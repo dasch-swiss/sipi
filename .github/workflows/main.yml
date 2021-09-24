@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v2
         with:
           repository: dasch-swiss/dsp-ci-assets
-          token: ${{ secrets.GitHub_PAT }} # `GitHub_PAT` is a secret that contains your PAT
+          token: ${{ secrets.DASCHBOT_PAT }} # `GitHub_PAT` is a secret that contains your PAT
           path: ci
       - name: Copy ci-assets
         run: |
@@ -81,7 +81,7 @@ jobs:
         uses: actions/checkout@v2
         with:
           repository: dasch-swiss/dsp-ci-assets
-          token: ${{ secrets.GitHub_PAT }} # `GitHub_PAT` is a secret that contains your PAT
+          token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
           path: ci
       - name: copy ci-assets
         run: |
