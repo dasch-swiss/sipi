@@ -1,5 +1,5 @@
 # STAGE 1: Build
-FROM dhlabbasel/sipi-base:18.04 as builder
+FROM daschswiss/sipi-base:2.4 as builder
 
 WORKDIR /sipi
 
@@ -13,7 +13,7 @@ RUN mkdir -p /sipi/build-linux && \
     make
 
 # STAGE 2: Setup
-FROM dhlabbasel/sipi-base:18.04
+FROM daschswiss/sipi-base:2.4
 
 MAINTAINER Ivan Subotic <400790+subotic@users.noreply.github.com>
 
