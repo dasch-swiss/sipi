@@ -33,21 +33,21 @@ publish-sipi-image: build-sipi-image ## publish Sipi Docker image to Docker-Hub
 
 .PHONY: compile
 compile: ## compile SIPI inside Docker
-	docker run -it --rm -v ${PWD}:/sipi dhlabbasel/sipi-base:18.04 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make"
+	docker run -it --rm -v ${PWD}:/sipi daschswiss/sipi-base:2.4 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make"
 
 .PHONY: compile-ci
 compile-ci: ## compile SIPI inside Docker (no it)
-	docker run --rm -v ${PWD}:/sipi dhlabbasel/sipi-base:18.04 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make"
+	docker run --rm -v ${PWD}:/sipi daschswiss/sipi-base:2.4 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make"
 
 .PHONY: test
 test: ## compile and run tests inside Docker
 	@mkdir -p ${PWD}/images
-	docker run -it --rm -v ${PWD}:/sipi dhlabbasel/sipi-base:18.04 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make && ctest --verbose"
+	docker run -it --rm -v ${PWD}:/sipi daschswiss/sipi-base:2.4 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make && ctest --verbose"
 
 .PHONY: test-ci
 test-ci: ## compile and run tests inside Docker (no it)
 	@mkdir -p ${CURRENT_DIR}/images
-	docker run --rm -v ${PWD}:/sipi dhlabbasel/sipi-base:18.04 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make && ctest --verbose"
+	docker run --rm -v ${PWD}:/sipi daschswiss/sipi-base:2.4 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make && ctest --verbose"
 
 .PHONY: test-integration
 test-integration: build-sipi-image ## run tests against locally published Sipi Docker image
