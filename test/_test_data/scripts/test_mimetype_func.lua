@@ -31,7 +31,7 @@ local test_files = {
     },
     {
         filename = 'test.csv',
-        expected_mimetype = "text/plain"
+        expected_mimetype = "application/csv"
     }
 }
 
