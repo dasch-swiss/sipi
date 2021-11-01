@@ -1,4 +1,4 @@
-SIPI_REPO := daschswiss/sipi
+DOCKER_REPO := daschswiss/sipi
 
 ifeq ($(BUILD_TAG),)
 	BUILD_TAG := $(shell git describe --tag --dirty --abbrev=7)
@@ -7,6 +7,6 @@ ifeq ($(BUILD_TAG),)
 	BUILD_TAG := $(shell git rev-parse --verify HEAD)
 endif
 
-ifeq ($(SIPI_IMAGE),)
-	SIPI_IMAGE := $(SIPI_REPO):$(BUILD_TAG)
+ifeq ($(DOCKER_IMAGE),)
+	DOCKER_IMAGE := $(DOCKER_REPO):$(BUILD_TAG)
 endif
