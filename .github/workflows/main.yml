@@ -89,7 +89,7 @@ jobs:
       - name: build and publish image
         run: |
           echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
-          make publish-sipi-image
+          make docker-publish
       - name: Update release notes
         uses: lakto/gren-action@v1.1.0
         env:
