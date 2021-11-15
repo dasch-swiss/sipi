@@ -22,41 +22,40 @@ docs-publish: ## build and publish docs to Github Pages
 install-requirements: ## install requirements for documentation
 	pip3 install -r requirements.txt
 
-.PHONY: build-sipi-image
-build-sipi-image: ## build and publish Sipi Docker image locally
-	docker build -t $(SIPI_IMAGE) .
-	docker tag $(SIPI_IMAGE) $(SIPI_REPO):latest
+.PHONY: docker-build
+docker-build: ## build and publish Sipi Docker image locally
+	docker buildx build --platform linux/amd64 -t $(DOCKER_IMAGE) -t $(DOCKER_REPO):latest --load .
 
-.PHONY: publish-sipi-image
-publish-sipi-image: build-sipi-image ## publish Sipi Docker image to Docker-Hub
-	docker push $(SIPI_IMAGE)
+.PHONY: docker-publish
+docker-publish: ## publish Sipi Docker image to Docker-Hub
+	docker buildx build --platform linux/amd64 -t $(DOCKER_IMAGE) -t $(DOCKER_REPO):latest --push .
 
 .PHONY: compile
 compile: ## compile SIPI inside Docker
-	docker run -it --rm -v ${PWD}:/sipi dhlabbasel/sipi-base:18.04 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make"
+	docker run -it --rm -v ${PWD}:/sipi daschswiss/sipi-base:2.4 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make"
 
 .PHONY: compile-ci
 compile-ci: ## compile SIPI inside Docker (no it)
-	docker run --rm -v ${PWD}:/sipi dhlabbasel/sipi-base:18.04 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make"
+	docker run --rm -v ${PWD}:/sipi daschswiss/sipi-base:2.4 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make"
 
 .PHONY: test
 test: ## compile and run tests inside Docker
 	@mkdir -p ${PWD}/images
-	docker run -it --rm -v ${PWD}:/sipi dhlabbasel/sipi-base:18.04 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make && ctest --verbose"
+	docker run -it --rm -v ${PWD}:/sipi daschswiss/sipi-base:2.4 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make && ctest --verbose"
 
 .PHONY: test-ci
 test-ci: ## compile and run tests inside Docker (no it)
 	@mkdir -p ${CURRENT_DIR}/images
-	docker run --rm -v ${PWD}:/sipi dhlabbasel/sipi-base:18.04 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make && ctest --verbose"
+	docker run --rm -v ${PWD}:/sipi daschswiss/sipi-base:2.4 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make && ctest --verbose"
 
 .PHONY: test-integration
-test-integration: build-sipi-image ## run tests against locally published Sipi Docker image
+test-integration: docker-build ## run tests against locally published Sipi Docker image
 	pytest -s test/integration
 
 .PHONY: run
-run: ## run SIPI inside Docker (does not compile)
+run: docker-build ## run SIPI inside Docker
 	@mkdir -p ${CURRENT_DIR}/images
-	docker run -it --rm -v ${PWD}:/sipi --workdir "/sipi" --expose "1024" --expose "1025" -p 1024:1024 -p 1025:1025 dhlabbasel/sipi-base:18.04 /bin/sh -c "/sipi/build-linux/sipi --config=/sipi/config/sipi.config.lua"
+	docker run -it --rm --workdir "/sipi" --expose "1024" --expose "1025" -p 1024:1024 -p 1025:1025 daschswiss/sipi:latest
 
 .PHONY: cmdline
 cmdline: ## run SIPI inside Docker (does not compile)
