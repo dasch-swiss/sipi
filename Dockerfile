@@ -1,5 +1,5 @@
 # STAGE 1: Build
-FROM daschswiss/sipi-base:2.4 as builder
+FROM daschswiss/sipi-base:2.4.2 as builder
 
 WORKDIR /sipi
 
