@@ -31,7 +31,7 @@ docker-build: ## build and publish Sipi Docker image locally
 
 .PHONY: docker-publish
 docker-publish: ## publish Sipi Docker image to Docker-Hub
-	docker buildx build --platform linux/amd64 -t $(DOCKER_IMAGE) -t $(DOCKER_REPO):latest --push .
+	docker buildx build --platform linux/amd64 -t $(DOCKER_IMAGE) --push .
 
 .PHONY: compile
 compile: ## compile SIPI inside Docker
