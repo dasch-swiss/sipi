@@ -6,6 +6,9 @@ CURRENT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
 include vars.mk
 
+# Version of the base Docker image
+SIPI_BASE_VERSION := 2.4.2
+
 .PHONY: docs-build
 docs-build: ## build docs into the local 'site' folder
 	mkdocs build
@@ -32,21 +35,21 @@ docker-publish: ## publish Sipi Docker image to Docker-Hub
 
 .PHONY: compile
 compile: ## compile SIPI inside Docker
-	docker run -it --rm -v ${PWD}:/sipi daschswiss/sipi-base:2.4 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make"
+	docker run -it --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make"
 
 .PHONY: compile-ci
 compile-ci: ## compile SIPI inside Docker (no it)
-	docker run --rm -v ${PWD}:/sipi daschswiss/sipi-base:2.4 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make"
+	docker run --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make"
 
 .PHONY: test
 test: ## compile and run tests inside Docker
 	@mkdir -p ${PWD}/images
-	docker run -it --rm -v ${PWD}:/sipi daschswiss/sipi-base:2.4 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make && ctest --verbose"
+	docker run -it --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make && ctest --verbose"
 
 .PHONY: test-ci
 test-ci: ## compile and run tests inside Docker (no it)
 	@mkdir -p ${CURRENT_DIR}/images
-	docker run --rm -v ${PWD}:/sipi daschswiss/sipi-base:2.4 /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make && ctest --verbose"
+	docker run --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make && ctest --verbose"
 
 .PHONY: test-integration
 test-integration: docker-build ## run tests against locally published Sipi Docker image
