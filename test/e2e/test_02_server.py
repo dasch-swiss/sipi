@@ -280,7 +280,6 @@ class TestServer:
     def test_json_info_validation(self, manager):
         """pass the info.json request tests"""
 
-
         expected_result = {
             '@context': 'http://iiif.io/api/image/3/context.json',
             'id': 'http://127.0.0.1:1024/unit/_lena512.jp2',
@@ -330,6 +329,25 @@ class TestServer:
         #expected_result["id"] = "https://127.0.0.1:1024/unit/{}".format(filename)
         #assert response_json == expected_result
 
+    def test_knora_json_for_video(self, manager):
+        """pass the knora.json request for video"""
+
+        expected_result = {
+            "@context": "http://sipi.io/api/file/3/context.json",
+            "id": "http://127.0.0.1:1024/unit/8pdET49BfoJ-EeRcIbgcLch.mp4",
+            "checksumOriginal": "19cc4bccad39c89cc44936ef69565bb933d41a065fd59d666d58e5ef344e8149",
+            "checksumDerivative": "19cc4bccad39c89cc44936ef69565bb933d41a065fd59d666d58e5ef344e8149",
+            "internalMimeType": "video/mp4",
+            "fileSize": 475205,
+            "originalFilename": "Dummy.mp4",
+            "duration": 4.7000000000000002,
+            "fps": "30/1",
+            "height": 240,
+            "width": 320
+        }
+
+        response_json = manager.get_json("/unit/8pdET49BfoJ-EeRcIbgcLch.mp4/knora.json")
+        assert response_json == expected_result
 
     def test_sqlite_api(self, manager):
         """Test sqlite API"""
