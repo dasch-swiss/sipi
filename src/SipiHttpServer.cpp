@@ -695,7 +695,7 @@ static void knora_send_info(Connection &conn_obj, SipiHttpServer *serv, shttps::
   std::string orig_checksum;
   std::string derivative_checksum;
   std::double_t sidecar_duration;
-  std::string sidecar_fps;
+  std::double_t sidecar_fps;
   std::double_t sidecar_height;
   std::double_t sidecar_width;
 
@@ -721,7 +721,7 @@ static void knora_send_info(Connection &conn_obj, SipiHttpServer *serv, shttps::
         } else if (std::strcmp("duration", key) == 0) {
           sidecar_duration = json_number_value(value);
         } else if (std::strcmp("fps", key) == 0) {
-          sidecar_fps = json_string_value(value);
+          sidecar_fps = json_number_value(value);
         } else if (std::strcmp("height", key) == 0) {
           sidecar_height = json_number_value(value);
         } else if (std::strcmp("width", key) == 0) {
@@ -801,7 +801,7 @@ static void knora_send_info(Connection &conn_obj, SipiHttpServer *serv, shttps::
     json_object_set_new(root, "fileSize", json_integer(fstatbuf.st_size));
     json_object_set_new(root, "originalFilename", json_string(orig_filename.c_str()));
     json_object_set_new(root, "duration", json_real(sidecar_duration));
-    json_object_set_new(root, "fps", json_string(sidecar_fps.c_str()));
+    json_object_set_new(root, "fps", json_real(sidecar_fps));
     json_object_set_new(root, "height", json_real(sidecar_height));
     json_object_set_new(root, "width", json_real(sidecar_width));
 
