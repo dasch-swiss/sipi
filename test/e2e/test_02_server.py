@@ -341,7 +341,7 @@ class TestServer:
             "fileSize": 475205,
             "originalFilename": "Dummy.mp4",
             "duration": 4.7000000000000002,
-            "fps": "30/1",
+            "fps": 30,
             "height": 240,
             "width": 320
         }
