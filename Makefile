@@ -7,7 +7,7 @@ CURRENT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 include vars.mk
 
 # Version of the base Docker image
-SIPI_BASE_VERSION := 2.4.2
+SIPI_BASE_VERSION := 2.5.0
 
 .PHONY: docs-build
 docs-build: ## build docs into the local 'site' folder
@@ -51,7 +51,7 @@ compile-ci: ## compile SIPI inside Docker (no it)
 
 .PHONY: compile-debug
 compile-debug: ## compile SIPI inside Docker with Debug symbols
-	docker run --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=OFF .. && make"
+	docker run --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make"
 
 .PHONY: test
 test: ## compile and run tests inside Docker
