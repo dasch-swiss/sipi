@@ -29,11 +29,11 @@ jobs:
           python-version: 3.9
       - name: install requirements
         run: make install-requirements
-      - name: run build
+      - name: compile
         run: make compile-ci
-      - name: run test
+      - name: test
         run: make test-ci
-      - name: run integration tests
+      - name: integration tests
         run: make test-integration
 
   # build documentation
