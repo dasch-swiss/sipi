@@ -1455,9 +1455,9 @@ static void knora_send_info(Connection &conn_obj, SipiHttpServer *serv, shttps::
                         numpages = info.numpages;
                     }
 
-                    size_t tmp_r_w, tmp_r_h;
-                    int tmp_red;
-                    bool tmp_ro;
+                    size_t tmp_r_w {0L}, tmp_r_h {0L};
+                    int tmp_red {0};
+                    bool tmp_ro {false};
                     try {
                         size->get_size(img_w, img_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
                         restriction_size->get_size(img_w, img_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);

@@ -303,12 +303,13 @@ namespace Sipi {
      * Finish writing data
      */
     static void term_html_destination(j_compress_ptr cinfo) {
+        std::cerr << "term_html_destination(j_compress_ptr cinfo)" << std::endl;
         HtmlBuffer *html_buffer = (HtmlBuffer *) cinfo->client_data;
         size_t nbytes = cinfo->dest->next_output_byte - html_buffer->buffer;
         try {
             html_buffer->conobj->sendAndFlush(html_buffer->buffer, nbytes);
         } catch (int i) { // an error occured in sending the data (broken pipe?)
-            // do nothing...
+            throw JpegError("Couldn't write to HTTP socket");
         }
 
         free(html_buffer->buffer);
@@ -319,6 +320,16 @@ namespace Sipi {
         cinfo->dest = nullptr;
     }
     //=============================================================================
+
+    static void cleanup_html_destination(j_compress_ptr cinfo) {
+        HtmlBuffer *html_buffer = (HtmlBuffer *) cinfo->client_data;
+        free(html_buffer->buffer);
+        free(html_buffer);
+        cinfo->client_data = nullptr;
+
+        free(cinfo->dest);
+        cinfo->dest = nullptr;
+    }
 
     /*!
      * This function is used to setup the I/O destination to the HTTP socket
@@ -940,12 +951,20 @@ namespace Sipi {
         try {
             jpeg_create_compress(&cinfo);
         } catch (JpegError &jpgerr) {
-            jpeg_destroy_compress(&cinfo);
             throw SipiImageError(__file__, __LINE__, jpgerr.what());
         }
         if (filepath == "HTTP") { // we are transmitting the data through the webserver
             shttps::Connection *conobj = img->connection();
-            jpeg_html_dest(&cinfo, conobj);
+            try {
+                jpeg_html_dest(&cinfo, conobj);
+            } catch (JpegError &jpgerr) {
+                jpeg_destroy_compress(&cinfo);
+                std::cerr << "BEFORE jpeg_destroy_compress(&cinfo)" << std::endl;
+                jpeg_destroy_compress(&cinfo);
+                std::cerr << "AFTER jpeg_destroy_compress(&cinfo)" << std::endl;
+                cleanup_html_destination(&cinfo);
+                throw SipiImageError(__file__, __LINE__, jpgerr.what());
+            }
         } else {
             if (filepath == "stdout:") {
                 jpeg_stdio_dest(&cinfo, stdout);
