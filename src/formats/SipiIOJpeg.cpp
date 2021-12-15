@@ -118,7 +118,7 @@ namespace Sipi {
             int tmp_n = write(file_buffer->file_id, file_buffer->buffer + nn, n);
             if (tmp_n < 0) {
                 throw JpegError("Couldn't write to file!");
-                //throw SipiImageError(__file__, __LINE__, "Couldn't write to file!");
+                //throw SipiImageError(thisSourceFile, __LINE__, "Couldn't write to file!");
                 //return false; // and create an error message!!
             } else {
                 n -= tmp_n;

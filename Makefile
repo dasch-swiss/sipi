@@ -84,7 +84,7 @@ shell: ## open shell inside privileged Docker container (does not compile)
 
 .PHONY: valgrind
 valgrind: ## start SIPI with Valgrind (needs to be started inside Docker container, e.g., 'make shell')
-	valgrind --leak-check=yes ./build-linux/sipi --config=/sipi/config/sipi.config.lua
+	valgrind --leak-check=yes --track-origins=yes ./build-linux/sipi --config=/sipi/config/sipi.config.lua
 
 .PHONY: clean
 clean: ## cleans the project directory

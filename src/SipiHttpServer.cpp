@@ -991,7 +991,7 @@ static void knora_send_info(Connection &conn_obj, SipiHttpServer *serv, shttps::
             parts.push_back(shttps::urldecode(uri.substr(old_pos, std::string::npos)));
         }
 
-        if (parts.size() < 1) {
+        if (parts.empty()) {
             send_error(conn_obj, Connection::BAD_REQUEST, "No parameters/path given");
             return;
         }
@@ -1007,7 +1007,7 @@ static void knora_send_info(Connection &conn_obj, SipiHttpServer *serv, shttps::
         std::string region_ex = "^(full)|(square)|([0-9]+,[0-9]+,[0-9]+,[0-9]+)|(pct:[0-9]*\\.?[0-9]*,[0-9]*\\.?[0-9]*,[0-9]*\\.?[0-9]*,[0-9]*\\.?[0-9]*)$";
 
         bool qualform_ok = false;
-        if (parts.size() > 0) qualform_ok = std::regex_match(parts[parts.size() - 1], std::regex(qualform_ex));
+        if (!parts.empty()) qualform_ok = std::regex_match(parts[parts.size() - 1], std::regex(qualform_ex));
 
         bool rotation_ok = false;
         if (parts.size() > 1) rotation_ok = std::regex_match(parts[parts.size() - 2], std::regex(rotation_ex));

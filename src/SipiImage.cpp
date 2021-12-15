@@ -257,9 +257,9 @@ namespace Sipi {
         } catch (std::out_of_range &e) {
             std::stringstream ss;
             ss << "Unsupported file type: \"" << filename;
-            throw SipiImageError(__file__, __LINE__, ss.str());
+            throw SipiImageError(thisSourceFile, __LINE__, ss.str());
         } catch (shttps::Error &err) {
-            throw SipiImageError(__file__, __LINE__, err.to_string());
+            throw SipiImageError(thisSourceFile, __LINE__, err.to_string());
         }
 
         return true;

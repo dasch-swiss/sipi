@@ -176,9 +176,9 @@ namespace shttps {
                 throw Error(__file__, __LINE__, magic_error(handle));
             }
 
-            // magic_close(handle);
 
             std::string mimestr(magic_file(handle, fpath.c_str()));
+            magic_close(handle);
             return parseMimetype(mimestr);
         }
         //=============================================================================================================

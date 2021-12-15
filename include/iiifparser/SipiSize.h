@@ -26,6 +26,7 @@
 #define __sipi_size_h
 
 #include <string>
+#include <utility>
 
 namespace Sipi {
 
@@ -37,11 +38,11 @@ namespace Sipi {
         int http_code;
         std::string description;
     public:
-        inline SipiSizeError(int http_code, const std::string &description) : http_code(http_code), description(description) {};
+        inline SipiSizeError(int http_code, std::string description) : http_code(http_code), description(std::move(description)) {};
 
-        inline int getHttpCode(void) { return http_code; }
+        inline int getHttpCode() const { return http_code; }
 
-        inline std::string getDescription(void) { return description; }
+        inline std::string getDescription() { return description; }
 
         inline std::string to_string() const {
             return "SipiSizeError: " + description;
@@ -90,28 +91,28 @@ namespace Sipi {
         /*!
          * Default constructor (full size)
          */
-        SipiSize() : size_type(SizeType::UNDEFINED), upscaling(false), percent(0.0F), reduce(0), nx(0), ny(0), w(0), h(0), canonical_ok(false) {}
+        SipiSize() : size_type(SizeType::UNDEFINED), upscaling(false), percent(0.0F), reduce(0), redonly(false), nx(0), ny(0), w(0), h(0), canonical_ok(false) {}
 
         /*!
          * Constructor with reduce parameter (reduce=0: full image, reduce=1: 1/2, reduce=2: 1/4,…)
          *
          * \param[in] reduce_p Reduce parameter
          */
-        SipiSize(int reduce_p) : size_type(SizeType::REDUCE), reduce(reduce_p) {}
+        explicit SipiSize(int reduce_p) : size_type(SizeType::REDUCE), upscaling(false), percent(0.0F), reduce(reduce_p), redonly(false), nx(0), ny(0), w(0), h(0), canonical_ok(false) {}
 
         /*!
          * Constructor with percentage parameter
          *
          * \param[in] percent_p Percentage parameter
          */
-        SipiSize(float percent_p) : size_type(SizeType::PERCENTS), percent(percent_p) {}
+        explicit SipiSize(float percent_p) : size_type(SizeType::PERCENTS), upscaling(false), percent(percent_p), reduce(false), redonly(false), nx(0), ny(0), w(0), h(0), canonical_ok(false) {}
 
         /*!
          * Construcor taking size/scale part of IIIF url as parameter
          *
          * \param[in] str String with the IIIF url part containing the size/scaling information
          */
-        SipiSize(std::string str);
+        explicit SipiSize(std::string str);
 
         /*!
          * Comparison operator ">"

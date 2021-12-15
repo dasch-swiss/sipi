@@ -956,7 +956,7 @@ namespace Sipi {
                         break;
                     }
                     default: {
-                        throw Sipi::SipiImageError(__file__, __LINE__, "Unsupported bits/sample (" + std::to_string(bps) + ")!");
+                        throw Sipi::SipiImageError(thisSourceFile, __LINE__, "Unsupported bits/sample (" + std::to_string(bps) + ")!");
                     }
                 }
             }
@@ -972,7 +972,7 @@ namespace Sipi {
                         break;
                     }
                     default: {
-                        throw Sipi::SipiImageError(__file__, __LINE__, "Unsupported bits/sample (" + std::to_string(bps) + ")!");
+                        throw Sipi::SipiImageError(thisSourceFile, __LINE__, "Unsupported bits/sample (" + std::to_string(bps) + ")!");
                     }
                 }
             }

@@ -3,13 +3,13 @@
 //
 #include "SocketControl.h"
 
-static const char __file__[] = __FILE__;
+static const char thisSourceFile[] = __FILE__;
 
 namespace shttps {
 
     SocketControl::SocketControl(ThreadControl &thread_control) {
         for (int i = 0; i < thread_control.nthreads(); i++) {
-            generic_open_sockets.push_back(SocketInfo(NOOP, CONTROL_SOCKET, thread_control[i].control_pipe));
+            generic_open_sockets.emplace_back(NOOP, CONTROL_SOCKET, thread_control[i].control_pipe);
         }
         n_msg_sockets = thread_control.nthreads();
         stop_sock_id = -1;
@@ -20,13 +20,9 @@ namespace shttps {
     //=========================================================================
 
     pollfd *SocketControl::get_sockets_arr() {
-        open_sockets = std::vector<pollfd>();
+        open_sockets.clear();
         for (auto const &tmp: generic_open_sockets) {
-            pollfd pfd;
-            pfd.fd = tmp.sid;
-            pfd.events = POLLIN;
-            pfd.revents = 0;
-            open_sockets.push_back(pfd);
+            open_sockets.push_back({tmp.sid, POLLIN, 0});
         }
         return open_sockets.data();
     }
@@ -34,9 +30,9 @@ namespace shttps {
     void SocketControl::add_stop_socket(int sid) { // only called once
         std::unique_lock<std::mutex> mutex_guard(sockets_mutex);
         if (dyn_socket_base != -1) {
-            throw Error(__file__, __LINE__, "Adding stop socket not allowed after adding dynamic sockets!");
+            throw Error(thisSourceFile, __LINE__, "Adding stop socket not allowed after adding dynamic sockets!");
         }
-        generic_open_sockets.push_back(SocketInfo(NOOP, STOP_SOCKET, sid));
+        generic_open_sockets.emplace_back(NOOP, STOP_SOCKET, sid);
         stop_sock_id = generic_open_sockets.size() - 1;
     }
     //=========================================================================
@@ -44,9 +40,9 @@ namespace shttps {
     void SocketControl::add_http_socket(int sid) { // only called once
         std::unique_lock<std::mutex> mutex_guard(sockets_mutex);
         if (dyn_socket_base != -1) {
-            throw Error(__file__, __LINE__, "Adding HTTP socket not allowed after adding dynamic sockets!");
+            throw Error(thisSourceFile, __LINE__, "Adding HTTP socket not allowed after adding dynamic sockets!");
         }
-        generic_open_sockets.push_back(SocketInfo(NOOP, HTTP_SOCKET, sid));
+        generic_open_sockets.emplace_back(NOOP, HTTP_SOCKET, sid);
         http_sock_id = generic_open_sockets.size() - 1;
     }
     //=========================================================================
@@ -54,9 +50,9 @@ namespace shttps {
     void SocketControl::add_ssl_socket(int sid) { // only called once
         std::unique_lock<std::mutex> mutex_guard(sockets_mutex);
         if (dyn_socket_base != -1) {
-            throw Error(__file__, __LINE__, "Adding SSL socket not allowed after adding dynamic sockets!");
+            throw Error(thisSourceFile, __LINE__, "Adding SSL socket not allowed after adding dynamic sockets!");
         }
-        generic_open_sockets.push_back(SocketInfo(NOOP, SSL_SOCKET, sid, nullptr));
+        generic_open_sockets.emplace_back(NOOP, SSL_SOCKET, sid, nullptr);
         ssl_sock_id = generic_open_sockets.size() - 1;
     }
     //=========================================================================
@@ -78,7 +74,7 @@ namespace shttps {
             sockid = generic_open_sockets[pos];
             generic_open_sockets.erase(generic_open_sockets.begin() + pos);
         } else {
-            throw Error(__file__, __LINE__, "Socket index out of range!");
+            throw Error(thisSourceFile, __LINE__, "Socket index out of range!");
         }
         if (pos < n_msg_sockets) { // we removed a thread socket, therefore we have to decrement all position ids
             n_msg_sockets--;
@@ -103,7 +99,7 @@ namespace shttps {
             generic_open_sockets.erase(generic_open_sockets.begin() + pos);
             waiting_sockets.push(sockid);
         } else {
-            throw Error(__file__, __LINE__, "Socket index out of range!");
+            throw Error(thisSourceFile, __LINE__, "Socket index out of range!");
         }
     }
     //=========================================================================
@@ -120,27 +116,41 @@ namespace shttps {
     }
     //=========================================================================§
 
-    int SocketControl::send_control_message(int pipe_id, const SocketInfo &msg) {
-        return ::send(pipe_id, &msg, sizeof(SocketInfo), 0);
+    ssize_t SocketControl::send_control_message(int pipe_id, const SocketInfo &msg) {
+        SIData data{};
+        data.type = msg.type;
+        data.socket_type = msg.socket_type;
+        data.sid = msg.sid;
+#ifdef SHTTPS_ENABLE_SSL
+        data.ssl_sid = msg.ssl_sid;
+#endif
+        for (int i = 0; i < INET6_ADDRSTRLEN; ++i) {
+            data.peer_ip[i] = msg.peer_ip[i];
+        }
+        data.peer_port = msg.peer_port;
+        return ::send(pipe_id, &data, sizeof(SIData), 0);
     }
     //=========================================================================§
 
     SocketControl::SocketInfo SocketControl::receive_control_message(int pipe_id) {
-        SocketInfo msg;
-        int n;
-        if ((n = ::read(pipe_id, &msg, sizeof(SocketInfo))) != sizeof(SocketInfo)) {
-            msg.type = ERROR;
+        SIData data{};
+        ssize_t n;
+        if ((n = ::read(pipe_id, &data, sizeof(SIData))) != sizeof(SIData)) {
+            data.type = ERROR;
             std::cerr << "==> receive_control_message: received only " << n << " bytes!!" << std::endl;
         }
-        return msg;
+        return {data};
     }
     //=========================================================================§
 
     void SocketControl::broadcast_exit() {
-        SocketInfo msg;
-        msg.type = EXIT;
+        SIData data{};
+        data.type = EXIT;
+        data.socket_type = CONTROL_SOCKET;
+        data.sid = 0;
         for (int i = 0; i < n_msg_sockets; i++) {
-            ::send(generic_open_sockets[i].sid, &msg, sizeof(SocketInfo), 0);
+            data.sid = generic_open_sockets[i].sid;
+            ::send(generic_open_sockets[i].sid, &data, sizeof(SIData), 0);
         }
     }
 
