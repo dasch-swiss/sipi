@@ -42,26 +42,22 @@ docker-publish-debug: ## publish Sipi Docker image to Docker-Hub with debugging 
 	docker buildx build --platform linux/amd64 --build-arg BUILD_TYPE=debug -t $(DOCKER_IMAGE)-debug --push .
 
 .PHONY: compile
-compile: ## compile SIPI inside Docker
-	docker run -it --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make"
+compile: ## compile SIPI inside Docker with Debug symbols
+	docker run -it --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make"
 
 .PHONY: compile-ci
 compile-ci: ## compile SIPI inside Docker (no it)
-	docker run --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make"
-
-.PHONY: compile-debug
-compile-debug: ## compile SIPI inside Docker with Debug symbols
 	docker run --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make"
 
 .PHONY: test
 test: ## compile and run tests inside Docker
 	@mkdir -p ${PWD}/images
-	docker run -it --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make && ctest --verbose"
+	docker run -it --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
 
 .PHONY: test-ci
 test-ci: ## compile and run tests inside Docker (no it)
 	@mkdir -p ${CURRENT_DIR}/images
-	docker run --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake .. && make && ctest --verbose"
+	docker run --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
 
 .PHONY: test-integration
 test-integration: docker-build ## run tests against locally published Sipi Docker image
