@@ -50,6 +50,7 @@ SockStream::SockStream(int sock_p, int in_bufsize_p, int out_bufsize_p, int putb
     setg(end, end, end);
 
     out_buf = new char[out_bufsize];
+    memset(out_buf, 0, out_bufsize);
     setp(out_buf, out_buf + out_bufsize);
 }
 
@@ -67,6 +68,7 @@ SockStream::SockStream(SSL *cSSL_p, int in_bufsize_p, int out_bufsize_p, int put
     setg(end, end, end);
 
     out_buf = new char[out_bufsize];
+    memset(out_buf, 0, out_bufsize);
     setp(out_buf, out_buf + out_bufsize);
 
 }

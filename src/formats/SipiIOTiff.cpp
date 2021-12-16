@@ -272,7 +272,7 @@ static ExifTag_type exiftag_list[] = {{EXIFTAG_EXPOSURETIME,             EXIF_DT
                                       {EXIFTAG_FLASH,                    EXIF_DT_UINT16,     0L,  {0l}},
                                       {EXIFTAG_FOCALLENGTH,              EXIF_DT_RATIONAL,   0L,  {0l}},
                                       {EXIFTAG_SUBJECTAREA,              EXIF_DT_UINT16_PTR, 0L,  {0L}}, //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ARRAY OF SHORTS
-                                      {EXIFTAG_MAKERNOTE,                EXIF_DT_STRING,     0L,  {0L}},
+                                      {EXIFTAG_MAKERNOTE,                EXIF_DT_UNDEFINED,  0L,  {0L}},
                                       {EXIFTAG_USERCOMMENT,              EXIF_DT_PTR,        0L,  {0L}},
                                       {EXIFTAG_SUBSECTIME,               EXIF_DT_STRING,     0L,  {0L}},
                                       {EXIFTAG_SUBSECTIMEORIGINAL,       EXIF_DT_STRING,     0L,  {0L}},
@@ -1502,7 +1502,6 @@ namespace Sipi {
 
                 case EXIF_DT_STRING: {
                     std::string tmpstr;
-
                     if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", tmpstr)) {
                         TIFFSetField(tif, exiftag_list[i].tag_id, tmpstr.c_str());
                         count++;
@@ -1534,14 +1533,7 @@ namespace Sipi {
 
                     if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", vuc)) {
                         int len = vuc.size();
-                        uint8 *uc = new uint8[len];
-
-                        for (int i = 0; i < len; i++) {
-                            uc[i] = vuc[i];
-                        }
-
-                        TIFFSetField(tif, exiftag_list[i].tag_id, len, uc);
-                        delete[] uc;
+                        TIFFSetField(tif, exiftag_list[i].tag_id, len, vuc.data());
                         count++;
                     }
 
@@ -1552,14 +1544,7 @@ namespace Sipi {
                     std::vector<uint16> vus;
                     if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", vus)) {
                         int len = vus.size();
-                        uint16 *us = new uint16[len];
-
-                        for (int i = 0; i < len; i++) {
-                            us[i] = vus[i];
-                        }
-
-                        TIFFSetField(tif, exiftag_list[i].tag_id, len, us);
-                        delete[] us;
+                        TIFFSetField(tif, exiftag_list[i].tag_id, len, vus.data());
                         count++;
                     }
                     break;
@@ -1570,14 +1555,7 @@ namespace Sipi {
 
                     if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", vui)) {
                         int len = vui.size();
-                        uint32 *ui = new uint32[len];
-
-                        for (int i = 0; i < len; i++) {
-                            ui[i] = vui[i];
-                        }
-
-                        TIFFSetField(tif, exiftag_list[i].tag_id, len, ui);
-                        delete[] ui;
+                        TIFFSetField(tif, exiftag_list[i].tag_id, len, vui.data());
                         count++;
                     }
 
@@ -1589,14 +1567,7 @@ namespace Sipi {
 
                     if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", vuc)) {
                         int len = vuc.size();
-                        unsigned char *uc = new unsigned char[len];
-
-                        for (int i = 0; i < len; i++) {
-                            uc[i] = vuc[i];
-                        }
-
-                        TIFFSetField(tif, exiftag_list[i].tag_id, len, uc);
-                        delete[] uc;
+                        TIFFSetField(tif, exiftag_list[i].tag_id, len, vuc.data());
                         count++;
                     }
 
@@ -1604,13 +1575,13 @@ namespace Sipi {
                 }
 
                 default: {
-                    // NO ACTION HERE At THE MOMENT...
+                    // NO ACTION HERE AT THE MOMENT...
                 }
             }
         }
 
         if (count > 0) {
-            uint64 exif_dir_offset = 0;
+            uint64 exif_dir_offset = 0L;
             TIFFWriteCustomDirectory(tif, &exif_dir_offset);
             TIFFSetDirectory(tif, 0);
             TIFFSetField(tif, TIFFTAG_EXIFIFD, exif_dir_offset);
