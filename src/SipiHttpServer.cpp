@@ -819,9 +819,9 @@ static void knora_send_info(Connection &conn_obj, SipiHttpServer *serv, shttps::
         char canonical_region[canonical_len + 1];
         char canonical_size[canonical_len + 1];
 
-        int tmp_r_x, tmp_r_y, tmp_red;
-        size_t tmp_r_w, tmp_r_h;
-        bool tmp_ro;
+        int tmp_r_x = 0, tmp_r_y = 0, tmp_red = 0;
+        size_t tmp_r_w = 0, tmp_r_h = 0;
+        bool tmp_ro = false;
 
         if (region->getType() != SipiRegion::FULL) {
             region->crop_coords(tmp_w, tmp_h, tmp_r_x, tmp_r_y, tmp_r_w, tmp_r_h);
