@@ -20,19 +20,20 @@
  * You should have received a copy of the GNU Affero General Public
  * License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <assert.h>
-#include <stdlib.h>
+#include <cassert>
+#include <cstdlib>
 #include <syslog.h>
-#include <stdarg.h>
+#include <cstdarg>
 
 #include <string>
+#include <cstring>
 #include <iostream>
 #include <fstream>
 #include <cstdio>
 #include <cmath>
 
-#include <stdlib.h>
-#include <errno.h>
+#include <cstdlib>
+#include <cerrno>
 
 #include "shttps/Connection.h"
 #include "SipiError.h"
@@ -82,14 +83,14 @@ static MEMTIFF *memTiffOpen(tsize_t incsiz = 10240, tsize_t initsiz = 10240) {
 /*===========================================================================*/
 
 static tsize_t memTiffReadProc(thandle_t handle, tdata_t buf, tsize_t size) {
-    MEMTIFF *memtif = (MEMTIFF *) handle;
+    auto *memtif = (MEMTIFF *) handle;
 
     tsize_t n;
 
     if (((tsize_t) memtif->fptr + size) <= memtif->flen) {
         n = size;
     } else {
-        n = memtif->flen - memtif->fptr;
+        n = memtif->flen - static_cast<tsize_t>(memtif->fptr);
     }
 
     memcpy(buf, memtif->data + memtif->fptr, n);
@@ -100,7 +101,7 @@ static tsize_t memTiffReadProc(thandle_t handle, tdata_t buf, tsize_t size) {
 /*===========================================================================*/
 
 static tsize_t memTiffWriteProc(thandle_t handle, tdata_t buf, tsize_t size) {
-    MEMTIFF *memtif = (MEMTIFF *) handle;
+    auto *memtif = (MEMTIFF *) handle;
 
     if (((tsize_t) memtif->fptr + size) > memtif->size) {
         if ((memtif->data = (unsigned char *) realloc(memtif->data, memtif->fptr + memtif->incsiz + size)) == nullptr) {
@@ -120,7 +121,7 @@ static tsize_t memTiffWriteProc(thandle_t handle, tdata_t buf, tsize_t size) {
 /*===========================================================================*/
 
 static toff_t memTiffSeekProc(thandle_t handle, toff_t off, int whence) {
-    MEMTIFF *memtif = (MEMTIFF *) handle;
+    auto *memtif = (MEMTIFF *) handle;
 
     switch (whence) {
         case SEEK_SET: {
@@ -162,6 +163,7 @@ static toff_t memTiffSeekProc(thandle_t handle, toff_t off, int whence) {
             memtif->fptr = memtif->size + off;
             break;
         }
+        default:{}
     }
 
     if (memtif->fptr > memtif->flen) memtif->flen = memtif->fptr;
@@ -170,7 +172,7 @@ static toff_t memTiffSeekProc(thandle_t handle, toff_t off, int whence) {
 /*===========================================================================*/
 
 static int memTiffCloseProc(thandle_t handle) {
-    MEMTIFF *memtif = (MEMTIFF *) handle;
+    auto *memtif = (MEMTIFF *) handle;
     memtif->fptr = 0;
     return 0;
 }
@@ -178,23 +180,21 @@ static int memTiffCloseProc(thandle_t handle) {
 
 
 static toff_t memTiffSizeProc(thandle_t handle) {
-    MEMTIFF *memtif = (MEMTIFF *) handle;
+    auto *memtif = (MEMTIFF *) handle;
     return memtif->flen;
 }
 /*===========================================================================*/
 
 
 static int memTiffMapProc(thandle_t handle, tdata_t *base, toff_t *psize) {
-    MEMTIFF *memtif = (MEMTIFF *) handle;
+    auto *memtif = (MEMTIFF *) handle;
     *base = memtif->data;
     *psize = memtif->flen;
     return (1);
 }
 /*===========================================================================*/
 
-static void memTiffUnmapProc(thandle_t handle, tdata_t base, toff_t size) {
-    return;
-}
+static void memTiffUnmapProc(thandle_t handle, tdata_t base, toff_t size) {}
 /*===========================================================================*/
 
 static void memTiffFree(MEMTIFF *memtif) {
@@ -202,7 +202,6 @@ static void memTiffFree(MEMTIFF *memtif) {
     memtif->data = nullptr;
     if (memtif != nullptr) free(memtif);
     memtif = nullptr;
-    return;
 }
 /*===========================================================================*/
 
@@ -505,7 +504,7 @@ namespace Sipi {
                     throw Sipi::SipiImageError(__file__, __LINE__, msg);
                 }
                 colmap_len = 1;
-                int itmp = 0;
+                size_t itmp = 0;
                 while (itmp < img->bps) {
                     colmap_len *= 2;
                     itmp++;
@@ -846,14 +845,14 @@ namespace Sipi {
                 }
                 uint8 *dataptr = new uint8[3*img->nx*img->ny];
                 if (cm_max <= 256) { // we have a colomap with entries form 0 - 255
-                    for (int i = 0; i < img->nx*img->ny; i++) {
+                    for (size_t i = 0; i < img->nx*img->ny; i++) {
                         dataptr[3*i]     = (uint8) rcm[img->pixels[i]];
                         dataptr[3*i + 1] = (uint8) gcm[img->pixels[i]];
                         dataptr[3*i + 2] = (uint8) bcm[img->pixels[i]];
                     }
                 }
                 else { // we have a colormap with entries > 255, assuming 16 bit
-                    for (int i = 0; i < img->nx*img->ny; i++) {
+                    for (size_t i = 0; i < img->nx*img->ny; i++) {
                         dataptr[3*i]     = (uint8) (rcm[img->pixels[i]] >> 8);
                         dataptr[3*i + 1] = (uint8) (gcm[img->pixels[i]] >> 8);
                         dataptr[3*i + 2] = (uint8) (bcm[img->pixels[i]] >> 8);
@@ -900,8 +899,8 @@ namespace Sipi {
                         // we have to convert to JPEG2000/littleCMS standard
                         //
                         if (img->bps == 8) {
-                            for (int y = 0; y < img->ny; y++) {
-                                for (int x = 0; x < img->nx; x++) {
+                            for (size_t y = 0; y < img->ny; y++) {
+                                for (size_t x = 0; x < img->nx; x++) {
                                     union {
                                         unsigned char u;
                                         signed char s;
@@ -916,8 +915,8 @@ namespace Sipi {
                         }
                         else if (img->bps == 16) {
                             unsigned  short *data = (unsigned short *) img->pixels;
-                            for (int y = 0; y < img->ny; y++) {
-                                for (int x = 0; x < img->nx; x++) {
+                            for (size_t y = 0; y < img->ny; y++) {
+                                for (size_t x = 0; x < img->nx; x++) {
                                     union {
                                         unsigned short u;
                                         signed short s;
@@ -1103,8 +1102,8 @@ namespace Sipi {
         }
         if (img->photo == PhotometricInterpretation::CIELAB) {
             if (img->bps == 8) {
-                for (int y = 0; y < img->ny; y++) {
-                    for (int x = 0; x < img->nx; x++) {
+                for (size_t y = 0; y < img->ny; y++) {
+                    for (size_t x = 0; x < img->nx; x++) {
                         union {
                             unsigned char u;
                             signed char s;
@@ -1117,8 +1116,8 @@ namespace Sipi {
                 }
             }
             else if (img->bps == 16) {
-                for (int y = 0; y < img->ny; y++) {
-                    for (int x = 0; x < img->nx; x++) {
+                for (size_t y = 0; y < img->ny; y++) {
+                    for (size_t x = 0; x < img->nx; x++) {
                         unsigned short *data = (unsigned short *) img->pixels;
                         union {
                             unsigned short u;
@@ -1283,7 +1282,7 @@ namespace Sipi {
 
         if (memtif != nullptr) {
             if (filepath == "stdout:") {
-                size_t n = 0;
+                tsize_t n = 0;
 
                 while (n < memtif->flen) {
                     n += fwrite(&(memtif->data[n]), 1, memtif->flen - n > 10240 ? 10240 : memtif->flen - n, stdout);

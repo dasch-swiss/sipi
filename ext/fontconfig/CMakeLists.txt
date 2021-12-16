@@ -21,7 +21,7 @@ ExternalProject_Add(project_fontconfig
         CONFIGURE_COMMAND   ${COMMON_SRCS}/fontconfig-2.13.1/configure
                             --prefix=${COMMON_LOCAL}
                             FREETYPE_CFLAGS=-I${CONFIGURE_INCDIR}/freetype2
-                            FREETYPE_LIBS="-L${CONFIGURE_LIBDIR} -lfreetype -lbz2 -lm -lharfbuzz -lpng -lz"
+                            FREETYPE_LIBS="-L${CONFIGURE_LIBDIR} -lfreetype -lbz2 -lharfbuzz -lpng -lz -lm"
                             --disable-shared
                             --enable-static
         BUILD_COMMAND make

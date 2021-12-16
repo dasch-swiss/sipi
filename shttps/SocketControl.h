@@ -53,6 +53,7 @@ namespace shttps {
             int sid;
 #ifdef SHTTPS_ENABLE_SSL
             SSL *ssl_sid;
+            SSL_CTX *sslctx;
 #endif
             char peer_ip[INET6_ADDRSTRLEN]{};
             int peer_port;
@@ -65,6 +66,7 @@ namespace shttps {
             int sid;
 #ifdef SHTTPS_ENABLE_SSL
             SSL *ssl_sid;
+            SSL_CTX *sslctx;
 #endif
             char peer_ip[INET6_ADDRSTRLEN]{};
             int peer_port;
@@ -72,11 +74,14 @@ namespace shttps {
             explicit SocketInfo(ControlMessageType type = NOOP,
                                 SocketType socket_type = CONTROL_SOCKET,
                                 int sid = -1,
+#ifdef SHTTPS_ENABLE_SSL
                                 SSL * ssl_sid = nullptr,
+                                SSL_CTX *sslctx = nullptr,
+#endif
                                 char *_peer_ip = nullptr,
                                 int peer_port = -1) :
 #ifdef SHTTPS_ENABLE_SSL
-                                type(type), socket_type(socket_type), sid(sid), ssl_sid(ssl_sid), peer_port(peer_port)
+                                type(type), socket_type(socket_type), sid(sid), ssl_sid(ssl_sid), sslctx(sslctx), peer_port(peer_port)
 #else
                                 type(type), socket_type(socket_type), sid(sid),  peer_port(peer_port)
 #endif
@@ -95,6 +100,7 @@ namespace shttps {
                 sid = si.sid;
 #ifdef SHTTPS_ENABLE_SSL
                 ssl_sid = si.ssl_sid;
+                sslctx = si.sslctx;
 #endif
                 for (int i = 0; i < INET6_ADDRSTRLEN; i++) peer_ip[i] = si.peer_ip[i];
                 peer_port = si.peer_port;
@@ -106,6 +112,7 @@ namespace shttps {
                 sid = data.sid;
 #ifdef SHTTPS_ENABLE_SSL
                 ssl_sid = data.ssl_sid;
+                sslctx = data.sslctx;
 #endif
                 for (int i = 0; i < INET6_ADDRSTRLEN; i++) peer_ip[i] = data.peer_ip[i];
                 peer_port = data.peer_port;
@@ -119,6 +126,7 @@ namespace shttps {
                 sid = si.sid;
 #ifdef SHTTPS_ENABLE_SSL
                 ssl_sid = si.ssl_sid;
+                sslctx = si.sslctx;
 #endif
                 for (int i = 0; i < INET6_ADDRSTRLEN; i++) peer_ip[i] = si.peer_ip[i];
                 peer_port = si.peer_port;

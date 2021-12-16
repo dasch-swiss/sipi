@@ -731,6 +731,7 @@ namespace shttps {
                        __file__, __LINE__, SSL_get_error(sockid.ssl_sid, sstat));
             }
             SSL_free(sockid.ssl_sid);
+            SSL_CTX_free(sockid.sslctx);
         }
 #endif
         if (shutdown(sockid.sid, SHUT_RDWR) < 0) {
@@ -876,9 +877,9 @@ namespace shttps {
         }
 #ifdef SHTTPS_ENABLE_SSL
         SSL *cSSL = nullptr;
+        SSL_CTX *sslctx = nullptr;
 
         if (ssl) {
-            SSL_CTX *sslctx;
             try {
                 if ((sslctx = SSL_CTX_new(SSLv23_server_method())) == nullptr) {
                     syslog(LOG_ERR, "OpenSSL error: SSL_CTX_new() failed");
@@ -934,6 +935,7 @@ namespace shttps {
             }
         }
         socket_id.ssl_sid = cSSL;
+        socket_id.sslctx = sslctx;
 #endif
         return socket_id;
     }
