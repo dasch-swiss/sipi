@@ -688,7 +688,7 @@ namespace Sipi {
                     primaries[5] = 0.0600;
                 }
 
-                unsigned short *tfunc= new unsigned short[3 * (1 << img->bps)], *tfunc_ti ;
+                unsigned short *tfunc = new unsigned short[3 * (1 << img->bps)], *tfunc_ti ;
                 unsigned int tfunc_len, tfunc_len_ti;
 
                 if (1 == TIFFGetField(tif, TIFFTAG_TRANSFERFUNCTION, &tfunc_len_ti, &tfunc_ti)) {
@@ -702,6 +702,7 @@ namespace Sipi {
                         tfunc_len = tfunc_len_ti / 3;
                     }
                 } else {
+                    delete[] tfunc;
                     tfunc = nullptr;
                     tfunc_len = 0;
                 }
