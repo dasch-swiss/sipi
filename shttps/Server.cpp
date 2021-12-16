@@ -722,6 +722,7 @@ namespace shttps {
      * @return
      */
     static int close_socket(const SocketControl::SocketInfo &sockid) {
+        std::cerr << "******** close_socket" << std::endl;
 #ifdef SHTTPS_ENABLE_SSL
         if (sockid.ssl_sid != nullptr) {
             int sstat;
@@ -931,6 +932,7 @@ namespace shttps {
                 }
 
                 SSL_free(cSSL);
+                SSL_CTX_free(sslctx);
                 cSSL = nullptr;
             }
         }

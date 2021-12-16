@@ -2112,6 +2112,7 @@ namespace shttps {
 
         json_t *root = subtable(L, 1);
         char *jsonstr = json_dumps(root, JSON_INDENT(3));
+        json_decref(root);
 
         if (jwt_new(&jwt) != 0) {
             lua_settop(L, 0); // clear stack
@@ -2128,6 +2129,7 @@ namespace shttps {
 
         lua_pushboolean(L, true);
         lua_pushstring(L, token);
+        free(jsonstr);
 
         return 2;
     }
@@ -2169,10 +2171,12 @@ namespace shttps {
         char *tokendata;
 
         if ((tokendata = jwt_dump_str(jwt, false)) == nullptr) {
+            jwt_free(jwt);
             lua_pushboolean(L, false);
             lua_pushstring(L, "'server.decode_jwt(token)': Error in decoding token! (2)");
             return 2;
         }
+        jwt_free(jwt);
 
         std::string tokenstr = tokendata;
         free(tokendata);
@@ -2185,6 +2189,7 @@ namespace shttps {
         try {
             lua_jsonobj(L, jsonobj);
         } catch (std::string &errorMsg) {
+
             lua_settop(L, 0); // clear stack
             lua_pushboolean(L, false);
             std::string tmpstr = std::string("'server.decode_jwt(token)': Error in decoding token: ") + errorMsg;
