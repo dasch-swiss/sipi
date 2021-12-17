@@ -40,7 +40,7 @@ namespace Sipi {
     class SipiIOJ2k : public SipiIO {
     private:
     public:
-        virtual ~SipiIOJ2k() {};
+        ~SipiIOJ2k() override = default;;
         /*!
          * Method used to read an image file
          *
@@ -50,9 +50,8 @@ namespace Sipi {
          * only reads part of the data returning an image with reduces resolution.
          * If the value is 1, only half the resolution is returned. If it is 2, only one forth etc.
          */
-        bool read(SipiImage *img, std::string filepath, int pagenum = 0, std::shared_ptr<SipiRegion> region = nullptr,
-                  std::shared_ptr<SipiSize> size = nullptr, bool force_bps_8 = false,
-                  ScalingQuality scaling_quality = {HIGH, HIGH, HIGH, HIGH}) override;
+        bool read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
+                  std::shared_ptr<SipiSize> size, bool force_bps_8, ScalingQuality scaling_quality) override;
 
         /*!
          * Get the dimension of the image
@@ -61,7 +60,7 @@ namespace Sipi {
          * \param[out] width Width of the image in pixels
          * \param[out] height Height of the image in pixels
          */
-        Sipi::SipiImgInfo getDim(std::string filepath, int pagenum = 0) override;
+        Sipi::SipiImgInfo getDim(const std::string &filepath, int pagenum) override;
 
         /*!
          * Write a TIFF image to a file, stdout or to a memory buffer
@@ -69,7 +68,7 @@ namespace Sipi {
          * \param *img Pointer to SipiImage instance
          * \param filepath Name of the image file to be written.
          */
-        void write(SipiImage *img, std::string filepath, const SipiCompressionParams *params = nullptr) override;
+        void write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params) override;
     };
 }
 

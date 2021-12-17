@@ -20,8 +20,8 @@
  * You should have received a copy of the GNU Affero General Public
  * License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <assert.h>
-#include <stdlib.h>
+#include <cassert>
+#include <cstdlib>
 #include <arpa/inet.h>
 
 #include <string>
@@ -29,11 +29,11 @@
 #include <iostream>
 #include <fstream>
 #include <cstdio>
-#include <stdio.h>
-#include <math.h>
+#include <cstdio>
+#include <cmath>
 #include <syslog.h>
 
-#include <string.h>
+#include <cstring>
 
 #include "SipiIOPng.h"
 
@@ -74,7 +74,7 @@ namespace Sipi {
 
         inline ~PngTextPtr() { delete[] text_ptr; };
 
-        inline unsigned int num() { return num_text; };
+        inline unsigned int num() const { return num_text; };
 
         inline png_text *ptr() { return text_ptr; };
 
@@ -131,7 +131,7 @@ namespace Sipi {
         std::cerr << "PNG WARNING: " << warning_msg << std::endl;
     }
 
-    bool SipiIOPng::read(SipiImage *img, std::string filepath, int pagenum, std::shared_ptr<SipiRegion> region,
+    bool SipiIOPng::read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
                          std::shared_ptr<SipiSize> size, bool force_bps_8,
                          ScalingQuality scaling_quality)
     {
@@ -294,7 +294,7 @@ namespace Sipi {
         }
 
         if (img->bps == 16) {
-            unsigned short *tmp = (unsigned short *) buffer;
+            auto *tmp = (unsigned short *) buffer;
             for (int i = 0; i < img->nx*img->ny*img->nc; i++) {
                 tmp[i] = ntohs(tmp[i]);
             }
@@ -338,7 +338,7 @@ namespace Sipi {
     /*==========================================================================*/
 
 
-    SipiImgInfo SipiIOPng::getDim(std::string filepath, int pagenum) {
+    SipiImgInfo SipiIOPng::getDim(const std::string &filepath, int pagenum) {
         FILE *infile;
         SipiImgInfo info;
         unsigned char header[8];
@@ -429,7 +429,7 @@ namespace Sipi {
 
     /*==========================================================================*/
 
-    void SipiIOPng::write(SipiImage *img, std::string filepath, const SipiCompressionParams *params) {
+    void SipiIOPng::write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params) {
         FILE *outfile = nullptr;
         png_structp png_ptr;
 
@@ -475,7 +475,7 @@ namespace Sipi {
             color_type = PNG_COLOR_TYPE_RGB_ALPHA;
         }
         else if (img->nc == 4) {
-            img->convertToIcc(icc_sRGB, 8);
+            img->convertToIcc(SipiIcc(Sipi::PredefinedProfiles::icc_sRGB), 8);
             color_type = PNG_COLOR_TYPE_RGB;
             img->nc = 3;
             img->bps = 8;
@@ -495,7 +495,7 @@ namespace Sipi {
         SipiEssentials es = img->essential_metadata();
         if ((img->icc != nullptr) || es.use_icc()) {
             if ((img->icc != nullptr) && (img->icc->getProfileType() == icc_LAB)) {
-                img->convertToIcc(Sipi::icc_sRGB, img->bps);
+                img->convertToIcc(SipiIcc(Sipi::PredefinedProfiles::icc_sRGB), img->bps);
             }
             std::vector<unsigned char> icc_buf;
             try {

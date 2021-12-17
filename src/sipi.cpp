@@ -800,7 +800,7 @@ int main(int argc, char *argv[]) {
       //img.read(optInFile); //convert to bps=8 in case of JPG output
       if (format == "jpg") {
         img.to8bps();
-        img.convertToIcc(Sipi::icc_sRGB, 8);
+        img.convertToIcc(Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_sRGB), 8);
       }
     } catch (Sipi::SipiImageError &err) {
       std::cerr << err << std::endl;
@@ -822,11 +822,11 @@ int main(int argc, char *argv[]) {
     if (!sipiopt.get_option("--icc")->empty()) {
       Sipi::SipiIcc icc;
       switch (optIcc) {
-        case OptIcc::sRGB: icc = Sipi::SipiIcc(Sipi::icc_sRGB);
+          case OptIcc::sRGB: icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_sRGB);
           break;
-        case OptIcc::AdobeRGB: icc = Sipi::SipiIcc(Sipi::icc_AdobeRGB);
+        case OptIcc::AdobeRGB: icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_AdobeRGB);
           break;
-        case OptIcc::GRAY: icc = Sipi::SipiIcc(Sipi::icc_GRAY_D50);
+        case OptIcc::GRAY: icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_GRAY_D50);
           break;
         case OptIcc::none: break;
       }

@@ -380,7 +380,7 @@ namespace Sipi {
         cmsGetProfileInfoASCII(rhs.icc_profile, cmsInfoCopyright, cmsNoLanguage, cmsNoCountry, buf.get(), len);
         outstr << "ICC-Copyright     : " << buf.get() << std::endl;
 
-        struct tm datetime;
+        struct tm datetime{};
         if (cmsGetHeaderCreationDateTime(rhs.icc_profile, &datetime)) {
             outstr << "ICC-Date          : " << asctime(&datetime);
         }

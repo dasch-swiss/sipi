@@ -311,7 +311,7 @@ static int exiftag_list_len = sizeof(exiftag_list) / sizeof(ExifTag_type);
 
 namespace Sipi {
 
-    unsigned char *read_watermark(std::string wmfile, int &nx, int &ny, int &nc) {
+    unsigned char *read_watermark(const std::string &wmfile, int &nx, int &ny, int &nc) {
         TIFF *tif;
         int sll;
         unsigned short spp, bps, pmi, pc;
@@ -403,16 +403,14 @@ namespace Sipi {
     static void tiffError(const char *module, const char *fmt, va_list argptr) {
         syslog(LOG_ERR, "ERROR IN TIFF! Module: %s", module);
         vsyslog(LOG_ERR, fmt, argptr);
-        return;
-    }
+   }
     //============================================================================
 
 
     static void tiffWarning(const char *module, const char *fmt, va_list argptr) {
         syslog(LOG_ERR, "ERROR IN TIFF! Module: %s", module);
         vsyslog(LOG_ERR, fmt, argptr);
-        return;
-    }
+   }
     //============================================================================
 
 #define N(a) (sizeof(a) / sizeof (a[0]))
@@ -430,7 +428,7 @@ namespace Sipi {
     }
     //============================================================================
 
-    void SipiIOTiff::initLibrary(void) {
+    void SipiIOTiff::initLibrary() {
         static bool done = false;
         if (!done) {
             TIFFSetErrorHandler(tiffError);
@@ -442,7 +440,7 @@ namespace Sipi {
     }
     //============================================================================
 
-    bool SipiIOTiff::read(SipiImage *img, std::string filepath, int pagenum, std::shared_ptr<SipiRegion> region,
+    bool SipiIOTiff::read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
                           std::shared_ptr<SipiSize> size, bool force_bps_8,
                           ScalingQuality scaling_quality) {
         TIFF *tif;
@@ -470,7 +468,7 @@ namespace Sipi {
                 throw Sipi::SipiImageError(__file__, __LINE__, msg);
             }
 
-            unsigned int sll = (unsigned int) TIFFScanlineSize(tif);
+            auto sll = (unsigned int) TIFFScanlineSize(tif);
             TIFF_GET_FIELD (tif, TIFFTAG_SAMPLESPERPIXEL, &stmp, 1);
             img->nc = (int) stmp;
 
@@ -708,7 +706,7 @@ namespace Sipi {
                 }
 
                 img->icc = std::make_shared<SipiIcc>(whitepoint, primaries, tfunc, tfunc_len);
-                if (tfunc != nullptr) delete[] tfunc;
+                delete[] tfunc;
             }
 
             //
@@ -724,7 +722,7 @@ namespace Sipi {
             if ((region == nullptr) || (region->getType() == SipiRegion::FULL)) {
                 if (planar == PLANARCONFIG_CONTIG) {
                     uint32 i;
-                    uint8 *dataptr = new uint8[img->ny * sll];
+                    auto *dataptr = new uint8[img->ny * sll];
 
                     for (i = 0; i < img->ny; i++) {
                         if (TIFFReadScanline(tif, dataptr + i * sll, i, 0) == -1) {
@@ -738,7 +736,7 @@ namespace Sipi {
 
                     img->pixels = dataptr;
                 } else if (planar == PLANARCONFIG_SEPARATE) { // RRRRR…RRR GGGGG…GGGG BBBBB…BBB
-                    uint8 *dataptr = new uint8[img->nc * img->ny * sll];
+                    auto *dataptr = new uint8[img->nc * img->ny * sll];
 
                     for (uint32 j = 0; j < img->nc; j++) {
                         for (uint32 i = 0; i < img->ny; i++) {
@@ -783,8 +781,8 @@ namespace Sipi {
                     }
                 }
 
-                uint8 *dataptr = new uint8[sll];
-                uint8 *inbuf = new uint8[ps * roi_w * roi_h * img->nc];
+                auto *dataptr = new uint8[sll];
+                auto *inbuf = new uint8[ps * roi_w * roi_h * img->nc];
 
                 if (planar == PLANARCONFIG_CONTIG) { // RGBRGBRGBRGBRGBRGBRGBRGB
                     for (uint32 i = 0; i < roi_h; i++) {
@@ -844,7 +842,7 @@ namespace Sipi {
                     if (gcm[i] > cm_max) cm_max = gcm[i];
                     if (bcm[i] > cm_max) cm_max = bcm[i];
                 }
-                uint8 *dataptr = new uint8[3*img->nx*img->ny];
+                auto *dataptr = new uint8[3*img->nx*img->ny];
                 if (cm_max <= 256) { // we have a colomap with entries form 0 - 255
                     for (size_t i = 0; i < img->nx*img->ny; i++) {
                         dataptr[3*i]     = (uint8) rcm[img->pixels[i]];
@@ -905,7 +903,7 @@ namespace Sipi {
                                     union {
                                         unsigned char u;
                                         signed char s;
-                                    } v;
+                                    } v{};
                                     v.u = img->pixels[img->nc*(y*img->nx + x) + 1];
                                     img->pixels[img->nc*(y*img->nx + x) + 1] = 128 + v.s;
                                     v.u = img->pixels[img->nc*(y*img->nx + x) + 2];
@@ -915,13 +913,13 @@ namespace Sipi {
                             img->icc = std::make_shared<SipiIcc>(icc_LAB);
                         }
                         else if (img->bps == 16) {
-                            unsigned  short *data = (unsigned short *) img->pixels;
+                            auto *data = (unsigned short *) img->pixels;
                             for (size_t y = 0; y < img->ny; y++) {
                                 for (size_t x = 0; x < img->nx; x++) {
                                     union {
                                         unsigned short u;
                                         signed short s;
-                                    } v;
+                                    } v{};
                                     v.u = data[img->nc*(y*img->nx + x) + 1];
                                     data[img->nc*(y*img->nx + x) + 1] = 32768 + v.s;
                                     v.u = data[img->nc*(y*img->nx + x) + 2];
@@ -1007,7 +1005,7 @@ namespace Sipi {
     //============================================================================
 
 
-    SipiImgInfo SipiIOTiff::getDim(std::string filepath, int pagenum) {
+    SipiImgInfo SipiIOTiff::getDim(const std::string &filepath, int pagenum) {
         TIFF *tif;
         SipiImgInfo info;
         if (nullptr != (tif = TIFFOpen(filepath.c_str(), "r"))) {
@@ -1049,10 +1047,10 @@ namespace Sipi {
     //============================================================================
 
 
-    void SipiIOTiff::write(SipiImage *img, std::string filepath, const SipiCompressionParams *params) {
+    void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params) {
         TIFF *tif;
         MEMTIFF *memtif = nullptr;
-        uint32 rowsperstrip = (uint32) -1;
+        auto rowsperstrip = (uint32) - 1;
         if ((filepath == "stdout:") || (filepath == "HTTP")) {
             memtif = memTiffOpen();
             tif = TIFFClientOpen("MEMTIFF", "w", (thandle_t) memtif, memTiffReadProc, memTiffWriteProc, memTiffSeekProc,
@@ -1108,7 +1106,7 @@ namespace Sipi {
                         union {
                             unsigned char u;
                             signed char s;
-                        } v;
+                        } v{};
                         v.s = img->pixels[img->nc*(y*img->nx + x) + 1] - 128;
                         img->pixels[img->nc*(y*img->nx + x) + 1] = v.u;
                         v.s = img->pixels[img->nc*(y*img->nx + x) + 2] - 128;
@@ -1119,11 +1117,11 @@ namespace Sipi {
             else if (img->bps == 16) {
                 for (size_t y = 0; y < img->ny; y++) {
                     for (size_t x = 0; x < img->nx; x++) {
-                        unsigned short *data = (unsigned short *) img->pixels;
+                        auto *data = (unsigned short *) img->pixels;
                         union {
                             unsigned short u;
                             signed short s;
-                        } v;
+                        } v{};
                         v.s = data[img->nc*(y*img->nx + x) + 1] - 32768;
                         data[img->nc*(y*img->nx + x) + 1] = v.u;
                         v.s = data[img->nc*(y*img->nx + x) + 2] - 32768;
@@ -1283,7 +1281,7 @@ namespace Sipi {
 
         if (memtif != nullptr) {
             if (filepath == "stdout:") {
-                tsize_t n = 0;
+                size_t n = 0;
 
                 while (n < memtif->flen) {
                     n += fwrite(&(memtif->data[n]), 1, memtif->flen - n > 10240 ? 10240 : memtif->flen - n, stdout);
@@ -1597,7 +1595,7 @@ namespace Sipi {
         //
         if (img->bps == 8) {
             byte *dataptr = img->pixels;
-            unsigned char *tmpptr = new unsigned char[img->nc * img->ny * img->nx];
+            auto *tmpptr = new unsigned char[img->nc * img->ny * img->nx];
 
             for (unsigned int k = 0; k < img->nc; k++) {
                 for (unsigned int j = 0; j < img->ny; j++) {

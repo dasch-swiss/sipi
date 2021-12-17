@@ -52,7 +52,7 @@ static const char __file__[] = __FILE__;
 static const int DPI = 300; // TODO: submitted parameter...
 
 namespace Sipi {
-    bool SipiIOPdf::read(SipiImage *img, std::string filepath, int pagenum, std::shared_ptr<SipiRegion> region,
+    bool SipiIOPdf::read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
               std::shared_ptr<SipiSize> size, bool force_bps_8,
               ScalingQuality scaling_quality) {
 
@@ -147,7 +147,7 @@ namespace Sipi {
         return true;
     };
 
-    SipiImgInfo SipiIOPdf::getDim(std::string filepath, int pagenum) {
+    SipiImgInfo SipiIOPdf::getDim(const std::string &filepath, int pagenum) {
         SipiImgInfo info;
 
         //
@@ -183,7 +183,7 @@ namespace Sipi {
         return info;
     };
 
-    void SipiIOPdf::write(SipiImage *img, std::string filepath, const SipiCompressionParams *params) {
+    void SipiIOPdf::write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params) {
         if (img->bps == 16) img->to8bps();
 
         //
