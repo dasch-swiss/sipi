@@ -33,7 +33,7 @@ namespace shttps {
             throw Error(thisSourceFile, __LINE__, "Adding stop socket not allowed after adding dynamic sockets!");
         }
         generic_open_sockets.emplace_back(NOOP, STOP_SOCKET, sid);
-        stop_sock_id = generic_open_sockets.size() - 1;
+        stop_sock_id = static_cast<int>(generic_open_sockets.size() - 1);
     }
     //=========================================================================
 
@@ -43,7 +43,7 @@ namespace shttps {
             throw Error(thisSourceFile, __LINE__, "Adding HTTP socket not allowed after adding dynamic sockets!");
         }
         generic_open_sockets.emplace_back(NOOP, HTTP_SOCKET, sid);
-        http_sock_id = generic_open_sockets.size() - 1;
+        http_sock_id = static_cast<int>(generic_open_sockets.size() - 1);
     }
     //=========================================================================
 
@@ -53,7 +53,7 @@ namespace shttps {
             throw Error(thisSourceFile, __LINE__, "Adding SSL socket not allowed after adding dynamic sockets!");
         }
         generic_open_sockets.emplace_back(NOOP, SSL_SOCKET, sid, nullptr);
-        ssl_sock_id = generic_open_sockets.size() - 1;
+        ssl_sock_id = static_cast<int>(generic_open_sockets.size() - 1);
     }
     //=========================================================================
 
@@ -63,7 +63,7 @@ namespace shttps {
         sockid.socket_type = DYN_SOCKET;
         generic_open_sockets.push_back(sockid);
         if (dyn_socket_base == -1) {
-            dyn_socket_base = generic_open_sockets.size() - 1;
+            dyn_socket_base = static_cast<int>(generic_open_sockets.size() - 1);
         }
     }
     //=========================================================================
@@ -106,7 +106,7 @@ namespace shttps {
 
     bool SocketControl::get_waiting(SocketInfo &sockid) {
         std::unique_lock<std::mutex> mutex_guard(sockets_mutex);
-        if (waiting_sockets.size() > 0) {
+        if (!waiting_sockets.empty()) {
             sockid = waiting_sockets.front();
             waiting_sockets.pop();
             return true;
@@ -140,7 +140,7 @@ namespace shttps {
             data.type = ERROR;
             std::cerr << "==> receive_control_message: received only " << n << " bytes!!" << std::endl;
         }
-        return {data};
+        return SocketInfo(data);
     }
     //=========================================================================§
 

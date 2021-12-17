@@ -22,11 +22,7 @@
  */
 
 #include <algorithm>
-#include <functional>
-#include <cctype>
 #include <iostream>
-#include <fstream>
-#include <sstream>
 #include <string>
 #include <cstring>      // Needed for memset
 #include <utility>
@@ -34,16 +30,15 @@
 
 #include <sys/types.h>
 #include <sys/select.h>
-#include <sys/errno.h>
+#include <cerrno>
 #include <sys/stat.h>
 #include <sys/socket.h>
-#include <signal.h>
+#include <csignal>
 #include <poll.h>
 #include <netinet/in.h>
 #include <arpa/inet.h> //inet_addr
 #include <unistd.h>    //write
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdlib>
 #include <fcntl.h>
 #include <pthread.h>
 #include <pwd.h>
@@ -53,7 +48,6 @@
 //#include "openssl/applink.c"
 
 
-#include "Global.h"
 #include "SockStream.h"
 #include "Server.h"
 #include "LuaServer.h"
@@ -68,25 +62,12 @@ namespace shttps {
 
     const char loggername[] = "Sipi"; // see Global.h !!
 
-    typedef struct {
-        int sock;
-#ifdef SHTTPS_ENABLE_SSL
-        SSL *cSSL;
-#endif
-        std::string peer_ip;
-        int peer_port;
-        int commpipe_read;
-        Server *serv;
-    } TData;
-    //=========================================================================
-
-
     /*!
      * Starts a thread just to catch all signals sent to the server process.
      * If it receives SIGINT or SIGTERM, tells the server to stop.
      */
     static void *sig_thread(void *arg) {
-        Server *serverptr = static_cast<Server *>(arg);
+        auto *serverptr = static_cast<Server *>(arg);
         sigset_t set;
         sigemptyset(&set);
         sigaddset(&set, SIGPIPE);
@@ -132,8 +113,7 @@ namespace shttps {
         }
 
         syslog(LOG_WARNING, "No handler available! Host: %s Uri: %s", conn.host().c_str(), conn.uri().c_str());
-        return;
-    }
+   }
     //=========================================================================
 
     /**
@@ -317,7 +297,7 @@ namespace shttps {
             return;
         }
 
-        struct stat s;
+        struct stat s{};
 
         if (stat(infile.c_str(), &s) == 0) {
             if (!(s.st_mode & S_IFREG)) { // we have not a regular file, do nothing!
@@ -439,7 +419,7 @@ namespace shttps {
                 //
                 // first we get the filesize and time using fstat
                 //
-                struct stat fstatbuf;
+                struct stat fstatbuf{};
 
                 if (stat(infile.c_str(), &fstatbuf) != 0) {
                     throw Error(__file__, __LINE__, "Cannot fstat file!");

@@ -30,6 +30,7 @@
 #include <cstdio>
 #include <cmath>
 #include <syslog.h>
+#include <cstring>
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -261,6 +262,18 @@ namespace Sipi {
     }
     //=============================================================================
 
+    static void cleanup_file_destination(j_compress_ptr cinfo) {
+        FileBuffer *file_buffer = (FileBuffer *) cinfo->client_data;
+        free(file_buffer->buffer);
+        free(file_buffer);
+        cinfo->client_data = nullptr;
+
+        free(cinfo->dest);
+        cinfo->dest = nullptr;
+    }
+    //=============================================================================
+
+
     /*!
      * Struct that is used to hold the variables for defining the
      * private I/O routines which are used to write the the HTTP socket
@@ -330,6 +343,7 @@ namespace Sipi {
         free(cinfo->dest);
         cinfo->dest = nullptr;
     }
+    //=============================================================================
 
     /*!
      * This function is used to setup the I/O destination to the HTTP socket
@@ -953,16 +967,14 @@ namespace Sipi {
         } catch (JpegError &jpgerr) {
             throw SipiImageError(__file__, __LINE__, jpgerr.what());
         }
+
         if (filepath == "HTTP") { // we are transmitting the data through the webserver
             shttps::Connection *conobj = img->connection();
             try {
                 jpeg_html_dest(&cinfo, conobj);
             } catch (JpegError &jpgerr) {
-                jpeg_destroy_compress(&cinfo);
-                std::cerr << "BEFORE jpeg_destroy_compress(&cinfo)" << std::endl;
-                jpeg_destroy_compress(&cinfo);
-                std::cerr << "AFTER jpeg_destroy_compress(&cinfo)" << std::endl;
                 cleanup_html_destination(&cinfo);
+                jpeg_destroy_compress(&cinfo);
                 throw SipiImageError(__file__, __LINE__, jpgerr.what());
             }
         } else {
@@ -971,6 +983,7 @@ namespace Sipi {
             } else {
                 if ((outfile = open(filepath.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)) ==
                     -1) {
+                    jpeg_destroy_compress(&cinfo);
                     throw SipiImageError(__file__, __LINE__, "Cannot open file \"" + filepath + "\"!");
                 }
                 jpeg_file_dest(&cinfo, outfile);
@@ -984,6 +997,7 @@ namespace Sipi {
             case MINISWHITE:
             case MINISBLACK: {
                 if (img->nc != 1) {
+                    jpeg_destroy_compress(&cinfo);
                     throw SipiImageError(__file__, __LINE__,
                                          "Num of components not 1 (nc = " + std::to_string(img->nc) + ")!");
                 }
@@ -993,6 +1007,7 @@ namespace Sipi {
             }
             case RGB: {
                 if (img->nc != 3) {
+                    jpeg_destroy_compress(&cinfo);
                     throw SipiImageError(__file__, __LINE__,
                                          "Num of components not 3 (nc = " + std::to_string(img->nc) + ")!");
                 }
@@ -1002,6 +1017,7 @@ namespace Sipi {
             }
             case SEPARATED: {
                 if (img->nc != 4) {
+                    jpeg_destroy_compress(&cinfo);
                     throw SipiImageError(__file__, __LINE__,
                                          "Num of components not 3 (nc = " + std::to_string(img->nc) + ")!");
                 }
@@ -1011,6 +1027,7 @@ namespace Sipi {
             }
             case YCBCR: {
                 if (img->nc != 3) {
+                    jpeg_destroy_compress(&cinfo);
                     throw SipiImageError(__file__, __LINE__,
                                          "Num of components not 3 (nc = " + std::to_string(img->nc) + ")!");
                 }
@@ -1025,6 +1042,7 @@ namespace Sipi {
                 break;
             }
             default: {
+                jpeg_destroy_compress(&cinfo);
                 throw SipiImageError(__file__, __LINE__, "Unsupported JPEG colorspace: " + std::to_string(img->photo));
             }
         }
@@ -1132,7 +1150,7 @@ namespace Sipi {
                 } catch (JpegError &jpgerr) {
                     jpeg_finish_compress(&cinfo);
                     jpeg_destroy_compress(&cinfo);
-                    if (outfile != -1) close(outfile);
+                   if (outfile != -1) close(outfile);
                     throw SipiImageError(__file__, __LINE__, jpgerr.what());
                 }
 
@@ -1214,7 +1232,6 @@ namespace Sipi {
         if (outfile != -1) close(outfile);
 
         jpeg_destroy_compress(&cinfo);
-
     }
 
 } // namespace

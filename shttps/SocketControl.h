@@ -48,15 +48,15 @@ namespace shttps {
         };
 
         struct SIData{
-            ControlMessageType type;
-            SocketType socket_type;
-            int sid;
+            ControlMessageType type{NOOP};
+            SocketType socket_type{CONTROL_SOCKET};
+            int sid{};
 #ifdef SHTTPS_ENABLE_SSL
-            SSL *ssl_sid;
-            SSL_CTX *sslctx;
+            SSL *ssl_sid{};
+            SSL_CTX *sslctx{};
 #endif
             char peer_ip[INET6_ADDRSTRLEN]{};
-            int peer_port;
+            int peer_port{};
         };
 
         class SocketInfo {
@@ -106,7 +106,7 @@ namespace shttps {
                 peer_port = si.peer_port;
             }
 
-            SocketInfo(const SIData &data) {
+            explicit SocketInfo(const SIData &data) {
                 type = data.type;
                 socket_type = data.socket_type;
                 sid = data.sid;
@@ -163,7 +163,7 @@ namespace shttps {
 
         pollfd *get_sockets_arr();
 
-        int get_sockets_size() const { return generic_open_sockets.size(); }
+        int get_sockets_size() const { return static_cast<int>(generic_open_sockets.size()); }
 
         int get_n_msg_sockets() const { return n_msg_sockets; }
 
@@ -183,9 +183,9 @@ namespace shttps {
 
         int get_dyn_socket_base() const { return dyn_socket_base; }
 
-        int size() { return generic_open_sockets.size(); }
+        int size() { return static_cast<int>(generic_open_sockets.size()); }
 
-        const pollfd &operator[](int index);
+        inline const pollfd &operator[](int index) { return open_sockets[index]; };
 
         void remove(int pos, SocketInfo &sockid);
 
