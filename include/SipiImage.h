@@ -232,29 +232,29 @@ class SipiImageError : public std::exception {
         /*!
          * Getter for nx
          */
-        inline size_t getNx() { return nx; };
+        inline size_t getNx() const { return nx; };
 
 
         /*!
          * Getter for ny
          */
-        inline size_t getNy() { return ny; };
+        inline size_t getNy() const { return ny; };
 
         /*!
          * Getter for nc (includes alpha channels!)
          */
-        inline size_t getNc() { return nc; };
+        inline size_t getNc() const { return nc; };
 
         /*!
          * Getter for number of alpha channels
          */
-        inline size_t getNalpha() { return es.size(); }
+        inline size_t getNalpha() const { return es.size(); }
 
         /*!
          * Get bits per sample of image
          * @return bis per sample (bps)
          */
-        inline size_t getBps() { return bps; }
+        inline size_t getBps() const { return bps; }
 
         /*! Destructor
          *
@@ -323,7 +323,7 @@ class SipiImageError : public std::exception {
          *
          * \returns Pointer to connection data
          */
-        inline shttps::Connection *connection() { return conobj; };
+        inline shttps::Connection *connection() const { return conobj; };
 
         inline void essential_metadata(const SipiEssentials &emdata_p) { emdata = emdata_p; }
 
@@ -401,7 +401,7 @@ class SipiImageError : public std::exception {
          * \param[in] pagenum Page that is to be used (for PDF's and multipage TIF's only, first page is 1)
          * \return Info about image (see SipiImgInfo)
          */
-        SipiImgInfo getDim(std::string filepath, int pagenum = 0);
+        SipiImgInfo getDim(const std::string &filepath, int pagenum = 0) const;
 
         /*!
          * Get the dimension of the image object
@@ -409,7 +409,7 @@ class SipiImageError : public std::exception {
          * @param[out] width Width of the image in pixels
          * @param[out] height Height of the image in pixels
          */
-        void getDim(size_t &width, size_t &height);
+        void getDim(size_t &width, size_t &height) const;
 
         /*!
          * Write an image to somewhere
@@ -425,13 +425,13 @@ class SipiImageError : public std::exception {
          * - "png" for PNG files
          * \param[in] filepath String containing the path/filename
          */
-        void write(std::string ftype, std::string filepath, const SipiCompressionParams *params = nullptr);
+        void write(const std::string &ftype, const std::string &filepath, const SipiCompressionParams *params = nullptr);
 
 
         /*!
          * Convert full range YCbCr (YCC) to RGB colors
          */
-        void convertYCC2RGB(void);
+        void convertYCC2RGB();
 
 
         /*!
@@ -468,7 +468,7 @@ class SipiImageError : public std::exception {
          * \param[in] width Width of the region. If the region goes beyond the image dimensions, it's adjusted.
          * \param[in] height Height of the region. If the region goes beyond the image dimensions, it's adjusted
          */
-        bool crop(std::shared_ptr<SipiRegion> region);
+        bool crop(const std::shared_ptr<SipiRegion> &region);
 
         /*!
          * Resize an image using a high speed algorithm which may result in poor image quality
@@ -511,7 +511,7 @@ class SipiImageError : public std::exception {
          *
          * \returns Returns true on success, false on error
          */
-        bool to8bps(void);
+        bool to8bps();
 
         /*!
          * Convert an image to a bitonal representation using Steinberg-Floyd dithering.
@@ -521,14 +521,14 @@ class SipiImageError : public std::exception {
          *
          * \returns Returns true on success, false on error
          */
-        bool toBitonal(void);
+        bool toBitonal();
 
         /*!
          * Add a watermark to a file...
          *
          * \param[in] wmfilename Path to watermakfile (which must be a TIFF file at the moment)
          */
-        bool add_watermark(std::string wmfilename);
+        bool add_watermark(const std::string &wmfilename);
 
 
         /*!
