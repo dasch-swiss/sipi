@@ -2,7 +2,7 @@
 ARG BUILD_TYPE=production
 
 # STAGE 1: Build production
-FROM daschswiss/sipi-base:2.4.2 as builder-production
+FROM daschswiss/sipi-base:2.5.0 as builder-production
 
 WORKDIR /sipi
 
