@@ -34,7 +34,10 @@ jobs:
       - name: test
         run: make test-ci
       - name: integration tests
-        run: make test-integration
+        run: |
+          ls chmod -R 777 $GITHUB_WORKSPACE/build-linux/extsrcs
+          chmod -R 777 $GITHUB_WORKSPACE/build-linux/extsrcs/v8_2_1-01727L
+          make test-integration
 
   # build documentation
   docs-build-test:

@@ -7,7 +7,8 @@ CURRENT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 include vars.mk
 
 # Version of the base Docker image
-SIPI_BASE_VERSION := 2.5.0
+SIPI_BASE := daschswiss/sipi-base:2.5.0
+UBUNTU_BASE := ubuntu:20.04
 
 .PHONY: docs-build
 docs-build: ## build docs into the local 'site' folder
@@ -27,37 +28,69 @@ install-requirements: ## install requirements for documentation
 
 .PHONY: docker-build
 docker-build: ## build and publish Sipi Docker image locally
-	docker buildx build --platform linux/amd64 --build-arg BUILD_TYPE=production -t $(DOCKER_IMAGE) -t $(DOCKER_REPO):latest --load .
+	docker buildx build \
+		--platform linux/amd64 \
+		--build-arg BUILD_TYPE=production \
+		--build-arg SIPI_BASE=$(SIPI_BASE) \
+		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		-t $(DOCKER_IMAGE) -t $(DOCKER_REPO):latest --load .
 
 .PHONY: docker-build-debug
 docker-build-debug: ## build and publish Sipi Docker image locally with debugging enabled
-	docker buildx build --platform linux/amd64 --build-arg BUILD_TYPE=debug -t $(DOCKER_IMAGE)-debug --load .
+	docker buildx build \
+		--platform linux/amd64 \
+		--build-arg BUILD_TYPE=debug \
+		--build-arg SIPI_BASE=$(SIPI_BASE) \
+        --build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		-t $(DOCKER_IMAGE)-debug --load .
 
 .PHONY: docker-publish
 docker-publish: ## publish Sipi Docker image to Docker-Hub
-	docker buildx build --platform linux/amd64 --build-arg BUILD_TYPE=production -t $(DOCKER_IMAGE) -t $(DOCKER_REPO):latest --push .
+	docker buildx build \
+		--platform linux/amd64 \
+		--build-arg BUILD_TYPE=production \
+		--build-arg SIPI_BASE=$(SIPI_BASE) \
+        --build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		-t $(DOCKER_IMAGE) -t $(DOCKER_REPO):latest --push .
 
 .PHONY: docker-publish-debug
 docker-publish-debug: ## publish Sipi Docker image to Docker-Hub with debugging enabled
-	docker buildx build --platform linux/amd64 --build-arg BUILD_TYPE=debug -t $(DOCKER_IMAGE)-debug --push .
+	docker buildx build \
+		--platform linux/amd64 \
+		--build-arg BUILD_TYPE=debug \
+		--build-arg SIPI_BASE=$(SIPI_BASE) \
+        --build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		-t $(DOCKER_IMAGE)-debug --push .
 
 .PHONY: compile
 compile: ## compile SIPI inside Docker with Debug symbols
-	docker run -it --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make"
+	docker run \
+		-it --rm \
+		-v ${PWD}:/sipi \
+		$(SIPI_BASE) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make"
 
 .PHONY: compile-ci
-compile-ci: ## compile SIPI inside Docker (no it)
-	docker run --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make"
+compile-ci: ## compile SIPI inside Docker with Debug symbols (no it)
+	docker run \
+		--rm \
+		-v ${PWD}:/sipi \
+		$(SIPI_BASE) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make"
 
 .PHONY: test
-test: ## compile and run tests inside Docker
+test: ## compile and run tests inside Docker with Debug symbols
 	@mkdir -p ${PWD}/images
-	docker run -it --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
+	docker run \
+		-it --rm \
+		-v ${PWD}:/sipi \
+		$(SIPI_BASE) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
 
 .PHONY: test-ci
-test-ci: ## compile and run tests inside Docker (no it)
+test-ci: ## compile and run tests inside Docker with Debug symbols (no it)
 	@mkdir -p ${CURRENT_DIR}/images
-	docker run --rm -v ${PWD}:/sipi daschswiss/sipi-base:$(SIPI_BASE_VERSION) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
+	docker run \
+		--rm \
+		-v ${PWD}:/sipi \
+		$(SIPI_BASE) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
 
 .PHONY: test-integration
 test-integration: docker-build ## run tests against locally published Sipi Docker image
@@ -66,17 +99,45 @@ test-integration: docker-build ## run tests against locally published Sipi Docke
 .PHONY: run
 run: docker-build ## run SIPI inside Docker
 	@mkdir -p ${CURRENT_DIR}/images
-	docker run -it --rm --workdir "/sipi" --expose "1024" --expose "1025" -p 1024:1024 -p 1025:1025 daschswiss/sipi:latest
+	docker run \
+		-it --rm \
+		--workdir "/sipi" \
+		--expose "1024" \
+		--expose "1025" \
+		-p 1024:1024 \
+		-p 1025:1025 \
+		daschswiss/sipi:latest
 
 .PHONY: cmdline
 cmdline: ## open shell inside Docker container
 	@mkdir -p ${CURRENT_DIR}/images
-	docker run -it --rm -v ${PWD}:/sipi --workdir "/sipi" --expose "1024" --expose "1025" -p 1024:1024 -p 1025:1025 dhlabbasel/sipi-base:18.04 /bin/sh
+	docker run -it --rm \
+		-v ${PWD}:/sipi \
+		--workdir "/sipi" \
+		--expose "1024" \
+		--expose "1025" \
+		-p 1024:1024 \
+		-p 1025:1025 \
+		${SIPI_BASE} /bin/bash
 
 .PHONY: shell
 shell: ## open shell inside privileged Docker container (does not compile)
 	@mkdir -p ${CURRENT_DIR}/images
-	docker run -it --privileged --cap-add=SYS_PTRACE --security-opt seccomp=unconfined --security-opt apparmor=unconfined --rm -v ${PWD}:/sipi --workdir "/sipi" --expose "1024" --expose "1025" -p 1024:1024 -p 1025:1025 -p 1234:1234 -p 1235:1235 daschswiss/sipi-base:${SIPI_BASE_VERSION} /bin/bash
+	docker run \
+		-it --rm \
+		--privileged \
+		--cap-add=SYS_PTRACE \
+		--security-opt seccomp=unconfined \
+		--security-opt apparmor=unconfined \
+		-v ${PWD}:/sipi \
+		--workdir "/sipi" \
+		--expose "1024" \
+		--expose "1025" \
+		-p 1024:1024 \
+		-p 1025:1025 \
+		-p 1234:1234 \
+		-p 1235:1235 \
+		${SIPI_BASE} /bin/bash
 
 .PHONY: valgrind
 valgrind: ## start SIPI with Valgrind (needs to be started inside Docker container, e.g., 'make shell')
