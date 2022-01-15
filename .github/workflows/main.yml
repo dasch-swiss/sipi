@@ -60,10 +60,7 @@ jobs:
       - name: build docker image
         run: make docker-build
       - name: integration tests
-        run: |
-          ls $GITHUB_WORKSPACE/build-linux/extsrcs
-          chmod -R 777 $GITHUB_WORKSPACE/build-linux/extsrcs/v8_2_1-01727L
-          make test-integration
+        run: make test-integration
 
   # publish only on release
   publish-images:
