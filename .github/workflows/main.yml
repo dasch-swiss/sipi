@@ -64,7 +64,7 @@ jobs:
 
   # publish only on release
   publish-images:
-    name: Publish Images to Dockerhub
+    name: Build and Publish Images to Dockerhub
     needs: [unit, integration]
     runs-on: ubuntu-latest
     if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags')
@@ -97,7 +97,7 @@ jobs:
 
   # build documentation
   docs:
-    name: Build Docs
+    name: Build Docs Testrun
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
@@ -117,7 +117,7 @@ jobs:
 
   # publish documentation when merged into main branch
   publish-docs:
-    name: Publish Docs
+    name: Build and Publish Docs
     needs: [docs]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
