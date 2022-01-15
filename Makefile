@@ -29,6 +29,7 @@ install-requirements: ## install requirements for documentation
 .PHONY: docker-build
 docker-build: ## build and publish Sipi Docker image locally
 	docker buildx build \
+		--progress auto \
 		--platform linux/amd64 \
 		--build-arg BUILD_TYPE=production \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
@@ -38,6 +39,7 @@ docker-build: ## build and publish Sipi Docker image locally
 .PHONY: docker-build-debug
 docker-build-debug: ## build and publish Sipi Docker image locally with debugging enabled
 	docker buildx build \
+		--progress auto \
 		--platform linux/amd64 \
 		--build-arg BUILD_TYPE=debug \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
@@ -47,6 +49,7 @@ docker-build-debug: ## build and publish Sipi Docker image locally with debuggin
 .PHONY: docker-publish
 docker-publish: ## publish Sipi Docker image to Docker-Hub
 	docker buildx build \
+		--progress auto \
 		--platform linux/amd64 \
 		--build-arg BUILD_TYPE=production \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
@@ -56,6 +59,7 @@ docker-publish: ## publish Sipi Docker image to Docker-Hub
 .PHONY: docker-publish-debug
 docker-publish-debug: ## publish Sipi Docker image to Docker-Hub with debugging enabled
 	docker buildx build \
+		--progress auto \
 		--platform linux/amd64 \
 		--build-arg BUILD_TYPE=debug \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \

@@ -4,7 +4,6 @@ build
 build-linux
 Dockerfile
 README.md
-**/*.pyc
 **/__pycache__/
 wheels/
 pip-log.txt
