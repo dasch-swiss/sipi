@@ -33,6 +33,8 @@ jobs:
         run: make compile-ci
       - name: test
         run: make test-ci
+      - name: build docker image
+        run: make docker-build
       - name: integration tests
         run: |
           ls $GITHUB_WORKSPACE/build-linux/extsrcs
