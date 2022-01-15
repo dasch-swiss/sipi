@@ -12,6 +12,7 @@
 #include <mutex>
 #include <csignal>
 #include <iostream>
+#include <cstring>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -20,7 +21,6 @@
 #include <unistd.h>
 #include <syslog.h>
 #include <poll.h>
-#include <string.h>
 
 #ifdef SHTTPS_ENABLE_SSL
 
@@ -47,6 +47,18 @@ namespace shttps {
             CONTROL_SOCKET, STOP_SOCKET, HTTP_SOCKET, SSL_SOCKET, DYN_SOCKET
         };
 
+        struct SIData{
+            ControlMessageType type{NOOP};
+            SocketType socket_type{CONTROL_SOCKET};
+            int sid{};
+#ifdef SHTTPS_ENABLE_SSL
+            SSL *ssl_sid{};
+            SSL_CTX *sslctx{};
+#endif
+            char peer_ip[INET6_ADDRSTRLEN]{};
+            int peer_port{};
+        };
+
         class SocketInfo {
         public:
             ControlMessageType type;
@@ -54,19 +66,28 @@ namespace shttps {
             int sid;
 #ifdef SHTTPS_ENABLE_SSL
             SSL *ssl_sid;
+            SSL_CTX *sslctx;
 #endif
-            char peer_ip[INET6_ADDRSTRLEN];
+            char peer_ip[INET6_ADDRSTRLEN]{};
             int peer_port;
 
-            SocketInfo(ControlMessageType type = NOOP,
-                       SocketType socket_type = CONTROL_SOCKET,
-                       int sid = -1,
-                       SSL * ssl_sid = nullptr,
-                       char *_peer_ip = nullptr,
-                       int peer_port = -1) : type(type), socket_type(socket_type), sid(sid), ssl_sid(ssl_sid), peer_port(peer_port)
+            explicit SocketInfo(ControlMessageType type = NOOP,
+                                SocketType socket_type = CONTROL_SOCKET,
+                                int sid = -1,
+#ifdef SHTTPS_ENABLE_SSL
+                                SSL * ssl_sid = nullptr,
+                                SSL_CTX *sslctx = nullptr,
+#endif
+                                char *_peer_ip = nullptr,
+                                int peer_port = -1) :
+#ifdef SHTTPS_ENABLE_SSL
+                                type(type), socket_type(socket_type), sid(sid), ssl_sid(ssl_sid), sslctx(sslctx), peer_port(peer_port)
+#else
+                                type(type), socket_type(socket_type), sid(sid),  peer_port(peer_port)
+#endif
             {
                 if (_peer_ip == nullptr) {
-                    for (int i = 0; i < INET6_ADDRSTRLEN; i++) peer_ip[i] = '\0';
+                    for (char & i : peer_ip) i = '\0';
                 } else {
                     strncpy(peer_ip, _peer_ip, INET6_ADDRSTRLEN - 1);
                     peer_ip[INET6_ADDRSTRLEN - 1] = '\0';
@@ -74,19 +95,38 @@ namespace shttps {
             }
 
             SocketInfo(const SocketInfo &si) {
+                type = si.type;
+                socket_type = si.socket_type;
                 sid = si.sid;
 #ifdef SHTTPS_ENABLE_SSL
                 ssl_sid = si.ssl_sid;
+                sslctx = si.sslctx;
 #endif
                 for (int i = 0; i < INET6_ADDRSTRLEN; i++) peer_ip[i] = si.peer_ip[i];
                 peer_port = si.peer_port;
             }
 
+            explicit SocketInfo(const SIData &data) {
+                type = data.type;
+                socket_type = data.socket_type;
+                sid = data.sid;
+#ifdef SHTTPS_ENABLE_SSL
+                ssl_sid = data.ssl_sid;
+                sslctx = data.sslctx;
+#endif
+                for (int i = 0; i < INET6_ADDRSTRLEN; i++) peer_ip[i] = data.peer_ip[i];
+                peer_port = data.peer_port;
+            }
 
-            SocketInfo operator=(const SocketInfo &si) {
+
+            SocketInfo &operator=(const SocketInfo &si) {
+                if (this == &si) return *this;
+                type = si.type;
+                socket_type = si.socket_type;
                 sid = si.sid;
 #ifdef SHTTPS_ENABLE_SSL
                 ssl_sid = si.ssl_sid;
+                sslctx = si.sslctx;
 #endif
                 for (int i = 0; i < INET6_ADDRSTRLEN; i++) peer_ip[i] = si.peer_ip[i];
                 peer_port = si.peer_port;
@@ -94,13 +134,6 @@ namespace shttps {
             }
 
         };
-
-        struct socket_info_hash {
-            size_t operator()(SocketInfo const &sockid) const noexcept {
-                return (sockid.sid);
-            }
-        };
-
 
     private:
         std::mutex sockets_mutex; //!> protecting mutex
@@ -126,50 +159,43 @@ namespace shttps {
          * sockets for the internal communication with the threads. The Initial sockets
          * are added to the idling sockets pool
          */
-        SocketControl(ThreadControl &thread_control);
+        explicit SocketControl(ThreadControl &thread_control);
 
         pollfd *get_sockets_arr();
 
-        int get_sockets_size() { return generic_open_sockets.size(); }
+        int get_sockets_size() const { return static_cast<int>(generic_open_sockets.size()); }
 
-        int get_n_msg_sockets() { return n_msg_sockets; }
+        int get_n_msg_sockets() const { return n_msg_sockets; }
 
         void add_stop_socket(int sid);
 
-        int get_stop_socket_id() { return stop_sock_id; }
+        int get_stop_socket_id() const { return stop_sock_id; }
 
         void add_http_socket(int sid);
 
-        int get_http_socket_id() { return http_sock_id; }
+        int get_http_socket_id() const { return http_sock_id; }
 
         void add_ssl_socket(int sid);
 
-        int get_ssl_socket_id() { return ssl_sock_id; }
+        int get_ssl_socket_id() const { return ssl_sock_id; }
 
         void add_dyn_socket(SocketInfo sockid);
 
-        int get_dyn_socket_base() { return dyn_socket_base; }
+        int get_dyn_socket_base() const { return dyn_socket_base; }
 
-        int size() { return generic_open_sockets.size(); }
+        int size() { return static_cast<int>(generic_open_sockets.size()); }
 
-        const pollfd &operator[](int index);
+        inline const pollfd &operator[](int index) { return open_sockets[index]; };
 
         void remove(int pos, SocketInfo &sockid);
 
 
-        /*!
-         *
-         * @param offset
-         * @param sockid
-         * @return
-         */
-        bool open_pop(int offset, SocketInfo &sockid);
 
         void move_to_waiting(int pos);
 
         bool get_waiting(SocketInfo &sockid);
 
-        static int send_control_message(int pipe_id, const SocketInfo &msg);
+        static ssize_t send_control_message(int pipe_id, const SocketInfo &msg);
 
         static SocketInfo receive_control_message(int pipe_id);
 

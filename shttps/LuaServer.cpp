@@ -2112,6 +2112,7 @@ namespace shttps {
 
         json_t *root = subtable(L, 1);
         char *jsonstr = json_dumps(root, JSON_INDENT(3));
+        json_decref(root);
 
         if (jwt_new(&jwt) != 0) {
             lua_settop(L, 0); // clear stack
@@ -2128,6 +2129,7 @@ namespace shttps {
 
         lua_pushboolean(L, true);
         lua_pushstring(L, token);
+        free(jsonstr);
 
         return 2;
     }
@@ -2169,10 +2171,12 @@ namespace shttps {
         char *tokendata;
 
         if ((tokendata = jwt_dump_str(jwt, false)) == nullptr) {
+            jwt_free(jwt);
             lua_pushboolean(L, false);
             lua_pushstring(L, "'server.decode_jwt(token)': Error in decoding token! (2)");
             return 2;
         }
+        jwt_free(jwt);
 
         std::string tokenstr = tokendata;
         free(tokendata);
@@ -2185,6 +2189,7 @@ namespace shttps {
         try {
             lua_jsonobj(L, jsonobj);
         } catch (std::string &errorMsg) {
+
             lua_settop(L, 0); // clear stack
             lua_pushboolean(L, false);
             std::string tmpstr = std::string("'server.decode_jwt(token)': Error in decoding token: ") + errorMsg;
@@ -3137,7 +3142,7 @@ namespace shttps {
 
         if (!lua_istable(L, -1)) {
             //return keyvalstores;
-            throw Error(__file__, __LINE__, "Value '" + table + "' in config file must be a table");
+            throw Error(thisSourceFile, __LINE__, "Value '" + table + "' in config file must be a table");
         }
 
         lua_pushnil(L);
@@ -3145,7 +3150,7 @@ namespace shttps {
             const char *profile_name = lua_tostring(L, -2);
 
             if (!lua_istable(L, -1)) {
-                throw Error(__file__, __LINE__, "Value '" + std::string(profile_name) + "' in config file must be a table");
+                throw Error(thisSourceFile, __LINE__, "Value '" + std::string(profile_name) + "' in config file must be a table");
             }
             LuaKeyValStore kvstore;
             lua_pushnil(L);
@@ -3169,13 +3174,13 @@ namespace shttps {
                     std::ostringstream errStream;
                     errStream << "Table contained returned nil";
                     std::string errorMsg = errStream.str();
-                    throw Error(__file__, __LINE__, errorMsg);
+                    throw Error(thisSourceFile, __LINE__, errorMsg);
                 } else {
                     std::string luaTypeName = std::string(lua_typename(L, -1));
                     std::ostringstream errMsg;
                     errMsg << "Table contained a value of type " << luaTypeName
                            << ", which is not supported";
-                    throw Error(__file__, __LINE__, errMsg.str());
+                    throw Error(thisSourceFile, __LINE__, errMsg.str());
                 }
                 kvstore[param_name] = tmplv;
                 lua_pop(L, 1);

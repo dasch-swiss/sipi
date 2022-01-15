@@ -62,11 +62,11 @@ namespace Sipi {
         try {
             if (Exiv2::XmpParser::decode(xmpData, xmp) != 0) {
                 Exiv2::XmpParser::terminate();
-                throw SipiError(__file__, __LINE__, "Could not parse XMP!");
+                throw SipiError(thisSourceFile, __LINE__, "Could not parse XMP!");
             }
         }
         catch(Exiv2::BasicError<char> &err) {
-            throw SipiError(__file__, __LINE__, err.what());
+            throw SipiError(thisSourceFile, __LINE__, err.what());
         }
          */
     }
@@ -80,11 +80,11 @@ namespace Sipi {
         try {
             if (Exiv2::XmpParser::decode(xmpData, xmp) != 0) {
                 Exiv2::XmpParser::terminate();
-                throw SipiError(__file__, __LINE__, "Could not parse XMP!");
+                throw SipiError(thisSourceFile, __LINE__, "Could not parse XMP!");
             }
         }
         catch(Exiv2::BasicError<char> &err) {
-            throw SipiError(__file__, __LINE__, err.what());
+            throw SipiError(thisSourceFile, __LINE__, err.what());
         }
          */
     }
@@ -99,11 +99,11 @@ namespace Sipi {
         try {
             if (Exiv2::XmpParser::decode(xmpData, buf) != 0) {
                 Exiv2::XmpParser::terminate();
-                throw SipiError(__file__, __LINE__, "Could not parse XMP!");
+                throw SipiError(thisSourceFile, __LINE__, "Could not parse XMP!");
             }
         }
         catch(Exiv2::BasicError<char> &err) {
-            throw SipiError(__file__, __LINE__, err.what());
+            throw SipiError(thisSourceFile, __LINE__, err.what());
         }
          */
     }
@@ -128,11 +128,11 @@ namespace Sipi {
         std::string xmpPacket;
         try {
             if (0 != Exiv2::XmpParser::encode(xmpPacket, xmpData, Exiv2::XmpParser::useCompactFormat)) {
-                throw SipiError(__file__, __LINE__, "Failed to serialize XMP data!");
+                throw SipiError(thisSourceFile, __LINE__, "Failed to serialize XMP data!");
             }
         }
         catch(Exiv2::BasicError<char> &err) {
-            throw SipiError(__file__, __LINE__, err.what());
+            throw SipiError(thisSourceFile, __LINE__, err.what());
         }
         Exiv2::XmpParser::terminate();
 

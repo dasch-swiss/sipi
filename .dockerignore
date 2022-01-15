@@ -1,4 +1,9 @@
-**/*.pyc
+.git
+.gitignore
+build
+build-linux
+Dockerfile
+README.md
 **/__pycache__/
 wheels/
 pip-log.txt

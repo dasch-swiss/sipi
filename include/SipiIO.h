@@ -87,6 +87,7 @@ namespace Sipi {
         J2K_Stiles,
         J2K_rates
     } SipiCompressionParamName;
+
     typedef std::unordered_map<int, std::string> SipiCompressionParams;
 
     class SipiImage; //!< forward declaration of class SipiImage
@@ -96,7 +97,7 @@ namespace Sipi {
      */
     class SipiIO {
     public:
-        virtual ~SipiIO() {};
+        virtual ~SipiIO() = default;;
 
 
         /*!
@@ -109,9 +110,36 @@ namespace Sipi {
          * to read only half the resolution. [default: 0]
          * \param force_bps_8 Convert the file to 8 bits/sample on reading thus enforcing an 8 bit image
          */
-        virtual bool read(SipiImage *img, std::string filepath, int pagenum, std::shared_ptr<SipiRegion> region,
+        virtual bool read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
                           std::shared_ptr<SipiSize> size, bool force_bps_8,
                           ScalingQuality scaling_quality) = 0;
+
+        bool read(SipiImage *img, const std::string &filepath) {
+            return read(img, filepath, 0, nullptr, nullptr, false,
+                        {HIGH, HIGH, HIGH, HIGH});
+        }
+
+        bool read(SipiImage *img, const std::string &filepath, int pagenum) {
+            return read(img, filepath, pagenum, nullptr, nullptr, false,
+                        {HIGH, HIGH, HIGH, HIGH});
+        }
+
+        bool read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region) {
+            return read(img, filepath, pagenum, region, nullptr, false,
+                        {HIGH, HIGH, HIGH, HIGH});
+        }
+
+        bool read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
+                  std::shared_ptr<SipiSize> size) {
+            return read(img, filepath, pagenum, region, size, false,
+                        {HIGH, HIGH, HIGH, HIGH});
+        }
+
+        bool read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
+                  std::shared_ptr<SipiSize> size, bool force_bps_8) {
+            return read(img, filepath, pagenum, region, size, force_bps_8,
+                 {HIGH, HIGH, HIGH, HIGH});
+        }
 
         /*!
          * Get the dimension of the image
@@ -120,7 +148,11 @@ namespace Sipi {
          * \param[out] width Width of the image in pixels
          * \param[out] height Height of the image in pixels
          */
-        virtual SipiImgInfo getDim(std::string filepath, int pagenum) = 0;
+        virtual SipiImgInfo getDim(const std::string &filepath, int pagenum) = 0;
+
+        SipiImgInfo getDim(const std::string &filepath) {
+            return getDim(filepath, 0)    ;
+        }
 
         /*!
          * Write an image for a file using the given file format implemented by the subclass
@@ -130,7 +162,11 @@ namespace Sipi {
          * - "-" means to write the image data to stdout
          * - "HTTP" means to write the image data to the HTTP-server output
          */
-        virtual void write(SipiImage *img, std::string filepath, const SipiCompressionParams *params = nullptr) = 0;
+        virtual void write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params) = 0;
+
+        void write(SipiImage *img, const std::string &filepath) {
+            write(img, filepath, nullptr);
+        }
     };
 
 }

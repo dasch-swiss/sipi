@@ -137,7 +137,8 @@ namespace shttps {
          * \param[in] name_p Name of the cookie
          * \param[in] value_p Value of the Cookie
          */
-        inline Cookie(const std::string &name_p, const std::string value_p) : _name(name_p), _value(value_p) {}
+        inline Cookie(const std::string &name_p, const std::string value_p) : _name(name_p), _value(value_p),
+        _secure(true), _http_only(false) {}
 
         /*!
          * Getter for the name

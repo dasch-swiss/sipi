@@ -54,7 +54,7 @@ std::string base64Encode(const std::vector<unsigned char> &message) {
 
     size_t encodedSize = 4*ceil((double) message.size() / 3);
 
-    char *buffer = (char *) calloc(1, encodedSize + 1);
+    char *buffer = (char *) malloc(encodedSize + 1);
     if(buffer == NULL) {
         throw shttps::Error(__file__, __LINE__, "Failed to allocate memory", errno);
     }
@@ -69,7 +69,9 @@ std::string base64Encode(const std::vector<unsigned char> &message) {
     BIO_free_all(bio);
     fclose(stream);
 
-    return std::string(buffer);
+    std::string res(buffer);
+    free(buffer);
+    return res;
 }
 
 std::vector<unsigned char> base64Decode(const std::string &b64message) {
@@ -77,7 +79,7 @@ std::vector<unsigned char> base64Decode(const std::string &b64message) {
     BIO *b64;
     size_t decodedLength = calcDecodeLength(b64message);
 
-    unsigned char *buffer = (unsigned char *) calloc(1, decodedLength + 1);
+    unsigned char *buffer = (unsigned char *) malloc(decodedLength + 1);
     if(buffer == NULL) {
         shttps::Error(__file__, __LINE__, "Failed to allocate memory", errno);
     }
@@ -97,6 +99,7 @@ std::vector<unsigned char> base64Decode(const std::string &b64message) {
     data.reserve(decodedLength);
     for (int i = 0; i < decodedLength; i++) data.push_back(buffer[i]);
 
+    free(buffer);
     return data;
 }
 
@@ -114,7 +117,10 @@ namespace Sipi {
     _data_chksum(data_chksum_p) {
         _is_set = true;
         _use_icc = false;
-        _icc_profile = base64Encode(icc_profile_p);
+        if (!_icc_profile.empty()) {
+            _icc_profile = base64Encode(icc_profile_p);
+            _use_icc = true;
+        }
     }
 
     std::string SipiEssentials::hash_type_string(void) const {

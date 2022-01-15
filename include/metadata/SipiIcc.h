@@ -62,7 +62,7 @@ namespace Sipi {
      */
     class SipiIcc {
     private:
-        cmsHPROFILE icc_profile;            //!< Handle of the littleCMS profile data
+        cmsHPROFILE icc_profile{};            //!< Handle of the littleCMS profile data
         PredefinedProfiles profile_type;    //!< Profile type that is represented
 
     public:
@@ -91,13 +91,13 @@ namespace Sipi {
          * Constructor using littleCMS profile
          * \param[in] icc_profile_p LittleCMS profile
          */
-        SipiIcc(cmsHPROFILE &icc_profile_p);
+        explicit SipiIcc(cmsHPROFILE &icc_profile_p);
 
         /**
          * Constructor to create a predefined profile
          * \param[in] predef Desired predefined profile
          */
-        SipiIcc(PredefinedProfiles predef);
+        explicit SipiIcc(PredefinedProfiles predef);
 
         /**
          * Constructor of an ICC RGB profile using white point, primaries and transfer function (if available),
@@ -107,8 +107,8 @@ namespace Sipi {
          * \param[in] tfunc Transfer function tables as retrieved by libtiff with either (1 << bitspersample) or 3*(1 << bitspersample) entries
          * \param[in] Length of tranfer function table
          */
-        SipiIcc(float white_point_p[], float primaries_p[], const unsigned short *tfunc = NULL,
-                const int tfunc_len = 0);
+        SipiIcc(float white_point_p[], float primaries_p[], const unsigned short *tfunc = nullptr,
+                int tfunc_len = 0);
 
         /**
          * Destructor
@@ -144,7 +144,7 @@ namespace Sipi {
          * Get the profile type
          * \retruns Gives the predefined profile type
          */
-        inline const PredefinedProfiles getProfileType() const { return profile_type; };
+        inline PredefinedProfiles getProfileType() const { return profile_type; };
 
         /*!
          * returns a littleCMS formatter with the given bits/sample

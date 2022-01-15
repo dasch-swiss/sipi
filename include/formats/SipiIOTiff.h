@@ -36,7 +36,7 @@
 
 namespace Sipi {
 
-    extern unsigned char *read_watermark(std::string wmfile, int &nx, int &ny, int &nc);
+    unsigned char *read_watermark(const std::string &wmfile, int &nx, int &ny, int &nc);
 
     /*! Class which implements the TIFF-reader/writer */
     class SipiIOTiff : public SipiIO {
@@ -94,9 +94,9 @@ namespace Sipi {
          * \param filepath Image file path
          * \param reduce Reducing factor. Not used reading TIFF files
          */
-        bool read(SipiImage *img, std::string filepath, int pagenum = 0, std::shared_ptr<SipiRegion> region = nullptr,
-                  std::shared_ptr<SipiSize> size = nullptr, bool force_bps_8 = true,
-                  ScalingQuality scaling_quality = {HIGH, HIGH, HIGH, HIGH}) override;
+        bool read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
+                  std::shared_ptr<SipiSize> size, bool force_bps_8,
+                  ScalingQuality scaling_quality) override;
 
         /*!
         * Get the dimension of the image
@@ -104,8 +104,7 @@ namespace Sipi {
         * \param[in] filepath Pathname of the image file
         * \return Image information
         */
-        SipiImgInfo getDim(std::string filepath, int pagenum) override;
-
+        SipiImgInfo getDim(const std::string &filepath, int pagenum) override;
 
         /*!
          * Write a TIFF image to a file, stdout or to a memory buffer
@@ -119,8 +118,7 @@ namespace Sipi {
          * - "-" means to write the image data to stdout
          * - "HTTP" means to write the image data to the HTTP-server output
          */
-        void write(SipiImage *img, std::string filepath, const SipiCompressionParams *params = nullptr) override;
-
+        void write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params) override;
     };
 }
 

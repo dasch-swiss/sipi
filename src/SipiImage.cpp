@@ -257,9 +257,9 @@ namespace Sipi {
         } catch (std::out_of_range &e) {
             std::stringstream ss;
             ss << "Unsupported file type: \"" << filename;
-            throw SipiImageError(__file__, __LINE__, ss.str());
+            throw SipiImageError(thisSourceFile, __LINE__, ss.str());
         } catch (shttps::Error &err) {
-            throw SipiImageError(__file__, __LINE__, err.to_string());
+            throw SipiImageError(thisSourceFile, __LINE__, err.to_string());
         }
 
         return true;
@@ -351,7 +351,7 @@ namespace Sipi {
     }
     //============================================================================
 
-    SipiImgInfo SipiImage::getDim(std::string filepath, int pagenum) {
+    SipiImgInfo SipiImage::getDim(const std::string &filepath, int pagenum) const {
         size_t pos = filepath.find_last_of('.');
         std::string fext = filepath.substr(pos + 1);
         std::string _fext;
@@ -390,27 +390,27 @@ namespace Sipi {
     //============================================================================
 
 
-    void SipiImage::getDim(size_t &width, size_t &height) {
+    void SipiImage::getDim(size_t &width, size_t &height) const {
         width = getNx();
         height = getNy();
     }
     //============================================================================
 
-    void SipiImage::write(std::string ftype, std::string filepath, const SipiCompressionParams *params) {
+    void SipiImage::write(const std::string &ftype, const std::string &filepath, const SipiCompressionParams *params) {
         io[ftype]->write(this, filepath, params);
    }
     //============================================================================
 
-    void SipiImage::convertYCC2RGB(void) {
+    void SipiImage::convertYCC2RGB() {
         if (bps == 8) {
             byte *inbuf = pixels;
             byte *outbuf = new byte[(size_t) nc * (size_t) nx * (size_t) ny];
 
             for (size_t j = 0; j < ny; j++) {
                 for (size_t i = 0; i < nx; i++) {
-                    double Y = (double) inbuf[nc * (j * nx + i) + 2];
-                    double Cb = (double) inbuf[nc * (j * nx + i) + 1];;
-                    double Cr = (double) inbuf[nc * (j * nx + i) + 0];
+                    auto Y = (double) inbuf[nc * (j * nx + i) + 2];
+                    auto Cb = (double) inbuf[nc * (j * nx + i) + 1];;
+                    auto Cr = (double) inbuf[nc * (j * nx + i) + 0];
 
                     int r = (int) (Y + 1.40200 * (Cr - 0x80));
                     int g = (int) (Y - 0.34414 * (Cb - 0x80) - 0.71414 * (Cr - 0x80));
@@ -431,13 +431,13 @@ namespace Sipi {
         } else if (bps == 16) {
             word *inbuf = (word *) pixels;
             size_t nnc = nc - 1;
-            unsigned short *outbuf = new unsigned short[nnc * nx * ny];
+            auto *outbuf = new unsigned short[nnc * nx * ny];
 
             for (size_t j = 0; j < ny; j++) {
                 for (size_t i = 0; i < nx; i++) {
-                    double Y = (double) inbuf[nc * (j * nx + i) + 2];
-                    double Cb = (double) inbuf[nc * (j * nx + i) + 1];;
-                    double Cr = (double) inbuf[nc * (j * nx + i) + 0];
+                    auto Y = (double) inbuf[nc * (j * nx + i) + 2];
+                    auto Cb = (double) inbuf[nc * (j * nx + i) + 1];;
+                    auto Cr = (double) inbuf[nc * (j * nx + i) + 0];
 
                     int r = (int) (Y + 1.40200 * (Cr - 0x80));
                     int g = (int) (Y - 0.34414 * (Cb - 0x80) - 0.71414 * (Cr - 0x80));
@@ -555,7 +555,7 @@ namespace Sipi {
             throw SipiImageError(__file__, __LINE__, msg);
         }
 
-        if (es.size() > 0) {
+        if (!es.empty()) {
             if (nc < 3) {
                 es.clear(); // no more alpha channel
             } else if (nc > 3) { // it's probably an alpha channel
@@ -591,7 +591,7 @@ namespace Sipi {
         } else if (bps == 16) {
             word *inbuf = (word *) pixels;
             size_t nnc = nc - 1;
-            unsigned short *outbuf = new unsigned short[nnc * nx * ny];
+            auto *outbuf = new unsigned short[nnc * nx * ny];
 
             for (size_t j = 0; j < ny; j++) {
                 for (size_t i = 0; i < nx; i++) {
@@ -685,7 +685,7 @@ namespace Sipi {
     //============================================================================
 
 
-    bool SipiImage::crop(std::shared_ptr<SipiRegion> region) {
+    bool SipiImage::crop(const std::shared_ptr<SipiRegion> &region) {
         int x, y;
         size_t width, height;
         if (region->getType() == SipiRegion::FULL) return true; // we do not have to crop;
@@ -1265,7 +1265,7 @@ namespace Sipi {
     }
     //============================================================================
 
-    bool SipiImage::to8bps(void) {
+    bool SipiImage::to8bps() {
         // little-endian architecture assumed
         //
         // we just use the shift-right operater (>> 8) to devide the values by 256 (2^8)!
@@ -1297,7 +1297,7 @@ namespace Sipi {
     //============================================================================
 
 
-    bool SipiImage::toBitonal(void) {
+    bool SipiImage::toBitonal() {
         if ((photo != MINISBLACK) && (photo != MINISWHITE)) {
             convertToIcc(SipiIcc(icc_GRAY_D50), 8);
         }
@@ -1311,7 +1311,7 @@ namespace Sipi {
         if (!doit) return true; // we have to do nothing, it's already bitonal
 
         // must be signed!! Error propagation my result in values < 0 or > 255
-        short *outbuf = new(std::nothrow) short[nx * ny];
+        auto *outbuf = new(std::nothrow) short[nx * ny];
 
         if (outbuf == nullptr) return false; // TODO: throw an error with a reasonable error message
 
@@ -1338,7 +1338,7 @@ namespace Sipi {
     //============================================================================
 
 
-    bool SipiImage::add_watermark(std::string wmfilename) {
+    bool SipiImage::add_watermark(const std::string &wmfilename) {
         int wm_nx, wm_ny, wm_nc;
         byte *wmbuf = read_watermark(wmfilename, wm_nx, wm_ny, wm_nc);
         if (wmbuf == nullptr) {
@@ -1452,7 +1452,7 @@ namespace Sipi {
 
             default: {
                 delete[] diffbuf;
-                if (new_rhs != nullptr) delete new_rhs;
+                delete new_rhs;
                 throw SipiImageError(__file__, __LINE__, "Bits per pixels not supported");
             }
         }
@@ -1503,12 +1503,12 @@ namespace Sipi {
 
             default: {
                 delete[] diffbuf;
-                if (new_rhs != nullptr) delete new_rhs;
+                delete new_rhs;
                 throw SipiImageError(__file__, __LINE__, "Bits per pixels not supported");
             }
         }
 
-        if (new_rhs != nullptr) delete new_rhs;
+        delete new_rhs;
 
         delete[] diffbuf;
         return *this;
@@ -1517,7 +1517,7 @@ namespace Sipi {
     /*==========================================================================*/
 
     SipiImage &SipiImage::operator-(const SipiImage &rhs) {
-        SipiImage *lhs = new SipiImage(*this);
+        auto *lhs = new SipiImage(*this);
         *lhs -= rhs;
         return *lhs;
     }
@@ -1581,7 +1581,7 @@ namespace Sipi {
 
             default: {
                 delete[] diffbuf;
-                if (new_rhs != nullptr) delete new_rhs;
+                delete new_rhs;
                 throw SipiImageError(__file__, __LINE__, "Bits per pixels not supported");
             }
         }
@@ -1627,7 +1627,7 @@ namespace Sipi {
 
             default: {
                 delete[] diffbuf;
-                if (new_rhs != nullptr) delete new_rhs;
+                delete new_rhs;
                 throw SipiImageError(__file__, __LINE__, "Bits per pixels not supported");
             }
         }
@@ -1640,7 +1640,7 @@ namespace Sipi {
     /*==========================================================================*/
 
     SipiImage &SipiImage::operator+(const SipiImage &rhs) {
-        SipiImage *lhs = new SipiImage(*this);
+        auto *lhs = new SipiImage(*this);
         *lhs += rhs;
         return *lhs;
     }

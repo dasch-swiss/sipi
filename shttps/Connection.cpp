@@ -607,13 +607,13 @@ namespace shttps {
 
                                     if (opts.count("form-data") == 0) {
                                         // something is wrong!
-                                        //cerr << __file__ << " #" << __LINE__ << endl;
+                                        //cerr << thisSourceFile << " #" << __LINE__ << endl;
                                         //cerr << "LINE=" << line << endl;
                                     }
 
                                     if (opts.count("name") == 0) {
                                         // something wrong
-                                        //cerr << __file__ << " #" << __LINE__ << endl;
+                                        //cerr << thisSourceFile << " #" << __LINE__ << endl;
                                         //cerr << "LINE=" << line << endl;
                                         //cerr << "VALUE=" << value << endl;
                                     }

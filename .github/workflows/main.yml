@@ -6,8 +6,8 @@ on:
     types: [published]
 
 jobs:
-  test:
-    name: Build and Test
+  unit:
+    name: Run Unit Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
@@ -22,54 +22,50 @@ jobs:
           path: ci
       - name: Copy ci-assets
         run: |
-          cp $GITHUB_WORKSPACE/ci/kakadu/v8_0_5-01727L.zip $GITHUB_WORKSPACE/vendor/v8_0_5-01727L.zip
+          cp $GITHUB_WORKSPACE/ci/kakadu/v8_2_1-01727L.zip $GITHUB_WORKSPACE/vendor/v8_2_1-01727L.zip
       - name: Set up Python 3.9
         uses: actions/setup-python@v2
         with:
           python-version: 3.9
       - name: install requirements
         run: make install-requirements
-      - name: run build
+      - name: compile
         run: make compile-ci
-      - name: run test
+      - name: test
         run: make test-ci
-      - name: run integration tests
-        run: make test-integration
 
-  # build documentation
-  docs-build-test:
-    name: Docs Build Test
+  integration:
+    name: Run Integration Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
+        uses: actions/checkout@v1
+        with:
+          fetch-depth: 50
+      - name: Checkout private ci-assets
         uses: actions/checkout@v2
         with:
-          fetch-depth: 1
-      - name: Set up Python 3.8
+          repository: dasch-swiss/dsp-ci-assets
+          token: ${{ secrets.DASCHBOT_PAT }} # `GitHub_PAT` is a secret that contains your PAT
+          path: ci
+      - name: Copy ci-assets
+        run: |
+          cp $GITHUB_WORKSPACE/ci/kakadu/v8_2_1-01727L.zip $GITHUB_WORKSPACE/vendor/v8_2_1-01727L.zip
+      - name: Set up Python 3.9
         uses: actions/setup-python@v2
         with:
-          python-version: 3.8
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      - name: Disk Free
-        run: |
-          df -h
-          docker system df
-          docker system prune --all --force --volumes
-          df -h
-      - name: run docs build
-        run: make docs-build
-      - name: Disk Free After
-        run: |
-          df -h
-          docker system df
+          python-version: 3.9
+      - name: install requirements
+        run: make install-requirements
+      - name: build docker image
+        run: make docker-build
+      - name: integration tests
+        run: make test-integration
 
   # publish only on release
-  publish:
-    name: Publish to Dockerhub
-    needs: test
+  publish-images:
+    name: Build and Publish Images to Dockerhub
+    needs: [unit, integration]
     runs-on: ubuntu-latest
     if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags')
     steps:
@@ -85,20 +81,44 @@ jobs:
           path: ci
       - name: copy ci-assets
         run: |
-          cp $GITHUB_WORKSPACE/ci/kakadu/v8_0_5-01727L.zip $GITHUB_WORKSPACE/vendor/v8_0_5-01727L.zip
-      - name: build and publish image
+          cp $GITHUB_WORKSPACE/ci/kakadu/v8_2_1-01727L.zip $GITHUB_WORKSPACE/vendor/v8_2_1-01727L.zip
+      - name: build and publish production image
         run: |
           echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
           make docker-publish
+      - name: build and publish debug image
+        run: |
+          echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
+          make docker-publish-debug
       - name: Update release notes
         uses: lakto/gren-action@v1.1.0
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
 
-  # deploy documentation when merged into main branch
-  deploy-docs:
-    name: Deploy docs
-    needs: [docs-build-test]
+  # build documentation
+  docs:
+    name: Build Docs Testrun
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: run docs build
+        run: make docs-build
+
+  # publish documentation when merged into main branch
+  publish-docs:
+    name: Build and Publish Docs
+    needs: [docs]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
@@ -109,7 +129,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           REQUIREMENTS: requirements.txt
-      - name: Disk Free After
-        run: |
-          df -h
-          docker system df

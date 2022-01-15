@@ -211,7 +211,7 @@ static bool is_jpx(const char *fname) {
 //=============================================================================
 
 
-bool SipiIOJ2k::read(SipiImage *img, std::string filepath, int pagenum, std::shared_ptr<SipiRegion> region,
+bool SipiIOJ2k::read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
                      std::shared_ptr<SipiSize> size, bool force_bps_8,
                      ScalingQuality scaling_quality) {
   if (!is_jpx(filepath.c_str())) return false; // It's not a JPGE2000....
@@ -627,7 +627,7 @@ bool SipiIOJ2k::read(SipiImage *img, std::string filepath, int pagenum, std::sha
 //=============================================================================
 
 
-SipiImgInfo SipiIOJ2k::getDim(std::string filepath, int pagenum) {
+SipiImgInfo SipiIOJ2k::getDim(const std::string &filepath, int pagenum) {
   SipiImgInfo info;
   if (!is_jpx(filepath.c_str())) {
     info.success = SipiImgInfo::FAILURE;
@@ -666,10 +666,10 @@ SipiImgInfo SipiIOJ2k::getDim(std::string filepath, int pagenum) {
   siz_params *siz = codestream.access_siz();
   int tmp_height;
   siz->get(Ssize, 0, 0, tmp_height);
-  info.height = (size_t) tmp_height;
+  info.height = tmp_height;
   int tmp_width;
   siz->get(Ssize, 0, 1, tmp_width);
-  info.width = (size_t) tmp_width;
+  info.width = tmp_width;
   info.success = SipiImgInfo::DIMS;
 
   int __tnx, __tny;
@@ -747,7 +747,7 @@ static long get_bpp_dims(kdu_codestream &codestream) {
   return ((long) max_height) * ((long) max_width);
 }
 
-void SipiIOJ2k::write(SipiImage *img, std::string filepath, const SipiCompressionParams *params) {
+void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params) {
   kdu_customize_warnings(&kdu_sipi_warn);
   kdu_customize_errors(&kdu_sipi_error);
 
@@ -1259,6 +1259,5 @@ void SipiIOJ2k::write(SipiImage *img, std::string filepath, const SipiCompressio
     throw SipiImageError(__file__, __LINE__, "Problem writing a JPEG2000 image!");
   }
 
-  return;
-}
+  }
 } // namespace Sipi
