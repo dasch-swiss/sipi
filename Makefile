@@ -53,7 +53,7 @@ docker-publish: ## publish Sipi Docker image to Docker-Hub
 		--platform linux/amd64 \
 		--build-arg BUILD_TYPE=production \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
-        --build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		-t $(DOCKER_IMAGE) -t $(DOCKER_REPO):latest --push .
 
 .PHONY: docker-publish-debug
@@ -63,7 +63,7 @@ docker-publish-debug: ## publish Sipi Docker image to Docker-Hub with debugging 
 		--platform linux/amd64 \
 		--build-arg BUILD_TYPE=debug \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
-        --build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		-t $(DOCKER_IMAGE)-debug --push .
 
 .PHONY: compile
