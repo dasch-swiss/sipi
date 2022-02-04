@@ -1254,7 +1254,12 @@ namespace shttps {
         }
         if (ins->eof() || os->eof()) return CLOSE;
         try {
+
+            syslog(LOG_DEBUG, "%s - %d", __FILE__, __LINE__);
+
             Connection conn(this, ins, os, _tmpdir);
+
+            syslog(LOG_DEBUG, "%s - %d", __FILE__, __LINE__);
 
             if (keep_alive <= 0) {
                 conn.keepAlive(false);
@@ -1265,6 +1270,8 @@ namespace shttps {
             conn.peer_port(peer_port);
             conn.secure(secure);
 
+            syslog(LOG_DEBUG, "%s - %d", __FILE__, __LINE__);
+
             if (conn.resetConnection()) {
                 if (conn.keepAlive()) {
                     return CONTINUE;
@@ -1272,6 +1279,8 @@ namespace shttps {
                     return CLOSE;
                 }
             }
+
+            syslog(LOG_DEBUG, "%s - %d", __FILE__, __LINE__);
 
             //
             // Setting up the Lua server
@@ -1282,11 +1291,15 @@ namespace shttps {
 
             LuaServer luaserver(conn, _initscript, true, lua_scriptdir);
 
+            syslog(LOG_DEBUG, "%s - %d", __FILE__, __LINE__);
+
             for (auto &global_func : lua_globals) {
                 global_func.func(luaserver.lua(), conn, global_func.func_dataptr);
             }
 
             void *hd = nullptr;
+
+            syslog(LOG_DEBUG, "%s - %d", __FILE__, __LINE__);
 
             try {
                 RequestHandler handler = getHandler(conn, &hd);
@@ -1296,9 +1309,13 @@ namespace shttps {
                 return CLOSE; // or CLOSE ??
             }
 
+            syslog(LOG_DEBUG, "%s - %d", __FILE__, __LINE__);
+
             if (!conn.cleanupUploads()) {
                 syslog(LOG_ERR, "Cleanup of uploaded files failed");
             }
+
+            syslog(LOG_DEBUG, "%s - %d", __FILE__, __LINE__);
 
             if (conn.keepAlive()) {
                 return CONTINUE;
