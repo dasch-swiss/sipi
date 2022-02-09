@@ -7,7 +7,7 @@ CURRENT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 include vars.mk
 
 # Version of the base Docker image
-SIPI_BASE := daschswiss/sipi-base:2.5.0
+SIPI_BASE := daschswiss/sipi-base:2.6.0
 UBUNTU_BASE := ubuntu:20.04
 
 .PHONY: docs-build
@@ -66,34 +66,46 @@ docker-publish-debug: ## publish Sipi Docker image to Docker-Hub with debugging 
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		-t $(DOCKER_IMAGE)-debug --push .
 
+.PHONY: create-ccache-volume
+create-ccache-volume: ## create a ccache Docker volume
+	docker volume create ccache
+
 .PHONY: compile
-compile: ## compile SIPI inside Docker with Debug symbols
+compile: create-ccache-volume ## compile SIPI inside Docker with Debug symbols
 	docker run \
 		-it --rm \
 		-v ${PWD}:/sipi \
+		-v ccache:/ccache \
+		-e CCACHE_DIR=/ccache \
 		$(SIPI_BASE) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make"
 
 .PHONY: compile-ci
-compile-ci: ## compile SIPI inside Docker with Debug symbols (no it)
+compile-ci: create-ccache-volume ## compile SIPI inside Docker with Debug symbols (no it)
 	docker run \
 		--rm \
 		-v ${PWD}:/sipi \
+		-v ccache:/ccache \
+        -e CCACHE_DIR=/ccache \
 		$(SIPI_BASE) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make"
 
 .PHONY: test
-test: ## compile and run tests inside Docker with Debug symbols
+test: create-ccache-volume ## compile and run tests inside Docker with Debug symbols
 	@mkdir -p ${PWD}/images
 	docker run \
 		-it --rm \
 		-v ${PWD}:/sipi \
+		-v ccache:/ccache \
+        -e CCACHE_DIR=/ccache \
 		$(SIPI_BASE) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
 
 .PHONY: test-ci
-test-ci: ## compile and run tests inside Docker with Debug symbols (no it)
+test-ci: create-ccache-volume ## compile and run tests inside Docker with Debug symbols (no it)
 	@mkdir -p ${CURRENT_DIR}/images
 	docker run \
 		--rm \
 		-v ${PWD}:/sipi \
+		-v ccache:/ccache \
+        -e CCACHE_DIR=/ccache \
 		$(SIPI_BASE) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
 
 .PHONY: test-integration

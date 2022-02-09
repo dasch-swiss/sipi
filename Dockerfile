@@ -1,6 +1,8 @@
+# syntax=docker/dockerfile:1.3
+
 # Expose (global) variables (ARGs before FROM can only be used on FROM lines and not afterwards)
 ARG BUILD_TYPE=production
-ARG SIPI_BASE=daschswiss/sipi-base:2.5.0
+ARG SIPI_BASE=daschswiss/sipi-base:2.6.0
 ARG UBUNTU_BASE=ubuntu:20.04
 
 # STAGE 1: Build debug
@@ -11,8 +13,12 @@ WORKDIR /sipi
 # Add everything to image.
 COPY . .
 
+# set ccache directory
+ENV CCACHE_DIR=/ccache
+
 # Build SIPI.
-RUN mkdir -p /sipi/build-linux && \
+RUN --mount=type=cache,target=/ccache \
+    mkdir -p /sipi/build-linux && \
     cd /sipi/build-linux && \
     cmake -DMAKE_DEBUG:BOOL=ON .. && \
     make
@@ -25,8 +31,12 @@ WORKDIR /sipi
 # Add everything to image.
 COPY . .
 
+# set ccache directory
+ENV CCACHE_DIR=/ccache
+
 # Build SIPI.
-RUN mkdir -p /sipi/build-linux && \
+RUN --mount=type=cache,target=/ccache \
+    mkdir -p /sipi/build-linux && \
     cd /sipi/build-linux && \
     cmake -DMAKE_DEBUG:BOOL=OFF .. && \
     make
@@ -39,8 +49,9 @@ MAINTAINER Ivan Subotic <400790+subotic@users.noreply.github.com>
 # Silence debconf messages
 ARG DEBIAN_FRONTEND=noninteractive
 
+# needs to be separate because of gnupg2 which is needed for the keyserver stuff
 RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
-    apt-get clean && apt-get -qq update && apt-get -y install \
+    apt-get update && apt-get -y install \
     ca-certificates \
     gnupg2
 
@@ -49,8 +60,7 @@ RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
     echo 'deb http://apt.llvm.org/focal/ llvm-toolchain-focal-11 main' | tee -a /etc/apt/sources.list && \
     echo 'deb-src http://apt.llvm.org/focal/ llvm-toolchain-focal-11 main' | tee -a /etc/apt/sources.list && \
     apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421 && \
-    apt-get clean && apt-get -qq update && apt-get -y install \
-    ca-certificates \
+    apt-get update && apt-get -y install \
     byobu curl git htop man vim wget unzip \
     libllvm11 llvm-11-runtime \
     openssl \
@@ -94,8 +104,9 @@ MAINTAINER Ivan Subotic <400790+subotic@users.noreply.github.com>
 # Silence debconf messages
 ARG DEBIAN_FRONTEND=noninteractive
 
+# needs to be separate because of gnupg2 which is needed for the keyserver stuff
 RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
-    apt-get clean && apt-get -qq update && apt-get -y install \
+    apt-get update && apt-get -y install \
     ca-certificates \
     gnupg2
 
@@ -104,8 +115,7 @@ RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
     echo 'deb http://apt.llvm.org/focal/ llvm-toolchain-focal-11 main' | tee -a /etc/apt/sources.list && \
     echo 'deb-src http://apt.llvm.org/focal/ llvm-toolchain-focal-11 main' | tee -a /etc/apt/sources.list && \
     apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421 && \
-    apt-get clean && apt-get -qq update && apt-get -y install \
-    ca-certificates \
+    apt-get update && apt-get -y install \
     byobu curl git htop man vim wget unzip \
     libllvm11 llvm-11-runtime \
     openssl \
