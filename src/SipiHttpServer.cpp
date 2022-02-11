@@ -705,18 +705,7 @@ namespace Sipi
         conn_obj.status(http_status);
         conn_obj.setBuffer(); // we want buffered output, since we send JSON text...
 
-        // set the origin
-        const std::string origin = conn_obj.header("origin");
-        syslog(LOG_DEBUG, "iiif_send_info: origin header %s", origin.c_str());
-        if (origin.empty())
-        {
-            conn_obj.header("Access-Control-Allow-Origin", "*");
-        }
-        else
-        {
-            conn_obj.header("Access-Control-Allow-Origin", origin);
-        }
-
+        conn_obj.header("Access-Control-Allow-Origin", "*");
         const std::string contenttype = conn_obj.header("accept");
         if (is_image_file)
         {
