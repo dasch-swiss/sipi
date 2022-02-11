@@ -71,58 +71,36 @@ create-ccache-volume: ## create a ccache Docker volume
 	docker volume create ccache
 
 .PHONY: compile
-compile: create-ccache-volume ## compile SIPI inside Docker with Debug symbols
-	docker run \
-		-it --rm \
-		-v ${PWD}:/sipi \
-		-v ccache:/ccache \
-		-e CCACHE_DIR=/ccache \
-		$(SIPI_BASE) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make"
+compile: ## compile SIPI (needs to be run inside devcontainer)
+	mkdir -p ${PWD}/build && cd ${PWD}/build && cmake -DMAKE_DEBUG:BOOL=ON .. && make
 
 .PHONY: compile-ci
-compile-ci: create-ccache-volume ## compile SIPI inside Docker with Debug symbols (no it)
+compile-ci: ## compile SIPI inside Docker with Debug symbols (no it)
 	docker run \
 		--rm \
 		-v ${PWD}:/sipi \
-		-v ccache:/ccache \
-        -e CCACHE_DIR=/ccache \
-		$(SIPI_BASE) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make"
+		$(SIPI_BASE) /bin/sh -c "mkdir -p /sipi/build && cd /sipi/build && cmake -DMAKE_DEBUG:BOOL=ON .. && make"
 
 .PHONY: test
-test: create-ccache-volume ## compile and run tests inside Docker with Debug symbols
+test: ## compile and run tests (needs to be run inside devcontainer)
 	@mkdir -p ${PWD}/images
-	docker run \
-		-it --rm \
-		-v ${PWD}:/sipi \
-		-v ccache:/ccache \
-        -e CCACHE_DIR=/ccache \
-		$(SIPI_BASE) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
+	mkdir -p ${PWD}/build && cd ${PWD}/build && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose
 
 .PHONY: test-ci
-test-ci: create-ccache-volume ## compile and run tests inside Docker with Debug symbols (no it)
+test-ci: ## compile and run tests inside Docker with Debug symbols (no it)
 	@mkdir -p ${CURRENT_DIR}/images
 	docker run \
 		--rm \
 		-v ${PWD}:/sipi \
-		-v ccache:/ccache \
-        -e CCACHE_DIR=/ccache \
-		$(SIPI_BASE) /bin/sh -c "mkdir -p /sipi/build-linux && cd /sipi/build-linux && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
+		$(SIPI_BASE) /bin/sh -c "mkdir -p /sipi/build && cd /sipi/build && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
 
 .PHONY: test-integration
 test-integration: docker-build ## run tests against locally published Sipi Docker image
 	pytest -s test/integration
 
 .PHONY: run
-run: docker-build ## run SIPI inside Docker
-	@mkdir -p ${CURRENT_DIR}/images
-	docker run \
-		-it --rm \
-		--workdir "/sipi" \
-		--expose "1024" \
-		--expose "1025" \
-		-p 1024:1024 \
-		-p 1025:1025 \
-		daschswiss/sipi:latest
+run: compile ## run SIPI (needs to be run inside devcontainer)
+	${PWD}/build/sipi --config=${PWD}/config/sipi.config.lua
 
 .PHONY: cmdline
 cmdline: ## open shell inside Docker container
@@ -157,11 +135,11 @@ shell: ## open shell inside privileged Docker container (does not compile)
 
 .PHONY: valgrind
 valgrind: ## start SIPI with Valgrind (needs to be started inside Docker container, e.g., 'make shell')
-	valgrind --leak-check=yes --track-origins=yes ./build-linux/sipi --config=/sipi/config/sipi.config.lua
+	valgrind --leak-check=yes --track-origins=yes ./build/sipi --config=/sipi/config/sipi.config.lua
 
 .PHONY: clean
 clean: ## cleans the project directory
-	@rm -rf build-linux/
+	@rm -rf build/
 	@rm -rf site/
 
 .PHONY: help
