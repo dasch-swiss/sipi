@@ -58,6 +58,12 @@ set(SIPI_SOURCE_DIR ${PROJECT_SOURCE_DIR})
 option(MAKE_SHARED_SIPI "Create sipi using all shared libraries" OFF)
 option(MAKE_DEBUG "Create sipi with debugger options on" ON)
 
+# check to see if we have access to ccache
+find_program(CCACHE_FOUND ccache)
+if(CCACHE_FOUND)
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+endif(CCACHE_FOUND)
+
 #
 # Here we determine the compiler and compiler version. We need clang >= 7.3 or g++ >= 5.3
 #

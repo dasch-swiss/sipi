@@ -1254,6 +1254,7 @@ namespace shttps {
         }
         if (ins->eof() || os->eof()) return CLOSE;
         try {
+
             Connection conn(this, ins, os, _tmpdir);
 
             if (keep_alive <= 0) {
