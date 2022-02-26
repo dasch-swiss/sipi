@@ -1,6 +1,6 @@
 # Expose (global) variables (ARGs before FROM can only be used on FROM lines and not afterwards)
 ARG BUILD_TYPE=production
-ARG SIPI_BASE=daschswiss/sipi-base:2.5.0
+ARG SIPI_BASE=daschswiss/sipi-base:2.7.0
 ARG UBUNTU_BASE=ubuntu:20.04
 
 # STAGE 1: Build debug

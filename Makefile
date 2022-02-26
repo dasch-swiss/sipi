@@ -7,7 +7,7 @@ CURRENT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 include vars.mk
 
 # Version of the base Docker image
-SIPI_BASE := daschswiss/sipi-base:2.5.0
+SIPI_BASE := daschswiss/sipi-base:2.7.0
 UBUNTU_BASE := ubuntu:20.04
 
 .PHONY: docs-build

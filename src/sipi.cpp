@@ -902,8 +902,6 @@ int main(int argc, char *argv[]) {
     //
 
     try {
-      std::cout << std::endl << "Ivan was here" << std::endl;
-      std::cout << std::endl << BUILD_TIMESTAMP << std::endl;
       std::cout << std::endl << BUILD_TIMESTAMP << std::endl;
       std::cout << BUILD_SCM_TAG << std::endl;
       std::cout << BUILD_SCM_REVISION << std::endl;
