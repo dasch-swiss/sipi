@@ -32,13 +32,9 @@
 #include <unistd.h>
 #include <streambuf>
 
-#ifdef SHTTPS_ENABLE_SSL
-
 #include "openssl/bio.h"
 #include "openssl/ssl.h"
 #include "openssl/err.h"
-
-#endif
 
 namespace shttps {
     /*!
@@ -70,9 +66,7 @@ namespace shttps {
         char *out_buf;     //!< output buffer
         int out_bufsize;   //!< Size of output buffer
         int sock;          //!< Socket handle
-#ifdef SHTTPS_ENABLE_SSL
         SSL *cSSL;         //!< SSL socket handle
-#endif
 
         /*!
          * This method is called when the read buffer (in_buf) has been empties.
@@ -121,8 +115,6 @@ namespace shttps {
          */
         SockStream(int sock_p, int in_bufsize_p = 8192, int out_bufsize = 8192, int putback_size_p = 32);
 
-#ifdef SHTTPS_ENABLE_SSL
-
         /*!
          * Constructor of the iostream for sockets which takes the socket id and the size of the buffers
          * as parameters. Please note the istreams allow to put back a characater/byte already read.
@@ -135,7 +127,6 @@ namespace shttps {
          */
         SockStream(SSL *cSSL_p, int in_bufsize_p = 8192, int out_bufsize = 8192, int putback_size_p = 32);
 
-#endif
 
         /*!
          * Destructor which frees all the resources, especially the input and output buffer

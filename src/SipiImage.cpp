@@ -39,7 +39,6 @@
 //#include "formats/SipiIOOpenJ2k.h"
 #include "formats/SipiIOJpeg.h"
 #include "formats/SipiIOPng.h"
-#include "formats/SipiIOPdf.h"
 #include "shttps/Parsing.h"
 
 static const char __file__[] = __FILE__;
@@ -51,8 +50,7 @@ namespace Sipi {
                                                                                {"jpx", std::make_shared<SipiIOJ2k>()},
             //{"jpx", std::make_shared<SipiIOOpenJ2k>()},
                                                                                {"jpg", std::make_shared<SipiIOJpeg>()},
-                                                                               {"png", std::make_shared<SipiIOPng>()},
-                                                                               {"pdf", std::make_shared<SipiIOPdf>()}};
+                                                                               {"png", std::make_shared<SipiIOPng>()}};
 
     /* ToDo: remove if everything is OK
     std::unordered_map<std::string, std::string> SipiImage::mimetypes = {{"jpx",  "image/jp2"},
@@ -61,8 +59,7 @@ namespace Sipi {
                                                                          {"jpeg", "image/jpeg"},
                                                                          {"tiff", "image/tiff"},
                                                                          {"tif",  "image/tiff"},
-                                                                         {"png",  "image/png"},
-                                                                         {"pdf",  "application/pdf"}};
+                                                                         {"png",  "image/png"}};
                                                                          */
 
     SipiImage::SipiImage() {
@@ -370,8 +367,6 @@ namespace Sipi {
             info = io[std::string("png")]->getDim(filepath, pagenum);
         } else if ((mimetype == "image/jp2") || (mimetype == "image/jpx")) {
             info = io[std::string("jpx")]->getDim(filepath, pagenum);
-        } else if (mimetype == "application/pdf") {
-            info = io[std::string("pdf")]->getDim(filepath, pagenum);
         }
         info.internalmimetype = mimetype;
 

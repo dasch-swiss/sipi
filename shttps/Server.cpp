@@ -583,17 +583,13 @@ namespace shttps {
                 syslog(LOG_ERR, "Could not get uid of user %s: you must start Sipi as root", userid_str.c_str());
             }
         }
-#ifdef SHTTPS_ENABLE_SSL
         SSL_load_error_strings();
         SSL_library_init();
         OpenSSL_add_all_algorithms();
-#endif
-
     }
 
 
 
-#ifdef SHTTPS_ENABLE_SSL
     /**
      * Set the Jason Web Token (jwt) secret that the server will use
      *
@@ -610,7 +606,6 @@ namespace shttps {
         }
     }
     //=========================================================================
-#endif
 
     /**
      * Get the correct handler to handle an incoming request. It seaches all
@@ -702,7 +697,6 @@ namespace shttps {
      * @return
      */
     static int close_socket(const SocketControl::SocketInfo &sockid) {
-#ifdef SHTTPS_ENABLE_SSL
         if (sockid.ssl_sid != nullptr) {
             int sstat;
             while ((sstat = SSL_shutdown(sockid.ssl_sid)) == 0);
@@ -713,7 +707,6 @@ namespace shttps {
             SSL_free(sockid.ssl_sid);
             SSL_CTX_free(sockid.sslctx);
         }
-#endif
         if (shutdown(sockid.sid, SHUT_RDWR) < 0) {
             syslog(LOG_DEBUG, "Debug: shutting down socket at [%s: %d]: %m failed (client terminated already?)",
                    __file__, __LINE__);
@@ -754,15 +747,11 @@ namespace shttps {
                         // here we process the request
                         //
                         std::unique_ptr<SockStream> sockstream;
-#ifdef SHTTPS_ENABLE_SSL
                         if (msg.ssl_sid != nullptr) {
                             sockstream = make_unique<SockStream>(msg.ssl_sid);
                         } else {
                             sockstream = make_unique<SockStream>(msg.sid);
                         }
-#else
-                        sockstream = make_unique<SockStream>(receive_msg.sid);
-#endif
 
                         std::istream ins(sockstream.get());
                         std::ostream os(sockstream.get());
@@ -772,7 +761,7 @@ namespace shttps {
                         shttps::ThreadStatus tstatus;
                         int keep_alive = 1;
                         std::string tmpstr(msg.peer_ip);
-#ifdef SHTTPS_ENABLE_SSL
+
                         if (msg.ssl_sid != nullptr) {
                             tstatus = tdata->serv->processRequest(&ins, &os, tmpstr,
                                                                   msg.peer_port, true, keep_alive);
@@ -780,10 +769,6 @@ namespace shttps {
                             tstatus = tdata->serv->processRequest(&ins, &os, tmpstr,
                                                                   msg.peer_port, false, keep_alive);
                         }
-#else
-                        tstatus = tdata->serv->processRequest(&ins, &os, tmpstr, msg.peer_port,
-                                                              false, keep_alive);
-#endif
                         //
                         // send the finished message
                         //
@@ -855,7 +840,6 @@ namespace shttps {
         } else {
             socket_id.peer_port = -1;
         }
-#ifdef SHTTPS_ENABLE_SSL
         SSL *cSSL = nullptr;
         SSL_CTX *sslctx = nullptr;
 
@@ -917,7 +901,6 @@ namespace shttps {
         }
         socket_id.ssl_sid = cSSL;
         socket_id.sslctx = sslctx;
-#endif
         return socket_id;
     }
 
@@ -1107,9 +1090,7 @@ namespace shttps {
 
                             SocketControl::SocketInfo sockid;
                             socket_control.remove(socket_control.get_http_socket_id(), sockid); // remove the HTTP socket
-#ifdef SHTTPS_ENABLE_SSL
                             socket_control.remove(socket_control.get_ssl_socket_id(), sockid); // remove the SSL socket
-#endif
                             socket_control.close_all_dynsocks(close_socket);
                             socket_control.broadcast_exit(); // broadcast EXIT to all worker threads
                             running = false;
@@ -1175,7 +1156,6 @@ namespace shttps {
                             //
                             SocketControl::SocketInfo sockid;
                             socket_control.remove(i, sockid); //  ==> CHANGES open_sockets!!
-#ifdef SHTTPS_ENABLE_SSL
                         } else if (i == socket_control.get_ssl_socket_id()) {
                             //
                             // The HTTP socked was being closed -> must be EXIT - do nothing!
@@ -1183,9 +1163,6 @@ namespace shttps {
                             SocketControl::SocketInfo sockid;
                             socket_control.remove(i, sockid); //  ==> CHANGES open_sockets!!
                         } else {
-#else
-                        } else {
-#endif
                             syslog(LOG_ERR, "We got a HANGUP from an unknown socket (socket_id = %d)", i);
                         }
                     } else {

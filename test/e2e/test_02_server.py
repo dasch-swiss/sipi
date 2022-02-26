@@ -294,7 +294,7 @@ class TestServer:
                 {'width': 128, 'height': 128}
             ],
             'tiles': [{'width': 512, 'height': 512, 'scaleFactors': [1, 2, 3, 4]}],
-            'extraFormats': ['tif', 'pdf', 'jp2'],
+            'extraFormats': ['tif', 'jp2'],
             'preferredFormats': ['jpg', 'tif', 'jp2', 'png'],
             'extraFeatures': [
                 'baseUriRedirect',
@@ -385,7 +385,6 @@ class TestServer:
                         "jpg",
                         "png",
                         "jp2",
-                        "pdf"
                     ],
                     "qualities": [
                         "color",
@@ -447,7 +446,7 @@ class TestServer:
                 'height': 512,
                 'scaleFactors': [1, 2, 3, 4, 5, 6, 7]
             }],
-            'extraFormats': ['tif', 'pdf', 'jp2'],
+            'extraFormats': ['tif', 'jp2'],
             'preferredFormats': ['jpg', 'tif', 'jp2', 'png'],
             'extraFeatures': [
                 'baseUriRedirect',
@@ -476,10 +475,6 @@ class TestServer:
     def test_pdf_server(self, manager):
         """Test serving entire PDF files"""
         manager.compare_server_bytes("/unit/CV+Pub_LukasRosenthaler.pdf/file", manager.data_dir_path("unit/CV+Pub_LukasRosenthaler.pdf"))
-
-    def test_pdf_page_server(self, manager):
-        """Test serving a PDF page as TIFF"""
-        manager.compare_server_images("/unit/CV+Pub_LukasRosenthaler.pdf@3/full/pct:25/0/default.jpg", manager.data_dir_path("unit/CV+Pub_LukasRosenthaler_p3.jpg"))
 
     def test_upscaling_server(self, manager):
         """Test upscaling of an image"""

@@ -41,11 +41,10 @@ namespace Sipi {
         std::string userid_str;
         std::string hostname;
         int port; //<! port number for server
-#ifdef SHTTPS_ENABLE_SSL
         int ssl_port = -1;
         std::string ssl_certificate;
         std::string ssl_key;
-#endif
+
         std::string img_root; //<! path to root of image repository
         int max_temp_file_age;
         int subdir_levels = -1;
@@ -89,7 +88,6 @@ namespace Sipi {
         inline int getPort(void) { return port; }
         inline void setPort(int i) { port = i; }
 
-#ifdef SHTTPS_ENABLE_SSL
 
         inline int getSSLPort(void) { return ssl_port; }
         inline void setSSLPort(int i) { ssl_port = i; }
@@ -99,8 +97,6 @@ namespace Sipi {
 
         inline std::string getSSLKey(void) { return ssl_key; }
         inline void setSSLKey(const std::string &str) { ssl_key = str; }
-
-#endif
 
         inline std::string getImgRoot(void) { return img_root; }
         inline void setImgRoot(const std::string &str) { img_root = str; }

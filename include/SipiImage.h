@@ -170,8 +170,7 @@ class SipiImageError : public std::exception {
         //friend class SipiIOOpenJ2k; //!< I/O class for the JPEG2000 file format
         friend class SipiIOJpeg;    //!< I/O class for the JPEG file format
         friend class SipiIOPng;     //!< I/O class for the PNG file format
-        friend class SipiIOPdf;     //!< I/O class for the PDF file format
-    private:
+     private:
         static std::unordered_map<std::string, std::shared_ptr<SipiIO> > io; //!< member variable holding a map of I/O class instances for the different file formats
         byte bilinn(byte buf[], register int nx, register float x, register float y, register int c, register int n);
 
