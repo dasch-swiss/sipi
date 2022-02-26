@@ -23,6 +23,7 @@ target
 __pycache__/
 doc/
 _build/
+.pytest_cache
 
 #
 # Cmake things to be ignored
