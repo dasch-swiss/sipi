@@ -8,10 +8,43 @@ if(SUPPORTS_FVISIBILITY_FLAG)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -std=c++17")
 endif()
 
+set(DARWIN "Darwin")
+set(LINUX "Linux")
+math(EXPR BITS "8*${CMAKE_SIZEOF_VOID_P}")
+
+#
+# this is needed for curl...
+#
+if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    find_library(COREFOUNDATION_FRAMEWORK "CoreFoundation")
+    if(NOT COREFOUNDATION_FRAMEWORK)
+        message(FATAL_ERROR "CoreFoundation framework not found")
+    endif()
+
+    find_library(SYSTEMCONFIGURATION_FRAMEWORK "SystemConfiguration")
+    if(NOT SYSTEMCONFIGURATION_FRAMEWORK)
+        message(FATAL_ERROR "SystemConfiguration framework not found")
+    endif()
+
+    list(APPEND CURL_LIBS "-framework CoreFoundation" "-framework SystemConfiguration")
+
+    if(CMAKE_USE_SECTRANSP)
+        find_library(SECURITY_FRAMEWORK "Security")
+        if(NOT SECURITY_FRAMEWORK)
+            message(FATAL_ERROR "Security framework not found")
+        endif()
+
+        set(SSL_ENABLED ON)
+        set(USE_SECTRANSP ON)
+        list(APPEND CURL_LIBS "-framework Security")
+    endif()
+endif()
+
+
 link_directories(
-        /usr/local/lib
         ${PROJECT_SOURCE_DIR}/local/lib
         ${CONFIGURE_LIBDIR}
+        /usr/local/lib
 )
 
 include_directories(
@@ -60,6 +93,7 @@ target_link_libraries(configuration
         exiv2-xmp
         expat
         tiff
+        webp
         jbigkit
         png
         kdu_aux
@@ -72,31 +106,25 @@ target_link_libraries(configuration
         dl
         pthread
         curl
-        poppler-cpp
-        poppler
-        podofo
-        idn
+        ssl
+        crypto
         jpeg
-        fontconfig
-        harfbuzz
-        freetype
         bzip2
-        unistring
-        ${CMAKE_DL_LIBS}
+        zstd
         z
-        m)
+        m
+        Threads::Threads
+        ${CMAKE_DL_LIBS})
 
-if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
+
+if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
     target_link_libraries(configuration
             iconv
-            gettext_intl)
+            gettext_intl
+            ${COREFOUNDATION_FRAMEWORK}
+            ${SYSTEMCONFIGURATION_FRAMEWORK})
 else()
-    target_link_libraries(configuration
-            rt)
-endif()
-
-if(OPENSSL_FOUND)
-    target_link_libraries(configuration ${OPENSSL_LIBRARIES})
+    target_link_libraries(configuration rt)
 endif()
 
 install(TARGETS configuration DESTINATION bin)

@@ -54,7 +54,7 @@
 #include "CLI11.hpp"
 
 #include "jansson.h"
-#include "podofo/podofo.h"
+// #include "podofo/podofo.h"
 
 #include "shttps/Parsing.h"
 #include "SipiConf.h"
@@ -108,13 +108,9 @@ static void sipiConfGlobals(lua_State *L, shttps::Connection &conn, void *user_d
   lua_pushinteger(L, conf->getPort());
   lua_rawset(L, -3); // table1
 
-#ifdef SHTTPS_ENABLE_SSL
-
   lua_pushstring(L, "sslport"); // table1 - "index_L1"
   lua_pushinteger(L, conf->getSSLPort());
   lua_rawset(L, -3); // table1
-
-#endif
 
   lua_pushstring(L, "imgroot"); // table1 - "index_L1"
   lua_pushstring(L, conf->getImgRoot().c_str());
@@ -283,6 +279,7 @@ class LibraryInitialiser {
   }
 };
 
+/*
 void TestHandler(shttps::Connection &conn, shttps::LuaServer &luaserver, void *user_data, void *dummy) {
   Sipi::SipiHttpServer *server = (Sipi::SipiHttpServer *) user_data;
 
@@ -368,7 +365,7 @@ void TestHandler(shttps::Connection &conn, shttps::LuaServer &luaserver, void *u
   delete pdf_buffer;
   return;
 }
-
+*/
 int main(int argc, char *argv[]) {
   //
   // first we initialize the libraries that sipi uses
@@ -394,15 +391,14 @@ int main(int argc, char *argv[]) {
   std::string optOutFile;
   sipiopt.add_option("-z,--outf,outfile", optOutFile, "Output file to be converted.");
 
-  enum class OptFormat : int { jpx, jpg, tif, png, pdf };
+  enum class OptFormat : int { jpx, jpg, tif, png };
   OptFormat optFormat = OptFormat::jpx;
   std::vector<std::pair<std::string, OptFormat>> optFormatMap{
       {"jpx", OptFormat::jpx},
       {"jp2", OptFormat::jpx},
       {"jpg", OptFormat::jpg},
       {"tif", OptFormat::tif},
-      {"png", OptFormat::png},
-      {"pdf", OptFormat::pdf}
+      {"png", OptFormat::png}
   };
   sipiopt.add_option("-F,--format", optFormat, "Output format.")
       ->transform(CLI::CheckedTransformer(optFormatMap, CLI::ignore_case));
@@ -728,8 +724,6 @@ int main(int argc, char *argv[]) {
           break;
         case OptFormat::png: format = "png";
           break;
-        case OptFormat::pdf: format = "png";
-          break;
       }
     } else {
       //
@@ -747,8 +741,6 @@ int main(int argc, char *argv[]) {
           format = "jpg";
         } else if (ext == "png") {
           format = "png";
-        } else if (ext == "pdf") {
-          format = "pdf";
         } else {
           std::cerr << "Not a supported filename extension: '" << ext << "' !" << std::endl;
           return EXIT_FAILURE;
@@ -1066,7 +1058,6 @@ int main(int argc, char *argv[]) {
         if (!sipiopt.get_option("--thumbsize")->empty()) sipiConf.setThumbSize(optThumbSize);
       }
 
-#ifdef SHTTPS_ENABLE_SSL
       if (!config_loaded) {
         sipiConf.setSSLCertificate(optSSLCertificatePath);
       } else {
@@ -1078,7 +1069,6 @@ int main(int argc, char *argv[]) {
       } else {
         if (!sipiopt.get_option("--sslkey")->empty()) sipiConf.setSSLKey(optSSLKeyPath);
       }
-#endif
 
       if (!config_loaded) {
         sipiConf.setJwtSecret(optJWTKey);
@@ -1207,14 +1197,12 @@ int main(int argc, char *argv[]) {
       syslog(LOG_INFO, BUILD_SCM_REVISION);
       setlogmask(old_ll);
 
-#           ifdef SHTTPS_ENABLE_SSL
       server.ssl_port(sipiConf.getSSLPort()); // set the secure connection port (-1 means no ssl socket)
       std::string tmps = sipiConf.getSSLCertificate();
       server.ssl_certificate(tmps);
       tmps = sipiConf.getSSLKey();
       server.ssl_key(tmps);
       server.jwt_secret(sipiConf.getJwtSecret());
-#           endif
 
       // set tmpdir for uploads (defined in sipi.config.lua)
       server.tmpdir(sipiConf.getTmpDir());
@@ -1258,7 +1246,7 @@ int main(int argc, char *argv[]) {
         filehandler_info.second = docroot;
         server.addRoute(shttps::Connection::GET, wwwroute, shttps::FileHandler, &filehandler_info);
         server.addRoute(shttps::Connection::POST, wwwroute, shttps::FileHandler, &filehandler_info);
-        server.addRoute(shttps::Connection::GET, "/test", TestHandler, &server);
+        //server.addRoute(shttps::Connection::GET, "/test", TestHandler, &server);
       }
 
       syslog(LOG_DEBUG, "Starting SipiHttpServer::run()");

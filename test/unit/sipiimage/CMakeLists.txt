@@ -11,8 +11,8 @@ if(SUPPORTS_FVISIBILITY_FLAG)
 endif()
 
 link_directories(
-        /usr/local/lib
         ${CONFIGURE_LIBDIR}
+        /usr/local/lib
 )
 
 include_directories(
@@ -36,7 +36,6 @@ add_executable(
         ${SRCS}
         ${PROJECT_SOURCE_DIR}/src/SipiConf.cpp ${PROJECT_SOURCE_DIR}/include/SipiConf.h
         ${PROJECT_SOURCE_DIR}/src/SipiError.cpp ${PROJECT_SOURCE_DIR}/include/SipiError.h
-        # ${PROJECT_SOURCE_DIR}/include/AdobeRGB1998_icc.h ${PROJECT_SOURCE_DIR}/include/USWebCoatedSWOP_icc.h
         ${PROJECT_SOURCE_DIR}/src/metadata/SipiIcc.cpp ${PROJECT_SOURCE_DIR}/include/metadata/SipiIcc.h
         ${PROJECT_SOURCE_DIR}/src/metadata/SipiXmp.cpp ${PROJECT_SOURCE_DIR}/include/metadata/SipiXmp.h
         ${PROJECT_SOURCE_DIR}/src/metadata/SipiIptc.cpp ${PROJECT_SOURCE_DIR}/include/metadata/SipiIptc.h
@@ -47,7 +46,6 @@ add_executable(
         ${PROJECT_SOURCE_DIR}/src/formats/SipiIOJ2k.cpp ${PROJECT_SOURCE_DIR}/include/formats/SipiIOJ2k.h
         ${PROJECT_SOURCE_DIR}/src/formats/SipiIOJpeg.cpp ${PROJECT_SOURCE_DIR}/include/formats/SipiIOJpeg.h
         ${PROJECT_SOURCE_DIR}/src/formats/SipiIOPng.cpp ${PROJECT_SOURCE_DIR}/include/formats/SipiIOPng.h
-        ${PROJECT_SOURCE_DIR}/src/formats/SipiIOPdf.cpp ${PROJECT_SOURCE_DIR}/include/formats/SipiIOPdf.h
         ${PROJECT_SOURCE_DIR}/src/SipiHttpServer.cpp ${PROJECT_SOURCE_DIR}/include/SipiHttpServer.h
         ${PROJECT_SOURCE_DIR}/src/SipiCache.cpp ${PROJECT_SOURCE_DIR}/include/SipiCache.h
         ${PROJECT_SOURCE_DIR}/src/SipiLua.cpp ${PROJECT_SOURCE_DIR}/include/SipiLua.h
@@ -78,7 +76,6 @@ target_link_libraries(sipiimage
         libgtest)
 
 target_link_libraries(sipiimage
-        ${LIBS}
         lcms2
         exiv2
         exiv2-xmp
@@ -97,24 +94,22 @@ target_link_libraries(sipiimage
         dl
         pthread
         curl
-        poppler-cpp
-        poppler
-        podofo
-        idn
+        ssl
+        crypto
         jpeg
-        fontconfig
-        harfbuzz
-        freetype
         bzip2
-        unistring
-        ${CMAKE_DL_LIBS}
+        zstd
         z
-        m)
+        m
+        Threads::Threads
+        ${CMAKE_DL_LIBS})
 
-if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
+if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
     target_link_libraries(sipiimage
             iconv
-            gettext_intl)
+            gettext_intl
+            ${COREFOUNDATION_FRAMEWORK}
+            ${SYSTEMCONFIGURATION_FRAMEWORK})
 else()
     target_link_libraries(sipiimage rt)
 endif()

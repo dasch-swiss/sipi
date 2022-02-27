@@ -29,5 +29,10 @@
 	"remoteUser": "vscode",
 	"features": {
 		"git": "latest"
-	}
+	},
+	"mounts": [
+		"source=${localEnv:HOME}/.ccache,target=/host-home-folder/.ccache,type=bind,consistency=cached"
+	]
+	
+
 }

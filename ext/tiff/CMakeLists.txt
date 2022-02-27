@@ -18,6 +18,7 @@ ExternalProject_Add(project_tiff
         DEPENDS jpeg
         DEPENDS xz
         DEPENDS webp
+        DEPENDS zstd
         INSTALL_DIR ${COMMON_LOCAL}
         TEST_BEFORE_INSTALL 1
         URL http://download.osgeo.org/libtiff/tiff-4.1.0.tar.gz

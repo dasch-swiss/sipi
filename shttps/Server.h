@@ -46,13 +46,9 @@
 #include <sstream>      // std::stringstream
 #include <iostream>
 
-#ifdef SHTTPS_ENABLE_SSL
-
 #include "openssl/bio.h"
 #include "openssl/ssl.h"
 #include "openssl/err.h"
-
-#endif
 
 #include "Global.h"
 #include "Error.h"
@@ -140,8 +136,6 @@ namespace shttps {
             void *func_dataptr;
         } GlobalFunc;
 
-#       ifdef SHTTPS_ENABLE_SSL
-
         /*!
          * Error handling class for SSL functions
          */
@@ -172,8 +166,6 @@ namespace shttps {
                 return ss.str();
             };
         };
-
-#       endif
 
     public:
         /*!
@@ -206,13 +198,9 @@ namespace shttps {
         int _sockfd; //!< socket id
         int _ssl_sockfd; //!< SSL socket id
 
-#       ifdef SHTTPS_ENABLE_SSL
-
         std::string _ssl_certificate; //!< Path to SSL certificate
         std::string _ssl_key; //!< Path to SSL certificate
         std::string _jwt_secret;
-
-#       endif
 
         int stoppipe[2];
 
@@ -248,8 +236,6 @@ namespace shttps {
                const std::string &logfile_p = "shttps.log", const std::string &loglevel_p = "DEBUG");
 
         inline int port(void) { return _port; }
-
-#       ifdef SHTTPS_ENABLE_SSL
 
         /*!
          * Sets the port number for the SSL socket
@@ -307,8 +293,6 @@ namespace shttps {
          * \returns String of length 32 with the secret used for JWT's
          */
         inline std::string jwt_secret(void) { return _jwt_secret; }
-
-#       endif
 
         /*!
          * Returns the maximum number of parallel threads allowed
@@ -404,21 +388,15 @@ namespace shttps {
         /*
         void add_thread(pthread_t thread_id_p, int commpipe_write_p, int sock_id);
 
-#       ifdef SHTTPS_ENABLE_SSL
 
         void thread_push(pthread_t thread_id_p, int commpipe_write_p, int sock_id, SSL *cSSL);
-
-#       endif
 
         int get_thread_sock(pthread_t thread_id_p);
 
         int get_thread_pipe(pthread_t thread_id_p);
 
-#       ifdef SHTTPS_ENABLE_SSL
-
         SSL *get_thread_ssl(pthread_t thread_id_p);
 
-#       endif
 
         void remove_thread(pthread_t thread_id_p);
 */
