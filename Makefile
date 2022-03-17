@@ -72,7 +72,7 @@ create-ccache-volume: ## create a ccache Docker volume
 
 .PHONY: compile
 compile: ## compile SIPI (needs to be run inside devcontainer)
-	mkdir -p ${PWD}/build && cd ${PWD}/build && cmake -DMAKE_DEBUG:BOOL=ON .. && make
+	mkdir -p $(CURRENT_DIR)/build && cd $(CURRENT_DIR)/build && cmake -DMAKE_DEBUG:BOOL=ON .. && make
 
 .PHONY: compile-ci
 compile-ci: ## compile SIPI inside Docker with Debug symbols (no it)

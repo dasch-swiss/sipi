@@ -29,6 +29,7 @@ import sys
 
 # Tests basic functionality of the Sipi server.
 
+
 class TestServer:
     component = "The Sipi server"
 
@@ -77,26 +78,31 @@ class TestServer:
 
     def test_file_bytes(self, manager):
         """return an unmodified JPG file"""
-        manager.compare_server_bytes("/knora/Leaves.jpg/full/max/0/default.jpg", manager.data_dir_path("knora/Leaves.jpg"))
+        manager.compare_server_bytes(
+            "/knora/Leaves.jpg/full/max/0/default.jpg", manager.data_dir_path("knora/Leaves.jpg"))
 
     def test_restrict(self, manager):
         """return a restricted image in a smaller size"""
-        image_info = manager.get_image_info("/knora/RestrictLeaves.jpg/full/max/0/default.jpg")
-        page_geometry = [line.strip().split()[-1] for line in image_info.splitlines() if line.strip().startswith("Page geometry:")][0]
+        image_info = manager.get_image_info(
+            "/knora/RestrictLeaves.jpg/full/max/0/default.jpg")
+        page_geometry = [line.strip().split()[-1] for line in image_info.splitlines()
+                         if line.strip().startswith("Page geometry:")][0]
         assert page_geometry == "128x128+0+0"
 
     def test_deny(self, manager):
         """return 401 Unauthorized if the user does not have permission to see the image"""
-        manager.expect_status_code("/knora/DenyLeaves.jpg/full/max/0/default.jpg", 401)
+        manager.expect_status_code(
+            "/knora/DenyLeaves.jpg/full/max/0/default.jpg", 401)
 
     def test_iiifurl_parsing(self, manager):
         """Return 400 for invalid IIIF URL's"""
         manager.expect_status_code("/unit//lena512.jp2", 400)
         manager.expect_status_code("/unit/lena512.jp2/max/0/default.jpg", 400)
-        manager.expect_status_code("/unit/lena512.jp2/full/max/default.jpg", 400)
-        manager.expect_status_code("/unit/lena512.jp2/full/max/!/default.jpg", 400)
+        manager.expect_status_code(
+            "/unit/lena512.jp2/full/max/default.jpg", 400)
+        manager.expect_status_code(
+            "/unit/lena512.jp2/full/max/!/default.jpg", 400)
         manager.expect_status_code("/unit/lena512.jp2/full/max/0/jpg", 400)
-
 
     def test_read_write(self, manager):
         """read an image file, convert it to JPEG2000 and write it"""
@@ -113,9 +119,11 @@ class TestServer:
     def test_jpg_with_comment(selfself, manager):
         """process an uploaded jpeg file with comment block properly"""
 
-        response_json = manager.post_file("/api/upload", manager.data_dir_path("unit/HasCommentBlock.JPG"), "image/jpeg")
+        response_json = manager.post_file(
+            "/api/upload", manager.data_dir_path("unit/HasCommentBlock.JPG"), "image/jpeg")
         filename = response_json["filename"]
-        response_json = manager.get_json("/unit/{}/knora.json".format(filename))
+        response_json = manager.get_json(
+            "/unit/{}/knora.json".format(filename))
 
         expected_result = {
             "@context": "http://sipi.io/api/file/3/context.json",
@@ -128,7 +136,6 @@ class TestServer:
         }
 
         assert response_json == expected_result
-
 
     def test_mimeconsistency(self, manager):
         """upload any file and check mimetype consistency"""
@@ -177,15 +184,17 @@ class TestServer:
         ]
 
         for test in testdata:
-            response_json = manager.post_file("/api/mimetest", manager.data_dir_path(test["filepath"]), test["mimetype"])
+            response_json = manager.post_file(
+                "/api/mimetest", manager.data_dir_path(test["filepath"]), test["mimetype"])
             assert response_json == test["expected_result"]
-
 
     def test_thumbnail(self, manager):
         """accept a POST request to create a thumbnail with Content-Type: multipart/form-data"""
-        response_json = manager.post_file("/make_thumbnail", manager.data_dir_path("knora/Leaves.jpg"), "image/jpeg")
+        response_json = manager.post_file(
+            "/make_thumbnail", manager.data_dir_path("knora/Leaves.jpg"), "image/jpeg")
         filename = response_json["filename"]
-        manager.expect_status_code("/thumbs/{}.jpg/full/max/0/default.jpg".format(filename), 200)
+        manager.expect_status_code(
+            "/thumbs/{}.jpg/full/max/0/default.jpg".format(filename), 200)
 
         # given the temporary filename, create the file
         params = {
@@ -198,8 +207,10 @@ class TestServer:
         filename_full = response_json2["filename_full"]
         filename_thumb = response_json2["filename_thumb"]
 
-        manager.expect_status_code("/knora/{}/full/max/0/default.jpg".format(filename_full), 200)
-        manager.expect_status_code("/knora/{}/full/max/0/default.jpg".format(filename_thumb), 200)
+        manager.expect_status_code(
+            "/knora/{}/full/max/0/default.jpg".format(filename_full), 200)
+        manager.expect_status_code(
+            "/knora/{}/full/max/0/default.jpg".format(filename_thumb), 200)
 
     def test_image_conversion(self, manager):
         """ convert and store an image file"""
@@ -215,8 +226,10 @@ class TestServer:
         filename_full = response_json["filename_full"]
         filename_thumb = response_json["filename_thumb"]
 
-        manager.expect_status_code("/knora/{}/full/max/0/default.jpg".format(filename_full), 200)
-        manager.expect_status_code("/knora/{}/full/max/0/default.jpg".format(filename_thumb), 200)
+        manager.expect_status_code(
+            "/knora/{}/full/max/0/default.jpg".format(filename_full), 200)
+        manager.expect_status_code(
+            "/knora/{}/full/max/0/default.jpg".format(filename_thumb), 200)
 
     def test_knora_info_validation(self, manager):
         """pass the knora.json request tests"""
@@ -234,7 +247,7 @@ class TestServer:
                     "originalMimeType": "image/tiff",
                     "internalMimeType": "image/jpx"
                 }
-            },{
+            }, {
                 "filepath": "unit/test.csv",
                 "mimetype": "text/csv",
                 "expected_result": {
@@ -250,24 +263,27 @@ class TestServer:
         ]
 
         for test in testdata:
-            response_json = manager.post_file("/api/upload", manager.data_dir_path(test["filepath"]), test["mimetype"])
+            response_json = manager.post_file(
+                "/api/upload", manager.data_dir_path(test["filepath"]), test["mimetype"])
             filename = response_json["filename"]
             if test["mimetype"] == "image/tiff":
-                manager.expect_status_code("/unit/{}/full/max/0/default.jpg".format(filename), 200)
+                manager.expect_status_code(
+                    "/unit/{}/full/max/0/default.jpg".format(filename), 200)
             else:
                 manager.expect_status_code("/unit/{}".format(filename), 200)
-            response_json = manager.get_json("/unit/{}/knora.json".format(filename))
+            response_json = manager.get_json(
+                "/unit/{}/knora.json".format(filename))
             expected_result = test["expected_result"]
             expected_result["id"] += filename
             assert response_json == expected_result
 
-        #expected_result = {
+        # expected_result = {
         #    "width": 512,
         #    "height": 512,
         #    "originalFilename": "lena512.tif",
         #    "originalMimeType": "image/tiff",
         #    "internalMimeType": "image/jpx"
-        #}
+        # }
 
         #response_json = manager.post_file("/api/upload", manager.data_dir_path("unit/lena512.tif"), "image/tiff")
         #filename = response_json["filename"]
@@ -279,7 +295,6 @@ class TestServer:
 
     def test_json_info_validation(self, manager):
         """pass the info.json request tests"""
-
 
         expected_result = {
             '@context': 'http://iiif.io/api/image/3/context.json',
@@ -317,19 +332,42 @@ class TestServer:
             ]
         }
 
-        response_json = manager.post_file("/api/upload", manager.data_dir_path("unit/lena512.tif"), "image/tiff")
+        response_json = manager.post_file(
+            "/api/upload", manager.data_dir_path("unit/lena512.tif"), "image/tiff")
         filename = response_json["filename"]
 
-        manager.expect_status_code("/unit/{}/full/max/0/default.jpg".format(filename), 200)
+        manager.expect_status_code(
+            "/unit/{}/full/max/0/default.jpg".format(filename), 200)
 
         response_json = manager.get_json("/unit/{}/info.json".format(filename))
-        expected_result["id"] = "http://127.0.0.1:1024/unit/{}".format(filename)
+        expected_result["id"] = "http://127.0.0.1:1024/unit/{}".format(
+            filename)
         assert response_json == expected_result
 
         #response_json = manager.get_json("/unit/{}/info.json".format(filename), use_ssl=True)
         #expected_result["id"] = "https://127.0.0.1:1024/unit/{}".format(filename)
         #assert response_json == expected_result
 
+    def test_knora_json_for_video(self, manager):
+        """pass the knora.json request for video"""
+
+        expected_result = {
+            "@context": "http://sipi.io/api/file/3/context.json",
+            "id": "http://127.0.0.1:1024/unit/8pdET49BfoJ-EeRcIbgcLch.mp4",
+            "checksumOriginal": "19cc4bccad39c89cc44936ef69565bb933d41a065fd59d666d58e5ef344e8149",
+            "checksumDerivative": "19cc4bccad39c89cc44936ef69565bb933d41a065fd59d666d58e5ef344e8149",
+            "internalMimeType": "video/mp4",
+            "fileSize": 475205,
+            "originalFilename": "Dummy.mp4",
+            "duration": 4.7000000000000002,
+            "fps": 30,
+            "height": 240,
+            "width": 320
+        }
+
+        response_json = manager.get_json(
+            "/unit/8pdET49BfoJ-EeRcIbgcLch.mp4/knora.json")
+        assert response_json == expected_result
 
     def test_sqlite_api(self, manager):
         """Test sqlite API"""
@@ -468,28 +506,30 @@ class TestServer:
                 'sizeByWh',
                 'sizeUpscaling']}
 
-
         json_result = manager.get_auth_json("/auth/lena512.jp2/info.json")
 
         assert json_result == expected_result
 
     def test_pdf_server(self, manager):
         """Test serving entire PDF files"""
-        manager.compare_server_bytes("/unit/CV+Pub_LukasRosenthaler.pdf/file", manager.data_dir_path("unit/CV+Pub_LukasRosenthaler.pdf"))
+        manager.compare_server_bytes("/unit/CV+Pub_LukasRosenthaler.pdf/file",
+                                     manager.data_dir_path("unit/CV+Pub_LukasRosenthaler.pdf"))
 
     def test_pdf_page_server(self, manager):
         """Test serving a PDF page as TIFF"""
-        manager.compare_server_images("/unit/CV+Pub_LukasRosenthaler.pdf@3/full/pct:25/0/default.jpg", manager.data_dir_path("unit/CV+Pub_LukasRosenthaler_p3.jpg"))
+        manager.compare_server_images("/unit/CV+Pub_LukasRosenthaler.pdf@3/full/pct:25/0/default.jpg",
+                                      manager.data_dir_path("unit/CV+Pub_LukasRosenthaler_p3.jpg"))
 
     def test_upscaling_server(self, manager):
         """Test upscaling of an image"""
-        manager.compare_server_images("/unit/lena512.jp2/full/^1000,/0/default.tif", manager.data_dir_path("unit/lena512_upscaled.tif"))
+        manager.compare_server_images(
+            "/unit/lena512.jp2/full/^1000,/0/default.tif", manager.data_dir_path("unit/lena512_upscaled.tif"))
 
     def test_concurrency(self, manager):
         """handle many concurrent requests for different URLs (this may take a while, please be patient)"""
 
         # The command-line arguments we want to pass to ab for each process.
-        
+
         filename = "load_test.jpx"
 
         ab_processes = [
@@ -523,7 +563,8 @@ class TestServer:
         # Start all the ab processes.
 
         for process_info in ab_processes:
-            process_info["process"] = manager.run_ab(process_info["concurrent_requests"], process_info["total_requests"], 300, process_info["url_path"])
+            process_info["process"] = manager.run_ab(
+                process_info["concurrent_requests"], process_info["total_requests"], 300, process_info["url_path"])
 
         # Wait for all the processes to terminate, and get their return codes and output.
 
@@ -543,16 +584,20 @@ class TestServer:
         failure_results = "\n"
 
         for process_info in ab_processes:
-            stdout_str = process_info["stdout"].decode("ascii", "ignore") # Strip out non-ASCII characters, because for some reason ab includes an invalid 0xff
-            non_2xx_responses_lines = [line.strip().split()[-1] for line in stdout_str.splitlines() if line.strip().startswith("Non-2xx responses:")]
+            # Strip out non-ASCII characters, because for some reason ab includes an invalid 0xff
+            stdout_str = process_info["stdout"].decode("ascii", "ignore")
+            non_2xx_responses_lines = [line.strip().split(
+            )[-1] for line in stdout_str.splitlines() if line.strip().startswith("Non-2xx responses:")]
 
             if len(non_2xx_responses_lines) > 0:
                 bad_result = True
-                failure_results += "Sipi returned a non-2xx response for URL path {}, returncode {}, and output:\n{}".format(process_info["url_path"], process_info["returncode"], stdout_str)
+                failure_results += "Sipi returned a non-2xx response for URL path {}, returncode {}, and output:\n{}".format(
+                    process_info["url_path"], process_info["returncode"], stdout_str)
 
             if process_info["returncode"] != 0:
                 bad_result = True
-                failure_results += "Failed ab command with URL path {}, returncode {}, and output:\n{}".format(process_info["url_path"], process_info["returncode"], stdout_str)
+                failure_results += "Failed ab command with URL path {}, returncode {}, and output:\n{}".format(
+                    process_info["url_path"], process_info["returncode"], stdout_str)
 
         if bad_result:
             failure_results += "\nWrote Sipi log file " + manager.sipi_log_file
