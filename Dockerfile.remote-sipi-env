@@ -11,7 +11,7 @@
 # ssh credentials (test user):
 #   user@password
 
-FROM daschswiss/sipi-base:2.7.0
+FROM daschswiss/sipi-base:2.9.0
 
 RUN DEBIAN_FRONTEND="noninteractive" apt-get update && apt-get -y install tzdata
 

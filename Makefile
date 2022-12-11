@@ -7,7 +7,7 @@ CURRENT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 include vars.mk
 
 # Version of the base Docker image
-SIPI_BASE := daschswiss/sipi-base:2.7.0
+SIPI_BASE := daschswiss/sipi-base:2.9.0
 UBUNTU_BASE := ubuntu:20.04
 
 .PHONY: docs-build
@@ -66,9 +66,9 @@ docker-publish-debug: ## publish Sipi Docker image to Docker-Hub with debugging 
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		-t $(DOCKER_IMAGE)-debug --push .
 
-#################
-# CMake remote development environment
-#################
+#####################################
+# Remote Sipi development environment
+#####################################
 
 .PHONY: docker-build-remote-sipi-env
 docker-build-remote-sipi-env: ## build and publish Remote Sipi Environment Docker image locally
@@ -78,6 +78,10 @@ docker-build-remote-sipi-env: ## build and publish Remote Sipi Environment Docke
 		-f Dockerfile.remote-sipi-env \
 		-t daschswiss/remote-sipi-env:1.0 --load .
 
+#####################################
+# Sipi remote development environment
+#####################################
+
 .PHONY: compile
 compile: ## compile SIPI (needs to be run inside devcontainer)
 	mkdir -p $(CURRENT_DIR)/build && cd $(CURRENT_DIR)/build && cmake -DMAKE_DEBUG:BOOL=ON .. && make
@@ -86,6 +90,7 @@ compile: ## compile SIPI (needs to be run inside devcontainer)
 compile-ci: ## compile SIPI inside Docker with Debug symbols (no it)
 	docker run \
 		--rm \
+		--platform linux/amd64 \
 		-v ${PWD}:/sipi \
 		$(SIPI_BASE) /bin/sh -c "mkdir -p /sipi/build && cd /sipi/build && cmake -DMAKE_DEBUG:BOOL=ON .. && make"
 
@@ -99,6 +104,7 @@ test-ci: ## compile and run tests inside Docker with Debug symbols (no it)
 	@mkdir -p ${CURRENT_DIR}/images
 	docker run \
 		--rm \
+		--platform linux/amd64 \
 		-v ${PWD}:/sipi \
 		$(SIPI_BASE) /bin/sh -c "mkdir -p /sipi/build && cd /sipi/build && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
 

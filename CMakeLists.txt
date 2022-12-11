@@ -21,7 +21,7 @@
 # License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-cmake_minimum_required(VERSION 3.19)
+cmake_minimum_required(VERSION 3.16)
 
 include(ExternalProject)
 include(CheckStructHasMember)
