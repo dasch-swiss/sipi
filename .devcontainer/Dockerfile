@@ -18,8 +18,6 @@ RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
     ca-certificates \
     byobu curl git htop man vim wget unzip \
     build-essential \
-    ninja-build \
-    cmake \
     ccache \
     libllvm-11-ocaml-dev libllvm11 llvm-11 llvm-11-dev llvm-11-doc llvm-11-runtime \
     clang-11 clang-tools-11 clang-11-doc libclang-common-11-dev libclang-11-dev libclang1-11 clang-format-11 \
@@ -57,6 +55,17 @@ ENV LANGUAGE=en_US.UTF-8
 # Set environment variables
 ENV CC clang-11
 ENV CXX clang++-11
+
+# The CMake version which should be downloaded and installed
+ENV CMAKE_VERSION 3.22.2
+
+# Install newer CMake version
+RUN wget https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}.tar.gz && \
+    tar -zxvf cmake-${CMAKE_VERSION}.tar.gz && \
+    cd cmake-${CMAKE_VERSION} && \
+    ./bootstrap && \
+    make && \
+    make install
 
 # Install additional test dependencies.
 RUN apt-get clean && apt-get -y install \

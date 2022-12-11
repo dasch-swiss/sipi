@@ -2,7 +2,7 @@
 
 # Expose (global) variables (ARGs before FROM can only be used on FROM lines and not afterwards)
 ARG BUILD_TYPE=production
-ARG SIPI_BASE=daschswiss/sipi-base:2.6.0
+ARG SIPI_BASE=daschswiss/sipi-base:2.7.0
 ARG UBUNTU_BASE=ubuntu:20.04
 
 # STAGE 1: Build debug
@@ -13,12 +13,8 @@ WORKDIR /sipi
 # Add everything to image.
 COPY . .
 
-# set ccache directory
-ENV CCACHE_DIR=/ccache
-
 # Build SIPI.
-RUN --mount=type=cache,target=/ccache \
-    mkdir -p /sipi/build-linux && \
+RUN mkdir -p /sipi/build-linux && \
     cd /sipi/build-linux && \
     cmake -DMAKE_DEBUG:BOOL=ON .. && \
     make
@@ -31,12 +27,8 @@ WORKDIR /sipi
 # Add everything to image.
 COPY . .
 
-# set ccache directory
-ENV CCACHE_DIR=/ccache
-
 # Build SIPI.
-RUN --mount=type=cache,target=/ccache \
-    mkdir -p /sipi/build-linux && \
+RUN mkdir -p /sipi/build-linux && \
     cd /sipi/build-linux && \
     cmake -DMAKE_DEBUG:BOOL=OFF .. && \
     make
