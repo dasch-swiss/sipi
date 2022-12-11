@@ -44,7 +44,7 @@ RUN --mount=type=cache,target=/ccache \
 # STAGE 2: Setup debug
 FROM $UBUNTU_BASE as debug
 
-MAINTAINER Ivan Subotic <400790+subotic@users.noreply.github.com>
+LABEL maintainer="400790+subotic@users.noreply.github.com"
 
 # Silence debconf messages
 ARG DEBIAN_FRONTEND=noninteractive
@@ -69,6 +69,8 @@ RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
     uuid \
     ffmpeg \
     at \
+    bc \
+    imagemagick \
     valgrind
 
 # add locales
@@ -99,7 +101,7 @@ CMD ["--config=/sipi/config/sipi.config.lua"]
 # STAGE 2: Setup production
 FROM $UBUNTU_BASE as production
 
-MAINTAINER Ivan Subotic <400790+subotic@users.noreply.github.com>
+LABEL maintainer="400790+subotic@users.noreply.github.com"
 
 # Silence debconf messages
 ARG DEBIAN_FRONTEND=noninteractive
@@ -123,7 +125,9 @@ RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
     locales \
     uuid \
     ffmpeg \
-    at
+    at \
+    bc \
+    imagemagick
 
 # add locales
 RUN locale-gen en_US.UTF-8 && \

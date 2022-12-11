@@ -720,7 +720,7 @@ namespace Sipi {
         json_object_set_new(root, "id", json_string(id.c_str()));
 
         //
-        // read sidecarfile if available
+        // read sidecar file if available
         //
         size_t pos = infile.rfind(".");
         std::string sidecarname = infile.substr(0, pos) + ".info";
@@ -729,7 +729,14 @@ namespace Sipi {
         std::string orig_filename;
         std::string orig_checksum;
         std::string derivative_checksum;
-        if (sidecar.good()) {
+
+        std::double_t sidecar_duration;
+        std::double_t sidecar_fps;
+        std::double_t sidecar_height;
+        std::double_t sidecar_width;
+
+        if (sidecar.good())
+        {
             std::stringstream ss;
             ss << sidecar.rdbuf(); // read the file
             json_t *scroot;
@@ -751,6 +758,23 @@ namespace Sipi {
                     else if (std::strcmp("checksumDerivative", key) == 0) {
                         derivative_checksum = json_string_value(value);
                     }
+                    else if (std::strcmp("duration", key) == 0)
+                    {
+                        sidecar_duration = json_number_value(value);
+                    }
+                    else if (std::strcmp("fps", key) == 0)
+                    {
+                        sidecar_fps = json_number_value(value);
+                    }
+                    else if (std::strcmp("height", key) == 0)
+                    {
+                        sidecar_height = json_number_value(value);
+                    }
+                    else if (std::strcmp("width", key) == 0)
+                    {
+                        sidecar_width = json_number_value(value);
+                    }
+
                     iter = json_object_iter_next(scroot, iter);
                 }
             }
@@ -814,7 +838,29 @@ namespace Sipi {
             conn_obj.sendAndFlush(json_str, strlen(json_str));
             free(json_str);
         }
-        else {
+        else if (actual_mimetype == "video/mp4")
+        {
+
+            json_object_set_new(root, "internalMimeType", json_string(actual_mimetype.c_str()));
+
+            struct stat fstatbuf;
+            if (stat(infile.c_str(), &fstatbuf) != 0)
+            {
+                throw Error(__file__, __LINE__, "Cannot fstat file!");
+            }
+            json_object_set_new(root, "fileSize", json_integer(fstatbuf.st_size));
+            json_object_set_new(root, "originalFilename", json_string(orig_filename.c_str()));
+            json_object_set_new(root, "duration", json_real(sidecar_duration));
+            json_object_set_new(root, "fps", json_real(sidecar_fps));
+            json_object_set_new(root, "height", json_real(sidecar_height));
+            json_object_set_new(root, "width", json_real(sidecar_width));
+
+            char *json_str = json_dumps(root, JSON_INDENT(3));
+            conn_obj.sendAndFlush(json_str, strlen(json_str));
+            free(json_str);
+        }
+        else
+        {
             json_object_set_new(root, "internalMimeType", json_string(actual_mimetype.c_str()));
 
             struct stat fstatbuf;
