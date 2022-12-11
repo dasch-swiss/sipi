@@ -13,12 +13,8 @@ WORKDIR /sipi
 # Add everything to image.
 COPY . .
 
-# set ccache directory
-ENV CCACHE_DIR=/ccache
-
 # Build SIPI.
-RUN --mount=type=cache,target=/ccache \
-    mkdir -p /sipi/build-linux && \
+RUN mkdir -p /sipi/build-linux && \
     cd /sipi/build-linux && \
     cmake -DMAKE_DEBUG:BOOL=ON .. && \
     make
@@ -31,12 +27,8 @@ WORKDIR /sipi
 # Add everything to image.
 COPY . .
 
-# set ccache directory
-ENV CCACHE_DIR=/ccache
-
 # Build SIPI.
-RUN --mount=type=cache,target=/ccache \
-    mkdir -p /sipi/build-linux && \
+RUN mkdir -p /sipi/build-linux && \
     cd /sipi/build-linux && \
     cmake -DMAKE_DEBUG:BOOL=OFF .. && \
     make
