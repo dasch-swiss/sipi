@@ -78,8 +78,17 @@ docker-build-remote-sipi-env: ## build and publish Remote Sipi Environment Docke
 		-f Dockerfile.remote-sipi-env \
 		-t daschswiss/remote-sipi-env:1.0 --load .
 
+.PHONY: start-local-dev-env
+start-local-dev-env: docker-build-remote-sipi-env ## starts the local development environment
+	docker run -d --cap-add sys_ptrace -p 127.0.0.1:2222:22 --name remote_sipi_env daschswiss/remote-sipi-env:1.0
+    ssh-keygen -f "$HOME/.ssh/known_hosts" -R "[localhost]:2222"
+
+.PHONY: stop-local-dev-env
+stop-local-dev-env: ## stops the local development environment
+	docker stop remote_sipi_env
+
 #####################################
-# Sipi remote development environment
+# Other targets
 #####################################
 
 .PHONY: compile
