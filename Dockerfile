@@ -2,8 +2,8 @@
 
 # Expose (global) variables (ARGs before FROM can only be used on FROM lines and not afterwards)
 ARG BUILD_TYPE=production
-ARG SIPI_BASE=daschswiss/sipi-base:2.9.0
-ARG UBUNTU_BASE=ubuntu:20.04
+ARG SIPI_BASE=daschswiss/sipi-base:2.12.0
+ARG UBUNTU_BASE=ubuntu:22.04
 
 # STAGE 1: Build debug
 FROM $SIPI_BASE as builder-debug
@@ -45,18 +45,14 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
     apt-get update && apt-get -y install \
     ca-certificates \
-    gnupg2
+    gnupg2 \
+    byobu curl git htop man vim wget unzip
 
 # Install build dependencies.
 RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
-    echo 'deb http://apt.llvm.org/focal/ llvm-toolchain-focal-11 main' | tee -a /etc/apt/sources.list && \
-    echo 'deb-src http://apt.llvm.org/focal/ llvm-toolchain-focal-11 main' | tee -a /etc/apt/sources.list && \
-    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421 && \
     apt-get update && apt-get -y install \
-    byobu curl git htop man vim wget unzip \
-    libllvm11 llvm-11-runtime \
+    libllvm14 llvm-14-runtime libidn14-dev \
     openssl \
-    libidn11-dev \
     locales \
     uuid \
     ffmpeg \
@@ -102,18 +98,15 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
     apt-get update && apt-get -y install \
     ca-certificates \
-    gnupg2
+    gnupg2 \
+    wget \
+    byobu curl git htop man vim wget unzip
 
 # Install build dependencies.
 RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
-    echo 'deb http://apt.llvm.org/focal/ llvm-toolchain-focal-11 main' | tee -a /etc/apt/sources.list && \
-    echo 'deb-src http://apt.llvm.org/focal/ llvm-toolchain-focal-11 main' | tee -a /etc/apt/sources.list && \
-    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421 && \
     apt-get update && apt-get -y install \
-    byobu curl git htop man vim wget unzip \
-    libllvm11 llvm-11-runtime \
+    libllvm14 llvm-14-runtime libidn14-dev \
     openssl \
-    libidn11-dev \
     locales \
     uuid \
     ffmpeg \

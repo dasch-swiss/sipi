@@ -11,9 +11,12 @@
 # ssh credentials (test user):
 #   user@password
 
-FROM daschswiss/sipi-base:2.9.0
+FROM daschswiss/sipi-base:2.12.0
 
-RUN DEBIAN_FRONTEND="noninteractive" apt-get update && apt-get -y install tzdata
+ARG DEBIAN_FRONTEND=noninteractive
+ENV TZ=Europe/Zurich
+
+RUN apt-get update && apt-get -y install tzdata
 
 RUN apt-get update \
   && apt-get install -y ssh \
@@ -23,17 +26,6 @@ RUN apt-get update \
       tar \
   && apt-get clean
 
-RUN ( \
-    echo 'LogLevel DEBUG2'; \
-    echo 'PermitRootLogin yes'; \
-    echo 'PasswordAuthentication yes'; \
-    echo 'Subsystem sftp /usr/lib/openssh/sftp-server'; \
-  ) > /etc/ssh/sshd_config_test_clion \
-  && mkdir /run/sshd
-
-RUN useradd -m user \
-  && yes password | passwd user
-
-RUN usermod -s /bin/bash user
-
-CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_test_clion"]
+ARG UID=1000
+RUN useradd -m -u ${UID} -s /bin/bash builder
+USER builder
