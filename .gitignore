@@ -15,25 +15,30 @@ sipi
 *~
 *.pyc
 .idea/
+/.vscode
 SipiConfig.h
 sipi.log*
 /extsrcs/
-/cmake-build-debug/
-/cmake-build-debug-remote/
+
 target
 __pycache__/
 doc/
 _build/
 .pytest_cache
+/venv/
 
 #
 # Cmake things to be ignored
 #
 lib
 local
+/build
 build-linux
 build-mac
 cmake-build-debug
+/cmake-build-debug/
+/cmake-build-debug-remote/
+/cmake-build-debug-inside-docker/
 # ignore cache
 cache/
 
@@ -60,7 +65,4 @@ _lena512.jp2
 /test/_test_data/images/unit/cielab.png
 /test/_test_data/images/unit/CIELab16.jpg
 /test/_test_data/images/unit/CIELab16.png
-/build
-/.vscode
-
-/cmake-build-debug-inside-docker/
+/test/_test_data/images/unit/cielab_2.tif

@@ -2,7 +2,7 @@
 
 # Expose (global) variables (ARGs before FROM can only be used on FROM lines and not afterwards)
 ARG BUILD_TYPE=production
-ARG SIPI_BASE=daschswiss/sipi-base:2.12.0
+ARG SIPI_BASE=daschswiss/sipi-base:2.14.0
 ARG UBUNTU_BASE=ubuntu:22.04
 
 # STAGE 1: Build debug
@@ -42,15 +42,20 @@ LABEL maintainer="400790+subotic@users.noreply.github.com"
 ARG DEBIAN_FRONTEND=noninteractive
 
 # needs to be separate because of gnupg2 which is needed for the keyserver stuff
-RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
-    apt-get update && apt-get -y install \
+RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
+  && apt-get clean \
+  && apt-get update \
+  && apt-get -y install \
     ca-certificates \
     gnupg2 \
-    byobu curl git htop man vim wget unzip
+    byobu curl git htop man vim wget unzip \
+  && apt-get clean
 
 # Install build dependencies.
-RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
-    apt-get update && apt-get -y install \
+RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
+  && apt-get clean \
+  && apt-get update \
+  && apt-get -y install \
     libllvm14 llvm-14-runtime libidn14-dev \
     openssl \
     locales \
@@ -59,7 +64,9 @@ RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
     at \
     bc \
     imagemagick \
-    valgrind
+    valgrind \
+    file \
+  && apt-get clean
 
 # add locales
 RUN locale-gen en_US.UTF-8 && \
@@ -95,16 +102,21 @@ LABEL maintainer="400790+subotic@users.noreply.github.com"
 ARG DEBIAN_FRONTEND=noninteractive
 
 # needs to be separate because of gnupg2 which is needed for the keyserver stuff
-RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
-    apt-get update && apt-get -y install \
+RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
+  && apt-get clean \
+  && apt-get update \
+  && apt-get -y install \
     ca-certificates \
     gnupg2 \
     wget \
-    byobu curl git htop man vim wget unzip
+    byobu curl git htop man vim wget unzip \
+  && apt-get clean
 
 # Install build dependencies.
-RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
-    apt-get update && apt-get -y install \
+RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
+  && apt-get clean \
+  && apt-get update \
+  && apt-get -y install \
     libllvm14 llvm-14-runtime libidn14-dev \
     openssl \
     locales \
@@ -112,7 +124,9 @@ RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
     ffmpeg \
     at \
     bc \
-    imagemagick
+    imagemagick \
+    file \
+  && apt-get clean
 
 # add locales
 RUN locale-gen en_US.UTF-8 && \
