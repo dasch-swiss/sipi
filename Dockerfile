@@ -56,7 +56,7 @@ RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
   && apt-get clean \
   && apt-get update \
   && apt-get -y install \
-    libllvm14 llvm-14-runtime libidn14-dev \
+    libllvm14 llvm-14-runtime \
     openssl \
     locales \
     uuid \
@@ -117,7 +117,7 @@ RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
   && apt-get clean \
   && apt-get update \
   && apt-get -y install \
-    libllvm14 llvm-14-runtime libidn14-dev \
+    libllvm14 llvm-14-runtime \
     openssl \
     locales \
     uuid \
