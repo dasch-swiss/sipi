@@ -42,9 +42,9 @@ def test_get_test_html():
         time.sleep(1)
         cid = container._container.short_id
         r = requests.get("http://localhost:1024/server/test.html")
-        assert r.status_code == 200
         if r.status_code != 200:
             get_logs(cid)
+        assert r.status_code == 200
 
 
 def test_file_type():
@@ -54,9 +54,9 @@ def test_file_type():
         time.sleep(1)
         cid = container._container.short_id
         r = requests.get("http://localhost:1024/test_file_type")
-        assert r.status_code == 200
         if r.status_code != 200:
             get_logs(cid)
+        assert r.status_code == 200
 
 
 def test_functions():
@@ -66,6 +66,6 @@ def test_functions():
         time.sleep(1)
         cid = container._container.short_id
         r = requests.get("http://localhost:1024/test_functions")
-        assert r.status_code == 200
         if r.status_code != 200:
             get_logs(cid)
+        assert r.status_code == 200
