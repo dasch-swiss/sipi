@@ -11,6 +11,7 @@ include_directories(
 ExternalProject_Add(project_zstd
         INSTALL_DIR ${COMMON_LOCAL}
         URL https://github.com/facebook/zstd/archive/refs/heads/dev.zip
+        DOWNLOAD_EXTRACT_TIMESTAMP NEW
         SOURCE_DIR ${COMMON_SRCS}/zstd
         SOURCE_SUBDIR build/cmake
         CMAKE_ARGS

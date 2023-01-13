@@ -10,6 +10,7 @@ include(ExternalProject)
 ExternalProject_Add(project_bzip2
         INSTALL_DIR ${COMMON_LOCAL}
         URL https://sourceforge.net/projects/bzip2/files/latest/download
+        DOWNLOAD_EXTRACT_TIMESTAMP NEW
         SOURCE_DIR ${COMMON_SRCS}/bzip2
         CONFIGURE_COMMAND ""
         BUILD_COMMAND make PREFIX=${COMMON_LOCAL}

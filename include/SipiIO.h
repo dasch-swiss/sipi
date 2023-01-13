@@ -50,11 +50,24 @@ namespace Sipi {
         ScalingMethod png;
     } ScalingQuality;
 
+    typedef enum : unsigned short { // from the TIFF specification...
+        TOPLEFT = 1,  //!< The 0th row represents the visual top of the image, and the 0th column represents the visual left-hand side.
+        TOPRIGHT = 2, //!< The 0th row represents the visual top of the image, and the 0th column represents the visual right-hand side.
+        BOTRIGHT = 3, //!< The 0th row represents the visual bottom of the image, and the 0th column represents the visual right-hand side.
+        BOTLEFT = 4,  //!< The 0th row represents the visual bottom of the image, and the 0th column represents the visual left-hand side.
+        LEFTTOP = 5,  //!< The 0th row represents the visual left-hand side of the image, and the 0th column represents the visual top.
+        RIGHTTOP = 6, //!< The 0th row represents the visual right-hand side of the image, and the 0th column represents the visual top.
+        RIGHTBOT = 7, //!< The 0th row represents the visual right-hand side of the image, and the 0th column represents the visual bottom.
+        LEFTBOT = 8   //!< The 0th row represents the visual left-hand side of the image, and the 0th column represents the visual bottom.
+    } Orientation;
+
+
     class SipiImgInfo {
     public:
         enum { FAILURE = 0, DIMS = 1, ALL = 2 } success;
         int width;
         int height;
+        Orientation orientation;
         int tile_width;
         int tile_height;
         int clevels;
@@ -63,15 +76,7 @@ namespace Sipi {
         std::string origname;
         std::string origmimetype;
 
-        SipiImgInfo() {
-            success = FAILURE;
-            width = 0;
-            height = 0;
-            tile_width = 0;
-            tile_height = 0;
-            clevels = 0;
-            numpages = 0;
-        };
+        SipiImgInfo() : success(FAILURE), width(0), height(0), orientation(TOPLEFT), tile_height(0), clevels(0), numpages(0) {};
     };
 
     enum {

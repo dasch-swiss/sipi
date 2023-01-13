@@ -10,6 +10,7 @@ ExternalProject_Add(project_webp
         DEPENDS xz
         INSTALL_DIR ${COMMON_LOCAL}
         URL https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.1.0.tar.gz
+        DOWNLOAD_EXTRACT_TIMESTAMP NEW
         SOURCE_DIR ${COMMON_SRCS}/libwebp-1.1.0
         CMAKE_ARGS -DCMAKE_PREFIX_PATH=${COMMON_LOCAL}
         -DCMAKE_INSTALL_PREFIX=${COMMON_LOCAL}

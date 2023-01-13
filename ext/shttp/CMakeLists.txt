@@ -8,6 +8,7 @@ include(ExternalProject)
 ExternalProject_Add(project_shttps
     INSTALL_DIR ${COMMON_LOCAL}
     DOWNLOAD_COMMAND cp -r ${SIPI_SOURCE_DIR}/shttps ${COMMON_SRCS}
+        DOWNLOAD_EXTRACT_TIMESTAMP NEW
     SOURCE_DIR ${COMMON_SRCS}/shttps
     CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${COMMON_LOCAL}
     INSTALL_COMMAND make install

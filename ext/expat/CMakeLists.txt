@@ -5,6 +5,7 @@ include(ExternalProject)
 ExternalProject_Add(project_expat
         INSTALL_DIR ${COMMON_LOCAL}
         URL https://github.com/libexpat/libexpat/releases/download/R_2_2_9/expat-2.2.9.tar.bz2
+        DOWNLOAD_EXTRACT_TIMESTAMP NEW
         SOURCE_DIR ${COMMON_SRCS}/expat
         CONFIGURE_COMMAND ${COMMON_SRCS}/expat/configure
             --prefix=${COMMON_LOCAL}

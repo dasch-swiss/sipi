@@ -178,6 +178,8 @@ namespace Sipi {
         img->bps = png_get_bit_depth(png_ptr, info_ptr);
         img->nc = png_get_channels(png_ptr, info_ptr);
 
+        img->orientation = TOPLEFT;
+
         png_uint_32 res_x, res_y;
         int unit_type;
         if (png_get_pHYs(png_ptr, info_ptr, &res_x, &res_y, &unit_type)) {
@@ -192,7 +194,7 @@ namespace Sipi {
                 fres_y = res_y;
             }
             img->exif->addKeyVal("Exif.Image.XResolution", fres_x);
-            img->exif->addKeyVal("Exif.Image.YResolution", fres_x);
+            img->exif->addKeyVal("Exif.Image.YResolution", fres_y);
             img->exif->addKeyVal("Exif.Image.ResolutionUnit", 2); // DPI
         }
 
@@ -382,6 +384,7 @@ namespace Sipi {
 
         info.width = png_get_image_width(png_ptr, info_ptr);
         info.height = png_get_image_height(png_ptr, info_ptr);
+        info.orientation = TOPLEFT;
         info.success = SipiImgInfo::DIMS;
 
         png_destroy_read_struct(&png_ptr, &info_ptr, &end_info);

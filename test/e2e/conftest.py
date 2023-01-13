@@ -18,6 +18,7 @@
 # See the GNU Affero General Public License for more details.
 # You should have received a copy of the GNU Affero General Public
 # License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
+import pprint
 
 import pytest
 import configparser
@@ -382,13 +383,18 @@ class SipiTestManager:
         sipi_url = self.make_sipi_url(url_path)
 
         with open(file_path, "rb") as file_obj:
-            files = { "file": (os.path.basename(file_path), file_obj, mime_type) }
+            files = {"file": (os.path.basename(file_path), file_obj, mime_type) }
             try:
                 response = requests.post(sipi_url, files=files, data=params, headers=headers)
                 response.raise_for_status()
-            except:
-                raise SipiTestError("post request with image file to {} failed: {}".format(sipi_url, response.json()["message"]))
-            return response.json()
+            except Exception as err:
+                print("**************************************************************************\n")
+                print('ERROR:', err)
+                print("**************************************************************************\n")
+                #raise SipiTestError("post request with image file to {} failed: {}".format(sipi_url, response.json()["message"]))
+                raise SipiTestError("post request with image file to {} failed: ".format(sipi_url))
+
+        return response.json()
 
     def get_json(self, url_path, use_ssl = False):
         """
@@ -438,7 +444,10 @@ class SipiTestManager:
         try:
             response = requests.post(sipi_url, data=params, headers=headers)
             response.raise_for_status()
-        except:
+        except Exception as err:
+            print('GAGAGAGAGAGA')
+            print(err)
+            print("GUGUGUGUGUGU")
             raise SipiTestError("post request to {} failed: {}".format(sipi_url, response.json()["message"]))
         return response.json()
 
@@ -455,7 +464,7 @@ class SipiTestManager:
         validator_process = subprocess.run(validator_process_args,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            universal_newlines = True)
+            universal_newlines=True)
 
         if validator_process.returncode != 0:
             raise SipiTestError("IIIF validation failed (wrote {}):\n{}".format(self.sipi_log_file, validator_process.stdout))

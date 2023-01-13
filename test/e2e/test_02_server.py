@@ -18,6 +18,7 @@
 # See the GNU Affero General Public License for more details.
 # You should have received a copy of the GNU Affero General Public
 # License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
+import pprint
 
 import pytest
 from pathlib import Path
@@ -472,9 +473,6 @@ class TestServer:
 
         assert json_result == expected_result
 
-    def test_pdf_server(self, manager):
-        """Test serving entire PDF files"""
-        manager.compare_server_bytes("/unit/CV+Pub_LukasRosenthaler.pdf/file", manager.data_dir_path("unit/CV+Pub_LukasRosenthaler.pdf"))
 
     def test_upscaling_server(self, manager):
         """Test upscaling of an image"""

@@ -9,6 +9,7 @@ ExternalProject_Add(project_lcms2
         INSTALL_DIR ${COMMON_LOCAL}
         URL https://github.com/dasch-swiss/sipi-third-party/raw/main/third-party/lcms2-2.9.tar.gz
         URL_HASH SHA256=48c6fdf98396fa245ed86e622028caf49b96fa22f3e5734f853f806fbc8e7d20
+        DOWNLOAD_EXTRACT_TIMESTAMP NEW
         SOURCE_DIR ${COMMON_SRCS}/lcms2-2.9
         CONFIGURE_COMMAND   ${COMMON_SRCS}/lcms2-2.9/configure
                             --prefix=${COMMON_LOCAL}

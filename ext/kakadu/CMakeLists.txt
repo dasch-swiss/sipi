@@ -11,6 +11,7 @@ ExternalProject_Add(
         project_kakadu
         INSTALL_DIR ${COMMON_LOCAL}
         DOWNLOAD_COMMAND unzip -o -d ${COMMON_SRCS} ${COMMON_VENDOR}/v8_2_1-01727L.zip
+        DOWNLOAD_EXTRACT_TIMESTAMP NEW
         CONFIGURE_COMMAND ""
         BUILD_COMMAND make --directory=${COMMON_SRCS}/v8_2_1-01727L/make/ -f ${KDU_MAKE} all_but_jni
         INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_directory ${COMMON_SRCS}/v8_2_1-01727L/lib/${KDU_ARCH} ${CONFIGURE_LIBDIR}

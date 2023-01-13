@@ -9,6 +9,7 @@ include(ExternalProject)
 ExternalProject_Add(project_lua
     INSTALL_DIR ${COMMON_LOCAL}
     URL http://www.lua.org/ftp/lua-5.3.5.tar.gz
+        DOWNLOAD_EXTRACT_TIMESTAMP NEW
     SOURCE_DIR ${COMMON_SRCS}/lua-5.3.5
     CONFIGURE_COMMAND ls
 #    BUILD_COMMAND make CPPFLAGS=-DLUA_USE_APICHECK CFLAGS=-DLUA_USE_APICHECK INSTALL_LIB=${CONFIGURE_LIBDIR} ${LUA_ARCH}

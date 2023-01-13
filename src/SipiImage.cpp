@@ -67,6 +67,7 @@ namespace Sipi {
         ny = 0;
         nc = 0;
         bps = 0;
+        orientation = TOPLEFT;
         pixels = nullptr;
         xmp = nullptr;
         icc = nullptr;
@@ -1051,6 +1052,10 @@ namespace Sipi {
 
         while (angle < 0.) angle += 360.;
         while (angle >= 360.) angle -= 360.;
+
+        if (angle == 0.) {
+            return true;
+        }
 
         if (angle == 90.) {
             //

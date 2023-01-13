@@ -184,6 +184,7 @@ class SipiImageError : public std::exception {
         size_t nc;         //!< Total number of samples per pixel
         size_t bps;        //!< bits per sample. Currently only 8 and 16 are supported
         std::vector<ExtraSamples> es; //!< meaning of extra samples
+        Orientation orientation;
         PhotometricInterpretation photo;    //!< Image type, that is the meaning of the channels
         byte *pixels;   //!< Pointer to block of memory holding the pixels
         std::shared_ptr<SipiXmp> xmp;   //!< Pointer to instance SipiXmp class (\ref SipiXmp), or NULL
@@ -254,6 +255,20 @@ class SipiImageError : public std::exception {
          * @return bis per sample (bps)
          */
         inline size_t getBps() const { return bps; }
+
+        inline std::shared_ptr<SipiExif> getExif() const { return exif; };
+
+        /*!
+         * Get orientation
+         * @return Returns orientation tag
+         */
+        inline Orientation getOrientation() const { return orientation; };
+
+        /*!
+         * Set orientation parameter
+         * @param ori orientation to be set
+         */
+        inline void setOrientation(Orientation ori) { orientation = ori; };
 
         /*! Destructor
          *

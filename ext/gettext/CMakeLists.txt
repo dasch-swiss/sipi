@@ -9,6 +9,7 @@ ExternalProject_Add(
         project_gettext
         INSTALL_DIR ${COMMON_LOCAL}
         URL http://ftp.gnu.org/pub/gnu/gettext/gettext-0.20.2.tar.gz
+        DOWNLOAD_EXTRACT_TIMESTAMP NEW
         SOURCE_DIR ${COMMON_SRCS}/gettext--0.20.2
         CONFIGURE_COMMAND   ${COMMON_SRCS}/gettext--0.20.2/configure
                             --prefix=${COMMON_LOCAL}

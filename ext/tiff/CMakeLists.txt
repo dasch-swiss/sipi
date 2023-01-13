@@ -22,6 +22,7 @@ ExternalProject_Add(project_tiff
         INSTALL_DIR ${COMMON_LOCAL}
         TEST_BEFORE_INSTALL 1
         URL http://download.osgeo.org/libtiff/tiff-4.1.0.tar.gz
+        DOWNLOAD_EXTRACT_TIMESTAMP NEW
         SOURCE_DIR ${COMMON_SRCS}/libtiff-4.1.0
         PATCH_COMMAND patch ${COMMON_SRCS}/libtiff-4.1.0/libtiff/tif_dirinfo.c < ${COMMON_PATCHES}/tiff-4.0.4.patch
         CMAKE_ARGS  ${CMAKE_CREATE_SHARED}

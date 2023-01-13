@@ -8,6 +8,7 @@ include(ExternalProject)
 ExternalProject_Add(project_sqlite3
         INSTALL_DIR ${COMMON_LOCAL}
         URL https://www.sqlite.org/2020/sqlite-autoconf-3320200.tar.gz
+        DOWNLOAD_EXTRACT_TIMESTAMP NEW
         SOURCE_DIR ${COMMON_SRCS}/sqlite-autoconf-3320200
         CONFIGURE_COMMAND ${COMMON_SRCS}/sqlite-autoconf-3320200/configure --enable-fts5  --prefix=${COMMON_LOCAL} --enable-shared --enable-static --libdir=${CONFIGURE_LIBDIR}
         BUILD_COMMAND make CFLAGS=-DSQLITE_ENABLE_RTREE=1
