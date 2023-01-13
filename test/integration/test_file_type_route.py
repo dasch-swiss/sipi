@@ -40,9 +40,11 @@ def test_get_test_html():
     container = setup_module()
     with container:
         time.sleep(1)
-        id = container._container.short_id
+        cid = container._container.short_id
         r = requests.get("http://localhost:1024/server/test.html")
         assert r.status_code == 200
+        if r.status_code != 200:
+            get_logs(cid)
 
 
 def test_file_type():
@@ -50,8 +52,11 @@ def test_file_type():
     container = setup_module()
     with container:
         time.sleep(1)
+        cid = container._container.short_id
         r = requests.get("http://localhost:1024/test_file_type")
         assert r.status_code == 200
+        if r.status_code != 200:
+            get_logs(cid)
 
 
 def test_functions():
@@ -59,5 +64,8 @@ def test_functions():
     container = setup_module()
     with container:
         time.sleep(1)
+        cid = container._container.short_id
         r = requests.get("http://localhost:1024/test_functions")
         assert r.status_code == 200
+        if r.status_code != 200:
+            get_logs(cid)
