@@ -1,0 +1,19 @@
+FROM daschswiss/sipi-base:2.14.0
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV TZ=Europe/Zurich
+
+RUN apt-get update && apt-get -y install tzdata
+
+RUN apt-get update \
+  && apt-get install -y \
+    ssh \
+    locales-all \
+    dos2unix \
+    rsync \
+    tar \
+  && apt-get clean
+
+ARG UID=1000
+RUN useradd -m -u ${UID} -s /bin/bash builder
+USER builder

@@ -40,7 +40,6 @@ def test_get_test_html():
     container = setup_module()
     with container:
         time.sleep(1)
-        id = container._container.short_id
         r = requests.get("http://localhost:1024/server/test.html")
         assert r.status_code == 200
 

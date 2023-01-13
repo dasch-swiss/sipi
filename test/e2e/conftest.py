@@ -38,6 +38,7 @@ import hashlib
 import glob
 import sys
 
+
 def pytest_addoption(parser):
     parser.addoption(
         "--sipi-exec", action="store", default="notset", help="The absolut path to the sipi executable"
@@ -100,7 +101,7 @@ class SipiTestManager:
         self.sipi_process = None
         self.sipi_started = False
         self.sipi_took_too_long = False
-        self.sipi_convert_command = "{} --file {} --format {} {}" # Braces will be replaced by actual arguments. See https://pyformat.info for details on string formatting.
+        self.sipi_convert_command = "{} --file {} --format {} {}"  # Braces will be replaced by actual arguments. See https://pyformat.info for details on string formatting.
         self.sipi_compare_command = "{} --compare {} {}"
 
         self.nginx_base_url = self.config["Nginx"]["base-url"]
@@ -108,7 +109,8 @@ class SipiTestManager:
         self.start_nginx_command = "nginx -p {} -c nginx.conf".format(self.nginx_working_dir)
         self.stop_nginx_command = "nginx -p {} -c nginx.conf -s stop".format(self.nginx_working_dir)
 
-        self.iiif_validator_command = "iiif-validate.py -s localhost:{} -p {} -i 67352ccc-d1b0-11e1-89ae-279075081939.jp2 --version=3.0 -v".format(self.sipi_port, self.iiif_validator_prefix)
+        self.iiif_validator_command = "iiif-validate.py -s localhost:{} -p {} -i 67352ccc-d1b0-11e1-89ae-279075081939.jp2 --version=3.0 -v".format(
+            self.sipi_port, self.iiif_validator_prefix)
 
         self.compare_command = "compare -metric {} {} {} null:"
         self.compare_out_re = re.compile(r"^(\d+) \(([0-9.]+)\).*$")
@@ -144,7 +146,6 @@ class SipiTestManager:
         except OSError:
             pass
 
-
         # Start a Sipi process and capture its output.
         sipi_args = shlex.split(self.sipi_command)
         sipi_start_time = time.time()
@@ -162,7 +163,8 @@ class SipiTestManager:
                 self.sipi_took_too_long = True
 
         if self.sipi_took_too_long:
-            raise SipiTestError("Sipi didn't start after {} seconds (wrote {})".format(self.sipi_start_wait, self.sipi_log_file))
+            raise SipiTestError(
+                "Sipi didn't start after {} seconds (wrote {})".format(self.sipi_start_wait, self.sipi_log_file))
 
     def stop_sipi(self):
         """Sends SIGTERM to Sipi and waits for it to stop."""
@@ -207,7 +209,7 @@ class SipiTestManager:
 
     def stop_nginx(self):
         """Stops nginx."""
-        
+
         nginx_args = shlex.split(self.stop_nginx_command)
         if subprocess.run(nginx_args).returncode != 0:
             raise SipiTestError("nginx failed to stop")
@@ -268,7 +270,10 @@ class SipiTestManager:
         if filecmp.cmp(downloaded_file_path, expected_file_path):
             os.remove(downloaded_file_path)
         else:
-            raise SipiTestError("Downloaded file {} is different from expected file {} (wrote {})".format(downloaded_file_path, expected_file_path, self.sipi_log_file))
+            raise SipiTestError(
+                "Downloaded file {} is different from expected file {} (wrote {})".format(downloaded_file_path,
+                                                                                          expected_file_path,
+                                                                                          self.sipi_log_file))
 
     def compare_server_images(self, url_path, expected_file_path, headers=None):
         """
@@ -282,14 +287,17 @@ class SipiTestManager:
 
         expected_file_basename, expected_file_extension = os.path.splitext(expected_file_path)
         downloaded_file_path = self.download_file(url_path, headers=headers, suffix=expected_file_extension)
-        compare_process_args = shlex.split(self.sipi_compare_command.format(self.sipi_executable, downloaded_file_path, expected_file_path))
+        compare_process_args = shlex.split(
+            self.sipi_compare_command.format(self.sipi_executable, downloaded_file_path, expected_file_path))
         compare_process = subprocess.run(compare_process_args,
                                          stdout=subprocess.PIPE,
                                          stderr=subprocess.STDOUT,
-                                         universal_newlines = True)
+                                         universal_newlines=True)
 
         if compare_process.returncode != 0:
-            raise SipiTestError("Sipi compare: pixels not identical {} {}:\n{}".format(downloaded_file_path, expected_file_path, convert_process.stdout))
+            raise SipiTestError(
+                "Sipi compare: pixels not identical {} {}:\n{}".format(downloaded_file_path, expected_file_path,
+                                                                       convert_process.stdout))
 
     def expect_status_code(self, url_path, status_code, headers=None):
         """
@@ -304,7 +312,12 @@ class SipiTestManager:
         response = requests.get(sipi_url, headers=headers)
 
         if response.status_code != status_code:
-            raise SipiTestError("Received status code {} for URL {}, expected {} (wrote {}). Response:\n{}".format(response.status_code, sipi_url, status_code, self.sipi_log_file, response.text))
+            raise SipiTestError(
+                "Received status code {} for URL {}, expected {} (wrote {}). Response:\n{}".format(response.status_code,
+                                                                                                   sipi_url,
+                                                                                                   status_code,
+                                                                                                   self.sipi_log_file,
+                                                                                                   response.text))
 
     def get_image_info(self, url_path, headers=None):
         """
@@ -318,9 +331,9 @@ class SipiTestManager:
         downloaded_file_path = self.download_file(url_path, headers=headers)
         info_process_args = shlex.split(self.info_command.format(downloaded_file_path))
         info_process = subprocess.run(info_process_args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            universal_newlines = True)
+                                      stdout=subprocess.PIPE,
+                                      stderr=subprocess.STDOUT,
+                                      universal_newlines=True)
         return info_process.stdout
 
     def sipi_convert(self, source_file_path, target_file_path, target_file_format):
@@ -331,15 +344,18 @@ class SipiTestManager:
             target_file_path: the absolute path of the target file.
             target_file_format: jpx, jpg, tif, or png.
         """
-        convert_process_args = shlex.split(self.sipi_convert_command.format(self.sipi_executable, source_file_path, target_file_format, target_file_path))
+        convert_process_args = shlex.split(
+            self.sipi_convert_command.format(self.sipi_executable, source_file_path, target_file_format,
+                                             target_file_path))
         convert_process = subprocess.run(convert_process_args,
-            cwd=self.sipi_working_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            universal_newlines = True)
+                                         cwd=self.sipi_working_dir,
+                                         stdout=subprocess.PIPE,
+                                         stderr=subprocess.STDOUT,
+                                         universal_newlines=True)
 
         if convert_process.returncode != 0:
-            raise SipiTestError("Error converting {} to {}:\n{}".format(source_file_path, target_file_path, convert_process.stdout))
+            raise SipiTestError(
+                "Error converting {} to {}:\n{}".format(source_file_path, target_file_path, convert_process.stdout))
 
     def compare_images(self, reference_target_file_path, converted_file_path, metric):
         """
@@ -351,11 +367,12 @@ class SipiTestManager:
             metric: the type of comparison to be performed, either 'MAE' or 'PAE'.
         """
 
-        compare_process_args = shlex.split(self.compare_command.format(metric, reference_target_file_path, converted_file_path))
+        compare_process_args = shlex.split(
+            self.compare_command.format(metric, reference_target_file_path, converted_file_path))
         compare_process = subprocess.run(compare_process_args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            universal_newlines = True)
+                                         stdout=subprocess.PIPE,
+                                         stderr=subprocess.STDOUT,
+                                         universal_newlines=True)
 
         compare_out_str = compare_process.stdout
         compare_out_regex_match = self.compare_out_re.match(compare_out_str)
@@ -367,7 +384,6 @@ class SipiTestManager:
             Converts a path relative to data-dir into an absolute path.
         """
         return os.path.join(self.data_dir, relative_path)
-
 
     def post_file(self, url_path, file_path, mime_type, params=None, headers=None):
         """
@@ -383,7 +399,7 @@ class SipiTestManager:
         sipi_url = self.make_sipi_url(url_path)
 
         with open(file_path, "rb") as file_obj:
-            files = {"file": (os.path.basename(file_path), file_obj, mime_type) }
+            files = {"file": (os.path.basename(file_path), file_obj, mime_type)}
             try:
                 response = requests.post(sipi_url, files=files, data=params, headers=headers)
                 response.raise_for_status()
@@ -396,7 +412,7 @@ class SipiTestManager:
 
         return response.json()
 
-    def get_json(self, url_path, use_ssl = False):
+    def get_json(self, url_path, use_ssl=False):
         """
         Sends a request which expects JSON
         :param url_path: a path that will be appended to the Sipi base URL to make the request.
@@ -415,7 +431,7 @@ class SipiTestManager:
             raise SipiTestError("post request to {} failed: {}".format(sipi_url, response.json()["message"]))
         return response.json()
 
-    def get_auth_json(self, url_path, use_ssl = False):
+    def get_auth_json(self, url_path, use_ssl=False):
         if use_ssl:
             sipi_url = self.make_sipi_ssl_url(url_path)
         else:
@@ -453,7 +469,7 @@ class SipiTestManager:
 
     def write_sipi_log(self):
         """Writes Sipi's output to a log file."""
-        
+
         with open(self.sipi_log_file, "w") as file:
             file.write(self.get_sipi_output())
 
@@ -467,9 +483,10 @@ class SipiTestManager:
             universal_newlines=True)
 
         if validator_process.returncode != 0:
-            raise SipiTestError("IIIF validation failed (wrote {}):\n{}".format(self.sipi_log_file, validator_process.stdout))
+            raise SipiTestError(
+                "IIIF validation failed (wrote {}):\n{}".format(self.sipi_log_file, validator_process.stdout))
 
-    def download_file_to_data_dir_tmp(self, url, file_extension = ".bin"):
+    def download_file_to_data_dir_tmp(self, url, file_extension=".bin"):
         """Only downloads a file to the target directory if not already there"""
         url_hash = hashlib.md5(url.encode('utf-8')).hexdigest()
         test_tmp_directory = self.data_dir_path("test_tmp")
@@ -506,14 +523,13 @@ class SipiTestManager:
         return subprocess.Popen(ab_args,
                                 cwd=self.sipi_working_dir,
                                 stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT) # redirect stderr to stdout
+                                stderr=subprocess.STDOUT)  # redirect stderr to stdout
 
     def cleanup(self):
         """Cleanup all files created"""
         fileList = glob.glob(self.data_dir + '/knora/_*')
         for filePath in fileList:
             os.remove(filePath)
-
 
         fileList = glob.glob(self.data_dir + '/unit/_*')
         for filePath in fileList:
@@ -523,8 +539,10 @@ class SipiTestManager:
         for filePath in fileList:
             os.remove(filePath)
 
+
 class SipiTestError(Exception):
     """Indicates an error in a Sipi test."""
+
 
 class ProcessOutputReader:
     """Spawns a thread that collects the output of a subprocess."""
@@ -544,12 +562,13 @@ class ProcessOutputReader:
                 else:
                     return
 
-        self.thread = threading.Thread(target = collect_lines)
+        self.thread = threading.Thread(target=collect_lines)
         self.thread.daemon = True
         self.thread.start()
 
     def get_output(self):
         return "".join(self.lines)
+
 
 def pytest_itemcollected(item):
     """Outputs test class and function docstrings, if provided, when each test is run."""
@@ -561,4 +580,3 @@ def pytest_itemcollected(item):
     suf = node.__doc__.strip() if node.__doc__ else node.__name__
     if pref or suf:
         item._nodeid = "{}: {} should {}".format(pref, component, suf)
-
