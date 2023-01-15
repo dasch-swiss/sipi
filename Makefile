@@ -92,7 +92,6 @@ compile-ci: ## compile SIPI inside Docker with Debug symbols
 compile-ci: ## compile SIPI inside Docker with Debug symbols (no it)
 	docker run \
 		--rm \
-		--platform linux/amd64,linux/arm64 \
 		-v ${PWD}:/tmp/sipi \
 		$(SIPI_BASE) /bin/sh -c "mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && cd /tmp/sipi/cmake-build-debug-inside-docker && cmake -DMAKE_DEBUG:BOOL=ON .. && make"
 
@@ -102,7 +101,6 @@ test: ## compile and run tests inside Docker with Debug symbols
 	docker run \
     		--rm \
     		-it \
-    		--platform linux/amd64 \
     		-v ${PWD}:/tmp/sipi \
     		$(SIPI_BASE) /bin/sh -c "mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && cd /tmp/sipi/cmake-build-debug-inside-docker && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
 
@@ -111,7 +109,6 @@ test-ci: ## compile and run tests inside Docker with Debug symbols (no it)
 	@mkdir -p ${CURRENT_DIR}/images
 	docker run \
 		--rm \
-		--platform linux/amd64,linux/arm64 \
 		-v ${PWD}:/tmp/sipi \
 		$(SIPI_BASE) /bin/sh -c "mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && cd /tmp/sipi/cmake-build-debug-inside-docker && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
 
