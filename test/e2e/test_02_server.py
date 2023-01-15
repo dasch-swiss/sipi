@@ -28,6 +28,7 @@ import time
 import datetime
 import sys
 
+
 # Tests basic functionality of the Sipi server.
 
 
@@ -286,13 +287,13 @@ class TestServer:
         #    "internalMimeType": "image/jpx"
         # }
 
-        #response_json = manager.post_file("/api/upload", manager.data_dir_path("unit/lena512.tif"), "image/tiff")
-        #filename = response_json["filename"]
-        #manager.expect_status_code("/unit/{}/full/max/0/default.jpg".format(filename), 200)
+        # response_json = manager.post_file("/api/upload", manager.data_dir_path("unit/lena512.tif"), "image/tiff")
+        # filename = response_json["filename"]
+        # manager.expect_status_code("/unit/{}/full/max/0/default.jpg".format(filename), 200)
 
-        #response_json = manager.get_json("/unit/{}/knora.json".format(filename))
+        # response_json = manager.get_json("/unit/{}/knora.json".format(filename))
 
-        #assert response_json == expected_result
+        # assert response_json == expected_result
 
     def test_json_info_validation(self, manager):
         """pass the info.json request tests"""
@@ -345,9 +346,9 @@ class TestServer:
             filename)
         assert response_json == expected_result
 
-        #response_json = manager.get_json("/unit/{}/info.json".format(filename), use_ssl=True)
-        #expected_result["id"] = "https://127.0.0.1:1024/unit/{}".format(filename)
-        #assert response_json == expected_result
+        # response_json = manager.get_json("/unit/{}/info.json".format(filename), use_ssl=True)
+        # expected_result["id"] = "https://127.0.0.1:1024/unit/{}".format(filename)
+        # assert response_json == expected_result
 
     def test_knora_json_for_video(self, manager):
         """pass the knora.json request for video"""
@@ -461,7 +462,8 @@ class TestServer:
                     '@context': 'http://iiif.io/api/auth/1/context.json',
                     '@id': 'https://localhost/iiif-cookie.html',
                     'profile': 'http://iiif.io/api/auth/1/login',
-                    'header': 'Please Log In', 'failureDescription': '<a href="http://example.org/policy">Access Policy</a>',
+                    'header': 'Please Log In',
+                    'failureDescription': '<a href="http://example.org/policy">Access Policy</a>',
                     'confirmLabel': 'Login to SIPI',
                     'failureHeader': 'Authentication Failed',
                     'description': 'This Example requires a demo login!',
@@ -509,7 +511,6 @@ class TestServer:
         json_result = manager.get_auth_json("/auth/lena512.jp2/info.json")
 
         assert json_result == expected_result
-
 
     def test_upscaling_server(self, manager):
         """Test upscaling of an image"""

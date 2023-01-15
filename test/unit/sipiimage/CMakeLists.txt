@@ -101,6 +101,7 @@ target_link_libraries(sipiimage
         zstd
         z
         m
+        lzma
         Threads::Threads
         ${CMAKE_DL_LIBS})
 

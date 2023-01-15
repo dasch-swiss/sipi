@@ -12,7 +12,7 @@ ExternalProject_Add(project_png
         #URL https://github.com/dasch-swiss/sipi-third-party/raw/main/third-party/libpng-1.6.34.tar.gz
         #URL_HASH SHA256=574623a4901a9969080ab4a2df9437026c8a87150dfd5c235e28c94b212964a7
         URL https://sourceforge.net/projects/libpng/files/libpng16/1.6.37/libpng-1.6.37.tar.gz/download
-        #DOWNLOAD_EXTRACT_TIMESTAMP NEW
+        DOWNLOAD_EXTRACT_TIMESTAMP NEW
         #DOWNLOAD_NAME libpng-latest.tar.gz
         #URL https://sourceforge.net/projects/libpng/files/latest/download?source=files
         SOURCE_DIR ${COMMON_SRCS}/libpng-1.6.37

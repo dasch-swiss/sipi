@@ -296,8 +296,7 @@ class SipiTestManager:
 
         if compare_process.returncode != 0:
             raise SipiTestError(
-                "Sipi compare: pixels not identical {} {}:\n{}".format(downloaded_file_path, expected_file_path,
-                                                                       convert_process.stdout))
+                "Sipi compare: pixels not identical {} {}:\n {}".format(downloaded_file_path, expected_file_path, compare_process.stdout))
 
     def expect_status_code(self, url_path, status_code, headers=None):
         """

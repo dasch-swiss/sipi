@@ -35,9 +35,42 @@ sipi = {
     port = 1024,
 
     --
+    -- Number of threads to use
+    --
+    nthreads = 4,
+
+    --
+    -- SIPI is using libjpeg to generate the JPEG images. libjpeg requires a quality value which
+    -- corresponds to the compression rate. 100 is (almost) no compression and best quality, 0
+    -- would be full compression and no quality. Reasonable values are between 30 and 95...
+    --
+    jpeg_quality = 60,
+
+    --
+    -- For scaling images, SIPI offers two methods. The value "high" offers best quality using expensive
+    -- algorithms (bilinear interpolation, if downscaling the image is first scaled up to an integer
+    -- multiple of the requires size, and then downscaled using averaging. This results in the best
+    -- image quality. "medium" uses bilinear interpolation but does not do upscaling before
+    -- downscaling. Scaling quality is set to "low", then just a lookup table and nearest integer
+    -- interpolation is being used to scale the images.
+    -- Recognized values are: "high", "medium", "low".
+    --
+    scaling_quality = {
+        jpeg = "medium",
+        tiff = "high",
+        png = "high",
+        j2k = "high"
+    },
+
+    --
     -- Number of seconds a connection (socket) remains open
     --
     keep_alive = 5,
+
+    --
+    -- Maximal size of a post request.
+    --
+    max_post_size = '300M',
 
     --
     -- indicates the path to the root of the image directory. Depending on the settings of the variable
@@ -49,9 +82,28 @@ sipi = {
     imgroot = './images', -- directory for Knora Sipi integration testing
 
     --
-    -- If FALSE, the prefix is not used to build the path to the image files
+    -- If TRUE, the IIIF prefix is used to build the path to the image files.
     --
     prefix_as_path = true,
+
+    --
+    -- In order not to accumulate too many files into one directory (which slows down file
+    -- access considerabely), the images are stored in recursive subdirectories 'A'-'Z'.
+    -- If subdir_levels is equal 0, no subdirectories are used. The maximum is 6.
+    -- The recommendation is that on average there should not be more than a few
+    -- thousand files in a unix directory (your mileage may vary depending on the
+    -- file system used).
+    --
+    subdir_levels = 0,
+
+    --
+    -- if subdir_levels is > 0 and if prefix_as_path is true, all prefixes will be
+    -- regarded as directories under imgroot. Thus, the subdirs 'A'-'Z' will be
+    -- created in these directories for the prefixes. However, it may make sense
+    -- for certain prefixes *not* to use subdirs. A list of these prefix-directories
+    -- can be given with this configuration parameter.
+    --
+    subdir_excludes = { "tmp", "thumb"},
 
     --
     -- Lua script which is executed on initialization of the Lua interpreter
@@ -66,12 +118,19 @@ sipi = {
     --
     -- maxcimal size of the cache
     --
-    cachesize = '100M',
+    cachesize = '20M',
 
     --
-    -- if the cache becomes full, the given percentage of file space is marked for reuase
+    -- maximal number of files to be cached
+    -- The cache will be purged if either the maximal size or maximal number
+    -- of files is reached
     --
-    cache_hysteresis = 0.1,
+    cache_nfiles = 8,
+
+    --
+    -- if the cache becomes full, the given percentage of file space is marked for reuse
+    --
+    cache_hysteresis = 0.15,
 
     --
     -- Path to the directory where the scripts for the routes defined below are to be found
@@ -87,6 +146,11 @@ sipi = {
     -- Path to the temporary directory
     --
     tmpdir = '/tmp',
+
+    --
+    -- The maximum allowed age of temporary files (in seconds) before they are deleted. Defaults to one day.
+    --
+    max_temp_file_age = 86400,
 
     --
     -- Path to Knora Application
@@ -126,55 +190,16 @@ sipi = {
 
 
     --
+    -- Name of the logfile (a ".txt" is added...) !!! Currently not used, since logging
+    -- is based on syslog !!!!
+    --
+    logfile = "sipi.log",
+
+    --
     -- loglevel, one of "DEBUG", "INFO", "NOTICE", "WARNING", "ERR",
     -- "CRIT", "ALERT", "EMERG"
     --
     loglevel = "DEBUG"
-}
-
-j2k_profiles = {
-    lossless_profile = {
-        --
-        -- for lossless use 'yes', for lossy use 'no'
-        --
-        Creversible = 'yes',
-
-        --
-        -- number of quality layers (determine bitrates automatically)
-        -- may not be used if rate is specified
-        --
-        Clayers = 8,
-
-        --
-        -- number of resolution levels of resolution pyramid)
-        --
-        Clevels = 6,
-
-        --
-        -- order of file organization
-        --
-        Corder = 'RPCL',
-
-        --
-        -- size of precincts
-        --
-        Cprecincts = '{256,256}',
-
-        --
-        -- code block size
-        --
-        Cblk = '{64,64}',
-
-        --
-        -- write SOP markers
-        --
-        Cuse_sop = 'yes'
-
-        --
-        -- bitrates per quality layer
-        --
-        -- rate '-,1,0.5,0.25'
-    }
 }
 
 --

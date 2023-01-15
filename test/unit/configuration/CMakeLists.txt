@@ -113,6 +113,7 @@ target_link_libraries(configuration
         zstd
         z
         m
+        lzma
         Threads::Threads
         ${CMAKE_DL_LIBS})
 

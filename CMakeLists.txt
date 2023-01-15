@@ -428,6 +428,7 @@ target_link_libraries(sipi ${LIBS}
         zstd
         z
         m
+        lzma
         Threads::Threads
         ${CMAKE_DL_LIBS})
 

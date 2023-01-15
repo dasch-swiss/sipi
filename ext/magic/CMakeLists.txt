@@ -10,6 +10,7 @@ ExternalProject_Add(project_magic
         DEPENDS bzip2
         INSTALL_DIR ${COMMON_LOCAL}
         URL http://ftp.astron.com/pub/file/file-5.41.tar.gz
+        DOWNLOAD_EXTRACT_TIMESTAMP NEW
         SOURCE_DIR ${COMMON_SRCS}/file-5.41
         CONFIGURE_COMMAND ${COMMON_SRCS}/file-5.41/configure --enable-static --enable-shared --prefix=${COMMON_LOCAL}
         BUILD_COMMAND make

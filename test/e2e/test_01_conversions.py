@@ -23,10 +23,10 @@ import pytest
 import tempfile
 import os
 
+
 # Tests file conversions.
 
 class TestConversions:
-
     component = "The Sipi command-line program"
 
     reference_tif_tmpl = "iso-15444-4/reference_jp2/jp2_{}.tif"
@@ -54,7 +54,8 @@ class TestConversions:
             manager.sipi_convert(reference_jp2, sipi_tif, "tif")
             pae = manager.compare_images(sipi_tif, reference_tif, "PAE")
 
-            results += "Image {}: Converted JP2 -> TIFF\n    Reference JP2: {}\n    Reference TIFF: {}\n    Sipi TIFF: {}\n    PAE (Sipi TIFF compared to reference TIFF): {}\n\n".format(i, reference_jp2, reference_tif, sipi_tif, pae)
+            results += "Image {}: Converted JP2 -> TIFF\n    Reference JP2: {}\n    Reference TIFF: {}\n    Sipi TIFF: {}\n    PAE (Sipi TIFF compared to reference TIFF): {}\n\n".format(
+                i, reference_jp2, reference_tif, sipi_tif, pae)
 
             if pae > 0:
                 bad_result = True
@@ -79,7 +80,8 @@ class TestConversions:
             manager.sipi_convert(sipi_jp2, sipi_tif, "tif")
             pae = manager.compare_images(sipi_tif, reference_tif, "PAE")
 
-            results += "Image {}: Converted TIFF -> JP2 -> TIFF\n    Reference TIFF: {}\n    Sipi JP2: {}\n    Sipi TIFF: {}\n    PAE (Sipi TIFF compared to reference TIFF): {}\n\n".format(i, reference_tif, sipi_jp2, sipi_tif, pae)
+            results += "Image {}: Converted TIFF -> JP2 -> TIFF\n    Reference TIFF: {}\n    Sipi JP2: {}\n    Sipi TIFF: {}\n    PAE (Sipi TIFF compared to reference TIFF): {}\n\n".format(
+                i, reference_tif, sipi_jp2, sipi_tif, pae)
 
             if pae > 0:
                 bad_result = True
