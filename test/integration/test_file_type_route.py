@@ -39,7 +39,7 @@ def test_get_test_html():
     """ This test gets the test.html file. """
     container = setup_module()
     with container:
-        time.sleep(1)
+        time.sleep(3)
         r = requests.get("http://localhost:1024/server/test.html")
         assert r.status_code == 200
 
@@ -48,7 +48,7 @@ def test_file_type():
     """ This tests the call to /test_file_type """
     container = setup_module()
     with container:
-        time.sleep(1)
+        time.sleep(3)
         r = requests.get("http://localhost:1024/test_file_type")
         assert r.status_code == 200
 
@@ -57,6 +57,6 @@ def test_functions():
     """ This tests the call to /test_functions """
     container = setup_module()
     with container:
-        time.sleep(1)
+        time.sleep(3)
         r = requests.get("http://localhost:1024/test_functions")
         assert r.status_code == 200
