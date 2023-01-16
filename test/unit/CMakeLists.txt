@@ -22,7 +22,7 @@ include(ExternalProject)
 ExternalProject_Add(
         gtest
         URL https://github.com/google/googletest/archive/refs/tags/release-1.12.1.tar.gz
-        DOWNLOAD_EXTRACT_TIMESTAMP NEW
+        #DOWNLOAD_EXTRACT_TIMESTAMP NEW
         #GIT_REPOSITORY https://github.com/google/googletest.git
         PREFIX ${CMAKE_CURRENT_BINARY_DIR}/gtest
         # Disable install step

@@ -21,8 +21,13 @@
 # License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.18)
+cmake_policy(VERSION 3.18)
+if(POLICY CMP0135) # DOWNLOAD_EXTRACT_TIMESTAMP
+    cmake_policy(SET CMP0135 OLD)
+endif()
 
+message(STATUS "cmake version: ${CMAKE_VERSION}")
 
 include(ExternalProject)
 include(CheckStructHasMember)

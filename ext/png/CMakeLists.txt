@@ -5,16 +5,19 @@ include(ExternalProject)
 #
 # get png
 #
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.25.1)
+    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
+else()
+    unset(timestamp_policy)
+endif()
+
 ExternalProject_Add(project_png
         DEPENDS zlib
         DEPENDS xz
         INSTALL_DIR ${COMMON_LOCAL}
-        #URL https://github.com/dasch-swiss/sipi-third-party/raw/main/third-party/libpng-1.6.34.tar.gz
-        #URL_HASH SHA256=574623a4901a9969080ab4a2df9437026c8a87150dfd5c235e28c94b212964a7
         URL https://sourceforge.net/projects/libpng/files/libpng16/1.6.37/libpng-1.6.37.tar.gz/download
-        DOWNLOAD_EXTRACT_TIMESTAMP NEW
-        #DOWNLOAD_NAME libpng-latest.tar.gz
-        #URL https://sourceforge.net/projects/libpng/files/latest/download?source=files
+        ${timestamp_policy}
+        DOWNLOAD_DIR ${COMMON_SRCS}/downloads
         SOURCE_DIR ${COMMON_SRCS}/libpng-1.6.37
         CMAKE_ARGS  ${SHARED_OPTION}
         -DCMAKE_PREFIX_PATH=${COMMON_LOCAL}

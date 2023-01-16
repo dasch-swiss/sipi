@@ -5,11 +5,19 @@ include(ExternalProject)
 #
 # get luarocks
 #
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.25.1)
+    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
+else()
+    unset(timestamp_policy)
+endif()
+
 ExternalProject_Add(project_luarocks
         DEPENDS lua
         INSTALL_DIR ${COMMON_LOCAL}
         URL http://luarocks.github.io/luarocks/releases/luarocks-3.3.1.tar.gz
-        DOWNLOAD_EXTRACT_TIMESTAMP NEW
+        ${timestamp_policy}
+        DOWNLOAD_DIR ${COMMON_SRCS}/downloads
+        #DOWNLOAD_EXTRACT_TIMESTAMP NEW
         SOURCE_DIR ${COMMON_SRCS}/luarocks-3.3.1
         CONFIGURE_COMMAND   ${COMMON_SRCS}/luarocks-3.3.1/configure
                             --prefix=${COMMON_LOCAL}

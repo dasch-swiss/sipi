@@ -12,10 +12,19 @@ else()
     set(CONF_ARCHOPT "")
 endif()
 
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.25.1)
+    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
+else()
+    unset(timestamp_policy)
+endif()
+
+
 ExternalProject_Add(project_ssl
         INSTALL_DIR ${COMMON_LOCAL}
         URL https://www.openssl.org/source/openssl-3.0.1.tar.gz
-        DOWNLOAD_EXTRACT_TIMESTAMP NEW
+        ${timestamp_policy}
+        DOWNLOAD_DIR ${COMMON_SRCS}/downloads
+        #DOWNLOAD_EXTRACT_TIMESTAMP NEW
         SOURCE_DIR ${COMMON_SRCS}/openssl
         CONFIGURE_COMMAND ${COMMON_SRCS}/openssl/Configure ${CONF_ARCHOPT}
         --prefix=${COMMON_LOCAL}

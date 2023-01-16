@@ -7,10 +7,17 @@ include(ExternalProject)
 # since we also need this as a shared library, we need to compile with PIC - Position Independent Code
 # which may generate less efficient code
 #
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.25.1)
+    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
+else()
+    unset(timestamp_policy)
+endif()
+
 ExternalProject_Add(project_bzip2
         INSTALL_DIR ${COMMON_LOCAL}
         URL https://sourceforge.net/projects/bzip2/files/latest/download
-        DOWNLOAD_EXTRACT_TIMESTAMP NEW
+        ${timestamp_policy}
+        DOWNLOAD_DIR ${COMMON_SRCS}/downloads
         SOURCE_DIR ${COMMON_SRCS}/bzip2
         CONFIGURE_COMMAND ""
         BUILD_COMMAND make PREFIX=${COMMON_LOCAL}

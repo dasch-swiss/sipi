@@ -5,12 +5,20 @@ include(ExternalProject)
 #
 # get libmagic (file)
 #
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.25.1)
+    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
+else()
+    unset(timestamp_policy)
+endif()
+
+
 ExternalProject_Add(project_magic
         DEPENDS xz
         DEPENDS bzip2
         INSTALL_DIR ${COMMON_LOCAL}
         URL http://ftp.astron.com/pub/file/file-5.41.tar.gz
-        DOWNLOAD_EXTRACT_TIMESTAMP NEW
+        ${timestamp_policy}
+        DOWNLOAD_DIR ${COMMON_SRCS}/downloads
         SOURCE_DIR ${COMMON_SRCS}/file-5.41
         CONFIGURE_COMMAND ${COMMON_SRCS}/file-5.41/configure --enable-static --enable-shared --prefix=${COMMON_LOCAL}
         BUILD_COMMAND make

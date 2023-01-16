@@ -7,11 +7,18 @@ include_directories(
         /usr/include
         /usr/local/include
 )
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.25.1)
+    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
+else()
+    unset(timestamp_policy)
+endif()
+
 
 ExternalProject_Add(project_zstd
         INSTALL_DIR ${COMMON_LOCAL}
         URL https://github.com/facebook/zstd/archive/refs/heads/dev.zip
-        DOWNLOAD_EXTRACT_TIMESTAMP NEW
+        DOWNLOAD_DIR ${COMMON_SRCS}/downloads
+        ${timestamp_policy}
         SOURCE_DIR ${COMMON_SRCS}/zstd
         SOURCE_SUBDIR build/cmake
         CMAKE_ARGS
