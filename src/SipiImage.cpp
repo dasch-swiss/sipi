@@ -729,53 +729,53 @@ namespace Sipi {
     /****************************************************************************/
 #define POSITION(x, y, c, n) ((n)*((y)*nx + (x)) + c)
 
-    byte SipiImage::bilinn(byte buf[], int nx, float x, float y, int c, int n) {
+    byte SipiImage::bilinn(byte buf[], int nx, double x, double y, int c, int n) {
         int ix, iy;
-        float rx, ry;
+        double rx, ry;
         ix = (int) x;
         iy = (int) y;
-        rx = x - (float) ix;
-        ry = y - (float) iy;
+        rx = x - (double) ix;
+        ry = y - (double) iy;
 
         if ((rx < 1.0e-2) && (ry < 1.0e-2)) {
             return (buf[POSITION(ix, iy, c, n)]);
         } else if (rx < 1.0e-2) {
-            return ((byte) (((float) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
-                             (float) buf[POSITION(ix, (iy + 1), c, n)] * (ry - rx * ry)) + 0.5));
+            return ((byte) lround(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
+                             (double) buf[POSITION(ix, (iy + 1), c, n)] * (ry - rx * ry))));
         } else if (ry < 1.0e-2) {
-            return ((byte) (((float) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
-                             (float) buf[POSITION((ix + 1), iy, c, n)] * (rx - rx * ry)) + 0.5));
+            return ((byte) lroundf(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
+                             (double) buf[POSITION((ix + 1), iy, c, n)] * (rx - rx * ry))));
         } else {
-            return ((byte) (((float) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
-                             (float) buf[POSITION((ix + 1), iy, c, n)] * (rx - rx * ry) +
-                             (float) buf[POSITION(ix, (iy + 1), c, n)] * (ry - rx * ry) +
-                             (float) buf[POSITION((ix + 1), (iy + 1), c, n)] * rx * ry) + 0.5));
+            return ((byte) lroundf(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
+                             (double) buf[POSITION((ix + 1), iy, c, n)] * (rx - rx * ry) +
+                             (double) buf[POSITION(ix, (iy + 1), c, n)] * (ry - rx * ry) +
+                             (double) buf[POSITION((ix + 1), (iy + 1), c, n)] * rx * ry)));
         }
     }
 
     /*==========================================================================*/
 
-    word SipiImage::bilinn(word buf[], int nx, float x, float y, int c, int n) {
+    word SipiImage::bilinn(word buf[], int nx, double x, double y, int c, int n) {
         int ix, iy;
-        float rx, ry;
+        double rx, ry;
         ix = (int) x;
         iy = (int) y;
-        rx = x - (float) ix;
-        ry = y - (float) iy;
+        rx = x - (double) ix;
+        ry = y - (double) iy;
 
         if ((rx < 1.0e-2) && (ry < 1.0e-2)) {
             return (buf[POSITION(ix, iy, c, n)]);
         } else if (rx < 1.0e-2) {
-            return ((word) (((float) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
-                             (float) buf[POSITION(ix, (iy + 1), c, n)] * (ry - rx * ry)) + 0.5));
+            return ((word) lround(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
+                             (double) buf[POSITION(ix, (iy + 1), c, n)] * (ry - rx * ry))));
         } else if (ry < 1.0e-2) {
-            return ((word) (((float) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
-                             (float) buf[POSITION((ix + 1), iy, c, n)] * (rx - rx * ry)) + 0.5));
+            return ((word) lround(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
+                             (double) buf[POSITION((ix + 1), iy, c, n)] * (rx - rx * ry))));
         } else {
-            return ((word) (((float) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
-                             (float) buf[POSITION((ix + 1), iy, c, n)] * (rx - rx * ry) +
-                             (float) buf[POSITION(ix, (iy + 1), c, n)] * (ry - rx * ry) +
-                             (float) buf[POSITION((ix + 1), (iy + 1), c, n)] * rx * ry) + 0.5));
+            return ((word) lround(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
+                             (double) buf[POSITION((ix + 1), iy, c, n)] * (rx - rx * ry) +
+                             (double) buf[POSITION(ix, (iy + 1), c, n)] * (ry - rx * ry) +
+                             (double) buf[POSITION((ix + 1), (iy + 1), c, n)] * rx * ry)));
         }
     }
     /*==========================================================================*/
@@ -831,20 +831,20 @@ namespace Sipi {
 
 
     bool SipiImage::scaleMedium(size_t nnx, size_t nny) {
-        auto xlut = shttps::make_unique<float[]>(nnx);
-        auto ylut = shttps::make_unique<float[]>(nny);
+        auto xlut = shttps::make_unique<double[]>(nnx);
+        auto ylut = shttps::make_unique<double[]>(nny);
 
         for (size_t i = 0; i < nnx; i++) {
-            xlut[i] = (float) (i * (nx - 1)) / (float) (nnx - 1);
+            xlut[i] = (double) (i * (nx - 1)) / (double) (nnx - 1);
         }
         for (size_t j = 0; j < nny; j++) {
-            ylut[j] = (float) (j * (ny - 1)) / (float) (nny - 1);
+            ylut[j] = (double) (j * (ny - 1)) / (double) (nny - 1);
         }
 
         if (bps == 8) {
             byte *inbuf = pixels;
             byte *outbuf = new byte[nnx * nny * nc];
-            float rx, ry;
+            double rx, ry;
 
             for (size_t j = 0; j < nny; j++) {
                 ry = ylut[j];
@@ -861,7 +861,7 @@ namespace Sipi {
         } else if (bps == 16) {
             word *inbuf = (word *) pixels;
             word *outbuf = new word[nnx * nny * nc];
-            float rx, ry;
+            double rx, ry;
 
             for (size_t j = 0; j < nny; j++) {
                 ry = ylut[j];
@@ -910,20 +910,20 @@ namespace Sipi {
             nnny = nny;
         }
 
-        auto xlut = shttps::make_unique<float[]>(nnnx);
-        auto ylut = shttps::make_unique<float[]>(nnny);
+        auto xlut = shttps::make_unique<double[]>(nnnx);
+        auto ylut = shttps::make_unique<double[]>(nnny);
 
         for (size_t i = 0; i < nnnx; i++) {
-            xlut[i] = (float) (i * (nx - 1)) / (float) (nnnx - 1);
+            xlut[i] = (double) (i * (nx - 1)) / (double) (nnnx - 1);
         }
         for (size_t j = 0; j < nnny; j++) {
-            ylut[j] = (float) (j * (ny - 1)) / (float) (nnny - 1);
+            ylut[j] = (double) (j * (ny - 1)) / (double) (nnny - 1);
         }
 
         if (bps == 8) {
             byte *inbuf = pixels;
             byte *outbuf = new byte[nnnx * nnny * nc];
-            float rx, ry;
+            double rx, ry;
 
             for (size_t j = 0; j < nnny; j++) {
                 ry = ylut[j];
@@ -940,7 +940,7 @@ namespace Sipi {
         } else if (bps == 16) {
             word *inbuf = (word *) pixels;
             word *outbuf = new word[nnnx * nnny * nc];
-            float rx, ry;
+            double rx, ry;
 
             for (size_t j = 0; j < nnny; j++) {
                 ry = ylut[j];
@@ -1183,31 +1183,31 @@ namespace Sipi {
             ny = nny;
         } else { // all other angles
             double phi = M_PI * angle / 180.0;
-            float ptx = nx / 2. - .5;
-            float pty = ny / 2. - .5;
+            double ptx = nx / 2. - .5;
+            double pty = ny / 2. - .5;
 
-            float si = sinf(-phi);
-            float co = cosf(-phi);
+            double si = sin(-phi);
+            double co = cos(-phi);
 
             size_t nnx;
             size_t nny;
 
             if ((angle > 0.) && (angle < 90.)) {
-                nnx = floor((float) nx * cosf(phi) + (float) ny * sinf(phi) + .5);
-                nny = floor((float) nx * sinf(phi) + (float) ny * cosf(phi) + .5);
+                nnx = floor((double) nx * cosf(phi) + (double) ny * sinf(phi) + .5);
+                nny = floor((double) nx * sinf(phi) + (double) ny * cosf(phi) + .5);
             } else if ((angle > 90.) && (angle < 180.)) {
-                nnx = floor(-((float) nx) * cosf(phi) + (float) ny * sinf(phi) + .5);
-                nny = floor((float) nx * sin(phi) - (float) ny * cosf(phi) + .5);
+                nnx = floor(-((double) nx) * cosf(phi) + (double) ny * sinf(phi) + .5);
+                nny = floor((double) nx * sin(phi) - (double) ny * cosf(phi) + .5);
             } else if ((angle > 180.) && (angle < 270.)) {
-                nnx = floor(-((float) nx) * cosf(phi) - (float) ny * sinf(phi) + .5);
-                nny = floor(-((float) nx) * sinf(phi) - (float) ny * cosf(phi) + .5);
+                nnx = floor(-((double) nx) * cosf(phi) - (double) ny * sinf(phi) + .5);
+                nny = floor(-((double) nx) * sinf(phi) - (double) ny * cosf(phi) + .5);
             } else {
-                nnx = floor((float) nx * cosf(phi) - (float) ny * sinf(phi) + .5);
-                nny = floor(-((float) nx) * sinf(phi) + (float) ny * cosf(phi) + .5);
+                nnx = floor((double) nx * cosf(phi) - (double) ny * sinf(phi) + .5);
+                nny = floor(-((double) nx) * sinf(phi) + (double) ny * cosf(phi) + .5);
             }
 
-            float pptx = ptx * (float) nnx / (float) nx;
-            float ppty = pty * (float) nny / (float) ny;
+            double pptx = ptx * (double) nnx / (double) nx;
+            double ppty = pty * (double) nny / (double) ny;
 
             if (bps == 8) {
                 byte *inbuf = pixels;
@@ -1216,10 +1216,10 @@ namespace Sipi {
 
                 for (size_t j = 0; j < nny; j++) {
                     for (size_t i = 0; i < nnx; i++) {
-                        float rx = ((float) i - pptx) * co - ((float) j - ppty) * si + ptx;
-                        float ry = ((float) i - pptx) * si + ((float) j - ppty) * co + pty;
+                        double rx = ((double) i - pptx) * co - ((double) j - ppty) * si + ptx;
+                        double ry = ((double) i - pptx) * si + ((double) j - ppty) * co + pty;
 
-                        if ((rx < 0.0) || (rx >= (float) (nx - 1)) || (ry < 0.0) || (ry >= (float) (ny - 1))) {
+                        if ((rx < 0.0) || (rx >= (double) (nx - 1)) || (ry < 0.0) || (ry >= (double) (ny - 1))) {
                             for (size_t k = 0; k < nc; k++) {
                                 outbuf[nc * (j * nnx + i) + k] = bg;
                             }
@@ -1240,10 +1240,10 @@ namespace Sipi {
 
                 for (size_t j = 0; j < nny; j++) {
                     for (size_t i = 0; i < nnx; i++) {
-                        float rx = ((float) i - pptx) * co - ((float) j - ppty) * si + ptx;
-                        float ry = ((float) i - pptx) * si + ((float) j - ppty) * co + pty;
+                        double rx = ((double) i - pptx) * co - ((double) j - ppty) * si + ptx;
+                        double ry = ((double) i - pptx) * si + ((double) j - ppty) * co + pty;
 
-                        if ((rx < 0.0) || (rx >= (float) (nx - 1)) || (ry < 0.0) || (ry >= (float) (ny - 1))) {
+                        if ((rx < 0.0) || (rx >= (double) (nx - 1)) || (ry < 0.0) || (ry >= (double) (ny - 1))) {
                             for (size_t k = 0; k < nc; k++) {
                                 outbuf[nc * (j * nnx + i) + k] = bg;
                             }
@@ -1345,18 +1345,18 @@ namespace Sipi {
             throw SipiImageError(__file__, __LINE__, "Cannot read watermark file " + wmfilename);
         }
 
-        auto xlut = shttps::make_unique<float[]>(nx);
-        auto ylut = shttps::make_unique<float[]>(ny);
+        auto xlut = shttps::make_unique<double[]>(nx);
+        auto ylut = shttps::make_unique<double[]>(ny);
 
         //float *xlut = new float[nx];
         //float *ylut = new float[ny];
 
         for (size_t i = 0; i < nx; i++) {
-            xlut[i] = (float) (wm_nx * i) / (float) nx;
+            xlut[i] = (double) (wm_nx * i) / (double) nx;
         }
 
         for (size_t j = 0; j < ny; j++) {
-            ylut[j] = (float) (wm_ny * j) / (float) ny;
+            ylut[j] = (double) (wm_ny * j) / (double) ny;
         }
 
         if (bps == 8) {
@@ -1367,7 +1367,7 @@ namespace Sipi {
                     byte val = bilinn(wmbuf, wm_nx, xlut[i], ylut[j], 0, wm_nc);
 
                     for (size_t k = 0; k < nc; k++) {
-                        float nval = (buf[nc * (j * nx + i) + k] / 255.) * (1.0F + val / 2550.0F) + val / 2550.0F;
+                        double nval = (buf[nc * (j * nx + i) + k] / 255.) * (1.0 + val / 2550.0) + val / 2550.0;
                         buf[nc * (j * nx + i) + k] = (nval > 1.0) ? 255 : floor(nval * 255. + .5);
                     }
                 }
@@ -1379,8 +1379,8 @@ namespace Sipi {
                 for (size_t i = 0; i < nx; i++) {
                     for (size_t k = 0; k < nc; k++) {
                         byte val = bilinn(wmbuf, wm_nx, xlut[i], ylut[j], 0, wm_nc);
-                        float nval =
-                                (buf[nc * (j * nx + i) + k] / 65535.0F) * (1.0F + val / 655350.0F) + val / 352500.F;
+                        double nval =
+                                (buf[nc * (j * nx + i) + k] / 65535.0) * (1.0 + val / 655350.0) + val / 352500.;
                         buf[nc * (j * nx + i) + k] = (nval > 1.0) ? (word) 65535 : (word) floor(nval * 65535. + .5);
                     }
                 }
@@ -1649,20 +1649,46 @@ namespace Sipi {
 
     bool SipiImage::operator==(const SipiImage &rhs) {
         if ((nx != rhs.nx) || (ny != rhs.ny) || (nc != rhs.nc) || (bps != rhs.bps) || (photo != rhs.photo)) {
+std::cerr << "................SHITTY THING" << std::endl;
             return false;
         }
 
         long long n_differences = 0;
 
-        for (size_t j = 0; j < ny; j++) {
-            for (size_t i = 0; i < nx; i++) {
-                for (size_t k = 0; k < nc; k++) {
-                    if (pixels[nc * (j * nx + i) + k] != rhs.pixels[nc * (j * nx + i) + k]) {
-                        n_differences++;
+        switch (bps) {
+            case 8: {
+                byte *ltmp1 = pixels;
+                byte *ltmp2 = rhs.pixels;
+                for (size_t j = 0; j < ny; j++) {
+                    for (size_t i = 0; i < nx; i++) {
+                        for (size_t k = 0; k < nc; k++) {
+                            if (ltmp1[nc * (j * nx + i) + k] != ltmp2[nc * (j * nx + i) + k]) {
+                                std::cerr << "x=" << i << " y=" << j << " c=" << k << " ltmp1=" << (int) ltmp1[nc * (j * nx + i) + k] << " ltmp2=" << (int) ltmp2[nc * (j * nx + i) + k] << std::endl;
+                                n_differences++;
+                            }
+                        }
                     }
                 }
+                break;
+            }
+            case 16: {
+                word *ltmp1 = (word *) pixels;
+                word *ltmp2 = (word *) pixels;
+                for (size_t j = 0; j < ny; j++) {
+                    for (size_t i = 0; i < nx; i++) {
+                        for (size_t k = 0; k < nc; k++) {
+                            if (ltmp1[nc * (j * nx + i) + k] != ltmp2[nc * (j * nx + i) + k]) {
+                                n_differences++;
+                            }
+                        }
+                    }
+                }
+                break;
             }
         }
+
+
+        std::cerr << "................n_differences: " << n_differences << std::endl;
 
         return n_differences <= 0;
     }

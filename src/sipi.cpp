@@ -718,7 +718,24 @@ int main(int argc, char *argv[]) {
         if (result) {
             std::cerr << "Files identical!" << std::endl;
         } else {
-            std::cerr << "Files differ! - See diff.tif" << std::endl;
+            float diffval = 0.;
+            int maxdiff = 0;
+            int max_x, max_y;
+            for (int y = 0; y < img1.getNy(); y++) {
+                for (int x = 0; x < img1.getNx(); x++) {
+                    for (int c = 0; c < img1.getNc(); c++) {
+                        int dv = img1.getPixel(x, y, c) - img2.getPixel(x, y, c);
+                        if (dv > maxdiff) {
+                            maxdiff = dv;
+                            max_x = x;
+                            max_y = y;
+                        }
+                        diffval += static_cast<float>(dv);
+                    }
+                }
+            }
+            diffval /= (img1.getNy()*img1.getNx()*img1.getNc());
+            std::cerr << "Files differ: avg: " << diffval << " max: " << maxdiff << "(" << max_x << ", " << max_y << ") See diff.tif" << std::endl;
         }
 
         return (result) ? 0 : -1;
