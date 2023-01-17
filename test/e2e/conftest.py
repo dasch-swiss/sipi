@@ -205,10 +205,6 @@ class SipiTestManager:
 
         nginx_args = shlex.split(self.start_nginx_command)
         if subprocess.run(nginx_args).returncode != 0:
-            print("ERROR ERROR ERROR: NGINX failed. ", subprocess.run(nginx_args).returncode)
-            os.system("ls " + nginx_log_dir)
-            os.system("cat " + nginx_log_dir + "/error.log")
-            print("---------------------------------------------------")
             raise SipiTestError("nginx failed to start")
 
     def stop_nginx(self):
@@ -291,7 +287,6 @@ class SipiTestManager:
 
         expected_file_basename, expected_file_extension = os.path.splitext(expected_file_path)
         downloaded_file_path = self.download_file(url_path, headers=headers, suffix=expected_file_extension)
-        print("=======================***********> Downloaded_path", downloaded_file_path)
         compare_process_args = shlex.split(
             self.sipi_compare_command.format(self.sipi_executable, downloaded_file_path, expected_file_path))
         compare_process = subprocess.run(compare_process_args,
@@ -465,9 +460,9 @@ class SipiTestManager:
             response = requests.post(sipi_url, data=params, headers=headers)
             response.raise_for_status()
         except Exception as err:
-            print('GAGAGAGAGAGA')
+            print("**************************************************************************\n")
             print(err)
-            print("GUGUGUGUGUGU")
+            print("**************************************************************************\n")
             raise SipiTestError("post request to {} failed: {}".format(sipi_url, response.json()["message"]))
         return response.json()
 

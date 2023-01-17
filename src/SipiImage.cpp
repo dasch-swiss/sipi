@@ -1649,7 +1649,6 @@ namespace Sipi {
 
     bool SipiImage::operator==(const SipiImage &rhs) {
         if ((nx != rhs.nx) || (ny != rhs.ny) || (nc != rhs.nc) || (bps != rhs.bps) || (photo != rhs.photo)) {
-std::cerr << "................SHITTY THING" << std::endl;
             return false;
         }
 
@@ -1663,7 +1662,6 @@ std::cerr << "................SHITTY THING" << std::endl;
                     for (size_t i = 0; i < nx; i++) {
                         for (size_t k = 0; k < nc; k++) {
                             if (ltmp1[nc * (j * nx + i) + k] != ltmp2[nc * (j * nx + i) + k]) {
-                                std::cerr << "x=" << i << " y=" << j << " c=" << k << " ltmp1=" << (int) ltmp1[nc * (j * nx + i) + k] << " ltmp2=" << (int) ltmp2[nc * (j * nx + i) + k] << std::endl;
                                 n_differences++;
                             }
                         }
@@ -1686,9 +1684,6 @@ std::cerr << "................SHITTY THING" << std::endl;
                 break;
             }
         }
-
-
-        std::cerr << "................n_differences: " << n_differences << std::endl;
 
         return n_differences <= 0;
     }
