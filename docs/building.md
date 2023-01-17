@@ -65,11 +65,11 @@ If you also want to run Sipi's tests:
     pip3 install psutil
     pip3 install iiif_validator
 
-### Ubuntu 18.04
+### Ubuntu 22.04
 
 Prerequisites for building Sipi without its automated test framework:
 
-    sudo apt-get install g++-7
+    sudo apt-get install g++-12
     sudo apt-get install cmake
     sudo apt-get install libssl-dev
     sudo apt-get install doxygen
@@ -116,54 +116,6 @@ OpenSSL libraries and includes. To apply the patch, go to the Sipi
 dicrectory and run:
 
     sudo ./debian-cmake-patch.sh
-
-### CentOS 7
-
-This requires [GCC](https://gcc.gnu.org) version 5.3 or greater. You can
-install it by installing
-[devtoolset-4](https://www.softwarecollections.org/en/scls/rhscl/devtoolset-4/),
-and adding this to your `.bash_profile`:
-
-    source scl_source enable devtoolset-4
-
-Prerequisites for building Sipi without its automated test framework:
-
-    sudo yum -y install cmake3
-    sudo yum -y install readline-devel
-    sudo yum -y install doxygen
-    sudo yum -y install patch
-    sudo yum -y install openssl-devel
-    sudo yum -y install gettext
-    sudo yum -y install file-devel
-
-If you also want to run Sipi's tests, you will need
-[ImageMagick](http://www.imagemagick.org/), version 7.0.6 or higher. We
-suggest compiling it from source:
-
-    sudo yum install libtiff-devel libjpeg-turbo-devel openjpeg2-devel
-    wget https://github.com/ImageMagick/ImageMagick/archive/7.0.6-0.tar.gz
-    tar -xzf 7.0.6-0.tar.gz
-    cd ImageMagick-7.0.6-0/
-    ./configure
-    make
-    sudo make install
-    sudo ldconfig /usr/local/lib
-
-Then:
-
-    sudo yum -y install httpd-tools
-    sudo yum -y install nginx
-    sudo chown -R $USER /var/log/nginx
-    sudo chown -R $USER /var/lib/nginx
-    sudo yum -y install https://centos7.iuscommunity.org/ius-release.rpm
-    sudo yum -y install python35u
-    sudo yum -y install python35u-devel
-    sudo yum -y install python35u-pip
-    sudo pip3.5 install Sphinx
-    sudo pip3.5 install pytest
-    sudo pip3.5 install requests
-    sudo pip3.5 install psutil
-    sudo pip3.5 install iiif_validator
 
 ### Docker
 

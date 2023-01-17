@@ -108,17 +108,13 @@ end
 
 local test_files = {
     {
-        filename = 'big.pdf',
-        expected_mimetype = "application/pdf"
-    },
-    {
-        filename = 'test.csv',
-        expected_mimetype = "text/plain"
+        filename = 'test.html',
+        expected_mimetype = "text/html"
     }
 }
 
 for i, fileitem in ipairs(test_files) do
-    local success, mimetype = server.file_mimetype(config.imgroot .. "/" .. fileitem.filename)
+    local success, mimetype = server.file_mimetype(config.docroot .. "/" .. fileitem.filename)
     if not success then
         send_error(400, "Couldn't get mimetype: " .. mimetype)
         return -1

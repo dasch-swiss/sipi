@@ -15,7 +15,7 @@ COPY . .
 # Build SIPI.
 RUN mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && \
     cd /tmp/sipi/cmake-build-debug-inside-docker && \
-    cmake -DMAKE_DEBUG:BOOL=OFF .. && \
+    cmake -DMAKE_DEBUG:BOOL=ON .. && \
     make
 
 # STAGE 2: Setup
@@ -34,12 +34,10 @@ RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
   && apt-get -y install \
     ca-certificates \
     gnupg2 \
-    tzdata \
-    wget \
     byobu curl git htop man vim wget unzip \
   && apt-get clean
 
-# Install build dependencies.
+# Install runtime dependencies.
 RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
   && apt-get clean \
   && apt-get update \
@@ -54,6 +52,7 @@ RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
     imagemagick \
     libmagic1 \
     file \
+    valgrind \
   && apt-get clean
 
 # add locales
