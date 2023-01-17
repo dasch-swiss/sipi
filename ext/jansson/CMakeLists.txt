@@ -7,7 +7,7 @@ set(JANSSON_INSTALL_LIB_DIR "lib/${BITS}")
 #
 # get jansson
 #
-if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.25.1)
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24.0)
     set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 else()
     unset(timestamp_policy)

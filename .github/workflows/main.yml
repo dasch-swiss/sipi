@@ -32,8 +32,6 @@ jobs:
           python-version: 3.11
       - name: install requirements
         run: make install-requirements
-      - name: compile
-        run: make compile-ci
       - name: test
         run: make test-ci
 
@@ -89,10 +87,6 @@ jobs:
         run: |
           echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
           make docker-publish
-      - name: build and publish debug image
-        run: |
-          echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
-          make docker-publish-debug
       - name: Update release notes
         uses: lakto/gren-action@v1.1.0
         env:

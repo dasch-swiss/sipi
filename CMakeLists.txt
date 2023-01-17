@@ -209,7 +209,7 @@ endif()
 # libmagic
 # (used to be build locally from source was moved to prerequisites)
 #
-#find_package(LibMagic REQUIRED)
+find_package(LibMagic REQUIRED)
 
 #find_package(JBIG REQUIRED)
 #include_directories(${JBIG_INCLUDE_DIR})
@@ -271,7 +271,6 @@ add_subdirectory(${EXT_PROJECTS_DIR}/luarocks)
 add_subdirectory(${EXT_PROJECTS_DIR}/sqlite3)
 add_subdirectory(${EXT_PROJECTS_DIR}/kakadu)
 add_subdirectory(${EXT_PROJECTS_DIR}/curl)
-add_subdirectory(${EXT_PROJECTS_DIR}/magic)
 
 # add a target to generate API documentation with Doxygen
 find_package(Doxygen)
@@ -481,4 +480,5 @@ add_test(NAME all_python_based_e2e_tests
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test/e2e
         COMMAND pytest -s --sipi-exec=$<TARGET_FILE:sipi>)
 
+# adds unit tests defined in the test/unit subdirectory
 add_subdirectory(test/unit)

@@ -44,19 +44,10 @@ def test_get_test_html():
         assert r.status_code == 200
 
 
-def test_file_type():
-    """ This tests the call to /test_file_type """
+def test_luafunctions():
+    """ This tests the call to /test/lua_functions """
     container = setup_module()
     with container:
         time.sleep(3)
-        r = requests.get("http://localhost:1024/test_file_type")
-        assert r.status_code == 200
-
-
-def test_functions():
-    """ This tests the call to /test_functions """
-    container = setup_module()
-    with container:
-        time.sleep(3)
-        r = requests.get("http://localhost:1024/test_functions")
+        r = requests.get("http://localhost:1024/test/luafunctions")
         assert r.status_code == 200
