@@ -7,7 +7,7 @@ include(ExternalProject)
 # since we also need this as a shared library, we need to compile with PIC - Position Independent Code
 # which may generate less efficient code
 #
-if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.25.1)
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24.0)
     set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 else()
     unset(timestamp_policy)
@@ -56,5 +56,3 @@ add_dependencies(bzip2 project_bzip2)
 #set_property(TARGET bzip2_shared PROPERTY IMPORTED_LOCATION ${CONFIGURE_LIBDIR}/libbz2${CMAKE_SHARED_LIBRARY_SUFFIX})
 #
 #add_dependencies(bzip2_shared project_bzip2_shared)
-
-

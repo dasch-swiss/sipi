@@ -49,5 +49,5 @@ def test_luafunctions():
     container = setup_module()
     with container:
         time.sleep(3)
-        r = requests.get("http://localhost:1024/luafunctions")
+        r = requests.get("http://localhost:1024/test/luafunctions")
         assert r.status_code == 200

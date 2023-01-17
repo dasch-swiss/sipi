@@ -5,7 +5,7 @@ include(ExternalProject)
 #https://www.sqlite.org/2020/sqlite-autoconf-3310000.tar.gz
 # get sqlite3
 #
-if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.25.1)
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24.0)
     set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 else()
     unset(timestamp_policy)

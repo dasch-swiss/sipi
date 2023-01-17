@@ -5,7 +5,7 @@ include(ExternalProject)
 #
 # httplib
 #
-if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.25.1)
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24.0)
     set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 else()
     unset(timestamp_policy)
@@ -34,4 +34,3 @@ else()
 endif()
 
 add_dependencies(shttp project_shttps)
-
