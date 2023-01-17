@@ -6,10 +6,19 @@ include(ExternalProject)
 #
 # get lua
 #
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.25.1)
+    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
+else()
+    unset(timestamp_policy)
+endif()
+
+
 ExternalProject_Add(project_lua
     INSTALL_DIR ${COMMON_LOCAL}
     URL http://www.lua.org/ftp/lua-5.3.5.tar.gz
-        DOWNLOAD_EXTRACT_TIMESTAMP NEW
+        ${timestamp_policy}
+        DOWNLOAD_DIR ${COMMON_SRCS}/downloads
+        #DOWNLOAD_EXTRACT_TIMESTAMP NEW
     SOURCE_DIR ${COMMON_SRCS}/lua-5.3.5
     CONFIGURE_COMMAND ls
 #    BUILD_COMMAND make CPPFLAGS=-DLUA_USE_APICHECK CFLAGS=-DLUA_USE_APICHECK INSTALL_LIB=${CONFIGURE_LIBDIR} ${LUA_ARCH}

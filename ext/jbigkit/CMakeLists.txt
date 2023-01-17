@@ -5,11 +5,19 @@ include(ExternalProject)
 #
 # get JBIG
 #
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.25.1)
+    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
+else()
+    unset(timestamp_policy)
+endif()
+
+
 ExternalProject_Add(
         project_jbigkit
         INSTALL_DIR ${COMMON_LOCAL}
         URL https://www.cl.cam.ac.uk/~mgk25/jbigkit/download/jbigkit-2.1.tar.gz
-        DOWNLOAD_EXTRACT_TIMESTAMP NEW
+        ${timestamp_policy}
+        DOWNLOAD_DIR ${COMMON_SRCS}/downloads
         SOURCE_DIR ${COMMON_SRCS}//jbigkit-2.1
         CONFIGURE_COMMAND ""
         BUILD_COMMAND make

@@ -88,7 +88,7 @@ docker-build-remote-sipi-env: ## build and publish Remote Sipi Environment Docke
 #####################################
 
 .PHONY: compile
-compile-ci: ## compile SIPI inside Docker with Debug symbols
+compile: ## compile SIPI inside Docker with Debug symbols
 	docker run \
 		--rm \
 		-it \

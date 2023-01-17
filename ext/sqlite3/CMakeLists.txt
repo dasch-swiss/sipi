@@ -5,12 +5,20 @@ include(ExternalProject)
 #https://www.sqlite.org/2020/sqlite-autoconf-3310000.tar.gz
 # get sqlite3
 #
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.25.1)
+    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
+else()
+    unset(timestamp_policy)
+endif()
+
+
 ExternalProject_Add(project_sqlite3
         INSTALL_DIR ${COMMON_LOCAL}
-        URL https://www.sqlite.org/2020/sqlite-autoconf-3320200.tar.gz
-        DOWNLOAD_EXTRACT_TIMESTAMP NEW
-        SOURCE_DIR ${COMMON_SRCS}/sqlite-autoconf-3320200
-        CONFIGURE_COMMAND ${COMMON_SRCS}/sqlite-autoconf-3320200/configure --enable-fts5  --prefix=${COMMON_LOCAL} --enable-shared --enable-static --libdir=${CONFIGURE_LIBDIR}
+        URL "https://www.sqlite.org/2022/sqlite-autoconf-3400100.tar.gz"
+        DOWNLOAD_DIR ${COMMON_SRCS}/downloads
+        ${timestamp_policy}
+        SOURCE_DIR ${COMMON_SRCS}/sqlite
+        CONFIGURE_COMMAND ${COMMON_SRCS}/sqlite/configure --enable-fts5  --prefix=${COMMON_LOCAL} --enable-shared --enable-static --libdir=${CONFIGURE_LIBDIR}
         BUILD_COMMAND make CFLAGS=-DSQLITE_ENABLE_RTREE=1
         BUILD_IN_SOURCE 1
         )
