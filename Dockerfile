@@ -7,10 +7,14 @@ ARG UBUNTU_BASE=ubuntu:22.04
 # STAGE 1: Build
 FROM $SIPI_BASE as builder
 
+ARG UID=1000
+RUN useradd -m -u ${UID} -s /bin/bash builder
+USER builder
+
 WORKDIR /tmp/sipi
 
 # Add everything to image.
-COPY . .
+COPY --chown=builder . .
 
 # Build SIPI.
 RUN mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && \

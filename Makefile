@@ -30,6 +30,7 @@ install-requirements: ## install requirements for documentation
 docker-build: ## build and publish Sipi Docker image locally
 	docker buildx build \
 		--progress auto \
+		--build-arg UID=$(shell id -u) \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		-t $(DOCKER_IMAGE) -t $(DOCKER_REPO):latest \
@@ -80,8 +81,9 @@ docker-build-remote-sipi-env: ## build and publish Remote Sipi Environment Docke
 	docker buildx build \
 		--progress auto \
 		--build-arg UID=$(shell id -u) \
-		-f Dockerfile.remote-sipi-env \
-		-t daschswiss/remote-sipi-env:1.0 --load .
+		-t daschswiss/remote-sipi-env:1.0 \
+		--load \
+		--file ./Dockerfile.remote-sipi-env
 
 #####################################
 # test targets
