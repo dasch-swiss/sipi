@@ -18,6 +18,7 @@
 #  LibMagic_INCLUDE_DIR        The location of magic.h
 
 find_path(LibMagic_ROOT_DIR
+        HINTS /opt/homebrew
     NAMES include/magic.h
 )
 
