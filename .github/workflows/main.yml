@@ -9,8 +9,8 @@ on:
     types: [published]
 
 jobs:
-  unit:
-    name: Run Unit Tests
+  build:
+    name: Build Test Publish
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
@@ -32,62 +32,19 @@ jobs:
           python-version: 3.11
       - name: install requirements
         run: make install-requirements
-      - name: test
+      - name: compile
+        run: make compile-ci
+      - name: run unit tests
         run: make test-ci
-
-  integration:
-    name: Run Integration Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 50
-      - name: Checkout private ci-assets
-        uses: actions/checkout@v3
-        with:
-          repository: dasch-swiss/dsp-ci-assets
-          token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
-          path: ci
-      - name: Copy ci-assets
-        run: |
-          cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.11
-      - name: install requirements
-        run: make install-requirements
-      - name: build docker image
-        run: make docker-build
-      - name: integration tests
+      - name: run integration tests
         run: make test-integration
-
-  # publish only on release
-  publish-images:
-    name: Build and Publish Images to Dockerhub
-    needs: [unit, integration]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags')
-    steps:
-      - name: checkout source
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 50
-      - name: checkout private ci-assets
-        uses: actions/checkout@v3
-        with:
-          repository: dasch-swiss/dsp-ci-assets
-          token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
-          path: ci
-      - name: copy ci-assets
-        run: |
-          cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
-      - name: build and publish production image
+      - name: build and publish multi arch production images on release
+        if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags')
         run: |
           echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
           make docker-publish
-      - name: Update release notes
+      - name: update release notes
+        if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags')
         uses: lakto/gren-action@v1.1.0
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
