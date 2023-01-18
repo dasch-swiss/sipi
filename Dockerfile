@@ -17,8 +17,8 @@ WORKDIR /tmp/sipi
 COPY --chown=builder . .
 
 # Build SIPI.
-RUN mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && \
-    cd /tmp/sipi/cmake-build-debug-inside-docker && \
+RUN mkdir -p ./cmake-build-debug-inside-docker && \
+    cd ./cmake-build-debug-inside-docker && \
     cmake -DMAKE_DEBUG:BOOL=OFF .. && \
     make
 
