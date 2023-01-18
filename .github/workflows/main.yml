@@ -13,37 +13,44 @@ jobs:
     name: Build Test Publish
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source
+      -
+        name: checkout source
         uses: actions/checkout@v3
         with:
           fetch-depth: 50
-      - name: Checkout private ci-assets
+      -
+        name: checkout private ci-assets
         uses: actions/checkout@v3
         with:
           repository: dasch-swiss/dsp-ci-assets
           token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
           path: ci
-      - name: Copy ci-assets
+      -
+        name: copy ci-assets
         run: |
           cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
-      - name: Set up Python 3.11
+      -
+        name: set up Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
-      - name: install requirements
+      -
+        name: install python packages
         run: make install-requirements
-      - name: compile
-        run: make compile-ci
-      - name: run unit tests
+      -
+        name: compile and run unit and e2e tests
         run: make test-ci
-      - name: run integration tests
+      -
+        name: build docker image and run integration tests
         run: make test-integration
-      - name: build and publish multi arch production images on release
+      -
+        name: build and publish multi arch production images on release
         if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags')
         run: |
           echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
           make docker-publish
-      - name: update release notes
+      -
+        name: update release notes
         if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags')
         uses: lakto/gren-action@v1.1.0
         env:
@@ -54,19 +61,23 @@ jobs:
     name: Build Docs Testrun
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source
+      -
+        name: Checkout source
         uses: actions/checkout@v3
         with:
           fetch-depth: 1
-      - name: Set up Python 3.11
+      -
+        name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
-      - name: Install dependencies
+      -
+        name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: run docs build
+      -
+        name: run docs build
         run: make docs-build
 
   # publish documentation when merged into main branch
@@ -76,9 +87,11 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout main branch
+      -
+        name: Checkout main branch
         uses: actions/checkout@v3
-      - name: Deploy docs
+      -
+        name: Deploy docs
         uses: mhausenblas/mkdocs-deploy-gh-pages@master
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
