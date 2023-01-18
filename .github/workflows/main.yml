@@ -123,4 +123,6 @@ jobs:
         uses: mhausenblas/mkdocs-deploy-gh-pages@master
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          CUSTOM_DOMAIN: sipi.io
+          CONFIG_FILE: mkdocs.yml
           REQUIREMENTS: requirements.txt
