@@ -121,10 +121,8 @@ namespace shttps {
         data.type = msg.type;
         data.socket_type = msg.socket_type;
         data.sid = msg.sid;
-#ifdef SHTTPS_ENABLE_SSL
         data.ssl_sid = msg.ssl_sid;
         data.sslctx = msg.sslctx;
-#endif
         for (int i = 0; i < INET6_ADDRSTRLEN; ++i) {
             data.peer_ip[i] = msg.peer_ip[i];
         }

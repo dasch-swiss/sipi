@@ -679,6 +679,7 @@ namespace Sipi {
         img->nx = cinfo.output_width;
         img->ny = cinfo.output_height;
         img->nc = cinfo.output_components;
+        img->orientation = TOPLEFT;
         int colspace = cinfo.out_color_space; // JCS_UNKNOWN, JCS_GRAYSCALE, JCS_RGB, JCS_YCbCr, JCS_CMYK, JCS_YCCK
         switch (colspace) {
             case JCS_RGB: {
@@ -868,6 +869,7 @@ namespace Sipi {
                         return info;
                     }
                     info.width = tmp_width;
+                    info.orientation = TOPLEFT;
                     info.success = SipiImgInfo::DIMS;
                     if (!getbyte(dummy, infile)) {
                         info.success = SipiImgInfo::FAILURE;

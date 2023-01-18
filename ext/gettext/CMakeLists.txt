@@ -5,12 +5,20 @@ include(ExternalProject)
 #
 # get gettext
 #
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24.0)
+    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
+else()
+    unset(timestamp_policy)
+endif()
+
 ExternalProject_Add(
         project_gettext
         INSTALL_DIR ${COMMON_LOCAL}
-        URL http://ftp.gnu.org/pub/gnu/gettext/gettext-0.20.2.tar.gz
-        SOURCE_DIR ${COMMON_SRCS}/gettext--0.20.2
-        CONFIGURE_COMMAND   ${COMMON_SRCS}/gettext--0.20.2/configure
+        URL http://ftp.gnu.org/pub/gnu/gettext/gettext-0.21.1.tar.gz
+        DOWNLOAD_DIR ${COMMON_SRCS}/downloads
+        ${timestamp_policy}
+        SOURCE_DIR ${COMMON_SRCS}/gettext--0.21.1
+        CONFIGURE_COMMAND   ${COMMON_SRCS}/gettext--0.21.1/configure
                             --prefix=${COMMON_LOCAL}
                             --enable-static
                             --libdir=${CONFIGURE_LIBDIR}

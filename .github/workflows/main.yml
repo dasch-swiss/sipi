@@ -14,26 +14,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
-        uses: actions/checkout@v1
+        uses: actions/checkout@v3
         with:
           fetch-depth: 50
       - name: Checkout private ci-assets
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: dasch-swiss/dsp-ci-assets
-          token: ${{ secrets.DASCHBOT_PAT }} # `GitHub_PAT` is a secret that contains your PAT
+          token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
           path: ci
       - name: Copy ci-assets
         run: |
-          cp $GITHUB_WORKSPACE/ci/kakadu/v8_2_1-01727L.zip $GITHUB_WORKSPACE/vendor/v8_2_1-01727L.zip
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v2
+          cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
         with:
-          python-version: 3.9
+          python-version: 3.11
       - name: install requirements
         run: make install-requirements
-      - name: compile
-        run: make compile-ci
       - name: test
         run: make test-ci
 
@@ -42,27 +40,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
-        uses: actions/checkout@v1
+        uses: actions/checkout@v3
         with:
           fetch-depth: 50
       - name: Checkout private ci-assets
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: dasch-swiss/dsp-ci-assets
-          token: ${{ secrets.DASCHBOT_PAT }} # `GitHub_PAT` is a secret that contains your PAT
+          token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
           path: ci
       - name: Copy ci-assets
         run: |
-          cp $GITHUB_WORKSPACE/ci/kakadu/v8_2_1-01727L.zip $GITHUB_WORKSPACE/vendor/v8_2_1-01727L.zip
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v2
+          cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
         with:
-          python-version: 3.9
+          python-version: 3.11
       - name: install requirements
         run: make install-requirements
-      - name: build docker image
-        run: make docker-build
-      - name: integration tests
+      - name: build docker image and run integration tests
         run: make test-integration
 
   # publish only on release
@@ -73,26 +69,22 @@ jobs:
     if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags')
     steps:
       - name: checkout source
-        uses: actions/checkout@v1
+        uses: actions/checkout@v3
         with:
           fetch-depth: 50
       - name: checkout private ci-assets
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: dasch-swiss/dsp-ci-assets
           token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
           path: ci
       - name: copy ci-assets
         run: |
-          cp $GITHUB_WORKSPACE/ci/kakadu/v8_2_1-01727L.zip $GITHUB_WORKSPACE/vendor/v8_2_1-01727L.zip
+          cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
       - name: build and publish production image
         run: |
           echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
           make docker-publish
-      - name: build and publish debug image
-        run: |
-          echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
-          make docker-publish-debug
       - name: Update release notes
         uses: lakto/gren-action@v1.1.0
         env:
@@ -104,13 +96,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 1
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v2
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
         with:
-          python-version: 3.8
+          python-version: 3.11
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -126,7 +118,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout main branch
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Deploy docs
         uses: mhausenblas/mkdocs-deploy-gh-pages@master
         env:

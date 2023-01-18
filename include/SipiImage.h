@@ -170,12 +170,11 @@ class SipiImageError : public std::exception {
         //friend class SipiIOOpenJ2k; //!< I/O class for the JPEG2000 file format
         friend class SipiIOJpeg;    //!< I/O class for the JPEG file format
         friend class SipiIOPng;     //!< I/O class for the PNG file format
-        friend class SipiIOPdf;     //!< I/O class for the PDF file format
-    private:
+     private:
         static std::unordered_map<std::string, std::shared_ptr<SipiIO> > io; //!< member variable holding a map of I/O class instances for the different file formats
-        byte bilinn(byte buf[], register int nx, register float x, register float y, register int c, register int n);
+        byte bilinn(byte buf[], register int nx, register double x, register double y, register int c, register int n);
 
-        word bilinn(word buf[], register int nx, register float x, register float y, register int c, register int n);
+        word bilinn(word buf[], register int nx, register double x, register double y, register int c, register int n);
 
         void ensure_exif();
 
@@ -185,6 +184,7 @@ class SipiImageError : public std::exception {
         size_t nc;         //!< Total number of samples per pixel
         size_t bps;        //!< bits per sample. Currently only 8 and 16 are supported
         std::vector<ExtraSamples> es; //!< meaning of extra samples
+        Orientation orientation;
         PhotometricInterpretation photo;    //!< Image type, that is the meaning of the channels
         byte *pixels;   //!< Pointer to block of memory holding the pixels
         std::shared_ptr<SipiXmp> xmp;   //!< Pointer to instance SipiXmp class (\ref SipiXmp), or NULL
@@ -256,11 +256,45 @@ class SipiImageError : public std::exception {
          */
         inline size_t getBps() const { return bps; }
 
+        inline std::shared_ptr<SipiExif> getExif() const { return exif; };
+
+
+        /*!
+         * Get orientation
+         * @return Returns orientation tag
+         */
+        inline Orientation getOrientation() const { return orientation; };
+
+        /*!
+         * Set orientation parameter
+         * @param ori orientation to be set
+         */
+        inline void setOrientation(Orientation ori) { orientation = ori; };
+
         /*! Destructor
          *
          * Destroys the image and frees all the resources associated with it
          */
         ~SipiImage();
+
+        inline int getPixel(size_t x, size_t y, size_t c) {
+            if (x >= nx) throw ((int) 1);
+            if (y >= ny) throw ((int) 2);
+            if (c >= nc) throw ((int) 3);
+            switch (bps) {
+                case 8: {
+                    unsigned char *tmp = (unsigned char *) pixels;
+                    return static_cast<int>(tmp[nc * (x * nx + y) + c]);
+                }
+                case 16: {
+                    unsigned short *tmp = (unsigned short *) pixels;
+                    return static_cast<int>(tmp[nc * (x * nx + y) + c]);
+                }
+                default: {
+                    throw ((int) 6);
+                }
+            }
+        }
 
         /*!
          * Sets a pixel to a given value
@@ -270,10 +304,10 @@ class SipiImageError : public std::exception {
          * \param[in] c Color channels
          * \param[in] val Pixel value
          */
-        inline void setPixel(unsigned int x, unsigned int y, unsigned int c, int val) {
+        inline void setPixel(size_t x, size_t y, size_t c, int val) {
             if (x >= nx) throw ((int) 1);
-            if (x >= ny) throw ((int) 2);
-            if (x >= nc) throw ((int) 3);
+            if (y >= ny) throw ((int) 2);
+            if (c >= nc) throw ((int) 3);
 
             switch (bps) {
                 case 8: {

@@ -19,9 +19,10 @@
  * See the GNU Affero General Public License for more details.
  * You should have received a copy of the GNU Affero General Public
  * License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
- */#include <climits>
-
+ */
+#include <climits>
 #include <cmath>
+
 #include "SipiError.h"
 #include "SipiExif.h"
 
@@ -62,43 +63,26 @@ namespace Sipi {
     }
 
     unsigned char * SipiExif::exifBytes(unsigned int &len) {
-        unsigned char *tmpbuf = new unsigned char[binary_size];
-        memcpy (tmpbuf, binaryExif, binary_size);
-
         Exiv2::Blob blob;
         Exiv2::WriteMethod wm = Exiv2::ExifParser::encode(blob, binaryExif, binary_size, byteorder, exifData);
-        unsigned char *buf;
+        unsigned char *tmpbuf;
         if (wm == Exiv2::wmIntrusive) {
             // we use blob
-            len = blob.size();
-            buf = new unsigned char[len];
-            memcpy (buf, blob.data(), len);
-            delete [] tmpbuf; // cleanup tmpbuf!
-            /*
-            for (int i = 0; i < len; i++) {
-                cerr << i << " => " << hex << blob[i];
-                if (isprint(blob[i])) cerr << " \"" << blob[i] << "\"";
-                cerr << endl;
-            }
-            */
+            binary_size = blob.size();
+            tmpbuf = new unsigned char[binary_size];
+            memcpy (tmpbuf, blob.data(), binary_size);
+            delete [] binaryExif; // cleanup tmpbuf!
+            binaryExif = tmpbuf;
         }
-        else {
-            buf = tmpbuf;
-            len = binary_size;
-        }
-        return buf;
+        len = binary_size;
+        return binaryExif;
     }
     //============================================================================
 
     std::vector<unsigned char> SipiExif::exifBytes(void) {
         unsigned int len = 0;
         unsigned char *buf = exifBytes(len);
-        std::vector<unsigned char> data;
-        if (buf != nullptr) {
-            data.reserve(len);
-            for (int i = 0; i < len; i++) data.push_back(buf[i]);
-            delete[] buf;
-        }
+        std::vector<unsigned char> data(buf, buf + len);
         return data;
     }
     //============================================================================
@@ -459,14 +443,18 @@ namespace Sipi {
     // string values
     //
     bool SipiExif::getValByKey(const std::string key_p, std::string &str_p) {
-        Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
-        Exiv2::ExifData::iterator pos = exifData.findKey(key);
-        if (pos == exifData.end()) {
+        try {
+            Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
+            Exiv2::ExifData::iterator pos = exifData.findKey(key);
+            if (pos == exifData.end()) {
+                return false;
+            }
+            Exiv2::Value::AutoPtr v = pos->getValue();
+            str_p = v->toString();
+            return v->ok();
+        } catch (const Exiv2::BasicError<char> &err) {
             return false;
         }
-        Exiv2::Value::AutoPtr v = pos->getValue();
-        str_p = v->toString();
-        return v->ok();
     }
     //============================================================================
 
@@ -502,14 +490,18 @@ namespace Sipi {
     // unsigned char values
     //
     bool SipiExif::getValByKey(const std::string key_p, unsigned char &uc) {
-        Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
-        Exiv2::ExifData::iterator pos = exifData.findKey(key);
-        if (pos == exifData.end()) {
+        try {
+            Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
+            Exiv2::ExifData::iterator pos = exifData.findKey(key);
+            if (pos == exifData.end()) {
+                return false;
+            }
+            Exiv2::Value::AutoPtr v = pos->getValue();
+            uc = (unsigned char) v->toLong();
+            return v->ok();
+        } catch (const Exiv2::BasicError<char> &err) {
             return false;
         }
-        Exiv2::Value::AutoPtr v = pos->getValue();
-        uc = (unsigned char) v->toLong();
-        return v->ok();
     }
     //============================================================================
 
@@ -545,14 +537,18 @@ namespace Sipi {
     // float values
     //
     bool SipiExif::getValByKey(const std::string key_p, float &f) {
-        Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
-        Exiv2::ExifData::iterator pos = exifData.findKey(key);
-        if (pos == exifData.end()) {
+        try {
+            Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
+            Exiv2::ExifData::iterator pos = exifData.findKey(key);
+            if (pos == exifData.end()) {
+                return false;
+            }
+            Exiv2::Value::AutoPtr v = pos->getValue();
+            f = v->toFloat();
+            return v->ok();
+        } catch (const Exiv2::BasicError<char> &err) {
             return false;
         }
-        Exiv2::Value::AutoPtr v = pos->getValue();
-        f = v->toFloat();
-        return v->ok();
     }
     //============================================================================
 
@@ -589,14 +585,18 @@ namespace Sipi {
     // Rational values
     //
     bool SipiExif::getValByKey(const std::string key_p, Exiv2::Rational &r) {
-        Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
-        Exiv2::ExifData::iterator pos = exifData.findKey(key);
-        if (pos == exifData.end()) {
+        try {
+            Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
+            Exiv2::ExifData::iterator pos = exifData.findKey(key);
+            if (pos == exifData.end()) {
+                return false;
+            }
+            Exiv2::Value::AutoPtr v = pos->getValue();
+            r =  v->toRational();
+            return v->ok();
+        } catch (const Exiv2::BasicError<char> &err) {
             return false;
         }
-        Exiv2::Value::AutoPtr v = pos->getValue();
-        r =  v->toRational();
-        return v->ok();
     }
     //============================================================================
 
@@ -633,14 +633,18 @@ namespace Sipi {
     // short values
     //
     bool SipiExif::getValByKey(const std::string key_p, short &s) {
-        Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
-        Exiv2::ExifData::iterator pos = exifData.findKey(key);
-        if (pos == exifData.end()) {
+        try {
+            Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
+            Exiv2::ExifData::iterator pos = exifData.findKey(key);
+            if (pos == exifData.end()) {
+                return false;
+            }
+            Exiv2::Value::AutoPtr v = pos->getValue();
+            s = (short) v->toLong();
+            return v->ok();
+        } catch (const Exiv2::BasicError<char> &err) {
             return false;
         }
-        Exiv2::Value::AutoPtr v = pos->getValue();
-        s = (short) v->toLong();
-        return v->ok();
     }
     //============================================================================
 
@@ -677,14 +681,18 @@ namespace Sipi {
     // unsigned short values
     //
     bool SipiExif::getValByKey(const std::string key_p, unsigned short &s) {
-        Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
-        Exiv2::ExifData::iterator pos = exifData.findKey(key);
-        if (pos == exifData.end()) {
+        try {
+            Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
+            Exiv2::ExifData::iterator pos = exifData.findKey(key);
+            if (pos == exifData.end()) {
+                return false;
+            }
+            Exiv2::Value::AutoPtr v = pos->getValue();
+            s = (unsigned short) v->toLong();
+            return v->ok();
+        } catch (const Exiv2::BasicError<char> &err) {
             return false;
         }
-        Exiv2::Value::AutoPtr v = pos->getValue();
-        s = (unsigned short) v->toLong();
-        return v->ok();
     }
     //============================================================================
 
@@ -721,14 +729,18 @@ namespace Sipi {
     // int values
     //
     bool SipiExif::getValByKey(const std::string key_p, int &s) {
-        Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
-        Exiv2::ExifData::iterator pos = exifData.findKey(key);
-        if (pos == exifData.end()) {
+        try {
+            Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
+            Exiv2::ExifData::iterator pos = exifData.findKey(key);
+            if (pos == exifData.end()) {
+                return false;
+            }
+            Exiv2::Value::AutoPtr v = pos->getValue();
+            s = (int) v->toLong();
+            return v->ok();
+        } catch (const Exiv2::BasicError<char> &err) {
             return false;
         }
-        Exiv2::Value::AutoPtr v = pos->getValue();
-        s = (int) v->toLong();
-        return v->ok();
     }
     //============================================================================
 
@@ -765,14 +777,18 @@ namespace Sipi {
     // unsigned int values
     //
     bool SipiExif::getValByKey(const std::string key_p, unsigned int &s) {
-        Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
-        Exiv2::ExifData::iterator pos = exifData.findKey(key);
-        if (pos == exifData.end()) {
+        try {
+            Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
+            Exiv2::ExifData::iterator pos = exifData.findKey(key);
+            if (pos == exifData.end()) {
+                return false;
+            }
+            Exiv2::Value::AutoPtr v = pos->getValue();
+            s = (unsigned int) v->toLong();
+            return v->ok();
+        } catch (const Exiv2::BasicError<char> &err) {
             return false;
         }
-        Exiv2::Value::AutoPtr v = pos->getValue();
-        s = (unsigned int) v->toLong();
-        return v->ok();
     }
     //============================================================================
 

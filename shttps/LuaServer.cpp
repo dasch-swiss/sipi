@@ -53,14 +53,7 @@
 
 #include "sole.hpp"
 #include "Parsing.h"
-
-
-#ifdef SHTTPS_ENABLE_SSL
-
 #include "jwt.h"
-
-#endif
-
 #include <jansson.h>
 
 using ms = std::chrono::milliseconds;
@@ -2070,7 +2063,6 @@ namespace shttps {
     }
     //=========================================================================
 
-#ifdef SHTTPS_ENABLE_SSL
 
     //
     // reserved claims (IntDate: The number of seconds from 1970-01-01T0:0:0Z):
@@ -2202,8 +2194,6 @@ namespace shttps {
         return 2;
     }
     //=========================================================================
-
-#endif
 
     /*!
      * Lua: logger(message, level)
@@ -2496,13 +2486,10 @@ namespace shttps {
 
         lua_rawset(L, -3); // table1
 
-#ifdef SHTTPS_ENABLE_SSL
 
         lua_pushstring(L, "has_openssl"); // table1 - "index_L1"
         lua_pushboolean(L, true); // table1 - "index_L1" - "value_L1"
         lua_rawset(L, -3); // table1
-
-#endif
 
         lua_pushstring(L, "client_ip"); // table1 - "index_L1"
         lua_pushstring(L, conn.peer_ip().c_str()); // table1 - "index_L1" - "value_L1"
@@ -2733,8 +2720,6 @@ namespace shttps {
         lua_pushcfunction(L, lua_systime); // table1 - "index_L1" - function
         lua_rawset(L, -3); // table1
 
-#ifdef SHTTPS_ENABLE_SSL
-
         lua_pushstring(L, "generate_jwt"); // table1 - "index_L1"
         lua_pushcfunction(L, lua_generate_jwt); // table1 - "index_L1" - function
         lua_rawset(L, -3); // table1 lua_decode_jwt
@@ -2742,8 +2727,6 @@ namespace shttps {
         lua_pushstring(L, "decode_jwt"); // table1 - "index_L1"
         lua_pushcfunction(L, lua_decode_jwt); // table1 - "index_L1" - function
         lua_rawset(L, -3); // table1
-
-#endif
 
         lua_pushstring(L, "parse_mimetype"); // table1 - "index_L1"
         lua_pushcfunction(L, lua_parse_mimetype); // table1 - "index_L1" - function

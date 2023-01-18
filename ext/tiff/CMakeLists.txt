@@ -14,13 +14,23 @@ else()
     set(CMAKE_CREATE_SHARED "-DBUILD_SHARED_LIBS=OFF")
 endif()
 
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24.0)
+    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
+else()
+    unset(timestamp_policy)
+endif()
+
+
 ExternalProject_Add(project_tiff
         DEPENDS jpeg
         DEPENDS xz
         DEPENDS webp
+        DEPENDS zstd
         INSTALL_DIR ${COMMON_LOCAL}
         TEST_BEFORE_INSTALL 1
         URL http://download.osgeo.org/libtiff/tiff-4.1.0.tar.gz
+        DOWNLOAD_DIR ${COMMON_SRCS}/downloads
+        ${timestamp_policy}
         SOURCE_DIR ${COMMON_SRCS}/libtiff-4.1.0
         PATCH_COMMAND patch ${COMMON_SRCS}/libtiff-4.1.0/libtiff/tif_dirinfo.c < ${COMMON_PATCHES}/tiff-4.0.4.patch
         CMAKE_ARGS  ${CMAKE_CREATE_SHARED}
