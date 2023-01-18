@@ -345,6 +345,7 @@ add_custom_target(icc_profiles
 link_directories(
         ${CONFIGURE_LIBDIR}
         /usr/local/lib
+        /opt/homebrew/lib
 )
 
 include_directories(
@@ -358,6 +359,7 @@ include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/local/include
         ${CMAKE_CURRENT_SOURCE_DIR}/local/include/openjpeg-2.1
         /usr/local/include
+        /opt/homebrew/include
 )
 
 add_executable(sipi
