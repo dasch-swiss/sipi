@@ -58,9 +58,7 @@ jobs:
           python-version: 3.11
       - name: install requirements
         run: make install-requirements
-      - name: build docker image
-        run: make docker-build
-      - name: integration tests
+      - name: build docker image and run integration tests
         run: make test-integration
 
   # publish only on release
