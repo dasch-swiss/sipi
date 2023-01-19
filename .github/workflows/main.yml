@@ -9,83 +9,122 @@ on:
     types: [published]
 
 jobs:
-  unit:
-    name: Run Unit Tests
+  test:
+    name: Run Unit and E2E Tests
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source
+      -
+        name: Checkout source
         uses: actions/checkout@v3
         with:
           fetch-depth: 50
-      - name: Checkout private ci-assets
+      -
+        name: Checkout private ci-assets
         uses: actions/checkout@v3
         with:
           repository: dasch-swiss/dsp-ci-assets
           token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
           path: ci
-      - name: Copy ci-assets
+      -
+        name: Copy ci-assets
         run: |
           cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
-      - name: Set up Python 3.11
+      -
+        name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
-      - name: install requirements
+      -
+        name: install requirements
         run: make install-requirements
-      - name: test
+      -
+        name: test
         run: make test-ci
 
   integration:
     name: Run Integration Tests
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source
+      -
+        name: Checkout source
         uses: actions/checkout@v3
         with:
           fetch-depth: 50
-      - name: Checkout private ci-assets
+      -
+        name: Checkout private ci-assets
         uses: actions/checkout@v3
         with:
           repository: dasch-swiss/dsp-ci-assets
           token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
           path: ci
-      - name: Copy ci-assets
+      -
+        name: Copy ci-assets
         run: |
           cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
-      - name: Set up Python 3.11
+      -
+        name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
-      - name: install requirements
+      -
+        name: install requirements
         run: make install-requirements
-      - name: build docker image and run integration tests
+      -
+        name: build docker image and run integration tests
         run: make test-integration
 
   # publish only on release
   publish-images:
     name: Build and Publish Images to Dockerhub
-    needs: [unit, integration]
+    needs: [test, integration]
     runs-on: ubuntu-latest
     if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags')
     steps:
-      - name: checkout source
+      -
+        name: checkout source
         uses: actions/checkout@v3
         with:
           fetch-depth: 50
-      - name: checkout private ci-assets
+      -
+        name: checkout private ci-assets
         uses: actions/checkout@v3
         with:
           repository: dasch-swiss/dsp-ci-assets
           token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
           path: ci
-      - name: copy ci-assets
+      -
+        name: copy ci-assets
         run: |
           cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
-      - name: build and publish production image
-        run: |
-          echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
-          make docker-publish
-      - name: Update release notes
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      -
+        name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v2
+      -
+        name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+      -
+        name: Get the version
+        id: get_version
+        run: echo ::set-output name=VERSION::$(echo $GITHUB_REF | cut -d / -f 3)
+      -
+        name: Build (always) and push (on release)
+        id: docker_build
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64 #, linux/arm64
+          push: true
+          tags: daschswiss/sipi:latest, daschswiss/sipi:${{ steps.get_version.outputs.VERSION }}
+      -
+        name: Update release notes
         uses: lakto/gren-action@v1.1.0
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
@@ -110,12 +149,12 @@ jobs:
       - name: run docs build
         run: make docs-build
 
-  # publish documentation when merged into main branch
+  # publish documentation on release
   publish-docs:
     name: Build and Publish Docs
     needs: [docs]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags')
     steps:
       - name: Checkout main branch
         uses: actions/checkout@v3
