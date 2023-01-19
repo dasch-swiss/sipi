@@ -39,7 +39,7 @@ def test_get_test_html():
     """ This test gets the test.html file. """
     container = setup_module()
     with container:
-        time.sleep(3)
+        time.sleep(1)
         r = requests.get("http://localhost:1024/server/test.html")
         assert r.status_code == 200
 
@@ -48,6 +48,6 @@ def test_luafunctions():
     """ This tests the call to /test/lua_functions """
     container = setup_module()
     with container:
-        time.sleep(3)
+        time.sleep(1)
         r = requests.get("http://localhost:1024/test/luafunctions")
         assert r.status_code == 200

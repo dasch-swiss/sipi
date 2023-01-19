@@ -168,12 +168,12 @@ if being requested for a PDF file (e.g. with the URL `http//iiif.myserver.org/im
 ```
 
 ##### Access to a raw files
-Sometimes it max be usefull to store non-image files such as XML-sidecars, manifests as JSON or complete PDF's etc. in
-the same environment as the images. For this reason supports an extension of the IIIF API:
+Sometimes it may be usefull to store non-image files such as XML-sidecars, manifests as JSON or complete PDF's, etc. in
+the same environment as the images. For this reason SIPI supports an extension of the IIIF API:
 
     http(s)://{server}/{prefix}/{identifier}/file
     
-The `/file`-path at the end of the URL makes SIPI to send the file as it is. Thus, for example a manfifest file could
+The `/file`-path at the end of the URL makes SIPI to send the file as it is. Thus, for example a manifest file could
 be accessed by
 
     https://iiif.my.server/images/myimage.json/file
