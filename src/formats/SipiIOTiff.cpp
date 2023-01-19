@@ -714,11 +714,13 @@ namespace Sipi {
             //
             // Read SipiEssential metadata
             //
-            char *emdatastr;
+            char *emdatastr = nullptr;
 
             if (1 == TIFFGetField(tif, TIFFTAG_SIPIMETA, &emdatastr)) {
-                SipiEssentials se(emdatastr);
-                img->essential_metadata(se);
+                if (strlen(emdatastr) > 0) {
+                    SipiEssentials se(emdatastr);
+                    img->essential_metadata(se);
+                }
             }
 
             if ((region == nullptr) || (region->getType() == SipiRegion::FULL)) {
