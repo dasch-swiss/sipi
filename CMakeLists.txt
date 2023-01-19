@@ -21,13 +21,20 @@
 # License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-cmake_minimum_required(VERSION 3.14.5)
+cmake_minimum_required(VERSION 3.18)
+cmake_policy(VERSION 3.18)
+if(POLICY CMP0135) # DOWNLOAD_EXTRACT_TIMESTAMP
+    cmake_policy(SET CMP0135 OLD)
+endif()
+
+message(STATUS "cmake version: ${CMAKE_VERSION}")
 
 include(ExternalProject)
 include(CheckStructHasMember)
 include(CheckIncludeFiles)
+include(FindPackageHandleStandardArgs)
 
-project(sipi)
+project(sipi VERSION 1.5)
 
 # ------------------------------------------------------------------------------
 # Set our path variables
@@ -45,6 +52,7 @@ if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 endif()
 
 set(COMMON_SOURCE_FILES_DIR ${PROJECT_SOURCE_DIR}/src)
+set(COMMON_LIBRARY_FILES_DIR ${PROJECT_SOURCE_DIR}/lib)
 set(COMMON_INCLUDE_FILES_DIR ${PROJECT_SOURCE_DIR}/include)
 set(DOXYGEN_FILES_DIR ${PROJECT_SOURCE_DIR}/doxygen)
 set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
@@ -108,37 +116,61 @@ if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
     message(STATUS ${CMAKE_SYSTEM_NAME})
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
     SET(CMAKE_MACOSX_RPATH 1)
-    SET(KDU_MAKE "Makefile-MAC-x86-${BITS}-gcc")
-    SET(KDU_ARCH "Mac-x86-${BITS}-gcc")
+    if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
+        SET(KDU_MAKE "Makefile-Mac-x86-${BITS}-gcc")
+        SET(KDU_ARCH "Mac-x86-${BITS}-gcc")
+        SET(KDU_EXEC_PLATFORM "Mac-x86-64-gcc")
+    else()
+        SET(KDU_MAKE "Makefile-MAC-arm-${BITS}-gcc")
+        SET(KDU_ARCH "Mac-arm-${BITS}-gcc")
+        SET(KDU_EXEC_PLATFORM "Mac-arm-64-gcc")
+    endif()
     SET(LUA_ARCH "macosx")
-    # ToDo: shouldn't this be also set on the mac through FindOpenSSL?
-    SET(OPENSSL_ROOT_DIR "/usr/local/opt/openssl" CACHE FILEPATH "openssl")
-    SET(OPENSSL_USE_STATIC_LIBS ON)
 elseif(CMAKE_SYSTEM_NAME STREQUAL LINUX)
     message(STATUS "Compiling for Linux64...")
     message(STATUS ${CMAKE_SYSTEM_NAME})
     execute_process(COMMAND /usr/bin/lsb_release -si COMMAND tr -d '\n' OUTPUT_VARIABLE CMAKE_DISTRO_NAME)
     MESSAGE(STATUS "Distro: " ${CMAKE_DISTRO_NAME})
-    SET(KDU_MAKE "Makefile-Linux-x86-${BITS}-gcc")
-    SET(KDU_ARCH "Linux-x86-${BITS}-gcc")
+    if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
+        SET(KDU_MAKE "Makefile-Linux-x86-${BITS}-gcc")
+        SET(KDU_ARCH "Linux-x86-${BITS}-gcc")
+        SET(KDU_EXEC_PLATFORM "Linux-x86-64-gcc")
+    else()
+        SET(KDU_MAKE "Makefile-Linux-arm-${BITS}-gcc")
+        SET(KDU_ARCH "Linux-arm-${BITS}-gcc")
+        SET(KDU_EXEC_PLATFORM "Linux-arm-64-gcc")
+    endif()
     SET(LUA_ARCH "linux")
 endif()
 message(STATUS "Compiling for ${KDU_ARCH}")
 
 #
-# OpenSSL ??
+# this is needed for curl...
 #
-include(FindOpenSSL)
-if(OPENSSL_FOUND)
-    message(STATUS "Found OpenSSL at ${OPENSSL_ROOT_DIR}")
-    add_definitions(${CMAKE_C_FLAGS} " -DSHTTPS_ENABLE_SSL")
-    add_definitions(${CMAKE_C_FLAGS} " -I${OPENSSL_INCLUDE_DIR}")
-    message(STATUS "OPENSSL_INCLUDE_DIR=${OPENSSL_INCLUDE_DIR}")
-    message(STATUS "OPENSSL_VERSION=${OPENSSL_VERSION}")
-else()
-    message(STATUS "No SSL support found!")
-endif()
+if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    find_library(COREFOUNDATION_FRAMEWORK "CoreFoundation")
+    if(NOT COREFOUNDATION_FRAMEWORK)
+        message(FATAL_ERROR "CoreFoundation framework not found")
+    endif()
 
+    find_library(SYSTEMCONFIGURATION_FRAMEWORK "SystemConfiguration")
+    if(NOT SYSTEMCONFIGURATION_FRAMEWORK)
+        message(FATAL_ERROR "SystemConfiguration framework not found")
+    endif()
+
+    list(APPEND CURL_LIBS "-framework CoreFoundation" "-framework SystemConfiguration")
+
+    if(CMAKE_USE_SECTRANSP)
+        find_library(SECURITY_FRAMEWORK "Security")
+        if(NOT SECURITY_FRAMEWORK)
+            message(FATAL_ERROR "Security framework not found")
+        endif()
+
+        set(SSL_ENABLED ON)
+        set(USE_SECTRANSP ON)
+        list(APPEND CURL_LIBS "-framework Security")
+    endif()
+endif()
 #SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 if(MAKE_SHARED_SIPI)
     SET(BUILD_SHARED_LIBRARIES ON)
@@ -219,8 +251,10 @@ find_package(Threads REQUIRED)
 # !!! order is important !!!
 # dependent targets need to be added before the dependers,
 # e.g., png, bzip2 before freetype
+add_subdirectory(${EXT_PROJECTS_DIR}/openssl)
 add_subdirectory(${EXT_PROJECTS_DIR}/xz)
 add_subdirectory(${EXT_PROJECTS_DIR}/zlib)
+add_subdirectory(${EXT_PROJECTS_DIR}/zstd)
 add_subdirectory(${EXT_PROJECTS_DIR}/jpeg)
 add_subdirectory(${EXT_PROJECTS_DIR}/jbigkit)
 add_subdirectory(${EXT_PROJECTS_DIR}/webp)
@@ -228,11 +262,6 @@ add_subdirectory(${EXT_PROJECTS_DIR}/tiff)
 add_subdirectory(${EXT_PROJECTS_DIR}/expat)
 add_subdirectory(${EXT_PROJECTS_DIR}/png)
 add_subdirectory(${EXT_PROJECTS_DIR}/bzip2)
-add_subdirectory(${EXT_PROJECTS_DIR}/freetype)
-add_subdirectory(${EXT_PROJECTS_DIR}/harfbuzz)
-add_subdirectory(${EXT_PROJECTS_DIR}/fontconfig)
-add_subdirectory(${EXT_PROJECTS_DIR}/unistring)
-add_subdirectory(${EXT_PROJECTS_DIR}/podofo)
 add_subdirectory(${EXT_PROJECTS_DIR}/gettext)
 add_subdirectory(${EXT_PROJECTS_DIR}/lcms2)
 add_subdirectory(${EXT_PROJECTS_DIR}/exiv2)
@@ -242,7 +271,6 @@ add_subdirectory(${EXT_PROJECTS_DIR}/luarocks)
 add_subdirectory(${EXT_PROJECTS_DIR}/sqlite3)
 add_subdirectory(${EXT_PROJECTS_DIR}/kakadu)
 add_subdirectory(${EXT_PROJECTS_DIR}/curl)
-add_subdirectory(${EXT_PROJECTS_DIR}/poppler)
 
 # add a target to generate API documentation with Doxygen
 find_package(Doxygen)
@@ -285,22 +313,6 @@ ENDIF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
 CONFIGURE_FILE(${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h.in ${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h)
 
 
-#
-# Here we get the ICC profiles from the Adobe website and prepare them for including
-# We just use the AdobeRGB1998.cc and the USWebCoatedSWOP.icc profiles for now...
-#
-#unset(ICC CACHE)
-#find_file(
-#    ICC
-#    icc.zip
-#    ${COMMON_INCLUDE_FILES_DIR}
-#    NO_DEFAULT_PATH
-#)
-#if(ICC)
-#    message(STATUS "Adobe ICC profiles were already downloaded")
-#else()
-#    file(DOWNLOAD http://download.adobe.com/pub/adobe/iccprofiles/win/AdobeICCProfilesWin_end-user.zip ${COMMON_INCLUDE_FILES_DIR}/icc.zip SHOW_PROGRESS)
-#endif()
 
 set(GENERATED_ICC_HEADERS
         ${COMMON_INCLUDE_FILES_DIR}/AdobeRGB1998_icc.h
@@ -326,30 +338,18 @@ add_custom_command(
         COMMAND rm ${COMMON_INCLUDE_FILES_DIR}/Rec709-Rec1886.icc
 )
 
-#add_custom_command(
-#        OUTPUT ${ICC_HEADERS}
-#        COMMENT "Generating ICC profile includes"
-#        WORKING_DIRECTORY ${COMMON_INCLUDE_FILES_DIR}
-#        DEPENDS ${COMMON_INCLUDE_FILES_DIR}/icc.zip
-#        COMMAND unzip -o ${COMMON_INCLUDE_FILES_DIR}/icc.zip -d ${COMMON_INCLUDE_FILES_DIR}/
-#        COMMAND cp '${COMMON_INCLUDE_FILES_DIR}/Adobe ICC Profiles \(end-user\)/RGB Profiles/AdobeRGB1998.icc' ${COMMON_INCLUDE_FILES_DIR}/AdobeRGB1998.icc
-#        COMMAND xxd -i AdobeRGB1998.icc AdobeRGB1998_icc.h
-#        COMMAND rm ${COMMON_INCLUDE_FILES_DIR}/AdobeRGB1998.icc
-#        COMMAND cp '${COMMON_INCLUDE_FILES_DIR}/Adobe ICC Profiles \(end-user\)/CMYK Profiles/USWebCoatedSWOP.icc' ${COMMON_INCLUDE_FILES_DIR}/USWebCoatedSWOP.icc
-#        COMMAND xxd -i USWebCoatedSWOP.icc USWebCoatedSWOP_icc.h
-#        COMMAND rm ${COMMON_INCLUDE_FILES_DIR}/USWebCoatedSWOP.icc
-#        COMMAND rm -rf '${COMMON_INCLUDE_FILES_DIR}/Adobe ICC Profiles \(end-user\)'
-#)
 add_custom_target(icc_profiles
         DEPENDS ${GENERATED_ICC_HEADERS}
 )
 
 link_directories(
-        /usr/local/lib
         ${CONFIGURE_LIBDIR}
+        /usr/local/lib
+        /opt/homebrew/lib
 )
 
 include_directories(
+        ${COMMON_LOCAL}/include
         ${COMMON_INCLUDE_FILES_DIR}
         ${COMMON_INCLUDE_FILES_DIR}/metadata
         ${COMMON_INCLUDE_FILES_DIR}/formats
@@ -358,8 +358,8 @@ include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/local/include
         ${CMAKE_CURRENT_SOURCE_DIR}/local/include/openjpeg-2.1
-        ${COMMON_LOCAL}/include
         /usr/local/include
+        /opt/homebrew/include
 )
 
 add_executable(sipi
@@ -378,7 +378,6 @@ add_executable(sipi
         src/formats/SipiIOJ2k.cpp include/formats/SipiIOJ2k.h
         src/formats/SipiIOJpeg.cpp include/formats/SipiIOJpeg.h
         src/formats/SipiIOPng.cpp include/formats/SipiIOPng.h
-        src/formats/SipiIOPdf.cpp include/formats/SipiIOPdf.h
         src/SipiHttpServer.cpp include/SipiHttpServer.h
         src/SipiCache.cpp include/SipiCache.h
         src/SipiLua.cpp include/SipiLua.h
@@ -402,7 +401,6 @@ add_executable(sipi
         shttps/jwt.c shttps/jwt.h
         shttps/makeunique.h
         src/SipiFilenameHash.cpp include/SipiFilenameHash.h
-        src/formats/SipiIOPdf.cpp include/formats/SipiIOPdf.h
         include/iiifparser/SipiIdentifier.h src/iiifparser/SipiIdentifier.cpp )
 
 add_dependencies(sipi
@@ -429,30 +427,25 @@ target_link_libraries(sipi ${LIBS}
         dl
         pthread
         curl
-        poppler-cpp
-        poppler
-        podofo
-        idn
+        ssl
+        crypto
         jpeg
-        fontconfig
-        harfbuzz
-        freetype
         bzip2
-        unistring
-        ${CMAKE_DL_LIBS}
+        zstd
         z
-        m)
+        m
+        lzma
+        Threads::Threads
+        ${CMAKE_DL_LIBS})
 
-if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
+if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
 	target_link_libraries(sipi
             iconv
-            gettext_intl)
+            gettext_intl
+            ${COREFOUNDATION_FRAMEWORK}
+            ${SYSTEMCONFIGURATION_FRAMEWORK})
 else()
     target_link_libraries(sipi rt)
-endif()
-
-if(OPENSSL_FOUND)
-    target_link_libraries(sipi ${OPENSSL_LIBRARIES})
 endif()
 
 
@@ -489,4 +482,5 @@ add_test(NAME all_python_based_e2e_tests
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test/e2e
         COMMAND pytest -s --sipi-exec=$<TARGET_FILE:sipi>)
 
+# adds unit tests defined in the test/unit subdirectory
 add_subdirectory(test/unit)

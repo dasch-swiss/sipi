@@ -420,7 +420,7 @@ bool SipiIOJ2k::read(SipiImage *img, const std::string &filepath, int pagenum, s
       }
       delete[] tmplut;
     }
-
+    img->orientation = TOPLEFT;
     if (img->nc > numcol) { // we have more components than colors -> alpha channel!
       for (size_t i = 0; i < img->nc - numcol; i++) { // img->nc - numcol: number of alpha channels (?)
         img->es.push_back(ASSOCALPHA);

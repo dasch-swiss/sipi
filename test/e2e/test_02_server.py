@@ -18,6 +18,7 @@
 # See the GNU Affero General Public License for more details.
 # You should have received a copy of the GNU Affero General Public
 # License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
+import pprint
 
 import pytest
 from pathlib import Path
@@ -26,6 +27,7 @@ import os.path
 import time
 import datetime
 import sys
+
 
 # Tests basic functionality of the Sipi server.
 
@@ -285,13 +287,13 @@ class TestServer:
         #    "internalMimeType": "image/jpx"
         # }
 
-        #response_json = manager.post_file("/api/upload", manager.data_dir_path("unit/lena512.tif"), "image/tiff")
-        #filename = response_json["filename"]
-        #manager.expect_status_code("/unit/{}/full/max/0/default.jpg".format(filename), 200)
+        # response_json = manager.post_file("/api/upload", manager.data_dir_path("unit/lena512.tif"), "image/tiff")
+        # filename = response_json["filename"]
+        # manager.expect_status_code("/unit/{}/full/max/0/default.jpg".format(filename), 200)
 
-        #response_json = manager.get_json("/unit/{}/knora.json".format(filename))
+        # response_json = manager.get_json("/unit/{}/knora.json".format(filename))
 
-        #assert response_json == expected_result
+        # assert response_json == expected_result
 
     def test_json_info_validation(self, manager):
         """pass the info.json request tests"""
@@ -309,7 +311,7 @@ class TestServer:
                 {'width': 128, 'height': 128}
             ],
             'tiles': [{'width': 512, 'height': 512, 'scaleFactors': [1, 2, 3, 4]}],
-            'extraFormats': ['tif', 'pdf', 'jp2'],
+            'extraFormats': ['tif', 'jp2'],
             'preferredFormats': ['jpg', 'tif', 'jp2', 'png'],
             'extraFeatures': [
                 'baseUriRedirect',
@@ -344,9 +346,9 @@ class TestServer:
             filename)
         assert response_json == expected_result
 
-        #response_json = manager.get_json("/unit/{}/info.json".format(filename), use_ssl=True)
-        #expected_result["id"] = "https://127.0.0.1:1024/unit/{}".format(filename)
-        #assert response_json == expected_result
+        # response_json = manager.get_json("/unit/{}/info.json".format(filename), use_ssl=True)
+        # expected_result["id"] = "https://127.0.0.1:1024/unit/{}".format(filename)
+        # assert response_json == expected_result
 
     def test_knora_json_for_video(self, manager):
         """pass the knora.json request for video"""
@@ -423,7 +425,6 @@ class TestServer:
                         "jpg",
                         "png",
                         "jp2",
-                        "pdf"
                     ],
                     "qualities": [
                         "color",
@@ -461,7 +462,8 @@ class TestServer:
                     '@context': 'http://iiif.io/api/auth/1/context.json',
                     '@id': 'https://localhost/iiif-cookie.html',
                     'profile': 'http://iiif.io/api/auth/1/login',
-                    'header': 'Please Log In', 'failureDescription': '<a href="http://example.org/policy">Access Policy</a>',
+                    'header': 'Please Log In',
+                    'failureDescription': '<a href="http://example.org/policy">Access Policy</a>',
                     'confirmLabel': 'Login to SIPI',
                     'failureHeader': 'Authentication Failed',
                     'description': 'This Example requires a demo login!',
@@ -485,7 +487,7 @@ class TestServer:
                 'height': 512,
                 'scaleFactors': [1, 2, 3, 4, 5, 6, 7]
             }],
-            'extraFormats': ['tif', 'pdf', 'jp2'],
+            'extraFormats': ['tif', 'jp2'],
             'preferredFormats': ['jpg', 'tif', 'jp2', 'png'],
             'extraFeatures': [
                 'baseUriRedirect',
@@ -509,16 +511,6 @@ class TestServer:
         json_result = manager.get_auth_json("/auth/lena512.jp2/info.json")
 
         assert json_result == expected_result
-
-    def test_pdf_server(self, manager):
-        """Test serving entire PDF files"""
-        manager.compare_server_bytes("/unit/CV+Pub_LukasRosenthaler.pdf/file",
-                                     manager.data_dir_path("unit/CV+Pub_LukasRosenthaler.pdf"))
-
-    def test_pdf_page_server(self, manager):
-        """Test serving a PDF page as TIFF"""
-        manager.compare_server_images("/unit/CV+Pub_LukasRosenthaler.pdf@3/full/pct:25/0/default.jpg",
-                                      manager.data_dir_path("unit/CV+Pub_LukasRosenthaler_p3.jpg"))
 
     def test_upscaling_server(self, manager):
         """Test upscaling of an image"""

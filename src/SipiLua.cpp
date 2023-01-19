@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include<unordered_set>
 
 #include <stdio.h>
 #include <SipiCache.h>
@@ -559,6 +560,7 @@ namespace Sipi {
 
     static int SImage_dims(lua_State *L) {
         size_t nx, ny;
+        Orientation orientation;
 
         if (lua_gettop(L) != 1) {
             lua_pop(L, lua_gettop(L));
@@ -592,6 +594,7 @@ namespace Sipi {
             }
             nx = info.width;
             ny = info.height;
+            orientation = info.orientation;
         } else {
             SImage *img = checkSImage(L, 1);
             if (img == nullptr) {
@@ -602,6 +605,7 @@ namespace Sipi {
             }
             nx = img->image->getNx();
             ny = img->image->getNy();
+            orientation = img->image->getOrientation();
         }
 
         lua_pop(L, lua_gettop(L));
@@ -617,9 +621,100 @@ namespace Sipi {
         lua_pushinteger(L, ny); // table - "ny" - <ny>
         lua_rawset(L, -3); // table
 
+        lua_pushstring(L, "orientation"); // table - "orientation"
+        lua_pushinteger(L, static_cast<int>(orientation)); // table - "orientation" - <orientation>
+        lua_rawset(L, -3); // table
+
         return 2;
     }
     //=========================================================================
+
+    static void get_exif_string(lua_State *L, std::shared_ptr<SipiExif> exif, const char *tagname) {
+        std::string tagvalue;
+        if (!exif->getValByKey(tagname, tagvalue)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "Sipi.Image.exif(): requested exif tag not available");
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_pushstring(L, tagvalue.c_str());
+    }
+
+    /*!
+     *
+     * @param L Lua interpreter
+     * @return Number of parameters on stack
+     *
+     * Lua usage:
+     *    SipiImage.exif(img, "<EXIF-TAGNAME>"
+     *
+     *  Note: so far anly ORIENTATION is supported!
+     */
+    static int SImage_get_exif(lua_State *L) {
+        if (lua_gettop(L) != 2) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): Incorrect number of arguments");
+            return 2;
+        }
+
+        SImage *img = checkSImage(L, 1);
+        if (img == nullptr) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): not a valid image");
+            return 2;
+        }
+        const char *tagname = lua_tostring(L, 2);
+        std::shared_ptr<SipiExif> exif = img->image->getExif();
+        if (exif == nullptr) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): no exif data available");
+            return 2;
+        }
+
+        std::unordered_set<std::string> ushort_taglist{
+                "Orientation",
+                "Compression",
+                "PhotometricInterpretation",
+                "Thresholding",
+                "ResolutionUnit",
+
+        };
+        std::unordered_set<std::string> string_taglist{
+                "DocumentName",
+                "Make",
+                "Model",
+                "Software",
+                "TargetPrinter",
+        };
+        std::string tag{tagname};
+        if (ushort_taglist.find(tag) != ushort_taglist.end()) {
+            unsigned short orientation;
+            if (!exif->getValByKey("Exif.Image." + tag, orientation)) {
+                lua_pop(L, lua_gettop(L));
+                lua_pushboolean(L, false);
+                lua_pushstring(L, "SipiImage.exif(): no exif Orientation available");
+                return 2;
+            }
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, true);
+            lua_pushinteger(L, orientation);
+            return 2;
+        }
+        else if (string_taglist.find(tag) != string_taglist.end()) {
+            get_exif_string(L, exif, tagname);
+            return 2;
+        }
+        else {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): Unrecognized EXIF-Tag");
+            return 2;
+        }
+    }
 
     /*!
      * Lua usage:
@@ -748,12 +843,13 @@ namespace Sipi {
     //=========================================================================
 
     /*!
-    * SipiImage.rotate(img, number)
+    * SipiImage.rotate(img, number, boolean)
+    * <img>:rotate(number, boolean)
     */
     static int SImage_rotate(lua_State *L) {
         int top = lua_gettop(L);
 
-        if (top != 2) {
+        if ((top < 2) || (top > 3)) {
             lua_pop(L, top);
             lua_pushboolean(L, false);
             lua_pushstring(L, "SipiImage.rotate(): Incorrect number of arguments");
@@ -769,9 +865,18 @@ namespace Sipi {
         }
 
         float angle = lua_tonumber(L, 2);
+        bool mirror{false};
+        if (top == 3) {
+            if (!lua_isboolean (L, 3)) {
+                lua_pushboolean(L, false);
+                lua_pushstring(L, "IIIFImage.rotate(): Incorrect  argument for mirror");
+                return 2;
+            }
+            mirror = lua_toboolean(L, 3);
+        }
         lua_pop(L, top);
 
-        img->image->rotate(angle); // does not throw an exception!
+        img->image->rotate(angle, mirror); // does not throw an exception!
 
         lua_pushboolean(L, true);
         lua_pushnil(L);
@@ -779,6 +884,74 @@ namespace Sipi {
         return 2;
     }
     //=========================================================================
+
+    /*!
+     * success = SipiImage.topleft(img)
+     * success = <img>:topleft()
+     *
+     * @param L Lua interpreter
+     * @return Always 2 (one param, success, on stack)
+     */
+    static int SImage_set_topleft(lua_State *L) {
+        std::cerr << ">>>>in  SImage_set_topleft" << std::endl;
+        int top = lua_gettop(L);
+
+        if (top != 1) {
+            lua_pop(L, top);
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.topleft(): Incorrect number of arguments");
+            return 2;
+        }
+
+        SImage *img = checkSImage(L, 1);
+
+        Orientation orientation = img->image->getOrientation();
+        std::shared_ptr<SipiExif> exif = img->image->getExif();
+        if (exif != nullptr) {
+            unsigned short ori;
+            if (exif->getValByKey("Exif.Image.Orientation", ori)) {
+                orientation = static_cast<Orientation>(ori);
+            }
+        }
+
+
+        switch (orientation) {
+            case TOPLEFT: // 1
+                lua_pop(L, lua_gettop(L));
+                lua_pushboolean(L, true);
+                return 1;
+            case TOPRIGHT: // 2
+                img->image->rotate(0., true);
+                break;
+            case BOTRIGHT: // 3
+                img->image->rotate(180., false);
+                break;
+            case BOTLEFT: // 4
+                img->image->rotate(180., true);
+                break;
+            case LEFTTOP: // 5
+                img->image->rotate(270., true);
+                break;
+            case RIGHTTOP: // 6
+                img->image->rotate(90., false);
+                break;
+            case RIGHTBOT: // 7
+                img->image->rotate(90., true);
+                break;
+            case LEFTBOT: // 8
+                img->image->rotate(270., false);
+                break;
+            default:
+                ; // nothing to do...
+        }
+
+        exif->addKeyVal("Exif.Image.Orientation", static_cast<unsigned short>(TOPLEFT));
+        img->image->setOrientation(TOPLEFT);
+
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        return 1;
+    }
 
     /*!
      * SipiImage.watermark(img, <wm-file>)
@@ -1067,11 +1240,13 @@ namespace Sipi {
     // map the method names exposed to Lua to the names defined here
     static const luaL_Reg SImage_methods[] = {{"new",                  SImage_new},
                                               {"dims",                 SImage_dims}, // #myimg
+                                              {"exif",                 SImage_get_exif}, // myimg
                                               {"write",                SImage_write}, // myimg >> filename
                                               {"send",                 SImage_send}, // myimg
                                               {"crop",                 SImage_crop}, // myimg - "100,100,500,500"
                                               {"scale",                SImage_scale}, // myimg % "500,"
                                               {"rotate",               SImage_rotate}, // myimg * 45.0
+                                              {"topleft",               SImage_set_topleft},
                                               {"watermark",            SImage_watermark}, // myimg + "wm-path"
                                               {"mimetype_consistency", SImage_mimetype_consistency},
                                               {0,                      0}};

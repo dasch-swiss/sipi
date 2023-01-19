@@ -5,11 +5,20 @@ include(ExternalProject)
 #
 # zlib
 #
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24.0)
+    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
+else()
+    unset(timestamp_policy)
+endif()
+
+
 ExternalProject_Add(project_zlib
         INSTALL_DIR ${COMMON_LOCAL}
-        URL http://zlib.net/zlib-1.2.12.tar.gz
-        SOURCE_DIR ${COMMON_SRCS}/zlib-1.2.12
-        CONFIGURE_COMMAND ${COMMON_SRCS}/zlib-1.2.12/configure
+        URL http://zlib.net/zlib-1.2.13.tar.gz
+        DOWNLOAD_DIR ${COMMON_SRCS}/downloads
+        ${timestamp_policy}
+        SOURCE_DIR ${COMMON_SRCS}/zlib-1.2.13
+        CONFIGURE_COMMAND ${COMMON_SRCS}/zlib-1.2.13/configure
             --prefix=${COMMON_LOCAL}
             --static
             # --shared

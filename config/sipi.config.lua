@@ -279,5 +279,10 @@ routes = {
         method = 'GET',
         route = '/test/luafunctions',
         script = 'test_functions.lua'
+    },
+    {
+        method = 'GET',
+        route = '/test/orientation',
+        script = 'orientation.lua'
     }
 }

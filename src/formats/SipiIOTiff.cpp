@@ -474,7 +474,9 @@ namespace Sipi {
 
             TIFF_GET_FIELD (tif, TIFFTAG_BITSPERSAMPLE, &stmp, 1);
             img->bps = stmp;
+
             TIFF_GET_FIELD (tif, TIFFTAG_ORIENTATION, &ori, ORIENTATION_TOPLEFT);
+            img->orientation = static_cast<Orientation>(ori);
 
             if (1 != TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &stmp)) {
                 img->photo = MINISBLACK;
@@ -1031,6 +1033,10 @@ namespace Sipi {
             }
             info.height = tmp_height;
             info.success = SipiImgInfo::DIMS;
+
+            unsigned short ori;
+            TIFF_GET_FIELD (tif, TIFFTAG_ORIENTATION, &ori, ORIENTATION_TOPLEFT);
+            info.orientation = static_cast<Orientation>(ori);
 
             char *emdatastr;
             if (1 == TIFFGetField(tif, TIFFTAG_SIPIMETA, &emdatastr)) {
