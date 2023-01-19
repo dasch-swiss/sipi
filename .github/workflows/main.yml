@@ -120,7 +120,7 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/arm64, linux/amd64
+          platforms: linux/amd64 #, linux/arm64
           push: true
           tags: daschswiss/sipi:latest, daschswiss/sipi:${{ steps.get_version.outputs.VERSION }}
       -
