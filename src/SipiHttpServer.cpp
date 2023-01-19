@@ -726,14 +726,14 @@ namespace Sipi {
         std::string sidecarname = infile.substr(0, pos) + ".info";
 
         std::ifstream sidecar(sidecarname);
-        std::string orig_filename;
-        std::string orig_checksum;
-        std::string derivative_checksum;
+        std::string orig_filename = "";
+        std::string orig_checksum = "";
+        std::string derivative_checksum = "";
 
-        std::double_t sidecar_duration;
-        std::double_t sidecar_fps;
-        std::double_t sidecar_height;
-        std::double_t sidecar_width;
+        std::double_t sidecar_duration = -1;
+        std::double_t sidecar_fps = -1;
+        std::double_t sidecar_height = -1;
+        std::double_t sidecar_width = -1;
 
         if (sidecar.good())
         {
@@ -782,9 +782,6 @@ namespace Sipi {
                 orig_filename = infile;
             }
             json_decref(scroot);
-        }
-        else {
-            orig_filename = infile;
         }
 
         if (!orig_checksum.empty()) {
@@ -849,11 +846,26 @@ namespace Sipi {
                 throw Error(__file__, __LINE__, "Cannot fstat file!");
             }
             json_object_set_new(root, "fileSize", json_integer(fstatbuf.st_size));
-            json_object_set_new(root, "originalFilename", json_string(orig_filename.c_str()));
-            json_object_set_new(root, "duration", json_real(sidecar_duration));
-            json_object_set_new(root, "fps", json_real(sidecar_fps));
-            json_object_set_new(root, "height", json_real(sidecar_height));
-            json_object_set_new(root, "width", json_real(sidecar_width));
+
+            if (!orig_filename.empty()) {
+                json_object_set_new(root, "originalFilename", json_string(orig_filename.c_str()));
+            }
+
+            if (sidecar_duration >= 0) {
+                json_object_set_new(root, "duration", json_real(sidecar_duration));
+            }
+
+            if (sidecar_fps >= 0) {
+                json_object_set_new(root, "fps", json_real(sidecar_fps));
+            }
+
+            if (sidecar_height >= 0) {
+                json_object_set_new(root, "height", json_real(sidecar_height));
+            }
+
+            if (sidecar_width >= 0) {
+                json_object_set_new(root, "width", json_real(sidecar_width));
+            }
 
             char *json_str = json_dumps(root, JSON_INDENT(3));
             conn_obj.sendAndFlush(json_str, strlen(json_str));
