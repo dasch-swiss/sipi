@@ -234,7 +234,9 @@ class TestServer:
             "/knora/{}/full/max/0/default.jpg".format(filename_thumb), 200)
 
     def test_knora_info_validation(self, manager):
-        """pass the knora.json request tests"""
+        """return a valid knora.json response"""
+
+        time.sleep(3)
 
         testdata = [
             {
@@ -369,6 +371,20 @@ class TestServer:
 
         response_json = manager.get_json(
             "/unit/8pdET49BfoJ-EeRcIbgcLch.mp4/knora.json")
+        assert response_json == expected_result
+
+    def test_handling_of_missing_sidecar_file_for_video(self, manager):
+        """correctly handle missing sidecar file for video"""
+
+        expected_result = {
+            "@context": "http://sipi.io/api/file/3/context.json",
+            "id": "http://127.0.0.1:1024/unit/has-missing-sidecar-file.mp4",
+            "internalMimeType": "video/mp4",
+            "fileSize": 475205,
+        }
+
+        response_json = manager.get_json(
+            "/unit/has-missing-sidecar-file.mp4/knora.json")
         assert response_json == expected_result
 
     def test_sqlite_api(self, manager):
