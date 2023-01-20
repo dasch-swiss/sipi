@@ -20,6 +20,7 @@ inline bool image_identical(const std::string &name1, const std::string &name2) 
 std::string leavesSmallWithAlpha = "../../../../test/_test_data/images/knora/Leaves-small-alpha.tif";
 std::string leavesSmallNoAlpha = "../../../../test/_test_data/images/knora/Leaves-small-no-alpha.tif";
 std::string png16bit = "../../../../test/_test_data/images/knora/png_16bit.png";
+std::string pngPaletteAlpha = "../../../../test/_test_data/images/unit/mario.png";
 std::string leaves8tif = "../../../../test/_test_data/images/knora/Leaves8.tif";
 std::string cielab = "../../../../test/_test_data/images/unit/cielab.tif";
 std::string cmyk = "../../../../test/_test_data/images/unit/cmyk.tif";
@@ -33,6 +34,7 @@ TEST(Sipiimage, CheckIfTestImagesCanBeFound)
     EXPECT_TRUE(exists_file(leavesSmallWithAlpha));
     EXPECT_TRUE(exists_file(leavesSmallNoAlpha));
     EXPECT_TRUE(exists_file(png16bit));
+    EXPECT_TRUE(exists_file(pngPaletteAlpha));
     EXPECT_TRUE(exists_file(cielab));
     EXPECT_TRUE(exists_file(cmyk));
     EXPECT_TRUE(exists_file(palette));
@@ -41,12 +43,14 @@ TEST(Sipiimage, CheckIfTestImagesCanBeFound)
 
 TEST(Sipiimage, ImageComparison)
 {
+    Sipi::SipiIOTiff::initLibrary();
     EXPECT_TRUE(image_identical(leaves8tif, leaves8tif));
 }
 
 // Convert Tiff with alpha channel to JPG
 TEST(Sipiimage, ConvertTiffWithAlphaToJPG)
 {
+    Sipi::SipiIOTiff::initLibrary();
     std::shared_ptr<Sipi::SipiRegion> region;
     std::shared_ptr<Sipi::SipiSize> size = std::make_shared<Sipi::SipiSize>("!128,128");
 
@@ -60,6 +64,7 @@ TEST(Sipiimage, ConvertTiffWithAlphaToJPG)
 // Convert Tiff with no alpha channel to JPG
 TEST(Sipiimage, ConvertTiffWithNoAlphaToJPG)
 {
+    Sipi::SipiIOTiff::initLibrary();
     std::shared_ptr<Sipi::SipiRegion> region;
     std::shared_ptr<Sipi::SipiSize> size = std::make_shared<Sipi::SipiSize>("!128,128");
 
@@ -72,6 +77,7 @@ TEST(Sipiimage, ConvertTiffWithNoAlphaToJPG)
 
 // Convert PNG 16 bit with alpha channel and ICC profile to TIFF and back
 TEST(Sipiimage, ConvertPng16BitToJpxToPng) {
+    Sipi::SipiIOTiff::initLibrary();
     Sipi::SipiImage img1;
     ASSERT_NO_THROW(img1.read(png16bit));
     ASSERT_NO_THROW(img1.write("tif", "../../../../test/_test_data/images/knora/png_16bit.tif"));
@@ -84,6 +90,7 @@ TEST(Sipiimage, ConvertPng16BitToJpxToPng) {
 
 // Convert PNG 16 bit with alpha channel and ICC profile to JPX
 TEST(Sipiimage, ConvertPng16BitToJpx) {
+    Sipi::SipiIOTiff::initLibrary();
     Sipi::SipiImage img1;
 
     ASSERT_NO_THROW(img1.read(png16bit));
@@ -97,6 +104,7 @@ TEST(Sipiimage, ConvertPng16BitToJpx) {
 // Convert PNG 16 bit with alpha channel and ICC profile to TIFF
 TEST(Sipiimage, ConvertPng16BitToTiff)
 {
+    Sipi::SipiIOTiff::initLibrary();
     Sipi::SipiImage img1;
 
     ASSERT_NO_THROW(img1.read(png16bit));
@@ -109,6 +117,7 @@ TEST(Sipiimage, ConvertPng16BitToTiff)
 // Convert PNG 16 bit with alpha channel and ICC profile to JPEG
 TEST(Sipiimage, ConvertPng16BitToJpg)
 {
+    Sipi::SipiIOTiff::initLibrary();
     Sipi::SipiImage img1;
 
     ASSERT_NO_THROW(img1.read(png16bit));
@@ -116,8 +125,20 @@ TEST(Sipiimage, ConvertPng16BitToJpg)
     ASSERT_NO_THROW(img1.write("jpg", "../../../../test/_test_data/images/knora/png_16bit.jpg"));
 }
 
+TEST(Sipiimage, ConvertPNGPaletteAlphaToTiff)
+{
+    Sipi::SipiIOTiff::initLibrary();
+    Sipi::SipiImage img1;
+
+    ASSERT_NO_THROW(img1.read(pngPaletteAlpha));
+    ASSERT_NO_THROW(img1.write("tif", "../../../../test/_test_data/images/unit/_mario.tif"));
+    EXPECT_TRUE(image_identical("../../../../test/_test_data/images/unit/mario.tif", "../../../../test/_test_data/images/unit/_mario.tif"));
+
+}
+
 TEST(Sipiimage, CIELab_Conversion)
 {
+    Sipi::SipiIOTiff::initLibrary();
     Sipi::SipiImage img1;
     Sipi::SipiImage img2;
     Sipi::SipiImage img3;
@@ -135,6 +156,7 @@ TEST(Sipiimage, CIELab_Conversion)
 
 TEST(Sipiimage, CIELab16_Conversion)
 {
+    Sipi::SipiIOTiff::initLibrary();
     Sipi::SipiImage img1;
     Sipi::SipiImage img2;
     Sipi::SipiImage img3;
@@ -155,6 +177,7 @@ TEST(Sipiimage, CIELab16_Conversion)
 
 TEST(Sipiimage, CMYK_Conversion)
 {
+    Sipi::SipiIOTiff::initLibrary();
     Sipi::SipiImage img1;
     Sipi::SipiImage img2;
     Sipi::SipiImage img3;
@@ -175,6 +198,7 @@ TEST(Sipiimage, CMYK_Conversion)
 
 TEST(Sipiimage, PALETTE_Conversion)
 {
+    Sipi::SipiIOTiff::initLibrary();
     Sipi::SipiImage img1;
     ASSERT_NO_THROW(img1.read(palette));
     ASSERT_NO_THROW(img1.write("jpx", "../../../../test/_test_data/images/unit/_palette.jpx"));
@@ -182,6 +206,7 @@ TEST(Sipiimage, PALETTE_Conversion)
 
 TEST(Sipiimage, GRAYICC_Conversion)
 {
+    Sipi::SipiIOTiff::initLibrary();
     Sipi::SipiImage img;
     ASSERT_NO_THROW(img.read(grayicc));
     ASSERT_NO_THROW(img.write("jpg", "../../../../test/_test_data/images/unit/_grayicc.jpg"));
@@ -189,6 +214,7 @@ TEST(Sipiimage, GRAYICC_Conversion)
 
 TEST(Sipiimage, CMYK_lossy_compression)
 {
+    Sipi::SipiIOTiff::initLibrary();
     Sipi::SipiImage img;
     std::shared_ptr<Sipi::SipiRegion> region = nullptr;
     std::shared_ptr<Sipi::SipiSize> size = nullptr;

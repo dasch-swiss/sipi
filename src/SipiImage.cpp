@@ -1290,7 +1290,6 @@ namespace Sipi {
             delete[] pixels;
             pixels = outbuf;
             bps = 8;
-
         }
         return true;
     }

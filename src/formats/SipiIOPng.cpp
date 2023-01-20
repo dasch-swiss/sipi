@@ -50,6 +50,8 @@
 #  define PNG_iTXt_SUPPORTED 1
 #endif
 
+#define PNG_BYTES_TO_CHECK 4
+
 static const char __file__[] = __FILE__;
 
 namespace Sipi {
@@ -89,7 +91,7 @@ namespace Sipi {
         if (num_text < num_text_len) {
             return &(text_ptr[num_text++]);
         } else {
-            png_text *tmpptr = new png_text[num_text_len + 16];
+            auto *tmpptr = new png_text[num_text_len + 16];
             for (unsigned int i = 0; i < num_text_len; i++) tmpptr[i] = text_ptr[i];
             delete[] text_ptr;
             text_ptr = tmpptr;
@@ -136,10 +138,10 @@ namespace Sipi {
                          ScalingQuality scaling_quality)
     {
         FILE *infile;
-        unsigned char header[8];
+        unsigned char header[PNG_BYTES_TO_CHECK];
         png_structp png_ptr;
         png_infop info_ptr;
-        png_infop end_info;
+
         //
         // open the input file
         //
@@ -147,14 +149,17 @@ namespace Sipi {
             return FALSE;
         }
 
-        fread(header, 1, 8, infile);
-
-        if (png_sig_cmp(header, 0, 8) != 0) {
+        //
+        // check header if we really have a PNG file...
+        //
+        fread(header, 1, PNG_BYTES_TO_CHECK, infile);
+        if (png_sig_cmp(header, 0, PNG_BYTES_TO_CHECK) != 0) {
             fclose(infile);
             return FALSE; // it's not a PNG file
         }
+
         if ((png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, (png_voidp) nullptr, sipi_error_fn,
-                                              (png_error_ptr) nullptr)) == nullptr) {
+                                              sipi_warning_fn)) == nullptr) {
             fclose(infile);
             throw SipiImageError(__file__, __LINE__, "Error reading PNG file \"" + filepath +
                                                      "\": Could not allocate mempry fpr png_structp !");
@@ -164,21 +169,20 @@ namespace Sipi {
             throw SipiImageError(__file__, __LINE__, "Error reading PNG file \"" + filepath +
                                                      "\": Could not allocate mempry fpr png_infop !");
         }
-        if ((end_info = png_create_info_struct(png_ptr)) == nullptr) {
-            fclose(infile);
-            throw SipiImageError(__file__, __LINE__, "Error reading PNG file \"" + filepath +
-                                                     "\": Could not allocate mempry fpr png_infop !");
-        }
+
         png_init_io(png_ptr, infile);
-        png_set_sig_bytes(png_ptr, 8);
+        png_set_sig_bytes(png_ptr, PNG_BYTES_TO_CHECK);
         png_read_info(png_ptr, info_ptr);
 
-        img->nx = png_get_image_width(png_ptr, info_ptr);
-        img->ny = png_get_image_height(png_ptr, info_ptr);
-        img->bps = png_get_bit_depth(png_ptr, info_ptr);
-        img->nc = png_get_channels(png_ptr, info_ptr);
-
+        png_uint_32 width, height;
+        int color_type, bit_depth, interlace_type;
+        png_get_IHDR(png_ptr, info_ptr, &width, &height, &bit_depth, &color_type,
+                     &interlace_type, NULL, NULL);
+        img->nx = width;
+        img->ny = height;
         img->orientation = TOPLEFT;
+
+        png_set_packing(png_ptr);
 
         png_uint_32 res_x, res_y;
         int unit_type;
@@ -198,36 +202,47 @@ namespace Sipi {
             img->exif->addKeyVal("Exif.Image.ResolutionUnit", 2); // DPI
         }
 
-        int colortype = png_get_color_type(png_ptr, info_ptr);
-        switch (colortype) {
+        switch (color_type) {
             case PNG_COLOR_TYPE_GRAY: { // implies nc = 1, (bit depths 1, 2, 4, 8, 16)
+                png_set_expand_gray_1_2_4_to_8(png_ptr);
                 img->photo = MINISBLACK;
                 break;
             }
-
             case PNG_COLOR_TYPE_GRAY_ALPHA: { // implies nc = 2, (bit depths 8, 16)
+                png_set_expand_gray_1_2_4_to_8(png_ptr);
                 img->photo = MINISBLACK;
                 img->es.push_back(ASSOCALPHA);
                 break;
             }
-
-            case PNG_COLOR_TYPE_PALETTE: { // we will not support it for now, (bit depths 1, 2, 4, 8)
-                img->photo = PALETTE;
+            case PNG_COLOR_TYPE_PALETTE: { // might have an alpha channel – we check further below...
+                png_set_palette_to_rgb(png_ptr);
+                img->photo = RGB;
                 break;
             }
-
             case PNG_COLOR_TYPE_RGB: { // implies nc = 3 (standard case :-), (bit_depths 8, 16)
                 img->photo = RGB;
                 break;
             }
-
             case PNG_COLOR_TYPE_RGBA: { // implies nc = 4, (bit_depths 8, 16)
                 img->photo = RGB;
                 img->es.push_back(ASSOCALPHA);
                 break;
             }
         }
+        if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS) != 0)
+            png_set_tRNS_to_alpha(png_ptr);
 
+        png_color_16 *image_background;
+        if (png_get_bKGD(png_ptr, info_ptr, &image_background) != 0) {
+            png_set_background(png_ptr, image_background,
+                               PNG_BACKGROUND_GAMMA_FILE, 1, 1.0);
+        }
+
+        png_read_update_info(png_ptr, info_ptr);
+
+        //
+        // check for ICC profiles...
+        //
         int srgb_intent;
         if (png_get_sRGB(png_ptr, info_ptr, &srgb_intent) != 0) {
             img->icc = std::make_shared<SipiIcc>(icc_sRGB);
@@ -265,35 +280,23 @@ namespace Sipi {
             }
         }
 
-        png_size_t sll = png_get_rowbytes(png_ptr, info_ptr);
+        size_t sll = png_get_rowbytes(png_ptr, info_ptr);
+        auto *buffer = new uint8[height * sll];
 
-        if (colortype == PNG_COLOR_TYPE_PALETTE) {
-            png_set_palette_to_rgb(png_ptr);
-            img->nc = 3;
-            img->photo = RGB;
-            sll = 3 * sll;
-        }
-
-        if (colortype == PNG_COLOR_TYPE_GRAY && img->bps < 8) {
-            png_set_expand_gray_1_2_4_to_8(png_ptr);
-            img->bps = 8;
-        }
-
-        uint8 *buffer = new uint8[img->ny * sll];
-        png_bytep *row_pointers = new png_bytep[img->ny];
-
+        auto *row_pointers = new png_bytep[height];
         for (size_t i = 0; i < img->ny; i++) {
             row_pointers[i] = (buffer + i * sll);
         }
 
         png_read_image(png_ptr, row_pointers);
-        png_read_end(png_ptr, end_info);
-        png_destroy_read_struct(&png_ptr, &info_ptr, &end_info);
-
-        if (colortype == PNG_COLOR_TYPE_PALETTE) {
-            img->nc = 3;
-            img->photo = RGB;
+        png_read_end(png_ptr, info_ptr);
+        img->bps = png_get_bit_depth(png_ptr, info_ptr);
+        img->nc = png_get_channels(png_ptr, info_ptr);
+        if (color_type == PNG_COLOR_TYPE_PALETTE && img->nc == 4) {
+            img->es.push_back(ASSOCALPHA);
         }
+
+        png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 
         if (img->bps == 16) {
             auto *tmp = (unsigned short *) buffer;
@@ -360,7 +363,6 @@ namespace Sipi {
 
         png_structp png_ptr;
         png_infop info_ptr;
-        png_infop end_info;
 
         if ((png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, (png_voidp) nullptr, (png_error_ptr) sipi_error_fn,
                                               (png_error_ptr) sipi_warning_fn)) == nullptr) {
@@ -369,11 +371,6 @@ namespace Sipi {
                                                      "\": Could not allocate mempry fpr png_structp !");
         }
         if ((info_ptr = png_create_info_struct(png_ptr)) == nullptr) {
-            fclose(infile);
-            throw SipiImageError(__file__, __LINE__, "Error reading PNG file \"" + filepath +
-                                                     "\": Could not allocate mempry fpr png_infop !");
-        }
-        if ((end_info = png_create_info_struct(png_ptr)) == nullptr) {
             fclose(infile);
             throw SipiImageError(__file__, __LINE__, "Error reading PNG file \"" + filepath +
                                                      "\": Could not allocate mempry fpr png_infop !");
@@ -387,7 +384,7 @@ namespace Sipi {
         info.orientation = TOPLEFT;
         info.success = SipiImgInfo::DIMS;
 
-        png_destroy_read_struct(&png_ptr, &info_ptr, &end_info);
+        png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 
         return info;
     }
