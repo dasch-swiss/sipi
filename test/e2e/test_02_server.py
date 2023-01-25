@@ -172,7 +172,7 @@ class TestServer:
                 "mimetype": "text/csv",
                 "expected_result": {
                     "consistency": True,
-                    "origname": "csv_test.csv"
+                    "origname": "csv_test-2.csv"
                 },
             },
             {
