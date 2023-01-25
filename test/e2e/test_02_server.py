@@ -168,6 +168,14 @@ class TestServer:
                 }
             },
             {
+                "filepath": "knora/csv_test-2.csv",
+                "mimetype": "text/csv",
+                "expected_result": {
+                    "consistency": True,
+                    "origname": "csv_test.csv"
+                },
+            },
+            {
                 "filepath": "knora/hello.resource.xml",
                 "mimetype": "application/xml",
                 "expected_result": {
