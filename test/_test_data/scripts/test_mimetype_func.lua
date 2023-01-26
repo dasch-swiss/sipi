@@ -32,6 +32,10 @@ local test_files = {
     {
         filename = 'test.csv',
         expected_mimetype = "text/csv"
+    },
+    {
+        filename = 'test2.csv',
+        expected_mimetype = "text/csv"
     }
 }
 
@@ -74,4 +78,3 @@ else
     server.sendStatus(500)
     return 200
 end
-
