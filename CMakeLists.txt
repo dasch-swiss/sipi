@@ -112,29 +112,24 @@ set(DARWIN "Darwin")
 set(LINUX "Linux")
 math(EXPR BITS "8*${CMAKE_SIZEOF_VOID_P}")
 if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
-    message(STATUS "Compiling for Darwin...")
-    message(STATUS ${CMAKE_SYSTEM_NAME})
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
-    SET(CMAKE_MACOSX_RPATH 1)
+    set(CMAKE_MACOSX_RPATH 1)
     if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
-        SET(KDU_MAKE "Makefile-Mac-x86-${BITS}-gcc")
-        SET(KDU_ARCH "Mac-x86-${BITS}-gcc")
-        SET(KDU_EXEC_PLATFORM "Mac-x86-64-gcc")
+        set(KDU_MAKE "Makefile-Mac-x86-${BITS}-gcc")
+        set(KDU_ARCH "Mac-x86-${BITS}-gcc")
+        set(KDU_EXEC_PLATFORM "Mac-x86-64-gcc")
     else()
-        SET(KDU_MAKE "Makefile-MAC-arm-${BITS}-gcc")
-        SET(KDU_ARCH "Mac-arm-${BITS}-gcc")
-        SET(KDU_EXEC_PLATFORM "Mac-arm-64-gcc")
+        set(KDU_MAKE "Makefile-MAC-arm-${BITS}-gcc")
+        set(KDU_ARCH "Mac-arm-${BITS}-gcc")
+        set(KDU_EXEC_PLATFORM "Mac-arm-64-gcc")
     endif()
-    SET(LUA_ARCH "macosx")
+    set(LUA_ARCH "macosx")
 elseif(CMAKE_SYSTEM_NAME STREQUAL LINUX)
-    message(STATUS "Compiling for Linux64...")
-    message(STATUS ${CMAKE_SYSTEM_NAME})
     execute_process(COMMAND /usr/bin/lsb_release -si COMMAND tr -d '\n' OUTPUT_VARIABLE CMAKE_DISTRO_NAME)
-    MESSAGE(STATUS "Distro: " ${CMAKE_DISTRO_NAME})
     if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
-        SET(KDU_MAKE "Makefile-Linux-x86-${BITS}-gcc")
-        SET(KDU_ARCH "Linux-x86-${BITS}-gcc")
-        SET(KDU_EXEC_PLATFORM "Linux-x86-64-gcc")
+        set(KDU_MAKE "Makefile-Linux-x86-${BITS}-gcc")
+        set(KDU_ARCH "Linux-x86-${BITS}-gcc")
+        set(KDU_EXEC_PLATFORM "Linux-x86-64-gcc")
     else()
         SET(KDU_MAKE "Makefile-Linux-arm-${BITS}-gcc")
         SET(KDU_ARCH "Linux-arm-${BITS}-gcc")
@@ -142,7 +137,9 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL LINUX)
     endif()
     SET(LUA_ARCH "linux")
 endif()
-message(STATUS "Compiling for ${KDU_ARCH}")
+message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
+message(STATUS "Distro: ${CMAKE_DISTRO_NAME}")
+message(STATUS "Compiling for: ${KDU_ARCH}")
 
 #
 # this is needed for curl...
@@ -228,7 +225,7 @@ else()
   set(M_LIBRARY "")
 endif()
 
-CHECK_STRUCT_HAS_MEMBER("struct stat" st_atimespec sys/stat.h HAVE_ST_ATIMESPEC LANGUAGE CXX)
+check_struct_has_member("struct stat" st_atimespec sys/stat.h HAVE_ST_ATIMESPEC LANGUAGE CXX)
 if(HAVE_ST_ATIMESPEC)
     message(STATUS "Have new struct stat")
 else()
@@ -284,33 +281,34 @@ endif(DOXYGEN_FOUND)
 
 # get current date and time
 string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M")
-MESSAGE( STATUS "Build timestamp: ${BUILD_TIMESTAMP}" )
+message( STATUS "Build timestamp: ${BUILD_TIMESTAMP}" )
 
 # get version from git
-IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
-    FIND_PACKAGE(Git)
-    IF(GIT_FOUND)
-        EXECUTE_PROCESS(
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
+    find_package(Git)
+    if(GIT_FOUND)
+        execute_process(
                 COMMAND ${GIT_EXECUTABLE} describe --tag --dirty --abbrev=7
-                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-                OUTPUT_VARIABLE "BUILD_SCM_TAG"
+                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                OUTPUT_VARIABLE BUILD_SCM_TAG
                 ERROR_QUIET
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
-        MESSAGE( STATUS "Build SCM tag: ${BUILD_SCM_TAG}" )
-        EXECUTE_PROCESS(
+        execute_process(
                 COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
-                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-                OUTPUT_VARIABLE "BUILD_SCM_REVISION"
+                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                OUTPUT_VARIABLE BUILD_SCM_REVISION
                 ERROR_QUIET
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
-        MESSAGE( STATUS "Build SCM revision: ${BUILD_SCM_REVISION}" )
-    ELSE(GIT_FOUND)
+    else(GIT_FOUND)
         SET(BUILD_SCM_REVISION 0)
         SET(BUILD_SCM_TAG 0)
-    ENDIF(GIT_FOUND)
-ENDIF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
+    endif(GIT_FOUND)
+    message( STATUS "Build SCM tag: ${BUILD_SCM_TAG}" )
+    message( STATUS "Build SCM revision: ${BUILD_SCM_REVISION}" )
+endif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
 
-CONFIGURE_FILE(${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h.in ${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h)
+# write out the sipi configuration
+configure_file(${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h.in ${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h)
 
 
 
