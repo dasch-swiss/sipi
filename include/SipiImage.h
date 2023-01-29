@@ -540,6 +540,13 @@ class SipiImageError : public std::exception {
         bool rotate(float angle, bool mirror = false);
 
         /*!
+         * Rotate the image if necessare so that ot has TOPLEFT orientation
+         *
+         * @return Returns true on success, false on error
+         */
+        bool set_topleft();
+
+        /*!
          * Convert an image from 16 to 8 bit. The algorithm just divides all pixel values
          * by 256 using the ">> 8" operator (fast & efficient)
          *

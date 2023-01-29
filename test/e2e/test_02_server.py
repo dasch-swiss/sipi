@@ -87,6 +87,7 @@ class TestServer:
         """return a restricted image in a smaller size"""
         image_info = manager.get_image_info(
             "/knora/RestrictLeaves.jpg/full/max/0/default.jpg")
+
         page_geometry = [line.strip().split()[-1] for line in image_info.splitlines()
                          if line.strip().startswith("Page geometry:")][0]
         assert page_geometry == "128x128+0+0"
@@ -132,7 +133,7 @@ class TestServer:
             "id": "http://127.0.0.1:1024/unit/{}".format(filename),
             "width": 373,
             "height": 496,
-            "internalMimeType": "image/jpx",
+            "internalMimeType": "image/jp2",
             "originalMimeType": "image/jpeg",
             "originalFilename": "HasCommentBlock.JPG"
         }
@@ -257,7 +258,7 @@ class TestServer:
                     "height": 512,
                     "originalFilename": "lena512.tif",
                     "originalMimeType": "image/tiff",
-                    "internalMimeType": "image/jpx"
+                    "internalMimeType": "image/jp2"
                 }
             }, {
                 "filepath": "unit/test.csv",

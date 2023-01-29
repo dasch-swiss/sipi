@@ -165,7 +165,10 @@ for imgindex, imgparam in pairs(server.uploads) do
         filename = tmpName, -- make this a IIIF URL
         original_mimetype = submitted_mimetype.mimetype,
         original_filename = filename,
-        file_type = 'IMAGE'
+        file_type = 'IMAGE',
+        thumbPath = thumbPath,
+        dims = dims,
+        result = result
     }
 
 end

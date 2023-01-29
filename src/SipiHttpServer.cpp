@@ -13,6 +13,7 @@
  * If you modify this Program, or any covered work, by linking or combining
  * it with Kakadu (or a modified version of that library) or Adobe ICC Color
  * Profiles (or a modified version of that library) or both, containing parts
+ * Profiles (or a modified version of that library) or both, containing parts
  * covered by the terms of the Kakadu Software Licence or Adobe Software Licence,
  * or both, the licensors of this Program grant you additional permission
  * to convey the resulting work.
@@ -826,7 +827,8 @@ namespace Sipi {
             if (info.numpages > 0) {
                 json_object_set_new(root, "numpages", json_integer(info.numpages));
             }
-            json_object_set_new(root, "internalMimeType", json_string(info.internalmimetype.c_str()));
+            //json_object_set_new(root, "internalMimeType", json_string(info.internalmimetype.c_str()));
+            json_object_set_new(root, "internalMimeType", json_string(actual_mimetype.c_str()));
             if (info.success == SipiImgInfo::ALL) {
                 json_object_set_new(root, "originalMimeType", json_string(info.origmimetype.c_str()));
                 json_object_set_new(root, "originalFilename", json_string(info.origname.c_str()));
