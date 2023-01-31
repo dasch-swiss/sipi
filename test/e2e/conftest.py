@@ -526,6 +526,7 @@ class SipiTestManager:
 
     def cleanup(self):
         """Cleanup all files created"""
+        return
         fileList = glob.glob(self.data_dir + '/knora/_*')
         for filePath in fileList:
             os.remove(filePath)

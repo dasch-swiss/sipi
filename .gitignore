@@ -67,3 +67,4 @@ _lena512.jp2
 /test/_test_data/images/unit/CIELab16.png
 /test/_test_data/images/unit/cielab_2.tif
 /cmake-build-dockerdebug
+/test/e2e/diff.tif

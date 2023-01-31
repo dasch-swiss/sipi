@@ -87,6 +87,7 @@ class TestServer:
         """return a restricted image in a smaller size"""
         image_info = manager.get_image_info(
             "/knora/RestrictLeaves.jpg/full/max/0/default.jpg")
+
         page_geometry = [line.strip().split()[-1] for line in image_info.splitlines()
                          if line.strip().startswith("Page geometry:")][0]
         assert page_geometry == "128x128+0+0"
@@ -132,7 +133,7 @@ class TestServer:
             "id": "http://127.0.0.1:1024/unit/{}".format(filename),
             "width": 373,
             "height": 496,
-            "internalMimeType": "image/jpx",
+            "internalMimeType": "image/jp2",
             "originalMimeType": "image/jpeg",
             "originalFilename": "HasCommentBlock.JPG"
         }
@@ -257,7 +258,7 @@ class TestServer:
                     "height": 512,
                     "originalFilename": "lena512.tif",
                     "originalMimeType": "image/tiff",
-                    "internalMimeType": "image/jpx"
+                    "internalMimeType": "image/jp2"
                 }
             }, {
                 "filepath": "unit/test.csv",
@@ -535,6 +536,23 @@ class TestServer:
         json_result = manager.get_auth_json("/auth/lena512.jp2/info.json")
 
         assert json_result == expected_result
+
+    def test_orientation_topleft(self, manager):
+        """Test rectifying the image orientation to topleft"""
+        response_json = manager.post_file(
+            "/api/upload", manager.data_dir_path("unit/image_orientation.jpg"), "image/jpeg")
+        filename = response_json["filename"]
+        manager.compare_server_images(
+            "/unit/{}/full/max/0/default.tif".format(filename), manager.data_dir_path("unit/image_orientation.tif"))
+
+    def test_4bit_palette_png(self, manager):
+        """Test reading 4 bit palette png with alpha channel"""
+        response_json = manager.post_file(
+            "/api/upload", manager.data_dir_path("unit/mario.png"), "image/png")
+        filename = response_json["filename"]
+        manager.compare_server_images(
+            "/unit/{}/full/max/0/default.tif".format(filename), manager.data_dir_path("unit/mario.tif"))
+
 
     def test_upscaling_server(self, manager):
         """Test upscaling of an image"""

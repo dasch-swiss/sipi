@@ -893,7 +893,6 @@ namespace Sipi {
      * @return Always 2 (one param, success, on stack)
      */
     static int SImage_set_topleft(lua_State *L) {
-        std::cerr << ">>>>in  SImage_set_topleft" << std::endl;
         int top = lua_gettop(L);
 
         if (top != 1) {
@@ -914,38 +913,7 @@ namespace Sipi {
             }
         }
 
-
-        switch (orientation) {
-            case TOPLEFT: // 1
-                lua_pop(L, lua_gettop(L));
-                lua_pushboolean(L, true);
-                return 1;
-            case TOPRIGHT: // 2
-                img->image->rotate(0., true);
-                break;
-            case BOTRIGHT: // 3
-                img->image->rotate(180., false);
-                break;
-            case BOTLEFT: // 4
-                img->image->rotate(180., true);
-                break;
-            case LEFTTOP: // 5
-                img->image->rotate(270., true);
-                break;
-            case RIGHTTOP: // 6
-                img->image->rotate(90., false);
-                break;
-            case RIGHTBOT: // 7
-                img->image->rotate(90., true);
-                break;
-            case LEFTBOT: // 8
-                img->image->rotate(270., false);
-                break;
-            default:
-                ; // nothing to do...
-        }
-
-        exif->addKeyVal("Exif.Image.Orientation", static_cast<unsigned short>(TOPLEFT));
+        img->image->set_topleft();
         img->image->setOrientation(TOPLEFT);
 
         lua_pop(L, lua_gettop(L));
@@ -1175,7 +1143,8 @@ namespace Sipi {
         lua_pop(L, lua_gettop(L));
 
         lua_pushboolean(L, true);
-        lua_pushnil(L);
+        lua_pushstring(L, imgpath);
+        //lua_pushnil(L);
 
         return 2;
     }

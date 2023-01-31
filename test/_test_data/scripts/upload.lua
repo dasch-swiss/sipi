@@ -113,6 +113,12 @@ for imgindex,imgparam in pairs(server.uploads) do
             return false
         end
 
+
+        --
+        -- Set orientation to topleft
+        --
+        myimg[imgindex]:topleft()
+
         --
         -- Create the destination path
         --

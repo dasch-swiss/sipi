@@ -84,6 +84,7 @@ namespace Sipi {
         nc = img_p.nc;
         bps = img_p.bps;
         es = img_p.es;
+        orientation = img_p.orientation;
         photo = img_p.photo;
         size_t bufsiz;
 
@@ -120,6 +121,7 @@ namespace Sipi {
 
     SipiImage::SipiImage(size_t nx_p, size_t ny_p, size_t nc_p, size_t bps_p, PhotometricInterpretation photo_p) : nx(
             nx_p), ny(ny_p), nc(nc_p), bps(bps_p), photo(photo_p) {
+        orientation = TOPLEFT; // assuming default...
         if (((photo == MINISWHITE) || (photo == MINISBLACK)) && !((nc == 1) || (nc == 2))) {
             throw SipiImageError(__file__, __LINE__, "Mismatch in Photometric interpretation and number of channels");
         }
@@ -177,6 +179,7 @@ namespace Sipi {
             ny = img_p.ny;
             nc = img_p.nc;
             bps = img_p.bps;
+            orientation = img_p.orientation;
             es = img_p.es;
             size_t bufsiz;
 
@@ -359,6 +362,7 @@ namespace Sipi {
 
         SipiImgInfo info;
         std::string mimetype = shttps::Parsing::getFileMimetype(filepath).first;
+        info.internalmimetype = mimetype;
 
         if ((mimetype == "image/tiff") || (mimetype == "image/x-tiff")) {
             info = io[std::string("tif")]->getDim(filepath, pagenum);
@@ -368,8 +372,9 @@ namespace Sipi {
             info = io[std::string("png")]->getDim(filepath, pagenum);
         } else if ((mimetype == "image/jp2") || (mimetype == "image/jpx")) {
             info = io[std::string("jpx")]->getDim(filepath, pagenum);
+        } else {
+            throw SipiImageError(__file__, __LINE__, "unknown mimetype: \"" + mimetype + "\"!");
         }
-        info.internalmimetype = mimetype;
 
         if (info.success == SipiImgInfo::FAILURE) {
             for (auto const &iterator : io) {
@@ -379,7 +384,8 @@ namespace Sipi {
         }
 
         if (info.success == SipiImgInfo::FAILURE) {
-            throw SipiImageError(__file__, __LINE__, "Could not read file " + filepath);
+            throw SipiImageError(__file__, __LINE__,
+                                 "Could not read file " + filepath);
         }
         return info;
     }
@@ -743,10 +749,10 @@ namespace Sipi {
             return ((byte) lround(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
                              (double) buf[POSITION(ix, (iy + 1), c, n)] * (ry - rx * ry))));
         } else if (ry < 1.0e-2) {
-            return ((byte) lroundf(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
+            return ((byte) lround(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
                              (double) buf[POSITION((ix + 1), iy, c, n)] * (rx - rx * ry))));
         } else {
-            return ((byte) lroundf(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
+            return ((byte) lround(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
                              (double) buf[POSITION((ix + 1), iy, c, n)] * (rx - rx * ry) +
                              (double) buf[POSITION(ix, (iy + 1), c, n)] * (ry - rx * ry) +
                              (double) buf[POSITION((ix + 1), (iy + 1), c, n)] * rx * ry)));
@@ -1193,17 +1199,17 @@ namespace Sipi {
             size_t nny;
 
             if ((angle > 0.) && (angle < 90.)) {
-                nnx = floor((double) nx * cosf(phi) + (double) ny * sinf(phi) + .5);
-                nny = floor((double) nx * sinf(phi) + (double) ny * cosf(phi) + .5);
+                nnx = floor((double) nx * cos(phi) + (double) ny * sin(phi) + .5);
+                nny = floor((double) nx * sin(phi) + (double) ny * cos(phi) + .5);
             } else if ((angle > 90.) && (angle < 180.)) {
-                nnx = floor(-((double) nx) * cosf(phi) + (double) ny * sinf(phi) + .5);
-                nny = floor((double) nx * sin(phi) - (double) ny * cosf(phi) + .5);
+                nnx = floor(-((double) nx) * cos(phi) + (double) ny * sin(phi) + .5);
+                nny = floor((double) nx * sin(phi) - (double) ny * cos(phi) + .5);
             } else if ((angle > 180.) && (angle < 270.)) {
-                nnx = floor(-((double) nx) * cosf(phi) - (double) ny * sinf(phi) + .5);
-                nny = floor(-((double) nx) * sinf(phi) - (double) ny * cosf(phi) + .5);
+                nnx = floor(-((double) nx) * cos(phi) - (double) ny * sin(phi) + .5);
+                nny = floor(-((double) nx) * sin(phi) - (double) ny * cos(phi) + .5);
             } else {
-                nnx = floor((double) nx * cosf(phi) - (double) ny * sinf(phi) + .5);
-                nny = floor(-((double) nx) * sinf(phi) + (double) ny * cosf(phi) + .5);
+                nnx = floor((double) nx * cos(phi) - (double) ny * sin(phi) + .5);
+                nny = floor(-((double) nx) * sin(phi) + (double) ny * cos(phi) + .5);
             }
 
             double pptx = ptx * (double) nnx / (double) nx;
@@ -1260,6 +1266,43 @@ namespace Sipi {
             }
             nx = nnx;
             ny = nny;
+        }
+        return true;
+    }
+    //============================================================================
+
+
+    bool SipiImage::set_topleft() {
+        switch (orientation) {
+            case TOPLEFT: // 1
+                return true;
+            case TOPRIGHT: // 2
+                rotate(0., true);
+                break;
+            case BOTRIGHT: // 3
+                rotate(180., false);
+                break;
+            case BOTLEFT: // 4
+                rotate(180., true);
+                break;
+            case LEFTTOP: // 5
+                rotate(270., true);
+                break;
+            case RIGHTTOP: // 6
+                rotate(90., false);
+                break;
+            case RIGHTBOT: // 7
+                rotate(90., true);
+                break;
+            case LEFTBOT: // 8
+                rotate(270., false);
+                break;
+            default:
+                ; // nothing to do...
+        }
+        orientation = TOPLEFT;
+        if (exif != nullptr) {
+            exif->addKeyVal("Exif.Image.Orientation", static_cast<unsigned short>(TOPLEFT));
         }
         return true;
     }
@@ -1367,7 +1410,7 @@ namespace Sipi {
 
                     for (size_t k = 0; k < nc; k++) {
                         double nval = (buf[nc * (j * nx + i) + k] / 255.) * (1.0 + val / 2550.0) + val / 2550.0;
-                        buf[nc * (j * nx + i) + k] = (nval > 1.0) ? 255 : floor(nval * 255. + .5);
+                        buf[nc * (j * nx + i) + k] = (nval > 1.0) ? 255 : (unsigned char) floorl(nval * 255. + .5);
                     }
                 }
             }
@@ -1380,7 +1423,7 @@ namespace Sipi {
                         byte val = bilinn(wmbuf, wm_nx, xlut[i], ylut[j], 0, wm_nc);
                         double nval =
                                 (buf[nc * (j * nx + i) + k] / 65535.0) * (1.0 + val / 655350.0) + val / 352500.;
-                        buf[nc * (j * nx + i) + k] = (nval > 1.0) ? (word) 65535 : (word) floor(nval * 65535. + .5);
+                        buf[nc * (j * nx + i) + k] = (nval > 1.0) ? (word) 65535 : (word) floorl(nval * 65535. + .5);
                     }
                 }
             }

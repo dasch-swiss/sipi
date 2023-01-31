@@ -27,6 +27,7 @@ std::string cmyk = "../../../../test/_test_data/images/unit/cmyk.tif";
 std::string cielab16 = "../../../../test/_test_data/images/unit/CIELab16.tif";
 std::string palette = "../../../../test/_test_data/images/unit/palette.tif";
 std::string grayicc = "../../../../test/_test_data/images/unit/gray_with_icc.jp2";
+std::string wrongrotation = "../../../../test/_test_data/images/unit/image_orientation.jpg";
 
 // Check if configuration file can be found
 TEST(Sipiimage, CheckIfTestImagesCanBeFound)
@@ -232,4 +233,24 @@ TEST(Sipiimage, CMYK_lossy_compression)
     };
     ASSERT_NO_THROW(img.write("jpx", "../../../../test/_test_data/images/unit/_cmyk_lossy.jp2", &params));
     EXPECT_TRUE(image_identical("../../../../test/_test_data/images/unit/cmyk_lossy.jp2", "../../../../test/_test_data/images/unit/_cmyk_lossy.jp2"));
+}
+
+TEST(Sipiimage, WrongRotation)
+{
+    Sipi::SipiIOTiff::initLibrary();
+    Sipi::SipiImage img;
+    std::shared_ptr<Sipi::SipiRegion> region = nullptr;
+    std::shared_ptr<Sipi::SipiSize> size = nullptr;
+    ASSERT_NO_THROW(img.readOriginal(wrongrotation, 0, region, size, shttps::HashType::sha256));
+    EXPECT_EQ(img.getNx(), 3264);
+    EXPECT_EQ(img.getNy(), 2448);
+    EXPECT_EQ(img.getNc(), 3);
+    EXPECT_EQ(img.getOrientation(), Sipi::RIGHTTOP);
+    ASSERT_NO_THROW(img.set_topleft());
+    EXPECT_EQ(img.getNx(), 2448);
+    EXPECT_EQ(img.getNy(), 3264);
+    EXPECT_EQ(img.getNc(), 3);
+    EXPECT_EQ(img.getOrientation(), Sipi::TOPLEFT);
+    ASSERT_NO_THROW(img.write("tif", "../../../../test/_test_data/images/unit/_image_orientation.tif"));
+    EXPECT_TRUE(image_identical("../../../../test/_test_data/images/unit/image_orientation.tif", "../../../../test/_test_data/images/unit/_image_orientation.tif"));
 }
