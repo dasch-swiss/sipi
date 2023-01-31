@@ -281,6 +281,6 @@ routes = {
     {
         method = 'GET',
         route = '/test_orientation',
-        script = 'orientation.lua'
+        script = 'test_orientation.lua'
     }
 }

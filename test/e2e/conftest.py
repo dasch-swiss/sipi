@@ -81,7 +81,7 @@ class SipiTestManager:
         sipi_config = self.config["Sipi"]
 
         # use the pytest parameter '--sipi-executable-path' instead the one in config.ini
-        if sipi_exec is not "notset":
+        if sipi_exec != "notset":
             self.sipi_executable = sipi_exec
         else:
             self.sipi_executable = os.path.abspath(sipi_config["sipi-executable"])
