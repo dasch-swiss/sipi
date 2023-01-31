@@ -538,12 +538,20 @@ class TestServer:
         assert json_result == expected_result
 
     def test_orientation_topleft(self, manager):
-        """Test rectifying the omage orientation to topleft"""
+        """Test rectifying the image orientation to topleft"""
         response_json = manager.post_file(
             "/api/upload", manager.data_dir_path("unit/image_orientation.jpg"), "image/jpeg")
         filename = response_json["filename"]
         manager.compare_server_images(
             "/unit/{}/full/max/0/default.tif".format(filename), manager.data_dir_path("unit/image_orientation.tif"))
+
+    def test_4bit_palette_png(self, manager):
+        """Test reading 4 bit palette png with alpha channel"""
+        response_json = manager.post_file(
+            "/api/upload", manager.data_dir_path("unit/mario.png"), "image/png")
+        filename = response_json["filename"]
+        manager.compare_server_images(
+            "/unit/{}/full/max/0/default.tif".format(filename), manager.data_dir_path("unit/mario.tif"))
 
 
     def test_upscaling_server(self, manager):
