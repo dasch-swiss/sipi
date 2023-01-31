@@ -637,3 +637,7 @@ class TestServer:
             failure_results += "\nWrote Sipi log file " + manager.sipi_log_file
 
         assert not bad_result, failure_results
+
+    def test_orientation(self, manager):
+        """convert image to always have top-left orientation"""
+        manager.expect_status_code("/test_orientation", 200)
