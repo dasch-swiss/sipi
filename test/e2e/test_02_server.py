@@ -537,6 +537,15 @@ class TestServer:
 
         assert json_result == expected_result
 
+    def test_orientation_topleft(self, manager):
+        """Test rectifying the omage orientation to topleft"""
+        response_json = manager.post_file(
+            "/api/upload", manager.data_dir_path("unit/image_orientation.jpg"), "image/jpeg")
+        filename = response_json["filename"]
+        manager.compare_server_images(
+            "/unit/{}/full/max/0/default.tif".format(filename), manager.data_dir_path("unit/image_orientation.tif"))
+
+
     def test_upscaling_server(self, manager):
         """Test upscaling of an image"""
         manager.compare_server_images(
