@@ -241,9 +241,7 @@ TEST(Sipiimage, WrongRotation)
     Sipi::SipiImage img;
     std::shared_ptr<Sipi::SipiRegion> region = nullptr;
     std::shared_ptr<Sipi::SipiSize> size = nullptr;
-    std::cerr << "+?????????????????????????????????????????" << std::endl;
     ASSERT_NO_THROW(img.readOriginal(wrongrotation, 0, region, size, shttps::HashType::sha256));
-    std::cerr << "-?????????????????????????????????????????" << std::endl;
     EXPECT_EQ(img.getNx(), 3264);
     EXPECT_EQ(img.getNy(), 2448);
     EXPECT_EQ(img.getNc(), 3);
@@ -253,4 +251,6 @@ TEST(Sipiimage, WrongRotation)
     EXPECT_EQ(img.getNy(), 3264);
     EXPECT_EQ(img.getNc(), 3);
     EXPECT_EQ(img.getOrientation(), Sipi::TOPLEFT);
+    ASSERT_NO_THROW(img.write("tif", "../../../../test/_test_data/images/unit/_image_orientation.tif"));
+    EXPECT_TRUE(image_identical("../../../../test/_test_data/images/unit/image_orientation.tif", "../../../../test/_test_data/images/unit/_image_orientation.tif"));
 }
