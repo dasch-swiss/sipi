@@ -559,6 +559,11 @@ class TestServer:
         manager.compare_server_images(
             "/unit/lena512.jp2/full/^1000,/0/default.tif", manager.data_dir_path("unit/lena512_upscaled.tif"))
 
+    def test_file_access(self, manager):
+        """Test access to normal file in IIIF path"""
+        manager.expect_status_code("/unit/test.csv/file", 200)
+        manager.expect_status_code("/unit/test2.csv/file", 401)
+
     def test_concurrency(self, manager):
         """handle many concurrent requests for different URLs (this may take a while, please be patient)"""
 

@@ -21,6 +21,14 @@
 
 require "get_knora_session"
 
+function file_pre_flight(filepath, cookie)
+    if filepath == "./images/unit/test.csv" then
+        return "allow", filepath
+    else
+        return "deny", ""
+    end
+end
+
 -------------------------------------------------------------------------------
 -- This function is being called from sipi before the file is served
 -- Knora is called to ask for the user's permissions on the file
