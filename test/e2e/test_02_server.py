@@ -288,6 +288,8 @@ class TestServer:
                 "/unit/{}/knora.json".format(filename))
             expected_result = test["expected_result"]
             expected_result["id"] += filename
+            print(expected_result)
+            print(response_json)
             assert response_json == expected_result
 
         # expected_result = {
