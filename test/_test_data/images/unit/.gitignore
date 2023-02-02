@@ -1,0 +1,29 @@
+# Ignore everything in this directory
+*
+# Except these files
+!.gitignore
+!image_with_rotation.jpg
+!8pdET49BfoJ-EeRcIbgcLch.info
+!8pdET49BfoJ-EeRcIbgcLch.mp4
+!8pdET49BfoJ-EeRcIbgcLch.mp4.orig
+!big.pdf
+!cielab.tif
+!CIELab16.jpx
+!CIELab16.tif
+!cielab_2.tif
+!cmyk.tif
+!cmyk_lossy.jp2
+!gray_with_icc.jp2
+!has-missing-sidecar-file.mp4
+!has-missing-sidecar-file.mp4.orig
+!HasCommentBlock.JPG
+!image_with_rotation.jpg
+!lena512.jp2
+!lena512.tif
+!lena512_upscaled.tif
+!mario.png
+!mario.tif
+!palette.tif
+!test.csv
+!test.info
+!test2.csv
