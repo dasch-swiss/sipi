@@ -567,7 +567,7 @@ int main(int argc, char *argv[]) {
                        "Path to document root for normal webserver.")->envname("SIPI_DOCROOT")->check(
             CLI::ExistingDirectory);
 
-    std::string optWWWRoute = "/server";`
+    std::string optWWWRoute = "/server";
     sipiopt.add_option("--wwwroute", optWWWRoute, "URL route for standard webserver.")->envname("SIPI_WWWROUTE");
 
     std::string optScriptDir = "./scripts";
