@@ -64,12 +64,44 @@ use the md5-algorithm for the has of the pixel values.
 
 ### SipiImage.dims()
 
-    success, dims = img.dims()
-    if success then
-        server.print('nx=', dims.nx, ' ny=', dims.ny)
-    end
+      success, dims = img.dims()
+      if success then
+          server.print('nx=', dims.nx, ' ny=', dims.ny, ' ori=', dims.orientation)
+      end
 
-Returns the pixel dimensions of the image as dims object.
+This method returns basic information about the image. It returns a Lua table withg the following items:
+- _nx_: Number of pixels in X direction (image width)
+- _ny_: Number of pixels in Y direction (image height)
+- _orientation_: Orientation of image which is an integer with the following meaning:
+  - _1_: (TOPLEFT) The 0th row represents the visual top of the image, and the 0th column represents the visual left-hand side.
+  - _2_: (TOPRIGHT) The 0th row represents the visual top of the image, and the 0th column represents the visual right-hand side.
+  - _3_: (BOTRIGHT) The 0th row represents the visual bottom of the image, and the 0th column represents the visual right-hand side.
+  - _4_: (BOTLEFT) The 0th row represents the visual bottom of the image, and the 0th column represents the visual left-hand side.
+  - _5_: (LEFTTOP) The 0th row represents the visual left-hand side of the image, and the 0th column represents the visual top.
+  - _6_: (RIGHTTOP) The 0th row represents the visual right-hand side of the image, and the 0th column represents the visual top.
+  - _7_: (RIGHTBOT) The 0th row represents the visual right-hand side of the image, and the 0th column represents the visual bottom.
+  - _8_: (LEFTBOT) The 0th row represents the visual left-hand side of the image, and the 0th column represents the visual bottom.
+
+### SipiImage.exif(&lt;EXIF-parameter-name&gt;)
+
+    success, value-or-errormsg = img:exit(<EXIF-parameter-name>)
+
+Return the value of an exif parameter. The following EXIF parameters are supported:
+- _"Orientation"_: Orientation (integer)
+- _"Compression"_: Compression method (integer)
+- _"PhotometricInterpretation"_: The photometric interpretation (integer)
+- _"SamplesPerPixel"_: Samples per pixel (integer)
+- _"ResolutionUnit"_: 1=none, 2=inches, 3=cm (integer)
+- _"PlanarConfiguration"_: Planar configuration, 1=chunky, 2=planar (integer)
+- _"DocumentName"_: Document name (string)
+- _"Make"_: Make of camera or scanner (string)
+- _"Model"_: Model of camera or scanner (string)
+- _"Software"_: Software used for capture (string)
+- _"Artist"_: Artist that created the image (string)
+- _"DateTime"_: Date and time of creation (string)
+- _"ImageDescription"_: Image description
+- _"Copyright"_: Copyright info
+- 
 
 ### SipiImage.crop(&lt;iiif-region-string&gt;)
 
@@ -82,14 +114,19 @@ valid IIIF-region string.
 
     success, errormsg = img.scale(<iiif-size-string>)
 
-Resizes the image to the given size as iiif-conformant size string.
+Resizes the image to the given size as IIIF-conformant size string.
 
 ### SipiImage.rotate(&lt;iiif-rotation-string&gt;)
 
     success, errormsg = img.rotate(<iiif-rotation-string>)
 
-> Rotates and/or mirrors the image according the given iiif-conformant
-> rotation string.
+Rotates and/or mirrors the image according the given iiif-conformant rotation string.
+
+### SipiImage.topleft()
+Rotates an image to the standard TOPLEFT orientation if necessary. Please note
+that viewers using tiling (e.g. [openseadragon](https://openseadragon.github.io)) require images in TOPLEFT rotation.
+Thus, it is highly recommended that all images served by SIPI IIIF will be set to TOPLEFT orientation. This process may
+involve rotation of 90, 180 or 270 degrees and possible mirroring which does _not_ change the pixel values through interpolation.
 
 ### SipiImage.watermark(wm-file-path)
 

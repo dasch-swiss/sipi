@@ -611,7 +611,7 @@ namespace Sipi {
         lua_pop(L, lua_gettop(L));
 
         lua_pushboolean(L, true);
-        lua_createtable(L, 0, 2); // table
+        lua_createtable(L, 0, 3); // table
 
         lua_pushstring(L, "nx"); // table - "nx"
         lua_pushinteger(L, nx); // table - "nx" - <nx>
@@ -679,21 +679,24 @@ namespace Sipi {
                 "Orientation",
                 "Compression",
                 "PhotometricInterpretation",
-                "Thresholding",
+                "SamplesPerPixel",
                 "ResolutionUnit",
-
+                "PlanarConfiguration"
         };
         std::unordered_set<std::string> string_taglist{
                 "DocumentName",
                 "Make",
                 "Model",
                 "Software",
-                "TargetPrinter",
+                "Artist",
+                "DateTime",
+                "ImageDescription",
+                "Copyright"
         };
         std::string tag{tagname};
         if (ushort_taglist.find(tag) != ushort_taglist.end()) {
-            unsigned short orientation;
-            if (!exif->getValByKey("Exif.Image." + tag, orientation)) {
+            unsigned short uval;
+            if (!exif->getValByKey("Exif.Image." + tag, uval)) {
                 lua_pop(L, lua_gettop(L));
                 lua_pushboolean(L, false);
                 lua_pushstring(L, "SipiImage.exif(): no exif Orientation available");
@@ -701,7 +704,7 @@ namespace Sipi {
             }
             lua_pop(L, lua_gettop(L));
             lua_pushboolean(L, true);
-            lua_pushinteger(L, orientation);
+            lua_pushinteger(L, uval);
             return 2;
         }
         else if (string_taglist.find(tag) != string_taglist.end()) {
