@@ -39,6 +39,7 @@ cmake-build-debug
 /cmake-build-debug/
 /cmake-build-debug-remote/
 /cmake-build-debug-inside-docker/
+/cmake-build-dockerdebug/
 # ignore cache
 cache/
 
@@ -48,23 +49,7 @@ cache/
 /server/admin/
 icc.zip
 
-
 # ignore test results
 /Testing
 /test/nginx/logs/error.log
-_lena512.jp2
 /site
-/test/_test_data/images/unit/_cmyk_2.tif
-/test/_test_data/images/unit/_cmyk_lossy.jp2
-/test/_test_data/images/unit/_cmyk.jpg
-/test/_test_data/images/unit/_cmyk.jpx
-/test/_test_data/images/unit/_cmyk.png
-/test/_test_data/images/unit/_grayicc.jpg
-/test/_test_data/images/unit/_palette.jpx
-/test/_test_data/images/unit/cielab.jpx
-/test/_test_data/images/unit/cielab.png
-/test/_test_data/images/unit/CIELab16.jpg
-/test/_test_data/images/unit/CIELab16.png
-/test/_test_data/images/unit/cielab_2.tif
-/cmake-build-dockerdebug
-/test/e2e/diff.tif

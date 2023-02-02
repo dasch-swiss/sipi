@@ -288,6 +288,8 @@ class TestServer:
                 "/unit/{}/knora.json".format(filename))
             expected_result = test["expected_result"]
             expected_result["id"] += filename
+            print(expected_result)
+            print(response_json)
             assert response_json == expected_result
 
         # expected_result = {
@@ -637,3 +639,7 @@ class TestServer:
             failure_results += "\nWrote Sipi log file " + manager.sipi_log_file
 
         assert not bad_result, failure_results
+
+    def test_orientation(self, manager):
+        """convert image to always have top-left orientation"""
+        manager.expect_status_code("/test_orientation", 200)
