@@ -629,7 +629,7 @@ namespace Sipi {
     }
     //=========================================================================
 
-    static void get_exif_string(lua_State *L, std::shared_ptr<SipiExif> exif, const char *tagname) {
+    static void get_exif_string(lua_State *L, std::shared_ptr<SipiExif> exif, const std::string &tagname) {
         std::string tagvalue;
         if (!exif->getValByKey(tagname, tagvalue)) {
             lua_pop(L, lua_gettop(L));
@@ -641,6 +641,44 @@ namespace Sipi {
         lua_pushstring(L, tagvalue.c_str());
     }
 
+    static void get_exif_ushort(lua_State *L, std::shared_ptr<SipiExif> exif, const std::string &tagname) {
+        unsigned short uval;
+        if (!exif->getValByKey(tagname, uval)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_pushinteger(L, uval);
+    }
+
+    static void get_exif_uint(lua_State *L, std::shared_ptr<SipiExif> exif, const std::string &tagname) {
+        unsigned int uval;
+        if (!exif->getValByKey(tagname, uval)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_pushinteger(L, uval);
+    }
+
+    static void get_exif_rational(lua_State *L, std::shared_ptr<SipiExif> exif, const std::string &tagname) {
+        Exiv2::Rational ratval;
+        if (!exif->getValByKey(tagname, ratval)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_Number val{(double) ratval.first / (double) ratval.second};
+        lua_pushnumber(L, val);
+    }
+
+
     /*!
      *
      * @param L Lua interpreter
@@ -649,7 +687,6 @@ namespace Sipi {
      * Lua usage:
      *    SipiImage.exif(img, "<EXIF-TAGNAME>"
      *
-     *  Note: so far anly ORIENTATION is supported!
      */
     static int SImage_get_exif(lua_State *L) {
         if (lua_gettop(L) != 2) {
@@ -683,7 +720,13 @@ namespace Sipi {
                 "ResolutionUnit",
                 "PlanarConfiguration"
         };
+        std::unordered_set<std::string> uint_taglist{
+                "ImageWidth",
+                "ImageLength",
+                "ImageNumber",
+        };
         std::unordered_set<std::string> string_taglist{
+                "ProcessingSoftware",
                 "DocumentName",
                 "Make",
                 "Model",
@@ -691,24 +734,43 @@ namespace Sipi {
                 "Artist",
                 "DateTime",
                 "ImageDescription",
-                "Copyright"
+                "HostComputer",
+                "Copyright",
+                "ImageID",
+                "DateTimeOriginal",
+                "SecurityClassification",
+                "ImageHistory",
+                "UniqueCameraModel",
+                "CameraSerialNumber",
+                "ReelName",
+                "CameraLabel"
         };
+        std::unordered_set<std::string> rational_taglist{
+            "XResolution",
+            "YResolution",
+            "ExposureTime",
+            "FNumber",
+            "ApertureValue",
+            "FocalLength",
+            "FlashEnergy",
+            "NoiseReductionApplied"
+        };
+
         std::string tag{tagname};
         if (ushort_taglist.find(tag) != ushort_taglist.end()) {
-            unsigned short uval;
-            if (!exif->getValByKey("Exif.Image." + tag, uval)) {
-                lua_pop(L, lua_gettop(L));
-                lua_pushboolean(L, false);
-                lua_pushstring(L, "SipiImage.exif(): no exif Orientation available");
-                return 2;
-            }
-            lua_pop(L, lua_gettop(L));
-            lua_pushboolean(L, true);
-            lua_pushinteger(L, uval);
+            get_exif_ushort(L, exif, "Exif.Image." + tag);
+            return 2;
+        }
+        else if (string_taglist.find(tag) != uint_taglist.end()) {
+            get_exif_string(L, exif, "Exif.Image." + tag);
+            return 2;
+        }
+        else if (string_taglist.find(tag) != rational_taglist.end()) {
+            get_exif_string(L, exif, "Exif.Image." + tag);
             return 2;
         }
         else if (string_taglist.find(tag) != string_taglist.end()) {
-            get_exif_string(L, exif, tagname);
+            get_exif_string(L, exif, "Exif.Image." + tag);
             return 2;
         }
         else {
@@ -719,10 +781,260 @@ namespace Sipi {
         }
     }
 
-    /*!
-     * Lua usage:
-     *    SipiImage.mimetype_consistency(img, "image/jpeg", "myfile.jpg")
-     */
+    static int SImage_get_exifgps(lua_State *L) {
+        if (lua_gettop(L) != 1) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.gps(): Incorrect number of arguments");
+            return 2;
+        }
+        SImage *img = checkSImage(L, 1);
+        if (img == nullptr) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.gps(): not a valid image");
+            return 2;
+        }
+        std::shared_ptr<SipiExif> exif = img->image->getExif();
+        if (exif == nullptr) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.gps(): no exif data available");
+            return 2;
+        }
+
+        char latref{'\0'};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSLatitudeRef"), latref)) {
+            latref = '\0';
+        }
+        std::vector<Exiv2::Rational> latitude{{0,1}, {0,1}, {0,1}};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSLatitude"), latitude)) {
+            latitude = {{0,1}, {0,1}, {0,1}};
+        }
+
+        char longituderef{'\0'};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSLongitudeRef"), longituderef)) {
+            longituderef = '\0';
+        }
+        std::vector<Exiv2::Rational> longitude{{0,1}, {0,1}, {0,1}};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSLongitude"), latitude)) {
+            longitude = {{0,1}, {0,1}, {0,1}};
+        }
+
+        char altituderef{'\0'};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSAltitudeRef"), altituderef)) {
+            altituderef = '\0';
+        }
+        std::vector<Exiv2::Rational> altitude{{0,1}, {0,1}, {0,1}};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.Exif.GPSInfo.GPSAltitude"), altitude)) {
+            altitude = {{0,1}, {0,1}, {0,1}};
+        }
+
+        std::vector<Exiv2::Rational> timestamp{{0,1}, {0,1}, {0,1}};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSTimeStamp"), timestamp)) {
+            timestamp = {{0,1}, {0,1}, {0,1}};
+        }
+
+        char speedref{'\0'};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSSpeedRef"), speedref)) {
+            speedref = '\0';
+        }
+        Exiv2::Rational speed{0,1};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSSpeed"), speed)) {
+            speed = {0,1};
+        }
+
+        char trackref{'\0'};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSTrackRef"), trackref)) {
+            trackref = '\0';
+        }
+        Exiv2::Rational track{0,1};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSTrack"), track)) {
+            track = {0,1};
+        }
+
+        char directionref{'\0'};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSImgDirectionRef"), directionref)) {
+            directionref = '\0';
+        }
+        Exiv2::Rational direction{0,1};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSImgDirection"), direction)) {
+            direction = {0,1};
+        }
+
+        char destlatref{'\0'};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSDestLatitudeRef"), destlatref)) {
+            destlatref = '\0';
+        }
+        std::vector<Exiv2::Rational> destlatitude{{0,1}, {0,1}, {0,1}};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSDestLatitude"), destlatitude)) {
+            destlatitude = {{0,1}, {0,1}, {0,1}};
+        }
+
+        char destlongituderef{'\0'};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSDestLongitudeRef"), destlongituderef)) {
+            destlongituderef = '\0';
+        }
+        std::vector<Exiv2::Rational> destlongitude{{0,1}, {0,1}, {0,1}};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSDestLongitude"), destlongitude)) {
+            destlongitude = {{0,0}, {0,0}, {0,0}};
+        }
+
+        char destbearingref{'\0'};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSDestBearingRef"), destbearingref)) {
+            destbearingref = '\0';
+        }
+        Exiv2::Rational destbearing{0,1};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSDestBearing"), destbearing)) {
+            destbearing = {0,1};
+        }
+
+        char destdistanceref{'\0'};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSDestDistanceRef"), destdistanceref)) {
+            destdistanceref = '\0';
+        }
+        Exiv2::Rational destdistance{0,1};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSDestDistance"), destdistance)) {
+            destdistance = {0,1};
+        }
+
+        Exiv2::Rational positioningerror{0,1};
+        if (!exif->getValByKey(std::string("Exif.GPSInfo.GPSHPositioningError"), positioningerror)) {
+            positioningerror = {0,1};
+        }
+
+
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true); // sucess
+
+        lua_createtable(L, 0, 4); // success - table1
+
+        lua_pushstring(L, "GPSLatitudeRef"); // success - table1 - name
+        lua_pushfstring(L, "%c", latref); // success - table1 - name - value
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSLatitude"); // success - table1 - name
+        lua_createtable(L, 0, 3); // success - table1 - name - table2
+        for (int i = 0; i < 3; ++i) {
+            lua_pushinteger(L, i); // success - table1 - name - table2 - i
+            lua_pushnumber(L, (double) latitude[i].first / (double) latitude[i].second); // success - table1 - name - table2 - i - latitude
+            lua_rawset(L, -3); // success - table1 - name - table2
+        }
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSLongitudeRef"); // success - table1 - name
+        lua_pushfstring(L, "%c", longituderef); // success - table1 - name - value
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSLongitude"); // success - table1 - name
+        lua_createtable(L, 0, 3); // success - table1 - name - table2
+        for (int i = 0; i < 3; ++i) {
+            lua_pushinteger(L, i); // success - table1 - name - table2 - i
+            lua_pushnumber(L, (double) longitude[i].first / (double) longitude[i].second); // success - table1 - name - table2 - i - latitude
+            lua_rawset(L, -3); // success - table1 - name - table2
+        }
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSAltitudeRef"); // success - table1 - name
+        lua_pushfstring(L, "%c", altituderef); // success - table1 - name - value
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSAltitude"); // success - table1 - name
+        lua_createtable(L, 0, 3); // success - table1 - name - table2
+        for (int i = 0; i < 3; ++i) {
+            lua_pushinteger(L, i); // success - table1 - name - table2 - i
+            lua_pushnumber(L, (double) altitude[i].first / (double) altitude[i].second); // success - table1 - name - table2 - i - latitude
+            lua_rawset(L, -3); // success - table1 - name - table2
+        }
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSTimeStamp"); // success - table1 - name
+        lua_createtable(L, 0, 3); // success - table1 - name - table2
+        for (int i = 0; i < 3; ++i) {
+            lua_pushinteger(L, i); // success - table1 - name - table2 - i
+            lua_pushnumber(L, (double) timestamp[i].first / (double) timestamp[i].second); // success - table1 - name - table2 - i - latitude
+            lua_rawset(L, -3); // success - table1 - name - table2
+        }
+
+        lua_pushstring(L, "GPSSpeedRef"); // success - table1 - name
+        lua_pushfstring(L, "%c", speedref); // success - table1 - name - value
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSSpeed"); // success - table1 - name
+        lua_pushnumber(L, (double) speed.first / (double) speed.second); // success - table1 - name - value
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSTrackRef"); // success - table1 - name
+        lua_pushfstring(L, "%c", trackref); // success - table1 - name - value
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSTrack"); // success - table1 - name
+        lua_pushnumber(L, (double) track.first / (double) track.second); // success - table1 - name - value
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSImgDirectionRef"); // success - table1 - name
+        lua_pushfstring(L, "%c", directionref); // success - table1 - name - value
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSImgDirection"); // success - table1 - name
+        lua_pushnumber(L, (double) direction.first / (double) direction.second); // success - table1 - name - value
+        lua_rawset(L, -3); // success - table1
+
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSDestLatitudeRef"); // success - table1 - name
+        lua_pushfstring(L, "%c", destlatref); // success - table1 - name - value
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSDestLatitude"); // success - table1 - name
+        lua_createtable(L, 0, 3); // success - table1 - name - table2
+        for (int i = 0; i < 3; ++i) {
+            lua_pushinteger(L, i); // success - table1 - name - table2 - i
+            lua_pushnumber(L, (double) destlatitude[i].first / (double) destlatitude[i].second); // success - table1 - name - table2 - i - latitude
+            lua_rawset(L, -3); // success - table1 - name - table2
+        }
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSDestLongitudeRef"); // success - table1 - name
+        lua_pushfstring(L, "%c", destlongituderef); // success - table1 - name - value
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSDestLongitude"); // success - table1 - name
+        lua_createtable(L, 0, 3); // success - table1 - name - table2
+        for (int i = 0; i < 3; ++i) {
+            lua_pushinteger(L, i); // success - table1 - name - table2 - i
+            lua_pushnumber(L, (double) destlongitude[i].first / (double) destlongitude[i].second); // success - table1 - name - table2 - i - latitude
+            lua_rawset(L, -3); // success - table1 - name - table2
+        }
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSDestBearingRef"); // success - table1 - name
+        lua_pushfstring(L, "%c", destbearingref); // success - table1 - name - value
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSDestBearing"); // success - table1 - name
+        lua_pushnumber(L, (double) destbearing.first / (double) destbearing.second); // success - table1 - name - value
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSDestDistanceRef"); // success - table1 - name
+        lua_pushfstring(L, "%c", destdistanceref); // success - table1 - name - value
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSDestDistance"); // success - table1 - name
+        lua_pushnumber(L, (double) destdistance.first / (double) destdistance.second); // success - table1 - name - value
+        lua_rawset(L, -3); // success - table1
+
+        lua_pushstring(L, "GPSHPositioningError"); // success - table1 - name
+        lua_pushnumber(L, (double) positioningerror.first / (double) positioningerror.second); // success - table1 - name - value
+        lua_rawset(L, -3); // success - table1
+
+        return 2;
+    }
+
+        /*!
+         * Lua usage:
+         *    SipiImage.mimetype_consistency(img, "image/jpeg", "myfile.jpg")
+         */
     static int SImage_mimetype_consistency(lua_State *L) {
         int top = lua_gettop(L);
 
@@ -1213,12 +1525,13 @@ namespace Sipi {
     static const luaL_Reg SImage_methods[] = {{"new",                  SImage_new},
                                               {"dims",                 SImage_dims}, // #myimg
                                               {"exif",                 SImage_get_exif}, // myimg
+                                              {"gps",                  SImage_get_exifgps},
                                               {"write",                SImage_write}, // myimg >> filename
                                               {"send",                 SImage_send}, // myimg
                                               {"crop",                 SImage_crop}, // myimg - "100,100,500,500"
                                               {"scale",                SImage_scale}, // myimg % "500,"
                                               {"rotate",               SImage_rotate}, // myimg * 45.0
-                                              {"topleft",               SImage_set_topleft},
+                                              {"topleft",              SImage_set_topleft},
                                               {"watermark",            SImage_watermark}, // myimg + "wm-path"
                                               {"mimetype_consistency", SImage_mimetype_consistency},
                                               {0,                      0}};

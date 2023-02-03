@@ -487,6 +487,53 @@ namespace Sipi {
 
 
     //____________________________________________________________________________
+    // char values
+    //
+    bool SipiExif::getValByKey(const std::string key_p, char &c) {
+        try {
+            Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
+            Exiv2::ExifData::iterator pos = exifData.findKey(key);
+            if (pos == exifData.end()) {
+                return false;
+            }
+            Exiv2::Value::AutoPtr v = pos->getValue();
+            c = (char) v->toLong();
+            return v->ok();
+        } catch (const Exiv2::BasicError<char> &err) {
+            return false;
+        }
+    }
+    //============================================================================
+
+
+    bool SipiExif::getValByKey(uint16_t tag, const std::string &groupName, char &c) {
+        Exiv2::ExifKey key = Exiv2::ExifKey(tag, groupName);
+        Exiv2::ExifData::iterator pos = exifData.findKey(key);
+        if (pos == exifData.end()) {
+            return false;
+        }
+        Exiv2::Value::AutoPtr v = pos->getValue();
+        c = (char) v->toLong();
+        return v->ok();
+    }
+    //============================================================================
+
+
+    bool SipiExif::getValByKey(uint16_t tag, const std::string &groupName, std::vector<char> &vc) {
+        Exiv2::ExifKey key = Exiv2::ExifKey(tag, groupName);
+        Exiv2::ExifData::iterator pos = exifData.findKey(key);
+        if (pos == exifData.end()) {
+            return false;
+        }
+        Exiv2::Value::AutoPtr v = pos->getValue();
+        for (int i = 0; i < v->count(); i++) {
+            vc.push_back((char) v->toLong(i));
+        }
+        return v->ok();
+    }
+    //============================================================================
+
+    //____________________________________________________________________________
     // unsigned char values
     //
     bool SipiExif::getValByKey(const std::string key_p, unsigned char &uc) {
@@ -613,6 +660,20 @@ namespace Sipi {
     }
     //============================================================================
 
+
+    bool SipiExif::getValByKey(const std::string key_p, std::vector<Exiv2::Rational> &r) {
+        Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
+        Exiv2::ExifData::iterator pos = exifData.findKey(key);
+        if (pos == exifData.end()) {
+            return false;
+        }
+        Exiv2::Value::AutoPtr v = pos->getValue();
+        for (int i = 0; i < v->count(); i++) {
+            r.push_back(v->toRational(i));
+        }
+        return v->ok();
+    }
+    //============================================================================
 
     bool SipiExif::getValByKey(uint16_t tag, const std::string &groupName, std::vector<Exiv2::Rational> &r) {
         Exiv2::ExifKey key = Exiv2::ExifKey(tag, groupName);

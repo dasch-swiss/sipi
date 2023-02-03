@@ -427,6 +427,15 @@ namespace Sipi {
         //____________________________________________________________________________
         // unsigned char values
         //
+        bool getValByKey(const std::string key_p, char &c);
+
+        bool getValByKey(uint16_t tag, const std::string &groupName, char &c);
+
+        bool getValByKey(uint16_t tag, const std::string &groupName, std::vector<char> &vc);
+
+        //____________________________________________________________________________
+        // unsigned char values
+        //
         bool getValByKey(const std::string key_p, unsigned char &uc);
 
         bool getValByKey(uint16_t tag, const std::string &groupName, unsigned char &uc);
@@ -476,6 +485,8 @@ namespace Sipi {
          * \returns true, if key is existing and the value could be retrieved, false otherwise
          */
         bool getValByKey(uint16_t tag, const std::string &groupName, Exiv2::Rational &r);
+
+        bool getValByKey(const std::string key_p, std::vector<Exiv2::Rational> &r);
 
         bool getValByKey(uint16_t tag, const std::string &groupName, std::vector<Exiv2::Rational> &r);
 
