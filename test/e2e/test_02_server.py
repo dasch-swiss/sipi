@@ -648,3 +648,20 @@ class TestServer:
     def test_orientation(self, manager):
         """convert image to always have top-left orientation"""
         manager.expect_status_code("/test_orientation", 200)
+
+    def test_exif_gps(self, manager):
+        expected_result = {
+            'make': 'Apple',
+            'datetime': '2022:12:11 13:02:51',
+            'compression': 0,
+            'ori': 1,
+            'model': 'iPhone 12 Pro'
+        }
+
+        response_json = manager.get_json("/test_exif_gps")
+        #assert response_json == expected_result
+        print('-------------------------------')
+        print(response_json)
+        print('-------------------------------')
+
+

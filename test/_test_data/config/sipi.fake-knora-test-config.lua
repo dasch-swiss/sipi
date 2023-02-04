@@ -282,5 +282,10 @@ routes = {
         method = 'GET',
         route = '/test_orientation',
         script = 'test_orientation.lua'
+    },
+    {
+        method = 'GET',
+        route = '/test_exif_gps',
+        script = 'test_exif_gps.lua'
     }
 }

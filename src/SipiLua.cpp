@@ -636,6 +636,7 @@ namespace Sipi {
             lua_pushboolean(L, false);
             lua_pushstring(L, "Sipi.Image.exif(): requested exif tag not available");
         }
+        std::cerr << "=====> get_exif_string: " << tagname << " -> " << tagvalue << std::endl;
         lua_pop(L, lua_gettop(L));
         lua_pushboolean(L, true);
         lua_pushstring(L, tagvalue.c_str());
@@ -648,6 +649,7 @@ namespace Sipi {
             lua_pushboolean(L, false);
             lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
         }
+        std::cerr << "=====> get_exif_ushort: " << tagname << " -> " << uval << std::endl;
         lua_pop(L, lua_gettop(L));
         lua_pushboolean(L, true);
         lua_pushinteger(L, uval);
@@ -660,6 +662,7 @@ namespace Sipi {
             lua_pushboolean(L, false);
             lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
         }
+        std::cerr << "=====> get_exif_uint: " << tagname << " -> " << uval << std::endl;
         lua_pop(L, lua_gettop(L));
         lua_pushboolean(L, true);
         lua_pushinteger(L, uval);
@@ -672,10 +675,10 @@ namespace Sipi {
             lua_pushboolean(L, false);
             lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
         }
+        std::cerr << "=====> get_exif_rational: " << tagname << " -> " << ratval.first << "/" << ratval.second << std::endl;
         lua_pop(L, lua_gettop(L));
         lua_pushboolean(L, true);
-        lua_Number val{(double) ratval.first / (double) ratval.second};
-        lua_pushnumber(L, val);
+        lua_pushnumber(L, (double) ratval.first / (double) ratval.second);
     }
 
 
@@ -757,19 +760,24 @@ namespace Sipi {
         };
 
         std::string tag{tagname};
+        std::cerr << "TAGNAME=" << tag << std::endl;
         if (ushort_taglist.find(tag) != ushort_taglist.end()) {
+            std::cerr << "FOUND IN ushort_taglist" << std::endl;
             get_exif_ushort(L, exif, "Exif.Image." + tag);
             return 2;
         }
-        else if (string_taglist.find(tag) != uint_taglist.end()) {
-            get_exif_string(L, exif, "Exif.Image." + tag);
+        else if (uint_taglist.find(tag) != uint_taglist.end()) {
+            std::cerr << "FOUND IN uint_taglist" << std::endl;
+            get_exif_uint(L, exif, "Exif.Image." + tag);
             return 2;
         }
-        else if (string_taglist.find(tag) != rational_taglist.end()) {
-            get_exif_string(L, exif, "Exif.Image." + tag);
+        else if (rational_taglist.find(tag) != rational_taglist.end()) {
+            std::cerr << "FOUND IN rational_taglist" << std::endl;
+            get_exif_rational(L, exif, "Exif.Image." + tag);
             return 2;
         }
         else if (string_taglist.find(tag) != string_taglist.end()) {
+            std::cerr << "FOUND IN string_taglist" << std::endl;
             get_exif_string(L, exif, "Exif.Image." + tag);
             return 2;
         }
