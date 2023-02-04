@@ -53,3 +53,4 @@ icc.zip
 /Testing
 /test/nginx/logs/error.log
 /site
+/test/e2e/diff.tif
