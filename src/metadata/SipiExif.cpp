@@ -632,6 +632,7 @@ namespace Sipi {
     // Rational values
     //
     bool SipiExif::getValByKey(const std::string key_p, Exiv2::Rational &r) {
+        std::cerr << "????????> SipiExif::getValByKey(const std::string key_p, Exiv2::Rational &r)" << std::endl;
         try {
             Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
             Exiv2::ExifData::iterator pos = exifData.findKey(key);
@@ -639,6 +640,8 @@ namespace Sipi {
                 return false;
             }
             Exiv2::Value::AutoPtr v = pos->getValue();
+            auto t = v->typeId();
+            std::cerr << "-----TYPEID=" << t << std::endl;
             r =  v->toRational();
             return v->ok();
         } catch (const Exiv2::BasicError<char> &err) {

@@ -635,6 +635,7 @@ namespace Sipi {
             lua_pop(L, lua_gettop(L));
             lua_pushboolean(L, false);
             lua_pushstring(L, "Sipi.Image.exif(): requested exif tag not available");
+            return;
         }
         std::cerr << "=====> get_exif_string: " << tagname << " -> " << tagvalue << std::endl;
         lua_pop(L, lua_gettop(L));
@@ -643,11 +644,12 @@ namespace Sipi {
     }
 
     static void get_exif_ushort(lua_State *L, std::shared_ptr<SipiExif> exif, const std::string &tagname) {
-        unsigned short uval;
+        unsigned short uval{0};
         if (!exif->getValByKey(tagname, uval)) {
             lua_pop(L, lua_gettop(L));
             lua_pushboolean(L, false);
             lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+            return;
         }
         std::cerr << "=====> get_exif_ushort: " << tagname << " -> " << uval << std::endl;
         lua_pop(L, lua_gettop(L));
@@ -656,11 +658,12 @@ namespace Sipi {
     }
 
     static void get_exif_uint(lua_State *L, std::shared_ptr<SipiExif> exif, const std::string &tagname) {
-        unsigned int uval;
+        unsigned int uval{0};
         if (!exif->getValByKey(tagname, uval)) {
             lua_pop(L, lua_gettop(L));
             lua_pushboolean(L, false);
             lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+            return;
         }
         std::cerr << "=====> get_exif_uint: " << tagname << " -> " << uval << std::endl;
         lua_pop(L, lua_gettop(L));
@@ -669,11 +672,12 @@ namespace Sipi {
     }
 
     static void get_exif_rational(lua_State *L, std::shared_ptr<SipiExif> exif, const std::string &tagname) {
-        Exiv2::Rational ratval;
+        Exiv2::Rational ratval{0,1};
         if (!exif->getValByKey(tagname, ratval)) {
             lua_pop(L, lua_gettop(L));
             lua_pushboolean(L, false);
             lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+            return;
         }
         std::cerr << "=====> get_exif_rational: " << tagname << " -> " << ratval.first << "/" << ratval.second << std::endl;
         lua_pop(L, lua_gettop(L));
