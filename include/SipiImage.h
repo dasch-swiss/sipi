@@ -172,9 +172,9 @@ class SipiImageError : public std::exception {
         friend class SipiIOPng;     //!< I/O class for the PNG file format
      private:
         static std::unordered_map<std::string, std::shared_ptr<SipiIO> > io; //!< member variable holding a map of I/O class instances for the different file formats
-        byte bilinn(byte buf[], register int nx, register double x, register double y, register int c, register int n);
+        static byte bilinn(byte buf[], register int nx, register double x, register double y, register int c, register int n);
 
-        word bilinn(word buf[], register int nx, register double x, register double y, register int c, register int n);
+        static word bilinn(word buf[], register int nx, register double x, register double y, register int c, register int n);
 
         void ensure_exif();
 
@@ -374,8 +374,8 @@ class SipiImageError : public std::exception {
          *
          * \throws SipiError
          */
-        void read(std::string filepath, int pagenum = 0, std::shared_ptr<SipiRegion> region = nullptr,
-                  std::shared_ptr<SipiSize> size = nullptr, bool force_bps_8 = false,
+        void read(const std::string& filepath, int pagenum = 0, const std::shared_ptr<SipiRegion>& region = nullptr,
+                  const std::shared_ptr<SipiSize>& size = nullptr, bool force_bps_8 = false,
                   ScalingQuality scaling_quality = {HIGH, HIGH, HIGH, HIGH});
 
         /*!
@@ -399,7 +399,7 @@ class SipiImageError : public std::exception {
          * \returns true, if everything worked. False, if the checksums do not match.
          */
         bool
-        readOriginal(const std::string &filepath, int pagenum = 0, std::shared_ptr<SipiRegion> region = nullptr, std::shared_ptr<SipiSize> size = nullptr,
+        readOriginal(const std::string &filepath, int pagenum = 0, const std::shared_ptr<SipiRegion>& region = nullptr, const std::shared_ptr<SipiSize>& size = nullptr,
                      shttps::HashType htype = shttps::HashType::sha256);
 
         /*!
@@ -424,7 +424,7 @@ class SipiImageError : public std::exception {
          * \returns true, if everything worked. False, if the checksums do not match.
          */
         bool
-        readOriginal(const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region, std::shared_ptr<SipiSize> size,
+        readOriginal(const std::string &filepath, int pagenum, const std::shared_ptr<SipiRegion>& region, const std::shared_ptr<SipiSize>& size,
                      const std::string &origname, shttps::HashType htype);
 
 

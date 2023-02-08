@@ -22,13 +22,9 @@
  */
 #include <string>
 #include <iostream>
-#include <sstream>
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include<unordered_set>
 
-#include <stdio.h>
 #include <SipiCache.h>
 #include <SipiFilenameHash.h>
 
@@ -37,7 +33,6 @@
 #include "SipiImage.h"
 #include "SipiLua.h"
 #include "SipiHttpServer.h"
-#include "SipiCache.h"
 #include "Error.h"
 
 namespace Sipi {
@@ -83,7 +78,7 @@ namespace Sipi {
      */
     static int lua_cache_size(lua_State *L) {
         lua_getglobal(L, sipiserver);
-        SipiHttpServer *server = (SipiHttpServer *) lua_touserdata(L, -1);
+        auto *server = (SipiHttpServer *) lua_touserdata(L, -1);
         lua_remove(L, -1); // remove from stack
         std::shared_ptr<SipiCache> cache = server->cache();
 
@@ -94,7 +89,7 @@ namespace Sipi {
 
         unsigned long long size = cache->getCachesize();
 
-        lua_pushinteger(L, size);
+        lua_pushinteger(L, static_cast<lua_Integer>(size));
         return 1;
     }
     //=========================================================================
@@ -105,7 +100,7 @@ namespace Sipi {
      */
     static int lua_cache_max_size(lua_State *L) {
         lua_getglobal(L, sipiserver);
-        SipiHttpServer *server = (SipiHttpServer *) lua_touserdata(L, -1);
+        auto *server = (SipiHttpServer *) lua_touserdata(L, -1);
         lua_remove(L, -1); // remove from stack
         std::shared_ptr<SipiCache> cache = server->cache();
 
@@ -116,7 +111,7 @@ namespace Sipi {
 
         unsigned long long maxsize = cache->getMaxCachesize();
 
-        lua_pushinteger(L, maxsize);
+        lua_pushinteger(L, static_cast<lua_Integer>(maxsize));
         return 1;
     }
     //=========================================================================
@@ -127,7 +122,7 @@ namespace Sipi {
      */
     static int lua_cache_nfiles(lua_State *L) {
         lua_getglobal(L, sipiserver);
-        SipiHttpServer *server = (SipiHttpServer *) lua_touserdata(L, -1);
+        auto *server = (SipiHttpServer *) lua_touserdata(L, -1);
         lua_remove(L, -1); // remove from stack
         std::shared_ptr<SipiCache> cache = server->cache();
 
@@ -149,7 +144,7 @@ namespace Sipi {
      */
     static int lua_cache_max_nfiles(lua_State *L) {
         lua_getglobal(L, sipiserver);
-        SipiHttpServer *server = (SipiHttpServer *) lua_touserdata(L, -1);
+        auto *server = (SipiHttpServer *) lua_touserdata(L, -1);
         lua_remove(L, -1); // remove from stack
         std::shared_ptr<SipiCache> cache = server->cache();
 
@@ -172,7 +167,7 @@ namespace Sipi {
      */
     static int lua_cache_path(lua_State *L) {
         lua_getglobal(L, sipiserver);
-        SipiHttpServer *server = (SipiHttpServer *) lua_touserdata(L, -1);
+        auto *server = (SipiHttpServer *) lua_touserdata(L, -1);
         lua_remove(L, -1); // remove from stack
         std::shared_ptr<SipiCache> cache = server->cache();
 
@@ -189,7 +184,7 @@ namespace Sipi {
 
     static void
     add_one_cache_file(int index, const std::string &canonical, const SipiCache::CacheRecord &cr, void *userdata) {
-        lua_State *L = (lua_State *) userdata;
+        auto *L = (lua_State *) userdata;
 
         lua_pushinteger(L, index);
         lua_createtable(L, 0, 4); // table1
@@ -219,14 +214,12 @@ namespace Sipi {
         lua_rawset(L, -3);
 
         lua_rawset(L, -3);
-
-        return;
-    }
+   }
     //=========================================================================
 
     static int lua_cache_filelist(lua_State *L) {
         lua_getglobal(L, sipiserver);
-        SipiHttpServer *server = (SipiHttpServer *) lua_touserdata(L, -1);
+        auto *server = (SipiHttpServer *) lua_touserdata(L, -1);
         lua_remove(L, -1); // remove from stack
 
         int top = lua_gettop(L);
@@ -263,7 +256,7 @@ namespace Sipi {
 
     static int lua_delete_cache_file(lua_State *L) {
         lua_getglobal(L, sipiserver);
-        SipiHttpServer *server = (SipiHttpServer *) lua_touserdata(L, -1);
+        auto *server = (SipiHttpServer *) lua_touserdata(L, -1);
         lua_remove(L, -1); // remove from stack
         std::shared_ptr<SipiCache> cache = server->cache();
 
@@ -292,7 +285,7 @@ namespace Sipi {
 
     static int lua_purge_cache(lua_State *L) {
         lua_getglobal(L, sipiserver);
-        SipiHttpServer *server = (SipiHttpServer *) lua_touserdata(L, -1);
+        auto *server = (SipiHttpServer *) lua_touserdata(L, -1);
         lua_remove(L, -1); // remove from stack
         std::shared_ptr<SipiCache> cache = server->cache();
 
@@ -316,7 +309,7 @@ namespace Sipi {
                                              {"filelist",   lua_cache_filelist},
                                              {"delete",     lua_delete_cache_file},
                                              {"purge",      lua_purge_cache},
-                                             {0,            0}};
+                                             {nullptr,            nullptr}};
     //=========================================================================
 
     static int lua_filenamehash_helper(lua_State *L) {
@@ -361,13 +354,13 @@ namespace Sipi {
     //=========================================================================
 
     static const luaL_Reg helper_methods[] = {{"filename_hash", lua_filenamehash_helper},
-                                             {0,            0}};
+                                             {nullptr, nullptr}};
     //=========================================================================
 
 
 
     static SImage *toSImage(lua_State *L, int index) {
-        SImage *img = (SImage *) lua_touserdata(L, index);
+        auto *img = (SImage *) lua_touserdata(L, index);
         if (img == nullptr) {
             lua_pushstring(L, "Type error: Not userdata object");
             lua_error(L);
@@ -389,7 +382,7 @@ namespace Sipi {
     //=========================================================================
 
     static SImage *pushSImage(lua_State *L, const SImage &simage) {
-        SImage *img = (SImage *) lua_newuserdata(L, sizeof(SImage));
+        auto *img = (SImage *) lua_newuserdata(L, sizeof(SImage));
         *img = simage;
         luaL_getmetatable(L, SIMAGE);
         lua_setmetatable(L, -2);
@@ -411,7 +404,7 @@ namespace Sipi {
      */
     static int SImage_new(lua_State *L) {
         lua_getglobal(L, shttps::luaconnection);
-        shttps::Connection *conn = (shttps::Connection *) lua_touserdata(L, -1);
+        auto *conn = (shttps::Connection *) lua_touserdata(L, -1);
         lua_remove(L, -1); // remove from stacks
         int top = lua_gettop(L);
 
@@ -639,11 +632,11 @@ namespace Sipi {
         lua_createtable(L, 0, 3); // table
 
         lua_pushstring(L, "nx"); // table - "nx"
-        lua_pushinteger(L, nx); // table - "nx" - <nx>
+        lua_pushinteger(L, static_cast<lua_Integer>(nx)); // table - "nx" - <nx>
         lua_rawset(L, -3); // table
 
         lua_pushstring(L, "ny"); // table - "ny"
-        lua_pushinteger(L, ny); // table - "ny" - <ny>
+        lua_pushinteger(L, static_cast<lua_Integer>(ny)); // table - "ny" - <ny>
         lua_rawset(L, -3); // table
 
         lua_pushstring(L, "orientation"); // table - "orientation"
@@ -1572,15 +1565,6 @@ namespace Sipi {
 
         SImage *img = checkSImage(L, 1);
 
-        Orientation orientation = img->image->getOrientation();
-        std::shared_ptr<SipiExif> exif = img->image->getExif();
-        if (exif != nullptr) {
-            unsigned short ori;
-            if (exif->getValByKey("Exif.Image.Orientation", ori)) {
-                orientation = static_cast<Orientation>(ori);
-            }
-        }
-
         img->image->set_topleft();
         img->image->setOrientation(TOPLEFT);
 
@@ -1686,11 +1670,11 @@ namespace Sipi {
                             std::stringstream ss;
                             ss << i;
                             value = ss.str();
-                        } catch (std::invalid_argument) {
+                        } catch (std::invalid_argument &err) {
                             lua_pop(L, lua_gettop(L));
                             lua_pushstring(L, "SipiImage.write(): invalid Clayers!");
                             return lua_error(L);
-                        } catch(std::out_of_range) {
+                        } catch(std::out_of_range &err) {
                             lua_pop(L, lua_gettop(L));
                             lua_pushstring(L, "SipiImage.write(): invalid Clayers!");
                             return lua_error(L);
@@ -1702,11 +1686,11 @@ namespace Sipi {
                             std::stringstream ss;
                             ss << i;
                             value = ss.str();
-                        } catch (std::invalid_argument) {
+                        } catch (std::invalid_argument &err) {
                             lua_pop(L, lua_gettop(L));
                             lua_pushstring(L, "SipiImage.write(): invalid Clevels!");
                             return lua_error(L);
-                        } catch(std::out_of_range) {
+                        } catch(std::out_of_range &err) {
                             lua_pop(L, lua_gettop(L));
                             lua_pushstring(L, "SipiImage.write(): invalid Clevels!");
                             return lua_error(L);
@@ -1748,8 +1732,8 @@ namespace Sipi {
         }
 
         std::string filename = imgpath;
-        size_t pos_ext = filename.find_last_of(".");
-        size_t pos_start = filename.find_last_of("/");
+        size_t pos_ext = filename.find_last_of('.');
+        size_t pos_start = filename.find_last_of('/');
         std::string dirpath;
         std::string basename;
         std::string extension;
@@ -1786,7 +1770,7 @@ namespace Sipi {
 
         if ((basename == "http") || (basename == "HTTP")) {
             lua_getglobal(L, shttps::luaconnection); // push onto stack
-            shttps::Connection *conn = (shttps::Connection *) lua_touserdata(L, -1); // does not change the stack
+            auto *conn = (shttps::Connection *) lua_touserdata(L, -1); // does not change the stack
             lua_remove(L, -1); // remove from stack
             img->image->connection(conn);
             try {
@@ -1854,7 +1838,7 @@ namespace Sipi {
         }
 
         lua_getglobal(L, shttps::luaconnection); // push onto stack
-        shttps::Connection *conn = (shttps::Connection *) lua_touserdata(L, -1); // does not change the stack
+        auto *conn = (shttps::Connection *) lua_touserdata(L, -1); // does not change the stack
         lua_remove(L, -1); // remove from stack
 
         img->image->connection(conn);
@@ -1887,7 +1871,7 @@ namespace Sipi {
                                               {"topleft",              SImage_set_topleft},
                                               {"watermark",            SImage_watermark}, // myimg + "wm-path"
                                               {"mimetype_consistency", SImage_mimetype_consistency},
-                                              {0,                      0}};
+                                              {nullptr,                      nullptr}};
     //=========================================================================
 
     static int SImage_gc(lua_State *L) {
@@ -1910,12 +1894,12 @@ namespace Sipi {
 
     static const luaL_Reg SImage_meta[] = {{"__gc",       SImage_gc},
                                            {"__tostring", SImage_tostring},
-                                           {0,            0}};
+                                           {nullptr,            nullptr}};
     //=========================================================================
 
 
     void sipiGlobals(lua_State *L, shttps::Connection &conn, void *user_data) {
-        SipiHttpServer *server = (SipiHttpServer *) user_data;
+        auto *server = (SipiHttpServer *) user_data;
 
         //
         // filesystem functions

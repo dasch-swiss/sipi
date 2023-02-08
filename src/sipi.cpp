@@ -845,7 +845,7 @@ int main(int argc, char *argv[]) {
             std::shared_ptr<Sipi::SipiExif> exif = img.getExif();
             if (exif != nullptr) {
                 unsigned short ori;
-                if (exif->getValByKey<unsigned short>("Exif.Image.Orientation", ori)) {
+                if (exif->getValByKey("Exif.Image.Orientation", ori)) {
                     orientation = static_cast<Sipi::Orientation>(ori);
                 }
             }
