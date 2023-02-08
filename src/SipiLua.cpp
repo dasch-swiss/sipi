@@ -42,6 +42,31 @@
 
 namespace Sipi {
 
+    typedef enum {
+        EXIV2_ASCII,
+        EXIV2_ASCIIV,
+        EXIV2_BYTE,
+        EXIV2_BYTEV,
+        EXIV2_UBYTE,
+        EXIV2_UBYTEV,
+        EXIV2_SHORT,
+        EXIV2_SHORTV,
+        EXIV2_USHORT,
+        EXIV2_USHORTV,
+        EXIV2_LONG,
+        EXIV2_LONGV,
+        EXIV2_ULONG,
+        EXIV2_ULONGV,
+        EXIV2_FLOAT,
+        EXIV2_FLOATV,
+        EXIV2_RATIONAL,
+        EXIV2_RATIONALV,
+        EXIV2_URATIONAL,
+        EXIV2_URATIONALV
+    } Exiv2DataType;
+
+    typedef std::pair<std::string,Exiv2DataType> Exiv2Valinfo;
+
     char sipiserver[] = "__sipiserver";
 
     static const char SIMAGE[] = "SipiImage";
@@ -629,21 +654,131 @@ namespace Sipi {
     }
     //=========================================================================
 
-    static void get_exif_string(lua_State *L, std::shared_ptr<SipiExif> exif, const std::string &tagname) {
+
+
+    static void get_exif_string(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
         std::string tagvalue;
+        std::cerr << "AA) ?=?=?=?=? =======> LUA: in get_exif_string(" << tagname << "): uval=" << tagvalue << std::endl;
         if (!exif->getValByKey(tagname, tagvalue)) {
             lua_pop(L, lua_gettop(L));
             lua_pushboolean(L, false);
             lua_pushstring(L, "Sipi.Image.exif(): requested exif tag not available");
             return;
         }
-        std::cerr << "=====> get_exif_string: " << tagname << " -> " << tagvalue << std::endl;
+        std::cerr << "BB) ?=?=?=?=? =======> LUA: in get_exif_string(" << tagname << "): uval=" << tagvalue << std::endl;
         lua_pop(L, lua_gettop(L));
         lua_pushboolean(L, true);
         lua_pushstring(L, tagvalue.c_str());
     }
 
-    static void get_exif_ushort(lua_State *L, std::shared_ptr<SipiExif> exif, const std::string &tagname) {
+    static void get_exif_stringv(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
+        std::vector<std::string> val;
+        if (!exif->getValByKey(tagname, val)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "Sipi.Image.exif(): requested exif tag not available");
+            return;
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_createtable(L, static_cast<int>(val.size()), 0);
+        for (int i = 0; i < val.size(); ++i) {
+            lua_pushstring(L, val[i].c_str());
+            lua_rawseti (L, -2, i+1);
+        }
+    }
+
+    static void get_exif_byte(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
+        char val{0};
+        if (!exif->getValByKey(tagname, val)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+            return;
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_pushinteger(L, static_cast<lua_Integer>(val));
+    }
+
+    static void get_exif_bytev(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
+        std::vector<char> val;
+        if (!exif->getValByKey(tagname, val)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+            return;
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_createtable(L, static_cast<int>(val.size()), 0);
+        for (int i = 0; i < val.size(); ++i) {
+            lua_pushinteger(L, static_cast<lua_Integer>(val[i]));
+            lua_rawseti (L, -2, i+1);
+        }
+    }
+
+    static void get_exif_ubyte(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
+        unsigned char val{0};
+        if (!exif->getValByKey(tagname, val)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+            return;
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_pushinteger(L, static_cast<lua_Integer>(val));
+    }
+
+    static void get_exif_ubytev(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
+        std::vector<unsigned char> val;
+        if (!exif->getValByKey(tagname, val)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+            return;
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_createtable(L, static_cast<int>(val.size()), 0);
+        for (int i = 0; i < val.size(); ++i) {
+            lua_pushinteger(L, static_cast<lua_Integer>(val[i]));
+            lua_rawseti (L, -2, i+1);
+        }
+    }
+
+    static void get_exif_short(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
+        short val{0};
+        if (!exif->getValByKey(tagname, val)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+            return;
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_pushinteger(L, val);
+    }
+
+    static void get_exif_shortv(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
+        std::vector<short> val;
+        if (!exif->getValByKey(tagname, val)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+            return;
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_createtable(L, static_cast<int>(val.size()), 0);
+        for (int i = 0; i < val.size(); ++i) {
+            lua_pushinteger(L, static_cast<lua_Integer>(val[i]));
+            lua_rawseti (L, -2, i+1);
+        }
+    }
+
+    static void get_exif_ushort(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
         unsigned short uval{0};
         if (!exif->getValByKey(tagname, uval)) {
             lua_pop(L, lua_gettop(L));
@@ -651,13 +786,60 @@ namespace Sipi {
             lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
             return;
         }
-        std::cerr << "=====> get_exif_ushort: " << tagname << " -> " << uval << std::endl;
+        std::cerr << "?=?=?=?=? =======> LUA: in get_exif_ushort(" << tagname << "): uval=" << uval << std::endl;
         lua_pop(L, lua_gettop(L));
         lua_pushboolean(L, true);
         lua_pushinteger(L, uval);
     }
 
-    static void get_exif_uint(lua_State *L, std::shared_ptr<SipiExif> exif, const std::string &tagname) {
+    static void get_exif_ushortv(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
+        std::vector<unsigned short> val;
+        if (!exif->getValByKey(tagname, val)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+            return;
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_createtable(L, static_cast<int>(val.size()), 0);
+        for (int i = 0; i < val.size(); ++i) {
+            lua_pushinteger(L, static_cast<lua_Integer>(val[i]));
+            lua_rawseti (L, -2, i+1);
+        }
+    }
+
+    static void get_exif_int(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
+        int uval{0};
+        if (!exif->getValByKey(tagname, uval)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+            return;
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_pushinteger(L, uval);
+    }
+
+    static void get_exif_intv(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
+        std::vector<int> val;
+        if (!exif->getValByKey(tagname, val)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+            return;
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_createtable(L, static_cast<int>(val.size()), 0);
+        for (int i = 0; i < val.size(); ++i) {
+            lua_pushinteger(L, static_cast<lua_Integer>(val[i]));
+            lua_rawseti (L, -2, i+1);
+        }
+    }
+
+    static void get_exif_uint(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
         unsigned int uval{0};
         if (!exif->getValByKey(tagname, uval)) {
             lua_pop(L, lua_gettop(L));
@@ -665,13 +847,59 @@ namespace Sipi {
             lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
             return;
         }
-        std::cerr << "=====> get_exif_uint: " << tagname << " -> " << uval << std::endl;
         lua_pop(L, lua_gettop(L));
         lua_pushboolean(L, true);
         lua_pushinteger(L, uval);
     }
 
-    static void get_exif_rational(lua_State *L, std::shared_ptr<SipiExif> exif, const std::string &tagname) {
+    static void get_exif_uintv(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
+        std::vector<unsigned int> val;
+        if (!exif->getValByKey(tagname, val)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+            return;
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_createtable(L, static_cast<int>(val.size()), 0);
+        for (int i = 0; i < val.size(); ++i) {
+            lua_pushinteger(L, static_cast<lua_Integer>(val[i]));
+            lua_rawseti (L, -2, i+1);
+        }
+    }
+
+    static void get_exif_float(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
+        float val{0};
+        if (!exif->getValByKey(tagname, val)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+            return;
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_pushnumber(L, static_cast<lua_Number>(val));
+    }
+
+    static void get_exif_floatv(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
+        std::vector<float> val;
+        if (!exif->getValByKey(tagname, val)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+            return;
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_createtable(L, static_cast<int>(val.size()), 0);
+        for (int i = 0; i < val.size(); ++i) {
+            lua_pushnumber(L, static_cast<lua_Number>(val[i]));
+            lua_rawseti (L, -2, i+1);
+        }
+    }
+
+    static void get_exif_rational(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
         Exiv2::Rational ratval{0,1};
         if (!exif->getValByKey(tagname, ratval)) {
             lua_pop(L, lua_gettop(L));
@@ -679,10 +907,34 @@ namespace Sipi {
             lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
             return;
         }
-        std::cerr << "=====> get_exif_rational: " << tagname << " -> " << ratval.first << "/" << ratval.second << std::endl;
         lua_pop(L, lua_gettop(L));
         lua_pushboolean(L, true);
-        lua_pushnumber(L, (double) ratval.first / (double) ratval.second);
+        lua_createtable(L, 2, 0);
+        lua_pushnumber(L, static_cast<lua_Number>(ratval.first));
+        lua_rawseti (L, -2, 1);
+        lua_pushnumber(L, static_cast<lua_Number>(ratval.second));
+        lua_rawseti (L, -2, 2);
+    }
+
+    static void get_exif_rationalv(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
+        std::vector<Exiv2::Rational> ratvalv;
+        if (!exif->getValByKey(tagname, ratvalv)) {
+            lua_pop(L, lua_gettop(L));
+            lua_pushboolean(L, false);
+            lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
+            return;
+        }
+        lua_pop(L, lua_gettop(L));
+        lua_pushboolean(L, true);
+        lua_createtable(L, static_cast<int>(ratvalv.size()), 0);
+        for (int i = 0; i < ratvalv.size(); ++i) {
+            lua_createtable(L, 2, 0);
+            lua_pushnumber(L, static_cast<lua_Number>(ratvalv[i].first));
+            lua_rawseti(L, -2, 1);
+            lua_pushnumber(L, static_cast<lua_Number>(ratvalv[i].second));
+            lua_rawseti(L, -2, 2);
+            lua_rawseti(L, -2, i + 1);
+        }
     }
 
 
@@ -719,70 +971,159 @@ namespace Sipi {
             return 2;
         }
 
-        std::unordered_set<std::string> ushort_taglist{
-                "Orientation",
-                "Compression",
-                "PhotometricInterpretation",
-                "SamplesPerPixel",
-                "ResolutionUnit",
-                "PlanarConfiguration"
-        };
-        std::unordered_set<std::string> uint_taglist{
-                "ImageWidth",
-                "ImageLength",
-                "ImageNumber",
-        };
-        std::unordered_set<std::string> string_taglist{
-                "ProcessingSoftware",
-                "DocumentName",
-                "Make",
-                "Model",
-                "Software",
-                "Artist",
-                "DateTime",
-                "ImageDescription",
-                "HostComputer",
-                "Copyright",
-                "ImageID",
-                "DateTimeOriginal",
-                "SecurityClassification",
-                "ImageHistory",
-                "UniqueCameraModel",
-                "CameraSerialNumber",
-                "ReelName",
-                "CameraLabel"
-        };
-        std::unordered_set<std::string> rational_taglist{
-            "XResolution",
-            "YResolution",
-            "ExposureTime",
-            "FNumber",
-            "ApertureValue",
-            "FocalLength",
-            "FlashEnergy",
-            "NoiseReductionApplied"
+
+        std::unordered_map<std::string, Exiv2Valinfo> taglist{
+                {"DocumentName", {"Image", EXIV2_ASCII}},
+                {"ImageDescription",  {"Image", EXIV2_ASCII}},
+                {"Make", {"Image", EXIV2_ASCII}},
+                {"Model", {"Image", EXIV2_ASCII}},
+                {"Orientation", {"Image", EXIV2_USHORT}},
+                {"XResolution", {"Image", EXIV2_URATIONAL}},
+                {"YResolution", {"Image", EXIV2_URATIONAL}},
+                {"PageName", {"Image", EXIV2_ASCII}},
+                {"XPosition", {"Image", EXIV2_URATIONAL}},
+                {"YPosition", {"Image", EXIV2_URATIONAL}},
+                {"ResolutionUnit", {"Image", EXIV2_USHORT}},
+                {"PageNumber", {"Image", EXIV2_USHORT}},
+                {"Software", {"Image", EXIV2_ASCII}},
+                {"ModifyDate", {"Image", EXIV2_ASCII}},
+                {"DateTime", {"Image", EXIV2_ASCII}},
+                {"Artist", {"Image", EXIV2_ASCII}},
+                {"HostComputer", {"Image", EXIV2_ASCII}},
+                {"TileWidth", {"Image", EXIV2_ULONG}},
+                {"TileLength", {"Image", EXIV2_ULONG}},
+                {"ImageID", {"Image", EXIV2_ASCII}},
+                {"BatteryLevel", {"Image", EXIV2_URATIONAL}},
+                {"Copyright", {"Image", EXIV2_ASCII}},
+                {"ImageNumber", {"Image", EXIV2_ULONG}},
+                {"ImageHistory", {"Image",EXIV2_ASCII}},
+                {"UniqueCameraModel", {"Image",EXIV2_ASCII}},
+                {"CameraSerialNumber", {"Image",EXIV2_ASCII}},
+                {"LensInfo", {"Image", EXIV2_URATIONALV}},
+                {"CameraLabel", {"Image", EXIV2_ASCII}},
+                {"ExposureTime", {"Photo", EXIV2_URATIONAL}},
+                {"FNumber", {"Photo", EXIV2_URATIONAL}},
+                {"ExposureProgram", {"Photo", EXIV2_USHORT}},
+                {"SpectralSensitivity", {"Photo", EXIV2_ASCII}},
+                {"ISOSpeedRatings", {"Photo", EXIV2_USHORT}},
+                {"SensitivityType", {"Photo", EXIV2_USHORT}},
+                {"StandardOutputSensitivity", {"Photo", EXIV2_ULONG}},
+                {"RecommendedExposureIndex", {"Photo", EXIV2_ULONG}},
+                {"ISOSpeed", {"Photo", EXIV2_ULONG}},
+                {"ISOSpeedLatitudeyyy", {"Photo", EXIV2_ULONG}},
+                {"ISOSpeedLatitudezzz", {"Photo", EXIV2_ULONG}},
+                {"DateTimeOriginal", {"Photo", EXIV2_ASCII}},
+                {"DateTimeDigitized", {"Photo", EXIV2_ASCII}},
+                {"OffsetTime", {"Photo", EXIV2_ASCII}},
+                {"OffsetTimeOriginal", {"Photo", EXIV2_ASCII}},
+                {"OffsetTimeDigitized", {"Photo", EXIV2_ASCII}},
+                {"ShutterSpeedValue", {"Photo", EXIV2_RATIONAL}},
+                {"ApertureValue", {"Photo", EXIV2_URATIONAL}},
+                {"BrightnessValue", {"Photo", EXIV2_RATIONAL}},
+                {"ExposureBiasValue", {"Photo", EXIV2_RATIONAL}},
+                {"MaxApertureValue", {"Photo", EXIV2_URATIONAL}},
+                {"SubjectDistance", {"Photo", EXIV2_URATIONAL}},
+                {"MeteringMode", {"Photo", EXIV2_USHORT}},
+                {"LightSource", {"Photo", EXIV2_USHORT}},
+                {"Flash", {"Photo", EXIV2_USHORT}},
+                {"FocalLength", {"Photo", EXIV2_URATIONAL}},
+                {"UserComment", {"Photo", EXIV2_ASCII}},
+                {"SubSecTime", {"Photo", EXIV2_ASCII}},
+                {"SubSecTimeOriginal", {"Photo", EXIV2_ASCII}},
+                {"SubSecTimeDigitized", {"Photo", EXIV2_ASCII}},
+                {"Temperature", {"Photo", EXIV2_RATIONAL}},
+                {"Humidity", {"Photo", EXIV2_URATIONAL}},
+                {"Pressure", {"Photo", EXIV2_URATIONAL}},
+                {"WaterDepth", {"Photo", EXIV2_RATIONAL}},
+                {"Acceleration", {"Photo", EXIV2_URATIONAL}},
+                {"CameraElevationAngle", {"Photo", EXIV2_RATIONAL}},
+                {"RelatedSoundFile", {"Photo", EXIV2_ASCII}},
+                {"FlashEnergy", {"Photo", EXIV2_URATIONAL}},
+                {"FocalPlaneXResolution", {"Photo", EXIV2_URATIONAL}},
+                {"FocalPlaneYResolution", {"Photo", EXIV2_URATIONAL}},
+                {"FocalPlaneResolutionUnit", {"Photo", EXIV2_USHORT}},
+                {"SceneCaptureType", {"Photo", EXIV2_USHORT}},
+                {"GainControl", {"Photo", EXIV2_USHORT}},
+                {"Contrast", {"Photo", EXIV2_USHORT}},
+                {"Saturation", {"Photo", EXIV2_USHORT}},
+                {"Sharpness", {"Photo", EXIV2_USHORT}},
+                {"SubjectDistanceRange", {"Photo", EXIV2_USHORT}},
+                {"ImageUniqueID", {"Photo", EXIV2_ASCII}},
+                {"OwnerName", {"Photo", EXIV2_ASCII}},
+                {"SerialNumber", {"Photo", EXIV2_ASCII}},
+                {"LensInfo", {"Photo", EXIV2_URATIONALV}},
+                {"LensMake", {"Photo", EXIV2_ASCII}},
+                {"LensModel", {"Photo", EXIV2_ASCII}},
+                {"LensSerialNumber", {"Photo", EXIV2_ASCII}},
         };
 
         std::string tag{tagname};
-        std::cerr << "TAGNAME=" << tag << std::endl;
-        if (ushort_taglist.find(tag) != ushort_taglist.end()) {
-            std::cerr << "FOUND IN ushort_taglist" << std::endl;
-            get_exif_ushort(L, exif, "Exif.Image." + tag);
-            return 2;
-        }
-        else if (uint_taglist.find(tag) != uint_taglist.end()) {
-            std::cerr << "FOUND IN uint_taglist" << std::endl;
-            get_exif_uint(L, exif, "Exif.Image." + tag);
-            return 2;
-        }
-        else if (rational_taglist.find(tag) != rational_taglist.end()) {
-            std::cerr << "FOUND IN rational_taglist" << std::endl;
-            get_exif_rational(L, exif, "Exif.Image." + tag);
-            return 2;
-        }
-        else if (string_taglist.find(tag) != string_taglist.end()) {
-            std::cerr << "FOUND IN string_taglist" << std::endl;
-            get_exif_string(L, exif, "Exif.Image." + tag);
+        std::cerr << "?=?=?=?=? TAGNAME=" << tag << std::endl;
+        auto tagiter = taglist.find(tag);
+        std::string fulltag{"Exif." + tagiter->second.first + "." + tagiter->first};
+        if (tagiter != taglist.end()) {
+            switch (tagiter->second.second) {
+                case EXIV2_ASCII:
+                    std::cerr << "?=?=?=?=? Before LUA:get_exif" << std::endl;
+                    get_exif_string(L, exif, fulltag);
+                    std::cerr << "?=?=?=?=? After LUA:get_exif" << std::endl;
+                    break;
+                case EXIV2_ASCIIV:
+                    get_exif_stringv(L, exif, fulltag);
+                    break;
+                case EXIV2_BYTE:
+                    get_exif_byte(L, exif, fulltag);
+                    break;
+                case EXIV2_BYTEV:
+                    get_exif_bytev(L, exif, fulltag);
+                    break;
+                case EXIV2_UBYTE:
+                    get_exif_ubyte(L, exif, fulltag);
+                    break;
+                case EXIV2_UBYTEV:
+                    get_exif_ubytev(L, exif, fulltag);
+                    break;
+                case EXIV2_SHORT:
+                    get_exif_short(L, exif, fulltag);
+                    break;
+                case EXIV2_SHORTV:
+                    get_exif_shortv(L, exif, fulltag);
+                    break;
+                case EXIV2_USHORT:
+                    std::cerr << "?=?=?=?=? Before LUA:get_exif" << std::endl;
+                    get_exif_ushort(L, exif, fulltag);
+                    std::cerr << "?=?=?=?=? After LUA:get_exif" << std::endl;
+                    break;
+                case EXIV2_USHORTV:
+                    get_exif_ushortv(L, exif, fulltag);
+                    break;
+                case EXIV2_LONG:
+                    get_exif_int(L, exif, fulltag);
+                    break;
+                case EXIV2_LONGV:
+                    get_exif_intv(L, exif, fulltag);
+                    break;
+                case EXIV2_ULONG:
+                    get_exif_uint(L, exif, fulltag);
+                    break;
+                case EXIV2_ULONGV:
+                    get_exif_uintv(L, exif, fulltag);
+                    break;
+                case EXIV2_FLOAT:
+                    get_exif_float(L, exif, fulltag);
+                    break;
+                case EXIV2_FLOATV:
+                    get_exif_floatv(L, exif, fulltag);
+                    break;
+                case EXIV2_RATIONAL:
+                case EXIV2_URATIONAL:
+                    get_exif_rational(L, exif, fulltag);
+                    break;
+                case EXIV2_RATIONALV:
+                case EXIV2_URATIONALV:
+                    get_exif_rational(L, exif, fulltag);
+                    break;
+            }
             return 2;
         }
         else {

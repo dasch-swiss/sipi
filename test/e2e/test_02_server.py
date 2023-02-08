@@ -651,17 +651,93 @@ class TestServer:
 
     def test_exif_gps(self, manager):
         expected_result = {
-            'make': 'Apple',
-            'datetime': '2022:12:11 13:02:51',
-            'compression': 0,
-            'ori': 1,
-            'model': 'iPhone 12 Pro'
-        }
+            'SubjectDistance': '--undefined--',
+            'RecommendedExposureIndex': '--undefined--',
+            'BrightnessValue': [117307, 10524],
+            'Flash': 16,
+            'OffsetTimeOriginal': '+01:00',
+            'GainControl': '--undefined--',
+            'SensitivityType': '--undefined--',
+            'Artist': '--undefined--',
+            'ExposureBiasValue': [0, 1],
+            'ModifyDate': '--undefined--',
+            'Contrast': '--undefined--',
+            'ApertureValue': [126503, 50079],
+            'Temperature': '--undefined--',
+            'TileLength': 512,
+            'CameraLabel': '--undefined--',
+            'MaxApertureValue': '--undefined--',
+            'ISOSpeedLatitudeyyy': '--undefined--',
+            'ImageHistory': '--undefined--',
+            'OffsetTimeDigitized': '+01:00',
+            'YResolution': [72, 1],
+            'SpectralSensitivity': '--undefined--',
+            'Orientation': 1,
+            'XResolution': [72, 1],
+            'PageName': '--undefined--',
+            'Acceleration': '--undefined--',
+            'TileWidth': 512,
+            'ISOSpeed': '--undefined--',
+            'LightSource': '--undefined--',
+            'LensMake': 'Apple',
+            'Model': 'iPhone 12 Pro',
+            'DateTime': '2022:12:11 13:02:51',
+            'ImageUniqueID': '--undefined--',
+            'ImageNumber': '--undefined--',
+            'FocalPlaneResolutionUnit': '--undefined--',
+            'FlashEnergy': '--undefined--',
+            'SubSecTime': '839',
+            'Software': '16.1.2',
+            'CameraSerialNumber': '--undefined--',
+            'WaterDepth': '--undefined--',
+            'Humidity': '--undefined--',
+            'DateTimeDigitized': '2022:12:11 13:02:51',
+            'LensSerialNumber': '--undefined--',
+            'ResolutionUnit': 2,
+            'DateTimeOriginal': '2022:12:11 13:02:51',
+            'LensModel': 'iPhone 12 Pro back triple camera 1.54mm f/2.4',
+            'FocalLength': [77, 50],
+            'OwnerName': '--undefined--',
+            'SubjectDistanceRange': '--undefined--',
+            'FNumber': [12, 5],
+            'DocumentName': '--undefined--',
+            'StandardOutputSensitivity': '--undefined--',
+            'ISOSpeedLatitudezzz': '--undefined--',
+            'ExposureProgram': 2,
+            'UniqueCameraModel': '--undefined--',
+            'SubSecTimeDigitized': '839',
+            'LensInfo': '--undefined--',
+            'ExposureTime': [1, 3984],
+            'Sharpness': '--undefined--',
+            'Saturation': '--undefined--',
+            'SceneCaptureType': 0,
+            'FocalPlaneXResolution': '--undefined--',
+            'FocalPlaneYResolution': '--undefined--',
+            'RelatedSoundFile': '--undefined--',
+            'Make': 'Apple',
+            'CameraElevationAngle': '--undefined--',
+            'Pressure': '--undefined--',
+            'PageNumber': '--undefined--',
+            'HostComputer': 'iPhone 12 Pro',
+            'SerialNumber': '--undefined--',
+            'SubSecTimeOriginal': '839',
+            'ImageDescription': '--undefined--',
+            'UserComment': '--undefined--',
+            'ISOSpeedRatings': 32,
+            'ShutterSpeedValue': [229477, 19187],
+            'MeteringMode': 5,
+            'Copyright': '--undefined--',
+            'BatteryLevel': '--undefined--',
+            'OffsetTime': '+01:00',
+            'ImageID': '--undefined--',
+            'XPosition': '--undefined--',
+            'YPosition': '--undefined--'}
+
 
         response_json = manager.get_json("/test_exif_gps")
-        #assert response_json == expected_result
-        print('-------------------------------')
-        print(response_json)
-        print('-------------------------------')
+        assert response_json == expected_result
+        #print('response_json-------------------------------')
+        #print(response_json)
+        #print('response_json-------------------------------')
 
 

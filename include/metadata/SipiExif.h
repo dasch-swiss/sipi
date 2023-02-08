@@ -22,8 +22,8 @@
  *//*!
  * This file implements the virtual abstract class which implements the image file I/O.
  */
-#ifndef __defined_exif_h
-#define __defined_exif_h
+#ifndef defined_exif_h
+#define defined_exif_h
 
 #include <string>
 #include <vector>
@@ -49,6 +49,126 @@ namespace Sipi {
         unsigned int binary_size;
         Exiv2::ExifData exifData;   //!< Private member variable holding the exiv2 EXIF data
         Exiv2::ByteOrder byteorder; //!< Private member holding the byteorder of the EXIF data
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, std::string &val) {
+            val = v->toString();
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, std::vector<std::string> &val) {
+            for (int i = 0; i < v->count(); i++) {
+                val.push_back(v->toString(i));
+            }
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, char &val) {
+            val = static_cast<char>(v->toLong());
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, std::vector<char> &val) {
+            for (int i = 0; i < v->count(); i++) {
+                val.push_back(static_cast<char>(v->toLong(i)));
+            }
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, unsigned char &val) {
+            val = static_cast<unsigned char>(v->toLong());
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, std::vector<unsigned char> &val) {
+            for (int i = 0; i < v->count(); i++) {
+                val.push_back(static_cast<unsigned char>(v->toLong(i)));
+            }
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, short val) {
+            val = static_cast<short>(v->toLong());
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, std::vector<short> &val) {
+            for (int i = 0; i < v->count(); i++) {
+                val.push_back(static_cast<short>(v->toLong(i)));
+            }
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, unsigned short &val) {
+            val = static_cast<unsigned short>(v->toLong());
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, std::vector<unsigned short> &val) {
+            for (int i = 0; i < v->count(); i++) {
+                val.push_back(static_cast<unsigned short>(v->toLong(i)));
+            }
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, int &val) {
+            val = static_cast<int>(v->toLong());
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, std::vector<int> &val) {
+            for (int i = 0; i < v->count(); i++) {
+                val.push_back(static_cast<int>(v->toLong(i)));
+            }
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, unsigned int &val) {
+            val = static_cast<unsigned int>(v->toLong());
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, std::vector<unsigned int> &val) {
+            for (int i = 0; i < v->count(); i++) {
+                val.push_back(static_cast<unsigned int>(v->toLong(i)));
+            }
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, float &val) {
+            val = static_cast<float>(v->toFloat());
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, std::vector<float> &val) {
+            for (int i = 0; i < v->count(); i++) {
+                val.push_back(static_cast<float>(v->toFloat(i)));
+            }
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, double &val) {
+            val = static_cast<double>(v->toFloat());
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, std::vector<double> &val) {
+            for (int i = 0; i < v->count(); i++) {
+                val.push_back(static_cast<double>(v->toFloat(i)));
+            }
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, Exiv2::Rational &val) {
+            val = v->toRational();
+            return v->ok();
+        }
+
+        inline bool assign_val(Exiv2::Value::AutoPtr &v, std::vector<Exiv2::Rational> &val) {
+            for (int i = 0; i < v->count(); i++) {
+                val.push_back(v->toRational(i));
+            }
+            return v->ok();
+        }
 
     public:
         /*!
@@ -81,7 +201,7 @@ namespace Sipi {
          *
          * @return Vector with EXIF data
          */
-        std::vector<unsigned char> exifBytes(void);
+        std::vector<unsigned char> exifBytes();
 
         /*!
          * Helper function to convert a signed float to a signed rational as used by EXIF
@@ -98,6 +218,7 @@ namespace Sipi {
          * \returns Exiv2::URational
          */
         static Exiv2::URational toURational(float f);
+
 
         /*!
          * Add key/value pair to EXIF data
@@ -404,21 +525,40 @@ namespace Sipi {
         //____________________________________________________________________________
         // string values
         //
-        /*!
-         * Retrieve a value from the EXIF data using the key
-         * \param[in] key_p Key of value to be retrieved (form: "groupname:key")
-         * \param[out] str_p Value as string
-         * \returns true, if key is existing and the value could be retrieved, false otherwise
-         */
-        bool getValByKey(const std::string key_p, std::string &str_p);
+        template<class T>
+        bool getValByKey(const std::string &key_p, T &val)  {
+            try {
+                Exiv2::ExifKey key = Exiv2::ExifKey(key_p);
+                auto pos = exifData.findKey(key);
+                if (pos == exifData.end()) {
+                    return false;
+                }
+                auto v = pos->getValue();
+                return assign_val(v, val);
+            } catch (const Exiv2::BasicError<char> &err) {
+                return false;
+            }
+        }
 
-        /*!
-         * Retrieve a value from the EXIF data using the key
-         * \param[in] tag EXIF tag number
-         * \param[in] groupName EXIF tag group name
-         * \param[out] str_p Value as string
-         * \returns true, if key is existing and the value could be retrieved, false otherwise
-         */
+        template<class T>
+        bool getValByKey(uint16_t tag, const std::string &groupName, T &val) {
+            try {
+                Exiv2::ExifKey key = Exiv2::ExifKey(tag, groupName);
+                auto pos = exifData.findKey(key);
+                if (pos == exifData.end()) {
+                    return false;
+                }
+                auto v = pos->getValue();
+                return assign_val(v, val);
+
+            } catch (const Exiv2::BasicError<char> &err) {
+                return false;
+            }
+         }
+
+        /*
+        bool getValByKey(const std::string &key_p, std::string &str_p);
+
         bool getValByKey(uint16_t tag, const std::string &groupName, std::string &str_p);
 
         bool getValByKey(uint16_t tag, const std::string &groupName, std::vector<std::string> &str_p);
@@ -427,7 +567,9 @@ namespace Sipi {
         //____________________________________________________________________________
         // unsigned char values
         //
-        bool getValByKey(const std::string key_p, char &c);
+        bool getValByKey(const std::string &key_p, char &c);
+
+        bool getValByKey(const std::string &key_p, std::vector<char> &vc);
 
         bool getValByKey(uint16_t tag, const std::string &groupName, char &c);
 
@@ -436,7 +578,9 @@ namespace Sipi {
         //____________________________________________________________________________
         // unsigned char values
         //
-        bool getValByKey(const std::string key_p, unsigned char &uc);
+        bool getValByKey(const std::string &key_p, unsigned char &uc);
+
+        bool getValByKey(const std::string &key_p, std::vector<unsigned char> &vuc);
 
         bool getValByKey(uint16_t tag, const std::string &groupName, unsigned char &uc);
 
@@ -446,21 +590,9 @@ namespace Sipi {
         //____________________________________________________________________________
         // float values
         //
-        /*!
-         * Retrieve a value from the EXIF data using the key
-         * \param[in] key_p Key of value to be retrieved (form: "groupname:key")
-         * \param[out] val_p Value as float
-         * \returns true, if key is existing and the value could be retrieved, false otherwise
-         */
-        bool getValByKey(const std::string key_p, float &val_p);
+        bool getValByKey(const std::string &key_p, float &val_p);
 
-        /*!
-         * Retrieve a value from the EXIF data using the key
-         * \param[in] tag EXIF tag number
-         * \param[in] groupName EXIF tag group name
-         * \param[out] val_p Value as float
-         * \returns true, if key is existing and the value could be retrieved, false otherwise
-         */
+        bool getValByKey(const std::string &key_p, std::vector<float> &f);
         bool getValByKey(uint16_t tag, const std::string &groupName, float &val_p);
 
         bool getValByKey(uint16_t tag, const std::string &groupName, std::vector<float> &val_p);
@@ -469,24 +601,13 @@ namespace Sipi {
         //____________________________________________________________________________
         // Rational values
         //
-        /*!
-         * Retrieve a value from the EXIF data using the key
-         * \param[in] key_p Key of value to be retrieved (form: "grouname:key")
-         * \param[out] s Value as Exiv2::Rational
-         * \returns true, if key is existing and the value could be retrieved, false otherwise
-         */
-        bool getValByKey(const std::string key_p, Exiv2::Rational &r);
+        bool getValByKey(const std::string &key_p, Exiv2::Rational &r);
 
-        /*!
-         * Retrieve a value from the EXIF data using the key
-         * \param[in] tag EXIF tag number
-         * \param[in] groupName EXIF tag group name
-         * \param[out] s Value as Exiv2::Rational
-         * \returns true, if key is existing and the value could be retrieved, false otherwise
-         */
+        bool getValByKey(const std::string &key_p, std::vector<Exiv2::Rational> &rv);
+
         bool getValByKey(uint16_t tag, const std::string &groupName, Exiv2::Rational &r);
 
-        bool getValByKey(const std::string key_p, std::vector<Exiv2::Rational> &r);
+        bool getValByKey(const std::string &key_p, std::vector<Exiv2::Rational> &rv);
 
         bool getValByKey(uint16_t tag, const std::string &groupName, std::vector<Exiv2::Rational> &r);
 
@@ -494,21 +615,10 @@ namespace Sipi {
         //____________________________________________________________________________
         // short values
         //
-        /*!
-         * Retrieve a value from the EXIF data using the key
-         * \param[in] key_p Key of value to be retrieved (form: "groupname:key")
-         * \param[out] s Value as short
-         * \returns true, if key is existing and the value could be retrieved, false otherwise
-         */
-        bool getValByKey(const std::string key_p, short &s);
+        bool getValByKey(const std::string &key_p, short &s);
 
-        /*!
-         * Retrieve a value from the EXIF data using the key
-         * \param[in] tag EXIF tag number
-         * \param[in] groupName EXIF tag group name
-         * \param[out] s Value as short
-         * \returns true, if key is existing and the value could be retrieved, false otherwise
-         */
+        bool getValByKey(const std::string &key_p, std::vector<short> &sv);
+
         bool getValByKey(uint16_t tag, const std::string &groupName, short &s);
 
         bool getValByKey(uint16_t tag, const std::string &groupName, std::vector<short> &s);
@@ -517,21 +627,10 @@ namespace Sipi {
         //____________________________________________________________________________
         // unsigned short values
         //
-        /*!
-         * Retrieve a value from the EXIF data using the key
-         * \param[in] key_p Key of value to be retrieved (form: "groupname:key")
-         * \param[out] s Value as unsigned short
-         * \returns true, if key is existing and the value could be retrieved, false otherwise
-         */
-        bool getValByKey(const std::string key_p, unsigned short &s);
+        bool getValByKey(const std::string &key_p, unsigned short &s);
 
-        /*!
-         * Retrieve a value from the EXIF data using the key
-         * \param[in] tag EXIF tag number
-         * \param[in] groupName EXIF tag group name
-         * \param[out] s Value as unsigned short
-         * \returns true, if key is existing and the value could be retrieved, false otherwise
-         */
+        bool getValByKey(const std::string &key_p, std::vector<unsigned short> &s);
+
         bool getValByKey(uint16_t tag, const std::string &groupName, unsigned short &s);
 
         bool getValByKey(uint16_t tag, const std::string &groupName, std::vector<unsigned short> &s);
@@ -540,21 +639,10 @@ namespace Sipi {
         //____________________________________________________________________________
         // int values
         //
-        /*!
-         * Retrieve a value from the EXIF data using the key
-         * \param[in] key_p Key of value to be retrieved (form: "groupname:key")
-         * \param[out] s Value as int
-         * \returns true, if key is existing and the value could be retrieved, false otherwise
-         */
-        bool getValByKey(const std::string key_p, int &s);
+        bool getValByKey(const std::string &key_p, int &s);
 
-        /*!
-         * Retrieve a value from the EXIF data using the key
-         * \param[in] tag EXIF tag number
-         * \param[in] groupName EXIF tag group name
-         * \param[out] s Value as int
-         * \returns true, if key is existing and the value could be retrieved, false otherwise
-         */
+        bool getValByKey(const std::string &key_p, std::vector<int> &sv);
+
         bool getValByKey(uint16_t tag, const std::string &groupName, int &s);
 
         bool getValByKey(uint16_t tag, const std::string &groupName, std::vector<int> &s);
@@ -563,24 +651,13 @@ namespace Sipi {
         //____________________________________________________________________________
         // unsigned int values
         //
-        /*!
-         * Retrieve a value from the EXIF data using the key
-         * \param[in] key_p Key of value to be retrieved (form: "groupname:key")
-         * \param[out] s Value as unsigned int
-         * \returns true, if key is existing and the value could be retrieved, false otherwise
-         */
-        bool getValByKey(const std::string key_p, unsigned int &s);
+        bool getValByKey(const std::string &key_p, unsigned int &s);
 
-        /*!
-         * Retrieve a value from the EXIF data using the key
-         * \param[in] tag EXIF tag number
-         * \param[in] groupName EXIF tag group name
-         * \param[out] s Value as unsigned int
-         * \returns true, if key is existing and the value could be retrieved, false otherwise
-         */
+        bool getValByKey(const std::string &key_p, std::vector<unsigned int> &sv);
         bool getValByKey(uint16_t tag, const std::string &groupName, unsigned int &s);
 
         bool getValByKey(uint16_t tag, const std::string &groupName, std::vector<unsigned int> &s);
+        */
 
         friend std::ostream &operator<<(std::ostream &lhs, SipiExif &rhs);
 
