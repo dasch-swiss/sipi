@@ -4,7 +4,7 @@
 server.setBuffer()
 server.sendHeader("Content-Type", "text/html")
 
-local test_image_path = config.imgroot .. "/unit" .. "/image_with_rotation.jpg"
+local test_image_path = config.imgroot .. "/unit/image_with_rotation.jpg"
 
 local success, img = SipiImage.new(test_image_path)
 if not success then

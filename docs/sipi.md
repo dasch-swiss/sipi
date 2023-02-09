@@ -39,15 +39,15 @@ The parts do have the following meaning:
      file.
   - `tif`: The image is delivered as TIFF image.
   - `png`: The image is delivered as PNG image.
-  - `pdf`: The image is delivered as PDF document. **Note**: *If the file in the SIPI repository is a multi-page PDF,
-     a SIPI-specific extensions allows to address single pages and deliver them as images in any format.
   - `jpx`: The image is delivered as JPEG2000 image.
+  
+  *NOTE*: PDF's are not supported. I consider PDF to be a __document format__ and *not* to be an image format.
 
 
 ## The SIPI Executable
 The SIPI executable is a statically linked program that can be started as
-- command line tool to perform image operations, mainly format conversions
-- as server deamon that provides IIIF conforming media server
+- _command line tool_ to perform image operations, mainly format conversions
+- _as server deamon_ that provides IIIF conforming media server
 
 ### Using SIPI as Command Line Tool
 
@@ -65,7 +65,7 @@ The SIPI command line mode can be used for the following tasks:
 /path/to/sipi --query infile
 ```
 
-#### Compare two Images Pixelwise
+#### Compare two Images pixelwise
 The images may have different formats: if the have exactely the same pixels, they are considered identical). Metadata
 is ignored for comparison:
 
@@ -141,32 +141,6 @@ launched as follows:
 #### SIPI specific extensions to IIIF
 SIPI implements some backwards compatible, non-standard extensions to the IIIF Image API:
 
-##### Page access to PDF's
-SIPI allows to access the pages of a multipage pdf in any format using the well known IIIF image API. The prerequisite
-is that the file is available in the repository in PDF format. Only the identifier section of the IIIF syntax has to be
-extended with a non-standard extensions: adding a `@`-character followed by an integer between 1 the number of pages
-retrieves this page of the PDF as if it would a a single standard image an can be rendered to any supported format:
-
-    https://iiif.my.server/images/mydoc.pdf@5/10,10,800,500/!500,500/0/default.jpg
-
-The above command would extract page #5 from the PDF, convert it into an image, select the given region and return
-it a JPEG image. This, with this feature, a 3rd party viewer such a [mirador](https://projectmirador.org) or
-[universalviewer](https://universalviewer.io) may be used for scrolling through the pages of a PDF file.
-
-In order to better support full PDF files, SIPI also adds the total number of pages to the `info.json` response 
-if being requested for a PDF file (e.g. with the URL `http//iiif.myserver.org/images/test.pdf/info.json`) in addition
- to the standard `info.json`-format:
-
-```json
-{
-  ...
-  "width": 2480,
-  "height": 3508,
-  "numpages": 27,
-  ...
-}
-```
-
 ##### Access to a raw files
 Sometimes it may be usefull to store non-image files such as XML-sidecars, manifests as JSON or complete PDF's, etc. in
 the same environment as the images. For this reason SIPI supports an extension of the IIIF API:
@@ -182,7 +156,7 @@ This works also for PDF's. The URL
 
     https://iiif.my.server/images/mydocument.pdf/file
     
-will download in toto to be opened by an external viewer or the webapplication.
+will download the PDF in toto to be opened by an external viewer or the webapplication.
 
 It is possible to use the IIIF-`info.json` syntax also on non-image files. In this case the `info.json` has the
 following format:
@@ -195,7 +169,6 @@ following format:
    "fileSize": 327
 }
 ```
-
 
 #### Setup of SIPI Directories
 SIPI needs the following directories and files setup and accessible (the real names of the directories must be indicated in the
@@ -305,7 +278,7 @@ The following configuration parameters are used by the SIPI server:
   between 1 and 100. Unfortunately, the IIIF Image API does not allow to give a JPEG quality (=compression) on the IIIF URL. SIPI
   allows to configure the compression quality system wide with this parameter. Allowed values are in he range
   \[1..100\] where 1 the worst quality (and highest compression factor = smallest file size) and 100 the highest
-  quality (with lowest compression factor = biggest file size). Please note that SIPI is not able to provide
+  quality (with the lowest compression factor = biggest file size). Please note that SIPI is not able to provide
   lossless compression for JPEG files.  
   *Cmdline option: `--quality`*  
   *Environment variable: `SIPI_JPEGQUALITY`*  

@@ -561,6 +561,11 @@ class TestServer:
         manager.compare_server_images(
             "/unit/lena512.jp2/full/^1000,/0/default.tif", manager.data_dir_path("unit/lena512_upscaled.tif"))
 
+    def test_file_access(self, manager):
+        """Test access to normal file in IIIF path"""
+        manager.expect_status_code("/unit/test.csv/file", 200)
+        manager.expect_status_code("/unit/test2.csv/file", 401)
+
     def test_concurrency(self, manager):
         """handle many concurrent requests for different URLs (this may take a while, please be patient)"""
 
@@ -643,3 +648,96 @@ class TestServer:
     def test_orientation(self, manager):
         """convert image to always have top-left orientation"""
         manager.expect_status_code("/test_orientation", 200)
+
+    def test_exif_gps(self, manager):
+        expected_result = {
+            'SubjectDistance': '--undefined--',
+            'RecommendedExposureIndex': '--undefined--',
+            'BrightnessValue': [117307, 10524],
+            'Flash': 16,
+            'OffsetTimeOriginal': '+01:00',
+            'GainControl': '--undefined--',
+            'SensitivityType': '--undefined--',
+            'Artist': '--undefined--',
+            'ExposureBiasValue': [0, 1],
+            'ModifyDate': '--undefined--',
+            'Contrast': '--undefined--',
+            'ApertureValue': [126503, 50079],
+            'Temperature': '--undefined--',
+            'TileLength': 512,
+            'CameraLabel': '--undefined--',
+            'MaxApertureValue': '--undefined--',
+            'ISOSpeedLatitudeyyy': '--undefined--',
+            'ImageHistory': '--undefined--',
+            'OffsetTimeDigitized': '+01:00',
+            'YResolution': [72, 1],
+            'SpectralSensitivity': '--undefined--',
+            'Orientation': 1,
+            'XResolution': [72, 1],
+            'PageName': '--undefined--',
+            'Acceleration': '--undefined--',
+            'TileWidth': 512,
+            'ISOSpeed': '--undefined--',
+            'LightSource': '--undefined--',
+            'LensMake': 'Apple',
+            'Model': 'iPhone 12 Pro',
+            'DateTime': '2022:12:11 13:02:51',
+            'ImageUniqueID': '--undefined--',
+            'ImageNumber': '--undefined--',
+            'FocalPlaneResolutionUnit': '--undefined--',
+            'FlashEnergy': '--undefined--',
+            'SubSecTime': '839',
+            'Software': '16.1.2',
+            'CameraSerialNumber': '--undefined--',
+            'WaterDepth': '--undefined--',
+            'Humidity': '--undefined--',
+            'DateTimeDigitized': '2022:12:11 13:02:51',
+            'LensSerialNumber': '--undefined--',
+            'ResolutionUnit': 2,
+            'DateTimeOriginal': '2022:12:11 13:02:51',
+            'LensModel': 'iPhone 12 Pro back triple camera 1.54mm f/2.4',
+            'FocalLength': [77, 50],
+            'OwnerName': '--undefined--',
+            'SubjectDistanceRange': '--undefined--',
+            'FNumber': [12, 5],
+            'DocumentName': '--undefined--',
+            'StandardOutputSensitivity': '--undefined--',
+            'ISOSpeedLatitudezzz': '--undefined--',
+            'ExposureProgram': 2,
+            'UniqueCameraModel': '--undefined--',
+            'SubSecTimeDigitized': '839',
+            'LensInfo': '--undefined--',
+            'ExposureTime': [1, 3984],
+            'Sharpness': '--undefined--',
+            'Saturation': '--undefined--',
+            'SceneCaptureType': 0,
+            'FocalPlaneXResolution': '--undefined--',
+            'FocalPlaneYResolution': '--undefined--',
+            'RelatedSoundFile': '--undefined--',
+            'Make': 'Apple',
+            'CameraElevationAngle': '--undefined--',
+            'Pressure': '--undefined--',
+            'PageNumber': '--undefined--',
+            'HostComputer': 'iPhone 12 Pro',
+            'SerialNumber': '--undefined--',
+            'SubSecTimeOriginal': '839',
+            'ImageDescription': '--undefined--',
+            'UserComment': '--undefined--',
+            'ISOSpeedRatings': 32,
+            'ShutterSpeedValue': [229477, 19187],
+            'MeteringMode': 5,
+            'Copyright': '--undefined--',
+            'BatteryLevel': '--undefined--',
+            'OffsetTime': '+01:00',
+            'ImageID': '--undefined--',
+            'XPosition': '--undefined--',
+            'YPosition': '--undefined--'}
+
+
+        response_json = manager.get_json("/test_exif_gps")
+        assert response_json == expected_result
+        #print('response_json-------------------------------')
+        #print(response_json)
+        #print('response_json-------------------------------')
+
+

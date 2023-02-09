@@ -230,7 +230,7 @@ typedef enum {
 } ExifDataType_type;
 
 typedef struct _exif_tag {
-    int tag_id;
+    uint16 tag_id;
     ExifDataType_type datatype;
     int len;
     union {
@@ -596,11 +596,11 @@ namespace Sipi {
             float f;
             if (1 == TIFFGetField(tif, TIFFTAG_XRESOLUTION, &f)) {
                 img->ensure_exif();
-                img->exif->addKeyVal(std::string("Exif.Image.XResolution"), f);
+                img->exif->addKeyVal(std::string("Exif.Image.XResolution"), SipiExif::toRational(f));
             }
             if (1 == TIFFGetField(tif, TIFFTAG_YRESOLUTION, &f)) {
                 img->ensure_exif();
-                img->exif->addKeyVal(std::string("Exif.Image.YResolution"), f);
+                img->exif->addKeyVal(std::string("Exif.Image.YResolution"), SipiExif::toRational(f));
             }
 
             short s;
@@ -1322,66 +1322,78 @@ namespace Sipi {
                 switch (exiftag_list[i].datatype) {
                     case EXIF_DT_RATIONAL: {
                         float f;
-
                         if (TIFFGetField(tif, exiftag_list[i].tag_id, &f)) {
                             Exiv2::Rational r = SipiExif::toRational(f);
-                            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", r);
+                            try {
+                                img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", r);
+                            } catch(const SipiError &err) {
+                                syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+                            }
                         }
-
                         break;
                     }
 
                     case EXIF_DT_UINT8: {
                         unsigned char uc;
-
                         if (TIFFGetField(tif, exiftag_list[i].tag_id, &uc)) {
-                            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", uc);
+                            try {
+                                img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", uc);
+                            } catch(const SipiError &err) {
+                                syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+                            }
                         }
-
                         break;
                     }
 
                     case EXIF_DT_UINT16: {
                         unsigned short us;
-
                         if (TIFFGetField(tif, exiftag_list[i].tag_id, &us)) {
-                            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", us);
+                            try {
+                                img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", us);
+                            } catch(const SipiError &err) {
+                                syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+                            }
                         }
-
                         break;
                     }
 
                     case EXIF_DT_UINT32: {
                         unsigned int ui;
-
                         if (TIFFGetField(tif, exiftag_list[i].tag_id, &ui)) {
-                            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", ui);
+                            try {
+                                img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", ui);
+                            } catch(const SipiError &err) {
+                                syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+                            }
                         }
-
                         break;
                     }
 
                     case EXIF_DT_STRING: {
                         char *tmpstr = nullptr;
-
                         if (TIFFGetField(tif, exiftag_list[i].tag_id, &tmpstr)) {
-                            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpstr);
+                            try {
+                                img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", std::string(tmpstr));
+                            } catch(const SipiError &err) {
+                                syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+                            }
                         }
-
                         break;
                     }
 
                     case EXIF_DT_RATIONAL_PTR: {
                         float *tmpbuf;
                         uint16 len;
-
                         if (TIFFGetField(tif, exiftag_list[i].tag_id, &len, &tmpbuf)) {
-                            Exiv2::Rational *r = new Exiv2::Rational[len];
+                            auto *r = new Exiv2::Rational[len];
                             for (int i; i < len; i++) {
                                 r[i] = SipiExif::toRational(tmpbuf[i]);
                             }
-
-                            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", r, len);
+                            try {
+                                img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", r, len);
+                            } catch(const SipiError &err) {
+                                syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+                            }
                             delete[] r;
                         }
                         break;
@@ -1392,31 +1404,38 @@ namespace Sipi {
                         uint16 len;
 
                         if (TIFFGetField(tif, exiftag_list[i].tag_id, &len, &tmpbuf)) {
-                            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
+                            try {
+                                img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
+                            } catch(const SipiError &err) {
+                                syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+                            }
                         }
-
                         break;
                     }
 
                     case EXIF_DT_UINT16_PTR: {
                         uint16 *tmpbuf;
                         uint16 len; // in bytes !!
-
                         if (TIFFGetField(tif, exiftag_list[i].tag_id, &len, &tmpbuf)) {
-                            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
+                            try {
+                                img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
+                            } catch(const SipiError &err) {
+                                syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+                            }
                         }
-
                         break;
                     }
 
                     case EXIF_DT_UINT32_PTR: {
                         uint32 *tmpbuf;
                         uint16 len;
-
                         if (TIFFGetField(tif, exiftag_list[i].tag_id, &len, &tmpbuf)) {
-                            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
+                            try {
+                                img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
+                            } catch(const SipiError &err) {
+                                syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+                            }
                         }
-
                         break;
                     }
 
@@ -1426,15 +1445,22 @@ namespace Sipi {
 
                         if (exiftag_list[i].len == 0) {
                             if (TIFFGetField(tif, exiftag_list[i].tag_id, &len, &tmpbuf)) {
-                                img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
+                                try {
+                                    img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
+                                } catch(const SipiError &err) {
+                                    syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+                                }
                             }
                         } else {
                             len = exiftag_list[i].len;
                             if (TIFFGetField(tif, exiftag_list[i].tag_id, &tmpbuf)) {
-                                img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
+                                try {
+                                    img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
+                                } catch(const SipiError &err) {
+                                    syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+                                }
                             }
                         }
-
                         break;
                     }
 

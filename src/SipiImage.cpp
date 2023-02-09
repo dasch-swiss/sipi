@@ -67,6 +67,7 @@ namespace Sipi {
         ny = 0;
         nc = 0;
         bps = 0;
+        photo = INVALID;
         orientation = TOPLEFT;
         pixels = nullptr;
         xmp = nullptr;
@@ -266,8 +267,8 @@ namespace Sipi {
         return true;
     }
     */
-    void SipiImage::read(std::string filepath, int pagenum, std::shared_ptr<SipiRegion> region, std::shared_ptr<SipiSize> size,
-                         bool force_bps_8, ScalingQuality scaling_quality) {
+    void SipiImage::read(const std::string& filepath, int pagenum, const std::shared_ptr<SipiRegion>& region,
+                         const std::shared_ptr<SipiSize>& size, bool force_bps_8, ScalingQuality scaling_quality) {
         size_t pos = filepath.find_last_of('.');
         std::string fext = filepath.substr(pos + 1);
         std::string _fext;
@@ -298,8 +299,8 @@ namespace Sipi {
     }
     //============================================================================
 
-    bool SipiImage::readOriginal(const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
-                                 std::shared_ptr<SipiSize> size, shttps::HashType htype) {
+    bool SipiImage::readOriginal(const std::string &filepath, int pagenum, const std::shared_ptr<SipiRegion>& region,
+                                 const std::shared_ptr<SipiSize>& size, shttps::HashType htype) {
         read(filepath, pagenum, region, size, false);
 
         if (!emdata.is_set()) {
@@ -312,8 +313,8 @@ namespace Sipi {
             if (icc != nullptr) {
                 iccprofile = icc->iccBytes();
             }
-            SipiEssentials emdata(origname, mimetype, shttps::HashType::sha256, checksum, iccprofile);
-            essential_metadata(emdata);
+            SipiEssentials emdata2(origname, mimetype, shttps::HashType::sha256, checksum, iccprofile);
+            essential_metadata(emdata2);
         } else {
             shttps::Hash internal_hash(emdata.hash_type());
             internal_hash.add_data(pixels, nx * ny * nc * bps / 8);
@@ -328,8 +329,8 @@ namespace Sipi {
     //============================================================================
 
 
-    bool SipiImage::readOriginal(const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
-                                 std::shared_ptr<SipiSize> size, const std::string &origname, shttps::HashType htype) {
+    bool SipiImage::readOriginal(const std::string &filepath, int pagenum, const std::shared_ptr<SipiRegion>& region,
+                                 const std::shared_ptr<SipiSize>& size, const std::string &origname, shttps::HashType htype) {
         read(filepath, pagenum, region, size, false);
 
         if (!emdata.is_set()) {
@@ -337,8 +338,8 @@ namespace Sipi {
             internal_hash.add_data(pixels, nx * ny * nc * bps / 8);
             std::string checksum = internal_hash.hash();
             std::string mimetype = shttps::Parsing::getFileMimetype(filepath).first;
-            SipiEssentials emdata(origname, mimetype, shttps::HashType::sha256, checksum);
-            essential_metadata(emdata);
+            SipiEssentials emdata2(origname, mimetype, shttps::HashType::sha256, checksum);
+            essential_metadata(emdata2);
         } else {
             shttps::Hash internal_hash(emdata.hash_type());
             internal_hash.add_data(pixels, nx * ny * nc * bps / 8);
@@ -793,10 +794,10 @@ namespace Sipi {
         auto ylut = shttps::make_unique<size_t[]>(nny);
 
         for (size_t i = 0; i < nnx; i++) {
-            xlut[i] = (size_t) (i * (nx - 1) / (nnx - 1) + 0.5);
+            xlut[i] = (size_t) lround(i * (nx - 1) / (nnx - 1));
         }
         for (size_t i = 0; i < nny; i++) {
-            ylut[i] = (size_t) (i * (ny - 1) / (nny - 1 ) + 0.5);
+            ylut[i] = (size_t) lround(i * (ny - 1) / (nny - 1 ));
         }
 
         if (bps == 8) {
@@ -1189,8 +1190,8 @@ namespace Sipi {
             ny = nny;
         } else { // all other angles
             double phi = M_PI * angle / 180.0;
-            double ptx = nx / 2. - .5;
-            double pty = ny / 2. - .5;
+            double ptx = static_cast<double>(nx) / 2. - .5;
+            double pty = static_cast<double>(ny) / 2. - .5;
 
             double si = sin(-phi);
             double co = cos(-phi);

@@ -71,7 +71,8 @@ namespace Sipi {
     /*!
      * The name of the Lua function that checks permissions before a file is returned to an HTTP client.
      */
-    static const std::string pre_flight_func_name = "pre_flight";
+    static const std::string iiif_preflight_funcname = "pre_flight";
+    static const std::string file_preflight_funcname = "file_pre_flight";
 
     typedef enum {
         iiif_prefix = 0,        //!< http://{url}/*{prefix}*/{id}/{region}/{size}/{rotation}/{quality}.{format}
@@ -195,9 +196,8 @@ namespace Sipi {
      * \param params the HTTP request parameters.
      * \return Pair of permission string and filepath
      */
-    // static std::pair<std::string, std::string>
     static std::unordered_map<std::string, std::string>
-    call_pre_flight(Connection &conn_obj, shttps::LuaServer &luaserver, const std::string &prefix, const std::string &identifier) {
+    call_iiif_preflight(Connection &conn_obj, shttps::LuaServer &luaserver, const std::string &prefix, const std::string &identifier) {
         // The permission and optional file path that the pre_fight function returns.
         std::unordered_map<std::string, std::string> preflight_info;
         // std::string permission;
@@ -226,12 +226,12 @@ namespace Sipi {
         lvals.push_back(cookie_param);
 
         // Call the pre-flight function.
-        std::vector<std::shared_ptr<LuaValstruct>> rvals = luaserver.executeLuafunction(pre_flight_func_name, lvals);
+        std::vector<std::shared_ptr<LuaValstruct>> rvals = luaserver.executeLuafunction(iiif_preflight_funcname, lvals);
 
         // If it returned nothing, that's an error.
         if (rvals.empty()) {
             std::ostringstream err_msg;
-            err_msg << "Lua function " << pre_flight_func_name << " must return at least one value";
+            err_msg << "Lua function " << iiif_preflight_funcname << " must return at least one value";
             throw SipiError(__file__, __LINE__, err_msg.str());
         }
 
@@ -249,7 +249,7 @@ namespace Sipi {
             }
             catch (const std::out_of_range &err) {
                 std::ostringstream err_msg;
-                err_msg << "The permission value returned by Lua function " << pre_flight_func_name << " has no type field!";
+                err_msg << "The permission value returned by Lua function " << iiif_preflight_funcname << " has no type field!";
                 throw SipiError(__file__, __LINE__, err_msg.str());
             }
             if (tmpv->type != LuaValstruct::STRING_TYPE) {
@@ -267,7 +267,7 @@ namespace Sipi {
         }
         else {
             std::ostringstream err_msg;
-            err_msg << "The permission value returned by Lua function " << pre_flight_func_name << " was not valid";
+            err_msg << "The permission value returned by Lua function " << iiif_preflight_funcname << " was not valid";
             throw SipiError(__file__, __LINE__, err_msg.str());
         }
 
@@ -283,7 +283,7 @@ namespace Sipi {
             (preflight_info["type"] != "deny"))
         {
             std::ostringstream err_msg;
-            err_msg << "The permission returned by Lua function " << pre_flight_func_name << " is not valid: " << preflight_info["type"];
+            err_msg << "The permission returned by Lua function " << iiif_preflight_funcname << " is not valid: " << preflight_info["type"];
             throw SipiError(__file__, __LINE__, err_msg.str());
         }
 
@@ -293,7 +293,7 @@ namespace Sipi {
         else {
             if (rvals.size() < 2) {
                 std::ostringstream err_msg;
-                err_msg << "Lua function " << pre_flight_func_name
+                err_msg << "Lua function " << iiif_preflight_funcname
                         << " returned other permission than 'deny', but it did not return a file path";
                 throw SipiError(__file__, __LINE__, err_msg.str());
             }
@@ -306,7 +306,7 @@ namespace Sipi {
             }
             else {
                 std::ostringstream err_msg;
-                err_msg << "The file path returned by Lua function " << pre_flight_func_name << " was not a string";
+                err_msg << "The file path returned by Lua function " << iiif_preflight_funcname << " was not a string";
                 throw SipiError(__file__, __LINE__, err_msg.str());
             }
         }
@@ -315,6 +315,118 @@ namespace Sipi {
         return preflight_info;
     }
     //=========================================================================
+
+    static std::unordered_map<std::string, std::string>
+    call_file_preflight(Connection &conn_obj, shttps::LuaServer &luaserver, const std::string &filepath) {
+        // The permission and optional file path that the pre_fight function returns.
+        std::unordered_map<std::string, std::string> preflight_info;
+        // std::string permission;
+        // std::string infile;
+
+        // The paramters to be passed to the pre-flight function.
+        std::vector<std::shared_ptr<LuaValstruct>> lvals;
+
+        // The first parameter is the filepath.
+        std::shared_ptr<LuaValstruct> file_path_param = std::make_shared<LuaValstruct>();
+        file_path_param->type = LuaValstruct::STRING_TYPE;
+        file_path_param->value.s = filepath;
+        lvals.push_back(file_path_param);
+
+        // The third parameter is the HTTP cookie.
+        std::shared_ptr<LuaValstruct> cookie_param = std::make_shared<LuaValstruct>();
+        std::string cookie = conn_obj.header("cookie");
+        cookie_param->type = LuaValstruct::STRING_TYPE;
+        cookie_param->value.s = cookie;
+        lvals.push_back(cookie_param);
+
+        // Call the pre-flight function.
+        std::vector<std::shared_ptr<LuaValstruct>> rvals = luaserver.executeLuafunction(file_preflight_funcname, lvals);
+
+        // If it returned nothing, that's an error.
+        if (rvals.empty()) {
+            std::ostringstream err_msg;
+            err_msg << "Lua function " << iiif_preflight_funcname << " must return at least one value";
+            throw SipiError(__file__, __LINE__, err_msg.str());
+        }
+
+        // The first return value is the permission code.
+        auto permission_return_val = rvals.at(0);
+
+        // The permission code must be a string or a table.
+        if (permission_return_val->type == LuaValstruct::STRING_TYPE) {
+            preflight_info["type"] = permission_return_val->value.s;
+        }
+        else if (permission_return_val->type == LuaValstruct::TABLE_TYPE) {
+            std::shared_ptr<LuaValstruct> tmpv;
+            try {
+                tmpv = permission_return_val->value.table.at("type");
+            }
+            catch (const std::out_of_range &err) {
+                std::ostringstream err_msg;
+                err_msg << "The permission value returned by Lua function " << iiif_preflight_funcname << " has no type field!";
+                throw SipiError(__file__, __LINE__, err_msg.str());
+            }
+            if (tmpv->type != LuaValstruct::STRING_TYPE) {
+                throw SipiError(__file__, __LINE__, "String value expected!");
+            }
+            preflight_info["type"] = tmpv->value.s;
+            for (const auto &keyval : permission_return_val->value.table) {
+                if (keyval.first == "type")
+                    continue;
+                if (keyval.second->type != LuaValstruct::STRING_TYPE) {
+                    throw SipiError(__file__, __LINE__, "String value expected!");
+                }
+                preflight_info[keyval.first] = keyval.second->value.s;
+            }
+        }
+        else {
+            std::ostringstream err_msg;
+            err_msg << "The permission value returned by Lua function " << iiif_preflight_funcname << " was not valid";
+            throw SipiError(__file__, __LINE__, err_msg.str());
+        }
+
+        //
+        // check if permission type is valid
+        //
+        if ((preflight_info["type"] != "allow") &&
+            (preflight_info["type"] != "login") &&
+            (preflight_info["type"] != "restrict") &&
+            (preflight_info["type"] != "deny"))
+        {
+            std::ostringstream err_msg;
+            err_msg << "The permission returned by Lua function " << iiif_preflight_funcname << " is not valid: " << preflight_info["type"];
+            throw SipiError(__file__, __LINE__, err_msg.str());
+        }
+
+        if (preflight_info["type"] == "deny") {
+            preflight_info["infile"] = "";
+        }
+        else {
+            if (rvals.size() < 2) {
+                std::ostringstream err_msg;
+                err_msg << "Lua function " << iiif_preflight_funcname
+                        << " returned other permission than 'deny', but it did not return a file path";
+                throw SipiError(__file__, __LINE__, err_msg.str());
+            }
+
+            auto infile_return_val = rvals.at(1);
+
+            // The file path must be a string.
+            if (infile_return_val->type == LuaValstruct::STRING_TYPE) {
+                preflight_info["infile"] = infile_return_val->value.s;
+            }
+            else {
+                std::ostringstream err_msg;
+                err_msg << "The file path returned by Lua function " << iiif_preflight_funcname << " was not a string";
+                throw SipiError(__file__, __LINE__, err_msg.str());
+            }
+        }
+
+        // Return the permission code and file path, if any, as a std::pair.
+        return preflight_info;
+    }
+    //=========================================================================
+
 
     //
     // ToDo: Prepare for IIIF Authentication API !!!!
@@ -341,8 +453,9 @@ namespace Sipi {
 
         SipiIdentifier sid = SipiIdentifier(params[iiif_identifier]);
         std::unordered_map<std::string, std::string> pre_flight_info;
-        if (luaserver.luaFunctionExists(pre_flight_func_name)) {
-            pre_flight_info = call_pre_flight(conn_obj, luaserver, urldecode(params[iiif_prefix]), sid.getIdentifier()); // may throw SipiError
+        if (luaserver.luaFunctionExists(iiif_preflight_funcname)) {
+            pre_flight_info = call_iiif_preflight(conn_obj, luaserver, urldecode(params[iiif_prefix]),
+                                                  sid.getIdentifier()); // may throw SipiError
             infile = pre_flight_info["infile"];
         }
         else {
@@ -1363,6 +1476,26 @@ namespace Sipi {
                 else {
                     infile = serv->imgroot() + "/" + urldecode(params[iiif_identifier]);
                 }
+                if (luaserver.luaFunctionExists(file_preflight_funcname)) {
+                    std::unordered_map<std::string, std::string> pre_flight_info;
+                    try {
+                        pre_flight_info = call_file_preflight(conn_obj, luaserver, infile);
+                    }
+                    catch (SipiError &err) {
+                        send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
+                        return;
+                    }
+                    if (pre_flight_info["type"] == "allow") {
+                        infile = pre_flight_info["infile"];
+                    }
+                    else if (pre_flight_info["type"] == "restrict") {
+                        infile = pre_flight_info["infile"];
+                    }
+                    else {
+                        send_error(conn_obj, Connection::UNAUTHORIZED, "Unauthorized access");
+                        return;
+                    }
+                }
                 if (access(infile.c_str(), R_OK) == 0) {
                     std::string actual_mimetype = shttps::Parsing::getFileMimetype(infile).first;
                     //
@@ -1468,10 +1601,11 @@ namespace Sipi {
                 std::string watermark;                                // path to watermark file, or empty, if no watermark required
                 auto restriction_size = std::make_shared<SipiSize>(); // size of restricted image... (SizeType::FULL if unrestricted)
 
-                if (luaserver.luaFunctionExists(pre_flight_func_name)) {
+                if (luaserver.luaFunctionExists(iiif_preflight_funcname)) {
                     std::unordered_map<std::string, std::string> pre_flight_info;
                     try {
-                        pre_flight_info = call_pre_flight(conn_obj, luaserver, params[iiif_prefix], sid.getIdentifier());
+                        pre_flight_info = call_iiif_preflight(conn_obj, luaserver, params[iiif_prefix],
+                                                              sid.getIdentifier());
                     }
                     catch (SipiError &err) {
                         send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);

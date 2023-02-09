@@ -197,8 +197,8 @@ namespace Sipi {
                 fres_x = res_x;
                 fres_y = res_y;
             }
-            img->exif->addKeyVal("Exif.Image.XResolution", fres_x);
-            img->exif->addKeyVal("Exif.Image.YResolution", fres_y);
+            img->exif->addKeyVal("Exif.Image.XResolution", SipiExif::toRational(fres_x));
+            img->exif->addKeyVal("Exif.Image.YResolution", SipiExif::toRational(fres_y));
             img->exif->addKeyVal("Exif.Image.ResolutionUnit", 2); // DPI
         }
 

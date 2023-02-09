@@ -1,12 +1,12 @@
 # SIPI Lua Interface
-SIPI has an embedded [LUA](http://www.lua.org) interpreter. LUA is a simple script language that was deveopped
-specifically to be embedded into applications. For example the game [minecraft](https://www.minecraft.net)
-makes extensive use of LUA scripting
+SIPI has an embedded [LUA](http://www.lua.org) interpreter. LUA is a simple script language that was developped
+specifically to be embedded into applications. For example the games [minecraft](https://www.minecraft.net) and
+[World of Warcraft](https://worldofwarcraft.com/de-de/) make extensive use of LUA scripting for customization and programming extensions.
 
-Each HTTP request to SIPI invokes a new, independent
-lua-instance. Therefore LUA may be used in the following contexts:
+Each HTTP request to SIPI invokes a recent, independent
+lua-instance (Version 5.3.5). Therefore, LUA may be used in the following contexts:
 
-- Preflight function (mandatory)
+- Preflight function
 - Embedded in HTML pages
 - RESTful services using the SIPI routing
 
@@ -20,7 +20,7 @@ Each lua-instance in SIPI includes additional SIPI-specific information:
   - querying and changing the SIPI runtime configuration (e.g. the cache)
 
 In general, the SIPI LUA function make use that a Lua function's return value may consist of
-more than one element (see [Multiple Results](http://www.lua.org/pil/5.1.html)):
+more than one element (see [Multiple Results](http://www.lua.org/pil/5.3.html)):
 
 Sipi provides the [LuaRocks](https://luarocks.org/)
 package manager which must be used in the context of SIPI.
@@ -30,22 +30,33 @@ request runs in its own thread and has its own Lua interpreter.
 Therefore, only Lua packages that are known to be thread-safe may be
 used!*
 
-## Pre-flight function
-The pre-fight function is mandatory and located in the init-script (see
+## Preflight function
+It is possible to define a LUA pre-flight function for *IIIF*-requests and independently one for *file*-requests
+(indicated by a _/file_ postfix in the URL). Both are optional and are best located in the init-script (see
 [configuarion options](../sipi/#setup-of-directories-needed) of SIPI). It is executed after the incoming
-IIIF HTTP request data has been processed but before an action to respond to the request has been taken. It should
-be noted that the pre-flight script is only executed for IIIF-specific requests. All other HTTP requests are being
-directed to "normal" HTTP-server part of SIPI. These can utilize the lua functionality by embedding LUA commands
-within the HTML.
+HTTP request data has been processed but before an action to respond to the request has been taken. It should
+be noted that the pre-flight script is only executed for IIIF-specific requests (either using the IIIF URL-syntax or the
+_/file_ postfix). All other HTTP requests are being directed to "normal" HTTP-server part of SIPI.
+These can utilize the lua functionality by embedding LUA commands within the HTML.
 
-The pre-flight function takes 3 parameter:
+### IIIF preflight function
+The IIIF preflight function must have the name **pre_flight** with the following signature:
+
+```lua
+function pre_flight(prefix,identifier,cookie)
+
+    return "allow", filepath
+end
+```
+The preflight function takes 3 parameter:
 
 - `prefix`: This is the prefix that is given on the IIIF url [mandatory]  
   *http(s)://{server}/__{prefix}__/{id}/{region}/{size}/{rotation}/{quality}.{format}*  
   Please note that the prefix may contain several "/" that can be used as path to the repository file
-- `identifier`: The image identifier (which must not correspond to an actual filename in the media files repositoy)
+- `identifier`: The image identifier (which must not correspond to an actual filename in the media files repositoy
+  of the SIPI IIIF server)
   [mandatory]
-- `cookie`: A cookie containing authorization information. Usually the cookie cntains a Json Web Token [optional]
+- `cookie`: A cookie containing authorization information. Usually the cookie contains a Json Web Token [optional]
 
 The pre-flight function must return at least 2 parameters:
 
@@ -66,27 +77,37 @@ The pre-flight function must return at least 2 parameters:
 The most simple working pre-flight looks as follows assuming that the `identifier`is the name of the master image
 file in the repository and the `prefix` is the path:
 ```lua
-function pre_flight(prefix, identifier, cookie) {
-    filepath = config.imgroot .. '/' .. prefix .. '/' .. identifier
+function pre_flight(prefix, identifier, cookie)
+    if config.prefix_as_path then
+        filepath = config.imgroot .. '/' .. prefix .. '/' .. identifier
+    else
+        filepath = config.imgroot .. '/' .. identifier
+    end
     return 'allow', filepath
-}
+end
 ```
-Above function allows all files to be served without restriction.
+Above example preflight function allows all files to be served without restriction.
+
+#### More complex example of preflight function 
 
 The following example uses some SIPI lua funtions
-to access a authorization server to check if the user (identified by a cookie) is allowed to see the specific image. We are
+to access an authorization server to check if the user (identified by a cookie) is allowed to see the specific image. We are
 using [Json Web Tokens](https://jwt.io) (JWT) which are supported by SIPI specific LUA functions. Please note that the
 SIPI JTW-functions support an arbitrary payload that has not to follow the JWT recommendations. In order to encode, the
 JWT_ALG_HS256 is beeing used together with the key that is defined in the SIPI configuration as
 [jwt_secret](../sipi/#jwt-secret).
 ```lua
-function pre_flight(prefix, identifier, cookie) {
+function pre_flight(prefix, identifier, cookie) 
     --
     -- make up the file path
     --
-    local filepath = config.imgroot .. '/' .. prefix .. '/' .. identifier
+    if config.prefix_as_path then
+        filepath = config.imgroot .. '/' .. prefix .. '/' .. identifier
+    else
+        filepath = config.imgroot .. '/' .. identifier
+    end
     --
-    -- we need a cookie containing the user inforamtion that will be
+    -- we need a cookie containing the user information that will be
     -- sent to the authorization server. In this
     -- example, the content does not follow the JWT rules
     -- (which is possible to pack any table into a JWT encoded token)
@@ -132,7 +153,7 @@ function pre_flight(prefix, identifier, cookie) {
     else
         return 'deny', filepath
     end
-}
+end
 ```
 Above example assumes that the cookie data is a string that contains encrypted user data from a table (key/value pair).
 Jason Web Token. This token is decoded and the information about the image to be displayed is added. Then the information
@@ -144,6 +165,27 @@ The pre-flight function uses the following SIPI-specific LUA global variables an
 - [server.http()](#serverhttp): (Function) Used to create a RESTful GET request.
 - [server.generate_jwt()](#servergenerate_jwt): (Function) Create a new JWT token from a key/value table.
 - [server.json_to_table()](#serverjson_to_table): (function) Convert a JSON into a LUA table.
+
+### File preflight function
+An URL in the form ```http(s)://{server}/{prefix}/{identifier}/file``` serves the given file as binary object (including
+propere mimetype in the header etc.). The file has to reside in the directory tree defined for IIIF requests. In these
+cases, a preflight script name `file_pre_flight` is being called if defined. Its signature is as follows:
+```lua
+function file_pre_flight(filepath, cookie)
+
+end
+```
+A simple example allowing access only to the file _"unit/test.csv"_ would be:
+```lua
+function file_pre_flight(filepath, cookie)
+    if filepath == "./images/unit/test.csv" then
+        return "allow", filepath
+    else
+        return "deny", ""
+    end
+end
+```
+This script would deny all other file access and the SIPI IIIF server responds with a `401 Unauthorized` error.
 
 ## LUA embedded in HTML
 The HTTP server that is included in SIPI can serve any type of file which are just transfered as is to the client.
@@ -252,7 +294,7 @@ client info could like follows:
 ```
 
 ### Embedded LUA and enforcing SSL
-The supplied init-file offers a LUA function that enforces the use of a SSL encryption page
+The supplied example initialization file offers a LUA function that enforces the use of a SSL encryption page
 proteced by a user name and password. It is used as follows by adding the following code
 *before the `<html>` opening tag*:
 
