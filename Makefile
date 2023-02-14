@@ -12,18 +12,22 @@ UBUNTU_BASE := ubuntu:22.04
 
 .PHONY: docs-build
 docs-build: ## build docs into the local 'site' folder
-	mkdocs build
+	@$(MAKE) -C docs docs-build
 
 .PHONY: docs-serve
 docs-serve: ## serve docs for local viewing
-	mkdocs serve
+	@$(MAKE) -C docs docs-serve
 
 .PHONY: docs-publish
 docs-publish: ## build and publish docs to Github Pages
-	mkdocs gh-deploy
+	@$(MAKE) -C docs docs-publish
+
+.PHONY: docs-install-requirements
+docs-install-requirements: ## install requirements for documentation
+	@$(MAKE) -C docs docs-install-requirements
 
 .PHONY: install-requirements
-install-requirements: ## install requirements for documentation
+install-requirements: docs-install-requirements ## install requirements for documentation
 	pip3 install -r requirements.txt
 
 .PHONY: docker-build

@@ -145,7 +145,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          make docs-install-requirements
       - name: run docs build
         run: make docs-build
 
@@ -163,5 +163,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           CUSTOM_DOMAIN: sipi.io
-          CONFIG_FILE: mkdocs.yml
-          REQUIREMENTS: requirements.txt
+          CONFIG_FILE: docs/mkdocs.yml
+          REQUIREMENTS: docs/requirements.txt

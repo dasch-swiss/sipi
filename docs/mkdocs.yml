@@ -26,5 +26,8 @@ theme:
     accent: 'deep blue'
   feature:
     tabs: false
+
+docs_dir: src
+
 extra_css:
   - 'assets/style/theme.css'
