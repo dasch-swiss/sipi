@@ -1497,11 +1497,11 @@ namespace Sipi {
                     }
                 }
                 if (access(infile.c_str(), R_OK) == 0) {
-                    std::string actual_mimetype = shttps::Parsing::getFileMimetype(infile).first;
+                    std::string actual_mimetype = shttps::Parsing::getBestFileMimetype(infile);
                     //
                     // first we get the filesize and time using fstat
                     //
-                    struct stat fstatbuf;
+                    struct stat fstatbuf{};
 
                     if (stat(infile.c_str(), &fstatbuf) != 0) {
                         syslog(LOG_ERR, "Cannot fstat file %s ", infile.c_str());
@@ -1518,11 +1518,11 @@ namespace Sipi {
 
                     std::string range = conn_obj.header("range");
                     if (range.empty()) {
+                        // no "Content-Length" since send_file() will add this
                         conn_obj.header("Content-Type", actual_mimetype);
                         conn_obj.header("Cache-Control", "public, must-revalidate, max-age=0");
                         conn_obj.header("Pragma", "no-cache");
                         conn_obj.header("Accept-Ranges", "bytes");
-                        conn_obj.header("Content-Length", std::to_string(fsize));
                         conn_obj.header("Last-Modified", timebuf);
                         conn_obj.header("Content-Transfer-Encoding: binary");
                         conn_obj.sendFile(infile);
@@ -1548,13 +1548,12 @@ namespace Sipi {
                             throw Error(__file__, __LINE__, "Range expression invalid!");
                         }
 
+                        // no "Content-Length" since send_file() will add this
                         conn_obj.status(Connection::PARTIAL_CONTENT);
                         conn_obj.header("Content-Type", actual_mimetype);
                         conn_obj.header("Cache-Control", "public, must-revalidate, max-age=0");
                         conn_obj.header("Pragma", "no-cache");
                         conn_obj.header("Accept-Ranges", "bytes");
-                        conn_obj.header("Content-Length", std::to_string(end - start + 1));
-                        conn_obj.header("Content-Length", std::to_string(end - start + 1));
                         std::stringstream ss;
                         ss << "bytes " << start << "-" << end << "/" << fsize;
                         conn_obj.header("Content-Range", ss.str());
