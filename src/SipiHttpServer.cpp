@@ -332,7 +332,7 @@ namespace Sipi {
         file_path_param->value.s = filepath;
         lvals.push_back(file_path_param);
 
-        // The third parameter is the HTTP cookie.
+        // The second parameter is the HTTP cookie.
         std::shared_ptr<LuaValstruct> cookie_param = std::make_shared<LuaValstruct>();
         std::string cookie = conn_obj.header("cookie");
         cookie_param->type = LuaValstruct::STRING_TYPE;
