@@ -363,7 +363,7 @@ namespace Sipi {
             }
             catch (const std::out_of_range &err) {
                 std::ostringstream err_msg;
-                err_msg << "The permission value returned by Lua function " << iiif_preflight_funcname << " has no type field!";
+                err_msg << "The permission value returned by Lua function " << file_preflight_funcname << " has no type field!";
                 throw SipiError(__file__, __LINE__, err_msg.str());
             }
             if (tmpv->type != LuaValstruct::STRING_TYPE) {
@@ -381,7 +381,7 @@ namespace Sipi {
         }
         else {
             std::ostringstream err_msg;
-            err_msg << "The permission value returned by Lua function " << iiif_preflight_funcname << " was not valid";
+            err_msg << "The permission value returned by Lua function " << file_preflight_funcname << " was not valid";
             throw SipiError(__file__, __LINE__, err_msg.str());
         }
 
@@ -394,7 +394,7 @@ namespace Sipi {
             (preflight_info["type"] != "deny"))
         {
             std::ostringstream err_msg;
-            err_msg << "The permission returned by Lua function " << iiif_preflight_funcname << " is not valid: " << preflight_info["type"];
+            err_msg << "The permission returned by Lua function " << file_preflight_funcname << " is not valid: " << preflight_info["type"];
             throw SipiError(__file__, __LINE__, err_msg.str());
         }
 
@@ -404,7 +404,7 @@ namespace Sipi {
         else {
             if (rvals.size() < 2) {
                 std::ostringstream err_msg;
-                err_msg << "Lua function " << iiif_preflight_funcname
+                err_msg << "Lua function " << file_preflight_funcname
                         << " returned other permission than 'deny', but it did not return a file path";
                 throw SipiError(__file__, __LINE__, err_msg.str());
             }
@@ -417,7 +417,7 @@ namespace Sipi {
             }
             else {
                 std::ostringstream err_msg;
-                err_msg << "The file path returned by Lua function " << iiif_preflight_funcname << " was not a string";
+                err_msg << "The file path returned by Lua function " << file_preflight_funcname << " was not a string";
                 throw SipiError(__file__, __LINE__, err_msg.str());
             }
         }
