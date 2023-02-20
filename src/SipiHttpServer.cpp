@@ -345,7 +345,7 @@ namespace Sipi {
         // If it returned nothing, that's an error.
         if (rvals.empty()) {
             std::ostringstream err_msg;
-            err_msg << "Lua function " << iiif_preflight_funcname << " must return at least one value";
+            err_msg << "Lua function " << file_preflight_funcname << " must return at least one value";
             throw SipiError(__file__, __LINE__, err_msg.str());
         }
 
