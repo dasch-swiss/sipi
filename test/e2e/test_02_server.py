@@ -18,6 +18,7 @@
 # See the GNU Affero General Public License for more details.
 # You should have received a copy of the GNU Affero General Public
 # License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
+import filecmp
 import pprint
 import shutil
 
@@ -147,7 +148,7 @@ class TestServer:
             "/api/upload", manager.data_dir_path("knora/test_odd.odd"), "text/xml")
 
         filename = response_json["filename"]
-        response_json = manager.get_json("/unit/{}/knora.json".format(filename))
+        response_json = manager.get_json("/unit/{}/knora.json".format(filename), False)
         expected_result = {
             '@context': 'http://sipi.io/api/file/3/context.json',
             'id': 'http://127.0.0.1:1024/unit/_test_odd.odd',
@@ -156,6 +157,9 @@ class TestServer:
             'originalFilename': ''
         }
         assert response_json == expected_result
+
+        downloaded_file_path = manager.download_file("/unit/{}/file".format(filename))
+        assert filecmp.cmp(manager.data_dir_path("knora/test_odd.odd"), downloaded_file_path)
 
 
     def test_mimeconsistency(self, manager):
