@@ -19,6 +19,7 @@
 # You should have received a copy of the GNU Affero General Public
 # License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
 import pprint
+import shutil
 
 import pytest
 from pathlib import Path
@@ -119,7 +120,7 @@ class TestServer:
 
         assert response_json == expected_result
 
-    def test_jpg_with_comment(selfself, manager):
+    def test_jpg_with_comment(self, manager):
         """process an uploaded jpeg file with comment block properly"""
 
         response_json = manager.post_file(
@@ -139,6 +140,23 @@ class TestServer:
         }
 
         assert response_json == expected_result
+
+    def test_odd_file(self, manager):
+        """Upload a ODD file"""
+        response_json = manager.post_file(
+            "/api/upload", manager.data_dir_path("knora/test_odd.odd"), "text/xml")
+
+        filename = response_json["filename"]
+        response_json = manager.get_json("/unit/{}/knora.json".format(filename))
+        expected_result = {
+            '@context': 'http://sipi.io/api/file/3/context.json',
+            'id': 'http://127.0.0.1:1024/unit/_test_odd.odd',
+            'internalMimeType': 'text/xml',
+            'fileSize': 8440,
+            'originalFilename': ''
+        }
+        assert response_json == expected_result
+
 
     def test_mimeconsistency(self, manager):
         """upload any file and check mimetype consistency"""
@@ -195,8 +213,7 @@ class TestServer:
         ]
 
         for test in testdata:
-            response_json = manager.post_file(
-                "/api/mimetest", manager.data_dir_path(test["filepath"]), test["mimetype"])
+            response_json = manager.post_file("/api/mimetest", manager.data_dir_path(test["filepath"]), test["mimetype"])
             assert response_json == test["expected_result"]
 
     def test_thumbnail(self, manager):
@@ -245,8 +262,6 @@ class TestServer:
     def test_knora_info_validation(self, manager):
         """return a valid knora.json response"""
 
-        time.sleep(3)
-
         testdata = [
             {
                 "filepath": "unit/lena512.tif",
@@ -256,13 +271,14 @@ class TestServer:
                     "id": "http://127.0.0.1:1024/unit/",
                     "width": 512,
                     "height": 512,
-                    "originalFilename": "lena512.tif",
+                    "internalMimeType": "image/jp2",
                     "originalMimeType": "image/tiff",
-                    "internalMimeType": "image/jp2"
+                    "originalFilename": "lena512.tif"
                 }
             }, {
                 "filepath": "unit/test.csv",
                 "mimetype": "text/csv",
+                "sidecar": ["unit/test.info", "unit/_test.info"],
                 "expected_result": {
                     "@context": "http://sipi.io/api/file/3/context.json",
                     "id": "http://127.0.0.1:1024/unit/",
@@ -276,9 +292,14 @@ class TestServer:
         ]
 
         for test in testdata:
+            print("$$$$$==================================================")
+            if test.get("sidecar") is not None:
+                shutil.copyfile(manager.data_dir_path(test["sidecar"][0]), manager.data_dir_path(test["sidecar"][1]))
             response_json = manager.post_file(
                 "/api/upload", manager.data_dir_path(test["filepath"]), test["mimetype"])
+            print(response_json)
             filename = response_json["filename"]
+            print("filename=", filename)
             if test["mimetype"] == "image/tiff":
                 manager.expect_status_code(
                     "/unit/{}/full/max/0/default.jpg".format(filename), 200)

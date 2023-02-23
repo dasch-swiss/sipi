@@ -48,6 +48,7 @@ for imgindex,imgparam in pairs(server.uploads) do
     --
     -- first we check the mimetype consistency
     --
+    local success
     success, mime_ok = server.file_mimeconsistency(imgindex)
     if not success then
         server.log(newfilepath, server.loglevel.error)
@@ -71,7 +72,8 @@ for imgindex,imgparam in pairs(server.uploads) do
     --
     -- generate a UUID
     --
-    local success, uuid62 = server.uuid62()
+    local uuid62
+    success, uuid62 = server.uuid62()
     if not success then
         server.log(uuid62, server.loglevel.error)
         send_error(500, uuid62)
@@ -109,7 +111,7 @@ for imgindex,imgparam in pairs(server.uploads) do
         success, newfilepath = helper.filename_hash(newfilename[imgindex]);
         if not success then
             server.log(newfilepath, server.loglevel.error)
-            server.send_error(500, newfilepath)
+            send_error(500, newfilepath)
             return false
         end
 
@@ -132,19 +134,26 @@ for imgindex,imgparam in pairs(server.uploads) do
             server.print('Error converting image to j2k: ', filename, ' ** ', errmsg)
         end
     else
-        filename = imgparam["origname"]
+        filename = "_" .. imgparam["origname"]
         --
         -- here we add the subdirs that are necessary if Sipi is configured to use subdirs
         --
         success, newfilepath = helper.filename_hash(filename)
         if not success then
             server.log(newfilepath, server.loglevel.error)
-            server.send_error(500, newfilepath)
+            send_error(500, newfilepath)
             return false
         end
 
         fullfilepath = config.imgroot .. '/unit/' .. newfilepath
-                server.copyTmpfile(index, fullfilepath)
+        local errormsg
+        success, errormsg = server.copyTmpfile(imgindex, fullfilepath)
+        if not success then
+            server.log(errormsg, server.loglevel.error)
+            send_error(500,errormsg)
+            return false
+        end
+        iiifurls[" fullfilepath"] =  fullfilepath
 
         iiifurls[filename] = protocol .. server.host .. '/unit/' .. newfilepath
         iiifurls["filename"] = filename
