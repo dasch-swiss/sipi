@@ -143,7 +143,7 @@ class TestServer:
         assert response_json == expected_result
 
     def test_odd_file(self, manager):
-        """Upload a ODD file"""
+        """Up- and download a ODD file"""
         response_json = manager.post_file(
             "/api/upload", manager.data_dir_path("knora/test_odd.odd"), "text/xml")
 
@@ -153,7 +153,7 @@ class TestServer:
             '@context': 'http://sipi.io/api/file/3/context.json',
             'id': 'http://127.0.0.1:1024/unit/_test_odd.odd',
             'internalMimeType': 'text/xml',
-            'fileSize': 8440,
+            'fileSize': 48002,
             'originalFilename': ''
         }
         assert response_json == expected_result
