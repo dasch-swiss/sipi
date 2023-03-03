@@ -22,10 +22,10 @@
 require "get_knora_session"
 
 function file_pre_flight(filepath, cookie)
-    if filepath == "./images/unit/test.csv" then
-        return "allow", filepath
-    else
+    if filepath == "./images/unit/test2.csv" then
         return "deny", ""
+    else
+        return "allow", filepath
     end
 end
 

@@ -2058,7 +2058,6 @@ namespace shttps {
 
         lua_pushboolean(L, true);
         lua_pushnil(L);
-
         return 2;
     }
     //=========================================================================

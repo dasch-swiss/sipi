@@ -1475,7 +1475,7 @@ namespace shttps {
             throw Error(__file__, __LINE__, "File not readable:" + path);
         }
 
-        struct stat fstatbuf;
+        struct stat fstatbuf{};
 
         if (stat(path.c_str(), &fstatbuf) != 0) {
             throw Error(__file__, __LINE__, "Cannot fstat file: " + path);
