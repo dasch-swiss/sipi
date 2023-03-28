@@ -64,6 +64,30 @@ docker-publish: ## publish Sipi Docker image to Docker-Hub
 		--push \
 		.
 
+.PHONY: docker-publish-aarch64
+docker-publish-aarch64: ## publish ARM Sipi Docker image to Docker-Hub with -aarch64 tag
+	docker buildx build \
+		--progress auto \
+		--platform linux/arm64 \
+		--build-arg BUILD_TYPE=production \
+		--build-arg SIPI_BASE=$(SIPI_BASE) \
+		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		-t $(DOCKER_IMAGE)-aarch64 \
+		--push \
+		.
+
+.PHONY: docker-publish-x86
+docker-publish-x86: ## publish x86 Sipi Docker image to Docker-Hub with -x86 tag
+	docker buildx build \
+		--progress auto \
+		--platform linux/amd64 \
+		--build-arg BUILD_TYPE=production \
+		--build-arg SIPI_BASE=$(SIPI_BASE) \
+		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		-t $(DOCKER_IMAGE)-x86 \
+		--push \
+		.
+
 .PHONY: docker-publish-debug
 docker-publish-debug: ## publish Sipi Docker image to Docker-Hub with debugging enabled
 	docker buildx build \

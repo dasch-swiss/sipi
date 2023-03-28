@@ -11,67 +11,46 @@ on:
 jobs:
   test:
     name: Run Unit and E2E Tests
-    runs-on: ubuntu-latest
+    runs-on: actuated
     steps:
-      -
-        name: Checkout source
+      - name: Checkout source
         uses: actions/checkout@v3
         with:
-          fetch-depth: 50
-      -
-        name: Checkout private ci-assets
+          fetch-depth: 0
+      - name: Checkout private ci-assets
         uses: actions/checkout@v3
         with:
           repository: dasch-swiss/dsp-ci-assets
           token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
           path: ci
-      -
-        name: Copy ci-assets
-        run: |
-          cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
-      -
-        name: Set up Python 3.11
+      - run: cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
+      - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
-      -
-        name: install requirements
-        run: make install-requirements
-      -
-        name: test
-        run: make test-ci
+      - run: make install-requirements
+      - run: make test-ci
 
   integration:
     name: Run Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: actuated
     steps:
-      -
-        name: Checkout source
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 50
-      -
-        name: Checkout private ci-assets
+      - name: Checkout private ci-assets
         uses: actions/checkout@v3
         with:
           repository: dasch-swiss/dsp-ci-assets
           token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
           path: ci
-      -
-        name: Copy ci-assets
-        run: |
-          cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
-      -
-        name: Set up Python 3.11
+      - run: cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
+      - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
-      -
-        name: install requirements
-        run: make install-requirements
-      -
-        name: build docker image and run integration tests
-        run: make test-integration
+      - run: make install-requirements
+      - run: make test-integration
 
   # publish only on release
   publish-images:
@@ -80,41 +59,33 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags')
     steps:
-      -
-        name: checkout source
+      - name: checkout source
         uses: actions/checkout@v3
         with:
           fetch-depth: 50
-      -
-        name: checkout private ci-assets
+      - name: checkout private ci-assets
         uses: actions/checkout@v3
         with:
           repository: dasch-swiss/dsp-ci-assets
           token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
           path: ci
-      -
-        name: copy ci-assets
+      - name: copy ci-assets
         run: |
           cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
-      -
-        name: Set up QEMU
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
-      -
-        name: Set up Docker Buildx
+      - name: Set up Docker Buildx
         id: buildx
         uses: docker/setup-buildx-action@v2
-      -
-        name: Login to Docker Hub
+      - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      -
-        name: Get the version
+      - name: Get the version
         id: get_version
         run: echo ::set-output name=VERSION::$(echo $GITHUB_REF | cut -d / -f 3)
-      -
-        name: Build (always) and push (on release)
+      - name: Build and push
         id: docker_build
         uses: docker/build-push-action@v3
         with:
@@ -123,11 +94,43 @@ jobs:
           platforms: linux/amd64 #, linux/arm64
           push: true
           tags: daschswiss/sipi:latest, daschswiss/sipi:${{ steps.get_version.outputs.VERSION }}
-      -
-        name: Update release notes
+      - name: Update release notes
         uses: lakto/gren-action@v1.1.0
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+
+  publish-aarch64:
+    name: Build and Publish ARM Image to Dockerhub
+    needs: [ test, integration ]
+    concurrency:
+      group: ${{ github.ref }}-aarch64
+      cancel-in-progress: true
+    if: github.event_name != 'schedule'
+    runs-on: actuated-aarch64
+    steps:
+      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+      - uses: docker/setup-buildx-action@v2
+      - name: Build and publish sipi aarch64 image to Dockerhub
+        run: |
+          echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
+          make docker-publish-aarch64
+
+  publish-x86:
+    name: Build and Publish x86 Image to Dockerhub
+    needs: [ test, integration ]
+    concurrency:
+      group: ${{ github.ref }}-aarch64
+      cancel-in-progress: true
+    if: github.event_name != 'schedule'
+    runs-on: actuated
+    steps:
+      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+      - uses: docker/setup-buildx-action@v2
+      - name: Build and publish sipi x86 image to Dockerhub
+        run: |
+          echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
+          make docker-publish-x86
+
 
   # build documentation
   docs:

@@ -1,0 +1,20 @@
+name: "Checkout"
+description: "Checkout code and ci-assets"
+
+runs:
+  using: "composite"
+  steps:
+    - name: checkout source
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - name: checkout private ci-assets
+      uses: actions/checkout@v3
+      with:
+        repository: dasch-swiss/dsp-ci-assets
+        token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
+        path: ci
+    - name: copy ci-assets
+      shell: bash
+      run: |
+        cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
