@@ -1,5 +1,6 @@
 name: "Start Debug Session"
 description: "Starts a debugging session of the self-hosted runner"
+inputs: SSH_GATEWAY_IP
 
 runs:
   using: "composite"
