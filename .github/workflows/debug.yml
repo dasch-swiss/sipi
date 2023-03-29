@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - '*'
+  push:
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+
+jobs:
+  specs:
+    name: specs
+    runs-on: actuated
+    steps:
+      - uses: actions/checkout@v1
+      - name: Setup mirror
+        uses: self-actuated/hub-mirror@master
+
+      - name: Check the mount-runner
+        run: |
+          sudo journalctl -u mount-runner --no-pager
+      - name: Show resolv file
+        run: |
+          cat /etc/resolv.conf
+          docker run ubuntu:22.04 cat /etc/resolv.conf
+      - name: Curl OpenSSL
+        run: |
+          curl -S -L -O https://www.openssl.org/source/openssl-3.0.1.tar.gz
+      - name: Curl inside Ubuntu
+        run: |
+          echo "FROM ubuntu:22.04" >> Dockerfile
+          echo "RUN apt-get update && apt-get install -y curl" >> Dockerfile
+          echo "RUN curl -S -L -O https://www.openssl.org/source/openssl-3.0.1.tar.gz" >> Dockerfile
+          docker build -t curl-ubuntu .
+      - name: Curl inside Dswiss
+        run: |
+          docker run \
+            --rm \
+            daschswiss/sipi-base:2.18.0 /bin/sh -c "curl -S -L -O https://www.openssl.org/source/openssl-3.0.1.tar.gz"
