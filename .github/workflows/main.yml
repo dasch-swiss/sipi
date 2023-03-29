@@ -22,6 +22,8 @@ jobs:
 #          SSH_GATEWAY_IP: ${{ secrets.SSH_GATEWAY_IP }}
       - name: curl-openssl
         run: curl -S -L -O https://www.openssl.org/source/openssl-3.0.1.tar.gz
+      - name: restart docker
+        run: sudo systemctl daemon-reload && sudo systemctl restart docker
       - run: make test-ci
 
   integration:
