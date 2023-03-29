@@ -13,22 +13,9 @@ jobs:
     name: Run Unit and E2E Tests
     runs-on: actuated
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-      - name: Checkout private ci-assets
-        uses: actions/checkout@v3
-        with:
-          repository: dasch-swiss/dsp-ci-assets
-          token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
-          path: ci
-      - run: cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.11
-      - run: make install-requirements
+      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+      - uses: dasch-swiss/sipi/.github/actions/setup-python@main
+      - uses: dasch-swiss/sipi/.github/actions/start-debug-session@main
       - run: make test-ci
 
   integration:
