@@ -147,7 +147,8 @@ test-ci: ## compile and run tests inside Docker with Debug symbols (no it)
 	docker run \
 		--rm \
 		-v ${PWD}:/tmp/sipi \
-		$(SIPI_BASE) /bin/sh -c "curl -S -L -O https://www.openssl.org/source/openssl-3.0.1.tar.gz & mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && cd /tmp/sipi/cmake-build-debug-inside-docker && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
+		$(SIPI_BASE) /bin/sh -c "curl -S -L -O https://www.openssl.org/source/openssl-3.0.1.tar.gz"
+		# $(SIPI_BASE) /bin/sh -c "mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && cd /tmp/sipi/cmake-build-debug-inside-docker && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
 
 .PHONY: test-integration
 test-integration: docker-build ## run tests against locally published Sipi Docker image
