@@ -11,7 +11,7 @@ on:
 jobs:
   test:
     name: Run Unit and E2E Tests
-    runs-on: ubuntu-latest
+    runs-on: actuated
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@feature/dev-1990-build-and-publish-sipi-arm-image-using
         with:
