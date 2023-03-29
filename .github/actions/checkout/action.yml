@@ -1,6 +1,9 @@
 name: "Checkout"
 description: "Checkout code and ci-assets"
-inputs: DASCHBOT_PAT
+inputs:
+  DASCHBOT_PAT:
+    description: "daschbot's private access token"
+    required: true
 
 runs:
   using: "composite"
@@ -13,7 +16,7 @@ runs:
       uses: actions/checkout@v3
       with:
         repository: dasch-swiss/dsp-ci-assets
-        token: ${{ DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
+        token: ${{ inputs.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
         path: ci
     - name: copy ci-assets
       shell: bash

@@ -1,6 +1,9 @@
 name: "Start Debug Session"
 description: "Starts a debugging session of the self-hosted runner"
-inputs: SSH_GATEWAY_IP
+inputs:
+  SSH_GATEWAY_IP:
+    description: 'SSH gateway IP address'
+    required: true
 
 runs:
   using: "composite"
@@ -10,7 +13,7 @@ runs:
     - name: Connect to the actuated SSH gateway
       uses: alexellis/actuated-ssh-gateway-action@master
       with:
-        gatewayaddr: ${{ secrets.SSH_GATEWAY_IP }}
+        gatewayaddr: ${{ inputs.SSH_GATEWAY_IP }}
         secure: true
     - name: Setup a blocking tmux session
       uses: alexellis/block-with-tmux-action@master
