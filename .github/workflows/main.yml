@@ -13,30 +13,17 @@ jobs:
     name: Run Unit and E2E Tests
     runs-on: actuated
     steps:
-      - uses: dasch-swiss/sipi/.github/actions/checkout@main
-      - uses: dasch-swiss/sipi/.github/actions/setup-python@main
-      - uses: dasch-swiss/sipi/.github/actions/start-debug-session@main
+      - uses: dasch-swiss/sipi/.github/actions/checkout@feature/dev-1990-build-and-publish-sipi-arm-image-using
+      - uses: dasch-swiss/sipi/.github/actions/setup-python-for-tests@feature/dev-1990-build-and-publish-sipi-arm-image-using
+      - uses: dasch-swiss/sipi/.github/actions/start-debug-session@feature/dev-1990-build-and-publish-sipi-arm-image-using
       - run: make test-ci
 
   integration:
     name: Run Integration Tests
     runs-on: actuated
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 50
-      - name: Checkout private ci-assets
-        uses: actions/checkout@v3
-        with:
-          repository: dasch-swiss/dsp-ci-assets
-          token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
-          path: ci
-      - run: cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.11
-      - run: make install-requirements
+      - uses: dasch-swiss/sipi/.github/actions/checkout@feature/dev-1990-build-and-publish-sipi-arm-image-using
+      - uses: dasch-swiss/sipi/.github/actions/setup-python-for-tests@feature/dev-1990-build-and-publish-sipi-arm-image-using
       - run: make test-integration
 
   # publish only on release
@@ -46,19 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags')
     steps:
-      - name: checkout source
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 50
-      - name: checkout private ci-assets
-        uses: actions/checkout@v3
-        with:
-          repository: dasch-swiss/dsp-ci-assets
-          token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
-          path: ci
-      - name: copy ci-assets
-        run: |
-          cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
+      - uses: dasch-swiss/sipi/.github/actions/checkout@feature/dev-1990-build-and-publish-sipi-arm-image-using
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
       - name: Set up Docker Buildx
@@ -86,6 +61,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
 
+  # publish aarch64 Docker image
   publish-aarch64:
     name: Build and Publish ARM Image to Dockerhub
     needs: [ test, integration ]
@@ -95,13 +71,14 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: actuated-aarch64
     steps:
-      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+      - uses: dasch-swiss/sipi/.github/actions/checkout@feature/dev-1990-build-and-publish-sipi-arm-image-using
       - uses: docker/setup-buildx-action@v2
       - name: Build and publish sipi aarch64 image to Dockerhub
         run: |
           echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
           make docker-publish-aarch64
 
+  # publish x86 Docker image
   publish-x86:
     name: Build and Publish x86 Image to Dockerhub
     needs: [ test, integration ]
@@ -111,7 +88,7 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: actuated
     steps:
-      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+      - uses: dasch-swiss/sipi/.github/actions/checkout@feature/dev-1990-build-and-publish-sipi-arm-image-using
       - uses: docker/setup-buildx-action@v2
       - name: Build and publish sipi x86 image to Dockerhub
         run: |
@@ -124,20 +101,9 @@ jobs:
     name: Build Docs Testrun
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 1
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.11
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          make docs-install-requirements
-      - name: run docs build
-        run: make docs-build
+      - uses: dasch-swiss/sipi/.github/actions/checkout@feature/dev-1990-build-and-publish-sipi-arm-image-using
+      - uses: dasch-swiss/sipi/.github/actions/setup-python-for-docs@feature/dev-1990-build-and-publish-sipi-arm-image-using
+      - run: make docs-build
 
   # publish documentation on release
   publish-docs:
@@ -146,10 +112,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags')
     steps:
-      - name: Checkout main branch
-        uses: actions/checkout@v3
-      - name: Deploy docs
-        uses: mhausenblas/mkdocs-deploy-gh-pages@master
+      - uses: actions/checkout@v3
+      - uses: mhausenblas/mkdocs-deploy-gh-pages@master
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           CUSTOM_DOMAIN: sipi.io
