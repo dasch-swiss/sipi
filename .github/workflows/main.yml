@@ -17,9 +17,9 @@ jobs:
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
       - uses: dasch-swiss/sipi/.github/actions/setup-python-for-tests@feature/dev-1990-build-and-publish-sipi-arm-image-using
-      - uses: dasch-swiss/sipi/.github/actions/start-debug-session@feature/dev-1990-build-and-publish-sipi-arm-image-using
-        with:
-          SSH_GATEWAY_IP: ${{ secrets.SSH_GATEWAY_IP }}
+#      - uses: dasch-swiss/sipi/.github/actions/start-debug-session@feature/dev-1990-build-and-publish-sipi-arm-image-using
+#        with:
+#          SSH_GATEWAY_IP: ${{ secrets.SSH_GATEWAY_IP }}
       - run: make test-ci
 
   integration:
