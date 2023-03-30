@@ -50,7 +50,8 @@ docker-build-debug: ## build and publish Sipi Docker image locally with debuggin
         --build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		-t $(DOCKER_IMAGE)-debug \
 		--load \
-		--file ./Dockerfile.debug
+		--file ./Dockerfile.debug \
+		-
 
 .PHONY: docker-publish
 docker-publish: ## publish Sipi Docker image to Docker-Hub
@@ -76,17 +77,25 @@ docker-publish-aarch64: ## publish ARM Sipi Docker image to Docker-Hub with -aar
 		--push \
 		.
 
-.PHONY: docker-publish-x86
-docker-publish-x86: ## publish x86 Sipi Docker image to Docker-Hub with -x86 tag
+.PHONY: docker-publish-amd64
+docker-publish-amd64: ## publish x86 Sipi Docker image to Docker-Hub with -amd64 tag
 	docker buildx build \
 		--progress auto \
 		--platform linux/amd64 \
 		--build-arg BUILD_TYPE=production \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
-		-t $(DOCKER_IMAGE)-x86 \
+		-t $(DOCKER_IMAGE)-amd64 \
 		--push \
 		.
+
+.PHONY: docker-publish-manifest
+docker-publish-manifest: ## publish Docker manifest combining aarch64 and x86 published images
+	docker manifest create $(DOCKER_IMAGE) --amend $(DOCKER_IMAGE)-amd64 --amend $(DOCKER_IMAGE)-aarch64
+	docker manifest annotate --arch amd64 --os linux $(DOCKER_IMAGE) $(DOCKER_IMAGE)-amd64
+	docker manifest annotate --arch arm64 --os linux $(DOCKER_IMAGE) $(DOCKER_IMAGE)-aarch64
+	docker manifest inspect $(DOCKER_IMAGE)
+	docker manifest push $(DOCKER_IMAGE)
 
 .PHONY: docker-publish-debug
 docker-publish-debug: ## publish Sipi Docker image to Docker-Hub with debugging enabled
@@ -98,7 +107,8 @@ docker-publish-debug: ## publish Sipi Docker image to Docker-Hub with debugging 
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		-t $(DOCKER_IMAGE)-debug \
 		--push \
-		--file ./Dockerfile.debug
+		-f ./Dockerfile.debug \
+		-
 
 #####################################
 # Remote Sipi development environment
@@ -111,7 +121,8 @@ docker-build-remote-sipi-env: ## build and publish Remote Sipi Environment Docke
 		--build-arg UID=$(shell id -u) \
 		-t daschswiss/remote-sipi-env:1.0 \
 		--load \
-		--file ./Dockerfile.remote-sipi-env
+		-f ./Dockerfile.remote-sipi-env \
+		-
 
 #####################################
 # test targets

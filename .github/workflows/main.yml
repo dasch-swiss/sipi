@@ -17,7 +17,7 @@ jobs:
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
       - uses: dasch-swiss/sipi/.github/actions/setup-python-for-tests@feature/dev-1990-build-and-publish-sipi-arm-image-using
-      - uses: dasch-swiss/sipi/.github/actions/update-dns@feature/dev-1990-build-and-publish-sipi-arm-image-using
+      - uses: self-actuated/hetzner-dns-action@v1
       - name: restart docker
         run: sudo systemctl daemon-reload && sudo systemctl restart docker
       - run: make test-ci
@@ -30,49 +30,12 @@ jobs:
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
       - uses: dasch-swiss/sipi/.github/actions/setup-python-for-tests@feature/dev-1990-build-and-publish-sipi-arm-image-using
-      - uses: dasch-swiss/sipi/.github/actions/update-dns@feature/dev-1990-build-and-publish-sipi-arm-image-using
+      - uses: self-actuated/hetzner-dns-action@v1
       - run: make test-integration
 
-  # publish only on release
-  publish-images:
-    name: Build and Publish Images to Dockerhub
-    needs: [test, integration]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags')
-    steps:
-      - uses: dasch-swiss/sipi/.github/actions/checkout@feature/dev-1990-build-and-publish-sipi-arm-image-using
-        with:
-          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v2
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USER }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - name: Get the version
-        id: get_version
-        run: echo ::set-output name=VERSION::$(echo $GITHUB_REF | cut -d / -f 3)
-      - name: Build and push
-        id: docker_build
-        uses: docker/build-push-action@v3
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64 #, linux/arm64
-          push: true
-          tags: daschswiss/sipi:latest, daschswiss/sipi:${{ steps.get_version.outputs.VERSION }}
-      - name: Update release notes
-        uses: lakto/gren-action@v1.1.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-
   # publish aarch64 Docker image
-  publish-aarch64:
-    name: Build and Publish ARM Image to Dockerhub
+  publish_aarch64:
+    name: Build and Publish aarch64 Image to Dockerhub
     needs: [ test, integration ]
     concurrency:
       group: ${{ github.ref }}-aarch64
@@ -83,16 +46,17 @@ jobs:
       - uses: dasch-swiss/sipi/.github/actions/checkout@feature/dev-1990-build-and-publish-sipi-arm-image-using
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
-      - uses: dasch-swiss/sipi/.github/actions/update-dns@feature/dev-1990-build-and-publish-sipi-arm-image-using
+      - uses: self-actuated/hetzner-dns-action@v1
       - uses: docker/setup-buildx-action@v2
-      - name: Build and publish sipi aarch64 image to Dockerhub
-        run: |
-          echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
-          make docker-publish-aarch64
+      - uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+      - run: make docker-publish-aarch64
 
-  # publish x86 Docker image
-  publish-x86:
-    name: Build and Publish x86 Image to Dockerhub
+  # publish amd64 Docker image
+  publish_amd64:
+    name: Build and Publish amd64 Image to Dockerhub
     needs: [ test, integration ]
     concurrency:
       group: ${{ github.ref }}-aarch64
@@ -103,12 +67,25 @@ jobs:
       - uses: dasch-swiss/sipi/.github/actions/checkout@feature/dev-1990-build-and-publish-sipi-arm-image-using
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
-      - uses: dasch-swiss/sipi/.github/actions/update-dns@feature/dev-1990-build-and-publish-sipi-arm-image-using
+      - uses: self-actuated/hetzner-dns-action@v1
       - uses: docker/setup-buildx-action@v2
-      - name: Build and publish sipi x86 image to Dockerhub
-        run: |
-          echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
-          make docker-publish-x86
+      - uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+      - run: make docker-publish-amd64
+
+  # publish manifest combining aarch64 and amd64 images
+  publish_manifest:
+    runs-on: ubuntu-latest
+    needs: [publish_amd64, publish_aarch64]
+    steps:
+      - name: Login to container Registry
+        uses: docker/login-action@v2
+        with:
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: docker-publish-manifest
 
 
   # build documentation
