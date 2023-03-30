@@ -17,11 +17,12 @@ jobs:
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
       - uses: dasch-swiss/sipi/.github/actions/setup-python-for-tests@feature/dev-1990-build-and-publish-sipi-arm-image-using
-#      - uses: dasch-swiss/sipi/.github/actions/start-debug-session@feature/dev-1990-build-and-publish-sipi-arm-image-using
-#        with:
-#          SSH_GATEWAY_IP: ${{ secrets.SSH_GATEWAY_IP }}
-      - name: curl-openssl
-        run: curl -S -L -O https://www.openssl.org/source/openssl-3.0.1.tar.gz
+      - name: Set Hetzner DNS
+        run: |
+          echo "[Resolve]" | sudo tee /etc/systemd/resolved.conf
+          echo "DNS=185.12.64.1" | sudo tee -a /etc/systemd/resolved.conf
+          sudo systemctl daemon-reload
+          sudo systemctl restart systemd-resolved.service
       - name: restart docker
         run: sudo systemctl daemon-reload && sudo systemctl restart docker
       - run: make test-ci
