@@ -108,7 +108,7 @@ docker-publish-debug: ## publish Sipi Docker image to Docker-Hub with debugging 
 		-t $(DOCKER_IMAGE)-debug \
 		--push \
 		-f ./Dockerfile.debug \
-		-
+		.
 
 #####################################
 # Remote Sipi development environment
@@ -122,7 +122,7 @@ docker-build-remote-sipi-env: ## build and publish Remote Sipi Environment Docke
 		-t daschswiss/remote-sipi-env:1.0 \
 		--load \
 		-f ./Dockerfile.remote-sipi-env \
-		-
+		.
 
 #####################################
 # test targets
