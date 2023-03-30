@@ -1,0 +1,13 @@
+name: "Update DNS entries"
+description: "Update DNS entries to fix the broken DNS on Hetzner servers"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set Hetzner DNS
+      shell: bash
+      run: |
+        echo "[Resolve]" | sudo tee /etc/systemd/resolved.conf
+        echo "DNS=185.12.64.1" | sudo tee -a /etc/systemd/resolved.conf
+        sudo systemctl daemon-reload
+        sudo systemctl restart systemd-resolved.service

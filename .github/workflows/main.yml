@@ -17,12 +17,7 @@ jobs:
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
       - uses: dasch-swiss/sipi/.github/actions/setup-python-for-tests@feature/dev-1990-build-and-publish-sipi-arm-image-using
-      - name: Set Hetzner DNS
-        run: |
-          echo "[Resolve]" | sudo tee /etc/systemd/resolved.conf
-          echo "DNS=185.12.64.1" | sudo tee -a /etc/systemd/resolved.conf
-          sudo systemctl daemon-reload
-          sudo systemctl restart systemd-resolved.service
+      - uses: dasch-swiss/sipi/.github/actions/update-dns@feature/dev-1990-build-and-publish-sipi-arm-image-using
       - name: restart docker
         run: sudo systemctl daemon-reload && sudo systemctl restart docker
       - run: make test-ci
@@ -35,6 +30,7 @@ jobs:
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
       - uses: dasch-swiss/sipi/.github/actions/setup-python-for-tests@feature/dev-1990-build-and-publish-sipi-arm-image-using
+      - uses: dasch-swiss/sipi/.github/actions/update-dns@feature/dev-1990-build-and-publish-sipi-arm-image-using
       - run: make test-integration
 
   # publish only on release
@@ -87,6 +83,7 @@ jobs:
       - uses: dasch-swiss/sipi/.github/actions/checkout@feature/dev-1990-build-and-publish-sipi-arm-image-using
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - uses: dasch-swiss/sipi/.github/actions/update-dns@feature/dev-1990-build-and-publish-sipi-arm-image-using
       - uses: docker/setup-buildx-action@v2
       - name: Build and publish sipi aarch64 image to Dockerhub
         run: |
@@ -106,6 +103,7 @@ jobs:
       - uses: dasch-swiss/sipi/.github/actions/checkout@feature/dev-1990-build-and-publish-sipi-arm-image-using
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - uses: dasch-swiss/sipi/.github/actions/update-dns@feature/dev-1990-build-and-publish-sipi-arm-image-using
       - uses: docker/setup-buildx-action@v2
       - name: Build and publish sipi x86 image to Dockerhub
         run: |
@@ -138,34 +136,3 @@ jobs:
           CUSTOM_DOMAIN: sipi.io
           CONFIG_FILE: docs/mkdocs.yml
           REQUIREMENTS: docs/requirements.txt
-
-  # testing. don't merge into main!
-  specs:
-    name: specs
-    runs-on: actuated
-    steps:
-      - uses: actions/checkout@v1
-      - name: Setup mirror
-        uses: self-actuated/hub-mirror@master
-
-      - name: Check the mount-runner
-        run: |
-          sudo journalctl -u mount-runner --no-pager
-      - name: Show resolv file
-        run: |
-          cat /etc/resolv.conf
-          docker run ubuntu:22.04 cat /etc/resolv.conf
-      - name: Curl OpenSSL
-        run: |
-          curl -S -L -O https://www.openssl.org/source/openssl-3.0.1.tar.gz
-      - name: Curl inside Ubuntu
-        run: |
-          echo "FROM ubuntu:22.04" >> Dockerfile
-          echo "RUN apt-get update && apt-get install -y curl" >> Dockerfile
-          echo "RUN curl -S -L -O https://www.openssl.org/source/openssl-3.0.1.tar.gz" >> Dockerfile
-          docker build -t curl-ubuntu .
-      - name: Curl inside Dswiss
-        run: |
-          docker run \
-            --rm \
-            daschswiss/sipi-base:2.18.0 /bin/sh -c "curl -S -L -O https://www.openssl.org/source/openssl-3.0.1.tar.gz"
