@@ -9,8 +9,12 @@ FROM $SIPI_BASE as builder
 
 WORKDIR /tmp/sipi
 
+# add sipi user
+RUN groupadd -r sipi && adduser -r -g sipi sipi
+USER sipi
+
 # Add everything to image.
-COPY . .
+COPY --chown=sipi:sipi . .
 
 # Build SIPI.
 RUN mkdir -p ./cmake-build-debug-inside-docker && \
