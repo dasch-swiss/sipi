@@ -4,11 +4,7 @@ description: "Setup python and install libraries"
 runs:
   using: "composite"
   steps:
-    - uses: actions/setup-python@v4
-      with:
-        python-version: 3.11
-
-    - name: add packages
+    - name: Install Python
       shell: bash
       run: |
         sudo add-apt-repository -y ppa:deadsnakes/ppa
