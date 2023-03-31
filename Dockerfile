@@ -17,15 +17,15 @@ USER sipi
 COPY --chown=sipi:sipi . .
 
 # Build SIPI.
-RUN mkdir -p ./cmake-build-debug-inside-docker && \
-    cd ./cmake-build-debug-inside-docker && \
+RUN mkdir -p ./build && \
+    cd ./build && \
     cmake -DMAKE_DEBUG:BOOL=OFF .. && \
     make
 
 # STAGE 2: Setup
 FROM $UBUNTU_BASE as final
 
-LABEL maintainer="400790+subotic@users.noreply.github.com"
+LABEL maintainer="support@dasch.swiss"
 
 # Silence debconf messages
 ARG DEBIAN_FRONTEND=noninteractive
@@ -68,7 +68,7 @@ RUN mkdir -p /sipi/images/knora && \
     mkdir -p /sipi/cache
 
 # Copy Sipi binary and other files from the build stage
-COPY --from=builder /tmp/sipi/cmake-build-debug-inside-docker/sipi /sipi/sipi
+COPY --from=builder /tmp/sipi/build/sipi /sipi/sipi
 COPY --from=builder /tmp/sipi/config/sipi.config.lua /sipi/config/sipi.config.lua
 COPY --from=builder /tmp/sipi/config/sipi.init.lua /sipi/config/sipi.init.lua
 COPY --from=builder /tmp/sipi/server/test.html /sipi/server/test.html

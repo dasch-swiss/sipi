@@ -37,7 +37,7 @@ docker-build: ## build and publish Sipi Docker image locally
 		--build-arg UID=$(shell id -u) \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
-		-t $(DOCKER_IMAGE) -t $(DOCKER_REPO):latest \
+		-t $(DOCKER_IMAGE) \
 		--load \
 		.
 
@@ -51,7 +51,7 @@ docker-build-debug: ## build and publish Sipi Docker image locally with debuggin
 		-t $(DOCKER_IMAGE)-debug \
 		--load \
 		--file ./Dockerfile.debug \
-		-
+		.
 
 .PHONY: docker-publish
 docker-publish: ## publish Sipi Docker image to Docker-Hub
@@ -114,14 +114,14 @@ docker-publish-debug: ## publish Sipi Docker image to Docker-Hub with debugging 
 # Remote Sipi development environment
 #####################################
 
-.PHONY: docker-build-remote-sipi-env
-docker-build-remote-sipi-env: ## build and publish Remote Sipi Environment Docker image locally
+.PHONY: docker-build-sipi-dev-env
+docker-build-sipi-dev-env: ## build and publish Sipi development environment Docker image locally
 	docker buildx build \
 		--progress auto \
 		--build-arg UID=$(shell id -u) \
 		-t daschswiss/remote-sipi-env:1.0 \
 		--load \
-		-f ./Dockerfile.remote-sipi-env \
+		-f ./Dockerfile.sipi-dev-env \
 		.
 
 #####################################

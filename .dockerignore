@@ -1,7 +1,12 @@
 .git
 .gitignore
-build
-build-linux
+build/
+build-linux/
+build-mac/
+cmake-build-debug/
+cmake-build-debug-remote/
+cmake-build-debug-inside-docker/
+cmake-build-dockerdebug/
 Dockerfile
 README.md
 **/__pycache__/
