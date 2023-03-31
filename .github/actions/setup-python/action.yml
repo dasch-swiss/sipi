@@ -1,0 +1,16 @@
+name: "Setup python and install libraries"
+description: "Setup python and install libraries"
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+
+    - name: add packages
+      shell: bash
+      run: |
+        sudo add-apt-repository -y ppa:deadsnakes/ppa
+        sudo apt install -qyyy --no-install-recommends python3.11 python3-pip
+        sudo ln -nsf /usr/bin/python3.11 /usr/bin/python3
