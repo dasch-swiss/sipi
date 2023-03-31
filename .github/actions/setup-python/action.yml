@@ -10,3 +10,4 @@ runs:
         sudo add-apt-repository -y ppa:deadsnakes/ppa
         sudo apt install -qyyy --no-install-recommends python3.11 python3-pip python3.11-distutils 
         sudo ln -nsf /usr/bin/python3.11 /usr/bin/python3
+        sudo python3 -m ensurepip --upgrade
