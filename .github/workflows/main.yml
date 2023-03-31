@@ -1,5 +1,4 @@
-name: "CI"
-description: "Run build pipeline on every commit to main or branch. Additionally, publish after each commit on main."
+name: "CI: test every branch / publish main"
 
 on:
   schedule:
