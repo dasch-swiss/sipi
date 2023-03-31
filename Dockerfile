@@ -7,14 +7,10 @@ ARG UBUNTU_BASE=ubuntu:22.04
 # STAGE 1: Build
 FROM $SIPI_BASE as builder
 
-ARG UID=1000
-RUN useradd -m -u ${UID} -s /bin/bash builder
-USER builder
-
 WORKDIR /tmp/sipi
 
 # Add everything to image.
-COPY --chown=builder . .
+COPY . .
 
 # Build SIPI.
 RUN mkdir -p ./cmake-build-debug-inside-docker && \
@@ -33,9 +29,7 @@ ENV TZ=Europe/Zurich
 
 # needs to be separate because of gnupg2 which is needed for the keyserver stuff
 RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
-  && apt-get clean \
-  && apt-get update \
-  && apt-get -y install \
+  && apt-get install -qyyy --no-install-recommends \
     ca-certificates \
     gnupg2 \
     tzdata \
@@ -45,9 +39,7 @@ RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
 
 # Install build dependencies.
 RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
-  && apt-get clean \
-  && apt-get update \
-  && apt-get -y install \
+  && apt-get -y install -qyyy --no-install-recommends \
     libllvm14 llvm-14-runtime \
     openssl \
     locales \
