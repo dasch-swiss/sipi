@@ -34,10 +34,9 @@ install-requirements: docs-install-requirements ## install requirements for docu
 docker-build: ## build and publish Sipi Docker image locally
 	docker buildx build \
 		--progress auto \
-		--build-arg UID=$(shell id -u) \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
-		-t $(DOCKER_IMAGE) \
+		-t $(DOCKER_IMAGE) -t $(DOCKER_REPO):latest \
 		--load \
 		.
 
@@ -45,7 +44,6 @@ docker-build: ## build and publish Sipi Docker image locally
 docker-build-debug: ## build and publish Sipi Docker image locally with debugging enabled
 	docker buildx build \
 		--progress auto \
-		--build-arg BUILD_TYPE=debug \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
         --build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		-t $(DOCKER_IMAGE)-debug \
@@ -53,24 +51,11 @@ docker-build-debug: ## build and publish Sipi Docker image locally with debuggin
 		--file ./Dockerfile.debug \
 		.
 
-.PHONY: docker-publish
-docker-publish: ## publish Sipi Docker image to Docker-Hub
-	docker buildx build \
-		--progress auto \
-		--platform linux/amd64,linux/arm64 \
-		--build-arg BUILD_TYPE=production \
-		--build-arg SIPI_BASE=$(SIPI_BASE) \
-		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
-		-t $(DOCKER_IMAGE) -t $(DOCKER_REPO):latest \
-		--push \
-		.
-
 .PHONY: docker-publish-aarch64
 docker-publish-aarch64: ## publish ARM Sipi Docker image to Docker-Hub with -aarch64 tag
 	docker buildx build \
 		--progress auto \
 		--platform linux/arm64 \
-		--build-arg BUILD_TYPE=production \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		-t $(DOCKER_IMAGE)-aarch64 \
@@ -82,7 +67,6 @@ docker-publish-amd64: ## publish x86 Sipi Docker image to Docker-Hub with -amd64
 	docker buildx build \
 		--progress auto \
 		--platform linux/amd64 \
-		--build-arg BUILD_TYPE=production \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		-t $(DOCKER_IMAGE)-amd64 \

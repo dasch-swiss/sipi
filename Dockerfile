@@ -9,12 +9,8 @@ FROM $SIPI_BASE as builder
 
 WORKDIR /tmp/sipi
 
-# add sipi user
-RUN groupadd -r sipi && adduser -r -g sipi sipi
-USER sipi
-
 # Add everything to image.
-COPY --chown=sipi:sipi . .
+COPY . .
 
 # Build SIPI.
 RUN mkdir -p ./build && \
