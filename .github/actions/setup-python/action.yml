@@ -1,6 +1,12 @@
 name: "Setup python and install libraries"
 description: "Setup python and install libraries"
 
+inputs:
+  version:
+    description: "Python version to install"
+    required: false
+    default: "3.11"
+
 runs:
   using: "composite"
   steps:
@@ -8,6 +14,9 @@ runs:
       shell: bash
       run: |
         sudo add-apt-repository -y ppa:deadsnakes/ppa
-        sudo apt install -qyyy --no-install-recommends python3.11 python3-pip python3.11-distutils 
-        sudo ln -nsf /usr/bin/python3.11 /usr/bin/python3
+        sudo apt install -qyyy --no-install-recommends python${{inputs.version}} python${{inputs.version}}-dev python${{inputs.version}}-distutils 
+        sudo ln -nsf /usr/bin/python${{inputs.version}} /usr/bin/python3
+    - name: Install PIP
+      shell: bash
+      run: |
         curl -sS https://bootstrap.pypa.io/get-pip.py | sudo python3
