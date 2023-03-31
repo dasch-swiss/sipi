@@ -31,19 +31,15 @@ LABEL maintainer="400790+subotic@users.noreply.github.com"
 ARG DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/Zurich
 
-# needs to be separate because of gnupg2 which is needed for the keyserver stuff
 RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
+  && apt-get clean \
+  && apt-get update \
   && apt-get install -qyyy --no-install-recommends \
     ca-certificates \
     gnupg2 \
     tzdata \
     wget \
     byobu curl git htop man vim wget unzip \
-  && apt-get clean
-
-# Install build dependencies.
-RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
-  && apt-get -y install -qyyy --no-install-recommends \
     libllvm14 llvm-14-runtime \
     openssl \
     locales \
