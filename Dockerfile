@@ -12,11 +12,12 @@ WORKDIR /tmp/sipi
 # Add everything to image.
 COPY . .
 
-# Build SIPI.
+# Build SIPI and run unit tests.
 RUN mkdir -p ./build && \
     cd ./build && \
     cmake -DMAKE_DEBUG:BOOL=OFF .. && \
-    make
+    make && \
+    ctest
 
 # STAGE 2: Setup
 FROM $UBUNTU_BASE as final

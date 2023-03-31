@@ -27,11 +27,10 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: make test-ci
-      - run: make test-integration
-      - name: Publish only on main or tag (release) but not on schedule
+      - run: make docker-test-build-amd64
+      - name: Push image to Docker hub only on main or tag (release) but not on schedule
         # if: github.ref_name == 'main' || startsWith(github.ref, 'refs/tags') && github.event_name != 'schedule'
-        run: make docker-publish-amd64
+        run: make docker-push-amd64
 
   # Run tests and publish aarch64
   build_aarch64:
@@ -52,11 +51,10 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: make test-ci
-      - run: make test-integration
-      - name: Publish only on main or tag (release) but not on schedule
+      - run: make docker-test-build-aarch64
+      - name: Push image to Docker hub only on main or tag (release) but not on schedule
         # if: github.ref_name == 'main' || startsWith(github.ref, 'refs/tags') && github.event_name != 'schedule'
-        run: make docker-publish-aarch64
+        run: make docker-push-aarch64
 
   # publish manifest combining aarch64 and amd64 images
   publish_manifest:
