@@ -28,6 +28,7 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       - run: make docker-test-build-amd64
+      - run: make test-integration
       - name: Push image to Docker hub only on main or tag (release) but not on schedule
         # if: github.ref_name == 'main' || startsWith(github.ref, 'refs/tags') && github.event_name != 'schedule'
         run: make docker-push-amd64
@@ -52,6 +53,7 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       - run: make docker-test-build-aarch64
+      - run: make test-integration
       - name: Push image to Docker hub only on main or tag (release) but not on schedule
         # if: github.ref_name == 'main' || startsWith(github.ref, 'refs/tags') && github.event_name != 'schedule'
         run: make docker-push-aarch64

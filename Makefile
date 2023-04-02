@@ -52,7 +52,7 @@ docker-build-debug: ## build and publish Sipi Docker image locally with debuggin
 		.
 
 .PHONY: docker-test-build-aarch64
-docker-test-build-aarch64: ## locally test and publish aarch64 Sipi Docker image with -aarch64 tag
+docker-test-build-aarch64: ## locally (unit) test and publish aarch64 Sipi Docker image with -aarch64 tag
 	docker buildx build \
 		--progress auto \
 		--platform linux/arm64 \
@@ -61,14 +61,13 @@ docker-test-build-aarch64: ## locally test and publish aarch64 Sipi Docker image
 		-t $(DOCKER_IMAGE)-aarch64 -t $(DOCKER_REPO):latest \
 		--load \
 		.
-	pytest -s test/integration
 
 .PHONY: docker-push-aarch64
 docker-push-aarch64: ## push previously build aarch64 image to Docker hub
 	docker push $(DOCKER_IMAGE)-aarch64
 
 .PHONY: docker-test-build-amd64
-docker-test-build-amd64: ## locally test and publish x86 Sipi Docker image with -amd64 tag
+docker-test-build-amd64: ## locally (unit) test and publish x86 Sipi Docker image with -amd64 tag
 	docker buildx build \
 		--progress auto \
 		--platform linux/amd64 \
@@ -77,7 +76,6 @@ docker-test-build-amd64: ## locally test and publish x86 Sipi Docker image with 
 		-t $(DOCKER_IMAGE)-amd64 -t $(DOCKER_REPO):latest \
 		--load \
 		.
-	pytest -s test/integration
 
 .PHONY: docker-push-amd64
 docker-push-amd64: ## push previously build x86 image to Docker hub
