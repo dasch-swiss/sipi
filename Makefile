@@ -156,6 +156,10 @@ test-ci: ## compile and run tests inside Docker with Debug symbols (no it)
 test-integration: docker-build ## run tests against locally published Sipi Docker image
 	pytest -s test/integration
 
+.PHONY: test-integration-ci
+test-integration-ci: ## run tests against (already) locally published Sipi Docker image
+	pytest -s test/integration
+
 #####################################
 # other targets
 #####################################
