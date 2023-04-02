@@ -1,165 +1,100 @@
-name: CI
+name: "CI: test every branch / publish main"
 
 on:
   schedule:
     # run every midnight (on main)
     - cron: '0 0 * * *'
   push:
-  release:
-    types: [published]
 
 jobs:
-  test:
-    name: Run Unit and E2E Tests
-    runs-on: ubuntu-latest
-    steps:
-      -
-        name: Checkout source
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 50
-      -
-        name: Checkout private ci-assets
-        uses: actions/checkout@v3
-        with:
-          repository: dasch-swiss/dsp-ci-assets
-          token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
-          path: ci
-      -
-        name: Copy ci-assets
-        run: |
-          cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
-      -
-        name: Set up Python 3.11
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.11
-      -
-        name: install requirements
-        run: make install-requirements
-      -
-        name: test
-        run: make test-ci
 
-  integration:
-    name: Run Integration Tests
-    runs-on: ubuntu-latest
+  # Run tests and publish amd64
+  build_amd64:
+    name: Run tests and publish amd64
+    runs-on: actuated
+    concurrency:
+      group: ${{ github.ref }}-amd64
+      cancel-in-progress: true
     steps:
-      -
-        name: Checkout source
-        uses: actions/checkout@v3
+      - uses: self-actuated/hetzner-dns-action@v1
+      - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
-          fetch-depth: 50
-      -
-        name: Checkout private ci-assets
-        uses: actions/checkout@v3
-        with:
-          repository: dasch-swiss/dsp-ci-assets
-          token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
-          path: ci
-      -
-        name: Copy ci-assets
-        run: |
-          cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
-      -
-        name: Set up Python 3.11
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.11
-      -
-        name: install requirements
-        run: make install-requirements
-      -
-        name: build docker image and run integration tests
-        run: make test-integration
-
-  # publish only on release
-  publish-images:
-    name: Build and Publish Images to Dockerhub
-    needs: [test, integration]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags')
-    steps:
-      -
-        name: checkout source
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 50
-      -
-        name: checkout private ci-assets
-        uses: actions/checkout@v3
-        with:
-          repository: dasch-swiss/dsp-ci-assets
-          token: ${{ secrets.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
-          path: ci
-      -
-        name: copy ci-assets
-        run: |
-          cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
-      -
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-      -
-        name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v2
-      -
-        name: Login to Docker Hub
-        uses: docker/login-action@v2
+          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - uses: dasch-swiss/sipi/.github/actions/setup-python@main
+      - run: make install-requirements
+      - uses: docker/setup-buildx-action@v2
+      - uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      -
-        name: Get the version
-        id: get_version
-        run: echo ::set-output name=VERSION::$(echo $GITHUB_REF | cut -d / -f 3)
-      -
-        name: Build (always) and push (on release)
-        id: docker_build
-        uses: docker/build-push-action@v3
+      - run: make docker-test-build-amd64
+      - run: make test-integration-ci
+      - name: Push image to Docker hub only on main or tag (release) but not on schedule
+        if: github.ref_name == 'main' || startsWith(github.ref, 'refs/tags') && github.event_name != 'schedule'
+        run: make docker-push-amd64
+
+  # Run tests and publish aarch64
+  build_aarch64:
+    name: Run tests and publish aarch64
+    runs-on: actuated-aarch64
+    concurrency:
+      group: ${{ github.ref }}-aarch64
+      cancel-in-progress: true
+    steps:
+      - uses: self-actuated/hetzner-dns-action@v1
+      - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64 #, linux/arm64
-          push: true
-          tags: daschswiss/sipi:latest, daschswiss/sipi:${{ steps.get_version.outputs.VERSION }}
-      -
-        name: Update release notes
-        uses: lakto/gren-action@v1.1.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - uses: dasch-swiss/sipi/.github/actions/setup-python@main
+      - run: make install-requirements
+      - uses: docker/setup-buildx-action@v2
+      - uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+      - run: make docker-test-build-aarch64
+      - run: make test-integration-ci
+      - name: Push image to Docker hub only on main or tag (release) but not on schedule
+        if: github.ref_name == 'main' || startsWith(github.ref, 'refs/tags') && github.event_name != 'schedule'
+        run: make docker-push-aarch64
+
+  # publish manifest combining aarch64 and amd64 images
+  publish_manifest:
+    name: Build and Publish Manifest to Dockerhub
+    runs-on: ubuntu-latest
+    needs: [build_amd64, build_aarch64]
+    if: github.ref_name == 'main' || startsWith(github.ref, 'refs/tags') && github.event_name != 'schedule'
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+      - run: make docker-publish-manifest
 
   # build documentation
-  docs:
-    name: Build Docs Testrun
+  build_docs:
+    name: Build docs testrun
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v3
+      - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
-          fetch-depth: 1
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.11
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          make docs-install-requirements
-      - name: run docs build
-        run: make docs-build
+          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - uses: dasch-swiss/sipi/.github/actions/setup-python@main
+      - run: make docs-install-requirements
+      - run: make docs-build
 
   # publish documentation on release
   publish-docs:
-    name: Build and Publish Docs
-    needs: [docs]
+    name: Build and publish docs on tag
+    needs: [build_docs]
     runs-on: ubuntu-latest
-    if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags')
+    if: startsWith(github.ref, 'refs/tags') && github.event_name != 'schedule'
     steps:
-      - name: Checkout main branch
-        uses: actions/checkout@v3
-      - name: Deploy docs
-        uses: mhausenblas/mkdocs-deploy-gh-pages@master
+      - uses: actions/checkout@v3
+      - uses: mhausenblas/mkdocs-deploy-gh-pages@master
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           CUSTOM_DOMAIN: sipi.io

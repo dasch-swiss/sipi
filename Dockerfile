@@ -7,47 +7,36 @@ ARG UBUNTU_BASE=ubuntu:22.04
 # STAGE 1: Build
 FROM $SIPI_BASE as builder
 
-ARG UID=1000
-RUN useradd -m -u ${UID} -s /bin/bash builder
-USER builder
-
 WORKDIR /tmp/sipi
 
 # Add everything to image.
-COPY --chown=builder . .
+COPY . .
 
-# Build SIPI.
-RUN mkdir -p ./cmake-build-debug-inside-docker && \
-    cd ./cmake-build-debug-inside-docker && \
+# Build SIPI and run unit tests.
+RUN mkdir -p ./build && \
+    cd ./build && \
     cmake -DMAKE_DEBUG:BOOL=OFF .. && \
-    make
+    make && \
+    ctest
 
 # STAGE 2: Setup
 FROM $UBUNTU_BASE as final
 
-LABEL maintainer="400790+subotic@users.noreply.github.com"
+LABEL maintainer="support@dasch.swiss"
 
 # Silence debconf messages
 ARG DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/Zurich
 
-# needs to be separate because of gnupg2 which is needed for the keyserver stuff
 RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
   && apt-get clean \
   && apt-get update \
-  && apt-get -y install \
+  && apt-get install -qyyy --no-install-recommends \
     ca-certificates \
     gnupg2 \
     tzdata \
     wget \
     byobu curl git htop man vim wget unzip \
-  && apt-get clean
-
-# Install build dependencies.
-RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
-  && apt-get clean \
-  && apt-get update \
-  && apt-get -y install \
     libllvm14 llvm-14-runtime \
     openssl \
     locales \
@@ -76,7 +65,7 @@ RUN mkdir -p /sipi/images/knora && \
     mkdir -p /sipi/cache
 
 # Copy Sipi binary and other files from the build stage
-COPY --from=builder /tmp/sipi/cmake-build-debug-inside-docker/sipi /sipi/sipi
+COPY --from=builder /tmp/sipi/build/sipi /sipi/sipi
 COPY --from=builder /tmp/sipi/config/sipi.config.lua /sipi/config/sipi.config.lua
 COPY --from=builder /tmp/sipi/config/sipi.init.lua /sipi/config/sipi.init.lua
 COPY --from=builder /tmp/sipi/server/test.html /sipi/server/test.html

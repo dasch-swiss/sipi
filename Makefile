@@ -34,7 +34,6 @@ install-requirements: docs-install-requirements ## install requirements for docu
 docker-build: ## build and publish Sipi Docker image locally
 	docker buildx build \
 		--progress auto \
-		--build-arg UID=$(shell id -u) \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		-t $(DOCKER_IMAGE) -t $(DOCKER_REPO):latest \
@@ -45,24 +44,50 @@ docker-build: ## build and publish Sipi Docker image locally
 docker-build-debug: ## build and publish Sipi Docker image locally with debugging enabled
 	docker buildx build \
 		--progress auto \
-		--build-arg BUILD_TYPE=debug \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
         --build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		-t $(DOCKER_IMAGE)-debug \
 		--load \
-		--file ./Dockerfile.debug
+		--file ./Dockerfile.debug \
+		.
 
-.PHONY: docker-publish
-docker-publish: ## publish Sipi Docker image to Docker-Hub
+.PHONY: docker-test-build-aarch64
+docker-test-build-aarch64: ## locally (unit) test and publish aarch64 Sipi Docker image with -aarch64 tag
 	docker buildx build \
 		--progress auto \
-		--platform linux/amd64,linux/arm64 \
-		--build-arg BUILD_TYPE=production \
+		--platform linux/arm64 \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
-		-t $(DOCKER_IMAGE) -t $(DOCKER_REPO):latest \
-		--push \
+		-t $(DOCKER_IMAGE)-aarch64 -t $(DOCKER_REPO):latest \
+		--load \
 		.
+
+.PHONY: docker-push-aarch64
+docker-push-aarch64: ## push previously build aarch64 image to Docker hub
+	docker push $(DOCKER_IMAGE)-aarch64
+
+.PHONY: docker-test-build-amd64
+docker-test-build-amd64: ## locally (unit) test and publish x86 Sipi Docker image with -amd64 tag
+	docker buildx build \
+		--progress auto \
+		--platform linux/amd64 \
+		--build-arg SIPI_BASE=$(SIPI_BASE) \
+		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		-t $(DOCKER_IMAGE)-amd64 -t $(DOCKER_REPO):latest \
+		--load \
+		.
+
+.PHONY: docker-push-amd64
+docker-push-amd64: ## push previously build x86 image to Docker hub
+	docker push $(DOCKER_IMAGE)-amd64
+
+.PHONY: docker-publish-manifest
+docker-publish-manifest: ## publish Docker manifest combining aarch64 and x86 published images
+	docker manifest create $(DOCKER_IMAGE) --amend $(DOCKER_IMAGE)-amd64 --amend $(DOCKER_IMAGE)-aarch64
+	docker manifest annotate --arch amd64 --os linux $(DOCKER_IMAGE) $(DOCKER_IMAGE)-amd64
+	docker manifest annotate --arch arm64 --os linux $(DOCKER_IMAGE) $(DOCKER_IMAGE)-aarch64
+	docker manifest inspect $(DOCKER_IMAGE)
+	docker manifest push $(DOCKER_IMAGE)
 
 .PHONY: docker-publish-debug
 docker-publish-debug: ## publish Sipi Docker image to Docker-Hub with debugging enabled
@@ -74,20 +99,22 @@ docker-publish-debug: ## publish Sipi Docker image to Docker-Hub with debugging 
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		-t $(DOCKER_IMAGE)-debug \
 		--push \
-		--file ./Dockerfile.debug
+		-f ./Dockerfile.debug \
+		.
 
 #####################################
 # Remote Sipi development environment
 #####################################
 
-.PHONY: docker-build-remote-sipi-env
-docker-build-remote-sipi-env: ## build and publish Remote Sipi Environment Docker image locally
+.PHONY: docker-build-sipi-dev-env
+docker-build-sipi-dev-env: ## build and publish Sipi development environment Docker image locally
 	docker buildx build \
 		--progress auto \
 		--build-arg UID=$(shell id -u) \
 		-t daschswiss/remote-sipi-env:1.0 \
 		--load \
-		--file ./Dockerfile.remote-sipi-env
+		-f ./Dockerfile.sipi-dev-env \
+		.
 
 #####################################
 # test targets
@@ -127,6 +154,10 @@ test-ci: ## compile and run tests inside Docker with Debug symbols (no it)
 
 .PHONY: test-integration
 test-integration: docker-build ## run tests against locally published Sipi Docker image
+	pytest -s test/integration
+
+.PHONY: test-integration-ci
+test-integration-ci: ## run tests against (already) locally published Sipi Docker image
 	pytest -s test/integration
 
 #####################################

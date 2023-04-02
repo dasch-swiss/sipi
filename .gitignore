@@ -32,14 +32,13 @@ _build/
 #
 lib
 local
-/build
-build-linux
-build-mac
-cmake-build-debug
-/cmake-build-debug/
-/cmake-build-debug-remote/
-/cmake-build-debug-inside-docker/
-/cmake-build-dockerdebug/
+build/
+build-linux/
+build-mac/
+cmake-build-debug/
+cmake-build-debug-remote/
+cmake-build-debug-inside-docker/
+cmake-build-dockerdebug/
 # ignore cache
 cache/
 
