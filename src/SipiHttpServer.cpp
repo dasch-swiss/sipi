@@ -772,6 +772,7 @@ namespace Sipi {
     }
     //=========================================================================
 
+    // This method handles requests for "http:://{server}/{prefix}/{id}/knora.json
     static void knora_send_info(
         Connection &conn_obj,
         SipiHttpServer *serv,
