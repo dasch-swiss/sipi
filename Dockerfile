@@ -76,6 +76,17 @@ COPY --from=builder /tmp/sipi/server/test.html /sipi/server/test.html
 COPY --from=builder /tmp/sipi/scripts/test_functions.lua /sipi/scripts/test_functions.lua
 COPY --from=builder /tmp/sipi/scripts/send_response.lua /sipi/scripts/send_response.lua
 
-ENTRYPOINT [ "/sipi/sipi" ]
+RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
+        curl https://github.com/fpco/pid1-rs/releases/download/v0.1.0/pid1-x86_64-unknown-linux-musl --output /usr/sbin/pid1; \
+    elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
+        curl https://github.com/fpco/pid1-rs/releases/download/v0.1.0/pid1-aarch64-unknown-linux-musl --output /usr/sbin/pid1; \
+    else \
+        echo "No supported target architecture selected"; \
+    fi \
 
-CMD ["--config=/sipi/config/sipi.config.lua"]
+
+RUN chmod +x /usr/sbin/pid1
+
+ENTRYPOINT [ "/usr/sbin/pid1" ]
+
+CMD [ "/sipi/sipi", "--config=/sipi/config/sipi.config.lua" ]
