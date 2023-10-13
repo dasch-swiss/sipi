@@ -22,6 +22,10 @@ RUN mkdir -p ./build && \
 # STAGE 2: Setup
 FROM $UBUNTU_BASE as final
 
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+RUN echo "I am running on $BUILDPLATFORM, building for $TARGETPLATFORM"
+
 LABEL maintainer="support@dasch.swiss"
 
 # Silence debconf messages
