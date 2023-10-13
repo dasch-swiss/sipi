@@ -13,7 +13,6 @@ else()
     unset(timestamp_policy)
 endif()
 
-
 ExternalProject_Add(project_zstd
         INSTALL_DIR ${COMMON_LOCAL}
         URL https://github.com/facebook/zstd/archive/refs/heads/dev.zip
