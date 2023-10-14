@@ -65,6 +65,9 @@ Command-line Options
 
       --skipmeta Value, -k Value
                         Skip the given metadata. Value can be none,all
+                    
+      --topleft fileIn fileOut
+                        Enforce orientation TOPLEFT.
 
       --mirror Value, -m Value
                         Mirror the image. Value can be: none,horizontal,vertical
