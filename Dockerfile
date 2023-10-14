@@ -84,6 +84,6 @@ RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
         echo "No supported target architecture selected"; \
     fi
 
-ENTRYPOINT [ "/usr/sbin/pid1" ]
+ENTRYPOINT [ "/usr/sbin/pid1", "/sipi/sipi" ]
 
-CMD [ "/sipi/sipi", "--config=/sipi/config/sipi.config.lua" ]
+CMD [ "--config=/sipi/config/sipi.config.lua" ]
