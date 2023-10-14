@@ -1,5 +1,5 @@
 #
-# Copyright © 2016 Lukas Rosenthaler, Andrea Bianco, Benjamin Geer,
+# Copyright © 2016 - 2023 Lukas Rosenthaler, Andrea Bianco, Benjamin Geer,
 # Ivan Subotic, Tobias Schweizer, André Kilchenmann, and André Fatton.
 # This file is part of Sipi.
 # Sipi is free software: you can redistribute it and/or modify
@@ -185,9 +185,9 @@ endif()
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
 if(MAKE_DEBUG)
-    set(CMAKE_CXX_FLAGS "-g -DNDEBUG -std=c++11 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
+    set(CMAKE_CXX_FLAGS "-g -DNDEBUG -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
 else()
-    set(CMAKE_CXX_FLAGS "-O3 -DNDEBUG -std=c++11 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
+    set(CMAKE_CXX_FLAGS "-O3 -DNDEBUG -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
 endif()
 
 include(CheckCXXCompilerFlag)

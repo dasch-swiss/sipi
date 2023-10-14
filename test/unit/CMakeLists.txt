@@ -21,7 +21,7 @@ include(ExternalProject)
 # Download and install GoogleTest
 ExternalProject_Add(
         gtest
-        URL https://github.com/google/googletest/archive/refs/tags/release-1.12.1.tar.gz
+        URL https://github.com/google/googletest/archive/refs/heads/main.zip
         #DOWNLOAD_EXTRACT_TIMESTAMP NEW
         #GIT_REPOSITORY https://github.com/google/googletest.git
         PREFIX ${CMAKE_CURRENT_BINARY_DIR}/gtest
@@ -70,4 +70,3 @@ add_subdirectory(sipiimage)
 #add_test(NAME sipiimage_unit_test
 #        WORKING_DIRECTORY
 #        COMMAND sipiimage)
-
