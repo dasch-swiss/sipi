@@ -1,4 +1,4 @@
-name: "CI: test every branch / publish main"
+name: ci
 
 on:
   schedule:
