@@ -77,15 +77,12 @@ COPY --from=builder /tmp/sipi/scripts/test_functions.lua /sipi/scripts/test_func
 COPY --from=builder /tmp/sipi/scripts/send_response.lua /sipi/scripts/send_response.lua
 
 RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
-        curl https://github.com/fpco/pid1-rs/releases/download/v0.1.0/pid1-x86_64-unknown-linux-musl --output /usr/sbin/pid1; \
+        curl https://github.com/fpco/pid1-rs/releases/download/v0.1.0/pid1-x86_64-unknown-linux-musl --output /usr/sbin/pid1 && chmod +x /usr/sbin/pid1; \
     elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
-        curl https://github.com/fpco/pid1-rs/releases/download/v0.1.0/pid1-aarch64-unknown-linux-musl --output /usr/sbin/pid1; \
+        curl https://github.com/fpco/pid1-rs/releases/download/v0.1.0/pid1-aarch64-unknown-linux-musl --output /usr/sbin/pid1 && chmod +x /usr/sbin/pid1; \
     else \
         echo "No supported target architecture selected"; \
-    fi \
-
-
-RUN chmod +x /usr/sbin/pid1
+    fi
 
 ENTRYPOINT [ "/usr/sbin/pid1" ]
 
