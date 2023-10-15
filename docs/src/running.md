@@ -16,7 +16,7 @@ Convert an image file to another format:
 
 Compare two image files:
 
-    local/bin/sipi --Compare file1 --Compare file2 
+    local/bin/sipi --compare file1 file2 
 
 Running Sipi As a Server
 ------------------------
@@ -65,6 +65,9 @@ Command-line Options
 
       --skipmeta Value, -k Value
                         Skip the given metadata. Value can be none,all
+                    
+      --topleft fileIn fileOut
+                        Enforce orientation TOPLEFT.
 
       --mirror Value, -m Value
                         Mirror the image. Value can be: none,horizontal,vertical
@@ -75,7 +78,7 @@ Command-line Options
       --salsah, -s
                         Special flag for SALSAH internal use
 
-      --Compare file1 --Compare file2 or -C file1 -C file2
+      --compare file1 file2 or -C file1 file2
                         Compare two files
 
       --watermark file, -w file
