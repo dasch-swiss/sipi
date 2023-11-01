@@ -18,7 +18,6 @@ ExternalProject_Add(project_sentry
         URL https://github.com/getsentry/sentry-native/releases/download/0.6.6/sentry-native.zip
         DOWNLOAD_DIR ${COMMON_SRCS}/downloads
         ${timestamp_policy}
-        #DOWNLOAD_EXTRACT_TIMESTAMP NEW
         SOURCE_DIR ${COMMON_SRCS}/sentry-native
         CMAKE_ARGS -D SENTRY_BACKEND=inproc -DSENTRY_BUILD_SHARED_LIBS=OFF -DCMAKE_PREFIX_PATH=${COMMON_LOCAL} -DCMAKE_INSTALL_PREFIX=${COMMON_LOCAL}
         )

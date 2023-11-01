@@ -674,9 +674,6 @@ int main(int argc, char *argv[]) {
             ->transform(CLI::CheckedTransformer(logLevelMap, CLI::ignore_case))->envname("SIPI_LOGLEVEL");
 
     // sentry configuration
-    // sentry_dsn
-    // sentry_release
-    // sentry_environment
     std::string optSentryDsn;
     sipiopt.add_option("--sentry-dsn", optSentryDsn)->envname("SIPI_SENTRY_DSN");
 
