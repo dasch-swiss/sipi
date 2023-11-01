@@ -246,7 +246,7 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
 # !!! order is important !!!
-# dependent targets need to be added before the dependers,
+# dependent targets need to be added before the target that depends on them
 # e.g., png, bzip2 before freetype
 add_subdirectory(${EXT_PROJECTS_DIR}/openssl)
 add_subdirectory(${EXT_PROJECTS_DIR}/xz)
@@ -268,6 +268,7 @@ add_subdirectory(${EXT_PROJECTS_DIR}/luarocks)
 add_subdirectory(${EXT_PROJECTS_DIR}/sqlite3)
 add_subdirectory(${EXT_PROJECTS_DIR}/kakadu)
 add_subdirectory(${EXT_PROJECTS_DIR}/curl)
+add_subdirectory(${EXT_PROJECTS_DIR}/sentry)
 
 # add a target to generate API documentation with Doxygen
 find_package(Doxygen)
@@ -424,6 +425,7 @@ target_link_libraries(sipi ${LIBS}
         sqlite3
         dl
         pthread
+        sentry
         curl
         ssl
         crypto
@@ -434,7 +436,8 @@ target_link_libraries(sipi ${LIBS}
         m
         lzma
         Threads::Threads
-        ${CMAKE_DL_LIBS})
+        ${CMAKE_DL_LIBS}
+)
 
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
 	target_link_libraries(sipi

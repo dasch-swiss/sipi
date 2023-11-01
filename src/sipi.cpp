@@ -60,6 +60,7 @@
 #include "SipiConf.h"
 #include "SipiIO.h"
 
+#include "sentry.h"
 
 // A macro for silencing incorrect compiler warnings about unused variables.
 #define _unused(x) ((void)(x))
@@ -672,6 +673,16 @@ int main(int argc, char *argv[]) {
                        "Logging level Value can be: 'DEBUG', 'INFO', 'WARNING', 'ERR', 'CRIT', 'ALERT', 'EMERG'.")
             ->transform(CLI::CheckedTransformer(logLevelMap, CLI::ignore_case))->envname("SIPI_LOGLEVEL");
 
+    // sentry configuration
+    std::string optSentryDsn;
+    sipiopt.add_option("--sentry-dsn", optSentryDsn)->envname("SIPI_SENTRY_DSN");
+
+    std::string optSentryRelease;
+    sipiopt.add_option("--sentry-release", optSentryRelease)->envname("SIPI_SENTRY_RELEASE");
+
+    std::string optSentryEnvironment;
+    sipiopt.add_option("--sentry-environment", optSentryEnvironment)->envname("SIPI_SENTRY_ENVIRONMENT");
+
     CLI11_PARSE(sipiopt, argc, argv);
 
     /*
@@ -1283,6 +1294,27 @@ int main(int argc, char *argv[]) {
             }
             SipiFilenameHash::setLevels(sipiConf.getSubdirLevels());
 
+            // At this point the config is loaded and we can initialize sentry
+            if (!optSentryDsn.empty()) {
+                sentry_options_t *options = sentry_options_new();
+                sentry_options_set_dsn(options, optSentryDsn.c_str());
+                sentry_options_set_database_path(options, ".sentry-native");
+
+                if (!optSentryRelease.empty()) {
+                    sentry_options_set_release(options, optSentryRelease.c_str());
+                }
+
+                if (!optSentryEnvironment.empty()) {
+                    sentry_options_set_environment(options, optSentryEnvironment.c_str());
+                } else {
+                    sentry_options_set_environment(options, "development");
+                }
+
+                sentry_options_set_debug(options, 1);
+                sentry_init(options);
+            }
+
+
             //Create object SipiHttpServer
             int nthreads = sipiConf.getNThreads();
             if (nthreads < 1) {
@@ -1360,5 +1392,7 @@ int main(int argc, char *argv[]) {
             std::cerr << err << std::endl;
         }
     }
+    // make sure everything flushes
+    sentry_close();
     return EXIT_SUCCESS;
 }

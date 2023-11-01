@@ -88,6 +88,7 @@ target_link_libraries(configuration
 
 target_link_libraries(configuration
         ${LIBS}
+        sentry
         lcms2
         exiv2
         exiv2-xmp

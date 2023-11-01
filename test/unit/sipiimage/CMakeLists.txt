@@ -76,6 +76,7 @@ target_link_libraries(sipiimage
         libgtest)
 
 target_link_libraries(sipiimage
+        sentry
         lcms2
         exiv2
         exiv2-xmp
