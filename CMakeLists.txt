@@ -246,7 +246,7 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
 # !!! order is important !!!
-# dependent targets need to be added before the dependers,
+# dependent targets need to be added before the target that depends on them
 # e.g., png, bzip2 before freetype
 add_subdirectory(${EXT_PROJECTS_DIR}/openssl)
 add_subdirectory(${EXT_PROJECTS_DIR}/xz)
@@ -268,6 +268,7 @@ add_subdirectory(${EXT_PROJECTS_DIR}/luarocks)
 add_subdirectory(${EXT_PROJECTS_DIR}/sqlite3)
 add_subdirectory(${EXT_PROJECTS_DIR}/kakadu)
 add_subdirectory(${EXT_PROJECTS_DIR}/curl)
+add_subdirectory(${EXT_PROJECTS_DIR}/sentry)
 
 # add a target to generate API documentation with Doxygen
 find_package(Doxygen)
@@ -353,6 +354,7 @@ include_directories(
         ${COMMON_INCLUDE_FILES_DIR}/formats
         ${COMMON_INCLUDE_FILES_DIR}/iiifparser
         ${PROJECT_SOURCE_DIR}/shttps
+        ${PROJECT_SOURCE_DIR}/shttps
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/local/include
         ${CMAKE_CURRENT_SOURCE_DIR}/local/include/openjpeg-2.1
@@ -434,6 +436,7 @@ target_link_libraries(sipi ${LIBS}
         m
         lzma
         Threads::Threads
+        sentry
         ${CMAKE_DL_LIBS})
 
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")

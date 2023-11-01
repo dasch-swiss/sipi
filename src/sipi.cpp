@@ -60,6 +60,7 @@
 #include "SipiConf.h"
 #include "SipiIO.h"
 
+#include "sentry.h"
 
 // A macro for silencing incorrect compiler warnings about unused variables.
 #define _unused(x) ((void)(x))
@@ -1283,6 +1284,30 @@ int main(int argc, char *argv[]) {
             }
             SipiFilenameHash::setLevels(sipiConf.getSubdirLevels());
 
+            // At this point the config is loaded and we can initialize sentry
+            // if (sipiConf.getSentryDSN()) {
+
+            sentry_options_t *options = sentry_options_new();
+            // sentry_options_set_dsn(options, sipiConf.getSentryDSN().c_str());
+            sentry_options_set_dsn(options, "https://71f979ac538edc9a80ea585b7dcd0a3d@o4506122165747712.ingest.sentry.io/4506122172825600");
+            // This is also the default-path. For further information and recommendations:
+            // https://docs.sentry.io/platforms/native/configuration/options/#database-path
+            sentry_options_set_database_path(options, ".sentry-native");
+            sentry_options_set_release(options, "my-project-name@2.3.12");
+            // sentry_options_set_release(options, BUILD_SCM_REVISION);
+            sentry_options_set_environment(options, BUILD_SCM_TAG);
+            sentry_options_set_debug(options, 1);
+            sentry_init(options);
+
+            sentry_capture_event(sentry_value_new_message_event(
+                    /*   level */ SENTRY_LEVEL_INFO,
+                    /*  logger */ "custom",
+                    /* message */ "It works!"
+            ));
+
+            // }
+
+
             //Create object SipiHttpServer
             int nthreads = sipiConf.getNThreads();
             if (nthreads < 1) {
@@ -1360,5 +1385,7 @@ int main(int argc, char *argv[]) {
             std::cerr << err << std::endl;
         }
     }
+    // make sure everything flushes
+    sentry_close();
     return EXIT_SUCCESS;
 }
