@@ -426,6 +426,7 @@ target_link_libraries(sipi ${LIBS}
         sqlite3
         dl
         pthread
+        sentry
         curl
         ssl
         crypto
@@ -436,8 +437,8 @@ target_link_libraries(sipi ${LIBS}
         m
         lzma
         Threads::Threads
-        sentry
-        ${CMAKE_DL_LIBS})
+        ${CMAKE_DL_LIBS}
+)
 
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
 	target_link_libraries(sipi

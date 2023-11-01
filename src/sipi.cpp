@@ -673,6 +673,19 @@ int main(int argc, char *argv[]) {
                        "Logging level Value can be: 'DEBUG', 'INFO', 'WARNING', 'ERR', 'CRIT', 'ALERT', 'EMERG'.")
             ->transform(CLI::CheckedTransformer(logLevelMap, CLI::ignore_case))->envname("SIPI_LOGLEVEL");
 
+    // sentry configuration
+    // sentry_dsn
+    // sentry_release
+    // sentry_environment
+    std::string optSentryDsn;
+    sipiopt.add_option("--sentry-dsn", optSentryDsn)->envname("SIPI_SENTRY_DSN");
+
+    std::string optSentryRelease;
+    sipiopt.add_option("--sentry-release", optSentryRelease)->envname("SIPI_SENTRY_RELEASE");
+
+    std::string optSentryEnvironment;
+    sipiopt.add_option("--sentry-environment", optSentryEnvironment)->envname("SIPI_SENTRY_ENVIRONMENT");
+
     CLI11_PARSE(sipiopt, argc, argv);
 
     /*
@@ -1285,27 +1298,24 @@ int main(int argc, char *argv[]) {
             SipiFilenameHash::setLevels(sipiConf.getSubdirLevels());
 
             // At this point the config is loaded and we can initialize sentry
-            // if (sipiConf.getSentryDSN()) {
+            if (!optSentryDsn.empty()) {
+                sentry_options_t *options = sentry_options_new();
+                sentry_options_set_dsn(options, optSentryDsn.c_str());
+                sentry_options_set_database_path(options, ".sentry-native");
 
-            sentry_options_t *options = sentry_options_new();
-            // sentry_options_set_dsn(options, sipiConf.getSentryDSN().c_str());
-            sentry_options_set_dsn(options, "https://71f979ac538edc9a80ea585b7dcd0a3d@o4506122165747712.ingest.sentry.io/4506122172825600");
-            // This is also the default-path. For further information and recommendations:
-            // https://docs.sentry.io/platforms/native/configuration/options/#database-path
-            sentry_options_set_database_path(options, ".sentry-native");
-            sentry_options_set_release(options, "my-project-name@2.3.12");
-            // sentry_options_set_release(options, BUILD_SCM_REVISION);
-            sentry_options_set_environment(options, BUILD_SCM_TAG);
-            sentry_options_set_debug(options, 1);
-            sentry_init(options);
+                if (!optSentryRelease.empty()) {
+                    sentry_options_set_release(options, optSentryRelease.c_str());
+                }
 
-            sentry_capture_event(sentry_value_new_message_event(
-                    /*   level */ SENTRY_LEVEL_INFO,
-                    /*  logger */ "custom",
-                    /* message */ "It works!"
-            ));
+                if (!optSentryEnvironment.empty()) {
+                    sentry_options_set_environment(options, optSentryEnvironment.c_str());
+                } else {
+                    sentry_options_set_environment(options, "development");
+                }
 
-            // }
+                sentry_options_set_debug(options, 1);
+                sentry_init(options);
+            }
 
 
             //Create object SipiHttpServer

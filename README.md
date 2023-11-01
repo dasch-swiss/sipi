@@ -85,6 +85,14 @@ $ make run
 $ (mkdir -p ./build-mac && cd build-mac && cmake .. && make && ctest --verbose)
 ```
 
+# Sentry.io
+If you would like to use Sentry.io for error reporting, you can set the environment variable
+`SIPI_SENTRY_DSN` to the DSN of your Sentry project. If you do not set this variable, Sentry.io will not be used.
+
+Further variables can be set to configure the Sentry client:
+- `SIPI_SENTRY_ENVIRONMENT`: The environment in which the application is running. Defaults to `development`.
+- `SIPI_SENTRY_RELEASE`: The release version number of the application. 
+
 # Releases
 
 Releases are published on Dockerhub: https://hub.docker.com/repository/docker/daschswiss/sipi
