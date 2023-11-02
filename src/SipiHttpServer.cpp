@@ -2052,6 +2052,7 @@ namespace Sipi {
     }
     //=========================================================================
 
+    // here we add the main IIIF route to the server (process_get_request)
     void SipiHttpServer::run(void) {
         int old_ll = setlogmask(LOG_MASK(LOG_INFO));
         syslog(LOG_INFO, "Sipi server starting");
@@ -2069,6 +2070,7 @@ namespace Sipi {
 
         user_data(this);
 
+        // in here, we add additional routes, namely the ones for the LUA scripts
         Server::run();
     }
     //=========================================================================

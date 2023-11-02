@@ -54,6 +54,8 @@
 #include "Parsing.h"
 #include "makeunique.h"
 
+#include "sentry.h"
+
 static const char __file__[] = __FILE__;
 
 static std::mutex debugio; // mutex to protect debugging messages from threads
@@ -128,6 +130,10 @@ namespace shttps {
      * @param hd Pointer to string object containing the lua script file name
      */
     void ScriptHandler(shttps::Connection &conn, LuaServer &lua, void *user_data, void *hd) {
+
+        // start sentry session
+        sentry_start_session();
+
         std::vector<std::string> headers = conn.header();
         std::string uri = conn.uri();
 
@@ -139,6 +145,9 @@ namespace shttps {
             conn << "File not found\n";
             conn.flush();
             syslog(LOG_ERR, "ScriptHandler: %s not readable!", script.c_str());
+
+            // end sentry session
+            sentry_end_session();
             return;
         }
 
@@ -160,6 +169,9 @@ namespace shttps {
                 try {
                     if (lua.executeChunk(luacode, script) < 0) {
                         conn.flush();
+
+                        // end sentry session
+                        sentry_end_session();
                         return;
                     }
                 } catch (Error &err) {
@@ -170,10 +182,15 @@ namespace shttps {
                         conn << "Lua Error:\r\n==========\r\n" << err << "\r\n";
                         conn.flush();
                     } catch (int i) {
+                        // end sentry session
+                        sentry_end_session();
                         return;
                     }
 
                     syslog(LOG_ERR, "ScriptHandler: error executing lua script: %s", err.to_string().c_str());
+
+                    // end sentry session
+                    sentry_end_session();
                     return;
                 }
                 conn.flush();
@@ -207,6 +224,8 @@ namespace shttps {
                     try {
                         if (lua.executeChunk(luastr, script) < 0) {
                             conn.flush();
+                            // end sentry session
+                            sentry_end_session();
                             return;
                         }
                     } catch (Error &err) {
@@ -216,10 +235,14 @@ namespace shttps {
                             conn << "Lua Error:\r\n==========\r\n" << err << "\r\n";
                             conn.flush();
                         } catch (InputFailure iofail) {
+                            // end sentry session
+                            sentry_end_session();
                             return;
                         }
 
                         syslog(LOG_ERR, "ScriptHandler: error executing lua chunk: %s", err.to_string().c_str());
+                        // end sentry session
+                        sentry_end_session();
                         return;
                     }
                 }
@@ -227,6 +250,8 @@ namespace shttps {
                 std::string htmlcode = eluacode.substr(end);
                 conn << htmlcode;
                 conn.flush();
+                // end sentry session
+                sentry_end_session();
             } else {
                 conn.status(Connection::INTERNAL_SERVER_ERROR);
                 conn.header("Content-Type", "text/text; charset=utf-8");
@@ -235,6 +260,8 @@ namespace shttps {
                 syslog(LOG_ERR, "ScriptHandler: error executing script, unknown extension: %s", extension.c_str());
             }
         } catch (InputFailure iofail) {
+            // end sentry session
+            sentry_end_session();
             return; // we have an io error => just return, the thread will exit
         } catch (Error &err) {
             try {
@@ -243,10 +270,14 @@ namespace shttps {
                 conn << err;
                 conn.flush();
             } catch (InputFailure iofail) {
+                // end sentry session
+                sentry_end_session();
                 return;
             }
 
             syslog(LOG_ERR, "FileHandler: internal error: %s", err.to_string().c_str());
+            // end sentry session
+            sentry_end_session();
             return;
         }
     }
@@ -264,6 +295,10 @@ namespace shttps {
      * @param hd nullptr or pair (docroot, route)
      */
     void FileHandler(shttps::Connection &conn, LuaServer &lua, void *user_data, void *hd) {
+
+        // start sentry session
+        sentry_start_session();
+
         std::vector<std::string> headers = conn.header();
         std::string uri = conn.uri();
 
@@ -294,6 +329,8 @@ namespace shttps {
             conn << "File not found\n";
             conn.flush();
             syslog(LOG_ERR, "FileHandler: %s not readable", infile.c_str());
+            // end sentry session
+            sentry_end_session();
             return;
         }
 
@@ -306,6 +343,8 @@ namespace shttps {
                 conn << infile << " not aregular file\n";
                 conn.flush();
                 syslog(LOG_ERR, "FileHandler: %s is not regular file", infile.c_str());
+                // end sentry session
+                sentry_end_session();
                 return;
             }
         } else {
@@ -314,6 +353,8 @@ namespace shttps {
             conn << "Could not stat file" << infile << "\n";
             conn.flush();
             syslog(LOG_ERR, "FileHandler: Could not stat %s", infile.c_str());
+            // end sentry session
+            sentry_end_session();
             return;
         }
 
@@ -348,6 +389,8 @@ namespace shttps {
                 try {
                     if (lua.executeChunk(luacode, infile) < 0) {
                         conn.flush();
+                        // end sentry session
+                        sentry_end_session();
                         return;
                     }
                 } catch (Error &err) {
@@ -358,10 +401,14 @@ namespace shttps {
                         conn.flush();
                     } catch (int i) {
                         syslog(LOG_ERR, "FileHandler: error executing lua chunk!");
+                        // end sentry session
+                        sentry_end_session();
                         return;
                     }
 
                     syslog(LOG_ERR, "FileHandler: error executing lua chunk: %s", err.to_string().c_str());
+                    // end sentry session
+                    sentry_end_session();
                     return;
                 }
 
@@ -407,6 +454,8 @@ namespace shttps {
                         } catch (InputFailure iofail) {}
 
                         syslog(LOG_ERR, "FileHandler: error executing lua chunk: %s", err.to_string().c_str());
+                        // end sentry session
+                        sentry_end_session();
                         return;
                     }
                 }
@@ -481,6 +530,8 @@ namespace shttps {
                 conn.flush();
             }
         } catch (InputFailure iofail) {
+            // end sentry session
+            sentry_end_session();
             return; // we have an io error => just return, the thread will exit
         } catch (Error &err) {
             try {
@@ -491,6 +542,8 @@ namespace shttps {
             } catch (InputFailure iofail) {}
 
             syslog(LOG_ERR, "FileHandler: internal error: %s", err.to_string().c_str());
+            // end sentry session
+            sentry_end_session();
             return;
         }
     }
@@ -721,6 +774,11 @@ namespace shttps {
     }
     //=========================================================================
 
+    // process request is one thread that is waiting for incoming requests
+    // and processes them. It is started by the main thread and will run
+    // until the server is stopped.
+    // This is in addition to the thread pool that is used to process the
+    // lua scripts.
     static void *process_request(void *arg) {
         ThreadControl::ThreadChildData *tdata = static_cast<ThreadControl::ThreadChildData *>(arg);
         //pthread_t my_tid = pthread_self();
@@ -743,6 +801,10 @@ namespace shttps {
                     case SocketControl::ERROR:
                         break; // should never happen!
                     case SocketControl::PROCESS_REQUEST: {
+
+                        // we start a new sentry session (one session per request)
+                        sentry_start_session();
+
                         //
                         // here we process the request
                         //
@@ -779,6 +841,9 @@ namespace shttps {
                             msg.type = SocketControl::FINISHED_AND_CLOSE;
                         }
                         SocketControl::send_control_message(tdata->control_pipe, msg);
+
+                        // we end the sentry session
+                        sentry_end_session();
                         break;
                     }
                     case SocketControl::EXIT: {
@@ -937,8 +1002,10 @@ namespace shttps {
         syslog(LOG_INFO, "Creating thread pool....");
         ThreadControl thread_control(_nthreads, process_request, this);
         SocketControl socket_control(thread_control);
+
         //
-        // now we are adding the lua routes
+        // here we are adding the lua routes. We do this here, because we need the
+        // thread pool to be initialized before we can add the routes.
         //
         for (auto &route : _lua_routes) {
             route.script = _scriptdir + "/" + route.script;

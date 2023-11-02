@@ -1298,7 +1298,7 @@ int main(int argc, char *argv[]) {
             if (!optSentryDsn.empty()) {
                 sentry_options_t *options = sentry_options_new();
                 sentry_options_set_dsn(options, optSentryDsn.c_str());
-                sentry_options_set_database_path(options, ".sentry-native");
+                sentry_options_set_database_path(options, "/tmp/.sentry-native");
 
                 if (!optSentryRelease.empty()) {
                     sentry_options_set_release(options, optSentryRelease.c_str());
@@ -1311,6 +1311,9 @@ int main(int argc, char *argv[]) {
                 }
 
                 sentry_options_set_debug(options, 1);
+
+                // disable auto session tracking as we start a new session for each request manually
+                sentry_options_set_auto_session_tracking(options, 0);
                 sentry_init(options);
             }
 
@@ -1378,6 +1381,8 @@ int main(int argc, char *argv[]) {
             std::string wwwroute = sipiConf.getWWWRoute();
             std::pair<std::string, std::string> filehandler_info;
 
+            // just because we can, we also add here two additional routes
+            // (tip: click into addRoute to see all the places where routes are added)
             if (!(wwwroute.empty() || docroot.empty())) {
                 filehandler_info.first = wwwroute;
                 filehandler_info.second = docroot;
