@@ -2006,27 +2006,6 @@ namespace Sipi {
     }
     //=========================================================================
 
-    static void test_handler(Connection &conn_obj, shttps::LuaServer &luaserver, void *user_data, void *dummy) {
-        lua_State *L = luaL_newstate();
-        luaL_openlibs(L);
-
-        conn_obj.status(Connection::OK);
-        conn_obj.header("Content-Type", "text/plain");
-        conn_obj << "TEST test TEST test TEST!\n";
-
-        lua_close(L);
-    }
-    //=========================================================================
-
-    static void exit_handler(Connection &conn_obj, shttps::LuaServer &luaserver, void *user_data, void *dummy) {
-        syslog(LOG_INFO, "Exit handler called. Stopping SIPI");
-        conn_obj.status(Connection::OK);
-        conn_obj.header("Content-Type", "text/plain");
-        conn_obj << "Stopping Sipi\n";
-        conn_obj.server()->stop();
-    }
-    //=========================================================================
-
     SipiHttpServer::SipiHttpServer(int port_p, unsigned nthreads_p, const std::string userid_str,
                                    const std::string &logfile_p, const std::string &loglevel_p) : Server::Server(port_p,
                                                                                                                  nthreads_p,
@@ -2065,8 +2044,6 @@ namespace Sipi {
 
         add_route(Connection::GET, "/favicon.ico", favicon_handler);
         add_route(Connection::GET, "/", iiif_handler);
-        add_route(Connection::GET, "/admin/test", test_handler);
-        add_route(Connection::GET, "/admin/exit", exit_handler);
 
         user_data(this);
 
