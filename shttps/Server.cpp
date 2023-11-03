@@ -724,8 +724,9 @@ namespace shttps {
     }
     //=========================================================================
 
-    // The request_processor is executed for each handle each request.
-    static void *request_processor(void *arg) {
+    // The socket_request_processor is added to each tread and initiates handling of requests
+    // waiting at the socket level, as soon as a thread from the thread pool is available.
+    static void *socket_request_processor(void *arg) {
         ThreadControl::ThreadChildData *tdata = static_cast<ThreadControl::ThreadChildData *>(arg);
         //pthread_t my_tid = pthread_self();
 
@@ -771,9 +772,11 @@ namespace shttps {
                         std::string tmpstr(msg.peer_ip);
 
                         if (msg.ssl_sid != nullptr) {
+                            // we have a secure connection and initiate processing of the request
                             tstatus = tdata->serv->process_request(&ins, &os, tmpstr,
                                                                    msg.peer_port, true, keep_alive);
                         } else {
+                            // we have a normal connection and initiate processing of the request
                             tstatus = tdata->serv->process_request(&ins, &os, tmpstr,
                                                                    msg.peer_port, false, keep_alive);
                         }
@@ -946,7 +949,7 @@ namespace shttps {
         setlogmask(old_ll);
 
         syslog(LOG_INFO, "Creating thread pool....");
-        ThreadControl thread_control(_nthreads, request_processor, this);
+        ThreadControl thread_control(_nthreads, socket_request_processor, this);
         SocketControl socket_control(thread_control);
 
         //
