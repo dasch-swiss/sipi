@@ -75,7 +75,7 @@ namespace shttps {
 
     typedef void (*RequestHandler)(Connection &, LuaServer &, void *, void *);
 
-    extern void FileHandler(Connection &conn, LuaServer &lua, void *user_data, void *handler_data);
+    extern void file_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, void *handler_data);
 
     typedef enum {
         CONTINUE, CLOSE
@@ -122,8 +122,8 @@ namespace shttps {
      *     }
      *
      *     shttps::Server server(4711);
-     *     server.addRoute(shttps::Connection::GET, "/", RootHandler);
-     *     server.addRoute(shttps::Connection::GET, "/mirror", MirrorHandler);
+     *     server.add_route(shttps::Connection::GET, "/", RootHandler);
+     *     server.add_route(shttps::Connection::GET, "/mirror", MirrorHandler);
      *     server.run();
      *
      */
@@ -218,7 +218,7 @@ namespace shttps {
         std::vector<GlobalFunc> lua_globals;
         size_t _max_post_size;
 
-        RequestHandler getHandler(Connection &conn, void **handler_data_p);
+        RequestHandler get_handler(Connection &conn, void **handler_data_p);
 
         SocketControl::SocketInfo accept_connection(int sock, bool ssl = false);
 
@@ -435,7 +435,7 @@ namespace shttps {
          * Add a request handler for the given request method and route
          *
          * \param[in] method_p Request method (GET, PUT, POST etc.)
-         * \param[in] path Route that this handler should serve
+         * \param[in] path_p Route that this handler should serve
          * \param[in] handler_p Handler function which serves this method/route combination.
          *            The handler has the form
          *
@@ -444,8 +444,8 @@ namespace shttps {
          * \param[in] handler_data_p Pointer to arbitrary data given to the handler when called
          *
          */
-        void addRoute(Connection::HttpMethod method_p, const std::string &path, RequestHandler handler_p,
-                      void *handler_data_p = nullptr);
+        void add_route(Connection::HttpMethod method_p, const std::string &path_p, RequestHandler handler_p,
+                       void *handler_data_p = nullptr);
 
         /*!
          * Process a request... (Eventually should be private method)
@@ -455,8 +455,8 @@ namespace shttps {
          * \param[in] peer_port Port number of peer/client
          */
         ThreadStatus
-        processRequest(std::istream *ins, std::ostream *os, std::string &peer_ip, int peer_port, bool secure,
-                       int &keep_alive, bool socket_reuse = false);
+        process_request(std::istream *ins, std::ostream *os, std::string &peer_ip, int peer_port, bool secure,
+                        int &keep_alive, bool socket_reuse = false);
 
         /*!
         * Return the user data that has been added previously

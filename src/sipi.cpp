@@ -1381,14 +1381,13 @@ int main(int argc, char *argv[]) {
             std::string wwwroute = sipiConf.getWWWRoute();
             std::pair<std::string, std::string> filehandler_info;
 
-            // just because we can, we also add here two additional routes
-            // (tip: click into addRoute to see all the places where routes are added)
+            // here we add two additional routes for handling files.
+            // (tip: click into add_route to see all the places where routes are added. there are a few places.)
             if (!(wwwroute.empty() || docroot.empty())) {
                 filehandler_info.first = wwwroute;
                 filehandler_info.second = docroot;
-                server.addRoute(shttps::Connection::GET, wwwroute, shttps::FileHandler, &filehandler_info);
-                server.addRoute(shttps::Connection::POST, wwwroute, shttps::FileHandler, &filehandler_info);
-                //server.addRoute(shttps::Connection::GET, "/test", TestHandler, &server);
+                server.add_route(shttps::Connection::GET, wwwroute, shttps::file_handler, &filehandler_info);
+                server.add_route(shttps::Connection::POST, wwwroute, shttps::file_handler, &filehandler_info);
             }
 
             syslog(LOG_DEBUG, "Starting SipiHttpServer::run()");

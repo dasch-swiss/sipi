@@ -1145,7 +1145,7 @@ namespace Sipi {
     }
     //=========================================================================
 
-    static void process_get_request(
+    static void iiif_handler(
         Connection &conn_obj,
         shttps::LuaServer &luaserver,
         void *user_data,
@@ -2052,7 +2052,7 @@ namespace Sipi {
     }
     //=========================================================================
 
-    // here we add the main IIIF route to the server (process_get_request)
+    // here we add the main IIIF route to the server (iiif_handler)
     void SipiHttpServer::run(void) {
         int old_ll = setlogmask(LOG_MASK(LOG_INFO));
         syslog(LOG_INFO, "Sipi server starting");
@@ -2063,14 +2063,14 @@ namespace Sipi {
         syslog(LOG_DEBUG, "Salsah prefix: %s", _salsah_prefix.c_str());
         setlogmask(old_ll);
 
-        addRoute(Connection::GET, "/favicon.ico", favicon_handler);
-        addRoute(Connection::GET, "/", process_get_request);
-        addRoute(Connection::GET, "/admin/test", test_handler);
-        addRoute(Connection::GET, "/admin/exit", exit_handler);
+        add_route(Connection::GET, "/favicon.ico", favicon_handler);
+        add_route(Connection::GET, "/", iiif_handler);
+        add_route(Connection::GET, "/admin/test", test_handler);
+        add_route(Connection::GET, "/admin/exit", exit_handler);
 
         user_data(this);
 
-        // in here, we add additional routes, namely the ones for the LUA scripts
+        // in shttps::Server::run(), add additional routes are added, namely the ones for the LUA scripts
         Server::run();
     }
     //=========================================================================
