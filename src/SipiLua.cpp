@@ -909,28 +909,6 @@ namespace Sipi {
         lua_rawseti (L, -2, 2);
     }
 
-    static void get_exif_rationalv(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname) {
-        std::vector<Exiv2::Rational> ratvalv;
-        if (!exif->getValByKey(tagname, ratvalv)) {
-            lua_pop(L, lua_gettop(L));
-            lua_pushboolean(L, false);
-            lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
-            return;
-        }
-        lua_pop(L, lua_gettop(L));
-        lua_pushboolean(L, true);
-        lua_createtable(L, static_cast<int>(ratvalv.size()), 0);
-        for (int i = 0; i < ratvalv.size(); ++i) {
-            lua_createtable(L, 2, 0);
-            lua_pushnumber(L, static_cast<lua_Number>(ratvalv[i].first));
-            lua_rawseti(L, -2, 1);
-            lua_pushnumber(L, static_cast<lua_Number>(ratvalv[i].second));
-            lua_rawseti(L, -2, 2);
-            lua_rawseti(L, -2, i + 1);
-        }
-    }
-
-
     /*!
      *
      * @param L Lua interpreter

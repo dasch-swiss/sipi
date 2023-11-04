@@ -54,6 +54,8 @@
 #include "Parsing.h"
 #include "makeunique.h"
 
+#include "sentry.h"
+
 static const char __file__[] = __FILE__;
 
 static std::mutex debugio; // mutex to protect debugging messages from threads
@@ -93,8 +95,9 @@ namespace shttps {
     //=========================================================================
 
     /**
-     * This ist just the default handler that handles any unknown routes or requests. It
-     * is called if the server does not know how to ahndle a requerst...
+     * The default handler that handles any unknown routes or requests. It
+     * is called if the server does not know how to handle a request. It returns
+     * a 404 error.
      *
      * @param conn Connection instance
      * @param lua Lua interpreter instance
@@ -117,9 +120,9 @@ namespace shttps {
     //=========================================================================
 
     /**
-     * This is the handler that is used to execute pure lua scripts (e.g. implementing
-     * RESTful services based on Lua. The file must have the extention ".lua" or
-     * ".elua" (for embeded lua in HTML, tags <lua>...</lua> in order that this handler
+     * The handler that is used to execute pure lua scripts (e.g. implementing
+     * RESTful services based on Lua. The file must have the extension ".lua" or
+     * ".elua" (for embedded lua in HTML, tags <lua>...</lua> in order that this handler
      * is being called.
      *
      * @param conn Connection instance
@@ -127,7 +130,7 @@ namespace shttps {
      * @param user_data
      * @param hd Pointer to string object containing the lua script file name
      */
-    void ScriptHandler(shttps::Connection &conn, LuaServer &lua, void *user_data, void *hd) {
+    void script_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, void *hd) {
         std::vector<std::string> headers = conn.header();
         std::string uri = conn.uri();
 
@@ -138,7 +141,7 @@ namespace shttps {
             conn.header("Content-Type", "text/text; charset=utf-8");
             conn << "File not found\n";
             conn.flush();
-            syslog(LOG_ERR, "ScriptHandler: %s not readable!", script.c_str());
+            syslog(LOG_ERR, "script_handler: %s not readable!", script.c_str());
             return;
         }
 
@@ -173,7 +176,7 @@ namespace shttps {
                         return;
                     }
 
-                    syslog(LOG_ERR, "ScriptHandler: error executing lua script: %s", err.to_string().c_str());
+                    syslog(LOG_ERR, "script_handler: error executing lua script: %s", err.to_string().c_str());
                     return;
                 }
                 conn.flush();
@@ -219,7 +222,7 @@ namespace shttps {
                             return;
                         }
 
-                        syslog(LOG_ERR, "ScriptHandler: error executing lua chunk: %s", err.to_string().c_str());
+                        syslog(LOG_ERR, "script_handler: error executing lua chunk: %s", err.to_string().c_str());
                         return;
                     }
                 }
@@ -232,7 +235,7 @@ namespace shttps {
                 conn.header("Content-Type", "text/text; charset=utf-8");
                 conn << "Script has no valid extension: '" << extension << "' !";
                 conn.flush();
-                syslog(LOG_ERR, "ScriptHandler: error executing script, unknown extension: %s", extension.c_str());
+                syslog(LOG_ERR, "script_handler: error executing script, unknown extension: %s", extension.c_str());
             }
         } catch (InputFailure iofail) {
             return; // we have an io error => just return, the thread will exit
@@ -246,7 +249,7 @@ namespace shttps {
                 return;
             }
 
-            syslog(LOG_ERR, "FileHandler: internal error: %s", err.to_string().c_str());
+            syslog(LOG_ERR, "file_handler: internal error: %s", err.to_string().c_str());
             return;
         }
     }
@@ -255,7 +258,7 @@ namespace shttps {
     /**
      * This is the normal file handler that just sends the contents of the file.
      * It is being activated in the main program (e.g. in shttps.cpp or sipi.cpp)
-     * using "server.addRoute()". For binary objects (images, video etc.) this handler
+     * using "server.add_route()". For binary objects (images, video etc.) this handler
      * supports the HTTP range header.
      *
      * @param conn Connection instance
@@ -263,7 +266,7 @@ namespace shttps {
      * @param user_data Hook to user data
      * @param hd nullptr or pair (docroot, route)
      */
-    void FileHandler(shttps::Connection &conn, LuaServer &lua, void *user_data, void *hd) {
+    void file_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, void *hd) {
         std::vector<std::string> headers = conn.header();
         std::string uri = conn.uri();
 
@@ -293,7 +296,7 @@ namespace shttps {
             conn.header("Content-Type", "text/text; charset=utf-8");
             conn << "File not found\n";
             conn.flush();
-            syslog(LOG_ERR, "FileHandler: %s not readable", infile.c_str());
+            syslog(LOG_ERR, "file_handler: %s not readable", infile.c_str());
             return;
         }
 
@@ -305,7 +308,7 @@ namespace shttps {
                 conn.header("Content-Type", "text/text; charset=utf-8");
                 conn << infile << " not aregular file\n";
                 conn.flush();
-                syslog(LOG_ERR, "FileHandler: %s is not regular file", infile.c_str());
+                syslog(LOG_ERR, "file_handler: %s is not regular file", infile.c_str());
                 return;
             }
         } else {
@@ -313,7 +316,7 @@ namespace shttps {
             conn.header("Content-Type", "text/text; charset=utf-8");
             conn << "Could not stat file" << infile << "\n";
             conn.flush();
-            syslog(LOG_ERR, "FileHandler: Could not stat %s", infile.c_str());
+            syslog(LOG_ERR, "file_handler: Could not stat %s", infile.c_str());
             return;
         }
 
@@ -357,11 +360,11 @@ namespace shttps {
                         conn << "Lua Error:\r\n==========\r\n" << err << "\r\n";
                         conn.flush();
                     } catch (int i) {
-                        syslog(LOG_ERR, "FileHandler: error executing lua chunk!");
+                        syslog(LOG_ERR, "file_handler: error executing lua chunk!");
                         return;
                     }
 
-                    syslog(LOG_ERR, "FileHandler: error executing lua chunk: %s", err.to_string().c_str());
+                    syslog(LOG_ERR, "file_handler: error executing lua chunk: %s", err.to_string().c_str());
                     return;
                 }
 
@@ -406,7 +409,7 @@ namespace shttps {
                             conn.flush();
                         } catch (InputFailure iofail) {}
 
-                        syslog(LOG_ERR, "FileHandler: error executing lua chunk: %s", err.to_string().c_str());
+                        syslog(LOG_ERR, "file_handler: error executing lua chunk: %s", err.to_string().c_str());
                         return;
                     }
                 }
@@ -490,7 +493,7 @@ namespace shttps {
                 conn.flush();
             } catch (InputFailure iofail) {}
 
-            syslog(LOG_ERR, "FileHandler: internal error: %s", err.to_string().c_str());
+            syslog(LOG_ERR, "file_handler: internal error: %s", err.to_string().c_str());
             return;
         }
     }
@@ -608,7 +611,7 @@ namespace shttps {
     //=========================================================================
 
     /**
-     * Get the correct handler to handle an incoming request. It seaches all
+     * Get the correct handler to handle an incoming request. It searches all
      * the supplied handlers to find the correct one. It returns the appropriate
      * handler and returns the handler data in handler_data_p
      *
@@ -616,7 +619,7 @@ namespace shttps {
      * @param handler_data_p Returns the pointer to the handler data
      * @return The appropriate handler for this request.
      */
-    RequestHandler Server::getHandler(Connection &conn, void **handler_data_p) {
+    RequestHandler Server::get_handler(Connection &conn, void **handler_data_p) {
         std::map<std::string, RequestHandler>::reverse_iterator item;
 
         size_t max_match_len = 0;
@@ -721,8 +724,10 @@ namespace shttps {
     }
     //=========================================================================
 
-    static void *process_request(void *arg) {
-        ThreadControl::ThreadChildData *tdata = static_cast<ThreadControl::ThreadChildData *>(arg);
+    // The socket_request_processor is added to each thread and initiates handling of requests
+    // waiting at the socket level, as soon as a thread from the thread pool is available.
+    static void *socket_request_processor(void *arg) {
+        auto *tdata = static_cast<ThreadControl::ThreadChildData *>(arg);
         //pthread_t my_tid = pthread_self();
 
 
@@ -743,6 +748,10 @@ namespace shttps {
                     case SocketControl::ERROR:
                         break; // should never happen!
                     case SocketControl::PROCESS_REQUEST: {
+
+                        // we start a new sentry session (one session per request)
+                        sentry_start_session();
+
                         //
                         // here we process the request
                         //
@@ -763,11 +772,13 @@ namespace shttps {
                         std::string tmpstr(msg.peer_ip);
 
                         if (msg.ssl_sid != nullptr) {
-                            tstatus = tdata->serv->processRequest(&ins, &os, tmpstr,
-                                                                  msg.peer_port, true, keep_alive);
+                            // we have a secure connection and initiate processing of the request
+                            tstatus = tdata->serv->process_request(&ins, &os, tmpstr,
+                                                                   msg.peer_port, true, keep_alive);
                         } else {
-                            tstatus = tdata->serv->processRequest(&ins, &os, tmpstr,
-                                                                  msg.peer_port, false, keep_alive);
+                            // we have a normal connection and initiate processing of the request
+                            tstatus = tdata->serv->process_request(&ins, &os, tmpstr,
+                                                                   msg.peer_port, false, keep_alive);
                         }
                         //
                         // send the finished message
@@ -779,6 +790,9 @@ namespace shttps {
                             msg.type = SocketControl::FINISHED_AND_CLOSE;
                         }
                         SocketControl::send_control_message(tdata->control_pipe, msg);
+
+                        // we end the sentry session
+                        sentry_end_session();
                         break;
                     }
                     case SocketControl::EXIT: {
@@ -935,14 +949,15 @@ namespace shttps {
         setlogmask(old_ll);
 
         syslog(LOG_INFO, "Creating thread pool....");
-        ThreadControl thread_control(_nthreads, process_request, this);
+        ThreadControl thread_control(_nthreads, socket_request_processor, this);
         SocketControl socket_control(thread_control);
+
         //
-        // now we are adding the lua routes
+        // here we are adding the lua routes.
         //
         for (auto &route : _lua_routes) {
             route.script = _scriptdir + "/" + route.script;
-            addRoute(route.method, route.route, ScriptHandler, &(route.script));
+            add_route(route.method, route.route, script_handler, &(route.script));
 
             old_ll = setlogmask(LOG_MASK(LOG_INFO));
             syslog(LOG_INFO, "Added route %s with script %s", route.route.c_str(), route.script.c_str());
@@ -1214,17 +1229,20 @@ namespace shttps {
     //=========================================================================
 
 
-    void Server::addRoute(Connection::HttpMethod method_p, const std::string &path_p, RequestHandler handler_p,
-                          void *handler_data_p) {
+    // Adds a route to the server. The route is a combination of an HTTP method, a path, and request handler.
+    void Server::add_route(Connection::HttpMethod method_p, const std::string &path_p, RequestHandler handler_p,
+                           void *handler_data_p) {
         handler[method_p][path_p] = handler_p;
         handler_data[method_p][path_p] = handler_data_p;
     }
     //=========================================================================
 
 
+    // Starts an instance of the LUA server and selects and hands over to the correct
+    // request handler for the incoming request.
     shttps::ThreadStatus
-    Server::processRequest(std::istream *ins, std::ostream *os, std::string &peer_ip, int peer_port, bool secure,
-                           int &keep_alive, bool socket_reuse) {
+    Server::process_request(std::istream *ins, std::ostream *os, std::string &peer_ip, int peer_port, bool secure,
+                            int &keep_alive, bool socket_reuse) {
         if (_tmpdir.empty()) {
             syslog(LOG_WARNING, "_tmpdir is empty");
             throw Error(__file__, __LINE__, "_tmpdir is empty");
@@ -1267,7 +1285,7 @@ namespace shttps {
             void *hd = nullptr;
 
             try {
-                RequestHandler handler = getHandler(conn, &hd);
+                RequestHandler handler = get_handler(conn, &hd);
                 handler(conn, luaserver, _user_data, hd);
             } catch (InputFailure iofail) {
                 syslog(LOG_ERR, "Possibly socket closed by peer");

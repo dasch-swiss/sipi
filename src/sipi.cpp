@@ -1298,7 +1298,7 @@ int main(int argc, char *argv[]) {
             if (!optSentryDsn.empty()) {
                 sentry_options_t *options = sentry_options_new();
                 sentry_options_set_dsn(options, optSentryDsn.c_str());
-                sentry_options_set_database_path(options, ".sentry-native");
+                sentry_options_set_database_path(options, "/tmp/.sentry-native");
 
                 if (!optSentryRelease.empty()) {
                     sentry_options_set_release(options, optSentryRelease.c_str());
@@ -1311,6 +1311,9 @@ int main(int argc, char *argv[]) {
                 }
 
                 sentry_options_set_debug(options, 1);
+
+                // disable auto session tracking as we start a new session for each request manually
+                sentry_options_set_auto_session_tracking(options, 0);
                 sentry_init(options);
             }
 
@@ -1378,12 +1381,13 @@ int main(int argc, char *argv[]) {
             std::string wwwroute = sipiConf.getWWWRoute();
             std::pair<std::string, std::string> filehandler_info;
 
+            // here we add two additional routes for handling files.
+            // (tip: click into add_route to see all the places where routes are added. there are a few places.)
             if (!(wwwroute.empty() || docroot.empty())) {
                 filehandler_info.first = wwwroute;
                 filehandler_info.second = docroot;
-                server.addRoute(shttps::Connection::GET, wwwroute, shttps::FileHandler, &filehandler_info);
-                server.addRoute(shttps::Connection::POST, wwwroute, shttps::FileHandler, &filehandler_info);
-                //server.addRoute(shttps::Connection::GET, "/test", TestHandler, &server);
+                server.add_route(shttps::Connection::GET, wwwroute, shttps::file_handler, &filehandler_info);
+                server.add_route(shttps::Connection::POST, wwwroute, shttps::file_handler, &filehandler_info);
             }
 
             syslog(LOG_DEBUG, "Starting SipiHttpServer::run()");

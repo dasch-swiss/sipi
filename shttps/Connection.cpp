@@ -78,18 +78,6 @@ namespace shttps {
         rtrim(s);
     }
 
-    // trim from start (copying)
-    static inline std::string ltrim_copy(std::string s) {
-        ltrim(s);
-        return s;
-    }
-
-    // trim from end (copying)
-    static inline std::string rtrim_copy(std::string s) {
-        rtrim(s);
-        return s;
-    }
-
     // trim from both ends (copying)
     static inline std::string trim_copy(std::string s) {
         trim(s);
