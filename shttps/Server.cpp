@@ -724,10 +724,10 @@ namespace shttps {
     }
     //=========================================================================
 
-    // The socket_request_processor is added to each tread and initiates handling of requests
+    // The socket_request_processor is added to each thread and initiates handling of requests
     // waiting at the socket level, as soon as a thread from the thread pool is available.
     static void *socket_request_processor(void *arg) {
-        ThreadControl::ThreadChildData *tdata = static_cast<ThreadControl::ThreadChildData *>(arg);
+        auto *tdata = static_cast<ThreadControl::ThreadChildData *>(arg);
         //pthread_t my_tid = pthread_self();
 
 
