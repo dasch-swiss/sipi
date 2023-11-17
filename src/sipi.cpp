@@ -1315,8 +1315,6 @@ int main(int argc, char *argv[]) {
                 // configures the sampling rate for transactions
                 sentry_options_set_traces_sample_rate(options, 0.2);
 
-                // disable auto session tracking as we start a new session for each request manually
-                sentry_options_set_auto_session_tracking(options, 0);
                 sentry_init(options);
             }
 
