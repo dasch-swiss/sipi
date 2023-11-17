@@ -749,8 +749,12 @@ namespace shttps {
                         break; // should never happen!
                     case SocketControl::PROCESS_REQUEST: {
 
-                        // we start a new sentry session (one session per request)
-                        sentry_start_session();
+                        // we start a sentry transaction
+                        sentry_transaction_context_t *tx_ctx = sentry_transaction_context_new(
+                            "socket_request_processor",
+                            "process_request"
+                        );
+                        sentry_transaction_t *tx = sentry_transaction_start(tx_ctx, sentry_value_new_null());
 
                         //
                         // here we process the request
@@ -791,8 +795,8 @@ namespace shttps {
                         }
                         SocketControl::send_control_message(tdata->control_pipe, msg);
 
-                        // we end the sentry session
-                        sentry_end_session();
+                        // we end the sentry transaction and send it to Sentry
+                        sentry_transaction_finish(tx);
                         break;
                     }
                     case SocketControl::EXIT: {
