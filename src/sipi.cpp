@@ -1313,7 +1313,7 @@ int main(int argc, char *argv[]) {
                 sentry_options_set_debug(options, 0);
 
                 // configures the sampling rate for transactions
-                sentry_options_set_traces_sample_rate(options, 0.2);
+                sentry_options_set_traces_sample_rate(options, 0.1);
 
                 sentry_init(options);
             }
