@@ -9,11 +9,11 @@ runs:
   using: "composite"
   steps:
     - name: checkout source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
     - name: checkout private ci-assets
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: dasch-swiss/dsp-ci-assets
         token: ${{ inputs.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT

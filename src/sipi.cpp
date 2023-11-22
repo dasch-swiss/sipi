@@ -25,7 +25,6 @@
 * \brief Implements an IIIF server with many features.
 *
 */
-#include <syslog.h>
 #include <string>
 #include <sstream>
 #include <vector>
@@ -34,15 +33,12 @@
 #include <sstream>
 #include <thread>
 #include <utility>
-#include <stdlib.h>
 #include <sys/stat.h>
 
 #include <dirent.h>
-#include <sys/stat.h>
 #include <unistd.h>
 
 #include "curl/curl.h"
-#include "shttps/Global.h"
 #include "shttps/LuaServer.h"
 #include "shttps/LuaSqlite.h"
 
@@ -54,7 +50,6 @@
 #include "CLI11.hpp"
 
 #include "jansson.h"
-// #include "podofo/podofo.h"
 
 #include "shttps/Parsing.h"
 #include "SipiConf.h"
@@ -1000,10 +995,6 @@ int main(int argc, char *argv[]) {
 
         try {
             std::cout << std::endl << "Ivan was here" << std::endl;
-            std::cout << std::endl << BUILD_TIMESTAMP << std::endl;
-            std::cout << std::endl << BUILD_TIMESTAMP << std::endl;
-            std::cout << BUILD_SCM_TAG << std::endl;
-            std::cout << BUILD_SCM_REVISION << std::endl;
 
             Sipi::SipiConf sipiConf;
             bool config_loaded = false;
@@ -1301,7 +1292,8 @@ int main(int argc, char *argv[]) {
                 sentry_options_set_database_path(options, "/tmp/.sentry-native");
 
                 if (!optSentryRelease.empty()) {
-                    sentry_options_set_release(options, optSentryRelease.c_str());
+                    std::string sentryReleaseTag = std::string(BUILD_SCM_TAG) + "/" + optSentryRelease;
+                    sentry_options_set_release(options, sentryReleaseTag.c_str());
                 }
 
                 if (!optSentryEnvironment.empty()) {
@@ -1332,9 +1324,9 @@ int main(int argc, char *argv[]) {
                     sipiConf.getLoglevel());
 
             int old_ll = setlogmask(LOG_MASK(LOG_INFO));
-            syslog(LOG_INFO, BUILD_TIMESTAMP);
-            syslog(LOG_INFO, BUILD_SCM_TAG);
-            syslog(LOG_INFO, BUILD_SCM_REVISION);
+            syslog(LOG_INFO, "BUILD_TIMESTAMP: %s", BUILD_TIMESTAMP);
+            syslog(LOG_INFO, "BUILD_SCM_TAG: %s", BUILD_SCM_TAG);
+            syslog(LOG_INFO, "BUILD_SCM_REVISION: %s", BUILD_SCM_REVISION);
             setlogmask(old_ll);
 
             server.ssl_port(sipiConf.getSSLPort()); // set the secure connection port (-1 means no ssl socket)

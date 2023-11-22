@@ -308,6 +308,12 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
     message( STATUS "Build SCM revision: ${BUILD_SCM_REVISION}" )
 endif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
 
+if (NOT "$ENV{BUILD_TAG}" STREQUAL "")
+    set(BUILD_SCM_TAG "$ENV{BUILD_TAG}" CACHE INTERNAL "Copied from environment variable")
+endif()
+
+message( STATUS "Build SCM tag: ${BUILD_SCM_TAG}" )
+
 # write out the sipi configuration
 configure_file(${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h.in ${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h)
 
@@ -425,6 +431,9 @@ target_link_libraries(sipi ${LIBS}
         sqlite3
         dl
         pthread
+        mini_chromium
+        crashpad_client
+        crashpad_util
         sentry
         curl
         ssl

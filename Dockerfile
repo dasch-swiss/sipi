@@ -12,6 +12,9 @@ WORKDIR /tmp/sipi
 # Add everything to image.
 COPY . .
 
+ARG BUILD_TAG
+ENV BUILD_TAG=${BUILD_TAG}
+
 # Build SIPI and run unit tests.
 RUN mkdir -p ./build && \
     cd ./build && \
@@ -75,6 +78,10 @@ COPY --from=builder /tmp/sipi/config/sipi.init.lua /sipi/config/sipi.init.lua
 COPY --from=builder /tmp/sipi/server/test.html /sipi/server/test.html
 COPY --from=builder /tmp/sipi/scripts/test_functions.lua /sipi/scripts/test_functions.lua
 COPY --from=builder /tmp/sipi/scripts/send_response.lua /sipi/scripts/send_response.lua
+
+# Copy crashpad handler
+COPY --from=builder /tmp/sipi/build/local/bin/crashpad_handler /usr/sbin/crashpad_handler
+RUN chmod +x /usr/sbin/crashpad_handler
 
 RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
         curl -L https://github.com/fpco/pid1-rs/releases/download/v0.1.2/pid1-x86_64-unknown-linux-musl -o /usr/sbin/pid1 && chmod +x /usr/sbin/pid1; \

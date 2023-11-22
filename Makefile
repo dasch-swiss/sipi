@@ -36,6 +36,7 @@ docker-build: ## build and publish Sipi Docker image locally
 		--progress auto \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		--build-arg BUILD_TAG=$(BUILD_TAG) \
 		-t $(DOCKER_IMAGE) -t $(DOCKER_REPO):latest \
 		--load \
 		.
@@ -45,7 +46,8 @@ docker-build-debug: ## build and publish Sipi Docker image locally with debuggin
 	docker buildx build \
 		--progress auto \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
-        --build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		--build-arg BUILD_TAG=$(BUILD_TAG) \
 		-t $(DOCKER_IMAGE)-debug \
 		--load \
 		--file ./Dockerfile.debug \
@@ -58,6 +60,7 @@ docker-test-build-aarch64: ## locally (unit) test and publish aarch64 Sipi Docke
 		--platform linux/arm64 \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		--build-arg BUILD_TAG=$(BUILD_TAG) \
 		-t $(DOCKER_IMAGE)-aarch64 -t $(DOCKER_REPO):latest \
 		--load \
 		.
@@ -73,6 +76,7 @@ docker-test-build-amd64: ## locally (unit) test and publish x86 Sipi Docker imag
 		--platform linux/amd64 \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		--build-arg BUILD_TAG=$(BUILD_TAG) \
 		-t $(DOCKER_IMAGE)-amd64 -t $(DOCKER_REPO):latest \
 		--load \
 		.
@@ -97,6 +101,7 @@ docker-publish-debug: ## publish Sipi Docker image to Docker-Hub with debugging 
 		--build-arg BUILD_TYPE=debug \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		--build-arg BUILD_TAG=$(BUILD_TAG) \
 		-t $(DOCKER_IMAGE)-debug \
 		--push \
 		-f ./Dockerfile.debug \
