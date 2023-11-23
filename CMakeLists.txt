@@ -413,6 +413,7 @@ add_dependencies(sipi
 
 
 # !!! ORDER MATTERS !!!
+# dependent targets need to be added before the target that depends on them
 target_link_libraries(sipi ${LIBS}
         lcms2
         exiv2
@@ -431,10 +432,12 @@ target_link_libraries(sipi ${LIBS}
         sqlite3
         dl
         pthread
-        mini_chromium
-        crashpad_client
-        crashpad_util
         sentry
+        crashpad_compat
+        crashpad_client
+        crashpad_handler_lib
+        crashpad_util
+        mini_chromium
         curl
         ssl
         crypto
