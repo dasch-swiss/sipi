@@ -22,10 +22,6 @@ RUN mkdir -p ./build && \
     make && \
     ctest
 
-RUN wget https://s3.amazonaws.com/getsentry-builds/getsentry/breakpad-tools/breakpad-tools-linux.zip && \
-    unzip breakpad-tools-linux.zip && \
-    ./dump_syms ./sipi
-
 # STAGE 2: Setup
 FROM $UBUNTU_BASE as final
 
