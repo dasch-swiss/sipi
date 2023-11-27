@@ -75,7 +75,8 @@ endif()
 #  Debug          : w/ debug symbols, w/o optimization
 #  Release        : w/o debug symbols, w/ optimization
 #  RelWithDebInfo : w/ debug symbols, w/ optimization
-set(CMAKE_BUILD_TYPE RelWithDebInfo)
+option(CMAKE_BUILD_TYPE "The default build type is RelWithDebInfo" RelWithDebInfo)
+
 
 #
 # Here we determine the compiler and compiler version. We need clang >= 7.3 or g++ >= 5.3
@@ -277,9 +278,7 @@ if(DOXYGEN_FOUND)
     )
 endif(DOXYGEN_FOUND)
 
-# get current date and time
-string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M")
-message( STATUS "Build timestamp: ${BUILD_TIMESTAMP}" )
+
 
 # get version from git
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
@@ -301,15 +300,16 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
         SET(BUILD_SCM_REVISION 0)
         SET(BUILD_SCM_TAG 0)
     endif(GIT_FOUND)
-    message( STATUS "Build SCM tag: ${BUILD_SCM_TAG}" )
-    message( STATUS "Build SCM revision: ${BUILD_SCM_REVISION}" )
 endif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
 
-if (NOT "$ENV{BUILD_TAG}" STREQUAL "")
-    set(BUILD_SCM_TAG "$ENV{BUILD_TAG}" CACHE INTERNAL "Copied from environment variable")
-endif()
+option(BUILD_SCM_TAG "Build SCM tag" "$ENV{BUILD_TAG}")
 
 message( STATUS "Build SCM tag: ${BUILD_SCM_TAG}" )
+message( STATUS "Build SCM revision: ${BUILD_SCM_REVISION}" )
+
+# get current date and time
+string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M")
+message( STATUS "Build timestamp: ${BUILD_TIMESTAMP}" )
 
 # write out the sipi configuration
 configure_file(${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h.in ${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h)
