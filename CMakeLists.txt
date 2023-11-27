@@ -21,7 +21,7 @@
 # License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.24)
 cmake_policy(VERSION 3.18)
 if(POLICY CMP0135) # DOWNLOAD_EXTRACT_TIMESTAMP
     cmake_policy(SET CMP0135 OLD)
@@ -34,7 +34,7 @@ include(CheckStructHasMember)
 include(CheckIncludeFiles)
 include(FindPackageHandleStandardArgs)
 
-project(sipi VERSION 1.5)
+project(sipi VERSION 3)
 
 # ------------------------------------------------------------------------------
 # Set our path variables
@@ -64,13 +64,18 @@ set(SIPI_SOURCE_DIR ${PROJECT_SOURCE_DIR})
 # Usually SIPI is compiled with all static libraries
 #
 option(MAKE_SHARED_SIPI "Create sipi using all shared libraries" OFF)
-option(MAKE_DEBUG "Create sipi with debugger options on" ON)
 
-# check to see if we have access to ccache
-find_program(CCACHE_FOUND ccache)
-if(CCACHE_FOUND)
-    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
-endif(CCACHE_FOUND)
+if(MAKE_SHARED_SIPI)
+    SET(BUILD_SHARED_LIBRARIES ON)
+else()
+    SET(BUILD_SHARED_LIBRARIES OFF)
+endif()
+
+# Set the build type.  Options are:
+#  Debug          : w/ debug symbols, w/o optimization
+#  Release        : w/o debug symbols, w/ optimization
+#  RelWithDebInfo : w/ debug symbols, w/ optimization
+set(CMAKE_BUILD_TYPE RelWithDebInfo)
 
 #
 # Here we determine the compiler and compiler version. We need clang >= 7.3 or g++ >= 5.3
@@ -168,24 +173,16 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
         list(APPEND CURL_LIBS "-framework Security")
     endif()
 endif()
-#SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
-if(MAKE_SHARED_SIPI)
-    SET(BUILD_SHARED_LIBRARIES ON)
-#    SET(CMAKE_EXE_LINKER_FLAGS "-shared")
-else()
-    SET(BUILD_SHARED_LIBRARIES OFF)
-    if(NOT CMAKE_SYSTEM_NAME STREQUAL DARWIN)
-#        SET(CMAKE_EXE_LINKER_FLAGS "-static")
-    endif()
-endif()
 
 #
 # set path to special find_package() code
 #
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
-if(MAKE_DEBUG)
-    set(CMAKE_CXX_FLAGS "-g -DNDEBUG -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CMAKE_CXX_FLAGS "-O0 -g -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
+elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    set(CMAKE_CXX_FLAGS "-O2 -g -DNDEBUG -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
 else()
     set(CMAKE_CXX_FLAGS "-O3 -DNDEBUG -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
 endif()
@@ -268,6 +265,7 @@ add_subdirectory(${EXT_PROJECTS_DIR}/luarocks)
 add_subdirectory(${EXT_PROJECTS_DIR}/sqlite3)
 add_subdirectory(${EXT_PROJECTS_DIR}/kakadu)
 add_subdirectory(${EXT_PROJECTS_DIR}/curl)
+add_subdirectory(${EXT_PROJECTS_DIR}/breakpad)
 add_subdirectory(${EXT_PROJECTS_DIR}/sentry)
 
 # add a target to generate API documentation with Doxygen
@@ -411,6 +409,8 @@ add_executable(sipi
 add_dependencies(sipi
         icc_profiles)
 
+add_dependencies(sipi project_breakpad)
+
 
 # !!! ORDER MATTERS !!!
 # dependent targets need to be added before the target that depends on them
@@ -433,10 +433,7 @@ target_link_libraries(sipi ${LIBS}
         dl
         pthread
         sentry
-        crashpad_compat
-        crashpad_client
-        crashpad_handler_lib
-        crashpad_util
+        breakpad_client
         mini_chromium
         curl
         ssl
