@@ -16,6 +16,11 @@ jobs:
       group: ${{ github.ref }}-amd64
       cancel-in-progress: true
     steps:
+      - name: Collect Workflow Telemetry
+        uses: catchpoint/workflow-telemetry-action@v1
+        with:
+          github_token: ${{ secrets.DASCHBOT_PAT }}
+          theme: dark
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
@@ -40,6 +45,11 @@ jobs:
       group: ${{ github.ref }}-aarch64
       cancel-in-progress: true
     steps:
+      - name: Collect Workflow Telemetry
+        uses: catchpoint/workflow-telemetry-action@v1
+        with:
+          github_token: ${{ secrets.DASCHBOT_PAT }}
+          theme: dark
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
