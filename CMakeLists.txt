@@ -265,7 +265,6 @@ add_subdirectory(${EXT_PROJECTS_DIR}/luarocks)
 add_subdirectory(${EXT_PROJECTS_DIR}/sqlite3)
 add_subdirectory(${EXT_PROJECTS_DIR}/kakadu)
 add_subdirectory(${EXT_PROJECTS_DIR}/curl)
-add_subdirectory(${EXT_PROJECTS_DIR}/breakpad)
 add_subdirectory(${EXT_PROJECTS_DIR}/sentry)
 
 # add a target to generate API documentation with Doxygen
@@ -409,9 +408,6 @@ add_executable(sipi
 add_dependencies(sipi
         icc_profiles)
 
-add_dependencies(sipi project_breakpad)
-
-
 # !!! ORDER MATTERS !!!
 # dependent targets need to be added before the target that depends on them
 target_link_libraries(sipi ${LIBS}
@@ -433,7 +429,10 @@ target_link_libraries(sipi ${LIBS}
         dl
         pthread
         sentry
-        breakpad_client
+        crashpad_compat
+        crashpad_client
+        crashpad_handler_lib
+        crashpad_util
         mini_chromium
         curl
         ssl
