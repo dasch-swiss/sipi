@@ -41,18 +41,6 @@ docker-build: ## build and publish Sipi Docker image locally
 		--load \
 		.
 
-.PHONY: docker-build-debug
-docker-build-debug: ## build and publish Sipi Docker image locally with debugging enabled
-	docker buildx build \
-		--progress auto \
-		--build-arg SIPI_BASE=$(SIPI_BASE) \
-		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
-		--build-arg BUILD_TAG=$(BUILD_TAG) \
-		-t $(DOCKER_IMAGE)-debug \
-		--load \
-		--file ./Dockerfile.debug \
-		.
-
 .PHONY: docker-test-build-aarch64
 docker-test-build-aarch64: ## locally (unit) test and publish aarch64 Sipi Docker image with -aarch64 tag
 	docker buildx build \
