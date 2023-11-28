@@ -1,25 +1,21 @@
-cmake_minimum_required(VERSION 3.14.5)
+cmake_minimum_required(VERSION 3.24.0)
 project(libsentry_builder C CXX)
 include(ExternalProject)
 
 #
 # Sentry SDK
 #
-if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24.0)
-    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
-else()
-    unset(timestamp_policy)
-endif()
-
-
+set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 ExternalProject_Add(project_sentry
         DEPENDS curl
         INSTALL_DIR ${COMMON_LOCAL}
-        URL https://github.com/getsentry/sentry-native/releases/download/0.6.6/sentry-native.zip
+        GIT_REPOSITORY https://github.com/getsentry/sentry-native
+        GIT_TAG 0.6.6
+        GIT_SUBMODULES_RECURSE TRUE
         DOWNLOAD_DIR ${COMMON_SRCS}/downloads
         ${timestamp_policy}
         SOURCE_DIR ${COMMON_SRCS}/sentry-native
-        CMAKE_ARGS -D SENTRY_BACKEND=inproc -DSENTRY_BUILD_SHARED_LIBS=OFF -DCMAKE_PREFIX_PATH=${COMMON_LOCAL} -DCMAKE_INSTALL_PREFIX=${COMMON_LOCAL}
+        CMAKE_ARGS -D SENTRY_BACKEND=crashpad -DSENTRY_BUILD_SHARED_LIBS=OFF -DCMAKE_PREFIX_PATH=${COMMON_LOCAL} -DCMAKE_INSTALL_PREFIX=${COMMON_LOCAL}
         )
 ExternalProject_Get_Property(project_sentry install_dir)
 

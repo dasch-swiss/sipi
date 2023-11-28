@@ -21,7 +21,7 @@
 # License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.24)
 cmake_policy(VERSION 3.18)
 if(POLICY CMP0135) # DOWNLOAD_EXTRACT_TIMESTAMP
     cmake_policy(SET CMP0135 OLD)
@@ -34,7 +34,7 @@ include(CheckStructHasMember)
 include(CheckIncludeFiles)
 include(FindPackageHandleStandardArgs)
 
-project(sipi VERSION 1.5)
+project(sipi VERSION 3)
 
 # ------------------------------------------------------------------------------
 # Set our path variables
@@ -64,13 +64,19 @@ set(SIPI_SOURCE_DIR ${PROJECT_SOURCE_DIR})
 # Usually SIPI is compiled with all static libraries
 #
 option(MAKE_SHARED_SIPI "Create sipi using all shared libraries" OFF)
-option(MAKE_DEBUG "Create sipi with debugger options on" ON)
 
-# check to see if we have access to ccache
-find_program(CCACHE_FOUND ccache)
-if(CCACHE_FOUND)
-    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
-endif(CCACHE_FOUND)
+if(MAKE_SHARED_SIPI)
+    SET(BUILD_SHARED_LIBRARIES ON)
+else()
+    SET(BUILD_SHARED_LIBRARIES OFF)
+endif()
+
+# Set the build type.  Options are:
+#  Debug          : w/ debug symbols, w/o optimization
+#  Release        : w/o debug symbols, w/ optimization
+#  RelWithDebInfo : w/ debug symbols, w/ optimization
+option(CMAKE_BUILD_TYPE "The default build type is RelWithDebInfo" RelWithDebInfo)
+
 
 #
 # Here we determine the compiler and compiler version. We need clang >= 7.3 or g++ >= 5.3
@@ -168,24 +174,16 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
         list(APPEND CURL_LIBS "-framework Security")
     endif()
 endif()
-#SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
-if(MAKE_SHARED_SIPI)
-    SET(BUILD_SHARED_LIBRARIES ON)
-#    SET(CMAKE_EXE_LINKER_FLAGS "-shared")
-else()
-    SET(BUILD_SHARED_LIBRARIES OFF)
-    if(NOT CMAKE_SYSTEM_NAME STREQUAL DARWIN)
-#        SET(CMAKE_EXE_LINKER_FLAGS "-static")
-    endif()
-endif()
 
 #
 # set path to special find_package() code
 #
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
-if(MAKE_DEBUG)
-    set(CMAKE_CXX_FLAGS "-g -DNDEBUG -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CMAKE_CXX_FLAGS "-O0 -g -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
+elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    set(CMAKE_CXX_FLAGS "-O2 -g -DNDEBUG -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
 else()
     set(CMAKE_CXX_FLAGS "-O3 -DNDEBUG -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
 endif()
@@ -280,9 +278,7 @@ if(DOXYGEN_FOUND)
     )
 endif(DOXYGEN_FOUND)
 
-# get current date and time
-string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M")
-message( STATUS "Build timestamp: ${BUILD_TIMESTAMP}" )
+
 
 # get version from git
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
@@ -304,9 +300,16 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
         SET(BUILD_SCM_REVISION 0)
         SET(BUILD_SCM_TAG 0)
     endif(GIT_FOUND)
-    message( STATUS "Build SCM tag: ${BUILD_SCM_TAG}" )
-    message( STATUS "Build SCM revision: ${BUILD_SCM_REVISION}" )
 endif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
+
+option(BUILD_SCM_TAG "Build SCM tag" "$ENV{BUILD_TAG}")
+
+message( STATUS "Build SCM tag: ${BUILD_SCM_TAG}" )
+message( STATUS "Build SCM revision: ${BUILD_SCM_REVISION}" )
+
+# get current date and time
+string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M")
+message( STATUS "Build timestamp: ${BUILD_TIMESTAMP}" )
 
 # write out the sipi configuration
 configure_file(${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h.in ${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h)
@@ -405,8 +408,8 @@ add_executable(sipi
 add_dependencies(sipi
         icc_profiles)
 
-
 # !!! ORDER MATTERS !!!
+# dependent targets need to be added before the target that depends on them
 target_link_libraries(sipi ${LIBS}
         lcms2
         exiv2
@@ -426,6 +429,11 @@ target_link_libraries(sipi ${LIBS}
         dl
         pthread
         sentry
+        crashpad_compat
+        crashpad_client
+        crashpad_handler_lib
+        crashpad_util
+        mini_chromium
         curl
         ssl
         crypto

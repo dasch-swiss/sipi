@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.3
 
 # Expose (global) variables (ARGs before FROM can only be used on FROM lines and not afterwards)
-ARG SIPI_BASE=daschswiss/sipi-base:2.18.0
+ARG SIPI_BASE=daschswiss/sipi-base:2.19.1
 ARG UBUNTU_BASE=ubuntu:22.04
 
 # STAGE 1: Build
@@ -12,10 +12,13 @@ WORKDIR /tmp/sipi
 # Add everything to image.
 COPY . .
 
+ARG BUILD_TAG
+ENV BUILD_TAG=${BUILD_TAG}
+
 # Build SIPI and run unit tests.
 RUN mkdir -p ./build && \
     cd ./build && \
-    cmake -DMAKE_DEBUG:BOOL=OFF .. && \
+    cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo .. && \
     make && \
     ctest
 
@@ -75,6 +78,10 @@ COPY --from=builder /tmp/sipi/config/sipi.init.lua /sipi/config/sipi.init.lua
 COPY --from=builder /tmp/sipi/server/test.html /sipi/server/test.html
 COPY --from=builder /tmp/sipi/scripts/test_functions.lua /sipi/scripts/test_functions.lua
 COPY --from=builder /tmp/sipi/scripts/send_response.lua /sipi/scripts/send_response.lua
+
+# Copy crashpad handler from the build stage to the place where it is expected by Sentry
+COPY --from=builder /tmp/sipi/build/local/bin/crashpad_handler /sipi/crashpad_handler
+RUN chmod +x /sipi/crashpad_handler
 
 RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
         curl -L https://github.com/fpco/pid1-rs/releases/download/v0.1.2/pid1-x86_64-unknown-linux-musl -o /usr/sbin/pid1 && chmod +x /usr/sbin/pid1; \

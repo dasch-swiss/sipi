@@ -6,6 +6,7 @@ build-mac/
 cmake-build-debug/
 cmake-build-debug-remote/
 cmake-build-debug-inside-docker/
+cmake-build-relwithdebinfo-inside-docker/
 cmake-build-dockerdebug/
 Dockerfile
 README.md
