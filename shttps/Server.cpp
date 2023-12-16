@@ -54,8 +54,6 @@
 #include "Parsing.h"
 #include "makeunique.h"
 
-#include "sentry.h"
-
 static const char __file__[] = __FILE__;
 
 static std::mutex debugio; // mutex to protect debugging messages from threads
@@ -105,14 +103,6 @@ namespace shttps {
      * @param hd not used
      */
     static void default_handler(Connection &conn, LuaServer &lua, void *user_data, void *hd) {
-
-        // we start a sentry transaction
-        sentry_transaction_context_t *tx_ctx = sentry_transaction_context_new(
-            "default_handler",
-            "execute_handler"
-        );
-        sentry_transaction_t *tx = sentry_transaction_start(tx_ctx, sentry_value_new_null());
-
         conn.status(Connection::NOT_FOUND);
         conn.header("Content-Type", "text/text");
         conn.setBuffer();
@@ -120,14 +110,10 @@ namespace shttps {
         try {
             conn << "No handler available" << Connection::flush_data;
         } catch (InputFailure iofail) {
-            // we end the sentry transaction and send it to Sentry
-            sentry_transaction_finish(tx);
             return;
         }
 
         syslog(LOG_WARNING, "No handler available! Host: %s Uri: %s", conn.host().c_str(), conn.uri().c_str());
-        // we end the sentry transaction and send it to Sentry
-        sentry_transaction_finish(tx);
    }
     //=========================================================================
 
@@ -143,14 +129,6 @@ namespace shttps {
      * @param hd Pointer to string object containing the lua script file name
      */
     void script_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, void *hd) {
-
-        // we start a sentry transaction
-        sentry_transaction_context_t *tx_ctx = sentry_transaction_context_new(
-            "script_handler",
-            "execute_handler"
-        );
-        sentry_transaction_t *tx = sentry_transaction_start(tx_ctx, sentry_value_new_null());
-
         std::vector<std::string> headers = conn.header();
         std::string uri = conn.uri();
 
@@ -162,8 +140,6 @@ namespace shttps {
             conn << "File not found\n";
             conn.flush();
             syslog(LOG_ERR, "script_handler: %s not readable!", script.c_str());
-            // we end the sentry transaction and send it to Sentry
-            sentry_transaction_finish(tx);
             return;
         }
 
@@ -185,8 +161,6 @@ namespace shttps {
                 try {
                     if (lua.executeChunk(luacode, script) < 0) {
                         conn.flush();
-                        // we end the sentry transaction and send it to Sentry
-                        sentry_transaction_finish(tx);
                         return;
                     }
                 } catch (Error &err) {
@@ -197,14 +171,10 @@ namespace shttps {
                         conn << "Lua Error:\r\n==========\r\n" << err << "\r\n";
                         conn.flush();
                     } catch (int i) {
-                        // we end the sentry transaction and send it to Sentry
-                        sentry_transaction_finish(tx);
                         return;
                     }
 
                     syslog(LOG_ERR, "script_handler: error executing lua script: %s", err.to_string().c_str());
-                    // we end the sentry transaction and send it to Sentry
-                    sentry_transaction_finish(tx);
                     return;
                 }
                 conn.flush();
@@ -238,8 +208,6 @@ namespace shttps {
                     try {
                         if (lua.executeChunk(luastr, script) < 0) {
                             conn.flush();
-                            // we end the sentry transaction and send it to Sentry
-                            sentry_transaction_finish(tx);
                             return;
                         }
                     } catch (Error &err) {
@@ -249,14 +217,10 @@ namespace shttps {
                             conn << "Lua Error:\r\n==========\r\n" << err << "\r\n";
                             conn.flush();
                         } catch (InputFailure iofail) {
-                            // we end the sentry transaction and send it to Sentry
-                            sentry_transaction_finish(tx);
                             return;
                         }
 
                         syslog(LOG_ERR, "script_handler: error executing lua chunk: %s", err.to_string().c_str());
-                        // we end the sentry transaction and send it to Sentry
-                        sentry_transaction_finish(tx);
                         return;
                     }
                 }
@@ -264,16 +228,12 @@ namespace shttps {
                 std::string htmlcode = eluacode.substr(end);
                 conn << htmlcode;
                 conn.flush();
-                // we end the sentry transaction and send it to Sentry
-                sentry_transaction_finish(tx);
             } else {
                 conn.status(Connection::INTERNAL_SERVER_ERROR);
                 conn.header("Content-Type", "text/text; charset=utf-8");
                 conn << "Script has no valid extension: '" << extension << "' !";
                 conn.flush();
                 syslog(LOG_ERR, "script_handler: error executing script, unknown extension: %s", extension.c_str());
-                // we end the sentry transaction and send it to Sentry
-                sentry_transaction_finish(tx);
             }
         } catch (InputFailure iofail) {
             return; // we have an io error => just return, the thread will exit
@@ -283,17 +243,11 @@ namespace shttps {
                 conn.header("Content-Type", "text/text; charset=utf-8");
                 conn << err;
                 conn.flush();
-                // we end the sentry transaction and send it to Sentry
-                sentry_transaction_finish(tx);
             } catch (InputFailure iofail) {
-                // we end the sentry transaction and send it to Sentry
-                sentry_transaction_finish(tx);
                 return;
             }
 
             syslog(LOG_ERR, "file_handler: internal error: %s", err.to_string().c_str());
-            // we end the sentry transaction and send it to Sentry
-            sentry_transaction_finish(tx);
             return;
         }
     }
@@ -311,14 +265,6 @@ namespace shttps {
      * @param hd nullptr or pair (docroot, route)
      */
     void file_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, void *hd) {
-
-        // we start a sentry transaction
-        sentry_transaction_context_t *tx_ctx = sentry_transaction_context_new(
-            "file_handler",
-            "execute_handler"
-        );
-        sentry_transaction_t *tx = sentry_transaction_start(tx_ctx, sentry_value_new_null());
-
         std::vector<std::string> headers = conn.header();
         std::string uri = conn.uri();
 
@@ -349,8 +295,6 @@ namespace shttps {
             conn << "File not found\n";
             conn.flush();
             syslog(LOG_ERR, "file_handler: %s not readable", infile.c_str());
-            // we end the sentry transaction and send it to Sentry
-            sentry_transaction_finish(tx);
             return;
         }
 
@@ -363,8 +307,6 @@ namespace shttps {
                 conn << infile << " not aregular file\n";
                 conn.flush();
                 syslog(LOG_ERR, "file_handler: %s is not regular file", infile.c_str());
-                // we end the sentry transaction and send it to Sentry
-                sentry_transaction_finish(tx);
                 return;
             }
         } else {
@@ -373,8 +315,6 @@ namespace shttps {
             conn << "Could not stat file" << infile << "\n";
             conn.flush();
             syslog(LOG_ERR, "file_handler: Could not stat %s", infile.c_str());
-            // we end the sentry transaction and send it to Sentry
-            sentry_transaction_finish(tx);
             return;
         }
 
@@ -409,8 +349,6 @@ namespace shttps {
                 try {
                     if (lua.executeChunk(luacode, infile) < 0) {
                         conn.flush();
-                        // we end the sentry transaction and send it to Sentry
-                        sentry_transaction_finish(tx);
                         return;
                     }
                 } catch (Error &err) {
@@ -421,14 +359,10 @@ namespace shttps {
                         conn.flush();
                     } catch (int i) {
                         syslog(LOG_ERR, "file_handler: error executing lua chunk!");
-                        // we end the sentry transaction and send it to Sentry
-                        sentry_transaction_finish(tx);
                         return;
                     }
 
                     syslog(LOG_ERR, "file_handler: error executing lua chunk: %s", err.to_string().c_str());
-                    // we end the sentry transaction and send it to Sentry
-                    sentry_transaction_finish(tx);
                     return;
                 }
 
@@ -463,8 +397,6 @@ namespace shttps {
                     try {
                         if (lua.executeChunk(luastr, infile) < 0) {
                             conn.flush();
-                            // we end the sentry transaction and send it to Sentry
-                            sentry_transaction_finish(tx);
                             return;
                         }
                     } catch (Error &err) {
@@ -473,13 +405,9 @@ namespace shttps {
                             conn.header("Content-Type", "text/text; charset=utf-8");
                             conn << "Lua Error:\r\n==========\r\n" << err << "\r\n";
                             conn.flush();
-                            // we end the sentry transaction and send it to Sentry
-                            sentry_transaction_finish(tx);
                         } catch (InputFailure iofail) {}
 
                         syslog(LOG_ERR, "file_handler: error executing lua chunk: %s", err.to_string().c_str());
-                        // we end the sentry transaction and send it to Sentry
-                        sentry_transaction_finish(tx);
                         return;
                     }
                 }
@@ -487,8 +415,6 @@ namespace shttps {
                 std::string htmlcode = eluacode.substr(end);
                 conn << htmlcode;
                 conn.flush();
-                // we end the sentry transaction and send it to Sentry
-                sentry_transaction_finish(tx);
             } else {
                 std::string actual_mimetype = shttps::Parsing::getFileMimetype(infile).first;
                 //
@@ -554,12 +480,8 @@ namespace shttps {
                     conn.sendFile(infile, 8192, start, end);
                 }
                 conn.flush();
-                // we end the sentry transaction and send it to Sentry
-                sentry_transaction_finish(tx);
             }
         } catch (InputFailure iofail) {
-            // we end the sentry transaction and send it to Sentry
-            sentry_transaction_finish(tx);
             return; // we have an io error => just return, the thread will exit
         } catch (Error &err) {
             try {
@@ -567,17 +489,11 @@ namespace shttps {
                 conn.header("Content-Type", "text/text; charset=utf-8");
                 conn << err;
                 conn.flush();
-                // we end the sentry transaction and send it to Sentry
-                sentry_transaction_finish(tx);
             } catch (InputFailure iofail) {}
 
             syslog(LOG_ERR, "file_handler: internal error: %s", err.to_string().c_str());
-            // we end the sentry transaction and send it to Sentry
-            sentry_transaction_finish(tx);
             return;
         }
-        // we end the sentry transaction and send it to Sentry
-        sentry_transaction_finish(tx);
     }
     //=========================================================================
 

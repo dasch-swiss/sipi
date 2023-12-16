@@ -266,7 +266,6 @@ add_subdirectory(${EXT_PROJECTS_DIR}/luarocks)
 add_subdirectory(${EXT_PROJECTS_DIR}/sqlite3)
 add_subdirectory(${EXT_PROJECTS_DIR}/kakadu)
 add_subdirectory(${EXT_PROJECTS_DIR}/curl)
-add_subdirectory(${EXT_PROJECTS_DIR}/sentry)
 
 # add a target to generate API documentation with Doxygen
 find_package(Doxygen)
@@ -428,12 +427,6 @@ target_link_libraries(sipi ${LIBS}
         sqlite3
         dl
         pthread
-        sentry
-        crashpad_compat
-        crashpad_client
-        crashpad_handler_lib
-        crashpad_util
-        mini_chromium
         curl
         ssl
         crypto

@@ -76,12 +76,6 @@ target_link_libraries(sipiimage
         libgtest)
 
 target_link_libraries(sipiimage
-        sentry
-        crashpad_compat
-        crashpad_client
-        crashpad_handler_lib
-        crashpad_util
-        mini_chromium
         lcms2
         exiv2
         exiv2-xmp

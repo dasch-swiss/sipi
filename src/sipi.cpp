@@ -55,8 +55,6 @@
 #include "SipiConf.h"
 #include "SipiIO.h"
 
-#include "sentry.h"
-
 // A macro for silencing incorrect compiler warnings about unused variables.
 #define _unused(x) ((void)(x))
 
@@ -669,14 +667,14 @@ int main(int argc, char *argv[]) {
             ->transform(CLI::CheckedTransformer(logLevelMap, CLI::ignore_case))->envname("SIPI_LOGLEVEL");
 
     // sentry configuration
-    std::string optSentryDsn;
-    sipiopt.add_option("--sentry-dsn", optSentryDsn)->envname("SIPI_SENTRY_DSN");
+    std::string optSipiSentryDsn;
+    sipiopt.add_option("--sentry-dsn", optSipiSentryDsn)->envname("SIPI_SENTRY_DSN");
 
-    std::string optSentryRelease;
-    sipiopt.add_option("--sentry-release", optSentryRelease)->envname("SIPI_SENTRY_RELEASE");
+    std::string optSipiSentryRelease;
+    sipiopt.add_option("--sentry-release", optSipiSentryRelease)->envname("SIPI_SENTRY_RELEASE");
 
-    std::string optSentryEnvironment;
-    sipiopt.add_option("--sentry-environment", optSentryEnvironment)->envname("SIPI_SENTRY_ENVIRONMENT");
+    std::string optSipiSentryEnvironment;
+    sipiopt.add_option("--sentry-environment", optSipiSentryEnvironment)->envname("SIPI_SENTRY_ENVIRONMENT");
 
     CLI11_PARSE(sipiopt, argc, argv);
 
@@ -1285,31 +1283,16 @@ int main(int argc, char *argv[]) {
             }
             SipiFilenameHash::setLevels(sipiConf.getSubdirLevels());
 
-            // At this point the config is loaded and we can initialize sentry
-            if (!optSentryDsn.empty()) {
-                sentry_options_t *options = sentry_options_new();
-                sentry_options_set_dsn(options, optSentryDsn.c_str());
-                sentry_options_set_database_path(options, "/tmp/.sentry-native");
 
-                if (!optSentryRelease.empty()) {
-                    std::string sentryReleaseTag = std::string(BUILD_SCM_TAG) + "/" + optSentryRelease;
-                    sentry_options_set_release(options, sentryReleaseTag.c_str());
-                }
+            // TODO: At this point the config is loaded and we can initialize metrics
+            if (!optSipiSentryDsn.empty())
+                syslog(LOG_INFO, "SIPI_SENTRY_DSN: %s", optSipiSentryDsn.c_str());
 
-                if (!optSentryEnvironment.empty()) {
-                    sentry_options_set_environment(options, optSentryEnvironment.c_str());
-                } else {
-                    sentry_options_set_environment(options, "development");
-                }
+            if (!optSipiSentryEnvironment.empty())
+                syslog(LOG_INFO, "SIPI_SENTRY_ENVRONMENT: %s", optSipiSentryEnvironment.c_str());
 
-                sentry_options_set_debug(options, 0);
-
-                // configures the sampling rate for transactions
-                sentry_options_set_traces_sample_rate(options, 0.1);
-
-                sentry_init(options);
-            }
-
+            if (!optSipiSentryRelease.empty())
+                syslog(LOG_INFO, "SIPI_SENTRY_Release: %s", optSipiSentryRelease.c_str());
 
             //Create object SipiHttpServer
             int nthreads = sipiConf.getNThreads();
@@ -1390,6 +1373,5 @@ int main(int argc, char *argv[]) {
         }
     }
     // make sure everything flushes
-    sentry_close();
     return EXIT_SUCCESS;
 }
