@@ -79,10 +79,6 @@ COPY --from=builder /tmp/sipi/server/test.html /sipi/server/test.html
 COPY --from=builder /tmp/sipi/scripts/test_functions.lua /sipi/scripts/test_functions.lua
 COPY --from=builder /tmp/sipi/scripts/send_response.lua /sipi/scripts/send_response.lua
 
-# Copy crashpad handler from the build stage to the place where it is expected by Sentry
-COPY --from=builder /tmp/sipi/build/local/bin/crashpad_handler /sipi/crashpad_handler
-RUN chmod +x /sipi/crashpad_handler
-
 RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
         curl -L https://github.com/fpco/pid1-rs/releases/download/v0.1.2/pid1-x86_64-unknown-linux-musl -o /usr/sbin/pid1 && chmod +x /usr/sbin/pid1; \
     elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
