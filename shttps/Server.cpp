@@ -85,6 +85,7 @@ namespace shttps {
             // Ignore any other signals. We must in particular ignore
             // SIGPIPE.
             if (sig == SIGINT || sig == SIGTERM) {
+                syslog(LOG_INFO, "Got SIGINT or SIGTERM, stopping server");
                 serverptr->stop();
                 return nullptr;
             }

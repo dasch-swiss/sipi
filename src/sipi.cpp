@@ -34,6 +34,7 @@
 #include <thread>
 #include <utility>
 #include <sys/stat.h>
+#include <execinfo.h>
 
 #include <dirent.h>
 #include <unistd.h>
@@ -273,94 +274,75 @@ private:
     }
 };
 
-/*
-void TestHandler(shttps::Connection &conn, shttps::LuaServer &luaserver, void *user_data, void *dummy) {
-  Sipi::SipiHttpServer *server = (Sipi::SipiHttpServer *) user_data;
+/*!
+ * Print a stack trace to stderr.
+ *
+ * This function is called when a signal is received that would normally terminate the program
+ * with a core dump. It prints a stack trace to stderr.
+ */
+void printStackTrace() {
+    void *array[15];
 
-  conn.setBuffer();
-  conn.setChunkedTransfer();
-  conn.header("Content-Type", "application/pdf; charset=utf-8");
+    const auto size = backtrace(array, 15);
+    char **strings = backtrace_symbols(array, size);
 
-  unsigned char img[3 * 256 * 256];
-  for (int y = 0; y < 256; y++) {
-    for (int x = 0; x < 256; x++) {
-      img[3 * (y * 256 + x)] = x;
-      img[3 * (y * 256 + x) + 1] = y;
-      img[3 * (y * 256 + x) + 2] = (x + y) / 2;
+    printf("Obtained %d stack frames.\n", size);
+
+    for (auto i = 0; i < size; i++) {
+        printf("%s\n", strings[i]);
     }
-  }
 
-  PoDoFo::PdfRefCountedBuffer *pdf_buffer = new PoDoFo::PdfRefCountedBuffer(32000);
-  PoDoFo::PdfOutputDevice *pdfdev = new PoDoFo::PdfOutputDevice(pdf_buffer);
-  PoDoFo::PdfStreamedDocument document(pdfdev);
-  PoDoFo::PdfPage *pPage;
-  PoDoFo::PdfPainter painter;
-  PoDoFo::PdfFont *pFont;
-
-  pPage = document.CreatePage(PoDoFo::PdfPage::CreateStandardPageSize(PoDoFo::ePdfPageSize_A4));
-  if (!pPage) {
-    std::cerr << "==>> ERROR: " << __LINE__ << std::endl;
-    return;
-  }
-  painter.SetPage(pPage);
-
-  pFont = document.CreateFont("arial");
-  if (!pFont) {
-    std::cerr << "==>> ERROR: " << __LINE__ << std::endl;
-    return;
-  }
-  pFont->SetFontSize(18.0);
-  painter.SetFont(pFont);
-  try {
-    painter.DrawText(56.69, pPage->GetPageSize().GetHeight() - 56.69, "Simple Image Presentation Interface (SIPI)");
-    pFont->SetFontSize(16.0);
-    painter.SetFont(pFont);
-    painter.DrawText(56.69, pPage->GetPageSize().GetHeight() - 80.0, "Server parameters");
-    pFont->SetFontSize(12.0);
-    painter.SetFont(pFont);
-
-    painter.DrawText(56.69, pPage->GetPageSize().GetHeight() - 100.0, "Number of threads:");
-    painter.DrawText(200.0, pPage->GetPageSize().GetHeight() - 100.0, std::to_string(server->nthreads()));
-
-    painter.DrawText(56.69, pPage->GetPageSize().GetHeight() - 120.0, "Port:");
-    painter.DrawText(200.0, pPage->GetPageSize().GetHeight() - 120.0, std::to_string(server->port()));
-
-    painter.DrawText(56.69, pPage->GetPageSize().GetHeight() - 140.0, "Image root:");
-    painter.DrawText(200.0, pPage->GetPageSize().GetHeight() - 140.0, server->imgroot());
-
-    painter.DrawText(56.69, pPage->GetPageSize().GetHeight() - 160.0, "Tmpdir:");
-    painter.DrawText(200.0, pPage->GetPageSize().GetHeight() - 160.0, server->tmpdir());
-
-    painter.DrawText(56.69, pPage->GetPageSize().GetHeight() - 180.0, "Scriptdir:");
-    painter.DrawText(200.0, pPage->GetPageSize().GetHeight() - 180.0, server->scriptdir());
-
-    painter.DrawText(56.69, pPage->GetPageSize().GetHeight() - 200.0, "Max. post size:");
-    painter.DrawText(200.0, pPage->GetPageSize().GetHeight() - 200.0, std::to_string(server->max_post_size()));
-  }
-  catch (PoDoFo::PdfError &err) {
-    std::cerr << err.what();
-  }
-
-  PoDoFo::PdfImage image(&document);
-  PoDoFo::PdfMemoryInputStream inimgstream((const char *) img, (PoDoFo::pdf_long) 3 * 256 * 256);
-  image.SetImageData(256, 256, 8, &inimgstream);
-
-  painter.DrawImage(56.69, 100.0, &image);
-
-  painter.FinishPage();
-  document.GetInfo()->SetCreator(PoDoFo::PdfString("Simple Image Presentation Interface (SIPI)"));
-  document.GetInfo()->SetAuthor(PoDoFo::PdfString("Lukas Rosenthaler"));
-  document.GetInfo()->SetTitle(PoDoFo::PdfString("Configuration parameters"));
-  document.GetInfo()->SetSubject(PoDoFo::PdfString("Configuration of SIPI server"));
-  document.GetInfo()->SetKeywords(PoDoFo::PdfString("SIPI;configuration;"));
-  document.Close();
-  conn.sendAndFlush(pdf_buffer->GetBuffer(), pdf_buffer->GetSize());
-  delete pdfdev;
-  delete pdf_buffer;
-  return;
+    free(strings);
 }
-*/
+
+/*!
+ * Handle a signal.
+ *
+ * This function is called when a signal is received that would normally terminate the program
+ * with a core dump. It prints a stack trace to stderr and exits with an error code.
+ *
+ * @param sig the signal number.
+ */
+void handler(const int sig) {
+
+    if (sig == SIGSEGV) {
+        fprintf(stderr, "SIGSEGV: segmentation fault.\n");
+        syslog(LOG_ERR, "SIGSEGV: segmentation fault.");
+    } else if (sig == SIGABRT) {
+        fprintf(stderr, "SIGABRT: abort.\n");
+        syslog(LOG_ERR, "SIGABRT: abort.");
+    } else {
+        fprintf(stderr, "Caught signal %d.\n", sig);
+        syslog(LOG_ERR, "Caught signal %d.", sig);
+    }
+
+    printStackTrace();
+
+    exit(1);
+}
+
+void baz() {
+    int *foo = (int*)-1; // make a bad pointer
+    printf("%d\n", *foo);       // causes segfault
+}
+
+void bar() { baz(); }
+void foo() { bar(); }
+
+/*!
+ * The main function.
+ *
+ * @param argc the number of command line arguments.
+ * @param argv the command line arguments.
+ * @return the exit code.
+ */
 int main(int argc, char *argv[]) {
+
+    // install signal handler
+    signal(SIGSEGV, handler);
+    signal(SIGABRT, handler);
+    foo(); // this will call foo, bar, and baz.  baz segfaults.
+
     //
     // first we initialize the libraries that sipi uses
     //
