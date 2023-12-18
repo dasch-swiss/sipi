@@ -275,10 +275,10 @@ private:
 };
 
 /*!
- * Print a stack trace to stderr.
+ * Print a stack trace.
  *
  * This function is called when a signal is received that would normally terminate the program
- * with a core dump. It prints a stack trace to stderr.
+ * with a core dump. It logs out a stack trace.
  */
 void printStackTrace() {
     void *array[15];
@@ -286,10 +286,10 @@ void printStackTrace() {
     const auto size = backtrace(array, 15);
     char **strings = backtrace_symbols(array, size);
 
-    printf("Obtained %d stack frames.\n", size);
+    syslog(LOG_ERR, "Obtained %d stack frames.\n", size);
 
     for (auto i = 0; i < size; i++) {
-        printf("%s\n", strings[i]);
+        syslog(LOG_ERR, "%s\n", strings[i]);
     }
 
     free(strings);
@@ -319,13 +319,10 @@ void test_crash_handler(shttps::Connection &conn, shttps::LuaServer &luaserver, 
 void sig_handler(const int sig) {
 
     if (sig == SIGSEGV) {
-        fprintf(stderr, "SIGSEGV: segmentation fault.\n");
         syslog(LOG_ERR, "SIGSEGV: segmentation fault.");
     } else if (sig == SIGABRT) {
-        fprintf(stderr, "SIGABRT: abort.\n");
         syslog(LOG_ERR, "SIGABRT: abort.");
     } else {
-        fprintf(stderr, "Caught signal %d.\n", sig);
         syslog(LOG_ERR, "Caught signal %d.", sig);
     }
 
@@ -1416,12 +1413,10 @@ int main(int argc, char *argv[]) {
                 server.add_route(shttps::Connection::POST, wwwroute, shttps::file_handler, &filehandler_info);
             }
 
-            // TODO: comment out before release
-            server.add_route(shttps::Connection::GET, "/crash", test_crash_handler);
-
-            syslog(LOG_DEBUG, "Starting SipiHttpServer::run()");
+            // start the server
             server.run();
         } catch (shttps::Error &err) {
+            syslog(LOG_ERR, "Error starting server: %s", err.what());
             std::cerr << err << std::endl;
         }
     }

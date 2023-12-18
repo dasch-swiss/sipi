@@ -2034,7 +2034,7 @@ namespace Sipi {
     // here we add the main IIIF route to the server (iiif_handler)
     void SipiHttpServer::run(void) {
         int old_ll = setlogmask(LOG_MASK(LOG_INFO));
-        syslog(LOG_INFO, "Sipi server starting");
+        syslog(LOG_INFO, "SipiHttpServer starting ...");
         //
         // setting the image root
         //
