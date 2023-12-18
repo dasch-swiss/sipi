@@ -59,7 +59,7 @@ namespace Sipi {
         int keep_alive;
         std::string thumb_size;
         int cache_n_files;
-        int n_threads;
+        unsigned int n_threads;
         size_t max_post_size;
         std::string tmp_dir;
         std::string scriptdir;
@@ -140,8 +140,8 @@ namespace Sipi {
         inline int getCacheNFiles(void) { return cache_n_files; }
         inline void setCacheNFiles(int i) { cache_n_files = i; }
 
-        inline int getNThreads(void) { return n_threads; }
-        inline void setNThreads(int i) { n_threads = i; }
+        inline unsigned int getNThreads() const { return n_threads; }
+        inline void setNThreads(const unsigned int i) { n_threads = i; }
 
         inline size_t getMaxPostSize(void) { return max_post_size; }
         inline void setMaxPostSize(size_t i) { max_post_size = i; }
