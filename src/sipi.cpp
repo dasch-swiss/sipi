@@ -180,7 +180,7 @@ static void sipiConfGlobals(lua_State *L, shttps::Connection &conn, void *user_d
     lua_rawset(L, -3); // table1
 
     lua_pushstring(L, "loglevel"); // table1 - "index_L1"
-    std::string loglevel = conf->getLoglevel();
+    const std::string loglevel = conf->getLoglevel();
     if (loglevel == "LOG_EMERG") {
         lua_pushinteger(L, LOG_EMERG);
     } else if (loglevel == "LOG_ALERT") {
@@ -293,19 +293,6 @@ void printStackTrace() {
     }
 
     free(strings);
-}
-
-
-void baz() {
-    int *foo = (int *)-1; // make a bad pointer
-    printf("%d\n", *foo); // causes segfault
-}
-
-void bar() { baz(); }
-void foo() { bar(); }
-
-void test_crash_handler(shttps::Connection &conn, shttps::LuaServer &luaserver, void *user_data, void *dummy) {
-    foo(); // this will call foo, bar, and baz.  baz segfaults.
 }
 
 /*!
@@ -1388,7 +1375,7 @@ int main(int argc, char *argv[]) {
 
             if (!cachedir.empty()) {
                 size_t cachesize = sipiConf.getCacheSize();
-                int nfiles = sipiConf.getCacheNFiles();
+                size_t nfiles = sipiConf.getCacheNFiles();
                 float hysteresis = sipiConf.getCacheHysteresis();
                 server.cache(cachedir, cachesize, nfiles, hysteresis);
             }

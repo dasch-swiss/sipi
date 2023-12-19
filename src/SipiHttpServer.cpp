@@ -21,11 +21,11 @@
  * You should have received a copy of the GNU Affero General Public
  * License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <stdio.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
 #include <unistd.h>
-#include <assert.h>
-#include <stdlib.h>
+#include <cassert>
+#include <cstdlib>
 #include <syslog.h>
 
 #include <string>
@@ -193,7 +193,8 @@ namespace Sipi {
      *
      * \param conn_obj the server connection.
      * \param luaserver the Lua server that will be used to call the function.
-     * \param params the HTTP request parameters.
+     * \param prefix the IIIF prefix.
+     * \param identifier the IIIF identifier.
      * \return Pair of permission string and filepath
      */
     static std::unordered_map<std::string, std::string>
@@ -2006,7 +2007,7 @@ namespace Sipi {
     }
     //=========================================================================
 
-    SipiHttpServer::SipiHttpServer(int port_p, unsigned nthreads_p, const std::string userid_str,
+    SipiHttpServer::SipiHttpServer(int port_p, const size_t nthreads_p, const std::string userid_str,
                                    const std::string &logfile_p, const std::string &loglevel_p) : Server::Server(port_p,
                                                                                                                  nthreads_p,
                                                                                                                  userid_str,
@@ -2019,7 +2020,7 @@ namespace Sipi {
     }
     //=========================================================================
 
-    void SipiHttpServer::cache(const std::string &cachedir_p, long long max_cachesize_p, unsigned max_nfiles_p,
+    void SipiHttpServer::cache(const std::string &cachedir_p, size_t max_cachesize_p, size_t max_nfiles_p,
                                float cache_hysteresis_p) {
         try {
             _cache = std::make_shared<SipiCache>(cachedir_p, max_cachesize_p, max_nfiles_p, cache_hysteresis_p);
@@ -2032,8 +2033,8 @@ namespace Sipi {
     //=========================================================================
 
     // here we add the main IIIF route to the server (iiif_handler)
-    void SipiHttpServer::run(void) {
-        int old_ll = setlogmask(LOG_MASK(LOG_INFO));
+    void SipiHttpServer::run() {
+        const int old_ll = setlogmask(LOG_MASK(LOG_INFO));
         syslog(LOG_INFO, "SipiHttpServer starting ...");
         //
         // setting the image root

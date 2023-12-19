@@ -57,123 +57,116 @@ namespace Sipi {
     class SipiHttpServer : public shttps::Server {
     private:
     protected:
-        pid_t _pid;
+        pid_t _pid{};
         std::string _imgroot;
         std::string _salsah_prefix;
-        bool _prefix_as_path;
-        std::vector<std::string> _dirs_to_exclude; //!< Directories which should have no subdirs even if subdirs are enabled
+        bool _prefix_as_path{};
+        std::vector<std::string> _dirs_to_exclude;
+        //!< Directories which should have no subdirs even if subdirs are enabled
         std::string _logfile;
         std::shared_ptr<SipiCache> _cache;
-        int _jpeg_quality;
-        std::unordered_map<std::string,SipiCompressionParams> _j2k_compression_profiles;
-        ScalingQuality _scaling_quality;
+        int _jpeg_quality{};
+        std::unordered_map<std::string, SipiCompressionParams> _j2k_compression_profiles;
+        ScalingQuality _scaling_quality{};
 
     public:
         /*!
          * Constructor which automatically starts the server
          *
          * \param port_p Portnumber on which the server should listen
-         * \param root_p Path to the root of directory containing the images
+         * \param nthreads_p Number of threads to be used for the server
+         * \param userid_str Userid under which the server should run
+         * \param logfile_p Name of the logfile
+         * \param loglevel_p Loglevel (DEBUG, INFO, WARNING, ERROR, CRITICAL)
          */
-        SipiHttpServer(int port_p, unsigned nthreads_p = 4, const std::string userid_str = "",
-                       const std::string &logfile_p = "sipi.log", const std::string &loglevel_p = "DEBUG");
+        explicit SipiHttpServer(int port_p, size_t nthreads_p = 4, std::string userid_str = "",
+                                const std::string &logfile_p = "sipi.log", const std::string &loglevel_p = "DEBUG");
 
-        void run();
+        void run() override;
 
-        std::pair<std::string, std::string>
+        static std::pair<std::string, std::string>
         get_canonical_url(size_t img_w, size_t img_h, const std::string &host, const std::string &prefix,
                           const std::string &identifier, std::shared_ptr<SipiRegion> region,
                           std::shared_ptr<SipiSize> size, SipiRotation &rotation,
                           SipiQualityFormat &quality_format, int pagenum = 0);
 
 
-        inline pid_t pid(void) { return _pid; }
+        pid_t pid() const { return _pid; }
 
-        inline void imgroot(const std::string &imgroot_p) { _imgroot = imgroot_p; }
+        void imgroot(const std::string &imgroot_p) { _imgroot = imgroot_p; }
 
-        inline std::string imgroot(void) { return _imgroot; }
+        std::string imgroot() { return _imgroot; }
 
-        inline std::string salsah_prefix(void) { return _salsah_prefix; }
+        std::string salsah_prefix() { return _salsah_prefix; }
 
-        inline void salsah_prefix(const std::string &salsah_prefix) { _salsah_prefix = salsah_prefix; }
+        void salsah_prefix(const std::string &salsah_prefix) { _salsah_prefix = salsah_prefix; }
 
-        inline bool prefix_as_path(void) { return _prefix_as_path; }
+        bool prefix_as_path() const { return _prefix_as_path; }
 
-        inline void prefix_as_path(bool prefix_as_path_p) { _prefix_as_path = prefix_as_path_p; }
+        void prefix_as_path(bool prefix_as_path_p) { _prefix_as_path = prefix_as_path_p; }
 
-        inline std::vector<std::string> dirs_to_exclude(void) { return _dirs_to_exclude; }
+        std::vector<std::string> dirs_to_exclude() { return _dirs_to_exclude; }
 
-        inline void dirs_to_exclude(const std::vector<std::string> &dirs_to_exclude) { _dirs_to_exclude = dirs_to_exclude; }
+        void dirs_to_exclude(const std::vector<std::string> &dirs_to_exclude) { _dirs_to_exclude = dirs_to_exclude; }
 
-        inline void jpeg_quality(int jpeg_quality_p) { _jpeg_quality = jpeg_quality_p; }
+        void jpeg_quality(int jpeg_quality_p) { _jpeg_quality = jpeg_quality_p; }
 
-        inline void j2k_compression_profiles(const std::unordered_map<std::string,SipiCompressionParams> &j2k_compression_profiles) {
+        void j2k_compression_profiles(
+            const std::unordered_map<std::string, SipiCompressionParams> &j2k_compression_profiles) {
             _j2k_compression_profiles = j2k_compression_profiles;
         }
 
-        inline int jpeg_quality(void) { return _jpeg_quality; }
+        int jpeg_quality() const { return _jpeg_quality; }
 
 
-        inline void scaling_quality(std::map<std::string,std::string> jpeg_quality_p) {
+        void scaling_quality(std::map<std::string, std::string> jpeg_quality_p) {
             if (jpeg_quality_p["jpk"] == "high") {
                 _scaling_quality.jk2 = HIGH;
-            }
-            else if (jpeg_quality_p["jpk"] == "medium") {
+            } else if (jpeg_quality_p["jpk"] == "medium") {
                 _scaling_quality.jk2 = MEDIUM;
-            }
-            else if (jpeg_quality_p["jpk"] == "low") {
+            } else if (jpeg_quality_p["jpk"] == "low") {
                 _scaling_quality.jk2 = LOW;
-            }
-            else {
+            } else {
                 _scaling_quality.jk2 = HIGH;
             }
 
             if (jpeg_quality_p["jpeg"] == "high") {
                 _scaling_quality.jpeg = HIGH;
-            }
-            else if (jpeg_quality_p["jpeg"] == "medium") {
+            } else if (jpeg_quality_p["jpeg"] == "medium") {
                 _scaling_quality.jpeg = MEDIUM;
-            }
-            else if (jpeg_quality_p["jpeg"] == "low") {
+            } else if (jpeg_quality_p["jpeg"] == "low") {
                 _scaling_quality.jpeg = LOW;
-            }
-            else {
+            } else {
                 _scaling_quality.jpeg = HIGH;
             }
 
             if (jpeg_quality_p["tiff"] == "high") {
                 _scaling_quality.tiff = HIGH;
-            }
-            else if (jpeg_quality_p["tiff"] == "medium") {
+            } else if (jpeg_quality_p["tiff"] == "medium") {
                 _scaling_quality.tiff = MEDIUM;
-            }
-            else if (jpeg_quality_p["tiff"] == "low") {
+            } else if (jpeg_quality_p["tiff"] == "low") {
                 _scaling_quality.tiff = LOW;
-            }
-            else {
+            } else {
                 _scaling_quality.tiff = HIGH;
             }
 
             if (jpeg_quality_p["png"] == "high") {
                 _scaling_quality.png = HIGH;
-            }
-            else if (jpeg_quality_p["png"] == "medium") {
+            } else if (jpeg_quality_p["png"] == "medium") {
                 _scaling_quality.png = MEDIUM;
-            }
-            else if (jpeg_quality_p["png"] == "low") {
+            } else if (jpeg_quality_p["png"] == "low") {
                 _scaling_quality.png = LOW;
-            }
-            else {
+            } else {
                 _scaling_quality.png = HIGH;
             }
         }
 
-        inline ScalingQuality scaling_quality(void) { return _scaling_quality; }
+        ScalingQuality scaling_quality() const { return _scaling_quality; }
 
-        void cache(const std::string &cachedir_p, long long max_cachesize_p = 0, unsigned max_nfiles_p = 0,
+        void cache(const std::string &cachedir_p, size_t max_cachesize_p = 0, size_t max_nfiles_p = 0,
                    float cache_hysteresis_p = 0.1);
 
-        inline std::shared_ptr<SipiCache> cache() { return _cache; }
+        std::shared_ptr<SipiCache> cache() { return _cache; }
 
     };
 
