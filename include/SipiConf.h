@@ -58,8 +58,8 @@ namespace Sipi {
         float cache_hysteresis;
         int keep_alive;
         std::string thumb_size;
-        int cache_n_files;
-        int n_threads;
+        size_t cache_n_files;
+        size_t n_threads;
         size_t max_post_size;
         std::string tmp_dir;
         std::string scriptdir;
@@ -77,109 +77,108 @@ namespace Sipi {
     public:
         SipiConf();
 
-        SipiConf(shttps::LuaServer &luacfg);
+        explicit SipiConf(shttps::LuaServer &luacfg);
 
-        inline std::string getUseridStr(void) { return userid_str; }
-        inline void setUseridStr(const std::string &str) {userid_str = str; };
+        std::string getUseridStr() { return userid_str; }
+        void setUseridStr(const std::string &str) {userid_str = str; };
 
-        inline std::string getHostname(void) { return hostname; }
-        inline void setHostname(const std::string &str) { hostname = str; }
+        std::string getHostname() { return hostname; }
+        void setHostname(const std::string &str) { hostname = str; }
 
-        inline int getPort(void) { return port; }
-        inline void setPort(int i) { port = i; }
+        int getPort() const { return port; }
+        void setPort(int i) { port = i; }
 
+        int getSSLPort() const { return ssl_port; }
+        void setSSLPort(const int i) { ssl_port = i; }
 
-        inline int getSSLPort(void) { return ssl_port; }
-        inline void setSSLPort(int i) { ssl_port = i; }
+        std::string getSSLCertificate() { return ssl_certificate; }
+        void setSSLCertificate(const std::string &str) { ssl_certificate = str; }
 
-        inline std::string getSSLCertificate(void) { return ssl_certificate; }
-        inline void setSSLCertificate(const std::string &str) { ssl_certificate = str; }
+        std::string getSSLKey() { return ssl_key; }
+        void setSSLKey(const std::string &str) { ssl_key = str; }
 
-        inline std::string getSSLKey(void) { return ssl_key; }
-        inline void setSSLKey(const std::string &str) { ssl_key = str; }
+        std::string getImgRoot() { return img_root; }
+        void setImgRoot(const std::string &str) { img_root = str; }
 
-        inline std::string getImgRoot(void) { return img_root; }
-        inline void setImgRoot(const std::string &str) { img_root = str; }
+        int getMaxTempFileAge() const { return max_temp_file_age; }
+        void setMaxTempFileAge(int i) { max_temp_file_age = i; }
 
-        inline int getMaxTempFileAge(void) { return max_temp_file_age; }
-        inline void setMaxTempFileAge(int i) { max_temp_file_age = i; }
+        bool getPrefixAsPath() const { return prefix_as_path; }
+        void setPrefixAsPath(bool b) { prefix_as_path = b; }
 
-        inline bool getPrefixAsPath(void) { return prefix_as_path; }
-        inline void setPrefixAsPath(bool b) { prefix_as_path = b; }
+        int getJpegQuality() const { return jpeg_quality; }
+        void setJpegQuality(int i) { jpeg_quality = i; }
 
-        inline int getJpegQuality(void) { return jpeg_quality; }
-        inline void setJpegQuality(int i) { jpeg_quality = i; }
+        std::map<std::string,std::string> getScalingQuality() { return scaling_quality; }
+        void  setScalingQuality(const std::map<std::string,std::string> &v) { scaling_quality = v; }
 
-        inline std::map<std::string,std::string> getScalingQuality(void) { return scaling_quality; }
-        void inline setScalingQuality(const std::map<std::string,std::string> &v) { scaling_quality = v; }
+        int getSubdirLevels() const { return subdir_levels; }
+        void setSubdirLevels(const int i) { subdir_levels = i; }
 
-        inline int getSubdirLevels(void) { return subdir_levels; }
-        inline void setSubdirLevels(int i) { subdir_levels = i; }
+        std::vector<std::string> getSubdirExcludes() { return subdir_excludes; }
+        void setSubdirExcludes(const std::vector<std::string> &v) { subdir_excludes = v; }
 
-        inline std::vector<std::string> getSubdirExcludes(void) { return subdir_excludes; }
-        inline void setSubdirExcludes(const std::vector<std::string> &v) { subdir_excludes = v; }
+        std::string getInitScript() { return init_script; }
+        void setInitScript(const std::string &str) { init_script = str; }
 
-        inline std::string getInitScript(void) { return init_script; }
-        inline void setInitScript(const std::string &str) { init_script = str; }
+        size_t getCacheSize() const { return cache_size; }
+        void setCacheSize(const size_t i) { cache_size = i; }
 
-        inline size_t getCacheSize(void) { return cache_size; }
-        inline void setCacheSize(size_t i) { cache_size = i; }
+        std::string getCacheDir() { return cache_dir; }
+        void setCacheDir(const std::string &str) { cache_dir = str; }
 
-        inline std::string getCacheDir(void) { return cache_dir; }
-        inline void setCacheDir(const std::string &str) { cache_dir = str; }
+        float getCacheHysteresis() const { return cache_hysteresis; }
+        void setCacheHysteresis(float f) { cache_hysteresis = f; }
 
-        inline float getCacheHysteresis(void) { return cache_hysteresis; }
-        inline void setCacheHysteresis(float f) { cache_hysteresis = f; }
+        int getKeepAlive() const { return keep_alive; }
+        void setKeepAlive(int i) { keep_alive = i; }
 
-        inline int getKeepAlive(void) { return keep_alive; }
-        inline void setKeepAlive(int i) { keep_alive = i; }
+        std::string getThumbSize() { return thumb_size; }
+        void setThumbSize(const std::string &str) { thumb_size = str; }
 
-        inline std::string getThumbSize(void) { return thumb_size; }
-        inline void setThumbSize(const std::string &str) { thumb_size = str; }
+        size_t getCacheNFiles() const { return cache_n_files; }
+        void setCacheNFiles(size_t i) { cache_n_files = i; }
 
-        inline int getCacheNFiles(void) { return cache_n_files; }
-        inline void setCacheNFiles(int i) { cache_n_files = i; }
+        unsigned int getNThreads() const { return n_threads; }
+        void setNThreads(const unsigned int i) { n_threads = i; }
 
-        inline int getNThreads(void) { return n_threads; }
-        inline void setNThreads(int i) { n_threads = i; }
+        size_t getMaxPostSize() const { return max_post_size; }
+        void setMaxPostSize(const size_t i) { max_post_size = i; }
 
-        inline size_t getMaxPostSize(void) { return max_post_size; }
-        inline void setMaxPostSize(size_t i) { max_post_size = i; }
+        std::string getTmpDir() { return tmp_dir; }
+        void setTmpDir(const std::string &str) { tmp_dir = str; }
 
-        inline std::string getTmpDir(void) { return tmp_dir; }
-        inline void setTmpDir(const std::string &str) { tmp_dir = str; }
+        std::string getScriptDir() { return scriptdir; }
+        void setScriptDir(const std::string &str) { scriptdir = str; }
 
-        inline std::string getScriptDir(void) { return scriptdir; }
-        inline void setScriptDir(const std::string &str) { scriptdir = str; }
+        std::vector<shttps::LuaRoute> getRoutes() { return routes; }
+        void seRoutes(const std::vector<shttps::LuaRoute> &r) { routes = r; }
 
-        inline std::vector<shttps::LuaRoute> getRoutes(void) { return routes; }
-        inline void seRoutes(const std::vector<shttps::LuaRoute> &r) { routes = r; }
+        std::string getKnoraPath() { return knora_path; }
+        void setKnoraPath(const std::string &str) { knora_path = str; }
 
-        inline std::string getKnoraPath(void) { return knora_path; }
-        inline void setKnoraPath(const std::string &str) { knora_path = str; }
+        std::string getKnoraPort() { return knora_port; }
+        void setKnoraPort(const std::string &str) { knora_port = str; }
 
-        inline std::string getKnoraPort(void) { return knora_port; }
-        inline void setKnoraPort(const std::string &str) { knora_port = str; }
+        std::string getLoglevel() { return loglevel; }
+        void setLogLevel(const std::string &str) { loglevel = str; }
 
-        inline std::string getLoglevel(void) { return loglevel; }
-        inline void setLogLevel(const std::string &str) { loglevel = str; }
+        std::string getLogfile() { return logfile; }
+        void setLogfile(const std::string &str) { logfile = str; }
 
-        inline std::string getLogfile(void) { return logfile; }
-        inline void setLogfile(const std::string &str) { logfile = str; }
+        std::string getDocRoot() { return docroot; }
+        void setDocRoot(const std::string &str) { docroot = str; }
 
-        inline std::string getDocRoot(void) { return docroot; }
-        inline void setDocRoot(const std::string &str) { docroot = str; }
+        std::string getWWWRoute() { return wwwroute; }
+        void setWWWRoute(const std::string &str) { wwwroute = str; }
 
-        inline std::string getWWWRoute(void) { return wwwroute; }
-        inline void setWWWRoute(const std::string &str) { wwwroute = str; }
+        std::string getJwtSecret() { return jwt_secret; }
+        void setJwtSecret(const std::string &str) { jwt_secret = str; }
 
-        inline std::string getJwtSecret(void) { return jwt_secret; }
-        inline void setJwtSecret(const std::string &str) { jwt_secret = str; }
+        std::string getAdminUser() { return adminuser; }
+        void setAdminUser(const std::string &str) { adminuser = str; }
 
-        inline std::string getAdminUser(void) { return adminuser; }
-        inline void setAdminUser(const std::string &str) { adminuser = str; }
-
-        inline std::string getPassword(void) { return password; }
+        std::string getPassword() { return password; }
         inline void setPasswort(const std::string &str) { password = str; }
     };
 

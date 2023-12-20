@@ -21,11 +21,11 @@
  * You should have received a copy of the GNU Affero General Public
  * License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <stdio.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
 #include <unistd.h>
-#include <assert.h>
-#include <stdlib.h>
+#include <cassert>
+#include <cstdlib>
 #include <syslog.h>
 
 #include <string>
@@ -63,8 +63,6 @@
 #include "favicon.h"
 
 #include "lua.hpp"
-
-#include "sentry.h"
 
 using namespace shttps;
 static const char __file__[] = __FILE__;
@@ -195,7 +193,8 @@ namespace Sipi {
      *
      * \param conn_obj the server connection.
      * \param luaserver the Lua server that will be used to call the function.
-     * \param params the HTTP request parameters.
+     * \param prefix the IIIF prefix.
+     * \param identifier the IIIF identifier.
      * \return Pair of permission string and filepath
      */
     static std::unordered_map<std::string, std::string>
@@ -1153,13 +1152,6 @@ namespace Sipi {
         void *user_data,
         void *dummy) {
 
-        // we start a sentry transaction
-        sentry_transaction_context_t *tx_ctx = sentry_transaction_context_new(
-            "iiif_handler",
-            "execute_handler"
-        );
-        sentry_transaction_t *tx = sentry_transaction_start(tx_ctx, sentry_value_new_null());
-
         auto *serv = static_cast<SipiHttpServer*>(user_data);
 
         enum {
@@ -1201,8 +1193,6 @@ namespace Sipi {
 
         if (parts.empty()) {
             send_error(conn_obj, Connection::BAD_REQUEST, "No parameters/path given");
-            // we end the sentry transaction and send it to Sentry
-            sentry_transaction_finish(tx);
             return;
         }
 
@@ -1263,8 +1253,6 @@ namespace Sipi {
                     if (!region_ok)
                         errmsg << " Error in region: \"" << parts[parts.size() - 4] << "\"!";
                     send_error(conn_obj, Connection::BAD_REQUEST, errmsg.str());
-                    // we end the sentry transaction and send it to Sentry
-                    sentry_transaction_finish(tx);
                     return;
                 }
                 params.push_back(parts[parts.size() - 5]); // iiif_identifier
@@ -1292,8 +1280,6 @@ namespace Sipi {
                 }
                 else {
                     send_error(conn_obj, Connection::BAD_REQUEST, "IIIF url not correctly formatted!");
-                    // we end the sentry transaction and send it to Sentry
-                    sentry_transaction_finish(tx);
                     return;
                 }
                 params.push_back(parts[parts.size() - 2]); // iiif_identifier
@@ -1317,8 +1303,6 @@ namespace Sipi {
                 }
                 else {
                     send_error(conn_obj, Connection::BAD_REQUEST, "IIIF url not correctly formatted!");
-                    // we end the sentry transaction and send it to Sentry
-                    sentry_transaction_finish(tx);
                     return;
                 }
                 params.push_back(parts[parts.size() - 2]); // iiif_identifier
@@ -1340,8 +1324,6 @@ namespace Sipi {
                     if (!region_ok && (parts.size() > 3))
                         errmsg << " Error in region: \"" << parts[parts.size() - 4] << "\"!";
                     send_error(conn_obj, Connection::BAD_REQUEST, errmsg.str());
-                    // we end the sentry transaction and send it to Sentry
-                    sentry_transaction_finish(tx);
                     return;
                 }
                 if (parts.size() >= 2) { // we have a prefix
@@ -1368,8 +1350,6 @@ namespace Sipi {
                     if (!region_ok && (parts.size() > 3))
                         errmsg << " Error in region: \"" << parts[parts.size() - 4] << "\"!";
                     send_error(conn_obj, Connection::BAD_REQUEST, errmsg.str());
-                    // we end the sentry transaction and send it to Sentry
-                    sentry_transaction_finish(tx);
                     return;
                 }
                 params.push_back(parts[parts.size() - 1]); // iiif_identifier
@@ -1418,8 +1398,6 @@ namespace Sipi {
                 if (!region_ok && (parts.size() > 3))
                     errmsg << " Error in region: \"" << parts[parts.size() - 4] << "\"!";
                 send_error(conn_obj, Connection::BAD_REQUEST, errmsg.str());
-                // we end the sentry transaction and send it to Sentry
-                sentry_transaction_finish(tx);
                 return;
             }
             if (parts.size() >= 2) { // we have a prefix
@@ -1446,8 +1424,6 @@ namespace Sipi {
                 if (!region_ok && (parts.size() > 3))
                     errmsg << " Error in region: \"" << parts[parts.size() - 4] << "\"!";
                 send_error(conn_obj, Connection::BAD_REQUEST, errmsg.str());
-                // we end the sentry transaction and send it to Sentry
-                sentry_transaction_finish(tx);
                 return;
             }
             params.push_back(parts[parts.size() - 1]); // iiif_identifier
@@ -1482,20 +1458,14 @@ namespace Sipi {
                 conn_obj << "Redirect to " << redirect;
                 syslog(LOG_INFO, "GET: redirect to %s", redirect.c_str());
                 conn_obj.flush();
-                // we end the sentry transaction and send it to Sentry
-                sentry_transaction_finish(tx);
                 return;
             }
             case SERVE_INFO: {
                 iiif_send_info(conn_obj, serv, luaserver, params, prefix_as_path);
-                // we end the sentry transaction and send it to Sentry
-                sentry_transaction_finish(tx);
                 return;
             }
             case SERVE_KNORAINFO: {
                 knora_send_info(conn_obj, serv, luaserver, params, prefix_as_path);
-                // we end the sentry transaction and send it to Sentry
-                sentry_transaction_finish(tx);
                 return;
             }
             case SERVE_FILE: {
@@ -1514,8 +1484,6 @@ namespace Sipi {
                     }
                     catch (SipiError &err) {
                         send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
-                        // we end the sentry transaction and send it to Sentry
-                        sentry_transaction_finish(tx);
                         return;
                     }
                     if (pre_flight_info["type"] == "allow") {
@@ -1526,8 +1494,6 @@ namespace Sipi {
                     }
                     else {
                         send_error(conn_obj, Connection::UNAUTHORIZED, "Unauthorized access");
-                        // we end the sentry transaction and send it to Sentry
-                        sentry_transaction_finish(tx);
                         return;
                     }
                 }
@@ -1604,8 +1570,6 @@ namespace Sipi {
                     send_error(conn_obj, Connection::NOT_FOUND);
                     conn_obj.flush();
                 }
-                // we end the sentry transaction and send it to Sentry
-                sentry_transaction_finish(tx);
                 return;
             } // case SERVE_FILE
             case SERVE_IIIF: {
@@ -1628,8 +1592,6 @@ namespace Sipi {
                 }
                 catch (Sipi::SipiError &err) {
                     send_error(conn_obj, Connection::BAD_REQUEST, err);
-                    // we end the sentry transaction and send it to Sentry
-                    sentry_transaction_finish(tx);
                     return;
                 }
                 //
@@ -1647,8 +1609,6 @@ namespace Sipi {
                     }
                     catch (SipiError &err) {
                         send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
-                        // we end the sentry transaction and send it to Sentry
-                        sentry_transaction_finish(tx);
                         return;
                     }
                     infile = pre_flight_info["infile"];
@@ -1673,15 +1633,11 @@ namespace Sipi {
                             }
                             if (!ok) {
                                 send_error(conn_obj, Connection::UNAUTHORIZED, "Unauthorized access");
-                                // we end the sentry transaction and send it to Sentry
-                                sentry_transaction_finish(tx);
                                 return;
                             }
                         }
                         else {
                             send_error(conn_obj, Connection::UNAUTHORIZED, "Unauthorized access");
-                            // we end the sentry transaction and send it to Sentry
-                            sentry_transaction_finish(tx);
                             return;
                         }
                     }
@@ -1713,8 +1669,6 @@ namespace Sipi {
                 if (access(infile.c_str(), R_OK) != 0) { // test, if file exists
                     syslog(LOG_INFO, "File %s not found", infile.c_str());
                     send_error(conn_obj, Connection::NOT_FOUND);
-                    // we end the sentry transaction and send it to Sentry
-                    sentry_transaction_finish(tx);
                     return;
                 }
 
@@ -1742,14 +1696,10 @@ namespace Sipi {
                     }
                     catch (SipiImageError &err) {
                         send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());
-                        // we end the sentry transaction and send it to Sentry
-                        sentry_transaction_finish(tx);
                         return;
                     }
                     if (info.success == SipiImgInfo::FAILURE) {
                         send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Couldn't get image dimensions!");
-                        // we end the sentry transaction and send it to Sentry
-                        sentry_transaction_finish(tx);
                         return;
                     }
                     img_w = info.width;
@@ -1769,14 +1719,10 @@ namespace Sipi {
                 }
                 catch (Sipi::SipiSizeError &err) {
                     send_error(conn_obj, Connection::BAD_REQUEST, err.to_string());
-                    // we end the sentry transaction and send it to Sentry
-                    sentry_transaction_finish(tx);
                     return;
                 }
                 catch (Sipi::SipiError &err) {
                     send_error(conn_obj, Connection::BAD_REQUEST, err);
-                    // we end the sentry transaction and send it to Sentry
-                    sentry_transaction_finish(tx);
                     return;
                 }
 
@@ -1794,8 +1740,6 @@ namespace Sipi {
                 }
                 catch (Sipi::SipiError &err) {
                     send_error(conn_obj, Connection::BAD_REQUEST, err);
-                    // we end the sentry transaction and send it to Sentry
-                    sentry_transaction_finish(tx);
                     return;
                 }
 
@@ -1838,8 +1782,6 @@ namespace Sipi {
                     catch (Sipi::SipiError &err) {
                         send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
                     }
-                    // we end the sentry transaction and send it to Sentry
-                    sentry_transaction_finish(tx);
                     return;
                 } // finish sending unmodified file in toto
 
@@ -1881,21 +1823,15 @@ namespace Sipi {
                             // -1 was thrown
                             syslog(LOG_WARNING, "Browser unexpectedly closed connection");
                             cache->deblock(cachefile);
-                            // we end the sentry transaction and send it to Sentry
-                            sentry_transaction_finish(tx);
                             return;
                         }
                         catch (Sipi::SipiError &err) {
                             syslog(LOG_ERR, "Error sending cache file: \"%s\": %s", cachefile.c_str(), err.to_string().c_str());
                             send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
                             cache->deblock(cachefile);
-                            // we end the sentry transaction and send it to Sentry
-                            sentry_transaction_finish(tx);
                             return;
                         }
                         cache->deblock(cachefile);
-                        // we end the sentry transaction and send it to Sentry
-                        sentry_transaction_finish(tx);
                         return;
                     }
                     cache->deblock(cachefile);
@@ -1907,14 +1843,10 @@ namespace Sipi {
                 }
                 catch (const SipiImageError &err) {
                     send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());
-                    // we end the sentry transaction and send it to Sentry
-                    sentry_transaction_finish(tx);
                     return;
                 }
                 catch (const SipiSizeError &err) {
                     send_error(conn_obj, Connection::BAD_REQUEST, err.to_string());
-                    // we end the sentry transaction and send it to Sentry
-                    sentry_transaction_finish(tx);
                     return;
                 }
 
@@ -1927,8 +1859,6 @@ namespace Sipi {
                     }
                     catch (Sipi::SipiError &err) {
                         send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
-                        // we end the sentry transaction and send it to Sentry
-                        sentry_transaction_finish(tx);
                         return;
                     }
                 }
@@ -1961,8 +1891,6 @@ namespace Sipi {
                     }
                     catch (Sipi::SipiError &err) {
                         send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
-                        // we end the sentry transaction and send it to Sentry
-                        sentry_transaction_finish(tx);
                         return;
                     }
                     syslog(LOG_INFO, "GET %s: adding watermark", uri.c_str());
@@ -1981,8 +1909,6 @@ namespace Sipi {
                         }
                         catch (const shttps::Error &err) {
                             send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
-                            // we end the sentry transaction and send it to Sentry
-                            sentry_transaction_finish(tx);
                             return;
                         }
                     }
@@ -2058,26 +1984,18 @@ namespace Sipi {
                         unlink(cachefile.c_str());
                     }
                     send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
-                    // we end the sentry transaction and send it to Sentry
-                    sentry_transaction_finish(tx);
                     return;
                 }
 
                 conn_obj.flush();
-                    // we end the sentry transaction and send it to Sentry
-                    sentry_transaction_finish(tx);
                 return;
             }
             case SERVE_ERROR: {
                 send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Unknown internal error!");
-                // we end the sentry transaction and send it to Sentry
-                sentry_transaction_finish(tx);
                 return;
             }
         } // switch(service)
 
-        // we end the sentry transaction and send it to Sentry
-        sentry_transaction_finish(tx);
         return;
     }
     //=========================================================================
@@ -2089,7 +2007,7 @@ namespace Sipi {
     }
     //=========================================================================
 
-    SipiHttpServer::SipiHttpServer(int port_p, unsigned nthreads_p, const std::string userid_str,
+    SipiHttpServer::SipiHttpServer(int port_p, const size_t nthreads_p, const std::string userid_str,
                                    const std::string &logfile_p, const std::string &loglevel_p) : Server::Server(port_p,
                                                                                                                  nthreads_p,
                                                                                                                  userid_str,
@@ -2102,7 +2020,7 @@ namespace Sipi {
     }
     //=========================================================================
 
-    void SipiHttpServer::cache(const std::string &cachedir_p, long long max_cachesize_p, unsigned max_nfiles_p,
+    void SipiHttpServer::cache(const std::string &cachedir_p, size_t max_cachesize_p, size_t max_nfiles_p,
                                float cache_hysteresis_p) {
         try {
             _cache = std::make_shared<SipiCache>(cachedir_p, max_cachesize_p, max_nfiles_p, cache_hysteresis_p);
@@ -2115,9 +2033,9 @@ namespace Sipi {
     //=========================================================================
 
     // here we add the main IIIF route to the server (iiif_handler)
-    void SipiHttpServer::run(void) {
-        int old_ll = setlogmask(LOG_MASK(LOG_INFO));
-        syslog(LOG_INFO, "Sipi server starting");
+    void SipiHttpServer::run() {
+        const int old_ll = setlogmask(LOG_MASK(LOG_INFO));
+        syslog(LOG_INFO, "SipiHttpServer starting ...");
         //
         // setting the image root
         //

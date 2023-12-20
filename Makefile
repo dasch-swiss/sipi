@@ -185,6 +185,7 @@ valgrind: ## start SIPI with Valgrind (needs to be started inside Docker contain
 .PHONY: clean
 clean: ## cleans the project directory
 	@rm -rf build/
+	@rm -rf cmake-build-relwithdebinfo-inside-docker/
 	@rm -rf site/
 
 .PHONY: help

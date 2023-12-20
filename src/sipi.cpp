@@ -34,6 +34,7 @@
 #include <thread>
 #include <utility>
 #include <sys/stat.h>
+#include <execinfo.h>
 
 #include <dirent.h>
 #include <unistd.h>
@@ -54,8 +55,6 @@
 #include "shttps/Parsing.h"
 #include "SipiConf.h"
 #include "SipiIO.h"
-
-#include "sentry.h"
 
 // A macro for silencing incorrect compiler warnings about unused variables.
 #define _unused(x) ((void)(x))
@@ -92,7 +91,7 @@
 static const char __file__[] = __FILE__;
 
 static void sipiConfGlobals(lua_State *L, shttps::Connection &conn, void *user_data) {
-    Sipi::SipiConf *conf = (Sipi::SipiConf *) user_data;
+    auto *conf = (Sipi::SipiConf *)user_data;
 
     lua_createtable(L, 0, 14); // table1
 
@@ -181,7 +180,7 @@ static void sipiConfGlobals(lua_State *L, shttps::Connection &conn, void *user_d
     lua_rawset(L, -3); // table1
 
     lua_pushstring(L, "loglevel"); // table1 - "index_L1"
-    std::string loglevel = conf->getLoglevel();
+    const std::string loglevel = conf->getLoglevel();
     if (loglevel == "LOG_EMERG") {
         lua_pushinteger(L, LOG_EMERG);
     } else if (loglevel == "LOG_ALERT") {
@@ -275,94 +274,64 @@ private:
     }
 };
 
-/*
-void TestHandler(shttps::Connection &conn, shttps::LuaServer &luaserver, void *user_data, void *dummy) {
-  Sipi::SipiHttpServer *server = (Sipi::SipiHttpServer *) user_data;
+/*!
+ * Print a stack trace.
+ *
+ * This function is called when a signal is received that would normally terminate the program
+ * with a core dump. It logs out a stack trace.
+ */
+void printStackTrace() {
+    void *array[15];
 
-  conn.setBuffer();
-  conn.setChunkedTransfer();
-  conn.header("Content-Type", "application/pdf; charset=utf-8");
+    const auto size = backtrace(array, 15);
+    char **strings = backtrace_symbols(array, size);
 
-  unsigned char img[3 * 256 * 256];
-  for (int y = 0; y < 256; y++) {
-    for (int x = 0; x < 256; x++) {
-      img[3 * (y * 256 + x)] = x;
-      img[3 * (y * 256 + x) + 1] = y;
-      img[3 * (y * 256 + x) + 2] = (x + y) / 2;
+    syslog(LOG_ERR, "Obtained %d stack frames.\n", size);
+
+    for (auto i = 0; i < size; i++) {
+        syslog(LOG_ERR, "%s\n", strings[i]);
     }
-  }
 
-  PoDoFo::PdfRefCountedBuffer *pdf_buffer = new PoDoFo::PdfRefCountedBuffer(32000);
-  PoDoFo::PdfOutputDevice *pdfdev = new PoDoFo::PdfOutputDevice(pdf_buffer);
-  PoDoFo::PdfStreamedDocument document(pdfdev);
-  PoDoFo::PdfPage *pPage;
-  PoDoFo::PdfPainter painter;
-  PoDoFo::PdfFont *pFont;
-
-  pPage = document.CreatePage(PoDoFo::PdfPage::CreateStandardPageSize(PoDoFo::ePdfPageSize_A4));
-  if (!pPage) {
-    std::cerr << "==>> ERROR: " << __LINE__ << std::endl;
-    return;
-  }
-  painter.SetPage(pPage);
-
-  pFont = document.CreateFont("arial");
-  if (!pFont) {
-    std::cerr << "==>> ERROR: " << __LINE__ << std::endl;
-    return;
-  }
-  pFont->SetFontSize(18.0);
-  painter.SetFont(pFont);
-  try {
-    painter.DrawText(56.69, pPage->GetPageSize().GetHeight() - 56.69, "Simple Image Presentation Interface (SIPI)");
-    pFont->SetFontSize(16.0);
-    painter.SetFont(pFont);
-    painter.DrawText(56.69, pPage->GetPageSize().GetHeight() - 80.0, "Server parameters");
-    pFont->SetFontSize(12.0);
-    painter.SetFont(pFont);
-
-    painter.DrawText(56.69, pPage->GetPageSize().GetHeight() - 100.0, "Number of threads:");
-    painter.DrawText(200.0, pPage->GetPageSize().GetHeight() - 100.0, std::to_string(server->nthreads()));
-
-    painter.DrawText(56.69, pPage->GetPageSize().GetHeight() - 120.0, "Port:");
-    painter.DrawText(200.0, pPage->GetPageSize().GetHeight() - 120.0, std::to_string(server->port()));
-
-    painter.DrawText(56.69, pPage->GetPageSize().GetHeight() - 140.0, "Image root:");
-    painter.DrawText(200.0, pPage->GetPageSize().GetHeight() - 140.0, server->imgroot());
-
-    painter.DrawText(56.69, pPage->GetPageSize().GetHeight() - 160.0, "Tmpdir:");
-    painter.DrawText(200.0, pPage->GetPageSize().GetHeight() - 160.0, server->tmpdir());
-
-    painter.DrawText(56.69, pPage->GetPageSize().GetHeight() - 180.0, "Scriptdir:");
-    painter.DrawText(200.0, pPage->GetPageSize().GetHeight() - 180.0, server->scriptdir());
-
-    painter.DrawText(56.69, pPage->GetPageSize().GetHeight() - 200.0, "Max. post size:");
-    painter.DrawText(200.0, pPage->GetPageSize().GetHeight() - 200.0, std::to_string(server->max_post_size()));
-  }
-  catch (PoDoFo::PdfError &err) {
-    std::cerr << err.what();
-  }
-
-  PoDoFo::PdfImage image(&document);
-  PoDoFo::PdfMemoryInputStream inimgstream((const char *) img, (PoDoFo::pdf_long) 3 * 256 * 256);
-  image.SetImageData(256, 256, 8, &inimgstream);
-
-  painter.DrawImage(56.69, 100.0, &image);
-
-  painter.FinishPage();
-  document.GetInfo()->SetCreator(PoDoFo::PdfString("Simple Image Presentation Interface (SIPI)"));
-  document.GetInfo()->SetAuthor(PoDoFo::PdfString("Lukas Rosenthaler"));
-  document.GetInfo()->SetTitle(PoDoFo::PdfString("Configuration parameters"));
-  document.GetInfo()->SetSubject(PoDoFo::PdfString("Configuration of SIPI server"));
-  document.GetInfo()->SetKeywords(PoDoFo::PdfString("SIPI;configuration;"));
-  document.Close();
-  conn.sendAndFlush(pdf_buffer->GetBuffer(), pdf_buffer->GetSize());
-  delete pdfdev;
-  delete pdf_buffer;
-  return;
+    free(strings);
 }
-*/
+
+/*!
+ * Handle a signal.
+ *
+ * This function is called when a signal is received that would normally terminate the program
+ * with a core dump. It prints a stack trace to stderr and exits with an error code.
+ *
+ * @param sig the signal number.
+ */
+void sig_handler(const int sig) {
+
+    if (sig == SIGSEGV) {
+        syslog(LOG_ERR, "SIGSEGV: segmentation fault.");
+    } else if (sig == SIGABRT) {
+        syslog(LOG_ERR, "SIGABRT: abort.");
+    } else {
+        syslog(LOG_ERR, "Caught signal %d.", sig);
+    }
+
+    printStackTrace();
+
+    exit(1);
+}
+
+
+/*!
+ * The main function.
+ *
+ * @param argc the number of command line arguments.
+ * @param argv the command line arguments.
+ * @return the exit code.
+ */
 int main(int argc, char *argv[]) {
+
+    // install signal handler
+    signal(SIGSEGV, sig_handler);
+    signal(SIGABRT, sig_handler);
+
     //
     // first we initialize the libraries that sipi uses
     //
@@ -375,7 +344,7 @@ int main(int argc, char *argv[]) {
     }
 
     CLI::App sipiopt(
-            "SIPI is a image format converter and - if started in server mode - a high performance IIIF server");
+        "SIPI is a image format converter and - if started in server mode - a high performance IIIF server");
 
     std::string optConfigfile;
     sipiopt.add_option("-c,--config",
@@ -389,35 +358,41 @@ int main(int argc, char *argv[]) {
     sipiopt.add_option("-z,--outf,outfile", optOutFile, "Output file to be converted.");
 
     enum class OptFormat : int {
-        jpx, jpg, tif, png
+        jpx,
+        jpg,
+        tif,
+        png
     };
     OptFormat optFormat = OptFormat::jpx;
     std::vector<std::pair<std::string, OptFormat>> optFormatMap{
-            {"jpx", OptFormat::jpx},
-            {"jp2", OptFormat::jpx},
-            {"jpg", OptFormat::jpg},
-            {"tif", OptFormat::tif},
-            {"png", OptFormat::png}
+        {"jpx", OptFormat::jpx},
+        {"jp2", OptFormat::jpx},
+        {"jpg", OptFormat::jpg},
+        {"tif", OptFormat::tif},
+        {"png", OptFormat::png}
     };
     sipiopt.add_option("-F,--format", optFormat, "Output format.")
-            ->transform(CLI::CheckedTransformer(optFormatMap, CLI::ignore_case));
+           ->transform(CLI::CheckedTransformer(optFormatMap, CLI::ignore_case));
 
     enum class OptIcc : int {
-        none, sRGB, AdobeRGB, GRAY
+        none,
+        sRGB,
+        AdobeRGB,
+        GRAY
     };
     OptIcc optIcc = OptIcc::none;
     std::vector<std::pair<std::string, OptIcc>> optIccMap{
-            {"none",     OptIcc::none},
-            {"sRGB",     OptIcc::sRGB},
-            {"AdobeRGB", OptIcc::AdobeRGB},
-            {"GRAY",     OptIcc::GRAY}
+        {"none", OptIcc::none},
+        {"sRGB", OptIcc::sRGB},
+        {"AdobeRGB", OptIcc::AdobeRGB},
+        {"GRAY", OptIcc::GRAY}
     };
     sipiopt.add_option("-I,--icc", optIcc, "Convert to ICC profile.")
-            ->transform(CLI::CheckedTransformer(optIccMap, CLI::ignore_case));
+           ->transform(CLI::CheckedTransformer(optIccMap, CLI::ignore_case));
 
     int optJpegQuality = 60;
     sipiopt.add_option("-q,--quality", optJpegQuality, "Quality (compression).")
-            ->check(CLI::Range(1, 100))->envname("SIPI_JPEGQUALITY");
+           ->check(CLI::Range(1, 100))->envname("SIPI_JPEGQUALITY");
 
     //
     // Parameters for JPEG2000 compression (see kakadu kdu_compress for details!)
@@ -426,14 +401,14 @@ int main(int argc, char *argv[]) {
     sipiopt.add_option("--Sprofile",
                        j2k_Sprofile,
                        "Restricted profile to which the code-stream conforms [Default: PART2].")
-            ->check(CLI::IsMember({"PROFILE0", "PROFILE1", "PROFILE2", "PART2",
-                                   "CINEMA2K", "CINEMA4K", "BROADCAST", "CINEMA2S", "CINEMA4S",
-                                   "CINEMASS", "IMF"}, CLI::ignore_case));
+           ->check(CLI::IsMember({"PROFILE0", "PROFILE1", "PROFILE2", "PART2",
+                                  "CINEMA2K", "CINEMA4K", "BROADCAST", "CINEMA2S", "CINEMA4S",
+                                  "CINEMASS", "IMF"}, CLI::ignore_case));
 
     std::vector<std::string> j2k_rates;
     sipiopt.add_option("--rates", j2k_rates, "One or more bit-rates (see kdu_compress help!). A value "
-                                             "\"-1\" may be used in place of the first bit-rate in the list to indicate "
-                                             "that the final quality layer should include all compressed bits.");
+                       "\"-1\" may be used in place of the first bit-rate in the list to indicate "
+                       "that the final quality layer should include all compressed bits.");
 
     int j2k_Clayers;
     sipiopt.add_option("--Clayers", j2k_Clayers, "J2K: Number of quality layers [Default: 8].");
@@ -448,7 +423,7 @@ int main(int argc, char *argv[]) {
                        "J2K: Progression order. The four character identifiers have the following interpretation: "
                        "L=layer; R=resolution; C=component; P=position. The first character in the identifier refers to the "
                        "index which progresses most slowly, while the last refers to the index which progresses most quickly [Default: RPCL].")
-            ->check(CLI::IsMember({"LRCP", "RLCP", "RPCL", "PCRL", "CPRL"}, CLI::ignore_case));
+           ->check(CLI::IsMember({"LRCP", "RLCP", "RPCL", "PCRL", "CPRL"}, CLI::ignore_case));
 
     std::string j2k_Stiles;
     sipiopt.add_option("--Stiles", j2k_Stiles, "J2K: Tiles dimensions \"{tx,ty} [Default: {256,256}]\".");
@@ -498,16 +473,18 @@ int main(int argc, char *argv[]) {
     sipiopt.add_flag("-k,--skipmeta", optSkipMeta, "Skip metadata of original file if flag is present.");
 
     enum class OptMirror {
-        none, horizontal, vertical
+        none,
+        horizontal,
+        vertical
     };
     OptMirror optMirror = OptMirror::none;
     std::vector<std::pair<std::string, OptMirror>> optMirrorMap{
-            {"none",       OptMirror::none},
-            {"horizontal", OptMirror::horizontal},
-            {"vertical",   OptMirror::vertical}
+        {"none", OptMirror::none},
+        {"horizontal", OptMirror::horizontal},
+        {"vertical", OptMirror::vertical}
     };
     sipiopt.add_option("-m,--mirror", optMirror, "Mirror the image. Value can be: 'none', 'horizontal', 'vertical'.")
-            ->transform(CLI::CheckedTransformer(optMirrorMap, CLI::ignore_case));
+           ->transform(CLI::CheckedTransformer(optMirrorMap, CLI::ignore_case));
 
     float optRotate = 0.0;
     sipiopt.add_option("-o,--rotate", optRotate, "Rotate the image. by degree Value, angle between (0.0 - 360.0).");
@@ -544,24 +521,24 @@ int main(int argc, char *argv[]) {
                        optKeepAlive,
                        "Number of seconds for the keeop-alive optioon of HTTP 1.1.")->envname("SIPI_KEEPALIVE");
 
-    int optNThreads = std::thread::hardware_concurrency();
+    unsigned int optNThreads = std::thread::hardware_concurrency();
     sipiopt.add_option("-t,--nthreads", optNThreads, "Number of threads for SIPI server")->envname("SIPI_NTHREADS");
 
     std::string optMaxPostSize = "300M";
     sipiopt.add_option("--maxpost",
                        optMaxPostSize,
                        "A string indicating the maximal size of a POST request, e.g. '300M'.")->envname(
-            "SIPI_MAXPOSTSIZE");
+        "SIPI_MAXPOSTSIZE");
 
     std::string optImgroot = "./images";
     sipiopt.add_option("--imgroot", optImgroot, "Root directory containing the images for the web server.")->envname(
-            "SIPI_IMGROOT")->check(CLI::ExistingDirectory);
+        "SIPI_IMGROOT")->check(CLI::ExistingDirectory);
 
     std::string optDocroot = "./server";
     sipiopt.add_option("--docroot",
                        optDocroot,
                        "Path to document root for normal webserver.")->envname("SIPI_DOCROOT")->check(
-            CLI::ExistingDirectory);
+        CLI::ExistingDirectory);
 
     std::string optWWWRoute = "/server";
     sipiopt.add_option("--wwwroute", optWWWRoute, "URL route for standard webserver.")->envname("SIPI_WWWROUTE");
@@ -570,28 +547,29 @@ int main(int argc, char *argv[]) {
     sipiopt.add_option("--scriptdir",
                        optScriptDir,
                        "Path to directory containing Lua scripts to implement routes.")->envname(
-            "SIPI_SCRIPTDIR")->check(
-            CLI::ExistingDirectory);
+        "SIPI_SCRIPTDIR")->check(
+        CLI::ExistingDirectory);
 
     std::string optTmpdir = "./tmp";
     sipiopt.add_option("--tmpdir", optTmpdir, "Path to the temporary directory (e.g. for uploads etc.).")->envname(
-            "SIPI_TMPDIR")->check(CLI::ExistingDirectory);
+        "SIPI_TMPDIR")->check(CLI::ExistingDirectory);
 
     int optMaxTmpAge = 86400;
     sipiopt.add_option("--maxtmpage",
                        optMaxTmpAge,
                        "The maximum allowed age of temporary files (in seconds) before they are deleted.")->envname(
-            "SIPI_MAXTMPAGE");
+        "SIPI_MAXTMPAGE");
 
     bool optPathprefix = false;
     sipiopt.add_flag("--pathprefix",
                      optPathprefix,
-                     "Flag, if set indicates that the IIIF prefix is part of the path to the image file (deprecated).")->envname(
-            "SIPI_PATHPREFIX");
+                     "Flag, if set indicates that the IIIF prefix is part of the path to the image file (deprecated).")
+           ->envname(
+               "SIPI_PATHPREFIX");
 
     int optSubdirLevels = 0;
     sipiopt.add_option("--subdirlevels", optSubdirLevels, "Number of subdir levels (deprecated).")->envname(
-            "SIPI_SUBDIRLEVELS");
+        "SIPI_SUBDIRLEVELS");
 
     std::vector<std::string> optSubdirExcludes = {"tmp", "thumb"};
     sipiopt.add_option("--subdirexcludes",
@@ -615,12 +593,13 @@ int main(int argc, char *argv[]) {
     double optCacheHysteresis = 0.15;
     sipiopt.add_option("--cachehysteresis",
                        optCacheHysteresis,
-                       "If the cache becomes full, the given percentage of file space is marked for reuse (0.0 - 1.0).")->envname(
-            "SIPI_CACHEHYSTERESIS");
+                       "If the cache becomes full, the given percentage of file space is marked for reuse (0.0 - 1.0).")
+           ->envname(
+               "SIPI_CACHEHYSTERESIS");
 
     std::string optThumbSize = "!128,128";
     sipiopt.add_option("--thumbsize", optThumbSize, "Size of the thumbnails (to be used within Lua).")->envname(
-            "SIPI_THUMBSIZE");
+        "SIPI_THUMBSIZE");
 
     std::string optSSLCertificatePath = "./certificate/certificate.pem";
     sipiopt.add_option("--sslcert", optSSLCertificatePath, "Path to SSL certificate.")->envname("SIPI_SSLCERTIFICATE");
@@ -632,7 +611,7 @@ int main(int argc, char *argv[]) {
     sipiopt.add_option("--jwtkey",
                        optJWTKey,
                        "The secret for generating JWT's (JSON Web Tokens) (exactly 42 characters).")->envname(
-            "SIPI_JWTKEY");
+        "SIPI_JWTKEY");
 
     std::string optAdminUser = "admin";
     sipiopt.add_option("--adminuser", optAdminUser, "Username for SIPI admin user.")->envname("SIPI_ADMIINUSER");
@@ -650,33 +629,40 @@ int main(int argc, char *argv[]) {
     sipiopt.add_option("--logfile", optLogfilePath, "Name of the logfile (NYI).")->envname("SIPI_LOGFILE");
 
     enum class LogLevel {
-        DEBUG, INFO, NOTICE, WARNING, ERR, CRIT, ALERT, EMERG
+        DEBUG,
+        INFO,
+        NOTICE,
+        WARNING,
+        ERR,
+        CRIT,
+        ALERT,
+        EMERG
     };
     LogLevel optLogLevel = LogLevel::DEBUG;
     std::vector<std::pair<std::string, LogLevel>> logLevelMap{
-            {"DEBUG",   LogLevel::DEBUG},
-            {"INFO",    LogLevel::INFO},
-            {"NOTICE",  LogLevel::NOTICE},
-            {"WARNING", LogLevel::WARNING},
-            {"ERR",     LogLevel::ERR},
-            {"CRIT",    LogLevel::CRIT},
-            {"ALERT",   LogLevel::ALERT},
-            {"EMERG",   LogLevel::EMERG}
+        {"DEBUG", LogLevel::DEBUG},
+        {"INFO", LogLevel::INFO},
+        {"NOTICE", LogLevel::NOTICE},
+        {"WARNING", LogLevel::WARNING},
+        {"ERR", LogLevel::ERR},
+        {"CRIT", LogLevel::CRIT},
+        {"ALERT", LogLevel::ALERT},
+        {"EMERG", LogLevel::EMERG}
     };
     sipiopt.add_option("--loglevel",
                        optLogLevel,
                        "Logging level Value can be: 'DEBUG', 'INFO', 'WARNING', 'ERR', 'CRIT', 'ALERT', 'EMERG'.")
-            ->transform(CLI::CheckedTransformer(logLevelMap, CLI::ignore_case))->envname("SIPI_LOGLEVEL");
+           ->transform(CLI::CheckedTransformer(logLevelMap, CLI::ignore_case))->envname("SIPI_LOGLEVEL");
 
     // sentry configuration
-    std::string optSentryDsn;
-    sipiopt.add_option("--sentry-dsn", optSentryDsn)->envname("SIPI_SENTRY_DSN");
+    std::string optSipiSentryDsn;
+    sipiopt.add_option("--sentry-dsn", optSipiSentryDsn)->envname("SIPI_SENTRY_DSN");
 
-    std::string optSentryRelease;
-    sipiopt.add_option("--sentry-release", optSentryRelease)->envname("SIPI_SENTRY_RELEASE");
+    std::string optSipiSentryRelease;
+    sipiopt.add_option("--sentry-release", optSipiSentryRelease)->envname("SIPI_SENTRY_RELEASE");
 
-    std::string optSentryEnvironment;
-    sipiopt.add_option("--sentry-environment", optSentryEnvironment)->envname("SIPI_SENTRY_ENVIRONMENT");
+    std::string optSipiSentryEnvironment;
+    sipiopt.add_option("--sentry-environment", optSipiSentryEnvironment)->envname("SIPI_SENTRY_ENVIRONMENT");
 
     CLI11_PARSE(sipiopt, argc, argv);
 
@@ -740,8 +726,9 @@ int main(int argc, char *argv[]) {
                     }
                 }
             }
-            diffval /= (img1.getNy()*img1.getNx()*img1.getNc());
-            std::cerr << "Files differ: avg: " << diffval << " max: " << maxdiff << "(" << max_x << ", " << max_y << ") See diff.tif" << std::endl;
+            diffval /= (img1.getNy() * img1.getNx() * img1.getNc());
+            std::cerr << "Files differ: avg: " << diffval << " max: " << maxdiff << "(" << max_x << ", " << max_y <<
+                ") See diff.tif" << std::endl;
         }
 
         return (result) ? 0 : -1;
@@ -756,18 +743,18 @@ int main(int argc, char *argv[]) {
         std::string format("jpg");
         if (!sipiopt.get_option("--format")->empty()) {
             switch (optFormat) {
-                case OptFormat::jpx:
-                    format = "jpx";
-                    break;
-                case OptFormat::jpg:
-                    format = "jpg";
-                    break;
-                case OptFormat::tif:
-                    format = "tif";
-                    break;
-                case OptFormat::png:
-                    format = "png";
-                    break;
+            case OptFormat::jpx:
+                format = "jpx";
+                break;
+            case OptFormat::jpg:
+                format = "jpg";
+                break;
+            case OptFormat::tif:
+                format = "tif";
+                break;
+            case OptFormat::png:
+                format = "png";
+                break;
             }
         } else {
             //
@@ -814,12 +801,14 @@ int main(int argc, char *argv[]) {
             try {
                 size = std::make_shared<Sipi::SipiSize>(optSize);
             } catch (std::exception &e) {
+                syslog(LOG_ERR, "Error in size parameter: %s", e.what());
                 return EXIT_FAILURE;
             }
         } else if (!sipiopt.get_option("--scale")->empty()) {
             try {
                 size = std::make_shared<Sipi::SipiSize>(optScale);
             } catch (std::exception &e) {
+                syslog(LOG_ERR, "Error in scale parameter: %s", e.what());
                 return EXIT_FAILURE;
             }
         }
@@ -856,31 +845,31 @@ int main(int argc, char *argv[]) {
                 }
             }
             switch (orientation) {
-                case Sipi::TOPLEFT: // 1
-                    break;
-                case Sipi::TOPRIGHT: // 2
-                    img.rotate(0., true);
-                    break;
-                case Sipi::BOTRIGHT: // 3
-                    img.rotate(180., false);
-                    break;
-                case Sipi::BOTLEFT: // 4
-                    img.rotate(180., true);
-                    break;
-                case Sipi::LEFTTOP: // 5
-                    img.rotate(270., true);
-                    break;
-                case Sipi::RIGHTTOP: // 6
-                    img.rotate(90., false);
-                    break;
-                case Sipi::RIGHTBOT: // 7
-                    img.rotate(90., true);
-                    break;
-                case Sipi::LEFTBOT: // 8
-                    img.rotate(270., false);
-                    break;
-                default:
-                    ; // nothing to do...
+            case Sipi::TOPLEFT: // 1
+                break;
+            case Sipi::TOPRIGHT: // 2
+                img.rotate(0., true);
+                break;
+            case Sipi::BOTRIGHT: // 3
+                img.rotate(180., false);
+                break;
+            case Sipi::BOTLEFT: // 4
+                img.rotate(180., true);
+                break;
+            case Sipi::LEFTTOP: // 5
+                img.rotate(270., true);
+                break;
+            case Sipi::RIGHTTOP: // 6
+                img.rotate(90., false);
+                break;
+            case Sipi::RIGHTBOT: // 7
+                img.rotate(90., true);
+                break;
+            case Sipi::LEFTBOT: // 8
+                img.rotate(270., false);
+                break;
+            default:
+                ; // nothing to do...
             }
             exif->addKeyVal("Exif.Image.Orientation", static_cast<unsigned short>(Sipi::TOPLEFT));
             img.setOrientation(Sipi::TOPLEFT);
@@ -910,17 +899,17 @@ int main(int argc, char *argv[]) {
         if (!sipiopt.get_option("--icc")->empty()) {
             Sipi::SipiIcc icc;
             switch (optIcc) {
-                case OptIcc::sRGB:
-                    icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_sRGB);
-                    break;
-                case OptIcc::AdobeRGB:
-                    icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_AdobeRGB);
-                    break;
-                case OptIcc::GRAY:
-                    icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_GRAY_D50);
-                    break;
-                case OptIcc::none:
-                    break;
+            case OptIcc::sRGB:
+                icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_sRGB);
+                break;
+            case OptIcc::AdobeRGB:
+                icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_AdobeRGB);
+                break;
+            case OptIcc::GRAY:
+                icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_GRAY_D50);
+                break;
+            case OptIcc::none:
+                break;
             }
             img.convertToIcc(icc, img.getBps());
         }
@@ -930,20 +919,20 @@ int main(int argc, char *argv[]) {
         //
         if (!(sipiopt.get_option("--mirror")->empty() && sipiopt.get_option("--rotate")->empty())) {
             switch (optMirror) {
-                case OptMirror::vertical: {
-                    img.rotate(optRotate + 180.0F, true);
-                    break;
+            case OptMirror::vertical: {
+                img.rotate(optRotate + 180.0F, true);
+                break;
+            }
+            case OptMirror::horizontal: {
+                img.rotate(optRotate, true);
+                break;
+            }
+            case OptMirror::none: {
+                if (optRotate != 0.0F) {
+                    img.rotate(optRotate, false);
                 }
-                case OptMirror::horizontal: {
-                    img.rotate(optRotate, true);
-                    break;
-                }
-                case OptMirror::none: {
-                    if (optRotate != 0.0F) {
-                        img.rotate(optRotate, false);
-                    }
-                    break;
-                }
+                break;
+            }
             }
         }
 
@@ -956,18 +945,27 @@ int main(int argc, char *argv[]) {
         //
         //int quality = 80
         Sipi::SipiCompressionParams comp_params;
-        if (!sipiopt.get_option("--quality")->empty()) comp_params[Sipi::JPEG_QUALITY] = optJpegQuality;
-        if (!sipiopt.get_option("--Sprofile")->empty()) comp_params[Sipi::J2K_Sprofile] = j2k_Sprofile;
-        if (!sipiopt.get_option("--Clayers")->empty()) comp_params[Sipi::J2K_Clayers] = std::to_string(j2k_Clayers);
-        if (!sipiopt.get_option("--Clevels")->empty()) comp_params[Sipi::J2K_Clevels] = std::to_string(j2k_Clevels);
-        if (!sipiopt.get_option("--Corder")->empty()) comp_params[Sipi::J2K_Corder] = j2k_Corder;
-        if (!sipiopt.get_option("--Cprecincts")->empty()) comp_params[Sipi::J2K_Cprecincts] = j2k_Cprecincts;
-        if (!sipiopt.get_option("--Cblk")->empty()) comp_params[Sipi::J2K_Cblk] = j2k_Cblk;
-        if (!sipiopt.get_option("--Cuse_sop")->empty()) comp_params[Sipi::J2K_Cuse_sop] = j2k_Cuse_sop ? "yes" : "no";
-        if (!sipiopt.get_option("--Stiles")->empty()) comp_params[Sipi::J2K_Stiles] = j2k_Stiles;
+        if (!sipiopt.get_option("--quality")->empty())
+            comp_params[Sipi::JPEG_QUALITY] = optJpegQuality;
+        if (!sipiopt.get_option("--Sprofile")->empty())
+            comp_params[Sipi::J2K_Sprofile] = j2k_Sprofile;
+        if (!sipiopt.get_option("--Clayers")->empty())
+            comp_params[Sipi::J2K_Clayers] = std::to_string(j2k_Clayers);
+        if (!sipiopt.get_option("--Clevels")->empty())
+            comp_params[Sipi::J2K_Clevels] = std::to_string(j2k_Clevels);
+        if (!sipiopt.get_option("--Corder")->empty())
+            comp_params[Sipi::J2K_Corder] = j2k_Corder;
+        if (!sipiopt.get_option("--Cprecincts")->empty())
+            comp_params[Sipi::J2K_Cprecincts] = j2k_Cprecincts;
+        if (!sipiopt.get_option("--Cblk")->empty())
+            comp_params[Sipi::J2K_Cblk] = j2k_Cblk;
+        if (!sipiopt.get_option("--Cuse_sop")->empty())
+            comp_params[Sipi::J2K_Cuse_sop] = j2k_Cuse_sop ? "yes" : "no";
+        if (!sipiopt.get_option("--Stiles")->empty())
+            comp_params[Sipi::J2K_Stiles] = j2k_Stiles;
         if (!sipiopt.get_option("--rates")->empty()) {
             std::stringstream ss;
-            for (auto &rate: j2k_rates) {
+            for (auto &rate : j2k_rates) {
                 if (rate == "X") {
                     ss << "-1.0 ";
                 } else {
@@ -1013,31 +1011,36 @@ int main(int argc, char *argv[]) {
             if (!config_loaded) {
                 sipiConf.setPort(optServerport);
             } else {
-                if (!sipiopt.get_option("--serverport")->empty()) sipiConf.setPort(optServerport);
+                if (!sipiopt.get_option("--serverport")->empty())
+                    sipiConf.setPort(optServerport);
             }
 
             if (!config_loaded) {
                 sipiConf.setSSLPort(optSSLport);
             } else {
-                if (!sipiopt.get_option("--sslport")->empty()) sipiConf.setSSLPort(optSSLport);
+                if (!sipiopt.get_option("--sslport")->empty())
+                    sipiConf.setSSLPort(optSSLport);
             }
 
             if (!config_loaded) {
                 sipiConf.setHostname(optHostname);
             } else {
-                if (!sipiopt.get_option("--hostname")->empty()) sipiConf.setHostname(optHostname);
+                if (!sipiopt.get_option("--hostname")->empty())
+                    sipiConf.setHostname(optHostname);
             }
 
             if (!config_loaded) {
                 sipiConf.setKeepAlive(optKeepAlive);
             } else {
-                if (!sipiopt.get_option("--keepalive")->empty()) sipiConf.setKeepAlive(optKeepAlive);
+                if (!sipiopt.get_option("--keepalive")->empty())
+                    sipiConf.setKeepAlive(optKeepAlive);
             }
 
             if (!config_loaded) {
                 sipiConf.setNThreads(optNThreads);
             } else {
-                if (!sipiopt.get_option("--nthreads")->empty()) sipiConf.setNThreads(optNThreads);
+                if (!sipiopt.get_option("--nthreads")->empty())
+                    sipiConf.setNThreads(optNThreads);
             }
 
             size_t l = optMaxPostSize.length();
@@ -1053,73 +1056,85 @@ int main(int argc, char *argv[]) {
             if (!config_loaded) {
                 sipiConf.setMaxPostSize(maxpost_size);
             } else {
-                if (!sipiopt.get_option("--maxpost")->empty()) sipiConf.setMaxPostSize(maxpost_size);
+                if (!sipiopt.get_option("--maxpost")->empty())
+                    sipiConf.setMaxPostSize(maxpost_size);
             }
 
             if (!config_loaded) {
                 sipiConf.setImgRoot(optImgroot);
             } else {
-                if (!sipiopt.get_option("--imgroot")->empty()) sipiConf.setImgRoot(optImgroot);
+                if (!sipiopt.get_option("--imgroot")->empty())
+                    sipiConf.setImgRoot(optImgroot);
             }
 
             if (!config_loaded) {
                 sipiConf.setDocRoot(optDocroot);
             } else {
-                if (!sipiopt.get_option("--docroot")->empty()) sipiConf.setDocRoot(optDocroot);
+                if (!sipiopt.get_option("--docroot")->empty())
+                    sipiConf.setDocRoot(optDocroot);
             }
 
             if (!config_loaded) {
                 sipiConf.setWWWRoute(optWWWRoute);
             } else {
-                if (!sipiopt.get_option("--wwwroute")->empty()) sipiConf.setWWWRoute(optWWWRoute);
+                if (!sipiopt.get_option("--wwwroute")->empty())
+                    sipiConf.setWWWRoute(optWWWRoute);
             }
 
             if (!config_loaded) {
                 sipiConf.setScriptDir(optScriptDir);
             } else {
-                if (!sipiopt.get_option("--scriptdir")->empty()) sipiConf.setScriptDir(optScriptDir);
+                if (!sipiopt.get_option("--scriptdir")->empty())
+                    sipiConf.setScriptDir(optScriptDir);
             }
 
             if (!config_loaded) {
                 sipiConf.setTmpDir(optTmpdir);
             } else {
-                if (!sipiopt.get_option("--tmpdir")->empty()) sipiConf.setTmpDir(optTmpdir);
+                if (!sipiopt.get_option("--tmpdir")->empty())
+                    sipiConf.setTmpDir(optTmpdir);
             }
 
             if (!config_loaded) {
                 sipiConf.setMaxTempFileAge(optMaxTmpAge);
             } else {
-                if (!sipiopt.get_option("--maxtmpage")->empty()) sipiConf.setMaxTempFileAge(optMaxTmpAge);
+                if (!sipiopt.get_option("--maxtmpage")->empty())
+                    sipiConf.setMaxTempFileAge(optMaxTmpAge);
             }
 
             if (!config_loaded) {
                 sipiConf.setPrefixAsPath(optPathprefix);
             } else {
-                if (!sipiopt.get_option("--pathprefix")->empty()) sipiConf.setPrefixAsPath(optPathprefix);
+                if (!sipiopt.get_option("--pathprefix")->empty())
+                    sipiConf.setPrefixAsPath(optPathprefix);
             }
 
             if (!config_loaded) {
                 sipiConf.setSubdirLevels(optSubdirLevels);
             } else {
-                if (!sipiopt.get_option("--subdirlevels")->empty()) sipiConf.setSubdirLevels(optSubdirLevels);
+                if (!sipiopt.get_option("--subdirlevels")->empty())
+                    sipiConf.setSubdirLevels(optSubdirLevels);
             }
 
             if (!config_loaded) {
                 sipiConf.setSubdirExcludes(optSubdirExcludes);
             } else {
-                if (!sipiopt.get_option("--subdirexcludes")->empty()) sipiConf.setSubdirExcludes(optSubdirExcludes);
+                if (!sipiopt.get_option("--subdirexcludes")->empty())
+                    sipiConf.setSubdirExcludes(optSubdirExcludes);
             }
 
             if (!config_loaded) {
                 sipiConf.setInitScript(optInitscript);
             } else {
-                if (!sipiopt.get_option("--initscript")->empty()) sipiConf.setInitScript(optInitscript);
+                if (!sipiopt.get_option("--initscript")->empty())
+                    sipiConf.setInitScript(optInitscript);
             }
 
             if (!config_loaded) {
                 sipiConf.setCacheDir(optCachedir);
             } else {
-                if (!sipiopt.get_option("--cachedir")->empty()) sipiConf.setCacheDir(optCachedir);
+                if (!sipiopt.get_option("--cachedir")->empty())
+                    sipiConf.setCacheDir(optCachedir);
             }
 
             l = optCacheSize.length();
@@ -1135,106 +1150,119 @@ int main(int argc, char *argv[]) {
             if (!config_loaded) {
                 sipiConf.setCacheSize(cache_size);
             } else {
-                if (!sipiopt.get_option("--cachesize")->empty()) sipiConf.setCacheSize(cache_size);
+                if (!sipiopt.get_option("--cachesize")->empty())
+                    sipiConf.setCacheSize(cache_size);
             }
 
             if (!config_loaded) {
                 sipiConf.setCacheNFiles(optCacheNFiles);
             } else {
-                if (!sipiopt.get_option("--cachenfiles")->empty()) sipiConf.setCacheNFiles(optCacheNFiles);
+                if (!sipiopt.get_option("--cachenfiles")->empty())
+                    sipiConf.setCacheNFiles(optCacheNFiles);
             }
 
             if (!config_loaded) {
                 sipiConf.setCacheHysteresis(optCacheHysteresis);
             } else {
-                if (!sipiopt.get_option("--cachehysteresis")->empty()) sipiConf.setCacheHysteresis(optCacheHysteresis);
+                if (!sipiopt.get_option("--cachehysteresis")->empty())
+                    sipiConf.setCacheHysteresis(optCacheHysteresis);
             }
 
             if (!config_loaded) {
                 sipiConf.setThumbSize(optThumbSize);
             } else {
-                if (!sipiopt.get_option("--thumbsize")->empty()) sipiConf.setThumbSize(optThumbSize);
+                if (!sipiopt.get_option("--thumbsize")->empty())
+                    sipiConf.setThumbSize(optThumbSize);
             }
 
             if (!config_loaded) {
                 sipiConf.setSSLCertificate(optSSLCertificatePath);
             } else {
-                if (!sipiopt.get_option("--sslcert")->empty()) sipiConf.setSSLCertificate(optSSLCertificatePath);
+                if (!sipiopt.get_option("--sslcert")->empty())
+                    sipiConf.setSSLCertificate(optSSLCertificatePath);
             }
 
             if (!config_loaded) {
                 sipiConf.setSSLKey(optSSLKeyPath);
             } else {
-                if (!sipiopt.get_option("--sslkey")->empty()) sipiConf.setSSLKey(optSSLKeyPath);
+                if (!sipiopt.get_option("--sslkey")->empty())
+                    sipiConf.setSSLKey(optSSLKeyPath);
             }
 
             if (!config_loaded) {
                 sipiConf.setJwtSecret(optJWTKey);
             } else {
-                if (!sipiopt.get_option("--jwtkey")->empty()) sipiConf.setJwtSecret(optJWTKey);
+                if (!sipiopt.get_option("--jwtkey")->empty())
+                    sipiConf.setJwtSecret(optJWTKey);
             }
 
             if (!config_loaded) {
                 sipiConf.setAdminUser(optAdminUser);
             } else {
-                if (!sipiopt.get_option("--adminuser")->empty()) sipiConf.setAdminUser(optAdminUser);
+                if (!sipiopt.get_option("--adminuser")->empty())
+                    sipiConf.setAdminUser(optAdminUser);
             }
 
             if (!config_loaded) {
                 sipiConf.setPasswort(optAdminPassword);
             } else {
-                if (!sipiopt.get_option("--adminpasswd")->empty()) sipiConf.setPasswort(optAdminPassword);
+                if (!sipiopt.get_option("--adminpasswd")->empty())
+                    sipiConf.setPasswort(optAdminPassword);
             }
 
             if (!config_loaded) {
                 sipiConf.setKnoraPath(optKnoraPath);
             } else {
-                if (!sipiopt.get_option("--knorapath")->empty()) sipiConf.setKnoraPath(optKnoraPath);
+                if (!sipiopt.get_option("--knorapath")->empty())
+                    sipiConf.setKnoraPath(optKnoraPath);
             }
 
             if (!config_loaded) {
                 sipiConf.setKnoraPort(optKnoraPort);
             } else {
-                if (!sipiopt.get_option("--knoraport")->empty()) sipiConf.setKnoraPort(optKnoraPort);
+                if (!sipiopt.get_option("--knoraport")->empty())
+                    sipiConf.setKnoraPort(optKnoraPort);
             }
 
             if (!config_loaded) {
                 sipiConf.setLogfile(optLogfilePath);
             } else {
-                if (!sipiopt.get_option("--logfile")->empty()) sipiConf.setLogfile(optLogfilePath);
+                if (!sipiopt.get_option("--logfile")->empty())
+                    sipiConf.setLogfile(optLogfilePath);
             }
 
             std::string loglevelstring;
             switch (optLogLevel) {
-                case LogLevel::DEBUG:
-                    loglevelstring = "DEBUG";
-                    break;
-                case LogLevel::INFO:
-                    loglevelstring = "INFO";
-                    break;
-                case LogLevel::NOTICE:
-                    loglevelstring = "NOTICE";
-                    break;
-                case LogLevel::WARNING:
-                    loglevelstring = "WARNING";
-                    break;
-                case LogLevel::ERR:
-                    loglevelstring = "ERR";
-                    break;
-                case LogLevel::CRIT:
-                    loglevelstring = "CRIT";
-                    break;
-                case LogLevel::ALERT:
-                    loglevelstring = "ALERT";
-                    break;
-                case LogLevel::EMERG:
-                    loglevelstring = "EMERG";
-                    break;
+            case LogLevel::DEBUG:
+                loglevelstring = "DEBUG";
+                break;
+            case LogLevel::INFO:
+                loglevelstring = "INFO";
+                break;
+            case LogLevel::NOTICE:
+                loglevelstring = "NOTICE";
+                break;
+            case LogLevel::WARNING:
+                loglevelstring = "WARNING";
+                break;
+            case LogLevel::ERR:
+                loglevelstring = "ERR";
+                break;
+            case LogLevel::CRIT:
+                loglevelstring = "CRIT";
+                break;
+            case LogLevel::ALERT:
+                loglevelstring = "ALERT";
+                break;
+            case LogLevel::EMERG:
+                loglevelstring = "EMERG";
+                break;
             }
             if (!config_loaded) {
                 sipiConf.setLogLevel(loglevelstring);
             } else {
-                if (!sipiopt.get_option("--loglevel")->empty()) sipiConf.setLogLevel(loglevelstring);
+                if (!sipiopt.get_option("--loglevel")->empty())
+                    sipiConf.setLogLevel(loglevelstring);
             }
 
             //
@@ -1256,13 +1284,17 @@ int main(int argc, char *argv[]) {
                 struct dirent *dp;
                 while ((dp = readdir(dirp)) != nullptr) {
                     if (dp->d_type == DT_DIR) {
-                        if (strcmp(dp->d_name, ".") == 0) continue;
-                        if (strcmp(dp->d_name, "..") == 0) continue;
+                        if (strcmp(dp->d_name, ".") == 0)
+                            continue;
+                        if (strcmp(dp->d_name, "..") == 0)
+                            continue;
                         bool exclude = false;
-                        for (auto direx: dirs_to_exclude) {
-                            if (direx == dp->d_name) exclude = true;
+                        for (auto direx : dirs_to_exclude) {
+                            if (direx == dp->d_name)
+                                exclude = true;
                         }
-                        if (exclude) continue;
+                        if (exclude)
+                            continue;
                         std::string path = sipiConf.getImgRoot() + "/" + dp->d_name;
                         int levels = SipiFilenameHash::check_levels(path);
                         int new_levels = sipiConf.getSubdirLevels();
@@ -1285,43 +1317,28 @@ int main(int argc, char *argv[]) {
             }
             SipiFilenameHash::setLevels(sipiConf.getSubdirLevels());
 
-            // At this point the config is loaded and we can initialize sentry
-            if (!optSentryDsn.empty()) {
-                sentry_options_t *options = sentry_options_new();
-                sentry_options_set_dsn(options, optSentryDsn.c_str());
-                sentry_options_set_database_path(options, "/tmp/.sentry-native");
 
-                if (!optSentryRelease.empty()) {
-                    std::string sentryReleaseTag = std::string(BUILD_SCM_TAG) + "/" + optSentryRelease;
-                    sentry_options_set_release(options, sentryReleaseTag.c_str());
-                }
+            // TODO: At this point the config is loaded and we can initialize metrics
+            if (!optSipiSentryDsn.empty())
+                syslog(LOG_INFO, "SIPI_SENTRY_DSN: %s", optSipiSentryDsn.c_str());
 
-                if (!optSentryEnvironment.empty()) {
-                    sentry_options_set_environment(options, optSentryEnvironment.c_str());
-                } else {
-                    sentry_options_set_environment(options, "development");
-                }
+            if (!optSipiSentryEnvironment.empty())
+                syslog(LOG_INFO, "SIPI_SENTRY_ENVRONMENT: %s", optSipiSentryEnvironment.c_str());
 
-                sentry_options_set_debug(options, 0);
-
-                // configures the sampling rate for transactions
-                sentry_options_set_traces_sample_rate(options, 0.1);
-
-                sentry_init(options);
-            }
-
+            if (!optSipiSentryRelease.empty())
+                syslog(LOG_INFO, "SIPI_SENTRY_Release: %s", optSipiSentryRelease.c_str());
 
             //Create object SipiHttpServer
-            int nthreads = sipiConf.getNThreads();
+            auto nthreads = sipiConf.getNThreads();
             if (nthreads < 1) {
                 nthreads = std::thread::hardware_concurrency();
             }
             Sipi::SipiHttpServer server(
-                    sipiConf.getPort(),
-                    static_cast<unsigned int>(nthreads),
-                    sipiConf.getUseridStr(),
-                    sipiConf.getLogfile(),
-                    sipiConf.getLoglevel());
+                sipiConf.getPort(),
+                nthreads,
+                sipiConf.getUseridStr(),
+                sipiConf.getLogfile(),
+                sipiConf.getLoglevel());
 
             int old_ll = setlogmask(LOG_MASK(LOG_INFO));
             syslog(LOG_INFO, "BUILD_TIMESTAMP: %s", BUILD_TIMESTAMP);
@@ -1340,7 +1357,7 @@ int main(int argc, char *argv[]) {
             server.tmpdir(sipiConf.getTmpDir());
             server.max_post_size(sipiConf.getMaxPostSize());
             server.scriptdir(
-                    sipiConf.getScriptDir()); // set the directory where the Lua scripts are found for the "Lua"-routes
+                sipiConf.getScriptDir()); // set the directory where the Lua scripts are found for the "Lua"-routes
             server.luaRoutes(sipiConf.getRoutes());
             server.add_lua_globals_func(sipiConfGlobals, &sipiConf);
             server.add_lua_globals_func(shttps::sqliteGlobals); // add new lua function "gaga"
@@ -1358,7 +1375,7 @@ int main(int argc, char *argv[]) {
 
             if (!cachedir.empty()) {
                 size_t cachesize = sipiConf.getCacheSize();
-                int nfiles = sipiConf.getCacheNFiles();
+                size_t nfiles = sipiConf.getCacheNFiles();
                 float hysteresis = sipiConf.getCacheHysteresis();
                 server.cache(cachedir, cachesize, nfiles, hysteresis);
             }
@@ -1383,13 +1400,13 @@ int main(int argc, char *argv[]) {
                 server.add_route(shttps::Connection::POST, wwwroute, shttps::file_handler, &filehandler_info);
             }
 
-            syslog(LOG_DEBUG, "Starting SipiHttpServer::run()");
+            // start the server
             server.run();
         } catch (shttps::Error &err) {
+            syslog(LOG_ERR, "Error starting server: %s", err.what());
             std::cerr << err << std::endl;
         }
     }
     // make sure everything flushes
-    sentry_close();
     return EXIT_SUCCESS;
 }
