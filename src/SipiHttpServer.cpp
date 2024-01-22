@@ -1885,7 +1885,7 @@ namespace Sipi {
                 // let's add a watermark if necessary
                 //
                 if (!watermark.empty()) {
-                    watermark = "watermark.tif";
+                    // watermark = "watermark.tif";
                     try {
                         img.add_watermark(watermark);
                     }
