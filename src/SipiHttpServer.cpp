@@ -479,10 +479,180 @@ namespace Sipi {
     }
     //=========================================================================
 
+
+
+
+
+    std::pair<std::string, std::string>
+    SipiHttpServer::get_canonical_url(
+        size_t tmp_w,
+        size_t tmp_h,
+        const std::string &host,
+        const std::string &prefix,
+        const std::string &identifier,
+        std::shared_ptr<SipiRegion> region,
+        std::shared_ptr<SipiSize> size,
+        SipiRotation &rotation,
+        SipiQualityFormat &quality_format, int pagenum)
+    {
+        static const int canonical_len = 127;
+
+        char canonical_region[canonical_len + 1];
+        char canonical_size[canonical_len + 1];
+
+        int tmp_r_x = 0, tmp_r_y = 0, tmp_red = 0;
+        size_t tmp_r_w = 0, tmp_r_h = 0;
+        bool tmp_ro = false;
+
+        if (region->getType() != SipiRegion::FULL) {
+            region->crop_coords(tmp_w, tmp_h, tmp_r_x, tmp_r_y, tmp_r_w, tmp_r_h);
+        }
+
+        region->canonical(canonical_region, canonical_len);
+
+        if (size->getType() != SipiSize::FULL) {
+            try {
+                size->get_size(tmp_w, tmp_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
+            }
+            catch (Sipi::SipiSizeError &err) {
+                throw SipiError(__file__, __LINE__, "SipiSize error!");
+            }
+        }
+
+        size->canonical(canonical_size, canonical_len);
+        float angle;
+        bool mirror = rotation.get_rotation(angle);
+        char canonical_rotation[canonical_len + 1];
+
+        if (mirror || (angle != 0.0)) {
+            if ((angle - floorf(angle)) < 1.0e-6) { // it's an integer
+                if (mirror) {
+                    (void)snprintf(canonical_rotation, canonical_len, "!%ld", lround(angle));
+                }
+                else {
+                    (void)snprintf(canonical_rotation, canonical_len, "%ld", lround(angle));
+                }
+            }
+            else {
+                if (mirror) {
+                    (void)snprintf(canonical_rotation, canonical_len, "!%1.1f", angle);
+                }
+                else {
+                    (void)snprintf(canonical_rotation, canonical_len, "%1.1f", angle);
+                }
+            }
+        }
+        else {
+            (void)snprintf(canonical_rotation, canonical_len, "0");
+        }
+
+        const unsigned canonical_header_len = 511;
+        char canonical_header[canonical_header_len + 1];
+        char ext[5];
+
+        switch (quality_format.format()) {
+            case SipiQualityFormat::JPG: {
+                ext[0] = 'j';
+                ext[1] = 'p';
+                ext[2] = 'g';
+                ext[3] = '\0';
+                break; // jpg
+            }
+            case SipiQualityFormat::JP2: {
+                ext[0] = 'j';
+                ext[1] = 'p';
+                ext[2] = '2';
+                ext[3] = '\0';
+                break; // jp2
+            }
+            case SipiQualityFormat::TIF: {
+                ext[0] = 't';
+                ext[1] = 'i';
+                ext[2] = 'f';
+                ext[3] = '\0';
+                break; // tif
+            }
+            case SipiQualityFormat::PNG: {
+                ext[0] = 'p';
+                ext[1] = 'n';
+                ext[2] = 'g';
+                ext[3] = '\0';
+                break; // png
+            }
+            default: {
+                throw SipiError(__file__, __LINE__,
+                                "Unsupported file format requested! Supported are .jpg, .jp2, .tif, .png");
+            }
+        }
+
+        std::string format;
+        if (quality_format.quality() != SipiQualityFormat::DEFAULT) {
+            switch (quality_format.quality()) {
+                case SipiQualityFormat::COLOR: {
+                    format = "/color.";
+                    break;
+                }
+                case SipiQualityFormat::GRAY: {
+                    format = "/gray.";
+                    break;
+                }
+                case SipiQualityFormat::BITONAL: {
+                    format = "/bitonal.";
+                    break;
+                }
+                default: {
+                    format = "/default.";
+                }
+            }
+        }
+        else {
+            format = "/default.";
+        }
+
+        std::string fullid = identifier;
+        if (pagenum > 0)
+            fullid += "@" + std::to_string(pagenum);
+        (void)snprintf(canonical_header, canonical_header_len,
+                       "<http://%s/%s/%s/%s/%s/%s/default.%s>;rel=\"canonical\"", host.c_str(), prefix.c_str(),
+                       fullid.c_str(), canonical_region, canonical_size, canonical_rotation, ext);
+        std::string canonical = host + "/" + prefix + "/" + fullid + "/" + std::string(canonical_region) + "/" +
+                                std::string(canonical_size) + "/" + std::string(canonical_rotation) + format +
+                                std::string(ext);
+
+        return make_pair(std::string(canonical_header), canonical);
+    }
+    //=========================================================================
+
+    static void serve_redirect(Connection &conn_obj, std::vector<std::string> params) {
+        conn_obj.setBuffer();
+        conn_obj.status(Connection::SEE_OTHER);
+        const std::string host = conn_obj.host();
+        std::string redirect;
+        if (conn_obj.secure())
+        {
+            redirect =
+                std::string("https://") + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier] +
+                "/info.json";
+        }
+        else
+        {
+            redirect =
+                std::string("http://") + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier] +
+                "/info.json";
+        }
+
+        conn_obj.header("Location", redirect);
+        conn_obj.header("Content-Type", "text/plain");
+        conn_obj << "Redirect to " << redirect;
+        syslog(LOG_INFO, "GET: redirect to %s", redirect.c_str());
+        conn_obj.flush();
+    }
+    //=========================================================================
+
     //
     // ToDo: Prepare for IIIF Authentication API !!!!
     //
-    static void iiif_send_info(
+    static void server_info(
         Connection &conn_obj,
         SipiHttpServer *serv,
         shttps::LuaServer &luaserver,
@@ -769,11 +939,10 @@ namespace Sipi {
         conn_obj.sendAndFlush(json_str, strlen(json_str));
         free(json_str);
         json_decref(root);
-        return;
     }
     //=========================================================================
 
-    static void knora_send_info(
+    static void serve_knora_info(
         Connection &conn_obj,
         SipiHttpServer *serv,
         shttps::LuaServer &luaserver,
@@ -1003,146 +1172,6 @@ namespace Sipi {
             free(json_str);
         }
         json_decref(root);
-    }
-    //=========================================================================
-
-    std::pair<std::string, std::string>
-    SipiHttpServer::get_canonical_url(
-        size_t tmp_w,
-        size_t tmp_h,
-        const std::string &host,
-        const std::string &prefix,
-        const std::string &identifier,
-        std::shared_ptr<SipiRegion> region,
-        std::shared_ptr<SipiSize> size,
-        SipiRotation &rotation,
-        SipiQualityFormat &quality_format, int pagenum)
-    {
-        static const int canonical_len = 127;
-
-        char canonical_region[canonical_len + 1];
-        char canonical_size[canonical_len + 1];
-
-        int tmp_r_x = 0, tmp_r_y = 0, tmp_red = 0;
-        size_t tmp_r_w = 0, tmp_r_h = 0;
-        bool tmp_ro = false;
-
-        if (region->getType() != SipiRegion::FULL) {
-            region->crop_coords(tmp_w, tmp_h, tmp_r_x, tmp_r_y, tmp_r_w, tmp_r_h);
-        }
-
-        region->canonical(canonical_region, canonical_len);
-
-        if (size->getType() != SipiSize::FULL) {
-            try {
-                size->get_size(tmp_w, tmp_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
-            }
-            catch (Sipi::SipiSizeError &err) {
-                throw SipiError(__file__, __LINE__, "SipiSize error!");
-            }
-        }
-
-        size->canonical(canonical_size, canonical_len);
-        float angle;
-        bool mirror = rotation.get_rotation(angle);
-        char canonical_rotation[canonical_len + 1];
-
-        if (mirror || (angle != 0.0)) {
-            if ((angle - floorf(angle)) < 1.0e-6) { // it's an integer
-                if (mirror) {
-                    (void)snprintf(canonical_rotation, canonical_len, "!%ld", lround(angle));
-                }
-                else {
-                    (void)snprintf(canonical_rotation, canonical_len, "%ld", lround(angle));
-                }
-            }
-            else {
-                if (mirror) {
-                    (void)snprintf(canonical_rotation, canonical_len, "!%1.1f", angle);
-                }
-                else {
-                    (void)snprintf(canonical_rotation, canonical_len, "%1.1f", angle);
-                }
-            }
-        }
-        else {
-            (void)snprintf(canonical_rotation, canonical_len, "0");
-        }
-
-        const unsigned canonical_header_len = 511;
-        char canonical_header[canonical_header_len + 1];
-        char ext[5];
-
-        switch (quality_format.format()) {
-            case SipiQualityFormat::JPG: {
-                ext[0] = 'j';
-                ext[1] = 'p';
-                ext[2] = 'g';
-                ext[3] = '\0';
-                break; // jpg
-            }
-            case SipiQualityFormat::JP2: {
-                ext[0] = 'j';
-                ext[1] = 'p';
-                ext[2] = '2';
-                ext[3] = '\0';
-                break; // jp2
-            }
-            case SipiQualityFormat::TIF: {
-                ext[0] = 't';
-                ext[1] = 'i';
-                ext[2] = 'f';
-                ext[3] = '\0';
-                break; // tif
-            }
-            case SipiQualityFormat::PNG: {
-                ext[0] = 'p';
-                ext[1] = 'n';
-                ext[2] = 'g';
-                ext[3] = '\0';
-                break; // png
-            }
-            default: {
-                throw SipiError(__file__, __LINE__,
-                                "Unsupported file format requested! Supported are .jpg, .jp2, .tif, .png");
-            }
-        }
-
-        std::string format;
-        if (quality_format.quality() != SipiQualityFormat::DEFAULT) {
-            switch (quality_format.quality()) {
-                case SipiQualityFormat::COLOR: {
-                    format = "/color.";
-                    break;
-                }
-                case SipiQualityFormat::GRAY: {
-                    format = "/gray.";
-                    break;
-                }
-                case SipiQualityFormat::BITONAL: {
-                    format = "/bitonal.";
-                    break;
-                }
-                default: {
-                    format = "/default.";
-                }
-            }
-        }
-        else {
-            format = "/default.";
-        }
-
-        std::string fullid = identifier;
-        if (pagenum > 0)
-            fullid += "@" + std::to_string(pagenum);
-        (void)snprintf(canonical_header, canonical_header_len,
-                       "<http://%s/%s/%s/%s/%s/%s/default.%s>;rel=\"canonical\"", host.c_str(), prefix.c_str(),
-                       fullid.c_str(), canonical_region, canonical_size, canonical_rotation, ext);
-        std::string canonical = host + "/" + prefix + "/" + fullid + "/" + std::string(canonical_region) + "/" +
-                                std::string(canonical_size) + "/" + std::string(canonical_rotation) + format +
-                                std::string(ext);
-
-        return make_pair(std::string(canonical_header), canonical);
     }
     //=========================================================================
 
@@ -1436,36 +1465,15 @@ namespace Sipi {
         //
         switch (service) {
             case SERVE_REDIRECT: {
-                conn_obj.setBuffer();
-                conn_obj.status(Connection::SEE_OTHER);
-                const std::string host = conn_obj.host();
-                std::string redirect;
-                if (conn_obj.secure())
-                {
-                    redirect =
-                        std::string("https://") + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier] +
-                        "/info.json";
-                }
-                else
-                {
-                    redirect =
-                        std::string("http://") + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier] +
-                        "/info.json";
-                }
-
-                conn_obj.header("Location", redirect);
-                conn_obj.header("Content-Type", "text/plain");
-                conn_obj << "Redirect to " << redirect;
-                syslog(LOG_INFO, "GET: redirect to %s", redirect.c_str());
-                conn_obj.flush();
+                serve_redirect(conn_obj, params);
                 return;
             }
             case SERVE_INFO: {
-                iiif_send_info(conn_obj, serv, luaserver, params, prefix_as_path);
+                server_info(conn_obj, serv, luaserver, params, prefix_as_path);
                 return;
             }
             case SERVE_KNORAINFO: {
-                knora_send_info(conn_obj, serv, luaserver, params, prefix_as_path);
+                serve_knora_info(conn_obj, serv, luaserver, params, prefix_as_path);
                 return;
             }
             case SERVE_FILE: {
