@@ -569,7 +569,7 @@ class SipiImageError : public std::exception {
          *
          * \param[in] wmfilename Path to watermakfile (which must be a TIFF file at the moment)
          */
-        bool add_watermark(const std::string &wmfilename);
+        void add_watermark(const std::string &wmfilename);
 
 
         /*!

@@ -1381,7 +1381,7 @@ namespace Sipi {
     //============================================================================
 
 
-    bool SipiImage::add_watermark(const std::string &wmfilename) {
+    void SipiImage::add_watermark(const std::string &wmfilename) {
         int wm_nx, wm_ny, wm_nc;
         byte *wmbuf = read_watermark(wmfilename, wm_nx, wm_ny, wm_nc);
         if (wmbuf == nullptr) {
@@ -1431,8 +1431,7 @@ namespace Sipi {
         }
 
         delete[] wmbuf;
-        return true;
-    }
+   }
 
     /*==========================================================================*/
 
