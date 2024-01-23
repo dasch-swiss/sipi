@@ -65,10 +65,10 @@ The pre-flight function must return at least 2 parameters:
   To allow more flexibility, the following permission tables are supported:  
     - Restricted access with watermark. The watermark must be a TIFF file with a single 8-bit channel (gray value
     image). For example:  
-    `{ type = 'restricted', watermark = './wm/mywatermark.tif' }`
+    `{ type = 'restrict', watermark = './wm/mywatermark.tif' }`
     - Restricted access with size limitation. The size must be a
       [IIIF size expression](https://iiif.io/api/image/3.0/#42-size). For example:  
-     `{ type = 'restricted', size='!256,256' }`
+     `{ type = 'restrict', size='!256,256' }`
     - SIPI also supports the [IIIF Authentification API](https://iiif.io/api/auth/1.0/). See section [IIIF
       Authentification]() on how to implement this feature in the pre-flight function.
 - `filepath`: The path to the master image file in the media files repository. This path can be assembled using the
@@ -158,7 +158,7 @@ end
 Above example assumes that the cookie data is a string that contains encrypted user data from a table (key/value pair).
 Jason Web Token. This token is decoded and the information about the image to be displayed is added. Then the information
 is encoded as a new token that ist transmitted to the RESTful interface of the authentification server. The answer is
-assumed to be json containing information about the type ('allow', 'deny', 'restricted') and the restriction settings.
+assumed to be json containing information about the type ('allow', 'deny', 'restrict') and the restriction settings.
 The pre-flight function uses the following SIPI-specific LUA global variables and function:
 
 - [config.imgroot](#configimgroot): (Global variable) Root directory of the image repository.
