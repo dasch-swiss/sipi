@@ -318,6 +318,23 @@ void sig_handler(const int sig) {
     exit(1);
 }
 
+/*!
+ * Handle any unhandled exceptions.
+ *
+ * This function is called when an unhandled exception is thrown. It logs out the exception
+ * and aborts the program.
+ */
+void my_terminate_handler() {
+    try {
+        // Rethrow the current exception to identify it
+        throw;
+    } catch (const std::exception& e) {
+       syslog(LOG_ERR, "Unhandled exception caught: %s", e.what());
+    } catch (...) {
+        syslog(LOG_ERR, "Unhandled unknown exception caught");
+    }
+    std::abort(); // Abort the program or perform other cleanup
+}
 
 /*!
  * The main function.
@@ -331,6 +348,9 @@ int main(int argc, char *argv[]) {
     // install signal handler
     signal(SIGSEGV, sig_handler);
     signal(SIGABRT, sig_handler);
+
+    // set top level exception handler
+    std::set_terminate(my_terminate_handler);
 
     //
     // first we initialize the libraries that sipi uses
