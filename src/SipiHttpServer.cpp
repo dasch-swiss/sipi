@@ -1593,6 +1593,12 @@ namespace Sipi {
             }
             catch (Sipi::SipiError &err) {
                 send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
+                syslog(LOG_ERR, "GET %s: error adding watermark: %s", uri.c_str(), err.to_string().c_str());
+                return;
+            }
+            catch (std::exception &err) {
+                send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.what());
+                syslog(LOG_ERR, "GET %s: error adding watermark: %s", uri.c_str(), err.what());
                 return;
             }
             syslog(LOG_INFO, "GET %s: adding watermark", uri.c_str());

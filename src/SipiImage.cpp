@@ -37,6 +37,8 @@
 #include "formats/SipiIOTiff.h"
 #include "formats/SipiIOJ2k.h"
 //#include "formats/SipiIOOpenJ2k.h"
+#include <sys/stat.h>
+
 #include "formats/SipiIOJpeg.h"
 #include "formats/SipiIOPng.h"
 #include "shttps/Parsing.h"
@@ -736,54 +738,63 @@ namespace Sipi {
     /****************************************************************************/
 #define POSITION(x, y, c, n) ((n)*((y)*nx + (x)) + c)
 
-    byte SipiImage::bilinn(byte buf[], int nx, double x, double y, int c, int n) {
-        int ix, iy;
-        double rx, ry;
-        ix = (int) x;
-        iy = (int) y;
-        rx = x - (double) ix;
-        ry = y - (double) iy;
+    byte SipiImage::bilinn(byte buf[], const int nx, const double x, const double y, const int c, const int n) {
+        const auto ix = static_cast<int>(x);
+        const auto iy = static_cast<int>(y);
+        const auto rx = x - static_cast<double>(ix);
+        const auto ry = y - static_cast<double>(iy);
 
-        if ((rx < 1.0e-2) && (ry < 1.0e-2)) {
+        constexpr double Threshold = 1.0e-2;
+
+        if ((rx < Threshold) && (ry < Threshold)) {
             return (buf[POSITION(ix, iy, c, n)]);
-        } else if (rx < 1.0e-2) {
+        }
+
+        if (rx < Threshold) {
             return ((byte) lround(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
                              (double) buf[POSITION(ix, (iy + 1), c, n)] * (ry - rx * ry))));
-        } else if (ry < 1.0e-2) {
+        }
+
+        if (ry < Threshold) {
             return ((byte) lround(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
                              (double) buf[POSITION((ix + 1), iy, c, n)] * (rx - rx * ry))));
-        } else {
-            return ((byte) lround(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
+        }
+
+        return ((byte) lround(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
                              (double) buf[POSITION((ix + 1), iy, c, n)] * (rx - rx * ry) +
                              (double) buf[POSITION(ix, (iy + 1), c, n)] * (ry - rx * ry) +
                              (double) buf[POSITION((ix + 1), (iy + 1), c, n)] * rx * ry)));
-        }
+
     }
 
     /*==========================================================================*/
 
-    word SipiImage::bilinn(word buf[], int nx, double x, double y, int c, int n) {
-        int ix, iy;
-        double rx, ry;
-        ix = (int) x;
-        iy = (int) y;
-        rx = x - (double) ix;
-        ry = y - (double) iy;
+    word SipiImage::bilinn(word buf[], const int nx, const double x, const double y, const int c, const int n) {
+        const auto ix = static_cast<int>(x);
+        const auto iy = static_cast<int>(y);
+        const auto rx = x - static_cast<double>(ix);
+        const auto ry = y - static_cast<double>(iy);
 
-        if ((rx < 1.0e-2) && (ry < 1.0e-2)) {
+        constexpr double Threshold = 1.0e-2;
+
+        if ((rx < Threshold) && (ry < Threshold)) {
             return (buf[POSITION(ix, iy, c, n)]);
-        } else if (rx < 1.0e-2) {
+        }
+
+        if (rx < Threshold) {
             return ((word) lround(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
                              (double) buf[POSITION(ix, (iy + 1), c, n)] * (ry - rx * ry))));
-        } else if (ry < 1.0e-2) {
+        }
+
+        if (ry < Threshold) {
             return ((word) lround(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
                              (double) buf[POSITION((ix + 1), iy, c, n)] * (rx - rx * ry))));
-        } else {
-            return ((word) lround(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
+        }
+
+        return ((word) lround(((double) buf[POSITION(ix, iy, c, n)] * (1 - rx - ry + rx * ry) +
                              (double) buf[POSITION((ix + 1), iy, c, n)] * (rx - rx * ry) +
                              (double) buf[POSITION(ix, (iy + 1), c, n)] * (ry - rx * ry) +
                              (double) buf[POSITION((ix + 1), (iy + 1), c, n)] * rx * ry)));
-        }
     }
     /*==========================================================================*/
 
@@ -1403,12 +1414,11 @@ namespace Sipi {
         }
 
         if (bps == 8) {
-            byte *buf = pixels;
+            auto *buf = pixels;
 
             for (size_t j = 0; j < ny; j++) {
                 for (size_t i = 0; i < nx; i++) {
                     byte val = bilinn(wmbuf, wm_nx, xlut[i], ylut[j], 0, wm_nc);
-
                     for (size_t k = 0; k < nc; k++) {
                         double nval = (buf[nc * (j * nx + i) + k] / 255.) * (1.0 + val / 2550.0) + val / 2550.0;
                         buf[nc * (j * nx + i) + k] = (nval > 1.0) ? 255 : (unsigned char) floorl(nval * 255. + .5);
@@ -1416,7 +1426,7 @@ namespace Sipi {
                 }
             }
         } else if (bps == 16) {
-            word *buf = (word *) pixels;
+            auto *buf = reinterpret_cast<word *>(pixels);
 
             for (size_t j = 0; j < ny; j++) {
                 for (size_t i = 0; i < nx; i++) {
