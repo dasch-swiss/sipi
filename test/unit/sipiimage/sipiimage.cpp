@@ -284,3 +284,17 @@ TEST(SipiImage, Watermark)
     ASSERT_THROW(img4.add_watermark(watermark_incorrect), std::exception);
 
 }
+
+TEST(SipiImage, Dev3229)
+{
+    Sipi::SipiIOTiff::initLibrary();
+    Sipi::SipiImage img1;
+    Sipi::SipiImage img2;
+
+    const std::string problem = "../../../../test/_test_data/images/unit/dev_3229.tif";
+
+    ASSERT_NO_THROW(img1.read(problem));
+    ASSERT_NO_THROW(img1.write("jpx", "../../../../test/_test_data/images/unit/dev_3229.jpx"));
+
+    img2.read("../../../../test/_test_data/images/unit/dev_3229.jpx");
+}

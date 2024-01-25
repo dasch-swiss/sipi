@@ -539,14 +539,21 @@ namespace Sipi {
         if (force_bps_8) img->bps = 8; // forces kakadu to convert to 8 bit!
         switch (img->bps) {
             case 8: {
-                kdu_core::kdu_byte *buffer8 = new kdu_core::kdu_byte[(int) dims.area() * img->nc];
-                decompressor.pull_stripe(buffer8, stripe_heights);
-                img->pixels = (byte *) buffer8;
+                auto *buffer8 = new kdu_core::kdu_byte[static_cast<int>(dims.area()) * img->nc];
+                try {
+                    decompressor.pull_stripe(buffer8, stripe_heights);
+                } catch (kdu_exception &exc) {
+                    codestream.destroy();
+                    input->close();
+                    jpx_in.close(); // Not really necessary here.
+                    throw SipiImageError(__file__, __LINE__, "Error while decompressing image!");
+                }
+                img->pixels = static_cast<byte *>(buffer8);
                 break;
             }
             case 12: {
                 std::vector<char> get_signed(img->nc, 0); // vector<bool> does not work -> special treatment in C++
-                kdu_core::kdu_int16 *buffer16 = new kdu_core::kdu_int16[(int) dims.area() * img->nc];
+                auto *buffer16 = new kdu_core::kdu_int16[(int) dims.area() * img->nc];
                 decompressor.pull_stripe(buffer16,
                                          stripe_heights,
                                          nullptr,
@@ -560,7 +567,7 @@ namespace Sipi {
             }
             case 16: {
                 std::vector<char> get_signed(img->nc, 0); // vector<bool> does not work -> special treatment in C++
-                kdu_core::kdu_int16 *buffer16 = new kdu_core::kdu_int16[(int) dims.area() * img->nc];
+                auto *buffer16 = new kdu_core::kdu_int16[(int) dims.area() * img->nc];
                 decompressor.pull_stripe(buffer16,
                                          stripe_heights,
                                          nullptr,
