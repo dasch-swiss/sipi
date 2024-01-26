@@ -291,10 +291,10 @@ TEST(SipiImage, Dev3229)
     Sipi::SipiImage img1;
     Sipi::SipiImage img2;
 
-    const std::string problem = "../../../../test/_test_data/images/unit/dev_3229.tif";
+    const std::string problematic_tif = "../../../../test/_test_data/images/unit/dev_3229.tif";
+    const std::string problematic_tif_converted_to_jpx = "../../../../test/_test_data/images/unit/dev_3229.jpx";
 
-    ASSERT_NO_THROW(img1.read(problem));
-    ASSERT_NO_THROW(img1.write("jpx", "../../../../test/_test_data/images/unit/dev_3229.jpx"));
-
-    img2.read("../../../../test/_test_data/images/unit/dev_3229.jpx");
+    ASSERT_NO_THROW(img1.read(problematic_tif));
+    ASSERT_NO_THROW(img1.write("jpx", problematic_tif_converted_to_jpx));
+    ASSERT_NO_THROW(img2.read(problematic_tif_converted_to_jpx));
 }

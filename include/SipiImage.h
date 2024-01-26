@@ -34,6 +34,7 @@
 #include <string>
 #include <unordered_map>
 #include <exception>
+#include <string>
 
 #include "SipiError.h"
 #include "SipiIO.h"
@@ -90,14 +91,10 @@ namespace Sipi {
 
     enum InfoError { INFO_ERROR };
 
-    /*!
-    * This class implements the error handling for the different image formats.
-    * It's being derived from the runtime_error so that catching the runtime error
-    * also catches errors withing reading/writing an image format.
-    */
-    //class SipiImageError : public std::runtime_error {
-class SipiImageError : public std::exception {
-    private:
+/*!
+* This class implements the error handling for the different image formats.
+*/
+class SipiImageError final : public std::exception {
         std::string file; //!< Source file where the error occurs in
         int line; //!< Line within the source file
         int errnum; //!< error number if a system call is the reason for the error
@@ -109,22 +106,15 @@ class SipiImageError : public std::exception {
         * Constructor
         * \param[in] file_p The source file name (usually __FILE__)
         * \param[in] line_p The line number in the source file (usually __LINE__)
-        * \param[in] Errnum, if a unix system call is the reason for throwing this exception
+        * \param[in] errnum_p if a unix system call is the reason for throwing this exception
         */
-        inline SipiImageError(const char *file_p, int line_p, int errnum_p = 0) : file(file_p), line(line_p),
-                                                                                  errnum(errnum_p) {}
-
-        /*!
-        * Constructor
-        * \param[in] file_p The source file name (usually __FILE__)
-        * \param[in] line_p The line number in the source file (usually __LINE__)
-        * \param[in] msg Error message describing the problem
-        * \param[in] errnum_p Errnum, if a unix system call is the reason for throwing this exception
-        */
-        inline SipiImageError(const char *file_p, int line_p, const char *msg_p, int errnum_p = 0) : file(file_p),
-                                                                                                     line(line_p),
-                                                                                                     errnum(errnum_p),
-                                                                                                     errmsg(msg_p) {}
+        SipiImageError(const char *file_p, const int line_p, const int errnum_p = 0) : file(file_p), line(line_p), errnum(errnum_p) {
+            std::ostringstream errStream;
+            errStream << "Sipi image error at [" << file << ": " << line << "]";
+            if (errnum != 0) errStream << " (system error: " << std::strerror(errnum) << ")";
+            errStream << ": " << errmsg;
+            fullerrmsg = errStream.str();
+        }
 
         /*!
         * Constructor
@@ -133,10 +123,30 @@ class SipiImageError : public std::exception {
         * \param[in] msg_p Error message describing the problem
         * \param[in] errnum_p Errnum, if a unix system call is the reason for throwing this exception
         */
-        inline SipiImageError(const char *file_p, int line_p, const std::string &msg_p, int errnum_p = 0) : file(
-                file_p), line(line_p), errnum(errnum_p), errmsg(msg_p) {}
+        SipiImageError(const char *file_p, const int line_p, const char *msg_p, const int errnum_p = 0) : file(file_p), line(line_p), errnum(errnum_p), errmsg(msg_p) {
+            std::ostringstream errStream;
+            errStream << "Sipi image error at [" << file << ": " << line << "]";
+            if (errnum != 0) errStream << " (system error: " << std::strerror(errnum) << ")";
+            errStream << ": " << errmsg;
+            fullerrmsg = errStream.str();
+        }
 
-        inline std::string to_string(void) const {
+        /*!
+        * Constructor
+        * \param[in] file_p The source file name (usually __FILE__)
+        * \param[in] line_p The line number in the source file (usually __LINE__)
+        * \param[in] msg_p Error message describing the problem
+        * \param[in] errnum_p Errnum, if a unix system call is the reason for throwing this exception
+        */
+        SipiImageError(const char *file_p, const int line_p, std::string msg_p, const int errnum_p = 0) : file(file_p), line(line_p), errnum(errnum_p), errmsg(std::move(msg_p)) {
+            std::ostringstream errStream;
+            errStream << "Sipi image error at [" << file << ": " << line << "]";
+            if (errnum != 0) errStream << " (system error: " << std::strerror(errnum) << ")";
+            errStream << ": " << errmsg;
+            fullerrmsg = errStream.str();
+        }
+
+        std::string to_string() const {
             std::ostringstream errStream;
             errStream << "Sipi image error at [" << file << ": " << line << "]";
             if (errnum != 0) errStream << " (system error: " << std::strerror(errnum) << ")";
@@ -145,8 +155,12 @@ class SipiImageError : public std::exception {
         }
         //============================================================================
 
-        inline friend std::ostream &operator<<(std::ostream &outStream, const SipiImageError &rhs) {
-            std::string errStr = rhs.to_string();
+        const char* what() const noexcept override {
+            return fullerrmsg.c_str();
+        }
+
+        friend std::ostream &operator<<(std::ostream &outStream, const SipiImageError &rhs) {
+            const std::string errStr = rhs.to_string();
             outStream << errStr << std::endl; // TODO: remove the endl, the logging code should do it
             return outStream;
         }

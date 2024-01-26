@@ -54,16 +54,6 @@ namespace Sipi {
                                                                                {"jpg", std::make_shared<SipiIOJpeg>()},
                                                                                {"png", std::make_shared<SipiIOPng>()}};
 
-    /* ToDo: remove if everything is OK
-    std::unordered_map<std::string, std::string> SipiImage::mimetypes = {{"jpx",  "image/jp2"},
-                                                                         {"jp2",  "image/jp2"},
-                                                                         {"jpg",  "image/jpeg"},
-                                                                         {"jpeg", "image/jpeg"},
-                                                                         {"tiff", "image/tiff"},
-                                                                         {"tif",  "image/tiff"},
-                                                                         {"png",  "image/png"}};
-                                                                         */
-
     SipiImage::SipiImage() {
         nx = 0;
         ny = 0;
@@ -225,50 +215,14 @@ namespace Sipi {
     void SipiImage::ensure_exif() {
         if (exif == nullptr) exif = std::make_shared<SipiExif>();
     }
-
     //============================================================================
 
+
     /*!
-     * This function compares the actual mime type of a file (based on its magic number) to
-     * the given mime type (sent by the client) and the extension of the given filename (sent by the client)
+     * Reads the image from a file by calling the appropriate reader.
+     * The readers return either boolean or throw an exception,
+     * so in any case wrap the call to this method in a try/catch block.
      */
-     /* ToDo: Delete
-    bool SipiImage::checkMimeTypeConsistency(const std::string &path, const std::string &given_mimetype,
-                                             const std::string &filename) {
-        try {
-            std::string actual_mimetype = shttps::Parsing::getFileMimetype(path).first;
-
-            if (actual_mimetype != given_mimetype) {
-                //std::cerr << actual_mimetype << " does not equal " << given_mimetype << std::endl;
-                return false;
-            }
-
-            size_t dot_pos = filename.find_last_of(".");
-
-            if (dot_pos == std::string::npos) {
-                //std::cerr << "invalid filename " << filename << std::endl;
-                return false;
-            }
-
-            std::string extension = filename.substr(dot_pos + 1);
-            std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower); // convert file extension to lower case (uppercase letters in file extension have to be converted for mime type comparison)
-            std::string mime_from_extension = Sipi::SipiImage::mimetypes.at(extension);
-
-            if (mime_from_extension != actual_mimetype) {
-                //std::cerr << "filename " << filename << "has not mime type " << actual_mimetype << std::endl;
-                return false;
-            }
-        } catch (std::out_of_range &e) {
-            std::stringstream ss;
-            ss << "Unsupported file type: \"" << filename;
-            throw SipiImageError(thisSourceFile, __LINE__, ss.str());
-        } catch (shttps::Error &err) {
-            throw SipiImageError(thisSourceFile, __LINE__, err.to_string());
-        }
-
-        return true;
-    }
-    */
     void SipiImage::read(const std::string& filepath, int pagenum, const std::shared_ptr<SipiRegion>& region,
                          const std::shared_ptr<SipiSize>& size, bool force_bps_8, ScalingQuality scaling_quality) {
         size_t pos = filepath.find_last_of('.');
@@ -296,7 +250,7 @@ namespace Sipi {
         }
 
         if (!got_file) {
-            throw SipiImageError(__file__, __LINE__, "Could not read file " + filepath);
+            throw SipiImageError(__file__, __LINE__, "Error reading file " + filepath);
         }
     }
     //============================================================================
