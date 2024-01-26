@@ -28,11 +28,11 @@ ExternalProject_Add(project_tiff
         DEPENDS zstd
         INSTALL_DIR ${COMMON_LOCAL}
         TEST_BEFORE_INSTALL 1
-        URL http://download.osgeo.org/libtiff/tiff-4.1.0.tar.gz
+        URL https://download.osgeo.org/libtiff/tiff-4.1.0.tar.gz
         DOWNLOAD_DIR ${COMMON_SRCS}/downloads
         ${timestamp_policy}
-        SOURCE_DIR ${COMMON_SRCS}/libtiff-4.1.0
-        PATCH_COMMAND patch ${COMMON_SRCS}/libtiff-4.1.0/libtiff/tif_dirinfo.c < ${COMMON_PATCHES}/tiff-4.0.4.patch
+        SOURCE_DIR ${COMMON_SRCS}/libtiff
+        PATCH_COMMAND patch ${COMMON_SRCS}/libtiff/libtiff/tif_dirinfo.c < ${COMMON_PATCHES}/tiff-4.0.4.patch
         CMAKE_ARGS  ${CMAKE_CREATE_SHARED}
                     -DCMAKE_C_STANDARD_LIBRARIES="-lpthread"
                     -DCMAKE_PREFIX_PATH=${COMMON_LOCAL}
