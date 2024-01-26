@@ -529,46 +529,70 @@ namespace Sipi {
 
         //
         // the following code directly converts a 16-Bit jpx into an 8-bit image.
-        // In order to retrieve a 16-Bit image, use kdu_uin16 *buffer an the apropriate signature of the pull_stripe method
+        // In order to retrieve a 16-Bit image, use kdu_uin16 *buffer and the apropriate signature of the pull_stripe method
         //
         kdu_supp::kdu_stripe_decompressor decompressor;
         decompressor.start(codestream);
-        int stripe_heights[4] = {dims.size.y, dims.size.y, dims.size.y,
-                                 dims.size.y}; // enough for alpha channel (4 components)
+        //TODO: check image for number of components and make this dynamic
+        int stripe_heights[5] = {dims.size.y, dims.size.y, dims.size.y, dims.size.y, dims.size.y}; // enough for alpha channel (5 components)
 
         if (force_bps_8) img->bps = 8; // forces kakadu to convert to 8 bit!
         switch (img->bps) {
             case 8: {
-                kdu_core::kdu_byte *buffer8 = new kdu_core::kdu_byte[(int) dims.area() * img->nc];
-                decompressor.pull_stripe(buffer8, stripe_heights);
-                img->pixels = (byte *) buffer8;
+                auto *buffer8 = new kdu_core::kdu_byte[static_cast<int>(dims.area()) * img->nc];
+                try {
+                    decompressor.pull_stripe(buffer8, stripe_heights);
+                } catch (kdu_exception &exc) {
+                    codestream.destroy();
+                    input->close();
+                    jpx_in.close(); // Not really necessary here.
+                    syslog(LOG_ERR, "Error while decompressing image: %s.", filepath.c_str());
+                    return false;
+                }
+                img->pixels = buffer8;
                 break;
             }
             case 12: {
                 std::vector<char> get_signed(img->nc, 0); // vector<bool> does not work -> special treatment in C++
-                kdu_core::kdu_int16 *buffer16 = new kdu_core::kdu_int16[(int) dims.area() * img->nc];
-                decompressor.pull_stripe(buffer16,
-                                         stripe_heights,
-                                         nullptr,
-                                         nullptr,
-                                         nullptr,
-                                         nullptr,
-                                         (bool *) get_signed.data());
-                img->pixels = (byte *) buffer16;
+                auto *buffer16 = new kdu_core::kdu_int16[(int) dims.area() * img->nc];
+                try {
+                    decompressor.pull_stripe(buffer16,
+                                             stripe_heights,
+                                             nullptr,
+                                             nullptr,
+                                             nullptr,
+                                             nullptr,
+                                             reinterpret_cast<bool *>(get_signed.data()));
+                } catch (kdu_exception &exc) {
+                    codestream.destroy();
+                    input->close();
+                    jpx_in.close(); // Not really necessary here.
+                    syslog(LOG_ERR, "Error while decompressing image: %s.", filepath.c_str());
+                    return false;
+                }
+                img->pixels = reinterpret_cast<byte *>(buffer16);
                 img->bps = 16;
                 break;
             }
             case 16: {
                 std::vector<char> get_signed(img->nc, 0); // vector<bool> does not work -> special treatment in C++
-                kdu_core::kdu_int16 *buffer16 = new kdu_core::kdu_int16[(int) dims.area() * img->nc];
-                decompressor.pull_stripe(buffer16,
-                                         stripe_heights,
-                                         nullptr,
-                                         nullptr,
-                                         nullptr,
-                                         nullptr,
-                                         (bool *) get_signed.data());
-                img->pixels = (byte *) buffer16;
+                auto *buffer16 = new kdu_core::kdu_int16[(int) dims.area() * img->nc];
+                try {
+                    decompressor.pull_stripe(buffer16,
+                                             stripe_heights,
+                                             nullptr,
+                                             nullptr,
+                                             nullptr,
+                                             nullptr,
+                                             reinterpret_cast<bool *>(get_signed.data()));
+                } catch (kdu_exception &exc) {
+                    codestream.destroy();
+                    input->close();
+                    jpx_in.close(); // Not really necessary here.
+                    syslog(LOG_ERR, "Error while decompressing image: %s.", filepath.c_str());
+                    return false;
+                }
+                img->pixels = reinterpret_cast<byte *>(buffer16);
                 break;
             }
             default: {

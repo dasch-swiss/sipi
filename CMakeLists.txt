@@ -375,7 +375,7 @@ add_executable(sipi
         src/metadata/SipiIptc.cpp include/metadata/SipiIptc.h
         src/metadata/SipiExif.cpp include/metadata/SipiExif.h
         src/metadata/SipiEssentials.cpp include/metadata/SipiEssentials.h
-        src/SipiImage.cpp include/SipiImage.h
+        src/SipiImage.cpp include/SipiImage.h include/SipiImageError.h
         src/formats/SipiIOTiff.cpp include/formats/SipiIOTiff.h
         src/formats/SipiIOJ2k.cpp include/formats/SipiIOJ2k.h
         src/formats/SipiIOJpeg.cpp include/formats/SipiIOJpeg.h
@@ -403,7 +403,8 @@ add_executable(sipi
         shttps/jwt.c shttps/jwt.h
         shttps/makeunique.h
         src/SipiFilenameHash.cpp include/SipiFilenameHash.h
-        include/iiifparser/SipiIdentifier.h src/iiifparser/SipiIdentifier.cpp )
+        include/iiifparser/SipiIdentifier.h src/iiifparser/SipiIdentifier.cpp
+        include/SipiImageError.h)
 
 add_dependencies(sipi
         icc_profiles)
