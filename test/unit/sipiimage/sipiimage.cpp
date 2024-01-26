@@ -293,8 +293,13 @@ TEST(SipiImage, Dev3229)
 
     const std::string problematic_tif = "../../../../test/_test_data/images/unit/dev_3229.tif";
     const std::string problematic_tif_converted_to_jpx = "../../../../test/_test_data/images/unit/dev_3229.jpx";
+    const std::string problematic_tif_converted_from_jpx_to_tif = "../../../../test/_test_data/images/unit/dev_3229_2.tif";
 
     ASSERT_NO_THROW(img1.read(problematic_tif));
     ASSERT_NO_THROW(img1.write("jpx", problematic_tif_converted_to_jpx));
     ASSERT_NO_THROW(img2.read(problematic_tif_converted_to_jpx));
+
+    // now test if conversion back to TIFF gives an identical image
+    ASSERT_NO_THROW(img2.write("tif", problematic_tif_converted_from_jpx_to_tif));
+    EXPECT_TRUE(image_identical(problematic_tif, problematic_tif_converted_from_jpx_to_tif));
 }
