@@ -11,10 +11,10 @@ with the IIIF conformant URL that has the following form:
 
 The parts do have the following meaning:
 
-- `{server}`: The DNS name of the server, eg. `iiif.dasch.swiss`. The server may include a portnumber,
-  eg. `iiif2.dasch.swiss:8080`.
+- `{server}`: The DNS name of the server, e.g., `iiif.dasch.swiss`. The server may include a port-number,
+  e.g., `iiif2.dasch.swiss:8080`.
 - `{prefix}`: A path (that may include `/`'s) to organize the assets. Usually the prefix reflect the internal
-  directory or folder hierarchy. However this can be overridden using special features of SIPI (see pre-flight-script
+  directory or folder hierarchy. However, this can be overridden using special features of SIPI (see pre-flight-script
   and sipi configuration file).
 - `{identifier}`: The identifier of the requested image. By default, it is the filename and its extension.
 - `{region}`: a region of interest that should be displayed. `full` indicates that the whole image is being requested.
@@ -41,7 +41,7 @@ The parts do have the following meaning:
   - `png`: The image is delivered as PNG image.
   - `jpx`: The image is delivered as JPEG2000 image.
   
-  *NOTE*: PDF's are not supported. I consider PDF to be a __document format__ and *not* to be an image format.
+  *NOTE*: PDF's are not supported. We consider PDF to be a __document format__ and *not* to be an image format.
 
 
 ## The SIPI Executable

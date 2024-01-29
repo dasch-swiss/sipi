@@ -9,6 +9,7 @@ nav:
   - Overview: index.md
   - Introduction: introduction.md
   - Basic information and Reference: sipi.md
+  - Command line interface: cli.md
   - Lua integration: lua.md
   - Lua imaging functions: lua-image.md
   - Sqlite3 integration: sqlite.md

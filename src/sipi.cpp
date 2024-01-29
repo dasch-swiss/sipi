@@ -467,7 +467,7 @@ int main(int argc, char *argv[]) {
     // used for rendering only one page of multipage PDF or TIFF (NYI for tif...)
     //
     int optPagenum = 0;
-    sipiopt.add_option("-n,--pagenum", optPagenum, "Pagenumber for PDF documents or multipage TIFFs.");
+    sipiopt.add_option("-n,--pagenum", optPagenum, "Pagenumber multipage TIFFs.");
 
     std::vector<int> optRegion;
     sipiopt.add_option("-r,--region",
