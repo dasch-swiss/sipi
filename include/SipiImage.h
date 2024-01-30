@@ -384,12 +384,13 @@ class SipiImageError final : public std::exception {
          * \param[in] region Pointer to a SipiRegion which indicates that we
          *            are only interested in this region. The image will be cropped.
          * \param[in] size Pointer to a size object. The image will be scaled accordingly
-         * \param[in] force_bps_8 We want in any case a 8 Bit/sample image. Reduce if necessary
+         * \param[in] force_bps_8 We want in any case a 8 Bit/sample image. Reduce if necessary. Default is false.
+         * \param[in] scaling_quality Quality of the scaling algorithm. Default is HIGH.
          *
          * \throws SipiError
          */
-        void read(const std::string& filepath, int pagenum = 0, const std::shared_ptr<SipiRegion>& region = nullptr,
-                  const std::shared_ptr<SipiSize>& size = nullptr, bool force_bps_8 = false,
+        void read(const std::string &filepath, const std::shared_ptr<SipiRegion> &region = nullptr,
+                  const std::shared_ptr<SipiSize> &size = nullptr, bool force_bps_8 = false,
                   ScalingQuality scaling_quality = {HIGH, HIGH, HIGH, HIGH});
 
         /*!
@@ -413,7 +414,7 @@ class SipiImageError final : public std::exception {
          * \returns true, if everything worked. False, if the checksums do not match.
          */
         bool
-        readOriginal(const std::string &filepath, int pagenum = 0, const std::shared_ptr<SipiRegion>& region = nullptr, const std::shared_ptr<SipiSize>& size = nullptr,
+        readOriginal(const std::string &filepath, const std::shared_ptr<SipiRegion> &region = nullptr, const std::shared_ptr<SipiSize> &size = nullptr,
                      shttps::HashType htype = shttps::HashType::sha256);
 
         /*!
@@ -438,7 +439,7 @@ class SipiImageError final : public std::exception {
          * \returns true, if everything worked. False, if the checksums do not match.
          */
         bool
-        readOriginal(const std::string &filepath, int pagenum, const std::shared_ptr<SipiRegion>& region, const std::shared_ptr<SipiSize>& size,
+        readOriginal(const std::string &filepath, const std::shared_ptr<SipiRegion> &region, const std::shared_ptr<SipiSize> &size,
                      const std::string &origname, shttps::HashType htype);
 
 
@@ -446,10 +447,9 @@ class SipiImageError final : public std::exception {
          * Get the dimension of the image
          *
          * \param[in] filepath Pathname of the image file
-         * \param[in] pagenum Page that is to be used (for PDF's and multipage TIF's only, first page is 1)
          * \return Info about image (see SipiImgInfo)
          */
-        SipiImgInfo getDim(const std::string &filepath, int pagenum = 0) const;
+        SipiImgInfo getDim(const std::string &filepath) const;
 
         /*!
          * Get the dimension of the image object

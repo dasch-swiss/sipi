@@ -449,7 +449,7 @@ namespace Sipi {
     //=============================================================================
 
 
-    bool SipiIOJpeg::read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
+    bool SipiIOJpeg::read(SipiImage *img, const std::string &filepath, std::shared_ptr<SipiRegion> region,
                           std::shared_ptr<SipiSize> size, bool force_bps_8,
                           ScalingQuality scaling_quality)
     {
@@ -794,7 +794,7 @@ namespace Sipi {
                           } while(0)
 
 
-    SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath, int pagenum) {
+    SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath) {
         int infile;
         SipiImgInfo info;
         //

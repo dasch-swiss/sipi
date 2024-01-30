@@ -1,16 +1,11 @@
 # https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.1.0.tar.gz
-cmake_minimum_required(VERSION 3.14.5)
 project(libwebp_builder C CXX)
 include(ExternalProject)
 
 #
 # libwebp
 #
-if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24.0)
-    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
-else()
-    unset(timestamp_policy)
-endif()
+set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
 
 ExternalProject_Add(project_webp

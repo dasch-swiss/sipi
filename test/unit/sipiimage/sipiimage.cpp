@@ -59,12 +59,12 @@ TEST(SipiImage, ImageComparison)
 TEST(SipiImage, ConvertTiffWithAlphaToJPG)
 {
     Sipi::SipiIOTiff::initLibrary();
-    std::shared_ptr<Sipi::SipiRegion> region;
-    std::shared_ptr<Sipi::SipiSize> size = std::make_shared<Sipi::SipiSize>("!128,128");
+    const std::shared_ptr<Sipi::SipiRegion> region;
+    const auto size = std::make_shared<Sipi::SipiSize>("!128,128");
 
     Sipi::SipiImage img;
 
-    ASSERT_NO_THROW(img.read(leavesSmallWithAlpha, 0, region, size));
+    ASSERT_NO_THROW(img.read(leavesSmallWithAlpha, region, size));
 
     ASSERT_NO_THROW(img.write("jpg", "../../../../test/_test_data/images/thumbs/Leaves-small-with-alpha.jpg"));
 }
@@ -78,7 +78,7 @@ TEST(SipiImage, ConvertTiffWithNoAlphaToJPG)
 
     Sipi::SipiImage img;
 
-    ASSERT_NO_THROW(img.read(leavesSmallNoAlpha, 0, region, size));
+    ASSERT_NO_THROW(img.read(leavesSmallNoAlpha, region, size));
 
     ASSERT_NO_THROW(img.write("jpg", "../../../../test/_test_data/images/thumbs/Leaves-small-no-alpha.jpg"));
 }
@@ -224,9 +224,9 @@ TEST(SipiImage, CMYK_lossy_compression)
 {
     Sipi::SipiIOTiff::initLibrary();
     Sipi::SipiImage img;
-    std::shared_ptr<Sipi::SipiRegion> region = nullptr;
-    std::shared_ptr<Sipi::SipiSize> size = nullptr;
-    ASSERT_NO_THROW(img.readOriginal(cmyk, 0, region, size, shttps::HashType::sha256));
+    const std::shared_ptr<Sipi::SipiRegion> region = nullptr;
+    const std::shared_ptr<Sipi::SipiSize> size = nullptr;
+    ASSERT_NO_THROW(img.readOriginal(cmyk, region, size, shttps::HashType::sha256));
         Sipi::SipiCompressionParams params =  {
             {
                 Sipi::J2K_rates, "0.5 0.2 0.1 0.025"
@@ -246,9 +246,9 @@ TEST(SipiImage, WrongRotation)
 {
     Sipi::SipiIOTiff::initLibrary();
     Sipi::SipiImage img;
-    std::shared_ptr<Sipi::SipiRegion> region = nullptr;
-    std::shared_ptr<Sipi::SipiSize> size = nullptr;
-    ASSERT_NO_THROW(img.readOriginal(wrongrotation, 0, region, size, shttps::HashType::sha256));
+    const std::shared_ptr<Sipi::SipiRegion> region = nullptr;
+    const std::shared_ptr<Sipi::SipiSize> size = nullptr;
+    ASSERT_NO_THROW(img.readOriginal(wrongrotation, region, size, shttps::HashType::sha256));
     //EXPECT_EQ(img.getNx(), 3264);
     //EXPECT_EQ(img.getNy(), 2448);
     //EXPECT_EQ(img.getNc(), 3);

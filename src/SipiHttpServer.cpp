@@ -804,7 +804,7 @@ namespace Sipi {
                 Sipi::SipiImage tmpimg;
                 Sipi::SipiImgInfo info;
                 try {
-                    info = tmpimg.getDim(access["infile"], pagenum);
+                    info = tmpimg.getDim(access["infile"]);
                 }
                 catch (SipiImageError &err) {
                     send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());
@@ -972,7 +972,6 @@ namespace Sipi {
         std::string infile = access["infile"];
 
         SipiIdentifier sid = SipiIdentifier(params[iiif_identifier]);
-        int pagenum = sid.getPage();
 
         conn_obj.header("Content-Type", "application/json");
 
@@ -1088,7 +1087,7 @@ namespace Sipi {
             Sipi::SipiImage tmpimg;
             Sipi::SipiImgInfo info;
             try {
-                info = tmpimg.getDim(infile, pagenum);
+                info = tmpimg.getDim(infile);
             }
             catch (SipiImageError &err) {
                 send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());
@@ -1386,8 +1385,6 @@ namespace Sipi {
         size_t tile_w = 0, tile_h = 0;
         int clevels = 0;
         int numpages = 0;
-        int pagenum = sid.getPage();
-
         //
         // get image dimensions, needed for get_canonical...
         //
@@ -1395,7 +1392,7 @@ namespace Sipi {
             Sipi::SipiImage tmpimg;
             Sipi::SipiImgInfo info;
             try {
-                info = tmpimg.getDim(infile, pagenum);
+                info = tmpimg.getDim(infile);
             }
             catch (SipiImageError &err) {
                 send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());
@@ -1542,7 +1539,7 @@ namespace Sipi {
 
         Sipi::SipiImage img;
         try {
-            img.read(infile, sid.getPage(), region, size, quality_format.format() == SipiQualityFormat::JPG, serv->scaling_quality());
+            img.read(infile, region, size, quality_format.format() == SipiQualityFormat::JPG, serv->scaling_quality());
         }
         catch (const SipiImageError &err) {
             send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());

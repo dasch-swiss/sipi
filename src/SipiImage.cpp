@@ -223,7 +223,7 @@ namespace Sipi {
      * The readers return either boolean or throw an exception,
      * so in any case wrap the call to this method in a try/catch block.
      */
-    void SipiImage::read(const std::string& filepath, int pagenum, const std::shared_ptr<SipiRegion>& region,
+    void SipiImage::read(const std::string& filepath, const std::shared_ptr<SipiRegion>& region,
                          const std::shared_ptr<SipiSize>& size, bool force_bps_8, ScalingQuality scaling_quality) {
         size_t pos = filepath.find_last_of('.');
         std::string fext = filepath.substr(pos + 1);
@@ -234,18 +234,18 @@ namespace Sipi {
         std::transform(fext.begin(), fext.end(), _fext.begin(), ::tolower);
 
         if ((_fext == "tif") || (_fext == "tiff")) {
-            got_file = io[std::string("tif")]->read(this, filepath, pagenum, region, size, force_bps_8, scaling_quality);
+            got_file = io[std::string("tif")]->read(this, filepath, region, size, force_bps_8, scaling_quality);
         } else if ((_fext == "jpg") || (_fext == "jpeg")) {
-            got_file = io[std::string("jpg")]->read(this, filepath, pagenum, region, size, force_bps_8, scaling_quality);
+            got_file = io[std::string("jpg")]->read(this, filepath, region, size, force_bps_8, scaling_quality);
         } else if (_fext == "png") {
-            got_file = io[std::string("png")]->read(this, filepath, pagenum, region, size, force_bps_8, scaling_quality);
+            got_file = io[std::string("png")]->read(this, filepath, region, size, force_bps_8, scaling_quality);
         } else if ((_fext == "jp2") || (_fext == "jpx") || (_fext == "j2k")) {
-            got_file = io[std::string("jpx")]->read(this, filepath, pagenum, region, size, force_bps_8, scaling_quality);
+            got_file = io[std::string("jpx")]->read(this, filepath, region, size, force_bps_8, scaling_quality);
         }
 
         if (!got_file) {
             for (auto const &iterator : io) {
-                if ((got_file = iterator.second->read(this, filepath, pagenum, region, size, force_bps_8, scaling_quality))) break;
+                if ((got_file = iterator.second->read(this, filepath, region, size, force_bps_8, scaling_quality))) break;
             }
         }
 
@@ -255,9 +255,9 @@ namespace Sipi {
     }
     //============================================================================
 
-    bool SipiImage::readOriginal(const std::string &filepath, int pagenum, const std::shared_ptr<SipiRegion>& region,
+    bool SipiImage::readOriginal(const std::string &filepath, const std::shared_ptr<SipiRegion>& region,
                                  const std::shared_ptr<SipiSize>& size, shttps::HashType htype) {
-        read(filepath, pagenum, region, size, false);
+        read(filepath, region, size, false);
 
         if (!emdata.is_set()) {
             shttps::Hash internal_hash(htype);
@@ -285,9 +285,9 @@ namespace Sipi {
     //============================================================================
 
 
-    bool SipiImage::readOriginal(const std::string &filepath, int pagenum, const std::shared_ptr<SipiRegion>& region,
+    bool SipiImage::readOriginal(const std::string &filepath, const std::shared_ptr<SipiRegion>& region,
                                  const std::shared_ptr<SipiSize>& size, const std::string &origname, shttps::HashType htype) {
-        read(filepath, pagenum, region, size, false);
+        read(filepath, region, size, false);
 
         if (!emdata.is_set()) {
             shttps::Hash internal_hash(htype);
@@ -309,7 +309,7 @@ namespace Sipi {
     }
     //============================================================================
 
-    SipiImgInfo SipiImage::getDim(const std::string &filepath, int pagenum) const {
+    SipiImgInfo SipiImage::getDim(const std::string &filepath) const {
         size_t pos = filepath.find_last_of('.');
         std::string fext = filepath.substr(pos + 1);
         std::string _fext;
@@ -322,20 +322,20 @@ namespace Sipi {
         info.internalmimetype = mimetype;
 
         if ((mimetype == "image/tiff") || (mimetype == "image/x-tiff")) {
-            info = io[std::string("tif")]->getDim(filepath, pagenum);
+            info = io[std::string("tif")]->getDim(filepath);
         } else if ((mimetype == "image/jpeg") || (mimetype == "image/pjpeg")) {
-            info = io[std::string("jpg")]->getDim(filepath, pagenum);
+            info = io[std::string("jpg")]->getDim(filepath);
         } else if (mimetype == "image/png") {
-            info = io[std::string("png")]->getDim(filepath, pagenum);
+            info = io[std::string("png")]->getDim(filepath);
         } else if ((mimetype == "image/jp2") || (mimetype == "image/jpx")) {
-            info = io[std::string("jpx")]->getDim(filepath, pagenum);
+            info = io[std::string("jpx")]->getDim(filepath);
         } else {
             throw SipiImageError(__file__, __LINE__, "unknown mimetype: \"" + mimetype + "\"!");
         }
 
         if (info.success == SipiImgInfo::FAILURE) {
             for (auto const &iterator : io) {
-                info = iterator.second->getDim(filepath, pagenum);
+                info = iterator.second->getDim(filepath);
                 if (info.success != SipiImgInfo::FAILURE) break;
             }
         }

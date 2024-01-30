@@ -1,4 +1,3 @@
-cmake_minimum_required(VERSION 3.14.5)
 project(tiff_builder C CXX)
 include(ExternalProject)
 
@@ -14,11 +13,7 @@ else()
     set(CMAKE_CREATE_SHARED "-DBUILD_SHARED_LIBS=OFF")
 endif()
 
-if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24.0)
-    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
-else()
-    unset(timestamp_policy)
-endif()
+set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
 set(LibTiffVersion "4.1.0")
 

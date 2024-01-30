@@ -1,4 +1,3 @@
-cmake_minimum_required(VERSION 3.14.5)
 project(kakadu_builder C CXX)
 include(ExternalProject)
 
@@ -10,11 +9,8 @@ message(STATUS ${CONFIGURE_LIBDIR})
 message(STATUS "VENDOR=${COMMON_VENDOR}")
 message(STATUS "KDU_MAKE=${KDU_MAKE}")
 
-if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24.0)
-    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
-else()
-    unset(timestamp_policy)
-endif()
+set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
+
 
 ExternalProject_Add(
         project_kakadu

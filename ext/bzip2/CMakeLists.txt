@@ -1,4 +1,3 @@
-cmake_minimum_required(VERSION 3.14.5)
 project(bzip2_builder C CXX)
 include(ExternalProject)
 
@@ -7,11 +6,7 @@ include(ExternalProject)
 # since we also need this as a shared library, we need to compile with PIC - Position Independent Code
 # which may generate less efficient code
 #
-if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24.0)
-    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
-else()
-    unset(timestamp_policy)
-endif()
+set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
 ExternalProject_Add(project_bzip2
         INSTALL_DIR ${COMMON_LOCAL}

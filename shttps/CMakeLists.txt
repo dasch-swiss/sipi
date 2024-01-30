@@ -21,7 +21,6 @@
 # License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-cmake_minimum_required(VERSION 2.8.11)
 
 include(ExternalProject)
 

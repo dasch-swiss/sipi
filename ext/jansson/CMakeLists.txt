@@ -1,4 +1,3 @@
-cmake_minimum_required(VERSION 3.14.5)
 project(libjansson_builder C CXX)
 include(ExternalProject)
 
@@ -7,11 +6,8 @@ set(JANSSON_INSTALL_LIB_DIR "lib/${BITS}")
 #
 # get jansson
 #
-if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24.0)
-    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
-else()
-    unset(timestamp_policy)
-endif()
+set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
+
 
 ExternalProject_Add(
         project_jansson

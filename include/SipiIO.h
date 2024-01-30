@@ -108,64 +108,55 @@ namespace Sipi {
         /*!
          * Method used to read an image file
          *
-         * \param *img Pointer to SipiImage instance
+         * \param img Pointer to SipiImage instance
          * \param filepath Image file path
-         * \param reduce Reducing factor. Some file formars support
-         * reading a lower resolution of the file. A reducing factor of 2 indicates
-         * to read only half the resolution. [default: 0]
+         * \param region Region of the image to read
+         * \param size Size of the image to read
          * \param force_bps_8 Convert the file to 8 bits/sample on reading thus enforcing an 8 bit image
+         * \param scaling_quality Quality of the scaling algorithm
          */
-        virtual bool read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
+        virtual bool read(SipiImage *img, const std::string &filepath, std::shared_ptr<SipiRegion> region,
                           std::shared_ptr<SipiSize> size, bool force_bps_8,
                           ScalingQuality scaling_quality) = 0;
 
         bool read(SipiImage *img, const std::string &filepath) {
-            return read(img, filepath, 0, nullptr, nullptr, false,
+            return read(img, filepath, nullptr, nullptr, false,
                         {HIGH, HIGH, HIGH, HIGH});
         }
 
-        bool read(SipiImage *img, const std::string &filepath, int pagenum) {
-            return read(img, filepath, pagenum, nullptr, nullptr, false,
+        bool read(SipiImage *img, const std::string &filepath, const std::shared_ptr<SipiRegion> region) {
+            return read(img, filepath, region, nullptr, false,
                         {HIGH, HIGH, HIGH, HIGH});
         }
 
-        bool read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region) {
-            return read(img, filepath, pagenum, region, nullptr, false,
+        bool read(SipiImage *img, const std::string &filepath, const std::shared_ptr<SipiRegion> region,
+                  const std::shared_ptr<SipiSize> size) {
+            return read(img, filepath, region, size, false,
                         {HIGH, HIGH, HIGH, HIGH});
         }
 
-        bool read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
-                  std::shared_ptr<SipiSize> size) {
-            return read(img, filepath, pagenum, region, size, false,
-                        {HIGH, HIGH, HIGH, HIGH});
-        }
-
-        bool read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
+        bool read(SipiImage *img, const std::string &filepath, const std::shared_ptr<SipiRegion> region,
                   std::shared_ptr<SipiSize> size, bool force_bps_8) {
-            return read(img, filepath, pagenum, region, size, force_bps_8,
+            return read(img, filepath, region, size, force_bps_8,
                  {HIGH, HIGH, HIGH, HIGH});
         }
 
         /*!
          * Get the dimension of the image
          *
-         * \param[in] filepath Pathname of the image file
-         * \param[out] width Width of the image in pixels
-         * \param[out] height Height of the image in pixels
+         * \param filepath Pathname of the image file
          */
-        virtual SipiImgInfo getDim(const std::string &filepath, int pagenum) = 0;
+        virtual SipiImgInfo getDim(const std::string &filepath) = 0;
 
-        SipiImgInfo getDim(const std::string &filepath) {
-            return getDim(filepath, 0)    ;
-        }
 
         /*!
          * Write an image for a file using the given file format implemented by the subclass
          *
-         * \param *img Pointer to SipiImage instance
+         * \param img Pointer to SipiImage instance
          * \param filepath Name of the image file to be written. Please note that
          * - "-" means to write the image data to stdout
          * - "HTTP" means to write the image data to the HTTP-server output
+         * \param params Compression parameters
          */
         virtual void write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params) = 0;
 

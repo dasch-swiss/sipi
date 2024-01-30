@@ -211,8 +211,8 @@ namespace Sipi {
 //=============================================================================
 
 
-    bool SipiIOJ2k::read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
-                         std::shared_ptr<SipiSize> size, bool force_bps_8,
+    bool SipiIOJ2k::read(SipiImage *img, const std::string &filepath, const std::shared_ptr<SipiRegion> region,
+                         const std::shared_ptr<SipiSize> size, bool force_bps_8,
                          ScalingQuality scaling_quality) {
         if (!is_jpx(filepath.c_str())) return false; // It's not a JPGE2000....
 
@@ -655,7 +655,7 @@ namespace Sipi {
 //=============================================================================
 
 
-    SipiImgInfo SipiIOJ2k::getDim(const std::string &filepath, int pagenum) {
+    SipiImgInfo SipiIOJ2k::getDim(const std::string &filepath) {
         SipiImgInfo info;
         if (!is_jpx(filepath.c_str())) {
             info.success = SipiImgInfo::FAILURE;
