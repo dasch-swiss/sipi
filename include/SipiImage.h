@@ -285,6 +285,14 @@ class SipiImageError final : public std::exception {
          */
         inline void setOrientation(Orientation ori) { orientation = ori; };
 
+
+        /*!
+         * Get photometric interpretation
+         * @return Returns photometric interpretation tag
+         */
+         PhotometricInterpretation getPhoto() const { return photo; };
+
+
         /*! Destructor
          *
          * Destroys the image and frees all the resources associated with it

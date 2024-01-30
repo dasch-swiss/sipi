@@ -294,6 +294,7 @@ TEST(SipiImage, Dev3229)
     const std::string problematic_tif = "../../../../test/_test_data/images/unit/dev_3229.tif";
     const std::string problematic_tif_converted_to_jpx = "../../../../test/_test_data/images/unit/dev_3229.jpx";
     const std::string problematic_tif_converted_from_jpx_to_tif = "../../../../test/_test_data/images/unit/dev_3229_2.tif";
+    const std::string problematic_tif_converted_to_jpg = "../../../../test/_test_data/images/unit/dev_3229.jpg";
 
     ASSERT_NO_THROW(img1.read(problematic_tif));
     ASSERT_NO_THROW(img1.write("jpx", problematic_tif_converted_to_jpx));
@@ -302,4 +303,7 @@ TEST(SipiImage, Dev3229)
     // now test if conversion back to TIFF gives an identical image
     ASSERT_NO_THROW(img2.write("tif", problematic_tif_converted_from_jpx_to_tif));
     EXPECT_TRUE(image_identical(problematic_tif, problematic_tif_converted_from_jpx_to_tif));
+
+    // now test if conversion of the TIFF to JPG is working
+    ASSERT_NO_THROW(img2.write("jpg", problematic_tif_converted_to_jpg));
 }

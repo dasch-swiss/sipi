@@ -1132,7 +1132,7 @@ namespace Sipi {
         // so, we remove it!
         //
         if ((img->getNc() > 3) && (img->getNalpha() > 0)) { // we have an alpha channel....
-            for (size_t i = 3; i < (img->getNalpha() + 3); i++) img->removeChan(i);
+            for (size_t i = (img->photo == SEPARATED ? 4 : 3); i < (img->getNalpha() + (img->photo == SEPARATED ? 4 : 3)); i++) img->removeChan(i);
         }
 
         struct jpeg_compress_struct cinfo;

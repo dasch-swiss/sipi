@@ -518,7 +518,7 @@ namespace Sipi {
             if (nc < 3) {
                 es.clear(); // no more alpha channel
             } else if (nc > 3) { // it's probably an alpha channel
-                if ((nc == 4) && (photo == SEPARATED)) {  // oh no – 4 channes, but CMYK
+                if ((nc == 4) && (photo == SEPARATED)) {  // oh no – 4 channels, but CMYK
                     std::string msg =
                             "Cannot remove component: nc=" + std::to_string(nc) + " chan=" + std::to_string(chan);
                     throw SipiImageError(__file__, __LINE__, msg);

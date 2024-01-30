@@ -1450,7 +1450,7 @@ namespace Sipi {
         //
         if ((region->getType() == SipiRegion::FULL) && (size->getType() == SipiSize::FULL) && (angle == 0.0) &&
             (!mirror) && watermark.empty() && (quality_format.format() == in_format) &&
-            (quality_format.quality() == SipiQualityFormat::DEFAULT) && (sid.getPage() < 1))
+            (quality_format.quality() == SipiQualityFormat::DEFAULT))
         {
 
             conn_obj.status(Connection::OK);
@@ -1487,8 +1487,8 @@ namespace Sipi {
 
         if (cache != nullptr) {
             //!>
-                    //!> here we check if the file is in the cache. If so, it's being blocked from deletion
-                    //!>
+            //!> here we check if the file is in the cache. If so, it's being blocked from deletion
+            //!>
             std::string cachefile = cache->check(infile, canonical, true); // we block the file from being deleted if successfull
 
             if (!cachefile.empty()) {
@@ -1624,7 +1624,7 @@ namespace Sipi {
                 conn_obj.header("Content-Type", "image/jpeg"); // set the header (mimetype)
 
                 if ((img.getNc() > 3) && (img.getNalpha() > 0)) { // we have an alpha channel....
-                    for (size_t i = 3; i < (img.getNalpha() + 3); i++)
+                    for (size_t i = (img.getPhoto() == SEPARATED ? 4 : 3); i < (img.getNalpha() + (img.getPhoto() == SEPARATED ? 4 : 3)); i++)
                         img.removeChan(i);
                 }
 
@@ -1788,7 +1788,7 @@ namespace Sipi {
                     params.push_back(prefix.str()); // iiif_prefix
                 }
                 else if (parts.size() == 5) {                         // we have no prefix
-                    params.push_back(""); // iiif_prefix
+                    params.emplace_back(""); // iiif_prefix
                 }
                 else {
                     std::stringstream errmsg;
@@ -1848,7 +1848,7 @@ namespace Sipi {
                     params.push_back(prefix.str()); // iiif_prefix
                 }
                 else if (parts.size() == 2) {                         // we have no prefix
-                    params.push_back(""); // iiif_prefix
+                    params.emplace_back(""); // iiif_prefix
                 }
                 else {
                     send_error(conn_obj, Connection::BAD_REQUEST, "IIIF url not correctly formatted!");
@@ -1885,7 +1885,7 @@ namespace Sipi {
                     params.push_back(prefix.str()); // iiif_prefix
                 }
                 else if (parts.size() == 1) {                         // we have no prefix
-                    params.push_back(""); // iiif_prefix
+                    params.emplace_back(""); // iiif_prefix
                 }
                 else {
                     std::stringstream errmsg;
@@ -1922,7 +1922,7 @@ namespace Sipi {
                 //
                 // we have something like "http:://{server}/{id}/file
                 //
-                params.push_back(""); // iiif_prefix
+                params.emplace_back(""); // iiif_prefix
             }
             else {
                 send_error(conn_obj, Connection::BAD_REQUEST, "IIIF url not correctly formatted!");
@@ -1959,7 +1959,7 @@ namespace Sipi {
                 params.push_back(prefix.str()); // iiif_prefix
             }
             else if (parts.size() == 1) {                         // we have no prefix
-                params.push_back(""); // iiif_prefix
+                params.emplace_back(""); // iiif_prefix
             }
             else {
                 std::stringstream errmsg;
