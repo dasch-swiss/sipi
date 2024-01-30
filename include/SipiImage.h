@@ -500,6 +500,17 @@ class SipiImageError final : public std::exception {
 
 
         /*!
+         * Remove extra samples from the image. Some output formats support only 3 channels (e.g., JPEG)
+         * so we need to remove the alpha channel. If we are dealing with a CMYK image, we need to take
+         * this into account as well.
+         */
+        void removeExtraSamples() {
+            for (size_t i = (photo == SEPARATED ? 4 : 3); i < (es.size() + (photo == SEPARATED ? 4 : 3)); i++)
+                removeChan(i);
+        }
+
+
+        /*!
          * Removes a channel from a multi component image
          *
          * \param[in] chan Index of component to remove, starting with 0

@@ -1623,9 +1623,8 @@ namespace Sipi {
                 conn_obj.header("Link", canonical_header);
                 conn_obj.header("Content-Type", "image/jpeg"); // set the header (mimetype)
 
-                if ((img.getNc() > 3) && (img.getNalpha() > 0)) { // we have an alpha channel....
-                    for (size_t i = (img.getPhoto() == SEPARATED ? 4 : 3); i < (img.getNalpha() + (img.getPhoto() == SEPARATED ? 4 : 3)); i++)
-                        img.removeChan(i);
+                if ((img.getNc() > 3) && (img.getNalpha() > 0)) { // we have an alpha channel and possibly a CMYK image
+                    img.removeExtraSamples();
                 }
 
                 Sipi::SipiIcc icc = Sipi::SipiIcc(Sipi::icc_sRGB); // force sRGB !!

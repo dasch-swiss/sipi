@@ -1131,8 +1131,8 @@ namespace Sipi {
         // we have to check if the image has an alpha channel (not supported by JPEG). If
         // so, we remove it!
         //
-        if ((img->getNc() > 3) && (img->getNalpha() > 0)) { // we have an alpha channel....
-            for (size_t i = (img->photo == SEPARATED ? 4 : 3); i < (img->getNalpha() + (img->photo == SEPARATED ? 4 : 3)); i++) img->removeChan(i);
+        if ((img->getNc() > 3) && (img->getNalpha() > 0)) { // we have an alpha channel and possibly a CMYK image
+            img->removeExtraSamples();
         }
 
         struct jpeg_compress_struct cinfo;

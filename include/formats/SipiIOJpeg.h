@@ -61,7 +61,6 @@ namespace Sipi {
          */
         Sipi::SipiImgInfo getDim(const std::string &filepath) override;
 
-
         /*!
          * Write a JPEG image to a file, stdout or to a memory buffer
          *

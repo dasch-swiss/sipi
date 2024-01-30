@@ -822,7 +822,6 @@ namespace Sipi {
                     tw = th = 0;
                 }
                 if (mindim > 1024) {
-                    const int mindim = img->ny < img->nx ? img->ny : img->nx;
                     std::stringstream ss;
                     ss << "Stiles={" << tw << "," << th << "}";
                     siz.parse_string(ss.str().c_str());
