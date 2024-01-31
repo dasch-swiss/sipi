@@ -285,25 +285,29 @@ TEST(SipiImage, Watermark)
 
 }
 
-TEST(SipiImage, Dev3229)
+TEST(SipiImage, CMYK_With_Alpha_Conversion)
 {
     Sipi::SipiIOTiff::initLibrary();
     Sipi::SipiImage img1;
     Sipi::SipiImage img2;
 
-    const std::string problematic_tif = "../../../../test/_test_data/images/unit/dev_3229.tif";
-    const std::string problematic_tif_converted_to_jpx = "../../../../test/_test_data/images/unit/dev_3229.jpx";
-    const std::string problematic_tif_converted_from_jpx_to_tif = "../../../../test/_test_data/images/unit/dev_3229_2.tif";
-    const std::string problematic_tif_converted_to_jpg = "../../../../test/_test_data/images/unit/dev_3229.jpg";
+    const std::string tif_cmyk_with_alpha = "../../../../test/_test_data/images/unit/cmyk_with_alpha.tif";
+    const std::string tif_cmyk_with_alpha_converted_to_jpx = "../../../../test/_test_data/images/unit/cmyk_with_alpha.jpx";
+    const std::string tif_cmyk_with_alpha_converted_from_jpx_to_tif = "../../../../test/_test_data/images/unit/cmyk_with_alpha_2.tif";
+    const std::string tif_cmyk_with_alpha_converted_to_jpg = "../../../../test/_test_data/images/unit/cmyk_with_alpha.jpg";
+    const std::string tif_cmyk_with_alpha_converted_to_png = "../../../../test/_test_data/images/unit/cmyk_with_alpha.png";
 
-    ASSERT_NO_THROW(img1.read(problematic_tif));
-    ASSERT_NO_THROW(img1.write("jpx", problematic_tif_converted_to_jpx));
-    ASSERT_NO_THROW(img2.read(problematic_tif_converted_to_jpx));
+    ASSERT_NO_THROW(img1.read(tif_cmyk_with_alpha));
+    ASSERT_NO_THROW(img1.write("jpx", tif_cmyk_with_alpha_converted_to_jpx));
+    ASSERT_NO_THROW(img2.read(tif_cmyk_with_alpha_converted_to_jpx));
 
     // now test if conversion back to TIFF gives an identical image
-    ASSERT_NO_THROW(img2.write("tif", problematic_tif_converted_from_jpx_to_tif));
-    EXPECT_TRUE(image_identical(problematic_tif, problematic_tif_converted_from_jpx_to_tif));
+    ASSERT_NO_THROW(img2.write("tif", tif_cmyk_with_alpha_converted_from_jpx_to_tif));
+    EXPECT_TRUE(image_identical(tif_cmyk_with_alpha, tif_cmyk_with_alpha_converted_from_jpx_to_tif));
 
-    // now test if conversion of the TIFF to JPG is working
-    ASSERT_NO_THROW(img2.write("jpg", problematic_tif_converted_to_jpg));
+    // now test if conversion to JPG is working
+    ASSERT_NO_THROW(img2.write("jpg", tif_cmyk_with_alpha_converted_to_jpg));
+
+    // now test if conversion to PNG is working
+    ASSERT_NO_THROW(img2.write("png", tif_cmyk_with_alpha_converted_to_png));
 }

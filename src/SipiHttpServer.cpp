@@ -1622,13 +1622,6 @@ namespace Sipi {
                 conn_obj.status(Connection::OK);
                 conn_obj.header("Link", canonical_header);
                 conn_obj.header("Content-Type", "image/jpeg"); // set the header (mimetype)
-
-                if ((img.getNc() > 3) && (img.getNalpha() > 0)) { // we have an alpha channel and possibly a CMYK image
-                    img.removeExtraSamples();
-                }
-
-                Sipi::SipiIcc icc = Sipi::SipiIcc(Sipi::icc_sRGB); // force sRGB !!
-                img.convertToIcc(icc, 8);
                 conn_obj.setChunkedTransfer();
                 Sipi::SipiCompressionParams qp = {{JPEG_QUALITY, std::to_string(serv->jpeg_quality())}};
                 img.write("jpg", "HTTP", &qp);
@@ -1688,6 +1681,14 @@ namespace Sipi {
                 unlink(cachefile.c_str());
             }
             send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
+            return;
+        }
+        catch (Sipi::SipiImageError &err) {
+            if (cache != nullptr) {
+                conn_obj.closeCacheFile();
+                unlink(cachefile.c_str());
+            }
+            send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.what());
             return;
         }
 

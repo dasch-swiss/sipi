@@ -464,6 +464,12 @@ namespace Sipi {
         /* set the zlib compression level */
         png_set_compression_level(png_ptr, Z_BEST_COMPRESSION);
 
+
+        // PNG does not support alpha channels, so we have to remove them if they are present
+        if ((img->getNc() > 3) && (img->getNalpha() > 0)) { // we have an alpha channel and possibly a CMYK image
+            img->removeExtraSamples();
+        }
+
         int color_type;
         if (img->nc == 1) { // grey value
             color_type = PNG_COLOR_TYPE_GRAY;

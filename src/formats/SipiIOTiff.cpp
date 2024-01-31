@@ -1070,8 +1070,8 @@ namespace Sipi {
                 throw Sipi::SipiImageError(__file__, __LINE__, msg);
             }
         }
-        TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, (int) img->nx);
-        TIFFSetField(tif, TIFFTAG_IMAGELENGTH, (int) img->ny);
+        TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, static_cast<int>(img->nx));
+        TIFFSetField(tif, TIFFTAG_IMAGELENGTH, static_cast<int>(img->ny));
         TIFFSetField(tif, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
         TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, TIFFDefaultStripSize(tif, rowsperstrip));
         TIFFSetField(tif, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);

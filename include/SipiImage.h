@@ -505,7 +505,9 @@ class SipiImageError final : public std::exception {
          * this into account as well.
          */
         void removeExtraSamples() {
-            for (size_t i = (photo == SEPARATED ? 4 : 3); i < (es.size() + (photo == SEPARATED ? 4 : 3)); i++)
+            const auto content_channels = (photo == SEPARATED ? 4 : 3);
+            const auto extra_channels = static_cast<int>(es.size());
+            for (size_t i = content_channels; i < (extra_channels + content_channels); i++)
                 removeChan(i);
         }
 

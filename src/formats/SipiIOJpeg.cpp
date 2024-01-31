@@ -870,8 +870,6 @@ namespace Sipi {
         // getting Metadata
         //
         marker = cinfo.marker_list;
-        unsigned char *icc_buffer = nullptr;
-        int icc_buffer_len = 0;
         while (marker) {
             if (marker->marker == JPEG_COM) {
                 std::string emdatastr((char *) marker->data, marker->data_length);
@@ -1125,7 +1123,6 @@ namespace Sipi {
             }
         }
 
-        if (img->bps == 16) img->to8bps();
 
         //
         // we have to check if the image has an alpha channel (not supported by JPEG). If
@@ -1134,6 +1131,9 @@ namespace Sipi {
         if ((img->getNc() > 3) && (img->getNalpha() > 0)) { // we have an alpha channel and possibly a CMYK image
             img->removeExtraSamples();
         }
+
+        Sipi::SipiIcc icc = Sipi::SipiIcc(Sipi::icc_sRGB); // force sRGB !!
+        img->convertToIcc(icc, 8); // only 8 bit JPEGs are supported by the spec
 
         struct jpeg_compress_struct cinfo;
         struct jpeg_error_mgr jerr;
