@@ -139,7 +139,7 @@ namespace Sipi {
          *
          * \returns CoordType
          */
-        inline SizeType getType() { return size_type; };
+        inline SizeType getType() const { return size_type; };
 
         /*!
          * Test, if size object has been initialized with a IIIF string

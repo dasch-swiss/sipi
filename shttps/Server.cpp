@@ -695,26 +695,25 @@ namespace shttps {
 
     /**
      * Close a socket
-     * @param tdata Pointer to thread data
-     * @return
+     * @param socket_info Socket info
      */
-    static int close_socket(const SocketControl::SocketInfo &sockid) {
-        if (sockid.ssl_sid != nullptr) {
+    static int close_socket(const SocketControl::SocketInfo &socket_info) {
+        if (socket_info.ssl_sid != nullptr) {
             int sstat;
-            while ((sstat = SSL_shutdown(sockid.ssl_sid)) == 0);
+            while ((sstat = SSL_shutdown(socket_info.ssl_sid)) == 0);
             if (sstat < 0) {
                 syslog(LOG_WARNING, "SSL socket error: shutdown of socket failed at [%s: %d] with error code %d",
-                       __file__, __LINE__, SSL_get_error(sockid.ssl_sid, sstat));
+                       __file__, __LINE__, SSL_get_error(socket_info.ssl_sid, sstat));
             }
-            SSL_free(sockid.ssl_sid);
-            SSL_CTX_free(sockid.sslctx);
+            SSL_free(socket_info.ssl_sid);
+            SSL_CTX_free(socket_info.sslctx);
         }
-        if (shutdown(sockid.sid, SHUT_RDWR) < 0) {
+        if (shutdown(socket_info.sid, SHUT_RDWR) < 0) {
             syslog(LOG_DEBUG, "Debug: shutting down socket at [%s: %d]: %m failed (client terminated already?)",
                    __file__, __LINE__);
         }
 
-        if (close(sockid.sid) == -1) {
+        if (close(socket_info.sid) == -1) {
             syslog(LOG_DEBUG, "Debug: closing socket at [%s: %d]: %m failed (client terminated already?)", __file__,
                    __LINE__);
         }

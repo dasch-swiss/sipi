@@ -90,11 +90,14 @@ namespace Sipi {
         /*!
          * Method used to read an image file
          *
-         * \param *img Pointer to SipiImage instance
+         * \param img Pointer to SipiImage instance
          * \param filepath Image file path
-         * \param reduce Reducing factor. Not used reading TIFF files
+         * \param region Region of the image to read
+         * \param size Size of the image to read
+         * \param force_bps_8 Convert the file to 8 bits/sample on reading thus enforcing an 8 bit image
+         * \param scaling_quality Quality of the scaling algorithm
          */
-        bool read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
+        bool read(SipiImage *img, const std::string &filepath, std::shared_ptr<SipiRegion> region,
                   std::shared_ptr<SipiSize> size, bool force_bps_8,
                   ScalingQuality scaling_quality) override;
 
@@ -104,7 +107,7 @@ namespace Sipi {
         * \param[in] filepath Pathname of the image file
         * \return Image information
         */
-        SipiImgInfo getDim(const std::string &filepath, int pagenum) override;
+        SipiImgInfo getDim(const std::string &filepath) override;
 
         /*!
          * Write a TIFF image to a file, stdout or to a memory buffer

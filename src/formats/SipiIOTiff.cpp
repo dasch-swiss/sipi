@@ -440,7 +440,7 @@ namespace Sipi {
     }
     //============================================================================
 
-    bool SipiIOTiff::read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
+    bool SipiIOTiff::read(SipiImage *img, const std::string &filepath, std::shared_ptr<SipiRegion> region,
                           std::shared_ptr<SipiSize> size, bool force_bps_8,
                           ScalingQuality scaling_quality) {
         TIFF *tif;
@@ -1009,7 +1009,7 @@ namespace Sipi {
     //============================================================================
 
 
-    SipiImgInfo SipiIOTiff::getDim(const std::string &filepath, int pagenum) {
+    SipiImgInfo SipiIOTiff::getDim(const std::string &filepath) {
         TIFF *tif;
         SipiImgInfo info;
         if (nullptr != (tif = TIFFOpen(filepath.c_str(), "r"))) {
@@ -1070,8 +1070,8 @@ namespace Sipi {
                 throw Sipi::SipiImageError(__file__, __LINE__, msg);
             }
         }
-        TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, (int) img->nx);
-        TIFFSetField(tif, TIFFTAG_IMAGELENGTH, (int) img->ny);
+        TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, static_cast<int>(img->nx));
+        TIFFSetField(tif, TIFFTAG_IMAGELENGTH, static_cast<int>(img->ny));
         TIFFSetField(tif, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
         TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, TIFFDefaultStripSize(tif, rowsperstrip));
         TIFFSetField(tif, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);

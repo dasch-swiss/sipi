@@ -449,7 +449,7 @@ namespace Sipi {
     //=============================================================================
 
 
-    bool SipiIOJpeg::read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
+    bool SipiIOJpeg::read(SipiImage *img, const std::string &filepath, std::shared_ptr<SipiRegion> region,
                           std::shared_ptr<SipiSize> size, bool force_bps_8,
                           ScalingQuality scaling_quality)
     {
@@ -794,7 +794,7 @@ namespace Sipi {
                           } while(0)
 
 
-    SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath, int pagenum) {
+    SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath) {
         int infile;
         SipiImgInfo info;
         //
@@ -870,8 +870,6 @@ namespace Sipi {
         // getting Metadata
         //
         marker = cinfo.marker_list;
-        unsigned char *icc_buffer = nullptr;
-        int icc_buffer_len = 0;
         while (marker) {
             if (marker->marker == JPEG_COM) {
                 std::string emdatastr((char *) marker->data, marker->data_length);
@@ -1125,15 +1123,17 @@ namespace Sipi {
             }
         }
 
-        if (img->bps == 16) img->to8bps();
 
         //
         // we have to check if the image has an alpha channel (not supported by JPEG). If
         // so, we remove it!
         //
-        if ((img->getNc() > 3) && (img->getNalpha() > 0)) { // we have an alpha channel....
-            for (size_t i = 3; i < (img->getNalpha() + 3); i++) img->removeChan(i);
+        if ((img->getNc() > 3) && (img->getNalpha() > 0)) { // we have an alpha channel and possibly a CMYK image
+            img->removeExtraSamples();
         }
+
+        Sipi::SipiIcc icc = Sipi::SipiIcc(Sipi::icc_sRGB); // force sRGB !!
+        img->convertToIcc(icc, 8); // only 8 bit JPEGs are supported by the spec
 
         struct jpeg_compress_struct cinfo;
         struct jpeg_error_mgr jerr;

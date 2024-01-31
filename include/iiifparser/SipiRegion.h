@@ -89,7 +89,7 @@ namespace Sipi {
          *
          * \returns CoordType
          */
-        inline CoordType getType() { return coord_type; };
+        inline CoordType getType() const { return coord_type; };
 
         /*!
          * Get the region parameters to do the actual cropping. The parameters returned are

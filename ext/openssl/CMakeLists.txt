@@ -1,4 +1,3 @@
-cmake_minimum_required(VERSION 3.16)
 project(ssl_builder C CXX)
 include(ExternalProject)
 
@@ -12,11 +11,7 @@ else()
     set(CONF_ARCHOPT "")
 endif()
 
-if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24.0)
-    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
-else()
-    unset(timestamp_policy)
-endif()
+set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
 
 ExternalProject_Add(project_ssl

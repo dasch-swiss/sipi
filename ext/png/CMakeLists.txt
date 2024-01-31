@@ -1,31 +1,29 @@
-cmake_minimum_required(VERSION 3.14.5)
 project(libpng_builder C CXX)
 include(ExternalProject)
 
 #
 # get png
 #
-if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24.0)
-    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
-else()
-    unset(timestamp_policy)
-endif()
+set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
+
+set(LibPngVersion "1.6.41")
 
 ExternalProject_Add(project_png
         DEPENDS zlib
         DEPENDS xz
         INSTALL_DIR ${COMMON_LOCAL}
-        URL https://sourceforge.net/projects/libpng/files/libpng16/1.6.37/libpng-1.6.37.tar.gz/download
+        URL https://sourceforge.net/projects/libpng/files/libpng16/${LibPngVersion}/libpng-${LibPngVersion}.tar.gz/download
         ${timestamp_policy}
         DOWNLOAD_DIR ${COMMON_SRCS}/downloads
-        SOURCE_DIR ${COMMON_SRCS}/libpng-1.6.37
+        SOURCE_DIR ${COMMON_SRCS}/libpng-${LibPngVersion}
         CMAKE_ARGS  ${SHARED_OPTION}
         -DCMAKE_PREFIX_PATH=${COMMON_LOCAL}
         -DCMAKE_INSTALL_PREFIX=${COMMON_LOCAL}
         -DCMAKE_INSTALL_LIBDIR=${CONFIGURE_LIBDIR}
         -DPNG_ARM_NEON:BOOL=on
         -DPNG_TESTS:BOOL=OFF
-        -DPNG_BUILD_ZLIB:BOOL=ON
+        -DPNG_BUILD_ZLIB:BOOL=OFF
+        -DZLIB_ROOT:BOOL=ON
         -DZLIB_INCLUDE_DIR=${CONFIGURE_INCDIR}
         -DZLIB_LIBRARY=${CONFIGURE_LIBDIR}/libz${CMAKE_STATIC_LIBRARY_SUFFIX}
 )

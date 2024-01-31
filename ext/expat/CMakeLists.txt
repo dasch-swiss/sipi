@@ -1,13 +1,7 @@
-cmake_minimum_required(VERSION 3.14.5)
 project(expat_builder C CXX)
 include(ExternalProject)
 
-if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24.0)
-    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
-else()
-    unset(timestamp_policy)
-endif()
-
+set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
 ExternalProject_Add(project_expat
         INSTALL_DIR ${COMMON_LOCAL}

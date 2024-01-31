@@ -700,7 +700,7 @@ int main(int argc, char *argv[]) {
         // we query all information from just one file
         //
         Sipi::SipiImage img;
-        img.read(optInFile, optPagenum);
+        img.read(optInFile);
         std::cout << img << std::endl;
         return (0);
     } else if (!sipiopt.get_option("--compare")->empty()) {
@@ -839,7 +839,6 @@ int main(int argc, char *argv[]) {
         Sipi::SipiImage img;
         try {
             img.readOriginal(optInFile,
-                             optPagenum,
                              region,
                              size,
                              shttps::HashType::sha256); //convert to bps=8 in case of JPG output

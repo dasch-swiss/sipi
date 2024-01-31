@@ -1374,9 +1374,7 @@ namespace shttps {
         if (_finished) throw Error(__file__, __LINE__, "Sending data already terminated!");
 
         if (outbuf != nullptr) {
-            //
             // we have a buffer -> we add the data to the buffer
-            //
             add_to_outbuf((char *) buffer, n);
         }
 
@@ -1384,9 +1382,7 @@ namespace shttps {
             //
             // we have chunked transfer, we don't want the content length header
             //
-            if (!header_sent) {
-                send_header(); // sends content length if nor buffer nor chunked
-            }
+            if (!header_sent) send_header(); // sends content length if nor buffer nor chunked
 
             if (outbuf != nullptr) {
                 //
@@ -1422,11 +1418,8 @@ namespace shttps {
                 // we use the buffer, the header *must* contain the Content-Length header!
                 // then we send the data in the buffer
                 //
-                if (header_sent) {
-                    throw Error(__file__, __LINE__, "Header already sent – cannot add Content-Length header!");
-                } else {
-                    send_header(); // sends content length if not buffer nor chunked
-                }
+                if (header_sent) throw Error(__file__, __LINE__, "Header already sent – cannot add Content-Length header!");
+                send_header(); // sends content length if not buffer nor chunked
                 os->write((char *) buffer, n);
                 if (os->eof() || os->fail()) throw OUTPUT_WRITE_FAIL;
                 if (cachefile != nullptr) cachefile->write((char *) buffer, n);
@@ -1435,11 +1428,8 @@ namespace shttps {
                 //
                 // we don't use a buffer (or the buffer is empty) -> send the data immediatly
                 //
-                if (header_sent) {
-                    throw Error(__file__, __LINE__, "Header already sent – cannot add Content-Length header!");
-                } else {
-                    send_header(n); // sends content length if not buffer nor chunked
-                }
+                if (header_sent) throw Error(__file__, __LINE__, "Header already sent – cannot add Content-Length header!");
+                send_header(n); // sends content length if not buffer nor chunked
                 os->write((char *) buffer, n);
                 if (os->eof() || os->fail()) throw OUTPUT_WRITE_FAIL;
                 if (cachefile != nullptr) cachefile->write((char *) buffer, n);
@@ -1633,7 +1623,7 @@ namespace shttps {
     }
     //=============================================================================
 
-    void Connection::send_header(size_t n) {
+    void Connection::send_header(const size_t n) {
         if (header_sent) {
             throw Error(__file__, __LINE__, "Header already sent!");
         }

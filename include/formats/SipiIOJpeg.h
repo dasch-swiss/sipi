@@ -49,7 +49,7 @@ namespace Sipi {
          * only reads part of the data returning an image with reduces resolution.
          * If the value is 1, only half the resolution is returned. If it is 2, only one forth etc.
          */
-        bool read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
+        bool read(SipiImage *img, const std::string &filepath, std::shared_ptr<SipiRegion> region,
                   std::shared_ptr<SipiSize> size, bool force_bps_8, ScalingQuality scaling_quality) override;
 
         /*!
@@ -59,8 +59,7 @@ namespace Sipi {
          * \param[out] width Width of the image in pixels
          * \param[out] height Height of the image in pixels
          */
-        Sipi::SipiImgInfo getDim(const std::string &filepath, int pagenum) override;
-
+        Sipi::SipiImgInfo getDim(const std::string &filepath) override;
 
         /*!
          * Write a JPEG image to a file, stdout or to a memory buffer

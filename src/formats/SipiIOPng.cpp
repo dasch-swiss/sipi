@@ -133,7 +133,7 @@ namespace Sipi {
         std::cerr << "PNG WARNING: " << warning_msg << std::endl;
     }
 
-    bool SipiIOPng::read(SipiImage *img, const std::string &filepath, int pagenum, std::shared_ptr<SipiRegion> region,
+    bool SipiIOPng::read(SipiImage *img, const std::string &filepath, std::shared_ptr<SipiRegion> region,
                          std::shared_ptr<SipiSize> size, bool force_bps_8,
                          ScalingQuality scaling_quality)
     {
@@ -343,7 +343,7 @@ namespace Sipi {
     /*==========================================================================*/
 
 
-    SipiImgInfo SipiIOPng::getDim(const std::string &filepath, int pagenum) {
+    SipiImgInfo SipiIOPng::getDim(const std::string &filepath) {
         FILE *infile;
         SipiImgInfo info;
         unsigned char header[8];
@@ -463,6 +463,12 @@ namespace Sipi {
 
         /* set the zlib compression level */
         png_set_compression_level(png_ptr, Z_BEST_COMPRESSION);
+
+
+        // PNG does not support alpha channels, so we have to remove them if they are present
+        if ((img->getNc() > 3) && (img->getNalpha() > 0)) { // we have an alpha channel and possibly a CMYK image
+            img->removeExtraSamples();
+        }
 
         int color_type;
         if (img->nc == 1) { // grey value

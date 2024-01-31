@@ -1,15 +1,11 @@
-cmake_minimum_required(VERSION 3.14.5)
 project(lcms2_builder C CXX)
 include(ExternalProject)
 
 #
 # get lcms2
 #
-if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24.0)
-    set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
-else()
-    unset(timestamp_policy)
-endif()
+set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
+
 
 ExternalProject_Add(project_lcms2
         INSTALL_DIR ${COMMON_LOCAL}

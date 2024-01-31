@@ -188,8 +188,8 @@ namespace Sipi {
         int max_reduce = reduce_p;
         reduce_p = 0;
 
-        float img_w_float = static_cast<float>(img_w);
-        float img_h_float = static_cast<float>(img_h);
+        auto img_w_float = static_cast<float>(img_w);
+        auto img_h_float = static_cast<float>(img_h);
 
         switch (size_type) {
             case SipiSize::UNDEFINED: {
