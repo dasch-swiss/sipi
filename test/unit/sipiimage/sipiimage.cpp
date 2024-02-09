@@ -215,11 +215,15 @@ TEST(SipiImage, GRAYICC_Conversion)
     Sipi::SipiIOTiff::initLibrary();
     Sipi::SipiImage img1;
     Sipi::SipiImage img2;
+    Sipi::SipiImage img3;
+    Sipi::SipiImage img4;
 
     const std::string grayicc_jp2 = "../../../../test/_test_data/images/unit/gray_with_icc.jp2";
     const std::string grayicc_jp2_to_jpeg = "../../../../test/_test_data/images/unit/_gray_with_icc.jpg";
+    const std::string gray_icc_jp2_to_jpeg_to_jp2 = "../../../../test/_test_data/images/unit/_gray_with_icc.jp2";
     const std::string gray_icc_another_jpeg = "../../../../test/_test_data/images/unit/gray_with_icc_another.jpg";
     const std::string gray_icc_another_jpeg_to_jp2 = "../../../../test/_test_data/images/unit/_gray_with_icc_another.jpx";
+    const std::string gray_icc_another_jpeg_to_jp2_to_jpeg = "../../../../test/_test_data/images/unit/_gray_with_icc_another.jpg";
 
     EXPECT_TRUE(exists_file(grayicc_jp2));
     EXPECT_TRUE(exists_file(gray_icc_another_jpeg));
@@ -227,12 +231,20 @@ TEST(SipiImage, GRAYICC_Conversion)
     // read from jp2 and write to jpeg
     ASSERT_NO_THROW(img1.read(grayicc_jp2));
     ASSERT_NO_THROW(img1.write("jpg", grayicc_jp2_to_jpeg));
-    EXPECT_TRUE(exists_file(grayicc_jp2_to_jpeg));
+
+    // now test if conversion back to jp2 gives an identical image
+    ASSERT_NO_THROW(img2.read(grayicc_jp2_to_jpeg));
+    ASSERT_NO_THROW(img2.write("jpx", gray_icc_jp2_to_jpeg_to_jp2));
+    EXPECT_TRUE(image_identical(grayicc_jp2, gray_icc_jp2_to_jpeg_to_jp2));
 
     // read from jpeg and write to jp2
-    ASSERT_NO_THROW(img2.read(gray_icc_another_jpeg));
-    ASSERT_NO_THROW(img2.write("jpx", gray_icc_another_jpeg_to_jp2));
-    EXPECT_TRUE(exists_file(gray_icc_another_jpeg_to_jp2));
+    ASSERT_NO_THROW(img3.read(gray_icc_another_jpeg));
+    ASSERT_NO_THROW(img3.write("jpx", gray_icc_another_jpeg_to_jp2));
+
+    // now test if conversion back to jpeg gives an identical image
+    ASSERT_NO_THROW(img4.read(gray_icc_another_jpeg_to_jp2));
+    ASSERT_NO_THROW(img4.write("jpg", gray_icc_another_jpeg_to_jp2_to_jpeg));
+    EXPECT_TRUE(image_identical(gray_icc_another_jpeg, gray_icc_another_jpeg_to_jp2_to_jpeg));
 }
 
 TEST(SipiImage, CMYK_lossy_compression)

@@ -673,8 +673,7 @@ namespace Sipi {
 
         jp2_ultimate_src.open(filepath.c_str());
 
-        if (jpx_in.open(&jp2_ultimate_src, true) <
-            0) { // if < 0, not compatible with JP2 or JPX.  Try opening as a raw code-stream.
+        if (jpx_in.open(&jp2_ultimate_src, true) < 0) { // if < 0, not compatible with JP2 or JPX.  Try opening as a raw code-stream.
             jp2_ultimate_src.close();
             file_in.open(filepath.c_str());
             input = &file_in;
