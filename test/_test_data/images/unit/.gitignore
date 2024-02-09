@@ -2,7 +2,6 @@
 *
 # Except these files
 !.gitignore
-!image_with_rotation.jpg
 !8pdET49BfoJ-EeRcIbgcLch.info
 !8pdET49BfoJ-EeRcIbgcLch.mp4
 !8pdET49BfoJ-EeRcIbgcLch.mp4.orig
@@ -12,6 +11,7 @@
 !cmyk.tif
 !cmyk_lossy.jp2
 !cmyk_with_alpha.tif
+!gray_with_icc_another.jpg
 !gray_with_icc.jp2
 !has-missing-sidecar-file.mp4
 !has-missing-sidecar-file.mp4.orig
