@@ -11,17 +11,18 @@ message(STATUS "KDU_MAKE=${KDU_MAKE}")
 
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
+set(KakaduVersion "v8_4_1-01382N")
 
 ExternalProject_Add(
         project_kakadu
         INSTALL_DIR ${COMMON_LOCAL}
-        DOWNLOAD_COMMAND unzip -o -d ${COMMON_SRCS} ${COMMON_VENDOR}/v8_3-01727L.zip
+        DOWNLOAD_COMMAND unzip -o -d ${COMMON_SRCS} ${COMMON_VENDOR}/${KakaduVersion}.zip
         ${timestamp_policy}
         CONFIGURE_COMMAND ""
-        BUILD_COMMAND make --directory=${COMMON_SRCS}/v8_3-01727L/make/ -f ${KDU_MAKE} EXEC_PLATFORM=${KDU_EXEC_PLATFORM} all_but_jni
-        INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_directory ${COMMON_SRCS}/v8_3-01727L/lib/${KDU_ARCH} ${CONFIGURE_LIBDIR}
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${COMMON_SRCS}/v8_3-01727L/bin/${KDU_ARCH} ${COMMON_LOCAL}/bin
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${COMMON_SRCS}/v8_3-01727L/managed/all_includes ${COMMON_LOCAL}/include
+        BUILD_COMMAND make --directory=${COMMON_SRCS}/${KakaduVersion}/make/ -f ${KDU_MAKE} EXEC_PLATFORM=${KDU_EXEC_PLATFORM} all_but_jni
+        INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_directory ${COMMON_SRCS}/${KakaduVersion}/lib/${KDU_ARCH} ${CONFIGURE_LIBDIR}
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${COMMON_SRCS}/${KakaduVersion}/bin/${KDU_ARCH} ${COMMON_LOCAL}/bin
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${COMMON_SRCS}/${KakaduVersion}/managed/all_includes ${COMMON_LOCAL}/include
 )
 
 ExternalProject_Get_Property(project_kakadu install_dir)
