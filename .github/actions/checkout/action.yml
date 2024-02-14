@@ -20,4 +20,4 @@ runs:
         path: ci
     - name: copy ci-assets
       shell: bash
-      run: cp $GITHUB_WORKSPACE/ci/kakadu/v8_3-01727L.zip $GITHUB_WORKSPACE/vendor/v8_3-01727L.zip
+      run: cp $GITHUB_WORKSPACE/ci/kakadu/v8_4_1-01382N.zip $GITHUB_WORKSPACE/vendor/v8_4_1-01382N.zip
