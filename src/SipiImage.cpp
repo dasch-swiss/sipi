@@ -438,7 +438,7 @@ namespace Sipi {
                 }
 
                 case 4: {
-                    icc = std::make_shared<SipiIcc>(icc_CYMK_standard); // assume CYMK
+                    icc = std::make_shared<SipiIcc>(icc_CMYK_standard); // assume CYMK
                     break;
                 }
 
@@ -489,7 +489,7 @@ namespace Sipi {
                 break;
             }
 
-            case icc_CYMK_standard: {
+            case icc_CMYK_standard: {
                 photo = SEPARATED;
                 break;
             }

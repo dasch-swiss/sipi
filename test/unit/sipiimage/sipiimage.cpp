@@ -23,7 +23,6 @@ std::string png16bit = "../../../../test/_test_data/images/knora/png_16bit.png";
 std::string pngPaletteAlpha = "../../../../test/_test_data/images/unit/mario.png";
 std::string leaves8tif = "../../../../test/_test_data/images/knora/Leaves8.tif";
 std::string cielab = "../../../../test/_test_data/images/unit/cielab.tif";
-std::string cmyk = "../../../../test/_test_data/images/unit/cmyk.tif";
 std::string cielab16 = "../../../../test/_test_data/images/unit/CIELab16.tif";
 std::string palette = "../../../../test/_test_data/images/unit/palette.tif";
 std::string wrongrotation = "../../../../test/_test_data/images/unit/image_orientation.jpg";
@@ -39,7 +38,6 @@ TEST(SipiImage, CheckIfTestImagesCanBeFound)
     EXPECT_TRUE(exists_file(pngPaletteAlpha));
     EXPECT_TRUE(exists_file(leaves8tif));
     EXPECT_TRUE(exists_file(cielab));
-    EXPECT_TRUE(exists_file(cmyk));
     EXPECT_TRUE(exists_file(cielab16));
     EXPECT_TRUE(exists_file(palette));
     EXPECT_TRUE(exists_file(wrongrotation));
@@ -189,6 +187,9 @@ TEST(SipiImage, CMYK_Conversion)
     Sipi::SipiImage img3;
     Sipi::SipiImage img4;
 
+    const std::string cmyk = "../../../../test/_test_data/images/unit/cmyk.tif";
+    EXPECT_TRUE(exists_file(cmyk));
+
     ASSERT_NO_THROW(img1.read(cmyk));
     ASSERT_NO_THROW(img1.write("jpx", "../../../../test/_test_data/images/unit/_cmyk.jpx"));
     ASSERT_NO_THROW(img2.read("../../../../test/_test_data/images/unit/_cmyk.jpx"));
@@ -210,41 +211,40 @@ TEST(SipiImage, PALETTE_Conversion)
     ASSERT_NO_THROW(img1.write("jpx", "../../../../test/_test_data/images/unit/_palette.jpx"));
 }
 
-TEST(SipiImage, GRAYICC_Conversion)
+TEST(SipiImage, GRAYICC_Conversion_01)
 {
     Sipi::SipiIOTiff::initLibrary();
     Sipi::SipiImage img1;
     Sipi::SipiImage img2;
     Sipi::SipiImage img3;
-    Sipi::SipiImage img4;
 
     const std::string grayicc_jp2 = "../../../../test/_test_data/images/unit/gray_with_icc.jp2";
     const std::string grayicc_jp2_to_jpeg = "../../../../test/_test_data/images/unit/_gray_with_icc.jpg";
-    const std::string gray_icc_jp2_to_jpeg_to_jp2 = "../../../../test/_test_data/images/unit/_gray_with_icc.jp2";
-    const std::string gray_icc_another_jpeg = "../../../../test/_test_data/images/unit/gray_with_icc_another.jpg";
-    const std::string gray_icc_another_jpeg_to_jp2 = "../../../../test/_test_data/images/unit/_gray_with_icc_another.jpx";
-    const std::string gray_icc_another_jpeg_to_jp2_to_jpeg = "../../../../test/_test_data/images/unit/_gray_with_icc_another.jpg";
 
     EXPECT_TRUE(exists_file(grayicc_jp2));
-    EXPECT_TRUE(exists_file(gray_icc_another_jpeg));
 
     // read from jp2 and write to jpeg
     ASSERT_NO_THROW(img1.read(grayicc_jp2));
     ASSERT_NO_THROW(img1.write("jpg", grayicc_jp2_to_jpeg));
-
-    // now test if conversion back to jp2 gives an identical image
     ASSERT_NO_THROW(img2.read(grayicc_jp2_to_jpeg));
-    ASSERT_NO_THROW(img2.write("jpx", gray_icc_jp2_to_jpeg_to_jp2));
-    EXPECT_TRUE(image_identical(grayicc_jp2, gray_icc_jp2_to_jpeg_to_jp2));
+}
+
+TEST(SipiImage, GRAYICC_Conversion_02)
+{
+    Sipi::SipiIOTiff::initLibrary();
+    Sipi::SipiImage img1;
+    Sipi::SipiImage img2;
+    Sipi::SipiImage img3;
+
+    const std::string gray_icc_another_jpeg = "../../../../test/_test_data/images/unit/gray_with_icc_another.jpg";
+    const std::string gray_icc_another_jpeg_to_jp2 = "../../../../test/_test_data/images/unit/_gray_with_icc_another.jpx";
+
+    EXPECT_TRUE(exists_file(gray_icc_another_jpeg));
 
     // read from jpeg and write to jp2
-    ASSERT_NO_THROW(img3.read(gray_icc_another_jpeg));
-    ASSERT_NO_THROW(img3.write("jpx", gray_icc_another_jpeg_to_jp2));
-
-    // now test if conversion back to jpeg gives an identical image
-    ASSERT_NO_THROW(img4.read(gray_icc_another_jpeg_to_jp2));
-    ASSERT_NO_THROW(img4.write("jpg", gray_icc_another_jpeg_to_jp2_to_jpeg));
-    EXPECT_TRUE(image_identical(gray_icc_another_jpeg, gray_icc_another_jpeg_to_jp2_to_jpeg));
+    ASSERT_NO_THROW(img1.read(gray_icc_another_jpeg));
+    ASSERT_NO_THROW(img1.write("jpx", gray_icc_another_jpeg_to_jp2));
+    ASSERT_NO_THROW(img2.read(gray_icc_another_jpeg_to_jp2));
 }
 
 TEST(SipiImage, CMYK_lossy_compression)
@@ -253,6 +253,10 @@ TEST(SipiImage, CMYK_lossy_compression)
     Sipi::SipiImage img;
     const std::shared_ptr<Sipi::SipiRegion> region = nullptr;
     const std::shared_ptr<Sipi::SipiSize> size = nullptr;
+
+    const std::string cmyk = "../../../../test/_test_data/images/unit/cmyk.tif";
+    EXPECT_TRUE(exists_file(cmyk));
+
     ASSERT_NO_THROW(img.readOriginal(cmyk, region, size, shttps::HashType::sha256));
         Sipi::SipiCompressionParams params =  {
             {

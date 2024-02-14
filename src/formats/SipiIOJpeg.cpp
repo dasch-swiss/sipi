@@ -235,6 +235,9 @@ namespace Sipi {
     }
     //=============================================================================
 
+    /*!
+     * Load the JPEG file
+     */
     static void jpeg_file_src(struct jpeg_decompress_struct *cinfo, int file_id) {
         struct jpeg_source_mgr *srcmgr;
         FileBuffer *file_buffer;
@@ -568,7 +571,7 @@ namespace Sipi {
         int icc_buffer_len = 0;
         while (marker) {
             if (marker->marker == JPEG_COM) {
-                std::string emdatastr((char *) marker->data, marker->data_length);
+                std::string emdatastr(reinterpret_cast<char *>(marker->data), marker->data_length);
                 if (emdatastr.compare(0, 5, "SIPI:", 5) == 0) {
                     SipiEssentials se(emdatastr);
                     img->essential_metadata(se);
@@ -577,12 +580,12 @@ namespace Sipi {
                 //
                 // first we try to find the exif part
                 //
-                auto *pos = (unsigned char *) memmem(marker->data, marker->data_length, "Exif\000\000", 6);
+                auto *pos = static_cast<unsigned char *>(memmem(marker->data, marker->data_length, "Exif\000\000", 6));
                 if (pos != nullptr) {
                     img->exif = std::make_shared<SipiExif>(pos + 6, marker->data_length - (pos - marker->data) - 6);
                     uint16_t ori;
                     if (img->exif->getValByKey("Exif.Image.Orientation", ori)) {
-                        img->orientation = Orientation(ori);
+                        img->orientation = static_cast<Orientation>(ori);
                     }
                 }
 
@@ -655,10 +658,10 @@ namespace Sipi {
                 //
                 // first we try to find the exif part
                 //
-                auto *pos = (unsigned char *) memmem(marker->data, marker->data_length, "ICC_PROFILE\0", 12);
+                auto *pos = static_cast<unsigned char *>(memmem(marker->data, marker->data_length, "ICC_PROFILE\0", 12));
                 if (pos != nullptr) {
                     auto len = marker->data_length - (pos - (unsigned char *) marker->data) - 14;
-                    icc_buffer = (unsigned char *) realloc(icc_buffer, icc_buffer_len + len);
+                    icc_buffer = static_cast<unsigned char*>(realloc(icc_buffer, icc_buffer_len + len));
                     Sipi::memcpy(icc_buffer + icc_buffer_len, pos + 14, (size_t) len);
                     icc_buffer_len += len;
                 }

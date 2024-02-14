@@ -50,7 +50,7 @@ namespace Sipi {
         icc_sRGB,           //!< Standard sRGB profile
         icc_AdobeRGB,       //!< Standard AdobeRGB profile
         icc_RGB,            //!< A RGB profile that's given with parameters such as white point, primary colors etc. (see TIFF specs)
-        icc_CYMK_standard,  //!< A "standard" CMYK profile. We currently use the "USWebCoatedSWOP" profile
+        icc_CMYK_standard,  //!< A "standard" CMYK profile. We currently use the "USWebCoatedSWOP" profile
         icc_GRAY_D50,       //!< A standard profile for gray value images using a D50 light source and a gamma of 2.2
         icc_LUM_D65,        //!< A standard profile for gray value images as used be JPEG2000 JP2_sLUM_SPACE
         icc_ROMM_GRAY,       //!< A profile used by the JPEG2000 ISO suite....
@@ -107,8 +107,7 @@ namespace Sipi {
          * \param[in] tfunc Transfer function tables as retrieved by libtiff with either (1 << bitspersample) or 3*(1 << bitspersample) entries
          * \param[in] Length of tranfer function table
          */
-        SipiIcc(float white_point_p[], float primaries_p[], const unsigned short *tfunc = nullptr,
-                int tfunc_len = 0);
+        SipiIcc(float white_point_p[], float primaries_p[], const unsigned short *tfunc = nullptr, int tfunc_len = 0);
 
         /**
          * Destructor

@@ -26,8 +26,6 @@
 #include "SipiError.h"
 #include "SipiXmp.h"
 
-static const char __file__[] = __FILE__;
-
 /*!
  * ToDo: remove provisional code as soon as Exiv2::Xmp is thread safe (expected v.26)
  * ATTENTION!!!!!!!!!
@@ -40,9 +38,8 @@ namespace Sipi {
 
     XmpMutex xmp_mutex;
 
-
     void xmplock_func(void *pLockData, bool lockUnlock) {
-        XmpMutex *m = (XmpMutex *) pLockData;
+        auto *m = static_cast<XmpMutex *>(pLockData);
         if (lockUnlock) {
             std::cerr << "XMP-LOCK!" << std::endl;
             m->lock.lock();

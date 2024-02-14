@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.3
 
 # Expose (global) variables (ARGs before FROM can only be used on FROM lines and not afterwards)
-ARG SIPI_BASE=daschswiss/sipi-base:2.19.1
+ARG SIPI_BASE=daschswiss/sipi-base:2.20.0
 ARG UBUNTU_BASE=ubuntu:22.04
 
 # STAGE 1: Build
