@@ -468,12 +468,13 @@ namespace Sipi {
                 throw Sipi::SipiImageError(__file__, __LINE__, msg);
             }
 
-            auto sll = (unsigned int) TIFFScanlineSize(tif);
+            auto sll = static_cast<unsigned int>(TIFFScanlineSize(tif));
+
             TIFF_GET_FIELD (tif, TIFFTAG_SAMPLESPERPIXEL, &stmp, 1);
-            img->nc = (int) stmp;
+            img->nc = static_cast<size_t>(stmp);
 
             TIFF_GET_FIELD (tif, TIFFTAG_BITSPERSAMPLE, &stmp, 1);
-            img->bps = stmp;
+            img->bps = static_cast<size_t>(stmp);
 
             TIFF_GET_FIELD (tif, TIFFTAG_ORIENTATION, &ori, ORIENTATION_TOPLEFT);
             img->orientation = static_cast<Orientation>(ori);
@@ -481,7 +482,7 @@ namespace Sipi {
             if (1 != TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &stmp)) {
                 img->photo = MINISBLACK;
             } else {
-                img->photo = (PhotometricInterpretation) stmp;
+                img->photo = static_cast<PhotometricInterpretation>(stmp);
             }
 
             //
@@ -886,7 +887,7 @@ namespace Sipi {
                     }
 
                     case SEPARATED: {
-                        img->icc = std::make_shared<SipiIcc>(icc_CYMK_standard);
+                        img->icc = std::make_shared<SipiIcc>(icc_CMYK_standard);
                         break;
                     }
 

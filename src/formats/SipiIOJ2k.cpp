@@ -238,8 +238,7 @@ namespace Sipi {
 
         jp2_ultimate_src.open(filepath.c_str());
 
-        if (jpx_in.open(&jp2_ultimate_src, true)
-            < 0) { // if < 0, not compatible with JP2 or JPX.  Try opening as a raw code-stream.
+        if (jpx_in.open(&jp2_ultimate_src, true) < 0) { // if < 0, not compatible with JP2 or JPX.  Try opening as a raw code-stream.
             jp2_ultimate_src.close();
             file_in.open(filepath.c_str());
             input = &file_in;
@@ -436,7 +435,7 @@ namespace Sipi {
                     }
                     case kdu_supp::JP2_CMYK_SPACE: {
                         img->photo = SEPARATED;
-                        img->icc = std::make_shared<SipiIcc>(icc_CYMK_standard);
+                        img->icc = std::make_shared<SipiIcc>(icc_CMYK_standard);
                         break;
                     }
                     case kdu_supp::JP2_YCbCr1_SPACE: {
@@ -673,8 +672,7 @@ namespace Sipi {
 
         jp2_ultimate_src.open(filepath.c_str());
 
-        if (jpx_in.open(&jp2_ultimate_src, true) <
-            0) { // if < 0, not compatible with JP2 or JPX.  Try opening as a raw code-stream.
+        if (jpx_in.open(&jp2_ultimate_src, true) < 0) { // if < 0, not compatible with JP2 or JPX.  Try opening as a raw code-stream.
             jp2_ultimate_src.close();
             file_in.open(filepath.c_str());
             input = &file_in;
@@ -1013,7 +1011,7 @@ namespace Sipi {
             }
 
             //
-            // we need the essenation metaqdata in order to preserve unsupported ICC profiles
+            // we need the essential metadata in order to preserve unsupported ICC profiles
             //
             SipiEssentials es = img->essential_metadata();
 
@@ -1035,7 +1033,12 @@ namespace Sipi {
                             break;
                         }
                         case icc_sRGB: {
-                            jp2_family_colour.init(JP2_sRGB_SPACE);
+                            // TODO: this fixes the problem with grayscale JPEGs, but is it breaking anything else?
+                            if (img->nc - img->es.size() == 1) {
+                                jp2_family_colour.init(JP2_sLUM_SPACE);
+                            } else {
+                                jp2_family_colour.init(JP2_sRGB_SPACE);
+                            }
                             break;
                         }
                         case icc_AdobeRGB: {
@@ -1050,7 +1053,7 @@ namespace Sipi {
                             jp2_family_colour.init(icc_bytes);
                             break;
                         }
-                        case icc_CYMK_standard: {
+                        case icc_CMYK_standard: {
                             jp2_family_colour.init(JP2_CMYK_SPACE);
                             break;
                         }

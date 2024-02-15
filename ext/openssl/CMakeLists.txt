@@ -13,10 +13,11 @@ endif()
 
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
+set(OpenSSLVersion "3.2.1")
 
 ExternalProject_Add(project_ssl
         INSTALL_DIR ${COMMON_LOCAL}
-        URL https://www.openssl.org/source/openssl-3.0.1.tar.gz
+        URL https://www.openssl.org/source/openssl-${OpenSSLVersion}.tar.gz
         ${timestamp_policy}
         DOWNLOAD_DIR ${COMMON_SRCS}/downloads
         #DOWNLOAD_EXTRACT_TIMESTAMP NEW

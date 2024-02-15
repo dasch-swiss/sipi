@@ -118,9 +118,9 @@ namespace Sipi {
             case icc_RGB: {
                 throw SipiError(__file__, __LINE__, "Profile type \"icc_RGB\" uses other constructor");
             }
-            case icc_CYMK_standard: {
+            case icc_CMYK_standard: {
                 icc_profile = cmsOpenProfileFromMem(USWebCoatedSWOP_icc, USWebCoatedSWOP_icc_len);
-                profile_type = icc_CYMK_standard;
+                profile_type = icc_CMYK_standard;
                 break;
             }
             case icc_GRAY_D50: {

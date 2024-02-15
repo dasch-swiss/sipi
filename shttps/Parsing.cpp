@@ -202,7 +202,7 @@ namespace shttps {
                 // wrong!)
                 //
                 bool found = false;
-                for (const auto mt: mimes_from_extension) {
+                for (const auto &mt: mimes_from_extension) {
                     if (mt == mimetype) { found = true; break; }
                 }
                 if (found) {
@@ -249,7 +249,7 @@ namespace shttps {
                 // now we test if the mimetype given given by the magic number corresponds to a valid mimetype for this extension
                 //
                 bool got1 = false;
-                for (const auto mt: mime_from_extension) {
+                for (const auto &mt: mime_from_extension) {
                     if (mt == actual_mimetype.first) { got1 = true; break; }
                 }
                 if (!got1) return false;
@@ -259,7 +259,7 @@ namespace shttps {
                     // now we test if the expected mimetype corresponds to a valid mimetype for this extension
                     //
                     bool got2 = false;
-                    for (const auto mt: mime_from_extension) {
+                    for (const auto &mt: mime_from_extension) {
                         if (mt == given_mimetype) { got2 = true; break; }
                     }
                     if (!got2) return false;
