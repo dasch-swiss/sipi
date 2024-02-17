@@ -239,7 +239,7 @@ namespace Sipi {
         // The first return value is the permission code.
         auto permission_return_val = rvals.at(0);
 
-        // The permission code must be a string.
+        // The permission code can be a string or a table
         if (permission_return_val->type == LuaValstruct::STRING_TYPE) {
             preflight_info["type"] = permission_return_val->value.s;
         }
@@ -648,7 +648,16 @@ namespace Sipi {
     //
     // ToDo: Prepare for IIIF Authentication API !!!!
     //
-    static void server_info(
+    /**
+     * This internal method serves the IIIF info.json file.
+     *
+     * @param conn_obj Connection object
+     * @param serv The Server instance
+     * @param luaserver The Lua server instance
+     * @param params the IIIF parameters
+     * @param prefix_as_path
+     */
+    static void serve_info_json_file(
         Connection &conn_obj,
         SipiHttpServer *serv,
         shttps::LuaServer &luaserver,
@@ -938,7 +947,15 @@ namespace Sipi {
     }
     //=========================================================================
 
-    static void serve_knora_info(
+    /**
+     * \brief This internal method serves the knora.json file, e.g., https://server/prefix/identifier.jp2/knora.json.
+     * \param conn_obj
+     * \param serv
+     * \param luaserver
+     * \param params
+     * \param prefix_as_path
+     */
+    static void serve_knora_json_file(
         Connection &conn_obj,
         SipiHttpServer *serv,
         shttps::LuaServer &luaserver,
@@ -1170,7 +1187,18 @@ namespace Sipi {
     }
     //=========================================================================
 
-    static void serve_file(Connection &conn_obj, shttps::LuaServer &luaserver, SipiHttpServer *serv, bool prefix_as_path, std::vector<std::string> params) {
+    /**
+     * \brief The internal function handels serving of raw files part for the iiif_handler.
+     * This is an extension of the IIIF Image API, which allows for the delivery of raw files.
+     * This is useful for delivering files that are not images, such as PDFs, audio, video, etc., and that
+     * cannot be accesed otherwise through the IIIF Image API.
+     * \param conn_obj
+     * \param luaserver
+     * \param serv
+     * \param prefix_as_path
+     * \param params
+     */
+    static void serve_file_download(Connection &conn_obj, shttps::LuaServer &luaserver, SipiHttpServer *serv, bool prefix_as_path, std::vector<std::string> params) {
         std::string requested_file;
         if (prefix_as_path && (!params[iiif_prefix].empty())) {
             requested_file = serv->imgroot() + "/" + urldecode(params[iiif_prefix]) + "/" +
@@ -1274,11 +1302,24 @@ namespace Sipi {
         }
     }
 
-    static void serve_iiif(Connection &conn_obj, shttps::LuaServer &luaserver, SipiHttpServer *serv, bool prefix_as_path, std::string uri, std::vector<std::string> params) {
+    /**
+     * @brief The internal function handels the serving of IIIFs part for the iiif_handler.
+     * This function gets the parameters from the request, calls the preflight function, which checks for permissions,
+     * deals with watermarks and size restrictions, gets the mimetype of the file, gets the cache info, gets the image
+     * and sends the image to the client
+     * @param conn_obj
+     * @param luaserver
+     * @param server
+     * @param prefix_as_path
+     * @param uri the raw URI from the request.
+     * @param params the parsed parameters from the URI.
+     */
+    static void serve_iiif(Connection &conn_obj, shttps::LuaServer &luaserver, SipiHttpServer *server, bool prefix_as_path, const std::string &uri, std::vector<std::string> params) {
         //
         // getting the identifier (which in case of a PDF or multipage TIFF my contain a page id (identifier@pagenum)
         //
         SipiIdentifier sid = urldecode(params[iiif_identifier]);
+
         //
         // getting IIIF parameters
         //
@@ -1296,18 +1337,18 @@ namespace Sipi {
             send_error(conn_obj, Connection::BAD_REQUEST, err);
             return;
         }
+
         //
         // here we start the lua script which checks for permissions
         //
         std::string infile;                                   // path to the input file on the server
         std::string watermark;                                // path to watermark file, or empty, if no watermark required
-        auto restriction_size = std::make_shared<SipiSize>(); // size of restricted image... (SizeType::FULL if unrestricted)
+        auto restricted_size = std::make_shared<SipiSize>();  // size of restricted image. (SizeType::FULL if unrestricted)
 
         if (luaserver.luaFunctionExists(iiif_preflight_funcname)) {
             std::unordered_map<std::string, std::string> pre_flight_info;
             try {
-                pre_flight_info = call_iiif_preflight(conn_obj, luaserver, params[iiif_prefix],
-                                                      sid.getIdentifier());
+                pre_flight_info = call_iiif_preflight(conn_obj, luaserver, params[iiif_prefix], sid.getIdentifier());
             }
             catch (SipiError &err) {
                 send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
@@ -1326,8 +1367,8 @@ namespace Sipi {
                         ; // do nothing, no watermark...
                     }
                     try {
-                        std::string tmpstr = pre_flight_info.at("size");
-                        restriction_size = std::make_shared<SipiSize>(tmpstr);
+                        std::string raw_size_str = pre_flight_info.at("size");
+                        restricted_size = std::make_shared<SipiSize>(raw_size_str);
                         ok = true;
                     }
                     catch (const std::out_of_range &err) {
@@ -1346,10 +1387,10 @@ namespace Sipi {
         }
         else {
             if (prefix_as_path && (!params[iiif_prefix].empty())) {
-                infile = serv->imgroot() + "/" + params[iiif_prefix] + "/" + sid.getIdentifier();
+                infile = server->imgroot() + "/" + params[iiif_prefix] + "/" + sid.getIdentifier();
             }
             else {
-                infile = serv->imgroot() + "/" + sid.getIdentifier();
+                infile = server->imgroot() + "/" + sid.getIdentifier();
             }
         }
 
@@ -1380,19 +1421,20 @@ namespace Sipi {
         //
         // get cache info
         //
-        std::shared_ptr<SipiCache> cache = serv->cache();
+        std::shared_ptr<SipiCache> cache = server->cache();
         size_t img_w = 0, img_h = 0;
         size_t tile_w = 0, tile_h = 0;
         int clevels = 0;
         int numpages = 0;
+
         //
-        // get image dimensions, needed for get_canonical...
+        // get image dimensions by accessing the file, needed for get_canonical...
         //
         if ((cache == nullptr) || !cache->getSize(infile, img_w, img_h, tile_w, tile_h, clevels, numpages)) {
-            Sipi::SipiImage tmpimg;
             Sipi::SipiImgInfo info;
             try {
-                info = tmpimg.getDim(infile);
+                Sipi::SipiImage img;
+                info = img.getDim(infile);
             }
             catch (SipiImageError &err) {
                 send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());
@@ -1415,7 +1457,7 @@ namespace Sipi {
         bool tmp_ro{false};
         try {
             size->get_size(img_w, img_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
-            restriction_size->get_size(img_w, img_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
+            restricted_size->get_size(img_w, img_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
         }
         catch (Sipi::SipiSizeError &err) {
             send_error(conn_obj, Connection::BAD_REQUEST, err.to_string());
@@ -1426,25 +1468,25 @@ namespace Sipi {
             return;
         }
 
-        if (!restriction_size->undefined() && (*size > *restriction_size)) {
-            size = restriction_size;
+        // if restricted size is set and smaller, we use it
+        if (!restricted_size->undefined() && (*size > *restricted_size)) {
+            size = restricted_size;
         }
 
         //.....................................................................
         // here we start building the canonical URL
         //
-        std::pair<std::string, std::string> tmppair;
+        std::pair<std::string, std::string> canonical_info;
         try {
-            tmppair = serv->get_canonical_url(img_w, img_h, conn_obj.host(), params[iiif_prefix],
-                                              sid.getIdentifier(), region, size, rotation, quality_format, sid.getPage());
+            canonical_info = Sipi::SipiHttpServer::get_canonical_url(img_w, img_h, conn_obj.host(), params[iiif_prefix], sid.getIdentifier(), region, size, rotation, quality_format, sid.getPage());
         }
         catch (Sipi::SipiError &err) {
             send_error(conn_obj, Connection::BAD_REQUEST, err);
             return;
         }
 
-        std::string canonical_header = tmppair.first;
-        std::string canonical = tmppair.second;
+        std::string canonical_header = canonical_info.first;
+        std::string canonical = canonical_info.second;
 
         // now we check if we can send the file directly
         //
@@ -1452,7 +1494,6 @@ namespace Sipi {
             (!mirror) && watermark.empty() && (quality_format.format() == in_format) &&
             (quality_format.quality() == SipiQualityFormat::DEFAULT))
         {
-
             conn_obj.status(Connection::OK);
             conn_obj.header("Cache-Control", "must-revalidate, post-check=0, pre-check=0");
             conn_obj.header("Link", canonical_header);
@@ -1485,6 +1526,7 @@ namespace Sipi {
             return;
         } // finish sending unmodified file in toto
 
+        // we only allow the cache if the file is not watermarked
         if (cache != nullptr) {
             //!>
             //!> here we check if the file is in the cache. If so, it's being blocked from deletion
@@ -1539,7 +1581,7 @@ namespace Sipi {
 
         Sipi::SipiImage img;
         try {
-            img.read(infile, region, size, quality_format.format() == SipiQualityFormat::JPG, serv->scaling_quality());
+            img.read(infile, region, size, quality_format.format() == SipiQualityFormat::JPG, server->scaling_quality());
         }
         catch (const SipiImageError &err) {
             send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());
@@ -1623,7 +1665,7 @@ namespace Sipi {
                 conn_obj.header("Link", canonical_header);
                 conn_obj.header("Content-Type", "image/jpeg"); // set the header (mimetype)
                 conn_obj.setChunkedTransfer();
-                Sipi::SipiCompressionParams qp = {{JPEG_QUALITY, std::to_string(serv->jpeg_quality())}};
+                Sipi::SipiCompressionParams qp = {{JPEG_QUALITY, std::to_string(server->jpeg_quality())}};
                 img.write("jpg", "HTTP", &qp);
                 break;
             }
@@ -1695,6 +1737,14 @@ namespace Sipi {
         conn_obj.flush();
     }
 
+    /**
+     * \brief The iiif_handler function is the main entry point for the IIIF route.
+     * It parses the URI and calls one of the appropriate functionss (serve_iiif, serve_info, serve_knora_info, ) to handle the request.
+     * \param conn_obj
+     * \param luaserver
+     * \param user_data
+     * \param dummy
+     */
     static void iiif_handler(
         Connection &conn_obj,
         shttps::LuaServer &luaserver,
@@ -1704,13 +1754,13 @@ namespace Sipi {
         auto *serv = static_cast<SipiHttpServer*>(user_data);
 
         enum {
-            SERVE_IIIF,
-            SERVE_INFO,
-            SERVE_KNORAINFO,
-            SERVE_REDIRECT,
-            SERVE_FILE,
-            SERVE_ERROR
-        } service = SERVE_ERROR;
+            IIIF,
+            INFO_JSON,
+            KNORA_JSON,
+            REDIRECT,
+            FILE_DOWNLOAD,
+            UNDEFINED
+        } request_type = UNDEFINED;
 
         bool prefix_as_path = serv->prefix_as_path();
 
@@ -1809,7 +1859,7 @@ namespace Sipi {
                 params.push_back(parts[parts.size() - 3]); // iiif_size
                 params.push_back(parts[parts.size() - 2]); // iiif_rotation
                 params.push_back(parts[parts.size() - 1]); // iiif_qualityformat
-                service = SERVE_IIIF;
+                request_type = IIIF;
             }
             else if ((fname_body == "info") && (fname_extension == "json")) {
                 //
@@ -1832,7 +1882,7 @@ namespace Sipi {
                     return;
                 }
                 params.push_back(parts[parts.size() - 2]); // iiif_identifier
-                service = SERVE_INFO;
+                request_type = INFO_JSON;
             }
             else if ((fname_body == "knora") && (fname_extension == "json")) {
                 //
@@ -1855,7 +1905,7 @@ namespace Sipi {
                     return;
                 }
                 params.push_back(parts[parts.size() - 2]); // iiif_identifier
-                service = SERVE_KNORAINFO;
+                request_type = KNORA_JSON;
             }
             else {
                 //
@@ -1902,7 +1952,7 @@ namespace Sipi {
                     return;
                 }
                 params.push_back(parts[parts.size() - 1]); // iiif_identifier
-                service = SERVE_REDIRECT;
+                request_type = REDIRECT;
             }
         }
         else if (parts[parts.size() - 1] == "file") {
@@ -1929,7 +1979,7 @@ namespace Sipi {
                 return;
             }
             params.push_back(parts[parts.size() - 2]); // iiif_identifier
-            service = SERVE_FILE;
+            request_type = FILE_DOWNLOAD;
         }
         else {
             //
@@ -1976,41 +2026,35 @@ namespace Sipi {
                 return;
             }
             params.push_back(parts[parts.size() - 1]); // iiif_identifier
-            service = SERVE_REDIRECT;
+            request_type = REDIRECT;
         }
 
-        //
-        // if we just get the base URL, we redirect to the image info document and the file is
-        // a supported image file format. Otherwise we just serve the file as blob.
-        //
-        switch (service) {
-            case SERVE_REDIRECT: {
-                serve_redirect(conn_obj, params);
-                return;
-            }
-            case SERVE_INFO: {
-                server_info(conn_obj, serv, luaserver, params, prefix_as_path);
-                return;
-            }
-            case SERVE_KNORAINFO: {
-                serve_knora_info(conn_obj, serv, luaserver, params, prefix_as_path);
-                return;
-            }
-            case SERVE_FILE: {
-                serve_file(conn_obj, luaserver, serv, prefix_as_path, params);
-                return;
-            } // case SERVE_FILE
-            case SERVE_IIIF: {
+        switch (request_type) {
+            case IIIF: {
                 serve_iiif(conn_obj, luaserver, serv, prefix_as_path, uri, params);
                 return;
             }
-            case SERVE_ERROR: {
+            case INFO_JSON: {
+                serve_info_json_file(conn_obj, serv, luaserver, params, prefix_as_path);
+                return;
+            }
+            case KNORA_JSON: {
+                serve_knora_json_file(conn_obj, serv, luaserver, params, prefix_as_path);
+                return;
+            }
+            case REDIRECT: {
+                serve_redirect(conn_obj, params);
+                return;
+            }
+            case FILE_DOWNLOAD: {
+                serve_file_download(conn_obj, luaserver, serv, prefix_as_path, params);
+                return;
+            }
+            case UNDEFINED: {
                 send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Unknown internal error!");
                 return;
             }
-        } // switch(service)
-
-        return;
+        }
     }
     //=========================================================================
 

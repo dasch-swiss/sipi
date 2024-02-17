@@ -108,7 +108,7 @@ namespace Sipi {
         explicit SipiSize(float percent_p) : size_type(SizeType::PERCENTS), upscaling(false), percent(percent_p), reduce(false), redonly(false), nx(0), ny(0), w(0), h(0), canonical_ok(false) {}
 
         /*!
-         * Construcor taking size/scale part of IIIF url as parameter
+         * Constructor taking size/scale part of IIIF url as parameter
          *
          * \param[in] str String with the IIIF url part containing the size/scaling information
          */

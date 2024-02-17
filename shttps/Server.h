@@ -348,21 +348,21 @@ namespace shttps {
         *
         * \returns Vector of Lua route infos
         */
-        inline std::vector<shttps::LuaRoute> luaRoutes(void) { return _lua_routes; }
+        std::vector<shttps::LuaRoute> luaRoutes() const { return _lua_routes; }
 
         /*!
          * set the routes that should be handled by Lua scripts
          *
          * \param[in] Vector of lua route infos
          */
-        inline void luaRoutes(const std::vector<shttps::LuaRoute> &lua_routes_p) { _lua_routes = lua_routes_p; }
+        void luaRoutes(const std::vector<shttps::LuaRoute> &lua_routes_p) { _lua_routes = lua_routes_p; }
 
         /*!
         * Set the loglevel
         *
         * \param[in] loglevel_p set the loglevel
         */
-        inline void loglevel(int loglevel_p) {
+        void loglevel(int loglevel_p) {
             setlogmask(LOG_UPTO(loglevel_p));
         }
 
@@ -376,14 +376,14 @@ namespace shttps {
          * a HTTP connection (socket) remains up without action before being closed by
          * the server. A keep-alive header will change this value
          */
-        inline void keep_alive_timeout(int keep_alive_timeout) { _keep_alive_timeout = keep_alive_timeout; }
+        void keep_alive_timeout(int keep_alive_timeout) { _keep_alive_timeout = keep_alive_timeout; }
 
         /*!
          * Returns the default keep alive timeout
          *
          * \returns Keep alive timeout in seconds
          */
-        inline int keep_alive_timeout(void) { return _keep_alive_timeout; }
+        int keep_alive_timeout() const { return _keep_alive_timeout; }
 
         /*
         void add_thread(pthread_t thread_id_p, int commpipe_write_p, int sock_id);

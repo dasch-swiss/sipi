@@ -52,7 +52,6 @@ namespace shttps {
             bool b;
             std::unordered_map<std::string, std::shared_ptr<struct _LuaValstruct>> table;
         } value;
-        //inline LuaValstruct() { type = }
     } LuaValstruct;
 
     typedef struct _LuaRoute {
@@ -69,8 +68,7 @@ namespace shttps {
 
     class LuaServer {
     private:
-        lua_State *L;
-        //std::vector<LuaSetGlobalsFunc> setGlobals;
+        lua_State *L{};
 
     public:
         /*!
@@ -83,7 +81,7 @@ namespace shttps {
          *
          * \param[in] conn HTTP Connection object
          */
-        LuaServer(Connection &conn);
+        explicit LuaServer(Connection &conn);
 
 
         /*!
@@ -92,7 +90,7 @@ namespace shttps {
          * \param[in] luafile A script containing lua commands
          * \param[in] iscode If true, the string contains lua-code to be executed directly
          */
-        LuaServer(const std::string &luafile, bool iscode = false);
+        explicit LuaServer(const std::string &luafile, bool iscode = false);
 
         /*!
          * Instantiates a lua interpreter an executes the given lua script
@@ -107,7 +105,7 @@ namespace shttps {
         /*!
          * Copy constructor throws error (not allowed!)
          */
-        inline LuaServer(const LuaServer &other) {
+        LuaServer(const LuaServer &other) {
             throw Error(__FILE__, __LINE__, "Copy constructor not allowed!");
         }
 
@@ -126,7 +124,7 @@ namespace shttps {
         /*!
          * Getter for the Lua state
          */
-        inline lua_State *lua() { return L; }
+        lua_State *lua() const { return L; }
 
         /*!
          * Adds a value to the server tabe.
@@ -156,24 +154,24 @@ namespace shttps {
         void createGlobals(Connection &conn);
 
 
-        std::string configString(const std::string table, const std::string variable, const std::string defval);
+        std::string configString(std::string table, std::string variable, std::string defval);
 
-        bool configBoolean(const std::string table, const std::string variable, const bool defval);
+        bool configBoolean(std::string table, std::string variable, bool defval);
 
-        int configInteger(const std::string table, const std::string variable, const int defval);
+        int configInteger(std::string table, std::string variable, int defval);
 
-        float configFloat(const std::string table, const std::string variable, const float defval);
+        float configFloat(std::string table, std::string variable, float defval);
 
-        const std::vector<std::string> configStringList(const std::string table, const std::string stringlist);
+        const std::vector<std::string> configStringList(std::string table, std::string stringlist);
 
         const std::map<std::string,std::string> configStringTable(
                 const std::string &table,
                 const std::string &variable,
                 const std::map<std::string,std::string> &defval);
 
-        const std::vector<LuaRoute> configRoute(const std::string routetable);
+        std::vector<LuaRoute> configRoute(const std::string &routetable) const;
 
-        const std::map<std::string,LuaKeyValStore> configKeyValueStores(const std::string table);
+        const std::map<std::string,LuaKeyValStore> configKeyValueStores(std::string table);
         /*!
          * Execute a chunk of Lua code
          *
@@ -190,7 +188,7 @@ namespace shttps {
          * \param[in] lvals vector of parameters to be passed to the function
          * \returns vector of LuaValstruct containing the result of the execution of the lua function
          */
-        std::vector<std::shared_ptr<LuaValstruct>> executeLuafunction(const std::string &funcname, std::vector<std::shared_ptr<LuaValstruct>> lvals);
+        std::vector<std::shared_ptr<LuaValstruct>> executeLuafunction(const std::string &funcname, const std::vector<std::shared_ptr<LuaValstruct>> &lvals);
 
         /*!
          * Executes a Lua function that either is defined in C or in Lua

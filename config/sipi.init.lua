@@ -284,6 +284,25 @@ function pre_flight(prefix,identifier,cookie)
             server.log("Server.http() failed: " .. result, server.loglevel.LOG_ERR)
             return 'deny'
         end
+    elseif string.find(identifier, "restricted") then
+        local filepath = config.imgroot .. '/' .. identifier
+        local settings_for_sipi = {}
+        settings_for_sipi['type'] = "restrict"
+        settings_for_sipi['size'] = "!500,500"
+        return settings_for_sipi, filepath
+    elseif string.find(identifier, "watermarked") then
+        local filepath = config.imgroot .. '/' .. identifier
+        local settings_for_sipi = {}
+        settings_for_sipi['type'] = "restrict"
+        settings_for_sipi['watermark'] = config.imgroot .. '/' .. "watermark.tif"
+        return settings_for_sipi, filepath
+    elseif string.find(identifier, "restricted_watermarked") then
+        local filepath = config.imgroot .. '/' .. identifier
+        local settings_for_sipi = {}
+        settings_for_sipi['type'] = "restrict"
+        settings_for_sipi['size'] = "!500,500"
+        settings_for_sipi['watermark'] = config.imgroot .. '/' .. "watermark.tif"
+        return settings_for_sipi, filepath
     else
         if config.prefix_as_path then
             filepath = config.imgroot .. '/' .. prefix .. '/' .. identifier
@@ -308,50 +327,50 @@ function pre_flight(prefix,identifier,cookie)
 
     return 'allow', filepath
 
---[[
+    --[[
 
-    if config.prefix_as_path then
-        filepath = config.imgroot .. '/' .. prefix .. '/' .. identifier
-    else
-        filepath = config.imgroot .. '/' .. identifier
-    end
+        if config.prefix_as_path then
+            filepath = config.imgroot .. '/' .. prefix .. '/' .. identifier
+        else
+            filepath = config.imgroot .. '/' .. identifier
+        end
 
-    if server.cookies['sipi-auth'] then
-        print('preflight: IIIF cookie')
-        access_info = server.cookies['sipi-auth']
-        success, token_val = server.decode_jwt(access_info)
-        if not success then
-            server.sendStatus(500)
-            server.log(token_val, server.loglevel.LOG_ERR)
-            return false
+        if server.cookies['sipi-auth'] then
+            print('preflight: IIIF cookie')
+            access_info = server.cookies['sipi-auth']
+            success, token_val = server.decode_jwt(access_info)
+            if not success then
+                server.sendStatus(500)
+                server.log(token_val, server.loglevel.LOG_ERR)
+                return false
+            end
+            if token_val['allow'] then
+                return 'allow', filepath
+            end
+        elseif server.header['authorization'] then
+            access_info = string.sub(server.header['authorization'], 8)
+            success, token_val = server.decode_jwt(access_info)
+            if not success then
+                server.sendStatus(500)
+                server.log(token_val, server.loglevel.LOG_ERR)
+                return false
+            end
+            if token_val['allow'] then
+                return 'allow', filepath
+            end
+        else
+            return {
+                type = 'login',
+                cookieUrl = 'https://localhost/iiif-cookie.html',
+                tokenUrl = 'https://localhost/iiif-token.php',
+                confirmLabel =  'Login to SIPI',
+                description = 'This Example requires a demo login!',
+                failureDescription = '<a href="http://example.org/policy">Access Policy</a>',
+                failureHeader = 'Authentication Failed',
+                header = 'Please Log In',
+                label = 'Login to SIPI',
+            }, filepath
         end
-        if token_val['allow'] then
-            return 'allow', filepath
-        end
-    elseif server.header['authorization'] then
-        access_info = string.sub(server.header['authorization'], 8)
-        success, token_val = server.decode_jwt(access_info)
-        if not success then
-            server.sendStatus(500)
-            server.log(token_val, server.loglevel.LOG_ERR)
-            return false
-        end
-        if token_val['allow'] then
-            return 'allow', filepath
-        end
-    else
-        return {
-            type = 'login',
-            cookieUrl = 'https://localhost/iiif-cookie.html',
-            tokenUrl = 'https://localhost/iiif-token.php',
-            confirmLabel =  'Login to SIPI',
-            description = 'This Example requires a demo login!',
-            failureDescription = '<a href="http://example.org/policy">Access Policy</a>',
-            failureHeader = 'Authentication Failed',
-            header = 'Please Log In',
-            label = 'Login to SIPI',
-        }, filepath
-    end
---]]
+    --]]
 end
 -------------------------------------------------------------------------------
