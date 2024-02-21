@@ -27,6 +27,8 @@
         # Build tool
         cmake
 
+        llvmPackages_17.clang
+
         # Build dependencies
         ffmpeg
         file
@@ -38,7 +40,6 @@
         libreadline-dev
         libmagic-dev
         libssl-dev
-        llvmPackages_17
         locales
         openssl
         uuid

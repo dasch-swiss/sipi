@@ -16,7 +16,7 @@
 , uuid
 , uuid-dev }:
 
-llvmPackages_11.stdenv.mkDerivation rec {
+llvmPackages_17.stdenv.mkDerivation rec {
   pname = "sipi";
   version = "3.8.12";
   
@@ -34,7 +34,6 @@ llvmPackages_11.stdenv.mkDerivation rec {
     libreadline-dev
     libmagic-dev
     libssl-dev
-    llvmPackages_17
     locales
     openssl
     uuid
