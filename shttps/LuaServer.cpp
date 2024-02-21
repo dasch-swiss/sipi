@@ -3035,7 +3035,7 @@ namespace shttps {
      * @param routetable A table name containing route info
      * @return Route info
      */
-    const std::vector<LuaRoute> LuaServer::configRoute(const std::string routetable) {
+    std::vector<LuaRoute> LuaServer::configRoute(const std::string &routetable) const {
         static struct {
             const char *name;
             int type;
@@ -3240,7 +3240,7 @@ namespace shttps {
         return tmplv;
     }
 
-    static void pushLuaValue(lua_State *L, const std::shared_ptr<LuaValstruct> lv) {
+    static void pushLuaValue(lua_State *L, const std::shared_ptr<LuaValstruct> &lv) {
         switch (lv->type) {
             case LuaValstruct::INT_TYPE: {
                 lua_pushinteger(L, lv->value.i);
@@ -3270,7 +3270,7 @@ namespace shttps {
     }
 
     std::vector<std::shared_ptr<LuaValstruct>>
-    LuaServer::executeLuafunction(const std::string &funcname, std::vector<std::shared_ptr<LuaValstruct>> lvs) {
+    LuaServer::executeLuafunction(const std::string &funcname, const std::vector<std::shared_ptr<LuaValstruct>> &lvals) {
         if (lua_getglobal(L, funcname.c_str()) != LUA_TFUNCTION) {
             lua_settop(L, 0); // clear stack
             std::ostringstream errMsg;
@@ -3278,11 +3278,11 @@ namespace shttps {
             throw Error(__file__, __LINE__, errMsg.str());
         }
 
-        for (auto lv : lvs) {
+        for (const auto& lv : lvals) {
             pushLuaValue(L, lv);
         }
 
-        if (lua_pcall(L, lvs.size(), LUA_MULTRET, 0) != LUA_OK) {
+        if (lua_pcall(L, lvals.size(), LUA_MULTRET, 0) != LUA_OK) {
             std::string luaErrorMsg(lua_tostring(L, 1));
             lua_settop(L, 0); // clear stack
             std::ostringstream errMsg;
@@ -3290,7 +3290,7 @@ namespace shttps {
             throw Error(__file__, __LINE__, errMsg.str());
         }
 
-        int top = lua_gettop(L);
+        const int top = lua_gettop(L);
         std::vector<std::shared_ptr<LuaValstruct>> retval;
 
         for (int i = 1; i <= top; i++) {

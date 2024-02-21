@@ -21,7 +21,7 @@
  * License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include <assert.h>
-#include <stdlib.h>
+#include <cstdlib>
 #include <syslog.h>
 
 #include <string>
@@ -29,14 +29,11 @@
 #include <fstream>
 #include <sstream>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <vector>
 #include <cmath>
 #include <climits>
 
-#include <stdio.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
 
 
 #include "shttps/Global.h"
@@ -51,7 +48,7 @@ namespace Sipi {
     size_t SipiSize::limitdim = 32000;
 
     SipiSize::SipiSize(std::string str) {
-        nx = ny = w = h =0;
+        nx = ny = w = h = 0;
         percent = 0.F;
         canonical_ok = false;
         reduce = 0;
