@@ -25,25 +25,21 @@
       packages = with pkgs; [
         
         # Build tool
-        cmake
-
         llvmPackages_17.clang
+        cmake
 
         # Build dependencies
         ffmpeg
-        file
+        file # libmagic-dev
         gettext
+        glibcLocales # locales
         gperf
-        libacl1-dev
-        libidn11-dev
-        libnuma-dev
-        libreadline-dev
-        libmagic-dev
-        libssl-dev
-        locales
-        openssl
-        uuid
-        uuid-dev
+        # libacl1-dev
+        libidn
+        libuuid # uuid und uuid-dev
+        # numactl # libnuma-dev not available on mac
+        openssl # libssl-dev
+        readline70 # libreadline-dev
         
         # Other stuff
         at

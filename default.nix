@@ -1,22 +1,17 @@
 { lib
+, llvmPackages_12
 , cmake
 , ffmpeg
 , file
 , gettext
+, glibcLocales
 , gperf
-, libacl1-dev
-, libidn11-dev
-, libnuma-dev
-, libreadline-dev
-, libmagic-dev
-, libssl-dev
-, llvmPackages_17
-, locales
+, libidn
+, libuuid
 , openssl
-, uuid
-, uuid-dev }:
+, readline70 }:
 
-llvmPackages_17.stdenv.mkDerivation rec {
+llvmPackages_12.stdenv.mkDerivation rec {
   pname = "sipi";
   version = "3.8.12";
   
@@ -27,17 +22,14 @@ llvmPackages_17.stdenv.mkDerivation rec {
     ffmpeg
     file
     gettext
+    glibcLocales
     gperf
-    libacl1-dev
-    libidn11-dev
-    libnuma-dev
-    libreadline-dev
-    libmagic-dev
-    libssl-dev
-    locales
+    # libacl1-dev
+    libidn
+    libuuid # uuid und uuid-dev
+    # numactl not available for mac
     openssl
-    uuid
-    uuid-dev
+    readline70
   ];
 
   cmakeFlags = [
