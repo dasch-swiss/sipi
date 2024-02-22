@@ -1,23 +1,24 @@
-{ lib
-, llvmPackages_12
-, cmake
-, ffmpeg
-, file
-, gettext
-, glibcLocales
-, gperf
-, libidn
-, libuuid
-, openssl
-, readline70 }:
-
-llvmPackages_12.stdenv.mkDerivation rec {
+{
+  lib,
+  clang16Stdenv,
+  cmake,
+  ffmpeg,
+  file,
+  gettext,
+  glibcLocales,
+  gperf,
+  libidn,
+  libuuid,
+  openssl,
+  readline70,
+}:
+clang16Stdenv.mkDerivation {
   pname = "sipi";
   version = "3.8.12";
-  
+
   src = ./.;
 
-  nativeBuildInputs = [ cmake ];
+  nativeBuildInputs = [cmake];
   buildInputs = [
     ffmpeg
     file
@@ -33,8 +34,7 @@ llvmPackages_12.stdenv.mkDerivation rec {
   ];
 
   cmakeFlags = [
-    "-DENABLE_TESTING=OFF"
-    "-DENABLE_INSTALL=ON"
+    "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
   ];
 
   meta = with lib; {

@@ -3,80 +3,83 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/23.11";
-    utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = inputs@{ self, nixpkgs, ...}: inputs.utils.lib.eachSystem [
-    "aarch64-darwin" "aarch64-linux" "x86_64-linux"
-  ] (system: let
-    pkgs = import nixpkgs {
-      inherit system;
-
-      # Add overlays if you need to override the nixpkgs official packages.
-      overlays = [];
-
-      # Uncomment this if you need unfree softeare (e.g. cuda) for your project.
-      # config.allowUnfree = true;
-    };
-  in {
-    defShells.default = pkgs.mkShell rec {
-      name = "sipi";
-
-      packages = with pkgs; [
-        
-        # Build tool
-        llvmPackages_17.clang
-        cmake
-
-        # Build dependencies
-        ffmpeg
-        file # libmagic-dev
-        gettext
-        glibcLocales # locales
-        gperf
-        # libacl1-dev
-        libidn
-        libuuid # uuid und uuid-dev
-        # numactl # libnuma-dev not available on mac
-        openssl # libssl-dev
-        readline70 # libreadline-dev
-        
-        # Other stuff
-        at
-        doxygen
-        pkg-config
-        valgrind
-
-        # additional test dependencies
-        nginx
-        libtiff5-dev
-        libopenjp2-7-dev
-        graphicsmagick
-        apache2-utils
-        imagemagick
-        libxml2
-        libxml2-dev
-        libxslt1.1
-        libxslt1-dev
-  
-        # Python dependencies
-        python311Full
-        python311Packages.pip
-        python311Packages.sphinx
-        python311Packages.pytest
-        python311Packages.requests
-        python311Packages.psutil
+  outputs = inputs @ {flake-parts, ...}:
+    flake-parts.lib.mkFlake {inherit inputs;} {
+      # This is the list of architectures that work with this project
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "x86_64-darwin"
+        "aarch64-darwin"
       ];
+      perSystem = {
+        config,
+        self',
+        inputs',
+        pkgs,
+        system,
+        ...
+      }: {
+        # devShells.default describes the default shell with C++, cmake,
+        # and other dependencies
+        devShells = {
+          clang = pkgs.mkShell.override {stdenv = pkgs.clang16Stdenv;} {
+            name = "sipi";
 
-    # Setting up the environment variables you need during development
-    shelHook = let
-      icon = "f121";
-    in ''
-      export PS1="$(echo -e '\u${icon}') {\[$(tput sgr0)\]\[\033[38;5;228m\]\w\[$(tput sgr0)\]\[\033[38;5;15m\]} (${name}) \\$ \[$(tput sgr0)\]"
-    '';
+            packages = with pkgs; [
+              # C++ Compiler is already part of stdenv
+              # Build tool
+              cmake
+
+              # Build dependencies
+              ffmpeg
+              file # libmagic-dev
+
+              gettext
+              glibcLocales # locales
+              gperf
+              # libacl1-dev
+              libidn
+              libuuid # uuid und uuid-dev
+              # numactl # libnuma-dev not available on mac
+              openssl # libssl-dev
+              readline70 # libreadline-dev
+
+              # Other stuff
+              # at
+              doxygen
+              pkg-config
+              # valgrind
+
+              # additional test dependencies
+              nginx
+              libtiff
+              graphicsmagick
+              apacheHttpd
+              imagemagick
+              libxml2
+              libxslt
+
+              # Python dependencies
+              python311Full
+              python311Packages.pip
+              python311Packages.sphinx
+              python311Packages.pytest
+              python311Packages.requests
+              python311Packages.psutil
+            ];
+          };
+        };
+
+        # The `callPackage` automatically fills the parameters of the funtion
+        # in package.nix with what's  inside the `pkgs` attribute.
+        packages.default = pkgs.callPackage ./package.nix {};
+
+        # The `config` variable contains our own outputs, so we can reference
+        # neighbor attributes like the package we just defined one line earlier.
+        devShells.default = config.packages.default;
+      };
     };
-
-    packages.default = pkgs.callPackage ./default.nix {};
-  });
-    
 }
