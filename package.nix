@@ -1,18 +1,19 @@
 {
   lib,
-  clang16Stdenv,
+  clang14Stdenv,
   cmake,
   ffmpeg,
   file,
   gettext,
   glibcLocales,
   gperf,
+  iconv,
   libidn,
   libuuid,
   openssl,
   readline70,
 }:
-clang16Stdenv.mkDerivation {
+clang14Stdenv.mkDerivation {
   pname = "sipi";
   version = "3.8.12";
 
@@ -25,6 +26,7 @@ clang16Stdenv.mkDerivation {
     gettext
     glibcLocales
     gperf
+    iconv
     # libacl1-dev
     libidn
     libuuid # uuid und uuid-dev
