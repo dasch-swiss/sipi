@@ -7,7 +7,6 @@ include(ExternalProject)
 #
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
-
 ExternalProject_Add(project_webp
         DEPENDS xz
         INSTALL_DIR ${COMMON_LOCAL}

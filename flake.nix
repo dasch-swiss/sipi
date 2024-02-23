@@ -25,8 +25,15 @@
         # devShells.default describes the default shell with C++, cmake,
         # and other dependencies
         devShells = {
-          clang = pkgs.mkShell.override {stdenv = pkgs.clang16Stdenv;} {
+          clang = pkgs.mkShell.override {stdenv = pkgs.clang14Stdenv;} {
             name = "sipi";
+
+            shellHook = ''
+              export PS1="\\u@\\h | nix-develop> "
+              unset SDKROOT
+              unset CMAKE_FRAMEWORK_PATH
+              # Additional environment tweaks
+            '';
 
             packages = with pkgs; [
               # C++ Compiler is already part of stdenv
@@ -36,14 +43,15 @@
               # Build dependencies
               ffmpeg
               file # libmagic-dev
-
               gettext
               glibcLocales # locales
               gperf
+              iconv
               # libacl1-dev
               libidn
               libuuid # uuid und uuid-dev
               # numactl # libnuma-dev not available on mac
+              libwebp
               openssl # libssl-dev
               readline70 # libreadline-dev
 

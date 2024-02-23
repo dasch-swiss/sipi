@@ -244,6 +244,10 @@ endif()
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
+# OpenGL and GLUT needed by tiff and webp
+find_package(OpenGL)
+find_package(GLUT)
+
 # !!! order is important !!!
 # dependent targets need to be added before the target that depends on them
 # e.g., png, bzip2 before freetype
