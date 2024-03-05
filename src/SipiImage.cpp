@@ -25,8 +25,10 @@
 #include <vector>
 #include <cmath>
 
-//#include <memory>
+#include <cassert>
+
 #include <climits>
+#include <sys/stat.h>
 
 #include "lcms2.h"
 #include "makeunique.h"
@@ -36,11 +38,9 @@
 #include "SipiImage.h"
 #include "formats/SipiIOTiff.h"
 #include "formats/SipiIOJ2k.h"
-//#include "formats/SipiIOOpenJ2k.h"
-#include <sys/stat.h>
-
 #include "formats/SipiIOJpeg.h"
 #include "formats/SipiIOPng.h"
+
 #include "shttps/Parsing.h"
 
 static const char __file__[] = __FILE__;
@@ -508,68 +508,131 @@ namespace Sipi {
     /*==========================================================================*/
 
 
-    void SipiImage::removeChan(unsigned int chan) {
-        if ((nc == 1) || (chan >= nc)) {
-            std::string msg = "Cannot remove component: nc=" + std::to_string(nc) + " chan=" + std::to_string(chan);
+    void SipiImage::removeChannel(const unsigned int channel, const bool force_gray_alpha) {
+        if ((nc == 1) || (channel >= nc)) {
+            std::string msg = "Cannot remove component: nc=" + std::to_string(nc) + " chan=" + std::to_string(channel);
             throw SipiImageError(__file__, __LINE__, msg);
         }
 
-        if (!es.empty()) {
-            if (nc < 3) {
-                es.clear(); // no more alpha channel
-            } else if (nc > 3) { // it's probably an alpha channel
-                if ((nc == 4) && (photo == SEPARATED)) {  // oh no – 4 channels, but CMYK
-                    std::string msg =
-                            "Cannot remove component: nc=" + std::to_string(nc) + " chan=" + std::to_string(chan);
-                    throw SipiImageError(__file__, __LINE__, msg);
-                } else {
-                    es.erase(es.begin() + (chan - ((photo == SEPARATED) ? 4 : 3)));
+        const bool has_removable_extra_samples = !es.empty();
+        const bool has_two_or_less_channels = nc < 3;
+        const bool has_three_channels = nc == 3;
+        const bool has_three_or_more_channels = nc > 3;
+
+
+        // Assumtion: An image with two or less channels cannot have extra samples
+        assert(has_two_or_less_channels && has_removable_extra_samples);
+
+        if (has_removable_extra_samples) {
+
+            // cleanup the extra samples
+            // TODO: figure out why this can even happen
+            if (has_two_or_less_channels) {
+                es.clear();
+            }
+
+            // TODO: figure out when this can happen. Maybe two channels with alpha is not allowed or even possible?
+            if (has_three_channels) {
+                std::string msg = "Cannot remove component: nc=" + std::to_string(nc) + " chan=" + std::to_string(channel);
+                throw SipiImageError(__file__, __LINE__, msg);
+            }
+
+            // TODO: figure out when this can happen and if this can/should be cought earlier
+            const bool cmyk_image = (nc == 4) && (photo == SEPARATED);
+            if (cmyk_image) {
+                std::string msg = "Cannot remove component: nc=" + std::to_string(nc) + " chan=" + std::to_string(channel);
+                throw SipiImageError(__file__, __LINE__, msg);
+            }
+        }
+
+        constexpr int _8bps = 8;
+        constexpr int _16bps = 16;
+
+        /**
+         * Purge the channel from the image.
+         * The image is stored in a single array, so we need to remove the
+         * corresponding pixel values. We do this by copying the original and
+         * omitting the channel to be removed.
+         */
+        auto purge_channel_pixels = [](const auto& original_pixels, auto& changed_pixels, const size_t nx, const size_t ny, const size_t nc, const size_t channel_to_remove, const size_t new_nc) {
+            for (size_t j = 0; j < ny; j++) {
+                for (size_t i = 0; i < nx; i++) {
+                    for (size_t k = 0; k < nc; k++) {
+                        if (k == channel_to_remove) {
+                            continue;
+                        }
+                        changed_pixels[new_nc * (j * nx + i) + k] = original_pixels[nc * (j * nx + i) + k];
+                    }
                 }
+            }
+        };
+
+        /**
+         * Purge the channel from the image.
+         * The image is stored in a single array, so we need to remove the
+         * corresponding pixel values. We do this by copying the original and
+         * omitting the channel to be removed. Additionally, we add middle gray
+         * (128) to each pixel's color component where the alpha channel is 0.
+         */
+        auto purge_channel_pixels_with_gray_alpha = [](const auto& original_pixels, auto& changed_pixels, const size_t nx, const size_t ny, const size_t nc, const size_t channel_to_remove, const size_t new_nc) {
+            for (size_t j = 0; j < ny; j++) {
+                for (size_t i = 0; i < nx; i++) {
+                    for (size_t k = 0; k < nc; k++) {
+                        if (k == channel_to_remove) {
+                            continue;
+                        }
+                        changed_pixels[new_nc * (j * nx + i) + k] = (original_pixels[nc * (j * nx + i) + channel_to_remove] == 0) ? 128 : original_pixels[nc * (j * nx + i) + k];
+                    }
+                }
+            }
+        };
+
+
+        const auto extra_sample_to_remove = channel - ((photo == SEPARATED) ? 4 : 3);
+        const bool is_alpha_channel =  es.at(extra_sample_to_remove) == ASSOCALPHA;
+        const bool is_rgb_image = photo == RGB;
+
+        /*
+         * 8 bit per sample.
+         * Since we want to remove a channel, we need to remove the corresponding
+         * pixel values, since the whole image is stored in a single array.
+         * - if the image is RGB, we additionally check apply_gray_alpha and if true,
+         *   we add middle gray (128) to each pixel's color component where the alpha
+         *   channel is 0.
+         */
+        if (bps == _8bps) {
+            byte *original_pixels = pixels;
+            const size_t new_nc = nc - 1;
+            auto *changed_pixels = new byte[ new_nc * nx * ny];
+
+            // only force gray values if the image is RGB and the alpha channel is the channel to be removed
+            const bool force_gray_values = force_gray_alpha && is_alpha_channel && is_rgb_image;
+            if (force_gray_values) {
+                purge_channel_pixels_with_gray_alpha(original_pixels, changed_pixels, nx, ny, nc, channel, new_nc);
             } else {
-                std::string msg = "Cannot remove component: nc=" + std::to_string(nc) + " chan=" + std::to_string(chan);
-                throw SipiImageError(__file__, __LINE__, msg);
-            }
-        }
-
-        if (bps == 8) {
-            byte *inbuf = pixels;
-            size_t nnc = nc - 1;
-            byte *outbuf = new byte[(size_t) nnc * (size_t) nx * (size_t) ny];
-
-            for (size_t j = 0; j < ny; j++) {
-                for (size_t i = 0; i < nx; i++) {
-                    for (size_t k = 0; k < nc; k++) {
-                        if (k == chan) continue;
-                        outbuf[nnc * (j * nx + i) + k] = inbuf[nc * (j * nx + i) + k];
-                    }
-                }
+                purge_channel_pixels(original_pixels, changed_pixels, nx, ny, nc, channel, new_nc);
             }
 
-            pixels = outbuf;
-            delete[] inbuf;
-        } else if (bps == 16) {
-            word *inbuf = (word *) pixels;
-            size_t nnc = nc - 1;
-            auto *outbuf = new unsigned short[nnc * nx * ny];
+            pixels = changed_pixels;
+            delete[] original_pixels;
+        } else if (bps == _16bps) {
+            auto *original_pixels = reinterpret_cast<unsigned short *>(pixels);
+            size_t new_nc = nc - 1;
+            auto *changed_pixels = new unsigned short[new_nc * nx * ny];
 
-            for (size_t j = 0; j < ny; j++) {
-                for (size_t i = 0; i < nx; i++) {
-                    for (size_t k = 0; k < nc; k++) {
-                        if (k == chan) continue;
-                        outbuf[nnc * (j * nx + i) + k] = inbuf[nc * (j * nx + i) + k];
-                    }
-                }
-            }
+            purge_channel_pixels(original_pixels, changed_pixels, nx, ny, nc, channel, new_nc);
 
-            pixels = (byte *) outbuf;
-            delete[] inbuf;
+            pixels = reinterpret_cast<unsigned char *>(changed_pixels);
+            delete[] original_pixels;
         } else {
-            if (bps != 8) {
-                std::string msg = "Bits per sample is not supported for operation: " + std::to_string(bps);
-                throw SipiImageError(__file__, __LINE__, msg);
-            }
+            const std::string msg = "Bits per sample is not supported for operation: " + std::to_string(bps);
+            throw SipiImageError(__file__, __LINE__, msg);
         }
 
+        // remove the extra sample that we removed from the image
+        es.erase(es.begin() + extra_sample_to_remove);
+
+        // lower channel count as we have removed a channel from the image
         nc--;
     }
     //============================================================================

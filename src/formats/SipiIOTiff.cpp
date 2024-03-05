@@ -440,6 +440,12 @@ namespace Sipi {
     }
     //============================================================================
 
+    /**
+     * TODO: SipiImage always assumes the image data to be in big endian format.
+     * TIFF files can be in little endian format. Every TIFF file begins with a two-byte indicator of byte order:
+     * "II" for little-endian (a.k.a. "Intel byte ordering" or "MM" for big-endian (a.k.a. "Motorola byte ordering" byte ordering.
+     * I don't see where this is handled in the code.
+     */
     bool SipiIOTiff::read(SipiImage *img, const std::string &filepath, std::shared_ptr<SipiRegion> region,
                           std::shared_ptr<SipiSize> size, bool force_bps_8,
                           ScalingQuality scaling_quality) {
