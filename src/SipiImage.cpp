@@ -517,8 +517,6 @@ namespace Sipi {
         const bool has_removable_extra_samples = !es.empty();
         const bool has_two_or_less_channels = nc < 3;
         const bool has_three_channels = nc == 3;
-        const bool has_three_or_more_channels = nc > 3;
-
 
         // Assumtion: An image with two or less channels cannot have extra samples
         assert(has_two_or_less_channels && has_removable_extra_samples);
@@ -537,7 +535,7 @@ namespace Sipi {
                 throw SipiImageError(__file__, __LINE__, msg);
             }
 
-            // TODO: figure out when this can happen and if this can/should be cought earlier
+            // TODO: figure out when this can happen and if this can/should be caught earlier
             const bool cmyk_image = (nc == 4) && (photo == SEPARATED);
             if (cmyk_image) {
                 std::string msg = "Cannot remove component: nc=" + std::to_string(nc) + " chan=" + std::to_string(channel);
