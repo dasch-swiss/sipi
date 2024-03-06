@@ -53,7 +53,6 @@ include_directories(
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/shttps
         ${PROJECT_SOURCE_DIR}/local/include
-        ${PROJECT_SOURCE_DIR}/local/include/openjpeg-2.1
         ${COMMON_INCLUDE_FILES_DIR}
         ${COMMON_INCLUDE_FILES_DIR}/metadata
         ${COMMON_INCLUDE_FILES_DIR}/formats

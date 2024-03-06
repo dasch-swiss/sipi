@@ -648,7 +648,6 @@ class SipiImageError final : public std::exception {
         friend class SipiIcc;       //!< We need SipiIcc as friend class
         friend class SipiIOTiff;    //!< I/O class for the TIFF file format
         friend class SipiIOJ2k;     //!< I/O class for the JPEG2000 file format
-        //friend class SipiIOOpenJ2k; //!< I/O class for the JPEG2000 file format
         friend class SipiIOJpeg;    //!< I/O class for the JPEG file format
         friend class SipiIOPng;     //!< I/O class for the PNG file format
     };
