@@ -984,127 +984,6 @@ namespace Sipi {
         jpeg_destroy_decompress(&cinfo);
         close(infile);
         return info;       // portions derived from IJG code */
-
-        /*
-        FILE *infile;
-        SipiImgInfo info;
-
-        //
-        // open the input file
-        //
-        if ((infile = fopen(filepath.c_str(), "rb")) == nullptr) {
-            // inlock.unlock();
-            info.success = SipiImgInfo::FAILURE;
-            return info;
-        }
-
-        int marker = 0;
-        int dummy = 0;
-        if (getc(infile) != 0xFF || getc(infile) != 0xD8) {
-            fclose(infile);
-            info.success = SipiImgInfo::FAILURE;
-            return info;
-        }
-        for (;;) {
-            int discarded_bytes = 0;
-            if (!getbyte(marker, infile)) {
-                info.success = SipiImgInfo::FAILURE;
-                return info;
-            }
-            while (marker != 0xFF) {
-                discarded_bytes++;
-                if (!getbyte(marker, infile)) {
-                    info.success = SipiImgInfo::FAILURE;
-                    return info;
-                }
-            }
-            do {
-                if (!getbyte(marker, infile)) {
-                    info.success = SipiImgInfo::FAILURE;
-                    return info;
-                }
-            } while (marker == 0xFF);
-
-            if (discarded_bytes != 0) {
-                fclose(infile);
-                info.success = SipiImgInfo::FAILURE;
-                return info;
-            }
-
-            switch (marker) {
-                case 0xC0:
-                case 0xC1:
-                case 0xC2:
-                case 0xC3:
-                case 0xC5:
-                case 0xC6:
-                case 0xC7:
-                case 0xC9:
-                case 0xCA:
-                case 0xCB:
-                case 0xCD:
-                case 0xCE:
-                case 0xCF: {
-                    if (!getword(dummy, infile)) {
-                        info.success = SipiImgInfo::FAILURE;
-                        return info;
-                    }
-                    if (!getbyte(dummy, infile)) {
-                        info.success = SipiImgInfo::FAILURE;
-                        return info;
-                    }
-                    int tmp_height;
-                    if (!getword(tmp_height, infile)) {
-                        info.success = SipiImgInfo::FAILURE;
-                        return info;
-                    }
-                    info.height = tmp_height;
-                    int tmp_width;
-                    if (!getword(tmp_width, infile)) {
-                        info.success = SipiImgInfo::FAILURE;
-                        return info;
-                    }
-                    info.width = tmp_width;
-                    info.orientation = TOPLEFT;
-                    info.success = SipiImgInfo::DIMS;
-                    if (!getbyte(dummy, infile)) {
-                        info.success = SipiImgInfo::FAILURE;
-                        return info;
-                    }
-                    fclose(infile);
-                    return info;
-                }
-                case 0xDA:
-                case 0xD9:
-                    fclose(infile);
-                    info.success = SipiImgInfo::FAILURE;
-                    return info;
-                default: {
-                    int length;
-                    if (!getword(length, infile)) {
-                        info.success = SipiImgInfo::FAILURE;
-                        return info;
-                    }
-                    if (length < 2) {
-                        fclose(infile);
-                        info.success = SipiImgInfo::FAILURE;
-                        return info;
-                    }
-                    length -= 2;
-                    while (length > 0) {
-                        if (!getbyte(dummy, infile)) {
-                            info.success = SipiImgInfo::FAILURE;
-                            return info;
-                        }
-                        length--;
-                    }
-                }
-                break;
-            }
-        }
-        info.success = SipiImgInfo::FAILURE;
-        return info;
-         */
     }
     //============================================================================
 
@@ -1131,8 +1010,14 @@ namespace Sipi {
         // we have to check if the image has an alpha channel (not supported by JPEG). If
         // so, we remove it!
         //
-        if ((img->getNc() > 3) && (img->getNalpha() > 0)) { // we have an alpha channel and possibly a CMYK image
-            img->removeExtraSamples();
+        const int number_of_alpha_channels = img->getNalpha();
+        const int number_of_channels = img->getNc();
+        bool three_or_more_channels = number_of_channels > 3;
+        bool more_than_zero_alpha_channel = number_of_alpha_channels > 0;
+
+        bool range_valid = three_or_more_channels && more_than_zero_alpha_channel;
+        if (range_valid) { // we can have an alpha channel and possibly a CMYK image
+            img->removeExtraSamples(true);
         }
 
         Sipi::SipiIcc icc = Sipi::SipiIcc(Sipi::icc_sRGB); // force sRGB !!
@@ -1144,9 +1029,9 @@ namespace Sipi {
         cinfo.err = jpeg_std_error(&jerr);
         jerr.error_exit = jpegErrorExit;
 
-        int outfile = -1;        /* target file */
+        int outfile = -1;           /* target file */
         JSAMPROW row_pointer[1];    /* pointer to JSAMPLE row[s] */
-        int row_stride;        /* physical row width in image buffer */
+        int row_stride;             /* physical row width in image buffer */
 
         try {
             jpeg_create_compress(&cinfo);

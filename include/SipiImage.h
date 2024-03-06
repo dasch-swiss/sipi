@@ -56,7 +56,10 @@
  */
 namespace Sipi {
 
+    // Used for 8 bits per sample (color channel) images
     typedef unsigned char byte;
+
+    // Used for 16 bits per sample (color channel) images
     typedef unsigned short word;
 
     /*! Implements the values of the photometric tag of the TIFF format */
@@ -178,36 +181,27 @@ class SipiImageError final : public std::exception {
     * is being modified!
     */
     class SipiImage {
-        friend class SipiIcc;       //!< We need SipiIcc as friend class
-        friend class SipiIOTiff;    //!< I/O class for the TIFF file format
-        friend class SipiIOJ2k;     //!< I/O class for the JPEG2000 file format
-        //friend class SipiIOOpenJ2k; //!< I/O class for the JPEG2000 file format
-        friend class SipiIOJpeg;    //!< I/O class for the JPEG file format
-        friend class SipiIOPng;     //!< I/O class for the PNG file format
-     private:
         static std::unordered_map<std::string, std::shared_ptr<SipiIO> > io; //!< member variable holding a map of I/O class instances for the different file formats
         static byte bilinn(byte buf[], register int nx, register double x, register double y, register int c, register int n);
-
         static word bilinn(word buf[], register int nx, register double x, register double y, register int c, register int n);
-
         void ensure_exif();
 
     protected:
-        size_t nx;         //!< Number of horizontal pixels (width)
-        size_t ny;         //!< Number of vertical pixels (height)
-        size_t nc;         //!< Total number of samples per pixel
-        size_t bps;        //!< bits per sample. Currently only 8 and 16 are supported
-        std::vector<ExtraSamples> es; //!< meaning of extra samples
-        Orientation orientation;
+        size_t nx;                          //!< Number of horizontal pixels (width)
+        size_t ny;                          //!< Number of vertical pixels (height)
+        size_t nc;                          //!< Total number of samples per pixel
+        size_t bps;                         //!< bits per sample. Currently only 8 and 16 are supported
+        std::vector<ExtraSamples> es;       //!< meaning of the extra samples (channels)
+        Orientation orientation;            //!< Orientation of the image
         PhotometricInterpretation photo;    //!< Image type, that is the meaning of the channels
-        byte *pixels;   //!< Pointer to block of memory holding the pixels
-        std::shared_ptr<SipiXmp> xmp;   //!< Pointer to instance SipiXmp class (\ref SipiXmp), or NULL
-        std::shared_ptr<SipiIcc> icc;   //!< Pointer to instance of SipiIcc class (\ref SipiIcc), or NULL
-        std::shared_ptr<SipiIptc> iptc; //!< Pointer to instance of SipiIptc class (\ref SipiIptc), or NULL
-        std::shared_ptr<SipiExif> exif; //!< Pointer to instance of SipiExif class (\ref SipiExif), or NULL
-        SipiEssentials emdata; //!< Metadata to be stored in file header
-        shttps::Connection *conobj; //!< Pointer to HTTP connection
-        SkipMetadata skip_metadata; //!< If true, all metadata is stripped off
+        byte *pixels;                       //!< Pointer to block of memory holding the pixels (allways in big-endian format if interpreted as 16 bit/sample)
+        std::shared_ptr<SipiXmp> xmp;       //!< Pointer to instance SipiXmp class (\ref SipiXmp), or NULL
+        std::shared_ptr<SipiIcc> icc;       //!< Pointer to instance of SipiIcc class (\ref SipiIcc), or NULL
+        std::shared_ptr<SipiIptc> iptc;     //!< Pointer to instance of SipiIptc class (\ref SipiIptc), or NULL
+        std::shared_ptr<SipiExif> exif;     //!< Pointer to instance of SipiExif class (\ref SipiExif), or NULL
+        SipiEssentials emdata;              //!< Metadata to be stored in file header
+        shttps::Connection *conobj;         //!< Pointer to HTTP connection
+        SkipMetadata skip_metadata;         //!< If true, all metadata is stripped off
 
     public:
         //
@@ -235,19 +229,9 @@ class SipiImageError final : public std::exception {
         SipiImage(size_t nx_p, size_t ny_p, size_t nc_p, size_t bps_p, PhotometricInterpretation photo_p);
 
         /*!
-         * Checks if the actual mimetype of an image file corresponds to the indicated mimetype and the extension of the filename.
-         * This function is used to check if information submitted with a file are actually valid.
-         */
-         /* ToDo: Delete
-        static bool checkMimeTypeConsistency(const std::string &path, const std::string &given_mimetype,
-                                             const std::string &filename);
-         */
-
-        /*!
          * Getter for nx
          */
         inline size_t getNx() const { return nx; };
-
 
         /*!
          * Getter for ny
@@ -270,8 +254,11 @@ class SipiImageError final : public std::exception {
          */
         inline size_t getBps() const { return bps; }
 
+        /**
+         * Get the exif metadata of the image.
+         * \return exif metadata
+         */
         inline std::shared_ptr<SipiExif> getExif() const { return exif; };
-
 
         /*!
          * Get orientation
@@ -281,9 +268,9 @@ class SipiImageError final : public std::exception {
 
         /*!
          * Set orientation parameter
-         * @param ori orientation to be set
+         * @param value orientation value to be set
          */
-        inline void setOrientation(Orientation ori) { orientation = ori; };
+        inline void setOrientation(Orientation value) { orientation = value; };
 
 
         /*!
@@ -364,7 +351,7 @@ class SipiImageError final : public std::exception {
          *
          * \param[in] smd Logical "or" of bitmasks for metadata to be skipped
          */
-        inline void setSkipMetadata(SkipMetadata smd) { skip_metadata = smd; };
+        void setSkipMetadata(SkipMetadata smd) { skip_metadata = smd; };
 
 
         /*!
@@ -372,18 +359,18 @@ class SipiImageError final : public std::exception {
          *
          * \param[in] conn_p Pointer to connection data
          */
-        inline void connection(shttps::Connection *conobj_p) { conobj = conobj_p; };
+        void connection(shttps::Connection *conobj_p) { conobj = conobj_p; };
 
         /*!
          * Retrieves the connection parameters of the mongoose server from an Image instance
          *
          * \returns Pointer to connection data
          */
-        inline shttps::Connection *connection() const { return conobj; };
+        shttps::Connection *connection() const { return conobj; };
 
-        inline void essential_metadata(const SipiEssentials &emdata_p) { emdata = emdata_p; }
+        void essential_metadata(const SipiEssentials &emdata_p) { emdata = emdata_p; }
 
-        inline SipiEssentials essential_metadata(void) { return emdata; }
+        SipiEssentials essential_metadata() const { return emdata; }
 
         /*!
          * Read an image from the given path
@@ -504,20 +491,24 @@ class SipiImageError final : public std::exception {
          * so we need to remove the alpha channel. If we are dealing with a CMYK image, we need to take
          * this into account as well.
          */
-        void removeExtraSamples() {
+        void removeExtraSamples(const bool force_gray_alpha = false) {
             const auto content_channels = (photo == SEPARATED ? 4 : 3);
             const auto extra_channels = static_cast<int>(es.size());
-            for (size_t i = content_channels; i < (extra_channels + content_channels); i++)
-                removeChan(i);
+            for (size_t i = content_channels; i < (extra_channels + content_channels); i++) {
+                removeChannel(i, force_gray_alpha);
+            }
         }
 
 
         /*!
          * Removes a channel from a multi component image
          *
-         * \param[in] chan Index of component to remove, starting with 0
+         * \param[in] channel Index of component to remove, starting with 0
+         * \param[in] force_gray_alpha If true,  based on the alpha channel that is removed, a gray value is applied
+         * to the remaining channels. This is useful for image formats that don't support alpha channel and where the
+         * main content is black, so it is better separated from the background (as the default would be black).
          */
-        void removeChan(unsigned int chan);
+        void removeChannel(unsigned int channel, bool force_gray_alpha = false);
 
         /*!
          * Crops an image to a region
@@ -653,6 +644,12 @@ class SipiImageError final : public std::exception {
         * \returns Returns ostream object
         */
         friend std::ostream &operator<<(std::ostream &lhs, const SipiImage &rhs);
+
+        friend class SipiIcc;       //!< We need SipiIcc as friend class
+        friend class SipiIOTiff;    //!< I/O class for the TIFF file format
+        friend class SipiIOJ2k;     //!< I/O class for the JPEG2000 file format
+        friend class SipiIOJpeg;    //!< I/O class for the JPEG file format
+        friend class SipiIOPng;     //!< I/O class for the PNG file format
     };
 }
 

@@ -363,7 +363,6 @@ include_directories(
         ${PROJECT_SOURCE_DIR}/shttps
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/local/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/local/include/openjpeg-2.1
         /usr/local/include
         /opt/homebrew/include
 )
