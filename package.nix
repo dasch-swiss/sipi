@@ -8,7 +8,6 @@
   glibcLocales,
   gperf,
   iconv,
-  libGLU,
   libidn,
   libuuid,
   openssl,
@@ -29,7 +28,7 @@ clang14Stdenv.mkDerivation {
     gperf
     iconv
     # libacl1-dev
-    libGLU
+    # libGLU
     libidn
     libuuid # uuid und uuid-dev
     # numactl not available for mac
