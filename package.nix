@@ -1,17 +1,17 @@
-{
-  lib,
-  clang17Stdenv,
-  cmake,
-  ffmpeg,
-  file,
-  gettext,
-  glibcLocales,
-  gperf,
-  iconv,
-  libidn,
-  libuuid,
-  openssl,
-  readline70,
+{ lib
+, clang17Stdenv
+, cmake
+, ffmpeg
+, file
+, gettext
+, glibcLocales
+, gperf
+, iconv
+, libidn
+, libuuid
+, openssl
+, perl
+, readline70
 }:
 clang17Stdenv.mkDerivation {
   pname = "sipi";
@@ -35,6 +35,7 @@ clang17Stdenv.mkDerivation {
     libidn
     libuuid # uuid und uuid-dev
     # numactl not available for mac
+    perl
     openssl
     readline70
   ];
@@ -42,6 +43,8 @@ clang17Stdenv.mkDerivation {
   cmakeFlags = [
     "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
   ];
+
+  makeFlags = [ "-j 1" ];
 
   meta = with lib; {
     homepage = "https://github.com/dasch-swiss/sipi";
