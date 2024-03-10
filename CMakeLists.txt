@@ -146,6 +146,7 @@ endif()
 message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
 message(STATUS "Distro: ${CMAKE_DISTRO_NAME}")
 message(STATUS "Compiling for: ${KDU_ARCH}")
+message(STATUS "Compiling Kakadu for: ${KDU_ARCH}")
 
 #
 # this is needed for curl...
@@ -175,11 +176,10 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     endif()
 endif()
 
-#
-# set path to special find_package() code
-#
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
+#
+# set compiler flags
+#
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_CXX_FLAGS "-O0 -g -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
 elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
@@ -199,6 +199,29 @@ if(SUPPORTS_FVISIBILITY_FLAG)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
 endif()
 
+
+#
+# append path to additional find_package() cmake modules
+#
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
+
+#
+# add code coverage
+#
+# If building the code with clang gives 'Error: could not load cache'
+#   1 turn COLLECT_CODE_COVERAGE to FALSE
+#   2 build and run the tests
+#   3 turn COLLECT_CODE_COVERAGE back to TRUE
+set(COLLECT_CODE_COVERAGE TRUE)
+if (COLLECT_CODE_COVERAGE)
+    include(CodeCoverage)
+    append_coverage_compiler_flags()
+    set(COVERAGE_EXCLUDES
+            "/Applications/Xcode.app/*"
+            "/opt/local/*"
+            "third_party/*"
+    )
+endif ()
 
 
 #

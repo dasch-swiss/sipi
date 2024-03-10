@@ -11,7 +11,7 @@ jobs:
   # Run tests and publish amd64
   build_amd64:
     name: Run tests and publish amd64
-    runs-on: actuated
+    runs-on: actuated-8cpu-20gb
     concurrency:
       group: ${{ github.ref }}-amd64
       cancel-in-progress: true
@@ -40,7 +40,7 @@ jobs:
   # Run tests and publish aarch64
   build_aarch64:
     name: Run tests and publish aarch64
-    runs-on: actuated-aarch64
+    runs-on: actuated-arm64-16cpu-20gb
     concurrency:
       group: ${{ github.ref }}-aarch64
       cancel-in-progress: true
