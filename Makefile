@@ -96,7 +96,7 @@ docker-build-sipi-dev-env: ## build and publish Sipi development environment Doc
 		.
 
 #####################################
-# test targets
+# test targets for usinf with Docker
 #####################################
 
 .PHONY: compile
@@ -140,46 +140,24 @@ test-integration-ci: ## run tests against (already) locally published Sipi Docke
 	pytest -s test/integration
 
 #####################################
-# other targets
+# Use inside NIX develop shell
 #####################################
 
+.PHONY: build
+build: ## build SIPI (inside NIX develop shell)
+	cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo
+	cd build && make -j 1
+
 .PHONY: run
-run: compile ## run SIPI (needs to be run inside devcontainer)
+run: compile ## run SIPI (inside NIX develop shell)
 	${PWD}/build/sipi --config=${PWD}/config/sipi.config.lua
 
-.PHONY: cmdline
-cmdline: ## open shell inside Docker container
-	@mkdir -p ${CURRENT_DIR}/images
-	docker run -it --rm \
-		-v ${PWD}:/sipi \
-		--workdir "/sipi" \
-		--expose "1024" \
-		--expose "1025" \
-		-p 1024:1024 \
-		-p 1025:1025 \
-		${SIPI_BASE} /bin/bash
-
-.PHONY: shell
-shell: ## open shell inside privileged Docker container (does not compile)
-	@mkdir -p ${CURRENT_DIR}/images
-	docker run \
-		-it --rm \
-		--privileged \
-		--cap-add=SYS_PTRACE \
-		--security-opt seccomp=unconfined \
-		--security-opt apparmor=unconfined \
-		-v ${PWD}:/sipi \
-		--workdir "/sipi" \
-		--expose "1024" \
-		--expose "1025" \
-		-p 1024:1024 \
-		-p 1025:1025 \
-		-p 1234:1234 \
-		-p 1235:1235 \
-		${SIPI_BASE} /bin/bash
+.PHONY: nix-develop
+cmdline: ## open NIX develop shell
+	nix develop .#clang
 
 .PHONY: valgrind
-valgrind: ## start SIPI with Valgrind (needs to be started inside Docker container, e.g., 'make shell')
+valgrind: ## start SIPI with Valgrind (inside NIX develop shell, e.g., 'make nix-develop')
 	valgrind --leak-check=yes --track-origins=yes ./build/sipi --config=/sipi/config/sipi.config.lua
 
 .PHONY: clean
