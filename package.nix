@@ -1,6 +1,6 @@
 {
   lib,
-  clang14Stdenv,
+  clang17Stdenv,
   cmake,
   ffmpeg,
   file,
@@ -13,13 +13,16 @@
   openssl,
   readline70,
 }:
-clang14Stdenv.mkDerivation {
+clang17Stdenv.mkDerivation {
   pname = "sipi";
   version = "3.8.12";
 
   src = ./.;
 
-  nativeBuildInputs = [cmake];
+  nativeBuildInputs = [
+    cmake
+  ];
+  
   buildInputs = [
     ffmpeg
     file

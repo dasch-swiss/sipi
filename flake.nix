@@ -1,8 +1,8 @@
 {
-  description = "Sipi C++ project setup";
+  description = "Sipi C++ build environment setup";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/23.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
   outputs = inputs @ {flake-parts, ...}:
@@ -25,7 +25,7 @@
         # devShells.default describes the default shell with C++, cmake,
         # and other dependencies
         devShells = {
-          clang = pkgs.mkShell.override {stdenv = pkgs.clang14Stdenv;} {
+          clang = pkgs.mkShell.override {stdenv = pkgs.clang17Stdenv;} {
             name = "sipi";
 
             shellHook = ''

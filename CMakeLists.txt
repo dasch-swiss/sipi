@@ -21,7 +21,7 @@
 # License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-cmake_minimum_required(VERSION 3.27)
+cmake_minimum_required(VERSION 3.28)
 cmake_policy(VERSION 3.18)
 if(POLICY CMP0135) # DOWNLOAD_EXTRACT_TIMESTAMP
     cmake_policy(SET CMP0135 OLD)
@@ -29,12 +29,18 @@ endif()
 
 message(STATUS "cmake version: ${CMAKE_VERSION}")
 
+project(sipi
+        VERSION 3
+        LANGUAGES CXX C
+)
+
+# enables cmake's support for testing
+enable_testing()
+
 include(ExternalProject)
 include(CheckStructHasMember)
 include(CheckIncludeFiles)
 include(FindPackageHandleStandardArgs)
-
-project(sipi VERSION 3)
 
 # ------------------------------------------------------------------------------
 # Set our path variables
@@ -81,21 +87,15 @@ option(CMAKE_BUILD_TYPE "The default build type is RelWithDebInfo" RelWithDebInf
 #
 # Here we determine the compiler and compiler version. We need clang >= 7.3 or g++ >= 5.3
 #
-if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "10.0")
-        message(FATAL_ERROR "Requires Apple Clang 10.0 or greater.")
-        set(ENV(CXX) "clang++")
-        set(ENV(CC) "clang")
-    endif()
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "7.0.0")
-        message(FATAL_ERROR "Requires Clang 7.0.0 or greater.")
+if(CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "15.0")
+        message(FATAL_ERROR "Clang version must be 15.0.0 or greater! Aborting...")
         set(ENV(CXX) "clang++")
         set(ENV(CC) "clang")
     endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "7.0")
-        message(FATAL_ERROR "Requires GCC 7.0 or greater.")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "13.0")
+        message(FATAL_ERROR "Requires GCC 13.0 or greater.")
         set(ENV(CXX) "g++")
         set(ENV(CC) "gcc")
     endif()
@@ -212,7 +212,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 #   1 turn COLLECT_CODE_COVERAGE to FALSE
 #   2 build and run the tests
 #   3 turn COLLECT_CODE_COVERAGE back to TRUE
-set(COLLECT_CODE_COVERAGE TRUE)
+set(COLLECT_CODE_COVERAGE FALSE)
 if (COLLECT_CODE_COVERAGE)
     include(CodeCoverage)
     append_coverage_compiler_flags()
@@ -497,9 +497,6 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/config/sipi.config.lua
 #-------------------
 # Test
 #-------------------
-
-# enables cmake's support for testing
-enable_testing()
 
 # custom target to only run 'e2e' tests
 add_custom_target(e2e
