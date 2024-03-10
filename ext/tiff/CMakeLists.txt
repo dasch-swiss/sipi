@@ -20,7 +20,7 @@ set(LibTiffVersion "4.1.0")
 ExternalProject_Add(project_tiff
         DEPENDS jpeg
         DEPENDS xz
-        # DEPENDS webp
+        DEPENDS webp
         DEPENDS zstd
         INSTALL_DIR ${COMMON_LOCAL}
         TEST_BEFORE_INSTALL 1
