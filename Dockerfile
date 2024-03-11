@@ -35,16 +35,26 @@ LABEL maintainer="support@dasch.swiss"
 ARG DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/Zurich
 
+RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list  \
+  && apt-get clean \
+  && apt-get -qq update  \
+  && apt-get -y install \
+    ca-certificates \
+    gnupg2 \
+    software-properties-common \
+  && apt-get clean
+
 RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
+  && wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg \
+  && echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] https://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" | tee /etc/apt/sources.list.d/llvm-18.list \
+  && apt-add-repository "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu jammy main" \
   && apt-get clean \
   && apt-get update \
   && apt-get install -qyyy --no-install-recommends \
-    ca-certificates \
-    gnupg2 \
     tzdata \
     wget \
     byobu curl git htop man vim wget unzip \
-    libllvm14 llvm-14-runtime \
+    libllvm18 llvm-18-runtime \
     openssl \
     locales \
     uuid \
