@@ -18,7 +18,7 @@ ENV BUILD_TAG=${BUILD_TAG}
 # Build SIPI and run unit tests.
 RUN mkdir -p ./build && \
     cd ./build && \
-    cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo .. && \
+    cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo --log-context .. && \
     make && \
     ctest
 

@@ -29,6 +29,22 @@ endif()
 
 message(STATUS "cmake version: ${CMAKE_VERSION}")
 
+# Require C++14, but let a parent project ask for something higher
+if(DEFINED CMAKE_CXX_STANDARD)
+    if(CMAKE_CXX_STANDARD MATCHES "^(90|99)$" OR CMAKE_CXX_STANDARD LESS 14)
+        message(FATAL_ERROR "This project requires at least C++14. Aborting...")
+    endif()
+else()
+    set(CMAKE_CXX_STANDARD 14)
+endif()
+# Always enforce the language constraint
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# We need compiler extensions for some of the dependencies
+if(NOT DEFINED CMAKE_CXX_EXTENSIONS)
+    set(CMAKE_CXX_EXTENSIONS ON)
+endif()
+
+list(APPEND CMAKE_MESSAGE_CONTEXT sipi)
 project(sipi
         VERSION 3
         LANGUAGES CXX C
@@ -271,6 +287,8 @@ find_package(Threads REQUIRED)
 find_package(OpenGL)
 find_package(GLUT)
 
+message("Adding external dependencies\nHere we go:")
+
 # !!! order is important !!!
 # dependent targets need to be added before the target that depends on them
 # e.g., png, bzip2 before freetype
@@ -294,6 +312,8 @@ add_subdirectory(${EXT_PROJECTS_DIR}/luarocks)
 add_subdirectory(${EXT_PROJECTS_DIR}/sqlite3)
 add_subdirectory(${EXT_PROJECTS_DIR}/kakadu)
 add_subdirectory(${EXT_PROJECTS_DIR}/curl)
+
+message("Adding external dependencies done.")
 
 # add a target to generate API documentation with Doxygen
 find_package(Doxygen)
