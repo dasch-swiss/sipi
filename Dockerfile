@@ -39,6 +39,9 @@ RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list  \
   && apt-get clean \
   && apt-get -qq update  \
   && apt-get -y install \
+    tzdata \
+    wget \
+    byobu curl git htop man vim wget unzip \
     ca-certificates \
     gnupg2 \
     software-properties-common \
@@ -51,9 +54,6 @@ RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
   && apt-get clean \
   && apt-get update \
   && apt-get install -qyyy --no-install-recommends \
-    tzdata \
-    wget \
-    byobu curl git htop man vim wget unzip \
     libllvm18 llvm-18-runtime \
     openssl \
     locales \
