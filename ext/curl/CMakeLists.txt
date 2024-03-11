@@ -2,30 +2,6 @@ project(curl_builder C CXX)
 include(ExternalProject)
 
 #
-# Setting up openssl - things...
-#
-#if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-#    if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
-#        set(OPENSSL_ROOT_DIR /usr/local/opt/openssl)
-#        set(OS_X_SPECIAL_FLAG -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl)
-#    else()
-#        set(OPENSSL_ROOT_DIR /opt/homebrew/opt/openssl)
-#        set(OS_X_SPECIAL_FLAG -DOPENSSL_ROOT_DIR=/opt/homebrew/opt/openssl)
-#    endif()
-#else()
-#    set(OS_X_SPECIAL_FLAG "")
-#endif()
-#
-#set(OPENSSL_ROOT_DIR ${COMMON_LOCAL})
-#
-#if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-#    set(OS_X_SPECIAL_FLAG -DOPENSSL_ROOT_DIR=${COMMON_SRCS}/openssl)
-#endif()
-#include(FindOpenSSL REQUIRED)
-#
-#message('==================== ${OPENSSL_FOUND}')
-
-#
 # get libcurl
 #
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
