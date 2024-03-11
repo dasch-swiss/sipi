@@ -25,7 +25,7 @@
         # devShells.default describes the default shell with C++, cmake,
         # and other dependencies
         devShells = {
-          clang = pkgs.mkShell.override {stdenv = pkgs.clang17Stdenv;} {
+          default = pkgs.mkShell.override {stdenv = pkgs.clang17Stdenv;} {
             name = "sipi";
 
             shellHook = ''
@@ -36,6 +36,11 @@
             '';
 
             packages = with pkgs; [
+              # TODO: extract only the dependencies provided through callPackage ant not try to build the derivation
+              # Include the package from packages.default defined on the pkgs.callPackage line
+              # self'.packages.default
+              
+              # List other packages you want in your devShell
               # C++ Compiler is already part of stdenv
               # Build tool
               cmake
@@ -81,13 +86,13 @@
           };
         };
 
-        # The `callPackage` automatically fills the parameters of the funtion
-        # in package.nix with what's  inside the `pkgs` attribute.
+        # The `callPackage` automatically fills the parameters of the function
+        # in package.nix with what's inside the `pkgs` attribute.
         packages.default = pkgs.callPackage ./package.nix {};
 
         # The `config` variable contains our own outputs, so we can reference
         # neighbor attributes like the package we just defined one line earlier.
-        devShells.default = config.packages.default;
+        # devShells.default = config.packages.default;
       };
     };
 }
