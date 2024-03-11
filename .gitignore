@@ -19,6 +19,7 @@ sipi
 SipiConfig.h
 sipi.log*
 /extsrcs/
+.direnv/
 
 target
 __pycache__/

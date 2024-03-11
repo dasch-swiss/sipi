@@ -1,4 +1,4 @@
-FROM daschswiss/sipi-base:2.20.0
+FROM daschswiss/sipi-base:2.21.0
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/Zurich
