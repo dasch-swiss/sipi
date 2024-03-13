@@ -146,6 +146,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
         set(KDU_EXEC_PLATFORM "Mac-arm-64-gcc")
     endif()
     set(LUA_ARCH "macosx")
+    message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
 elseif(CMAKE_SYSTEM_NAME STREQUAL LINUX)
     execute_process(COMMAND /usr/bin/lsb_release -si COMMAND tr -d '\n' OUTPUT_VARIABLE CMAKE_DISTRO_NAME)
     if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
@@ -158,40 +159,10 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL LINUX)
         SET(KDU_EXEC_PLATFORM "Linux-arm-64-gcc")
     endif()
     SET(LUA_ARCH "linux")
+    message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
+    message(STATUS "Distro: ${CMAKE_DISTRO_NAME}")
 endif()
-message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
-message(STATUS "Distro: ${CMAKE_DISTRO_NAME}")
-message(STATUS "Compiling for: ${KDU_ARCH}")
 message(STATUS "Compiling Kakadu for: ${KDU_ARCH}")
-
-#
-# this is needed for curl...
-#
-if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    find_library(COREFOUNDATION_FRAMEWORK "CoreFoundation")
-    if(NOT COREFOUNDATION_FRAMEWORK)
-        message(FATAL_ERROR "CoreFoundation framework not found")
-    endif()
-
-    find_library(SYSTEMCONFIGURATION_FRAMEWORK "SystemConfiguration")
-    if(NOT SYSTEMCONFIGURATION_FRAMEWORK)
-        message(FATAL_ERROR "SystemConfiguration framework not found")
-    endif()
-
-    list(APPEND CURL_LIBS "-framework CoreFoundation" "-framework SystemConfiguration")
-
-    if(CMAKE_USE_SECTRANSP)
-        find_library(SECURITY_FRAMEWORK "Security")
-        if(NOT SECURITY_FRAMEWORK)
-            message(FATAL_ERROR "Security framework not found")
-        endif()
-
-        set(SSL_ENABLED ON)
-        set(USE_SECTRANSP ON)
-        list(APPEND CURL_LIBS "-framework Security")
-    endif()
-endif()
-
 
 #
 # set compiler flags
@@ -239,22 +210,51 @@ if (COLLECT_CODE_COVERAGE)
     )
 endif ()
 
+# on macOS, ignore frameworks
+# the complete environment should be provided through NIX
+if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
+    set(CMAKE_FIND_FRAMEWORK NEVER)
+    set(CMAKE_IGNORE_PATH "/usr/local/lib*")
+endif()
 
 #
 # libmagic
 # (used to be build locally from source was moved to prerequisites)
 #
 find_package(LibMagic REQUIRED)
+if (LIBMAGIC_FOUND)
+    include_directories(${LibMagic_INCLUDE_DIR})
+endif()
+
+#
+# openssl
+# (used to be build locally from source was moved to prerequisites)
+#
+find_package(OpenSSL REQUIRED)
+if(OPENSSL_FOUND)
+    message(STATUS "OpenSSL dirs: ${OPENSSL_INCLUDE_DIR}")
+    message(STATUS "OpenSSL libs: ${OPENSSL_LIBRARIES}")
+    include_directories(${OPENSSL_INCLUDE_DIR})
+endif()
+
+#
+# libcurl
+# (used to be build locally from source was moved to prerequisites)
+find_package(CURL REQUIRED)
+if(CURL_FOUND)
+    message(STATUS "curl dirs: ${CURL_INCLUDE_DIRS}")
+    message(STATUS "curl libs: ${CURL_LIBRARIES}")
+    include_directories(${CURL_INCLUDE_DIRS})
+endif()
+
+
 
 #find_package(JBIG REQUIRED)
 #include_directories(${JBIG_INCLUDE_DIR})
 # message(STATUS "JBIG ${JBIG_INCLUDE_DIR}")
 
 if(NOT WIN32)
-  find_library(M_LIBRARY
-    NAMES m
-    PATHS /usr/lib /usr/local/lib
-  )
+  find_library(M_LIBRARY NAMES m)
   if(NOT M_LIBRARY)
     message(STATUS "math lib 'libm' not found; floating point support disabled")
   endif()
@@ -283,16 +283,12 @@ endif()
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-# OpenGL and GLUT needed by tiff and webp
-find_package(OpenGL)
-find_package(GLUT)
-
-message("Adding external dependencies\nHere we go:")
+message(STATUS "Adding external dependencies ...")
 
 # !!! order is important !!!
 # dependent targets need to be added before the target that depends on them
 # e.g., png, bzip2 before freetype
-add_subdirectory(${EXT_PROJECTS_DIR}/openssl)
+# add_subdirectory(${EXT_PROJECTS_DIR}/openssl)
 add_subdirectory(${EXT_PROJECTS_DIR}/xz)
 add_subdirectory(${EXT_PROJECTS_DIR}/zlib)
 add_subdirectory(${EXT_PROJECTS_DIR}/zstd)
@@ -311,11 +307,13 @@ add_subdirectory(${EXT_PROJECTS_DIR}/lua)
 add_subdirectory(${EXT_PROJECTS_DIR}/luarocks)
 add_subdirectory(${EXT_PROJECTS_DIR}/sqlite3)
 add_subdirectory(${EXT_PROJECTS_DIR}/kakadu)
-add_subdirectory(${EXT_PROJECTS_DIR}/curl)
+# add_subdirectory(${EXT_PROJECTS_DIR}/curl)
 
-message("Adding external dependencies done.")
+message(STATUS "... adding external dependencies done.")
 
+#
 # add a target to generate API documentation with Doxygen
+#
 find_package(Doxygen)
 if(DOXYGEN_FOUND)
     add_custom_target(doc
@@ -326,8 +324,9 @@ if(DOXYGEN_FOUND)
 endif(DOXYGEN_FOUND)
 
 
-
+#
 # get version from git
+#
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
     find_package(Git)
     if(GIT_FOUND)
@@ -361,8 +360,9 @@ message( STATUS "Build timestamp: ${BUILD_TIMESTAMP}" )
 # write out the sipi configuration
 configure_file(${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h.in ${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h)
 
-
-
+#
+# generate ICC profile includes
+#
 set(GENERATED_ICC_HEADERS
         ${COMMON_INCLUDE_FILES_DIR}/AdobeRGB1998_icc.h
         ${COMMON_INCLUDE_FILES_DIR}/USWebCoatedSWOP_icc.h
@@ -391,11 +391,7 @@ add_custom_target(icc_profiles
         DEPENDS ${GENERATED_ICC_HEADERS}
 )
 
-link_directories(
-        ${CONFIGURE_LIBDIR}
-        /usr/local/lib
-        /opt/homebrew/lib
-)
+link_directories(${CONFIGURE_LIBDIR})
 
 include_directories(
         ${COMMON_LOCAL}/include
@@ -406,8 +402,6 @@ include_directories(
         ${PROJECT_SOURCE_DIR}/shttps
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/local/include
-        /usr/local/include
-        /opt/homebrew/include
 )
 
 add_executable(sipi
@@ -452,8 +446,7 @@ add_executable(sipi
         include/iiifparser/SipiIdentifier.h src/iiifparser/SipiIdentifier.cpp
         include/SipiImageError.h)
 
-add_dependencies(sipi
-        icc_profiles)
+add_dependencies(sipi icc_profiles)
 
 # !!! ORDER MATTERS !!!
 # dependent targets need to be added before the target that depends on them
@@ -475,9 +468,11 @@ target_link_libraries(sipi ${LIBS}
         sqlite3
         dl
         pthread
-        curl
-        ssl
-        crypto
+        # curl
+        ${CURL_LIBRARIES}
+        ${OPENSSL_LIBRARIES}
+        # ssl
+        # crypto
         jpeg
         bzip2
         zstd
@@ -489,11 +484,7 @@ target_link_libraries(sipi ${LIBS}
 )
 
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-	target_link_libraries(sipi
-            iconv
-            gettext_intl
-            ${COREFOUNDATION_FRAMEWORK}
-            ${SYSTEMCONFIGURATION_FRAMEWORK})
+	target_link_libraries(sipi iconv gettext_intl)
 else()
     target_link_libraries(sipi rt)
 endif()
@@ -505,7 +496,6 @@ install(TARGETS sipi
 
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/local/bin/lua
         ${CMAKE_CURRENT_SOURCE_DIR}/local/bin/luarocks
-#        ${CMAKE_CURRENT_SOURCE_DIR}/local/bin/luarocks-5.3
         DESTINATION ${CMAKE_INSTALL_PREFIX}/bin/
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 

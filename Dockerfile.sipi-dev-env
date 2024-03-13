@@ -3,15 +3,17 @@ FROM daschswiss/sipi-base:2.21.0
 ARG DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/Zurich
 
-RUN apt-get update && apt-get -y install tzdata
-
 RUN apt-get update \
   && apt-get install -y \
+    tzdata \
     ssh \
     locales-all \
     dos2unix \
     rsync \
     tar \
+    curl \
+    libcurl4-openssl-dev \
+    libssl-dev \
   && apt-get clean
 
 ARG UID=1000

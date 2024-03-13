@@ -1,53 +1,100 @@
-# - Try to find libmagic header and library
-#
-# Usage of this module as follows:
-#
-#     find_package(LibMagic)
-#
-# Variables used by this module, they can change the default behaviour and need
-# to be set before calling find_package:
-#
-#  LibMagic_ROOT_DIR         Set this variable to the root installation of
-#                            libmagic if the module has problems finding the
-#                            proper installation path.
-#
-# Variables defined by this module:
-#
-#  LIBMAGIC_FOUND              System has libmagic and magic.h
-#  LibMagic_LIBRARY            The libmagic library
-#  LibMagic_INCLUDE_DIR        The location of magic.h
 
-find_path(LibMagic_ROOT_DIR
-        HINTS /opt/homebrew
-    NAMES include/magic.h
-)
+#-------------------------------------------------------------------------------
+# Copyright (c) 2013-2013, Lars Baehren <lbaehren@gmail.com>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without modification,
+# are permitted provided that the following conditions are met:
+#
+#  * Redistributions of source code must retain the above copyright notice, this
+#    list of conditions and the following disclaimer.
+#  * Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#-------------------------------------------------------------------------------
 
-if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    # the static version of the library is preferred on OS X for the
-    # purposes of making packages (libmagic doesn't ship w/ OS X)
-    set(libmagic_names libmagic.a magic)
-else ()
-    set(libmagic_names magic)
-endif ()
+# - Check for the presence of LIBMAGIC
+#
+# The following variables are set when LIBMAGIC is found:
+#  LibMagic_FOUND      = Set to true, if all components of LIBMAGIC have been
+#                        found.
+#  LibMagic_INCLUDES   = Include path for the header files of LIBMAGIC
+#  LibMagic_LIBRARIES  = Link these to use LIBMAGIC
+#  LibMagic_LFLAGS     = Linker flags (optional)
 
-find_library(LibMagic_LIBRARY
-    NAMES ${libmagic_names}
-    HINTS ${LibMagic_ROOT_DIR}/lib
-)
+if (NOT LibMagic_FOUND)
 
-find_path(LibMagic_INCLUDE_DIR
-    NAMES magic.h
-    HINTS ${LibMagic_ROOT_DIR}/include
-)
+    if (NOT LIBMAGIC_ROOT_DIR)
+        set (LIBMAGIC_ROOT_DIR ${CMAKE_INSTALL_PREFIX})
+    endif (NOT LIBMAGIC_ROOT_DIR)
 
-include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(LibMagic DEFAULT_MSG
-    LibMagic_LIBRARY
-    LibMagic_INCLUDE_DIR
-)
+    ##____________________________________________________________________________
+    ## Check for the header files
 
-mark_as_advanced(
-    LibMagic_ROOT_DIR
-    LibMagic_LIBRARY
-    LibMagic_INCLUDE_DIR
-)
+    find_path (LIBMAGIC_FILE_H
+            NAMES file/file.h
+            HINTS ${LIBMAGIC_ROOT_DIR} ${CMAKE_INSTALL_PREFIX}
+            PATH_SUFFIXES include
+    )
+    if (LIBMAGIC_FILE_H)
+        list (APPEND LibMagic_INCLUDES ${LIBMAGIC_FILE_H})
+    endif (LIBMAGIC_FILE_H)
+
+    find_path (LIBMAGIC_MAGIC_H
+            NAMES magic.h
+            HINTS ${LIBMAGIC_ROOT_DIR} ${CMAKE_INSTALL_PREFIX}
+            PATH_SUFFIXES include include/linux
+    )
+    if (LIBMAGIC_MAGIC_H)
+        list (APPEND LibMagic_INCLUDES ${LIBMAGIC_MAGIC_H})
+    endif (LIBMAGIC_MAGIC_H)
+
+    list (REMOVE_DUPLICATES LibMagic_INCLUDES)
+
+    ##____________________________________________________________________________
+    ## Check for the library
+
+    find_library (LibMagic_LIBRARIES magic
+            HINTS ${LIBMAGIC_ROOT_DIR} ${CMAKE_INSTALL_PREFIX}
+            PATH_SUFFIXES lib
+    )
+
+    ##____________________________________________________________________________
+    ## Actions taken when all components have been found
+
+    find_package_handle_standard_args (LibMagic DEFAULT_MSG LibMagic_INCLUDES LibMagic_LIBRARIES)
+
+    if (LIBMAGIC_FOUND)
+        if (NOT LIBMAGIC_FIND_QUIETLY)
+            message (STATUS "Found components for LIBMAGIC")
+            message (STATUS "LIBMAGIC_ROOT_DIR  = ${LIBMAGIC_ROOT_DIR}")
+            message (STATUS "LibMagic_INCLUDES  = ${LibMagic_INCLUDES}")
+            message (STATUS "LibMagic_LIBRARIES = ${LibMagic_LIBRARIES}")
+        endif (NOT LIBMAGIC_FIND_QUIETLY)
+    else (LIBMAGIC_FOUND)
+        if (LIBMAGIC_FIND_REQUIRED)
+            message (FATAL_ERROR "Could not find LIBMAGIC!")
+        endif (LIBMAGIC_FIND_REQUIRED)
+    endif (LIBMAGIC_FOUND)
+
+    ##____________________________________________________________________________
+    ## Mark advanced variables
+
+    mark_as_advanced (
+            LIBMAGIC_ROOT_DIR
+            LibMagic_INCLUDES
+            LibMagic_LIBRARIES
+    )
+
+endif (NOT LibMagic_FOUND)

@@ -30,8 +30,6 @@ clang17Stdenv.mkDerivation {
     glibcLocales
     gperf
     iconv
-    # libacl1-dev
-    # libGLU
     libidn
     libuuid # uuid und uuid-dev
     # numactl not available for mac

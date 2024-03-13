@@ -30,6 +30,7 @@ ExternalProject_Add(project_tiff
         SOURCE_DIR ${COMMON_SRCS}/libtiff-${LibTiffVersion}
         PATCH_COMMAND patch ${COMMON_SRCS}/libtiff-${LibTiffVersion}/libtiff/tif_dirinfo.c < ${COMMON_PATCHES}/tiff-4.0.4.patch
         CMAKE_ARGS  ${CMAKE_CREATE_SHARED}
+                    -DCMAKE_FIND_FRAMEWORK=NEVER
                     -DCMAKE_C_STANDARD_LIBRARIES="-lpthread"
                     -DCMAKE_PREFIX_PATH=${COMMON_LOCAL}
                     -DCMAKE_INSTALL_PREFIX=${COMMON_LOCAL}

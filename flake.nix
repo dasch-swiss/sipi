@@ -32,6 +32,13 @@
               export PS1="\\u@\\h | nix-develop> "
               unset SDKROOT
               unset CMAKE_FRAMEWORK_PATH
+              unset CMAKE_INCLUDE_PATH
+              unset CMAKE_LIBRARY_PATH
+              # Any other environment tweaks
+
+              # Explicitly tell CMake not to search the system paths
+              export CMAKE_IGNORE_PATH="/System/Library/Frameworks"
+              echo "Ignoring macOS System Frameworks for CMake"
               # Additional environment tweaks
             '';
 
@@ -52,7 +59,6 @@
               glibcLocales # locales
               gperf
               iconv
-              # libacl1-dev
               libidn
               libuuid # uuid und uuid-dev
               # numactl # libnuma-dev not available on mac

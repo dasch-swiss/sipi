@@ -1,7 +1,6 @@
 
 link_directories(
         ${CONFIGURE_LIBDIR}
-        /usr/local/lib
 )
 
 include_directories(
@@ -9,12 +8,10 @@ include_directories(
         ${PROJECT_SOURCE_DIR}/src
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/shttps
-        ${PROJECT_SOURCE_DIR}/local/include
         ${COMMON_INCLUDE_FILES_DIR}
         ${COMMON_INCLUDE_FILES_DIR}/metadata
         ${COMMON_INCLUDE_FILES_DIR}/formats
         ${COMMON_INCLUDE_FILES_DIR}/iiifparser
-        /usr/local/include
 )
 
 file(GLOB SRCS *.cpp)

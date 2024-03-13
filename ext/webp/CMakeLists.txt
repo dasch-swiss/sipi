@@ -15,8 +15,7 @@ ExternalProject_Add(project_webp
         ${timestamp_policy}
         #DOWNLOAD_EXTRACT_TIMESTAMP NEW
         SOURCE_DIR ${COMMON_SRCS}/libwebp-1.1.0
-        CMAKE_ARGS -DCMAKE_PREFIX_PATH=${COMMON_LOCAL}
-        -DCMAKE_INSTALL_PREFIX=${COMMON_LOCAL}
+        CMAKE_ARGS -DWEBP_BUILD_ANIM_UTILS=OFF -DWEBP_BUILD_VWEBP=OFF  -DCMAKE_PREFIX_PATH=${COMMON_LOCAL} -DCMAKE_INSTALL_PREFIX=${COMMON_LOCAL}
         )
 ExternalProject_Get_Property(project_webp install_dir)
 
