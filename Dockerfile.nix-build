@@ -2,21 +2,16 @@
 FROM nixos/nix:latest AS builder
 
 # Copy our source and setup our working dir.
-COPY . /tmp/build
-WORKDIR /tmp/build
+COPY . /tmp/src
+WORKDIR /tmp/src
 
 # Build our Nix environment
+# and build SIPI and run unit tests.
 RUN nix \
     --extra-experimental-features "nix-command flakes" \
     --option filter-syscalls false \
-    develop
+    develop --command bash -c "cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo --log-context && cd ./build && cmake --build . --parallel 1 && ctest"
 
-# Build SIPI and run unit tests.
-RUN mkdir -p ./build && \
-    cd ./build && \
-    cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo --log-context .. && \
-    make && \
-    ctest --output-on-failure
 
 # Copy the Nix store closure into a directory. The Nix store closure is the
 # entire set of Nix store values that we need for our build.
@@ -31,5 +26,5 @@ WORKDIR /app
 
 # Copy /nix/store
 COPY --from=builder /tmp/nix-store-closure /nix/store
-COPY --from=builder /tmp/build/result /app
-CMD ["/app/bin/sipi"]
+COPY --from=builder /tmp/src/build /app
+CMD ["/app/build/sipi"]

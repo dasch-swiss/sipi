@@ -9,15 +9,14 @@ message(STATUS ${CONFIGURE_LIBDIR})
 message(STATUS "VENDOR=${COMMON_VENDOR}")
 message(STATUS "KDU_MAKE=${KDU_MAKE}")
 
-set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
-
 set(KakaduVersion "v8_4_1-01382N")
 
 ExternalProject_Add(
         project_kakadu
         INSTALL_DIR ${COMMON_LOCAL}
         DOWNLOAD_COMMAND unzip -o -d ${COMMON_SRCS} ${COMMON_VENDOR}/${KakaduVersion}.zip
-        ${timestamp_policy}
+        DOWNLOAD_EXTRACT_TIMESTAMP OLD
+        # PATCH_COMMAND patch ${COMMON_SRCS}/${KakaduVersion}/coresys/make/Makefile-Linux-arm-64-gcc < ${COMMON_PATCHES}/kakadu_makefile_linux_arm_64.patch && patch ${COMMON_SRCS}/${KakaduVersion}/apps/make/Makefile-Linux-arm-64-gcc < ${COMMON_PATCHES}/kakadu_makefile_linux_arm_64.patch && patch ${COMMON_SRCS}/${KakaduVersion}/managed/make/Makefile-Linux-arm-64-gcc < ${COMMON_PATCHES}/kakadu_makefile_linux_arm_64.patch
         CONFIGURE_COMMAND ""
         BUILD_COMMAND make --directory=${COMMON_SRCS}/${KakaduVersion}/make/ -f ${KDU_MAKE} EXEC_PLATFORM=${KDU_EXEC_PLATFORM} all_but_jni
         INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_directory ${COMMON_SRCS}/${KakaduVersion}/lib/${KDU_ARCH} ${CONFIGURE_LIBDIR}
