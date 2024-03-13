@@ -4,6 +4,7 @@
 , curl
 , ffmpeg
 , file
+, gcc13
 , gettext
 , glibcLocales
 , gperf
@@ -29,6 +30,7 @@ clang17Stdenv.mkDerivation {
     curl
     ffmpeg
     file
+    gcc13
     gettext
     glibcLocales
     gperf

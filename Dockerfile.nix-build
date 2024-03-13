@@ -9,7 +9,14 @@ WORKDIR /tmp/build
 RUN nix \
     --extra-experimental-features "nix-command flakes" \
     --option filter-syscalls false \
-    build
+    develop
+
+# Build SIPI and run unit tests.
+RUN mkdir -p ./build && \
+    cd ./build && \
+    cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo --log-context .. && \
+    make && \
+    ctest --output-on-failure
 
 # Copy the Nix store closure into a directory. The Nix store closure is the
 # entire set of Nix store values that we need for our build.

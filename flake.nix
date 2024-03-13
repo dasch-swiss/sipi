@@ -53,6 +53,7 @@
               cmake
 
               # Build dependencies
+              asio # networking library needed for crow (microframework for the web)
               curl
               ffmpeg
               file # libmagic-dev
