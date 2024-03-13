@@ -53,6 +53,7 @@
               cmake
 
               # Build dependencies
+              curl
               ffmpeg
               file # libmagic-dev
               gettext
@@ -70,6 +71,7 @@
               # at
               doxygen
               pkg-config
+              unzip
               # valgrind
 
               # additional test dependencies

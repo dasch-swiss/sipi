@@ -1,6 +1,7 @@
 { lib
 , clang17Stdenv
 , cmake
+, curl
 , ffmpeg
 , file
 , gettext
@@ -12,6 +13,7 @@
 , openssl
 , perl
 , readline70
+, unzip
 }:
 clang17Stdenv.mkDerivation {
   pname = "sipi";
@@ -24,6 +26,7 @@ clang17Stdenv.mkDerivation {
   ];
   
   buildInputs = [
+    curl
     ffmpeg
     file
     gettext
@@ -36,6 +39,7 @@ clang17Stdenv.mkDerivation {
     perl
     openssl
     readline70
+    unzip
   ];
 
   cmakeFlags = [
