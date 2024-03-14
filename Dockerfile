@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.3
 
 # Expose (global) variables (ARGs before FROM can only be used on FROM lines and not afterwards)
-ARG SIPI_BASE=daschswiss/sipi-base:2.22.0
+ARG SIPI_BASE=daschswiss/sipi-base:2.23.0
 ARG UBUNTU_BASE=ubuntu:22.04
 
 # STAGE 1: Build
@@ -16,11 +16,10 @@ ARG BUILD_TAG
 ENV BUILD_TAG=${BUILD_TAG}
 
 # Build SIPI and run unit tests.
-RUN mkdir -p ./build && \
-    cd ./build && \
-    cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo --log-context .. && \
-    make && \
-    ctest
+RUN cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo --log-context \
+    && cd build \
+    && cmake --build . --parallel 1 \
+    && ctest
 
 # STAGE 2: Setup
 FROM $UBUNTU_BASE as final
@@ -48,13 +47,9 @@ RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list  \
   && apt-get clean
 
 RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
-  && wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg \
-  && echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] https://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" | tee /etc/apt/sources.list.d/llvm-18.list \
-  && apt-add-repository "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu jammy main" \
   && apt-get clean \
   && apt-get update \
   && apt-get install -qyyy --no-install-recommends \
-    libllvm18 llvm-18-runtime \
     openssl \
     locales \
     uuid \

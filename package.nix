@@ -1,5 +1,5 @@
 { lib
-, clang17Stdenv
+, stdenv
 , cmake
 , curl
 , ffmpeg
@@ -16,7 +16,7 @@
 , readline70
 , unzip
 }:
-clang17Stdenv.mkDerivation {
+stdenv.mkDerivation {
   pname = "sipi";
   version = "3.8.12";
 

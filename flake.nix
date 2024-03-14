@@ -25,7 +25,7 @@
         # devShells.default describes the default shell with C++, cmake,
         # and other dependencies
         devShells = {
-          default = pkgs.mkShell.override {stdenv = pkgs.clang17Stdenv;} {
+          default = pkgs.mkShell.override {stdenv = pkgs.gcc13Stdenv;} {
             name = "sipi";
 
             shellHook = ''

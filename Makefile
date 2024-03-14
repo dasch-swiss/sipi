@@ -7,7 +7,7 @@ CURRENT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 include vars.mk
 
 # Version of the base Docker image
-SIPI_BASE := daschswiss/sipi-base:2.22.0
+SIPI_BASE := daschswiss/sipi-base:2.23.0
 UBUNTU_BASE := ubuntu:22.04
 
 .PHONY: docs-build
@@ -131,13 +131,13 @@ test-ci: ## compile and run tests inside Docker with Debug symbols (no it)
 		-v ${PWD}:/tmp/sipi \
 		$(SIPI_BASE) /bin/sh -c "mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && cd /tmp/sipi/cmake-build-debug-inside-docker && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
 
-.PHONY: test-integration
-test-integration: docker-build ## run tests against locally published Sipi Docker image
-	pytest -s test/integration
+.PHONY: test-smoke
+test-smoke: docker-build ## run smoke tests against locally published Sipi Docker image
+	pytest -s test/smoke
 
-.PHONY: test-integration-ci
-test-integration-ci: ## run tests against (already) locally published Sipi Docker image
-	pytest -s test/integration
+.PHONY: test-smoke-ci
+test-smoke-ci: ## run smoke tests against (already) locally published Sipi Docker image
+	pytest -s test/smoke
 
 #####################################
 # Use inside NIX develop shell
@@ -146,7 +146,7 @@ test-integration-ci: ## run tests against (already) locally published Sipi Docke
 .PHONY: build
 build: ## build SIPI (inside NIX develop shell)
 	cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo
-	cd build && make -j 1
+	cd build && cmake --build . --parallel 1
 
 .PHONY: run
 run: compile ## run SIPI (inside NIX develop shell)

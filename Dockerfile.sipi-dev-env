@@ -1,4 +1,4 @@
-FROM daschswiss/sipi-base:2.22.0
+FROM daschswiss/sipi-base:2.23.0
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/Zurich
@@ -11,7 +11,20 @@ RUN apt-get update \
     dos2unix \
     rsync \
     tar \
+    grep \
   && apt-get clean
+
+# Set GCC 13 as the default gcc and g++
+RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 60 --slave /usr/bin/g++ g++ /usr/bin/g++-13
+
+# Verify the installation
+RUN gcc --version && g++ --version
+
+# Verify the installation
+RUN ls /usr/include/pthread.h
+RUN ls /lib/aarch64-linux-gnu/libc.so*
+RUN nm -D /lib/aarch64-linux-gnu/libc.so.6 | grep pthread_create
+RUN ldd --version
 
 ARG UID=1000
 RUN useradd -m -u ${UID} -s /bin/bash builder

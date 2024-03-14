@@ -1,16 +1,3 @@
-include(CheckCXXCompilerFlag)
-check_cxx_compiler_flag("-fvisibility-inlines-hidden" SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
-if(SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility-inlines-hidden -std=c++17")
-endif()
-check_cxx_compiler_flag("-fvisibility=hidden" SUPPORTS_FVISIBILITY_FLAG)
-if(SUPPORTS_FVISIBILITY_FLAG)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -std=c++17")
-endif()
-
-set(DARWIN "Darwin")
-set(LINUX "Linux")
-math(EXPR BITS "8*${CMAKE_SIZEOF_VOID_P}")
 
 link_directories(
         ${CONFIGURE_LIBDIR}
@@ -73,8 +60,8 @@ target_link_libraries(configuration
         sqlite3
         dl
         pthread
-        curl
-        ssl
+        ${CURL_LIBRARIES}
+        ${OPENSSL_LIBRARIES}
         crypto
         jpeg
         bzip2
@@ -94,6 +81,4 @@ endif()
 
 install(TARGETS configuration DESTINATION bin)
 
-
-add_test(NAME configuration_unit_test
-        COMMAND configuration)
+add_test(NAME configuration_unit_test COMMAND configuration)

@@ -101,7 +101,7 @@ option(CMAKE_BUILD_TYPE "The default build type is RelWithDebInfo" RelWithDebInf
 
 
 #
-# Here we determine the compiler and compiler version. We need clang >= 7.3 or g++ >= 5.3
+# Here we determine the compiler and compiler version. We need clang >= 15 or g++ >= 13
 #
 if(CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "15.0")
@@ -118,7 +118,14 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 else()
     message(WARNING "You are using an unsupported compiler (${CMAKE_CXX_COMPILER_ID}). Compilation has only been tested with Clang and GCC.")
 endif()
+#
+# Set the C++ standard to C++14 (goal is to move to C++23)
+#
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
 
+#
+# turn on some features
+#
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-fvisibility-inlines-hidden" SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
 if(SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
@@ -130,11 +137,14 @@ if(SUPPORTS_FVISIBILITY_FLAG)
 endif()
 
 
+#
+# Figure out the system we are compiling for and
+# set flags for compiling Kakadu and Lua
+#
 set(DARWIN "Darwin")
 set(LINUX "Linux")
 math(EXPR BITS "8*${CMAKE_SIZEOF_VOID_P}")
 if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
     set(CMAKE_MACOSX_RPATH 1)
     if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
         set(KDU_MAKE "Makefile-Mac-x86-${BITS}-gcc")
@@ -148,7 +158,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
     set(LUA_ARCH "macosx")
     message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
 elseif(CMAKE_SYSTEM_NAME STREQUAL LINUX)
-    execute_process(COMMAND /usr/bin/lsb_release -si COMMAND tr -d '\n' OUTPUT_VARIABLE CMAKE_DISTRO_NAME)
     if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
         set(KDU_MAKE "Makefile-Linux-x86-${BITS}-gcc")
         set(KDU_ARCH "Linux-x86-${BITS}-gcc")
@@ -160,7 +169,6 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL LINUX)
     endif()
     SET(LUA_ARCH "linux")
     message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
-    message(STATUS "Distro: ${CMAKE_DISTRO_NAME}")
 endif()
 message(STATUS "Compiling Kakadu for: ${KDU_ARCH}")
 
@@ -168,12 +176,12 @@ message(STATUS "Compiling Kakadu for: ${KDU_ARCH}")
 # set compiler flags
 #
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_CXX_FLAGS "-O0 -g -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
 elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    set(CMAKE_CXX_FLAGS "-O1 -g -DNDEBUG -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O1 -g -DNDEBUG -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -rdynamic -g")
 else()
-    set(CMAKE_CXX_FLAGS "-O3 -DNDEBUG -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
 endif()
 
 include(CheckCXXCompilerFlag)
@@ -217,6 +225,9 @@ if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
     set(CMAKE_IGNORE_PATH "/usr/local/lib*")
 endif()
 
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+
 #
 # libmagic
 # (used to be build locally from source was moved to prerequisites)
@@ -246,8 +257,6 @@ if(CURL_FOUND)
     message(STATUS "curl libs: ${CURL_LIBRARIES}")
     include_directories(${CURL_INCLUDE_DIRS})
 endif()
-
-
 
 #find_package(JBIG REQUIRED)
 #include_directories(${JBIG_INCLUDE_DIR})
@@ -279,9 +288,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
 	find_package(ICONV REQUIRED)
 endif()
 #find_package(MATH REQUIRED)
-
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
 
 message(STATUS "Adding external dependencies ...")
 
@@ -508,6 +514,9 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/config/sipi.config.lua
 # Test
 #-------------------
 
+# adds unit tests defined in the test/unit subdirectory
+add_subdirectory(test/unit)
+
 # custom target to only run 'e2e' tests
 add_custom_target(e2e
         DEPENDS sipi
@@ -518,6 +527,3 @@ add_custom_target(e2e
 add_test(NAME all_python_based_e2e_tests
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test/e2e
         COMMAND pytest -s --sipi-exec=$<TARGET_FILE:sipi>)
-
-# adds unit tests defined in the test/unit subdirectory
-add_subdirectory(test/unit)

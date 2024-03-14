@@ -3,10 +3,6 @@
 #
 # all tests can be run from the build directory with `make test`
 
-set(CMAKE_CXX_FLAGS "-O0 -g -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
-
-find_package(Threads REQUIRED)
-
 # Enable ExternalProject CMake module
 include(ExternalProject)
 

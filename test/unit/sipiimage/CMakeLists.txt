@@ -59,8 +59,7 @@ add_executable(
 )
 add_dependencies(sipiimage icc_profiles)
 
-target_link_libraries(sipiimage
-        libgtest)
+target_link_libraries(sipiimage libgtest)
 
 target_link_libraries(sipiimage
         lcms2
@@ -80,8 +79,8 @@ target_link_libraries(sipiimage
         sqlite3
         dl
         pthread
-        curl
-        ssl
+        ${CURL_LIBRARIES}
+        ${OPENSSL_LIBRARIES}
         crypto
         jpeg
         bzip2
@@ -93,17 +92,9 @@ target_link_libraries(sipiimage
         ${CMAKE_DL_LIBS})
 
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-    target_link_libraries(sipiimage
-            iconv
-            gettext_intl
-            ${COREFOUNDATION_FRAMEWORK}
-            ${SYSTEMCONFIGURATION_FRAMEWORK})
+    target_link_libraries(sipiimage iconv gettext_intl)
 else()
     target_link_libraries(sipiimage rt)
-endif()
-
-if(OPENSSL_FOUND)
-    target_link_libraries(sipiimage ${OPENSSL_LIBRARIES})
 endif()
 
 install(TARGETS sipiimage DESTINATION bin)
