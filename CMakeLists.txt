@@ -515,8 +515,8 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/config/sipi.config.lua
 # Test
 #-------------------
 
-# adds unit tests defined in the test/unit subdirectory
-add_subdirectory(test/unit)
+# adds google tests defined in the test/unit and test/approval subdirectories
+add_subdirectory(test)
 
 # custom target to only run 'e2e' tests
 add_custom_target(e2e

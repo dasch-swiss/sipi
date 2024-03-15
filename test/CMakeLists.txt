@@ -41,20 +41,28 @@ set_target_properties(libgmock PROPERTIES
         )
 
 # I couldn't make it work with INTERFACE_INCLUDE_DIRECTORIES
-include_directories("${source_dir}/googletest/include"
-        "${source_dir}/googlemock/include")
+include_directories("${source_dir}/googletest/include" "${source_dir}/googlemock/include")
 
+# Download and install ApprovalTests.cpp single header distribution
+set(HEADER_URL "https://github.com/approvals/ApprovalTests.cpp/releases/download/v.10.13.0/ApprovalTests.v.10.13.0.hpp")
+set(HEADER_FILE "${CMAKE_BINARY_DIR}/include/ApprovalTests.hpp")
+
+if(NOT EXISTS "${HEADER_FILE}")
+        file(DOWNLOAD ${HEADER_URL} ${HEADER_FILE}
+                TIMEOUT 60  # Set a timeout for the download in seconds
+                EXPECTED_HASH SHA256=c00f6390b81d9924dc646e9d32b61e1e09abda106c13704f714ac349241bb9ff # Optional: Verify file integrity
+                TLS_VERIFY ON)  # Verify TLS/SSL certificates; ON by default
+endif()
+
+include_directories("${CMAKE_BINARY_DIR}/include")
+
+# Approval tests
+add_subdirectory(approval)
 
 # Configuration parsing and tests
 # To only run this single test, run from inside the build directory '(cd test/unit && ./configuration/configuration)'
-add_subdirectory(configuration)
-#add_test(NAME configuration_unit_test
-#        WORKING_DIRECTORY
-#        COMMAND configuration)
+add_subdirectory(unit/configuration)
 
 # SipiImage tests
 # To only run this single test, run from inside the build directory '(cd test/unit && ./sipiimage/sipiimage)'
-add_subdirectory(sipiimage)
-#add_test(NAME sipiimage_unit_test
-#        WORKING_DIRECTORY
-#        COMMAND sipiimage)
+add_subdirectory(unit/sipiimage)
