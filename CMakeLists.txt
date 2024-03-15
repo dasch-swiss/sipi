@@ -124,18 +124,11 @@ endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
 
 #
-# turn on some features
-#
-include(CheckCXXCompilerFlag)
-check_cxx_compiler_flag("-fvisibility-inlines-hidden" SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
-if(SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility-inlines-hidden")
+# Statically compile the C++ standard library into the executable
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    message(STATUS "Compiling with GCC. Statically linking libstdc++.")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libstdc++")
 endif()
-check_cxx_compiler_flag("-fvisibility=hidden" SUPPORTS_FVISIBILITY_FLAG)
-if(SUPPORTS_FVISIBILITY_FLAG)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
-endif()
-
 
 #
 # Figure out the system we are compiling for and
@@ -184,6 +177,9 @@ else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
 endif()
 
+#
+# turn on some features
+#
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-fvisibility-inlines-hidden" SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
 if(SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)

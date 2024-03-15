@@ -50,7 +50,6 @@ RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
   && apt-get clean \
   && apt-get update \
   && apt-get install -qyyy --no-install-recommends \
-    libstdc++6 \
     curl \
     openssl \
     locales \
