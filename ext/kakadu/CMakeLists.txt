@@ -16,7 +16,7 @@ ExternalProject_Add(
         INSTALL_DIR ${COMMON_LOCAL}
         DOWNLOAD_COMMAND unzip -o -d ${COMMON_SRCS} ${COMMON_VENDOR}/${KakaduVersion}.zip
         DOWNLOAD_EXTRACT_TIMESTAMP OLD
-        # PATCH_COMMAND patch ${COMMON_SRCS}/${KakaduVersion}/coresys/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu_coresys_makefile_mac_clang_to_gcc.patch && patch ${COMMON_SRCS}/${KakaduVersion}/apps/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu_apps_makefile_mac_clang_to_gcc.patch && patch ${COMMON_SRCS}/${KakaduVersion}/managed/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu_apps_makefile_mac_clang_to_gcc.patch
+        PATCH_COMMAND patch ${COMMON_SRCS}/${KakaduVersion}/coresys/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu-makefile-coresys.patch && patch ${COMMON_SRCS}/${KakaduVersion}/apps/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu-makefile-apps.patch && patch ${COMMON_SRCS}/${KakaduVersion}/managed/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu-makefile-managed.patch
         CONFIGURE_COMMAND ""
         BUILD_COMMAND make --directory=${COMMON_SRCS}/${KakaduVersion}/make/ -f ${KDU_MAKE} EXEC_PLATFORM=${KDU_EXEC_PLATFORM} all_but_jni
         INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_directory ${COMMON_SRCS}/${KakaduVersion}/lib/${KDU_ARCH} ${CONFIGURE_LIBDIR}
