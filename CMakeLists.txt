@@ -272,6 +272,7 @@ else()
   set(M_LIBRARY "")
 endif()
 
+set(HAVE_ST_ATIMESPEC 0)
 check_struct_has_member("struct stat" st_atimespec sys/stat.h HAVE_ST_ATIMESPEC LANGUAGE CXX)
 if(HAVE_ST_ATIMESPEC)
     message(STATUS "Have new struct stat")

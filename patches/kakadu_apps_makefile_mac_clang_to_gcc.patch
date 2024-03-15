@@ -1,7 +1,8 @@
 --- ./Makefile-Linux-arm-64-gcc	2023-11-17 08:09:02
 +++ ./Makefile-Linux-arm-64-gcc-changed	2024-03-13 18:26:26
-@@ -1,4 +1,4 @@
+@@ -1,5 +1,5 @@
 -CC = clang++  # You can change to g++, but may then need KDU_NO_AVX
 +CC = g++      # You can change to g++, but may then need KDU_NO_AVX
++CXXFLAGS += -DKDU_NO_AVX
  
  PLATFORM = Mac-arm-64-gcc

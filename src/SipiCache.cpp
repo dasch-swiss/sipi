@@ -284,7 +284,7 @@ namespace Sipi {
             sort(alist.begin(), alist.end(), _compare_access_time_asc);
 
             long long cachesize_goal = max_cachesize * cache_hysteresis;
-            int nfiles_goal = max_nfiles * cache_hysteresis;
+            unsigned int nfiles_goal = max_nfiles * cache_hysteresis;
 
             for (const auto &ele : alist) {
                 syslog(LOG_DEBUG, "Purging from cache \"%s\"...", cachetable[ele.canonical].cachepath.c_str());
