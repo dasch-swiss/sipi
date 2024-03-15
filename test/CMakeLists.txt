@@ -56,6 +56,14 @@ endif()
 
 include_directories("${CMAKE_BINARY_DIR}/include")
 
+if(NOT TARGET ApprovalTests)
+        set(LIB_NAME ApprovalTests)
+        add_library(${LIB_NAME} INTERFACE)
+        target_include_directories(${LIB_NAME} INTERFACE "${CMAKE_BINARY_DIR}/include")
+        add_library(${LIB_NAME}::${LIB_NAME} ALIAS ${LIB_NAME})
+endif()
+
+
 # Approval tests
 add_subdirectory(approval)
 
