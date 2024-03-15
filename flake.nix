@@ -86,11 +86,19 @@
 
               # Python dependencies
               python311Full
+              python311Packages.deprecation
+              python311Packages.docker
               python311Packages.pip
-              python311Packages.sphinx
+              python311Packages.psutil
               python311Packages.pytest
               python311Packages.requests
-              python311Packages.psutil
+              python311Packages.sphinx
+              python311Packages.testcontainers
+              python311Packages.wrapt
+
+
+
+
             ];
           };
         };
