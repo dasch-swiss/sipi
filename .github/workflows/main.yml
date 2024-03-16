@@ -31,7 +31,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: make docker-test-build-amd64
+      - run: make docker-test-build-amd64 # two stage build, where test is run in the first stage
       - run: make test-smoke-ci
       - name: Push image to Docker hub only on main or tag (release) but not on schedule
         if: (github.ref_name == 'main' || startsWith(github.ref, 'refs/tags')) && github.event_name != 'schedule'
@@ -60,8 +60,8 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: make docker-test-build-aarch64
-      - run: make test-smoke--ci
+      - run: make docker-test-build-aarch64 # two stage build, where test is run in the first stage
+      - run: make test-smoke-ci
       - name: Push image to Docker hub only on main or tag (release) but not on schedule
         if: (github.ref_name == 'main' || startsWith(github.ref, 'refs/tags')) && github.event_name != 'schedule'
         run: make docker-push-aarch64
