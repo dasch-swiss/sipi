@@ -142,12 +142,11 @@ namespace Sipi {
          * \param[in] cachedir_p Path to the cache directory. The directory must exist!
          * \param[in] max_cachesize_p Maximum size of the cache in bytes.
          * \param[in] max_nfiles_p Maximum number of files in the cache.
-         * \param[in] cache_hsyteresis_p If the maximum size of the cache is reached, some of the files that
+         * \param[in] cache_hysteresis_p If the maximum size of the cache is reached, some of the files that
          * have not been accessed recently will be deleted. The cache_hysteresis (between 0.0 and 1.0) defines the
          * amount of bytes that have to be cleared in relation to the max_cachesize_p.
          */
-        SipiCache(const std::string &cachedir_p, long long max_cachesize_p = 0, unsigned max_nfiles_p = 0,
-                  float cache_hysteresis_p = 0.1);
+        SipiCache(const std::string &cachedir_p, long long max_cachesize_p = 0, unsigned max_nfiles_p = 0, float cache_hysteresis_p = 0.1);
 
         /*!
          * Cleans up the cache, serializes the actual cache content into a file and closes all caching

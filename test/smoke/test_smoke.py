@@ -17,10 +17,10 @@ def setup_module():
 
     container = DockerContainer("daschswiss/sipi:latest")
     container.with_bind_ports(1024, 1024)
-    container.with_volume_mapping(config_dir, "/sipi/config")
-    container.with_volume_mapping(images_dir, "/sipi/images")
-    container.with_volume_mapping(scripts_dir, "/sipi/scripts")
-    container.with_volume_mapping(server_dir, "/sipi/server")
+    container.with_volume_mapping(str(config_dir), "/sipi/config")
+    container.with_volume_mapping(str(images_dir), "/sipi/images")
+    container.with_volume_mapping(str(scripts_dir), "/sipi/scripts")
+    container.with_volume_mapping(str(server_dir), "/sipi/server")
 
     return container
 

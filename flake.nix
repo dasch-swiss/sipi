@@ -1,53 +1,64 @@
 {
-  description = "Sipi C++ project setup";
+  description = "Sipi C++ build environment setup";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/23.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = inputs @ {flake-parts, ...}:
-    flake-parts.lib.mkFlake {inherit inputs;} {
-      # This is the list of architectures that work with this project
-      systems = [
-        "x86_64-linux"
-        "aarch64-linux"
-        "x86_64-darwin"
-        "aarch64-darwin"
-      ];
-      perSystem = {
-        config,
-        self',
-        inputs',
-        pkgs,
-        system,
-        ...
-      }: {
+  outputs = { self, nixpkgs, flake-utils, ... }:
+  flake-utils.lib.eachSystem ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"] (system:
+    let
+        overlays = [
+            (final: prev: {
+                # The iiif-validator is not yet part of nixpkgs, so we need to add it as an overlay
+                iiif-validator = final.callPackage ./iiif-validator.nix { };
+            })
+        ];
+        pkgs = import nixpkgs {
+            inherit system overlays;
+        };
+    in
+    {
         # devShells.default describes the default shell with C++, cmake,
         # and other dependencies
         devShells = {
-          clang = pkgs.mkShell.override {stdenv = pkgs.clang14Stdenv;} {
+          default = pkgs.mkShell.override {stdenv = pkgs.gcc13Stdenv;} {
             name = "sipi";
 
             shellHook = ''
               export PS1="\\u@\\h | nix-develop> "
               unset SDKROOT
               unset CMAKE_FRAMEWORK_PATH
+              unset CMAKE_INCLUDE_PATH
+              unset CMAKE_LIBRARY_PATH
+              # Any other environment tweaks
+
+              # Explicitly tell CMake not to search the system paths
+              export CMAKE_IGNORE_PATH="/System/Library/Frameworks"
+              echo "Ignoring macOS System Frameworks for CMake"
               # Additional environment tweaks
             '';
 
             packages = with pkgs; [
+              # TODO: extract only the dependencies provided through callPackage and not try to build the derivation
+              # Include the package from packages.default defined on the pkgs.callPackage line
+              # self'.packages.default
+
+              # List other packages you want in your devShell
               # C++ Compiler is already part of stdenv
               # Build tool
               cmake
 
               # Build dependencies
+              asio # networking library needed for crow (microframework for the web)
+              curl
               ffmpeg
               file # libmagic-dev
               gettext
               glibcLocales # locales
               gperf
               iconv
-              # libacl1-dev
               libidn
               libuuid # uuid und uuid-dev
               # numactl # libnuma-dev not available on mac
@@ -59,6 +70,7 @@
               # at
               doxygen
               pkg-config
+              unzip
               # valgrind
 
               # additional test dependencies
@@ -72,22 +84,28 @@
 
               # Python dependencies
               python311Full
+              python311Packages.deprecation
+              python311Packages.docker
               python311Packages.pip
-              python311Packages.sphinx
+              python311Packages.psutil
               python311Packages.pytest
               python311Packages.requests
-              python311Packages.psutil
+              python311Packages.sphinx
+              python311Packages.testcontainers
+              python311Packages.wrapt
+
+              # added through overlay to nixpkgs
+              iiif-validator
             ];
           };
         };
 
-        # The `callPackage` automatically fills the parameters of the funtion
-        # in package.nix with what's  inside the `pkgs` attribute.
+        # The `callPackage` automatically fills the parameters of the function
+        # in package.nix with what's inside the `pkgs` attribute.
         packages.default = pkgs.callPackage ./package.nix {};
 
         # The `config` variable contains our own outputs, so we can reference
         # neighbor attributes like the package we just defined one line earlier.
-        devShells.default = config.packages.default;
-      };
-    };
+        # devShells.default = config.packages.default;
+    });
 }

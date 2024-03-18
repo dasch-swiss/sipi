@@ -21,7 +21,7 @@
 # License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-cmake_minimum_required(VERSION 3.27)
+cmake_minimum_required(VERSION 3.28)
 cmake_policy(VERSION 3.18)
 if(POLICY CMP0135) # DOWNLOAD_EXTRACT_TIMESTAMP
     cmake_policy(SET CMP0135 OLD)
@@ -29,12 +29,34 @@ endif()
 
 message(STATUS "cmake version: ${CMAKE_VERSION}")
 
+# Require C++14, but let a parent project ask for something higher
+if(DEFINED CMAKE_CXX_STANDARD)
+    if(CMAKE_CXX_STANDARD MATCHES "^(90|99)$" OR CMAKE_CXX_STANDARD LESS 14)
+        message(FATAL_ERROR "This project requires at least C++14. Aborting...")
+    endif()
+else()
+    set(CMAKE_CXX_STANDARD 14)
+endif()
+# Always enforce the language constraint
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# We need compiler extensions for some of the dependencies
+if(NOT DEFINED CMAKE_CXX_EXTENSIONS)
+    set(CMAKE_CXX_EXTENSIONS ON)
+endif()
+
+list(APPEND CMAKE_MESSAGE_CONTEXT sipi)
+project(sipi
+        VERSION 3
+        LANGUAGES CXX C
+)
+
+# enables cmake's support for testing
+enable_testing()
+
 include(ExternalProject)
 include(CheckStructHasMember)
 include(CheckIncludeFiles)
 include(FindPackageHandleStandardArgs)
-
-project(sipi VERSION 3)
 
 # ------------------------------------------------------------------------------
 # Set our path variables
@@ -79,46 +101,43 @@ option(CMAKE_BUILD_TYPE "The default build type is RelWithDebInfo" RelWithDebInf
 
 
 #
-# Here we determine the compiler and compiler version. We need clang >= 7.3 or g++ >= 5.3
+# Here we determine the compiler and compiler version. We need clang >= 15 or g++ >= 13
 #
-if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "10.0")
-        message(FATAL_ERROR "Requires Apple Clang 10.0 or greater.")
-        set(ENV(CXX) "clang++")
-        set(ENV(CC) "clang")
-    endif()
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "7.0.0")
-        message(FATAL_ERROR "Requires Clang 7.0.0 or greater.")
+if(CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "15.0")
+        message(FATAL_ERROR "Clang version must be 15.0.0 or greater! Aborting...")
         set(ENV(CXX) "clang++")
         set(ENV(CC) "clang")
     endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "7.0")
-        message(FATAL_ERROR "Requires GCC 7.0 or greater.")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "13.0")
+        message(FATAL_ERROR "Requires GCC 13.0 or greater.")
         set(ENV(CXX) "g++")
         set(ENV(CC) "gcc")
     endif()
 else()
     message(WARNING "You are using an unsupported compiler (${CMAKE_CXX_COMPILER_ID}). Compilation has only been tested with Clang and GCC.")
 endif()
+#
+# Set the C++ standard to C++14 (goal is to move to C++23)
+#
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
 
-include(CheckCXXCompilerFlag)
-check_cxx_compiler_flag("-fvisibility-inlines-hidden" SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
-if(SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility-inlines-hidden")
+#
+# Statically compile the C++ standard library into the executable
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    message(STATUS "Compiling with GCC. Statically linking libstdc++.")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libstdc++")
 endif()
-check_cxx_compiler_flag("-fvisibility=hidden" SUPPORTS_FVISIBILITY_FLAG)
-if(SUPPORTS_FVISIBILITY_FLAG)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
-endif()
 
-
+#
+# Figure out the system we are compiling for and
+# set flags for compiling Kakadu and Lua
+#
 set(DARWIN "Darwin")
 set(LINUX "Linux")
 math(EXPR BITS "8*${CMAKE_SIZEOF_VOID_P}")
 if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
     set(CMAKE_MACOSX_RPATH 1)
     if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
         set(KDU_MAKE "Makefile-Mac-x86-${BITS}-gcc")
@@ -130,8 +149,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
         set(KDU_EXEC_PLATFORM "Mac-arm-64-gcc")
     endif()
     set(LUA_ARCH "macosx")
+    message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
 elseif(CMAKE_SYSTEM_NAME STREQUAL LINUX)
-    execute_process(COMMAND /usr/bin/lsb_release -si COMMAND tr -d '\n' OUTPUT_VARIABLE CMAKE_DISTRO_NAME)
     if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
         set(KDU_MAKE "Makefile-Linux-x86-${BITS}-gcc")
         set(KDU_ARCH "Linux-x86-${BITS}-gcc")
@@ -142,53 +161,25 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL LINUX)
         SET(KDU_EXEC_PLATFORM "Linux-arm-64-gcc")
     endif()
     SET(LUA_ARCH "linux")
+    message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
 endif()
-message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
-message(STATUS "Distro: ${CMAKE_DISTRO_NAME}")
-message(STATUS "Compiling for: ${KDU_ARCH}")
+message(STATUS "Compiling Kakadu for: ${KDU_ARCH}")
 
 #
-# this is needed for curl...
+# set compiler flags
 #
-if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    find_library(COREFOUNDATION_FRAMEWORK "CoreFoundation")
-    if(NOT COREFOUNDATION_FRAMEWORK)
-        message(FATAL_ERROR "CoreFoundation framework not found")
-    endif()
-
-    find_library(SYSTEMCONFIGURATION_FRAMEWORK "SystemConfiguration")
-    if(NOT SYSTEMCONFIGURATION_FRAMEWORK)
-        message(FATAL_ERROR "SystemConfiguration framework not found")
-    endif()
-
-    list(APPEND CURL_LIBS "-framework CoreFoundation" "-framework SystemConfiguration")
-
-    if(CMAKE_USE_SECTRANSP)
-        find_library(SECURITY_FRAMEWORK "Security")
-        if(NOT SECURITY_FRAMEWORK)
-            message(FATAL_ERROR "Security framework not found")
-        endif()
-
-        set(SSL_ENABLED ON)
-        set(USE_SECTRANSP ON)
-        list(APPEND CURL_LIBS "-framework Security")
-    endif()
-endif()
-
-#
-# set path to special find_package() code
-#
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
-
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_CXX_FLAGS "-O0 -g -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
 elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    set(CMAKE_CXX_FLAGS "-O1 -g -DNDEBUG -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O1 -g -DNDEBUG -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -rdynamic -g")
 else()
-    set(CMAKE_CXX_FLAGS "-O3 -DNDEBUG -std=c++14 -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
 endif()
 
+#
+# turn on some features
+#
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-fvisibility-inlines-hidden" SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
 if(SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
@@ -200,22 +191,75 @@ if(SUPPORTS_FVISIBILITY_FLAG)
 endif()
 
 
+#
+# append path to additional find_package() cmake modules
+#
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
+
+#
+# add code coverage
+#
+# If building the code with clang gives 'Error: could not load cache'
+#   1 turn COLLECT_CODE_COVERAGE to FALSE
+#   2 build and run the tests
+#   3 turn COLLECT_CODE_COVERAGE back to TRUE
+set(COLLECT_CODE_COVERAGE FALSE)
+if (COLLECT_CODE_COVERAGE)
+    include(CodeCoverage)
+    append_coverage_compiler_flags()
+    set(COVERAGE_EXCLUDES
+            "/Applications/Xcode.app/*"
+            "/opt/local/*"
+            "third_party/*"
+    )
+endif ()
+
+# on macOS, ignore frameworks
+# the complete environment should be provided through NIX
+if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
+    set(CMAKE_FIND_FRAMEWORK NEVER)
+    set(CMAKE_IGNORE_PATH "/usr/local/lib*")
+endif()
+
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
 
 #
 # libmagic
 # (used to be build locally from source was moved to prerequisites)
 #
 find_package(LibMagic REQUIRED)
+if (LIBMAGIC_FOUND)
+    include_directories(${LibMagic_INCLUDE_DIR})
+endif()
+
+#
+# openssl
+# (used to be build locally from source was moved to prerequisites)
+#
+find_package(OpenSSL REQUIRED)
+if(OPENSSL_FOUND)
+    message(STATUS "OpenSSL dirs: ${OPENSSL_INCLUDE_DIR}")
+    message(STATUS "OpenSSL libs: ${OPENSSL_LIBRARIES}")
+    include_directories(${OPENSSL_INCLUDE_DIR})
+endif()
+
+#
+# libcurl
+# (used to be build locally from source was moved to prerequisites)
+find_package(CURL REQUIRED)
+if(CURL_FOUND)
+    message(STATUS "curl dirs: ${CURL_INCLUDE_DIRS}")
+    message(STATUS "curl libs: ${CURL_LIBRARIES}")
+    include_directories(${CURL_INCLUDE_DIRS})
+endif()
 
 #find_package(JBIG REQUIRED)
 #include_directories(${JBIG_INCLUDE_DIR})
 # message(STATUS "JBIG ${JBIG_INCLUDE_DIR}")
 
 if(NOT WIN32)
-  find_library(M_LIBRARY
-    NAMES m
-    PATHS /usr/lib /usr/local/lib
-  )
+  find_library(M_LIBRARY NAMES m)
   if(NOT M_LIBRARY)
     message(STATUS "math lib 'libm' not found; floating point support disabled")
   endif()
@@ -224,6 +268,7 @@ else()
   set(M_LIBRARY "")
 endif()
 
+set(HAVE_ST_ATIMESPEC 0)
 check_struct_has_member("struct stat" st_atimespec sys/stat.h HAVE_ST_ATIMESPEC LANGUAGE CXX)
 if(HAVE_ST_ATIMESPEC)
     message(STATUS "Have new struct stat")
@@ -241,17 +286,12 @@ if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
 endif()
 #find_package(MATH REQUIRED)
 
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
-
-# OpenGL and GLUT needed by tiff and webp
-find_package(OpenGL)
-find_package(GLUT)
+message(STATUS "Adding external dependencies ...")
 
 # !!! order is important !!!
 # dependent targets need to be added before the target that depends on them
 # e.g., png, bzip2 before freetype
-add_subdirectory(${EXT_PROJECTS_DIR}/openssl)
+# add_subdirectory(${EXT_PROJECTS_DIR}/openssl)
 add_subdirectory(${EXT_PROJECTS_DIR}/xz)
 add_subdirectory(${EXT_PROJECTS_DIR}/zlib)
 add_subdirectory(${EXT_PROJECTS_DIR}/zstd)
@@ -270,9 +310,13 @@ add_subdirectory(${EXT_PROJECTS_DIR}/lua)
 add_subdirectory(${EXT_PROJECTS_DIR}/luarocks)
 add_subdirectory(${EXT_PROJECTS_DIR}/sqlite3)
 add_subdirectory(${EXT_PROJECTS_DIR}/kakadu)
-add_subdirectory(${EXT_PROJECTS_DIR}/curl)
+# add_subdirectory(${EXT_PROJECTS_DIR}/curl)
 
+message(STATUS "... adding external dependencies done.")
+
+#
 # add a target to generate API documentation with Doxygen
+#
 find_package(Doxygen)
 if(DOXYGEN_FOUND)
     add_custom_target(doc
@@ -283,8 +327,9 @@ if(DOXYGEN_FOUND)
 endif(DOXYGEN_FOUND)
 
 
-
+#
 # get version from git
+#
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
     find_package(Git)
     if(GIT_FOUND)
@@ -318,8 +363,9 @@ message( STATUS "Build timestamp: ${BUILD_TIMESTAMP}" )
 # write out the sipi configuration
 configure_file(${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h.in ${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h)
 
-
-
+#
+# generate ICC profile includes
+#
 set(GENERATED_ICC_HEADERS
         ${COMMON_INCLUDE_FILES_DIR}/AdobeRGB1998_icc.h
         ${COMMON_INCLUDE_FILES_DIR}/USWebCoatedSWOP_icc.h
@@ -348,11 +394,7 @@ add_custom_target(icc_profiles
         DEPENDS ${GENERATED_ICC_HEADERS}
 )
 
-link_directories(
-        ${CONFIGURE_LIBDIR}
-        /usr/local/lib
-        /opt/homebrew/lib
-)
+link_directories(${CONFIGURE_LIBDIR})
 
 include_directories(
         ${COMMON_LOCAL}/include
@@ -363,8 +405,6 @@ include_directories(
         ${PROJECT_SOURCE_DIR}/shttps
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/local/include
-        /usr/local/include
-        /opt/homebrew/include
 )
 
 add_executable(sipi
@@ -409,8 +449,7 @@ add_executable(sipi
         include/iiifparser/SipiIdentifier.h src/iiifparser/SipiIdentifier.cpp
         include/SipiImageError.h)
 
-add_dependencies(sipi
-        icc_profiles)
+add_dependencies(sipi icc_profiles)
 
 # !!! ORDER MATTERS !!!
 # dependent targets need to be added before the target that depends on them
@@ -432,9 +471,11 @@ target_link_libraries(sipi ${LIBS}
         sqlite3
         dl
         pthread
-        curl
-        ssl
-        crypto
+        # curl
+        ${CURL_LIBRARIES}
+        ${OPENSSL_LIBRARIES}
+        # ssl
+        # crypto
         jpeg
         bzip2
         zstd
@@ -446,11 +487,7 @@ target_link_libraries(sipi ${LIBS}
 )
 
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-	target_link_libraries(sipi
-            iconv
-            gettext_intl
-            ${COREFOUNDATION_FRAMEWORK}
-            ${SYSTEMCONFIGURATION_FRAMEWORK})
+	target_link_libraries(sipi iconv gettext_intl)
 else()
     target_link_libraries(sipi rt)
 endif()
@@ -462,7 +499,6 @@ install(TARGETS sipi
 
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/local/bin/lua
         ${CMAKE_CURRENT_SOURCE_DIR}/local/bin/luarocks
-#        ${CMAKE_CURRENT_SOURCE_DIR}/local/bin/luarocks-5.3
         DESTINATION ${CMAKE_INSTALL_PREFIX}/bin/
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 
@@ -475,8 +511,8 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/config/sipi.config.lua
 # Test
 #-------------------
 
-# enables cmake's support for testing
-enable_testing()
+# adds google tests defined in the test/unit and test/approval subdirectories
+add_subdirectory(test)
 
 # custom target to only run 'e2e' tests
 add_custom_target(e2e
@@ -489,5 +525,4 @@ add_test(NAME all_python_based_e2e_tests
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test/e2e
         COMMAND pytest -s --sipi-exec=$<TARGET_FILE:sipi>)
 
-# adds unit tests defined in the test/unit subdirectory
-add_subdirectory(test/unit)
+set_property(TEST all_python_based_e2e_tests PROPERTY LABELS e2e)

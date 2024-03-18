@@ -1,44 +1,54 @@
-{
-  lib,
-  clang14Stdenv,
-  cmake,
-  ffmpeg,
-  file,
-  gettext,
-  glibcLocales,
-  gperf,
-  iconv,
-  libidn,
-  libuuid,
-  openssl,
-  readline70,
+{ lib
+, stdenv
+, cmake
+, curl
+, ffmpeg
+, file
+, gcc13
+, gettext
+, glibcLocales
+, gperf
+, iconv
+, libidn
+, libuuid
+, openssl
+, perl
+, readline70
+, unzip
 }:
-clang14Stdenv.mkDerivation {
+stdenv.mkDerivation {
   pname = "sipi";
   version = "3.8.12";
 
   src = ./.;
 
-  nativeBuildInputs = [cmake];
+  nativeBuildInputs = [
+    cmake
+  ];
+  
   buildInputs = [
+    curl
     ffmpeg
     file
+    gcc13
     gettext
     glibcLocales
     gperf
     iconv
-    # libacl1-dev
-    # libGLU
     libidn
     libuuid # uuid und uuid-dev
     # numactl not available for mac
+    perl
     openssl
     readline70
+    unzip
   ];
 
   cmakeFlags = [
     "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
   ];
+
+  makeFlags = [ "-j 1" ];
 
   meta = with lib; {
     homepage = "https://github.com/dasch-swiss/sipi";

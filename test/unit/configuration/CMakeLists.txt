@@ -1,50 +1,6 @@
-include(CheckCXXCompilerFlag)
-check_cxx_compiler_flag("-fvisibility-inlines-hidden" SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
-if(SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility-inlines-hidden -std=c++17")
-endif()
-check_cxx_compiler_flag("-fvisibility=hidden" SUPPORTS_FVISIBILITY_FLAG)
-if(SUPPORTS_FVISIBILITY_FLAG)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -std=c++17")
-endif()
-
-set(DARWIN "Darwin")
-set(LINUX "Linux")
-math(EXPR BITS "8*${CMAKE_SIZEOF_VOID_P}")
-
-#
-# this is needed for curl...
-#
-if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    find_library(COREFOUNDATION_FRAMEWORK "CoreFoundation")
-    if(NOT COREFOUNDATION_FRAMEWORK)
-        message(FATAL_ERROR "CoreFoundation framework not found")
-    endif()
-
-    find_library(SYSTEMCONFIGURATION_FRAMEWORK "SystemConfiguration")
-    if(NOT SYSTEMCONFIGURATION_FRAMEWORK)
-        message(FATAL_ERROR "SystemConfiguration framework not found")
-    endif()
-
-    list(APPEND CURL_LIBS "-framework CoreFoundation" "-framework SystemConfiguration")
-
-    if(CMAKE_USE_SECTRANSP)
-        find_library(SECURITY_FRAMEWORK "Security")
-        if(NOT SECURITY_FRAMEWORK)
-            message(FATAL_ERROR "Security framework not found")
-        endif()
-
-        set(SSL_ENABLED ON)
-        set(USE_SECTRANSP ON)
-        list(APPEND CURL_LIBS "-framework Security")
-    endif()
-endif()
-
 
 link_directories(
-        ${PROJECT_SOURCE_DIR}/local/lib
         ${CONFIGURE_LIBDIR}
-        /usr/local/lib
 )
 
 include_directories(
@@ -104,8 +60,8 @@ target_link_libraries(configuration
         sqlite3
         dl
         pthread
-        curl
-        ssl
+        ${CURL_LIBRARIES}
+        ${OPENSSL_LIBRARIES}
         crypto
         jpeg
         bzip2
@@ -118,17 +74,13 @@ target_link_libraries(configuration
 
 
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-    target_link_libraries(configuration
-            iconv
-            gettext_intl
-            ${COREFOUNDATION_FRAMEWORK}
-            ${SYSTEMCONFIGURATION_FRAMEWORK})
+    target_link_libraries(configuration iconv gettext_intl)
 else()
     target_link_libraries(configuration rt)
 endif()
 
 install(TARGETS configuration DESTINATION bin)
 
+add_test(NAME configuration_unit_test COMMAND configuration)
 
-add_test(NAME configuration_unit_test
-        COMMAND configuration)
+set_property(TEST configuration_unit_test PROPERTY LABELS unit)

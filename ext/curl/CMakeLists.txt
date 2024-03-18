@@ -18,6 +18,7 @@ ExternalProject_Add(project_curl
         -DCMAKE_INSTALL_PREFIX=${COMMON_LOCAL}
         -DBUILD_SHARED_LIBS:BOOL=OFF
         -DCMAKE_USE_LIBSSH2:BOOL=OFF
+        -DCMAKE_FIND_FRAMEWORK=NEVER
         -DHTTP_ONLY:BOOL=ON
         ${OS_X_SPECIAL_FLAG}
         )
