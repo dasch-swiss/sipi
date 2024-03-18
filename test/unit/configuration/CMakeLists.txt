@@ -82,3 +82,5 @@ endif()
 install(TARGETS configuration DESTINATION bin)
 
 add_test(NAME configuration_unit_test COMMAND configuration)
+
+set_property(TEST configuration_unit_test PROPERTY LABELS unit)

@@ -99,5 +99,6 @@ endif()
 
 install(TARGETS sipiimage DESTINATION bin)
 
-add_test(NAME sipiimage_unit_test
-        COMMAND sipiimage)
+add_test(NAME sipiimage_unit_test COMMAND sipiimage)
+
+set_property(TEST sipiimage_unit_test PROPERTY LABELS unit)

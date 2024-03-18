@@ -131,6 +131,10 @@ test-ci: ## compile and run tests inside Docker with Debug symbols (no it)
 		-v ${PWD}:/tmp/sipi \
 		$(SIPI_BASE) /bin/sh -c "mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && cd /tmp/sipi/cmake-build-debug-inside-docker && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
 
+.PHONY: test-e2e
+test-e2e: ## run end-to-end locally (needs local Nix develop shell)
+	pytest -s test/e2e --sipi-exec=./build/sipi
+
 .PHONY: test-smoke
 test-smoke: docker-build ## run smoke tests against locally published Sipi Docker image
 	pytest -s test/smoke

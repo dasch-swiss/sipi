@@ -524,3 +524,5 @@ add_custom_target(e2e
 add_test(NAME all_python_based_e2e_tests
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test/e2e
         COMMAND pytest -s --sipi-exec=$<TARGET_FILE:sipi>)
+
+set_property(TEST all_python_based_e2e_tests PROPERTY LABELS e2e)

@@ -3,10 +3,21 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
+    flake-parts.url = "github:hercules-ci/flake-parts";
   };
 
-  outputs = inputs @ {flake-parts, ...}:
-    flake-parts.lib.mkFlake {inherit inputs;} {
+  outputs = inputs @ {self, nixpkgs, flake-utils, flake-parts, ... }:
+    let
+        addIiif-validatorOverlay = final: prev: {
+            # The iiif-validator is not yet part of nixpkgs, so we need to add it as an overlay
+            iiif-validator = final.callPackage ./iiif-validator.nix { };
+        };
+    in
+    flake-parts.lib.mkFlake {
+      inherit self nixpkgs flake-utils;
+      overlays = [ addIiif-validatorOverlay ];
+
       # This is the list of architectures that work with this project
       systems = [
         "x86_64-linux"
@@ -14,14 +25,9 @@
         "x86_64-darwin"
         "aarch64-darwin"
       ];
-      perSystem = {
-        config,
-        self',
-        inputs',
-        pkgs,
-        system,
-        ...
-      }: {
+
+      # Define custom packages, apps, and dev shells here
+      perSystem = { pkgs, ... }: {
         # devShells.default describes the default shell with C++, cmake,
         # and other dependencies
         devShells = {
@@ -43,7 +49,7 @@
             '';
 
             packages = with pkgs; [
-              # TODO: extract only the dependencies provided through callPackage ant not try to build the derivation
+              # TODO: extract only the dependencies provided through callPackage and not try to build the derivation
               # Include the package from packages.default defined on the pkgs.callPackage line
               # self'.packages.default
               
@@ -95,10 +101,6 @@
               python311Packages.sphinx
               python311Packages.testcontainers
               python311Packages.wrapt
-
-
-
-
             ];
           };
         };
