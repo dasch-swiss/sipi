@@ -47,6 +47,8 @@ add_executable(
         ${PROJECT_SOURCE_DIR}/include/formats/SipiIOPng.h
         ${PROJECT_SOURCE_DIR}/src/SipiHttpServer.cpp
         ${PROJECT_SOURCE_DIR}/src/SipiHttpServer.hpp
+        ${PROJECT_SOURCE_DIR}/src/handlers/iiif_handler.cpp
+        ${PROJECT_SOURCE_DIR}/src/handlers/iiif_handler.hpp
         ${PROJECT_SOURCE_DIR}/src/SipiCache.cpp
         ${PROJECT_SOURCE_DIR}/include/SipiCache.h
         ${PROJECT_SOURCE_DIR}/src/SipiLua.cpp

@@ -447,6 +447,8 @@ add_executable(sipi
         src/formats/SipiIOPng.cpp include/formats/SipiIOPng.h
         src/SipiHttpServer.cpp
         src/SipiHttpServer.hpp
+        src/handlers/iiif_handler.cpp
+        src/handlers/iiif_handler.hpp
         src/SipiCache.cpp include/SipiCache.h
         src/SipiLua.cpp include/SipiLua.h
         src/iiifparser/SipiRotation.cpp include/iiifparser/SipiRotation.h
