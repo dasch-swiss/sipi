@@ -12,6 +12,7 @@ RUN apt-get update \
     rsync \
     tar \
     grep \
+    build-essential \
   && apt-get clean
 
 # Set GCC 13 as the default gcc and g++

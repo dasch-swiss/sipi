@@ -30,9 +30,9 @@
 
 #include "shttps/Connection.h"
 #include "shttps/Parsing.h"
-#include "SipiImage.h"
+#include "SipiImage.hpp"
 #include "SipiLua.h"
-#include "SipiHttpServer.h"
+#include "SipiHttpServer.hpp"
 #include "Error.h"
 
 namespace Sipi {

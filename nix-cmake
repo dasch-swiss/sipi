@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+
+# let's say you have a C++ project in Nix that you want to work on with CLion so that the Nix dependencies are available
+# put this script in your project directory
+# then, in Settings -> Build, Execution, Deployment -> Toolchains set CMake to this script
+# if you need any extra nix-shell arguments, add them to the invocation at the bottom
+
+import os
+import sys
+import shlex
+
+
+def is_test_invocation(args):
+    # This function checks if the current invocation is for testing.
+    # You might check for specific CTest arguments or a pattern that matches your testing setup.
+    # For simplicity, this example looks for a '--test' flag which you might need to adjust
+    return '--test' in args or 'ctest' in args
+
+
+scriptDir = os.path.dirname(os.path.realpath(__file__))
+
+args = list(map(shlex.quote, sys.argv[1:]))
+
+# Use the cmakeFlags set by Nix if not running --build or tests
+if "--build" not in args and not is_test_invocation(args):
+    args.insert(0, "$cmakeFlags")
+
+cwd = os.getcwd()
+cmd = 'cd ' + cwd + ' && cmake ' + ' '.join(args)
+
+if is_test_invocation(args):
+    # Modify cmd for test execution
+    # Here you might need to adjust the command to work with CTest specifically.
+    # This could involve using a different command or altering the existing one to suit test execution.
+    cmd = 'cd ' + cwd + ' && ctest ' + ' '.join(args)  # Adjust this line as necessary
+
+os.chdir(scriptDir)
+os.execvp("nix", [
+    "nix", "develop", "--command", "bash", "-c", cmd
+])

@@ -35,7 +35,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "SipiError.h"
+#include "../SipiError.hpp"
 #include "SipiRegion.h"
 
 static const char __file__[] = __FILE__;

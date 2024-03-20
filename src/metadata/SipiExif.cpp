@@ -23,7 +23,7 @@
 #include <climits>
 #include <cmath>
 
-#include "SipiError.h"
+#include "../SipiError.hpp"
 #include "SipiExif.h"
 
 static const char file_[] = __FILE__;

@@ -30,7 +30,7 @@
 #include <fcntl.h>
 #include <cstdio>
 
-#include "SipiError.h"
+#include "../SipiError.hpp"
 #include "SipiIOJpeg.h"
 #include "SipiCommon.h"
 #include "shttps/Connection.h"

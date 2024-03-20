@@ -35,7 +35,7 @@
 
 #include "shttps/Global.h"
 #include "shttps/Hash.h"
-#include "SipiImage.h"
+#include "SipiImage.hpp"
 #include "formats/SipiIOTiff.h"
 #include "formats/SipiIOJ2k.h"
 #include "formats/SipiIOJpeg.h"

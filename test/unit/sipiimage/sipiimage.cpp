@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 
-#include "../../../include/SipiImage.h"
+#include "../../../src/SipiImage.hpp"
 
 //small function to check if file exist
 inline bool exists_file(const std::string &name) {

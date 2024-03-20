@@ -52,7 +52,7 @@
 
 #include "SipiCache.h"
 #include "shttps/Global.h"
-#include "SipiError.h"
+#include "SipiError.hpp"
 
 static const char __file__[] = __FILE__;
 

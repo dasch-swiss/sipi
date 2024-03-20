@@ -20,12 +20,12 @@
  * You should have received a copy of the GNU Affero General Public
  * License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <stdlib.h>
+#include <cstdlib>
 #include <cstring>
 #include <sstream>
 
 
-#include "SipiError.h"
+#include "SipiError.hpp"
 
 namespace Sipi {
 
@@ -39,7 +39,7 @@ namespace Sipi {
                                                                                                             errno_p) {}
     //============================================================================
 
-    std::string SipiError::to_string(void) const {
+    std::string SipiError::to_string() const {
         std::ostringstream errStream;
         errStream << "Sipi Error at [" << file << ": " << line << "]";
         if (sysErrno != 0) errStream << " (system error: " << std::strerror(sysErrno) << ")";
@@ -49,7 +49,7 @@ namespace Sipi {
     //============================================================================
 
     std::ostream &operator<<(std::ostream &outStream, const SipiError &rhs) {
-        std::string errStr = rhs.to_string();
+        const std::string errStr = rhs.to_string();
         outStream << errStr << std::endl; // TODO: remove the endl, the logging code should do it
         return outStream;
     }

@@ -23,7 +23,7 @@
 #include <mutex>
 #include <pthread.h>
 
-#include "SipiError.h"
+#include "../SipiError.hpp"
 #include "SipiXmp.h"
 
 /*!

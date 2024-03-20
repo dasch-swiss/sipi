@@ -38,7 +38,7 @@
 #include "shttps/Connection.h"
 #include "shttps/Global.h"
 
-#include "SipiError.h"
+#include "../SipiError.hpp"
 #include "SipiIOJ2k.h"
 
 

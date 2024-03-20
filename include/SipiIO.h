@@ -30,7 +30,7 @@
 #include <string>
 #include <stdexcept>
 
-#include "SipiImage.h"
+#include "../src/SipiImage.hpp"
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiSize.h"
 

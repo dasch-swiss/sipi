@@ -44,8 +44,8 @@
 #include <SipiFilenameHash.h>
 #include <LuaServer.h>
 
-#include "SipiImage.h"
-#include "SipiError.h"
+#include "SipiImage.hpp"
+#include "SipiError.hpp"
 #include "iiifparser/SipiSize.h"
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiRotation.h"
@@ -55,9 +55,11 @@
 // #include "Salsah.h"
 
 #include "shttps/Global.h"
-#include "SipiHttpServer.h"
 #include "shttps/Connection.h"
 #include "shttps/Parsing.h"
+
+#include "SipiHttpServer.hpp"
+#include "handlers/iiif_handler.hpp"
 
 #include "jansson.h"
 #include "favicon.h"
@@ -1752,120 +1754,210 @@ namespace Sipi {
         void *dummy) {
 
         auto *serv = static_cast<SipiHttpServer*>(user_data);
-
-        enum {
-            IIIF,
-            INFO_JSON,
-            KNORA_JSON,
-            REDIRECT,
-            FILE_DOWNLOAD,
-            UNDEFINED
-        } request_type = UNDEFINED;
-
         bool prefix_as_path = serv->prefix_as_path();
+
 
         std::string uri = conn_obj.uri(); // Has form "/pre/fix/es.../BAU_1_000441077_2_1.j2k/full/,1000/0/default.jpg"
 
-        std::vector<std::string> parts;
-        size_t pos = 0;
-        size_t old_pos = 0;
 
-        //
-        // IIIF URi schema:
-        // {scheme}://{server}{/prefix}/{identifier}/{region}/{size}/{rotation}/{quality}.{format}
-        //
-        // The slashes "/" separate the different parts...
-        //
-        while ((pos = uri.find('/', pos)) != std::string::npos) {
-            pos++;
-            if (pos == 1) { // if first char is a token skip it!
+        handlers::iiif_handler::RequestType request_type = [&]()-> handlers::iiif_handler::RequestType {
+
+            handlers::iiif_handler::RequestType request_type = handlers::iiif_handler::UNDEFINED;
+
+            std::vector<std::string> parts;
+            size_t pos = 0;
+            size_t old_pos = 0;
+
+            //
+            // IIIF URi schema:
+            // {scheme}://{server}{/prefix}/{identifier}/{region}/{size}/{rotation}/{quality}.{format}
+            //
+            // The slashes "/" separate the different parts...
+            //
+            while ((pos = uri.find('/', pos)) != std::string::npos) {
+                pos++;
+                if (pos == 1) { // if first char is a token skip it!
+                    old_pos = pos;
+                    continue;
+                }
+                parts.push_back(shttps::urldecode(uri.substr(old_pos, pos - old_pos - 1)));
                 old_pos = pos;
-                continue;
             }
-            parts.push_back(shttps::urldecode(uri.substr(old_pos, pos - old_pos - 1)));
-            old_pos = pos;
-        }
 
-        if (old_pos != uri.length()) {
-            parts.push_back(shttps::urldecode(uri.substr(old_pos, std::string::npos)));
-        }
+            if (old_pos != uri.length()) {
+                parts.push_back(shttps::urldecode(uri.substr(old_pos, std::string::npos)));
+            }
 
-        if (parts.empty()) {
-            send_error(conn_obj, Connection::BAD_REQUEST, "No parameters/path given");
-            return;
-        }
+            if (parts.empty()) {
+                send_error(conn_obj, Connection::BAD_REQUEST, "No parameters/path given");
+                return handlers::iiif_handler::UNDEFINED;
+            }
 
-        std::vector<std::string> params;
+            std::vector<std::string> params;
 
-        //
-        // below are regex expressions for the different parts of the IIIF URL
-        //
-        std::string qualform_ex = R"(^(color|gray|bitonal|default)\.(jpg|tif|png|jp2)$)";
-        std::string rotation_ex = R"(^!?[-+]?[0-9]*\.?[0-9]*$)";
-        std::string size_ex = R"(^(\^?max)|(\^?pct:[0-9]*\.?[0-9]*)|(\^?[0-9]*,)|(\^?,[0-9]*)|(\^?!?[0-9]*,[0-9]*)$)";
-        std::string region_ex = R"(^(full)|(square)|([0-9]+,[0-9]+,[0-9]+,[0-9]+)|(pct:[0-9]*\.?[0-9]*,[0-9]*\.?[0-9]*,[0-9]*\.?[0-9]*,[0-9]*\.?[0-9]*)$)";
-
-        bool qualform_ok = false;
-        if (!parts.empty())
-            qualform_ok = std::regex_match(parts[parts.size() - 1], std::regex(qualform_ex));
-
-        bool rotation_ok = false;
-        if (parts.size() > 1)
-            rotation_ok = std::regex_match(parts[parts.size() - 2], std::regex(rotation_ex));
-
-        bool size_ok = false;
-        if (parts.size() > 2)
-            size_ok = std::regex_match(parts[parts.size() - 3], std::regex(size_ex));
-
-        bool region_ok = false;
-        if (parts.size() > 3)
-            region_ok = std::regex_match(parts[parts.size() - 4], std::regex(region_ex));
-
-        if ((pos = parts[parts.size() - 1].find('.', 0)) != std::string::npos) {
-            std::string fname_body = parts[parts.size() - 1].substr(0, pos);
-            std::string fname_extension = parts[parts.size() - 1].substr(pos + 1, std::string::npos);
             //
-            // we will serve IIIF syntax based image
+            // below are regex expressions for the different parts of the IIIF URL
             //
-            if (qualform_ok && rotation_ok && size_ok && region_ok) {
-                if (parts.size() >= 6) { // we have a prefix
-                    std::stringstream prefix;
-                    for (int i = 0; i < (parts.size() - 5); i++) {
-                        if (i > 0)
-                            prefix << "/";
-                        prefix << parts[i];
+            std::string qualform_ex = R"(^(color|gray|bitonal|default)\.(jpg|tif|png|jp2)$)";
+            std::string rotation_ex = R"(^!?[-+]?[0-9]*\.?[0-9]*$)";
+            std::string size_ex = R"(^(\^?max)|(\^?pct:[0-9]*\.?[0-9]*)|(\^?[0-9]*,)|(\^?,[0-9]*)|(\^?!?[0-9]*,[0-9]*)$)";
+            std::string region_ex = R"(^(full)|(square)|([0-9]+,[0-9]+,[0-9]+,[0-9]+)|(pct:[0-9]*\.?[0-9]*,[0-9]*\.?[0-9]*,[0-9]*\.?[0-9]*,[0-9]*\.?[0-9]*)$)";
+
+            bool qualform_ok = false;
+            if (!parts.empty())
+                qualform_ok = std::regex_match(parts[parts.size() - 1], std::regex(qualform_ex));
+
+            bool rotation_ok = false;
+            if (parts.size() > 1)
+                rotation_ok = std::regex_match(parts[parts.size() - 2], std::regex(rotation_ex));
+
+            bool size_ok = false;
+            if (parts.size() > 2)
+                size_ok = std::regex_match(parts[parts.size() - 3], std::regex(size_ex));
+
+            bool region_ok = false;
+            if (parts.size() > 3)
+                region_ok = std::regex_match(parts[parts.size() - 4], std::regex(region_ex));
+
+            if ((pos = parts[parts.size() - 1].find('.', 0)) != std::string::npos) {
+                std::string fname_body = parts[parts.size() - 1].substr(0, pos);
+                std::string fname_extension = parts[parts.size() - 1].substr(pos + 1, std::string::npos);
+                //
+                // we will serve IIIF syntax based image
+                //
+                if (qualform_ok && rotation_ok && size_ok && region_ok) {
+                    if (parts.size() >= 6) { // we have a prefix
+                        std::stringstream prefix;
+                        for (int i = 0; i < (parts.size() - 5); i++) {
+                            if (i > 0)
+                                prefix << "/";
+                            prefix << parts[i];
+                        }
+                        params.push_back(prefix.str()); // iiif_prefix
                     }
-                    params.push_back(prefix.str()); // iiif_prefix
+                    else if (parts.size() == 5) {                         // we have no prefix
+                        params.emplace_back(""); // iiif_prefix
+                    }
+                    else {
+                        std::stringstream errmsg;
+                        errmsg << "IIIF url not correctly formatted:";
+                        if (!qualform_ok)
+                            errmsg << " Error in quality: \"" << parts[parts.size() - 1] << "\"!";
+                        if (!rotation_ok)
+                            errmsg << " Error in rotation: \"" << parts[parts.size() - 2] << "\"!";
+                        if (!size_ok)
+                            errmsg << " Error in size: \"" << parts[parts.size() - 3] << "\"!";
+                        if (!region_ok)
+                            errmsg << " Error in region: \"" << parts[parts.size() - 4] << "\"!";
+                        send_error(conn_obj, Connection::BAD_REQUEST, errmsg.str());
+                        return handlers::iiif_handler::UNDEFINED;
+                    }
+                    params.push_back(parts[parts.size() - 5]); // iiif_identifier
+                    params.push_back(parts[parts.size() - 4]); // iiif_region
+                    params.push_back(parts[parts.size() - 3]); // iiif_size
+                    params.push_back(parts[parts.size() - 2]); // iiif_rotation
+                    params.push_back(parts[parts.size() - 1]); // iiif_qualityformat
+                    request_type = handlers::iiif_handler::IIIF;
                 }
-                else if (parts.size() == 5) {                         // we have no prefix
-                    params.emplace_back(""); // iiif_prefix
+                else if ((fname_body == "info") && (fname_extension == "json")) {
+                    //
+                    // we have something like "http:://{server}/{prefix}/{id}/info.json
+                    //
+                    if (parts.size() >= 3) { // we have a prefix
+                        std::stringstream prefix;
+                        for (int i = 0; i < (parts.size() - 2); i++) {
+                            if (i > 0)
+                                prefix << "/";
+                            prefix << parts[i];
+                        }
+                        params.push_back(prefix.str()); // iiif_prefix
+                    }
+                    else if (parts.size() == 2) {                         // we have no prefix
+                        params.push_back(""); // iiif_prefix
+                    }
+                    else {
+                        send_error(conn_obj, Connection::BAD_REQUEST, "IIIF url not correctly formatted!");
+                        return handlers::iiif_handler::UNDEFINED;
+                    }
+                    params.push_back(parts[parts.size() - 2]); // iiif_identifier
+                    request_type = handlers::iiif_handler::INFO_JSON;
+                }
+                else if ((fname_body == "knora") && (fname_extension == "json")) {
+                    //
+                    // we have something like "http:://{server}/{prefix}/{id}/knora.json
+                    //
+                    if (parts.size() >= 3) { // we have a prefix
+                        std::stringstream prefix;
+                        for (int i = 0; i < (parts.size() - 2); i++) {
+                            if (i > 0)
+                                prefix << "/";
+                            prefix << parts[i];
+                        }
+                        params.push_back(prefix.str()); // iiif_prefix
+                    }
+                    else if (parts.size() == 2) {                         // we have no prefix
+                        params.emplace_back(""); // iiif_prefix
+                    }
+                    else {
+                        send_error(conn_obj, Connection::BAD_REQUEST, "IIIF url not correctly formatted!");
+                        return handlers::iiif_handler::UNDEFINED;
+                    }
+                    params.push_back(parts[parts.size() - 2]); // iiif_identifier
+                    request_type = handlers::iiif_handler::KNORA_JSON;
                 }
                 else {
-                    std::stringstream errmsg;
-                    errmsg << "IIIF url not correctly formatted:";
-                    if (!qualform_ok)
-                        errmsg << " Error in quality: \"" << parts[parts.size() - 1] << "\"!";
-                    if (!rotation_ok)
-                        errmsg << " Error in rotation: \"" << parts[parts.size() - 2] << "\"!";
-                    if (!size_ok)
-                        errmsg << " Error in size: \"" << parts[parts.size() - 3] << "\"!";
-                    if (!region_ok)
-                        errmsg << " Error in region: \"" << parts[parts.size() - 4] << "\"!";
-                    send_error(conn_obj, Connection::BAD_REQUEST, errmsg.str());
-                    return;
+                    //
+                    // we have something like "http:://{server}/{prefix}/{id}" with id as "body.ext"
+                    //
+                    if (qualform_ok || rotation_ok || size_ok || region_ok) {
+                        std::stringstream errmsg;
+                        errmsg << "IIIF url not correctly formatted:";
+                        if (!qualform_ok && !parts.empty())
+                            errmsg << " Error in quality: \"" << parts[parts.size() - 1] << "\"!";
+                        if (!rotation_ok && (parts.size() > 1))
+                            errmsg << " Error in rotation: \"" << parts[parts.size() - 2] << "\"!";
+                        if (!size_ok && (parts.size() > 2))
+                            errmsg << " Error in size: \"" << parts[parts.size() - 3] << "\"!";
+                        if (!region_ok && (parts.size() > 3))
+                            errmsg << " Error in region: \"" << parts[parts.size() - 4] << "\"!";
+                        send_error(conn_obj, Connection::BAD_REQUEST, errmsg.str());
+                        return handlers::iiif_handler::UNDEFINED;
+                    }
+                    if (parts.size() >= 2) { // we have a prefix
+                        std::stringstream prefix;
+                        for (int i = 0; i < (parts.size() - 1); i++) {
+                            if (i > 0)
+                                prefix << "/";
+                            prefix << parts[i];
+                        }
+                        params.push_back(prefix.str()); // iiif_prefix
+                    }
+                    else if (parts.size() == 1) {                         // we have no prefix
+                        params.emplace_back(""); // iiif_prefix
+                    }
+                    else {
+                        std::stringstream errmsg;
+                        errmsg << "IIIF url not correctly formatted:";
+                        if (!qualform_ok && (!parts.empty()))
+                            errmsg << " Error in quality: \"" << parts[parts.size() - 1] << "\"!";
+                        if (!rotation_ok && (parts.size() > 1))
+                            errmsg << " Error in rotation: \"" << parts[parts.size() - 2] << "\"!";
+                        if (!size_ok && (parts.size() > 2))
+                            errmsg << " Error in size: \"" << parts[parts.size() - 3] << "\"!";
+                        if (!region_ok && (parts.size() > 3))
+                            errmsg << " Error in region: \"" << parts[parts.size() - 4] << "\"!";
+                        send_error(conn_obj, Connection::BAD_REQUEST, errmsg.str());
+                        return handlers::iiif_handler::UNDEFINED;
+                    }
+                    params.push_back(parts[parts.size() - 1]); // iiif_identifier
+                    request_type = handlers::iiif_handler::REDIRECT;
                 }
-                params.push_back(parts[parts.size() - 5]); // iiif_identifier
-                params.push_back(parts[parts.size() - 4]); // iiif_region
-                params.push_back(parts[parts.size() - 3]); // iiif_size
-                params.push_back(parts[parts.size() - 2]); // iiif_rotation
-                params.push_back(parts[parts.size() - 1]); // iiif_qualityformat
-                request_type = IIIF;
             }
-            else if ((fname_body == "info") && (fname_extension == "json")) {
-                //
-                // we have something like "http:://{server}/{prefix}/{id}/info.json
-                //
+            else if (parts[parts.size() - 1] == "file") {
                 if (parts.size() >= 3) { // we have a prefix
+                    //
+                    // we have something like "http:://{server}/{prefix}/{id}/file
+                    //
                     std::stringstream prefix;
                     for (int i = 0; i < (parts.size() - 2); i++) {
                         if (i > 0)
@@ -1874,47 +1966,27 @@ namespace Sipi {
                     }
                     params.push_back(prefix.str()); // iiif_prefix
                 }
-                else if (parts.size() == 2) {                         // we have no prefix
-                    params.push_back(""); // iiif_prefix
-                }
-                else {
-                    send_error(conn_obj, Connection::BAD_REQUEST, "IIIF url not correctly formatted!");
-                    return;
-                }
-                params.push_back(parts[parts.size() - 2]); // iiif_identifier
-                request_type = INFO_JSON;
-            }
-            else if ((fname_body == "knora") && (fname_extension == "json")) {
-                //
-                // we have something like "http:://{server}/{prefix}/{id}/knora.json
-                //
-                if (parts.size() >= 3) { // we have a prefix
-                    std::stringstream prefix;
-                    for (int i = 0; i < (parts.size() - 2); i++) {
-                        if (i > 0)
-                            prefix << "/";
-                        prefix << parts[i];
-                    }
-                    params.push_back(prefix.str()); // iiif_prefix
-                }
-                else if (parts.size() == 2) {                         // we have no prefix
+                else if (parts.size() == 2) { // we have no prefix
+                    //
+                    // we have something like "http:://{server}/{id}/file
+                    //
                     params.emplace_back(""); // iiif_prefix
                 }
                 else {
                     send_error(conn_obj, Connection::BAD_REQUEST, "IIIF url not correctly formatted!");
-                    return;
+                    return handlers::iiif_handler::UNDEFINED;
                 }
                 params.push_back(parts[parts.size() - 2]); // iiif_identifier
-                request_type = KNORA_JSON;
+                request_type = handlers::iiif_handler::FILE_DOWNLOAD;
             }
             else {
                 //
-                // we have something like "http:://{server}/{prefix}/{id}" with id as "body.ext"
+                // we have something like "http:://{server}/{prefix}/{id}" with id as "body_without_ext"
                 //
                 if (qualform_ok || rotation_ok || size_ok || region_ok) {
                     std::stringstream errmsg;
                     errmsg << "IIIF url not correctly formatted:";
-                    if (!qualform_ok && !parts.empty())
+                    if (!qualform_ok && (parts.size() > 0))
                         errmsg << " Error in quality: \"" << parts[parts.size() - 1] << "\"!";
                     if (!rotation_ok && (parts.size() > 1))
                         errmsg << " Error in rotation: \"" << parts[parts.size() - 2] << "\"!";
@@ -1923,7 +1995,7 @@ namespace Sipi {
                     if (!region_ok && (parts.size() > 3))
                         errmsg << " Error in region: \"" << parts[parts.size() - 4] << "\"!";
                     send_error(conn_obj, Connection::BAD_REQUEST, errmsg.str());
-                    return;
+                    return handlers::iiif_handler::UNDEFINED;
                 }
                 if (parts.size() >= 2) { // we have a prefix
                     std::stringstream prefix;
@@ -1940,7 +2012,7 @@ namespace Sipi {
                 else {
                     std::stringstream errmsg;
                     errmsg << "IIIF url not correctly formatted:";
-                    if (!qualform_ok && (!parts.empty()))
+                    if (!qualform_ok && (parts.size() > 0))
                         errmsg << " Error in quality: \"" << parts[parts.size() - 1] << "\"!";
                     if (!rotation_ok && (parts.size() > 1))
                         errmsg << " Error in rotation: \"" << parts[parts.size() - 2] << "\"!";
@@ -1949,108 +2021,39 @@ namespace Sipi {
                     if (!region_ok && (parts.size() > 3))
                         errmsg << " Error in region: \"" << parts[parts.size() - 4] << "\"!";
                     send_error(conn_obj, Connection::BAD_REQUEST, errmsg.str());
-                    return;
+                    return handlers::iiif_handler::UNDEFINED;
                 }
                 params.push_back(parts[parts.size() - 1]); // iiif_identifier
-                request_type = REDIRECT;
+                request_type = handlers::iiif_handler::REDIRECT;
             }
-        }
-        else if (parts[parts.size() - 1] == "file") {
-            if (parts.size() >= 3) { // we have a prefix
-                //
-                // we have something like "http:://{server}/{prefix}/{id}/file
-                //
-                std::stringstream prefix;
-                for (int i = 0; i < (parts.size() - 2); i++) {
-                    if (i > 0)
-                        prefix << "/";
-                    prefix << parts[i];
-                }
-                params.push_back(prefix.str()); // iiif_prefix
-            }
-            else if (parts.size() == 2) { // we have no prefix
-                //
-                // we have something like "http:://{server}/{id}/file
-                //
-                params.emplace_back(""); // iiif_prefix
-            }
-            else {
-                send_error(conn_obj, Connection::BAD_REQUEST, "IIIF url not correctly formatted!");
-                return;
-            }
-            params.push_back(parts[parts.size() - 2]); // iiif_identifier
-            request_type = FILE_DOWNLOAD;
-        }
-        else {
-            //
-            // we have something like "http:://{server}/{prefix}/{id}" with id as "body_without_ext"
-            //
-            if (qualform_ok || rotation_ok || size_ok || region_ok) {
-                std::stringstream errmsg;
-                errmsg << "IIIF url not correctly formatted:";
-                if (!qualform_ok && (parts.size() > 0))
-                    errmsg << " Error in quality: \"" << parts[parts.size() - 1] << "\"!";
-                if (!rotation_ok && (parts.size() > 1))
-                    errmsg << " Error in rotation: \"" << parts[parts.size() - 2] << "\"!";
-                if (!size_ok && (parts.size() > 2))
-                    errmsg << " Error in size: \"" << parts[parts.size() - 3] << "\"!";
-                if (!region_ok && (parts.size() > 3))
-                    errmsg << " Error in region: \"" << parts[parts.size() - 4] << "\"!";
-                send_error(conn_obj, Connection::BAD_REQUEST, errmsg.str());
-                return;
-            }
-            if (parts.size() >= 2) { // we have a prefix
-                std::stringstream prefix;
-                for (int i = 0; i < (parts.size() - 1); i++) {
-                    if (i > 0)
-                        prefix << "/";
-                    prefix << parts[i];
-                }
-                params.push_back(prefix.str()); // iiif_prefix
-            }
-            else if (parts.size() == 1) {                         // we have no prefix
-                params.emplace_back(""); // iiif_prefix
-            }
-            else {
-                std::stringstream errmsg;
-                errmsg << "IIIF url not correctly formatted:";
-                if (!qualform_ok && (parts.size() > 0))
-                    errmsg << " Error in quality: \"" << parts[parts.size() - 1] << "\"!";
-                if (!rotation_ok && (parts.size() > 1))
-                    errmsg << " Error in rotation: \"" << parts[parts.size() - 2] << "\"!";
-                if (!size_ok && (parts.size() > 2))
-                    errmsg << " Error in size: \"" << parts[parts.size() - 3] << "\"!";
-                if (!region_ok && (parts.size() > 3))
-                    errmsg << " Error in region: \"" << parts[parts.size() - 4] << "\"!";
-                send_error(conn_obj, Connection::BAD_REQUEST, errmsg.str());
-                return;
-            }
-            params.push_back(parts[parts.size() - 1]); // iiif_identifier
-            request_type = REDIRECT;
-        }
+            return request_type;
+        }();
+
+        // FIXME: remove this and pass the one returned from the parse function
+        std::vector<std::string> params;
 
         switch (request_type) {
-            case IIIF: {
+            case handlers::iiif_handler::IIIF: {
                 serve_iiif(conn_obj, luaserver, serv, prefix_as_path, uri, params);
                 return;
             }
-            case INFO_JSON: {
+            case handlers::iiif_handler::INFO_JSON: {
                 serve_info_json_file(conn_obj, serv, luaserver, params, prefix_as_path);
                 return;
             }
-            case KNORA_JSON: {
+            case handlers::iiif_handler::KNORA_JSON: {
                 serve_knora_json_file(conn_obj, serv, luaserver, params, prefix_as_path);
                 return;
             }
-            case REDIRECT: {
+            case handlers::iiif_handler::REDIRECT: {
                 serve_redirect(conn_obj, params);
                 return;
             }
-            case FILE_DOWNLOAD: {
+            case handlers::iiif_handler::FILE_DOWNLOAD: {
                 serve_file_download(conn_obj, luaserver, serv, prefix_as_path, params);
                 return;
             }
-            case UNDEFINED: {
+            case handlers::iiif_handler::UNDEFINED: {
                 send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Unknown internal error!");
                 return;
             }
