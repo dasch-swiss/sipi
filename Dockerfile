@@ -19,7 +19,7 @@ ENV BUILD_TAG=${BUILD_TAG}
 RUN cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo --log-context \
     && cd build \
     && cmake --build . --parallel 1 \
-    && ctest
+    && ctest --output-on-failure
 
 # STAGE 2: Setup
 FROM $UBUNTU_BASE as final
