@@ -5,9 +5,18 @@ set(TEST_NAME sipi_handlers_tests)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-include_directories(${CMAKE_SOURCE_DIR}/src)
+include_directories(
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/shttps
+)
 
 set(IIIF_HANDLER_SOURCE_FILES
+        ${CMAKE_SOURCE_DIR}/shttps/ChunkReader.cpp
+        ${CMAKE_SOURCE_DIR}/shttps/ChunkReader.h
+        ${CMAKE_SOURCE_DIR}/shttps/Connection.cpp
+        ${CMAKE_SOURCE_DIR}/shttps/Connection.h
+        ${CMAKE_SOURCE_DIR}/shttps/Error.cpp
+        ${CMAKE_SOURCE_DIR}/shttps/Error.h
         ${CMAKE_SOURCE_DIR}/src/handlers/iiif_handler.cpp
         ${CMAKE_SOURCE_DIR}/src/handlers/iiif_handler.hpp
 )

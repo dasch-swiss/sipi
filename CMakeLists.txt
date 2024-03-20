@@ -123,10 +123,12 @@ endif()
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CMAKE_REQUIRED_FLAGS "-std=c++23") # or the appropriate flag for your compiler
+
 # Simple C++ test program
 set(CXX_TEST_PROGRAM "
-    #include <version>
     #include <expected>
+    #include <version>
     int main() { return 0; }
 ")
 
@@ -137,7 +139,7 @@ check_cxx_source_compiles("${CXX_TEST_PROGRAM}" CXX23_SUPPORTED)
 if(CXX23_SUPPORTED)
     message(STATUS "C++23 is supported.")
 else()
-    message(STATUS "C++23 is not supported.")
+    message(FATAL_ERROR "C++23 is not supported.")
 endif()
 
 #
