@@ -10,9 +10,10 @@
 #include <string>
 #include <vector>
 
-namespace handlers::iiif_handler {
-
-    enum RequestType {
+namespace handlers::iiif_handler
+{
+    enum RequestType
+    {
         IIIF,
         INFO_JSON,
         KNORA_JSON,
@@ -21,8 +22,10 @@ namespace handlers::iiif_handler {
         UNDEFINED
     };
 
-    inline std::string requestTypeToString(const RequestType type) {
-        switch (type) {
+    inline std::string request_type_to_string(const RequestType type)
+    {
+        switch (type)
+        {
         case IIIF:
             return "IIIF";
         case INFO_JSON:
@@ -42,35 +45,43 @@ namespace handlers::iiif_handler {
 
 
     // Struct to hold the result of parsing an IIIF URL
-    struct IIIFUrlParseResult {
+    struct IIIFUriParseResult
+    {
         RequestType request_type;
         std::vector<std::string> params;
 
-        [[nodiscard]] std::string to_string() const {
+        [[nodiscard]] std::string to_string() const
+        {
             std::stringstream result;
 
             // Assuming you have a function to convert RequestType to string
             // If not, you'll need to implement this according to your enum
-            std::string requestTypeStr = requestTypeToString(request_type);
+            const std::string requestTypeStr = request_type_to_string(request_type);
 
             result << "request_type: " << requestTypeStr << ", params: ";
 
             // Concatenate params
-            for (size_t i = 0; i < params.size(); ++i) {
+            for (size_t i = 0; i < params.size(); ++i)
+            {
                 result << params[i];
-                if (i != params.size() - 1) {
+                if (i != params.size() - 1)
+                {
                     result << ", "; // Add a separator between the params, but not after the last one
                 }
             }
 
             return result.str();
         }
+
+        [[nodiscard]] bool operator==(const IIIFUriParseResult& other) const
+        {
+            return request_type == other.request_type && params == other.params;
+        }
     };
 
     // Free function to parse an IIIF URL returning either the result or an error message
     [[nodiscard]] auto
-    parse_iiif_url(const std::string &uri) noexcept -> std::expected<IIIFUrlParseResult, std::string>;
-
+    parse_iiif_uri(const std::string& uri) noexcept -> std::expected<IIIFUriParseResult, std::string>;
 } // namespace handlers::iiif_handler
 
 

@@ -182,8 +182,8 @@ class SipiImageError final : public std::exception {
     */
     class SipiImage {
         static std::unordered_map<std::string, std::shared_ptr<SipiIO> > io; //!< member variable holding a map of I/O class instances for the different file formats
-        static byte bilinn(byte buf[], register int nx, register double x, register double y, register int c, register int n);
-        static word bilinn(word buf[], register int nx, register double x, register double y, register int c, register int n);
+        static byte bilinn(byte buf[], int nx, double x, double y, int c, int n);
+        static word bilinn(word buf[], int nx, double x, double y, int c, int n);
         void ensure_exif();
 
     protected:
@@ -634,7 +634,7 @@ class SipiImageError final : public std::exception {
 
         SipiImage &operator+(const SipiImage &rhs);
 
-        bool operator==(const SipiImage &rhs);
+        bool operator==(const SipiImage &rhs) const;
 
         /*!
         * The overloaded << operator which is used to write the error message to the output

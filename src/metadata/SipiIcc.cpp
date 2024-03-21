@@ -235,7 +235,7 @@ namespace Sipi {
         std::vector<unsigned char> data;
         if (buf != nullptr) {
             data.reserve(len);
-            for (int i = 0; i < len; i++) data.push_back(buf[i]);
+            for (size_t i = 0; i < len; i++) data.push_back(buf[i]);
             delete[] buf;
         }
         return data;
