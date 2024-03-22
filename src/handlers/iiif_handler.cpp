@@ -35,6 +35,9 @@ std::string vector_to_string(const std::vector<T>& vec) {
  * off of the {schema} and {server} parts, thus only getting:
  * {/prefix}/{identifier}/{region}/{size}/{rotation}/{quality}.{format},
  * e.g., "/iiif/2/image.jpg/full/200,/0/default.jpg".
+ *
+ * TODO: The parsing is not complete and needs to be extended to cover all cases.
+ * TODO: Property based testing would be useful here.
  */
 [[nodiscard]]
 auto parse_iiif_uri(const std::string& uri) noexcept -> std::expected<IIIFUriParseResult, std::string> {
@@ -80,7 +83,10 @@ auto parse_iiif_uri(const std::string& uri) noexcept -> std::expected<IIIFUriPar
     // below are regex expressions for the different parts of the IIIF URL
     //
     std::string qualform_ex = R"(^(color|gray|bitonal|default)\.(jpg|tif|png|jp2)$)";
-    std::string rotation_ex = R"(^!?[-+]?[0-9]*\.?[0-9]*$)";
+
+    // rotation can be a number or a number with a "!" in front.
+    // There is an '|' in the middle of the regex!
+    std::string rotation_ex = R"(^[-+]?[0-9]*\.?[0-9]+$|^![-+]?[0-9]*\.?[0-9]+$)";
     std::string size_ex = R"(^(\^?max)|(\^?pct:[0-9]*\.?[0-9]*)|(\^?[0-9]*,)|(\^?,[0-9]*)|(\^?!?[0-9]*,[0-9]*)$)";
     std::string region_ex =
         R"(^(full)|(square)|([0-9]+,[0-9]+,[0-9]+,[0-9]+)|(pct:[0-9]*\.?[0-9]*,[0-9]*\.?[0-9]*,[0-9]*\.?[0-9]*,[0-9]*\.?[0-9]*)$)";
@@ -117,10 +123,10 @@ auto parse_iiif_uri(const std::string& uri) noexcept -> std::expected<IIIFUriPar
         std::string fname_body = parts[parts.size() - 1].substr(0, pos);
         std::string fname_extension = parts[parts.size() - 1].substr(pos + 1, std::string::npos);
 
-        // Let's check if we have a valid IIIF URL
+        // Let's check if we have a valid IIIF URI
         if (qualform_ok && rotation_ok && size_ok && region_ok) {
             //
-            // we potentially have a valid IIIF URL
+            // we potentially have a valid IIIF URI
             //
             if (parts.size() >= 6) {
                 // we have a prefix
@@ -135,9 +141,7 @@ auto parse_iiif_uri(const std::string& uri) noexcept -> std::expected<IIIFUriPar
                 // we have no prefix
                 params.emplace_back(""); // iiif_prefix
             } else {
-                std::stringstream errmsg;
-                errmsg << "IIIF url not correctly formatted:";
-                return std::unexpected(errmsg.str());
+                return std::unexpected("IIIF url not correctly formatted");
             }
             params.push_back(parts[parts.size() - 5]); // iiif_identifier
             params.push_back(parts[parts.size() - 4]); // iiif_region
@@ -183,7 +187,7 @@ auto parse_iiif_uri(const std::string& uri) noexcept -> std::expected<IIIFUriPar
                 // we have no prefix
                 params.emplace_back(""); // iiif_prefix
             } else {
-                return std::unexpected("IIIF url not correctly formatted!");
+                return std::unexpected("IIIF url not correctly formatted");
             }
             params.push_back(parts[parts.size() - 2]); // iiif_identifier
             request_type = KNORA_JSON;
@@ -191,15 +195,36 @@ auto parse_iiif_uri(const std::string& uri) noexcept -> std::expected<IIIFUriPar
             //
             // we potentially have something like "/{prefix}/{id}" with id as "body.ext"
             //
+            if (qualform_ok) {
+                // we have a valid quality format but the rest of the URL is not valid
+                return std::unexpected("IIIF url not correctly formatted");
+            }
+
+            // or something like "/unit/lena512.jp2/full/max/0/garbage.garbage"
+            // we optimize the check that three out of four parts are correct
+            if (rotation_ok && size_ok && region_ok) {
+                std::stringstream errmsg;
+                errmsg << "IIIF url not correctly formatted:";
+                if (!qualform_ok && !parts.empty())
+                    errmsg << " Error in quality: \"" << parts[parts.size() - 1] << "\"!";
+                return std::unexpected(errmsg.str());
+            }
+
             if (parts.size() >= 2) {
                 // we have a prefix
                 //
                 // we have something like "/{prefix}/{id}" with id as "body.ext"
                 //
+
+                // we have a prefix
                 std::stringstream prefix;
                 for (size_t i = 0; i < (parts.size() - 1); i++) {
-                    if (i > 0)
+                    if (parts[i].empty()) {
+                        return std::unexpected("IIIF url not correctly formatted!");
+                    }
+                    if (!prefix.str().empty()) {
                         prefix << "/";
+                    }
                     prefix << parts[i];
                 }
                 params.push_back(prefix.str()); // iiif_prefix
@@ -236,7 +261,7 @@ auto parse_iiif_uri(const std::string& uri) noexcept -> std::expected<IIIFUriPar
             //
             std::stringstream prefix;
             for (size_t i = 0; i < (parts.size() - 2); i++) {
-                if (i > 0)
+                if (!prefix.str().empty())
                     prefix << "/";
                 prefix << parts[i];
             }
@@ -255,13 +280,28 @@ auto parse_iiif_uri(const std::string& uri) noexcept -> std::expected<IIIFUriPar
     } else {
         //
         // we potentially have something like "/{prefix}/{id}" with id as "body_without_ext"
+        // remember that there could potentially be more than one prefix
         //
+
+        // or something like "/unit/lena512.jp2/full/max/0/jpg"
+        // we optimize the check that three out of four parts are correct
+        if (rotation_ok && size_ok && region_ok) {
+            std::stringstream errmsg;
+            errmsg << "IIIF url not correctly formatted:";
+            if (!qualform_ok && !parts.empty())
+                errmsg << " Error in quality: \"" << parts[parts.size() - 1] << "\"!";
+            return std::unexpected(errmsg.str());
+        }
         if (parts.size() >= 2) {
             // we have a prefix
             std::stringstream prefix;
             for (size_t i = 0; i < (parts.size() - 1); i++) {
-                if (i > 0)
+                if (parts[i].empty()) {
+                    return std::unexpected("IIIF url not correctly formatted!");
+                }
+                if (!prefix.str().empty()) {
                     prefix << "/";
+                }
                 prefix << parts[i];
             }
             params.push_back(prefix.str()); // iiif_prefix
@@ -274,8 +314,6 @@ auto parse_iiif_uri(const std::string& uri) noexcept -> std::expected<IIIFUriPar
         params.push_back(parts[parts.size() - 1]); // iiif_identifier
         request_type = REDIRECT;
     }
-
-    // std::cout << ">> params: " << vector_to_string(params) << ", request_type: " << request_type << std::endl;
 
     return IIIFUriParseResult {request_type, params};
 }

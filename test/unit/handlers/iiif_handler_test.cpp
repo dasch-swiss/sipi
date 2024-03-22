@@ -39,11 +39,18 @@ TEST(iiif_handler, parse_iiif_base_uri_needing_redirect) {
     }
 }
 
-TEST(iiif_handler, not_parse_invalid_iiif_uris_missing_identifier_and_parameters) {
+TEST(iiif_handler, not_parse_invalid_iiif_uris) {
 
     std::vector<std::string> invalid_uris = {
         "/",
-        "//2/"
+        "//2/",
+        "/unit//lena512.jp2",
+        "/unit/lena512.jp2/max/0/default.jpg",
+        "/unit/lena512.jp2/full/max/default.jpg",
+        "/unit/lena512.jp2/full/max/!/default.jpg",
+        "/unit/lena512.jp2/full/max/0/jpg",
+        "/knora/67352ccc-d1b0-11e1-89ae-279075081939.jp2/full/max/0/default.aN",
+        "/knora/67352ccc-d1b0-11e1-89ae-279075081939.jp2/full/max/0/BFTP=w.jpg",
     };
 
     for (const auto& uri: invalid_uris) {

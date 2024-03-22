@@ -99,7 +99,7 @@ class TestServer:
         manager.expect_status_code(
             "/knora/DenyLeaves.jpg/full/max/0/default.jpg", 401)
 
-    def test_iiifurl_parsing(self, manager):
+    def test_iiif_url_parsing(self, manager):
         """Return 400 for invalid IIIF URL's"""
         manager.expect_status_code("/unit//lena512.jp2", 400)
         manager.expect_status_code("/unit/lena512.jp2/max/0/default.jpg", 400)
@@ -764,5 +764,3 @@ class TestServer:
         #print('response_json-------------------------------')
         #print(response_json)
         #print('response_json-------------------------------')
-
-
