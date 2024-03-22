@@ -64,9 +64,7 @@ jobs:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
-      - uses: buildjet/setup-python@v5
-        with:
-          python-version: '3.11.8'
+      - uses: dasch-swiss/sipi/.github/actions/setup-python@main
       - run: make install-requirements
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
