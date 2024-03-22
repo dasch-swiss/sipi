@@ -1222,8 +1222,7 @@ namespace shttps {
 
 
     // Adds a route to the server. The route is a combination of an HTTP method, a path, and request handler.
-    void Server::add_route(Connection::HttpMethod method_p, const std::string &path_p, RequestHandler handler_p,
-                           void *handler_data_p) {
+    void Server::add_route(Connection::HttpMethod method_p, const std::string &path_p, RequestHandler handler_p, void *handler_data_p) {
         handler[method_p][path_p] = handler_p;
         handler_data[method_p][path_p] = handler_data_p;
     }

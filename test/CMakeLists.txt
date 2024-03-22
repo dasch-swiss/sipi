@@ -74,3 +74,7 @@ add_subdirectory(unit/configuration)
 # SipiImage tests
 # To only run this single test, run from inside the build directory '(cd test/unit && ./sipiimage/sipiimage)'
 add_subdirectory(unit/sipiimage)
+
+# Handlers tests
+# To only run this single test, run from inside the build directory '(cd test/unit && ./handlers/handlers)'
+add_subdirectory(unit/handlers)

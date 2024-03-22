@@ -41,6 +41,7 @@ cmake-build-debug-remote/
 cmake-build-debug-inside-docker/
 cmake-build-dockerdebug/
 cmake-build-relwithdebinfo-inside-docker/
+cmake-build-relwithdebinfo-nix-develop/
 # ignore cache
 cache/
 

@@ -36,19 +36,19 @@
 #include <exception>
 #include <string>
 
-#include "SipiError.h"
-#include "SipiIO.h"
-#include "formats/SipiIOTiff.h"
-#include "metadata/SipiXmp.h"
-#include "metadata/SipiIcc.h"
-#include "metadata/SipiIptc.h"
-#include "metadata/SipiExif.h"
-#include "metadata/SipiEssentials.h"
-#include "iiifparser/SipiRegion.h"
-#include "iiifparser/SipiSize.h"
+#include "SipiError.hpp"
+#include "../include/SipiIO.h"
+#include "../include/formats/SipiIOTiff.h"
+#include "../include/metadata/SipiXmp.h"
+#include "../include/metadata/SipiIcc.h"
+#include "../include/metadata/SipiIptc.h"
+#include "../include/metadata/SipiExif.h"
+#include "../include/metadata/SipiEssentials.h"
+#include "../include/iiifparser/SipiRegion.h"
+#include "../include/iiifparser/SipiSize.h"
 
-#include "shttps/Connection.h"
-#include "shttps/Hash.h"
+#include "../shttps/Connection.h"
+#include "../shttps/Hash.h"
 
 
 /*!
@@ -182,8 +182,8 @@ class SipiImageError final : public std::exception {
     */
     class SipiImage {
         static std::unordered_map<std::string, std::shared_ptr<SipiIO> > io; //!< member variable holding a map of I/O class instances for the different file formats
-        static byte bilinn(byte buf[], register int nx, register double x, register double y, register int c, register int n);
-        static word bilinn(word buf[], register int nx, register double x, register double y, register int c, register int n);
+        static byte bilinn(byte buf[], int nx, double x, double y, int c, int n);
+        static word bilinn(word buf[], int nx, double x, double y, int c, int n);
         void ensure_exif();
 
     protected:
@@ -492,8 +492,8 @@ class SipiImageError final : public std::exception {
          * this into account as well.
          */
         void removeExtraSamples(const bool force_gray_alpha = false) {
-            const auto content_channels = (photo == SEPARATED ? 4 : 3);
-            const auto extra_channels = static_cast<int>(es.size());
+            const size_t content_channels = (photo == SEPARATED ? 4 : 3);
+            const size_t extra_channels = es.size();
             for (size_t i = content_channels; i < (extra_channels + content_channels); i++) {
                 removeChannel(i, force_gray_alpha);
             }
@@ -634,7 +634,7 @@ class SipiImageError final : public std::exception {
 
         SipiImage &operator+(const SipiImage &rhs);
 
-        bool operator==(const SipiImage &rhs);
+        bool operator==(const SipiImage &rhs) const;
 
         /*!
         * The overloaded << operator which is used to write the error message to the output

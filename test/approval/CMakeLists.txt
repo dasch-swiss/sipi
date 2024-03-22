@@ -2,7 +2,7 @@
 # Google Test Approval Tests Starter
 # -----------------------
 set(TEST_NAME sipi.approvaltests)
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 23)
 set(SOURCE_FILES
         main.cpp
         googletest_starter_test.cpp

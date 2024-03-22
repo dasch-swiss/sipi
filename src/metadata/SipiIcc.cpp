@@ -26,12 +26,12 @@
 
 static const char __file__[] = __FILE__;
 
-#include "SipiError.h"
+#include "../SipiError.hpp"
 #include "AdobeRGB1998_icc.h"
 #include "USWebCoatedSWOP_icc.h"
 #include "Rec709-Rec1886_icc.h"
 
-#include "SipiImage.h"
+#include "../SipiImage.hpp"
 #include "shttps/makeunique.h"
 
 namespace Sipi {
@@ -235,7 +235,7 @@ namespace Sipi {
         std::vector<unsigned char> data;
         if (buf != nullptr) {
             data.reserve(len);
-            for (int i = 0; i < len; i++) data.push_back(buf[i]);
+            for (size_t i = 0; i < len; i++) data.push_back(buf[i]);
             delete[] buf;
         }
         return data;

@@ -5,7 +5,7 @@
 #include <cstring>
 
 #include "shttps/Connection.h"
-#include "SipiError.h"
+#include "../SipiError.hpp"
 #include "SipiIdentifier.h"
 
 static const char __file__[] = __FILE__;

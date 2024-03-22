@@ -45,8 +45,8 @@
 
 #include "shttps/Server.h"
 #include "SipiLua.h"
-#include "SipiImage.h"
-#include "SipiHttpServer.h"
+#include "SipiImage.hpp"
+#include "SipiHttpServer.hpp"
 #include "SipiFilenameHash.h"
 #include "CLI11.hpp"
 
@@ -730,13 +730,13 @@ int main(int argc, char *argv[]) {
         if (result) {
             std::cerr << "Files identical!" << std::endl;
         } else {
-            float diffval = 0.;
-            int maxdiff = 0;
-            int max_x, max_y;
-            for (int y = 0; y < img1.getNy(); y++) {
-                for (int x = 0; x < img1.getNx(); x++) {
-                    for (int c = 0; c < img1.getNc(); c++) {
-                        int dv = img1.getPixel(x, y, c) - img2.getPixel(x, y, c);
+            double diffval = 0.;
+            size_t maxdiff = 0;
+            size_t max_x, max_y;
+            for (size_t y = 0; y < img1.getNy(); y++) {
+                for (size_t x = 0; x < img1.getNx(); x++) {
+                    for (size_t c = 0; c < img1.getNc(); c++) {
+                        size_t dv = img1.getPixel(x, y, c) - img2.getPixel(x, y, c);
                         if (dv > maxdiff) {
                             maxdiff = dv;
                             max_x = x;
@@ -746,7 +746,7 @@ int main(int argc, char *argv[]) {
                     }
                 }
             }
-            diffval /= (img1.getNy() * img1.getNx() * img1.getNc());
+            diffval /= static_cast<double>(img1.getNy() * img1.getNx() * img1.getNc());
             std::cerr << "Files differ: avg: " << diffval << " max: " << maxdiff << "(" << max_x << ", " << max_y <<
                 ") See diff.tif" << std::endl;
         }

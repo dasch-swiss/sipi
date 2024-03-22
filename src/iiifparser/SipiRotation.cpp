@@ -36,7 +36,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "SipiError.h"
+#include "../SipiError.hpp"
 #include "SipiRotation.h"
 #include "shttps/Parsing.h"
 

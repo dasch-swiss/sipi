@@ -30,7 +30,7 @@
 #include "tiff.h"
 #include "tiffio.h"
 
-#include "SipiImage.h"
+#include "../../src/SipiImage.hpp"
 //#include "metadata/SipiExif.h"
 #include "SipiIO.h"
 

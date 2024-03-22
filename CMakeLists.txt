@@ -103,25 +103,44 @@ option(CMAKE_BUILD_TYPE "The default build type is RelWithDebInfo" RelWithDebInf
 #
 # Here we determine the compiler and compiler version. We need clang >= 15 or g++ >= 13
 #
-if(CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "15.0")
-        message(FATAL_ERROR "Clang version must be 15.0.0 or greater! Aborting...")
-        set(ENV(CXX) "clang++")
-        set(ENV(CC) "clang")
-    endif()
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "13.0")
         message(FATAL_ERROR "Requires GCC 13.0 or greater.")
         set(ENV(CXX) "g++")
         set(ENV(CC) "gcc")
     endif()
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "15.0")
+        message(FATAL_ERROR "Clang version must be 15.0.0 or greater! Aborting...")
+        set(ENV(CXX) "clang++")
+        set(ENV(CC) "clang")
+    endif()
 else()
     message(WARNING "You are using an unsupported compiler (${CMAKE_CXX_COMPILER_ID}). Compilation has only been tested with Clang and GCC.")
 endif()
-#
-# Set the C++ standard to C++14 (goal is to move to C++23)
-#
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
+
+# Set C++ standard to C++23
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(CMAKE_REQUIRED_FLAGS "-std=c++23") # or the appropriate flag for your compiler
+
+# Simple C++ test program
+set(CXX_TEST_PROGRAM "
+    #include <expected>
+    #include <version>
+    int main() { return 0; }
+")
+
+# Check if the test program compiles with C++23
+include(CheckCXXSourceCompiles)
+check_cxx_source_compiles("${CXX_TEST_PROGRAM}" CXX23_SUPPORTED)
+
+if(CXX23_SUPPORTED)
+    message(STATUS "C++23 is supported.")
+else()
+    message(FATAL_ERROR "C++23 is not supported.")
+endif()
 
 #
 # Statically compile the C++ standard library into the executable
@@ -410,7 +429,8 @@ include_directories(
 add_executable(sipi
         src/sipi.cpp
         src/SipiConf.cpp include/SipiConf.h
-        src/SipiError.cpp include/SipiError.h
+        src/SipiError.cpp
+        src/SipiError.hpp
         include/AdobeRGB1998_icc.h include/USWebCoatedSWOP_icc.h
         include/CLI11.hpp
         src/metadata/SipiIcc.cpp include/metadata/SipiIcc.h
@@ -418,12 +438,17 @@ add_executable(sipi
         src/metadata/SipiIptc.cpp include/metadata/SipiIptc.h
         src/metadata/SipiExif.cpp include/metadata/SipiExif.h
         src/metadata/SipiEssentials.cpp include/metadata/SipiEssentials.h
-        src/SipiImage.cpp include/SipiImage.h include/SipiImageError.h
+        src/SipiImage.cpp
+        src/SipiImage.hpp
+        src/SipiImageError.hpp
         src/formats/SipiIOTiff.cpp include/formats/SipiIOTiff.h
         src/formats/SipiIOJ2k.cpp include/formats/SipiIOJ2k.h
         src/formats/SipiIOJpeg.cpp include/formats/SipiIOJpeg.h
         src/formats/SipiIOPng.cpp include/formats/SipiIOPng.h
-        src/SipiHttpServer.cpp include/SipiHttpServer.h
+        src/SipiHttpServer.cpp
+        src/SipiHttpServer.hpp
+        src/handlers/iiif_handler.cpp
+        src/handlers/iiif_handler.hpp
         src/SipiCache.cpp include/SipiCache.h
         src/SipiLua.cpp include/SipiLua.h
         src/iiifparser/SipiRotation.cpp include/iiifparser/SipiRotation.h
@@ -447,7 +472,8 @@ add_executable(sipi
         shttps/makeunique.h
         src/SipiFilenameHash.cpp include/SipiFilenameHash.h
         include/iiifparser/SipiIdentifier.h src/iiifparser/SipiIdentifier.cpp
-        include/SipiImageError.h)
+        src/handlers/iiif_handler.cpp
+        src/handlers/iiif_handler.hpp)
 
 add_dependencies(sipi icc_profiles)
 

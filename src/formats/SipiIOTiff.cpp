@@ -36,9 +36,9 @@
 #include <cerrno>
 
 #include "shttps/Connection.h"
-#include "SipiError.h"
+#include "../SipiError.hpp"
 #include "SipiIOTiff.h"
-#include "SipiImage.h"
+#include "../SipiImage.hpp"
 
 #include "tif_dir.h"  // libtiff internals; for _TIFFFieldArray
 

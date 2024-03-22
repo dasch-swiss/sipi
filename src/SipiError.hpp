@@ -32,13 +32,10 @@
  * the line number and a description of what went wrong.
  */
 
-#include <iostream>
 #include <string>
-#include <exception>
-#include <stdexcept>
 #include <memory>
 
-#include "shttps/Error.h"
+#include "../shttps/Error.h"
 
 /**
  * \namespace Sipi Used for all sipi things.
@@ -46,7 +43,7 @@
 namespace Sipi {
 
     /*!
-     * \class SipiError "SipiError.h"
+     * \class SipiError "SipiError.hpp"
      * \brief Class that implements the error handling with exceptions
      *
      * Used for giving error messages while throwing

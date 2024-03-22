@@ -38,7 +38,7 @@
 
 #include "shttps/Global.h"
 #include "shttps/Parsing.h"
-#include "SipiError.h"
+#include "../SipiError.hpp"
 #include "SipiSize.h"
 
 static const char __file__[] = __FILE__;

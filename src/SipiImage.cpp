@@ -35,7 +35,7 @@
 
 #include "shttps/Global.h"
 #include "shttps/Hash.h"
-#include "SipiImage.h"
+#include "SipiImage.hpp"
 #include "formats/SipiIOTiff.h"
 #include "formats/SipiIOJ2k.h"
 #include "formats/SipiIOJpeg.h"
@@ -1713,7 +1713,7 @@ namespace Sipi {
 
     /*==========================================================================*/
 
-    bool SipiImage::operator==(const SipiImage &rhs) {
+    bool SipiImage::operator==(const SipiImage &rhs) const{
         if ((nx != rhs.nx) || (ny != rhs.ny) || (nc != rhs.nc) || (bps != rhs.bps) || (photo != rhs.photo)) {
             return false;
         }
