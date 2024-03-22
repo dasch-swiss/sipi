@@ -37,34 +37,48 @@
 /**
  * @namespace Sipi Is used for all Sipi things.
  */
-namespace Sipi {
-
-    typedef enum {
+namespace Sipi
+{
+    typedef enum
+    {
         HIGH = 0, MEDIUM = 1, LOW = 2
     } ScalingMethod;
 
-    typedef struct _ScalingQuality {
+    typedef struct _ScalingQuality
+    {
         ScalingMethod jk2;
         ScalingMethod jpeg;
         ScalingMethod tiff;
         ScalingMethod png;
     } ScalingQuality;
 
-    typedef enum : unsigned short { // from the TIFF specification...
-        TOPLEFT = 1,  //!< The 0th row represents the visual top of the image, and the 0th column represents the visual left-hand side.
-        TOPRIGHT = 2, //!< The 0th row represents the visual top of the image, and the 0th column represents the visual right-hand side.
-        BOTRIGHT = 3, //!< The 0th row represents the visual bottom of the image, and the 0th column represents the visual right-hand side.
-        BOTLEFT = 4,  //!< The 0th row represents the visual bottom of the image, and the 0th column represents the visual left-hand side.
-        LEFTTOP = 5,  //!< The 0th row represents the visual left-hand side of the image, and the 0th column represents the visual top.
-        RIGHTTOP = 6, //!< The 0th row represents the visual right-hand side of the image, and the 0th column represents the visual top.
-        RIGHTBOT = 7, //!< The 0th row represents the visual right-hand side of the image, and the 0th column represents the visual bottom.
-        LEFTBOT = 8   //!< The 0th row represents the visual left-hand side of the image, and the 0th column represents the visual bottom.
+    typedef enum : unsigned short
+    {
+        // from the TIFF specification...
+        TOPLEFT = 1,
+        //!< The 0th row represents the visual top of the image, and the 0th column represents the visual left-hand side.
+        TOPRIGHT = 2,
+        //!< The 0th row represents the visual top of the image, and the 0th column represents the visual right-hand side.
+        BOTRIGHT = 3,
+        //!< The 0th row represents the visual bottom of the image, and the 0th column represents the visual right-hand side.
+        BOTLEFT = 4,
+        //!< The 0th row represents the visual bottom of the image, and the 0th column represents the visual left-hand side.
+        LEFTTOP = 5,
+        //!< The 0th row represents the visual left-hand side of the image, and the 0th column represents the visual top.
+        RIGHTTOP = 6,
+        //!< The 0th row represents the visual right-hand side of the image, and the 0th column represents the visual top.
+        RIGHTBOT = 7,
+        //!< The 0th row represents the visual right-hand side of the image, and the 0th column represents the visual bottom.
+        LEFTBOT = 8
+        //!< The 0th row represents the visual left-hand side of the image, and the 0th column represents the visual bottom.
     } Orientation;
 
 
-    class SipiImgInfo {
+    class SipiImgInfo
+    {
     public:
         enum { FAILURE = 0, DIMS = 1, ALL = 2 } success;
+
         int width;
         int height;
         Orientation orientation;
@@ -76,10 +90,14 @@ namespace Sipi {
         std::string origname;
         std::string origmimetype;
 
-        SipiImgInfo() : success(FAILURE), width(0), height(0), orientation(TOPLEFT), tile_height(0), clevels(0), numpages(0) {};
+        SipiImgInfo() : success{FAILURE}, width{0}, height{0}, orientation{TOPLEFT}, tile_width{0}, tile_height{0},
+                        clevels{0}, numpages{0}
+        {
+        };
     };
 
-    enum {
+    enum
+    {
         JPEG_QUALITY,
         J2K_Sprofile,
         J2K_Creversible,
@@ -100,7 +118,8 @@ namespace Sipi {
     /*!
      * This is the virtual base class for all classes implementing image I/O.
      */
-    class SipiIO {
+    class SipiIO
+    {
     public:
         virtual ~SipiIO() = default;;
 
@@ -115,30 +134,34 @@ namespace Sipi {
          * \param force_bps_8 Convert the file to 8 bits/sample on reading thus enforcing an 8 bit image
          * \param scaling_quality Quality of the scaling algorithm
          */
-        virtual bool read(SipiImage *img, const std::string &filepath, std::shared_ptr<SipiRegion> region,
+        virtual bool read(SipiImage* img, const std::string& filepath, std::shared_ptr<SipiRegion> region,
                           std::shared_ptr<SipiSize> size, bool force_bps_8,
                           ScalingQuality scaling_quality) = 0;
 
-        bool read(SipiImage *img, const std::string &filepath) {
+        bool read(SipiImage* img, const std::string& filepath)
+        {
             return read(img, filepath, nullptr, nullptr, false,
                         {HIGH, HIGH, HIGH, HIGH});
         }
 
-        bool read(SipiImage *img, const std::string &filepath, const std::shared_ptr<SipiRegion> region) {
+        bool read(SipiImage* img, const std::string& filepath, const std::shared_ptr<SipiRegion> region)
+        {
             return read(img, filepath, region, nullptr, false,
                         {HIGH, HIGH, HIGH, HIGH});
         }
 
-        bool read(SipiImage *img, const std::string &filepath, const std::shared_ptr<SipiRegion> region,
-                  const std::shared_ptr<SipiSize> size) {
+        bool read(SipiImage* img, const std::string& filepath, const std::shared_ptr<SipiRegion> region,
+                  const std::shared_ptr<SipiSize> size)
+        {
             return read(img, filepath, region, size, false,
                         {HIGH, HIGH, HIGH, HIGH});
         }
 
-        bool read(SipiImage *img, const std::string &filepath, const std::shared_ptr<SipiRegion> region,
-                  std::shared_ptr<SipiSize> size, bool force_bps_8) {
+        bool read(SipiImage* img, const std::string& filepath, const std::shared_ptr<SipiRegion> region,
+                  std::shared_ptr<SipiSize> size, bool force_bps_8)
+        {
             return read(img, filepath, region, size, force_bps_8,
-                 {HIGH, HIGH, HIGH, HIGH});
+                        {HIGH, HIGH, HIGH, HIGH});
         }
 
         /*!
@@ -146,7 +169,7 @@ namespace Sipi {
          *
          * \param filepath Pathname of the image file
          */
-        virtual SipiImgInfo getDim(const std::string &filepath) = 0;
+        virtual SipiImgInfo getDim(const std::string& filepath) = 0;
 
 
         /*!
@@ -158,13 +181,13 @@ namespace Sipi {
          * - "HTTP" means to write the image data to the HTTP-server output
          * \param params Compression parameters
          */
-        virtual void write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params) = 0;
+        virtual void write(SipiImage* img, const std::string& filepath, const SipiCompressionParams* params) = 0;
 
-        void write(SipiImage *img, const std::string &filepath) {
+        void write(SipiImage* img, const std::string& filepath)
+        {
             write(img, filepath, nullptr);
         }
     };
-
 }
 
 #endif
