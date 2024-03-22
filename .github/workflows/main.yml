@@ -69,7 +69,7 @@ jobs:
   # Build and run tests on aarch64
   build_aarch64_2:
     name: Build and run tests on aarch64
-    runs-on: buildjet-2vcpu-ubuntu-2204
+    runs-on: buildjet-4vcpu-ubuntu-2204-arm
     steps:
       - name: Collect Workflow Telemetry
         uses: catchpoint/workflow-telemetry-action@v1
