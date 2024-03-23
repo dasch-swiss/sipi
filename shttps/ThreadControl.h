@@ -1,17 +1,18 @@
-//
-// Created by Lukas Rosenthaler on 08.07.20.
-//
+/*
+ * Copyright © 2016 - 2024 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform
+ * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 
-#include <sys/types.h>
+#include <pthread.h>//for threading , link with lpthread
 #include <sys/socket.h>
-#include <pthread.h> //for threading , link with lpthread
-//#include <thread>
-#include <vector>
-#include <queue>
+#include <sys/types.h>
+// #include <thread>
 #include <mutex>
-#include <unistd.h>
-#include <syslog.h>
 #include <poll.h>
+#include <queue>
+#include <syslog.h>
+#include <unistd.h>
+#include <vector>
 
 #include <atomic>
 
@@ -20,47 +21,50 @@
 
 namespace shttps {
 
-    class Server; // Declaration only
+class Server;// Declaration only
 
-    class ThreadControl {
-    public:
-        typedef struct {
-            pthread_t tid;
-            int control_pipe;
-        } ThreadMasterData;
+class ThreadControl
+{
+public:
+  typedef struct
+  {
+    pthread_t tid;
+    int control_pipe;
+  } ThreadMasterData;
 
-        typedef struct {
-            int control_pipe;
-            int result;
-            Server *serv;
-        } ThreadChildData;
+  typedef struct
+  {
+    int control_pipe;
+    int result;
+    Server *serv;
+  } ThreadChildData;
 
-        typedef enum {INVALID_INDEX} ThreadControlErrors;
+  typedef enum { INVALID_INDEX } ThreadControlErrors;
 
-    private:
-        std::vector<ThreadMasterData> thread_list; //!> List of all threads
-        std::vector<ThreadChildData> child_data; //!> Data given to the thread
-        std::queue<ThreadMasterData> thread_queue; //!> Queue of available threads for processing
-        std::mutex thread_queue_mutex;
+private:
+  std::vector<ThreadMasterData> thread_list;//!> List of all threads
+  std::vector<ThreadChildData> child_data;//!> Data given to the thread
+  std::queue<ThreadMasterData> thread_queue;//!> Queue of available threads for processing
+  std::mutex thread_queue_mutex;
 
-    public:
-        ThreadControl(int n_threads, void *(*start_routine)(void*), Server *serv);
+public:
+  ThreadControl(int n_threads, void *(*start_routine)(void *), Server *serv);
 
-        ~ThreadControl();
+  ~ThreadControl();
 
-        void thread_push(const ThreadMasterData &tinfo);
+  void thread_push(const ThreadMasterData &tinfo);
 
-        bool thread_pop(ThreadMasterData &tinfo);
+  bool thread_pop(ThreadMasterData &tinfo);
 
-        int thread_delete(int pos);
+  int thread_delete(int pos);
 
-        ThreadMasterData &operator[](int index);
+  ThreadMasterData &operator[](int index);
 
-        inline int nthreads() const { return thread_list.size(); }
+  inline int nthreads() const { return thread_list.size(); }
 
-        void join_all();
-    };
+  void join_all();
+};
 
-}
+}// namespace shttps
 
-#endif //SIPI_THREADCONTROL_H
+#endif// SIPI_THREADCONTROL_H

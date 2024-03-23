@@ -34,17 +34,17 @@ typedef struct jwt jwt_t;
 
 /** JWT algorithm types. */
 typedef enum jwt_alg {
-    JWT_ALG_NONE = 0,
-    JWT_ALG_HS256,
-    JWT_ALG_HS384,
-    JWT_ALG_HS512,
-    JWT_ALG_RS256,
-    JWT_ALG_RS384,
-    JWT_ALG_RS512,
-    JWT_ALG_ES256,
-    JWT_ALG_ES384,
-    JWT_ALG_ES512,
-    JWT_ALG_TERM
+  JWT_ALG_NONE = 0,
+  JWT_ALG_HS256,
+  JWT_ALG_HS384,
+  JWT_ALG_HS512,
+  JWT_ALG_RS256,
+  JWT_ALG_RS384,
+  JWT_ALG_RS512,
+  JWT_ALG_ES256,
+  JWT_ALG_ES384,
+  JWT_ALG_ES512,
+  JWT_ALG_TERM
 } jwt_alg_t;
 
 /**
@@ -99,8 +99,7 @@ int jwt_new(jwt_t **jwt);
  *     signature, however, standard validation of the token is still
  *     performed.
  */
-int jwt_decode(jwt_t **jwt, const char *token, const unsigned char *key,
-               int key_len);
+int jwt_decode(jwt_t **jwt, const char *token, const unsigned char *key, int key_len);
 
 /**
  * Free a JWT object and any other resources it is using.
@@ -261,8 +260,7 @@ int jwt_del_grants(jwt_t *jwt, const char *grant);
  * @param grant String containing the name of the grant to delete.
  * @return Returns 0 on success, valid errno otherwise.
  */
-int jwt_del_grant(jwt_t *jwt, const char *grant)
-__attribute__ ((deprecated));
+int jwt_del_grant(jwt_t *jwt, const char *grant) __attribute__((deprecated));
 
 /** @} */
 
