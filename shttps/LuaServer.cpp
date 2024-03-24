@@ -42,8 +42,6 @@
 using ms = std::chrono::milliseconds;
 using get_time = std::chrono::steady_clock;
 
-static const char __file__[] = __FILE__;
-
 static const char servertablename[] = "server";
 
 namespace shttps {
@@ -92,7 +90,7 @@ static std::string stackDump(lua_State *L)
 static int dont_panic(lua_State *L)
 {
   std::string errorMsg = stackDump(L);
-  throw Error(__file__, __LINE__, errorMsg);
+  throw Error(errorMsg);
 }
 
 /*
@@ -220,7 +218,7 @@ static std::string base64_decode(std::string const &encoded_string)
  */
 LuaServer::LuaServer()
 {
-  if ((L = luaL_newstate()) == nullptr) { throw Error(__file__, __LINE__, "Couldn't start lua interpreter"); }
+  if ((L = luaL_newstate()) == nullptr) { throw Error("Couldn't start lua interpreter"); }
   lua_atpanic(L, dont_panic);
   luaL_openlibs(L);
 }
@@ -231,7 +229,7 @@ LuaServer::LuaServer()
  */
 LuaServer::LuaServer(Connection &conn)
 {
-  if ((L = luaL_newstate()) == nullptr) { throw Error(__file__, __LINE__, "Couldn't start lua interpreter"); }
+  if ((L = luaL_newstate()) == nullptr) { throw Error("Couldn't start lua interpreter"); }
 
   lua_atpanic(L, dont_panic);
   luaL_openlibs(L);
@@ -246,7 +244,7 @@ LuaServer::LuaServer(Connection &conn)
  */
 LuaServer::LuaServer(const std::string &luafile, bool iscode)
 {
-  if ((L = luaL_newstate()) == nullptr) { throw Error(__file__, __LINE__, "Couldn't start lua interpreter"); }
+  if ((L = luaL_newstate()) == nullptr) { throw Error("Couldn't start lua interpreter"); }
 
   lua_atpanic(L, dont_panic);
   luaL_openlibs(L);
@@ -271,7 +269,7 @@ LuaServer::LuaServer(const std::string &luafile, bool iscode)
  */
 LuaServer::LuaServer(Connection &conn, const std::string &luafile, bool iscode, const std::string &lua_scriptdir)
 {
-  if ((L = luaL_newstate()) == nullptr) { throw Error(__file__, __LINE__, "Couldn't start lua interpreter"); }
+  if ((L = luaL_newstate()) == nullptr) { throw Error("Couldn't start lua interpreter"); }
 
   lua_atpanic(L, dont_panic);
   luaL_openlibs(L);
@@ -2827,7 +2825,7 @@ std::string LuaServer::configString(const std::string table, const std::string v
     return defval;
   }
 
-  if (!lua_isstring(L, -1)) { throw Error(__file__, __LINE__, "String expected for " + table + "." + variable); }
+  if (!lua_isstring(L, -1)) { throw Error("String expected for " + table + "." + variable); }
 
   std::string retval = lua_tostring(L, -1);
   lua_pop(L, 2);
@@ -2858,7 +2856,7 @@ bool LuaServer::configBoolean(const std::string table, const std::string variabl
     return defval;
   }
 
-  if (!lua_isboolean(L, -1)) { throw Error(__file__, __LINE__, "Integer expected for " + table + "." + variable); }
+  if (!lua_isboolean(L, -1)) { throw Error("Integer expected for " + table + "." + variable); }
 
   bool retval = lua_toboolean(L, -1) == 1;
   lua_pop(L, 2);
@@ -2889,7 +2887,7 @@ int LuaServer::configInteger(const std::string table, const std::string variable
     return defval;
   }
 
-  if (!lua_isinteger(L, -1)) { throw Error(__file__, __LINE__, "Integer expected for " + table + "." + variable); }
+  if (!lua_isinteger(L, -1)) { throw Error("Integer expected for " + table + "." + variable); }
 
   int retval = static_cast<int>(lua_tointeger(L, -1));
   lua_pop(L, 2);
@@ -2920,7 +2918,7 @@ float LuaServer::configFloat(const std::string table, const std::string variable
     return defval;
   }
 
-  if (!lua_isnumber(L, -1)) { throw Error(__file__, __LINE__, "Number expected for " + table + "." + variable); }
+  if (!lua_isnumber(L, -1)) { throw Error("Number expected for " + table + "." + variable); }
 
   lua_Number num = lua_tonumber(L, -1);
   lua_pop(L, 2);
@@ -2950,9 +2948,7 @@ const std::vector<std::string> LuaServer::configStringList(const std::string tab
     return strings;
   }
 
-  if (!lua_istable(L, -1)) {
-    throw Error(__file__, __LINE__, "Value '" + variable + "' in config file must be a table");
-  }
+  if (!lua_istable(L, -1)) { throw Error("Value '" + variable + "' in config file must be a table"); }
 
   for (int i = 1;; i++) {
     lua_rawgeti(L, -1, i);
@@ -3001,9 +2997,7 @@ const std::map<std::string, std::string> LuaServer::configStringTable(const std:
     return defval;
   }
 
-  if (!lua_istable(L, -1)) {
-    throw Error(__file__, __LINE__, "Value '" + variable + "' in config file must be a table");
-  }
+  if (!lua_istable(L, -1)) { throw Error("Value '" + variable + "' in config file must be a table"); }
 
   lua_pushvalue(L, -1);
   lua_pushnil(L);
@@ -3014,12 +3008,12 @@ const std::map<std::string, std::string> LuaServer::configStringTable(const std:
     if (lua_isstring(L, -1)) {
       keystr = lua_tostring(L, -1);
     } else {
-      throw Error(__file__, __LINE__, "Key element of '" + variable + "' in config file must be a string");
+      throw Error("Key element of '" + variable + "' in config file must be a string");
     }
     if (lua_isstring(L, -2)) {
       valstr = lua_tostring(L, -2);
     } else {
-      throw Error(__file__, __LINE__, "Value element of '" + variable + "' in config file must be a string");
+      throw Error("Value element of '" + variable + "' in config file must be a string");
     }
     lua_pop(L, 2);
     subtable[keystr] = valstr;
@@ -3047,9 +3041,7 @@ std::vector<LuaRoute> LuaServer::configRoute(const std::string &routetable) cons
 
   lua_getglobal(L, routetable.c_str());
 
-  if (!lua_istable(L, -1)) {
-    throw Error(__file__, __LINE__, "Value '" + routetable + "' in config file must be a table");
-  }
+  if (!lua_istable(L, -1)) { throw Error("Value '" + routetable + "' in config file must be a table"); }
 
   for (int i = 1;; i++) {
     lua_rawgeti(L, -1, i);
@@ -3091,7 +3083,7 @@ std::vector<LuaRoute> LuaServer::configRoute(const std::string &routetable) cons
         } else if (method == "OTHER") {
           route.method = Connection::HttpMethod::OTHER;
         } else {
-          throw Error(__file__, __LINE__, std::string("Unknown HTTP method") + method);
+          throw Error(std::string("Unknown HTTP method") + method);
         }
         break;
       case 1:
@@ -3183,10 +3175,9 @@ int LuaServer::executeChunk(const std::string &luastr, const std::string &script
     if (lua_gettop(L) > 0) {
       errorMsg = lua_tostring(L, 1);
       lua_pop(L, 1);
-      throw Error(
-        __file__, __LINE__, std::string("LuaServer::executeChunk failed: ") + errorMsg + ", scriptname: " + scriptname);
+      throw Error(std::string("LuaServer::executeChunk failed: ") + errorMsg + ", scriptname: " + scriptname);
     } else {
-      throw Error(__file__, __LINE__, "LuaServer::executeChunk failed");
+      throw Error("LuaServer::executeChunk failed");
     }
   }
 
@@ -3232,12 +3223,12 @@ static std::shared_ptr<LuaValstruct> getLuaValue(lua_State *L, int index, const 
     std::ostringstream errStream;
     errStream << "Lua function " << funcname << " returned nil";
     std::string errorMsg = errStream.str();
-    throw Error(__file__, __LINE__, errorMsg);
+    throw Error(errorMsg);
   } else {
     std::string luaTypeName = std::string(lua_typename(L, index));
     std::ostringstream errMsg;
     errMsg << "Lua function " << funcname << " returned a value of type " << luaTypeName << ", which is not supported";
-    throw Error(__file__, __LINE__, errMsg.str());
+    throw Error(errMsg.str());
   }
   return tmplv;
 }
@@ -3279,7 +3270,7 @@ std::vector<std::shared_ptr<LuaValstruct>> LuaServer::executeLuafunction(const s
     lua_settop(L, 0);// clear stack
     std::ostringstream errMsg;
     errMsg << "LuaServer::executeLuafunction: function " << funcname << " not found";
-    throw Error(__file__, __LINE__, errMsg.str());
+    throw Error(errMsg.str());
   }
 
   for (const auto &lv : lvals) { pushLuaValue(L, lv); }
@@ -3289,7 +3280,7 @@ std::vector<std::shared_ptr<LuaValstruct>> LuaServer::executeLuafunction(const s
     lua_settop(L, 0);// clear stack
     std::ostringstream errMsg;
     errMsg << "LuaServer::executeLuafunction: function " << funcname << " failed: " << luaErrorMsg;
-    throw Error(__file__, __LINE__, errMsg.str());
+    throw Error(errMsg.str());
   }
 
   const int top = lua_gettop(L);

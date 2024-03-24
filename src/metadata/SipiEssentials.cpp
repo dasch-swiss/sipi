@@ -39,7 +39,7 @@ std::string base64Encode(const std::vector<unsigned char> &message)
   size_t encodedSize = 4 * ceil((double)message.size() / 3);
 
   char *buffer = (char *)malloc(encodedSize + 1);
-  if (buffer == NULL) { throw shttps::Error(__file__, __LINE__, "Failed to allocate memory", errno); }
+  if (buffer == nullptr) { throw shttps::Error("Failed to allocate memory", errno); }
 
   stream = fmemopen(buffer, encodedSize + 1, "w");
   b64 = BIO_new(BIO_f_base64());
@@ -63,7 +63,7 @@ std::vector<unsigned char> base64Decode(const std::string &b64message)
   size_t decodedLength = calcDecodeLength(b64message);
 
   unsigned char *buffer = (unsigned char *)malloc(decodedLength + 1);
-  if (buffer == NULL) { shttps::Error(__file__, __LINE__, "Failed to allocate memory", errno); }
+  if (buffer == NULL) { throw shttps::Error("Failed to allocate memory", errno); }
   FILE *stream = fmemopen((char *)b64message.c_str(), b64message.size(), "r");
 
   b64 = BIO_new(BIO_f_base64());

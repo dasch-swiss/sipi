@@ -29,7 +29,7 @@ namespace Sipi {
  * \brief Class that implements the error handling with exceptions
  *
  * Used for giving error messages while throwing
- * an exception. The class inherits from std::runtime_error.
+ * an exception.
  */
 class SipiError : public shttps::Error
 {
@@ -38,29 +38,21 @@ public:
   /*!
    * Constructor with all (char *) strings
    *
-   * \param[in] file The filename, usually the __FILE__ macro.
-   * \param[in] line The source code line, usually the __LINE__ macro.
    * \param[in] msg The message describing the error.
    * \param[in] errno_p Retrieve and display the system error message from errno.
+   * \param[in] loc The source location where the error occurs
    */
-  SipiError(const char *file, const int line, const char *msg, int errno_p = 0);
+  explicit SipiError(const char *msg, int errno_p = 0, const std::source_location &loc = std::source_location::current());
 
   /*!
    * Constructor with std::string strings for the message. The file parameter is
    * is always of type (char *), becuase usually its either __LINE__ or a static
    * pointer to char
    *
-   * \param[in] file The filename, usually the __FILE__ macro.
-   * \param[in] line The source code line, usually the __LINE__ macro.
    * \param[in] msg The message describing the error.
-   * \param[in] syserr Retrieve and display the system error message from errno.
+   * \param[in] errno_p Retrieve and display the system error message from errno.
    */
-  SipiError(const char *file, const int line, const std::string &msg, int errno_p = 0);
-
-  /*!
-   * Convert the error into a string message
-   */
-  std::string to_string() const;
+  explicit SipiError(const std::string &msg, int errno_p = 0, const std::source_location &loc = std::source_location::current());
 
   /*!
    * The overloaded << operator which is used to write the error message to the output

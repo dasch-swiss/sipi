@@ -5,8 +5,6 @@
 
 #include <cstring>
 #include <iostream>
-#include <string>
-#include <unordered_set>
 
 #include <SipiCache.h>
 #include <SipiFilenameHash.h>
@@ -15,6 +13,8 @@
 #include "SipiHttpServer.hpp"
 #include "SipiImage.hpp"
 #include "SipiLua.h"
+
+#include "SipiImageError.hpp"
 #include "shttps/Connection.h"
 #include "shttps/Parsing.h"
 

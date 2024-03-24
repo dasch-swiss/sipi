@@ -19,15 +19,13 @@
 
 using namespace std;
 
-static const char __file__[] = __FILE__;
-
 namespace shttps {
 
 Hash::Hash(HashType type)
 {
   context = EVP_MD_CTX_create();
-  if (context == nullptr) { throw Error(__file__, __LINE__, "EVP_MD_CTX_create failed!"); }
-  int status;
+  if (context == nullptr) { throw Error("EVP_MD_CTX_create failed!"); }
+  int status = 0;
   switch (type) {
   case none: {
     status = EVP_DigestInit_ex(context, EVP_md5(), nullptr);
@@ -56,7 +54,7 @@ Hash::Hash(HashType type)
   }
   if (status != 1) {
     EVP_MD_CTX_destroy(context);
-    throw Error(__file__, __LINE__, "EVP_DigestInit_ex failed!");
+    throw Error("EVP_DigestInit_ex failed!");
   }
 }
 //==========================================================================

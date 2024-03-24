@@ -36,8 +36,6 @@
 #include "SockStream.h"
 #include "makeunique.h"
 
-static const char __file__[] = __FILE__;
-
 static std::mutex debugio;// mutex to protect debugging messages from threads
 
 namespace shttps {
@@ -407,7 +405,7 @@ void file_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, voi
       {
       };
 
-      if (stat(infile.c_str(), &fstatbuf) != 0) { throw Error(__file__, __LINE__, "Cannot fstat file!"); }
+      if (stat(infile.c_str(), &fstatbuf) != 0) { throw Error("Cannot fstat file!"); }
       size_t fsize = fstatbuf.st_size;
 #ifdef __APPLE__
       struct timespec rawtime = fstatbuf.st_mtimespec;
@@ -436,11 +434,11 @@ void file_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, voi
         int start = 0;// lets assume beginning of file
         int end = fsize - 1;// lets assume whole file
         if (std::regex_match(range.c_str(), m, re)) {
-          if (m.size() < 2) { throw Error(__file__, __LINE__, "Range expression invalid!"); }
+          if (m.size() < 2) { throw Error("Range expression invalid!"); }
           start = std::stoi(m[1]);
           if ((m.size() > 1) && !m[2].str().empty()) { end = std::stoi(m[2]); }
         } else {
-          throw Error(__file__, __LINE__, "Range expression invalid!");
+          throw Error("Range expression invalid!");
         }
 
         conn.status(Connection::PARTIAL_CONTENT);
@@ -682,22 +680,30 @@ static int close_socket(const SocketControl::SocketInfo &socket_info)
     while ((sstat = SSL_shutdown(socket_info.ssl_sid)) == 0)
       ;
     if (sstat < 0) {
+      const auto loc = std::source_location::current();
       syslog(LOG_WARNING,
         "SSL socket error: shutdown of socket failed at [%s: %d] with error code %d",
-        __file__,
-        __LINE__,
+        loc.file_name(),
+        loc.line(),
         SSL_get_error(socket_info.ssl_sid, sstat));
     }
     SSL_free(socket_info.ssl_sid);
     SSL_CTX_free(socket_info.sslctx);
   }
   if (shutdown(socket_info.sid, SHUT_RDWR) < 0) {
-    syslog(
-      LOG_DEBUG, "Debug: shutting down socket at [%s: %d]: %m failed (client terminated already?)", __file__, __LINE__);
+    const auto loc = std::source_location::current();
+    syslog(LOG_DEBUG,
+      "Debug: shutting down socket at [%s: %d]: %m failed (client terminated already?)",
+      loc.file_name(),
+      loc.line());
   }
 
   if (close(socket_info.sid) == -1) {
-    syslog(LOG_DEBUG, "Debug: closing socket at [%s: %d]: %m failed (client terminated already?)", __file__, __LINE__);
+    const auto loc = std::source_location::current();
+    syslog(LOG_DEBUG,
+      "Debug: closing socket at [%s: %d]: %m failed (client terminated already?)",
+      loc.file_name(),
+      loc.line());
   }
 
   return 0;
@@ -719,7 +725,8 @@ static void *socket_request_processor(void *arg)
   do {
     poll_status = poll(readfds, 1, -1);
     if (poll_status < 0) {
-      syslog(LOG_ERR, "Blocking poll on control pipe failed at [%s: %d]", __file__, __LINE__);
+      const auto loc = std::source_location::current();
+      syslog(LOG_ERR, "Blocking poll on control pipe failed at [%s: %d]", loc.file_name(), loc.line());
       tdata->result = -1;
       return nullptr;
     }
@@ -808,7 +815,8 @@ SocketControl::SocketInfo Server::accept_connection(int sock, bool ssl)
   socket_id.sid = accept(sock, (struct sockaddr *)&cli_addr, &cli_size);
 
   if (socket_id.sid <= 0) {
-    syslog(LOG_ERR, "Socket error  at [%s: %d]: %m", __file__, __LINE__);
+    auto loc = std::source_location::current();
+    syslog(LOG_ERR, "Socket error  at [%s: %d]: %m", loc.file_name(), loc.line());
     // ToDo: Perform appropriate action!
   }
   socket_id.type = SocketControl::NOOP;
@@ -835,40 +843,40 @@ SocketControl::SocketInfo Server::accept_connection(int sock, bool ssl)
     try {
       if ((sslctx = SSL_CTX_new(SSLv23_server_method())) == nullptr) {
         syslog(LOG_ERR, "OpenSSL error: SSL_CTX_new() failed");
-        throw SSLError(__file__, __LINE__, "OpenSSL error: SSL_CTX_new() failed");
+        throw SSLError("OpenSSL error: SSL_CTX_new() failed");
       }
       SSL_CTX_set_options(sslctx, SSL_OP_SINGLE_DH_USE);
       if (SSL_CTX_use_certificate_file(sslctx, _ssl_certificate.c_str(), SSL_FILETYPE_PEM) != 1) {
         std::string msg = "OpenSSL error: SSL_CTX_use_certificate_file(" + _ssl_certificate + ") failed";
         syslog(LOG_ERR, "%s", msg.c_str());
-        throw SSLError(__file__, __LINE__, msg);
+        throw SSLError(msg);
       }
       if (SSL_CTX_use_PrivateKey_file(sslctx, _ssl_key.c_str(), SSL_FILETYPE_PEM) != 1) {
         std::string msg = "OpenSSL error: SSL_CTX_use_PrivateKey_file(" + _ssl_certificate + ") failed";
         syslog(LOG_ERR, "%s", msg.c_str());
-        throw SSLError(__file__, __LINE__, msg);
+        throw SSLError(msg);
       }
       if (!SSL_CTX_check_private_key(sslctx)) {
         std::string msg = "OpenSSL error: SSL_CTX_check_private_key() failed";
         syslog(LOG_ERR, "%s", msg.c_str());
-        throw SSLError(__file__, __LINE__, msg);
+        throw SSLError(msg);
       }
       if ((cSSL = SSL_new(sslctx)) == nullptr) {
         std::string msg = "OpenSSL error: SSL_new() failed";
         syslog(LOG_ERR, "%s", msg.c_str());
-        throw SSLError(__file__, __LINE__, msg);
+        throw SSLError(msg);
       }
       if (SSL_set_fd(cSSL, socket_id.sid) != 1) {
         std::string msg = "OpenSSL error: SSL_set_fd() failed";
         syslog(LOG_ERR, "%s", msg.c_str());
-        throw SSLError(__file__, __LINE__, msg);
+        throw SSLError(msg);
       }
 
       // Here is the SSL Accept portion.  Now all reads and writes must use SS
       if ((SSL_accept(cSSL)) <= 0) {
         std::string msg = "OpenSSL error: SSL_accept() failed";
         syslog(LOG_ERR, "%s", msg.c_str());
-        throw SSLError(__file__, __LINE__, msg);
+        throw SSLError(msg);
       }
     } catch (SSLError &err) {
       syslog(LOG_ERR, "%s", err.to_string().c_str());
@@ -949,7 +957,8 @@ void Server::run()
   }
 
   if (socketpair(PF_LOCAL, SOCK_STREAM, 0, stoppipe) != 0) {
-    syslog(LOG_ERR, "Creating pipe failed at [%s: %d]: %m", __file__, __LINE__);
+    auto loc = std::source_location::current();
+    syslog(LOG_ERR, "Creating pipe failed at [%s: %d]: %m", loc.file_name(), loc.line());
     return;
   }
 
@@ -965,7 +974,8 @@ void Server::run()
     pollfd *sockets = socket_control.get_sockets_arr();
     int nsocks;
     if ((nsocks = poll(sockets, socket_control.get_sockets_size(), -1)) < 0) {
-      syslog(LOG_ERR, "Blocking poll failed at [%s: %d]: %m", __file__, __LINE__);
+      auto loc = std::source_location::current();
+      syslog(LOG_ERR, "Blocking poll failed at [%s: %d]: %m", loc.file_name(), loc.line());
       running = false;
       break;
     }
@@ -1198,7 +1208,7 @@ shttps::ThreadStatus Server::process_request(std::istream *ins,
 {
   if (_tmpdir.empty()) {
     syslog(LOG_WARNING, "_tmpdir is empty");
-    throw Error(__file__, __LINE__, "_tmpdir is empty");
+    throw Error("_tmpdir is empty");
   }
   if (ins->eof() || os->eof()) return CLOSE;
   try {
@@ -1272,7 +1282,7 @@ void Server::debugmsg(const int line, const std::string &msg)
 {
   std::lock_guard<std::mutex> debug_mutex_guard(debugio);
 
-  std::cerr << "DBG> " << line << " " << msg << std::endl;
+  std::cerr << "DBG> " << line << " " << msg << '\n';
 }
 //=========================================================================
 

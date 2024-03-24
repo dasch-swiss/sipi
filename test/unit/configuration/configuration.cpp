@@ -1,15 +1,20 @@
+/*
+ * Copyright © 2016 - 2024 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform
+ * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 #include "gtest/gtest.h"
 
 #include "../../../include/SipiConf.h"
 #include "../../../shttps/LuaServer.h"
 
-#include <stdio.h>
+#include <cstdio>
 #include <unistd.h>
 #define GetCurrentDir getcwd
 #include <iostream>
 
 // helper function to find out what the current working directory is
-std::string GetCurrentWorkingDir(void)
+std::string GetCurrentWorkingDir()
 {
   char buff[FILENAME_MAX];
   GetCurrentDir(buff, FILENAME_MAX);
@@ -20,11 +25,11 @@ std::string GetCurrentWorkingDir(void)
 // helper function to check if file exist
 inline bool exists_file(const std::string &name)
 {
-  struct stat buffer;
+  struct stat buffer{};
   return (stat(name.c_str(), &buffer) == 0);
 }
 
-std::string configfile = "../../../../config/sipi.config.lua";
+const std::string configfile { "../../../../config/sipi.config.lua"};
 
 // Check if configuration file can be found
 TEST(Configuration, CheckIfConfigurationFileCanBeFound)

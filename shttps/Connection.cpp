@@ -14,27 +14,20 @@
 #include <iomanip>
 #include <iostream>
 #include <locale>
-#include <new>
 #include <sstream>
 #include <string>
 
 #include <arpa/inet.h>//inet_addrmktemp
+#include <cstdio>
 #include <fcntl.h>
-#include <netinet/in.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>//write
 
 #include "ChunkReader.h"
 #include "Connection.h"
 #include "Error.h"
-#include "Global.h"
 #include "Server.h"// TEMPORARY !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #include "makeunique.h"
-
-static const char __file__[] = __FILE__;
 
 using namespace std;
 
@@ -142,7 +135,7 @@ size_t safeGetline(std::istream &is, std::string &t, size_t max_n)
       n++;
       t += (char)c;
     }
-    if ((max_n > 0) && (n >= max_n)) { throw Error(__file__, __LINE__, "Input line too long!"); }
+    if ((max_n > 0) && (n >= max_n)) { throw Error("Input line too long!"); }
   }
 }
 //=========================================================================
@@ -163,8 +156,8 @@ std::string urldecode(const std::string &src, bool form_encoded)
         string tmpstr = src.substr(start, pos - start);
 
         if (form_encoded) {
-          for (int i = 0; i < tmpstr.length(); i++) {
-            if (tmpstr[i] == '+') tmpstr[i] = ' ';
+          for (size_t i = 0; i < tmpstr.length(); i++) {
+            if (tmpstr[i] == '+') { tmpstr[i] = ' '; }
           }
         }
 
@@ -182,8 +175,8 @@ std::string urldecode(const std::string &src, bool form_encoded)
         pos += 3;
         string tmpstr = src.substr(start, pos - start);
         if (form_encoded) {
-          for (int i = 0; i < tmpstr.length(); i++) {
-            if (tmpstr[i] == '+') tmpstr[i] = ' ';
+          for (size_t i = 0; i < tmpstr.length(); i++) {
+            if (tmpstr[i] == '+') { tmpstr[i] = ' '; }
           }
         }
         outss << tmpstr;
@@ -328,7 +321,7 @@ vector<string> Connection::process_header_value(const string &valstr)
 //=============================================================================
 
 
-Connection::Connection(void)
+Connection::Connection()
 {
   _server = nullptr;
   _secure = false;
@@ -375,7 +368,7 @@ Connection::Connection(Server *server_p,
   status(OK);// thats the default...
 
   if (outbuf_size > 0) {
-    if ((outbuf = (char *)malloc(outbuf_size)) == nullptr) { throw Error(__file__, __LINE__, "malloc failed!", errno); }
+    if ((outbuf = (char *)malloc(outbuf_size)) == nullptr) { throw Error("malloc failed!", errno); }
 
     outbuf_nbytes = 0;
   } else {
@@ -474,7 +467,7 @@ Connection::Connection(Server *server_p,
 
           if ((bodybuf = (char *)malloc((content_length + 1) * sizeof(char))) == nullptr) {
             free(chunk_buf);
-            throw Error(__file__, __LINE__, "malloc failed!", errno);
+            throw Error("malloc failed!", errno);
           }
 
           memcpy(bodybuf, chunk_buf, content_length);
@@ -482,11 +475,11 @@ Connection::Connection(Server *server_p,
         } else {
           if (content_length > 0) {
             if ((_server->max_post_size() > 0) && (content_length > _server->max_post_size())) {
-              throw Error(__file__, __LINE__, "Content bigger than max_post_size");
+              throw Error("Content bigger than max_post_size");
             }
 
             if ((bodybuf = (char *)malloc((content_length + 1) * sizeof(char))) == nullptr) {
-              throw Error(__file__, __LINE__, "malloc failed!", errno);
+              throw Error("malloc failed!", errno);
             }
 
             ins->read(bodybuf, content_length);
@@ -508,16 +501,16 @@ Connection::Connection(Server *server_p,
         content_length = 0;
       } else if (content_type_opts[0] == "multipart/form-data") {
         if ((!_chunked_transfer_in) && (_server->max_post_size() > 0) && (content_length > _server->max_post_size())) {
-          throw Error(__file__, __LINE__, "Upload bigger than max_post_size");
+          throw Error("Upload bigger than max_post_size");
         }
 
         string boundary;
-        for (int i = 1; i < content_type_opts.size(); ++i) {
+        for (size_t i = 1; i < content_type_opts.size(); ++i) {
           pair<string, string> p = strsplit(content_type_opts[i], '=');
           if (p.first == "boundary") { boundary = string("--") + p.second; }
         }
 
-        if (boundary.empty()) { throw Error(__file__, __LINE__, "boundary header missing in multipart/form-data!"); }
+        if (boundary.empty()) { throw Error("boundary header missing in multipart/form-data!"); }
 
         string lastboundary = boundary + "--";
         size_t n = 0;
@@ -532,7 +525,7 @@ Connection::Connection(Server *server_p,
         if (ins->fail() || ins->eof()) { throw INPUT_READ_FAIL; }
 
         if ((_server->max_post_size() > 0) && (n > _server->max_post_size())) {
-          throw Error(__file__, __LINE__, "Content bigger than max_post_size");
+          throw Error("Content bigger than max_post_size");
         }
 
         while (line != lastboundary) {
@@ -547,7 +540,7 @@ Connection::Connection(Server *server_p,
             if (ins->fail() || ins->eof()) { throw INPUT_READ_FAIL; }
 
             if ((_server->max_post_size() > 0) && (n > _server->max_post_size())) {
-              throw Error(__file__, __LINE__, "Content bigger than max_post_size");
+              throw Error("Content bigger than max_post_size");
             }
 
             while (!line.empty()) {
@@ -604,7 +597,7 @@ Connection::Connection(Server *server_p,
               n += _chunked_transfer_in ? ckrd.getline(line) : safeGetline(*ins, line, _server->max_post_size() - n);
               if (ins->fail() || ins->eof()) { throw INPUT_READ_FAIL; }
               if ((_server->max_post_size() > 0) && (n > _server->max_post_size())) {
-                throw Error(__file__, __LINE__, "Content bigger than max_post_size");
+                throw Error("Content bigger than max_post_size");
               }
             }// while
 
@@ -614,7 +607,7 @@ Connection::Connection(Server *server_p,
               if (ins->fail() || ins->eof()) { throw INPUT_READ_FAIL; }
 
               if ((_server->max_post_size() > 0) && (n > _server->max_post_size())) {
-                throw Error(__file__, __LINE__, "Content bigger than max_post_size");
+                throw Error("Content bigger than max_post_size");
               }
 
               while ((line != boundary) && (line != lastboundary)) {
@@ -623,7 +616,7 @@ Connection::Connection(Server *server_p,
                 if (ins->fail() || ins->eof()) { throw INPUT_READ_FAIL; }
 
                 if ((_server->max_post_size() > 0) && (n > _server->max_post_size())) {
-                  throw Error(__file__, __LINE__, "Content bigger than max_post_size");
+                  throw Error("Content bigger than max_post_size");
                 }
               }
 
@@ -638,7 +631,7 @@ Connection::Connection(Server *server_p,
               // create a unique temporary filename
               //
 
-              if (_tmpdir.empty()) { throw Error(__file__, __LINE__, "_tmpdir is empty"); }
+              if (_tmpdir.empty()) { throw Error("_tmpdir is empty"); }
 
               tmpname = _tmpdir + "/sipi_XXXXXXXX";
 
@@ -647,13 +640,13 @@ Connection::Connection(Server *server_p,
               (writable.get())[tmpname.size()] = '\0';// don't forget the terminating 0
               int fd = mkstemp(writable.get());
 
-              if (fd == -1) { throw Error(__file__, __LINE__, "Could not create temporary filename!"); }
+              if (fd == -1) { throw Error("Could not create temporary filename!"); }
 
               tmpname = string(writable.get());
               close(fd);// here we close the file created by mkstemp
               ofstream outf(tmpname, ofstream::out | ofstream::trunc | ofstream::binary);
 
-              if (outf.fail()) { throw Error(__file__, __LINE__, "Could not open temporary file!"); }
+              if (outf.fail()) { throw Error("Could not open temporary file!"); }
 
               //
               // the boundary string starts on a new line which is separate by "\r\n"
@@ -666,7 +659,7 @@ Connection::Connection(Server *server_p,
                 ++n;
 
                 if ((_server->max_post_size() > 0) && (n > _server->max_post_size())) {
-                  throw Error(__file__, __LINE__, "Content bigger than max_post_size");
+                  throw Error("Content bigger than max_post_size");
                 }
 
                 if ((cnt < nlboundary.length()) && (inbyte == nlboundary[cnt])) {
@@ -676,9 +669,9 @@ Connection::Connection(Server *server_p,
                     break;// break enclosing while loop
                   }
                 } else if (cnt > 0) {// not yet the boundary
-                  for (int i = 0; i < cnt; i++) {
+                  for (size_t i = 0; i < cnt; i++) {
                     outf.put(nlboundary[i]);
-                    if (!outf.good()) { throw Error(__file__, __LINE__, "Could not write to output file!"); }
+                    if (!outf.good()) { throw Error("Could not write to output file!"); }
                     ++fsize;
                   }
 
@@ -689,13 +682,13 @@ Connection::Connection(Server *server_p,
                     outf.put((char)inbyte);
                   }
 
-                  if (!outf.good()) { throw Error(__file__, __LINE__, "Could not write to output file!"); }
+                  if (!outf.good()) { throw Error("Could not write to output file!"); }
 
                   ++fsize;
                 } else {
                   outf.put((char)inbyte);
 
-                  if (!outf.good()) { throw Error(__file__, __LINE__, "Could not write to output file!"); }
+                  if (!outf.good()) { throw Error("Could not write to output file!"); }
 
                   ++fsize;
                 }
@@ -717,7 +710,7 @@ Connection::Connection(Server *server_p,
               ++n;
 
               if ((_server->max_post_size() > 0) && (n > _server->max_post_size())) {
-                throw Error(__file__, __LINE__, "Content bigger than max_post_size");
+                throw Error("Content bigger than max_post_size");
               }
 
               if (inbyte == '-') {// we have a last boundary!
@@ -742,7 +735,7 @@ Connection::Connection(Server *server_p,
           if (ins->fail() || ins->eof()) { throw INPUT_READ_FAIL; }
 
           if ((_server->max_post_size() > 0) && (n > _server->max_post_size())) {
-            throw Error(__file__, __LINE__, "Content bigger than max_post_size");
+            throw Error("Content bigger than max_post_size");
           }
         }
 
@@ -756,17 +749,17 @@ Connection::Connection(Server *server_p,
           ChunkReader ckrd(ins, _server->max_post_size());
           content_length = ckrd.readAll(&tmp);
           if ((_content = (char *)malloc((content_length + 1) * sizeof(char))) == nullptr) {
-            throw Error(__file__, __LINE__, "malloc failed!", errno);
+            throw Error("malloc failed!", errno);
           }
           memcpy(_content, tmp, content_length);
           free(tmp);
           _content[content_length] = '\0';
         } else if (content_length > 0) {
           if ((_server->max_post_size() > 0) && (content_length > _server->max_post_size())) {
-            throw Error(__file__, __LINE__, "Content bigger than max_post_size");
+            throw Error("Content bigger than max_post_size");
           }
           if ((_content = (char *)malloc((content_length + 1) * sizeof(char))) == nullptr) {
-            throw Error(__file__, __LINE__, "malloc failed!", errno);
+            throw Error("malloc failed!", errno);
           }
           ins->read(_content, content_length);
           if (ins->fail() || ins->eof()) {
@@ -777,7 +770,7 @@ Connection::Connection(Server *server_p,
           _content[content_length] = '\0';
         }
       } else {
-        throw Error(__file__, __LINE__, "Content type not supported!");
+        throw Error("Content type not supported!");
       }
     } else if (method_in == "DELETE") {
       vector<string> content_type_opts = process_header_value(header_in["content-type"]);
@@ -787,17 +780,17 @@ Connection::Connection(Server *server_p,
         ChunkReader ckrd(ins, _server->max_post_size());
         content_length = ckrd.readAll(&tmp);
         if ((_content = (char *)malloc((content_length + 1) * sizeof(char))) == nullptr) {
-          throw Error(__file__, __LINE__, "malloc failed!", errno);
+          throw Error("malloc failed!", errno);
         }
         memcpy(_content, tmp, content_length);
         free(tmp);
         _content[content_length] = '\0';
       } else if (content_length > 0) {
         if ((_server->max_post_size() > 0) && (content_length > _server->max_post_size())) {
-          throw Error(__file__, __LINE__, "Content bigger than max_post_size");
+          throw Error("Content bigger than max_post_size");
         }
         if ((_content = (char *)malloc((content_length + 1) * sizeof(char))) == nullptr) {
-          throw Error(__file__, __LINE__, "malloc failed!", errno);
+          throw Error("malloc failed!", errno);
         }
         ins->read(_content, content_length);
 
@@ -817,17 +810,17 @@ Connection::Connection(Server *server_p,
         ChunkReader ckrd(ins, _server->max_post_size());
         content_length = ckrd.readAll(&tmp);
         if ((_content = (char *)malloc((content_length + 1) * sizeof(char))) == nullptr) {
-          throw Error(__file__, __LINE__, "malloc failed!", errno);
+          throw Error("malloc failed!", errno);
         }
         memcpy(_content, tmp, content_length);
         free(tmp);
         _content[content_length] = '\0';
       } else if (content_length > 0) {
         if ((_server->max_post_size() > 0) && (content_length > _server->max_post_size())) {
-          throw Error(__file__, __LINE__, "Content bigger than max_post_size");
+          throw Error("Content bigger than max_post_size");
         }
         if ((_content = (char *)malloc((content_length + 1) * sizeof(char))) == nullptr) {
-          throw Error(__file__, __LINE__, "malloc failed!", errno);
+          throw Error("malloc failed!", errno);
         }
         ins->read(_content, content_length);
 
@@ -844,18 +837,15 @@ Connection::Connection(Server *server_p,
       _method = OTHER;
     }
   } else {
-    throw Error(__file__, __LINE__, "Invalid HTTP header!");
+    throw Error("Invalid HTTP header!");
   }
 }
 //=============================================================================
 
-Connection::Connection(const Connection &conn) { throw Error(__file__, __LINE__, "Copy constructor not allowed!"); }
+Connection::Connection(const Connection &conn) { throw Error("Copy constructor not allowed!"); }
 //=============================================================================
 
-Connection &Connection::operator=(const Connection &other)
-{
-  throw Error(__file__, __LINE__, "Assignment operator not allowed!");
-}
+Connection &Connection::operator=(const Connection &other) { throw Error("Assignment operator not allowed!"); }
 //=============================================================================
 
 Connection::~Connection()
@@ -1075,7 +1065,7 @@ string Connection::getParams(const std::string &name)
 }
 //=============================================================================
 
-vector<string> Connection::getParams(void)
+vector<string> Connection::getParams()
 {
   vector<string> names;
 
@@ -1095,7 +1085,7 @@ string Connection::postParams(const std::string &name)
 }
 //=============================================================================
 
-vector<string> Connection::postParams(void)
+vector<string> Connection::postParams()
 {
   vector<string> names;
 
@@ -1114,7 +1104,7 @@ string Connection::requestParams(const std::string &name)
 }
 //=============================================================================
 
-vector<string> Connection::requestParams(void)
+vector<string> Connection::requestParams()
 {
   vector<string> names;
 
@@ -1126,10 +1116,10 @@ vector<string> Connection::requestParams(void)
 
 void Connection::setBuffer(size_t buf_size, size_t buf_inc)
 {
-  if (header_sent) { throw Error(__file__, __LINE__, "Header already sent - cannot changed to buffered mode!"); }
+  if (header_sent) { throw Error("Header already sent - cannot changed to buffered mode!"); }
 
   if (outbuf == nullptr) {
-    if ((outbuf = (char *)malloc(outbuf_size)) == nullptr) { throw Error(__file__, __LINE__, "malloc failed!", errno); }
+    if ((outbuf = (char *)malloc(outbuf_size)) == nullptr) { throw Error("malloc failed!", errno); }
 
     outbuf_nbytes = 0;
   }
@@ -1139,7 +1129,7 @@ void Connection::setBuffer(size_t buf_size, size_t buf_inc)
 
 void Connection::setChunkedTransfer()
 {
-  if (header_sent) { throw Error(__file__, __LINE__, "Header already sent!"); }
+  if (header_sent) { throw Error("Header already sent!"); }
 
   header_out["Transfer-Encoding"] = "chunked";
   _chunked_transfer_out = true;
@@ -1150,11 +1140,11 @@ void Connection::openCacheFile(const std::string &cfname)
 {
   cachefile = new ofstream(cfname, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
 
-  if (cachefile->fail()) { throw Error(__file__, __LINE__, "Could not open cache file!"); }
+  if (cachefile->fail()) { throw Error("Could not open cache file!"); }
 }
 //=============================================================================
 
-void Connection::closeCacheFile(void)
+void Connection::closeCacheFile()
 {
   if (cachefile != nullptr) {
     cachefile->close();
@@ -1164,7 +1154,7 @@ void Connection::closeCacheFile(void)
 }
 //=============================================================================
 
-vector<string> Connection::header(void)
+vector<string> Connection::header()
 {
   vector<string> names;
 
@@ -1177,7 +1167,7 @@ vector<string> Connection::header(void)
 
 void Connection::header(string name, string value)
 {
-  if (header_sent) { throw Error(__file__, __LINE__, "Header already sent!"); }
+  if (header_sent) { throw Error("Header already sent!"); }
 
   header_out[name] = value;
 }
@@ -1199,7 +1189,7 @@ void Connection::cookies(const Cookie &cookie_p)
 
 void Connection::corsHeader(const char *origin)
 {
-  if (origin == nullptr) return;
+  if (origin == nullptr) { return; }
   header_out["Access-Control-Allow-Origin"] = origin;
   header_out["Access-Control-Allow-Credentials"] = "true";
   // header_out["Access-Control-Expose-Headers"] = "FooBar";
@@ -1209,7 +1199,7 @@ void Connection::corsHeader(const char *origin)
 
 void Connection::corsHeader(const std::string &origin)
 {
-  if (origin.empty()) return;
+  if (origin.empty()) { return; }
   header_out["Access-Control-Allow-Origin"] = origin;
   header_out["Access-Control-Allow-Credentials"] = "true";
   // header_out["Access-Control-Expose-Headers"] = "FooBar";
@@ -1232,7 +1222,7 @@ void Connection::sendData(const void *buffer, size_t n)
 
 void Connection::send(const void *buffer, size_t n)
 {
-  if (_finished) throw Error(__file__, __LINE__, "Sending data already terminated!");
+  if (_finished) throw Error("Sending data already terminated!");
 
   if (outbuf != nullptr) {
     //
@@ -1288,7 +1278,7 @@ void Connection::send(const void *buffer, size_t n)
         //
         // houston, we have a problem. The header is already sent...
         //
-        throw Error(__file__, __LINE__, "Header already sent – cannot add data anymore!");
+        throw Error("Header already sent – cannot add data anymore!");
       }
     }
   }
@@ -1298,7 +1288,7 @@ void Connection::send(const void *buffer, size_t n)
 
 void Connection::sendAndFlush(const void *buffer, size_t n)
 {
-  if (_finished) throw Error(__file__, __LINE__, "Sending data already terminated!");
+  if (_finished) throw Error("Sending data already terminated!");
 
   if (outbuf != nullptr) {
     // we have a buffer -> we add the data to the buffer
@@ -1345,7 +1335,7 @@ void Connection::sendAndFlush(const void *buffer, size_t n)
       // we use the buffer, the header *must* contain the Content-Length header!
       // then we send the data in the buffer
       //
-      if (header_sent) throw Error(__file__, __LINE__, "Header already sent – cannot add Content-Length header!");
+      if (header_sent) throw Error("Header already sent – cannot add Content-Length header!");
       send_header();// sends content length if not buffer nor chunked
       os->write((char *)buffer, n);
       if (os->eof() || os->fail()) throw OUTPUT_WRITE_FAIL;
@@ -1355,7 +1345,7 @@ void Connection::sendAndFlush(const void *buffer, size_t n)
       //
       // we don't use a buffer (or the buffer is empty) -> send the data immediatly
       //
-      if (header_sent) throw Error(__file__, __LINE__, "Header already sent – cannot add Content-Length header!");
+      if (header_sent) throw Error("Header already sent – cannot add Content-Length header!");
       send_header(n);// sends content length if not buffer nor chunked
       os->write((char *)buffer, n);
       if (os->eof() || os->fail()) throw OUTPUT_WRITE_FAIL;
@@ -1372,45 +1362,45 @@ void Connection::sendAndFlush(const void *buffer, size_t n)
 
 void Connection::sendFile(const string &path, const size_t bufsize, size_t from, size_t to)
 {
-  if (_finished) throw Error(__file__, __LINE__, "Sending data already terminated!");
+  if (_finished) throw Error("Sending data already terminated!");
 
   //
   // test if we have access to the file
   //
   if (access(path.c_str(), R_OK) != 0) {// test, if file exists
-    throw Error(__file__, __LINE__, "File not readable:" + path);
+    throw Error("File not readable:" + path);
   }
 
   struct stat fstatbuf
   {
   };
 
-  if (stat(path.c_str(), &fstatbuf) != 0) { throw Error(__file__, __LINE__, "Cannot fstat file: " + path); }
+  if (stat(path.c_str(), &fstatbuf) != 0) { throw Error("Cannot fstat file: " + path); }
 
   size_t fsize = fstatbuf.st_size;
   size_t orig_fsize = fsize;
 
   FILE *infile = fopen(path.c_str(), "rb");
 
-  if (infile == nullptr) { throw Error(__file__, __LINE__, "File not readable: " + path); }
+  if (infile == nullptr) { throw Error("File not readable: " + path); }
 
   if (from > 0) {
     if (from < fsize) {
       if (fseek(infile, from, SEEK_SET) < 0) {
         fclose(infile);
-        throw Error(__file__, __LINE__, "Cannot seek to position!");
+        throw Error("Cannot seek to position!");
       }
       fsize -= from;
     } else {
       fclose(infile);
-      throw Error(__file__, __LINE__, "Seek position beyond end of file!");
+      throw Error("Seek position beyond end of file!");
     }
   }
 
   if (to > 0) {
     if (to > orig_fsize) {
       fclose(infile);
-      throw Error(__file__, __LINE__, "Trying to read beyond end of file!");
+      throw Error("Trying to read beyond end of file!");
     }
     fsize -= (orig_fsize - to - 1);
   }
@@ -1467,15 +1457,15 @@ void Connection::sendFile(const string &path, const size_t bufsize, size_t from,
 //=============================================================================
 
 
-void Connection::flush(void)
+void Connection::flush()
 {
   if (!header_sent) {
-    if (_finished) throw Error(__file__, __LINE__, "Sending data already terminated!");
+    if (_finished) throw Error("Sending data already terminated!");
     send_header();// sends content length if not buffer nor chunked
   }
 
   if ((outbuf != nullptr) && (outbuf_nbytes > 0)) {
-    if (_finished) throw Error(__file__, __LINE__, "Sending data already terminated!");
+    if (_finished) throw Error("Sending data already terminated!");
     if (_chunked_transfer_out) {
       *os << std::hex << outbuf_nbytes << "\r\n";
       if (os->eof() || os->fail()) throw OUTPUT_WRITE_FAIL;
@@ -1535,14 +1525,12 @@ Connection &Connection::operator<<(const Error &err)
 
 void Connection::add_to_outbuf(char *buf, size_t n)
 {
-  if (_finished) throw Error(__file__, __LINE__, "Sending data already terminated!");
+  if (_finished) throw Error("Sending data already terminated!");
 
   if (outbuf_nbytes + n > outbuf_size) {
     size_t incsize = outbuf_size + ((n + outbuf_inc - 1) / outbuf_inc) * outbuf_inc;
     char *tmpbuf;
-    if ((tmpbuf = (char *)realloc(outbuf, incsize)) == nullptr) {
-      throw Error(__file__, __LINE__, "realloc failed!", errno);
-    }
+    if ((tmpbuf = (char *)realloc(outbuf, incsize)) == nullptr) { throw Error("realloc failed!", errno); }
     outbuf = tmpbuf;
     outbuf_size = incsize;
   }
@@ -1554,7 +1542,7 @@ void Connection::add_to_outbuf(char *buf, size_t n)
 
 void Connection::send_header(const size_t n)
 {
-  if (header_sent) { throw Error(__file__, __LINE__, "Header already sent!"); }
+  if (header_sent) { throw Error("Header already sent!"); }
 
   *os << "HTTP/1.1 " << to_string(status_code) << " " << status_string << "\r\n";
   if (os->eof() || os->fail()) throw OUTPUT_WRITE_FAIL;

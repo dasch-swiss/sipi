@@ -5,19 +5,15 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstring>// Needed for memset
 #include <fcntl.h>
 #include <functional>
 #include <iomanip>
 #include <iostream>
 #include <locale>
 #include <netinet/in.h>
-#include <new>
 #include <regex>
-#include <signal.h>
 #include <sstream>
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>//write
@@ -25,8 +21,6 @@
 #include "ChunkReader.h"
 #include "Connection.h"
 #include "Error.h"
-
-static const char __file__[] = __FILE__;
 
 using namespace std;
 
@@ -51,7 +45,7 @@ size_t ChunkReader::read_chunk(istream &ins, char **buf, size_t offs)
   try {
     n = stoul(line, 0, 16);
   } catch (const std::invalid_argument &ia) {
-    throw Error(__file__, __LINE__, ia.what());
+    throw Error(ia.what());
   }
 
   //
@@ -60,18 +54,18 @@ size_t ChunkReader::read_chunk(istream &ins, char **buf, size_t offs)
   if ((post_maxsize > 0) && (n > post_maxsize)) {
     stringstream ss;
     ss << "Chunksize (" << n << ") to big (maxsize=" << post_maxsize << ")";
-    throw Error(__file__, __LINE__, ss.str());
+    throw Error(ss.str());
   }
 
   if (n == 0) return 0;
 
   if (*buf == nullptr) {
     if ((*buf = (char *)malloc((n + 1) * sizeof(char))) == nullptr) {
-      throw Error(__file__, __LINE__, "malloc failed", errno);
+      throw Error("malloc failed", errno);
     }
   } else {
     if ((*buf = (char *)realloc(*buf, (offs + n + 1) * sizeof(char))) == nullptr) {
-      throw Error(__file__, __LINE__, "realloc failed", errno);
+      throw Error("realloc failed", errno);
     }
   }
 
@@ -101,7 +95,7 @@ size_t ChunkReader::readAll(char **buf)
     if ((post_maxsize > 0) && (nbytes > post_maxsize)) {
       stringstream ss;
       ss << "Chunksize (" << nbytes << ") to big (maxsize=" << post_maxsize << ")";
-      throw Error(__file__, __LINE__, ss.str());
+      throw Error(ss.str());
     }
   }
 
@@ -124,7 +118,7 @@ size_t ChunkReader::getline(std::string &t)
       try {
         chunk_size = stoul(line, 0, 16);
       } catch (const std::invalid_argument &ia) {
-        throw Error(__file__, __LINE__, ia.what());
+        throw Error(ia.what());
       }
 
       //
@@ -133,7 +127,7 @@ size_t ChunkReader::getline(std::string &t)
       if ((post_maxsize > 0) && (chunk_size > post_maxsize)) {
         stringstream ss;
         ss << "Chunksize (" << chunk_size << ") to big (maxsize=" << post_maxsize << ")";
-        throw Error(__file__, __LINE__, ss.str());
+        throw Error(ss.str());
       }
 
       if (chunk_size == 0) {
@@ -194,7 +188,7 @@ int ChunkReader::getc(void)
     try {
       chunk_size = stoul(line, 0, 16);
     } catch (const std::invalid_argument &ia) {
-      throw Error(__file__, __LINE__, ia.what() + line);
+      throw Error(ia.what() + line);
     }
 
     //
@@ -203,7 +197,7 @@ int ChunkReader::getc(void)
     if ((post_maxsize > 0) && (chunk_size > post_maxsize)) {
       stringstream ss;
       ss << "Chunksize (" << chunk_size << ") to big (maxsize=" << post_maxsize << ")";
-      throw Error(__file__, __LINE__, ss.str());
+      throw Error(ss.str());
     }
 
     if (chunk_size == 0) {

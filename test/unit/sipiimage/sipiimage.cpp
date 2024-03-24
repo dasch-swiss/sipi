@@ -1,6 +1,12 @@
+/*
+ * Copyright © 2016 - 2024 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform
+ * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 #include "gtest/gtest.h"
 
 #include "../../../src/SipiImage.hpp"
+#include "SipiIOTiff.h"
 
 // small function to check if file exist
 inline bool exists_file(const std::string &name)
@@ -21,17 +27,17 @@ inline bool image_identical(const std::string &name1, const std::string &name2)
   return (img1 == img2);
 }
 
-std::string leavesSmallWithAlpha = "../../../../test/_test_data/images/knora/Leaves-small-alpha.tif";
-std::string leavesSmallNoAlpha = "../../../../test/_test_data/images/knora/Leaves-small-no-alpha.tif";
-std::string png16bit = "../../../../test/_test_data/images/knora/png_16bit.png";
-std::string pngPaletteAlpha = "../../../../test/_test_data/images/unit/mario.png";
-std::string leaves8tif = "../../../../test/_test_data/images/knora/Leaves8.tif";
-std::string cielab = "../../../../test/_test_data/images/unit/cielab.tif";
-std::string cielab16 = "../../../../test/_test_data/images/unit/CIELab16.tif";
-std::string palette = "../../../../test/_test_data/images/unit/palette.tif";
-std::string wrongrotation = "../../../../test/_test_data/images/unit/image_orientation.jpg";
-std::string watermark_correct = "../../../../test/_test_data/images/unit/watermark_correct.tif";
-std::string watermark_incorrect = "../../../../test/_test_data/images/unit/watermark_incorrect.tif";
+const std::string leavesSmallWithAlpha = "../../../../test/_test_data/images/knora/Leaves-small-alpha.tif";
+const std::string leavesSmallNoAlpha = "../../../../test/_test_data/images/knora/Leaves-small-no-alpha.tif";
+const std::string png16bit = "../../../../test/_test_data/images/knora/png_16bit.png";
+const std::string pngPaletteAlpha = "../../../../test/_test_data/images/unit/mario.png";
+const std::string leaves8tif = "../../../../test/_test_data/images/knora/Leaves8.tif";
+const std::string cielab = "../../../../test/_test_data/images/unit/cielab.tif";
+const std::string cielab16 = "../../../../test/_test_data/images/unit/CIELab16.tif";
+const std::string palette = "../../../../test/_test_data/images/unit/palette.tif";
+const std::string wrongrotation = "../../../../test/_test_data/images/unit/image_orientation.jpg";
+const std::string watermark_correct = "../../../../test/_test_data/images/unit/watermark_correct.tif";
+const std::string watermark_incorrect = "../../../../test/_test_data/images/unit/watermark_incorrect.tif";
 
 // Check if configuration file can be found
 TEST(SipiImage, CheckIfTestImagesCanBeFound)

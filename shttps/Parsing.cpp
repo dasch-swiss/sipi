@@ -11,8 +11,6 @@
 
 #include "magic.h"
 
-static const char __file__[] = __FILE__;
-
 namespace shttps::Parsing {
 
 static std::unordered_map<std::string, std::vector<std::string>> mimetypes = { { "jpg", { "image/jpeg" } },
@@ -130,7 +128,7 @@ std::pair<std::string, std::string> parseMimetype(const std::string &mimestr)
     } else {
       std::ostringstream error_msg;
       error_msg << "Could not parse MIME type: " << mimestr;
-      throw Error(__file__, __LINE__, error_msg.str());
+      throw Error(error_msg.str());
     }
 
     // Convert MIME type and charset to lower case
@@ -141,7 +139,7 @@ std::pair<std::string, std::string> parseMimetype(const std::string &mimestr)
   } catch (std::regex_error &e) {
     std::ostringstream error_msg;
     error_msg << "Regex error: " << e.what();
-    throw Error(__file__, __LINE__, error_msg.str());
+    throw Error(error_msg.str());
   }
 }
 //=============================================================================================================
@@ -150,10 +148,10 @@ std::pair<std::string, std::string> getFileMimetype(const std::string &fpath)
 {
   magic_t handle;
   if ((handle = magic_open(MAGIC_MIME | MAGIC_PRESERVE_ATIME)) == nullptr) {
-    throw Error(__file__, __LINE__, magic_error(handle));
+    throw Error(magic_error(handle));
   }
 
-  if (magic_load(handle, nullptr) != 0) { throw Error(__file__, __LINE__, magic_error(handle)); }
+  if (magic_load(handle, nullptr) != 0) { throw Error(magic_error(handle)); }
 
 
   std::string mimestr(magic_file(handle, fpath.c_str()));
@@ -209,7 +207,7 @@ bool checkMimeTypeConsistency(const std::string &path, const std::string &filena
     if (dot_pos == std::string::npos) {
       std::stringstream ss;
       ss << "Invalid filename without extension: \"" << filename << "\"";
-      throw Error(__file__, __LINE__, ss.str());
+      throw Error(ss.str());
     }
     std::string extension = filename.substr(dot_pos + 1);
     // convert file extension to lower case (uppercase letters in file extension have to be converted for
@@ -250,7 +248,7 @@ bool checkMimeTypeConsistency(const std::string &path, const std::string &filena
   } catch (std::out_of_range &e) {
     std::stringstream ss;
     ss << "Unsupported file type: \"" << filename << "\"";
-    throw shttps::Error(__file__, __LINE__, ss.str());
+    throw shttps::Error(ss.str());
   }
 
   return true;
@@ -273,12 +271,12 @@ size_t parse_int(std::string &str)
     } else {
       std::ostringstream error_msg;
       error_msg << "Could not parse integer: " << str;
-      throw Error(__file__, __LINE__, error_msg.str());
+      throw Error(error_msg.str());
     }
   } catch (std::regex_error &e) {
     std::ostringstream error_msg;
     error_msg << "Regex error: " << e.what();
-    throw Error(__file__, __LINE__, error_msg.str());
+    throw Error(error_msg.str());
   }
 }
 //=============================================================================================================
@@ -299,12 +297,12 @@ float parse_float(std::string &str)
     } else {
       std::ostringstream error_msg;
       error_msg << "Could not parse floating-point number: " << str;
-      throw Error(__file__, __LINE__, error_msg.str());
+      throw Error(error_msg.str());
     }
   } catch (std::regex_error &e) {
     std::ostringstream error_msg;
     error_msg << "Regex error: " << e.what();
-    throw Error(__file__, __LINE__, error_msg.str());
+    throw Error(error_msg.str());
   }
 }
 //=============================================================================================================

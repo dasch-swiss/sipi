@@ -19,15 +19,15 @@
 #include "shttps/Connection.h"
 #include "shttps/makeunique.h"
 
+#include "SipiImageError.hpp"
 #include "jerror.h"
 #include "jpeglib.h"
+
+#include <tiff.h>
 
 #define ICC_MARKER (JPEG_APP0 + 2) /* JPEG marker code for ICC */
 // #define ICC_OVERHEAD_LEN  14        /* size of non-profile data in APP2 */
 // #define MAX_BYTES_IN_MARKER  65533    /* maximum data len of a JPEG marker */
-
-
-static const char thisSourceFile[] = __FILE__;
 
 
 namespace Sipi {
@@ -128,7 +128,7 @@ static void term_file_destination(j_compress_ptr cinfo)
   do {
     auto tmp_n = write(file_buffer->file_id, file_buffer->buffer + nn, n);
     if (tmp_n < 0) {
-      throw SipiImageError(thisSourceFile, __LINE__, "Couldn't write to file!");
+      throw SipiImageError("Couldn't write to file!");
     } else {
       n -= tmp_n;
       nn += tmp_n;
@@ -529,7 +529,7 @@ bool SipiIOJpeg::read(SipiImage *img,
   } catch (JpegError &jpgerr) {
     jpeg_destroy_decompress(&cinfo);
     close(infile);
-    throw SipiError(thisSourceFile, __LINE__, "Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
+    throw SipiError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
   }
 
   //
@@ -541,12 +541,12 @@ bool SipiIOJpeg::read(SipiImage *img,
   } catch (JpegError &jpgerr) {
     jpeg_destroy_decompress(&cinfo);
     close(infile);
-    throw SipiImageError(thisSourceFile, __LINE__, "Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
+    throw SipiImageError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
   }
   if (res != JPEG_HEADER_OK) {
     jpeg_destroy_decompress(&cinfo);
     close(infile);
-    throw SipiImageError(thisSourceFile, __LINE__, "Error reading JPEG file: \"" + filepath + "\"");
+    throw SipiImageError("Error reading JPEG file: \"" + filepath + "\"");
   }
 
   boolean no_cropping = false;
@@ -634,7 +634,7 @@ bool SipiIOJpeg::read(SipiImage *img,
           } while ((ll < marker->data_length) && (*s != '\0'));
           if (ll == marker->data_length) {
             // we didn't find anything....
-            throw SipiError(thisSourceFile, __LINE__, "XMP Problem");
+            throw SipiError("XMP Problem");
           }
           // now we start reading the data
           while ((ll < marker->data_length) && (*pos != '>')) {
@@ -665,7 +665,7 @@ bool SipiIOJpeg::read(SipiImage *img,
 
           img->xmp = std::make_shared<SipiXmp>(xmpstr);
         } catch (SipiError &err) {
-          std::cerr << "Failed to parse XMP..." << std::endl;
+          std::cerr << "Failed to parse XMP..." << '\n';
         }
       }
     } else if (marker->marker == JPEG_APP0 + 2) {
@@ -698,7 +698,7 @@ bool SipiIOJpeg::read(SipiImage *img,
   } catch (JpegError &jpgerr) {
     jpeg_destroy_decompress(&cinfo);
     close(infile);
-    throw SipiImageError(thisSourceFile, __LINE__, "Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
+    throw SipiImageError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
   }
 
   img->bps = 8;
@@ -725,13 +725,13 @@ bool SipiIOJpeg::read(SipiImage *img,
     break;
   }
   case JCS_YCCK: {
-    throw SipiImageError(thisSourceFile, __LINE__, "Unsupported JPEG colorspace (JCS_YCCK)!");
+    throw SipiImageError("Unsupported JPEG colorspace (JCS_YCCK)!");
   }
   case JCS_UNKNOWN: {
-    throw SipiImageError(thisSourceFile, __LINE__, "Unsupported JPEG colorspace (JCS_UNKNOWN)!");
+    throw SipiImageError("Unsupported JPEG colorspace (JCS_UNKNOWN)!");
   }
   default: {
-    throw SipiImageError(thisSourceFile, __LINE__, "Unsupported JPEG colorspace!");
+    throw SipiImageError("Unsupported JPEG colorspace!");
   }
   }
   int sll = cinfo.output_components * cinfo.output_width * sizeof(uint8);
@@ -747,13 +747,13 @@ bool SipiIOJpeg::read(SipiImage *img,
   } catch (JpegError &jpgerr) {
     jpeg_destroy_decompress(&cinfo);
     close(infile);
-    throw SipiImageError(thisSourceFile, __LINE__, "Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
+    throw SipiImageError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
   }
   try {
     jpeg_finish_decompress(&cinfo);
   } catch (JpegError &jpgerr) {
     close(infile);
-    throw SipiImageError(thisSourceFile, __LINE__, "Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
+    throw SipiImageError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
   }
 
   try {
@@ -761,7 +761,7 @@ bool SipiIOJpeg::read(SipiImage *img,
   } catch (JpegError &jpgerr) {
     close(infile);
     // inlock.unlock();
-    throw SipiImageError(thisSourceFile, __LINE__, "Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
+    throw SipiImageError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
   }
   close(infile);
 
@@ -1017,12 +1017,12 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
     try {
       quality = stoi(params->at(JPEG_QUALITY));
     } catch (const std::out_of_range &er) {
-      throw SipiImageError(thisSourceFile, __LINE__, "JPEG quality argument must be integer between 0 and 100");
+      throw SipiImageError("JPEG quality argument must be integer between 0 and 100");
     } catch (const std::invalid_argument &ia) {
-      throw SipiImageError(thisSourceFile, __LINE__, "JPEG quality argument must be integer between 0 and 100");
+      throw SipiImageError("JPEG quality argument must be integer between 0 and 100");
     }
     if ((quality < 0) || (quality > 100)) {
-      throw SipiImageError(thisSourceFile, __LINE__, "JPEG quality argument must be integer between 0 and 100");
+      throw SipiImageError("JPEG quality argument must be integer between 0 and 100");
     }
   }
 
@@ -1057,7 +1057,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   try {
     jpeg_create_compress(&cinfo);
   } catch (JpegError &jpgerr) {
-    throw SipiImageError(thisSourceFile, __LINE__, jpgerr.what());
+    throw SipiImageError(jpgerr.what());
   }
 
   if (filepath == "HTTP") {
@@ -1068,7 +1068,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
     } catch (JpegError &jpgerr) {
       cleanup_html_destination(&cinfo);
       jpeg_destroy_compress(&cinfo);
-      throw SipiImageError(thisSourceFile, __LINE__, jpgerr.what());
+      throw SipiImageError(jpgerr.what());
     }
   } else {
     if (filepath == "stdout:") {
@@ -1076,7 +1076,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
     } else {
       if ((outfile = open(filepath.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)) == -1) {
         jpeg_destroy_compress(&cinfo);
-        throw SipiImageError(thisSourceFile, __LINE__, "Cannot open file \"" + filepath + "\"!");
+        throw SipiImageError("Cannot open file \"" + filepath + "\"!");
       }
       jpeg_file_dest(&cinfo, outfile);
     }
@@ -1090,7 +1090,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   case MINISBLACK: {
     if (img->nc != 1) {
       jpeg_destroy_compress(&cinfo);
-      throw SipiImageError(thisSourceFile, __LINE__, "Num of components not 1 (nc = " + std::to_string(img->nc) + ")!");
+      throw SipiImageError("Num of components not 1 (nc = " + std::to_string(img->nc) + ")!");
     }
     cinfo.in_color_space = JCS_GRAYSCALE;
     cinfo.jpeg_color_space = JCS_GRAYSCALE;
@@ -1099,7 +1099,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   case RGB: {
     if (img->nc != 3) {
       jpeg_destroy_compress(&cinfo);
-      throw SipiImageError(thisSourceFile, __LINE__, "Num of components not 3 (nc = " + std::to_string(img->nc) + ")!");
+      throw SipiImageError("Num of components not 3 (nc = " + std::to_string(img->nc) + ")!");
     }
     cinfo.in_color_space = JCS_RGB;
     cinfo.jpeg_color_space = JCS_RGB;
@@ -1108,7 +1108,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   case SEPARATED: {
     if (img->nc != 4) {
       jpeg_destroy_compress(&cinfo);
-      throw SipiImageError(thisSourceFile, __LINE__, "Num of components not 3 (nc = " + std::to_string(img->nc) + ")!");
+      throw SipiImageError("Num of components not 3 (nc = " + std::to_string(img->nc) + ")!");
     }
     cinfo.in_color_space = JCS_CMYK;
     cinfo.jpeg_color_space = JCS_CMYK;
@@ -1117,7 +1117,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   case YCBCR: {
     if (img->nc != 3) {
       jpeg_destroy_compress(&cinfo);
-      throw SipiImageError(thisSourceFile, __LINE__, "Num of components not 3 (nc = " + std::to_string(img->nc) + ")!");
+      throw SipiImageError("Num of components not 3 (nc = " + std::to_string(img->nc) + ")!");
     }
     cinfo.in_color_space = JCS_YCbCr;
     cinfo.jpeg_color_space = JCS_YCbCr;
@@ -1131,7 +1131,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   }
   default: {
     jpeg_destroy_compress(&cinfo);
-    throw SipiImageError(thisSourceFile, __LINE__, "Unsupported JPEG colorspace: " + std::to_string(img->photo));
+    throw SipiImageError("Unsupported JPEG colorspace: " + std::to_string(img->photo));
   }
   }
   cinfo.progressive_mode = TRUE;
@@ -1148,7 +1148,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
     jpeg_destroy_compress(&cinfo);
     if (outfile != -1) close(outfile);
     // outlock.unlock();
-    throw SipiImageError(thisSourceFile, __LINE__, jpgerr.what());
+    throw SipiImageError(jpgerr.what());
   }
 
   //
@@ -1175,7 +1175,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
         jpeg_finish_compress(&cinfo);
         jpeg_destroy_compress(&cinfo);
         if (outfile != -1) close(outfile);
-        throw SipiImageError(thisSourceFile, __LINE__, jpgerr.what());
+        throw SipiImageError(jpgerr.what());
       }
     } else {
       // std::cerr << "exif to big" << std::endl;
@@ -1197,7 +1197,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
         jpeg_finish_compress(&cinfo);
         jpeg_destroy_compress(&cinfo);
         if (outfile != -1) close(outfile);
-        throw SipiImageError(thisSourceFile, __LINE__, jpgerr.what());
+        throw SipiImageError(jpgerr.what());
       }
     } else {
       // std::cerr << "xml to big" << std::endl;
@@ -1240,13 +1240,13 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
         jpeg_finish_compress(&cinfo);
         jpeg_destroy_compress(&cinfo);
         if (outfile != -1) close(outfile);
-        throw SipiImageError(thisSourceFile, __LINE__, jpgerr.what());
+        throw SipiImageError(jpgerr.what());
       }
 
       n_towrite -= n_nextwrite;
       n_written += n_nextwrite;
     }
-    if (n_towrite != 0) { std::cerr << "Hoppla!" << std::endl; }
+    if (n_towrite != 0) { std::cerr << "Hoppla!" << '\n'; }
   }
 
   if (img->iptc != nullptr) {
@@ -1270,7 +1270,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
       } catch (JpegError &jpgerr) {
         jpeg_destroy_compress(&cinfo);
         if (outfile != -1) close(outfile);
-        throw SipiImageError(thisSourceFile, __LINE__, jpgerr.what());
+        throw SipiImageError(jpgerr.what());
       }
     } else {
       // std::cerr << "iptc to big" << std::endl;
@@ -1288,7 +1288,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
     } catch (JpegError &jpgerr) {
       jpeg_destroy_compress(&cinfo);
       if (outfile != -1) close(outfile);
-      throw SipiImageError(thisSourceFile, __LINE__, jpgerr.what());
+      throw SipiImageError(jpgerr.what());
     }
   }
 
@@ -1305,7 +1305,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   } catch (JpegError &jpgerr) {
     jpeg_destroy_compress(&cinfo);
     if (outfile != -1) close(outfile);
-    throw SipiImageError(thisSourceFile, __LINE__, jpgerr.what());
+    throw SipiImageError(jpgerr.what());
   }
 
   try {
@@ -1313,7 +1313,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   } catch (JpegError &jpgerr) {
     jpeg_destroy_compress(&cinfo);
     if (outfile != -1) close(outfile);
-    throw SipiImageError(thisSourceFile, __LINE__, jpgerr.what());
+    throw SipiImageError(jpgerr.what());
   }
   if (outfile != -1) close(outfile);
 

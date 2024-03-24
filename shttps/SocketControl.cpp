@@ -5,8 +5,6 @@
 
 #include "SocketControl.h"
 
-static const char thisSourceFile[] = __FILE__;
-
 namespace shttps {
 
 SocketControl::SocketControl(ThreadControl &thread_control)
@@ -33,7 +31,7 @@ void SocketControl::add_stop_socket(int sid)
 {// only called once
   std::unique_lock<std::mutex> mutex_guard(sockets_mutex);
   if (dyn_socket_base != -1) {
-    throw Error(thisSourceFile, __LINE__, "Adding stop socket not allowed after adding dynamic sockets!");
+    throw Error("Adding stop socket not allowed after adding dynamic sockets!");
   }
   generic_open_sockets.emplace_back(NOOP, STOP_SOCKET, sid);
   stop_sock_id = static_cast<int>(generic_open_sockets.size() - 1);
@@ -44,7 +42,7 @@ void SocketControl::add_http_socket(int sid)
 {// only called once
   std::unique_lock<std::mutex> mutex_guard(sockets_mutex);
   if (dyn_socket_base != -1) {
-    throw Error(thisSourceFile, __LINE__, "Adding HTTP socket not allowed after adding dynamic sockets!");
+    throw Error("Adding HTTP socket not allowed after adding dynamic sockets!");
   }
   generic_open_sockets.emplace_back(NOOP, HTTP_SOCKET, sid);
   http_sock_id = static_cast<int>(generic_open_sockets.size() - 1);
@@ -55,7 +53,7 @@ void SocketControl::add_ssl_socket(int sid)
 {// only called once
   std::unique_lock<std::mutex> mutex_guard(sockets_mutex);
   if (dyn_socket_base != -1) {
-    throw Error(thisSourceFile, __LINE__, "Adding SSL socket not allowed after adding dynamic sockets!");
+    throw Error("Adding SSL socket not allowed after adding dynamic sockets!");
   }
   generic_open_sockets.emplace_back(NOOP, SSL_SOCKET, sid, nullptr);
   ssl_sock_id = static_cast<int>(generic_open_sockets.size() - 1);
@@ -72,14 +70,14 @@ void SocketControl::add_dyn_socket(SocketInfo sockid)
 }
 //=========================================================================
 
-void SocketControl::remove(int pos, SocketInfo &sockid)
+void SocketControl::remove(const int pos, SocketInfo &sockid)
 {// called multiple times, changes open sockets vector!!!
   std::unique_lock<std::mutex> mutex_guard(sockets_mutex);
   if ((pos >= 0) && (pos < generic_open_sockets.size())) {
     sockid = generic_open_sockets[pos];
     generic_open_sockets.erase(generic_open_sockets.begin() + pos);
   } else {
-    throw Error(thisSourceFile, __LINE__, "Socket index out of range!");
+    throw Error("Socket index out of range!");
   }
   if (pos < n_msg_sockets) {// we removed a thread socket, therefore we have to decrement all position ids
     n_msg_sockets--;
@@ -105,7 +103,7 @@ void SocketControl::move_to_waiting(int pos)
     generic_open_sockets.erase(generic_open_sockets.begin() + pos);
     waiting_sockets.push(sockid);
   } else {
-    throw Error(thisSourceFile, __LINE__, "Socket index out of range!");
+    throw Error("Socket index out of range!");
   }
 }
 //=========================================================================
@@ -143,7 +141,7 @@ SocketControl::SocketInfo SocketControl::receive_control_message(int pipe_id)
   ssize_t n;
   if ((n = ::read(pipe_id, &data, sizeof(SIData))) != sizeof(SIData)) {
     data.type = ERROR;
-    std::cerr << "==> receive_control_message: received only " << n << " bytes!!" << std::endl;
+    std::cerr << "==> receive_control_message: received only " << n << " bytes!!" << '\n';
   }
   return SocketInfo(data);
 }

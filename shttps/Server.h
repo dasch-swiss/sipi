@@ -109,11 +109,11 @@ class Server
   /*!
    * Struct to hold Global Lua function and associated userdata
    */
-  typedef struct
+  using GlobalFunc = struct
   {
     LuaSetGlobalsFunc func;
     void *func_dataptr;
-  } GlobalFunc;
+  };
 
   /*!
    * Error handling class for SSL functions
@@ -124,16 +124,20 @@ class Server
     SSL *cSSL;
 
   public:
-    inline SSLError(const char *file, const int line, const char *msg, SSL *cSSL_p = nullptr)
-      : Error(file, line, msg), cSSL(cSSL_p){};
+    explicit SSLError(const char *msg,
+      SSL *cSSL_p = nullptr,
+      const std::source_location &loc = std::source_location::current())
+      : Error(msg, 0, loc), cSSL(cSSL_p){};
 
-    inline SSLError(const char *file, const int line, const std::string &msg, SSL *cSSL_p = nullptr)
-      : Error(file, line, msg), cSSL(cSSL_p){};
+    explicit SSLError(const std::string &msg,
+      SSL *cSSL_p = nullptr,
+      const std::source_location &loc = std::source_location::current())
+      : Error(msg, 0, loc), cSSL(cSSL_p){};
 
-    inline std::string to_string(void)
+    [[nodiscard]]  std::string to_string() const override
     {
       std::stringstream ss;
-      ss << "SSL-ERROR at [" << file << ": " << line << "] ";
+      ss << "SSL-ERROR at [" << this->getFile() << ": " << this->getLine() << "] ";
       BIO *bio = BIO_new(BIO_s_mem());
       ERR_print_errors(bio);
       char *buf = nullptr;
@@ -153,13 +157,13 @@ public:
   class CommMsg
   {
   public:
-    static inline int send(int pipe_id)
+    static int send(int pipe_id)
     {
       if ((::send(pipe_id, "X", 1, 0)) != 1) { return -1; }
       return 0;
     };
 
-    static inline int read(int pipe_id)
+    static int read(int pipe_id)
     {
       char c;
       if (::read(pipe_id, &c, 1) != 1) { return -1; }
@@ -385,7 +389,7 @@ public:
   inline void initscript(const std::string &initscript_p)
   {
     std::ifstream t(initscript_p);
-    if (t.fail()) { throw Error(__FILE__, __LINE__, "initscript \"" + initscript_p + "\" not found!"); }
+    if (t.fail()) { throw Error("initscript \"" + initscript_p + "\" not found!"); }
 
     t.seekg(0, std::ios::end);
     _initscript.reserve(t.tellg());

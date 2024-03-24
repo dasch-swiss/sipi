@@ -770,12 +770,12 @@ public:
   /*!
    * Sends the header and all data available.
    */
-  void flush(void);
+  void flush();
 
   /*!
    * Flags the connection to be reset
    */
-  inline bool resetConnection(void) { return _reset_connection; }
+  bool resetConnection() const { return _reset_connection; }
 };
 
 }// namespace shttps

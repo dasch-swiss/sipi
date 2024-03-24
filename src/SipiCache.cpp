@@ -9,8 +9,6 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
-#include <memory>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -19,14 +17,12 @@
 #include <malloc.h>
 #else
 
-#include <stdlib.h>
 
 #endif
 
 #include <assert.h>
 #include <dirent.h>
 #include <stdio.h>
-#include <string.h>
 #include <sys/stat.h>
 #include <syslog.h>
 #include <unistd.h>
@@ -36,7 +32,6 @@
 #include "SipiError.hpp"
 #include "shttps/Global.h"
 
-static const char __file__[] = __FILE__;
 
 namespace Sipi {
 
@@ -63,7 +58,7 @@ SipiCache::SipiCache(const std::string &cachedir_p,
 {
 
   if (access(_cachedir.c_str(), R_OK | W_OK | X_OK) != 0) {
-    throw SipiError(__file__, __LINE__, "Cache directory not available", errno);
+    throw SipiError("Cache directory not available", errno);
   }
 
   std::string cachefilename = _cachedir + "/.sipicache";
@@ -310,7 +305,7 @@ std::string SipiCache::check(const std::string &origpath_p, const std::string &c
   SipiCache::CacheRecord fr;
 
   if (stat(origpath_p.c_str(), &fileinfo) != 0) {
-    throw SipiError(__file__, __LINE__, "Couldn't stat file \"" + origpath_p + "\"!", errno);
+    throw SipiError("Couldn't stat file \"" + origpath_p + "\"!", errno);
   }
 #if defined(HAVE_ST_ATIMESPEC)
   struct timespec mtime = fileinfo.st_mtimespec;
@@ -365,7 +360,7 @@ std::string SipiCache::getNewCacheFileName(void)
   int tmp_fd = mkstemp(c_filename);
 
   if (tmp_fd == -1) {
-    throw SipiError(__file__, __LINE__, std::string("Couldn't create cache file ") + filename, errno);
+    throw SipiError(std::string("Couldn't create cache file ") + filename, errno);
   }
 
   close(tmp_fd);
@@ -407,7 +402,7 @@ void SipiCache::add(const std::string &origpath_p,
   fr.cachepath = cachepath;
 
   if (stat(cachepath_p.c_str(), &fileinfo) != 0) {
-    throw SipiError(__file__, __LINE__, "Couldn't stat file \"" + origpath_p + "\"!", errno);
+    throw SipiError("Couldn't stat file \"" + origpath_p + "\"!", errno);
   }
 #if defined(HAVE_ST_ATIMESPEC)
   fr.mtime = fileinfo.st_mtimespec;
@@ -533,7 +528,7 @@ bool SipiCache::getSize(const std::string &origname_p,
 {
   struct stat fileinfo;
   if (stat(origname_p.c_str(), &fileinfo) != 0) {
-    throw SipiError(__file__, __LINE__, "Couldn't stat file \"" + origname_p + "\"!", errno);
+    throw SipiError("Couldn't stat file \"" + origname_p + "\"!", errno);
   }
 #if defined(HAVE_ST_ATIMESPEC)
   struct timespec mtime = fileinfo.st_mtimespec;

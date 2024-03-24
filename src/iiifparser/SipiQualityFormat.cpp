@@ -3,28 +3,14 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#include <assert.h>
-#include <cmath>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <fstream>
-#include <iostream>
-#include <sstream>
-#include <stdlib.h>
-#include <string>
-#include <vector>
 
-#include <stdio.h>
-#include <string.h>
+#include <fstream>
 
 #include "../SipiError.hpp"
 #include "SipiQualityFormat.h"
 
 
 #include <string>
-
-static const char __file__[] = __FILE__;
 
 namespace Sipi {
 
@@ -39,7 +25,7 @@ SipiQualityFormat::SipiQualityFormat(std::string str)
   size_t dot_pos = str.find(".");
 
   if (dot_pos == std::string::npos) {
-    throw SipiError(__file__, __LINE__, "IIIF Error reading Quality+Format parameter  \"" + str + "\" !");
+    throw SipiError("IIIF Error reading Quality+Format parameter  \"" + str + "\" !");
   }
 
   std::string quality = str.substr(0, dot_pos);
@@ -54,7 +40,7 @@ SipiQualityFormat::SipiQualityFormat(std::string str)
   } else if (quality == "bitonal") {
     quality_type = SipiQualityFormat::BITONAL;
   } else {
-    throw SipiError(__file__, __LINE__, "IIIF Error reading Quality parameter  \"" + quality + "\" !");
+    throw SipiError("IIIF Error reading Quality parameter  \"" + quality + "\" !");
   }
 
   if (format == "jpg") {

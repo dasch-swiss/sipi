@@ -7,7 +7,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <syslog.h>
 #include <unistd.h>
 
 #include <cmath>
@@ -15,7 +14,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <iostream>
 #include <regex>
 #include <sstream>
 #include <string>
@@ -24,9 +22,7 @@
 #include <vector>
 
 #include <LuaServer.h>
-#include <SipiFilenameHash.h>
 
-#include "PhpSession.h"
 #include "SipiError.hpp"
 #include "SipiImage.hpp"
 #include "iiifparser/SipiIdentifier.h"
@@ -34,10 +30,8 @@
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiRotation.h"
 #include "iiifparser/SipiSize.h"
-// #include "Salsah.h"
 
 #include "shttps/Connection.h"
-#include "shttps/Global.h"
 #include "shttps/Parsing.h"
 
 #include "SipiHttpServer.hpp"
@@ -46,10 +40,9 @@
 #include "favicon.h"
 #include "jansson.h"
 
-#include "lua.hpp"
+#include "SipiImageError.hpp"
 
 using namespace shttps;
-static const char __file__[] = __FILE__;
 
 namespace Sipi {
 /*!
@@ -221,7 +214,7 @@ static std::unordered_map<std::string, std::string> call_iiif_preflight(Connecti
   if (rvals.empty()) {
     std::ostringstream err_msg;
     err_msg << "Lua function " << iiif_preflight_funcname << " must return at least one value";
-    throw SipiError(__file__, __LINE__, err_msg.str());
+    throw SipiError(err_msg.str());
   }
 
   // The first return value is the permission code.
@@ -237,21 +230,19 @@ static std::unordered_map<std::string, std::string> call_iiif_preflight(Connecti
     } catch (const std::out_of_range &err) {
       std::ostringstream err_msg;
       err_msg << "The permission value returned by Lua function " << iiif_preflight_funcname << " has no type field!";
-      throw SipiError(__file__, __LINE__, err_msg.str());
+      throw SipiError(err_msg.str());
     }
-    if (tmpv->type != LuaValstruct::STRING_TYPE) { throw SipiError(__file__, __LINE__, "String value expected!"); }
+    if (tmpv->type != LuaValstruct::STRING_TYPE) { throw SipiError("String value expected!"); }
     preflight_info["type"] = tmpv->value.s;
     for (const auto &keyval : permission_return_val->value.table) {
       if (keyval.first == "type") continue;
-      if (keyval.second->type != LuaValstruct::STRING_TYPE) {
-        throw SipiError(__file__, __LINE__, "String value expected!");
-      }
+      if (keyval.second->type != LuaValstruct::STRING_TYPE) { throw SipiError("String value expected!"); }
       preflight_info[keyval.first] = keyval.second->value.s;
     }
   } else {
     std::ostringstream err_msg;
     err_msg << "The permission value returned by Lua function " << iiif_preflight_funcname << " was not valid";
-    throw SipiError(__file__, __LINE__, err_msg.str());
+    throw SipiError(err_msg.str());
   }
 
   //
@@ -264,7 +255,7 @@ static std::unordered_map<std::string, std::string> call_iiif_preflight(Connecti
     std::ostringstream err_msg;
     err_msg << "The permission returned by Lua function " << iiif_preflight_funcname
             << " is not valid: " << preflight_info["type"];
-    throw SipiError(__file__, __LINE__, err_msg.str());
+    throw SipiError(err_msg.str());
   }
 
   if (preflight_info["type"] == "deny") {
@@ -274,7 +265,7 @@ static std::unordered_map<std::string, std::string> call_iiif_preflight(Connecti
       std::ostringstream err_msg;
       err_msg << "Lua function " << iiif_preflight_funcname
               << " returned other permission than 'deny', but it did not return a file path";
-      throw SipiError(__file__, __LINE__, err_msg.str());
+      throw SipiError(err_msg.str());
     }
 
     auto infile_return_val = rvals.at(1);
@@ -285,7 +276,7 @@ static std::unordered_map<std::string, std::string> call_iiif_preflight(Connecti
     } else {
       std::ostringstream err_msg;
       err_msg << "The file path returned by Lua function " << iiif_preflight_funcname << " was not a string";
-      throw SipiError(__file__, __LINE__, err_msg.str());
+      throw SipiError(err_msg.str());
     }
   }
 
@@ -326,7 +317,7 @@ static std::unordered_map<std::string, std::string>
   if (rvals.empty()) {
     std::ostringstream err_msg;
     err_msg << "Lua function " << file_preflight_funcname << " must return at least one value";
-    throw SipiError(__file__, __LINE__, err_msg.str());
+    throw SipiError(err_msg.str());
   }
 
   // The first return value is the permission code.
@@ -342,21 +333,19 @@ static std::unordered_map<std::string, std::string>
     } catch (const std::out_of_range &err) {
       std::ostringstream err_msg;
       err_msg << "The permission value returned by Lua function " << file_preflight_funcname << " has no type field!";
-      throw SipiError(__file__, __LINE__, err_msg.str());
+      throw SipiError(err_msg.str());
     }
-    if (tmpv->type != LuaValstruct::STRING_TYPE) { throw SipiError(__file__, __LINE__, "String value expected!"); }
+    if (tmpv->type != LuaValstruct::STRING_TYPE) { throw SipiError("String value expected!"); }
     preflight_info["type"] = tmpv->value.s;
     for (const auto &keyval : permission_return_val->value.table) {
       if (keyval.first == "type") continue;
-      if (keyval.second->type != LuaValstruct::STRING_TYPE) {
-        throw SipiError(__file__, __LINE__, "String value expected!");
-      }
+      if (keyval.second->type != LuaValstruct::STRING_TYPE) { throw SipiError("String value expected!"); }
       preflight_info[keyval.first] = keyval.second->value.s;
     }
   } else {
     std::ostringstream err_msg;
     err_msg << "The permission value returned by Lua function " << file_preflight_funcname << " was not valid";
-    throw SipiError(__file__, __LINE__, err_msg.str());
+    throw SipiError(err_msg.str());
   }
 
   //
@@ -367,7 +356,7 @@ static std::unordered_map<std::string, std::string>
     std::ostringstream err_msg;
     err_msg << "The permission returned by Lua function " << file_preflight_funcname
             << " is not valid: " << preflight_info["type"];
-    throw SipiError(__file__, __LINE__, err_msg.str());
+    throw SipiError(err_msg.str());
   }
 
   if (preflight_info["type"] == "deny") {
@@ -377,7 +366,7 @@ static std::unordered_map<std::string, std::string>
       std::ostringstream err_msg;
       err_msg << "Lua function " << file_preflight_funcname
               << " returned other permission than 'deny', but it did not return a file path";
-      throw SipiError(__file__, __LINE__, err_msg.str());
+      throw SipiError(err_msg.str());
     }
 
     auto infile_return_val = rvals.at(1);
@@ -388,7 +377,7 @@ static std::unordered_map<std::string, std::string>
     } else {
       std::ostringstream err_msg;
       err_msg << "The file path returned by Lua function " << file_preflight_funcname << " was not a string";
-      throw SipiError(__file__, __LINE__, err_msg.str());
+      throw SipiError(err_msg.str());
     }
   }
 
@@ -442,7 +431,7 @@ static std::unordered_map<std::string, std::string> check_file_access(Connection
   //
   if (access(infile.c_str(), R_OK) != 0) {
     // test, if file exists
-    throw SipiError(__file__, __LINE__, "Cannot read image file: " + infile);
+    throw SipiError("Cannot read image file: " + infile);
   }
   pre_flight_info["infile"] = infile;
   return pre_flight_info;
@@ -478,7 +467,7 @@ std::pair<std::string, std::string> SipiHttpServer::get_canonical_url(size_t tmp
     try {
       size->get_size(tmp_w, tmp_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
     } catch (Sipi::SipiSizeError &err) {
-      throw SipiError(__file__, __LINE__, "SipiSize error!");
+      throw SipiError("SipiSize error!");
     }
   }
 
@@ -540,7 +529,7 @@ std::pair<std::string, std::string> SipiHttpServer::get_canonical_url(size_t tmp
     break;// png
   }
   default: {
-    throw SipiError(__file__, __LINE__, "Unsupported file format requested! Supported are .jpg, .jp2, .tif, .png");
+    throw SipiError("Unsupported file format requested! Supported are .jpg, .jp2, .tif, .png");
   }
   }
 
@@ -688,7 +677,7 @@ static void serve_info_json_file(Connection &conn_obj,
     json_object_set_new(root, "internalMimeType", json_string(actual_mimetype.c_str()));
 
     struct stat fstatbuf;
-    if (stat(access["infile"].c_str(), &fstatbuf) != 0) { throw Error(__file__, __LINE__, "Cannot fstat file!"); }
+    if (stat(access["infile"].c_str(), &fstatbuf) != 0) { throw Error("Cannot fstat file!"); }
     json_object_set_new(root, "fileSize", json_integer(fstatbuf.st_size));
   }
 
@@ -1048,7 +1037,7 @@ static void serve_knora_json_file(Connection &conn_obj,
     json_object_set_new(root, "internalMimeType", json_string(actual_mimetype.c_str()));
 
     struct stat fstatbuf;
-    if (stat(infile.c_str(), &fstatbuf) != 0) { throw Error(__file__, __LINE__, "Cannot fstat file!"); }
+    if (stat(infile.c_str(), &fstatbuf) != 0) { throw Error("Cannot fstat file!"); }
     json_object_set_new(root, "fileSize", json_integer(fstatbuf.st_size));
 
     if (!orig_filename.empty()) { json_object_set_new(root, "originalFilename", json_string(orig_filename.c_str())); }
@@ -1068,7 +1057,7 @@ static void serve_knora_json_file(Connection &conn_obj,
     json_object_set_new(root, "internalMimeType", json_string(actual_mimetype.c_str()));
 
     struct stat fstatbuf;
-    if (stat(infile.c_str(), &fstatbuf) != 0) { throw Error(__file__, __LINE__, "Cannot fstat file!"); }
+    if (stat(infile.c_str(), &fstatbuf) != 0) { throw Error("Cannot fstat file!"); }
     json_object_set_new(root, "fileSize", json_integer(fstatbuf.st_size));
     json_object_set_new(root, "originalFilename", json_string(orig_filename.c_str()));
 
@@ -1162,11 +1151,11 @@ static void serve_file_download(Connection &conn_obj,
       int start = 0;// lets assume beginning of file
       int end = fsize - 1;// lets assume whole file
       if (std::regex_match(range.c_str(), m, re)) {
-        if (m.size() < 2) { throw Error(__file__, __LINE__, "Range expression invalid!"); }
+        if (m.size() < 2) { throw Error("Range expression invalid!"); }
         start = std::stoi(m[1]);
         if ((m.size() > 1) && !m[2].str().empty()) { end = std::stoi(m[2]); }
       } else {
-        throw Error(__file__, __LINE__, "Range expression invalid!");
+        throw Error("Range expression invalid!");
       }
 
       // no "Content-Length" since send_file() will add this

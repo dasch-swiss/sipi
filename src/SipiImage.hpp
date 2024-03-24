@@ -12,14 +12,10 @@
 #ifndef __sipi_image_h
 #define __sipi_image_h
 
-#include <exception>
-#include <sstream>
 #include <string>
 #include <unordered_map>
-#include <utility>
 
 #include "../include/SipiIO.h"
-#include "../include/formats/SipiIOTiff.h"
 #include "../include/iiifparser/SipiRegion.h"
 #include "../include/iiifparser/SipiSize.h"
 #include "../include/metadata/SipiEssentials.h"
@@ -27,7 +23,6 @@
 #include "../include/metadata/SipiIcc.h"
 #include "../include/metadata/SipiIptc.h"
 #include "../include/metadata/SipiXmp.h"
-#include "SipiError.hpp"
 
 #include "../shttps/Connection.h"
 #include "../shttps/Hash.h"
@@ -39,13 +34,13 @@
 namespace Sipi {
 
 // Used for 8 bits per sample (color channel) images
-typedef unsigned char byte;
+using byte = unsigned char;
 
 // Used for 16 bits per sample (color channel) images
-typedef unsigned short word;
+using word = unsigned short;
 
 /*! Implements the values of the photometric tag of the TIFF format */
-typedef enum : unsigned short {
+using PhotometricInterpretation = enum : unsigned short {
   MINISWHITE = 0,//!< B/W or gray value image with 0 = white and 1 (255) = black
   MINISBLACK = 1,//!< B/W or gray value image with 0 = black and 1 (255) = white (is default in SIPI)
   RGB = 2,//!< Color image with RGB values
@@ -61,111 +56,25 @@ typedef enum : unsigned short {
   LOGLUV = 32845,//!< LOGLuv format (not supported)
   LINEARRAW = 34892,//!< Linear raw array for DNG and RAW formats. Not supported!
   INVALID = 65535//!< an invalid value
-} PhotometricInterpretation;
+};
 
 /*! The meaning of extra channels as used in the TIF format */
-typedef enum : unsigned short {
+using ExtraSamples = enum : std::uint8_t {
   UNSPECIFIED = 0,//!< Unknown meaning
   ASSOCALPHA = 1,//!< Associated alpha channel
   UNASSALPHA = 2//!< Unassociated alpha channel
-} ExtraSamples;
+};
 
-typedef enum {
+using SkipMetadata = enum: std::uint8_t {
   SKIP_NONE = 0x00,
   SKIP_ICC = 0x01,
   SKIP_XMP = 0x02,
   SKIP_IPTC = 0x04,
   SKIP_EXIF = 0x08,
   SKIP_ALL = 0xFF
-} SkipMetadata;
-
-enum InfoError { INFO_ERROR };
-
-/*!
- * This class implements the error handling for the different image formats.
- */
-class SipiImageError final : public std::exception
-{
-  std::string file;//!< Source file where the error occurs in
-  int line;//!< Line within the source file
-  int errnum;//!< error number if a system call is the reason for the error
-  std::string errmsg;
-  std::string fullerrmsg;
-
-public:
-  /*!
-   * Constructor
-   * \param[in] file_p The source file name (usually __FILE__)
-   * \param[in] line_p The line number in the source file (usually __LINE__)
-   * \param[in] errnum_p if a unix system call is the reason for throwing this exception
-   */
-  SipiImageError(const char *file_p, const int line_p, const int errnum_p = 0)
-    : file(file_p), line(line_p), errnum(errnum_p)
-  {
-    std::ostringstream errStream;
-    errStream << "Sipi image error at [" << file << ": " << line << "]";
-    if (errnum != 0) errStream << " (system error: " << std::strerror(errnum) << ")";
-    errStream << ": " << errmsg;
-    fullerrmsg = errStream.str();
-  }
-
-  /*!
-   * Constructor
-   * \param[in] file_p The source file name (usually __FILE__)
-   * \param[in] line_p The line number in the source file (usually __LINE__)
-   * \param[in] msg_p Error message describing the problem
-   * \param[in] errnum_p Errnum, if a unix system call is the reason for throwing this exception
-   */
-  SipiImageError(const char *file_p, const int line_p, const char *msg_p, const int errnum_p = 0)
-    : file(file_p), line(line_p), errnum(errnum_p), errmsg(msg_p)
-  {
-    std::ostringstream errStream;
-    errStream << "Sipi image error at [" << file << ": " << line << "]";
-    if (errnum != 0) errStream << " (system error: " << std::strerror(errnum) << ")";
-    errStream << ": " << errmsg;
-    fullerrmsg = errStream.str();
-  }
-
-  /*!
-   * Constructor
-   * \param[in] file_p The source file name (usually __FILE__)
-   * \param[in] line_p The line number in the source file (usually __LINE__)
-   * \param[in] msg_p Error message describing the problem
-   * \param[in] errnum_p Errnum, if a unix system call is the reason for throwing this exception
-   */
-  SipiImageError(const char *file_p, const int line_p, std::string msg_p, const int errnum_p = 0)
-    : file(file_p), line(line_p), errnum(errnum_p), errmsg(std::move(msg_p))
-  {
-    std::ostringstream errStream;
-    errStream << "Sipi image error at [" << file << ": " << line << "]";
-    if (errnum != 0) errStream << " (system error: " << std::strerror(errnum) << ")";
-    errStream << ": " << errmsg;
-    fullerrmsg = errStream.str();
-  }
-
-  std::string to_string() const
-  {
-    std::ostringstream errStream;
-    errStream << "Sipi image error at [" << file << ": " << line << "]";
-    if (errnum != 0) errStream << " (system error: " << std::strerror(errnum) << ")";
-    errStream << ": " << errmsg;
-    return errStream.str();
-  }
-
-  //============================================================================
-
-  const char *what() const noexcept override { return fullerrmsg.c_str(); }
-
-  friend std::ostream &operator<<(std::ostream &outStream, const SipiImageError &rhs)
-  {
-    const std::string errStr = rhs.to_string();
-    outStream << errStr << std::endl;// TODO: remove the endl, the logging code should do it
-    return outStream;
-  }
-
-  //============================================================================
 };
 
+enum InfoError { INFO_ERROR };
 
 /*!
  * \class SipiImage
@@ -178,8 +87,8 @@ public:
  */
 class SipiImage
 {
-  static std::unordered_map<std::string, std::shared_ptr<SipiIO>> io;
-  //!< member variable holding a map of I/O class instances for the different file formats
+  static std::unordered_map<std::string, std::shared_ptr<SipiIO>>
+    io;//!< member variable holding a map of I/O class instances for the different file formats
   static byte bilinn(byte buf[], int nx, double x, double y, int c, int n);
   static word bilinn(word buf[], int nx, double x, double y, int c, int n);
   void ensure_exif();
@@ -192,8 +101,8 @@ protected:
   std::vector<ExtraSamples> es;//!< meaning of the extra samples (channels)
   Orientation orientation;//!< Orientation of the image
   PhotometricInterpretation photo;//!< Image type, that is the meaning of the channels
-  byte *pixels;
-  //!< Pointer to block of memory holding the pixels (allways in big-endian format if interpreted as 16 bit/sample)
+  byte *pixels;//!< Pointer to block of memory holding the pixels (allways in big-endian format if interpreted as 16
+               //!< bit/sample)
   std::shared_ptr<SipiXmp> xmp;//!< Pointer to instance SipiXmp class (\ref SipiXmp), or NULL
   std::shared_ptr<SipiIcc> icc;//!< Pointer to instance of SipiIcc class (\ref SipiIcc), or NULL
   std::shared_ptr<SipiIptc> iptc;//!< Pointer to instance of SipiIptc class (\ref SipiIptc), or NULL
@@ -230,40 +139,40 @@ public:
   /*!
    * Getter for nx
    */
-  inline size_t getNx() const { return nx; };
+  [[nodiscard]] size_t getNx() const { return nx; };
 
   /*!
    * Getter for ny
    */
-  inline size_t getNy() const { return ny; };
+  [[nodiscard]] size_t getNy() const { return ny; };
 
   /*!
    * Getter for nc (includes alpha channels!)
    */
-  inline size_t getNc() const { return nc; };
+  [[nodiscard]] size_t getNc() const { return nc; };
 
   /*!
    * Getter for number of alpha channels
    */
-  inline size_t getNalpha() const { return es.size(); }
+  [[nodiscard]] size_t getNalpha() const { return es.size(); }
 
   /*!
    * Get bits per sample of image
    * @return bis per sample (bps)
    */
-  inline size_t getBps() const { return bps; }
+  [[nodiscard]] size_t getBps() const { return bps; }
 
   /**
    * Get the exif metadata of the image.
    * \return exif metadata
    */
-  inline std::shared_ptr<SipiExif> getExif() const { return exif; };
+  [[nodiscard]] std::shared_ptr<SipiExif> getExif() const { return exif; };
 
   /*!
    * Get orientation
    * @return Returns orientation tag
    */
-  inline Orientation getOrientation() const { return orientation; };
+  [[nodiscard]] Orientation getOrientation() const { return orientation; };
 
   /*!
    * Set orientation parameter
@@ -276,7 +185,7 @@ public:
    * Get photometric interpretation
    * @return Returns photometric interpretation tag
    */
-  PhotometricInterpretation getPhoto() const { return photo; };
+  [[nodiscard]] PhotometricInterpretation getPhoto() const { return photo; };
 
 
   /*! Destructor
@@ -367,11 +276,11 @@ public:
    *
    * \returns Pointer to connection data
    */
-  shttps::Connection *connection() const { return conobj; };
+  [[nodiscard]] shttps::Connection *connection() const { return conobj; };
 
   void essential_metadata(const SipiEssentials &emdata_p) { emdata = emdata_p; }
 
-  SipiEssentials essential_metadata() const { return emdata; }
+  [[nodiscard]] SipiEssentials essential_metadata() const { return emdata; }
 
   /*!
    * Read an image from the given path

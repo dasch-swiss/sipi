@@ -37,7 +37,7 @@ SipiExif::SipiExif(const unsigned char *exif, unsigned int len)
   try {
     byteorder = Exiv2::ExifParser::decode(exifData, exif, (uint32_t)len);
   } catch (Exiv2::BasicError<char> &exiverr) {
-    throw SipiError(file_, __LINE__, exiverr.what());
+    throw SipiError(exiverr.what());
   }
 }
 //============================================================================
@@ -48,7 +48,7 @@ unsigned char *SipiExif::exifBytes(unsigned int &len)
 {
   Exiv2::Blob blob;
   Exiv2::WriteMethod wm = Exiv2::ExifParser::encode(blob, binaryExif, binary_size, byteorder, exifData);
-  unsigned char *tmpbuf;
+  unsigned char *tmpbuf = nullptr;
   if (wm == Exiv2::wmIntrusive) {
     // we use blob
     binary_size = blob.size();
@@ -73,8 +73,8 @@ std::vector<unsigned char> SipiExif::exifBytes()
 
 Exiv2::Rational SipiExif::toRational(float f)
 {
-  int numerator;
-  int denominator;
+  int numerator = 0;
+  int denominator = 0;
   if (f == 0.0F) {
     numerator = 0;
     denominator = 1;
@@ -107,7 +107,7 @@ Exiv2::URational SipiExif::toURational(float f)
   unsigned int numerator;
   unsigned int denominator;
 
-  if (f < 0.0F) throw SipiError(file_, __LINE__, "Cannot convert negative float to URational!");
+  if (f < 0.0F) throw SipiError("Cannot convert negative float to URational!");
 
   if (f == 0.0F) {
     numerator = 0;

@@ -3,26 +3,13 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#include <assert.h>
-#include <cmath>
-#include <cstdio>
-#include <cstdlib>
+
 #include <cstring>
 #include <fstream>
-#include <iostream>
-#include <sstream>
-#include <stdlib.h>
-#include <string>
-#include <vector>
-
-#include <stdio.h>
-#include <string.h>
 
 #include "../SipiError.hpp"
 #include "SipiRotation.h"
 #include "shttps/Parsing.h"
-
-static const char __file__[] = __FILE__;
 
 namespace Sipi {
 
@@ -47,7 +34,7 @@ SipiRotation::SipiRotation(std::string str)
 
     rotation = shttps::Parsing::parse_float(str);
   } catch (shttps::Error &error) {
-    throw SipiError(__file__, __LINE__, "Could not parse IIIF rotation parameter: " + str);
+    throw SipiError("Could not parse IIIF rotation parameter: " + str);
   }
 }
 //-------------------------------------------------------------------------

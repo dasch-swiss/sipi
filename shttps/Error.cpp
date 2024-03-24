@@ -8,27 +8,29 @@
 
 #include "Error.h"
 
+#include <source_location>
+
 namespace shttps {
 
-Error::Error(const char *file_p, const int line_p, const char *msg, int errno_p)
-  : runtime_error(
-      std::string(msg) + "\nFile: " + std::string(file_p) + std::string(" Line: ") + std::to_string(line_p)),
-    line(line_p), file(file_p), message(msg), sysErrno(errno_p)
+Error::Error(const char *msg, int errno_p, const std::source_location &loc)
+  : runtime_error(std::string(msg) + "\nFile: " + std::string(loc.file_name()) + std::string(" Line: ")
+                  + std::to_string(loc.line())),
+    message{ msg }, sysErrno{ errno_p }, location{ loc }
 {}
 //============================================================================
 
 
-Error::Error(const char *file_p, const int line_p, const std::string &msg, int errno_p)
-  : runtime_error(
-      std::string(msg) + "\nFile: " + std::string(file_p) + std::string(" Line: ") + std::to_string(line_p)),
-    line(line_p), file(file_p), message(msg), sysErrno(errno_p)
+Error::Error(const std::string &msg, int errno_p, const std::source_location &loc)
+  : runtime_error(std::string(msg) + "\nFile: " + std::string(loc.file_name()) + std::string(" Line: ")
+                  + std::to_string(loc.line())),
+    message{ msg }, sysErrno{ errno_p }, location{ loc }
 {}
 //============================================================================
 
-std::string Error::to_string(void) const
+std::string Error::to_string() const
 {
   std::ostringstream err_stream;
-  err_stream << "Error at [" << file << ": " << line << "]";
+  err_stream << "Error at [" << location.file_name() << ": " << location.line() << "]";
   if (sysErrno != 0) err_stream << " (system error: " << std::strerror(sysErrno) << ")";
   err_stream << ": " << message;
   return err_stream.str();

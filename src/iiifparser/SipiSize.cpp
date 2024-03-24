@@ -3,7 +3,7 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#include <assert.h>
+#include <cassert>
 #include <cstdlib>
 #include <syslog.h>
 
@@ -11,20 +11,15 @@
 #include <cmath>
 #include <cstdio>
 #include <fstream>
-#include <iostream>
 #include <sstream>
 #include <string>
-
-#include <cstdio>
 #include <cstring>
 
 
 #include "../SipiError.hpp"
 #include "SipiSize.h"
-#include "shttps/Global.h"
 #include "shttps/Parsing.h"
 
-static const char __file__[] = __FILE__;
 
 namespace Sipi {
 
@@ -50,14 +45,14 @@ SipiSize::SipiSize(std::string str)
       size_type = SizeType::FULL;
     } else if (str.find("pct") != std::string::npos) {
       if (exclamation_mark)
-        throw SipiError(__file__, __LINE__, "Invalid IIIF size parameter: \"!" + str + "\": \"!\" not allowed here!");
+        throw SipiError("Invalid IIIF size parameter: \"!" + str + "\": \"!\" not allowed here!");
       size_type = SizeType::PERCENTS;
       std::string percent_str = str.substr(4);
       percent = shttps::Parsing::parse_float(percent_str);
       if (percent < 0.0) percent = 1.0;
     } else if (str.find("red") != std::string::npos) {
       if (exclamation_mark)
-        throw SipiError(__file__, __LINE__, "Invalid IIIF size parameter: \"!" + str + "\": \"!\" not allowed here!");
+        throw SipiError("Invalid IIIF size parameter: \"!" + str + "\": \"!\" not allowed here!");
       size_type = SizeType::REDUCE;
       std::string reduce_str = str.substr(4);
       reduce = static_cast<int>(shttps::Parsing::parse_int(reduce_str));
@@ -66,7 +61,7 @@ SipiSize::SipiSize(std::string str)
       size_t comma_pos = str.find(',');
 
       if (comma_pos == std::string::npos) {
-        throw SipiError(__file__, __LINE__, "Could not parse IIIF size parameter: \"" + str + "\"");
+        throw SipiError("Could not parse IIIF size parameter: \"" + str + "\"");
       }
 
       std::string width_str = str.substr(0, comma_pos);
@@ -74,20 +69,20 @@ SipiSize::SipiSize(std::string str)
 
       if ((width_str.empty() && height_str.empty())
           || (size_type == SizeType::MAXDIM && (width_str.empty() || height_str.empty()))) {
-        throw SipiError(__file__, __LINE__, "Could not parse IIIF size parameter: \"" + str + "\" ");
+        throw SipiError("Could not parse IIIF size parameter: \"" + str + "\" ");
       }
 
       if (width_str.empty()) {// ",h" or "^,h"
         if (exclamation_mark)
-          throw SipiError(__file__, __LINE__, "Invalid IIIF size parameter: \"!" + str + "\": \"!\" not allowed here!");
+          throw SipiError("Invalid IIIF size parameter: \"!" + str + "\": \"!\" not allowed here!");
         ny = shttps::Parsing::parse_int(height_str);
-        if (ny == 0) { throw SipiError(__file__, __LINE__, "IIIF height cannot be zero"); }
+        if (ny == 0) { throw SipiError("IIIF height cannot be zero"); }
         size_type = SizeType::PIXELS_Y;
       } else if (height_str.empty()) {// "w," or "^w,"
         if (exclamation_mark)
-          throw SipiError(__file__, __LINE__, "Invalid IIIF size parameter: \"!" + str + "\": \"!\" not allowed here!");
+          throw SipiError("Invalid IIIF size parameter: \"!" + str + "\": \"!\" not allowed here!");
         nx = shttps::Parsing::parse_int(width_str);
-        if (nx == 0) { throw SipiError(__file__, __LINE__, "IIIF width cannot be zero"); }
+        if (nx == 0) { throw SipiError("IIIF width cannot be zero"); }
 
         size_type = SizeType::PIXELS_X;
       } else {// "w,h" or "^w,h" or "!w,h" or "^!w,h"
@@ -95,7 +90,7 @@ SipiSize::SipiSize(std::string str)
         ny = shttps::Parsing::parse_int(height_str);
 
         if (nx == 0 || ny == 0) {
-          throw SipiError(__file__, __LINE__, "IIIF size would result in a width or height of zero: " + str);
+          throw SipiError("IIIF size would result in a width or height of zero: " + str);
         }
 
         if (exclamation_mark) {
@@ -111,7 +106,7 @@ SipiSize::SipiSize(std::string str)
   } catch (SipiError &sipi_error) {
     throw sipi_error;
   } catch (shttps::Error &error) {
-    throw SipiError(__file__, __LINE__, "Could not parse IIIF size parameter: " + str);
+    throw SipiError("Could not parse IIIF size parameter: " + str);
   }
 }
 
@@ -119,14 +114,14 @@ SipiSize::SipiSize(std::string str)
 
 bool SipiSize::operator>(const SipiSize &s) const
 {
-  if (!canonical_ok) { throw SipiError(__file__, __LINE__, "Final size not yet determined"); }
+  if (!canonical_ok) { throw SipiError("Final size not yet determined"); }
   return ((w > s.w) || (h > s.h));
 }
 //-------------------------------------------------------------------------
 
 bool SipiSize::operator>=(const SipiSize &s) const
 {
-  if (!canonical_ok) { throw SipiError(__file__, __LINE__, "Final size not yet determined"); }
+  if (!canonical_ok) { throw SipiError("Final size not yet determined"); }
 
   return ((w >= s.w) || (h >= s.h));
 }
@@ -134,7 +129,7 @@ bool SipiSize::operator>=(const SipiSize &s) const
 
 bool SipiSize::operator<(const SipiSize &s) const
 {
-  if (!canonical_ok) { throw SipiError(__file__, __LINE__, "Final size not yet determined"); }
+  if (!canonical_ok) { throw SipiError("Final size not yet determined"); }
 
   return ((w < s.w) && (h < s.h));
 }
@@ -142,7 +137,7 @@ bool SipiSize::operator<(const SipiSize &s) const
 
 bool SipiSize::operator<=(const SipiSize &s) const
 {
-  if (!canonical_ok) { throw SipiError(__file__, __LINE__, "Final size not yet determined"); }
+  if (!canonical_ok) { throw SipiError("Final size not yet determined"); }
 
   return ((w <= s.w) && (h <= s.h));
 }
@@ -406,12 +401,12 @@ void SipiSize::canonical(char *buf, int buflen)
 
   if (!canonical_ok && (size_type != SipiSize::FULL)) {
     std::string msg = "Canonical size not determined!";
-    throw SipiError(__file__, __LINE__, msg);
+    throw SipiError(msg);
   }
 
   switch (size_type) {
   case SipiSize::UNDEFINED: {
-    throw SipiError(__file__, __LINE__, "Error creating size string!");
+    throw SipiError("Error creating size string!");
     break;
   }
   case SipiSize::PERCENTS:
@@ -437,7 +432,7 @@ void SipiSize::canonical(char *buf, int buflen)
   }
   }
 
-  if ((n < 0) || (n >= buflen)) { throw SipiError(__file__, __LINE__, "Error creating size string!"); }
+  if ((n < 0) || (n >= buflen)) { throw SipiError("Error creating size string!"); }
 }
 //-------------------------------------------------------------------------
 

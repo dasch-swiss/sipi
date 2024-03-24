@@ -91,14 +91,14 @@ public:
   /*!
    * Copy constructor throws error (not allowed!)
    */
-  LuaServer(const LuaServer &other) { throw Error(__FILE__, __LINE__, "Copy constructor not allowed!"); }
+  LuaServer(const LuaServer &other) { throw Error("Copy constructor not allowed!"); }
 
   /*!
    * Assignment operator throws error (not allowed!)
    */
   inline LuaServer &operator=(const LuaServer &other)
   {
-    throw Error(__FILE__, __LINE__, "Assigment operator not allowed!");
+    throw Error("Assigment operator not allowed!");
   }
 
   /*!

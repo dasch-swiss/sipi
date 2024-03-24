@@ -3,25 +3,15 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#include <assert.h>
+#include <cassert>
 #include <cmath>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <fstream>
-#include <iostream>
 #include <sstream>
-#include <stdlib.h>
 #include <string>
-#include <vector>
-
-#include <stdio.h>
-#include <string.h>
 
 #include "../SipiError.hpp"
 #include "SipiRegion.h"
-
-static const char __file__[] = __FILE__;
 
 namespace Sipi {
 
@@ -52,14 +42,14 @@ SipiRegion::SipiRegion(std::string str)
     std::string tmpstr = str.substr(4);
     n = sscanf(tmpstr.c_str(), "%f,%f,%f,%f", &rx, &ry, &rw, &rh);
 
-    if (n != 4) { throw SipiError(__file__, __LINE__, "IIIF Error reading Region parameter  \"" + str + "\""); }
+    if (n != 4) { throw SipiError("IIIF Error reading Region parameter  \"" + str + "\""); }
 
     canonical_ok = false;
   } else {
     coord_type = SipiRegion::COORDS;
     n = sscanf(str.c_str(), "%f,%f,%f,%f", &rx, &ry, &rw, &rh);
 
-    if (n != 4) { throw SipiError(__file__, __LINE__, "IIIF Error reading Region parameter  \"" + str + "\""); }
+    if (n != 4) { throw SipiError("IIIF Error reading Region parameter  \"" + str + "\""); }
 
     canonical_ok = false;
   }
@@ -121,7 +111,7 @@ SipiRegion::CoordType SipiRegion::crop_coords(size_t nx, size_t ny, int &p_x, in
   } else if (x >= nx) {
     std::stringstream msg;
     msg << "Invalid cropping region outside of image (x=" << x << " nx=" << nx << ")";
-    throw SipiError(__file__, __LINE__, msg.str());
+    throw SipiError(msg.str());
   }
 
   if (y < 0) {
@@ -130,7 +120,7 @@ SipiRegion::CoordType SipiRegion::crop_coords(size_t nx, size_t ny, int &p_x, in
   } else if (y >= ny) {
     std::stringstream msg;
     msg << "Invalid cropping region outside of image (y=" << y << " ny=" << ny << ")";
-    throw SipiError(__file__, __LINE__, msg.str());
+    throw SipiError(msg.str());
   }
 
   if (w == 0) {
@@ -166,7 +156,7 @@ void SipiRegion::canonical(char *buf, int buflen)
 {
   if (!canonical_ok && (coord_type != FULL)) {
     std::string msg = "Canonical coordinates not determined";
-    throw SipiError(__file__, __LINE__, msg);
+    throw SipiError(msg);
   }
 
   switch (coord_type) {

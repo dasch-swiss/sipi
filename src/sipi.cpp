@@ -27,6 +27,7 @@
 #include "CLI11.hpp"
 #include "SipiFilenameHash.h"
 #include "SipiHttpServer.hpp"
+#include "SipiImageError.hpp"
 #include "SipiImage.hpp"
 #include "SipiLua.h"
 #include "shttps/Server.h"
@@ -35,6 +36,7 @@
 
 #include "SipiConf.h"
 #include "SipiIO.h"
+#include "SipiIOTiff.h"
 #include "shttps/Parsing.h"
 
 // A macro for silencing incorrect compiler warnings about unused variables.
@@ -68,8 +70,6 @@
  *     sipi [options] <infile> <outfile>
  *
  */
-
-static const char __file__[] = __FILE__;
 
 static void sipiConfGlobals(lua_State *L, shttps::Connection &conn, void *user_data)
 {
@@ -244,7 +244,7 @@ private:
     // Initialise Exiv2, registering namespace sipi. Since this is not thread-safe, it must
     // be done here in the main thread.
     if (!Exiv2::XmpParser::initialize(Sipi::xmplock_func, &Sipi::xmp_mutex)) {
-      throw shttps::Error(__file__, __LINE__, "Exiv2::XmpParser::initialize failed");
+      throw shttps::Error("Exiv2::XmpParser::initialize failed");
     }
 
     // Inititalise the TIFF library.
@@ -937,7 +937,7 @@ int main(int argc, char *argv[])
     try {
       img.write(format, optOutFile, &comp_params);
     } catch (Sipi::SipiImageError &err) {
-      std::cerr << err << std::endl;
+      std::cerr << err << '\n';
     }
 
     if (!sipiopt.get_option("--salsah")->empty()) { std::cout << img.getNx() << " " << img.getNy() << std::endl; }
@@ -1203,7 +1203,7 @@ int main(int argc, char *argv[])
         DIR *dirp = opendir(sipiConf.getImgRoot().c_str());
         if (dirp == nullptr) {
           throw shttps::Error(
-            __file__, __LINE__, std::string("Couldn't read directory content! Path: ") + sipiConf.getImgRoot(), errno);
+            std::string("Couldn't read directory content! Path: ") + sipiConf.getImgRoot(), errno);
         }
         struct dirent *dp;
         while ((dp = readdir(dirp)) != nullptr) {

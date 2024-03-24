@@ -5,16 +5,13 @@
 
 #include "SipiIptc.h"
 #include "../SipiError.hpp"
-#include <stdlib.h>
-
-static const char __file__[] = __FILE__;
 
 namespace Sipi {
 
 SipiIptc::SipiIptc(const unsigned char *iptc, unsigned int len)
 {
   if (Exiv2::IptcParser::decode(iptcData, iptc, (uint32_t)len) != 0) {
-    throw SipiError(__file__, __LINE__, "No valid IPTC data!");
+    throw SipiError("No valid IPTC data!");
   }
 }
 //============================================================================

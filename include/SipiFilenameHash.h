@@ -1,6 +1,7 @@
-//
-// Created by Lukas Rosenthaler on 04.06.17.
-//
+/*
+ * Copyright © 2016 - 2024 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform
+ * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 
 #ifndef SIPI_SIPIFILENAMEHASH_H
 #define SIPI_SIPIFILENAMEHASH_H
@@ -22,79 +23,79 @@
  *
  * The class may throw a SipiError!
  */
-class SipiFilenameHash {
+class SipiFilenameHash
+{
 private:
-    const int seed = 137;   //!< an arbitrary seed value (no special meaning...)
-    const int numchars = 26;
-    const unsigned int modval = 308915776; // (26^6)
-    const int hash_len = 6;
-    std::string path;
-    std::string name;
-    std::vector<char> *hash; //!< Pointer to a vector of chars
-    static int __levels;
+  const int seed = 137;//!< an arbitrary seed value (no special meaning...)
+  const int numchars = 26;
+  const unsigned int modval = 308915776;// (26^6)
+  const int hash_len = 6;
+  std::string path;
+  std::string name;
+  std::vector<char> *hash;//!< Pointer to a vector of chars
+  static int __levels;
 
 public:
-    /*!
-     * Constructor for hash vector
-     *
-     * @param name Filename of file for which the "hash" should be calculated
-     * @param hash_len Number of directory levels. Must be in the range (inklusive) of [1..6]!
-     */
-    SipiFilenameHash(const std::string &path_p);
+  /*!
+   * Constructor for hash vector
+   *
+   * @param name Filename of file for which the "hash" should be calculated
+   * @param hash_len Number of directory levels. Must be in the range (inklusive) of [1..6]!
+   */
+  SipiFilenameHash(const std::string &path_p);
 
-    /*!
-     * Copy constructor (makes deep copy)
-     *
-     * @param other Reference to SipiFilenameHash instance
-     */
-    SipiFilenameHash(const SipiFilenameHash& other);
+  /*!
+   * Copy constructor (makes deep copy)
+   *
+   * @param other Reference to SipiFilenameHash instance
+   */
+  SipiFilenameHash(const SipiFilenameHash &other);
 
-    /*!
-     * Assignment copy operator (deep copy)
-     *
-     * @param other Reference to SipiFilenameHash instance
-     * @return
-     */
-    SipiFilenameHash& operator=(const SipiFilenameHash& other);
+  /*!
+   * Assignment copy operator (deep copy)
+   *
+   * @param other Reference to SipiFilenameHash instance
+   * @return
+   */
+  SipiFilenameHash &operator=(const SipiFilenameHash &other);
 
-    /*!
-     * Destructor which frees all allocated memory (pointer to vector)
-     */
-    virtual ~SipiFilenameHash();
+  /*!
+   * Destructor which frees all allocated memory (pointer to vector)
+   */
+  virtual ~SipiFilenameHash();
 
-    inline static void setLevels(int l) { __levels = l; }
+  inline static void setLevels(int l) { __levels = l; }
 
-    inline static int getLevels(void) { return __levels; }
+  inline static int getLevels(void) { return __levels; }
 
 
-    /*!
-     * Index operator to access hash character
-     *
-     * @param index Number between [0..5] inclusive
-     *
-     * @return Character in the range 'A' to 'Z'
-     */
-    char &operator[] (int index);
+  /*!
+   * Index operator to access hash character
+   *
+   * @param index Number between [0..5] inclusive
+   *
+   * @return Character in the range 'A' to 'Z'
+   */
+  char &operator[](int index);
 
-    std::string filepath(void);
+  std::string filepath(void);
 
-    /*!
-     * Returns the number of levels used in the image repository
-     *
-     * @param imgdir Top of image repository
-     * @return Returns the number of levels used
-     */
-    static int check_levels(const std::string &imgdir);
+  /*!
+   * Returns the number of levels used in the image repository
+   *
+   * @param imgdir Top of image repository
+   * @return Returns the number of levels used
+   */
+  static int check_levels(const std::string &imgdir);
 
-    /*!
-     * Changes the number of levels and migrates all files
-     *
-     * @param imgdir  Top of image repository
-     * @param levels Nunber of levels the image respository should have
-     */
-    static void migrateToLevels(const std::string &imgdir, int levels);
-
+  /*!
+   * Changes the number of levels and migrates all files
+   *
+   * @param imgdir  Top of image repository
+   * @param levels Nunber of levels the image respository should have
+   */
+  static void migrateToLevels(const std::string &imgdir, int levels);
 };
 
 
-#endif //SIPI_SIPIFILENAMEHASH_H
+#endif// SIPI_SIPIFILENAMEHASH_H

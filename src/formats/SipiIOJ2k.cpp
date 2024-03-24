@@ -31,6 +31,7 @@
 #include "kdu_params.h"
 #include "kdu_sample_processing.h"
 // Application level includes
+#include "SipiImageError.hpp"
 #include "jp2.h"
 #include "jpx.h"
 #include "kdu_file_io.h"
@@ -456,7 +457,7 @@ bool SipiIOJ2k::read(SipiImage *img,
           img->photo = SEPARATED;
         } else {
           syslog(LOG_ERR, "Unsupported number of colors: %d", numcol);
-          throw SipiImageError(__file__, __LINE__, "Unsupported number of colors: " + std::to_string(numcol));
+          throw SipiImageError("Unsupported number of colors: " + std::to_string(numcol));
         }
         int icc_len;
         const unsigned char *icc_buf = colinfo.get_icc_profile(&icc_len);
@@ -486,7 +487,7 @@ bool SipiIOJ2k::read(SipiImage *img,
 
       default: {
         syslog(LOG_ERR, "Unsupported ICC profile: %s", std::to_string(space).c_str());
-        throw SipiImageError(__file__, __LINE__, "Unsupported ICC profile: " + std::to_string(space));
+        throw SipiImageError("Unsupported ICC profile: " + std::to_string(space));
       }
       }
     }
@@ -509,7 +510,7 @@ bool SipiIOJ2k::read(SipiImage *img,
       break;
     }
     default: {
-      throw SipiImageError(__file__, __LINE__, "No meaningful photometric interpretation possible");
+      throw SipiImageError("No meaningful photometric interpretation possible");
     }
     }// switch(numcol)
   }
@@ -580,7 +581,7 @@ bool SipiIOJ2k::read(SipiImage *img,
     input->close();
     jpx_in.close();// Not really necessary here.
     syslog(LOG_ERR, "Unsupported number of bits/sample: %ld !", img->bps);
-    throw SipiImageError(__file__, __LINE__, "Unsupported number of bits/sample!");
+    throw SipiImageError("Unsupported number of bits/sample!");
   }
   }
   decompressor.finish();
@@ -782,7 +783,7 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
     if ((params != nullptr) && (!params->empty())) {
       if (params->find(J2K_Stiles) != params->end()) {
         int n = std::sscanf(params->at(J2K_Stiles).c_str(), "{%d,%d}", &tw, &th);
-        if (n != 2) { throw SipiImageError(__file__, __LINE__, "Tiling parameter invalid!"); }
+        if (n != 2) { throw SipiImageError("Tiling parameter invalid!"); }
         if ((mindim > tw) && (mindim > th)) {
           std::stringstream ss;
           ss << "Stiles=" << params->at(J2K_Stiles);
@@ -1236,7 +1237,7 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
         stripe_start += img->ny - stripe_start;
       }
     } else {
-      throw SipiImageError(__file__, __LINE__, "Unsupported number of bits/sample!");
+      throw SipiImageError("Unsupported number of bits/sample!");
     }
     compressor.finish(0, NULL, NULL, env_ref);
     // Finally, cleanup
@@ -1251,7 +1252,7 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
     }
     if (http != nullptr) { delete http; }
   } catch (kdu_exception e) {
-    throw SipiImageError(__file__, __LINE__, "Problem writing a JPEG2000 image!");
+    throw SipiImageError("Problem writing a JPEG2000 image!");
   }
 }
 }// namespace Sipi
