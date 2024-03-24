@@ -9,8 +9,8 @@
  * to read, write and modify images. Reading and writing is supported in several standard formats
  * such as TIFF, J2k, PNG etc.
  */
-#ifndef __sipi_image_h
-#define __sipi_image_h
+#ifndef _sipi_image_h
+#define _sipi_image_h
 
 #include <string>
 #include <unordered_map>
@@ -178,7 +178,7 @@ public:
    * Set orientation parameter
    * @param value orientation value to be set
    */
-  inline void setOrientation(Orientation value) { orientation = value; };
+  void setOrientation(Orientation value) { orientation = value; };
 
 
   /*!
@@ -194,7 +194,7 @@ public:
    */
   ~SipiImage();
 
-  inline int getPixel(size_t x, size_t y, size_t c)
+  int getPixel(size_t x, size_t y, size_t c)
   {
     if (x >= nx) throw((int)1);
     if (y >= ny) throw((int)2);
@@ -222,7 +222,7 @@ public:
    * \param[in] c Color channels
    * \param[in] val Pixel value
    */
-  inline void setPixel(size_t x, size_t y, size_t c, int val)
+  void setPixel(size_t x, size_t y, size_t c, int val)
   {
     if (x >= nx) throw((int)1);
     if (y >= ny) throw((int)2);
@@ -298,7 +298,7 @@ public:
     const std::shared_ptr<SipiRegion> &region = nullptr,
     const std::shared_ptr<SipiSize> &size = nullptr,
     bool force_bps_8 = false,
-    ScalingQuality scaling_quality = { HIGH, HIGH, HIGH, HIGH });
+    ScalingQuality scaling_quality = { ScalingMethod::HIGH, ScalingMethod::HIGH, ScalingMethod::HIGH, ScalingMethod::HIGH });
 
   /*!
    * Read an image that is to be considered an "original image". In this case
@@ -359,7 +359,7 @@ public:
    * \param[in] filepath Pathname of the image file
    * \return Info about image (see SipiImgInfo)
    */
-  SipiImgInfo getDim(const std::string &filepath) const;
+  [[nodiscard]] SipiImgInfo getDim(const std::string &filepath) const;
 
   /*!
    * Get the dimension of the image object

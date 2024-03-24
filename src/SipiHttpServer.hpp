@@ -10,13 +10,11 @@
  *
  * We support cross domain scripting (CORS according to \url http://www.html5rocks.com/en/tutorials/cors/)
  */
-#ifndef __defined_sipihttp_server_h
-#define __defined_sipihttp_server_h
+#ifndef _defined_sipihttp_server_h
+#define _defined_sipihttp_server_h
 
 #include <memory>
 #include <string>
-#include <sys/types.h>
-#include <unistd.h>
 
 #include "SipiCache.h"
 #include "iiifparser/SipiQualityFormat.h"
@@ -26,7 +24,6 @@
 #include "shttps/Server.h"
 
 #include "SipiIO.h"
-#include "lua.hpp"
 
 
 namespace Sipi {
@@ -94,13 +91,13 @@ public:
 
   bool prefix_as_path() const { return _prefix_as_path; }
 
-  void prefix_as_path(bool prefix_as_path_p) { _prefix_as_path = prefix_as_path_p; }
+  void prefix_as_path(const bool prefix_as_path_p) { _prefix_as_path = prefix_as_path_p; }
 
   std::vector<std::string> dirs_to_exclude() { return _dirs_to_exclude; }
 
   void dirs_to_exclude(const std::vector<std::string> &dirs_to_exclude) { _dirs_to_exclude = dirs_to_exclude; }
 
-  void jpeg_quality(int jpeg_quality_p) { _jpeg_quality = jpeg_quality_p; }
+  void jpeg_quality(const int jpeg_quality_p) { _jpeg_quality = jpeg_quality_p; }
 
   void j2k_compression_profiles(const std::unordered_map<std::string, SipiCompressionParams> &j2k_compression_profiles)
   {
@@ -113,43 +110,43 @@ public:
   void scaling_quality(std::map<std::string, std::string> jpeg_quality_p)
   {
     if (jpeg_quality_p["jpk"] == "high") {
-      _scaling_quality.jk2 = HIGH;
+      _scaling_quality.jk2 = ScalingMethod::HIGH;
     } else if (jpeg_quality_p["jpk"] == "medium") {
-      _scaling_quality.jk2 = MEDIUM;
+      _scaling_quality.jk2 = ScalingMethod::MEDIUM;
     } else if (jpeg_quality_p["jpk"] == "low") {
-      _scaling_quality.jk2 = LOW;
+      _scaling_quality.jk2 = ScalingMethod::LOW;
     } else {
-      _scaling_quality.jk2 = HIGH;
+      _scaling_quality.jk2 = ScalingMethod::HIGH;
     }
 
     if (jpeg_quality_p["jpeg"] == "high") {
-      _scaling_quality.jpeg = HIGH;
+      _scaling_quality.jpeg = ScalingMethod::HIGH;
     } else if (jpeg_quality_p["jpeg"] == "medium") {
-      _scaling_quality.jpeg = MEDIUM;
+      _scaling_quality.jpeg = ScalingMethod::MEDIUM;
     } else if (jpeg_quality_p["jpeg"] == "low") {
-      _scaling_quality.jpeg = LOW;
+      _scaling_quality.jpeg = ScalingMethod::LOW;
     } else {
-      _scaling_quality.jpeg = HIGH;
+      _scaling_quality.jpeg = ScalingMethod::HIGH;
     }
 
     if (jpeg_quality_p["tiff"] == "high") {
-      _scaling_quality.tiff = HIGH;
+      _scaling_quality.tiff = ScalingMethod::HIGH;
     } else if (jpeg_quality_p["tiff"] == "medium") {
-      _scaling_quality.tiff = MEDIUM;
+      _scaling_quality.tiff = ScalingMethod::MEDIUM;
     } else if (jpeg_quality_p["tiff"] == "low") {
-      _scaling_quality.tiff = LOW;
+      _scaling_quality.tiff = ScalingMethod::LOW;
     } else {
-      _scaling_quality.tiff = HIGH;
+      _scaling_quality.tiff = ScalingMethod::HIGH;
     }
 
     if (jpeg_quality_p["png"] == "high") {
-      _scaling_quality.png = HIGH;
+      _scaling_quality.png = ScalingMethod::HIGH;
     } else if (jpeg_quality_p["png"] == "medium") {
-      _scaling_quality.png = MEDIUM;
+      _scaling_quality.png = ScalingMethod::MEDIUM;
     } else if (jpeg_quality_p["png"] == "low") {
-      _scaling_quality.png = LOW;
+      _scaling_quality.png = ScalingMethod::LOW;
     } else {
-      _scaling_quality.png = HIGH;
+      _scaling_quality.png = ScalingMethod::HIGH;
     }
   }
 

@@ -441,7 +441,7 @@ add_executable(sipi
         src/metadata/SipiEssentials.cpp include/metadata/SipiEssentials.h
         src/SipiImage.cpp
         src/SipiImage.hpp
-        src/OmegaException.hpp
+        src/SipiImageError.hpp
         src/formats/SipiIOTiff.cpp include/formats/SipiIOTiff.h
         src/formats/SipiIOJ2k.cpp include/formats/SipiIOJ2k.h
         src/formats/SipiIOJpeg.cpp include/formats/SipiIOJpeg.h
@@ -475,7 +475,7 @@ add_executable(sipi
         include/iiifparser/SipiIdentifier.h src/iiifparser/SipiIdentifier.cpp
         src/handlers/iiif_handler.cpp
         src/handlers/iiif_handler.hpp
-        src/SipiImageError.hpp)
+        )
 
 add_dependencies(sipi icc_profiles)
 

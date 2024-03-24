@@ -304,13 +304,13 @@ bool SipiIOPng::read(SipiImage *img,
     SipiSize::SizeType rtype = size->get_size(img->nx, img->ny, nnx, nny, reduce, redonly);
     if (rtype != SipiSize::FULL) {
       switch (scaling_quality.png) {
-      case HIGH:
+      case ScalingMethod::HIGH:
         img->scale(nnx, nny);
         break;
-      case MEDIUM:
+      case ScalingMethod::MEDIUM:
         img->scaleMedium(nnx, nny);
         break;
-      case LOW:
+      case ScalingMethod::LOW:
         img->scaleFast(nnx, nny);
       }
     }

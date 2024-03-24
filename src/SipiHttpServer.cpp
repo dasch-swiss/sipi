@@ -51,14 +51,14 @@ namespace Sipi {
 static const std::string iiif_preflight_funcname = "pre_flight";
 static const std::string file_preflight_funcname = "file_pre_flight";
 
-typedef enum {
+using IiifParams = enum {
   iiif_prefix = 0,//!< http://{url}/*{prefix}*/{id}/{region}/{size}/{rotation}/{quality}.{format}
   iiif_identifier = 1,//!< http://{url}/{prefix}/*{id}*/{region}/{size}/{rotation}/{quality}.{format}
   iiif_region = 2,//!< http://{url}/{prefix}/{id}/{region}/{size}/{rotation}/{quality}.{format}
   iiif_size = 3,//!< http://{url}/{prefix}/{id}/{region}/*{size}*/{rotation}/{quality}.{format}
   iiif_rotation = 4,//!< http://{url}/{prefix}/{id}/{region}/{size}/*{rotation}*/{quality}.{format}
   iiif_qualityformat = 5,//!< http://{url}/{prefix}/{id}/{region}/{size}/{rotation}/*{quality}.{format}*
-} IiifParams;
+};
 
 /*!
  * Sends an HTTP error response to the client, and logs the error if appropriate.
@@ -1672,7 +1672,7 @@ SipiHttpServer::SipiHttpServer(int port_p,
 {
   _salsah_prefix = "imgrep";
   _cache = nullptr;
-  _scaling_quality = { HIGH, HIGH, HIGH, HIGH };
+  _scaling_quality = { ScalingMethod::HIGH, ScalingMethod::HIGH, ScalingMethod::HIGH, ScalingMethod::HIGH };
 }
 
 //=========================================================================

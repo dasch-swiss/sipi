@@ -788,13 +788,13 @@ bool SipiIOJpeg::read(SipiImage *img,
   //
   if ((size != nullptr) && (rtype != SipiSize::FULL)) {
     switch (scaling_quality.jpeg) {
-    case HIGH:
+    case ScalingMethod::HIGH:
       img->scale(nnx, nny);
       break;
-    case MEDIUM:
+    case ScalingMethod::MEDIUM:
       img->scaleMedium(nnx, nny);
       break;
-    case LOW:
+    case ScalingMethod::LOW:
       img->scaleFast(nnx, nny);
       break;
     }
