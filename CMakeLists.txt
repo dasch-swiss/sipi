@@ -421,6 +421,7 @@ include_directories(
         ${COMMON_INCLUDE_FILES_DIR}/metadata
         ${COMMON_INCLUDE_FILES_DIR}/formats
         ${COMMON_INCLUDE_FILES_DIR}/iiifparser
+        ${PROJECT_SOURCE_DIR}/src
         ${PROJECT_SOURCE_DIR}/shttps
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/local/include
@@ -473,7 +474,8 @@ add_executable(sipi
         src/SipiFilenameHash.cpp include/SipiFilenameHash.h
         include/iiifparser/SipiIdentifier.h src/iiifparser/SipiIdentifier.cpp
         src/handlers/iiif_handler.cpp
-        src/handlers/iiif_handler.hpp)
+        src/handlers/iiif_handler.hpp
+        )
 
 add_dependencies(sipi icc_profiles)
 

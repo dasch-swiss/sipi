@@ -6,7 +6,9 @@ link_directories(
 include_directories(
         ${PROJECT_SOURCE_DIR}
         ${PROJECT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/src/formats
         ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/include/formats
         ${PROJECT_SOURCE_DIR}/shttps
         ${COMMON_INCLUDE_FILES_DIR}
         ${COMMON_INCLUDE_FILES_DIR}/metadata
@@ -93,6 +95,7 @@ add_executable(
         ${PROJECT_SOURCE_DIR}/shttps/makeunique.h
         ${PROJECT_SOURCE_DIR}/src/SipiFilenameHash.cpp
         ${PROJECT_SOURCE_DIR}/include/SipiFilenameHash.h
+
 )
 add_dependencies(sipiimage icc_profiles)
 
