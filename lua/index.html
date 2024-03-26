@@ -1,0 +1,2916 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../sipi/">
+      
+      
+        <link rel="next" href="../lua-image/">
+      
+      <link rel="icon" href="../assets/images/dasch-favicon.ico">
+      <meta name="generator" content="mkdocs-1.4.2, mkdocs-material-9.0.6">
+    
+    
+      
+        <title>Lua integration - SIPI Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.558e4712.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.2505c338.min.css">
+      
+      
+
+    
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/style/theme.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-blue" data-md-color-accent="deep-blue">
+  
+    
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#sipi-lua-interface" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="SIPI Documentation" class="md-header__button md-logo" aria-label="SIPI Documentation" data-md-component="logo">
+      
+  <img src="../assets/images/dasch-icon-white.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            SIPI Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Lua integration
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dasch-swiss/sipi" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dasch-swiss/sipi
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="SIPI Documentation" class="md-nav__button md-logo" aria-label="SIPI Documentation" data-md-component="logo">
+      
+  <img src="../assets/images/dasch-icon-white.svg" alt="logo">
+
+    </a>
+    SIPI Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dasch-swiss/sipi" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dasch-swiss/sipi
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        Overview
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../introduction/" class="md-nav__link">
+        Introduction
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sipi/" class="md-nav__link">
+        Basic information and Reference
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+    
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Lua integration
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        Lua integration
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#preflight-function" class="md-nav__link">
+    Preflight function
+  </a>
+  
+    <nav class="md-nav" aria-label="Preflight function">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#iiif-preflight-function" class="md-nav__link">
+    IIIF preflight function
+  </a>
+  
+    <nav class="md-nav" aria-label="IIIF preflight function">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#more-complex-example-of-preflight-function" class="md-nav__link">
+    More complex example of preflight function
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-preflight-function" class="md-nav__link">
+    File preflight function
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lua-embedded-in-html" class="md-nav__link">
+    LUA embedded in HTML
+  </a>
+  
+    <nav class="md-nav" aria-label="LUA embedded in HTML">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#embedded-lua-and-enforcing-ssl" class="md-nav__link">
+    Embedded LUA and enforcing SSL
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-uploads-to-sipi" class="md-nav__link">
+    File uploads to SIPI
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#restful-api-and-custom-routes" class="md-nav__link">
+    RESTful API and custom routes
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#iiif-authentication-api-10-in-sipi" class="md-nav__link">
+    IIIF Authentication API 1.0 in SIPI
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sipi-variables-available-to-lua-scripts" class="md-nav__link">
+    SIPI variables available to Lua scripts
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI variables available to Lua scripts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sipi-configuration-variables" class="md-nav__link">
+    SIPI configuration variables
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI configuration variables">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#confighostname" class="md-nav__link">
+    config.hostname
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configport" class="md-nav__link">
+    config.port
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configsslport" class="md-nav__link">
+    config.sslport
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configimgroot" class="md-nav__link">
+    config.imgroot
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configdocroot" class="md-nav__link">
+    config.docroot
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configmax_temp_file_age" class="md-nav__link">
+    config.max_temp_file_age
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configprefix_as_path" class="md-nav__link">
+    config.prefix_as_path
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configinit_script" class="md-nav__link">
+    config.init_script
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configscriptdir" class="md-nav__link">
+    config.scriptdir
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configcache_dir" class="md-nav__link">
+    config.cache_dir
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configcache_size" class="md-nav__link">
+    config.cache_size
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configcache_n_files" class="md-nav__link">
+    config.cache_n_files
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configcache_hysteresis" class="md-nav__link">
+    config.cache_hysteresis
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configjpeg_quality" class="md-nav__link">
+    config.jpeg_quality
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configkeep_alive" class="md-nav__link">
+    config.keep_alive
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configthumb_size" class="md-nav__link">
+    config.thumb_size
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#confign_threads" class="md-nav__link">
+    config.n_threads
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configmax_post_size" class="md-nav__link">
+    config.max_post_size
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configtmpdir" class="md-nav__link">
+    config.tmpdir
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configssl_certificate" class="md-nav__link">
+    config.ssl/_certificate
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configssl_key" class="md-nav__link">
+    config.ssl/_key
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configlogfile" class="md-nav__link">
+    config.logfile
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configloglevel" class="md-nav__link">
+    config.loglevel
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configadminuser" class="md-nav__link">
+    config.adminuser
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configpassword" class="md-nav__link">
+    config.password
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sipi-server-variables" class="md-nav__link">
+    SIPI Server Variables
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI Server Variables">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#servermethod" class="md-nav__link">
+    server.method
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverhas_openssl" class="md-nav__link">
+    server.has_openssl
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serversecure" class="md-nav__link">
+    server.secure
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverhost" class="md-nav__link">
+    server.host
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverclient_ip" class="md-nav__link">
+    server.client_ip
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverclient_port" class="md-nav__link">
+    server.client_port
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serveruri" class="md-nav__link">
+    server.uri
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverheader" class="md-nav__link">
+    server.header
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servercookies" class="md-nav__link">
+    server.cookies
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverget" class="md-nav__link">
+    server.get
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverpost" class="md-nav__link">
+    server.post
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverrequest" class="md-nav__link">
+    server.request
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servercontent" class="md-nav__link">
+    server.content
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servercontent_type" class="md-nav__link">
+    server.content_type
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serveruploads" class="md-nav__link">
+    server.uploads
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#knora-specific-variables" class="md-nav__link">
+    Knora-specific variables
+  </a>
+  
+    <nav class="md-nav" aria-label="Knora-specific variables">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configknora_path" class="md-nav__link">
+    config.knora_path
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configknora_port" class="md-nav__link">
+    config.knora_port
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sipi-functions-available-to-lua-scripts" class="md-nav__link">
+    SIPI functions available to Lua scripts
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI functions available to Lua scripts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sipi-connection-functions" class="md-nav__link">
+    SIPI Connection Functions
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI Connection Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#serversetbuffer" class="md-nav__link">
+    server.setBuffer
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serversendheader" class="md-nav__link">
+    server.sendHeader
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serversendcookie" class="md-nav__link">
+    server.sendCookie
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serversendstatus" class="md-nav__link">
+    server.sendStatus
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverprint" class="md-nav__link">
+    server.print
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverrequireauth" class="md-nav__link">
+    server.requireAuth
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sipi-file-system-function" class="md-nav__link">
+    SIPI File System Function
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI File System Function">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#serverfsftype" class="md-nav__link">
+    server.fs.ftype
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsmodtime" class="md-nav__link">
+    server.fs.modtime
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsis_readable" class="md-nav__link">
+    server.fs.is_readable
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsis_writeable" class="md-nav__link">
+    server.fs.is_writeable
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsis_executable" class="md-nav__link">
+    server.fs.is_executable
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsexists" class="md-nav__link">
+    server.fs.exists
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsunlink" class="md-nav__link">
+    server.fs.unlink
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsmkdir" class="md-nav__link">
+    server.fs.mkdir
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsrmdir" class="md-nav__link">
+    server.fs.rmdir
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsgetcwd" class="md-nav__link">
+    server.fs.getcwd
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsreaddir" class="md-nav__link">
+    server.fs.readdir
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfschdir" class="md-nav__link">
+    server.fs.chdir
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfscopyfile" class="md-nav__link">
+    server.fs.copyFile
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsmovefile" class="md-nav__link">
+    server.fs.moveFile
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#other-helper-function" class="md-nav__link">
+    Other Helper Function
+  </a>
+  
+    <nav class="md-nav" aria-label="Other Helper Function">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#serverhttp" class="md-nav__link">
+    server.http
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servertable_to_json" class="md-nav__link">
+    server.table_to_json
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverjson_to_table" class="md-nav__link">
+    server.json_to_table
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servergenerate_jwt" class="md-nav__link">
+    server.generate_jwt
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverdecode_jwt" class="md-nav__link">
+    server.decode_jwt
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverparse_mimetype" class="md-nav__link">
+    server.parse_mimetype
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfile_mimetype" class="md-nav__link">
+    server.file_mimetype
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfile_mimeconsistency" class="md-nav__link">
+    server.file_mimeconsistency
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servercopytmpfile" class="md-nav__link">
+    server.copyTmpfile
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serversystime" class="md-nav__link">
+    server.systime
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverlog" class="md-nav__link">
+    server.log
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serveruuid" class="md-nav__link">
+    server.uuid
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serveruuid62" class="md-nav__link">
+    server.uuid62
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serveruuid_to_base62" class="md-nav__link">
+    server.uuid_to_base62
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverbase62_to_uuid" class="md-nav__link">
+    server.base62_to_uuid
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installing-lua-modules" class="md-nav__link">
+    Installing Lua modules
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lua-image/" class="md-nav__link">
+        Lua imaging functions
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sqlite/" class="md-nav__link">
+        Sqlite3 integration
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../building/" class="md-nav__link">
+        Building
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../running/" class="md-nav__link">
+        Running
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../developing/" class="md-nav__link">
+        Developing
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0-release-notes/" class="md-nav__link">
+        Release-Notes
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#preflight-function" class="md-nav__link">
+    Preflight function
+  </a>
+  
+    <nav class="md-nav" aria-label="Preflight function">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#iiif-preflight-function" class="md-nav__link">
+    IIIF preflight function
+  </a>
+  
+    <nav class="md-nav" aria-label="IIIF preflight function">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#more-complex-example-of-preflight-function" class="md-nav__link">
+    More complex example of preflight function
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-preflight-function" class="md-nav__link">
+    File preflight function
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lua-embedded-in-html" class="md-nav__link">
+    LUA embedded in HTML
+  </a>
+  
+    <nav class="md-nav" aria-label="LUA embedded in HTML">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#embedded-lua-and-enforcing-ssl" class="md-nav__link">
+    Embedded LUA and enforcing SSL
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-uploads-to-sipi" class="md-nav__link">
+    File uploads to SIPI
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#restful-api-and-custom-routes" class="md-nav__link">
+    RESTful API and custom routes
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#iiif-authentication-api-10-in-sipi" class="md-nav__link">
+    IIIF Authentication API 1.0 in SIPI
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sipi-variables-available-to-lua-scripts" class="md-nav__link">
+    SIPI variables available to Lua scripts
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI variables available to Lua scripts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sipi-configuration-variables" class="md-nav__link">
+    SIPI configuration variables
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI configuration variables">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#confighostname" class="md-nav__link">
+    config.hostname
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configport" class="md-nav__link">
+    config.port
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configsslport" class="md-nav__link">
+    config.sslport
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configimgroot" class="md-nav__link">
+    config.imgroot
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configdocroot" class="md-nav__link">
+    config.docroot
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configmax_temp_file_age" class="md-nav__link">
+    config.max_temp_file_age
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configprefix_as_path" class="md-nav__link">
+    config.prefix_as_path
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configinit_script" class="md-nav__link">
+    config.init_script
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configscriptdir" class="md-nav__link">
+    config.scriptdir
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configcache_dir" class="md-nav__link">
+    config.cache_dir
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configcache_size" class="md-nav__link">
+    config.cache_size
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configcache_n_files" class="md-nav__link">
+    config.cache_n_files
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configcache_hysteresis" class="md-nav__link">
+    config.cache_hysteresis
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configjpeg_quality" class="md-nav__link">
+    config.jpeg_quality
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configkeep_alive" class="md-nav__link">
+    config.keep_alive
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configthumb_size" class="md-nav__link">
+    config.thumb_size
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#confign_threads" class="md-nav__link">
+    config.n_threads
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configmax_post_size" class="md-nav__link">
+    config.max_post_size
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configtmpdir" class="md-nav__link">
+    config.tmpdir
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configssl_certificate" class="md-nav__link">
+    config.ssl/_certificate
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configssl_key" class="md-nav__link">
+    config.ssl/_key
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configlogfile" class="md-nav__link">
+    config.logfile
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configloglevel" class="md-nav__link">
+    config.loglevel
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configadminuser" class="md-nav__link">
+    config.adminuser
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configpassword" class="md-nav__link">
+    config.password
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sipi-server-variables" class="md-nav__link">
+    SIPI Server Variables
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI Server Variables">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#servermethod" class="md-nav__link">
+    server.method
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverhas_openssl" class="md-nav__link">
+    server.has_openssl
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serversecure" class="md-nav__link">
+    server.secure
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverhost" class="md-nav__link">
+    server.host
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverclient_ip" class="md-nav__link">
+    server.client_ip
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverclient_port" class="md-nav__link">
+    server.client_port
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serveruri" class="md-nav__link">
+    server.uri
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverheader" class="md-nav__link">
+    server.header
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servercookies" class="md-nav__link">
+    server.cookies
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverget" class="md-nav__link">
+    server.get
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverpost" class="md-nav__link">
+    server.post
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverrequest" class="md-nav__link">
+    server.request
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servercontent" class="md-nav__link">
+    server.content
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servercontent_type" class="md-nav__link">
+    server.content_type
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serveruploads" class="md-nav__link">
+    server.uploads
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#knora-specific-variables" class="md-nav__link">
+    Knora-specific variables
+  </a>
+  
+    <nav class="md-nav" aria-label="Knora-specific variables">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configknora_path" class="md-nav__link">
+    config.knora_path
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configknora_port" class="md-nav__link">
+    config.knora_port
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sipi-functions-available-to-lua-scripts" class="md-nav__link">
+    SIPI functions available to Lua scripts
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI functions available to Lua scripts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sipi-connection-functions" class="md-nav__link">
+    SIPI Connection Functions
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI Connection Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#serversetbuffer" class="md-nav__link">
+    server.setBuffer
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serversendheader" class="md-nav__link">
+    server.sendHeader
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serversendcookie" class="md-nav__link">
+    server.sendCookie
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serversendstatus" class="md-nav__link">
+    server.sendStatus
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverprint" class="md-nav__link">
+    server.print
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverrequireauth" class="md-nav__link">
+    server.requireAuth
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sipi-file-system-function" class="md-nav__link">
+    SIPI File System Function
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI File System Function">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#serverfsftype" class="md-nav__link">
+    server.fs.ftype
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsmodtime" class="md-nav__link">
+    server.fs.modtime
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsis_readable" class="md-nav__link">
+    server.fs.is_readable
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsis_writeable" class="md-nav__link">
+    server.fs.is_writeable
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsis_executable" class="md-nav__link">
+    server.fs.is_executable
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsexists" class="md-nav__link">
+    server.fs.exists
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsunlink" class="md-nav__link">
+    server.fs.unlink
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsmkdir" class="md-nav__link">
+    server.fs.mkdir
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsrmdir" class="md-nav__link">
+    server.fs.rmdir
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsgetcwd" class="md-nav__link">
+    server.fs.getcwd
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsreaddir" class="md-nav__link">
+    server.fs.readdir
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfschdir" class="md-nav__link">
+    server.fs.chdir
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfscopyfile" class="md-nav__link">
+    server.fs.copyFile
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsmovefile" class="md-nav__link">
+    server.fs.moveFile
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#other-helper-function" class="md-nav__link">
+    Other Helper Function
+  </a>
+  
+    <nav class="md-nav" aria-label="Other Helper Function">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#serverhttp" class="md-nav__link">
+    server.http
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servertable_to_json" class="md-nav__link">
+    server.table_to_json
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverjson_to_table" class="md-nav__link">
+    server.json_to_table
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servergenerate_jwt" class="md-nav__link">
+    server.generate_jwt
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverdecode_jwt" class="md-nav__link">
+    server.decode_jwt
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverparse_mimetype" class="md-nav__link">
+    server.parse_mimetype
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfile_mimetype" class="md-nav__link">
+    server.file_mimetype
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfile_mimeconsistency" class="md-nav__link">
+    server.file_mimeconsistency
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servercopytmpfile" class="md-nav__link">
+    server.copyTmpfile
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serversystime" class="md-nav__link">
+    server.systime
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverlog" class="md-nav__link">
+    server.log
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serveruuid" class="md-nav__link">
+    server.uuid
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serveruuid62" class="md-nav__link">
+    server.uuid62
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serveruuid_to_base62" class="md-nav__link">
+    server.uuid_to_base62
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverbase62_to_uuid" class="md-nav__link">
+    server.base62_to_uuid
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installing-lua-modules" class="md-nav__link">
+    Installing Lua modules
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+
+<h1 id="sipi-lua-interface">SIPI Lua Interface</h1>
+<p>SIPI has an embedded <a href="http://www.lua.org">LUA</a> interpreter. LUA is a simple script language that was developped
+specifically to be embedded into applications. For example the games <a href="https://www.minecraft.net">minecraft</a> and
+<a href="https://worldofwarcraft.com/de-de/">World of Warcraft</a> make extensive use of LUA scripting for customization and programming extensions.</p>
+<p>Each HTTP request to SIPI invokes a recent, independent
+lua-instance (Version 5.3.5). Therefore, LUA may be used in the following contexts:</p>
+<ul>
+<li>Preflight function</li>
+<li>Embedded in HTML pages</li>
+<li>RESTful services using the SIPI routing</li>
+</ul>
+<p>Each lua-instance in SIPI includes additional SIPI-specific information:</p>
+<ul>
+<li>global variables about the SIPI configuration</li>
+<li>information about the current HTTP request</li>
+<li>SIPI specific functions for</li>
+<li>processing the request and send back information</li>
+<li>getting image information and transforming images</li>
+<li>querying and changing the SIPI runtime configuration (e.g. the cache)</li>
+</ul>
+<p>In general, the SIPI LUA function make use that a Lua function's return value may consist of
+more than one element (see <a href="http://www.lua.org/pil/5.3.html">Multiple Results</a>):</p>
+<p>Sipi provides the <a href="https://luarocks.org/">LuaRocks</a>
+package manager which must be used in the context of SIPI.</p>
+<p><em>The Lua interpreter in Sipi runs in a multithreaded environment: each
+request runs in its own thread and has its own Lua interpreter.
+Therefore, only Lua packages that are known to be thread-safe may be
+used!</em></p>
+<h2 id="preflight-function">Preflight function</h2>
+<p>It is possible to define a LUA pre-flight function for <em>IIIF</em>-requests and independently one for <em>file</em>-requests
+(indicated by a <em>/file</em> postfix in the URL). Both are optional and are best located in the init-script (see
+<a href="../sipi/#setup-of-directories-needed">configuarion options</a> of SIPI). It is executed after the incoming
+HTTP request data has been processed but before an action to respond to the request has been taken. It should
+be noted that the pre-flight script is only executed for IIIF-specific requests (either using the IIIF URL-syntax or the
+<em>/file</em> postfix). All other HTTP requests are being directed to "normal" HTTP-server part of SIPI.
+These can utilize the lua functionality by embedding LUA commands within the HTML.</p>
+<h3 id="iiif-preflight-function">IIIF preflight function</h3>
+<p>The IIIF preflight function must have the name <strong>pre_flight</strong> with the following signature:</p>
+<pre><code class="language-lua">function pre_flight(prefix,identifier,cookie)
+
+    return &quot;allow&quot;, filepath
+end
+</code></pre>
+<p>The preflight function takes 3 parameter:</p>
+<ul>
+<li><code>prefix</code>: This is the prefix that is given on the IIIF url [mandatory]<br />
+<em>http(s)://{server}/<strong>{prefix}</strong>/{id}/{region}/{size}/{rotation}/{quality}.{format}</em><br />
+  Please note that the prefix may contain several "/" that can be used as path to the repository file</li>
+<li><code>identifier</code>: The image identifier (which must not correspond to an actual filename in the media files repositoy
+  of the SIPI IIIF server)
+  [mandatory]</li>
+<li><code>cookie</code>: A cookie containing authorization information. Usually the cookie contains a Json Web Token [optional]</li>
+</ul>
+<p>The pre-flight function must return at least 2 parameters:</p>
+<ul>
+<li><code>permission</code>: A string or a table indication the permission to read the image. In a simple case it's either the
+  string <code>"allow"</code> or <code>"deny"</code>.<br />
+  To allow more flexibility, the following permission tables are supported:  <ul>
+<li>Restricted access with watermark. The watermark must be a TIFF file with a single 8-bit channel (gray value
+image). For example:<br />
+<code>{ type = 'restrict', watermark = './wm/mywatermark.tif' }</code></li>
+<li>Restricted access with size limitation. The size must be a
+  <a href="https://iiif.io/api/image/3.0/#42-size">IIIF size expression</a>. For example:<br />
+<code>{ type = 'restrict', size='!256,256' }</code></li>
+<li>SIPI also supports the <a href="https://iiif.io/api/auth/1.0/">IIIF Authentification API</a>. See section <a href="">IIIF
+  Authentification</a> on how to implement this feature in the pre-flight function.</li>
+</ul>
+</li>
+<li><code>filepath</code>: The path to the master image file in the media files repository. This path can be assembled using the
+  <code>prefix</code> and <code>identifier</code> using any additional information (e.g. accessing a database or using the LUA restful client)</li>
+</ul>
+<p>The most simple working pre-flight looks as follows assuming that the <code>identifier</code>is the name of the master image
+file in the repository and the <code>prefix</code> is the path:</p>
+<pre><code class="language-lua">function pre_flight(prefix, identifier, cookie)
+    if config.prefix_as_path then
+        filepath = config.imgroot .. '/' .. prefix .. '/' .. identifier
+    else
+        filepath = config.imgroot .. '/' .. identifier
+    end
+    return 'allow', filepath
+end
+</code></pre>
+<p>Above example preflight function allows all files to be served without restriction.</p>
+<h4 id="more-complex-example-of-preflight-function">More complex example of preflight function</h4>
+<p>The following example uses some SIPI lua funtions
+to access an authorization server to check if the user (identified by a cookie) is allowed to see the specific image. We are
+using <a href="https://jwt.io">Json Web Tokens</a> (JWT) which are supported by SIPI specific LUA functions. Please note that the
+SIPI JTW-functions support an arbitrary payload that has not to follow the JWT recommendations. In order to encode, the
+JWT_ALG_HS256 is beeing used together with the key that is defined in the SIPI configuration as
+<a href="../sipi/#jwt-secret">jwt_secret</a>.</p>
+<pre><code class="language-lua">function pre_flight(prefix, identifier, cookie) 
+    --
+    -- make up the file path
+    --
+    if config.prefix_as_path then
+        filepath = config.imgroot .. '/' .. prefix .. '/' .. identifier
+    else
+        filepath = config.imgroot .. '/' .. identifier
+    end
+    --
+    -- we need a cookie containing the user information that will be
+    -- sent to the authorization server. In this
+    -- example, the content does not follow the JWT rules
+    -- (which is possible to pack any table into a JWT encoded token)
+    --
+    if cookie then
+        --
+        -- we decode the cookie in order to get a table of key/value pairs
+        --
+        success, userinfo = server.decode_jwt(cookie)
+        if not success then
+            return 'deny', filepath
+        end
+        --
+        -- prepare the RESTful call to the authorization server
+        --
+
+        -- add the image identifier to the info table:
+        userinfo[&quot;imgid&quot;] = identifier
+        -- encode the userinfo to a JWT-like token:
+        local new_cookie = server.generate_jwt(userinfo) 
+        local url = 'http://auth.institution.org/api/getauth/' .. identifier
+        local auth_information = { Cookie = new_cookie }
+        --
+        -- make the HTTP request with a timeout of 500 ms
+        --
+        success, result = server.http('GET', url, auth_information, 500) 
+        if success then
+            --
+            -- we got a response from the server
+            --
+            success, response_json = server.json_to_table(result.body)
+            if success then  -- everything OK
+                return {
+                            type = response_json.type,
+                            restriction = response_json.restriction
+                        }, filepath
+            else
+                return 'deny', filepath
+            end
+        else
+            return 'deny', filepath
+        end
+    else
+        return 'deny', filepath
+    end
+end
+</code></pre>
+<p>Above example assumes that the cookie data is a string that contains encrypted user data from a table (key/value pair).
+Jason Web Token. This token is decoded and the information about the image to be displayed is added. Then the information
+is encoded as a new token that ist transmitted to the RESTful interface of the authentification server. The answer is
+assumed to be json containing information about the type ('allow', 'deny', 'restrict') and the restriction settings.
+The pre-flight function uses the following SIPI-specific LUA global variables and function:</p>
+<ul>
+<li><a href="#configimgroot">config.imgroot</a>: (Global variable) Root directory of the image repository.</li>
+<li><a href="#serverhttp">server.http()</a>: (Function) Used to create a RESTful GET request.</li>
+<li><a href="#servergenerate_jwt">server.generate_jwt()</a>: (Function) Create a new JWT token from a key/value table.</li>
+<li><a href="#serverjson_to_table">server.json_to_table()</a>: (function) Convert a JSON into a LUA table.</li>
+</ul>
+<h3 id="file-preflight-function">File preflight function</h3>
+<p>An URL in the form <code>http(s)://{server}/{prefix}/{identifier}/file</code> serves the given file as binary object (including
+propere mimetype in the header etc.). The file has to reside in the directory tree defined for IIIF requests. In these
+cases, a preflight script name <code>file_pre_flight</code> is being called if defined. Its signature is as follows:</p>
+<pre><code class="language-lua">function file_pre_flight(filepath, cookie)
+
+end
+</code></pre>
+<p>A simple example allowing access only to the file <em>"unit/test.csv"</em> would be:</p>
+<pre><code class="language-lua">function file_pre_flight(filepath, cookie)
+    if filepath == &quot;./images/unit/test.csv&quot; then
+        return &quot;allow&quot;, filepath
+    else
+        return &quot;deny&quot;, &quot;&quot;
+    end
+end
+</code></pre>
+<p>This script would deny all other file access and the SIPI IIIF server responds with a <code>401 Unauthorized</code> error.</p>
+<h2 id="lua-embedded-in-html">LUA embedded in HTML</h2>
+<p>The HTTP server that is included in SIPI can serve any type of file which are just transfered as is to the client.
+However, if a file has an extension of <code>.elua</code>, it is assumed to be a HTML file with embedded LUA code. ALL SIPI-specific
+LUA functions and global variables are available.</p>
+<p>Embedding works with the special tag <code>&lt;lua&gt;</code> and <code>&lt;/lua&gt;</code>. All text between the opening and closing tag is interpreted
+as LUA code. SIPI provides an extra LUA function to output data to the client (<a href="#serverprint">server.print</a>). Thus, dynamic,
+server-generated HTML may be created. A sample page that displays some information about the server configuration and
+client info could like follows:</p>
+<pre><code class="language-html">&lt;html&gt;
+    &lt;head&gt;
+        &lt;title&gt;SIPI Configuration Info&lt;/title&gt;
+    &lt;/head&gt;
+    &lt;body&gt;
+    &lt;h1&gt;SIPI Configuration Info&lt;/h1&gt;
+    &lt;h2&gt;Configuration variables&lt;/h2&gt;
+    &lt;table&gt;
+        &lt;tr&gt;
+            &lt;td&gt;imgroot&lt;/td&gt;
+            &lt;td&gt;:&lt;/td&gt;
+            &lt;td&gt;&lt;lua&gt;server.print(config.imgroot)&lt;/lua&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+            &lt;td&gt;docroot&lt;/td&gt;
+            &lt;td&gt;:&lt;/td&gt;
+            &lt;td&gt;&lt;lua&gt;server.print(server.docroot)&lt;/lua&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+            &lt;td&gt;hostname&lt;/td&gt;
+            &lt;td&gt;:&lt;/td&gt;
+            &lt;td&gt;&lt;lua&gt;server.print(config.hostname)&lt;/lua&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+            &lt;td&gt;scriptdir&lt;/td&gt;
+            &lt;td&gt;:&lt;/td&gt;
+            &lt;td&gt;&lt;lua&gt;server.print(config.scriptdir)&lt;/lua&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+            &lt;td&gt;cachedir&lt;/td&gt;
+            &lt;td&gt;:&lt;/td&gt;
+            &lt;td&gt;&lt;lua&gt;server.print(config.cache_dir)&lt;/lua&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+            &lt;td&gt;tmpdir&lt;/td&gt;
+            &lt;td&gt;:&lt;/td&gt;
+            &lt;td&gt;&lt;lua&gt;server.print(config.tmpdir)&lt;/lua&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+            &lt;td&gt;port&lt;/td&gt;
+            &lt;td&gt;:&lt;/td&gt;
+            &lt;td&gt;&lt;lua&gt;server.print(config.port)&lt;/lua&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;lua&gt;
+            if server.has_openssl then
+                server.print('&lt;tr&gt;&lt;td&gt;SSL port&lt;/td&gt;&lt;td&gt;:&lt;/td&gt;&lt;td&gt;' ..
+                             config.sslport .. '&lt;/td&gt;&lt;/tr&gt;')
+            end
+        &lt;/lua&gt;
+        &lt;tr&gt;
+            &lt;td&gt;number of threads:&lt;/td&gt;
+            &lt;td&gt;:&lt;/td&gt;
+            &lt;td&gt;&lt;lua&gt;server.print(config.n_threads)&lt;/lua&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+            &lt;td&gt;maximal post size:&lt;/td&gt;
+            &lt;td&gt;:&lt;/td&gt;
+            &lt;td&gt;&lt;lua&gt;server.print(config.max_post_size)&lt;/lua&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+    &lt;/table&gt;
+    &lt;h2&gt;Client information&lt;/h2&gt;
+    &lt;table&gt;
+        &lt;tr&gt;
+            &lt;td&gt;Host in request&lt;/td&gt;
+            &lt;td&gt;:&lt;/td&gt;
+            &lt;td&gt;&lt;lua&gt;server.print(server.host)&lt;/lua&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+            &lt;td&gt;IP of client&lt;/td&gt;
+            &lt;td&gt;:&lt;/td&gt;
+            &lt;td&gt;&lt;lua&gt;server.print(server.client_ip)&lt;/lua&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+            &lt;td&gt;URL path&lt;/td&gt;
+            &lt;td&gt;:&lt;/td&gt;
+            &lt;td&gt;&lt;lua&gt;server.print(server.uri)&lt;/lua&gt;&lt;/td&gt;
+            &lt;/tr&gt;
+    &lt;/table&gt;
+
+    &lt;p&gt;Important Note: &quot;IP of client&quot; and &quot;Host in request&quot; may
+       indicate the information of a proxy and notof the actual
+       client!&lt;/p&gt;
+    &lt;h2&gt;Request Header Information&lt;/h2&gt;
+    &lt;table&gt;
+        &lt;lua&gt;
+            for key, val in pairs(server.header) do
+                server.print('&lt;tr&gt;&lt;td&gt;' .. key ..
+                             '&lt;/td&gt;&lt;td&gt;:&lt;/td&gt;&lt;td&gt;' .. val .
+                             '&lt;/td&gt;&lt;/tr&gt;')
+            end
+        &lt;/lua&gt;
+    &lt;/table&gt;
+    &lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<h3 id="embedded-lua-and-enforcing-ssl">Embedded LUA and enforcing SSL</h3>
+<p>The supplied example initialization file offers a LUA function that enforces the use of a SSL encryption page
+proteced by a user name and password. It is used as follows by adding the following code
+<em>before the <code>&lt;html&gt;</code> opening tag</em>:</p>
+<pre><code class="language-lua">&lt;lua&gt;
+    if server.secure then
+        protocol = 'https://'
+    else
+        protocol = 'http://'
+    end
+
+    success,token = authorize_page('admin.sipi.org',
+                                   'administrator',
+                                    extecteduser, expectedPassword)
+    if not success then
+        return
+    end
+&lt;/lua&gt;
+</code></pre>
+<p>where <code>expectedUser</code> and <code>extectedPassword</code> are the user/password combination the user is expected to enter.</p>
+<h3 id="file-uploads-to-sipi">File uploads to SIPI</h3>
+<p>The SIPI specific LUA function allow the upload of files using POST requests with <code>multipart/form-data</code> content.
+The global variable <code>server.uploads</code> contains`the information about the uploads. The following variables and
+function help to deal with uploads:</p>
+<ul>
+<li><a href="#serveruploads">server.uploads</a> : information about the files in the upload request.</li>
+<li><a href="#servercopytmpfile">server.copyTmpfile</a> : copies a fie from the upload location to the destination directory.</li>
+</ul>
+<p>In addition the file system functions that SIPI provides may be used.</p>
+<p>See the scripts <code>upload.elua</code> and <code>do-upload.elua</code> in the server directory, and <code>upload.lua</code> in the scripts directory
+for a working example.</p>
+<h2 id="restful-api-and-custom-routes">RESTful API and custom routes</h2>
+<p>Custom routes to implement a RESTful API can be defined in Sipi's configuration file using the
+<code>routes</code> configuration variable. For example:</p>
+<pre><code>routes = {
+    {
+        method = 'GET',
+        route = '/status',
+        script = 'get_repository_status.lua'
+    },
+    {
+        method = 'POST',
+        route = '/make_thumbnail',
+        script = 'make_image_thumbnail.lua'
+    }
+}
+</code></pre>
+<p>Sipi looks for these scripts in the directory specified by <code>scriptdir</code>
+in its configuration file. The first route that matches the beginning of
+the requested URL path will be used.</p>
+<h2 id="iiif-authentication-api-10-in-sipi">IIIF Authentication API 1.0 in SIPI</h2>
+<p>The <code>pre_flight</code> function is also responsible for activating the IIIF Auth API. In order to do so, the pre_flight script
+returns a table that contains all necessary information. For details about the IIIF Authentication API 1.0 see the
+<a href="https://iiif.io/api/auth/1.0/">IIIF documentation</a>. The following fields have to be returned by the
+<code>pre_flight</code>-function as LUA-table:</p>
+<ul>
+<li><code>type</code>: String giving the type. Valid are:<br />
+<code>"login"</code>, <code>"clickthrough"</code>, <code>""kiosk"</code> or <code>"external"</code>.</li>
+<li><code>cookieUrl</code>: URL where to get a valid IIIF Auth cookie for this service.</li>
+<li><code>tokenUrl</code>: URL where to get a valid IIIF Auth token for this service.</li>
+<li><code>confirmLabel</code>: Label to display in confirmation box.</li>
+<li><code>description</code>: Description for login window.</li>
+<li><code>failureDescription</code>: Information, if login fails.</li>
+<li><code>failureHeader</code>: Header for failure window.</li>
+<li><code>header</code>: Header of login window</li>
+<li><code>label</code>: Label of the login window</li>
+</ul>
+<p>In addition, the filepath has to be returns. A full response may look as follows:</p>
+<pre><code class="language-lua">return {
+   type = 'login',
+    cookieUrl = 'https://localhost/iiif-cookie.html',
+    tokenUrl = 'https://localhost/iiif-token.php',
+    confirmLabel =  'Login to SIPI',
+    description = 'This Example requires a demo login!',
+    failureDescription = '&lt;a href=&quot;http://example.org/policy&quot;&gt;Access Policy&lt;/a&gt;',
+    failureHeader = 'Authentication Failed',
+    header = 'Please Log In',
+    label = 'Login to SIPI',
+}, filepath
+</code></pre>
+<p>SIPI will use this information returned by the <code>pre_flight</code> function to return the appropriate responses to the
+client requests based on the IIIF Authentication API 1.0. Check for support of the IIIF Authentication API 1.0
+for <a href="https://projectmirador.org">mirador</a> and <a href="https://universalviewer.io">universalviewer</a>, both applications which
+suppport the IIIF standards.</p>
+<h2 id="sipi-variables-available-to-lua-scripts">SIPI variables available to Lua scripts</h2>
+<p>There are many globally accessible LUA variables made available which reflext the configuration of SIPI and the
+state of the server and request. This variables a read only and created for every request.</p>
+<h3 id="sipi-configuration-variables">SIPI configuration variables</h3>
+<p>This variables are defined ither in the configuration file if SIPI, in environemt variables at startup or
+as command line option when starting the server.</p>
+<h4 id="confighostname">config.hostname</h4>
+<pre><code>config.hostname
+</code></pre>
+<p>The hostname  SIPI is configures to run on
+(see <a href="../sipi/#hostname">hostname</a> in configuration description).</p>
+<h4 id="configport">config.port</h4>
+<pre><code>config.port
+</code></pre>
+<p>Portnumber where the SIPI server listens
+(see <a href="../sipi/#port">serverport</a> in configuration description).</p>
+<h4 id="configsslport">config.sslport</h4>
+<pre><code>config.sslport
+</code></pre>
+<p>Portnumber for SSL connections of SIPI
+(see <a href="../sipi/#sslport">sslport</a> in configuration description).</p>
+<h4 id="configimgroot">config.imgroot</h4>
+<pre><code>config.imgroot
+</code></pre>
+<p>Root directory for IIIF-served images
+(see <a href="../sipi/#imgroot">imgroot</a> in configuration description).</p>
+<h4 id="configdocroot">config.docroot</h4>
+<pre><code>config.docroot
+</code></pre>
+<p>Root directory for WEB-Server
+(see <a href="../sipi/#docroot">docroot</a> in configuration description).</p>
+<h4 id="configmax_temp_file_age">config.max_temp_file_age</h4>
+<pre><code>config.max_temp_file_age
+</code></pre>
+<p>maximum age of temporary files
+(see <a href="../sipi/#maxtmpfileage">max_temp_file_age</a> in configuration description).</p>
+<h4 id="configprefix_as_path">config.prefix_as_path</h4>
+<pre><code>config.prefix_as_path`
+</code></pre>
+<p><code>true</code> if the prefix should be used as path info
+(see <a href="../sipi/#prefixaspath">prefix_as_path</a> in configuration description).</p>
+<h4 id="configinit_script">config.init_script</h4>
+<pre><code>config.init_script
+</code></pre>
+<p>Path to initialization script
+(see <a href="../sipi/#initscript">initscript</a> in configuration description).</p>
+<h4 id="configscriptdir">config.scriptdir</h4>
+<pre><code>config.scriptdir
+</code></pre>
+<p>Path to script directory.
+(see <a href="../sipi/#scriptdir">scriptdir</a> in configuration description).</p>
+<h4 id="configcache_dir">config.cache_dir</h4>
+<pre><code>config.cache_dir
+</code></pre>
+<p>Path to cache directory for iIIF served images.
+(see <a href="../sipi/#cachedir">cachedir</a> in configuration description).</p>
+<h4 id="configcache_size">config.cache_size</h4>
+<pre><code>config.cache_size
+</code></pre>
+<p>Maximal size of cache
+(see <a href="../sipi/#cachesize">cachesize</a> in configuration description).</p>
+<h4 id="configcache_n_files">config.cache_n_files</h4>
+<pre><code>config.cache_n_files
+</code></pre>
+<p>Maximal number of files in cache.
+(see <a href="../sipi/#cachenfiles">cache_nfiles</a> in configuration description).</p>
+<h4 id="configcache_hysteresis">config.cache_hysteresis</h4>
+<pre><code>config.cache_hysteresis
+</code></pre>
+<p>Amount of data to be purged if cache reaches maximum size.
+(see <a href="../sipi/#hysteresis">cache_hysteresis</a> in configuration description).</p>
+<h4 id="configjpeg_quality">config.jpeg_quality</h4>
+<pre><code>config.jpeg_quality
+</code></pre>
+<p>Unfortunately, the IIIF Image API does not allow to give a JPEG quality (=compression) on the IIIF URL. SIPI
+allows to configure the compression quality system wide with this parameter. Allowed values are in he range
+[1..100] where 1 the worst quality (and highest compression factor = smallest file size) and 100 the highest
+quality (with lowest compression factor = biggest file size). Please note that SIPI is not able to provide
+lossless compression for JPEG files.
+(see <a href="../sipi/#jpegquality">jpeg_quality</a> in configuration description).</p>
+<h4 id="configkeep_alive">config.keep_alive</h4>
+<pre><code>config.keep_alive
+</code></pre>
+<p>Maximal keep-alive time for HTTP requests that ask for a keep-alive connection.
+(see <a href="../sipi/#keepalive">keep_alive</a> in configuration description).</p>
+<h4 id="configthumb_size">config.thumb_size</h4>
+<pre><code>config.thumb_size
+</code></pre>
+<p>Default thumbnail image size.
+(see <a href="../sipi/#thumbsize">thumb_size</a> in configuration description).</p>
+<h4 id="confign_threads">config.n_threads</h4>
+<pre><code>config.n_threads
+</code></pre>
+<p>Number of worker threads SIPI uses.
+(see <a href="../sipi/#nthreads">nthreads</a> in configuration description).</p>
+<h4 id="configmax_post_size">config.max_post_size</h4>
+<pre><code>config.max_post_size
+</code></pre>
+<p>Maximal size of POST data allowed
+(see <a href="../sipi/#maxpostsize">max_post_size</a> in configuration description).</p>
+<h4 id="configtmpdir">config.tmpdir</h4>
+<pre><code>config.tmpdir
+</code></pre>
+<p>Temporary directory to store uploads.
+(see <a href="../sipi/#tmpdir">tmpdir</a> in configuration description).</p>
+<h4 id="configssl_certificate">config.ssl/_certificate</h4>
+<pre><code>config.ssl_certificate
+</code></pre>
+<p>Path to the SSL certificate that SIPI uses.
+(see <a href="../sipi/#sslcertificate">ssl_certificate</a> in configuration description).</p>
+<h4 id="configssl_key">config.ssl/_key</h4>
+<pre><code>config.ssl_key
+</code></pre>
+<p>Path to the SSL key that SIPI uses.
+(see <a href="../sipi/#sslkey">ssl_key</a> in configuration description).</p>
+<h4 id="configlogfile">config.logfile</h4>
+<pre><code>config.logfile
+</code></pre>
+<p>Name of the logfile. SIPI is currently using the <a href="https://en.wikipedia.org/wiki/Syslog">syslog</a> facility and the
+logfile name is ignored. 
+(see <a href="../sipi/#logfile">logfile</a> in configuration description).</p>
+<h4 id="configloglevel">config.loglevel</h4>
+<pre><code>config.loglevel
+</code></pre>
+<p>Indicates what should be logged. The variable contains a integer that corresponds to the syslog level.
+(see <a href="../sipi/#loglevel">loglevel</a> in configuration description).</p>
+<h4 id="configadminuser">config.adminuser</h4>
+<pre><code>config.adminuser
+</code></pre>
+<p>Name of admin user.
+(see <a href="../sipi/#configuration-of-administrator-access">user</a> in configuration description).</p>
+<h4 id="configpassword">config.password</h4>
+<pre><code>config.password
+</code></pre>
+<p>Password (plain text, not encrypted) of admin user (<em>use with caution</em>)!
+(see <a href="../sipi/#configuration-of-administrator-access">password</a> in configuration description).</p>
+<h3 id="sipi-server-variables">SIPI Server Variables</h3>
+<p>Sipi server variables are dependent on the incoming request and are created by SIPI automatically for each
+request.</p>
+<h4 id="servermethod">server.method</h4>
+<pre><code>server.method
+</code></pre>
+<p>The HTTP request method. Is one of <code>OPTIONS</code>, <code>GET</code>, <code>HEAD</code>, <code>POST</code>, <code>PUT</code>, <code>DELETE</code>, <code>TRACE</code>, <code>CONNECT</code> or <code>OTHER</code>.</p>
+<h4 id="serverhas_openssl">server.has_openssl</h4>
+<pre><code>server.has_openssl
+</code></pre>
+<p><code>true</code> if OpenSSL is available. This variable is determined compilation time. Usually SSL should be included, but SIPI
+can be compiled without SSL support. There is no option in the configuration file for this.</p>
+<h4 id="serversecure">server.secure</h4>
+<pre><code>server.secure
+</code></pre>
+<p><code>true</code> if the connection was made over HTTPS using SSL.</p>
+<h4 id="serverhost">server.host</h4>
+<pre><code>server.host
+</code></pre>
+<p>The hostname of the Sipi server that was used in the request.</p>
+<h4 id="serverclient_ip">server.client_ip</h4>
+<pre><code>server.client_ip
+</code></pre>
+<p>The IPv4 or IPv6 address of the client connecting to Sipi.</p>
+<h4 id="serverclient_port">server.client_port</h4>
+<pre><code>server.client_port
+</code></pre>
+<p>The port number of the client socket.</p>
+<h4 id="serveruri">server.uri</h4>
+<pre><code>server.uri
+</code></pre>
+<p>The URL path used to access Sipi (does not include the hostname).</p>
+<h4 id="serverheader">server.header</h4>
+<pre><code>server.header
+</code></pre>
+<p>A table containing all the HTTP request headers(in lowercase).</p>
+<h4 id="servercookies">server.cookies</h4>
+<pre><code>server.cookies
+</code></pre>
+<p>A table of the cookies that were sent with the request.</p>
+<h4 id="serverget">server.get</h4>
+<pre><code>server.get
+</code></pre>
+<p>A table of GET request parameters.</p>
+<h4 id="serverpost">server.post</h4>
+<pre><code>server.post
+</code></pre>
+<p>A table of POST or PUT request parameters.</p>
+<h4 id="serverrequest">server.request</h4>
+<pre><code>server.request
+</code></pre>
+<p>All request parameters.</p>
+<h4 id="servercontent">server.content</h4>
+<pre><code>server.content
+</code></pre>
+<p>If the request had a body, the variable contains the body data. Otherwise it's <code>nil</code>.</p>
+<h4 id="servercontent_type">server.content_type</h4>
+<pre><code>server.content_type
+</code></pre>
+<p>Returns the content type of the request. If there is no type or no content, this variable is <code>nil</code>.</p>
+<h4 id="serveruploads">server.uploads</h4>
+<pre><code>server.uploads
+</code></pre>
+<p>This is an array of upload parameters, one per file. Each one is a table containing:</p>
+<ul>
+<li><code>fieldname</code>: the name of the form field.</li>
+<li><code>origname</code>: the original filename.</li>
+<li><code>tmpname</code>: a temporary path to the uploaded file.</li>
+<li><code>mimetype</code>: the MIME type of the uploaded file as provided by the browser.</li>
+<li><code>filesize</code>: the size of uploaded file in bytes.</li>
+</ul>
+<p>The upload can be accessed as follows:</p>
+<pre><code class="language-lua">for index, value in pairs(server.uploads) do
+    --
+    -- copy the uploaded file to the image repository using the original name
+    --
+    server.copyTmpfile(index, config.imgdir .. '/' .. value[&quot;origname&quot;])
+end
+</code></pre>
+<h3 id="knora-specific-variables">Knora-specific variables</h3>
+<p>The development of SIPI came out of the need to have a flexible, high performance IIIF server for the Swiss National
+research infrastructure <a href="https://dasch.swiss">Data and Service Center for the Humanities</a> (DaSCH). The aim of the DaSCH
+is to guarantee long-term accessibility of research data from the Humanities. The operates a specialized platform
+<a href="https://knora.org">Knora</a>. The following variables are for internal use only.</p>
+<h4 id="configknora_path">config.knora_path</h4>
+<pre><code>config.knora_path
+</code></pre>
+<p>Path to knora REST API (only for SIPI used with Knora)</p>
+<h4 id="configknora_port">config.knora_port</h4>
+<pre><code>config.knora_port
+</code></pre>
+<p>Port that the Knora API uses</p>
+<h2 id="sipi-functions-available-to-lua-scripts">SIPI functions available to Lua scripts</h2>
+<p>Sipi provides the following functions that can be called from Lua
+scripts. Each function returns two values. The first value is <code>true</code> if
+the operation succeeded, <code>false</code> otherwise. If the operation succeeded,
+the second value is the result of the operation, otherwise it is an
+error message.</p>
+<h3 id="sipi-connection-functions">SIPI Connection Functions</h3>
+<p>These LUA function alter the way the HTTP connection is handled.</p>
+<h4 id="serversetbuffer">server.setBuffer</h4>
+<pre><code>success, errmsg = server.setBuffer([bufsize][,incsize])
+</code></pre>
+<p>Activates the the connection buffer. Optionally the buffer size and
+increment size can be given. Returns <code>true, nil</code> on success or
+<code>false, errormsg</code> on failure.</p>
+<h4 id="serversendheader">server.sendHeader</h4>
+<pre><code>success, errormsg = server.sendHeader(key, value)
+</code></pre>
+<p>Sets an HTTP response header. Returns <code>true, nil</code> on success or
+<code>false, errormsg</code> on failure.</p>
+<h4 id="serversendcookie">server.sendCookie</h4>
+<pre><code>success, errormsg = server.sendCookie(key, value [, options-table])
+</code></pre>
+<p>Sets a cookie in the HTTP response. Returns <code>true, nil</code> on success or
+<code>false, errormsg</code> on failure. The optional <code>options-table</code> is a Lua
+table containing the following keys:</p>
+<ul>
+<li><code>path</code></li>
+<li><code>domain</code></li>
+<li><code>expires</code> (value in seconds)</li>
+<li><code>secure</code> (boolean)</li>
+<li><code>http_only</code> (boolean)</li>
+</ul>
+<h4 id="serversendstatus">server.sendStatus</h4>
+<pre><code>server.sendStatus(code)
+</code></pre>
+<p>Sends an HTTP status code. This function is always successful and
+returns nothing.</p>
+<h4 id="serverprint">server.print</h4>
+<pre><code>success, errormsg = server.print(values)
+</code></pre>
+<p>Prints variables and/or strings over the HTTP connection to the client that originated the request. Returns
+<code>true, nil</code> on success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverrequireauth">server.requireAuth</h4>
+<pre><code>success, table = server.requireAuth()
+</code></pre>
+<p>This function retrieves HTTP authentication data that was supplied after sending a <code>'WWW-Authenticate'</code>-header (e.g.
+by issuing a the following commands to enter the HTTP login dialog:</p>
+<pre><code>    server.setBuffer()
+    server.sendStatus(401);
+    server.sendHeader('WWW-Authenticate', 'Basic realm="Sipi"')
+</code></pre>
+<p>It returns <code>true, table</code> on success or <code>false, errormsg</code> on failure. The result of the authorization
+is returned as table with the following elements:</p>
+<ul>
+<li><code>status</code>: Either <code>BASIC</code>, <code>BEARER</code>, <code>NOAUTH</code> (no authorization header) or <code>ERROR</code></li>
+<li><code>username</code>: A string containing the supplied username (only existing if stats is <code>BASIC</code>)</li>
+<li><code>password</code>: A string containing the supplied password (only existing if stats is <code>BASIC</code>)</li>
+<li><code>token</code>: A string containing the raw token information (only if status <code>BEARER</code>)</li>
+<li><code>message</code>: A string containing the error message (only if status <code>ERROR</code>)</li>
+</ul>
+<p>Example:</p>
+<pre><code>success, auth = server.requireAuth()
+if not success then
+    server.sendStatus(501)
+    server.print("Error in getting authentication scheme!")
+    return -1
+end
+
+if auth.status == 'BASIC' then
+    --
+    -- everything OK, let's create the token for further
+    -- calls and ad it to a cookie
+    --
+    if auth.username == config.adminuser and
+       auth.password == config.password then
+        tokendata = {
+            iss = "sipi.unibas.ch",
+            aud = "knora.org",
+            user = auth.username
+        }
+        success, token = server.generate_jwt(tokendata)
+        if not success then
+            server.sendStatus(501)
+            server.print("Could not generate JWT!")
+            return -1
+        end
+        success, errormsg = server.sendCookie('sipi',
+                                              token,
+                                              {path = '/', expires = 3600})
+        if not success then
+            server.sendStatus(501)
+            server.print("Couldn't send cookie with JWT!")
+            return -1
+        end
+    else
+        server.sendStatus(401)
+        server.sendHeader('WWW-Authenticate', 'Basic realm="Sipi"')
+        server.print("Wrong credentials!")
+        return -1
+    end
+elseif auth.status == 'BEARER' then
+    success, jwt = server.decode_jwt(auth.token)
+    if not success then
+        server.sendStatus(501)
+        server.print("Couldn't deocde JWT!")
+        return -1
+    end
+    if (jwt.iss ~= 'sipi.unibas.ch') or
+       (jwt.aud ~= 'knora.org') or
+       (jwt.user ~= config.adminuser) then
+        server.sendStatus(401)
+        server.sendHeader('WWW-Authenticate', 'Basic realm="Sipi"')
+        return -1
+    end
+elseif auth.status == 'NOAUTH' then
+    server.setBuffer()
+    server.sendStatus(401);
+    server.sendHeader('WWW-Authenticate', 'Basic realm="Sipi"')
+    return -1
+else
+    server.status(401)
+    server.sendHeader('WWW-Authenticate', 'Basic realm="Sipi"')
+    return -1
+end
+</code></pre>
+<h3 id="sipi-file-system-function">SIPI File System Function</h3>
+<p>These functions offer tools to manipuale files and directories, and to gather file information.</p>
+<h4 id="serverfsftype">server.fs.ftype</h4>
+<pre><code>success, filetype = server.fs.ftype(filepath)
+</code></pre>
+<p>Checks the filetype of a given filepath. Returns either <code>true, filetype</code>
+(with filetype one of <code>"FILE"</code>, <code>"DIRECTORY"</code>, <code>"CHARDEV"</code>, <code>"BLOCKDEV"</code>, <code>"LINK"</code>,
+<code>"SOCKET"</code> or <code>"UNKNOWN"</code>) or <code>false, errormsg</code>.</p>
+<h4 id="serverfsmodtime">server.fs.modtime</h4>
+<pre><code>success, modtime = server.fs.modtime(filepath)
+</code></pre>
+<p>Retrieves the last modification date of a file in seconds since epoch
+UTC. Returns either <code>true</code>, <code>modtime</code> or <code>false</code>, <code>errormsg</code>.</p>
+<h4 id="serverfsis_readable">server.fs.is_readable</h4>
+<pre><code>success, readable = server.fs.is_readable(filepath)
+</code></pre>
+<p>Checks if a file is readable. Returns <code>true, readable</code> (boolean) on
+success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfsis_writeable">server.fs.is_writeable</h4>
+<pre><code>success, writeable = server.fs.is_writeable(filepath)
+</code></pre>
+<p>Checks if a file is writeable. Returns <code>true, writeable</code> (boolean) on
+success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfsis_executable">server.fs.is_executable</h4>
+<pre><code>success, errormsg = server.fs.is_executable(filepath)
+</code></pre>
+<p>Checks if a file is executable. Returns <code>true, executable</code> (boolean) on
+success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfsexists">server.fs.exists</h4>
+<pre><code>success, exists = server.fs.exists(filepath)
+</code></pre>
+<p>Checks if a file exists. Checks if a file exists. Returns <code>true, exists</code>
+(boolean) on success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfsunlink">server.fs.unlink</h4>
+<pre><code>success, errormsg = server.fs.unlink(filename)
+</code></pre>
+<p>Deletes a file from the file system. The file must exist and the user
+must have write access. Returns <code>true, nil</code> on success or
+<code>false, errormsg</code> on failure.</p>
+<h4 id="serverfsmkdir">server.fs.mkdir</h4>
+<pre><code>success, errormsg = server.fs.mkdir(dirname, [tonumber('0755', 8)])
+</code></pre>
+<p>Creates a new directory, optionally with the specified permissions.
+Returns <code>true, nil</code> on success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfsrmdir">server.fs.rmdir</h4>
+<pre><code>success, errormsg = server.fs.rmdir(dirname)
+</code></pre>
+<p>Deletes a directory. Returns <code>true, nil</code> on success or <code>false, errormsg</code>
+on failure.</p>
+<h4 id="serverfsgetcwd">server.fs.getcwd</h4>
+<pre><code>success, curdir = server.fs.getcwd()
+</code></pre>
+<p>Gets the current working directory. Returns <code>true, current_dir</code> on
+success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfsreaddir">server.fs.readdir</h4>
+<pre><code>success, filenames = server.fs.readdir(dirname)
+</code></pre>
+<p>Gets the names of the files in a directory, not including <code>.</code> and <code>..</code>.
+Returns <code>true, table</code> on success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfschdir">server.fs.chdir</h4>
+<pre><code>success, oldir = server.fs.chdir(newdir)
+</code></pre>
+<p>Change working directory. Returns <code>true, olddir</code> on success or
+<code>false, errormsg</code> on failure.</p>
+<h4 id="serverfscopyfile">server.fs.copyFile</h4>
+<pre><code>success, errormsg = server.fs.copyFile(source, destination)
+</code></pre>
+<p>Copies a file from source to destination. Returns <code>true, nil</code>on success
+or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfsmovefile">server.fs.moveFile</h4>
+<pre><code>success, errormsg = server.fs.moveFile(from, to)
+</code></pre>
+<p>Moves a file. The move connot cross filesystem boundaries! <code>true, nil</code>on
+success or <code>false, errormsg</code> on failure.</p>
+<h3 id="other-helper-function">Other Helper Function</h3>
+<h4 id="serverhttp">server.http</h4>
+<pre><code>success, result = server.http(method, "http://server.domain[:port]/path/file" [, header] [, timeout])
+</code></pre>
+<p>Performs an HTTP request using curl. Currently implements only GET requests. Parameters:</p>
+<ul>
+<li><code>method</code>: The HTTP request method. Currently must be <code>"GET"</code>.</li>
+<li><code>url</code>: The HTTP URL.</li>
+<li><code>header</code>: An optional table of key-value pairs representing HTTP
+    request headers.</li>
+<li><code>timeout</code>: An optional number of milliseconds until the connection
+    times out.</li>
+</ul>
+<p>Authentication is not yet supported.</p>
+<p>The result is a table:</p>
+<pre><code>result = {
+    status_code = value -- HTTP status code returned
+    erromsg = "error description" -- only if success is false
+    header = {
+        name = value [, name = value, ...]
+    },
+    certificate = { -- only if HTTPS connection
+        subject = value,
+        issuer = value
+    },
+    body = data,
+    duration = milliseconds
+}
+</code></pre>
+<p>Example:</p>
+<pre><code>success, result = server.http("GET", "http://www.salsah.org/api/resources/1", 100)
+
+if (result.success) then
+   server.print("&lt;table&gt;")
+   server.print("&lt;tr&gt;&lt;th&gt;Field&lt;/th&gt;&lt;th&gt;Value&lt;/th&gt;&lt;/tr&gt;")
+   for k,v in pairs(server.header) do
+       server.print("&lt;tr&gt;&lt;td&gt;", k, "&lt;/td&gt;&lt;td&gt;", v, "&lt;/td&gt;&lt;/tr&gt;")
+   end
+   server.print("&lt;/table&gt;&lt;hr/&gt;")
+
+   server.print("Duration: ", result.duration, " ms&lt;br/&gt;&lt;hr/&gt;")
+   server.print("Body:&lt;br/&gt;", result.body)
+else
+   server.print("ERROR: ", result.errmsg)
+end
+</code></pre>
+<h4 id="servertable_to_json">server.table_to_json</h4>
+<pre><code>success, jsonstr = server.table\_to\_json(table)
+</code></pre>
+<p>Converts a (nested) Lua table to a JSON string. Returns <code>true, jsonstr</code>
+on success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverjson_to_table">server.json_to_table</h4>
+<pre><code>success, table = server.json_to_table(jsonstr)
+</code></pre>
+<p>Converts a JSON string to a (nested) Lua table. Returns <code>true, table</code> on
+success or <code>false, errormsg</code> on failure.</p>
+<h4 id="servergenerate_jwt">server.generate_jwt</h4>
+<pre><code>success, token = server.generate_jwt(table)
+</code></pre>
+<p>Generates a <a href="https://jwt.io/">JSON Web Token</a> (JWT) with the supplied table as
+payload. Returns <code>true, token</code> on success or <code>false, errormsg</code> on
+failure. The internal may contain arbitrary keys and/or may contains the JWT
+claims as follows. (The type <code>IntDate</code> is a number of seconds since
+1970-01-01T0:0:0Z):</p>
+<ul>
+<li><code>iss</code> (string =&gt; StringOrURI) OPT: principal that issued the JWT.</li>
+<li><code>exp</code> (number =&gt; IntDate) OPT: expiration time on or after which
+    the token MUST NOT be accepted for processing.</li>
+<li><code>nbf</code> (number =&gt; IntDate) OPT: identifies the time before which
+    the token MUST NOT be accepted for processing.</li>
+<li><code>iat</code> (number =&gt; IntDate) OPT: identifies the time at which the
+    JWT was issued.</li>
+<li><code>aud</code> (string =&gt; StringOrURI) OPT: identifies the audience that
+    the JWT is intended for. The audience value is a string, typically
+    the base address of the resource being accessed, such as
+    <code>https://contoso.com</code>.</li>
+<li><code>prn</code> (string =&gt; StringOrURI) OPT: identifies the subject of
+    the JWT.</li>
+<li><code>jti</code> (string =&gt; String) OPT: provides a unique identifier for
+    the JWT.</li>
+</ul>
+<h4 id="serverdecode_jwt">server.decode_jwt</h4>
+<pre><code>success, table = server.decode_jwt(token)
+</code></pre>
+<p>Decodes a <a href="https://jwt.io/">JSON Web Token</a> (JWT) and returns its
+content as table. Returns <code>true, table</code> on success or <code>false, errormsg</code>
+on failure.</p>
+<h4 id="serverparse_mimetype">server.parse_mimetype</h4>
+<pre><code>success, mimetype = server.parse_mimetype(str)
+</code></pre>
+<p>Parses a mimtype HTTP header string and returns a pair containing the actual
+mimetype and the charset used (if available). It returns <code>true, pair</code> with pair as mimetype
+and charset on success, <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfile_mimetype">server.file_mimetype</h4>
+<pre><code>success, table = server.file_mimetype(path)
+success, table = server.file_mimetype(index)
+</code></pre>
+<p>Determines the mimetype of a file. The <em>first</em> form is used if the file
+path is known. The <em>second</em> form can be used for uploads by passing the
+upload file index. It returns <code>true, table</code> on success or <code>false, errormsg</code> on
+failure. The table has 2 members: - <code>mimetype</code> - <code>charset</code></p>
+<h4 id="serverfile_mimeconsistency">server.file_mimeconsistency</h4>
+<pre><code>success, is_consistent = server.file_mimeconsistency(path)
+success, is_consistent = server.file_mimeconsistency(index)
+</code></pre>
+<p>Checks if the file extension and the mimetype determined by the magic
+of the file is consistent. The <em>first</em> form requires a path (including the
+filename with extension), the <em>second</em> can be used for checking uploads by 
+passing the file index. It returns <code>true, is_consistent</code> on success or
+<code>false, errormsg</code> in case of an error. <code>is_consistent</code> is true if the
+mimetype corresponds to the file extension.</p>
+<h4 id="servercopytmpfile">server.copyTmpfile</h4>
+<pre><code>success, errormsg = server.copyTmpfile(from, to)
+</code></pre>
+<p>Sipi saves each uploaded file in a temporary location (given by the
+config variable <code>tmpdir</code>) and deletes it after the request has been
+served. This function is used to copy the file to another location where
+it can be retrieved later. Returns <code>true, nil</code> on success or
+<code>false, errormsg</code> on failure.</p>
+<p>Parameters:</p>
+<ul>
+<li><code>from</code>:    an index (integer value) of array server.uploads.</li>
+<li><code>target</code>:  destination path</li>
+</ul>
+<h4 id="serversystime">server.systime</h4>
+<pre><code>systime = server.systime()
+</code></pre>
+<p>Returns the current system time on the server in seconds since epoch.</p>
+<h4 id="serverlog">server.log</h4>
+<pre><code>server.log(message, loglevel)
+</code></pre>
+<p>Writes a message to
+<a href="http://man7.org/linux/man-pages/man3/syslog.3.html">syslog</a>. Severity
+levels are:</p>
+<ul>
+<li><code>server.loglevel.LOG_EMERG</code></li>
+<li><code>server.loglevel.LOG_ALERT</code></li>
+<li><code>server.loglevel.LOG_CRIT</code></li>
+<li><code>server.loglevel.LOG_ERR</code></li>
+<li><code>server.loglevel.LOG_WARNING</code></li>
+<li><code>server.loglevel.LOG_NOTICE</code></li>
+<li><code>server.loglevel.LOG_INFO</code></li>
+<li><code>server.loglevel.LOG_DEBUG</code></li>
+</ul>
+<h4 id="serveruuid">server.uuid</h4>
+<pre><code>success, uuid = server.uuid()
+</code></pre>
+<p>Generates a random UUID version 4 identifier in canonical form, as
+described in <a href="https://tools.ietf.org/html/rfc4122">RFC 4122</a>. Returns
+<code>true, uuid</code> on success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serveruuid62">server.uuid62</h4>
+<pre><code>success, uuid62 = server.uuid62()
+</code></pre>
+<p>Generates a Base62-encoded UUID. Returns <code>true, uuid62</code> on success or
+<code>false, errormsg</code> on failure.</p>
+<h4 id="serveruuid_to_base62">server.uuid_to_base62</h4>
+<pre><code>success, uuid62 = server.uuid_to_base62(uuid)
+</code></pre>
+<p>Converts a canonical UUID string to a Base62-encoded UUID. Returns
+<code>true, uuid62</code> on success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverbase62_to_uuid">server.base62_to_uuid</h4>
+<pre><code>success, uuid = server.base62_to_uuid(uuid62)
+</code></pre>
+<p>Converts a Base62-encoded UUID to canonical form. Returns <code>true, uuid</code>
+on success or <code>false, errormsg</code> on failure.</p>
+<h2 id="installing-lua-modules">Installing Lua modules</h2>
+<p>To install Lua modules that can be used in Lua scripts, use
+<code>local/bin/luarocks</code>. Make sure that the location where the modules are
+stored is in the Lua package path, which is printed by
+local/bin/lurocks path. The Lua paths will be used by the Lua
+interpreter when loading modules in a script with <code>require</code> (see <a href="http://leafo.net/guides/customizing-the-luarocks-tree.html">Using
+LuaRocks to install packages in the current
+directory</a>).</p>
+<p>For example, using <code>local/bin/luarocks install --local package</code>, the
+package will be installed in <code>~/.luarocks/</code>. To include this path in the
+Lua's interpreter package search path, you can use an environment
+variable. Running <code>local/bin/luarocks path</code> outputs the code you can use
+to do so. Alternatively, you can build the package path at the beginning
+of a Lua file by setting <code>package.path</code> and <code>package.cpath</code> (see
+<a href="http://leafo.net/guides/customizing-the-luarocks-tree.html#the-install-locations/using-a-custom-directory/quick-guide/running-scripts-with-packages">Running scripts with
+packages</a>).</p>
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      &copy; 2017 - 2021 <a href='https://dasch.swiss' target='_blank'>Data and Service Center for the Humanities (DaSCH)</a>
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    <script id="__config" type="application/json">{"base": "..", "features": [], "search": "../assets/javascripts/workers/search.e5c33ebb.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.51d95adb.min.js"></script>
+      
+    
+  </body>
+</html>
