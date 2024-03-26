@@ -448,7 +448,8 @@ std::pair<std::string, std::string> SipiHttpServer::get_canonical_url(size_t tmp
   std::shared_ptr<SipiSize> size,
   SipiRotation &rotation,
   SipiQualityFormat &quality_format,
-  int pagenum)
+  int pagenum,
+  const std::string& cannonical_watermark)
 {
   static constexpr int canonical_len = 127;
 
@@ -560,17 +561,22 @@ std::pair<std::string, std::string> SipiHttpServer::get_canonical_url(size_t tmp
   if (pagenum > 0) fullid += "@" + std::to_string(pagenum);
   (void)snprintf(canonical_header,
     canonical_header_len,
-    "<http://%s/%s/%s/%s/%s/%s/default.%s>;rel=\"canonical\"",
+    "<http://%s/%s/%s/%s/%s/%s/default.%s/%s>;rel=\"canonical\"",
     host.c_str(),
     prefix.c_str(),
     fullid.c_str(),
     canonical_region,
     canonical_size,
     canonical_rotation,
-    ext);
+    ext,
+    cannonical_watermark.c_str());
+
+  // Here we are creating the canonical URL. Attention: We have added the watermark to the URL, which is not part of the
+  // IIIF standard. This is necessary for correct caching, as the watermark is not part of the image, but is added
+  // by the server.
   std::string canonical = host + "/" + prefix + "/" + fullid + "/" + std::string(canonical_region) + "/"
                           + std::string(canonical_size) + "/" + std::string(canonical_rotation) + format
-                          + std::string(ext);
+                          + std::string{ext} + "/" + std::string{cannonical_watermark};
 
   return make_pair(std::string(canonical_header), canonical);
 }
@@ -1342,6 +1348,8 @@ static void serve_iiif(Connection &conn_obj,
   // if restricted size is set and smaller, we use it
   if (!restricted_size->undefined() && (*size > *restricted_size)) { size = restricted_size; }
 
+  std::string cannonical_watermark = watermark.empty() ? "0" : "1";
+
   //.....................................................................
   // here we start building the canonical URL
   //
@@ -1356,7 +1364,8 @@ static void serve_iiif(Connection &conn_obj,
       size,
       rotation,
       quality_format,
-      sid.getPage());
+      sid.getPage(),
+      cannonical_watermark);
   } catch (Sipi::SipiError &err) {
     send_error(conn_obj, Connection::BAD_REQUEST, err);
     return;

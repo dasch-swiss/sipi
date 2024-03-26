@@ -20,9 +20,8 @@
 
 #endif
 
-#include <assert.h>
+#include <cassert>
 #include <dirent.h>
-#include <stdio.h>
 #include <sys/stat.h>
 #include <syslog.h>
 #include <unistd.h>
