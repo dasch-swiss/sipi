@@ -76,7 +76,8 @@ public:
     std::shared_ptr<SipiSize> size,
     SipiRotation &rotation,
     SipiQualityFormat &quality_format,
-    int pagenum = 0);
+    int pagenum = 0,
+    const std::string &canonnical_watermark = "0");
 
 
   pid_t pid() const { return _pid; }
