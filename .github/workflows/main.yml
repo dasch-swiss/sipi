@@ -37,7 +37,7 @@ jobs:
       fail-fast: true # In case one of the jobs fails, the other jobs will be cancelled
       matrix:
         runs-on: [ buildjet-2vcpu-ubuntu-2204, buildjet-4vcpu-ubuntu-2204, buildjet-8vcpu-ubuntu-2204, buildjet-16vcpu-ubuntu-2204 ]
-    name: Build - buildjet - amd64 - ${{matrix.runs-on}}
+    name: Build - amd64 - ${{matrix.runs-on}}
     runs-on: ${{matrix.runs-on}}
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
@@ -83,7 +83,7 @@ jobs:
       fail-fast: true # In case one of the jobs fails, the other jobs will be cancelled
       matrix:
         runs-on: [ buildjet-2vcpu-ubuntu-2204-arm, buildjet-4vcpu-ubuntu-2204-arm, buildjet-8vcpu-ubuntu-2204-arm, buildjet-16vcpu-ubuntu-2204-arm ]
-    name: Build - buildjet - aarch64 - ${{matrix.runs-on}}
+    name: Build - aarch64 - ${{matrix.runs-on}}
     runs-on: ${{matrix.runs-on}}
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
