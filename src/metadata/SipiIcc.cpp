@@ -280,59 +280,59 @@ unsigned int SipiIcc::iccFormatter(SipiImage *img) const
   }
   }
   switch (img->photo) {
-  case MINISWHITE: {
+  case PhotometricInterpretation::MINISWHITE: {
     format |= COLORSPACE_SH(PT_GRAY);
     break;
   }
-  case MINISBLACK: {
+  case PhotometricInterpretation::MINISBLACK: {
     format |= COLORSPACE_SH(PT_GRAY);
     break;
   }
-  case RGB: {
+  case PhotometricInterpretation::RGB: {
     format |= COLORSPACE_SH(PT_RGB);
     break;
   }
-  case PALETTE: {
+  case PhotometricInterpretation::PALETTE: {
     throw SipiError("Photometric interpretation \"PALETTE\" not supported");
     break;
   }
-  case MASK: {
+  case PhotometricInterpretation::MASK: {
     throw SipiError("Photometric interpretation \"MASK\" not supported");
     break;
   }
-  case SEPARATED: {// --> CMYK
+  case PhotometricInterpretation::SEPARATED: {// --> CMYK
     format |= COLORSPACE_SH(PT_CMYK);
     break;
   }
-  case YCBCR: {
+  case PhotometricInterpretation::YCBCR: {
     format |= COLORSPACE_SH(PT_YCbCr);
     break;
   }
-  case CIELAB: {
+  case PhotometricInterpretation::CIELAB: {
     format |= COLORSPACE_SH(PT_Lab);
     break;
   }
-  case ICCLAB: {
+  case PhotometricInterpretation::ICCLAB: {
     format |= COLORSPACE_SH(PT_Lab);
     break;
   }
-  case ITULAB: {
+  case PhotometricInterpretation::ITULAB: {
     format |= COLORSPACE_SH(PT_Lab);
     break;
   }
-  case CFA: {
+  case PhotometricInterpretation::CFA: {
     throw SipiError("Photometric interpretation \"Color Field Array (CFS)\" not supported");
     break;
   }
-  case LOGL: {
+  case PhotometricInterpretation::LOGL: {
     throw SipiError("Photometric interpretation \"LOGL\" not supported");
     break;
   }
-  case LOGLUV: {
+  case PhotometricInterpretation::LOGLUV: {
     throw SipiError("Photometric interpretation \"LOGLUV\" not supported");
     break;
   }
-  case LINEARRAW: {
+  case PhotometricInterpretation::LINEARRAW: {
     throw SipiError("Photometric interpretation \"LINEARRAW\" not supported");
     break;
   }

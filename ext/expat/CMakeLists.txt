@@ -10,23 +10,18 @@ ExternalProject_Add(project_expat
         DOWNLOAD_DIR ${COMMON_SRCS}/downloads
         SOURCE_DIR ${COMMON_SRCS}/expat
         CMAKE_ARGS
-            -DCMAKE_PREFIX_PATH=${COMMON_LOCAL}
-            -DCMAKE_INSTALL_PREFIX=${COMMON_LOCAL}
-            -DEXPAT_BUILD_TOOLS:BOOL=OFF
-            -DEXPAT_BUILD_EXAMPLES:BOOL=OFF
-            -DEXPAT_BUILD_DOCS:BOOL=OFF
-            -DBUILD_SHARED_LIBS:BOOL=${MAKE_SHARED_SIPI}
+        -DCMAKE_PREFIX_PATH=${COMMON_LOCAL}
+        -DCMAKE_INSTALL_PREFIX=${COMMON_LOCAL}
+        -DEXPAT_BUILD_TOOLS:BOOL=OFF
+        -DEXPAT_BUILD_EXAMPLES:BOOL=OFF
+        -DEXPAT_BUILD_DOCS:BOOL=OFF
+        -DBUILD_SHARED_LIBS:BOOL=${MAKE_SHARED_SIPI}
         BUILD_IN_SOURCE 1
 )
 
 ExternalProject_Get_Property(project_expat install_dir)
 
-if(MAKE_SHARED_SIPI)
-    add_library(expat SHARED IMPORTED GLOBAL)
-    set_property(TARGET expat PROPERTY IMPORTED_LOCATION ${CONFIGURE_LIBDIR}/libexpat${CMAKE_SHARED_LIBRARY_SUFFIX})
-else()
-    add_library(expat STATIC IMPORTED GLOBAL)
-    set_property(TARGET expat PROPERTY IMPORTED_LOCATION ${CONFIGURE_LIBDIR}/libexpat${CMAKE_STATIC_LIBRARY_SUFFIX})
-endif()
+add_library(expat STATIC IMPORTED GLOBAL)
+set_property(TARGET expat PROPERTY IMPORTED_LOCATION ${CONFIGURE_LIBDIR}/libexpat${CMAKE_STATIC_LIBRARY_SUFFIX})
 
 add_dependencies(expat project_expat)

@@ -40,14 +40,14 @@ SipiImage::SipiImage()
   ny = 0;
   nc = 0;
   bps = 0;
-  photo = INVALID;
+  photo = PhotometricInterpretation::INVALID;
   orientation = TOPLEFT;
   pixels = nullptr;
   xmp = nullptr;
   icc = nullptr;
   iptc = nullptr;
   exif = nullptr;
-  skip_metadata = SKIP_NONE;
+  skip_metadata = SkipMetadata::SKIP_NONE;
   conobj = nullptr;
 };
 //============================================================================
@@ -99,11 +99,11 @@ SipiImage::SipiImage(size_t nx_p, size_t ny_p, size_t nc_p, size_t bps_p, Photom
   : nx(nx_p), ny(ny_p), nc(nc_p), bps(bps_p), photo(photo_p)
 {
   orientation = TOPLEFT;// assuming default...
-  if (((photo == MINISWHITE) || (photo == MINISBLACK)) && !((nc == 1) || (nc == 2))) {
+  if (((photo == PhotometricInterpretation::MINISWHITE) || (photo == PhotometricInterpretation::MINISBLACK)) && !((nc == 1) || (nc == 2))) {
     throw SipiImageError("Mismatch in Photometric interpretation and number of channels");
   }
 
-  if ((photo == RGB) && !((nc == 3) || (nc == 4))) {
+  if ((photo == PhotometricInterpretation::RGB) && !((nc == 3) || (nc == 4))) {
     throw SipiImageError("Mismatch in Photometric interpretation and number of channels");
   }
 
@@ -137,7 +137,7 @@ SipiImage::SipiImage(size_t nx_p, size_t ny_p, size_t nc_p, size_t bps_p, Photom
   icc = nullptr;
   iptc = nullptr;
   exif = nullptr;
-  skip_metadata = SKIP_NONE;
+  skip_metadata = SkipMetadata::SKIP_NONE;
   conobj = nullptr;
 }
 
@@ -469,24 +469,24 @@ void SipiImage::convertToIcc(const SipiIcc &target_icc_p, int new_bps)
   PredefinedProfiles targetPT = target_icc_p.getProfileType();
   switch (targetPT) {
   case icc_GRAY_D50: {
-    photo = MINISBLACK;
+    photo = PhotometricInterpretation::MINISBLACK;
     break;
   }
 
   case icc_RGB:
   case icc_sRGB:
   case icc_AdobeRGB: {
-    photo = RGB;
+    photo = PhotometricInterpretation::RGB;
     break;
   }
 
   case icc_CMYK_standard: {
-    photo = SEPARATED;
+    photo = PhotometricInterpretation::SEPARATED;
     break;
   }
 
   case icc_LAB: {
-    photo = CIELAB;
+    photo = PhotometricInterpretation::CIELAB;
     break;
   }
 
@@ -526,7 +526,7 @@ void SipiImage::removeChannel(const unsigned int channel, const bool force_gray_
     }
 
     // TODO: figure out when this can happen and if this can/should be caught earlier
-    const bool cmyk_image = (nc == 4) && (photo == SEPARATED);
+    const bool cmyk_image = (nc == 4) && (photo == PhotometricInterpretation::SEPARATED);
     if (cmyk_image) {
       std::string msg = "Cannot remove component: nc=" + std::to_string(nc) + " chan=" + std::to_string(channel);
       throw SipiImageError(msg);
@@ -586,9 +586,9 @@ void SipiImage::removeChannel(const unsigned int channel, const bool force_gray_
   };
 
 
-  const auto extra_sample_to_remove = channel - ((photo == SEPARATED) ? 4 : 3);
-  const bool is_alpha_channel = es.at(extra_sample_to_remove) == ASSOCALPHA;
-  const bool is_rgb_image = photo == RGB;
+  const auto extra_sample_to_remove = channel - ((photo == PhotometricInterpretation::SEPARATED) ? 4 : 3);
+  const bool is_alpha_channel = es.at(extra_sample_to_remove) == ExtraSamples::ASSOCALPHA;
+  const bool is_rgb_image = photo == PhotometricInterpretation::RGB;
 
   /*
    * 8 bit per sample.
@@ -1325,7 +1325,7 @@ bool SipiImage::to8bps()
 
 bool SipiImage::toBitonal()
 {
-  if ((photo != MINISBLACK) && (photo != MINISWHITE)) { convertToIcc(SipiIcc(icc_GRAY_D50), 8); }
+  if ((photo != PhotometricInterpretation::MINISBLACK) && (photo != PhotometricInterpretation::MINISWHITE)) { convertToIcc(SipiIcc(icc_GRAY_D50), 8); }
 
   bool doit = false;// will be set true if we find a value not equal 0 or 255
 
@@ -1708,7 +1708,7 @@ std::ostream &operator<<(std::ostream &outstr, const SipiImage &rhs)
   outstr << "nc    = " << std::to_string(rhs.nc) << '\n';
   outstr << "es    = " << std::to_string(rhs.es.size()) << '\n';
   outstr << "bps   = " << std::to_string(rhs.bps) << '\n';
-  outstr << "photo = " << std::to_string(rhs.photo) << '\n';
+  outstr << "photo = " << to_string(rhs.photo) << '\n';
 
   if (rhs.xmp) { outstr << "XMP-Metadata: " << '\n' << *(rhs.xmp) << '\n'; }
 

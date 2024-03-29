@@ -385,7 +385,7 @@ bool SipiIOJ2k::read(SipiImage *img,
   // get ICC-Profile if available
   //
   jpx_layer = jpx_in.access_layer(0);
-  img->photo = INVALID;// we initialize to an invalid value in order to test later if img->photo has been set
+  img->photo = PhotometricInterpretation::INVALID;// we initialize to an invalid value in order to test later if img->photo has been set
   int numcol;
   if (jpx_layer.exists()) {
     kdu_supp::jp2_colour colinfo = jpx_layer.access_colour(0);
@@ -412,24 +412,24 @@ bool SipiIOJ2k::read(SipiImage *img,
     img->orientation = TOPLEFT;
     if (img->nc > numcol) {// we have more components than colors -> alpha channel!
       for (size_t i = 0; i < img->nc - numcol; i++) {// img->nc - numcol: number of alpha channels (?)
-        img->es.push_back(ASSOCALPHA);
+        img->es.push_back(ExtraSamples::ASSOCALPHA);
       }
     }
     if (colinfo.exists()) {
       int space = colinfo.get_space();
       switch (space) {
       case kdu_supp::JP2_sRGB_SPACE: {
-        img->photo = RGB;
+        img->photo = PhotometricInterpretation::RGB;
         img->icc = std::make_shared<SipiIcc>(icc_sRGB);
         break;
       }
       case kdu_supp::JP2_CMYK_SPACE: {
-        img->photo = SEPARATED;
+        img->photo = PhotometricInterpretation::SEPARATED;
         img->icc = std::make_shared<SipiIcc>(icc_CMYK_standard);
         break;
       }
       case kdu_supp::JP2_YCbCr1_SPACE: {
-        img->photo = YCBCR;
+        img->photo = PhotometricInterpretation::YCBCR;
         img->icc = std::make_shared<SipiIcc>(icc_sRGB);
         break;
       }
@@ -437,12 +437,12 @@ bool SipiIOJ2k::read(SipiImage *img,
       case kdu_supp::JP2_YCbCr3_SPACE: {
         float whitepoint[] = { 0.3127, 0.3290 };
         float primaries[] = { 0.630, 0.340, 0.310, 0.595, 0.155, 0.070 };
-        img->photo = YCBCR;
+        img->photo = PhotometricInterpretation::YCBCR;
         img->icc = std::make_shared<SipiIcc>(whitepoint, primaries);
         break;
       }
       case kdu_supp::JP2_iccRGB_SPACE: {
-        img->photo = RGB;
+        img->photo = PhotometricInterpretation::RGB;
         int icc_len;
         const unsigned char *icc_buf = colinfo.get_icc_profile(&icc_len);
         img->icc = std::make_shared<SipiIcc>(icc_buf, icc_len);
@@ -450,11 +450,11 @@ bool SipiIOJ2k::read(SipiImage *img,
       }
       case kdu_supp::JP2_iccANY_SPACE: {
         if (numcol == 1) {
-          img->photo = MINISBLACK;
+          img->photo = PhotometricInterpretation::MINISBLACK;
         } else if (numcol == 3) {
-          img->photo = RGB;
+          img->photo = PhotometricInterpretation::RGB;
         } else if (numcol == 4) {
-          img->photo = SEPARATED;
+          img->photo = PhotometricInterpretation::SEPARATED;
         } else {
           syslog(LOG_ERR, "Unsupported number of colors: %d", numcol);
           throw SipiImageError("Unsupported number of colors: " + std::to_string(numcol));
@@ -465,22 +465,22 @@ bool SipiIOJ2k::read(SipiImage *img,
         break;
       }
       case kdu_supp::JP2_sLUM_SPACE: {
-        img->photo = MINISBLACK;
+        img->photo = PhotometricInterpretation::MINISBLACK;
         img->icc = std::make_shared<SipiIcc>(icc_LUM_D65);
         break;
       }
       case kdu_supp::JP2_sYCC_SPACE: {
-        img->photo = YCBCR;
+        img->photo = PhotometricInterpretation::YCBCR;
         img->icc = std::make_shared<SipiIcc>(icc_sRGB);
         break;
       }
       case kdu_supp::JP2_CIELab_SPACE: {
-        img->photo = CIELAB;
+        img->photo = PhotometricInterpretation::CIELAB;
         img->icc = std::make_shared<SipiIcc>(icc_LAB);
         break;
       }
       case 100: {
-        img->photo = MINISBLACK;
+        img->photo = PhotometricInterpretation::MINISBLACK;
         img->icc = std::make_shared<SipiIcc>(icc_ROMM_GRAY);
         break;
       }
@@ -495,18 +495,18 @@ bool SipiIOJ2k::read(SipiImage *img,
     numcol = img->nc;
   }
 
-  if (img->photo == INVALID) {
+  if (img->photo == PhotometricInterpretation::INVALID) {
     switch (numcol) {
     case 1: {
-      img->photo = MINISBLACK;
+      img->photo = PhotometricInterpretation::MINISBLACK;
       break;
     }
     case 3: {
-      img->photo = RGB;
+      img->photo = PhotometricInterpretation::RGB;
       break;
     }
     case 4: {
-      img->photo = SEPARATED;
+      img->photo = PhotometricInterpretation::SEPARATED;
       break;
     }
     default: {
@@ -608,9 +608,9 @@ bool SipiIOJ2k::read(SipiImage *img,
     delete[] glut;
     delete[] blut;
   }
-  if (img->photo == YCBCR) {
+  if (img->photo == PhotometricInterpretation::YCBCR) {
     img->convertYCC2RGB();
-    img->photo = RGB;
+    img->photo = PhotometricInterpretation::RGB;
   }
 
   if ((size != nullptr) && (!redonly)) {

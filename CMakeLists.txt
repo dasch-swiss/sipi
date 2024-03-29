@@ -1,24 +1,6 @@
 #
-# Copyright © 2016 - 2023 Lukas Rosenthaler, Andrea Bianco, Benjamin Geer,
-# Ivan Subotic, Tobias Schweizer, André Kilchenmann, and André Fatton.
-# This file is part of Sipi.
-# Sipi is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as published
-# by the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-# Sipi is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# Additional permission under GNU AGPL version 3 section 7:
-# If you modify this Program, or any covered work, by linking or combining
-# it with Kakadu (or a modified version of that library) or Adobe ICC Color
-# Profiles (or a modified version of that library) or both, containing parts
-# covered by the terms of the Kakadu Software Licence or Adobe Software Licence,
-# or both, the licensors of this Program grant you additional permission
-# to convey the resulting work.
-# See the GNU Affero General Public License for more details.
-# You should have received a copy of the GNU Affero General Public
-# License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
+# Copyright © 2016 - 2024 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform
+# contributors. SPDX-License-Identifier: AGPL-3.0-or-later
 #
 
 cmake_minimum_required(VERSION 3.28)
@@ -29,13 +11,13 @@ endif()
 
 message(STATUS "cmake version: ${CMAKE_VERSION}")
 
-# Require C++14, but let a parent project ask for something higher
+# Require C++23 but let a parent project ask for something higher
 if(DEFINED CMAKE_CXX_STANDARD)
-    if(CMAKE_CXX_STANDARD MATCHES "^(90|99)$" OR CMAKE_CXX_STANDARD LESS 14)
-        message(FATAL_ERROR "This project requires at least C++14. Aborting...")
+    if(CMAKE_CXX_STANDARD MATCHES "^(90|99)$" OR CMAKE_CXX_STANDARD LESS 23)
+        message(FATAL_ERROR "This project requires at least C++23. Aborting...")
     endif()
 else()
-    set(CMAKE_CXX_STANDARD 14)
+    set(CMAKE_CXX_STANDARD 23)
 endif()
 # Always enforce the language constraint
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -147,6 +129,13 @@ endif()
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     message(STATUS "Compiling with GCC. Statically linking libstdc++.")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libstdc++")
+endif()
+
+#
+# Dynamically compile the C++ standard library into the executable
+if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
+    message(STATUS "Compiling with Clang. Linking stdc++.")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
 endif()
 
 #
@@ -302,24 +291,31 @@ CHECK_INCLUDE_FILES (malloc.h HAVE_MALLOC_H)
 #
 if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
 	find_package(ICONV REQUIRED)
+    find_package(INIH REQUIRED)
+endif()
+if(INIH_FOUND)
+    message(STATUS "inih dirs: ${INIH_INCLUDE_DIR}")
+    message(STATUS "inih libs: ${INIH_LIBRARY}")
+    include_directories(${INIH_INCLUDE_DIRS})
 endif()
 #find_package(MATH REQUIRED)
 
 message(STATUS "Adding external dependencies ...")
 
+file(MAKE_DIRECTORY ${CONFIGURE_LIBDIR})
+
 # !!! order is important !!!
 # dependent targets need to be added before the target that depends on them
 # e.g., png, bzip2 before freetype
-# add_subdirectory(${EXT_PROJECTS_DIR}/openssl)
 add_subdirectory(${EXT_PROJECTS_DIR}/xz)
 add_subdirectory(${EXT_PROJECTS_DIR}/zlib)
 add_subdirectory(${EXT_PROJECTS_DIR}/zstd)
 add_subdirectory(${EXT_PROJECTS_DIR}/jpeg)
 add_subdirectory(${EXT_PROJECTS_DIR}/jbigkit)
 add_subdirectory(${EXT_PROJECTS_DIR}/webp)
-add_subdirectory(${EXT_PROJECTS_DIR}/tiff)
 add_subdirectory(${EXT_PROJECTS_DIR}/expat)
 add_subdirectory(${EXT_PROJECTS_DIR}/png)
+add_subdirectory(${EXT_PROJECTS_DIR}/tiff)
 add_subdirectory(${EXT_PROJECTS_DIR}/bzip2)
 add_subdirectory(${EXT_PROJECTS_DIR}/gettext)
 add_subdirectory(${EXT_PROJECTS_DIR}/lcms2)
@@ -329,7 +325,6 @@ add_subdirectory(${EXT_PROJECTS_DIR}/lua)
 add_subdirectory(${EXT_PROJECTS_DIR}/luarocks)
 add_subdirectory(${EXT_PROJECTS_DIR}/sqlite3)
 add_subdirectory(${EXT_PROJECTS_DIR}/kakadu)
-# add_subdirectory(${EXT_PROJECTS_DIR}/curl)
 
 message(STATUS "... adding external dependencies done.")
 
@@ -479,6 +474,9 @@ add_executable(sipi
 
 add_dependencies(sipi icc_profiles)
 
+add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 exiv2 jansson lua sqlite3 kdu kdu_aux)
+
+
 # !!! ORDER MATTERS !!!
 # dependent targets need to be added before the target that depends on them
 target_link_libraries(sipi ${LIBS}
@@ -499,11 +497,8 @@ target_link_libraries(sipi ${LIBS}
         sqlite3
         dl
         pthread
-        # curl
         ${CURL_LIBRARIES}
         ${OPENSSL_LIBRARIES}
-        # ssl
-        # crypto
         jpeg
         bzip2
         zstd
@@ -515,7 +510,7 @@ target_link_libraries(sipi ${LIBS}
 )
 
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-	target_link_libraries(sipi iconv gettext_intl)
+	target_link_libraries(sipi iconv gettext_intl intl)
 else()
     target_link_libraries(sipi rt)
 endif()
@@ -554,3 +549,9 @@ add_test(NAME all_python_based_e2e_tests
         COMMAND pytest -s --sipi-exec=$<TARGET_FILE:sipi>)
 
 set_property(TEST all_python_based_e2e_tests PROPERTY LABELS e2e)
+
+#-------------------
+# Fuzz testing
+#-------------------
+
+add_subdirectory(fuzz)

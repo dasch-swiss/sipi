@@ -7,9 +7,7 @@ include(ExternalProject)
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
 
-
-ExternalProject_Add(
-        project_jbigkit
+ExternalProject_Add(project_jbigkit
         INSTALL_DIR ${COMMON_LOCAL}
         URL https://www.cl.cam.ac.uk/~mgk25/jbigkit/download/jbigkit-2.1.tar.gz
         ${timestamp_policy}

@@ -863,7 +863,7 @@ int main(int argc, char *argv[])
     //
     std::string skipmeta("none");
 
-    if (!sipiopt.get_option("--skipmeta")->empty()) { img.setSkipMetadata(Sipi::SKIP_ALL); }
+    if (!sipiopt.get_option("--skipmeta")->empty()) { img.setSkipMetadata(Sipi::SkipMetadata::SKIP_ALL); }
 
     //
     // color profile processing

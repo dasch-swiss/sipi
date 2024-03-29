@@ -9,8 +9,8 @@ set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 set(LibPngVersion "1.6.41")
 
 ExternalProject_Add(project_png
-        DEPENDS zlib
-        DEPENDS xz
+        DEPENDS project_zlib
+        DEPENDS project_xz
         INSTALL_DIR ${COMMON_LOCAL}
         URL https://sourceforge.net/projects/libpng/files/libpng16/${LibPngVersion}/libpng-${LibPngVersion}.tar.gz/download
         ${timestamp_policy}
@@ -35,9 +35,3 @@ add_library(png STATIC IMPORTED GLOBAL)
 set_property(TARGET png PROPERTY IMPORTED_LOCATION ${CONFIGURE_LIBDIR}/libpng${CMAKE_STATIC_LIBRARY_SUFFIX})
 
 add_dependencies(png project_png)
-
-# shared
-add_library(png_shared SHARED IMPORTED GLOBAL)
-set_property(TARGET png_shared PROPERTY IMPORTED_LOCATION ${CONFIGURE_LIBDIR}/libpng${CMAKE_SHARED_LIBRARY_SUFFIX})
-
-add_dependencies(png_shared project_png)

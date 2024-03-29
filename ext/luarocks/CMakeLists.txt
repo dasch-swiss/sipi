@@ -15,17 +15,17 @@ ExternalProject_Add(project_luarocks
         DOWNLOAD_DIR ${COMMON_SRCS}/downloads
         #DOWNLOAD_EXTRACT_TIMESTAMP NEW
         SOURCE_DIR ${COMMON_SRCS}/luarocks-3.3.1
-        CONFIGURE_COMMAND   ${COMMON_SRCS}/luarocks-3.3.1/configure
-                            --prefix=${COMMON_LOCAL}
-                            --with-lua-bin=${COMMON_LOCAL}/bin
-                            --with-lua-include=${COMMON_LOCAL}/include
-                            --with-lua-lib=${COMMON_LOCAL}/lib
-                            --rocks-tree=${CMAKE_INSTALL_PREFIX}/luarocks
-#    --libdir=${CONFIGURE_LIBDIR}
+        CONFIGURE_COMMAND ${COMMON_SRCS}/luarocks-3.3.1/configure
+        --prefix=${COMMON_LOCAL}
+        --with-lua-bin=${COMMON_LOCAL}/bin
+        --with-lua-include=${COMMON_LOCAL}/include
+        --with-lua-lib=${COMMON_LOCAL}/lib
+        --rocks-tree=${CMAKE_INSTALL_PREFIX}/luarocks
+        #    --libdir=${CONFIGURE_LIBDIR}
         BUILD_COMMAND make build
         INSTALL_COMMAND make install
         BUILD_IN_SOURCE 1
-        )
+)
 ExternalProject_Get_Property(project_luarocks install_dir)
 
 add_library(luarocks STATIC IMPORTED GLOBAL)

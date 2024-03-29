@@ -20,24 +20,51 @@
         };
     in
     {
-        # devShells.default describes the default shell with C++, cmake,
-        # and other dependencies
         devShells = {
+
+          # devShells.clang describes a shell with the clang compiler
+          clang = pkgs.mkShell.override {stdenv = pkgs.clang16Stdenv;} {
+            name = "sipi";
+
+            shellHook = ''
+              export PS1="\\u@\\h | nix-develop> "
+            '';
+
+            packages = with pkgs; [
+              # List other packages you want in your devShell
+              # C++ Compiler is already part of stdenv
+              # Build tool
+              cmake
+
+              # Build dependencies
+              asio # networking library needed for crow (microframework for the web)
+              curl
+              exiv2
+              ffmpeg
+              file # libmagic-dev
+              gettext
+              glibcLocales # locales
+              gperf
+              iconv
+              inih
+              libidn
+              libuuid # uuid und uuid-dev
+              # numactl # libnuma-dev not available on mac
+              libwebp
+              openssl # libssl-dev
+              readline70 # libreadline-dev
+              pkg-config
+              unzip
+            ];
+          };
+
+          # devShells.default describes the default shell with C++, cmake,
+          # and other dependencies
           default = pkgs.mkShell.override {stdenv = pkgs.gcc13Stdenv;} {
             name = "sipi";
 
             shellHook = ''
               export PS1="\\u@\\h | nix-develop> "
-              unset SDKROOT
-              unset CMAKE_FRAMEWORK_PATH
-              unset CMAKE_INCLUDE_PATH
-              unset CMAKE_LIBRARY_PATH
-              # Any other environment tweaks
-
-              # Explicitly tell CMake not to search the system paths
-              export CMAKE_IGNORE_PATH="/System/Library/Frameworks"
-              echo "Ignoring macOS System Frameworks for CMake"
-              # Additional environment tweaks
             '';
 
             packages = with pkgs; [
@@ -53,12 +80,14 @@
               # Build dependencies
               asio # networking library needed for crow (microframework for the web)
               curl
+              exiv2
               ffmpeg
               file # libmagic-dev
               gettext
               glibcLocales # locales
               gperf
               iconv
+              inih
               libidn
               libuuid # uuid und uuid-dev
               # numactl # libnuma-dev not available on mac

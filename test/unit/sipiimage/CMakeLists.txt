@@ -132,7 +132,7 @@ target_link_libraries(sipiimage
         ${CMAKE_DL_LIBS})
 
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-    target_link_libraries(sipiimage iconv gettext_intl)
+    target_link_libraries(sipiimage iconv intl)
 else()
     target_link_libraries(sipiimage rt)
 endif()

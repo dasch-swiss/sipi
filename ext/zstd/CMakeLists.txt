@@ -1,11 +1,7 @@
 project(zstd_builder C CXX)
 include(ExternalProject)
 
-include_directories(
-        ${COMMON_LOCAL}/include
-        /usr/include
-        /usr/local/include
-)
+include_directories(${COMMON_LOCAL}/include)
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
 ExternalProject_Add(project_zstd
@@ -16,17 +12,13 @@ ExternalProject_Add(project_zstd
         SOURCE_DIR ${COMMON_SRCS}/zstd
         SOURCE_SUBDIR build/cmake
         CMAKE_ARGS
-            -DCMAKE_PREFIX_PATH=${COMMON_LOCAL}
-            -DCMAKE_INSTALL_PREFIX=${COMMON_LOCAL}
+        -DCMAKE_PREFIX_PATH=${COMMON_LOCAL}
+        -DCMAKE_INSTALL_PREFIX=${COMMON_LOCAL}
         BUILD_IN_SOURCE 1
-        )
+)
 ExternalProject_Get_Property(project_zstd install_dir)
 
-if(MAKE_SHARED_SIPI)
-    add_library(zstd SHARED IMPORTED GLOBAL)
-    set_property(TARGET zstd PROPERTY IMPORTED_LOCATION ${CONFIGURE_LIBDIR}/libzstd${CMAKE_SHARED_LIBRARY_SUFFIX})
-else()
-    add_library(zstd STATIC IMPORTED GLOBAL)
-    set_property(TARGET zstd PROPERTY IMPORTED_LOCATION ${CONFIGURE_LIBDIR}/libzstd${CMAKE_STATIC_LIBRARY_SUFFIX})
-endif()
+add_library(zstd STATIC IMPORTED GLOBAL)
+set_property(TARGET zstd PROPERTY IMPORTED_LOCATION ${CONFIGURE_LIBDIR}/libzstd${CMAKE_STATIC_LIBRARY_SUFFIX})
+
 add_dependencies(zstd project_zstd)

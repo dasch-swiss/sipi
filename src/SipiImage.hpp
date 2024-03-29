@@ -40,7 +40,7 @@ using byte = unsigned char;
 using word = unsigned short;
 
 /*! Implements the values of the photometric tag of the TIFF format */
-using PhotometricInterpretation = enum : unsigned short {
+enum class PhotometricInterpretation : std::uint16_t {
   MINISWHITE = 0,//!< B/W or gray value image with 0 = white and 1 (255) = black
   MINISBLACK = 1,//!< B/W or gray value image with 0 = black and 1 (255) = white (is default in SIPI)
   RGB = 2,//!< Color image with RGB values
@@ -58,14 +58,52 @@ using PhotometricInterpretation = enum : unsigned short {
   INVALID = 65535//!< an invalid value
 };
 
+inline auto to_string(const PhotometricInterpretation photo)-> std::string
+{
+  switch (photo) {
+    case PhotometricInterpretation::MINISWHITE:
+      return "MINISWHITE";
+    case PhotometricInterpretation::MINISBLACK:
+      return "MINISBLACK";
+    case PhotometricInterpretation::RGB:
+      return "RGB";
+    case PhotometricInterpretation::PALETTE:
+      return "PALETTE";
+    case PhotometricInterpretation::MASK:
+      return "MASK";
+    case PhotometricInterpretation::SEPARATED:
+      return "SEPARATED";
+    case PhotometricInterpretation::YCBCR:
+      return "YCBCR";
+    case PhotometricInterpretation::CIELAB:
+      return "CIELAB";
+    case PhotometricInterpretation::ICCLAB:
+      return "ICCLAB";
+    case PhotometricInterpretation::ITULAB:
+      return "ITULAB";
+    case PhotometricInterpretation::CFA:
+      return "CFA";
+    case PhotometricInterpretation::LOGL:
+      return "LOGL";
+    case PhotometricInterpretation::LOGLUV:
+      return "LOGLUV";
+    case PhotometricInterpretation::LINEARRAW:
+      return "LINEARRAW";
+    case PhotometricInterpretation::INVALID:
+      return "INVALID";
+    default:
+      return "UNKNOWN";
+  }
+}
+
 /*! The meaning of extra channels as used in the TIF format */
-using ExtraSamples = enum : std::uint8_t {
+enum class ExtraSamples : std::uint8_t {
   UNSPECIFIED = 0,//!< Unknown meaning
   ASSOCALPHA = 1,//!< Associated alpha channel
   UNASSALPHA = 2//!< Unassociated alpha channel
 };
 
-using SkipMetadata = enum: std::uint8_t {
+enum SkipMetadata : std::uint8_t {
   SKIP_NONE = 0x00,
   SKIP_ICC = 0x01,
   SKIP_XMP = 0x02,
@@ -298,7 +336,10 @@ public:
     const std::shared_ptr<SipiRegion> &region = nullptr,
     const std::shared_ptr<SipiSize> &size = nullptr,
     bool force_bps_8 = false,
-    ScalingQuality scaling_quality = { ScalingMethod::HIGH, ScalingMethod::HIGH, ScalingMethod::HIGH, ScalingMethod::HIGH });
+    ScalingQuality scaling_quality = { ScalingMethod::HIGH,
+      ScalingMethod::HIGH,
+      ScalingMethod::HIGH,
+      ScalingMethod::HIGH });
 
   /*!
    * Read an image that is to be considered an "original image". In this case
@@ -408,7 +449,7 @@ public:
    */
   void removeExtraSamples(const bool force_gray_alpha = false)
   {
-    const size_t content_channels = (photo == SEPARATED ? 4 : 3);
+    const size_t content_channels = (photo == PhotometricInterpretation::SEPARATED ? 4 : 3);
     const size_t extra_channels = es.size();
     for (size_t i = content_channels; i < (extra_channels + content_channels); i++) {
       removeChannel(i, force_gray_alpha);

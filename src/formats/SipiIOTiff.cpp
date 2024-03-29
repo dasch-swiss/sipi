@@ -482,7 +482,7 @@ bool SipiIOTiff::read(SipiImage *img,
     img->orientation = static_cast<Orientation>(ori);
 
     if (1 != TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &stmp)) {
-      img->photo = MINISBLACK;
+      img->photo = PhotometricInterpretation::MINISBLACK;
     } else {
       img->photo = static_cast<PhotometricInterpretation>(stmp);
     }
@@ -499,7 +499,7 @@ bool SipiIOTiff::read(SipiImage *img,
     std::vector<uint16> bcm;
 
     int colmap_len = 0;
-    if (img->photo == PALETTE) {
+    if (img->photo == PhotometricInterpretation::PALETTE) {
       uint16 *_rcm = nullptr, *_gcm = nullptr, *_bcm = nullptr;
       if (TIFFGetField(tif, TIFFTAG_COLORMAP, &_rcm, &_gcm, &_bcm) == 0) {
         TIFFClose(tif);
@@ -532,16 +532,16 @@ bool SipiIOTiff::read(SipiImage *img,
         ExtraSamples extra;
         switch (es[i]) {
         case 0:
-          extra = UNSPECIFIED;
+          extra = ExtraSamples::UNSPECIFIED;
           break;
         case 1:
-          extra = ASSOCALPHA;
+          extra = ExtraSamples::ASSOCALPHA;
           break;
         case 2:
-          extra = UNASSALPHA;
+          extra = ExtraSamples::UNASSALPHA;
           break;
         default:
-          extra = UNSPECIFIED;
+          extra = ExtraSamples::UNSPECIFIED;
         }
         img->es.push_back(extra);
       }
@@ -840,7 +840,7 @@ bool SipiIOTiff::read(SipiImage *img,
     }
     TIFFClose(tif);
 
-    if (img->photo == PALETTE) {
+    if (img->photo == PhotometricInterpretation::PALETTE) {
       //
       // ok, we have a palette color image we have to convert to RGB...
       //
@@ -867,37 +867,37 @@ bool SipiIOTiff::read(SipiImage *img,
       delete[] img->pixels;
       img->pixels = dataptr;
       dataptr = nullptr;
-      img->photo = RGB;
+      img->photo = PhotometricInterpretation::RGB;
       img->nc = 3;
     }
 
     if (img->icc == nullptr) {
       switch (img->photo) {
-      case MINISBLACK: {
+      case PhotometricInterpretation::MINISBLACK: {
         if (img->bps == 1) { cvrt1BitTo8Bit(img, sll, 0, 255); }
         img->icc = std::make_shared<SipiIcc>(icc_GRAY_D50);
         break;
       }
 
-      case MINISWHITE: {
+      case PhotometricInterpretation::MINISWHITE: {
         if (img->bps == 1) { cvrt1BitTo8Bit(img, sll, 255, 0); }
         img->icc = std::make_shared<SipiIcc>(icc_GRAY_D50);
         break;
       }
 
-      case SEPARATED: {
+      case PhotometricInterpretation::SEPARATED: {
         img->icc = std::make_shared<SipiIcc>(icc_CMYK_standard);
         break;
       }
 
-      case YCBCR:// fall through!
+      case PhotometricInterpretation::YCBCR:// fall through!
 
-      case RGB: {
+      case PhotometricInterpretation::RGB: {
         img->icc = std::make_shared<SipiIcc>(icc_sRGB);
         break;
       }
 
-      case CIELAB: {
+      case PhotometricInterpretation::CIELAB: {
         //
         // we have to convert to JPEG2000/littleCMS standard
         //
@@ -937,7 +937,7 @@ bool SipiIOTiff::read(SipiImage *img,
       }
 
       default: {
-        throw Sipi::SipiImageError("Unsupported photometric interpretation (" + std::to_string(img->photo) + ")");
+        throw Sipi::SipiImageError("Unsupported photometric interpretation (" + to_string(img->photo) + ")");
       }
       }
     }
@@ -1152,9 +1152,9 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
   TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, img->photo);
 
   //
-  // let's get the TIFF metadata if there is some. We stored the TIFF metadata in the exifData meber variable!
+  // let's get the TIFF metadata if there is some. We stored the TIFF metadata in the exifData member variable!
   //
-  if ((img->exif != nullptr) & (!(img->skip_metadata & SKIP_EXIF))) {
+  if ((img->exif != nullptr) & static_cast<int>(!(img->skip_metadata & SkipMetadata::SKIP_EXIF))) {
     std::string value;
 
     if (img->exif->getValByKey("Exif.Image.ImageDescription", value)) {

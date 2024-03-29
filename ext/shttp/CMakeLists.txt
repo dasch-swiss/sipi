@@ -16,16 +16,11 @@ ExternalProject_Add(project_shttps
         CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${COMMON_LOCAL}
         INSTALL_COMMAND make install
         BUILD_IN_SOURCE 1
-        )
+)
 
 ExternalProject_Get_Property(project_shttps install_dir)
 
-if(MAKE_SHARED_SIPI)
-    add_library(shttp SHARED IMPORTED GLOBAL)
-    set_property(TARGET shttp PROPERTY IMPORTED_LOCATION ${CONFIGURE_LIBDIR}/libshttp${CMAKE_SHARED_LIBRARY_SUFFIX})
-else()
-    add_library(shttp STATIC IMPORTED GLOBAL)
-    set_property(TARGET shttp PROPERTY IMPORTED_LOCATION ${CONFIGURE_LIBDIR}/libshttp${CMAKE_STATIC_LIBRARY_SUFFIX})
-endif()
+add_library(shttp STATIC IMPORTED GLOBAL)
+set_property(TARGET shttp PROPERTY IMPORTED_LOCATION ${CONFIGURE_LIBDIR}/libshttp${CMAKE_STATIC_LIBRARY_SUFFIX})
 
 add_dependencies(shttp project_shttps)

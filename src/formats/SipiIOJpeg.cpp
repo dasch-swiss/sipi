@@ -709,19 +709,19 @@ bool SipiIOJpeg::read(SipiImage *img,
   // JCS_UNKNOWN, JCS_GRAYSCALE, JCS_RGB, JCS_YCbCr, JCS_CMYK, JCS_YCCK
   switch (colspace) {
   case JCS_RGB: {
-    img->photo = RGB;
+    img->photo = PhotometricInterpretation::RGB;
     break;
   }
   case JCS_GRAYSCALE: {
-    img->photo = MINISBLACK;
+    img->photo = PhotometricInterpretation::MINISBLACK;
     break;
   }
   case JCS_CMYK: {
-    img->photo = SEPARATED;
+    img->photo = PhotometricInterpretation::SEPARATED;
     break;
   }
   case JCS_YCbCr: {
-    img->photo = YCBCR;
+    img->photo = PhotometricInterpretation::YCBCR;
     break;
   }
   case JCS_YCCK: {
@@ -1086,8 +1086,8 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   cinfo.image_height = (int)img->ny;
   cinfo.input_components = (int)img->nc; /* # of color components per pixel */
   switch (img->photo) {
-  case MINISWHITE:
-  case MINISBLACK: {
+  case PhotometricInterpretation::MINISWHITE:
+  case PhotometricInterpretation::MINISBLACK: {
     if (img->nc != 1) {
       jpeg_destroy_compress(&cinfo);
       throw SipiImageError("Num of components not 1 (nc = " + std::to_string(img->nc) + ")!");
@@ -1096,7 +1096,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
     cinfo.jpeg_color_space = JCS_GRAYSCALE;
     break;
   }
-  case RGB: {
+  case PhotometricInterpretation::RGB: {
     if (img->nc != 3) {
       jpeg_destroy_compress(&cinfo);
       throw SipiImageError("Num of components not 3 (nc = " + std::to_string(img->nc) + ")!");
@@ -1105,7 +1105,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
     cinfo.jpeg_color_space = JCS_RGB;
     break;
   }
-  case SEPARATED: {
+  case PhotometricInterpretation::SEPARATED: {
     if (img->nc != 4) {
       jpeg_destroy_compress(&cinfo);
       throw SipiImageError("Num of components not 3 (nc = " + std::to_string(img->nc) + ")!");
@@ -1114,7 +1114,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
     cinfo.jpeg_color_space = JCS_CMYK;
     break;
   }
-  case YCBCR: {
+  case PhotometricInterpretation::YCBCR: {
     if (img->nc != 3) {
       jpeg_destroy_compress(&cinfo);
       throw SipiImageError("Num of components not 3 (nc = " + std::to_string(img->nc) + ")!");
@@ -1123,7 +1123,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
     cinfo.jpeg_color_space = JCS_YCbCr;
     break;
   }
-  case CIELAB: {
+  case PhotometricInterpretation::CIELAB: {
     img->convertToIcc(SipiIcc(Sipi::PredefinedProfiles::icc_sRGB), 8);
     cinfo.in_color_space = JCS_RGB;
     cinfo.jpeg_color_space = JCS_RGB;
@@ -1131,7 +1131,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   }
   default: {
     jpeg_destroy_compress(&cinfo);
-    throw SipiImageError("Unsupported JPEG colorspace: " + std::to_string(img->photo));
+    throw SipiImageError("Unsupported JPEG colorspace: " + to_string(img->photo));
   }
   }
   cinfo.progressive_mode = TRUE;

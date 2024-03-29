@@ -195,27 +195,27 @@ bool SipiIOPng::read(SipiImage *img,
   switch (color_type) {
   case PNG_COLOR_TYPE_GRAY: {// implies nc = 1, (bit depths 1, 2, 4, 8, 16)
     png_set_expand_gray_1_2_4_to_8(png_ptr);
-    img->photo = MINISBLACK;
+    img->photo = PhotometricInterpretation::MINISBLACK;
     break;
   }
   case PNG_COLOR_TYPE_GRAY_ALPHA: {// implies nc = 2, (bit depths 8, 16)
     png_set_expand_gray_1_2_4_to_8(png_ptr);
-    img->photo = MINISBLACK;
-    img->es.push_back(ASSOCALPHA);
+    img->photo = PhotometricInterpretation::MINISBLACK;
+    img->es.push_back(ExtraSamples::ASSOCALPHA);
     break;
   }
   case PNG_COLOR_TYPE_PALETTE: {// might have an alpha channel – we check further below...
     png_set_palette_to_rgb(png_ptr);
-    img->photo = RGB;
+    img->photo = PhotometricInterpretation::RGB;
     break;
   }
   case PNG_COLOR_TYPE_RGB: {// implies nc = 3 (standard case :-), (bit_depths 8, 16)
-    img->photo = RGB;
+    img->photo = PhotometricInterpretation::RGB;
     break;
   }
   case PNG_COLOR_TYPE_RGBA: {// implies nc = 4, (bit_depths 8, 16)
-    img->photo = RGB;
-    img->es.push_back(ASSOCALPHA);
+    img->photo = PhotometricInterpretation::RGB;
+    img->es.push_back(ExtraSamples::ASSOCALPHA);
     break;
   }
   }
@@ -277,7 +277,7 @@ bool SipiIOPng::read(SipiImage *img,
   png_read_end(png_ptr, info_ptr);
   img->bps = png_get_bit_depth(png_ptr, info_ptr);
   img->nc = png_get_channels(png_ptr, info_ptr);
-  if (color_type == PNG_COLOR_TYPE_PALETTE && img->nc == 4) { img->es.push_back(ASSOCALPHA); }
+  if (color_type == PNG_COLOR_TYPE_PALETTE && img->nc == 4) { img->es.push_back(ExtraSamples::ASSOCALPHA); }
 
   png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 

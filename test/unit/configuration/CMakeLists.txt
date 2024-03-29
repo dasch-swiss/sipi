@@ -75,7 +75,7 @@ target_link_libraries(configuration
 
 
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-    target_link_libraries(configuration iconv gettext_intl)
+    target_link_libraries(configuration iconv intl)
 else()
     target_link_libraries(configuration rt)
 endif()
