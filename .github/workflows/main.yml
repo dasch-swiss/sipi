@@ -36,7 +36,7 @@ jobs:
     strategy:
       fail-fast: true # In case one of the jobs fails, the other jobs will be cancelled
       matrix:
-        runs-on: [ buildjet-2vcpu-ubuntu-2204, buildjet-4vcpu-ubuntu-2204, buildjet-8vcpu-ubuntu-2204, buildjet-16vcpu-ubuntu-2204 ]
+        runs-on: [ buildjet-4vcpu-ubuntu-2204, buildjet-8vcpu-ubuntu-2204, buildjet-16vcpu-ubuntu-2204 ]
     name: Build - amd64 - ${{matrix.runs-on}}
     runs-on: ${{matrix.runs-on}}
     steps:
@@ -82,7 +82,7 @@ jobs:
     strategy:
       fail-fast: true # In case one of the jobs fails, the other jobs will be cancelled
       matrix:
-        runs-on: [ buildjet-2vcpu-ubuntu-2204-arm, buildjet-4vcpu-ubuntu-2204-arm, buildjet-8vcpu-ubuntu-2204-arm, buildjet-16vcpu-ubuntu-2204-arm ]
+        runs-on: [ buildjet-4vcpu-ubuntu-2204-arm, buildjet-8vcpu-ubuntu-2204-arm, buildjet-16vcpu-ubuntu-2204-arm ]
     name: Build - aarch64 - ${{matrix.runs-on}}
     runs-on: ${{matrix.runs-on}}
     steps:
