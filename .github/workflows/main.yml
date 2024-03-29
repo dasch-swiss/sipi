@@ -10,7 +10,7 @@ jobs:
 
   # Run tests and publish amd64
   build_amd64:
-    name: Run tests and publish amd64
+    name: Build - actuated - amd64
     runs-on: actuated-8cpu-20gb
     concurrency:
       group: ${{ github.ref }}-amd64
@@ -33,11 +33,12 @@ jobs:
         run: make docker-push-amd64
 
   build_amd64_buildjet:
-    name: Run tests and publish amd64
-    runs-on: buildjet-8vcpu-ubuntu-2204
-    concurrency:
-      group: ${{ github.ref }}-amd64-buildjet
-      cancel-in-progress: true
+    strategy:
+      fail-fast: true # In case one of the jobs fails, the other jobs will be cancelled
+      matrix:
+        runs-on: [ buildjet-2vcpu-ubuntu-2204, buildjet-4vcpu-ubuntu-2204, buildjet-8vcpu-ubuntu-2204, buildjet-16vcpu-ubuntu-2204 ]
+    name: Build - buildjet - amd64 - ${{matrix.runs-on}}
+    runs-on: ${{matrix.runs-on}}
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
@@ -54,7 +55,7 @@ jobs:
 
   # Run tests and publish aarch64
   build_aarch64:
-    name: Run tests and publish aarch64
+    name: Build - actuated - aarch64
     runs-on: actuated-arm64-16cpu-20gb
     concurrency:
       group: ${{ github.ref }}-aarch64
@@ -78,11 +79,12 @@ jobs:
 
   # Build and run tests on aarch64
   build_aarch64_buildjet:
-    name: Build and run tests on aarch64
-    runs-on: buildjet-8vcpu-ubuntu-2204-arm
-    concurrency:
-      group: ${{ github.ref }}-aarch64-buildjet
-      cancel-in-progress: true
+    strategy:
+      fail-fast: true # In case one of the jobs fails, the other jobs will be cancelled
+      matrix:
+        runs-on: [ buildjet-2vcpu-ubuntu-2204-arm, buildjet-4vcpu-ubuntu-2204-arm, buildjet-8vcpu-ubuntu-2204-arm, buildjet-16vcpu-ubuntu-2204-arm ]
+    name: Build - buildjet - aarch64 - ${{matrix.runs-on}}
+    runs-on: ${{matrix.runs-on}}
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
