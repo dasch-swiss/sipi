@@ -32,6 +32,26 @@ jobs:
         if: (github.ref_name == 'main' || startsWith(github.ref, 'refs/tags')) && github.event_name != 'schedule'
         run: make docker-push-amd64
 
+  build_amd64_buildjet:
+    name: Run tests and publish amd64
+    runs-on: buildjet-8vcpu-ubuntu-2204
+    concurrency:
+      group: ${{ github.ref }}-amd64
+      cancel-in-progress: true
+    steps:
+      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+        with:
+          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - uses: dasch-swiss/sipi/.github/actions/setup-python@main
+      - run: make install-requirements
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+      - run: make docker-test-build-amd64 # two stage build, where test is run in the first stage
+      - run: make test-smoke-ci
+
   # Run tests and publish aarch64
   build_aarch64:
     name: Run tests and publish aarch64
@@ -57,9 +77,9 @@ jobs:
         run: make docker-push-aarch64
 
   # Build and run tests on aarch64
-  build_aarch64_2:
+  build_aarch64_buildjet:
     name: Build and run tests on aarch64
-    runs-on: buildjet-4vcpu-ubuntu-2204-arm
+    runs-on: buildjet-8vcpu-ubuntu-2204-arm
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
