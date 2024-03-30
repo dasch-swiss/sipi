@@ -1,0 +1,40 @@
+# This is the main CI workflow that runs the test suite on all pushes to main and all pull requests.
+# It runs the following jobs:
+# - required: runs the test suite on ubuntu with stable and beta rust toolchains
+# - minimal: runs the test suite with the minimal versions of the dependencies that satisfy the
+#   requirements of this crate, and its dependencies
+# - os-check: runs the test suite on mac and windows
+# - coverage: runs the test suite and collects coverage information
+# See check.yml for information about how the concurrency cancellation and workflow triggering works
+permissions:
+  contents: read
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+name: test
+jobs:
+  required:
+    runs-on: ${{ matrix.runs-on }}
+    name: ${{ matrix.compiler }} / ${{ matrix.runs-on }}
+    strategy:
+      matrix:
+        # run on stable and beta to ensure that tests won't break on the next version of the rust
+        # toolchain
+        compiler: [ gcc ]
+        runs-on: [ buildjet-4vcpu-ubuntu-2204 buildjet-4vcpu-ubuntu-2204-arm ]
+    steps:
+      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+        with:
+          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - uses: cachix/install-nix-action@v22
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - run: |
+          nix \
+            --extra-experimental-features "nix-command flakes" \
+            --option filter-syscalls false \
+            develop --command bash -c "cmake -S . -B ./build -G "Unix Makefiles" -DCODE_COVERAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo --log-context && cmake --build ./build && cd build && ctest --output-on-failure"
