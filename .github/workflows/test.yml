@@ -1,11 +1,11 @@
-# This is the main CI workflow that runs the test suite on all pushes to main and all pull requests.
-# It runs the following jobs:
-# - required: runs the test suite on ubuntu with stable and beta rust toolchains
-# - minimal: runs the test suite with the minimal versions of the dependencies that satisfy the
-#   requirements of this crate, and its dependencies
-# - os-check: runs the test suite on mac and windows
-# - coverage: runs the test suite and collects coverage information
-# See check.yml for information about how the concurrency cancellation and workflow triggering works
+# This is the main CI workflow that runs the test suite on all pull requests.
+# It runs the following inside a Nix development shell and ubuntu-22.04 runner:
+#     - a debug build
+#     - with code coverage enabled
+#     - using the GCC compiler
+#     - on amd64 and aarch64 architectures
+#     - and runs the test suite (e2e, unit, approval)
+
 permissions:
   contents: read
 on:

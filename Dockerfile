@@ -16,7 +16,7 @@ ARG BUILD_TAG
 ENV BUILD_TAG=${BUILD_TAG}
 
 # Build SIPI and run unit tests.
-RUN cmake -S . -B ./build -G "Unix Makefiles" -DCODE_COVERAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo --log-context
+RUN cmake -S . -B ./build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=RelWithDebInfo --log-context
 RUN cmake --build ./build
 RUN cd build && ctest --output-on-failure
 
