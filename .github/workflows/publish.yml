@@ -36,7 +36,7 @@ jobs:
   publish_aarch64:
     if: github.ref == 'refs/heads/main' || (github.event_name == 'create' && startsWith(github.ref, 'refs/tags/'))
     name: Publish - aarch64
-    runs-on: buildjet-4vcpu-ubuntu-2204-arm
+    runs-on: buildjet-8vcpu-ubuntu-2204-arm
     concurrency:
       group: ${{ github.ref }}-aarch64
       cancel-in-progress: true

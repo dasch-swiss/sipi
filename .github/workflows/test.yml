@@ -25,7 +25,7 @@ jobs:
         # run on stable and beta to ensure that tests won't break on the next version of the rust
         # toolchain
         compiler: [ gcc ]
-        runs-on: [ buildjet-4vcpu-ubuntu-2204, buildjet-4vcpu-ubuntu-2204-arm ]
+        runs-on: [ buildjet-4vcpu-ubuntu-2204, buildjet-8vcpu-ubuntu-2204-arm ]
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
