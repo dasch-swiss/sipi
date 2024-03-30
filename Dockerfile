@@ -17,7 +17,7 @@ ENV BUILD_TAG=${BUILD_TAG}
 
 # Build SIPI and run unit tests.
 RUN cmake -S . -B ./build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=RelWithDebInfo --log-context
-RUN cmake --build ./build --parallel
+RUN cmake --build ./build --parallel 4
 RUN cd build && ctest --output-on-failure
 
 # STAGE 2: Setup

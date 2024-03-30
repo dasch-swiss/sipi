@@ -449,7 +449,7 @@ std::pair<std::string, std::string> SipiHttpServer::get_canonical_url(size_t tmp
   SipiRotation &rotation,
   SipiQualityFormat &quality_format,
   int pagenum,
-  const std::string& cannonical_watermark)
+  const std::string &cannonical_watermark)
 {
   static constexpr int canonical_len = 127;
 
@@ -576,7 +576,7 @@ std::pair<std::string, std::string> SipiHttpServer::get_canonical_url(size_t tmp
   // by the server.
   std::string canonical = host + "/" + prefix + "/" + fullid + "/" + std::string(canonical_region) + "/"
                           + std::string(canonical_size) + "/" + std::string(canonical_rotation) + format
-                          + std::string{ext} + "/" + std::string{cannonical_watermark};
+                          + std::string{ ext } + "/" + std::string{ cannonical_watermark };
 
   return make_pair(std::string(canonical_header), canonical);
 }

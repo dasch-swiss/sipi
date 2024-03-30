@@ -25,7 +25,7 @@ jobs:
         # run on stable and beta to ensure that tests won't break on the next version of the rust
         # toolchain
         compiler: [ gcc ]
-        runs-on: [ buildjet-4vcpu-ubuntu-2204, buildjet-8vcpu-ubuntu-2204-arm ]
+        runs-on: [ buildjet-4vcpu-ubuntu-2204, buildjet-4vcpu-ubuntu-2204-arm ]
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
@@ -37,4 +37,4 @@ jobs:
           nix \
             --extra-experimental-features "nix-command flakes" \
             --option filter-syscalls false \
-            develop --command bash -c "cmake -S . -B ./build -DCODE_COVERAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo --log-context && cmake --build ./build --parallel && cd build && ctest --output-on-failure"
+            develop --command bash -c "cmake -S . -B ./build -DCODE_COVERAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo --log-context && cmake --build ./build --parallel 4 && cd build && ctest --output-on-failure"
