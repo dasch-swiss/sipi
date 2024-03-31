@@ -1,4 +1,6 @@
 
+set(TEST_NAME configuration_tests)
+
 link_directories(
         ${CONFIGURE_LIBDIR}
 )
@@ -18,7 +20,7 @@ include_directories(
 
 file(GLOB SRCS *.cpp)
 
-add_executable(configuration
+add_executable(${TEST_NAME}
         ${SRCS}
         ${PROJECT_SOURCE_DIR}/src/SipiConf.cpp ${PROJECT_SOURCE_DIR}/include/SipiConf.h
         ${PROJECT_SOURCE_DIR}/src/SipiError.cpp
@@ -39,10 +41,10 @@ add_executable(configuration
         ${PROJECT_SOURCE_DIR}/shttps/makeunique.h ${PROJECT_SOURCE_DIR}/src/SipiFilenameHash.cpp ${PROJECT_SOURCE_DIR}/include/SipiFilenameHash.h
 )
 
-target_link_libraries(configuration
+target_link_libraries(${TEST_NAME}
         libgtest)
 
-target_link_libraries(configuration
+target_link_libraries(${TEST_NAME}
         ${LIBS}
         lcms2
         exiv2
@@ -75,13 +77,17 @@ target_link_libraries(configuration
 
 
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-    target_link_libraries(configuration iconv intl)
+    target_link_libraries(${TEST_NAME} iconv intl)
 else()
-    target_link_libraries(configuration rt)
+    target_link_libraries(${TEST_NAME} rt)
 endif()
 
-install(TARGETS configuration DESTINATION bin)
+target_link_libraries(${TEST_NAME} build_config)
+if (CODE_COVERAGE)
+    target_link_libraries(${TEST_NAME} coverage_config)
+endif ()
 
-add_test(NAME configuration_unit_test COMMAND configuration)
+install(TARGETS ${TEST_NAME} DESTINATION bin)
+add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
 
-set_property(TEST configuration_unit_test PROPERTY LABELS unit)
+set_property(TEST ${TEST_NAME} PROPERTY LABELS unit)

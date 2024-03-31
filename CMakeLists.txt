@@ -5,26 +5,26 @@
 
 cmake_minimum_required(VERSION 3.28)
 cmake_policy(VERSION 3.18)
-if(POLICY CMP0135) # DOWNLOAD_EXTRACT_TIMESTAMP
+if (POLICY CMP0135) # DOWNLOAD_EXTRACT_TIMESTAMP
     cmake_policy(SET CMP0135 OLD)
-endif()
+endif ()
 
 message(STATUS "cmake version: ${CMAKE_VERSION}")
 
 # Require C++23 but let a parent project ask for something higher
-if(DEFINED CMAKE_CXX_STANDARD)
-    if(CMAKE_CXX_STANDARD MATCHES "^(90|99)$" OR CMAKE_CXX_STANDARD LESS 23)
+if (DEFINED CMAKE_CXX_STANDARD)
+    if (CMAKE_CXX_STANDARD MATCHES "^(90|99)$" OR CMAKE_CXX_STANDARD LESS 23)
         message(FATAL_ERROR "This project requires at least C++23. Aborting...")
-    endif()
-else()
+    endif ()
+else ()
     set(CMAKE_CXX_STANDARD 23)
-endif()
+endif ()
 # Always enforce the language constraint
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # We need compiler extensions for some of the dependencies
-if(NOT DEFINED CMAKE_CXX_EXTENSIONS)
+if (NOT DEFINED CMAKE_CXX_EXTENSIONS)
     set(CMAKE_CXX_EXTENSIONS ON)
-endif()
+endif ()
 
 list(APPEND CMAKE_MESSAGE_CONTEXT sipi)
 project(sipi
@@ -51,9 +51,9 @@ set(CONFIGURE_INCDIR ${COMMON_LOCAL}/include)
 
 # set cmake default install location
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-    set (CMAKE_INSTALL_PREFIX "${COMMON_LOCAL}" CACHE PATH "default install path" FORCE )
+    set(CMAKE_INSTALL_PREFIX "${COMMON_LOCAL}" CACHE PATH "default install path" FORCE)
     message(STATUS CMAKE_INSTALL_DIR: ${CMAKE_INSTALL_PREFIX})
-endif()
+endif ()
 
 set(COMMON_SOURCE_FILES_DIR ${PROJECT_SOURCE_DIR}/src)
 set(COMMON_LIBRARY_FILES_DIR ${PROJECT_SOURCE_DIR}/lib)
@@ -69,11 +69,11 @@ set(SIPI_SOURCE_DIR ${PROJECT_SOURCE_DIR})
 #
 option(MAKE_SHARED_SIPI "Create sipi using all shared libraries" OFF)
 
-if(MAKE_SHARED_SIPI)
+if (MAKE_SHARED_SIPI)
     SET(BUILD_SHARED_LIBRARIES ON)
-else()
+else ()
     SET(BUILD_SHARED_LIBRARIES OFF)
-endif()
+endif ()
 
 # Set the build type.  Options are:
 #  Debug          : w/ debug symbols, w/o optimization
@@ -85,21 +85,21 @@ option(CMAKE_BUILD_TYPE "The default build type is RelWithDebInfo" RelWithDebInf
 #
 # Here we determine the compiler and compiler version. We need clang >= 15 or g++ >= 13
 #
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "13.0")
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "13.0")
         message(FATAL_ERROR "Requires GCC 13.0 or greater.")
-        set(ENV(CXX) "g++")
-        set(ENV(CC) "gcc")
-    endif()
-elseif(CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "15.0")
+        set(ENV (CXX) "g++")
+        set(ENV (CC) "gcc")
+    endif ()
+elseif (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "15.0")
         message(FATAL_ERROR "Clang version must be 15.0.0 or greater! Aborting...")
-        set(ENV(CXX) "clang++")
-        set(ENV(CC) "clang")
-    endif()
-else()
+        set(ENV (CXX) "clang++")
+        set(ENV (CC) "clang")
+    endif ()
+else ()
     message(WARNING "You are using an unsupported compiler (${CMAKE_CXX_COMPILER_ID}). Compilation has only been tested with Clang and GCC.")
-endif()
+endif ()
 
 # Set C++ standard to C++23
 set(CMAKE_CXX_STANDARD 23)
@@ -118,25 +118,33 @@ set(CXX_TEST_PROGRAM "
 include(CheckCXXSourceCompiles)
 check_cxx_source_compiles("${CXX_TEST_PROGRAM}" CXX23_SUPPORTED)
 
-if(CXX23_SUPPORTED)
+if (CXX23_SUPPORTED)
     message(STATUS "C++23 is supported.")
-else()
+else ()
     message(FATAL_ERROR "C++23 is not supported.")
-endif()
+endif ()
+
+
+#
+# compiler and linker flags configuration
+# used to hold the flags for the compiler and linker
+# which are then later applied to the different targets
+#
+add_library(build_config INTERFACE)
 
 #
 # Statically compile the C++ standard library into the executable
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     message(STATUS "Compiling with GCC. Statically linking libstdc++.")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libstdc++")
-endif()
+    target_link_options(build_config INTERFACE -static-libstdc++)
+endif ()
 
 #
 # Dynamically compile the C++ standard library into the executable
 if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     message(STATUS "Compiling with Clang. Linking stdc++.")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
-endif()
+    target_compile_options(build_config INTERFACE -stdlib=libc++)
+endif ()
 
 #
 # Figure out the system we are compiling for and
@@ -145,58 +153,55 @@ endif()
 set(DARWIN "Darwin")
 set(LINUX "Linux")
 math(EXPR BITS "8*${CMAKE_SIZEOF_VOID_P}")
-if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
+if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
     set(CMAKE_MACOSX_RPATH 1)
     if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
         set(KDU_MAKE "Makefile-Mac-x86-${BITS}-gcc")
         set(KDU_ARCH "Mac-x86-${BITS}-gcc")
         set(KDU_EXEC_PLATFORM "Mac-x86-64-gcc")
-    else()
+    else ()
         set(KDU_MAKE "Makefile-MAC-arm-${BITS}-gcc")
         set(KDU_ARCH "Mac-arm-${BITS}-gcc")
         set(KDU_EXEC_PLATFORM "Mac-arm-64-gcc")
-    endif()
+    endif ()
     set(LUA_ARCH "macosx")
     message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
-elseif(CMAKE_SYSTEM_NAME STREQUAL LINUX)
+elseif (CMAKE_SYSTEM_NAME STREQUAL LINUX)
     if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
         set(KDU_MAKE "Makefile-Linux-x86-${BITS}-gcc")
         set(KDU_ARCH "Linux-x86-${BITS}-gcc")
         set(KDU_EXEC_PLATFORM "Linux-x86-64-gcc")
-    else()
+    else ()
         SET(KDU_MAKE "Makefile-Linux-arm-${BITS}-gcc")
         SET(KDU_ARCH "Linux-arm-${BITS}-gcc")
         SET(KDU_EXEC_PLATFORM "Linux-arm-64-gcc")
-    endif()
+    endif ()
     SET(LUA_ARCH "linux")
     message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
-endif()
+endif ()
 message(STATUS "Compiling Kakadu for: ${KDU_ARCH}")
 
 #
 # set compiler flags
 #
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
-elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O1 -g -DNDEBUG -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -rdynamic -g")
-else()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
-endif()
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_options(build_config INTERFACE -O0 -g -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual)
+elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_options(build_config INTERFACE -O3 -DNDEBUG -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual)
+endif ()
 
 #
 # turn on some features
 #
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-fvisibility-inlines-hidden" SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
-if(SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility-inlines-hidden")
-endif()
+if (SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
+    target_compile_options(build_config INTERFACE -fvisibility-inlines-hidden)
+endif ()
 check_cxx_compiler_flag("-fvisibility=hidden" SUPPORTS_FVISIBILITY_FLAG)
-if(SUPPORTS_FVISIBILITY_FLAG)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
-endif()
+if (SUPPORTS_FVISIBILITY_FLAG)
+    target_compile_options(build_config INTERFACE -fvisibility=hidden)
+endif ()
 
 
 #
@@ -205,29 +210,29 @@ endif()
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
 #
-# add code coverage
+# Code Coverage
 #
-# If building the code with clang gives 'Error: could not load cache'
-#   1 turn COLLECT_CODE_COVERAGE to FALSE
-#   2 build and run the tests
-#   3 turn COLLECT_CODE_COVERAGE back to TRUE
-set(COLLECT_CODE_COVERAGE FALSE)
-if (COLLECT_CODE_COVERAGE)
-    include(CodeCoverage)
-    append_coverage_compiler_flags()
-    set(COVERAGE_EXCLUDES
-            "/Applications/Xcode.app/*"
-            "/opt/local/*"
-            "third_party/*"
+
+# Code Coverage Configuration
+add_library(coverage_config INTERFACE)
+
+option(CODE_COVERAGE "Enable coverage reporting" OFF)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
+    # Add required flags (GCC & LLVM/Clang)
+    target_compile_options(coverage_config INTERFACE
+            -O0        # no optimization
+            -g         # generate debug info
+            --coverage # sets all required flags
     )
-endif ()
+    target_link_options(coverage_config INTERFACE --coverage)
+endif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
 
 # on macOS, ignore frameworks
 # the complete environment should be provided through NIX
-if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
+if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
     set(CMAKE_FIND_FRAMEWORK NEVER)
     set(CMAKE_IGNORE_PATH "/usr/local/lib*")
-endif()
+endif ()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
@@ -239,65 +244,60 @@ find_package(Threads REQUIRED)
 find_package(LibMagic REQUIRED)
 if (LIBMAGIC_FOUND)
     include_directories(${LibMagic_INCLUDE_DIR})
-endif()
+endif ()
 
 #
 # openssl
 # (used to be build locally from source was moved to prerequisites)
 #
 find_package(OpenSSL REQUIRED)
-if(OPENSSL_FOUND)
+if (OPENSSL_FOUND)
     message(STATUS "OpenSSL dirs: ${OPENSSL_INCLUDE_DIR}")
     message(STATUS "OpenSSL libs: ${OPENSSL_LIBRARIES}")
     include_directories(${OPENSSL_INCLUDE_DIR})
-endif()
+endif ()
 
 #
 # libcurl
 # (used to be build locally from source was moved to prerequisites)
 find_package(CURL REQUIRED)
-if(CURL_FOUND)
+if (CURL_FOUND)
     message(STATUS "curl dirs: ${CURL_INCLUDE_DIRS}")
     message(STATUS "curl libs: ${CURL_LIBRARIES}")
     include_directories(${CURL_INCLUDE_DIRS})
-endif()
+endif ()
 
 #find_package(JBIG REQUIRED)
 #include_directories(${JBIG_INCLUDE_DIR})
 # message(STATUS "JBIG ${JBIG_INCLUDE_DIR}")
 
-if(NOT WIN32)
-  find_library(M_LIBRARY NAMES m)
-  if(NOT M_LIBRARY)
-    message(STATUS "math lib 'libm' not found; floating point support disabled")
-  endif()
-else()
-  # not needed on windows
-  set(M_LIBRARY "")
-endif()
+if (NOT WIN32)
+    find_library(M_LIBRARY NAMES m)
+    if (NOT M_LIBRARY)
+        message(STATUS "math lib 'libm' not found; floating point support disabled")
+    endif ()
+else ()
+    # not needed on windows
+    set(M_LIBRARY "")
+endif ()
 
 set(HAVE_ST_ATIMESPEC 0)
 check_struct_has_member("struct stat" st_atimespec sys/stat.h HAVE_ST_ATIMESPEC LANGUAGE CXX)
-if(HAVE_ST_ATIMESPEC)
+if (HAVE_ST_ATIMESPEC)
     message(STATUS "Have new struct stat")
-else()
+else ()
     message(STATUS "Have old struct stat")
-endif()
+endif ()
 
-CHECK_INCLUDE_FILES (malloc.h HAVE_MALLOC_H)
+CHECK_INCLUDE_FILES(malloc.h HAVE_MALLOC_H)
 
 #
 # "standard" packages that are required for sipi
 #
-if(CMAKE_SYSTEM_NAME STREQUAL DARWIN)
-	find_package(ICONV REQUIRED)
-    find_package(INIH REQUIRED)
-endif()
-if(INIH_FOUND)
-    message(STATUS "inih dirs: ${INIH_INCLUDE_DIR}")
-    message(STATUS "inih libs: ${INIH_LIBRARY}")
-    include_directories(${INIH_INCLUDE_DIRS})
-endif()
+if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
+    find_package(ICONV REQUIRED)
+endif ()
+
 #find_package(MATH REQUIRED)
 
 message(STATUS "Adding external dependencies ...")
@@ -317,7 +317,6 @@ add_subdirectory(${EXT_PROJECTS_DIR}/expat)
 add_subdirectory(${EXT_PROJECTS_DIR}/png)
 add_subdirectory(${EXT_PROJECTS_DIR}/tiff)
 add_subdirectory(${EXT_PROJECTS_DIR}/bzip2)
-add_subdirectory(${EXT_PROJECTS_DIR}/gettext)
 add_subdirectory(${EXT_PROJECTS_DIR}/lcms2)
 add_subdirectory(${EXT_PROJECTS_DIR}/exiv2)
 add_subdirectory(${EXT_PROJECTS_DIR}/jansson)
@@ -332,21 +331,21 @@ message(STATUS "... adding external dependencies done.")
 # add a target to generate API documentation with Doxygen
 #
 find_package(Doxygen)
-if(DOXYGEN_FOUND)
+if (DOXYGEN_FOUND)
     add_custom_target(doc
-        ${DOXYGEN_EXECUTABLE} ${DOXYGEN_FILES_DIR}/Doxyfile
-        WORKING_DIRECTORY ${DOXYGEN_FILES_DIR}
-        COMMENT "Generating API documentation with Doxygen" VERBATIM
+            ${DOXYGEN_EXECUTABLE} ${DOXYGEN_FILES_DIR}/Doxyfile
+            WORKING_DIRECTORY ${DOXYGEN_FILES_DIR}
+            COMMENT "Generating API documentation with Doxygen" VERBATIM
     )
-endif(DOXYGEN_FOUND)
+endif (DOXYGEN_FOUND)
 
 
 #
 # get version from git
 #
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
+if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
     find_package(Git)
-    if(GIT_FOUND)
+    if (GIT_FOUND)
         execute_process(
                 COMMAND ${GIT_EXECUTABLE} describe --tag --dirty --abbrev=7
                 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -359,20 +358,20 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
                 OUTPUT_VARIABLE BUILD_SCM_REVISION
                 ERROR_QUIET
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
-    else(GIT_FOUND)
+    else (GIT_FOUND)
         SET(BUILD_SCM_REVISION 0)
         SET(BUILD_SCM_TAG 0)
-    endif(GIT_FOUND)
-endif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
+    endif (GIT_FOUND)
+endif (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
 
 option(BUILD_SCM_TAG "Build SCM tag" "$ENV{BUILD_TAG}")
 
-message( STATUS "Build SCM tag: ${BUILD_SCM_TAG}" )
-message( STATUS "Build SCM revision: ${BUILD_SCM_REVISION}" )
+message(STATUS "Build SCM tag: ${BUILD_SCM_TAG}")
+message(STATUS "Build SCM revision: ${BUILD_SCM_REVISION}")
 
 # get current date and time
 string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M")
-message( STATUS "Build timestamp: ${BUILD_TIMESTAMP}" )
+message(STATUS "Build timestamp: ${BUILD_TIMESTAMP}")
 
 # write out the sipi configuration
 configure_file(${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h.in ${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h)
@@ -470,7 +469,7 @@ add_executable(sipi
         include/iiifparser/SipiIdentifier.h src/iiifparser/SipiIdentifier.cpp
         src/handlers/iiif_handler.cpp
         src/handlers/iiif_handler.hpp
-        )
+)
 
 add_dependencies(sipi icc_profiles)
 
@@ -479,7 +478,7 @@ add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 
 
 # !!! ORDER MATTERS !!!
 # dependent targets need to be added before the target that depends on them
-target_link_libraries(sipi ${LIBS}
+target_link_libraries(${PROJECT_NAME} ${LIBS}
         lcms2
         exiv2
         exiv2-xmp
@@ -509,12 +508,19 @@ target_link_libraries(sipi ${LIBS}
         ${CMAKE_DL_LIBS}
 )
 
-if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-	target_link_libraries(sipi iconv gettext_intl intl)
-else()
+if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
+    target_link_libraries(sipi iconv intl)
+else ()
     target_link_libraries(sipi rt)
-endif()
+endif ()
 
+#
+# apply the compiler and linker flags
+#
+target_link_libraries(sipi build_config)
+if (CODE_COVERAGE)
+    target_link_libraries(sipi coverage_config)
+endif ()
 
 install(TARGETS sipi
         RUNTIME DESTINATION bin

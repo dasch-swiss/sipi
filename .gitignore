@@ -56,3 +56,8 @@ icc.zip
 /test/nginx/logs/error.log
 /site
 /test/e2e/diff.tif
+
+# ignore coverage
+/coverage
+/coverage.info
+*.gcov

@@ -96,7 +96,7 @@ sipi = {
     --
     -- If true, the IIIF prefix is used to build the path to the image files.
     --
-    prefix_as_path = false,
+    prefix_as_path = true,
 
     --
     -- In order not to accumulate too many files into one directory (which slows down file

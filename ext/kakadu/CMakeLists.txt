@@ -26,7 +26,7 @@ ExternalProject_Add(project_kakadu
         DOWNLOAD_EXTRACT_TIMESTAMP OLD
         PATCH_COMMAND ${PATCH_COMMAND_OVERRIDE}
         CONFIGURE_COMMAND ""
-        BUILD_COMMAND make --directory=${COMMON_SRCS}/${KakaduVersion}/make/ -f ${KDU_MAKE} EXEC_PLATFORM=${KDU_EXEC_PLATFORM} all_but_jni
+        BUILD_COMMAND make -j1 --directory=${COMMON_SRCS}/${KakaduVersion}/make/ -f ${KDU_MAKE} EXEC_PLATFORM=${KDU_EXEC_PLATFORM} all_but_jni
         INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_directory ${COMMON_SRCS}/${KakaduVersion}/lib/${KDU_ARCH} ${CONFIGURE_LIBDIR}
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${COMMON_SRCS}/${KakaduVersion}/bin/${KDU_ARCH} ${COMMON_LOCAL}/bin
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${COMMON_SRCS}/${KakaduVersion}/managed/all_includes ${COMMON_LOCAL}/include

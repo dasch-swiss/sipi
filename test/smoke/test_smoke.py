@@ -35,6 +35,15 @@ def get_logs(container_id):
     return result.stdout, result.stderr
 
 
+def test_get_image():
+    """ This test gets the lena512.jp2 image. """
+    container = setup_module()
+    with container:
+        time.sleep(1)
+        r = requests.get("http://localhost:1024/unit/lena512.jp2/full/max/0/default.jpg")
+        assert r.status_code == 200
+
+
 def test_get_test_html():
     """ This test gets the test.html file. """
     container = setup_module()

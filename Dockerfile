@@ -16,10 +16,9 @@ ARG BUILD_TAG
 ENV BUILD_TAG=${BUILD_TAG}
 
 # Build SIPI and run unit tests.
-RUN cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo --log-context \
-    && cd build \
-    && cmake --build . --parallel 1 \
-    && ctest --output-on-failure
+RUN cmake -S . -B ./build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release --log-context
+RUN cmake --build ./build --parallel 4
+RUN cd build && ctest --output-on-failure
 
 # STAGE 2: Setup
 FROM $UBUNTU_BASE as final

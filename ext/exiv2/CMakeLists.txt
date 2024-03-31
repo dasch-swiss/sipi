@@ -1,11 +1,8 @@
 project(exiv2_builder C CXX)
 include(ExternalProject)
 
-find_package(INIH REQUIRED)
-
 include_directories(
         ${COMMON_LOCAL}/include
-        ${INIH_INCLUDE_DIR}
 )
 
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
@@ -15,7 +12,6 @@ set(Exiv2Version "v0.27.7")
 
 ExternalProject_Add(project_exiv2
         DEPENDS project_expat
-        DEPENDS project_gettext
         DEPENDS project_png
         DEPENDS project_zlib
         INSTALL_DIR ${COMMON_LOCAL}
@@ -34,4 +30,4 @@ set_property(TARGET exiv2 PROPERTY IMPORTED_LOCATION ${CONFIGURE_LIBDIR}/libexiv
 add_library(xmp STATIC IMPORTED GLOBAL)
 set_property(TARGET xmp PROPERTY IMPORTED_LOCATION ${CONFIGURE_LIBDIR}/libexiv2-xmp${CMAKE_STATIC_LIBRARY_SUFFIX})
 
-add_dependencies(exiv2 project_exiv2)
+add_dependencies(exiv2 project_exiv2 expat png zlib)

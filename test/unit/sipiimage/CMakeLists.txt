@@ -1,3 +1,4 @@
+set(TEST_NAME sipi_image_tests)
 
 link_directories(
         ${CONFIGURE_LIBDIR}
@@ -18,8 +19,7 @@ include_directories(
 
 file(GLOB SRCS *.cpp)
 
-add_executable(
-        sipiimage
+add_executable(${TEST_NAME}
         ${SRCS}
         ${PROJECT_SOURCE_DIR}/src/SipiConf.cpp
         ${PROJECT_SOURCE_DIR}/include/SipiConf.h
@@ -97,11 +97,11 @@ add_executable(
         ${PROJECT_SOURCE_DIR}/include/SipiFilenameHash.h
 
 )
-add_dependencies(sipiimage icc_profiles)
+add_dependencies(${TEST_NAME} icc_profiles)
 
-target_link_libraries(sipiimage libgtest)
+target_link_libraries(${TEST_NAME} libgtest)
 
-target_link_libraries(sipiimage
+target_link_libraries(${TEST_NAME}
         lcms2
         exiv2
         exiv2-xmp
@@ -132,13 +132,18 @@ target_link_libraries(sipiimage
         ${CMAKE_DL_LIBS})
 
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-    target_link_libraries(sipiimage iconv intl)
+    target_link_libraries(${TEST_NAME} iconv intl)
 else()
-    target_link_libraries(sipiimage rt)
+    target_link_libraries(${TEST_NAME} rt)
 endif()
 
-install(TARGETS sipiimage DESTINATION bin)
+target_link_libraries(${TEST_NAME} build_config)
+if (CODE_COVERAGE)
+    target_link_libraries(${TEST_NAME} coverage_config)
+endif ()
 
-add_test(NAME sipiimage_unit_test COMMAND sipiimage)
 
-set_property(TEST sipiimage_unit_test PROPERTY LABELS unit)
+install(TARGETS ${TEST_NAME} DESTINATION bin)
+
+add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+set_property(TEST ${TEST_NAME} PROPERTY LABELS unit)

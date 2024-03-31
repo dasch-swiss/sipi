@@ -1,0 +1,57 @@
+# This is the main CI workflow that runs the test suite on all pull requests.
+# It runs the following inside a Nix development shell and ubuntu-22.04 runner:
+#     - a debug build
+#     - with code coverage enabled
+#     - using the GCC compiler
+#     - on amd64 and aarch64 architectures
+#     - and runs the test suite (e2e, unit, approval)
+
+permissions:
+  contents: read
+on:
+  schedule:
+    # run on midnight every day
+    - cron: '0 0 * * *'
+  push:
+    branches: [ main ]
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+name: test
+jobs:
+  test:
+    runs-on: ${{ matrix.runs-on }}
+    name: ${{ matrix.compiler }} / ${{ matrix.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # run on stable and beta to ensure that tests won't break on the next version of the rust
+        # toolchain
+        compiler: [ gcc ]
+        runs-on: [ buildjet-4vcpu-ubuntu-2204, buildjet-4vcpu-ubuntu-2204-arm ]
+    steps:
+      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+        with:
+          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - uses: cachix/install-nix-action@v22
+        with:
+          github_access_token: ${{ secrets.GH_TOKEN }}
+      - run: |
+          nix \
+            --extra-experimental-features "nix-command flakes" \
+            --option filter-syscalls false \
+            develop --command bash -c "cmake -S . -B ./build -DCODE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug --log-context && cmake --build ./build --parallel 4 && cd build && ctest --output-on-failure"
+      - name: Gather code coverage
+        if: ${{ matrix.runs-on == 'buildjet-4vcpu-ubuntu-2204' }}
+        run: |
+          nix \
+            --extra-experimental-features "nix-command flakes" \
+            --option filter-syscalls false \
+            develop --command bash -c "cd build && gcovr -j 1 --delete --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable gcov"
+      - name: Upload coverage reports to Codecov
+        if: ${{ matrix.runs-on == 'buildjet-4vcpu-ubuntu-2204' }}
+        uses: codecov/codecov-action@v4.0.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: dasch-swiss/sipi
