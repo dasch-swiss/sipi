@@ -35,6 +35,7 @@
               # C++ Compiler is already part of stdenv
               # Build tool
               cmake
+              gcovr # code coverage helper tool
 
               # Build dependencies
               asio # networking library needed for crow (microframework for the web)
@@ -76,6 +77,7 @@
               # C++ Compiler is already part of stdenv
               # Build tool
               cmake
+              gcovr # code coverage helper tool
 
               # Build dependencies
               asio # networking library needed for crow (microframework for the web)

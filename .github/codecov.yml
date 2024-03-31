@@ -13,7 +13,9 @@ coverage:
 
 # Test files aren't important for coverage
 ignore:
-  - "tests"
+  - "fuzz"
+  - "test"
+
 
 # Make comments less noisy
 comment:
