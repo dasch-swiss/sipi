@@ -28,5 +28,12 @@ set(SOURCE_FILES
 )
 add_executable(${TEST_NAME} ${SOURCE_FILES})
 target_link_libraries(${TEST_NAME} libgtest)
+
+target_link_libraries(${TEST_NAME} build_config)
+if (CODE_COVERAGE)
+    target_link_libraries(${TEST_NAME} coverage_config)
+endif ()
+
+install(TARGETS ${TEST_NAME} DESTINATION bin)
 add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
 set_property(TEST ${TEST_NAME} PROPERTY LABELS unit)

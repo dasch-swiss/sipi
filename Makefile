@@ -96,7 +96,7 @@ docker-build-sipi-dev-env: ## build and publish Sipi development environment Doc
 		.
 
 #####################################
-# test targets for usinf with Docker
+# test targets for using with Docker
 #####################################
 
 .PHONY: compile

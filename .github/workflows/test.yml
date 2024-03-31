@@ -37,7 +37,7 @@ jobs:
           nix \
             --extra-experimental-features "nix-command flakes" \
             --option filter-syscalls false \
-            develop --command bash -c "cmake -S . -B ./build -DCODE_COVERAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo --log-context && cmake --build ./build --parallel 4 && cd build && ctest --output-on-failure"
+            develop --command bash -c "cmake -S . -B ./build -DCODE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug --log-context && cmake --build ./build --parallel 4 && cd build && ctest --output-on-failure"
       - name: Gather code coverage
         if: ${{ matrix.runs-on == 'buildjet-4vcpu-ubuntu-2204' }}
         run: |

@@ -36,6 +36,7 @@
               # Build tool
               cmake
               gcovr # code coverage helper tool
+              lcov # code coverage helper tool
 
               # Build dependencies
               asio # networking library needed for crow (microframework for the web)
@@ -78,6 +79,7 @@
               # Build tool
               cmake
               gcovr # code coverage helper tool
+              lcov # code coverage helper tool
 
               # Build dependencies
               asio # networking library needed for crow (microframework for the web)

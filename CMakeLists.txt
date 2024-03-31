@@ -124,18 +124,26 @@ else ()
     message(FATAL_ERROR "C++23 is not supported.")
 endif ()
 
+
+#
+# compiler and linker flags configuration
+# used to hold the flags for the compiler and linker
+# which are then later applied to the different targets
+#
+add_library(build_config INTERFACE)
+
 #
 # Statically compile the C++ standard library into the executable
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     message(STATUS "Compiling with GCC. Statically linking libstdc++.")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libstdc++")
+    target_compile_options(build_config INTERFACE -static-libstdc++)
 endif ()
 
 #
 # Dynamically compile the C++ standard library into the executable
 if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     message(STATUS "Compiling with Clang. Linking stdc++.")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+    target_compile_options(build_config INTERFACE -stdlib=libc++)
 endif ()
 
 #
@@ -177,12 +185,9 @@ message(STATUS "Compiling Kakadu for: ${KDU_ARCH}")
 # set compiler flags
 #
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
-elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O1 -g -DNDEBUG -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -rdynamic -g")
-else ()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual")
+    target_compile_options(build_config INTERFACE -O0 -g -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual)
+elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_options(build_config INTERFACE -O3 -DNDEBUG -Wall -Wno-uninitialized -Wno-deprecated -Woverloaded-virtual)
 endif ()
 
 #
@@ -191,11 +196,11 @@ endif ()
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-fvisibility-inlines-hidden" SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
 if (SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility-inlines-hidden")
+    target_compile_options(build_config INTERFACE -fvisibility-inlines-hidden)
 endif ()
 check_cxx_compiler_flag("-fvisibility=hidden" SUPPORTS_FVISIBILITY_FLAG)
 if (SUPPORTS_FVISIBILITY_FLAG)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
+    target_compile_options(build_config INTERFACE -fvisibility=hidden)
 endif ()
 
 
@@ -509,6 +514,13 @@ else ()
     target_link_libraries(sipi rt)
 endif ()
 
+#
+# apply the compiler and linker flags
+#
+target_link_libraries(sipi build_config)
+if (CODE_COVERAGE)
+    target_link_libraries(sipi coverage_config)
+endif ()
 
 install(TARGETS sipi
         RUNTIME DESTINATION bin

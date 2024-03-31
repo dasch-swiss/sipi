@@ -510,14 +510,15 @@ void SipiImage::removeChannel(const unsigned int channel, const bool force_gray_
   const bool has_two_or_less_channels = nc < 3;
   const bool has_three_channels = nc == 3;
 
-  // Assumtion: An image with two or less channels cannot have extra samples
-  assert(has_two_or_less_channels && has_removable_extra_samples);
-
   if (has_removable_extra_samples) {
 
     // cleanup the extra samples
     // TODO: figure out why this can even happen
-    if (has_two_or_less_channels) { es.clear(); }
+    if (has_two_or_less_channels) {
+      // Assumtion: An image with two or less channels cannot have extra samples
+      assert(has_two_or_less_channels && has_removable_extra_samples);
+      es.clear();
+    }
 
     // TODO: figure out when this can happen. Maybe two channels with alpha is not allowed or even possible?
     if (has_three_channels) {

@@ -15,6 +15,7 @@ coverage:
 ignore:
   - "fuzz"
   - "test"
+  - "build/extsrcs"
 
 
 # Make comments less noisy
