@@ -51,7 +51,7 @@ jobs:
             develop --command bash -c "cd build && gcovr -j 1 --delete --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable gcov"
       - name: Upload coverage reports to Codecov
         if: ${{ matrix.runs-on == 'buildjet-4vcpu-ubuntu-2204' }}
-        uses: codecov/codecov-action@v4.0.1
+        uses: codecov/codecov-action@v4.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: dasch-swiss/sipi
