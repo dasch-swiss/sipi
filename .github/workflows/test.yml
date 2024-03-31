@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 name: test
 jobs:
-  required:
+  test:
     runs-on: ${{ matrix.runs-on }}
     name: ${{ matrix.compiler }} / ${{ matrix.runs-on }}
     strategy:
