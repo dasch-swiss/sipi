@@ -22,7 +22,7 @@ docker-build:
 		--load \
 		.
 # run smoke tests against locally published Sipi Docker image
-test-smoke: docker-build
+test-smoke:
 	pytest -s test/smoke
 
 #

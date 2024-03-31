@@ -56,7 +56,7 @@ TEST(Configuration, LoadConfigurationFile)
   EXPECT_EQ(sipiConf.getKeepAlive(), 5);
   EXPECT_EQ(sipiConf.getMaxPostSize(), 300 * 1024 * 1024);
   EXPECT_EQ(sipiConf.getImgRoot(), "./images");
-  EXPECT_EQ(sipiConf.getPrefixAsPath(), false);
+  EXPECT_EQ(sipiConf.getPrefixAsPath(), true);
   EXPECT_EQ(sipiConf.getSubdirLevels(), 0);
   EXPECT_EQ(sipiConf.getSubdirExcludes().size(), 2);
   EXPECT_EQ(sipiConf.getInitScript(), "./config/sipi.init.lua");

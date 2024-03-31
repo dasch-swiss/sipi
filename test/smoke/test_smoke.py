@@ -40,7 +40,7 @@ def test_get_image():
     container = setup_module()
     with container:
         time.sleep(1)
-        r = requests.get("http://localhost:1024/knora/lena512.jp2/full/max/0/default.jpg")
+        r = requests.get("http://localhost:1024/unit/lena512.jp2/full/max/0/default.jpg")
         assert r.status_code == 200
 
 
