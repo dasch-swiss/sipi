@@ -11,6 +11,20 @@ docker-run:
     docker run -it --rm -v /Users/subotic/_github.com/dasch-swiss/sipi:/app -v /Volumes/PhotoArchive:/scratch -w /app daschswiss/remote-sipi-env:1.0 /bin/bash
 
 
+# build and publish Sipi Docker image locally
+docker-build:
+	docker buildx build \
+		--progress auto \
+		--build-arg SIPI_BASE=daschswiss/sipi-base:2.23.0 \
+		--build-arg UBUNTU_BASE=ubuntu:22.04 \
+		--build-arg BUILD_TAG=development \
+		-t daschswiss/sipi:development -t daschswiss/sipi:latest \
+		--load \
+		.
+# run smoke tests against locally published Sipi Docker image
+test-smoke: docker-build
+	pytest -s test/smoke
+
 #
 # The following commands need to be run inside a Nix development shell
 #

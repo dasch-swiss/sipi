@@ -136,7 +136,7 @@ add_library(build_config INTERFACE)
 # Statically compile the C++ standard library into the executable
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     message(STATUS "Compiling with GCC. Statically linking libstdc++.")
-    target_compile_options(build_config INTERFACE -static-libstdc++)
+    target_link_options(build_config INTERFACE -static-libstdc++)
 endif ()
 
 #
