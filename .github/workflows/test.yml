@@ -34,7 +34,7 @@ jobs:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
-      - uses: cachix/install-nix-action@v22
+      - uses: cachix/install-nix-action@v26
         with:
           github_access_token: ${{ secrets.GH_TOKEN }}
       - run: |
