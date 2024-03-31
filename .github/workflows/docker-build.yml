@@ -1,8 +1,6 @@
 name: docker-build
 
 on:
-  push:
-    branches: [ main ]
   pull_request:
 
 jobs:
@@ -12,7 +10,7 @@ jobs:
     name: amd64
     runs-on: buildjet-4vcpu-ubuntu-2204
     concurrency:
-      group: ${{ github.ref }}-amd64
+      group: ${{ github.ref }}-docker-build-amd64
       cancel-in-progress: true
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
@@ -33,7 +31,7 @@ jobs:
     name: aarch64
     runs-on: buildjet-4vcpu-ubuntu-2204-arm
     concurrency:
-      group: ${{ github.ref }}-aarch64
+      group: ${{ github.ref }}-docker-build-aarch64
       cancel-in-progress: true
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
