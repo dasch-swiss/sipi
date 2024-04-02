@@ -79,7 +79,7 @@ endif ()
 #  Debug          : w/ debug symbols, w/o optimization
 #  Release        : w/o debug symbols, w/ optimization
 #  RelWithDebInfo : w/ debug symbols, w/ optimization
-option(CMAKE_BUILD_TYPE "The default build type is RelWithDebInfo" RelWithDebInfo)
+option(CMAKE_BUILD_TYPE "The default build type is RelWithDebInfo" Debug)
 
 
 #
@@ -88,14 +88,10 @@ option(CMAKE_BUILD_TYPE "The default build type is RelWithDebInfo" RelWithDebInf
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "13.0")
         message(FATAL_ERROR "Requires GCC 13.0 or greater.")
-        set(ENV (CXX) "g++")
-        set(ENV (CC) "gcc")
     endif ()
 elseif (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "15.0")
         message(FATAL_ERROR "Clang version must be 15.0.0 or greater! Aborting...")
-        set(ENV (CXX) "clang++")
-        set(ENV (CC) "clang")
     endif ()
 else ()
     message(WARNING "You are using an unsupported compiler (${CMAKE_CXX_COMPILER_ID}). Compilation has only been tested with Clang and GCC.")
@@ -107,24 +103,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_REQUIRED_FLAGS "-std=c++23") # or the appropriate flag for your compiler
 
-# Simple C++ test program
-set(CXX_TEST_PROGRAM "
-    #include <expected>
-    #include <version>
-    int main() { return 0; }
-")
-
-# Check if the test program compiles with C++23
-include(CheckCXXSourceCompiles)
-check_cxx_source_compiles("${CXX_TEST_PROGRAM}" CXX23_SUPPORTED)
-
-if (CXX23_SUPPORTED)
-    message(STATUS "C++23 is supported.")
-else ()
-    message(FATAL_ERROR "C++23 is not supported.")
-endif ()
-
-
 #
 # compiler and linker flags configuration
 # used to hold the flags for the compiler and linker
@@ -135,15 +113,15 @@ add_library(build_config INTERFACE)
 #
 # Statically compile the C++ standard library into the executable
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    message(STATUS "Compiling with GCC. Statically linking libstdc++.")
-    target_link_options(build_config INTERFACE -static-libstdc++)
+    message(STATUS "Compiling with GCC (-static-libstdc++).") # and -lstdc++_libbacktrace.")
+    target_link_options(build_config INTERFACE -static-libstdc++) # -lstdc++_libbacktrace)
 endif ()
 
 #
 # Dynamically compile the C++ standard library into the executable
 if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
-    message(STATUS "Compiling with Clang. Linking stdc++.")
-    target_compile_options(build_config INTERFACE -stdlib=libc++)
+    message(STATUS "Compiling with Clang (-stdlib=libstdc++ and -static-libstdc++).")
+    target_compile_options(build_config INTERFACE -stdlib=libstdc++ -static-libstdc++)
 endif ()
 
 #
@@ -324,6 +302,7 @@ add_subdirectory(${EXT_PROJECTS_DIR}/lua)
 add_subdirectory(${EXT_PROJECTS_DIR}/luarocks)
 add_subdirectory(${EXT_PROJECTS_DIR}/sqlite3)
 add_subdirectory(${EXT_PROJECTS_DIR}/kakadu)
+add_subdirectory(${EXT_PROJECTS_DIR}/sentry)
 
 message(STATUS "... adding external dependencies done.")
 
@@ -473,7 +452,7 @@ add_executable(sipi
 
 add_dependencies(sipi icc_profiles)
 
-add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 exiv2 jansson lua sqlite3 kdu kdu_aux)
+add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 exiv2 jansson lua sqlite3 kdu kdu_aux sentry)
 
 
 # !!! ORDER MATTERS !!!
@@ -507,6 +486,9 @@ target_link_libraries(${PROJECT_NAME} ${LIBS}
         Threads::Threads
         ${CMAKE_DL_LIBS}
 )
+
+# add the sentry libraries
+target_link_libraries(sipi sentry)
 
 if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
     target_link_libraries(sipi iconv intl)
