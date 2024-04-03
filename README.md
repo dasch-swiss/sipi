@@ -1,11 +1,12 @@
 [![Build Status](https://github.com/dasch-swiss/sipi/workflows/CI/badge.svg?branch=main)](https://github.com/dasch-swiss/sipi/actions)
 
-# Overview
+# Sipi - Simple Image Presentation Interface
 
+## Overview
 
 Simple Image Presentation Interface (SIPI) is a multithreaded, high-performance, IIIF compatible media server developed by
-the [Data and Service Center for the Humanities](https://dasch.swiss) at the
-[University of Basel](https://www.unibas.ch/en.html). It is designed to
+the [Swiss National Data and Service Center for the Humanities](https://dasch.swiss) at the
+[University of Basel](https://www.unibas.ch). It is designed to
 be used by archives, libraries, and other institutions that need to
 preserve high-quality images while making them available online.
 
@@ -55,7 +56,7 @@ macOS.
 Freely distributable binary releases are available
 [daschswiss/sipi](https://hub.docker.com/r/daschswiss/sipi) as docker image.
 
-# Documentation
+## Documentation
 
 The documentation is online at https://sipi.io.
 
@@ -68,24 +69,24 @@ make docs-build
 
 You will then find the manual under `site/index.html`.
 
-# Building from source
+## Building from source
 
 All should be run from inside the root of the repository.
 
-## Build and run inside Docker - recommended
+### Build and run inside Docker - recommended
 ```bash
 $ make compile
 $ make test
 $ make run
 ```
 
-## Build under macOS - not recommended. You are on your own. We warned you ;-)
+### Build under macOS - not recommended. You are on your own. We warned you ;-)
 
 ```bash
 $ (mkdir -p ./build-mac && cd build-mac && cmake .. && make && ctest --verbose)
 ```
 
-# Sentry.io
+## Sentry.io
 If you would like to use Sentry.io for error reporting, you can set the environment variable
 `SIPI_SENTRY_DSN` to the DSN of your Sentry project. If you do not set this variable, Sentry.io will not be used.
 
@@ -93,11 +94,38 @@ Further variables can be set to configure the Sentry client:
 - `SIPI_SENTRY_ENVIRONMENT`: The environment in which the application is running. Defaults to `development`.
 - `SIPI_SENTRY_RELEASE`: The release version number of the application. 
 
-# Releases
+## Releases
 
 Releases are published on Dockerhub: https://hub.docker.com/repository/docker/daschswiss/sipi
 
+## How should I write my commits?
+
+We are using [Conventional Commit messages](https://www.conventionalcommits.org/).
+
+The most important prefixes you should have in mind are:
+
+* `fix:` which represents bug fixes, and correlates to a [SemVer](https://semver.org/)
+  patch.
+* `feat:` which represents a new feature, and correlates to a SemVer minor.
+* `feat!:`,  or `fix!:`, `refactor!:`, etc., which represent a breaking change
+  (indicated by the `!`) and will result in a SemVer major.
+
+This is the complete list of what is defined and if it is visible in the
+changelog:
+- 'feat' -> section: 'Features'
+- 'feature' -> section: 'Features'
+- 'fix' -> section: 'Bug Fixes'
+- 'perf' -> section: 'Performance Improvements'
+- 'revert' -> section: 'Reverts'
+- 'docs' -> section: 'Documentation', hidden: true
+- 'style' -> section: 'Styles', hidden: true
+- 'chore' -> section: 'Miscellaneous Chores', hidden: true
+- 'refactor' -> section: 'Code Refactoring', hidden: true
+- 'test' -> section: 'Tests', hidden: true
+- 'build' -> section: 'Build System', hidden: true
+- 'ci' -> section: 'Continuous Integration', hidden: true
+```
 
 # Contact Information
 
-Lukas Rosenthaler `<lukas.rosenthaler@unibas.ch>`
+DaSCH Support `<support@dasch.swiss>`
