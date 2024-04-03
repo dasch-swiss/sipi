@@ -9,9 +9,8 @@ on:
 
 jobs:
   # Build for release and publish amd64
-  publish_amd64:
+  amd64:
     if: github.ref == 'refs/heads/main' || (github.event_name == 'create' && startsWith(github.ref, 'refs/tags/'))
-    name: amd64
     runs-on: buildjet-4vcpu-ubuntu-2204
     concurrency:
       group: ${{ github.ref }}-publish-amd64
@@ -33,9 +32,8 @@ jobs:
         run: make docker-push-amd64
 
   # Build for release and publish aarch64
-  publish_aarch64:
+  aarch64:
     if: github.ref == 'refs/heads/main' || (github.event_name == 'create' && startsWith(github.ref, 'refs/tags/'))
-    name: aarch64
     runs-on: buildjet-4vcpu-ubuntu-2204-arm
     concurrency:
       group: ${{ github.ref }}-publish-aarch64
@@ -57,11 +55,10 @@ jobs:
         run: make docker-push-aarch64
 
   # Publish manifest combining aarch64 and amd64 images
-  publish_manifest:
-    name:  Publish - Manifest
+  manifest:
     runs-on: ubuntu-latest
-    needs: [ publish_amd64, publish_aarch64 ]
-    if: (github.ref_name == 'main' || startsWith(github.ref, 'refs/tags'))
+    needs: [ publish-amd64, publish-aarch64 ]
+    if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags'))
     steps:
       - uses: actions/checkout@v4
         with:
@@ -72,9 +69,22 @@ jobs:
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       - run: make docker-publish-manifest
 
+  # Publish release to Sentry allowing us to track more
+  sentry:
+    runs-on: ubuntu-latest
+    needs: [ publish-manifest ]
+    if: startsWith(github.ref, 'refs/tags')
+    steps:
+      - uses: getsentry/action-release@v1
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        with:
+          version: ${{ github.ref_name }}
+
   # Publish documentation
-  publish-docs:
-    name: Publish - docs
+  docs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags')
     steps:
