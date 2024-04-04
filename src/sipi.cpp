@@ -20,26 +20,26 @@
 #include <dirent.h>
 #include <unistd.h>
 
+#include <curl/curl.h>
 #include <jansson.h>
-
 #include <sentry.h>
 
-#include <curl/curl.h>
 #include "shttps/LuaServer.h"
 #include "shttps/LuaSqlite.h"
+#include "shttps/Parsing.h"
+#include "shttps/Server.h"
+
 
 #include "CLI11.hpp"
+#include "SipiConf.h"
 #include "SipiFilenameHash.h"
 #include "SipiHttpServer.hpp"
+#include "SipiIO.h"
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
 #include "SipiLua.h"
-#include "shttps/Server.h"
+#include "formats/SipiIOTiff.h"
 
-#include "SipiConf.h"
-#include "SipiIO.h"
-#include "SipiIOTiff.h"
-#include "shttps/Parsing.h"
 #include "generated/SipiVersion.h"
 
 // A macro for silencing incorrect compiler warnings about unused variables.
@@ -270,7 +270,7 @@ private:
  * This function is called when a signal is received that would normally terminate the program
  * with a core dump. It logs out a stack trace.
  */
-[[NO_DISCARD]] auto get_stack_trace() -> std::string
+auto get_stack_trace() -> std::string
 {
   void *array[15];
 
@@ -280,9 +280,7 @@ private:
   std::ostringstream errStream;
   errStream << "Obtained " << size << " stack frames.\n";
 
-  for (auto i = 0; i < size; i++) {
-    errStream << strings[i] << '\n';
-  }
+  for (auto i = 0; i < size; i++) { errStream << strings[i] << '\n'; }
 
   return errStream.str();
 }

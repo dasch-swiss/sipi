@@ -8,6 +8,7 @@
 
 #include <cstring>
 #include <source_location>
+#include <sstream>
 
 namespace Sipi {
 
@@ -93,6 +94,6 @@ private:
   std::source_location location_;//!< Source location where the error occurs
   std::string fullerrmsg_;
 };
-}// namespace sipi
+}// namespace Sipi
 
 #endif// SIPIIMAGEERROR_HPP

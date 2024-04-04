@@ -400,8 +400,6 @@ link_directories(${CMAKE_BINARY_DIR}/local/lib)
 include_directories(
         ${PROJECT_SOURCE_DIR}
         ${PROJECT_SOURCE_DIR}/include
-        ${PROJECT_SOURCE_DIR}/include/metadata
-        ${PROJECT_SOURCE_DIR}/include/formats
         ${PROJECT_SOURCE_DIR}/include/iiifparser
         ${PROJECT_SOURCE_DIR}/src
         ${CMAKE_BINARY_DIR}
@@ -413,8 +411,6 @@ add_executable(sipi
         ${PROJECT_SOURCE_DIR}/src/SipiConf.cpp include/SipiConf.h
         ${PROJECT_SOURCE_DIR}/src/SipiError.cpp
         ${PROJECT_SOURCE_DIR}/src/SipiError.hpp
-        ${CMAKE_BINARY_DIR}/generated/AdobeRGB1998_icc.h
-        ${CMAKE_BINARY_DIR}/generated/USWebCoatedSWOP_icc.h
         ${PROJECT_SOURCE_DIR}/include/CLI11.hpp
         ${PROJECT_SOURCE_DIR}/src/metadata/SipiIcc.cpp ${PROJECT_SOURCE_DIR}/include/metadata/SipiIcc.h
         ${PROJECT_SOURCE_DIR}/src/metadata/SipiXmp.cpp ${PROJECT_SOURCE_DIR}/include/metadata/SipiXmp.h

@@ -3,8 +3,8 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#include "SipiIptc.h"
-#include "../SipiError.hpp"
+#include "metadata/SipiIptc.h"
+#include "SipiError.hpp"
 
 namespace Sipi {
 

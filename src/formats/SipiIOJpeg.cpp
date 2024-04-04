@@ -3,27 +3,30 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <string>
 #include <unistd.h>
-#include <vector>
 
 #include <cstdio>
 #include <fcntl.h>
 
-#include "../SipiError.hpp"
-#include "SipiCommon.h"
-#include "SipiIOJpeg.h"
+#include <tiff.h>
+
 #include "shttps/Connection.h"
 #include "shttps/makeunique.h"
 
+#include "SipiCommon.h"
+#include "SipiError.hpp"
+#include "SipiIO.h"
+#include "SipiImage.hpp"
 #include "SipiImageError.hpp"
+#include "formats/SipiIOJpeg.h"
+
 #include "jerror.h"
 #include "jpeglib.h"
-
-#include <tiff.h>
 
 #define ICC_MARKER (JPEG_APP0 + 2) /* JPEG marker code for ICC */
 // #define ICC_OVERHEAD_LEN  14        /* size of non-profile data in APP2 */
@@ -112,7 +115,7 @@ static boolean empty_file_buffer(j_compress_ptr cinfo)
   cinfo->dest->free_in_buffer = file_buffer->buflen;
   cinfo->dest->next_output_byte = file_buffer->buffer;
 
-  return true;
+  return static_cast<boolean>(1);
 }
 
 //=============================================================================
@@ -181,7 +184,7 @@ static void init_file_source(struct jpeg_decompress_struct *cinfo)
 
 //=============================================================================
 
-static int file_source_fill_input_buffer(struct jpeg_decompress_struct *cinfo)
+static boolean file_source_fill_input_buffer(struct jpeg_decompress_struct *cinfo)
 {
   auto *file_buffer = (FileBuffer *)cinfo->client_data;
   size_t nbytes = 0;
@@ -204,7 +207,7 @@ static int file_source_fill_input_buffer(struct jpeg_decompress_struct *cinfo)
   }
   cinfo->src->next_input_byte = file_buffer->buffer;
   cinfo->src->bytes_in_buffer = nbytes;
-  return TRUE;
+  return static_cast<boolean>(true);
 }
 
 //=============================================================================
@@ -302,7 +305,7 @@ static boolean empty_html_buffer(j_compress_ptr cinfo)
   cinfo->dest->free_in_buffer = html_buffer->buflen;
   cinfo->dest->next_output_byte = html_buffer->buffer;
 
-  return true;
+  return static_cast<boolean>(true);
 }
 
 //=============================================================================
@@ -508,8 +511,8 @@ bool SipiIOJpeg::read(SipiImage *img,
   {
   };
 
-  JSAMPARRAY linbuf;
-  jpeg_saved_marker_ptr marker;
+  JSAMPARRAY linbuf = nullptr;
+  jpeg_saved_marker_ptr marker = nullptr;
 
   //
   // let's create the decompressor
@@ -537,7 +540,7 @@ bool SipiIOJpeg::read(SipiImage *img,
   //
   int res;
   try {
-    res = jpeg_read_header(&cinfo, TRUE);
+    res = jpeg_read_header(&cinfo, static_cast<boolean>(true));
   } catch (JpegError &jpgerr) {
     jpeg_destroy_decompress(&cinfo);
     close(infile);
@@ -549,32 +552,32 @@ bool SipiIOJpeg::read(SipiImage *img,
     throw SipiImageError("Error reading JPEG file: \"" + filepath + "\"");
   }
 
-  boolean no_cropping = false;
-  if (region == nullptr) no_cropping = true;
-  if ((region != nullptr) && (region->getType()) == SipiRegion::FULL) no_cropping = true;
+  auto no_cropping = static_cast<boolean>(false);
+  if (region == nullptr) { no_cropping = static_cast<boolean>(true); }
+  if ((region != nullptr) && (region->getType()) == SipiRegion::FULL) { no_cropping = static_cast<boolean>(true); }
 
   size_t nnx, nny;
   SipiSize::SizeType rtype = SipiSize::FULL;
   if (size != nullptr) { rtype = size->getType(); }
 
-  if (no_cropping) {
+  if (no_cropping == 1) {
     //
     // here we prepare tha scaling/reduce stuff...
     //
     int reduce = 3;// maximal reduce factor is 3: 1/1, 1/2, 1/4 and 1/8
-    bool redonly = true;// we assume that only a reduce is necessary
     if ((size != nullptr) && (rtype != SipiSize::FULL)) {
+      bool redonly = true;// we assume that only a reduce is necessary
       size->get_size(cinfo.image_width, cinfo.image_height, nnx, nny, reduce, redonly);
     } else {
       reduce = 0;
     }
 
-    if (reduce < 0) reduce = 0;
+    reduce = std::max(reduce, 0);
     cinfo.scale_num = 1;
     cinfo.scale_denom = 1;
-    for (int i = 0; i < reduce; i++) cinfo.scale_denom *= 2;
+    for (int i = 0; i < reduce; i++) { cinfo.scale_denom *= 2; }
   }
-  cinfo.do_fancy_upsampling = false;
+  cinfo.do_fancy_upsampling = static_cast<boolean>(false);
 
   //
   // set default orientation
@@ -587,7 +590,7 @@ bool SipiIOJpeg::read(SipiImage *img,
   marker = cinfo.marker_list;
   unsigned char *icc_buffer = nullptr;
   int icc_buffer_len = 0;
-  while (marker) {
+  while (marker != nullptr) {
     if (marker->marker == JPEG_COM) {
       std::string emdatastr(reinterpret_cast<char *>(marker->data), marker->data_length);
       if (emdatastr.compare(0, 5, "SIPI:", 5) == 0) {
@@ -768,7 +771,7 @@ bool SipiIOJpeg::read(SipiImage *img,
   //
   // do some cropping...
   //
-  if (!no_cropping) {
+  if (no_cropping == 0) {
     // not no cropping (!!) means "do crop"!
     //
     // let's first crop the region (we read the full size image in this case)
@@ -779,7 +782,7 @@ bool SipiIOJpeg::read(SipiImage *img,
     // no we scale the region to the desired size
     //
     int reduce = -1;
-    bool redonly;
+    bool redonly = false;
     (void)size->get_size(img->nx, img->ny, nnx, nny, reduce, redonly);
   }
 
@@ -800,7 +803,7 @@ bool SipiIOJpeg::read(SipiImage *img,
     }
   }
 
-  return TRUE;
+  return true;
 }
 
 //============================================================================
@@ -878,7 +881,7 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
   //
   int res;
   try {
-    res = jpeg_read_header(&cinfo, TRUE);
+    res = jpeg_read_header(&cinfo, static_cast<boolean>(true));
   } catch (JpegError &jpgerr) {
     jpeg_destroy_decompress(&cinfo);
     close(infile);

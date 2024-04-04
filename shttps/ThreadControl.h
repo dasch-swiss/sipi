@@ -58,7 +58,7 @@ public:
 
   int thread_delete(int pos);
 
-  ThreadMasterData &operator[](int index);
+  ThreadMasterData &operator[](size_t index);
 
   inline int nthreads() const { return thread_list.size(); }
 

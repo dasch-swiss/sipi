@@ -10,8 +10,6 @@
 #include "SipiIdentifier.h"
 #include "shttps/Connection.h"
 
-static const char __file__[] = __FILE__;
-
 namespace Sipi {
 SipiIdentifier::SipiIdentifier(const std::string &str)
 {

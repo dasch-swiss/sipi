@@ -9,11 +9,17 @@
 #ifndef defined_exif_h
 #define defined_exif_h
 
-#include <exiv2/exiv2.hpp>
+
 #include <string>
 #include <vector>
 
-#include "../../src/SipiError.hpp"
+#include <exiv2/exif.hpp>
+#include <exiv2/types.hpp>
+#include <exiv2/value.hpp>
+#include <exiv2/tags.hpp>
+#include <exiv2/error.hpp>
+
+#include "SipiError.hpp"
 
 namespace Sipi {
 

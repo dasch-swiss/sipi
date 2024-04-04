@@ -8,13 +8,11 @@ set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
 ExternalProject_Add(project_lcms2
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        URL https://github.com/dasch-swiss/sipi-third-party/raw/main/third-party/lcms2-2.9.tar.gz
+        URL https://github.com/mm2/Little-CMS/releases/download/lcms2.16/lcms2-2.16.tar.gz
         ${timestamp_policy}
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
-        #URL_HASH SHA256=48c6fdf98396fa245ed86e622028caf49b96fa22f3e5734f853f806fbc8e7d20
-        #DOWNLOAD_EXTRACT_TIMESTAMP NEW
-        SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/lcms2-2.9
-        CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/lcms2-2.9/configure
+        SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/lcms2
+        CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/lcms2/configure
         --prefix=${CMAKE_BINARY_DIR}/local
         --with-jpeg=${CMAKE_BINARY_DIR}/local
         --with-tiff=${CMAKE_BINARY_DIR}/local

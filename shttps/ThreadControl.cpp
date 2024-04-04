@@ -4,11 +4,11 @@
  */
 
 #include "ThreadControl.h"
+#include <cstring>
 #include <iostream>
-#include <stdio.h>
-#include <string.h>
+#include <syslog.h>
 
-static const char __file__[] = __FILE__;
+#include <source_location>
 
 namespace shttps {
 
@@ -23,7 +23,8 @@ ThreadControl::ThreadControl(int n_threads, void *(*start_routine)(void *), Serv
   for (int n = 0; n < n_threads; n++) {
     int control_pipe[2];
     if (socketpair(PF_LOCAL, SOCK_STREAM, 0, control_pipe) != 0) {
-      syslog(LOG_ERR, "Creating pipe failed at [%s: %d]: %m", __file__, __LINE__);
+      const auto loc = std::source_location::current();
+      syslog(LOG_ERR, "Creating pipe failed at [%s: %d]: %m", loc.file_name(), loc.line());
       return;
     }
     child_data.push_back({ control_pipe[1], control_pipe[0], serv });
@@ -38,7 +39,8 @@ ThreadControl::ThreadControl(int n_threads, void *(*start_routine)(void *), Serv
     pthread_attr_t tattr;
     pthread_attr_init(&tattr);
     if (pthread_create(&thread_data.tid, &tattr, start_routine, (void *)(&cd[n])) < 0) {
-      syslog(LOG_ERR, "Could not create thread at [%s: %d]: %m", __file__, __LINE__);
+      const auto loc = std::source_location::current();
+      syslog(LOG_ERR, "Could not create thread at [%s: %d]: %m", loc.file_name(), loc.line());
       break;
     }
     thread_list.push_back(thread_data);
@@ -76,9 +78,9 @@ bool ThreadControl::thread_pop(ThreadMasterData &tinfo)
 }
 //=========================================================================
 
-ThreadControl::ThreadMasterData &ThreadControl::operator[](int index)
+ThreadControl::ThreadMasterData &ThreadControl::operator[](size_t index)
 {
-  if (index >= 0 && index < thread_list.size()) {
+  if (index < thread_list.size()) {
     return thread_list[index];
   } else {
     throw ThreadControlErrors::INVALID_INDEX;
