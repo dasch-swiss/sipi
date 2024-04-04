@@ -7,18 +7,19 @@
  * \brief Implements an IIIF server with many features.
  *
  */
+#include <syslog.h>
+#include <dirent.h>
 #include <execinfo.h>
-#include <fstream>
 #include <iostream>
+#include <csignal>
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
+
 #include <thread>
+#include <unistd.h>
 #include <utility>
 #include <vector>
-
-#include <dirent.h>
-#include <unistd.h>
 
 #include <curl/curl.h>
 #include <jansson.h>
@@ -374,7 +375,7 @@ int main(int argc, char *argv[])
     sentry_options_set_database_path(options, "/tmp/.sentry-native");
 
     if (!sentry_release.empty()) {
-      std::string sentryReleaseTag = std::string(BUILD_SCM_TAG) + "/" + sentry_release;
+      std::string sentryReleaseTag = std::string(BUILD_SCM_TAG);
       sentry_options_set_release(options, sentryReleaseTag.c_str());
     }
 
@@ -390,8 +391,6 @@ int main(int argc, char *argv[])
     sentry_options_set_traces_sample_rate(options, 0.1);
 
     sentry_init(options);
-
-    sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_INFO, "custom", "It works!"));
   }
 
 
