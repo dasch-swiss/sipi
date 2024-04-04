@@ -14,7 +14,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "SipiConfig.h"
+#include "generated/SipiConfig.h"
 
 namespace Sipi {
 

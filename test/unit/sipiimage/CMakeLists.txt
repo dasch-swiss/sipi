@@ -1,7 +1,7 @@
 set(TEST_NAME sipi_image_tests)
 
 link_directories(
-        ${CONFIGURE_LIBDIR}
+        ${CMAKE_BINARY_DIR}/local/lib
 )
 
 include_directories(

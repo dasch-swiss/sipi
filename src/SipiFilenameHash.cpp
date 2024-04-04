@@ -8,10 +8,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <string.h>
+#include <cstring>
 
 #include "SipiFilenameHash.h"
-#include "Error.h"
+#include "shttps/Error.h"
 
 int SipiFilenameHash::__levels = 0;
 

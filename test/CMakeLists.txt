@@ -45,7 +45,7 @@ include_directories("${source_dir}/googletest/include" "${source_dir}/googlemock
 
 # Download and install ApprovalTests.cpp single header distribution
 set(HEADER_URL "https://github.com/approvals/ApprovalTests.cpp/releases/download/v.10.13.0/ApprovalTests.v.10.13.0.hpp")
-set(HEADER_FILE "${CMAKE_BINARY_DIR}/include/ApprovalTests.hpp")
+set(HEADER_FILE "${CMAKE_BINARY_DIR}/local/include/ApprovalTests.hpp")
 
 if(NOT EXISTS "${HEADER_FILE}")
         file(DOWNLOAD ${HEADER_URL} ${HEADER_FILE}
@@ -54,12 +54,12 @@ if(NOT EXISTS "${HEADER_FILE}")
                 TLS_VERIFY ON)  # Verify TLS/SSL certificates; ON by default
 endif()
 
-include_directories("${CMAKE_BINARY_DIR}/include")
+include_directories("${CMAKE_BINARY_DIR}/local/include")
 
 if(NOT TARGET ApprovalTests)
         set(LIB_NAME ApprovalTests)
         add_library(${LIB_NAME} INTERFACE)
-        target_include_directories(${LIB_NAME} INTERFACE "${CMAKE_BINARY_DIR}/include")
+        target_include_directories(${LIB_NAME} INTERFACE "${COMON_LOCAL_INCLUDE}")
         add_library(${LIB_NAME}::${LIB_NAME} ALIAS ${LIB_NAME})
 endif()
 

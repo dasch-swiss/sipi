@@ -7,7 +7,7 @@
 
 #include <regex>
 
-#include "Connection.h"
+#include "shttps/Connection.h"
 
 namespace handlers::iiif_handler {
 

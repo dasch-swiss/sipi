@@ -7,10 +7,10 @@
 
 #include <ctime>
 
-#include "../SipiError.hpp"
-#include "AdobeRGB1998_icc.h"
-#include "Rec709-Rec1886_icc.h"
-#include "USWebCoatedSWOP_icc.h"
+#include "SipiError.hpp"
+#include "generated/AdobeRGB1998_icc.h"
+#include "generated/Rec709-Rec1886_icc.h"
+#include "generated/USWebCoatedSWOP_icc.h"
 
 #include "../SipiImage.hpp"
 #include "shttps/makeunique.h"

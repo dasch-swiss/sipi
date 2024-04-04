@@ -20,9 +20,11 @@
 #include <dirent.h>
 #include <unistd.h>
 
+#include <jansson.h>
+
 #include <sentry.h>
 
-#include "curl/curl.h"
+#include <curl/curl.h>
 #include "shttps/LuaServer.h"
 #include "shttps/LuaSqlite.h"
 
@@ -34,12 +36,11 @@
 #include "SipiLua.h"
 #include "shttps/Server.h"
 
-#include "jansson.h"
-
 #include "SipiConf.h"
 #include "SipiIO.h"
 #include "SipiIOTiff.h"
 #include "shttps/Parsing.h"
+#include "generated/SipiVersion.h"
 
 // A macro for silencing incorrect compiler warnings about unused variables.
 #define _unused(x) ((void)(x))
@@ -269,20 +270,21 @@ private:
  * This function is called when a signal is received that would normally terminate the program
  * with a core dump. It logs out a stack trace.
  */
-void printStackTrace()
+[[NO_DISCARD]] auto get_stack_trace() -> std::string
 {
   void *array[15];
 
   const auto size = backtrace(array, 15);
   char **strings = backtrace_symbols(array, size);
 
-  syslog(LOG_ERR, "Obtained %d stack frames.\n", size);
+  std::ostringstream errStream;
+  errStream << "Obtained " << size << " stack frames.\n";
 
-  for (auto i = 0; i < size; i++) { syslog(LOG_ERR, "%s\n", strings[i]); }
+  for (auto i = 0; i < size; i++) {
+    errStream << strings[i] << '\n';
+  }
 
-  // sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "sig_handler", std::to_string(strings)));
-
-  free(strings);
+  return errStream.str();
 }
 
 /*!
@@ -295,22 +297,18 @@ void printStackTrace()
  */
 void sig_handler(const int sig)
 {
-
+  std::string msg;
   if (sig == SIGSEGV) {
-    std::string msg = "SIGSEGV: segmentation fault.";
-    sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "sig_handler", msg.c_str()));
-    syslog(LOG_ERR, "%s", msg.c_str());
+    msg = "SIGSEGV: segmentation fault.";
   } else if (sig == SIGABRT) {
-    std::string msg = "SIGABRT: abort.";
-    sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "sig_handler", msg.c_str()));
-    syslog(LOG_ERR, "%s", msg.c_str());
+    msg = "SIGABRT: abort.";
   } else {
-    std::string msg = "Caught signal " + std::to_string(sig);
-    sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "sig_handler", msg.c_str()));
-    syslog(LOG_ERR, "%s", msg.c_str());
+    msg = "Caught signal " + std::to_string(sig);
   }
 
-  printStackTrace();
+  msg += "\n" + get_stack_trace();
+  sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "sig_handler", msg.c_str()));
+  syslog(LOG_ERR, "%s", msg.c_str());
 
   exit(1);
 }
@@ -323,14 +321,20 @@ void sig_handler(const int sig)
  */
 void my_terminate_handler()
 {
+  std::string msg;
   try {
     // Rethrow the current exception to identify it
     throw;
   } catch (const std::exception &e) {
-    syslog(LOG_ERR, "Unhandled exception caught: %s", e.what());
+    msg = "Unhandled exception caught: " + std::string(e.what());
   } catch (...) {
-    syslog(LOG_ERR, "Unhandled unknown exception caught");
+    msg = "Unhandled unknown exception caught";
   }
+
+  msg += "\n" + get_stack_trace();
+  sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "my_terminate_handler", msg.c_str()));
+  syslog(LOG_ERR, "%s", msg.c_str());
+
   std::abort();// Abort the program or perform other cleanup
 }
 

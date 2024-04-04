@@ -14,7 +14,7 @@
 #include <sys/stat.h>
 
 #include "lcms2.h"
-#include "makeunique.h"
+#include "shttps/makeunique.h"
 
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
