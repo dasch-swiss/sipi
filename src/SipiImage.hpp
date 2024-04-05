@@ -13,19 +13,18 @@
 #define _sipi_image_h
 
 #include <string>
-#include <unordered_map>
+// #include <unordered_map>
 
-#include "../include/SipiIO.h"
-#include "../include/iiifparser/SipiRegion.h"
-#include "../include/iiifparser/SipiSize.h"
-#include "../include/metadata/SipiEssentials.h"
-#include "../include/metadata/SipiExif.h"
-#include "../include/metadata/SipiIcc.h"
-#include "../include/metadata/SipiIptc.h"
-#include "../include/metadata/SipiXmp.h"
+#include "shttps/Connection.h"
+//#include "shttps/Hash.h"
 
-#include "../shttps/Connection.h"
-#include "../shttps/Hash.h"
+#include "SipiIO.h"
+// #include "iiifparser/SipiRegion.h"
+#include "metadata/SipiEssentials.h"
+#include "metadata/SipiExif.h"
+#include "metadata/SipiIcc.h"
+#include "metadata/SipiIptc.h"
+#include "metadata/SipiXmp.h"
 
 
 /*!
@@ -58,41 +57,41 @@ enum class PhotometricInterpretation : std::uint16_t {
   INVALID = 65535//!< an invalid value
 };
 
-inline auto to_string(const PhotometricInterpretation photo)-> std::string
+inline auto to_string(const PhotometricInterpretation photo) -> std::string
 {
   switch (photo) {
-    case PhotometricInterpretation::MINISWHITE:
-      return "MINISWHITE";
-    case PhotometricInterpretation::MINISBLACK:
-      return "MINISBLACK";
-    case PhotometricInterpretation::RGB:
-      return "RGB";
-    case PhotometricInterpretation::PALETTE:
-      return "PALETTE";
-    case PhotometricInterpretation::MASK:
-      return "MASK";
-    case PhotometricInterpretation::SEPARATED:
-      return "SEPARATED";
-    case PhotometricInterpretation::YCBCR:
-      return "YCBCR";
-    case PhotometricInterpretation::CIELAB:
-      return "CIELAB";
-    case PhotometricInterpretation::ICCLAB:
-      return "ICCLAB";
-    case PhotometricInterpretation::ITULAB:
-      return "ITULAB";
-    case PhotometricInterpretation::CFA:
-      return "CFA";
-    case PhotometricInterpretation::LOGL:
-      return "LOGL";
-    case PhotometricInterpretation::LOGLUV:
-      return "LOGLUV";
-    case PhotometricInterpretation::LINEARRAW:
-      return "LINEARRAW";
-    case PhotometricInterpretation::INVALID:
-      return "INVALID";
-    default:
-      return "UNKNOWN";
+  case PhotometricInterpretation::MINISWHITE:
+    return "MINISWHITE";
+  case PhotometricInterpretation::MINISBLACK:
+    return "MINISBLACK";
+  case PhotometricInterpretation::RGB:
+    return "RGB";
+  case PhotometricInterpretation::PALETTE:
+    return "PALETTE";
+  case PhotometricInterpretation::MASK:
+    return "MASK";
+  case PhotometricInterpretation::SEPARATED:
+    return "SEPARATED";
+  case PhotometricInterpretation::YCBCR:
+    return "YCBCR";
+  case PhotometricInterpretation::CIELAB:
+    return "CIELAB";
+  case PhotometricInterpretation::ICCLAB:
+    return "ICCLAB";
+  case PhotometricInterpretation::ITULAB:
+    return "ITULAB";
+  case PhotometricInterpretation::CFA:
+    return "CFA";
+  case PhotometricInterpretation::LOGL:
+    return "LOGL";
+  case PhotometricInterpretation::LOGLUV:
+    return "LOGLUV";
+  case PhotometricInterpretation::LINEARRAW:
+    return "LINEARRAW";
+  case PhotometricInterpretation::INVALID:
+    return "INVALID";
+  default:
+    return "UNKNOWN";
   }
 }
 

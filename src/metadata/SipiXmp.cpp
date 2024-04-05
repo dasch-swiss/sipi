@@ -6,8 +6,8 @@
 #include <mutex>
 #include <pthread.h>
 
-#include "../SipiError.hpp"
-#include "SipiXmp.h"
+#include "SipiError.hpp"
+#include "metadata/SipiXmp.h"
 
 /*!
  * ToDo: remove provisional code as soon as Exiv2::Xmp is thread safe (expected v.26)
@@ -25,10 +25,10 @@ void xmplock_func(void *pLockData, bool lockUnlock)
 {
   auto *m = static_cast<XmpMutex *>(pLockData);
   if (lockUnlock) {
-    std::cerr << "XMP-LOCK!" << std::endl;
+    std::cerr << "XMP-LOCK!" << '\n';
     m->lock.lock();
   } else {
-    std::cerr << "XMP-UNLOCK!" << std::endl;
+    std::cerr << "XMP-UNLOCK!" << '\n';
     m->lock.unlock();
   }
 }

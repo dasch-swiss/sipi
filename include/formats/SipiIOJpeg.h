@@ -6,13 +6,13 @@
 /*!
  * This file handles the reading and writing of JPEG 2000 files using libtiff.
  */
-#ifndef __sipi_io_jpeg_h
-#define __sipi_io_jpeg_h
+#ifndef _sipi_io_jpeg_h
+#define _sipi_io_jpeg_h
 
 #include <string>
 
-#include "../../src/SipiImage.hpp"
 #include "SipiIO.h"
+#include "SipiImage.hpp"
 
 namespace Sipi {
 

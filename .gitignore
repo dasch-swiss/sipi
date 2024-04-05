@@ -16,7 +16,8 @@ sipi
 *.pyc
 .idea/
 /.vscode
-SipiConfig.h
+/include/SipiConfig.h
+/include/SipiVersion.h
 sipi.log*
 /extsrcs/
 .direnv/

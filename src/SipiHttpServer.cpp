@@ -21,18 +21,18 @@
 #include <utility>
 #include <vector>
 
-#include <LuaServer.h>
+#include "shttps/Connection.h"
+#include "shttps/LuaServer.h"
+#include "shttps/Parsing.h"
 
 #include "SipiError.hpp"
 #include "SipiImage.hpp"
+#include "SipiImageError.hpp"
 #include "iiifparser/SipiIdentifier.h"
 #include "iiifparser/SipiQualityFormat.h"
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiRotation.h"
 #include "iiifparser/SipiSize.h"
-
-#include "shttps/Connection.h"
-#include "shttps/Parsing.h"
 
 #include "SipiHttpServer.hpp"
 #include "handlers/iiif_handler.hpp"
@@ -40,7 +40,6 @@
 #include "favicon.h"
 #include "jansson.h"
 
-#include "SipiImageError.hpp"
 
 using namespace shttps;
 

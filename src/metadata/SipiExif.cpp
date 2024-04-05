@@ -6,10 +6,8 @@
 #include <climits>
 #include <cmath>
 
-#include "../SipiError.hpp"
-#include "SipiExif.h"
-
-static const char file_[] = __FILE__;
+#include "SipiError.hpp"
+#include "metadata/SipiExif.h"
 
 namespace Sipi {
 

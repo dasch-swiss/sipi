@@ -1,43 +1,47 @@
 /*
- * Copyright © 2016 - 2024 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform contributors.
- * SPDX-License-Identifier: AGPL-3.0-or-later
+ * Copyright © 2016 - 2024 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform
+ * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 /*!
  * \brief Implements an IIIF server with many features.
  *
  */
+#include <syslog.h>
+#include <dirent.h>
 #include <execinfo.h>
-#include <fstream>
 #include <iostream>
+#include <csignal>
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
+
 #include <thread>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
-#include <dirent.h>
-#include <unistd.h>
+#include <curl/curl.h>
+#include <jansson.h>
+#include <sentry.h>
 
-#include "curl/curl.h"
 #include "shttps/LuaServer.h"
 #include "shttps/LuaSqlite.h"
-
-#include "CLI11.hpp"
-#include "SipiFilenameHash.h"
-#include "SipiHttpServer.hpp"
-#include "SipiImageError.hpp"
-#include "SipiImage.hpp"
-#include "SipiLua.h"
+#include "shttps/Parsing.h"
 #include "shttps/Server.h"
 
-#include "jansson.h"
 
+#include "CLI11.hpp"
 #include "SipiConf.h"
+#include "SipiFilenameHash.h"
+#include "SipiHttpServer.hpp"
 #include "SipiIO.h"
-#include "SipiIOTiff.h"
-#include "shttps/Parsing.h"
+#include "SipiImage.hpp"
+#include "SipiImageError.hpp"
+#include "SipiLua.h"
+#include "formats/SipiIOTiff.h"
+
+#include "generated/SipiVersion.h"
 
 // A macro for silencing incorrect compiler warnings about unused variables.
 #define _unused(x) ((void)(x))
@@ -267,18 +271,19 @@ private:
  * This function is called when a signal is received that would normally terminate the program
  * with a core dump. It logs out a stack trace.
  */
-void printStackTrace()
+auto get_stack_trace() -> std::string
 {
   void *array[15];
 
   const auto size = backtrace(array, 15);
   char **strings = backtrace_symbols(array, size);
 
-  syslog(LOG_ERR, "Obtained %d stack frames.\n", size);
+  std::ostringstream errStream;
+  errStream << "Obtained " << size << " stack frames.\n";
 
-  for (auto i = 0; i < size; i++) { syslog(LOG_ERR, "%s\n", strings[i]); }
+  for (auto i = 0; i < size; i++) { errStream << strings[i] << '\n'; }
 
-  free(strings);
+  return errStream.str();
 }
 
 /*!
@@ -291,16 +296,18 @@ void printStackTrace()
  */
 void sig_handler(const int sig)
 {
-
+  std::string msg;
   if (sig == SIGSEGV) {
-    syslog(LOG_ERR, "SIGSEGV: segmentation fault.");
+    msg = "SIGSEGV: segmentation fault.";
   } else if (sig == SIGABRT) {
-    syslog(LOG_ERR, "SIGABRT: abort.");
+    msg = "SIGABRT: abort.";
   } else {
-    syslog(LOG_ERR, "Caught signal %d.", sig);
+    msg = "Caught signal " + std::to_string(sig);
   }
 
-  printStackTrace();
+  msg += "\n" + get_stack_trace();
+  sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "sig_handler", msg.c_str()));
+  syslog(LOG_ERR, "%s", msg.c_str());
 
   exit(1);
 }
@@ -313,14 +320,20 @@ void sig_handler(const int sig)
  */
 void my_terminate_handler()
 {
+  std::string msg;
   try {
     // Rethrow the current exception to identify it
     throw;
   } catch (const std::exception &e) {
-    syslog(LOG_ERR, "Unhandled exception caught: %s", e.what());
+    msg = "Unhandled exception caught: " + std::string(e.what());
   } catch (...) {
-    syslog(LOG_ERR, "Unhandled unknown exception caught");
+    msg = "Unhandled unknown exception caught";
   }
+
+  msg += "\n" + get_stack_trace();
+  sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "my_terminate_handler", msg.c_str()));
+  syslog(LOG_ERR, "%s", msg.c_str());
+
   std::abort();// Abort the program or perform other cleanup
 }
 
@@ -341,6 +354,46 @@ int main(int argc, char *argv[])
   // set top level exception handler
   std::set_terminate(my_terminate_handler);
 
+  // Attempt to read the environment variable
+  const char *sipi_sentry_dsn = getenv("SIPI_SENTRY_DSN");
+  std::string sentry_dsn{};
+  if (sipi_sentry_dsn != nullptr) { sentry_dsn = sipi_sentry_dsn; }
+
+  const char *sipi_sentry_release = getenv("SIPI_SENTRY_RELEASE");
+  std::string sentry_release{};
+  if (sipi_sentry_release != nullptr) { sentry_release = sipi_sentry_release; }
+
+  const char *sipi_sentry_environment = getenv("SIPI_SENTRY_ENVIRONMENT");
+  std::string sentry_environment{};
+  if (sipi_sentry_environment != nullptr) { sentry_environment = sipi_sentry_environment; }
+
+
+  // At this point the config is loaded and we can initialize sentry
+  if (!sentry_dsn.empty()) {
+    sentry_options_t *options = sentry_options_new();
+    sentry_options_set_dsn(options, sentry_dsn.c_str());
+    sentry_options_set_database_path(options, "/tmp/.sentry-native");
+
+    if (!sentry_release.empty()) {
+      std::string sentryReleaseTag = std::string(BUILD_SCM_TAG);
+      sentry_options_set_release(options, sentryReleaseTag.c_str());
+    }
+
+    if (!sentry_environment.empty()) {
+      sentry_options_set_environment(options, sentry_environment.c_str());
+    } else {
+      sentry_options_set_environment(options, "development");
+    }
+
+    sentry_options_set_debug(options, 0);
+
+    // configures the sampling rate for transactions
+    sentry_options_set_traces_sample_rate(options, 0.1);
+
+    sentry_init(options);
+  }
+
+
   //
   // first we initialize the libraries that sipi uses
   //
@@ -348,7 +401,7 @@ int main(int argc, char *argv[])
     LibraryInitialiser &sipi_init = LibraryInitialiser::instance();
     _unused(sipi_init);// Silence compiler warning about unused variable.
   } catch (shttps::Error &e) {
-    std::cerr << e.to_string() << std::endl;
+    std::cerr << e.to_string() << '\n';
     return EXIT_FAILURE;
   }
 
@@ -1202,8 +1255,7 @@ int main(int argc, char *argv[])
         //
         DIR *dirp = opendir(sipiConf.getImgRoot().c_str());
         if (dirp == nullptr) {
-          throw shttps::Error(
-            std::string("Couldn't read directory content! Path: ") + sipiConf.getImgRoot(), errno);
+          throw shttps::Error(std::string("Couldn't read directory content! Path: ") + sipiConf.getImgRoot(), errno);
         }
         struct dirent *dp;
         while ((dp = readdir(dirp)) != nullptr) {
@@ -1316,9 +1368,10 @@ int main(int argc, char *argv[])
       server.run();
     } catch (shttps::Error &err) {
       syslog(LOG_ERR, "Error starting server: %s", err.what());
-      std::cerr << err << std::endl;
+      std::cerr << err << '\n';
     }
   }
   // make sure everything flushes
+  sentry_close();
   return EXIT_SUCCESS;
 }

@@ -46,20 +46,17 @@ include(FindPackageHandleStandardArgs)
 # ------------------------------------------------------------------------------
 set(COMMON_LOCAL ${CMAKE_BINARY_DIR}/local)
 set(COMMON_SRCS ${CMAKE_BINARY_DIR}/extsrcs)
-set(CONFIGURE_LIBDIR ${COMMON_LOCAL}/lib)
-set(CONFIGURE_INCDIR ${COMMON_LOCAL}/include)
 
 # set cmake default install location
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-    set(CMAKE_INSTALL_PREFIX "${COMMON_LOCAL}" CACHE PATH "default install path" FORCE)
+    set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/local" CACHE PATH "default install path" FORCE)
     message(STATUS CMAKE_INSTALL_DIR: ${CMAKE_INSTALL_PREFIX})
 endif ()
 
 set(COMMON_SOURCE_FILES_DIR ${PROJECT_SOURCE_DIR}/src)
-set(COMMON_LIBRARY_FILES_DIR ${PROJECT_SOURCE_DIR}/lib)
 set(COMMON_INCLUDE_FILES_DIR ${PROJECT_SOURCE_DIR}/include)
-set(DOXYGEN_FILES_DIR ${PROJECT_SOURCE_DIR}/doxygen)
-set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
+set(COMMON_DOXYGEN ${PROJECT_SOURCE_DIR}/doxygen)
+set(COMMON_EXT ${PROJECT_SOURCE_DIR}/ext)
 set(COMMON_PATCHES ${PROJECT_SOURCE_DIR}/patches)
 set(COMMON_VENDOR ${PROJECT_SOURCE_DIR}/vendor)
 set(SIPI_SOURCE_DIR ${PROJECT_SOURCE_DIR})
@@ -79,7 +76,7 @@ endif ()
 #  Debug          : w/ debug symbols, w/o optimization
 #  Release        : w/o debug symbols, w/ optimization
 #  RelWithDebInfo : w/ debug symbols, w/ optimization
-option(CMAKE_BUILD_TYPE "The default build type is RelWithDebInfo" RelWithDebInfo)
+option(CMAKE_BUILD_TYPE "The default build type is RelWithDebInfo" Debug)
 
 
 #
@@ -88,14 +85,10 @@ option(CMAKE_BUILD_TYPE "The default build type is RelWithDebInfo" RelWithDebInf
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "13.0")
         message(FATAL_ERROR "Requires GCC 13.0 or greater.")
-        set(ENV (CXX) "g++")
-        set(ENV (CC) "gcc")
     endif ()
 elseif (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "15.0")
         message(FATAL_ERROR "Clang version must be 15.0.0 or greater! Aborting...")
-        set(ENV (CXX) "clang++")
-        set(ENV (CC) "clang")
     endif ()
 else ()
     message(WARNING "You are using an unsupported compiler (${CMAKE_CXX_COMPILER_ID}). Compilation has only been tested with Clang and GCC.")
@@ -107,24 +100,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_REQUIRED_FLAGS "-std=c++23") # or the appropriate flag for your compiler
 
-# Simple C++ test program
-set(CXX_TEST_PROGRAM "
-    #include <expected>
-    #include <version>
-    int main() { return 0; }
-")
-
-# Check if the test program compiles with C++23
-include(CheckCXXSourceCompiles)
-check_cxx_source_compiles("${CXX_TEST_PROGRAM}" CXX23_SUPPORTED)
-
-if (CXX23_SUPPORTED)
-    message(STATUS "C++23 is supported.")
-else ()
-    message(FATAL_ERROR "C++23 is not supported.")
-endif ()
-
-
 #
 # compiler and linker flags configuration
 # used to hold the flags for the compiler and linker
@@ -135,15 +110,15 @@ add_library(build_config INTERFACE)
 #
 # Statically compile the C++ standard library into the executable
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    message(STATUS "Compiling with GCC. Statically linking libstdc++.")
-    target_link_options(build_config INTERFACE -static-libstdc++)
+    message(STATUS "Compiling with GCC (-static-libstdc++).") # and -lstdc++_libbacktrace.")
+    target_link_options(build_config INTERFACE -static-libstdc++) # -lstdc++_libbacktrace)
 endif ()
 
 #
 # Dynamically compile the C++ standard library into the executable
 if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
-    message(STATUS "Compiling with Clang. Linking stdc++.")
-    target_compile_options(build_config INTERFACE -stdlib=libc++)
+    message(STATUS "Compiling with Clang (-stdlib=libstdc++ and -static-libstdc++).")
+    target_compile_options(build_config INTERFACE -stdlib=libstdc++ -static-libstdc++)
 endif ()
 
 #
@@ -291,6 +266,9 @@ endif ()
 
 CHECK_INCLUDE_FILES(malloc.h HAVE_MALLOC_H)
 
+# write out the malloc and atimespec information
+configure_file(${PROJECT_SOURCE_DIR}/include/SipiConfig.h.in ${CMAKE_BINARY_DIR}/generated/SipiConfig.h)
+
 #
 # "standard" packages that are required for sipi
 #
@@ -302,28 +280,29 @@ endif ()
 
 message(STATUS "Adding external dependencies ...")
 
-file(MAKE_DIRECTORY ${CONFIGURE_LIBDIR})
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/local/lib)
 
 # !!! order is important !!!
 # dependent targets need to be added before the target that depends on them
 # e.g., png, bzip2 before freetype
-add_subdirectory(${EXT_PROJECTS_DIR}/xz)
-add_subdirectory(${EXT_PROJECTS_DIR}/zlib)
-add_subdirectory(${EXT_PROJECTS_DIR}/zstd)
-add_subdirectory(${EXT_PROJECTS_DIR}/jpeg)
-add_subdirectory(${EXT_PROJECTS_DIR}/jbigkit)
-add_subdirectory(${EXT_PROJECTS_DIR}/webp)
-add_subdirectory(${EXT_PROJECTS_DIR}/expat)
-add_subdirectory(${EXT_PROJECTS_DIR}/png)
-add_subdirectory(${EXT_PROJECTS_DIR}/tiff)
-add_subdirectory(${EXT_PROJECTS_DIR}/bzip2)
-add_subdirectory(${EXT_PROJECTS_DIR}/lcms2)
-add_subdirectory(${EXT_PROJECTS_DIR}/exiv2)
-add_subdirectory(${EXT_PROJECTS_DIR}/jansson)
-add_subdirectory(${EXT_PROJECTS_DIR}/lua)
-add_subdirectory(${EXT_PROJECTS_DIR}/luarocks)
-add_subdirectory(${EXT_PROJECTS_DIR}/sqlite3)
-add_subdirectory(${EXT_PROJECTS_DIR}/kakadu)
+add_subdirectory(${COMMON_EXT}/xz)
+add_subdirectory(${COMMON_EXT}/zlib)
+add_subdirectory(${COMMON_EXT}/zstd)
+add_subdirectory(${COMMON_EXT}/jpeg)
+add_subdirectory(${COMMON_EXT}/jbigkit)
+add_subdirectory(${COMMON_EXT}/webp)
+add_subdirectory(${COMMON_EXT}/expat)
+add_subdirectory(${COMMON_EXT}/png)
+add_subdirectory(${COMMON_EXT}/tiff)
+add_subdirectory(${COMMON_EXT}/bzip2)
+add_subdirectory(${COMMON_EXT}/lcms2)
+add_subdirectory(${COMMON_EXT}/exiv2)
+add_subdirectory(${COMMON_EXT}/jansson)
+add_subdirectory(${COMMON_EXT}/lua)
+add_subdirectory(${COMMON_EXT}/luarocks)
+add_subdirectory(${COMMON_EXT}/sqlite3)
+add_subdirectory(${COMMON_EXT}/kakadu)
+add_subdirectory(${COMMON_EXT}/sentry)
 
 message(STATUS "... adding external dependencies done.")
 
@@ -333,8 +312,8 @@ message(STATUS "... adding external dependencies done.")
 find_package(Doxygen)
 if (DOXYGEN_FOUND)
     add_custom_target(doc
-            ${DOXYGEN_EXECUTABLE} ${DOXYGEN_FILES_DIR}/Doxyfile
-            WORKING_DIRECTORY ${DOXYGEN_FILES_DIR}
+            ${DOXYGEN_EXECUTABLE} ${COMMON_DOXYGEN}/Doxyfile
+            WORKING_DIRECTORY ${COMMON_DOXYGEN}
             COMMENT "Generating API documentation with Doxygen" VERBATIM
     )
 endif (DOXYGEN_FOUND)
@@ -343,7 +322,7 @@ endif (DOXYGEN_FOUND)
 #
 # get version from git
 #
-if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
+if (EXISTS ${PROJECT_SOURCE_DIR}/.git)
     find_package(Git)
     if (GIT_FOUND)
         execute_process(
@@ -362,7 +341,7 @@ if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
         SET(BUILD_SCM_REVISION 0)
         SET(BUILD_SCM_TAG 0)
     endif (GIT_FOUND)
-endif (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
+endif (EXISTS ${PROJECT_SOURCE_DIR}/.git)
 
 option(BUILD_SCM_TAG "Build SCM tag" "$ENV{BUILD_TAG}")
 
@@ -373,107 +352,112 @@ message(STATUS "Build SCM revision: ${BUILD_SCM_REVISION}")
 string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M")
 message(STATUS "Build timestamp: ${BUILD_TIMESTAMP}")
 
-# write out the sipi configuration
-configure_file(${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h.in ${COMMON_INCLUDE_FILES_DIR}/SipiConfig.h)
+
+#
+# get version from version.txt
+#
+file(READ version.txt SIPI_VERSION_STRING)
+string(STRIP "${SIPI_VERSION_STRING}" SIPI_VERSION_STRING)
+message(STATUS "Sipi version: ${SIPI_VERSION_STRING}")
+
+# write out the version and build information
+configure_file(${PROJECT_SOURCE_DIR}/include/SipiVersion.h.in ${CMAKE_BINARY_DIR}/generated/SipiVersion.h)
+
 
 #
 # generate ICC profile includes
 #
 set(GENERATED_ICC_HEADERS
-        ${COMMON_INCLUDE_FILES_DIR}/AdobeRGB1998_icc.h
-        ${COMMON_INCLUDE_FILES_DIR}/USWebCoatedSWOP_icc.h
-        ${COMMON_INCLUDE_FILES_DIR}/YCC709_icc.h
+        ${CMAKE_BINARY_DIR}/generated/AdobeRGB1998_icc.h
+        ${CMAKE_BINARY_DIR}/generated/USWebCoatedSWOP_icc.h
+        ${CMAKE_BINARY_DIR}/generated/YCC709_icc.h
 )
 
 add_custom_command(
         OUTPUT ${GENERATED_ICC_HEADERS}
         COMMENT "Generating ICC profile includes"
-        WORKING_DIRECTORY ${COMMON_INCLUDE_FILES_DIR}
-        COMMAND cp ${COMMON_INCLUDE_FILES_DIR}/ICC-Profiles/AdobeRGB1998.icc ${COMMON_INCLUDE_FILES_DIR}/AdobeRGB1998.icc
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/generated
+        COMMAND cp ${PROJECT_SOURCE_DIR}/include/ICC-Profiles/AdobeRGB1998.icc ${CMAKE_BINARY_DIR}/generated/AdobeRGB1998.icc
         COMMAND xxd -i AdobeRGB1998.icc AdobeRGB1998_icc.h
-        COMMAND rm ${COMMON_INCLUDE_FILES_DIR}/AdobeRGB1998.icc
-        COMMAND cp ${COMMON_INCLUDE_FILES_DIR}/ICC-Profiles/USWebCoatedSWOP.icc ${COMMON_INCLUDE_FILES_DIR}/USWebCoatedSWOP.icc
+        COMMAND rm ${CMAKE_BINARY_DIR}/generated/AdobeRGB1998.icc
+        COMMAND cp ${PROJECT_SOURCE_DIR}/include/ICC-Profiles/USWebCoatedSWOP.icc ${CMAKE_BINARY_DIR}/generated/USWebCoatedSWOP.icc
         COMMAND xxd -i USWebCoatedSWOP.icc USWebCoatedSWOP_icc.h
-        COMMAND rm ${COMMON_INCLUDE_FILES_DIR}/USWebCoatedSWOP.icc
-        COMMAND cp ${COMMON_INCLUDE_FILES_DIR}/ICC-Profiles/YCC709.icm ${COMMON_INCLUDE_FILES_DIR}/YCC709.icm
+        COMMAND rm ${CMAKE_BINARY_DIR}/generated/USWebCoatedSWOP.icc
+        COMMAND cp ${PROJECT_SOURCE_DIR}/include/ICC-Profiles/YCC709.icm ${CMAKE_BINARY_DIR}/generated/YCC709.icm
         COMMAND xxd -i YCC709.icm YCC709_icc.h
-        COMMAND rm ${COMMON_INCLUDE_FILES_DIR}/YCC709.icm
-        COMMAND cp ${COMMON_INCLUDE_FILES_DIR}/ICC-Profiles/Rec709-Rec1886.icc ${COMMON_INCLUDE_FILES_DIR}/Rec709-Rec1886.icc
+        COMMAND rm ${CMAKE_BINARY_DIR}/generated/YCC709.icm
+        COMMAND cp ${PROJECT_SOURCE_DIR}/include/ICC-Profiles/Rec709-Rec1886.icc ${CMAKE_BINARY_DIR}/generated/Rec709-Rec1886.icc
         COMMAND xxd -i Rec709-Rec1886.icc Rec709-Rec1886_icc.h
-        COMMAND rm ${COMMON_INCLUDE_FILES_DIR}/Rec709-Rec1886.icc
+        COMMAND rm ${CMAKE_BINARY_DIR}/generated/Rec709-Rec1886.icc
 )
 
 add_custom_target(icc_profiles
         DEPENDS ${GENERATED_ICC_HEADERS}
 )
 
-link_directories(${CONFIGURE_LIBDIR})
+link_directories(${CMAKE_BINARY_DIR}/local/lib)
 
 include_directories(
-        ${COMMON_LOCAL}/include
-        ${COMMON_INCLUDE_FILES_DIR}
-        ${COMMON_INCLUDE_FILES_DIR}/metadata
-        ${COMMON_INCLUDE_FILES_DIR}/formats
-        ${COMMON_INCLUDE_FILES_DIR}/iiifparser
+        ${PROJECT_SOURCE_DIR}
+        ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/include/iiifparser
         ${PROJECT_SOURCE_DIR}/src
-        ${PROJECT_SOURCE_DIR}/shttps
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/local/include
+        ${CMAKE_BINARY_DIR}
+        ${CMAKE_BINARY_DIR}/local/include
 )
 
 add_executable(sipi
-        src/sipi.cpp
-        src/SipiConf.cpp include/SipiConf.h
-        src/SipiError.cpp
-        src/SipiError.hpp
-        include/AdobeRGB1998_icc.h include/USWebCoatedSWOP_icc.h
-        include/CLI11.hpp
-        src/metadata/SipiIcc.cpp include/metadata/SipiIcc.h
-        src/metadata/SipiXmp.cpp include/metadata/SipiXmp.h
-        src/metadata/SipiIptc.cpp include/metadata/SipiIptc.h
-        src/metadata/SipiExif.cpp include/metadata/SipiExif.h
-        src/metadata/SipiEssentials.cpp include/metadata/SipiEssentials.h
-        src/SipiImage.cpp
-        src/SipiImage.hpp
-        src/SipiImageError.hpp
-        src/formats/SipiIOTiff.cpp include/formats/SipiIOTiff.h
-        src/formats/SipiIOJ2k.cpp include/formats/SipiIOJ2k.h
-        src/formats/SipiIOJpeg.cpp include/formats/SipiIOJpeg.h
-        src/formats/SipiIOPng.cpp include/formats/SipiIOPng.h
-        src/SipiHttpServer.cpp
-        src/SipiHttpServer.hpp
-        src/handlers/iiif_handler.cpp
-        src/handlers/iiif_handler.hpp
-        src/SipiCache.cpp include/SipiCache.h
-        src/SipiLua.cpp include/SipiLua.h
-        src/iiifparser/SipiRotation.cpp include/iiifparser/SipiRotation.h
-        src/iiifparser/SipiQualityFormat.cpp include/iiifparser/SipiQualityFormat.h
-        src/iiifparser/SipiRegion.cpp include/iiifparser/SipiRegion.h
-        src/iiifparser/SipiSize.cpp include/iiifparser/SipiSize.h
-        src/SipiCommon.cpp include/SipiCommon.h
-        shttps/Global.h
-        shttps/Error.cpp shttps/Error.h
-        shttps/Hash.cpp shttps/Hash.h
-        shttps/SockStream.cpp shttps/SockStream.h
-        shttps/ChunkReader.cpp shttps/ChunkReader.h
-        shttps/Connection.cpp shttps/Connection.h
-        shttps/LuaServer.cpp shttps/LuaServer.h
-        shttps/LuaSqlite.cpp shttps/LuaSqlite.h
-        shttps/Parsing.cpp shttps/Parsing.h
-        shttps/ThreadControl.cpp shttps/ThreadControl.h
-        shttps/SocketControl.cpp shttps/SocketControl.h
-        shttps/Server.cpp shttps/Server.h
-        shttps/jwt.c shttps/jwt.h
-        shttps/makeunique.h
-        src/SipiFilenameHash.cpp include/SipiFilenameHash.h
-        include/iiifparser/SipiIdentifier.h src/iiifparser/SipiIdentifier.cpp
-        src/handlers/iiif_handler.cpp
-        src/handlers/iiif_handler.hpp
+        ${PROJECT_SOURCE_DIR}/src/sipi.cpp
+        ${PROJECT_SOURCE_DIR}/src/SipiConf.cpp include/SipiConf.h
+        ${PROJECT_SOURCE_DIR}/src/SipiError.cpp
+        ${PROJECT_SOURCE_DIR}/src/SipiError.hpp
+        ${PROJECT_SOURCE_DIR}/include/CLI11.hpp
+        ${PROJECT_SOURCE_DIR}/src/metadata/SipiIcc.cpp ${PROJECT_SOURCE_DIR}/include/metadata/SipiIcc.h
+        ${PROJECT_SOURCE_DIR}/src/metadata/SipiXmp.cpp ${PROJECT_SOURCE_DIR}/include/metadata/SipiXmp.h
+        ${PROJECT_SOURCE_DIR}/src/metadata/SipiIptc.cpp ${PROJECT_SOURCE_DIR}/include/metadata/SipiIptc.h
+        ${PROJECT_SOURCE_DIR}/src/metadata/SipiExif.cpp ${PROJECT_SOURCE_DIR}/include/metadata/SipiExif.h
+        ${PROJECT_SOURCE_DIR}/src/metadata/SipiEssentials.cpp ${PROJECT_SOURCE_DIR}/include/metadata/SipiEssentials.h
+        ${PROJECT_SOURCE_DIR}/src/SipiImage.cpp
+        ${PROJECT_SOURCE_DIR}/src/SipiImage.hpp
+        ${PROJECT_SOURCE_DIR}/src/SipiImageError.hpp
+        ${PROJECT_SOURCE_DIR}/src/formats/SipiIOTiff.cpp ${PROJECT_SOURCE_DIR}/include/formats/SipiIOTiff.h
+        ${PROJECT_SOURCE_DIR}/src/formats/SipiIOJ2k.cpp ${PROJECT_SOURCE_DIR}/include/formats/SipiIOJ2k.h
+        ${PROJECT_SOURCE_DIR}/src/formats/SipiIOJpeg.cpp ${PROJECT_SOURCE_DIR}/include/formats/SipiIOJpeg.h
+        ${PROJECT_SOURCE_DIR}/src/formats/SipiIOPng.cpp ${PROJECT_SOURCE_DIR}/include/formats/SipiIOPng.h
+        ${PROJECT_SOURCE_DIR}/src/SipiHttpServer.cpp
+        ${PROJECT_SOURCE_DIR}/src/SipiHttpServer.hpp
+        ${PROJECT_SOURCE_DIR}/src/handlers/iiif_handler.cpp
+        ${PROJECT_SOURCE_DIR}/src/handlers/iiif_handler.hpp
+        ${PROJECT_SOURCE_DIR}/src/SipiCache.cpp include/SipiCache.h
+        ${PROJECT_SOURCE_DIR}/src/SipiLua.cpp include/SipiLua.h
+        ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiRotation.cpp include/iiifparser/SipiRotation.h
+        ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiQualityFormat.cpp ${PROJECT_SOURCE_DIR}/include/iiifparser/SipiQualityFormat.h
+        ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiRegion.cpp ${PROJECT_SOURCE_DIR}/include/iiifparser/SipiRegion.h
+        ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiSize.cpp include/iiifparser/SipiSize.h
+        ${PROJECT_SOURCE_DIR}/src/SipiCommon.cpp ${PROJECT_SOURCE_DIR}/include/SipiCommon.h
+        ${PROJECT_SOURCE_DIR}/shttps/Global.h
+        ${PROJECT_SOURCE_DIR}/shttps/Error.cpp ${PROJECT_SOURCE_DIR}/shttps/Error.h
+        ${PROJECT_SOURCE_DIR}/shttps/Hash.cpp ${PROJECT_SOURCE_DIR}/shttps/Hash.h
+        ${PROJECT_SOURCE_DIR}/shttps/SockStream.cpp ${PROJECT_SOURCE_DIR}/shttps/SockStream.h
+        ${PROJECT_SOURCE_DIR}/shttps/ChunkReader.cpp ${PROJECT_SOURCE_DIR}/shttps/ChunkReader.h
+        ${PROJECT_SOURCE_DIR}/shttps/Connection.cpp ${PROJECT_SOURCE_DIR}/shttps/Connection.h
+        ${PROJECT_SOURCE_DIR}/shttps/LuaServer.cpp ${PROJECT_SOURCE_DIR}/shttps/LuaServer.h
+        ${PROJECT_SOURCE_DIR}/shttps/LuaSqlite.cpp ${PROJECT_SOURCE_DIR}/shttps/LuaSqlite.h
+        ${PROJECT_SOURCE_DIR}/shttps/Parsing.cpp ${PROJECT_SOURCE_DIR}/shttps/Parsing.h
+        ${PROJECT_SOURCE_DIR}/shttps/ThreadControl.cpp ${PROJECT_SOURCE_DIR}/shttps/ThreadControl.h
+        ${PROJECT_SOURCE_DIR}/shttps/SocketControl.cpp ${PROJECT_SOURCE_DIR}/shttps/SocketControl.h
+        ${PROJECT_SOURCE_DIR}/shttps/Server.cpp ${PROJECT_SOURCE_DIR}/shttps/Server.h
+        ${PROJECT_SOURCE_DIR}/shttps/jwt.c ${PROJECT_SOURCE_DIR}/shttps/jwt.h
+        ${PROJECT_SOURCE_DIR}/shttps/makeunique.h
+        ${PROJECT_SOURCE_DIR}/src/SipiFilenameHash.cpp ${PROJECT_SOURCE_DIR}/include/SipiFilenameHash.h
+        ${PROJECT_SOURCE_DIR}/include/iiifparser/SipiIdentifier.h ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiIdentifier.cpp
+        ${PROJECT_SOURCE_DIR}/src/handlers/iiif_handler.cpp
+        ${PROJECT_SOURCE_DIR}/src/handlers/iiif_handler.hpp
 )
 
 add_dependencies(sipi icc_profiles)
 
-add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 exiv2 jansson lua sqlite3 kdu kdu_aux)
+add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 exiv2 jansson lua sqlite3 kdu kdu_aux sentry)
 
 
 # !!! ORDER MATTERS !!!
@@ -507,6 +491,9 @@ target_link_libraries(${PROJECT_NAME} ${LIBS}
         Threads::Threads
         ${CMAKE_DL_LIBS}
 )
+
+# add the sentry libraries
+target_link_libraries(sipi sentry)
 
 if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
     target_link_libraries(sipi iconv intl)

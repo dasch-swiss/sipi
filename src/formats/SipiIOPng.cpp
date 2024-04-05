@@ -17,15 +17,12 @@
 
 #include <cstring>
 
-#include "SipiIOPng.h"
-
-#include "SipiImageError.hpp"
-
-
 #include <png.h>
 #include <tiff.h>
 #include <zlib.h>
 
+#include "SipiImageError.hpp"
+#include "formats/SipiIOPng.h"
 
 // bad hack in order to include definitions in png.h on debian systems
 #if !defined(PNG_TEXT_SUPPORTED)
@@ -153,13 +150,11 @@ bool SipiIOPng::read(SipiImage *img,
   if ((png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, (png_voidp) nullptr, sipi_error_fn, sipi_warning_fn))
       == nullptr) {
     fclose(infile);
-    throw SipiImageError(
-      "Error reading PNG file \"" + filepath + "\": Could not allocate mempry fpr png_structp !");
+    throw SipiImageError("Error reading PNG file \"" + filepath + "\": Could not allocate mempry fpr png_structp !");
   }
   if ((info_ptr = png_create_info_struct(png_ptr)) == nullptr) {
     fclose(infile);
-    throw SipiImageError(
-      "Error reading PNG file \"" + filepath + "\": Could not allocate mempry fpr png_infop !");
+    throw SipiImageError("Error reading PNG file \"" + filepath + "\": Could not allocate mempry fpr png_infop !");
   }
 
   png_init_io(png_ptr, infile);
@@ -352,13 +347,11 @@ SipiImgInfo SipiIOPng::getDim(const std::string &filepath)
          PNG_LIBPNG_VER_STRING, (png_voidp) nullptr, (png_error_ptr)sipi_error_fn, (png_error_ptr)sipi_warning_fn))
       == nullptr) {
     fclose(infile);
-    throw SipiImageError(
-      "Error reading PNG file \"" + filepath + "\": Could not allocate mempry fpr png_structp !");
+    throw SipiImageError("Error reading PNG file \"" + filepath + "\": Could not allocate mempry fpr png_structp !");
   }
   if ((info_ptr = png_create_info_struct(png_ptr)) == nullptr) {
     fclose(infile);
-    throw SipiImageError(
-      "Error reading PNG file \"" + filepath + "\": Could not allocate mempry fpr png_infop !");
+    throw SipiImageError("Error reading PNG file \"" + filepath + "\": Could not allocate mempry fpr png_infop !");
   }
 
   png_init_io(png_ptr, infile);
@@ -422,8 +415,7 @@ void SipiIOPng::write(SipiImage *img, const std::string &filepath, const SipiCom
   png_structp png_ptr;
 
   if (!(png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, sipi_error_fn, sipi_warning_fn))) {
-    throw SipiImageError(
-      "Error writing PNG file \"" + filepath + "\": png_create_write_struct failed !");
+    throw SipiImageError("Error writing PNG file \"" + filepath + "\": png_create_write_struct failed !");
   }
 
   if (filepath == "stdout:") {
@@ -433,8 +425,7 @@ void SipiIOPng::write(SipiImage *img, const std::string &filepath, const SipiCom
   } else {
     if (!(outfile = fopen(filepath.c_str(), "wb"))) {
       png_free_data(png_ptr, nullptr, PNG_FREE_ALL, -1);
-      throw SipiImageError(
-        "Error writing PNG file \"" + filepath + "\": Could notopen output file !");
+      throw SipiImageError("Error writing PNG file \"" + filepath + "\": Could notopen output file !");
     }
   }
 
@@ -473,8 +464,7 @@ void SipiIOPng::write(SipiImage *img, const std::string &filepath, const SipiCom
     img->bps = 8;
   } else {
     png_free_data(png_ptr, info_ptr, PNG_FREE_ALL, -1);
-    throw SipiImageError(
-      "Error writing PNG file \"" + filepath + "\": cannot handle number of channels () !");
+    throw SipiImageError("Error writing PNG file \"" + filepath + "\": cannot handle number of channels () !");
   }
 
   png_set_IHDR(png_ptr,

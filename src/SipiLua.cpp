@@ -6,17 +6,17 @@
 #include <cstring>
 #include <iostream>
 
-#include <SipiCache.h>
-#include <SipiFilenameHash.h>
+#include "shttps/Connection.h"
+#include "shttps/Error.h"
+#include "shttps/Parsing.h"
 
-#include "Error.h"
+#include "SipiCache.h"
+#include "SipiFilenameHash.h"
 #include "SipiHttpServer.hpp"
 #include "SipiImage.hpp"
+#include "SipiImageError.hpp"
 #include "SipiLua.h"
 
-#include "SipiImageError.hpp"
-#include "shttps/Connection.h"
-#include "shttps/Parsing.h"
 
 namespace Sipi {
 

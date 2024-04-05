@@ -2,7 +2,7 @@
 set(TEST_NAME configuration_tests)
 
 link_directories(
-        ${CONFIGURE_LIBDIR}
+        ${CMAKE_BINARY_DIR}/local/lib
 )
 
 include_directories(

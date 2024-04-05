@@ -16,19 +16,17 @@
 
 #include <cerrno>
 
-#include "../SipiError.hpp"
-#include "../SipiImage.hpp"
-#include "SipiIOTiff.h"
+#include "tif_dir.h"// libtiff internals; for _TIFFFieldArray
 
-#include "SipiImageError.hpp"
 #include "shttps/Connection.h"
 
-#include "tif_dir.h"// libtiff internals; for _TIFFFieldArray
+#include "SipiError.hpp"
+#include "SipiImage.hpp"
+#include "SipiImageError.hpp"
+#include "formats/SipiIOTiff.h"
 
 
 #include "shttps/Global.h"
-
-static const char __file__[] = __FILE__;
 
 #define TIFF_GET_FIELD(file, tag, var, default)                      \
   {                                                                  \

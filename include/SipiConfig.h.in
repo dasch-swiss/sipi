@@ -3,16 +3,10 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#ifndef __defined_config_h
-#define __defined_config_h
-
+#ifndef __defined_sipi_config_h
+#define __defined_sipi_config_h
 
 #cmakedefine HAVE_MALLOC_H 1
 #cmakedefine HAVE_ST_ATIMESPEC
-
-#define BUILD_TIMESTAMP "${BUILD_TIMESTAMP}"
-#define BUILD_SCM_TAG "${BUILD_SCM_TAG}"
-#define BUILD_SCM_REVISION "${BUILD_SCM_REVISION}"
-
 
 #endif

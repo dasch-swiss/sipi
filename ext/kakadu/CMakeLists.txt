@@ -1,7 +1,7 @@
 project(kakadu_builder C CXX)
 include(ExternalProject)
 
-message(STATUS ${CONFIGURE_LIBDIR})
+message(STATUS ${CMAKE_BINARY_DIR}/local/lib)
 #
 # compiling kakadu (without JAVA interface)
 #
@@ -17,29 +17,29 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     set(PATCH_COMMAND_OVERRIDE "")
 else ()
     # when we compile with gcc, we need to patch the makefiles, so that the target uses GCC instead of Clang
-    set(PATCH_COMMAND_OVERRIDE patch ${COMMON_SRCS}/${KakaduVersion}/coresys/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu-makefile-coresys.patch && patch ${COMMON_SRCS}/${KakaduVersion}/apps/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu-makefile-apps.patch && patch ${COMMON_SRCS}/${KakaduVersion}/managed/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu-makefile-managed.patch)
+    set(PATCH_COMMAND_OVERRIDE patch ${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}/coresys/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu-makefile-coresys.patch && patch ${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}/apps/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu-makefile-apps.patch && patch ${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}/managed/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu-makefile-managed.patch)
 endif ()
 
 ExternalProject_Add(project_kakadu
-        INSTALL_DIR ${COMMON_LOCAL}
-        DOWNLOAD_COMMAND unzip -o -d ${COMMON_SRCS} ${COMMON_VENDOR}/${KakaduVersion}.zip
+        INSTALL_DIR ${CMAKE_BINARY_DIR}/local
+        DOWNLOAD_COMMAND unzip -o -d ${CMAKE_BINARY_DIR}/local/extsrcs ${COMMON_VENDOR}/${KakaduVersion}.zip
         DOWNLOAD_EXTRACT_TIMESTAMP OLD
         PATCH_COMMAND ${PATCH_COMMAND_OVERRIDE}
         CONFIGURE_COMMAND ""
-        BUILD_COMMAND make -j1 --directory=${COMMON_SRCS}/${KakaduVersion}/make/ -f ${KDU_MAKE} EXEC_PLATFORM=${KDU_EXEC_PLATFORM} all_but_jni
-        INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_directory ${COMMON_SRCS}/${KakaduVersion}/lib/${KDU_ARCH} ${CONFIGURE_LIBDIR}
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${COMMON_SRCS}/${KakaduVersion}/bin/${KDU_ARCH} ${COMMON_LOCAL}/bin
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${COMMON_SRCS}/${KakaduVersion}/managed/all_includes ${COMMON_LOCAL}/include
+        BUILD_COMMAND make -j1 --directory=${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}/make/ -f ${KDU_MAKE} EXEC_PLATFORM=${KDU_EXEC_PLATFORM} all_but_jni
+        INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}/lib/${KDU_ARCH} ${CMAKE_BINARY_DIR}/local/lib
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}/bin/${KDU_ARCH} ${CMAKE_BINARY_DIR}/local/bin
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}/managed/all_includes ${CMAKE_BINARY_DIR}/local/include
 )
 
 ExternalProject_Get_Property(project_kakadu install_dir)
 
 add_library(kdu STATIC IMPORTED GLOBAL)
-set_property(TARGET kdu PROPERTY IMPORTED_LOCATION ${CONFIGURE_LIBDIR}/libkdu${CMAKE_STATIC_LIBRARY_SUFFIX})
+set_property(TARGET kdu PROPERTY IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/local/lib/libkdu${CMAKE_STATIC_LIBRARY_SUFFIX})
 
 add_dependencies(kdu project_kakadu)
 
 add_library(kdu_aux STATIC IMPORTED GLOBAL)
-set_property(TARGET kdu_aux PROPERTY IMPORTED_LOCATION ${CONFIGURE_LIBDIR}/libkdu_aux${CMAKE_STATIC_LIBRARY_SUFFIX})
+set_property(TARGET kdu_aux PROPERTY IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/local/lib/libkdu_aux${CMAKE_STATIC_LIBRARY_SUFFIX})
 
 add_dependencies(kdu_aux project_kakadu)

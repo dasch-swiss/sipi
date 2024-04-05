@@ -4,25 +4,17 @@
  */
 
 #include <assert.h>
-#include <stdlib.h>
-#include <syslog.h>
-
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <syslog.h>
 #include <vector>
 
+#include <cstring>
 #include <fcntl.h>
-#include <string.h>
-
-#include "shttps/Connection.h"
-#include "shttps/Global.h"
-
-#include "../SipiError.hpp"
-#include "SipiIOJ2k.h"
-
 
 // Kakadu core includes
 #include "kdu_compressed.h"
@@ -30,19 +22,25 @@
 #include "kdu_messaging.h"
 #include "kdu_params.h"
 #include "kdu_sample_processing.h"
+
 // Application level includes
-#include "SipiImageError.hpp"
+
 #include "jp2.h"
 #include "jpx.h"
 #include "kdu_file_io.h"
 #include "kdu_stripe_compressor.h"
 #include "kdu_stripe_decompressor.h"
+
+#include "shttps/Connection.h"
+#include "shttps/Global.h"
 #include "shttps/makeunique.h"
+
+#include "SipiError.hpp"
+#include "SipiImageError.hpp"
+#include "formats/SipiIOJ2k.h"
 
 using namespace kdu_core;
 using namespace kdu_supp;
-
-static const char __file__[] = __FILE__;
 
 namespace Sipi {
 
@@ -385,7 +383,8 @@ bool SipiIOJ2k::read(SipiImage *img,
   // get ICC-Profile if available
   //
   jpx_layer = jpx_in.access_layer(0);
-  img->photo = PhotometricInterpretation::INVALID;// we initialize to an invalid value in order to test later if img->photo has been set
+  img->photo = PhotometricInterpretation::INVALID;// we initialize to an invalid value in order to test later if
+                                                  // img->photo has been set
   int numcol;
   if (jpx_layer.exists()) {
     kdu_supp::jp2_colour colinfo = jpx_layer.access_colour(0);

@@ -23,8 +23,6 @@
 
 #include <mariadb/mysql.h>
 
-static const char __file__[] = __FILE__;
-
 namespace Sipi {
 
 typedef enum {MYSQL_STRING, MYSQL_INTEGER, MYSQL_FLOAT} MysqlDatatype;

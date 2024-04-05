@@ -80,8 +80,6 @@ a:12:{
 }
 */
 
-static const char __file__[] = __FILE__;
-
 namespace Sipi {
 
 class PhpException : public std::exception {

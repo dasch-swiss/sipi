@@ -17,8 +17,6 @@
 #include "SipiError.h"
 #include "Template.h"
 
-static const char __file__[] = __FILE__;
-
 namespace Sipi {
 
 void Template::value(const std::string &name, const string &sval) {

@@ -14,7 +14,9 @@
 #include <sys/stat.h>
 
 #include "lcms2.h"
-#include "makeunique.h"
+
+#include "shttps/Parsing.h"
+#include "shttps/makeunique.h"
 
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
@@ -24,8 +26,6 @@
 #include "formats/SipiIOTiff.h"
 #include "shttps/Global.h"
 #include "shttps/Hash.h"
-
-#include "shttps/Parsing.h"
 
 namespace Sipi {
 
@@ -99,7 +99,8 @@ SipiImage::SipiImage(size_t nx_p, size_t ny_p, size_t nc_p, size_t bps_p, Photom
   : nx(nx_p), ny(ny_p), nc(nc_p), bps(bps_p), photo(photo_p)
 {
   orientation = TOPLEFT;// assuming default...
-  if (((photo == PhotometricInterpretation::MINISWHITE) || (photo == PhotometricInterpretation::MINISBLACK)) && !((nc == 1) || (nc == 2))) {
+  if (((photo == PhotometricInterpretation::MINISWHITE) || (photo == PhotometricInterpretation::MINISBLACK))
+      && !((nc == 1) || (nc == 2))) {
     throw SipiImageError("Mismatch in Photometric interpretation and number of channels");
   }
 
@@ -1326,7 +1327,9 @@ bool SipiImage::to8bps()
 
 bool SipiImage::toBitonal()
 {
-  if ((photo != PhotometricInterpretation::MINISBLACK) && (photo != PhotometricInterpretation::MINISWHITE)) { convertToIcc(SipiIcc(icc_GRAY_D50), 8); }
+  if ((photo != PhotometricInterpretation::MINISBLACK) && (photo != PhotometricInterpretation::MINISWHITE)) {
+    convertToIcc(SipiIcc(icc_GRAY_D50), 8);
+  }
 
   bool doit = false;// will be set true if we find a value not equal 0 or 255
 

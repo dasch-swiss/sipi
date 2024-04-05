@@ -11,11 +11,9 @@
 #include <string.h>
 #include <vector>
 
-#include "SipiEssentials.h"
+#include "metadata/SipiEssentials.h"
 #include "shttps/Error.h"
 #include "shttps/Global.h"
-
-static const char __file__[] = __FILE__;
 
 static int calcDecodeLength(const std::string &b64input)
 {
