@@ -18,6 +18,5 @@
     { "type": "ci", "section": "Continuous Integration", "hidden": true }
   ],
   "packages": {".": {}},
-  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"
 }
