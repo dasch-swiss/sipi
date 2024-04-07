@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.12.1](https://github.com/dasch-swiss/sipi/compare/v3.12.0...v3.12.1) (2024-04-07)
+
+
+### Bug Fixes
+
+* Triggering release creation ([7434ed4](https://github.com/dasch-swiss/sipi/commit/7434ed42edb3869d542c96add443ae9af1d16b6d))
+
 ## [3.12.0](https://github.com/dasch-swiss/sipi/compare/v3.11.0...v3.12.0) (2024-04-07)
 
 
