@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.12.0](https://github.com/dasch-swiss/sipi/compare/v3.11.0...v3.12.0) (2024-04-07)
+
+
+### Features
+
+* Trying out release-please ([4ca8169](https://github.com/dasch-swiss/sipi/commit/4ca8169d87eee061350fed530e1318a2e21ed7f9))
+
 ## 3.11.0 (2024-04-05)
 
 
