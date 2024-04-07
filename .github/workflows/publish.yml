@@ -85,6 +85,7 @@ jobs:
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         with:
           version: ${{ github.ref_name }}
+          version_prefix: "v"
 
   # Publish documentation
   docs:
