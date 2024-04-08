@@ -318,32 +318,36 @@ if (DOXYGEN_FOUND)
     )
 endif (DOXYGEN_FOUND)
 
-
 #
-# get version from git
+# get version from git if not provided externally
 #
-if (EXISTS ${PROJECT_SOURCE_DIR}/.git)
-    find_package(Git)
-    if (GIT_FOUND)
-        execute_process(
-                COMMAND ${GIT_EXECUTABLE} describe --tag --dirty --abbrev=7
-                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-                OUTPUT_VARIABLE BUILD_SCM_TAG
-                ERROR_QUIET
-                OUTPUT_STRIP_TRAILING_WHITESPACE)
-        execute_process(
-                COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
-                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-                OUTPUT_VARIABLE BUILD_SCM_REVISION
-                ERROR_QUIET
-                OUTPUT_STRIP_TRAILING_WHITESPACE)
-    else (GIT_FOUND)
-        SET(BUILD_SCM_REVISION 0)
-        SET(BUILD_SCM_TAG 0)
-    endif (GIT_FOUND)
-endif (EXISTS ${PROJECT_SOURCE_DIR}/.git)
-
-option(BUILD_SCM_TAG "Build SCM tag" "$ENV{BUILD_TAG}")
+if (EXT_PROVIDED_VERSION STREQUAL "OFF")
+    message(STATUS "Getting version from git")
+    if (EXISTS ${PROJECT_SOURCE_DIR}/.git)
+        find_package(Git)
+        if (GIT_FOUND)
+            execute_process(
+                    COMMAND ${GIT_EXECUTABLE} describe --tag --dirty --abbrev=7
+                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                    OUTPUT_VARIABLE BUILD_SCM_TAG
+                    ERROR_QUIET
+                    OUTPUT_STRIP_TRAILING_WHITESPACE)
+            execute_process(
+                    COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
+                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                    OUTPUT_VARIABLE BUILD_SCM_REVISION
+                    ERROR_QUIET
+                    OUTPUT_STRIP_TRAILING_WHITESPACE)
+        else (GIT_FOUND)
+            SET(BUILD_SCM_REVISION 0)
+            SET(BUILD_SCM_TAG 0)
+        endif (GIT_FOUND)
+    endif (EXISTS ${PROJECT_SOURCE_DIR}/.git)
+else ()
+    message(STATUS "Using externally provided version")
+    SET(BUILD_SCM_REVISION 0)
+    SET(BUILD_SCM_TAG ${EXT_PROVIDED_VERSION})
+endif (EXT_PROVIDED_VERSION STREQUAL "OFF")
 
 message(STATUS "Build SCM tag: ${BUILD_SCM_TAG}")
 message(STATUS "Build SCM revision: ${BUILD_SCM_REVISION}")
