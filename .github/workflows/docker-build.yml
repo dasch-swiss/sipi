@@ -1,6 +1,9 @@
 name: docker-build
 
 on:
+  schedule:
+    # run on midnight every day
+    - cron: '0 0 * * *'
   pull_request:
 
 jobs:
