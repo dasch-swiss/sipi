@@ -9,7 +9,7 @@
  */
 #include <syslog.h>
 #include <csignal>
-#include <stdlib.h>
+#include <cstdlib>
 #include <dirent.h>
 #include <execinfo.h>
 #include <iostream>
