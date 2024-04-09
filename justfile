@@ -66,3 +66,7 @@ run:
 # start SIPI with Valgrind (inside NIX develop shell, e.g., 'nix clang')
 valgrind:
 	valgrind --leak-check=yes --track-origins=yes ./build/sipi --config=/sipi/config/sipi.config.lua
+
+# query version of the project
+version:
+    cmake -P query_version.cmake

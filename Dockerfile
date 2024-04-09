@@ -12,11 +12,11 @@ WORKDIR /tmp/sipi
 # Add everything to image.
 COPY . .
 
-ARG BUILD_TAG
-ENV BUILD_TAG=${BUILD_TAG}
+# this can be provided when the image is built
+ARG VERSION=OFF
 
 # Build SIPI and run unit tests.
-RUN cmake -S . -B ./build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release --log-context
+RUN cmake -S . -B ./build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DEXT_PROVIDED_VERSION=$VERSION --log-context
 RUN cmake --build ./build --parallel 4
 RUN cd build && ctest --output-on-failure
 
