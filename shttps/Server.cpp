@@ -579,7 +579,7 @@ void Server::jwt_secret(const std::string &jwt_secret_p)
   auto secret_size = _jwt_secret.size();
 
   if (secret_size < 32) {
-    for (int i = 0; i < (32 - secret_size); i++) { _jwt_secret.push_back('A' + i); }
+    for (size_t i = 0; i < (32 - secret_size); i++) { _jwt_secret.push_back('A' + i); }
   }
 }
 //=========================================================================
@@ -691,11 +691,6 @@ static int close_socket(const SocketControl::SocketInfo &socket_info)
     SSL_CTX_free(socket_info.sslctx);
   }
   if (shutdown(socket_info.sid, SHUT_RDWR) < 0) {
-    const auto loc = std::source_location::current();
-    syslog(LOG_DEBUG,
-      "Debug: shutting down socket at [%s: %d]: %m failed (client terminated already?)",
-      loc.file_name(),
-      loc.line());
   }
 
   if (close(socket_info.sid) == -1) {
@@ -904,7 +899,6 @@ SocketControl::SocketInfo Server::accept_connection(int sock, bool ssl)
  */
 void Server::run()
 {
-  syslog(LOG_DEBUG, "In Server::run");
   // Start a thread just to catch signals sent to the server process.
   pthread_t sighandler_thread;
   sigset_t set;
@@ -1259,7 +1253,6 @@ shttps::ThreadStatus Server::process_request(std::istream *ins,
       return CLOSE;
     }
   } catch (InputFailure iofail) {// "error" is thrown, if the socket was closed from the main thread...
-    syslog(LOG_DEBUG, "Socket connection: timeout or socket closed from main");
     return CLOSE;
   } catch (Error &err) {
     syslog(LOG_WARNING, "Internal server error: %s", err.to_string().c_str());

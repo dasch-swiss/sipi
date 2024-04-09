@@ -7,7 +7,9 @@
  * \brief Implements an IIIF server with many features.
  *
  */
+#include <syslog.h>
 #include <csignal>
+#include <stdlib.h>
 #include <dirent.h>
 #include <execinfo.h>
 #include <iostream>
@@ -15,7 +17,7 @@
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
-#include <syslog.h>
+
 
 #include <thread>
 #include <unistd.h>
@@ -46,9 +48,6 @@
 #include "formats/SipiIOTiff.h"
 
 #include "generated/SipiVersion.h"
-
-// A macro for silencing incorrect compiler warnings about unused variables.
-#define _unused(x) ((void)(x))
 
 /*!
  * \mainpage
@@ -345,7 +344,7 @@ enum class OptFormat : int { jpx, jpg, tif, png };
 enum class OptIcc : int { none, sRGB, AdobeRGB, GRAY };
 enum class OptMirror { none, horizontal, vertical };
 enum class LogLevel { DEBUG, INFO, NOTICE, WARNING, ERR, CRIT, ALERT, EMERG };
-struct CLIArgumentOptionsResult
+struct CLIArgumentOptions
 {
   std::shared_ptr<CLI::App> sipiopt;
   std::string optConfigfile;
@@ -415,12 +414,12 @@ struct CLIArgumentOptionsResult
  * return CLIArgumentOptionsResult containing an instance of the CLI::App class that is used to parse the command line
  * arguments. Note: shared_ptr is used because the CLI::App class does not implement move semantics.
  */
-CLIArgumentOptionsResult get_cli_args()
+CLIArgumentOptions get_cli_args()
 {
   const auto app = std::make_shared<CLI::App>(
     "SIPI is a image format converter and - if started in server mode - a high performance IIIF server");
 
-  CLIArgumentOptionsResult result;
+  CLIArgumentOptions result;
 
   app->add_option("-c,--config", result.optConfigfile, "Configuration file for web server.")
     ->envname("SIPI_CONFIGFILE")
@@ -668,7 +667,7 @@ CLIArgumentOptionsResult get_cli_args()
 /**
  * Query the image file for all information.
  */
-void query_command(CLIArgumentOptionsResult cli_args)
+void query_command(CLIArgumentOptions const& cli_args)
 {
   //
   // we query all information from just one file
@@ -681,7 +680,7 @@ void query_command(CLIArgumentOptionsResult cli_args)
 /**
  * Compare two image files.
  */
-int compare_command(CLIArgumentOptionsResult cli_args)
+int compare_command(CLIArgumentOptions const& cli_args)
 {
   //
   // command line function: we want to compare pixelwise to files. After having done this, we exit
@@ -736,7 +735,7 @@ int compare_command(CLIArgumentOptionsResult cli_args)
 /**
  * Convert an image file.
  */
-int convert_command(CLIArgumentOptionsResult cli_args)
+int convert_command(CLIArgumentOptions const& cli_args)
 {
   //
   // Commandline conversion with input and output file given
@@ -984,7 +983,7 @@ int convert_command(CLIArgumentOptionsResult cli_args)
 /**
  * Server Command
  */
-int server_command(CLIArgumentOptionsResult cli_args)
+int server_command(CLIArgumentOptions cli_args)
 {
 
   std::cout << std::endl << "Ivan was here" << std::endl;
@@ -1378,8 +1377,7 @@ int main(int argc, char *argv[])
   // first we initialize the libraries that sipi uses
   //
   try {
-    LibraryInitialiser &sipi_init = LibraryInitialiser::instance();
-    _unused(sipi_init);// Silence compiler warning about unused variable.
+    LibraryInitialiser::instance();
   } catch (shttps::Error &e) {
     std::cerr << e.to_string() << '\n';
     return EXIT_FAILURE;
@@ -1390,6 +1388,9 @@ int main(int argc, char *argv[])
   // parse the command line arguments or exit if not valid
   CLI11_PARSE(*cli_args.sipiopt, argc, argv);
 
+  //
+  // Query the image file for all information.
+  //
   if (!cli_args.sipiopt->get_option("--query")->empty()) {
     try {
       // add opening trace
@@ -1402,6 +1403,9 @@ int main(int argc, char *argv[])
     }
   }
 
+  //
+  // Compare two image files.
+  //
   if (!cli_args.sipiopt->get_option("--compare")->empty()) {
     try {
       // add opening trace
@@ -1414,6 +1418,9 @@ int main(int argc, char *argv[])
     }
   }
 
+  //
+  // Convert an image file.
+  //
   if (!(cli_args.sipiopt->get_option("--file")->empty() || cli_args.sipiopt->get_option("--outf")->empty())) {
     try {
       // add opening trace
@@ -1426,13 +1433,11 @@ int main(int argc, char *argv[])
     }
   }
 
-  if (!(cli_args.sipiopt->get_option("--config")->empty()
-               && cli_args.sipiopt->get_option("--serverport")->empty())) {
-    //
-    // there is a configuration file given on the command line. Thus we try to start SIPI in
-    // server mode
-    //
-
+  //
+  // there is a configuration file given on the command line. Thus we try to start SIPI in
+  // server mode
+  //
+  if (!(cli_args.sipiopt->get_option("--config")->empty() && cli_args.sipiopt->get_option("--serverport")->empty())) {
     try {
       // add opening trace
       const int ret_code = server_command(cli_args);
