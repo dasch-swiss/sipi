@@ -39,12 +39,14 @@
               lcov # code coverage helper tool
 
               # Build dependencies
+              abseil-cpp
               asio # networking library needed for crow (microframework for the web)
               curl
               exiv2
               ffmpeg
               file # libmagic-dev
               gettext
+              grpc
               glibcLocales # locales
               gperf
               iconv
@@ -54,6 +56,7 @@
               # numactl # libnuma-dev not available on mac
               libwebp
               openssl # libssl-dev
+              protobuf
               readline70 # libreadline-dev
               pkg-config
               unzip
@@ -82,12 +85,14 @@
               lcov # code coverage helper tool
 
               # Build dependencies
+              abseil-cpp
               asio # networking library needed for crow (microframework for the web)
               curl
               exiv2
               ffmpeg
               file # libmagic-dev
               gettext
+              grpc
               glibcLocales # locales
               gperf
               iconv
@@ -97,6 +102,7 @@
               # numactl # libnuma-dev not available on mac
               libwebp
               openssl # libssl-dev
+              protobuf
               readline70 # libreadline-dev
 
               # Other stuff

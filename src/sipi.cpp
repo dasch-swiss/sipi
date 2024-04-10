@@ -7,7 +7,6 @@
  * \brief Implements an IIIF server with many features.
  *
  */
-#include <syslog.h>
 #include <csignal>
 #include <cstdlib>
 #include <dirent.h>
@@ -17,6 +16,7 @@
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
+#include <syslog.h>
 
 
 #include <thread>
@@ -29,7 +29,8 @@
 
 #include <curl/curl.h>
 #include <jansson.h>
-#include <sentry.h>
+
+#include "otel.hpp"
 
 #include "shttps/LuaServer.h"
 #include "shttps/LuaSqlite.h"
@@ -78,7 +79,11 @@
  *
  */
 
-static void sipiConfGlobals(lua_State *L, shttps::Connection &conn, void *user_data)
+
+
+namespace {
+
+void sipiConfGlobals(lua_State *L, shttps::Connection &conn, void *user_data)
 {
   auto *conf = (Sipi::SipiConf *)user_data;
 
@@ -216,7 +221,7 @@ static void sipiConfGlobals(lua_State *L, shttps::Connection &conn, void *user_d
 }
 
 // small function to check if file exist
-inline bool exists_file(const std::string &name)
+bool exists_file(const std::string &name)
 {
   struct stat buffer;
   return (stat(name.c_str(), &buffer) == 0);
@@ -309,7 +314,7 @@ void sig_handler(const int sig)
   }
 
   msg += "\n" + get_stack_trace();
-  sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "sig_handler", msg.c_str()));
+  // TODO: add sig_handler metric: "sig_handler", msg.c_str()
   syslog(LOG_ERR, "%s", msg.c_str());
 
   exit(1);
@@ -334,7 +339,7 @@ void my_terminate_handler()
   }
 
   msg += "\n" + get_stack_trace();
-  sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "my_terminate_handler", msg.c_str()));
+  // TODO: add my_terminate_handler metric: "my_terminate_handler", msg.c_str()
   syslog(LOG_ERR, "%s", msg.c_str());
 
   std::abort();// Abort the program or perform other cleanup
@@ -667,7 +672,7 @@ CLIArgumentOptions get_cli_args()
 /**
  * Query the image file for all information.
  */
-void query_command(CLIArgumentOptions const& cli_args)
+void query_command(CLIArgumentOptions const &cli_args)
 {
   //
   // we query all information from just one file
@@ -680,7 +685,7 @@ void query_command(CLIArgumentOptions const& cli_args)
 /**
  * Compare two image files.
  */
-int compare_command(CLIArgumentOptions const& cli_args)
+int compare_command(CLIArgumentOptions const &cli_args)
 {
   //
   // command line function: we want to compare pixelwise to files. After having done this, we exit
@@ -735,7 +740,7 @@ int compare_command(CLIArgumentOptions const& cli_args)
 /**
  * Convert an image file.
  */
-int convert_command(CLIArgumentOptions const& cli_args)
+int convert_command(CLIArgumentOptions const &cli_args)
 {
   //
   // Commandline conversion with input and output file given
@@ -1355,7 +1360,7 @@ int server_command(CLIArgumentOptions cli_args)
   server.run();
   return EXIT_SUCCESS;
 }
-
+}// namespace
 /*!
  * The main function.
  *
@@ -1388,14 +1393,24 @@ int main(int argc, char *argv[])
   // parse the command line arguments or exit if not valid
   CLI11_PARSE(*cli_args.sipiopt, argc, argv);
 
+  initTracer();
+  auto tracer = opentelemetry::trace::Provider::GetTracerProvider()->GetTracer("sipi-cli");
+
+  initMeter();
+  auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter("sipi-cli");
+
+  initLogger();
+  auto logger = opentelemetry::logs::Provider::GetLoggerProvider()->GetLogger("sipi-cli");
+
   //
   // Query the image file for all information.
   //
   if (!cli_args.sipiopt->get_option("--query")->empty()) {
     try {
-      // add opening trace
+
+      auto span = tracer->StartSpan("query_command");
       query_command(cli_args);
-      // add closing trace
+      span->End();
       return EXIT_SUCCESS;
     } catch (std::exception &e) {
       syslog(LOG_ERR, "Error in query command: %s", e.what());
@@ -1408,11 +1423,15 @@ int main(int argc, char *argv[])
   //
   if (!cli_args.sipiopt->get_option("--compare")->empty()) {
     try {
-      // add opening trace
+      auto span = tracer->StartSpan("compare_command");
+      auto counter = meter->CreateDoubleCounter("compare_command");
+      counter->Add(1.0, {{"command", "compare"}});
+      logger->Info("Starting compare command");
       int const ret_code = compare_command(cli_args);
-      // add closing trace
+      span->End();
       return ret_code;
     } catch (std::exception &e) {
+      logger->Error("Error in compare command: {}", e.what());
       syslog(LOG_ERR, "Error in compare command: %s", e.what());
       return EXIT_FAILURE;
     }
@@ -1426,9 +1445,12 @@ int main(int argc, char *argv[])
       // add opening trace
       int const ret_code = convert_command(cli_args);
       // add closing trace
+      CleanupTracer();
       return ret_code;
     } catch (std::exception &e) {
+      logger->Error("Error in convert command: {}", e.what());
       syslog(LOG_ERR, "Error in convert command: %s", e.what());
+      CleanupTracer();
       return EXIT_FAILURE;
     }
   }
@@ -1439,16 +1461,23 @@ int main(int argc, char *argv[])
   //
   if (!(cli_args.sipiopt->get_option("--config")->empty() && cli_args.sipiopt->get_option("--serverport")->empty())) {
     try {
-      // add opening trace
+      auto span = tracer->StartSpan("server_command");
+      auto counter = meter->CreateDoubleCounter("server_command");
+      counter->Add(1.0, {{"command", "server"}});
+      logger->Info("Starting server command");
       const int ret_code = server_command(cli_args);
       // add closing trace
+      CleanupTracer();
       return ret_code;
     } catch (shttps::Error &err) {
+      logger->Error("Error starting server: {}", err.what());
       syslog(LOG_ERR, "Error starting server: %s", err.what());
       std::cerr << err << '\n';
+      CleanupTracer();
       return EXIT_FAILURE;
     }
   }
 
+  CleanupTracer();
   return EXIT_SUCCESS;
 }

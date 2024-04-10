@@ -242,9 +242,23 @@ if (CURL_FOUND)
     include_directories(${CURL_INCLUDE_DIRS})
 endif ()
 
-#find_package(JBIG REQUIRED)
-#include_directories(${JBIG_INCLUDE_DIR})
-# message(STATUS "JBIG ${JBIG_INCLUDE_DIR}")
+#
+# abseil-cpp
+# required for opentelemetry-cpp and protobuf
+#
+find_package(absl REQUIRED)
+if (absl_FOUND)
+    message(STATUS "abseil found")
+endif ()
+
+#
+# protobuf
+# required for opentelemetry-cpp
+#
+find_package(Protobuf REQUIRED)
+if (Protobuf_FOUND)
+    message(STATUS "protobuf found")
+endif ()
 
 if (NOT WIN32)
     find_library(M_LIBRARY NAMES m)
@@ -302,7 +316,8 @@ add_subdirectory(${COMMON_EXT}/lua)
 add_subdirectory(${COMMON_EXT}/luarocks)
 add_subdirectory(${COMMON_EXT}/sqlite3)
 add_subdirectory(${COMMON_EXT}/kakadu)
-add_subdirectory(${COMMON_EXT}/sentry)
+add_subdirectory(${COMMON_EXT}/googletest)
+add_subdirectory(${COMMON_EXT}/opentelemetry-cpp)
 
 message(STATUS "... adding external dependencies done.")
 
@@ -321,7 +336,7 @@ endif (DOXYGEN_FOUND)
 #
 # get version from git if not provided externally
 #
-if (EXT_PROVIDED_VERSION STREQUAL "OFF")
+if (NOT DEFINED EXT_PROVIDED_VERSION AND NOT EXT_PROVIDED_VERSION STREQUAL "OFF")
     message(STATUS "Getting version from git")
     if (EXISTS ${PROJECT_SOURCE_DIR}/.git)
         find_package(Git)
@@ -347,7 +362,7 @@ else ()
     message(STATUS "Using externally provided version")
     SET(BUILD_SCM_REVISION 0)
     SET(BUILD_SCM_TAG ${EXT_PROVIDED_VERSION})
-endif (EXT_PROVIDED_VERSION STREQUAL "OFF")
+endif (NOT DEFINED EXT_PROVIDED_VERSION AND NOT EXT_PROVIDED_VERSION STREQUAL "OFF")
 
 message(STATUS "Build SCM tag: ${BUILD_SCM_TAG}")
 message(STATUS "Build SCM revision: ${BUILD_SCM_REVISION}")
@@ -457,11 +472,12 @@ add_executable(sipi
         ${PROJECT_SOURCE_DIR}/include/iiifparser/SipiIdentifier.h ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiIdentifier.cpp
         ${PROJECT_SOURCE_DIR}/src/handlers/iiif_handler.cpp
         ${PROJECT_SOURCE_DIR}/src/handlers/iiif_handler.hpp
+        src/otel.hpp
 )
 
 add_dependencies(sipi icc_profiles)
 
-add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 exiv2 jansson lua sqlite3 kdu kdu_aux sentry)
+add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 exiv2 jansson lua sqlite3 kdu kdu_aux)
 
 
 # !!! ORDER MATTERS !!!
@@ -496,8 +512,11 @@ target_link_libraries(${PROJECT_NAME} ${LIBS}
         ${CMAKE_DL_LIBS}
 )
 
-# add the sentry libraries
-target_link_libraries(sipi sentry)
+# add the open-telemetry libraries
+add_library(otel INTERFACE)
+add_dependencies(otel otel_common otel_trace otel_exporter otel_resources)
+target_link_libraries(otel INTERFACE otel_common otel_trace otel_exporter otel_resources)
+target_link_libraries(sipi otel)
 
 if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
     target_link_libraries(sipi iconv intl)
