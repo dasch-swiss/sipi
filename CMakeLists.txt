@@ -61,23 +61,11 @@ set(COMMON_PATCHES ${PROJECT_SOURCE_DIR}/patches)
 set(COMMON_VENDOR ${PROJECT_SOURCE_DIR}/vendor)
 set(SIPI_SOURCE_DIR ${PROJECT_SOURCE_DIR})
 
-#
-# Usually SIPI is compiled with all static libraries
-#
-option(MAKE_SHARED_SIPI "Create sipi using all shared libraries" OFF)
-
-if (MAKE_SHARED_SIPI)
-    SET(BUILD_SHARED_LIBRARIES ON)
-else ()
-    SET(BUILD_SHARED_LIBRARIES OFF)
-endif ()
-
 # Set the build type.  Options are:
 #  Debug          : w/ debug symbols, w/o optimization
 #  Release        : w/o debug symbols, w/ optimization
 #  RelWithDebInfo : w/ debug symbols, w/ optimization
-option(CMAKE_BUILD_TYPE "The default build type is RelWithDebInfo" Debug)
-
+option(CMAKE_BUILD_TYPE "The default build type is Debug" Debug)
 
 #
 # Here we determine the compiler and compiler version. We need clang >= 15 or g++ >= 13
@@ -204,10 +192,10 @@ endif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES ".*
 
 # on macOS, ignore frameworks
 # the complete environment should be provided through NIX
-if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
-    set(CMAKE_FIND_FRAMEWORK NEVER)
-    set(CMAKE_IGNORE_PATH "/usr/local/lib*")
-endif ()
+#if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
+#    set(CMAKE_FIND_FRAMEWORK NEVER)
+#    set(CMAKE_IGNORE_PATH "/usr/local/lib*")
+#endif ()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
@@ -246,7 +234,7 @@ endif ()
 # abseil-cpp
 # required for opentelemetry-cpp and protobuf
 #
-find_package(absl REQUIRED)
+find_package(absl CONFIG REQUIRED)
 if (absl_FOUND)
     message(STATUS "abseil found")
 endif ()
@@ -477,7 +465,7 @@ add_executable(sipi
 
 add_dependencies(sipi icc_profiles)
 
-add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 exiv2 jansson lua sqlite3 kdu kdu_aux)
+add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 exiv2 jansson lua sqlite3 kdu kdu_aux otel)
 
 
 # !!! ORDER MATTERS !!!
@@ -513,10 +501,7 @@ target_link_libraries(${PROJECT_NAME} ${LIBS}
 )
 
 # add the open-telemetry libraries
-add_library(otel INTERFACE)
-add_dependencies(otel otel_common otel_trace otel_exporter otel_resources)
-target_link_libraries(otel INTERFACE otel_common otel_trace otel_exporter otel_resources)
-target_link_libraries(sipi otel)
+# target_link_libraries(sipi otel absl::synchronization)
 
 if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
     target_link_libraries(sipi iconv intl)

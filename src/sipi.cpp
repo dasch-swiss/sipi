@@ -80,7 +80,6 @@
  */
 
 
-
 namespace {
 
 void sipiConfGlobals(lua_State *L, shttps::Connection &conn, void *user_data)
@@ -1394,13 +1393,14 @@ int main(int argc, char *argv[])
   CLI11_PARSE(*cli_args.sipiopt, argc, argv);
 
   initTracer();
-  auto tracer = opentelemetry::trace::Provider::GetTracerProvider()->GetTracer("sipi-cli");
+  auto tracer = get_tracer();
 
   initMeter();
-  auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter("sipi-cli");
+  auto meter = get_meter();
 
   initLogger();
-  auto logger = opentelemetry::logs::Provider::GetLoggerProvider()->GetLogger("sipi-cli");
+  auto logger = get_logger();
+
 
   //
   // Query the image file for all information.
@@ -1425,7 +1425,7 @@ int main(int argc, char *argv[])
     try {
       auto span = tracer->StartSpan("compare_command");
       auto counter = meter->CreateDoubleCounter("compare_command");
-      counter->Add(1.0, {{"command", "compare"}});
+      counter->Add(1.0, { { "command", "compare" } });
       logger->Info("Starting compare command");
       int const ret_code = compare_command(cli_args);
       span->End();
@@ -1442,15 +1442,11 @@ int main(int argc, char *argv[])
   //
   if (!(cli_args.sipiopt->get_option("--file")->empty() || cli_args.sipiopt->get_option("--outf")->empty())) {
     try {
-      // add opening trace
       int const ret_code = convert_command(cli_args);
-      // add closing trace
-      CleanupTracer();
       return ret_code;
     } catch (std::exception &e) {
       logger->Error("Error in convert command: {}", e.what());
       syslog(LOG_ERR, "Error in convert command: %s", e.what());
-      CleanupTracer();
       return EXIT_FAILURE;
     }
   }
@@ -1463,21 +1459,16 @@ int main(int argc, char *argv[])
     try {
       auto span = tracer->StartSpan("server_command");
       auto counter = meter->CreateDoubleCounter("server_command");
-      counter->Add(1.0, {{"command", "server"}});
+      counter->Add(1.0, { { "command", "server" } });
       logger->Info("Starting server command");
       const int ret_code = server_command(cli_args);
-      // add closing trace
-      CleanupTracer();
       return ret_code;
     } catch (shttps::Error &err) {
       logger->Error("Error starting server: {}", err.what());
       syslog(LOG_ERR, "Error starting server: %s", err.what());
       std::cerr << err << '\n';
-      CleanupTracer();
       return EXIT_FAILURE;
     }
   }
-
-  CleanupTracer();
   return EXIT_SUCCESS;
 }
