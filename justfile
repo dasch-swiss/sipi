@@ -70,3 +70,7 @@ valgrind:
 # query version of the project
 version:
     cmake -P query_version.cmake
+
+# Delete the build directory
+clean:
+    rm -rf build

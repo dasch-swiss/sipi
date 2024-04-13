@@ -41,8 +41,7 @@ add_executable(${TEST_NAME}
         ${PROJECT_SOURCE_DIR}/shttps/makeunique.h ${PROJECT_SOURCE_DIR}/src/SipiFilenameHash.cpp ${PROJECT_SOURCE_DIR}/include/SipiFilenameHash.h
 )
 
-target_link_libraries(${TEST_NAME}
-        libgtest)
+target_link_libraries(${TEST_NAME} googletest)
 
 target_link_libraries(${TEST_NAME}
         ${LIBS}

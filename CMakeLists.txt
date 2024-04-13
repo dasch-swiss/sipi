@@ -32,6 +32,8 @@ project(sipi
         LANGUAGES CXX C
 )
 
+set(ABSL_PROPAGATE_CXX_STD ON CACHE BOOL "Propagate CXX standard to Abseil targets" FORCE)
+
 # enables cmake's support for testing
 enable_testing()
 
@@ -232,7 +234,7 @@ endif ()
 
 #
 # abseil-cpp
-# required for opentelemetry-cpp and protobuf
+# required for opentelemetry-cpp
 #
 find_package(absl CONFIG REQUIRED)
 if (absl_FOUND)
@@ -242,11 +244,35 @@ endif ()
 #
 # protobuf
 # required for opentelemetry-cpp
+# cmake --help-module FindProtobuf
 #
-find_package(Protobuf REQUIRED)
+find_package(Protobuf CONFIG REQUIRED)
 if (Protobuf_FOUND)
+    message(STATUS "protobuf dirs: ${Protobuf_INCLUDE_DIRS}")
+    message(STATUS "protobuf lib: ${Protobuf_LIBRARIES}")
     message(STATUS "protobuf found")
 endif ()
+
+#
+# nlohmann_json
+# required for opentelemetry-cpp
+find_package(nlohmann_json CONFIG REQUIRED)
+if (nlohmann_json_FOUND)
+    message(STATUS "nlohmann_json found")
+endif ()
+
+#
+# protobuf
+#
+find_package(opentelemetry-cpp CONFIG REQUIRED)
+if (OPENTELEMETRY_CPP_FOUND)
+    message(STATUS "opentelemetry-cpp dirs: ${OPENTELEMETRY_CPP_INCLUDE_DIRS}")
+    message(STATUS "opentelemetry-cpp libs: ${OPENTELEMETRY_CPP_LIBRARIES}")
+    include_directories(${opentelemetry-cpp_INCLUDE_DIRS})
+    message(STATUS "opentelemetry-cpp found")
+endif ()
+
+
 
 if (NOT WIN32)
     find_library(M_LIBRARY NAMES m)
@@ -287,6 +313,7 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/local/lib)
 # !!! order is important !!!
 # dependent targets need to be added before the target that depends on them
 # e.g., png, bzip2 before freetype
+add_subdirectory(${COMMON_EXT}/googletest)
 add_subdirectory(${COMMON_EXT}/xz)
 add_subdirectory(${COMMON_EXT}/zlib)
 add_subdirectory(${COMMON_EXT}/zstd)
@@ -304,8 +331,6 @@ add_subdirectory(${COMMON_EXT}/lua)
 add_subdirectory(${COMMON_EXT}/luarocks)
 add_subdirectory(${COMMON_EXT}/sqlite3)
 add_subdirectory(${COMMON_EXT}/kakadu)
-add_subdirectory(${COMMON_EXT}/googletest)
-add_subdirectory(${COMMON_EXT}/opentelemetry-cpp)
 
 message(STATUS "... adding external dependencies done.")
 
@@ -413,7 +438,7 @@ include_directories(
         ${CMAKE_BINARY_DIR}/local/include
 )
 
-add_executable(sipi
+add_executable(${PROJECT_NAME}
         ${PROJECT_SOURCE_DIR}/src/sipi.cpp
         ${PROJECT_SOURCE_DIR}/src/SipiConf.cpp include/SipiConf.h
         ${PROJECT_SOURCE_DIR}/src/SipiError.cpp
@@ -460,17 +485,17 @@ add_executable(sipi
         ${PROJECT_SOURCE_DIR}/include/iiifparser/SipiIdentifier.h ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiIdentifier.cpp
         ${PROJECT_SOURCE_DIR}/src/handlers/iiif_handler.cpp
         ${PROJECT_SOURCE_DIR}/src/handlers/iiif_handler.hpp
-        src/otel.hpp
+        ${PROJECT_SOURCE_DIR}/src/otel.hpp
 )
 
-add_dependencies(sipi icc_profiles)
+add_dependencies(${PROJECT_NAME} icc_profiles)
 
-add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 exiv2 jansson lua sqlite3 kdu kdu_aux otel)
-
+add_library(third_party INTERFACE)
+add_dependencies(third_party bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 exiv2 jansson lua sqlite3 kdu kdu_aux)
 
 # !!! ORDER MATTERS !!!
 # dependent targets need to be added before the target that depends on them
-target_link_libraries(${PROJECT_NAME} ${LIBS}
+target_link_libraries(third_party INTERFACE
         lcms2
         exiv2
         exiv2-xmp
@@ -496,28 +521,36 @@ target_link_libraries(${PROJECT_NAME} ${LIBS}
         z
         m
         lzma
-        Threads::Threads
         ${CMAKE_DL_LIBS}
 )
 
-# add the open-telemetry libraries
-# target_link_libraries(sipi otel absl::synchronization)
 
+target_link_libraries(${PROJECT_NAME} ${LIBS} third_party)
+
+set(absl_LIBS absl::atomic_hook absl::errno_saver absl::log_severity absl::no_destructor absl::nullability absl::raw_logging_internal absl::spinlock_wait absl::config absl::dynamic_annotations absl::core_headers absl::malloc_internal absl::base_internal absl::base absl::throw_delegate absl::pretty_function absl::endian absl::scoped_set_env absl::strerror absl::fast_type_id absl::prefetch absl::algorithm absl::algorithm_container absl::cleanup_internal absl::cleanup absl::btree absl::compressed_tuple absl::fixed_array absl::inlined_vector_internal absl::inlined_vector absl::flat_hash_map absl::flat_hash_set absl::node_hash_map absl::node_hash_set absl::container_memory absl::hash_function_defaults absl::hash_policy_traits absl::common_policy_traits absl::hashtablez_sampler absl::hashtable_debug absl::hashtable_debug_hooks absl::node_slot_policy absl::raw_hash_map absl::container_common absl::raw_hash_set absl::layout absl::crc_cpu_detect absl::crc_internal absl::crc32c absl::non_temporal_arm_intrinsics absl::non_temporal_memcpy absl::crc_cord_state absl::stacktrace absl::symbolize absl::examine_stack absl::failure_signal_handler absl::debugging_internal absl::demangle_internal absl::leak_check absl::debugging absl::flags_path_util absl::flags_program_name absl::flags_config absl::flags_marshalling absl::flags_commandlineflag_internal absl::flags_commandlineflag absl::flags_private_handle_accessor absl::flags_reflection absl::flags_internal absl::flags absl::flags_usage_internal absl::flags_usage absl::flags_parse absl::any_invocable absl::bind_front absl::function_ref absl::overload absl::hash absl::city absl::low_level_hash absl::log_internal_check_impl absl::log_internal_check_op absl::log_internal_conditions absl::log_internal_config absl::log_internal_flags absl::log_internal_format absl::log_internal_globals absl::log_internal_log_impl absl::log_internal_proto absl::log_internal_message absl::log_internal_log_sink_set absl::log_internal_nullguard absl::log_internal_nullstream absl::log_internal_strip absl::log_internal_voidify absl::log_internal_append_truncated absl::absl_check absl::absl_log absl::check absl::die_if_null absl::log_flags absl::log_globals absl::log_initialize absl::log absl::log_entry absl::log_sink absl::log_sink_registry absl::log_streamer absl::log_internal_structured absl::log_structured absl::vlog_config_internal absl::absl_vlog_is_on absl::vlog_is_on absl::log_internal_fnmatch absl::memory absl::type_traits absl::meta absl::bits absl::int128 absl::numeric absl::numeric_representation absl::sample_recorder absl::exponential_biased absl::periodic_sampler absl::random_random absl::random_bit_gen_ref absl::random_internal_mock_helpers absl::random_distributions absl::random_seed_gen_exception absl::random_seed_sequences absl::random_internal_traits absl::random_internal_distribution_caller absl::random_internal_fast_uniform_bits absl::random_internal_seed_material absl::random_internal_pool_urbg absl::random_internal_salted_seed_seq absl::random_internal_iostream_state_saver absl::random_internal_generate_real absl::random_internal_wide_multiply absl::random_internal_fastmath absl::random_internal_nonsecure_base absl::random_internal_pcg_engine absl::random_internal_randen_engine absl::random_internal_platform absl::random_internal_randen absl::random_internal_randen_slow absl::random_internal_randen_hwaes absl::random_internal_randen_hwaes_impl absl::random_internal_distribution_test_util absl::random_internal_uniform_helper absl::status absl::statusor absl::string_view absl::strings absl::charset absl::has_ostream_operator absl::strings_internal absl::str_format absl::str_format_internal absl::cord_internal absl::cordz_update_tracker absl::cordz_functions absl::cordz_statistics absl::cordz_handle absl::cordz_info absl::cordz_sample_token absl::cordz_update_scope absl::cord absl::graphcycles_internal absl::kernel_timeout_internal absl::synchronization absl::time absl::civil_time absl::time_zone absl::any absl::bad_any_cast absl::bad_any_cast_impl absl::span absl::optional absl::bad_optional_access absl::bad_variant_access absl::variant absl::compare absl::utility absl::if_constexpr)
+
+# add opentelemetry-cpp include and libraries to the target
+target_link_libraries(${PROJECT_NAME} ${absl_LIBS} ${Protobuf_LIBRARIES} ${OPENTELEMETRY_CPP_LIBRARIES} Threads::Threads)
+
+# although we are using NIX, we still need to link against the system libraries on macOS,
+# thus we need to link against CoreFoundation because the dependencies gotten through NIX
+# where built against it :(
 if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
-    target_link_libraries(sipi iconv intl)
+    find_library(CORE_FOUNDATION_FRAMEWORK CoreFoundation)
+    target_link_libraries(${PROJECT_NAME} iconv intl "${CORE_FOUNDATION_FRAMEWORK}")
 else ()
-    target_link_libraries(sipi rt)
+    target_link_libraries(${PROJECT_NAME} rt)
 endif ()
 
 #
 # apply the compiler and linker flags
 #
-target_link_libraries(sipi build_config)
+target_link_libraries(${PROJECT_NAME} build_config)
 if (CODE_COVERAGE)
-    target_link_libraries(sipi coverage_config)
+    target_link_libraries(${PROJECT_NAME} coverage_config)
 endif ()
 
-install(TARGETS sipi
+install(TARGETS ${PROJECT_NAME}
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION lib)
 

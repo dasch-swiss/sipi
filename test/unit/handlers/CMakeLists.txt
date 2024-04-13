@@ -27,7 +27,7 @@ set(SOURCE_FILES
         ${IIIF_HANDLER_SOURCE_FILES}
 )
 add_executable(${TEST_NAME} ${SOURCE_FILES})
-target_link_libraries(${TEST_NAME} libgtest)
+target_link_libraries(${TEST_NAME} googletest)
 
 target_link_libraries(${TEST_NAME} build_config)
 if (CODE_COVERAGE)

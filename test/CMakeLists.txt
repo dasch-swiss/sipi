@@ -23,7 +23,7 @@ if(NOT TARGET ApprovalTests)
         add_library(${LIB_NAME} INTERFACE)
         target_include_directories(${LIB_NAME} INTERFACE "${COMON_LOCAL_INCLUDE}")
         add_library(${LIB_NAME}::${LIB_NAME} ALIAS ${LIB_NAME})
-        add_dependencies(${LIB_NAME} libgtest libgmock)
+        add_dependencies(${LIB_NAME} googletest)
 endif()
 
 

@@ -99,7 +99,7 @@ add_executable(${TEST_NAME}
 )
 add_dependencies(${TEST_NAME} icc_profiles)
 
-target_link_libraries(${TEST_NAME} libgtest)
+target_link_libraries(${TEST_NAME} googletest)
 
 target_link_libraries(${TEST_NAME}
         lcms2

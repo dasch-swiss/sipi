@@ -1,36 +1,20 @@
-project(opentelemetry_builder C CXX)
+project(googletest_builder C CXX)
 include(ExternalProject)
 
-
-# Download and install GoogleTest from main branch
-ExternalProject_Add(project_gtest
+set(GoogleTestVersion "main")
+ExternalProject_Add(project_googletest
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
         GIT_REPOSITORY https://github.com/google/googletest
-        GIT_TAG main
-        GIT_SUBMODULES_RECURSE TRUE
+        GIT_TAG ${GoogleTestVersion}
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/googletest
-        PREFIX ${CMAKE_BINARY_DIR}/local
-        # Disable install step
-        CMAKE_ARGS -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/local -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local
+        CMAKE_ARGS -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=FALSE -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/local -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local -DCMAKE_INSTALL_LIBDIR=${CMAKE_BINARY_DIR}/local/lib
 )
 
-# Get GTest source and binary directories from CMake project
-ExternalProject_Get_Property(project_gtest source_dir binary_dir)
+ExternalProject_Get_Property(project_googletest install_dir source_dir binary_dir)
 
-add_library(libgtest IMPORTED STATIC GLOBAL)
-set_target_properties(libgtest PROPERTIES
-        "IMPORTED_LOCATION" ${CMAKE_BINARY_DIR}/local/lib/libgtest${CMAKE_STATIC_LIBRARY_SUFFIX}
-        "IMPORTED_LINK_INTERFACE_LIBRARIES" "${CMAKE_THREAD_LIBS_INIT}"
-)
-add_dependencies(libgtest project_gtest)
-
-add_library(libgmock IMPORTED STATIC GLOBAL)
-set_target_properties(libgmock PROPERTIES
-        "IMPORTED_LOCATION" ${CMAKE_BINARY_DIR}/local/lib/libgmock${CMAKE_STATIC_LIBRARY_SUFFIX}
-        "IMPORTED_LINK_INTERFACE_LIBRARIES" "${CMAKE_THREAD_LIBS_INIT}"
-)
-add_dependencies(libgmock project_gtest)
-
-# I couldn't make it work with INTERFACE_INCLUDE_DIRECTORIES
-include_directories("${CMAKE_BINARY_DIR}/local/include/gtest" "${CMAKE_BINARY_DIR}/local/include/gmock")
+# order matters
+# here we only add the googletest libraries which are used in the project
+add_library(googletest INTERFACE)
+target_include_directories(googletest INTERFACE "${install_dir}/include/gtest" "${install_dir}/include/gmock")
+target_link_libraries(googletest INTERFACE "${install_dir}/lib/libgtest.a" "${install_dir}/lib/libgtest_main.a" "${install_dir}/lib/libgmock.a" "${install_dir}/lib/libgmock_main.a")

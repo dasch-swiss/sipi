@@ -11,8 +11,20 @@
     let
         overlays = [
             (final: prev: {
-                # The iiif-validator is not yet part of nixpkgs, so we need to add it as an overlay
-                iiif-validator = final.callPackage ./iiif-validator.nix { };
+                abseil-cpp = final.callPackage ./package-abseil-cpp.nix {
+                    cxxStandard = "23";
+                    # stdenv = prev.gcc13Stdenv;
+                 };
+                protobuf = final.callPackage ./package-protobuf.nix {
+                    cxxStandard = "23";
+                    # stdenv = prev.gcc13Stdenv;
+                };
+                # The iiif-validator and opentelemetry-cpp are not yet part of nixpkgs, so we need to add it as an overlay
+                iiif-validator = final.callPackage ./package-iiif-validator.nix { };
+                opentelemetry-cpp = final.callPackage ./package-opentelemetry-cpp.nix {
+                    cxxStandard = "23";
+                    stdenv = prev.gcc13Stdenv;
+                };
             })
         ];
         pkgs = import nixpkgs {
@@ -46,7 +58,6 @@
               ffmpeg
               file # libmagic-dev
               gettext
-              grpc
               glibcLocales # locales
               gperf
               iconv
@@ -55,7 +66,9 @@
               libuuid # uuid und uuid-dev
               # numactl # libnuma-dev not available on mac
               libwebp
+              nlohmann_json
               openssl # libssl-dev
+              opentelemetry-cpp # our own overlay
               protobuf
               readline70 # libreadline-dev
               pkg-config
@@ -92,7 +105,6 @@
               ffmpeg
               file # libmagic-dev
               gettext
-              grpc
               glibcLocales # locales
               gperf
               iconv
@@ -101,7 +113,9 @@
               libuuid # uuid und uuid-dev
               # numactl # libnuma-dev not available on mac
               libwebp
+              nlohmann_json
               openssl # libssl-dev
+              opentelemetry-cpp # our own overlay
               protobuf
               readline70 # libreadline-dev
 
