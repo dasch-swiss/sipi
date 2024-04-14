@@ -39,8 +39,8 @@ gcc:
 
 # Build the `sipi` binary
 build:
-	cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DCODE_COVERAGE=ON
-	cmake --build ./build --parallel
+	cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DCODE_COVERAGE=ON --trace --debug-output
+	cmake --build ./build --parallel 1 --verbose
 
 # Run the tests
 test: build

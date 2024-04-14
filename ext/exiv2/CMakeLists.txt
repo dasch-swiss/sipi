@@ -7,7 +7,7 @@ include_directories(
 
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
-set(Exiv2Version "v0.27.7")
+set(Exiv2Version "v0.28.2")
 
 
 ExternalProject_Add(project_exiv2

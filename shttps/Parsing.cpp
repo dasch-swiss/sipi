@@ -5,6 +5,7 @@
 
 #include <regex>
 #include <sstream>
+#include<algorithm>
 
 #include "Error.h"
 #include "Parsing.h"

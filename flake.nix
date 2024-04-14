@@ -13,17 +13,17 @@
             (final: prev: {
                 abseil-cpp = final.callPackage ./package-abseil-cpp.nix {
                     cxxStandard = "23";
-                    # stdenv = prev.gcc13Stdenv;
-                 };
+                    stdenv = prev.clang17Stdenv;
+                };
                 protobuf = final.callPackage ./package-protobuf.nix {
                     cxxStandard = "23";
-                    # stdenv = prev.gcc13Stdenv;
+                    stdenv = prev.clang17Stdenv;
                 };
                 # The iiif-validator and opentelemetry-cpp are not yet part of nixpkgs, so we need to add it as an overlay
                 iiif-validator = final.callPackage ./package-iiif-validator.nix { };
                 opentelemetry-cpp = final.callPackage ./package-opentelemetry-cpp.nix {
                     cxxStandard = "23";
-                    stdenv = prev.gcc13Stdenv;
+                    stdenv = prev.clang17Stdenv;
                 };
             })
         ];
@@ -33,13 +33,13 @@
     in
     {
         devShells = {
-
-          # devShells.clang describes a shell with the clang compiler
-          clang = pkgs.mkShell.override {stdenv = pkgs.clang16Stdenv;} {
+          default = pkgs.mkShell.override {stdenv = pkgs.clang17Stdenv;} {
             name = "sipi";
 
+            nativeBuildInputs = [ pkgs.git pkgs.cmake pkgs.openssl pkgs.cacert ];
+
             shellHook = ''
-              export PS1="\\u@\\h | nix-develop> "
+                export PS1="\\u@\\h | nix-develop> "
             '';
 
             packages = with pkgs; [
@@ -51,7 +51,7 @@
               lcov # code coverage helper tool
 
               # Build dependencies
-              abseil-cpp
+              abseil-cpp # our own overlay
               asio # networking library needed for crow (microframework for the web)
               curl
               exiv2
@@ -69,64 +69,13 @@
               nlohmann_json
               openssl # libssl-dev
               opentelemetry-cpp # our own overlay
-              protobuf
+              protobuf # our own overlay
               readline70 # libreadline-dev
-              pkg-config
-              unzip
-            ];
-          };
-
-          # devShells.default describes the default shell with C++, cmake,
-          # and other dependencies
-          default = pkgs.mkShell.override {stdenv = pkgs.gcc13Stdenv;} {
-            name = "sipi";
-
-            shellHook = ''
-              export PS1="\\u@\\h | nix-develop> "
-            '';
-
-            packages = with pkgs; [
-              # TODO: extract only the dependencies provided through callPackage and not try to build the derivation
-              # Include the package from packages.default defined on the pkgs.callPackage line
-              # self'.packages.default
-
-              # List other packages you want in your devShell
-              # C++ Compiler is already part of stdenv
-              # Build tool
-              cmake
-              gcovr # code coverage helper tool
-              lcov # code coverage helper tool
-
-              # Build dependencies
-              abseil-cpp
-              asio # networking library needed for crow (microframework for the web)
-              curl
-              exiv2
-              ffmpeg
-              file # libmagic-dev
-              gettext
-              glibcLocales # locales
-              gperf
-              iconv
-              inih
-              libidn
-              libuuid # uuid und uuid-dev
-              # numactl # libnuma-dev not available on mac
-              libwebp
-              nlohmann_json
-              openssl # libssl-dev
-              opentelemetry-cpp # our own overlay
-              protobuf
-              readline70 # libreadline-dev
-
-              # Other stuff
-              # at
               doxygen
               pkg-config
               unzip
-              # valgrind
 
-              # additional test dependencies
+               # additional test dependencies
               nginx
               libtiff
               graphicsmagick
@@ -155,7 +104,11 @@
 
         # The `callPackage` automatically fills the parameters of the function
         # in package.nix with what's inside the `pkgs` attribute.
-        packages.default = pkgs.callPackage ./package.nix {};
+        packages.default = pkgs.callPackage ./package.nix  {
+            inherit (pkgs) abseil-cpp protobuf opentelemetry-cpp;
+            cxxStandard = "23";
+            stdenv = pkgs.clang17Stdenv;
+        };
 
         # The `config` variable contains our own outputs, so we can reference
         # neighbor attributes like the package we just defined one line earlier.

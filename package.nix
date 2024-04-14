@@ -1,20 +1,26 @@
 { lib
 , stdenv
 , cmake
+, abseil-cpp
+, cacert
 , curl
 , ffmpeg
 , file
-, gcc13
 , gettext
+, git
 , glibcLocales
 , gperf
 , iconv
 , libidn
 , libuuid
+, nlohmann_json
 , openssl
+, opentelemetry-cpp
 , perl
+, protobuf
 , readline70
 , unzip
+, cxxStandard
 }:
 stdenv.mkDerivation {
   pname = "sipi";
@@ -23,32 +29,42 @@ stdenv.mkDerivation {
   src = ./.;
 
   nativeBuildInputs = [
-    cmake
+    cmake git openssl cacert
   ];
+
+  shellHook = ''
+    export SSL_CERT_FILE=${cacert}/etc/ssl/certs/ca-bundle.crt
+    export GIT_SSL_CAINFO="${cacert}/etc/ssl/certs/ca-bundle.crt"
+    export PS1="\\u@\\h | nix-develop> "
+  '';
   
   buildInputs = [
+    abseil-cpp
     curl
     ffmpeg
     file
-    gcc13
     gettext
+    git
     glibcLocales
     gperf
     iconv
     libidn
     libuuid # uuid und uuid-dev
-    # numactl not available for mac
+    nlohmann_json
     perl
     openssl
+    opentelemetry-cpp
+    protobuf
     readline70
     unzip
   ];
 
   cmakeFlags = [
-    "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+    "-DCMAKE_BUILD_TYPE=Release"
+    "-DCMAKE_CXX_STANDARD=${cxxStandard}"
   ];
 
-  makeFlags = [ "-j 1" ];
+  makeFlags = [ "-j" "VERBOSE=1" ];
 
   meta = with lib; {
     homepage = "https://github.com/dasch-swiss/sipi";
