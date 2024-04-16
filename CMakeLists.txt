@@ -4,72 +4,27 @@
 #
 
 cmake_minimum_required(VERSION 3.28)
-cmake_policy(VERSION 3.18)
-if (POLICY CMP0135) # DOWNLOAD_EXTRACT_TIMESTAMP
-    cmake_policy(SET CMP0135 OLD)
-endif ()
+cmake_policy(VERSION 3.28)
 
 message(STATUS "cmake version: ${CMAKE_VERSION}")
 
-# Require C++23 but let a parent project ask for something higher
-if (DEFINED CMAKE_CXX_STANDARD)
-    if (CMAKE_CXX_STANDARD MATCHES "^(90|99)$" OR CMAKE_CXX_STANDARD LESS 23)
-        message(FATAL_ERROR "This project requires at least C++23. Aborting...")
-    endif ()
-else ()
-    set(CMAKE_CXX_STANDARD 23)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
-    set(CMAKE_REQUIRED_FLAGS "-std=c++23") # or the appropriate flag for your compiler
-endif ()
-# Always enforce the language constraint
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# We need compiler extensions for some of the dependencies
-if (NOT DEFINED CMAKE_CXX_EXTENSIONS)
-    set(CMAKE_CXX_EXTENSIONS ON)
-endif ()
-
+#
+# Set the project name and version
+#
 list(APPEND CMAKE_MESSAGE_CONTEXT sipi)
 project(sipi
         VERSION 3
         LANGUAGES CXX C
 )
 
-set(ABSL_PROPAGATE_CXX_STD ON CACHE BOOL "Propagate CXX standard to Abseil targets" FORCE)
-
-# enables cmake's support for testing
-enable_testing()
-
-include(ExternalProject)
-include(CheckStructHasMember)
-include(CheckIncludeFiles)
-include(FindPackageHandleStandardArgs)
-
-# ------------------------------------------------------------------------------
-# Set our path variables
-# the build folder will hold all downloaded, built, and installed files
-# ------------------------------------------------------------------------------
-set(COMMON_LOCAL ${CMAKE_BINARY_DIR}/local)
-set(COMMON_SRCS ${CMAKE_BINARY_DIR}/extsrcs)
-
-# set cmake default install location
-if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-    set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/local" CACHE PATH "default install path" FORCE)
-    message(STATUS CMAKE_INSTALL_DIR: ${CMAKE_INSTALL_PREFIX})
-endif ()
-
-set(COMMON_SOURCE_FILES_DIR ${PROJECT_SOURCE_DIR}/src)
-set(COMMON_INCLUDE_FILES_DIR ${PROJECT_SOURCE_DIR}/include)
-set(COMMON_DOXYGEN ${PROJECT_SOURCE_DIR}/doxygen)
-set(COMMON_EXT ${PROJECT_SOURCE_DIR}/ext)
-set(COMMON_PATCHES ${PROJECT_SOURCE_DIR}/patches)
-set(COMMON_VENDOR ${PROJECT_SOURCE_DIR}/vendor)
-set(SIPI_SOURCE_DIR ${PROJECT_SOURCE_DIR})
-
 # Set the build type.  Options are:
 #  Debug          : w/ debug symbols, w/o optimization
 #  Release        : w/o debug symbols, w/ optimization
 #  RelWithDebInfo : w/ debug symbols, w/ optimization
 option(CMAKE_BUILD_TYPE "The default build type is Debug" Debug)
+option(CODE_COVERAGE "Enable coverage reporting" OFF)
+
+message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
 
 #
 # Here we determine the compiler and compiler version. We need clang >= 15 or g++ >= 13
@@ -84,6 +39,25 @@ elseif (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     endif ()
 else ()
     message(WARNING "You are using an unsupported compiler (${CMAKE_CXX_COMPILER_ID}). Compilation has only been tested with Clang and GCC.")
+endif ()
+
+#
+# Require C++23 but let a parent project ask for something higher
+#
+if (DEFINED CMAKE_CXX_STANDARD)
+    if (CMAKE_CXX_STANDARD MATCHES "^(90|99)$" OR CMAKE_CXX_STANDARD LESS 23)
+        message(FATAL_ERROR "This project requires at least C++23. Aborting...")
+    endif ()
+else ()
+    set(CMAKE_CXX_STANDARD 23)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    set(CMAKE_REQUIRED_FLAGS "-std=c++23") # or the appropriate flag for your compiler
+endif ()
+# Always enforce the language constraint
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# We need compiler extensions for some of the dependencies
+if (NOT DEFINED CMAKE_CXX_EXTENSIONS)
+    set(CMAKE_CXX_EXTENSIONS ON)
 endif ()
 
 
@@ -111,7 +85,7 @@ endif ()
 
 #
 # Figure out the system we are compiling for and
-# set flags for compiling Kakadu and Lua
+# set flags for compiling Kakadu and Lua (TODO: move kakadu and lua configuration to their own files)
 #
 set(DARWIN "Darwin")
 set(LINUX "Linux")
@@ -119,10 +93,12 @@ math(EXPR BITS "8*${CMAKE_SIZEOF_VOID_P}")
 if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
     set(CMAKE_MACOSX_RPATH 1)
     if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
+        set(CMAKE_OSX_ARCHITECTURES "x86_64" CACHE STRING "Build architectures for OSX" FORCE)
         set(KDU_MAKE "Makefile-Mac-x86-${BITS}-gcc")
         set(KDU_ARCH "Mac-x86-${BITS}-gcc")
         set(KDU_EXEC_PLATFORM "Mac-x86-64-gcc")
     else ()
+        set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "Build architectures for OSX" FORCE)
         set(KDU_MAKE "Makefile-MAC-arm-${BITS}-gcc")
         set(KDU_ARCH "Mac-arm-${BITS}-gcc")
         set(KDU_EXEC_PLATFORM "Mac-arm-64-gcc")
@@ -168,18 +144,9 @@ endif ()
 
 
 #
-# append path to additional find_package() cmake modules
-#
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
-
-#
-# Code Coverage
-#
-
 # Code Coverage Configuration
+#
 add_library(coverage_config INTERFACE)
-
-option(CODE_COVERAGE "Enable coverage reporting" OFF)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
     # Add required flags (GCC & LLVM/Clang)
     target_compile_options(coverage_config INTERFACE
@@ -189,6 +156,53 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES ".*Cla
     )
     target_link_options(coverage_config INTERFACE --coverage)
 endif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
+
+
+
+
+
+
+set(ABSL_PROPAGATE_CXX_STD ON CACHE BOOL "Propagate CXX standard to Abseil targets" FORCE)
+
+# enables cmake's support for testing
+enable_testing()
+
+include(ExternalProject)
+include(CheckStructHasMember)
+include(CheckIncludeFiles)
+include(FindPackageHandleStandardArgs)
+
+# ------------------------------------------------------------------------------
+# Set our path variables
+# the build folder will hold all downloaded, built, and installed files
+# ------------------------------------------------------------------------------
+set(COMMON_LOCAL ${CMAKE_BINARY_DIR}/local)
+set(COMMON_SRCS ${CMAKE_BINARY_DIR}/extsrcs)
+
+# set cmake default install location
+if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/local" CACHE PATH "default install path" FORCE)
+    message(STATUS CMAKE_INSTALL_DIR: ${CMAKE_INSTALL_PREFIX})
+endif ()
+
+set(COMMON_SOURCE_FILES_DIR ${PROJECT_SOURCE_DIR}/src)
+set(COMMON_INCLUDE_FILES_DIR ${PROJECT_SOURCE_DIR}/include)
+set(COMMON_DOXYGEN ${PROJECT_SOURCE_DIR}/doxygen)
+set(COMMON_EXT ${PROJECT_SOURCE_DIR}/ext)
+set(COMMON_PATCHES ${PROJECT_SOURCE_DIR}/patches)
+set(COMMON_VENDOR ${PROJECT_SOURCE_DIR}/vendor)
+set(SIPI_SOURCE_DIR ${PROJECT_SOURCE_DIR})
+
+
+
+
+
+
+
+#
+# append path to additional find_package() cmake modules
+#
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
 # on macOS, ignore frameworks
 # the complete environment should be provided through NIX
@@ -215,8 +229,8 @@ endif ()
 #
 find_package(OpenSSL REQUIRED)
 if (OPENSSL_FOUND)
-    message(STATUS "OpenSSL dirs: ${OPENSSL_INCLUDE_DIR}")
-    message(STATUS "OpenSSL libs: ${OPENSSL_LIBRARIES}")
+    # message(STATUS "OpenSSL dirs: ${OPENSSL_INCLUDE_DIR}")
+    # message(STATUS "OpenSSL libs: ${OPENSSL_LIBRARIES}")
     include_directories(${OPENSSL_INCLUDE_DIR})
 endif ()
 
@@ -225,17 +239,17 @@ endif ()
 # (used to be build locally from source was moved to prerequisites)
 find_package(CURL REQUIRED)
 if (CURL_FOUND)
-    message(STATUS "curl dirs: ${CURL_INCLUDE_DIRS}")
-    message(STATUS "curl libs: ${CURL_LIBRARIES}")
+    # message(STATUS "curl dirs: ${CURL_INCLUDE_DIRS}")
+    # message(STATUS "curl libs: ${CURL_LIBRARIES}")
     include_directories(${CURL_INCLUDE_DIRS})
 endif ()
 
 find_package(inih REQUIRED)
 if( inih_FOUND )
-    message (STATUS "inih_INCLUDE_DIRS : " ${inih_INCLUDE_DIRS} )
-    message (STATUS "inih_LIBRARIES : " ${inih_LIBRARIES} )
-    message (STATUS "inih_inireader_INCLUDE_DIRS : " ${inih_inireader_INCLUDE_DIRS} )
-    message (STATUS "inih_inireader_LIBRARIES : " ${inih_inireader_LIBRARIES} )
+    # message (STATUS "inih_INCLUDE_DIRS : " ${inih_INCLUDE_DIRS} )
+    # message (STATUS "inih_LIBRARIES : " ${inih_LIBRARIES} )
+    # message (STATUS "inih_inireader_INCLUDE_DIRS : " ${inih_inireader_INCLUDE_DIRS} )
+    # message (STATUS "inih_inireader_LIBRARIES : " ${inih_inireader_LIBRARIES} )
 endif()
 
 
@@ -245,7 +259,7 @@ endif()
 #
 find_package(absl CONFIG REQUIRED)
 if (absl_FOUND)
-    message(STATUS "abseil found")
+    # message(STATUS "abseil found")
 endif ()
 
 #
@@ -255,9 +269,9 @@ endif ()
 #
 find_package(Protobuf CONFIG REQUIRED)
 if (Protobuf_FOUND)
-    message(STATUS "protobuf dirs: ${Protobuf_INCLUDE_DIRS}")
-    message(STATUS "protobuf lib: ${Protobuf_LIBRARIES}")
-    message(STATUS "protobuf found")
+    # message(STATUS "protobuf dirs: ${Protobuf_INCLUDE_DIRS}")
+    # message(STATUS "protobuf lib: ${Protobuf_LIBRARIES}")
+    # message(STATUS "protobuf found")
 endif ()
 
 #
@@ -265,7 +279,7 @@ endif ()
 # required for opentelemetry-cpp
 find_package(nlohmann_json CONFIG REQUIRED)
 if (nlohmann_json_FOUND)
-    message(STATUS "nlohmann_json found")
+    # message(STATUS "nlohmann_json found")
 endif ()
 
 #
@@ -273,10 +287,10 @@ endif ()
 #
 find_package(opentelemetry-cpp CONFIG REQUIRED)
 if (OPENTELEMETRY_CPP_FOUND)
-    message(STATUS "opentelemetry-cpp dirs: ${OPENTELEMETRY_CPP_INCLUDE_DIRS}")
-    message(STATUS "opentelemetry-cpp libs: ${OPENTELEMETRY_CPP_LIBRARIES}")
+    # message(STATUS "opentelemetry-cpp dirs: ${OPENTELEMETRY_CPP_INCLUDE_DIRS}")
+    # message(STATUS "opentelemetry-cpp libs: ${OPENTELEMETRY_CPP_LIBRARIES}")
     include_directories(${opentelemetry-cpp_INCLUDE_DIRS})
-    message(STATUS "opentelemetry-cpp found")
+    # message(STATUS "opentelemetry-cpp found")
 endif ()
 
 
@@ -385,12 +399,8 @@ else ()
     SET(BUILD_SCM_TAG ${EXT_PROVIDED_VERSION})
 endif (NOT DEFINED EXT_PROVIDED_VERSION AND NOT EXT_PROVIDED_VERSION STREQUAL "OFF")
 
-message(STATUS "Build SCM tag: ${BUILD_SCM_TAG}")
-message(STATUS "Build SCM revision: ${BUILD_SCM_REVISION}")
-
 # get current date and time
 string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M")
-message(STATUS "Build timestamp: ${BUILD_TIMESTAMP}")
 
 
 #
@@ -398,7 +408,7 @@ message(STATUS "Build timestamp: ${BUILD_TIMESTAMP}")
 #
 file(READ version.txt SIPI_VERSION_STRING)
 string(STRIP "${SIPI_VERSION_STRING}" SIPI_VERSION_STRING)
-message(STATUS "Sipi version: ${SIPI_VERSION_STRING}")
+
 
 # write out the version and build information
 configure_file(${PROJECT_SOURCE_DIR}/include/SipiVersion.h.in ${CMAKE_BINARY_DIR}/generated/SipiVersion.h)
@@ -599,3 +609,33 @@ set_property(TEST all_python_based_e2e_tests PROPERTY LABELS e2e)
 #-------------------
 
 # add_subdirectory(fuzz)
+
+
+message(STATUS "")
+message(STATUS "Sipi is now configured for ${CMAKE_SYSTEM}")
+message(STATUS "")
+message(STATUS "  Sipi version:                       ${SIPI_VERSION_STRING}")
+message(STATUS "  Build SCM tag:                      ${BUILD_SCM_TAG}")
+message(STATUS "  Build SCM revision:                 ${BUILD_SCM_REVISION}")
+message(STATUS "  Build timestamp:                    ${BUILD_TIMESTAMP}")
+message(STATUS "")
+message(STATUS "  Installation directory:             ${CMAKE_BINARY_DIR}")
+message(STATUS "  Documentation directory:            ${COMMON_DOXYGEN}")
+message(STATUS "  C compiler:                         ${CMAKE_C_COMPILER}")
+message(STATUS "  C++ compiler:                       ${CMAKE_CXX_COMPILER}")
+message(STATUS "  Build shared libraries:             ${BUILD_SHARED_LIBS}")
+message(STATUS "  Build type:                         ${CMAKE_BUILD_TYPE}")
+message(STATUS "  C++ standard:                       ${CMAKE_CXX_STANDARD}")
+message(STATUS "  C++ extensions:                     ${CMAKE_CXX_EXTENSIONS}")
+message(STATUS "  Code coverage:                      ${CODE_COVERAGE}")
+message(STATUS "  Compiler flags:                     ${CMAKE_CXX_FLAGS}")
+message(STATUS "  Linker flags:                       ${CMAKE_EXE_LINKER_FLAGS}")
+message(STATUS "  CMake version:                      ${CMAKE_VERSION}")
+message(STATUS "  CMake generator:                    ${CMAKE_GENERATOR}")
+message(STATUS "  CMake build tool:                   ${CMAKE_BUILD_TOOL}")
+message(STATUS "  CMake source directory:             ${CMAKE_SOURCE_DIR}")
+message(STATUS "  CMake binary directory:             ${CMAKE_BINARY_DIR}")
+message(STATUS "  CMake install prefix:               ${CMAKE_INSTALL_PREFIX}")
+message(STATUS "  CMake system name:                  ${CMAKE_SYSTEM_NAME}")
+message(STATUS "  CMake system processor:             ${CMAKE_SYSTEM_PROCESSOR}")
+message(STATUS "")

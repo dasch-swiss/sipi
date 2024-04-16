@@ -7,16 +7,17 @@ include(ExternalProject)
 #
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
+set(LuaVersion "5.4.6")
 ExternalProject_Add(project_lua
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        URL http://www.lua.org/ftp/lua-5.3.5.tar.gz
-        ${timestamp_policy}
+        URL http://www.lua.org/ftp/lua-${LuaVersion}.tar.gz
+        URL_HASH SHA256=7d5ea1b9cb6aa0b59ca3dde1c6adcb57ef83a1ba8e5432c0ecd06bf439b3ad88
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
-        SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/lua-5.3.5
-        CONFIGURE_COMMAND ls
+        SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/lua-${LuaVersion}
+        CONFIGURE_COMMAND ""
         # BUILD_COMMAND make CPPFLAGS=-DLUA_USE_APICHECK CFLAGS=-DLUA_USE_APICHECK INSTALL_LIB=${CMAKE_BINARY_DIR}/local/lib ${LUA_ARCH}
-        BUILD_COMMAND make INSTALL_LIB=${CMAKE_BINARY_DIR}/local/lib ${LUA_ARCH} test
-        INSTALL_COMMAND make INSTALL_LIB=${CMAKE_BINARY_DIR}/local/lib install INSTALL_TOP=${CMAKE_BINARY_DIR}/local
+        BUILD_COMMAND make CC=clang INSTALL_TOP=${CMAKE_BINARY_DIR}/local ${LUA_ARCH} test
+        INSTALL_COMMAND make install INSTALL_TOP=${CMAKE_BINARY_DIR}/local
         BUILD_IN_SOURCE 1
 )
 

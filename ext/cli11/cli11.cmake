@@ -13,4 +13,4 @@ if (NOT cli11_POPULATED)
     FetchContent_Populate(cli11)
 endif ()
 
-message(STATUS "cli11 source dir: ${cli11_SOURCE_DIR}")
+# message(STATUS "cli11 source dir: ${cli11_SOURCE_DIR}")

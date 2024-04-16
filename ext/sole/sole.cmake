@@ -13,4 +13,4 @@ if (NOT sole_POPULATED)
     # Add the fetched content's source directory to the build (triggers the build)
 endif ()
 
-message(STATUS "sole source dir: ${sole_SOURCE_DIR}")
+# message(STATUS "sole source dir: ${sole_SOURCE_DIR}")

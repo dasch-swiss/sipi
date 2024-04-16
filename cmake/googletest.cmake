@@ -20,8 +20,8 @@ if (NOT googletest_POPULATED)
     add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR})
 endif ()
 
-message(STATUS "googletest_SOURCE_DIR: ${googletest_SOURCE_DIR}")
-message(STATUS "googletest_BINARY_DIR: ${googletest_BINARY_DIR}")
+# message(STATUS "googletest_SOURCE_DIR: ${googletest_SOURCE_DIR}")
+# message(STATUS "googletest_BINARY_DIR: ${googletest_BINARY_DIR}")
 
 # order matters
 # here we only add the googletest libraries which are used in the project

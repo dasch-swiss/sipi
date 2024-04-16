@@ -5,11 +5,6 @@ set(TEST_NAME sipi_handlers_tests)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-include_directories(
-        ${CMAKE_SOURCE_DIR}/src
-        ${CMAKE_SOURCE_DIR}/shttps
-)
-
 set(IIIF_HANDLER_SOURCE_FILES
         ${CMAKE_SOURCE_DIR}/shttps/ChunkReader.cpp
         ${CMAKE_SOURCE_DIR}/shttps/ChunkReader.h
@@ -27,9 +22,13 @@ set(SOURCE_FILES
         ${IIIF_HANDLER_SOURCE_FILES}
 )
 add_executable(${TEST_NAME} ${SOURCE_FILES})
-target_link_libraries(${TEST_NAME} googletest)
+add_dependencies(${TEST_NAME} googletest ApprovalTests)
 
+target_include_directories(${TEST_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/shttps)
+target_include_directories(${TEST_NAME} PUBLIC ${googletest_SOURCE_DIR}/include/gtest ${googletest_SOURCE_DIR}/include/gmock)
+target_link_libraries(${TEST_NAME} googletest)
 target_link_libraries(${TEST_NAME} build_config)
+
 if (CODE_COVERAGE)
     target_link_libraries(${TEST_NAME} coverage_config)
 endif ()
