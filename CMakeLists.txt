@@ -36,10 +36,6 @@ project(sipi
 
 set(ABSL_PROPAGATE_CXX_STD ON CACHE BOOL "Propagate CXX standard to Abseil targets" FORCE)
 
-set(NIX_CMAKE_PREFIX_PATH $ENV{CMAKE_PREFIX_PATH})
-set(NIX_CMAKE_LIBRARY_PATH $ENV{CMAKE_LIBRARY_PATH})
-set(NIX_CMAKE_INCLUDE_PATH $ENV{CMAKE_INCLUDE_PATH})
-
 # enables cmake's support for testing
 enable_testing()
 
@@ -132,7 +128,6 @@ if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
         set(KDU_EXEC_PLATFORM "Mac-arm-64-gcc")
     endif ()
     set(LUA_ARCH "macosx")
-    message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
 elseif (CMAKE_SYSTEM_NAME STREQUAL LINUX)
     if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
         set(KDU_MAKE "Makefile-Linux-x86-${BITS}-gcc")
@@ -144,8 +139,9 @@ elseif (CMAKE_SYSTEM_NAME STREQUAL LINUX)
         SET(KDU_EXEC_PLATFORM "Linux-arm-64-gcc")
     endif ()
     SET(LUA_ARCH "linux")
-    message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
 endif ()
+message(STATUS "Lua ARCH set as: ${LUA_ARCH}")
+message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
 message(STATUS "Compiling Kakadu for: ${KDU_ARCH}")
 
 #
@@ -234,6 +230,15 @@ if (CURL_FOUND)
     include_directories(${CURL_INCLUDE_DIRS})
 endif ()
 
+find_package(inih REQUIRED)
+if( inih_FOUND )
+    message (STATUS "inih_INCLUDE_DIRS : " ${inih_INCLUDE_DIRS} )
+    message (STATUS "inih_LIBRARIES : " ${inih_LIBRARIES} )
+    message (STATUS "inih_inireader_INCLUDE_DIRS : " ${inih_inireader_INCLUDE_DIRS} )
+    message (STATUS "inih_inireader_LIBRARIES : " ${inih_inireader_LIBRARIES} )
+endif()
+
+
 #
 # abseil-cpp
 # required for opentelemetry-cpp
@@ -315,6 +320,8 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/local/lib)
 # !!! order is important !!!
 # dependent targets need to be added before the target that depends on them
 # e.g., png, bzip2 before freetype
+include(${COMMON_EXT}/cli11/cli11.cmake)
+include(${COMMON_EXT}/sole/sole.cmake)
 add_subdirectory(${COMMON_EXT}/xz)
 add_subdirectory(${COMMON_EXT}/zlib)
 add_subdirectory(${COMMON_EXT}/zstd)
@@ -445,7 +452,6 @@ add_executable(${PROJECT_NAME}
         ${PROJECT_SOURCE_DIR}/src/SipiConf.cpp include/SipiConf.h
         ${PROJECT_SOURCE_DIR}/src/SipiError.cpp
         ${PROJECT_SOURCE_DIR}/src/SipiError.hpp
-        ${PROJECT_SOURCE_DIR}/include/CLI11.hpp
         ${PROJECT_SOURCE_DIR}/src/metadata/SipiIcc.cpp ${PROJECT_SOURCE_DIR}/include/metadata/SipiIcc.h
         ${PROJECT_SOURCE_DIR}/src/metadata/SipiXmp.cpp ${PROJECT_SOURCE_DIR}/include/metadata/SipiXmp.h
         ${PROJECT_SOURCE_DIR}/src/metadata/SipiIptc.cpp ${PROJECT_SOURCE_DIR}/include/metadata/SipiIptc.h
@@ -499,7 +505,7 @@ add_dependencies(${PROJECT_NAME} bzip2 zlib xz zstd jpeg jbigkit png webp tiff e
 target_link_libraries(${PROJECT_NAME}
         lcms2
         exiv2
-        exiv2-xmp
+        ${inih_inireader_LIBRARIES}
         expat
         tiff
         webp
@@ -524,6 +530,9 @@ target_link_libraries(${PROJECT_NAME}
         lzma
         ${CMAKE_DL_LIBS}
 )
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${cli11_SOURCE_DIR})
+target_include_directories(${PROJECT_NAME} PRIVATE ${sole_SOURCE_DIR})
 
 set(absl_LIBS absl::atomic_hook absl::errno_saver absl::log_severity absl::no_destructor absl::nullability absl::raw_logging_internal absl::spinlock_wait absl::config absl::dynamic_annotations absl::core_headers absl::malloc_internal absl::base_internal absl::base absl::throw_delegate absl::pretty_function absl::endian absl::scoped_set_env absl::strerror absl::fast_type_id absl::prefetch absl::algorithm absl::algorithm_container absl::cleanup_internal absl::cleanup absl::btree absl::compressed_tuple absl::fixed_array absl::inlined_vector_internal absl::inlined_vector absl::flat_hash_map absl::flat_hash_set absl::node_hash_map absl::node_hash_set absl::container_memory absl::hash_function_defaults absl::hash_policy_traits absl::common_policy_traits absl::hashtablez_sampler absl::hashtable_debug absl::hashtable_debug_hooks absl::node_slot_policy absl::raw_hash_map absl::container_common absl::raw_hash_set absl::layout absl::crc_cpu_detect absl::crc_internal absl::crc32c absl::non_temporal_arm_intrinsics absl::non_temporal_memcpy absl::crc_cord_state absl::stacktrace absl::symbolize absl::examine_stack absl::failure_signal_handler absl::debugging_internal absl::demangle_internal absl::leak_check absl::debugging absl::flags_path_util absl::flags_program_name absl::flags_config absl::flags_marshalling absl::flags_commandlineflag_internal absl::flags_commandlineflag absl::flags_private_handle_accessor absl::flags_reflection absl::flags_internal absl::flags absl::flags_usage_internal absl::flags_usage absl::flags_parse absl::any_invocable absl::bind_front absl::function_ref absl::overload absl::hash absl::city absl::low_level_hash absl::log_internal_check_impl absl::log_internal_check_op absl::log_internal_conditions absl::log_internal_config absl::log_internal_flags absl::log_internal_format absl::log_internal_globals absl::log_internal_log_impl absl::log_internal_proto absl::log_internal_message absl::log_internal_log_sink_set absl::log_internal_nullguard absl::log_internal_nullstream absl::log_internal_strip absl::log_internal_voidify absl::log_internal_append_truncated absl::absl_check absl::absl_log absl::check absl::die_if_null absl::log_flags absl::log_globals absl::log_initialize absl::log absl::log_entry absl::log_sink absl::log_sink_registry absl::log_streamer absl::log_internal_structured absl::log_structured absl::vlog_config_internal absl::absl_vlog_is_on absl::vlog_is_on absl::log_internal_fnmatch absl::memory absl::type_traits absl::meta absl::bits absl::int128 absl::numeric absl::numeric_representation absl::sample_recorder absl::exponential_biased absl::periodic_sampler absl::random_random absl::random_bit_gen_ref absl::random_internal_mock_helpers absl::random_distributions absl::random_seed_gen_exception absl::random_seed_sequences absl::random_internal_traits absl::random_internal_distribution_caller absl::random_internal_fast_uniform_bits absl::random_internal_seed_material absl::random_internal_pool_urbg absl::random_internal_salted_seed_seq absl::random_internal_iostream_state_saver absl::random_internal_generate_real absl::random_internal_wide_multiply absl::random_internal_fastmath absl::random_internal_nonsecure_base absl::random_internal_pcg_engine absl::random_internal_randen_engine absl::random_internal_platform absl::random_internal_randen absl::random_internal_randen_slow absl::random_internal_randen_hwaes absl::random_internal_randen_hwaes_impl absl::random_internal_distribution_test_util absl::random_internal_uniform_helper absl::status absl::statusor absl::string_view absl::strings absl::charset absl::has_ostream_operator absl::strings_internal absl::str_format absl::str_format_internal absl::cord_internal absl::cordz_update_tracker absl::cordz_functions absl::cordz_statistics absl::cordz_handle absl::cordz_info absl::cordz_sample_token absl::cordz_update_scope absl::cord absl::graphcycles_internal absl::kernel_timeout_internal absl::synchronization absl::time absl::civil_time absl::time_zone absl::any absl::bad_any_cast absl::bad_any_cast_impl absl::span absl::optional absl::bad_optional_access absl::bad_variant_access absl::variant absl::compare absl::utility absl::if_constexpr)
 

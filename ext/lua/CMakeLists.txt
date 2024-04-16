@@ -12,11 +12,10 @@ ExternalProject_Add(project_lua
         URL http://www.lua.org/ftp/lua-5.3.5.tar.gz
         ${timestamp_policy}
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
-        #DOWNLOAD_EXTRACT_TIMESTAMP NEW
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/lua-5.3.5
         CONFIGURE_COMMAND ls
-        #    BUILD_COMMAND make CPPFLAGS=-DLUA_USE_APICHECK CFLAGS=-DLUA_USE_APICHECK INSTALL_LIB=${CMAKE_BINARY_DIR}/local/lib ${LUA_ARCH}
-        BUILD_COMMAND make INSTALL_LIB=${CMAKE_BINARY_DIR}/local/lib ${LUA_ARCH}
+        # BUILD_COMMAND make CPPFLAGS=-DLUA_USE_APICHECK CFLAGS=-DLUA_USE_APICHECK INSTALL_LIB=${CMAKE_BINARY_DIR}/local/lib ${LUA_ARCH}
+        BUILD_COMMAND make INSTALL_LIB=${CMAKE_BINARY_DIR}/local/lib ${LUA_ARCH} test
         INSTALL_COMMAND make INSTALL_LIB=${CMAKE_BINARY_DIR}/local/lib install INSTALL_TOP=${CMAKE_BINARY_DIR}/local
         BUILD_IN_SOURCE 1
 )

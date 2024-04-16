@@ -17,7 +17,8 @@ ExternalProject_Add(project_jansson
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
         # DOWNLOAD_EXTRACT_TIMESTAMP OLD
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/jansson
-        CMAKE_ARGS -DJANSSON_BUILD_DOCS=OFF -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/local
+        CMAKE_ARGS -DJANSSON_BUILD_DOCS=OFF
+        -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/local
         -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local
         -DJANSSON_INSTALL_LIB_DIR:String=${CMAKE_BINARY_DIR}/local/lib
 )

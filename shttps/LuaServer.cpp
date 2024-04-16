@@ -23,6 +23,7 @@
 #include <sys/types.h>
 #include <syslog.h>
 #include <unistd.h>
+#include <sole.hpp>
 
 #include "Connection.h"
 #include "Error.h"
@@ -36,7 +37,6 @@
 
 #include "Parsing.h"
 #include "jwt.h"
-#include "sole.hpp"
 #include <jansson.h>
 
 using ms = std::chrono::milliseconds;

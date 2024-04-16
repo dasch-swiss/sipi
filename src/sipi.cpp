@@ -24,11 +24,9 @@
 #include <utility>
 #include <vector>
 
-#include <memory>
-
-
 #include <curl/curl.h>
 #include <jansson.h>
+#include <CLI11.hpp>
 
 #include "otel.hpp"
 
@@ -37,8 +35,6 @@
 #include "shttps/Parsing.h"
 #include "shttps/Server.h"
 
-
-#include "CLI11.hpp"
 #include "SipiConf.h"
 #include "SipiFilenameHash.h"
 #include "SipiHttpServer.hpp"
