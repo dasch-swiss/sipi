@@ -17,7 +17,7 @@
 
 
 #include "../SipiError.hpp"
-#include "SipiSize.h"
+#include "iiifparser/SipiSize.h"
 #include "shttps/Parsing.h"
 
 

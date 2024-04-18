@@ -15,3 +15,5 @@ if (NOT cli11_POPULATED)
 endif ()
 
 # message(STATUS "cli11 source dir: ${cli11_SOURCE_DIR}")
+add_library(cli11 INTERFACE)
+target_include_directories(cli11 INTERFACE ${cli11_SOURCE_DIR})

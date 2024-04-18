@@ -452,13 +452,10 @@ target_link_directories(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/local/lib)
 target_include_directories(${PROJECT_NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}
         ${PROJECT_SOURCE_DIR}/include
-        ${PROJECT_SOURCE_DIR}/include/iiifparser
         ${PROJECT_SOURCE_DIR}/src
         ${CMAKE_BINARY_DIR}
         ${CMAKE_BINARY_DIR}/local/include
         ${CMAKE_BINARY_DIR}/generated
-        ${cli11_SOURCE_DIR}
-        ${sole_SOURCE_DIR}
 )
 
 set(SOURCES
@@ -508,7 +505,7 @@ set(SOURCES
 
 target_sources(${PROJECT_NAME} PRIVATE ${SOURCES})
 
-add_dependencies(${PROJECT_NAME} icc_profiles zlib xz bz2_static libzstd_static jpeg jbigkit png_static webp tiff expat lcms2 exiv2 jansson lua luarocks sqlite3 kdu kdu_aux)
+add_dependencies(${PROJECT_NAME} icc_profiles zlib xz bz2_static libzstd_static jpeg jbigkit png_static webp tiff expat lcms2 exiv2 jansson lua luarocks sqlite3 kdu kdu_aux sole cli11)
 
 # !!! ORDER MATTERS !!!
 # dependent targets need to be added before the target that depends on them
@@ -538,6 +535,8 @@ target_link_libraries(${PROJECT_NAME}
         zlib
         m
         ${CMAKE_DL_LIBS}
+        sole
+        cli11
 )
 
 
@@ -587,7 +586,7 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/config/sipi.config.lua
 #-------------------
 
 # adds google tests defined in the test/unit and test/approval subdirectories
-# add_subdirectory(test)
+add_subdirectory(test)
 
 # custom target to only run 'e2e' tests
 add_custom_target(e2e

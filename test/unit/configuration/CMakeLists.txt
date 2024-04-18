@@ -5,30 +5,27 @@ set(TEST_TARGET_INCLUDE_DIRECTORIES
         ${PROJECT_SOURCE_DIR}
         ${PROJECT_SOURCE_DIR}/src
         ${PROJECT_SOURCE_DIR}/include
-        ${PROJECT_SOURCE_DIR}/shttps
-        ${COMMON_INCLUDE_FILES_DIR}
-        ${COMMON_INCLUDE_FILES_DIR}/metadata
-        ${COMMON_INCLUDE_FILES_DIR}/formats
-        ${COMMON_INCLUDE_FILES_DIR}/iiifparser
         ${CMAKE_BINARY_DIR}/local/include
 )
 
 set(${TEST_TARGET_SOURCE_FILES}
-        ${PROJECT_SOURCE_DIR}/src/SipiConf.cpp
-        ${PROJECT_SOURCE_DIR}/src/SipiError.cpp
-        ${PROJECT_SOURCE_DIR}/src/SipiError.hpp
-        ${PROJECT_SOURCE_DIR}/shttps/Error.cpp
-        ${PROJECT_SOURCE_DIR}/shttps/Hash.cpp
-        ${PROJECT_SOURCE_DIR}/shttps/SockStream.cpp
         ${PROJECT_SOURCE_DIR}/shttps/ChunkReader.cpp
         ${PROJECT_SOURCE_DIR}/shttps/Connection.cpp
+        ${PROJECT_SOURCE_DIR}/shttps/Error.cpp
+        ${PROJECT_SOURCE_DIR}/shttps/Hash.cpp
+        ${PROJECT_SOURCE_DIR}/shttps/jwt.c
         ${PROJECT_SOURCE_DIR}/shttps/LuaServer.cpp
         ${PROJECT_SOURCE_DIR}/shttps/LuaSqlite.cpp
         ${PROJECT_SOURCE_DIR}/shttps/Parsing.cpp
-        ${PROJECT_SOURCE_DIR}/shttps/ThreadControl.cpp
-        ${PROJECT_SOURCE_DIR}/shttps/SocketControl.cpp
         ${PROJECT_SOURCE_DIR}/shttps/Server.cpp
-        ${PROJECT_SOURCE_DIR}/shttps/jwt.c
+        ${PROJECT_SOURCE_DIR}/shttps/Shttp.cpp
+        ${PROJECT_SOURCE_DIR}/shttps/SocketControl.cpp
+        ${PROJECT_SOURCE_DIR}/shttps/SockStream.cpp
+        ${PROJECT_SOURCE_DIR}/shttps/ThreadControl.cpp
+
+        ${PROJECT_SOURCE_DIR}/src/SipiConf.cpp
+        ${PROJECT_SOURCE_DIR}/src/SipiError.cpp
+        ${PROJECT_SOURCE_DIR}/src/SipiError.hpp
         ${PROJECT_SOURCE_DIR}/src/SipiFilenameHash.cpp
 )
 set(SOURCE_FILES
@@ -65,13 +62,13 @@ target_link_libraries(${TEST_NAME}
         ${OPENSSL_LIBRARIES}
         crypto
         jpeg
-        bzip2
-        zstd
-        z
-        m
-        lzma
-        Threads::Threads
-        ${CMAKE_DL_LIBS})
+        bz2_static
+        libzstd_static
+        zlib
+        ${CMAKE_DL_LIBS}
+        sole
+        cli11
+)
 
 
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")

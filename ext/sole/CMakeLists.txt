@@ -15,3 +15,6 @@ if (NOT sole_POPULATED)
 endif ()
 
 # message(STATUS "sole source dir: ${sole_SOURCE_DIR}")
+
+add_library(sole INTERFACE)
+target_include_directories(sole INTERFACE ${sole_SOURCE_DIR})

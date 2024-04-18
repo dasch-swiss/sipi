@@ -2,17 +2,10 @@ set(TEST_NAME sipi_image_tests)
 
 set(TEST_TARGET_INCLUDE_DIRECTORIES
         ${PROJECT_SOURCE_DIR}
-        ${PROJECT_SOURCE_DIR}/src
-        ${PROJECT_SOURCE_DIR}/src/formats
         ${PROJECT_SOURCE_DIR}/include
-        ${PROJECT_SOURCE_DIR}/shttps
-        ${COMMON_INCLUDE_FILES_DIR}
-        ${COMMON_INCLUDE_FILES_DIR}/metadata
-        ${COMMON_INCLUDE_FILES_DIR}/formats
-        ${COMMON_INCLUDE_FILES_DIR}/iiifparser
+        ${PROJECT_SOURCE_DIR}/src
         ${CMAKE_BINARY_DIR}/local/include
         ${CMAKE_BINARY_DIR}/generated
-        ${sole_SOURCE_DIR}
 )
 
 set(${TEST_TARGET_SOURCE_FILES}
@@ -62,7 +55,7 @@ set(SOURCE_FILES
 add_executable(${TEST_NAME})
 
 add_dependencies(${TEST_NAME} icc_profiles)
-add_dependencies(${TEST_NAME} bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 exiv2 jansson lua luarocks sqlite3 kdu kdu_aux)
+add_dependencies(${TEST_NAME} zlib xz bz2_static libzstd_static jpeg jbigkit png_static webp tiff expat lcms2 exiv2 jansson lua luarocks sqlite3 kdu kdu_aux sole cli11)
 
 target_sources(${TEST_NAME} PRIVATE ${SOURCE_FILES})
 target_include_directories(${TEST_NAME} PRIVATE ${TEST_TARGET_INCLUDE_DIRECTORIES})
@@ -76,7 +69,7 @@ target_link_libraries(${TEST_NAME}
         tiff
         webp
         jbigkit
-        png
+        png_static
         kdu_aux
         kdu
         xz
@@ -90,13 +83,14 @@ target_link_libraries(${TEST_NAME}
         ${OPENSSL_LIBRARIES}
         crypto
         jpeg
-        bzip2
-        zstd
-        z
+        bz2_static
+        libzstd_static
+        zlib
         m
-        lzma
-        Threads::Threads
-        ${CMAKE_DL_LIBS})
+        ${CMAKE_DL_LIBS}
+        sole
+        cli11
+)
 
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
     target_link_libraries(${TEST_NAME} iconv intl)

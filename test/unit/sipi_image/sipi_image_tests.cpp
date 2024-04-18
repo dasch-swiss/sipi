@@ -11,11 +11,11 @@
 #include <string>
 #include <sys/stat.h>
 
-#include "Hash.h"
+#include "shttps/Hash.h"
 #include "SipiIO.h"
 #include "SipiImage.hpp"
-#include "SipiRegion.h"
-#include "SipiSize.h"
+#include "metadata/SipiRegion.h"
+#include "metadata/SipiSize.h"
 #include "formats/SipiIOTiff.h"
 
 // small function to check if file exist

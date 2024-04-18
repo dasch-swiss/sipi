@@ -7,8 +7,8 @@
 #include <cstring>
 #include <fstream>
 
-#include "../SipiError.hpp"
-#include "SipiRotation.h"
+#include "SipiError.hpp"
+#include "iiifparser/SipiRotation.h"
 #include "shttps/Parsing.h"
 
 namespace Sipi {

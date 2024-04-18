@@ -6,19 +6,17 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(TEST_TARGET_INCLUDE_DIRECTORIES
-        ${CMAKE_SOURCE_DIR}/src/handlers
-        ${CMAKE_SOURCE_DIR}/shttps
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_BINARY_DIR}/local/include
 )
 
 set(TEST_TARGET_SOURCE_FILES
         ${CMAKE_SOURCE_DIR}/shttps/ChunkReader.cpp
-        ${CMAKE_SOURCE_DIR}/shttps/ChunkReader.h
         ${CMAKE_SOURCE_DIR}/shttps/Connection.cpp
-        ${CMAKE_SOURCE_DIR}/shttps/Connection.h
         ${CMAKE_SOURCE_DIR}/shttps/Error.cpp
-        ${CMAKE_SOURCE_DIR}/shttps/Error.h
         ${CMAKE_SOURCE_DIR}/src/handlers/iiif_handler.cpp
-        ${CMAKE_SOURCE_DIR}/src/handlers/iiif_handler.hpp
 )
 
 set(SOURCE_FILES

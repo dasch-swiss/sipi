@@ -6,8 +6,8 @@
 
 #include <fstream>
 
-#include "../SipiError.hpp"
-#include "SipiQualityFormat.h"
+#include "SipiError.hpp"
+#include "iiifparser/SipiQualityFormat.h"
 
 
 #include <string>

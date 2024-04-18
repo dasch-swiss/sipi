@@ -7,7 +7,7 @@
 #include <cstring>
 
 #include "../SipiError.hpp"
-#include "SipiIdentifier.h"
+#include "iiifparser/SipiIdentifier.h"
 #include "shttps/Connection.h"
 
 namespace Sipi {
