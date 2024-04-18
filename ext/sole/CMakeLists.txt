@@ -1,3 +1,4 @@
+project(sole_builder C CXX)
 include(FetchContent)
 
 FetchContent_Declare(

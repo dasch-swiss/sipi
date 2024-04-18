@@ -1,53 +1,52 @@
 
 set(TEST_NAME configuration_tests)
 
-link_directories(
-        ${CMAKE_BINARY_DIR}/local/lib
-)
-
-include_directories(
+set(TEST_TARGET_INCLUDE_DIRECTORIES
         ${PROJECT_SOURCE_DIR}
         ${PROJECT_SOURCE_DIR}/src
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/shttps
-        ${PROJECT_SOURCE_DIR}/local/include
         ${COMMON_INCLUDE_FILES_DIR}
         ${COMMON_INCLUDE_FILES_DIR}/metadata
         ${COMMON_INCLUDE_FILES_DIR}/formats
         ${COMMON_INCLUDE_FILES_DIR}/iiifparser
-        /usr/local/include
+        ${CMAKE_BINARY_DIR}/local/include
 )
 
-file(GLOB SRCS *.cpp)
-
-add_executable(${TEST_NAME}
-        ${SRCS}
-        ${PROJECT_SOURCE_DIR}/src/SipiConf.cpp ${PROJECT_SOURCE_DIR}/include/SipiConf.h
+set(${TEST_TARGET_SOURCE_FILES}
+        ${PROJECT_SOURCE_DIR}/src/SipiConf.cpp
         ${PROJECT_SOURCE_DIR}/src/SipiError.cpp
         ${PROJECT_SOURCE_DIR}/src/SipiError.hpp
-        ${PROJECT_SOURCE_DIR}/shttps/Global.h
-        ${PROJECT_SOURCE_DIR}/shttps/Error.cpp ${PROJECT_SOURCE_DIR}/shttps/Error.h
-        ${PROJECT_SOURCE_DIR}/shttps/Hash.cpp ${PROJECT_SOURCE_DIR}/shttps/Hash.h
-        ${PROJECT_SOURCE_DIR}/shttps/SockStream.cpp ${PROJECT_SOURCE_DIR}/shttps/SockStream.h
-        ${PROJECT_SOURCE_DIR}/shttps/ChunkReader.cpp ${PROJECT_SOURCE_DIR}/shttps/ChunkReader.h
-        ${PROJECT_SOURCE_DIR}/shttps/Connection.cpp ${PROJECT_SOURCE_DIR}/shttps/Connection.h
-        ${PROJECT_SOURCE_DIR}/shttps/LuaServer.cpp ${PROJECT_SOURCE_DIR}/shttps/LuaServer.h
-        ${PROJECT_SOURCE_DIR}/shttps/LuaSqlite.cpp ${PROJECT_SOURCE_DIR}/shttps/LuaSqlite.h
-        ${PROJECT_SOURCE_DIR}/shttps/Parsing.cpp ${PROJECT_SOURCE_DIR}/shttps/Parsing.h
-        ${PROJECT_SOURCE_DIR}/shttps/ThreadControl.cpp ${PROJECT_SOURCE_DIR}/shttps/ThreadControl.h
-        ${PROJECT_SOURCE_DIR}/shttps/SocketControl.cpp ${PROJECT_SOURCE_DIR}/shttps/SocketControl.h
-        ${PROJECT_SOURCE_DIR}/shttps/Server.cpp ${PROJECT_SOURCE_DIR}/shttps/Server.h
-        ${PROJECT_SOURCE_DIR}/shttps/jwt.c ${PROJECT_SOURCE_DIR}/shttps/jwt.h
-        ${PROJECT_SOURCE_DIR}/shttps/makeunique.h ${PROJECT_SOURCE_DIR}/src/SipiFilenameHash.cpp ${PROJECT_SOURCE_DIR}/include/SipiFilenameHash.h
+        ${PROJECT_SOURCE_DIR}/shttps/Error.cpp
+        ${PROJECT_SOURCE_DIR}/shttps/Hash.cpp
+        ${PROJECT_SOURCE_DIR}/shttps/SockStream.cpp
+        ${PROJECT_SOURCE_DIR}/shttps/ChunkReader.cpp
+        ${PROJECT_SOURCE_DIR}/shttps/Connection.cpp
+        ${PROJECT_SOURCE_DIR}/shttps/LuaServer.cpp
+        ${PROJECT_SOURCE_DIR}/shttps/LuaSqlite.cpp
+        ${PROJECT_SOURCE_DIR}/shttps/Parsing.cpp
+        ${PROJECT_SOURCE_DIR}/shttps/ThreadControl.cpp
+        ${PROJECT_SOURCE_DIR}/shttps/SocketControl.cpp
+        ${PROJECT_SOURCE_DIR}/shttps/Server.cpp
+        ${PROJECT_SOURCE_DIR}/shttps/jwt.c
+        ${PROJECT_SOURCE_DIR}/src/SipiFilenameHash.cpp
 )
+set(SOURCE_FILES
+        main.cpp
+        configuration_tests.cpp
+        ${TEST_TARGET_SOURCE_FILES}
+)
+add_executable(${TEST_NAME})
+target_sources(${TEST_NAME} PRIVATE ${SOURCE_FILES})
+target_include_directories(${TEST_NAME} PRIVATE ${TEST_TARGET_INCLUDE_DIRECTORIES})
+target_include_directories(${TEST_NAME} PRIVATE ${sole_SOURCE_DIR})
 
-target_link_libraries(${TEST_NAME} googletest)
+target_link_libraries(${TEST_NAME} gtest_main gtest gmock gmock_main)
 
 target_link_libraries(${TEST_NAME}
         ${LIBS}
         lcms2
         exiv2
-        exiv2-xmp
         expat
         tiff
         webp
@@ -82,7 +81,7 @@ else()
 endif()
 
 target_link_libraries(${TEST_NAME} build_config)
-if (CODE_COVERAGE)
+if (WITH_CODE_COVERAGE)
     target_link_libraries(${TEST_NAME} coverage_config)
 endif ()
 

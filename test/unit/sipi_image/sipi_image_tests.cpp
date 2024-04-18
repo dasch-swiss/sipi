@@ -5,8 +5,18 @@
 
 #include "gtest/gtest.h"
 
-#include "../../../src/SipiImage.hpp"
-#include "SipiIOTiff.h"
+
+#include <exception>
+#include <memory>
+#include <string>
+#include <sys/stat.h>
+
+#include "Hash.h"
+#include "SipiIO.h"
+#include "SipiImage.hpp"
+#include "SipiRegion.h"
+#include "SipiSize.h"
+#include "formats/SipiIOTiff.h"
 
 // small function to check if file exist
 inline bool exists_file(const std::string &name)
@@ -228,7 +238,6 @@ TEST(SipiImage, GRAYICC_Conversion_01)
   Sipi::SipiIOTiff::initLibrary();
   Sipi::SipiImage img1;
   Sipi::SipiImage img2;
-  Sipi::SipiImage img3;
 
   const std::string grayicc_jp2 = "../../../../test/_test_data/images/unit/gray_with_icc.jp2";
   const std::string grayicc_jp2_to_jpeg = "../../../../test/_test_data/images/unit/_gray_with_icc.jpg";
@@ -246,7 +255,6 @@ TEST(SipiImage, GRAYICC_Conversion_02)
   Sipi::SipiIOTiff::initLibrary();
   Sipi::SipiImage img1;
   Sipi::SipiImage img2;
-  Sipi::SipiImage img3;
 
   const std::string gray_icc_another_jpeg = "../../../../test/_test_data/images/unit/gray_with_icc_another.jpg";
   const std::string gray_icc_another_jpeg_to_jp2 = "../../../../test/_test_data/images/unit/_gray_with_icc_another.jpx";
@@ -270,7 +278,7 @@ TEST(SipiImage, CMYK_lossy_compression)
   EXPECT_TRUE(exists_file(cmyk));
 
   ASSERT_NO_THROW(img.readOriginal(cmyk, region, size, shttps::HashType::sha256));
-  Sipi::SipiCompressionParams params = {
+  Sipi::SipiCompressionParams const params = {
     { Sipi::J2K_rates, "0.5 0.2 0.1 0.025" }, { Sipi::J2K_Clayers, "4" }, { Sipi::J2K_Clevels, "3" }
   };
   ASSERT_NO_THROW(img.write("jpx", "../../../../test/_test_data/images/unit/_cmyk_lossy.jp2", &params));

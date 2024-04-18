@@ -12,11 +12,11 @@ set(Exiv2Version "v0.28.2")
 
 ExternalProject_Add(project_exiv2
         DEPENDS project_expat
-        DEPENDS project_png
-        DEPENDS project_zlib
+        # DEPENDS project_png
+        # DEPENDS project_zlib
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
         URL https://github.com/Exiv2/exiv2/archive/refs/tags/${Exiv2Version}.tar.gz
-        ${timestamp_policy}
+        URL_HASH SHA256=543bead934135f20f438e0b6d8858c55c5fcb7ff80f5d1d55489965f1aad58b9
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/exiv2-trunk
         CMAKE_ARGS -DBUILD_SHARED_LIBS=OFF -DEXIV2_BUILD_SAMPLES:BOOL=OFF -DEXIV2_BUILD_EXIV2_COMMAND=OFF -DEXIV2_ENABLE_NLS=OFF -DEXIV2_ENABLE_BROTLI=OFF -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local -DCMAKE_INSTALL_LIBDIR=${CMAKE_BINARY_DIR}/local/lib

@@ -12,3 +12,8 @@ target_link_libraries(${TEST_NAME} ApprovalTests::ApprovalTests gtest gtest_main
 target_compile_definitions(${TEST_NAME} PRIVATE -DAPPROVAL_TESTS_HIDE_DEPRECATED_CODE=1)
 add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
 set_property(TEST ${TEST_NAME} PROPERTY LABELS approval)
+
+target_link_libraries(${TEST_NAME} build_config)
+if (WITH_CODE_COVERAGE)
+    target_link_libraries(${TEST_NAME} coverage_config)
+endif ()

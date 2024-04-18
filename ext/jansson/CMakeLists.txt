@@ -1,21 +1,11 @@
 project(libjansson_builder C CXX)
 include(ExternalProject)
 
-set(JANSSON_INSTALL_LIB_DIR "lib/${BITS}")
-
-#
-# get jansson
-#
-set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
-
-
 ExternalProject_Add(project_jansson
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        # GIT_REPOSITORY https://github.com/akheron/jansson.git
-        URL http://www.digip.org/jansson/releases/jansson-2.13.1.tar.gz
-        ${timestamp_policy}
+        URL https://github.com/akheron/jansson/releases/download/v2.13.1/jansson-2.13.1.tar.gz
+        URL_HASH SHA256=f4f377da17b10201a60c1108613e78ee15df6b12016b116b6de42209f47a474f
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
-        # DOWNLOAD_EXTRACT_TIMESTAMP OLD
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/jansson
         CMAKE_ARGS -DJANSSON_BUILD_DOCS=OFF
         -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/local

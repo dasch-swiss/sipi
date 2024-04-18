@@ -1,24 +1,23 @@
 project(zstd_builder C CXX)
-include(ExternalProject)
+include(FetchContent)
 
-include_directories(${CMAKE_BINARY_DIR}/local/include)
-set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
+set(ZSTD_BUILD_STATIC ON)
+set(ZSTD_BUILD_SHARED OFF)
 
-ExternalProject_Add(project_zstd
-        INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        URL https://github.com/facebook/zstd/archive/refs/heads/dev.zip
-        DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
-        ${timestamp_policy}
-        SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/zstd
+FetchContent_Declare(
+        zstd
+        URL https://github.com/facebook/zstd/releases/download/v1.5.6/zstd-1.5.6.tar.gz
+        URL_HASH SHA256=8c29e06cf42aacc1eafc4077ae2ec6c6fcb96a626157e0593d5e82a34fd403c1
         SOURCE_SUBDIR build/cmake
-        CMAKE_ARGS
-        -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/local
-        -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local
-        BUILD_IN_SOURCE 1
 )
-ExternalProject_Get_Property(project_zstd install_dir)
 
-add_library(zstd STATIC IMPORTED GLOBAL)
-set_property(TARGET zstd PROPERTY IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/local/lib/libzstd${CMAKE_STATIC_LIBRARY_SUFFIX})
+FetchContent_MakeAvailable(zstd)
 
-add_dependencies(zstd project_zstd)
+# Define the zstd library as an IMPORTED target
+#add_library(zstd STATIC IMPORTED GLOBAL)
+#set_target_properties(zstd PROPERTIES
+#        IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/local/lib/libzstd${CMAKE_STATIC_LIBRARY_SUFFIX}
+#        INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_BINARY_DIR}/local/include
+#)
+
+add_dependencies(libzstd_static xz)

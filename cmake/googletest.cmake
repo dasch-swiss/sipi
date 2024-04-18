@@ -22,9 +22,3 @@ endif ()
 
 # message(STATUS "googletest_SOURCE_DIR: ${googletest_SOURCE_DIR}")
 # message(STATUS "googletest_BINARY_DIR: ${googletest_BINARY_DIR}")
-
-# order matters
-# here we only add the googletest libraries which are used in the project
-add_library(googletest INTERFACE)
-target_include_directories(googletest INTERFACE "${googletest_SOURCE_DIR}/include/gtest" "${googletest_SOURCE_DIR}/include/gmock")
-target_link_libraries(googletest INTERFACE "${googletest_BINARY_DIR}/lib/libgtest.a" "${googletest_BINARY_DIR}/lib/libgtest_main.a" "${googletest_BINARY_DIR}/lib/libgmock.a" "${googletest_BINARY_DIR}/lib/libgmock_main.a")

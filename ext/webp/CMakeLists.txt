@@ -8,7 +8,7 @@ include(ExternalProject)
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
 ExternalProject_Add(project_webp
-        DEPENDS project_xz
+        # DEPENDS project_xz
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
         URL https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.1.0.tar.gz
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
@@ -22,4 +22,4 @@ ExternalProject_Get_Property(project_webp install_dir)
 add_library(webp STATIC IMPORTED GLOBAL)
 set_property(TARGET webp PROPERTY IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/local/lib/libwebp${CMAKE_STATIC_LIBRARY_SUFFIX})
 
-add_dependencies(webp project_webp)
+add_dependencies(webp project_webp xz)

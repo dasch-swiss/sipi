@@ -6,4 +6,4 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(approvaltests)
 
-add_dependencies(ApprovalTests googletest)
+add_dependencies(ApprovalTests gtest_main)

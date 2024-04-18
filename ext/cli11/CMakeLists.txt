@@ -1,3 +1,4 @@
+project(cli11_builder C CXX)
 include(FetchContent)
 
 FetchContent_Declare(

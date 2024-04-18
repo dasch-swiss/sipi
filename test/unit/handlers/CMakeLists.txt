@@ -5,7 +5,12 @@ set(TEST_NAME sipi_handlers_tests)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(IIIF_HANDLER_SOURCE_FILES
+set(TEST_TARGET_INCLUDE_DIRECTORIES
+        ${CMAKE_SOURCE_DIR}/src/handlers
+        ${CMAKE_SOURCE_DIR}/shttps
+)
+
+set(TEST_TARGET_SOURCE_FILES
         ${CMAKE_SOURCE_DIR}/shttps/ChunkReader.cpp
         ${CMAKE_SOURCE_DIR}/shttps/ChunkReader.h
         ${CMAKE_SOURCE_DIR}/shttps/Connection.cpp
@@ -19,17 +24,17 @@ set(IIIF_HANDLER_SOURCE_FILES
 set(SOURCE_FILES
         main.cpp
         iiif_handler_test.cpp
-        ${IIIF_HANDLER_SOURCE_FILES}
+        ${TEST_TARGET_SOURCE_FILES}
 )
-add_executable(${TEST_NAME} ${SOURCE_FILES})
-add_dependencies(${TEST_NAME} googletest ApprovalTests)
+add_executable(${TEST_NAME})
+target_sources(${TEST_NAME} PRIVATE ${SOURCE_FILES})
+target_include_directories(${TEST_NAME} PRIVATE ${TEST_TARGET_INCLUDE_DIRECTORIES})
 
-target_include_directories(${TEST_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/shttps)
-target_include_directories(${TEST_NAME} PUBLIC ${googletest_SOURCE_DIR}/include/gtest ${googletest_SOURCE_DIR}/include/gmock)
-target_link_libraries(${TEST_NAME} googletest)
+add_dependencies(${TEST_NAME} gtest_main gtest gmock)
+target_link_libraries(${TEST_NAME} gtest_main gtest gmock)
+
 target_link_libraries(${TEST_NAME} build_config)
-
-if (CODE_COVERAGE)
+if (WITH_CODE_COVERAGE)
     target_link_libraries(${TEST_NAME} coverage_config)
 endif ()
 
