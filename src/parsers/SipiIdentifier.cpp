@@ -3,11 +3,12 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+#include "parsers/SipiIdentifier.h"
+
+
 #include <cstdlib>
 #include <cstring>
 
-#include "../SipiError.hpp"
-#include "iiifparser/SipiIdentifier.h"
 #include "shttps/Connection.h"
 
 namespace Sipi {

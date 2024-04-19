@@ -13,8 +13,8 @@
 #include <cstdint>
 #include <unordered_map>
 
-#include "iiifparser/SipiRegion.h"
-#include "iiifparser/SipiSize.h"
+#include "parsers/SipiRegion.h"
+#include "parsers/SipiSize.h"
 
 #include <memory>
 

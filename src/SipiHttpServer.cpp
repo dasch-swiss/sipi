@@ -28,17 +28,13 @@
 #include "SipiError.hpp"
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
-#include "iiifparser/SipiIdentifier.h"
-#include "iiifparser/SipiQualityFormat.h"
-#include "iiifparser/SipiRegion.h"
-#include "iiifparser/SipiRotation.h"
-#include "iiifparser/SipiSize.h"
 
 #include "SipiHttpServer.hpp"
 #include "handlers/iiif_handler.hpp"
 
 #include "favicon.h"
 #include "jansson.h"
+#include "parsers/SipiIdentifier.h"
 
 
 using namespace shttps;

@@ -17,13 +17,11 @@
 #include <string>
 
 #include "SipiCache.h"
-#include "iiifparser/SipiQualityFormat.h"
-#include "iiifparser/SipiRegion.h"
-#include "iiifparser/SipiRotation.h"
-#include "iiifparser/SipiSize.h"
 #include "shttps/Server.h"
 
 #include "SipiIO.h"
+#include "parsers/SipiQualityFormat.h"
+#include "parsers/SipiRotation.h"
 
 
 namespace Sipi {
