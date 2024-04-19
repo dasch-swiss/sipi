@@ -1,3 +1,7 @@
+DOCKER_REPO := "daschswiss/sipi"
+BUILD_TAG := `git describe --tag --dirty --abbrev=7`
+DOCKER_IMAGE := DOCKER_REPO + ":" + BUILD_TAG
+
 # List all recipies
 default:
     just --list --unsorted
@@ -17,12 +21,13 @@ docker-build:
 		--progress auto \
 		--build-arg SIPI_BASE=daschswiss/sipi-base:2.23.0 \
 		--build-arg UBUNTU_BASE=ubuntu:22.04 \
-		--build-arg BUILD_TAG=development \
-		-t daschswiss/sipi:development -t daschswiss/sipi:latest \
+		--build-arg VERSION={{BUILD_TAG}} \
+		-t {{DOCKER_REPO}}:{{BUILD_TAG}} -t {{DOCKER_REPO}}:latest \
 		--load \
 		.
+
 # run smoke tests against locally published Sipi Docker image
-test-smoke:
+test-smoke: docker-build
 	pytest -s test/smoke
 
 #

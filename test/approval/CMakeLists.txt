@@ -1,6 +1,3 @@
-# -----------------------
-# Google Test Approval Tests Starter
-# -----------------------
 set(TEST_NAME sipi.approvaltests)
 set(CMAKE_CXX_STANDARD 23)
 set(SOURCE_FILES

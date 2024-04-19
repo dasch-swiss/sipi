@@ -24,7 +24,7 @@ ExternalProject_Add(project_kakadu
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
         DOWNLOAD_COMMAND unzip -o -d ${CMAKE_BINARY_DIR}/local/extsrcs ${COMMON_VENDOR}/${KakaduVersion}.zip
         DOWNLOAD_EXTRACT_TIMESTAMP OLD
-        PATCH_COMMAND ${PATCH_COMMAND_OVERRIDE}
+        PATCH_COMMAND ""
         CONFIGURE_COMMAND ""
         BUILD_COMMAND make -j1 --directory=${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}/make/ -f ${KDU_MAKE} EXEC_PLATFORM=${KDU_EXEC_PLATFORM} all_but_jni
         INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}/lib/${KDU_ARCH} ${CMAKE_BINARY_DIR}/local/lib

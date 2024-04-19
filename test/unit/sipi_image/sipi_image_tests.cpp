@@ -14,8 +14,8 @@
 #include "shttps/Hash.h"
 #include "SipiIO.h"
 #include "SipiImage.hpp"
-#include "metadata/SipiRegion.h"
-#include "metadata/SipiSize.h"
+#include "parsers/SipiRegion.h"
+#include "parsers/SipiSize.h"
 #include "formats/SipiIOTiff.h"
 
 // small function to check if file exist

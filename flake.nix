@@ -36,7 +36,7 @@
           default = pkgs.mkShell.override {stdenv = pkgs.clang17Stdenv;} {
             name = "sipi";
 
-            nativeBuildInputs = [ pkgs.git pkgs.cmake pkgs.openssl pkgs.cacert ];
+            nativeBuildInputs = [ pkgs.git pkgs.cmake pkgs.openssl pkgs.cacert pkgs.autoconf ];
 
             shellHook = ''
                 export PS1="\\u@\\h | nix-develop> "
@@ -46,6 +46,7 @@
               # List other packages you want in your devShell
               # C++ Compiler is already part of stdenv
               # Build tool
+              autoconf
               cmake
               gcovr # code coverage helper tool
               lcov # code coverage helper tool
