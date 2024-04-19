@@ -10,7 +10,7 @@ WORKDIR /tmp/src
 RUN nix \
     --extra-experimental-features "nix-command flakes" \
     --option filter-syscalls false \
-    develop --command bash -c "cmake -S . -B ./build -DCMAKE_BUILD_TYPE:STRING=Release -DEXT_PROVIDED_VERSION:STRING=$VERSION -DWITH_CODE_COVERAGE:BOOL=TRUE --log-context && cmake --build ./build --parallel 4 && cd build && ctest --output-on-failure"
+    develop --command bash -c "cmake -S . -B ./build -DCMAKE_BUILD_TYPE:STRING=Release -DEXT_PROVIDED_VERSION:STRING=$VERSION -DWITH_CODE_COVERAGE:BOOL=FALSE --log-context && cmake --build ./build --parallel 4 && cd build && ctest --output-on-failure"
 
 
 # Copy the Nix store closure into a directory. The Nix store closure is the

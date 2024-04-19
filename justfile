@@ -26,8 +26,40 @@ docker-build:
 		--load \
 		.
 
-# run smoke tests against locally published Sipi Docker image
+# locally (unit) test and publish aarch64 Sipi Docker image with -aarch64 tag
+docker-build-aarch64:
+	docker buildx build \
+		--progress auto \
+		--platform linux/arm64 \
+		--build-arg VERSION={{BUILD_TAG}} \
+		-t {{DOCKER_REPO}}:{{BUILD_TAG}}-aarch64 -t {{DOCKER_REPO}}:latest \
+		--load \
+		.
+
+# push previously build aarch64 image to Docker hub
+docker-push-aarch64:
+	docker push {{DOCKER_REPO}}:{{BUILD_TAG}}-aarch64
+
+# locally (unit) test and publish x86 Sipi Docker image with -amd64 tag
+docker-build-amd64:
+	docker buildx build \
+		--progress auto \
+		--platform linux/amd64 \
+		--build-arg VERSION={{BUILD_TAG}} \
+		-t {{DOCKER_REPO}}:{{BUILD_TAG}}-amd64 -t {{DOCKER_REPO}}:latest \
+		--load \
+		.
+
+# push previously build x86 image to Docker hub
+docker-push-amd64:
+	docker push {{DOCKER_REPO}}:{{BUILD_TAG}}-amd64
+
+## locally publish Sipi Docker image and run smoke tests against it
 test-smoke: docker-build
+	pytest -s test/smoke
+
+## run smoke tests against (already) locally published Sipi Docker image
+test-smoke-ci:
 	pytest -s test/smoke
 
 #

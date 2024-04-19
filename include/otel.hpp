@@ -7,6 +7,7 @@
 
 #include "opentelemetry/context/propagation/global_propagator.h"
 #include "opentelemetry/exporters/ostream/log_record_exporter.h"
+#include "opentelemetry/exporters/ostream/log_record_exporter_factory.h"
 #include "opentelemetry/exporters/ostream/metric_exporter_factory.h"
 #include "opentelemetry/exporters/ostream/span_exporter_factory.h"
 #include "opentelemetry/exporters/otlp/otlp_http_exporter_factory.h"
@@ -33,6 +34,8 @@
 #include "opentelemetry/trace/provider.h"
 #include "opentelemetry/trace/tracer.h"
 
+#include "absl/strings/escaping.h"// for absl::Base64Escape
+
 #include <cstring>
 #include <fstream>
 #include <generated/SipiVersion.h>
@@ -56,6 +59,7 @@ namespace metrics_sdk = opentelemetry::sdk::metrics;
 
 namespace logs_api = opentelemetry::logs;
 namespace logs_sdk = opentelemetry::sdk::logs;
+namespace logs_exporter = opentelemetry::exporter::logs;
 
 namespace {
 // Class definition for context propagation
@@ -64,9 +68,23 @@ std::string version{ BUILD_SCM_TAG };
 std::string name{ "sipi" };
 std::string schema{ "https://opentelemetry.io/schemas/1.2.0" };
 
+
 // ===== GENERAL SETUP =====
 void initTracer()
 {
+  const char *username_env = std::getenv("GRAFANA_OTLP_USER");
+  const char *password_env = std::getenv("GRAFANA_OTLP_TOKEN");
+
+  if (!username_env) { throw std::runtime_error("Environment variable 'GRAFANA_OTLP_USER' not found."); }
+  std::string username{ username_env };
+
+  if (!password_env) { throw std::runtime_error("Environment variable 'GRAFANA_OTLP_TOKEN' not found."); }
+  std::string password{ password_env };
+
+  const std::string credentials = username + ":" + password;
+  const std::string encodedCredentials = absl::Base64Escape(credentials);
+  const std::string authHeader = "Basic " + encodedCredentials;
+
   resource::ResourceAttributes resource_attributes = { { "service.name", name }, { "service.version", version } };
   auto resource = resource::Resource::Create(resource_attributes);
 
@@ -74,7 +92,7 @@ void initTracer()
   traceOptions.url = std::string(std::getenv("GRAFANA_OTLP_ENDPOINT")) + "/v1/traces";
   traceOptions.content_type = otlp::HttpRequestContentType::kBinary;
   traceOptions.http_headers.insert(
-    std::make_pair<const std::string, std::string>("Authorization", std::getenv("GRAFANA_OTLP_TOKEN")));
+    std::make_pair<const std::string, const std::string>("Authorization", std::move(authHeader)));
 
   auto exporter = otlp::OtlpHttpExporterFactory::Create(traceOptions);
   auto processor = trace_sdk::SimpleSpanProcessorFactory::Create(std::move(exporter));
@@ -94,6 +112,19 @@ void initTracer()
 // ===== METRIC SETUP =====
 void initMeter()
 {
+  const char *username_env = std::getenv("GRAFANA_OTLP_USER");
+  const char *password_env = std::getenv("GRAFANA_OTLP_TOKEN");
+
+  if (!username_env) { throw std::runtime_error("Environment variable 'GRAFANA_OTLP_USER' not found."); }
+  std::string username{ username_env };
+
+  if (!password_env) { throw std::runtime_error("Environment variable 'GRAFANA_OTLP_TOKEN' not found."); }
+  std::string password{ password_env };
+
+  const std::string credentials = username + ":" + password;
+  const std::string encodedCredentials = absl::Base64Escape(credentials);
+  const std::string authHeader = "Basic " + encodedCredentials;
+
   resource::ResourceAttributes resource_attributes = { { "service.name", name }, { "service.version", version } };
   auto resource = resource::Resource::Create(resource_attributes);
 
@@ -102,7 +133,7 @@ void initMeter()
   otlpOptions.aggregation_temporality = otlp::PreferredAggregationTemporality::kDelta;
   otlpOptions.content_type = otlp::HttpRequestContentType::kBinary;
   otlpOptions.http_headers.insert(
-    std::make_pair<const std::string, std::string>("Authorization", std::getenv("GRAFANA_OTLP_TOKEN")));
+    std::make_pair<const std::string, const std::string>("Authorization", std::move(authHeader)));
 
   // This creates the exporter with the options we have defined above.
   auto exporter = otlp::OtlpHttpMetricExporterFactory::Create(otlpOptions);
@@ -124,16 +155,30 @@ void initMeter()
 // ===== LOG SETUP =====
 void initLogger()
 {
+  const char *username_env = std::getenv("GRAFANA_OTLP_USER");
+  const char *password_env = std::getenv("GRAFANA_OTLP_TOKEN");
+
+  if (!username_env) { throw std::runtime_error("Environment variable 'GRAFANA_OTLP_USER' not found."); }
+  const std::string username{ username_env };
+
+  if (!password_env) { throw std::runtime_error("Environment variable 'GRAFANA_OTLP_TOKEN' not found."); }
+  const std::string password{ password_env };
+
+  const std::string credentials = username + ":" + password;
+  const std::string encodedCredentials = absl::Base64Escape(credentials);
+  const std::string authHeader = "Basic " + encodedCredentials;
+
   resource::ResourceAttributes resource_attributes = { { "service.name", name }, { "service.version", version } };
   auto resource = resource::Resource::Create(resource_attributes);
 
   otlp::OtlpHttpLogRecordExporterOptions loggerOptions;
   loggerOptions.url = std::string(std::getenv("GRAFANA_OTLP_ENDPOINT")) + "/v1/logs";
   loggerOptions.http_headers.insert(
-    std::make_pair<const std::string, std::string>("Authorization", std::getenv("GRAFANA_OTLP_TOKEN")));
+    std::make_pair<const std::string, const std::string>("Authorization", std::move(authHeader)));
   loggerOptions.content_type = opentelemetry::exporter::otlp::HttpRequestContentType::kBinary;
 
-  auto exporter = otlp::OtlpHttpLogRecordExporterFactory::Create(loggerOptions);
+  // auto exporter = otlp::OtlpHttpLogRecordExporterFactory::Create(loggerOptions);
+  auto exporter = logs_exporter::OStreamLogRecordExporterFactory::Create();
   auto processor = logs_sdk::SimpleLogRecordProcessorFactory::Create(std::move(exporter));
   std::vector<std::unique_ptr<logs_sdk::LogRecordProcessor>> processors;
   processors.push_back(std::move(processor));
@@ -142,6 +187,7 @@ void initLogger()
   std::shared_ptr provider = logs_sdk::LoggerProviderFactory::Create(std::move(context));
   opentelemetry::logs::Provider::SetLoggerProvider(provider);
 }
+
 nostd::shared_ptr<opentelemetry::logs::Logger> get_logger()
 {
   auto logger = logs_api::Provider::GetLoggerProvider()->GetLogger("sipi");

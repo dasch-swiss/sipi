@@ -308,7 +308,7 @@ void sig_handler(const int sig)
     msg = "Caught signal " + std::to_string(sig);
   }
 
-  msg += "\n" + get_stack_trace();
+  // msg += "\n" + get_stack_trace();
   // TODO: add sig_handler metric: "sig_handler", msg.c_str()
   syslog(LOG_ERR, "%s", msg.c_str());
 
@@ -1388,14 +1388,14 @@ int main(int argc, char *argv[])
   // parse the command line arguments or exit if not valid
   CLI11_PARSE(*cli_args.sipiopt, argc, argv);
 
-  initTracer();
-  auto tracer = get_tracer();
+  // initTracer();
+  // auto tracer = get_tracer();
 
-  initMeter();
-  auto meter = get_meter();
+  // initMeter();
+  // auto meter = get_meter();
 
-  initLogger();
-  auto logger = get_logger();
+  // initLogger();
+  // auto logger = get_logger();
 
 
   //
@@ -1403,10 +1403,9 @@ int main(int argc, char *argv[])
   //
   if (!cli_args.sipiopt->get_option("--query")->empty()) {
     try {
-
-      auto span = tracer->StartSpan("query_command");
+      // auto span = tracer->StartSpan("query_command");
       query_command(cli_args);
-      span->End();
+      // span->End();
       return EXIT_SUCCESS;
     } catch (std::exception &e) {
       syslog(LOG_ERR, "Error in query command: %s", e.what());
@@ -1419,15 +1418,15 @@ int main(int argc, char *argv[])
   //
   if (!cli_args.sipiopt->get_option("--compare")->empty()) {
     try {
-      auto span = tracer->StartSpan("compare_command");
-      auto counter = meter->CreateDoubleCounter("compare_command");
-      counter->Add(1.0, { { "command", "compare" } });
-      logger->Info("Starting compare command");
+      // auto span = tracer->StartSpan("compare_command");
+      // auto counter = meter->CreateDoubleCounter("compare_command");
+      // counter->Add(1.0, { { "command", "compare" } });
+      // logger->Info("Starting compare command");
       int const ret_code = compare_command(cli_args);
-      span->End();
+      // span->End();
       return ret_code;
     } catch (std::exception &e) {
-      logger->Error("Error in compare command: {}", e.what());
+      // logger->Error("Error in compare command: {}", e.what());
       syslog(LOG_ERR, "Error in compare command: %s", e.what());
       return EXIT_FAILURE;
     }
@@ -1441,7 +1440,7 @@ int main(int argc, char *argv[])
       int const ret_code = convert_command(cli_args);
       return ret_code;
     } catch (std::exception &e) {
-      logger->Error("Error in convert command: {}", e.what());
+      // logger->Error("Error in convert command: {}", e.what());
       syslog(LOG_ERR, "Error in convert command: %s", e.what());
       return EXIT_FAILURE;
     }
@@ -1453,14 +1452,14 @@ int main(int argc, char *argv[])
   //
   if (!(cli_args.sipiopt->get_option("--config")->empty() && cli_args.sipiopt->get_option("--serverport")->empty())) {
     try {
-      auto span = tracer->StartSpan("server_command");
-      auto counter = meter->CreateDoubleCounter("server_command");
-      counter->Add(1.0, { { "command", "server" } });
-      logger->Info("Starting server command");
+      // auto span = tracer->StartSpan("server_command");
+      // auto counter = meter->CreateDoubleCounter("server_command");
+      // counter->Add(1.0, { { "command", "server" } });
+      // logger->Info("Starting server command");
       const int ret_code = server_command(cli_args);
       return ret_code;
     } catch (shttps::Error &err) {
-      logger->Error("Error starting server: {}", err.what());
+      // logger->Error("Error starting server: {}", err.what());
       syslog(LOG_ERR, "Error starting server: %s", err.what());
       std::cerr << err << '\n';
       return EXIT_FAILURE;

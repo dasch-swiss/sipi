@@ -19,6 +19,7 @@ jobs:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - uses: extractions/setup-just@v1
       - uses: dasch-swiss/sipi/.github/actions/setup-python@main
       - run: make install-requirements
       - uses: docker/setup-buildx-action@v3
@@ -26,8 +27,8 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: make docker-test-build-amd64 # two stage build, where test is run in the first stage
-      - run: make test-smoke-ci
+      - run: just docker-build-amd64 # two stage build, where test is run in the first stage
+      - run: just test-smoke-ci
 
   # Docker build for aarch64
   build_aarch64:
@@ -40,6 +41,7 @@ jobs:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - uses: extractions/setup-just@v1
       - uses: dasch-swiss/sipi/.github/actions/setup-python@main
       - run: make install-requirements
       - uses: docker/setup-buildx-action@v3
@@ -47,8 +49,8 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: make docker-test-build-aarch64 # two stage build, where test is run in the first stage
-      - run: make test-smoke-ci
+      - run: just docker-build-aarch64 # two stage build, where test is run in the first stage
+      - run: just test-smoke-ci
 
   # build documentation
   build_docs:
