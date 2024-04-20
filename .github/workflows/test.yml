@@ -47,7 +47,7 @@ jobs:
           nix \
             --extra-experimental-features "nix-command flakes" \
             --option filter-syscalls false \
-            develop --command bash -c "cd build && gcovr -j 1 --delete --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable gcov --gcov-ignore-parse-errors=negative_hits.warn_once_per_file"
+            develop --command bash -c "cd build && gcovr -j 1 --delete --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable llvm-cov --gcov-ignore-parse-errors=negative_hits.warn_once_per_file"
       - name: Upload coverage reports to Codecov
         if: ${{ matrix.runs-on == 'buildjet-4vcpu-ubuntu-2204' }}
         uses: codecov/codecov-action@v4.2.0

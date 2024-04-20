@@ -76,7 +76,7 @@ gcc:
 
 # Build the `sipi` binary
 build:
-	cmake -B build -S . -DCMAKE_BUILD_TYPE:STRING=Debug -DWITH_CODE_COVERAGE:BOOL=ON
+	cmake -B build -S . -DCMAKE_BUILD_TYPE:STRING=Debug -DWITH_CODE_COVERAGE:BOOL=OFF
 	cmake --build ./build --parallel
 
 # Run the tests
@@ -85,7 +85,7 @@ test: build
 
 # Print the test coverage (using gcov executable, thus assuming GCC)
 coverage: test
-    cd build && gcovr -j 4 --delete --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable gcov
+    cd build && gcovr -j 4 --delete --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable llvm-cov
 
 # Print the test coverage
 coverage1: test
