@@ -37,6 +37,8 @@ jobs:
         with:
           github_access_token: ${{ secrets.GH_TOKEN }}
       - run: |
+          git config --global --unset http.proxy
+          git config --global --unset https.proxy
           nix \
             --extra-experimental-features "nix-command flakes" \
             --option filter-syscalls false \
