@@ -76,12 +76,12 @@ gcc:
 
 # Build the `sipi` binary
 build:
-	cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DWITH_CODE_COVERAGE=ON
+	cmake -B build -S . -DCMAKE_BUILD_TYPE:STRING=Debug -DWITH_CODE_COVERAGE:BOOL=ON
 	cmake --build ./build --parallel
 
 # Run the tests
 test: build
-    cd build && ctest --output-on-failure
+    ctest --test-dir ./build/test --parallel --output-on-failure
 
 # Print the test coverage (using gcov executable, thus assuming GCC)
 coverage: test
