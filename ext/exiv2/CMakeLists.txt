@@ -1,29 +1,23 @@
 project(exiv2_builder C CXX)
-include(ExternalProject)
+include(FetchContent)
 
-include_directories(
-        ${CMAKE_BINARY_DIR}/local/include
-)
+set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type")
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared library")
+set(EXIV2_BUILD_SAMPLES OFF CACHE BOOL "Build samples")
+set(EXIV2_BUILD_EXIV2_COMMAND OFF CACHE BOOL "Build exiv2 command")
+set(EXIV2_ENABLE_NLS OFF CACHE BOOL "Enable NLS")
+set(EXIV2_ENABLE_BROTLI OFF CACHE BOOL "Enable brotli")
+set(EXPAT_USE_STATIC_LIBS ON CACHE BOOL "Use static expat library")
+set(EXPAT_LIBRARY expat CACHE FILEPATH "Path to expat library")
+set(CMAKE_PREFIX_PATH ${CMAKE_BINARY_DIR}/local CACHE PATH "Path to the local directory")
+set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR}/local CACHE PATH "Path to the local directory")
+set(CMAKE_INSTALL_LIBDIR ${CMAKE_BINARY_DIR}/local/lib CACHE PATH "Path to the local lib directory")
 
-set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
-
-set(Exiv2Version "v0.28.2")
-
-
-ExternalProject_Add(project_exiv2
-        DEPENDS project_expat
-        # DEPENDS project_png
-        # DEPENDS project_zlib
-        INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        URL https://github.com/Exiv2/exiv2/archive/refs/tags/${Exiv2Version}.tar.gz
+FetchContent_Declare(
+        exiv2
+        URL https://github.com/Exiv2/exiv2/archive/refs/tags/v0.28.2.tar.gz
         URL_HASH SHA256=543bead934135f20f438e0b6d8858c55c5fcb7ff80f5d1d55489965f1aad58b9
-        DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
-        SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/exiv2-trunk
-        CMAKE_ARGS -DBUILD_SHARED_LIBS=OFF -DEXIV2_BUILD_SAMPLES:BOOL=OFF -DEXIV2_BUILD_EXIV2_COMMAND=OFF -DEXIV2_ENABLE_NLS=OFF -DEXIV2_ENABLE_BROTLI=OFF -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local -DCMAKE_INSTALL_LIBDIR=${CMAKE_BINARY_DIR}/local/lib
-        BUILD_IN_SOURCE 1
 )
-ExternalProject_Get_Property(project_exiv2 install_dir)
+FetchContent_MakeAvailable(exiv2)
 
-add_library(exiv2 STATIC IMPORTED GLOBAL)
-set_property(TARGET exiv2 PROPERTY IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/local/lib/libexiv2${CMAKE_STATIC_LIBRARY_SUFFIX})
-add_dependencies(exiv2 project_exiv2 expat png zlib)
+add_dependencies(exiv2lib expat png_static zlib)

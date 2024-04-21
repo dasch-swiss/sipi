@@ -559,7 +559,7 @@ set(sipi_DEPENDENCIES
         tiff
         expat
         lcms2
-        exiv2
+        exiv2lib
         jansson
         lua
         luarocks
@@ -579,7 +579,7 @@ set(otel_LIBRARIES ${Protobuf_LIBRARIES} ${OPENTELEMETRY_CPP_LIBRARIES})
 # dependent targets need to be added before the target that depends on them
 set(sipi_LIBRARIES
         lcms2
-        exiv2
+        exiv2lib
         ${inih_inireader_LIBRARIES}
         expat
         tiff
