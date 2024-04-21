@@ -11,6 +11,7 @@
 , glibcLocales
 , gperf
 , iconv
+, inih
 , libidn
 , libuuid
 , nlohmann_json
@@ -18,6 +19,7 @@
 , opentelemetry-cpp
 , perl
 , protobuf
+, python311Full
 , readline70
 , unzip
 , cxxStandard
@@ -48,6 +50,7 @@ stdenv.mkDerivation {
     glibcLocales
     gperf
     iconv
+    inih
     libidn
     libuuid # uuid und uuid-dev
     nlohmann_json
@@ -55,6 +58,7 @@ stdenv.mkDerivation {
     openssl
     opentelemetry-cpp
     protobuf
+    python311Full
     readline70
     unzip
   ];
