@@ -3,15 +3,16 @@
 , fetchFromGitLab
 , nix-update-script
 
-, autoreconfHook
-, pkg-config
-, sphinx
+, cmake
 
+, jbigkit
 , lerc
 , libdeflate
-, libjpeg
+, libjpeg_original
+, libpng
 , xz
 , zlib
+, zstd
 
   # for passthru.tests
 , libgeotiff
@@ -22,6 +23,8 @@
 , openimageio
 , freeimage
 , testers
+
+, cxxStandard ? null
 }:
 
 stdenv.mkDerivation (finalAttrs: {
@@ -45,36 +48,46 @@ stdenv.mkDerivation (finalAttrs: {
     # `version` in the project's include paths
     ./rename-version.patch
     # patch dirinfo as it was in sipi before. Don't know why it was changed.
-    ./dirinfo.patch
+    # ./dirinfo.patch
   ];
 
   postPatch = ''
-    mv VERSION VERSION.txt
+    # mv VERSION VERSION.txt
   '';
 
-  outputs = [ "bin" "dev" "dev_private" "out" "man" "doc" ];
-
-  postFixup = ''
-    moveToOutput include/tif_config.h $dev_private
-    moveToOutput include/tif_dir.h $dev_private
-    moveToOutput include/tif_hash_set.h $dev_private
-    moveToOutput include/tiffiop.h $dev_private
-  '';
-
-  # If you want to change to a different build system, please make
-  # sure cross-compilation works first!
-  nativeBuildInputs = [ autoreconfHook pkg-config sphinx ];
-
-  buildInputs = [
-    lerc
+  cmakeFlags = [
+      "-DCMAKE_BUILD_TYPE=Release"
+      "-DCMAKE_FIND_FRAMEWORK=NEVER"
+      "-DBUILD_SHARED_LIBS:BOOL=OFF"
+  ] ++ lib.optionals (cxxStandard != null) [
+      "-DCMAKE_CXX_STANDARD=${cxxStandard}"
   ];
 
-  # TODO: opengl support (bogus configure detection)
+  outputs = [ "bin" "dev" "out" ];
+
+  postFixup = ''
+    moveToOutput include/tif_config.h $dev
+    moveToOutput include/tif_dir.h $dev
+    moveToOutput include/tif_hash_set.h $dev
+    moveToOutput include/tiffiop.h $dev
+  '';
+
+  nativeBuildInputs = [ cmake ];
+
+  buildInputs = [
+
+    lerc
+
+  ];
+
   propagatedBuildInputs = [
+    jbigkit
     libdeflate
-    libjpeg
+    libjpeg_original
+    libpng
     xz
     zlib
+    zstd
   ];
 
   enableParallelBuilding = true;

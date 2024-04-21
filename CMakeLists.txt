@@ -197,93 +197,16 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
 # on macOS, ignore frameworks
 # the complete environment should be provided through NIX
-#if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
-#    set(CMAKE_FIND_FRAMEWORK NEVER)
-#    set(CMAKE_IGNORE_PATH "/usr/local/lib*")
-#endif ()
+if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
+    set(CMAKE_FIND_FRAMEWORK NEVER)
+    set(CMAKE_IGNORE_PATH "/usr/local/lib*")
+endif ()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-#
-# libmagic
-# (used to be build locally from source was moved to prerequisites)
-#
-find_package(LibMagic REQUIRED)
-if (LIBMAGIC_FOUND)
-    include_directories(${LibMagic_INCLUDE_DIR})
-endif ()
-
-#
-# openssl
-# (used to be build locally from source was moved to prerequisites)
-#
-find_package(OpenSSL REQUIRED)
-if (OPENSSL_FOUND)
-    # message(STATUS "OpenSSL dirs: ${OPENSSL_INCLUDE_DIR}")
-    # message(STATUS "OpenSSL libs: ${OPENSSL_LIBRARIES}")
-    include_directories(${OPENSSL_INCLUDE_DIR})
-endif ()
-
-#
-# libcurl
-# (used to be build locally from source was moved to prerequisites)
-find_package(CURL REQUIRED)
-if (CURL_FOUND)
-    # message(STATUS "curl dirs: ${CURL_INCLUDE_DIRS}")
-    # message(STATUS "curl libs: ${CURL_LIBRARIES}")
-    include_directories(${CURL_INCLUDE_DIRS})
-endif ()
-
-find_package(inih REQUIRED)
-if (inih_FOUND)
-    # message (STATUS "inih_INCLUDE_DIRS : " ${inih_INCLUDE_DIRS} )
-    # message (STATUS "inih_LIBRARIES : " ${inih_LIBRARIES} )
-    # message (STATUS "inih_inireader_INCLUDE_DIRS : " ${inih_inireader_INCLUDE_DIRS} )
-    # message (STATUS "inih_inireader_LIBRARIES : " ${inih_inireader_LIBRARIES} )
-endif ()
-
-
-#
-# abseil-cpp
-# required for opentelemetry-cpp
-#
-find_package(absl CONFIG REQUIRED)
-if (absl_FOUND)
-    # message(STATUS "abseil found")
-endif ()
-
-#
-# protobuf
-# required for opentelemetry-cpp
-# cmake --help-module FindProtobuf
-#
-find_package(Protobuf CONFIG REQUIRED)
-if (Protobuf_FOUND)
-    # message(STATUS "protobuf dirs: ${Protobuf_INCLUDE_DIRS}")
-    # message(STATUS "protobuf lib: ${Protobuf_LIBRARIES}")
-    # message(STATUS "protobuf found")
-endif ()
-
-#
-# nlohmann_json
-# required for opentelemetry-cpp
-find_package(nlohmann_json CONFIG REQUIRED)
-if (nlohmann_json_FOUND)
-    # message(STATUS "nlohmann_json found")
-endif ()
-
-#
-# protobuf
-#
-find_package(opentelemetry-cpp CONFIG REQUIRED)
-if (OPENTELEMETRY_CPP_FOUND)
-    # message(STATUS "opentelemetry-cpp dirs: ${OPENTELEMETRY_CPP_INCLUDE_DIRS}")
-    # message(STATUS "opentelemetry-cpp libs: ${OPENTELEMETRY_CPP_LIBRARIES}")
-    include_directories(${opentelemetry-cpp_INCLUDE_DIRS})
-    # message(STATUS "opentelemetry-cpp found")
-endif ()
-
+# find all the required dependencies provided through NIX
+include(./cmake/find-nix-dependencies.cmake)
 
 if (NOT WIN32)
     find_library(M_LIBRARY NAMES m)
@@ -326,18 +249,18 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/local/lib)
 # e.g., png, bzip2 before freetype
 add_subdirectory(${COMMON_EXT}/cli11)
 add_subdirectory(${COMMON_EXT}/sole)
-add_subdirectory(${COMMON_EXT}/xz)
-add_subdirectory(${COMMON_EXT}/zlib)
+# add_subdirectory(${COMMON_EXT}/xz)
+# add_subdirectory(${COMMON_EXT}/zlib)
 add_subdirectory(${COMMON_EXT}/kakadu)
 add_subdirectory(${COMMON_EXT}/jansson)
 add_subdirectory(${COMMON_EXT}/jpeg)
 add_subdirectory(${COMMON_EXT}/jbigkit)
 add_subdirectory(${COMMON_EXT}/bzip2)
-add_subdirectory(${COMMON_EXT}/zstd)
-add_subdirectory(${COMMON_EXT}/webp)
+# add_subdirectory(${COMMON_EXT}/zstd)
+# add_subdirectory(${COMMON_EXT}/webp)
 add_subdirectory(${COMMON_EXT}/expat)
 add_subdirectory(${COMMON_EXT}/png)
-add_subdirectory(${COMMON_EXT}/tiff)
+# add_subdirectory(${COMMON_EXT}/tiff)
 add_subdirectory(${COMMON_EXT}/lcms2)
 add_subdirectory(${COMMON_EXT}/exiv2)
 add_subdirectory(${COMMON_EXT}/lua)
@@ -548,15 +471,10 @@ target_sources(${PROJECT_NAME} PRIVATE
 
 set(sipi_DEPENDENCIES
         icc_profiles
-        zlib
-        xz
         bz2_static
-        libzstd_static
         jpeg
         jbigkit
         png_static
-        webp
-        tiff
         expat
         lcms2
         exiv2lib
@@ -616,7 +534,7 @@ target_link_libraries(${PROJECT_NAME} ${sipi_LIBRARIES})
 # thus we need to link against CoreFoundation because the dependencies gotten through NIX
 # where built against it :(
 if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
-    find_library(CORE_FOUNDATION_FRAMEWORK CoreFoundation)
+    # find_library(CORE_FOUNDATION_FRAMEWORK CoreFoundation)
     target_link_libraries(${PROJECT_NAME} iconv intl "${CORE_FOUNDATION_FRAMEWORK}")
 else ()
     target_link_libraries(${PROJECT_NAME} rt)

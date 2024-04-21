@@ -19,5 +19,3 @@ FetchContent_MakeAvailable(zstd)
 #        IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/local/lib/libzstd${CMAKE_STATIC_LIBRARY_SUFFIX}
 #        INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_BINARY_DIR}/local/include
 #)
-
-add_dependencies(libzstd_static xz)

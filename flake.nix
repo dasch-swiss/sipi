@@ -25,13 +25,26 @@
                     cxxStandard = "23";
                     stdenv = prev.clang17Stdenv;
                 };
-                libtiff = final.callPackage ./nix-overlays/libtiff {
+                libtiff-static = final.callPackage ./nix-overlays/libtiff {
+                    cxxStandard = "23";
                     stdenv = prev.clang17Stdenv;
+                    jbigkit = prev.pkgsStatic.jbigkit;
+                    libdeflate = prev.pkgsStatic.libdeflate;
+                    libjpeg_original = prev.pkgsStatic.libjpeg_original;
+                    libpng = prev.pkgsStatic.libpng;
+                    # libwebp = prev.pkgsStatic.libwebp;
+                    # libyuv = prev.pkgsStatic.libyuv;
+                    xz = prev.pkgsStatic.xz;
+                    zlib = prev.pkgsStatic.zlib;
+                    zstd = prev.pkgsStatic.zstd;
                 };
             })
         ];
         pkgs = import nixpkgs {
             inherit system overlays;
+            config = {
+                 packageOverrides = pkgs: rec {};
+            };
         };
     in
     {
@@ -45,19 +58,20 @@
                 export PS1="\\u@\\h | nix-develop> "
             '';
 
-            packages = with pkgs; [
+            buildInputs = with pkgs; [
               # List other packages you want in your devShell
               # C++ Compiler is already part of stdenv
               # Build tool
               autoconf
               cmake
+              doxygen
               gcovr # code coverage helper tool
               lcov # code coverage helper tool
+              pkg-config
+              unzip
 
               # Build dependencies
-              abseil-cpp # our own overlay
               asio # networking library needed for crow (microframework for the web)
-              curl
               exiv2
               ffmpeg
               file # libmagic-dev
@@ -69,19 +83,18 @@
               libidn
               libuuid # uuid und uuid-dev
               # numactl # libnuma-dev not available on mac
-              libwebp
               nlohmann_json
-              openssl # libssl-dev
-              opentelemetry-cpp # our own overlay
-              protobuf # our own overlay
               readline70 # libreadline-dev
-              doxygen
-              pkg-config
-              unzip
 
-               # additional test dependencies
+              # Build dependencies
+              abseil-cpp # our own overlay
+              libtiff-static # our own overlay
+              openjpeg # our own overlay
+              protobuf # our own overlay
+              opentelemetry-cpp # our own overlay
+
+              # additional test dependencies
               nginx
-              libtiff
               graphicsmagick
               apacheHttpd
               imagemagick
@@ -100,16 +113,27 @@
               python311Packages.testcontainers
               python311Packages.wrapt
 
-              # added through overlay to nixpkgs
-              iiif-validator
-            ];
+              iiif-validator # our own overlay
+            ] ++ (with pkgs.pkgsStatic; [
+                # static variants of the libraries
+                bzip2
+                curl
+                # jbigkit
+                # libjpeg_original
+                # libpng
+                libwebp
+                openssl
+                # xz
+                # zlib
+                # zstd
+            ]);
           };
         };
 
         # The `callPackage` automatically fills the parameters of the function
         # in package.nix with what's inside the `pkgs` attribute.
         packages.default = pkgs.callPackage ./package.nix  {
-            inherit (pkgs) abseil-cpp protobuf opentelemetry-cpp;
+            inherit (pkgs) abseil-cpp libtiff-static protobuf opentelemetry-cpp zlib;
             cxxStandard = "23";
             stdenv = pkgs.clang17Stdenv;
         };

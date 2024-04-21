@@ -40,4 +40,4 @@ set_target_properties(tiff PROPERTIES
 )
 
 # Ensure that the tiff library target depends on the completed build of libtiff
-add_dependencies(tiff project_tiff xz libzstd_static png_static jbigkit webp jpeg)
+add_dependencies(tiff project_tiff libzstd_static png_static jbigkit jpeg)

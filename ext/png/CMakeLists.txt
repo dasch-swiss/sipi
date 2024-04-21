@@ -22,5 +22,3 @@ FetchContent_Declare(
         URL_HASH SHA256=fecc95b46cf05e8e3fc8a414750e0ba5aad00d89e9fdf175e94ff041caf1a03a
 )
 FetchContent_MakeAvailable(png)
-
-add_dependencies(png_static xz zlib)

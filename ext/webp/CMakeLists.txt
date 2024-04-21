@@ -15,5 +15,3 @@ FetchContent_Declare(
         URL_HASH SHA256=98a052268cc4d5ece27f76572a7f50293f439c17a98e67c4ea0c7ed6f50ef043
 )
 FetchContent_MakeAvailable(webp)
-
-add_dependencies(webp xz)

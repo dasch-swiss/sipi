@@ -13,6 +13,7 @@
 , iconv
 , inih
 , libidn
+, libtiff-static
 , libuuid
 , nlohmann_json
 , openssl
@@ -52,6 +53,7 @@ stdenv.mkDerivation {
     iconv
     inih
     libidn
+    libtiff-static
     libuuid # uuid und uuid-dev
     nlohmann_json
     perl
