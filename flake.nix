@@ -11,18 +11,21 @@
     let
         overlays = [
             (final: prev: {
-                abseil-cpp = final.callPackage ./package-abseil-cpp.nix {
+                abseil-cpp = final.callPackage ./nix-overlays/abseil-cpp {
                     cxxStandard = "23";
                     stdenv = prev.clang17Stdenv;
                 };
-                protobuf = final.callPackage ./package-protobuf.nix {
+                protobuf = final.callPackage ./nix-overlays/protobuf {
                     cxxStandard = "23";
                     stdenv = prev.clang17Stdenv;
                 };
                 # The iiif-validator and opentelemetry-cpp are not yet part of nixpkgs, so we need to add it as an overlay
-                iiif-validator = final.callPackage ./package-iiif-validator.nix { };
-                opentelemetry-cpp = final.callPackage ./package-opentelemetry-cpp.nix {
+                iiif-validator = final.callPackage ./nix-overlays/iiif-validator { };
+                opentelemetry-cpp = final.callPackage ./nix-overlays/opentelemetry-cpp {
                     cxxStandard = "23";
+                    stdenv = prev.clang17Stdenv;
+                };
+                libtiff = final.callPackage ./nix-overlays/libtiff {
                     stdenv = prev.clang17Stdenv;
                 };
             })

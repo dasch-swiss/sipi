@@ -1,0 +1,11 @@
+--- tiff-4.0.4/libtiff/tif_dirinfo.c.orig	2015-09-18 14:37:02.000000000 +0200
++++ tiff-4.0.4/libtiff/tif_dirinfo.c.new	2015-09-18 14:59:09.000000000 +0200
+@@ -150,7 +150,7 @@
+ 	{TIFFTAG_PIXAR_MATRIX_WORLDTOCAMERA, 16, 16, TIFF_FLOAT, 0, TIFF_SETGET_C0_FLOAT, TIFF_SETGET_UNDEFINED, FIELD_CUSTOM, 1, 0, "MatrixWorldToCamera", NULL},
+    {TIFFTAG_COPYRIGHT, -1, -1, TIFF_ASCII, 0, TIFF_SETGET_ASCII, TIFF_SETGET_UNDEFINED, FIELD_CUSTOM, 1, 0, "Copyright", NULL},
+    /* end Pixar tags */
+-	{ TIFFTAG_RICHTIFFIPTC, -3, -3, TIFF_LONG, 0, TIFF_SETGET_C32_UINT32, TIFF_SETGET_UNDEFINED, FIELD_CUSTOM, 0, 1, "RichTIFFIPTC", NULL },
++	{ TIFFTAG_RICHTIFFIPTC, -3, -3, TIFF_UNDEFINED, 0, TIFF_SETGET_UNDEFINED, TIFF_SETGET_UNDEFINED, FIELD_CUSTOM, 0, 1, "RichTIFFIPTC", NULL },
+    {TIFFTAG_PHOTOSHOP, -3, -3, TIFF_BYTE, 0, TIFF_SETGET_C32_UINT8, TIFF_SETGET_UNDEFINED, FIELD_CUSTOM, 1, 1, "Photoshop", NULL},
+    /*--: EXIFIFD and GPSIFD specified as TIFF_LONG by Aware-Systems and not TIFF_IFD8 as in original LibTiff. However, for IFD-like tags,
+     * libtiff uses the data type TIFF_IFD8 in tiffFields[]-tag definition combined with a special handling procedure in order to write either
