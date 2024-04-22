@@ -70,18 +70,20 @@ stdenv.mkDerivation (finalAttrs: {
     moveToOutput include/tif_dir.h $dev
     moveToOutput include/tif_hash_set.h $dev
     moveToOutput include/tiffiop.h $dev
+
+    mv ./libtiff/tif_config.h $dev/include
+    mv ./libtiff/tif_dir.h $dev/include
+    mv ./libtiff/tif_hash_set.h $dev/include
+    mv ./libtiff/tiffiop.h $dev/include
   '';
 
   nativeBuildInputs = [ cmake ];
 
-  buildInputs = [
-
-    lerc
-
-  ];
+  buildInputs = [];
 
   propagatedBuildInputs = [
     jbigkit
+    lerc
     libdeflate
     libjpeg_original
     libpng

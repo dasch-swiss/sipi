@@ -2,7 +2,7 @@
   description = "Sipi C++ build environment setup";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -11,21 +11,21 @@
     let
         overlays = [
             (final: prev: {
-                abseil-cpp = final.callPackage ./nix-overlays/abseil-cpp {
+                abseil-cpp = prev.callPackage ./nix-overlays/abseil-cpp {
                     cxxStandard = "23";
                     stdenv = prev.clang17Stdenv;
                 };
-                protobuf = final.callPackage ./nix-overlays/protobuf {
+                protobuf = prev.callPackage ./nix-overlays/protobuf {
                     cxxStandard = "23";
                     stdenv = prev.clang17Stdenv;
                 };
                 # The iiif-validator and opentelemetry-cpp are not yet part of nixpkgs, so we need to add it as an overlay
-                iiif-validator = final.callPackage ./nix-overlays/iiif-validator { };
+                iiif-validator = prev.callPackage ./nix-overlays/iiif-validator { };
                 opentelemetry-cpp = final.callPackage ./nix-overlays/opentelemetry-cpp {
                     cxxStandard = "23";
                     stdenv = prev.clang17Stdenv;
                 };
-                libtiff-static = final.callPackage ./nix-overlays/libtiff {
+                libtiff-static = prev.callPackage ./nix-overlays/libtiff {
                     cxxStandard = "23";
                     stdenv = prev.clang17Stdenv;
                     jbigkit = prev.pkgsStatic.jbigkit;
