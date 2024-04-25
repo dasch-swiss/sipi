@@ -13,22 +13,23 @@
             (final: prev: {
                 abseil-cpp = prev.callPackage ./nix-overlays/abseil-cpp {
                     cxxStandard = "23";
-                    stdenv = prev.clang17Stdenv;
+                    # stdenv = prev.llvmPackages_17.stdenv;
                 };
                 protobuf = prev.callPackage ./nix-overlays/protobuf {
                     cxxStandard = "23";
-                    stdenv = prev.clang17Stdenv;
+                    # stdenv = prev.llvmPackages_17.stdenv;
                 };
                 # The iiif-validator and opentelemetry-cpp are not yet part of nixpkgs, so we need to add it as an overlay
                 iiif-validator = prev.callPackage ./nix-overlays/iiif-validator { };
                 opentelemetry-cpp = final.callPackage ./nix-overlays/opentelemetry-cpp {
                     cxxStandard = "23";
-                    stdenv = prev.clang17Stdenv;
+                    # stdenv = prev.llvmPackages_17.stdenv;
                 };
-                libtiff-static = prev.callPackage ./nix-overlays/libtiff {
+                libtiff-patched = prev.callPackage ./nix-overlays/libtiff {
                     cxxStandard = "23";
-                    stdenv = prev.clang17Stdenv;
+                    # stdenv = prev.llvmPackages_17.stdenv;
                     jbigkit = prev.pkgsStatic.jbigkit;
+                    # lerc = prev.pkgsStatic.lerc;
                     libdeflate = prev.pkgsStatic.libdeflate;
                     libjpeg_original = prev.pkgsStatic.libjpeg_original;
                     libpng = prev.pkgsStatic.libpng;
@@ -49,12 +50,17 @@
     in
     {
         devShells = {
-          default = pkgs.mkShell.override {stdenv = pkgs.clang17Stdenv;} {
+          # default = pkgs.mkShell.override {stdenv = pkgs.llvmPackages_17.stdenv;} {
+          default = pkgs.mkShell {
             name = "sipi";
 
             nativeBuildInputs = [ pkgs.git pkgs.cmake pkgs.openssl pkgs.cacert pkgs.autoconf ];
 
             shellHook = ''
+                # echo "C++ includes: $(clang++ -E -x c++ - -v < /dev/null 2>&1 | grep '/include')"
+                # echo | clang -v -E -x c++ -
+                # export CXXFLAGS="-isystem ${pkgs.libcxx}/include/c++/v1 $CXXFLAGS"
+                # export LDFLAGS="-L${pkgs.libcxx}/lib $LDFLAGS"
                 export PS1="\\u@\\h | nix-develop> "
             '';
 
@@ -88,7 +94,7 @@
 
               # Build dependencies
               abseil-cpp # our own overlay
-              libtiff-static # our own overlay
+              libtiff-patched # our own overlay
               openjpeg # our own overlay
               protobuf # our own overlay
               opentelemetry-cpp # our own overlay
@@ -118,6 +124,7 @@
                 # static variants of the libraries
                 bzip2
                 curl
+                expat
                 # jbigkit
                 # libjpeg_original
                 # libpng
@@ -126,7 +133,7 @@
                 # xz
                 # zlib
                 # zstd
-            ]);
+            ]) ++ [stdenv.cc.libc];
           };
         };
 
@@ -135,7 +142,7 @@
         packages.default = pkgs.callPackage ./package.nix  {
             inherit (pkgs) abseil-cpp libtiff-static protobuf opentelemetry-cpp zlib;
             cxxStandard = "23";
-            stdenv = pkgs.clang17Stdenv;
+            # stdenv = pkgs.clang17Stdenv;
         };
 
         # The `config` variable contains our own outputs, so we can reference

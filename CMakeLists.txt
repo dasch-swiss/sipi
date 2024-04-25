@@ -189,11 +189,10 @@ set(COMMON_PATCHES ${PROJECT_SOURCE_DIR}/patches)
 set(COMMON_VENDOR ${PROJECT_SOURCE_DIR}/vendor)
 set(SIPI_SOURCE_DIR ${PROJECT_SOURCE_DIR})
 
-
 #
 # append path to additional find_package() cmake modules
 #
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
 
 # on macOS, ignore frameworks
 # the complete environment should be provided through NIX
@@ -202,21 +201,8 @@ if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
     set(CMAKE_IGNORE_PATH "/usr/local/lib*")
 endif ()
 
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
-
 # find all the required dependencies provided through NIX
 include(./cmake/find-nix-dependencies.cmake)
-
-if (NOT WIN32)
-    find_library(M_LIBRARY NAMES m)
-    if (NOT M_LIBRARY)
-        message(STATUS "math lib 'libm' not found; floating point support disabled")
-    endif ()
-else ()
-    # not needed on windows
-    set(M_LIBRARY "")
-endif ()
 
 set(HAVE_ST_ATIMESPEC 0)
 check_struct_has_member("struct stat" st_atimespec sys/stat.h HAVE_ST_ATIMESPEC LANGUAGE CXX)
@@ -231,15 +217,6 @@ CHECK_INCLUDE_FILES(malloc.h HAVE_MALLOC_H)
 # write out the malloc and atimespec information
 configure_file(${PROJECT_SOURCE_DIR}/include/SipiConfig.h.in ${CMAKE_BINARY_DIR}/generated/SipiConfig.h)
 
-#
-# "standard" packages that are required for sipi
-#
-if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
-    find_package(ICONV REQUIRED)
-endif ()
-
-#find_package(MATH REQUIRED)
-
 message(STATUS "Adding external dependencies ...")
 
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/local/lib)
@@ -253,33 +230,21 @@ add_subdirectory(${COMMON_EXT}/sole)
 # add_subdirectory(${COMMON_EXT}/zlib)
 add_subdirectory(${COMMON_EXT}/kakadu)
 add_subdirectory(${COMMON_EXT}/jansson)
-add_subdirectory(${COMMON_EXT}/jpeg)
-add_subdirectory(${COMMON_EXT}/jbigkit)
-add_subdirectory(${COMMON_EXT}/bzip2)
+# add_subdirectory(${COMMON_EXT}/jpeg)
+# add_subdirectory(${COMMON_EXT}/jbigkit)
+# add_subdirectory(${COMMON_EXT}/bzip2)
 # add_subdirectory(${COMMON_EXT}/zstd)
 # add_subdirectory(${COMMON_EXT}/webp)
-add_subdirectory(${COMMON_EXT}/expat)
-add_subdirectory(${COMMON_EXT}/png)
+# add_subdirectory(${COMMON_EXT}/expat)
+# add_subdirectory(${COMMON_EXT}/png)
 # add_subdirectory(${COMMON_EXT}/tiff)
 add_subdirectory(${COMMON_EXT}/lcms2)
-add_subdirectory(${COMMON_EXT}/exiv2)
+# add_subdirectory(${COMMON_EXT}/exiv2)
 add_subdirectory(${COMMON_EXT}/lua)
 add_subdirectory(${COMMON_EXT}/luarocks)
 add_subdirectory(${COMMON_EXT}/sqlite3)
 
 message(STATUS "... adding external dependencies done.")
-
-#
-# add a target to generate API documentation with Doxygen
-#
-find_package(Doxygen)
-if (DOXYGEN_FOUND)
-    add_custom_target(doc
-            ${DOXYGEN_EXECUTABLE} ${COMMON_DOXYGEN}/Doxyfile
-            WORKING_DIRECTORY ${COMMON_DOXYGEN}
-            COMMENT "Generating API documentation with Doxygen" VERBATIM
-    )
-endif (DOXYGEN_FOUND)
 
 #
 # get version from git if not provided externally
@@ -471,13 +436,7 @@ target_sources(${PROJECT_NAME} PRIVATE
 
 set(sipi_DEPENDENCIES
         icc_profiles
-        bz2_static
-        jpeg
-        jbigkit
-        png_static
-        expat
         lcms2
-        exiv2lib
         jansson
         lua
         luarocks
@@ -497,29 +456,28 @@ set(otel_LIBRARIES ${Protobuf_LIBRARIES} ${OPENTELEMETRY_CPP_LIBRARIES})
 # dependent targets need to be added before the target that depends on them
 set(sipi_LIBRARIES
         lcms2
-        exiv2lib
-        ${inih_inireader_LIBRARIES}
-        expat
-        tiff
-        webp
-        jbigkit
-        png_static
+        Exiv2::exiv2lib # find_package(exiv2lib) sets Exiv2::exiv2lib
+        inih::inireader # find_package(inih) sets inih::inireader
+        EXPAT::EXPAT # find_package(EXPAT) sets EXPAT::EXPAT
+        TIFF::TIFF # find_package(TIFF) sets TIFF::TIFF
+        LERC::LERC # find_package(LERC) sets LERC::LERC
+        WebP::libwebp # find_package(WebP) sets WebP::libwebp
+        JBIG::JBIG # find_package(JBIG) sets JBIG::JBIG
+        PNG::PNG # find_package(PNG) sets PNG::PNG
         kdu_aux
         kdu
-        xz
         magic
         lua
         jansson
         sqlite3
         dl
-        pthread
-        ${CURL_LIBRARIES}
-        ${OPENSSL_LIBRARIES}
-        jpeg
-        bz2_static
-        libzstd_static
-        zlib
-        m
+        CURL::libcurl # find_package(CURL) sets CURL::libcurl
+        OpenSSL::SSL # find_package(OpenSSL) sets OpenSSL::SSL
+        JPEG::JPEG # find_package(JPEG) sets JPEG::JPEG
+        ZLIB::ZLIB # find_package(ZLIB) sets ZLIB::ZLIB
+        BZip2::BZip2 # find_package(BZip2) sets BZip2::BZip2
+        liblzma::liblzma # find_package(liblzma) sets liblzma::liblzma
+        m # libm part of the standard library
         ${CMAKE_DL_LIBS}
         sole
         cli11
@@ -535,7 +493,7 @@ target_link_libraries(${PROJECT_NAME} ${sipi_LIBRARIES})
 # where built against it :(
 if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
     # find_library(CORE_FOUNDATION_FRAMEWORK CoreFoundation)
-    target_link_libraries(${PROJECT_NAME} iconv intl "${CORE_FOUNDATION_FRAMEWORK}")
+    target_link_libraries(${PROJECT_NAME} iconv intl )
 else ()
     target_link_libraries(${PROJECT_NAME} rt)
 endif ()
@@ -548,6 +506,15 @@ if (WITH_CODE_COVERAGE)
     target_link_libraries(${PROJECT_NAME} coverage_config)
 endif ()
 
+# Debugging
+include(./cmake/debug.cmake)
+print_target_properties(${PROJECT_NAME})
+
+message(STATUS "CPATH: $ENV{CPATH}")
+message(STATUS "C_INCLUDE_PATH: $ENV{C_INCLUDE_PATH}")
+message(STATUS "CPLUS_INCLUDE_PATH: $ENV{CPLUS_INCLUDE_PATH}")
+
+set(CMAKE_VERBOSE_MAKEFILE ON)
 
 # install all artifacts
 
@@ -619,4 +586,13 @@ message(STATUS "  CMake binary directory:             ${CMAKE_BINARY_DIR}")
 message(STATUS "  CMake install prefix:               ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "  CMake system name:                  ${CMAKE_SYSTEM_NAME}")
 message(STATUS "  CMake system processor:             ${CMAKE_SYSTEM_PROCESSOR}")
+message(STATUS "")
+message(STATUS "Required dependencies:")
+message(STATUS "  CMath:                              ${CMath_FOUND}")
+message(STATUS "  OpenSSL:                            ${OPENSSL_FOUND}")
+message(STATUS "  Opentelemetry-cpp:                  ${OPENTELEMETRY_CPP_FOUND}")
+message(STATUS "  Protobuf:                           ${Protobuf_FOUND}")
+message(STATUS "  TIFF:                               ${TIFF_FOUND}")
+message(STATUS "  WebP:                               ${WebP_FOUND}")
+message(STATUS "  ZLIB:                               ${ZLIB_FOUND}")
 message(STATUS "")

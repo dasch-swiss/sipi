@@ -8,6 +8,20 @@ if (absl_FOUND)
 endif ()
 
 #
+# bzip2
+# (provided through NIX)
+find_package(BZip2 REQUIRED)
+
+#
+# CMath
+# (provided through NIX)
+find_package(CMath REQUIRED)
+if (CMath_FOUND)
+    message(STATUS "cmath dirs: ${CMath_INCLUDE_DIRS}")
+    message(STATUS "cmath libs: ${CMath_LIBRARIES}")
+endif ()
+
+#
 # libcurl
 # (provided through NIX)
 find_package(CURL REQUIRED)
@@ -15,6 +29,39 @@ if (CURL_FOUND)
     # message(STATUS "curl dirs: ${CURL_INCLUDE_DIRS}")
     # message(STATUS "curl libs: ${CURL_LIBRARIES}")
     include_directories(${CURL_INCLUDE_DIRS})
+endif ()
+
+#
+# deflate
+# (provided through NIX)
+find_package(Deflate REQUIRED)
+
+#
+# Doxygen
+#
+find_package(Doxygen)
+if (DOXYGEN_FOUND)
+    add_custom_target(doc
+            ${DOXYGEN_EXECUTABLE} ${COMMON_DOXYGEN}/Doxyfile
+            WORKING_DIRECTORY ${COMMON_DOXYGEN}
+            COMMENT "Generating API documentation with Doxygen" VERBATIM
+    )
+endif (DOXYGEN_FOUND)
+
+# (provided through NIX)
+find_package(exiv2lib REQUIRED CONFIG NAMES exiv2)
+
+#
+# expat
+# (provided through NIX)
+find_package(EXPAT REQUIRED)
+if (EXPAT_FOUND)
+    # message(STATUS "expat dirs: ${EXPAT_INCLUDE_DIRS}")
+    # message(STATUS "expat libs: ${EXPAT_LIBRARIES}")
+endif ()
+
+if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
+    find_package(ICONV REQUIRED)
 endif ()
 
 find_package(inih REQUIRED)
@@ -26,6 +73,11 @@ if (inih_FOUND)
 endif ()
 
 #
+# JBIG
+# (provided through NIX)
+find_package(JBIG REQUIRED)
+
+#
 # libjpeg
 # (provided through NIX)
 find_package(JPEG REQUIRED)
@@ -33,6 +85,11 @@ if (JPEG_FOUND)
     message(STATUS "JPEG dirs: ${JPEG_INCLUDE_DIR}")
     message(STATUS "JPEG libs: ${JPEG_LIBRARIES}")
 endif ()
+
+#
+# Lerc
+# (provided through NIX)
+find_package(LERC REQUIRED)
 
 #
 # libmagic
@@ -45,10 +102,10 @@ endif ()
 #
 # lzma (new xz codebase)
 # (provided through NIX)
-find_package(LibLZMA REQUIRED)
-if (LIBLZMA_FOUND)
-    message(STATUS "LZMA dirs: ${LIBLZMA_INCLUDE_DIR}")
-    message(STATUS "LZMA libs: ${LIBLZMA_LIBRARIES}")
+find_package(liblzma REQUIRED)
+if (liblzma_FOUND)
+#    message(STATUS "LZMA dirs: ${LIBLZMA_INCLUDE_DIR}")
+#    message(STATUS "LZMA libs: ${LIBLZMA_LIBRARIES}")
 endif ()
 
 
@@ -83,6 +140,11 @@ if (OPENTELEMETRY_CPP_FOUND)
 endif ()
 
 #
+# PNG
+# (provided through NIX)
+find_package(PNG REQUIRED)
+
+#
 # protobuf
 # required for opentelemetry-cpp
 # cmake --help-module FindProtobuf
@@ -94,13 +156,16 @@ if (Protobuf_FOUND)
     # message(STATUS "protobuf found")
 endif ()
 
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+
 #
 # libtiff
 # (provided through NIX)
 find_package(TIFF REQUIRED)
 if (TIFF_FOUND)
-    message(STATUS "TIFF dirs: ${TIFF_INCLUDE_DIR}")
-    message(STATUS "TIFF libs: ${TIFF_LIBRARIES}")
+    # message(STATUS "TIFF dirs: ${TIFF_INCLUDE_DIR}")
+    # message(STATUS "TIFF libs: ${TIFF_LIBRARIES}")
 endif ()
 
 #
@@ -108,8 +173,8 @@ endif ()
 # (provided through NIX)
 find_package(WebP REQUIRED)
 if (WebP_FOUND)
-    message(STATUS "libwebp_INCLUDE_DIRS : " ${WebP_INCLUDE_DIRS} )
-    message(STATUS "libwebp_LIBRARIES : " ${WebP_LIBRARIES} )
+    # message(STATUS "libwebp_INCLUDE_DIRS : " ${WebP_INCLUDE_DIRS} )
+    # message(STATUS "libwebp_LIBRARIES : " ${WebP_LIBRARIES} )
 endif ()
 
 #
@@ -118,6 +183,11 @@ endif ()
 set(ZLIB_USE_STATIC_LIBS "ON")
 find_package(ZLIB REQUIRED)
 if (ZLIB_FOUND)
-    message(STATUS "ZLIB dirs: ${ZLIB_INCLUDE_DIRS}")
-    message(STATUS "ZLIB libs: ${ZLIB_LIBRARIES}")
+    # message(STATUS "ZLIB dirs: ${ZLIB_INCLUDE_DIRS}")
+    # message(STATUS "ZLIB libs: ${ZLIB_LIBRARIES}")
 endif ()
+
+#
+# zstd
+# (provided through NIX)
+find_package(ZSTD REQUIRED)

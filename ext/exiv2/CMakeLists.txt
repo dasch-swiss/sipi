@@ -20,4 +20,4 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(exiv2)
 
-add_dependencies(exiv2lib expat png_static )
+# add_dependencies(exiv2lib expat png_static )
