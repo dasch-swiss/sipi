@@ -48,109 +48,103 @@
           };
         };
       in
-      {
-        devShells = {
-          # default = pkgs.mkShell.override {stdenv = pkgs.llvmPackages_17.stdenv;} {
-          default = pkgs.mkShell.override { stdenv = pkgs.gcc13Stdenv; } {
-            name = "sipi";
+      with pkgs;
+      rec {
+        # devShells.default = pkgs.mkShell.override {stdenv = pkgs.llvmPackages_17.stdenv;} {
+        devShells.default = mkShell.override { stdenv = llvmPackages_18.libcxxStdenv; } {
+          name = "sipi";
 
-            nativeBuildInputs = [ pkgs.git pkgs.cmake pkgs.openssl pkgs.cacert pkgs.autoconf ];
+          shellHook = ''
+            # echo "C++ includes: $(clang++ -E -x c++ - -v < /dev/null 2>&1 | grep '/include')"
+            # echo | clang++ -v -E -x c++ -
+            # echo | g++ -Wp,-v -x c++ - -fsyntax-only
+            export PS1="\\u@\\h | nix-develop> "
+          '';
 
-            shellHook = ''
-              # echo "C++ includes: $(clang++ -E -x c++ - -v < /dev/null 2>&1 | grep '/include')"
-              # export CXXFLAGS="-isystem ${pkgs.libcxx}/include/c++/v1 $CXXFLAGS"
-              # export LDFLAGS="-L${pkgs.libcxx}/lib $LDFLAGS"
-              # echo | clang++ -v -E -x c++ -
-              # export NIX_CFLAGS_COMPILE="-isystem ${pkgs.glibc.dev}/include $NIX_CFLAGS_COMPILE"
-              # export NIX_CFLAGS_COMPILE="-isystem ${pkgs.gcc.cc.lib}/include $NIX_CFLAGS_COMPILE"
-              echo | g++ -Wp,-v -x c++ - -fsyntax-only
-              export PS1="\\u@\\h | nix-develop> "
-            '';
+          nativeBuildInputs = [ git cmake openssl cacert pkg-config autoconf ];
 
-            buildInputs = with pkgs; [
-              stdenv
-              # List other packages you want in your devShell
-              # C++ Compiler is already part of stdenv
-              # Build tool
-              autoconf
-              cmake
-              doxygen
-              gcovr # code coverage helper tool
-              lcov # code coverage helper tool
-              pkg-config
-              unzip
+          buildInputs = [
+            # List other packages you want in your devShell
+            # C++ Compiler is already part of stdenv
+            # Build tool
+            # autoconf
+            # pkg-config
+            # cmake
+            doxygen
+            gcovr # code coverage helper tool
+            lcov # code coverage helper tool
+            unzip
 
-              # Build dependencies
-              asio # networking library needed for crow (microframework for the web)
-              exiv2
-              ffmpeg
-              file # libmagic-dev
-              gettext
-              glibcLocales # locales
-              gperf
-              iconv
-              inih
-              libidn
-              libuuid # uuid und uuid-dev
-              # numactl # libnuma-dev not available on mac
-              nlohmann_json
-              readline70 # libreadline-dev
+            # Build dependencies
+            asio # networking library needed for crow (microframework for the web)
+            exiv2
+            ffmpeg
+            file # libmagic-dev
+            gettext
+            glibcLocales # locales
+            gperf
+            iconv
+            inih
+            libidn
+            libuuid # uuid und uuid-dev
+            # numactl # libnuma-dev not available on mac
+            nlohmann_json
+            readline70 # libreadline-dev
 
-              # Build dependencies
-              abseil-cpp # our own overlay
-              libtiff-patched # our own overlay
-              openjpeg # our own overlay
-              protobuf # our own overlay
-              opentelemetry-cpp # our own overlay
+            # Build dependencies
+            abseil-cpp # our own overlay
+            libtiff-patched # our own overlay
+            openjpeg # our own overlay
+            protobuf # our own overlay
+            opentelemetry-cpp # our own overlay
 
-              # additional test dependencies
-              nginx
-              graphicsmagick
-              apacheHttpd
-              imagemagick
-              libxml2
-              libxslt
+            # additional test dependencies
+            nginx
+            graphicsmagick
+            apacheHttpd
+            imagemagick
+            libxml2
+            libxslt
 
-              # Python dependencies
-              python311Full
-              python311Packages.deprecation
-              python311Packages.docker
-              python311Packages.pip
-              python311Packages.psutil
-              python311Packages.pytest
-              python311Packages.requests
-              python311Packages.sphinx
-              python311Packages.testcontainers
-              python311Packages.wrapt
+            # Python dependencies
+            python311Full
+            python311Packages.deprecation
+            python311Packages.docker
+            python311Packages.pip
+            python311Packages.psutil
+            python311Packages.pytest
+            python311Packages.requests
+            python311Packages.sphinx
+            python311Packages.testcontainers
+            python311Packages.wrapt
 
-              iiif-validator # our own overlay
-            ] ++ (with pkgs.pkgsStatic; [
-              # static variants of the libraries
-              bzip2
-              curl
-              expat
-              # jbigkit
-              # libjpeg_original
-              # libpng
-              libwebp
-              openssl
-              # xz
-              # zlib
-              # zstd
-            ]) ++ [ stdenv.cc.libc ];
-          };
+            iiif-validator # our own overlay
+          ] ++ (with pkgsStatic; [
+            # static variants of the libraries
+            bzip2
+            curl
+            expat
+            # jbigkit
+            # libjpeg_original
+            # libpng
+            libwebp
+            openssl
+            # xz
+            # zlib
+            # zstd
+          ]);
         };
 
         # The `callPackage` automatically fills the parameters of the function
         # in package.nix with what's inside the `pkgs` attribute.
-        packages.default = pkgs.callPackage ./package.nix {
+        packages.default = callPackage ./package.nix {
           inherit (pkgs) abseil-cpp libtiff-static protobuf opentelemetry-cpp zlib;
           cxxStandard = "23";
-          stdenv = pkgs.gcc13Stdenv;
+          stdenv = gcc13Stdenv;
         };
 
         # The `config` variable contains our own outputs, so we can reference
         # neighbor attributes like the package we just defined one line earlier.
-        # devShells.default = config.packages.default;
+        # devShells.default = packages.default;
       });
 }
