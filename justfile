@@ -55,11 +55,11 @@ docker-push-amd64:
 	docker push {{DOCKER_REPO}}:{{BUILD_TAG}}-amd64
 
 ## locally publish Sipi Docker image and run smoke tests against it
-test-smoke: docker-build
+smoke-test: docker-build
 	pytest -s test/smoke
 
 ## run smoke tests against (already) locally published Sipi Docker image
-test-smoke-ci:
+smoke-test-ci:
 	pytest -s test/smoke
 
 #

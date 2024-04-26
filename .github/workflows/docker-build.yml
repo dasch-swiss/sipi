@@ -28,7 +28,7 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       - run: just docker-build-amd64 # two stage build, where test is run in the first stage
-      - run: just test-smoke-ci
+      - run: just smoke-test-ci
 
   # Docker build for aarch64
   build_aarch64:
@@ -50,7 +50,7 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       - run: just docker-build-aarch64 # two stage build, where test is run in the first stage
-      - run: just test-smoke-ci
+      - run: just smoke-test-ci
 
   # build documentation
   build_docs:
