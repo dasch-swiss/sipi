@@ -16,20 +16,22 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     # when we compile with clang, we don't need to patch the makefiles
     set(PATCH_COMMAND_OVERRIDE "")
 else ()
-    # when we compile with gcc, we need to patch the makefiles, so that the target uses GCC instead of Clang
-    set(PATCH_COMMAND_OVERRIDE patch ${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}/coresys/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu-makefile-coresys.patch && patch ${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}/apps/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu-makefile-apps.patch && patch ${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}/managed/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu-makefile-managed.patch)
+    message(STATUS "Patching Kakadu makefiles for GCC")
+    # when we compile with gcc, we need to patch the Mac makefiles, so that the target uses GCC instead of Clang
+    set(PATCH_COMMAND_OVERRIDE patch ${CMAKE_BINARY_DIR}/extsrcs/kakadu/${KakaduVersion}/coresys/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu-makefile-coresys.patch && patch ${CMAKE_BINARY_DIR}/extsrcs/kakadu/${KakaduVersion}/apps/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu-makefile-apps.patch && patch ${CMAKE_BINARY_DIR}/extsrcs/kakadu/${KakaduVersion}/managed/make/Makefile-Mac-arm-64-gcc < ${COMMON_PATCHES}/kakadu-makefile-managed.patch)
 endif ()
 
 ExternalProject_Add(project_kakadu
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        DOWNLOAD_COMMAND unzip -o -d ${CMAKE_BINARY_DIR}/local/extsrcs ${COMMON_VENDOR}/${KakaduVersion}.zip
+        DOWNLOAD_COMMAND unzip -o -d ${CMAKE_BINARY_DIR}/extsrcs/kakadu ${COMMON_VENDOR}/${KakaduVersion}.zip
         DOWNLOAD_EXTRACT_TIMESTAMP OLD
-        PATCH_COMMAND ""
+        DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/extsrcs/kakadu
+        PATCH_COMMAND ${PATCH_COMMAND_OVERRIDE}
         CONFIGURE_COMMAND ""
-        BUILD_COMMAND make -j1 --directory=${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}/make/ -f ${KDU_MAKE} EXEC_PLATFORM=${KDU_EXEC_PLATFORM} all_but_jni_static
-        INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}/lib/${KDU_ARCH} ${CMAKE_BINARY_DIR}/local/lib
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}/bin/${KDU_ARCH} ${CMAKE_BINARY_DIR}/local/bin
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}/managed/all_includes ${CMAKE_BINARY_DIR}/local/include
+        BUILD_COMMAND make -j1 --directory=${CMAKE_BINARY_DIR}/extsrcs/kakadu/${KakaduVersion}/make/ -f ${KDU_MAKE} EXEC_PLATFORM=${KDU_EXEC_PLATFORM} all_but_jni_static
+        INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/extsrcs/kakadu/${KakaduVersion}/lib/${KDU_ARCH} ${CMAKE_BINARY_DIR}/local/lib
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/extsrcs/kakadu/${KakaduVersion}/bin/${KDU_ARCH} ${CMAKE_BINARY_DIR}/local/bin
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/extsrcs/kakadu/${KakaduVersion}/managed/all_includes ${CMAKE_BINARY_DIR}/local/include
 )
 
 ExternalProject_Get_Property(project_kakadu install_dir)
