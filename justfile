@@ -81,7 +81,7 @@ build:
 
 # Run the tests
 test: build
-    ctest --test-dir ./build/test --parallel --output-on-failure
+    cd ./build && ctest --output-on-failure
 
 # Print the test coverage (using gcov executable, thus assuming GCC)
 coverage: test

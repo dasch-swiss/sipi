@@ -13,21 +13,21 @@
           (final: prev: {
             abseil-cpp = prev.callPackage ./nix-overlays/abseil-cpp {
               cxxStandard = "23";
-              # stdenv = prev.llvmPackages_17.stdenv;
+              stdenv = prev.llvmPackages_17.libcxxStdenv;
             };
             protobuf = prev.callPackage ./nix-overlays/protobuf {
               cxxStandard = "23";
-              # stdenv = prev.llvmPackages_17.stdenv;
+              stdenv = prev.llvmPackages_17.libcxxStdenv;
             };
             # The iiif-validator and opentelemetry-cpp are not yet part of nixpkgs, so we need to add it as an overlay
             iiif-validator = prev.callPackage ./nix-overlays/iiif-validator { };
             opentelemetry-cpp = final.callPackage ./nix-overlays/opentelemetry-cpp {
               cxxStandard = "23";
-              # stdenv = prev.llvmPackages_17.stdenv;
+              stdenv = prev.llvmPackages_17.libcxxStdenv;
             };
             libtiff-patched = prev.callPackage ./nix-overlays/libtiff {
               cxxStandard = "23";
-              stdenv = prev.gcc13Stdenv;
+              stdenv = prev.llvmPackages_17.libcxxStdenv;
               jbigkit = prev.pkgsStatic.jbigkit;
               # lerc = prev.pkgsStatic.lerc;
               libdeflate = prev.pkgsStatic.libdeflate;
@@ -51,7 +51,7 @@
       with pkgs;
       rec {
         # devShells.default = pkgs.mkShell.override {stdenv = pkgs.llvmPackages_17.stdenv;} {
-        devShells.default = mkShell.override { stdenv = llvmPackages_18.libcxxStdenv; } {
+        devShells.default = mkShell.override { stdenv = pkgs.llvmPackages_17.libcxxStdenv; } {
           name = "sipi";
 
           shellHook = ''
@@ -140,7 +140,7 @@
         packages.default = callPackage ./package.nix {
           inherit (pkgs) abseil-cpp libtiff-static protobuf opentelemetry-cpp zlib;
           cxxStandard = "23";
-          stdenv = gcc13Stdenv;
+          stdenv = pkgs.llvmPackages_17.libcxxStdenv;
         };
 
         # The `config` variable contains our own outputs, so we can reference

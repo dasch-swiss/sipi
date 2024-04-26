@@ -507,14 +507,14 @@ if (WITH_CODE_COVERAGE)
 endif ()
 
 # Debugging
-include(./cmake/debug.cmake)
-print_target_properties(${PROJECT_NAME})
+# include(./cmake/debug.cmake)
+# print_target_properties(${PROJECT_NAME})
 
-message(STATUS "CPATH: $ENV{CPATH}")
-message(STATUS "C_INCLUDE_PATH: $ENV{C_INCLUDE_PATH}")
-message(STATUS "CPLUS_INCLUDE_PATH: $ENV{CPLUS_INCLUDE_PATH}")
+# message(STATUS "CPATH: $ENV{CPATH}")
+# message(STATUS "C_INCLUDE_PATH: $ENV{C_INCLUDE_PATH}")
+# message(STATUS "CPLUS_INCLUDE_PATH: $ENV{CPLUS_INCLUDE_PATH}")
 
-set(CMAKE_VERBOSE_MAKEFILE ON)
+# set(CMAKE_VERBOSE_MAKEFILE ON)
 
 # install all artifacts
 
