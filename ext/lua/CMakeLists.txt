@@ -18,7 +18,7 @@ if(NOT lua_POPULATED)
             project_lua
             SOURCE_DIR ${lua_SOURCE_DIR}
             CONFIGURE_COMMAND ""
-            BUILD_COMMAND make CC=clang INSTALL_TOP=${CMAKE_BINARY_DIR}/local ${LUA_ARCH}
+            BUILD_COMMAND make INSTALL_TOP=${CMAKE_BINARY_DIR}/local ${LUA_ARCH}
             INSTALL_COMMAND make install INSTALL_TOP=${CMAKE_BINARY_DIR}/local
             BUILD_IN_SOURCE 1
     )

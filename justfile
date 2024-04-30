@@ -66,12 +66,8 @@ smoke-test-ci:
 # The following commands need to be run inside a Nix development shell
 #
 
-# Open the Nix development shell with the clang environment: `just clang`
-clang:
-	nix develop .#clang
-
-# Open the Nix development shell with the gcc environment: `just gcc`
-gcc:
+# Open the Nix development shell with all dependencies
+develop:
     nix develop
 
 # Build the `sipi` binary

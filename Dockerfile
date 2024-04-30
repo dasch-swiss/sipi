@@ -1,17 +1,22 @@
 # Nix builder
-FROM nixos/nix:latest AS builder
+FROM nixos/nix:2.22.0 AS builder
 
 # Copy our source and setup our working dir.
 COPY . /tmp/src
 WORKDIR /tmp/src
 
-# Build our Nix environment
-# and build SIPI and run unit tests.
-RUN nix \
-    --extra-experimental-features "nix-command flakes" \
-    --option filter-syscalls false \
-    develop --command bash -c "cmake -S . -B ./build -DCMAKE_BUILD_TYPE:STRING=Release -DEXT_PROVIDED_VERSION:STRING=$VERSION -DWITH_CODE_COVERAGE:BOOL=FALSE --log-context && cmake --build ./build --parallel 4 && ctest --test-dir ./build/test --parallel --output-on-failure"
+# Enable the Nix experimental features.
+RUN echo "experimental-features = nix-command flakes" >> /etc/nix/nix.conf
 
+# Install and use cachix for caching .
+RUN nix-env -iA cachix -f https://cachix.org/api/v1/install \
+    && cachix authtoken xxx \
+    && cachix use dasch-swiss \
+    && nix develop --profile dev-profile -c true \
+    && cachix push dasch-swiss dev-profile
+
+# Build SIPI and run unit tests.
+RUN nix develop --command bash -c "cmake -S . -B ./build -DCMAKE_BUILD_TYPE:STRING=Release -DEXT_PROVIDED_VERSION:STRING=$VERSION -DWITH_CODE_COVERAGE:BOOL=FALSE --log-context && cmake --build ./build --parallel 4 --verbose && ctest --test-dir ./build/test --parallel --output-on-failure"
 
 # Copy the Nix store closure into a directory. The Nix store closure is the
 # entire set of Nix store values that we need for our build.

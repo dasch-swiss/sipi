@@ -18,6 +18,7 @@ stdenv.mkDerivation (finalAttrs: {
 
   cmakeFlags = [
     "-DCMAKE_BUILD_TYPE=Release"
+    "-DCMAKE_FIND_FRAMEWORK=NEVER"
     "-DABSL_BUILD_TEST=OFF"
     "-DBUILD_SHARED_LIBS=OFF"
   ] ++ lib.optionals (cxxStandard != null) [

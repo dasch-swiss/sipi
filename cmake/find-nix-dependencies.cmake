@@ -108,7 +108,15 @@ if (liblzma_FOUND)
 #    message(STATUS "LZMA libs: ${LIBLZMA_LIBRARIES}")
 endif ()
 
-
+## if found, adds Lua::Lua target
+#find_package(Lua REQUIRED)
+#if (LUA_FOUND)
+#    message(STATUS "Lua dirs: ${LUA_INCLUDE_DIR}")
+#    message(STATUS "Lua libs: ${LUA_LIBRARIES}")
+#    add_library(Lua::Lua INTERFACE IMPORTED)
+#    set_property(TARGET Lua::Lua PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${LUA_INCLUDE_DIR}")
+#    set_property(TARGET Lua::Lua PROPERTY INTERFACE_LINK_LIBRARIES "${LUA_LIBRARIES}")
+#endif()
 
 #
 # nlohmann_json
@@ -156,8 +164,13 @@ if (Protobuf_FOUND)
     # message(STATUS "protobuf found")
 endif ()
 
+find_package(SQLite3 REQUIRED)
+
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
+if(Threads_FOUND)
+    message(STATUS "Threads libs: ${CMAKE_THREAD_LIBS_INIT}")
+endif()
 
 #
 # libtiff

@@ -30,12 +30,12 @@ message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
 # Here we determine the compiler and compiler version. We need clang >= 15 or g++ >= 13
 #
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "13.0")
-        message(FATAL_ERROR "Requires GCC 13.0 or greater.")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "12.0")
+        message(FATAL_ERROR "Requires GCC 13.0 or greater providing c++23 support. Aborting...")
     endif ()
 elseif (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "15.0")
-        message(FATAL_ERROR "Clang version must be 15.0.0 or greater! Aborting...")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0")
+        message(FATAL_ERROR "Clang version must be 16.0.0 or greater providing c++23 support! Aborting...")
     endif ()
 else ()
     message(WARNING "You are using an unsupported compiler (${CMAKE_CXX_COMPILER_ID}). Compilation has only been tested with Clang and GCC.")
@@ -71,8 +71,8 @@ add_library(build_config INTERFACE)
 #
 # Statically compile the C++ standard library into the executable
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    message(STATUS "Compiling with GCC (-static-libstdc++).") # and -lstdc++_libbacktrace.")
-    target_link_options(build_config INTERFACE -static-libstdc++) # -lstdc++_libbacktrace)
+    message(STATUS "Compiling with GCC.") # and -lstdc++_libbacktrace.")
+    # target_link_options(build_config INTERFACE -static-libgcc -static-libstdc++) # -lstdc++_libbacktrace)
 endif ()
 
 #
@@ -80,7 +80,7 @@ endif ()
 if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     message(STATUS "Compiling with Clang (-stdlib=libc++).")
     target_link_options(build_config INTERFACE -stdlib=libc++)
-    link_libraries(c++abi)
+    # link_libraries(c++abi)
 endif ()
 
 #
@@ -199,6 +199,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
 if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
     set(CMAKE_FIND_FRAMEWORK NEVER)
     set(CMAKE_IGNORE_PATH "/usr/local/lib*")
+    set(CMAKE_IGNORE_PATH "/Library/Frameworks*")
 endif ()
 
 # find all the required dependencies provided through NIX
@@ -241,8 +242,8 @@ add_subdirectory(${COMMON_EXT}/jansson)
 add_subdirectory(${COMMON_EXT}/lcms2)
 # add_subdirectory(${COMMON_EXT}/exiv2)
 add_subdirectory(${COMMON_EXT}/lua)
-add_subdirectory(${COMMON_EXT}/luarocks)
-add_subdirectory(${COMMON_EXT}/sqlite3)
+# add_subdirectory(${COMMON_EXT}/luarocks)
+# add_subdirectory(${COMMON_EXT}/sqlite3)
 
 message(STATUS "... adding external dependencies done.")
 
@@ -439,8 +440,7 @@ set(sipi_DEPENDENCIES
         lcms2
         jansson
         lua
-        luarocks
-        sqlite3
+        # luarocks
         kdu
         kdu_aux
         sole
@@ -469,16 +469,15 @@ set(sipi_LIBRARIES
         magic
         lua
         jansson
-        sqlite3
-        dl
+        SQLite::SQLite3 # find_package(SQLite3) sets SQLite::SQLite3
         CURL::libcurl # find_package(CURL) sets CURL::libcurl
         OpenSSL::SSL # find_package(OpenSSL) sets OpenSSL::SSL
         JPEG::JPEG # find_package(JPEG) sets JPEG::JPEG
         ZLIB::ZLIB # find_package(ZLIB) sets ZLIB::ZLIB
         BZip2::BZip2 # find_package(BZip2) sets BZip2::BZip2
         liblzma::liblzma # find_package(liblzma) sets liblzma::liblzma
-        m # libm part of the standard library
-        ${CMAKE_DL_LIBS}
+        CMath::CMath # find_package(CMath) sets CMath::CMath  / libm part of the standard library / -lm linker flag
+        ${CMAKE_DL_LIBS} # libdl part of the standard library / -ldl linker flag
         sole
         cli11
         ${abseil_LIBRARIES}

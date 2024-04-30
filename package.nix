@@ -1,20 +1,27 @@
 { lib
 , stdenv
 , cmake
+, git
+, unzip
+, xxd
+
 , abseil-cpp
+, bzip2
 , cacert
 , curl
+, exiv2
+, expat
 , ffmpeg
 , file
 , gettext
-, git
 , glibcLocales
 , gperf
 , iconv
 , inih
 , libidn
-, libtiff-static
+, libtiff-patched
 , libuuid
+, libwebp
 , nlohmann_json
 , openssl
 , opentelemetry-cpp
@@ -22,7 +29,8 @@
 , protobuf
 , python311Full
 , readline70
-, unzip
+, sqlite
+
 , cxxStandard
 }:
 stdenv.mkDerivation {
@@ -35,15 +43,15 @@ stdenv.mkDerivation {
     cmake git openssl cacert
   ];
 
-  shellHook = ''
-    export SSL_CERT_FILE=${cacert}/etc/ssl/certs/ca-bundle.crt
-    export GIT_SSL_CAINFO="${cacert}/etc/ssl/certs/ca-bundle.crt"
-    export PS1="\\u@\\h | nix-develop> "
-  '';
-  
   buildInputs = [
+    xxd
+    unzip
+
     abseil-cpp
+    bzip2
     curl
+    exiv2
+    expat
     ffmpeg
     file
     gettext
@@ -53,8 +61,9 @@ stdenv.mkDerivation {
     iconv
     inih
     libidn
-    libtiff-static
+    libtiff-patched
     libuuid # uuid und uuid-dev
+    libwebp
     nlohmann_json
     perl
     openssl
@@ -62,7 +71,7 @@ stdenv.mkDerivation {
     protobuf
     python311Full
     readline70
-    unzip
+    sqlite
   ];
 
   cmakeFlags = [

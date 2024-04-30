@@ -30,5 +30,5 @@ IF(CMath_FOUND)
     set( CMath_INCLUDE_DIRS ${MATH_INCLUDE_DIR} )
     add_library(CMath::CMath UNKNOWN IMPORTED)
     set_target_properties(CMath::CMath PROPERTIES IMPORTED_LOCATION "${MATH_LIBRARY}")
-
+    set_target_properties(CMath::CMath PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${MATH_INCLUDE_DIR}")
 ENDIF(CMath_FOUND)
