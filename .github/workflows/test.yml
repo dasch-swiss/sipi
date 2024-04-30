@@ -40,8 +40,8 @@ jobs:
           github_access_token: ${{ secrets.GH_TOKEN }}
       - name: fix git config
         run: |
-          sudo git config --global --unset http.proxy
-          sudo git config --global --unset https.proxy
+          git config --global --unset http.proxy
+          git config --global --unset https.proxy
       - name: Build and run tests
         run: nix develop --command bash -c "cmake -S . -B ./build -DCODE_COVERAGE:BOOL=ON -DCMAKE_BUILD_TYPE:STRING=Debug --log-context && cmake --build ./build --parallel 4 && ctest --test-dir ./build/test --parallel --output-on-failure"
       - name: Gather code coverage
