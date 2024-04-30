@@ -38,9 +38,14 @@ jobs:
       group: ${{ github.ref }}-docker-build-aarch64
       cancel-in-progress: true
     steps:
-      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+      - name: checkout source
+        uses: actions/checkout@v4
         with:
-          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+          fetch-depth: 0
+      - name: Unlock secrets
+        uses: sliteteam/github-action-git-crypt-unlock@1.2.0
+        env:
+          GIT_CRYPT_KEY: ${{ secrets.GIT_CRYPT_KEY }}
       - uses: extractions/setup-just@v1
       - uses: dasch-swiss/sipi/.github/actions/setup-python@main
       - run: make install-requirements
@@ -57,9 +62,10 @@ jobs:
     name: docs test run
     runs-on: ubuntu-latest
     steps:
-      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+      - name: checkout source
+        uses: actions/checkout@v4
         with:
-          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+          fetch-depth: 0
       - uses: dasch-swiss/sipi/.github/actions/setup-python@main
       - run: make docs-install-requirements
       - run: make docs-build
