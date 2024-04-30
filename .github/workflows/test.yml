@@ -47,14 +47,8 @@ jobs:
           name: dasch-swiss
           # If you chose API tokens for write access OR if you have a private cache
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-      - run: |
-          git config --global --unset http.proxy
-          git config --global --unset https.proxy
-          nix \
-            --extra-experimental-features "nix-command flakes" \
-            develop --profile dev-profile -c true
-          cachix push dasch-swiss dev-profile
-      - run: |
+      - name: Build and run tests
+        run: |
           git config --global --unset http.proxy
           git config --global --unset https.proxy
           nix \
