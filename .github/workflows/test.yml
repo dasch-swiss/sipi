@@ -47,10 +47,6 @@ jobs:
           name: dasch-swiss
           # If you chose API tokens for write access OR if you have a private cache
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-      - name: fix git config
-        run: |
-          git config --global --unset http.proxy
-          git config --global --unset https.proxy
       - name: Build and run tests
         run: nix develop --command bash -c "cmake -S . -B ./build -DCODE_COVERAGE:BOOL=ON -DCMAKE_BUILD_TYPE:STRING=Debug --log-context && cmake --build ./build --parallel 4 && ctest --test-dir ./build/test --parallel --output-on-failure"
       - name: Gather code coverage
