@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.3
+
 # Nix builder
 FROM nixos/nix:2.22.0 AS builder
 
@@ -9,14 +11,14 @@ WORKDIR /tmp/src
 RUN echo "experimental-features = nix-command flakes" >> /etc/nix/nix.conf
 
 # Install and use cachix for caching .
-RUN nix-env -iA cachix -f https://cachix.org/api/v1/install \
-    && cachix authtoken xxx \
+RUN nix-env -iA cachix -f https://cachix.org/api/v1/install
+RUN --mount=type=secret,id=CACHIX_AUTH_TOKEN cachix authtoken $(cat /run/secrets/CACHIX_AUTH_TOKEN) \
     && cachix use dasch-swiss \
     && nix develop --profile dev-profile -c true \
     && cachix push dasch-swiss dev-profile
 
 # Build SIPI and run unit tests.
-RUN nix develop --command bash -c "cmake -S . -B ./build -DCMAKE_BUILD_TYPE:STRING=Release -DEXT_PROVIDED_VERSION:STRING=$VERSION -DWITH_CODE_COVERAGE:BOOL=FALSE --log-context && cmake --build ./build --parallel 4 --verbose && ctest --test-dir ./build/test --parallel --output-on-failure"
+RUN nix build
 
 # Copy the Nix store closure into a directory. The Nix store closure is the
 # entire set of Nix store values that we need for our build.

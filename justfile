@@ -17,14 +17,15 @@ docker-run:
 
 # build and publish Sipi Docker image locally
 docker-build:
-	docker buildx build \
-		--progress auto \
-		--build-arg SIPI_BASE=daschswiss/sipi-base:2.23.0 \
-		--build-arg UBUNTU_BASE=ubuntu:22.04 \
-		--build-arg VERSION={{BUILD_TAG}} \
-		-t {{DOCKER_REPO}}:{{BUILD_TAG}} -t {{DOCKER_REPO}}:latest \
-		--load \
-		.
+    docker build \
+        --secret id=CACHIX_AUTH_TOKEN \
+        --progress auto \
+        --build-arg SIPI_BASE=daschswiss/sipi-base:2.23.0 \
+        --build-arg UBUNTU_BASE=ubuntu:22.04 \
+        --build-arg VERSION={{BUILD_TAG}} \
+        -t {{DOCKER_REPO}}:{{BUILD_TAG}} -t {{DOCKER_REPO}}:latest \
+        --load \
+        .
 
 # locally (unit) test and publish aarch64 Sipi Docker image with -aarch64 tag
 docker-build-aarch64:

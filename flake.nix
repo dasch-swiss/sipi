@@ -48,7 +48,7 @@
       rec {
         # devShells.default = pkgs.mkShell.override {stdenv = pkgs.llvmPackages_17.stdenv;} {
         # kakadu makefile is handcrafted and hardcodes gcc under linux
-        devShells.default = pkgs.mkShell.override { stdenv = if pkgs.stdenv.isDarwin then pkgs.clang17Stdenv else pkgs.gcc13Stdenv; } {
+        devShells.custom = pkgs.mkShell.override { stdenv = if pkgs.stdenv.isDarwin then pkgs.clang17Stdenv else pkgs.gcc13Stdenv; } {
           # devShells.default = pkgs.mkShell.override { stdenv = pkgs.gcc13Stdenv; } {
           name = "sipi";
 
@@ -163,7 +163,7 @@
         # in package.nix with what's inside the `pkgs` attribute.
         packages.default = pkgs.callPackage ./package.nix
           {
-            inherit (pkgs) abseil-cpp libtiff-patched protobuf opentelemetry-cpp;
+            inherit (pkgs) abseil-cpp iiif-validator libtiff-patched protobuf opentelemetry-cpp;
             inherit (pkgs.pkgsStatic) bzip2 curl expat libwebp openssl sqlite;
             xxd = pkgs.unixtools.xxd;
 
@@ -176,6 +176,6 @@
 
         # The `config` variable contains our own outputs, so we can reference
         # neighbor attributes like the package we just defined one line earlier.
-        # devShells.default = packages.default;
+        devShells.default = packages.default;
       });
 }

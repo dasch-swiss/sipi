@@ -197,9 +197,12 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
 # on macOS, ignore frameworks
 # the complete environment should be provided through NIX
 if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
-    # set(CMAKE_FIND_FRAMEWORK NEVER)
+    set(CMAKE_FIND_FRAMEWORK LAST)
     set(CMAKE_IGNORE_PATH "/usr/local/lib*")
     set(CMAKE_IGNORE_PATH "/Library/Frameworks*")
+    set(CMAKE_IGNORE_PATH "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX14.4.sdk/System/Library/Frameworks/Kernel.framework/Headers")
+    set(CMAKE_IGNORE_PATH "/Library/Frameworks/Mono.framework/Headers")
+    set(CMAKE_IGNORE_PATH "//Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX14.4.sdk/System/Library/Frameworks/Kernel.framework/Headers/math.h")
 endif ()
 
 # find all the required dependencies provided through NIX
