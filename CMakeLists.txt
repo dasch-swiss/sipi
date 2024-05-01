@@ -197,7 +197,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
 # on macOS, ignore frameworks
 # the complete environment should be provided through NIX
 if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
-    set(CMAKE_FIND_FRAMEWORK NEVER)
+    # set(CMAKE_FIND_FRAMEWORK NEVER)
     set(CMAKE_IGNORE_PATH "/usr/local/lib*")
     set(CMAKE_IGNORE_PATH "/Library/Frameworks*")
 endif ()
@@ -241,7 +241,7 @@ add_subdirectory(${COMMON_EXT}/jansson)
 # add_subdirectory(${COMMON_EXT}/tiff)
 add_subdirectory(${COMMON_EXT}/lcms2)
 # add_subdirectory(${COMMON_EXT}/exiv2)
-add_subdirectory(${COMMON_EXT}/lua)
+# add_subdirectory(${COMMON_EXT}/lua)
 # add_subdirectory(${COMMON_EXT}/luarocks)
 # add_subdirectory(${COMMON_EXT}/sqlite3)
 
@@ -439,7 +439,7 @@ set(sipi_DEPENDENCIES
         icc_profiles
         lcms2
         jansson
-        lua
+        # lua
         # luarocks
         kdu
         kdu_aux
@@ -467,11 +467,16 @@ set(sipi_LIBRARIES
         kdu_aux
         kdu
         magic
-        lua
+        Lua::Lua # lua
         jansson
         SQLite::SQLite3 # find_package(SQLite3) sets SQLite::SQLite3
         CURL::libcurl # find_package(CURL) sets CURL::libcurl
         OpenSSL::SSL # find_package(OpenSSL) sets OpenSSL::SSL
+        Libidn2::Libidn2 # find_package(Libidn2) sets Libidn2::Libidn2
+        libunistring::libunistring # find_package(libunistring) sets libunistring::libunistring
+        libssh2::libssh2 # find_package(libssh2) sets libssh2::libssh2
+        libnghttp2::libnghttp2 # find_package(libnghttp2) sets libnghttp2::libnghttp2
+        libpsl::libpsl # find_package(libpsl) sets libpsl::libpsl
         JPEG::JPEG # find_package(JPEG) sets JPEG::JPEG
         ZLIB::ZLIB # find_package(ZLIB) sets ZLIB::ZLIB
         BZip2::BZip2 # find_package(BZip2) sets BZip2::BZip2
@@ -485,17 +490,19 @@ set(sipi_LIBRARIES
         Threads::Threads
 )
 
-target_link_libraries(${PROJECT_NAME} ${sipi_LIBRARIES})
+
 
 # although we are using NIX, we still need to link against the system libraries on macOS,
-# thus we need to link against CoreFoundation because the dependencies gotten through NIX
+# thus we need to link against SystemConfiguration because the dependencies gotten through NIX
 # where built against it :(
 if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
-    # find_library(CORE_FOUNDATION_FRAMEWORK CoreFoundation)
-    target_link_libraries(${PROJECT_NAME} iconv intl )
+    find_library(SYSTEM_CONFIGURATION_FRAMEWORK SystemConfiguration)
+    set(sipi_LIBRARIES ${sipi_LIBRARIES} ${ICONV_LIBRARIES} ${SDL2_LIBRARIES} intl ${SYSTEM_CONFIGURATION_FRAMEWORK})
 else ()
-    target_link_libraries(${PROJECT_NAME} rt)
+    set(sipi_LIBRARIES ${sipi_LIBRARIES} rt)
 endif ()
+
+target_link_libraries(${PROJECT_NAME} ${sipi_LIBRARIES})
 
 #
 # apply the compiler and linker flags
@@ -520,11 +527,6 @@ endif ()
 install(TARGETS ${PROJECT_NAME}
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION lib)
-
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/local/bin/lua
-        ${CMAKE_CURRENT_SOURCE_DIR}/local/bin/luarocks
-        DESTINATION ${CMAKE_INSTALL_PREFIX}/bin/
-        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/config/sipi.config.lua
         DESTINATION ${CMAKE_INSTALL_PREFIX}/etc

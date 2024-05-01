@@ -2,15 +2,19 @@
 , stdenv
 , cmake
 , git
+, cacert
+, libtool
+, pkg-config
+
 , unzip
 , xxd
 
-, abseil-cpp
-, bzip2
-, cacert
-, curl
+# darwin
+, cctools ? null
+, libiconv
+, SystemConfiguration ? null
+
 , exiv2
-, expat
 , ffmpeg
 , file
 , gettext
@@ -18,60 +22,94 @@
 , gperf
 , iconv
 , inih
-, libidn
-, libtiff-patched
+, libidn2
+, libunistring
 , libuuid
-, libwebp
 , nlohmann_json
-, openssl
-, opentelemetry-cpp
 , perl
-, protobuf
 , python311Full
 , readline70
+
+  # custom overlays
+, abseil-cpp
+, libtiff-patched
+, protobuf
+, opentelemetry-cpp
+
+  # static libraries
+, bzip2
+, curl
+, expat
+, libpsl
+, libssh2
+, libwebp
+, lua5_4
+, nghttp2
+, openssl
 , sqlite
 
 , cxxStandard
 }:
 stdenv.mkDerivation {
   pname = "sipi";
-  version = "3.8.12";
+  version = "3.8.12-dev";
 
   src = ./.;
 
   nativeBuildInputs = [
-    cmake git openssl cacert
+    cmake
+    git
+    cacert
+    openssl
+    pkg-config
+  ] ++ lib.optionals (stdenv.isDarwin) [
+    cctools
+    libtool
   ];
 
   buildInputs = [
     xxd
     unzip
 
-    abseil-cpp
-    bzip2
     curl
     exiv2
-    expat
     ffmpeg
     file
     gettext
     git
     glibcLocales
     gperf
-    iconv
     inih
-    libidn
-    libtiff-patched
+    libidn2
+    libunistring
     libuuid # uuid und uuid-dev
-    libwebp
+    lua5_4
     nlohmann_json
     perl
-    openssl
-    opentelemetry-cpp
-    protobuf
+
     python311Full
     readline70
+
+    # custom overlays
+    abseil-cpp
+    libtiff-patched
+    protobuf
+    opentelemetry-cpp
+
+    # static libraries
+    bzip2
+    curl
+    expat
+    libpsl
+    libssh2
+    libwebp
+    nghttp2
+    openssl
     sqlite
+
+  ] ++ lib.optionals (stdenv.isDarwin) [
+    libiconv
+    SystemConfiguration
   ];
 
   cmakeFlags = [

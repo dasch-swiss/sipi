@@ -91,6 +91,21 @@ endif ()
 # (provided through NIX)
 find_package(LERC REQUIRED)
 
+find_package(UNISTRING REQUIRED)
+if (UNISTRING_FOUND)
+    message(STATUS "libunistring dirs: ${UNISTRING_INCLUDE_DIR}")
+    message(STATUS "libunistring libs: ${UNISTRING_LIBRARY}")
+    add_library(libunistring::libunistring INTERFACE IMPORTED)
+    set_property(TARGET libunistring::libunistring PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${UNISTRING_INCLUDE_DIR}")
+    set_property(TARGET libunistring::libunistring PROPERTY INTERFACE_LINK_LIBRARIES "${UNISTRING_LIBRARY}")
+endif ()
+
+find_package(Libidn2 REQUIRED)
+if (Libidn2_FOUND)
+    message(STATUS "libidn2 dirs: ${LIBIDN2_INCLUDE_DIR}")
+    message(STATUS "libidn2 libs: ${LIBIDN2_LIBRARIES}")
+endif ()
+
 #
 # libmagic
 # (provided through NIX)
@@ -108,15 +123,44 @@ if (liblzma_FOUND)
 #    message(STATUS "LZMA libs: ${LIBLZMA_LIBRARIES}")
 endif ()
 
-## if found, adds Lua::Lua target
-#find_package(Lua REQUIRED)
-#if (LUA_FOUND)
-#    message(STATUS "Lua dirs: ${LUA_INCLUDE_DIR}")
-#    message(STATUS "Lua libs: ${LUA_LIBRARIES}")
-#    add_library(Lua::Lua INTERFACE IMPORTED)
-#    set_property(TARGET Lua::Lua PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${LUA_INCLUDE_DIR}")
-#    set_property(TARGET Lua::Lua PROPERTY INTERFACE_LINK_LIBRARIES "${LUA_LIBRARIES}")
-#endif()
+
+find_package(LibPSL REQUIRED)
+if (LibPSL_FOUND)
+    message(STATUS "libpsl dirs: ${LIBPSL_INCLUDE_DIR}")
+    message(STATUS "libpsl libs: ${LIBPSL_LIBRARY}")
+    add_library(libpsl::libpsl INTERFACE IMPORTED)
+    set_property(TARGET libpsl::libpsl PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${LIBPSL_INCLUDE_DIR}")
+    set_property(TARGET libpsl::libpsl PROPERTY INTERFACE_LINK_LIBRARIES "${LIBPSL_LIBRARY}")
+endif ()
+
+find_package(LibSSH2 REQUIRED)
+if (LibSSH2_FOUND)
+    message(STATUS "libssh2 dirs: ${LIBSSH2_INCLUDE_DIR}")
+    message(STATUS "libssh2 libs: ${LIBSSH2_LIBRARY}")
+    add_library(libssh2::libssh2 INTERFACE IMPORTED)
+    set_property(TARGET libssh2::libssh2 PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${LIBSSH2_INCLUDE_DIR}")
+    set_property(TARGET libssh2::libssh2 PROPERTY INTERFACE_LINK_LIBRARIES "${LIBSSH2_LIBRARY}")
+endif ()
+
+# if found, adds Lua::Lua target
+find_package(Lua REQUIRED)
+if (LUA_FOUND)
+    message(STATUS "Lua dirs: ${LUA_INCLUDE_DIR}")
+    message(STATUS "Lua libs: ${LUA_LIBRARIES}")
+    add_library(Lua::Lua INTERFACE IMPORTED)
+    set_property(TARGET Lua::Lua PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${LUA_INCLUDE_DIR}")
+    set_property(TARGET Lua::Lua PROPERTY INTERFACE_LINK_LIBRARIES "${LUA_LIBRARIES}")
+endif()
+
+find_package(NGHTTP2 REQUIRED)
+if(NGHTTP2_FOUND)
+    message(STATUS "nghttp2 dirs: ${NGHTTP2_INCLUDE_DIRS}")
+    message(STATUS "nghttp2 libs: ${NGHTTP2_LIBRARIES}")
+    add_library(libnghttp2::libnghttp2 INTERFACE IMPORTED)
+    set_property(TARGET libnghttp2::libnghttp2 PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${NGHTTP2_INCLUDE_DIRS}")
+    set_property(TARGET libnghttp2::libnghttp2 PROPERTY INTERFACE_LINK_LIBRARIES "${NGHTTP2_LIBRARIES}")
+endif()
+
 
 #
 # nlohmann_json

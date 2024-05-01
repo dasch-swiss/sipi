@@ -18,12 +18,6 @@ target_link_libraries(${TEST_NAME} gtest_main gtest gmock ${sipi_LIBRARIES})
 
 add_dependencies(${TEST_NAME} gtest_main gtest gmock ${sipi_DEPENDENCIES})
 
-if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-    target_link_libraries(${TEST_NAME} iconv intl)
-else()
-    target_link_libraries(${TEST_NAME} rt)
-endif()
-
 target_link_libraries(${TEST_NAME} build_config)
 if (WITH_CODE_COVERAGE)
     target_link_libraries(${TEST_NAME} coverage_config)

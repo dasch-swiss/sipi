@@ -49,7 +49,7 @@
         # devShells.default = pkgs.mkShell.override {stdenv = pkgs.llvmPackages_17.stdenv;} {
         # kakadu makefile is handcrafted and hardcodes gcc under linux
         devShells.default = pkgs.mkShell.override { stdenv = if pkgs.stdenv.isDarwin then pkgs.clang17Stdenv else pkgs.gcc13Stdenv; } {
-        # devShells.default = pkgs.mkShell.override { stdenv = pkgs.gcc13Stdenv; } {
+          # devShells.default = pkgs.mkShell.override { stdenv = pkgs.gcc13Stdenv; } {
           name = "sipi";
 
           # nativeBuildInputs = with pkgs; [ git cmake openssl cacert pkg-config autoconf unzip cachix ];
@@ -80,8 +80,10 @@
             gperf
             iconv
             inih
-            libidn
+            libidn2
+            libunistring
             libuuid # uuid und uuid-dev
+            lua5_4
             # numactl # libnuma-dev not available on mac
             nlohmann_json
             readline70 # libreadline-dev
@@ -122,14 +124,17 @@
             # jbigkit
             # libjpeg_original
             # libpng
+            libpsl
+            libssh2
             libwebp
+            nghttp2
             openssl
             sqlite
             # xz
             # zlib
             # zstd
           ]) ++ lib.optionals (stdenv.isDarwin) [
-            # pkgs.darwin.apple_sdk.frameworks.CoreFoundation
+            pkgs.darwin.apple_sdk.frameworks.SystemConfiguration
           ] ++ lib.optionals (stdenv.isLinux) [
             # Linux specific dependencies
             # pkgs.gcc13
@@ -139,31 +144,35 @@
           ];
         };
 
-#        shellHook =
-#          if pkgs.stdenv.isDarwin then ''
-#            # echo "C++ includes: $(clang++ -E -x c++ - -v < /dev/null 2>&1 | grep '/include')"
-#            # echo | clang++ -v -E -x c++ -
-#            # echo | g++ -Wp,-v -x c++ - -fsyntax-only
-#            export PS1="\\u@\\h | nix-develop> "
-#          '' else ''
-#            export CXXFLAGS="-isystem -I${pkgs.gcc12}/include/c++/${pkgs.gcc12.version} -isystem -I${pkgs.glibc.dev}/include $CXXFLAGS"
-#            export CFLAGS="-isystem ${pkgs.glibc.dev}/include $CFLAGS"
-#            # export LDFLAGS="-L${pkgs.glibc.static.out}/lib" -Wl,-rpath,${pkgs.glibc.static.out}/lib $LDFLAGS"
-#            export LIBRARY_PATH="${pkgs.glibc.out}/lib $LIBRARY_PATH"
-#            printenv
-#            export PS1="\\u@\\h | nix-develop> "
-#          '';
+        #        shellHook =
+        #          if pkgs.stdenv.isDarwin then ''
+        #            # echo "C++ includes: $(clang++ -E -x c++ - -v < /dev/null 2>&1 | grep '/include')"
+        #            # echo | clang++ -v -E -x c++ -
+        #            # echo | g++ -Wp,-v -x c++ - -fsyntax-only
+        #            export PS1="\\u@\\h | nix-develop> "
+        #          '' else ''
+        #            export CXXFLAGS="-isystem -I${pkgs.gcc12}/include/c++/${pkgs.gcc12.version} -isystem -I${pkgs.glibc.dev}/include $CXXFLAGS"
+        #            export CFLAGS="-isystem ${pkgs.glibc.dev}/include $CFLAGS"
+        #            # export LDFLAGS="-L${pkgs.glibc.static.out}/lib" -Wl,-rpath,${pkgs.glibc.static.out}/lib $LDFLAGS"
+        #            export LIBRARY_PATH="${pkgs.glibc.out}/lib $LIBRARY_PATH"
+        #            printenv
+        #            export PS1="\\u@\\h | nix-develop> "
+        #          '';
 
         # The `callPackage` automatically fills the parameters of the function
         # in package.nix with what's inside the `pkgs` attribute.
-        packages.default = pkgs.callPackage ./package.nix {
-          inherit (pkgs) abseil-cpp libtiff-patched protobuf opentelemetry-cpp;
-          inherit (pkgs.pkgsStatic) bzip2 curl expat libwebp openssl sqlite;
-          xxd = pkgs.unixtools.xxd;
+        packages.default = pkgs.callPackage ./package.nix
+          {
+            inherit (pkgs) abseil-cpp libtiff-patched protobuf opentelemetry-cpp;
+            inherit (pkgs.pkgsStatic) bzip2 curl expat libwebp openssl sqlite;
+            xxd = pkgs.unixtools.xxd;
 
-          cxxStandard = "23";
-          stdenv = if pkgs.stdenv.isDarwin then pkgs.clang17Stdenv else pkgs.gcc13Stdenv;
-        };
+            cctools = if pkgs.stdenv.isDarwin then pkgs.darwin.cctools else null;
+            SystemConfiguration = if pkgs.stdenv.isDarwin then pkgs.darwin.apple_sdk.frameworks.SystemConfiguration else null;
+
+            cxxStandard = "23";
+            stdenv = if pkgs.stdenv.isDarwin then pkgs.clang17Stdenv else pkgs.gcc13Stdenv;
+          };
 
         # The `config` variable contains our own outputs, so we can reference
         # neighbor attributes like the package we just defined one line earlier.
