@@ -96,6 +96,7 @@
             opentelemetry-cpp # our own overlay
 
             # additional test dependencies
+            gtest
             nginx
             graphicsmagick
             apacheHttpd
@@ -161,7 +162,7 @@
 
         # The `callPackage` automatically fills the parameters of the function
         # in package.nix with what's inside the `pkgs` attribute.
-        packages.default = pkgs.callPackage ./package.nix
+        packages.default = pkgs.callPackage ./default.nix
           {
             inherit (pkgs) abseil-cpp iiif-validator libtiff-patched protobuf opentelemetry-cpp;
             inherit (pkgs.pkgsStatic) bzip2 curl expat libwebp openssl sqlite;

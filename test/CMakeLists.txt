@@ -4,8 +4,7 @@
 # all tests can be run from the build directory with `make test`
 
 # Configure dependencies
-include(${PROJECT_SOURCE_DIR}/cmake/googletest.cmake)
-include(${PROJECT_SOURCE_DIR}/cmake/approvaltests.cmake)
+find_package(GTest REQUIRED)
 
 # Approval tests
 add_subdirectory(approval)

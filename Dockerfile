@@ -18,7 +18,7 @@ RUN --mount=type=secret,id=CACHIX_AUTH_TOKEN cachix authtoken $(cat /run/secrets
     && cachix push dasch-swiss dev-profile
 
 # Build SIPI and run unit tests.
-RUN nix build
+RUN nix build -L
 
 # Copy the Nix store closure into a directory. The Nix store closure is the
 # entire set of Nix store values that we need for our build.

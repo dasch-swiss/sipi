@@ -56,11 +56,11 @@ stdenv.mkDerivation (finalAttrs: {
   '';
 
   cmakeFlags = [
-      "-DCMAKE_BUILD_TYPE=Release"
-      "-DCMAKE_FIND_FRAMEWORK=NEVER"
-      "-DBUILD_SHARED_LIBS:BOOL=OFF"
+    "-DCMAKE_BUILD_TYPE=Release"
+    "-DCMAKE_FIND_FRAMEWORK=NEVER"
+    "-DBUILD_SHARED_LIBS:BOOL=OFF"
   ] ++ lib.optionals (cxxStandard != null) [
-      "-DCMAKE_CXX_STANDARD=${cxxStandard}"
+    "-DCMAKE_CXX_STANDARD=${cxxStandard}"
   ];
 
   outputs = [ "bin" "dev" "out" ];
@@ -73,7 +73,7 @@ stdenv.mkDerivation (finalAttrs: {
 
   nativeBuildInputs = [ cmake ];
 
-  buildInputs = [];
+  buildInputs = [ ];
 
   propagatedBuildInputs = [
     jbigkit

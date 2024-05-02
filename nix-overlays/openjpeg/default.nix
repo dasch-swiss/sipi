@@ -1,7 +1,19 @@
-{ lib, stdenv, fetchFromGitHub, cmake, pkg-config
-, libdeflate, libpng, libtiff, zlib, lcms2, lerc, jpylyzer
+{ lib
+, stdenv
+, fetchFromGitHub
+, cmake
+, pkg-config
+, libdeflate
+, libpng
+, libtiff
+, zlib
+, lcms2
+, lerc
+, jpylyzer
 , jpipLibSupport ? false # JPIP library & executables
-, jpipServerSupport ? false, curl, fcgi # JPIP Server
+, jpipServerSupport ? false
+, curl
+, fcgi # JPIP Server
 , jdk
 , poppler
 

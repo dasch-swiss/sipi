@@ -82,7 +82,7 @@ TEST(SipiImage, ConvertTiffWithAlphaToJPG)
 
   EXPECT_NO_THROW(img.read(leavesSmallWithAlpha, region, size));
 
-  EXPECT_NO_THROW(img.write("jpg", "../../../../test/_test_data/images/thumbs/Leaves-small-with-alpha.jpg"));
+  EXPECT_NO_THROW(img.write("jpg", "../../../../test/_test_data/images/knora/_Leaves-small-with-alpha.jpg"));
 }
 
 // Convert Tiff with no alpha channel to JPG
@@ -96,7 +96,7 @@ TEST(SipiImage, ConvertTiffWithNoAlphaToJPG)
 
   EXPECT_NO_THROW(img.read(leavesSmallNoAlpha, region, size));
 
-  EXPECT_NO_THROW(img.write("jpg", "../../../../test/_test_data/images/thumbs/Leaves-small-no-alpha.jpg"));
+  EXPECT_NO_THROW(img.write("jpg", "../../../../test/_test_data/images/knora/_Leaves-small-no-alpha.jpg"));
 }
 
 // Convert PNG 16 bit with alpha channel and ICC profile to TIFF and back

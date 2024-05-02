@@ -1,11 +1,11 @@
 { lib
 , stdenv
+
 , cmake
 , git
 , cacert
 , libtool
 , pkg-config
-
 , unzip
 , xxd
 
@@ -48,6 +48,7 @@
 , sqlite
 
   # testing
+, gtest
 , nginx
 , graphicsmagick
 , apacheHttpd
@@ -60,11 +61,14 @@
 
 , cxxStandard
 }:
-stdenv.mkDerivation rec {
-  pname = "sipi";
-  version = "3.8.12-dev";
 
+let
   src = ./.;
+  version = lib.readFile "${src}/version.txt";
+in
+stdenv.mkDerivation {
+  inherit src version;
+  pname = "sipi";
 
   cmakeFlags = [
     "-DCMAKE_BUILD_TYPE:STRING=Release"
@@ -75,22 +79,21 @@ stdenv.mkDerivation rec {
 
   outputs = [ "out" ];
 
-
+  strictDeps = true;
   nativeBuildInputs = [
     cmake
     git
     cacert
     openssl
     pkg-config
+    unzip
+    xxd
   ] ++ lib.optionals (stdenv.isDarwin) [
     cctools
     libtool
   ];
 
   buildInputs = [
-    xxd
-    unzip
-
     curl
     exiv2
     ffmpeg
@@ -124,7 +127,12 @@ stdenv.mkDerivation rec {
     nghttp2
     openssl
     sqlite
+  ] ++ lib.optionals (stdenv.isDarwin) [
+    libiconv
+    SystemConfiguration
+  ];
 
+  nativeCheckInputs = [
     # testing
     nginx
     graphicsmagick
@@ -143,10 +151,10 @@ stdenv.mkDerivation rec {
     python311Packages.testcontainers
     python311Packages.wrapt
     iiif-validator
+  ];
 
-  ] ++ lib.optionals (stdenv.isDarwin) [
-    libiconv
-    SystemConfiguration
+  checkInputs = [
+    gtest
   ];
 
   enableParallelBuilding = true;

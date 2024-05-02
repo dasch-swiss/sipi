@@ -108,3 +108,7 @@ version:
 # Delete the build directory
 clean:
     rm -rf build
+
+# Format all nix files
+nix-fmt:
+    nixpkgs-fmt .
