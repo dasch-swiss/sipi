@@ -1,2 +1,3 @@
 vendor/** filter=git-crypt diff=git-crypt
 .envrc filter=git-crypt diff=git-crypt
+nix-overlays/kakadu/v8_4_1-01382N.zip filter=git-crypt diff=git-crypt

@@ -34,6 +34,7 @@
 , libtiff-patched
 , protobuf
 , opentelemetry-cpp
+, kakadu
 
   # static libraries
 , brotli
@@ -117,6 +118,7 @@ stdenv.mkDerivation {
     libtiff-patched
     protobuf
     opentelemetry-cpp
+    kakadu
 
     # static libraries
     brotli

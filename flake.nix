@@ -40,6 +40,10 @@
               zlib = prev.pkgsStatic.zlib;
               zstd = prev.pkgsStatic.zstd;
             };
+            kakadu = prev.callPackage ./nix-overlays/kakadu {
+              cxxStandard = "23";
+              stdenv = if prev.stdenv.isDarwin then prev.llvmPackages_17.libcxxStdenv else prev.gcc13Stdenv;
+            };
           })
         ];
         pkgs = import nixpkgs {
@@ -94,6 +98,7 @@
             openjpeg # our own overlay
             protobuf # our own overlay
             opentelemetry-cpp # our own overlay
+            kakadu # our own overlay
 
             # additional test dependencies
             gtest
@@ -165,7 +170,6 @@
         # in package.nix with what's inside the `pkgs` attribute.
         packages.default = pkgs.callPackage ./default.nix
           {
-            inherit (pkgs) abseil-cpp iiif-validator libtiff-patched protobuf opentelemetry-cpp;
             inherit (pkgs.pkgsStatic) brotli bzip2 curl expat libiconv libpsl libssh2 libunistring libwebp nghttp2 openssl sqlite;
             xxd = pkgs.unixtools.xxd;
 
