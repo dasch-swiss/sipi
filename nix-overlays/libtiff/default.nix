@@ -5,6 +5,7 @@
 
 , cmake
 
+, brotli
 , jbigkit
 , lerc
 , libdeflate
@@ -76,6 +77,7 @@ stdenv.mkDerivation (finalAttrs: {
   buildInputs = [ ];
 
   propagatedBuildInputs = [
+    brotli
     jbigkit
     lerc
     libdeflate

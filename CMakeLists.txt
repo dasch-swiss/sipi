@@ -475,11 +475,12 @@ set(sipi_LIBRARIES
         SQLite::SQLite3 # find_package(SQLite3) sets SQLite::SQLite3
         CURL::libcurl # find_package(CURL) sets CURL::libcurl
         OpenSSL::SSL # find_package(OpenSSL) sets OpenSSL::SSL
-        Libidn2::Libidn2 # find_package(Libidn2) sets Libidn2::Libidn2
-        libunistring::libunistring # find_package(libunistring) sets libunistring::libunistring
         libssh2::libssh2 # find_package(libssh2) sets libssh2::libssh2
         libnghttp2::libnghttp2 # find_package(libnghttp2) sets libnghttp2::libnghttp2
         libpsl::libpsl # find_package(libpsl) sets libpsl::libpsl
+        Libidn2::Libidn2 # find_package(Libidn2) sets Libidn2::Libidn2
+        libunistring::libunistring # find_package(libunistring) sets libunistring::libunistring
+        brotli::brotlicommon # find_package(brotli) sets brotli::brotli
         JPEG::JPEG # find_package(JPEG) sets JPEG::JPEG
         ZLIB::ZLIB # find_package(ZLIB) sets ZLIB::ZLIB
         BZip2::BZip2 # find_package(BZip2) sets BZip2::BZip2
@@ -530,11 +531,6 @@ endif ()
 install(TARGETS ${PROJECT_NAME}
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION lib)
-
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/config/sipi.config.lua
-        DESTINATION ${CMAKE_INSTALL_PREFIX}/etc
-        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
-
 
 #-------------------
 # Test

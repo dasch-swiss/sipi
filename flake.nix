@@ -28,6 +28,7 @@
             libtiff-patched = prev.callPackage ./nix-overlays/libtiff {
               cxxStandard = "23";
               stdenv = if prev.stdenv.isDarwin then prev.llvmPackages_17.libcxxStdenv else prev.gcc13Stdenv;
+              brotli = prev.pkgsStatic.brotli;
               jbigkit = prev.pkgsStatic.jbigkit;
               # lerc = prev.pkgsStatic.lerc;
               libdeflate = prev.pkgsStatic.libdeflate;
@@ -81,13 +82,12 @@
             iconv
             inih
             libidn2
-            libunistring
+
             libuuid # uuid und uuid-dev
             lua5_4
             # numactl # libnuma-dev not available on mac
             nlohmann_json
             readline70 # libreadline-dev
-
             # Build dependencies
             abseil-cpp # our own overlay
             libtiff-patched # our own overlay
@@ -127,6 +127,7 @@
             # libpng
             libpsl
             libssh2
+            libunistring
             libwebp
             nghttp2
             openssl
@@ -165,7 +166,7 @@
         packages.default = pkgs.callPackage ./default.nix
           {
             inherit (pkgs) abseil-cpp iiif-validator libtiff-patched protobuf opentelemetry-cpp;
-            inherit (pkgs.pkgsStatic) bzip2 curl expat libwebp openssl sqlite;
+            inherit (pkgs.pkgsStatic) brotli bzip2 curl expat libiconv libpsl libssh2 libunistring libwebp nghttp2 openssl sqlite;
             xxd = pkgs.unixtools.xxd;
 
             cctools = if pkgs.stdenv.isDarwin then pkgs.darwin.cctools else null;

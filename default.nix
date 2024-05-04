@@ -23,8 +23,8 @@
 , iconv
 , inih
 , libidn2
-, libunistring
 , libuuid
+, lua5_4
 , nlohmann_json
 , perl
 , readline70
@@ -36,13 +36,14 @@
 , opentelemetry-cpp
 
   # static libraries
+, brotli
 , bzip2
 , curl
 , expat
 , libpsl
 , libssh2
+, libunistring
 , libwebp
-, lua5_4
 , nghttp2
 , openssl
 , sqlite
@@ -104,7 +105,7 @@ stdenv.mkDerivation {
     gperf
     inih
     libidn2
-    libunistring
+
     libuuid # uuid und uuid-dev
     lua5_4
     nlohmann_json
@@ -118,17 +119,19 @@ stdenv.mkDerivation {
     opentelemetry-cpp
 
     # static libraries
+    brotli
     bzip2
     curl
     expat
+    libiconv
     libpsl
     libssh2
+    libunistring
     libwebp
     nghttp2
     openssl
     sqlite
   ] ++ lib.optionals (stdenv.isDarwin) [
-    libiconv
     SystemConfiguration
   ];
 

@@ -7,6 +7,19 @@ if (absl_FOUND)
     message(STATUS "abseil found")
 endif ()
 
+find_package(Brotli REQUIRED)
+if(Brotli_FOUND)
+    message(STATUS "brotli dirs: ${BROTLI_INCLUDE_DIRS}")
+    message(STATUS "brotlicommon libs: ${BROTLICOMMON_LIBRARY}")
+    message(STATUS "brotlidec libs: ${BROTLIDEC_LIBRARY}")
+    add_library(brotli::brotlicommon INTERFACE IMPORTED)
+    set_property(TARGET brotli::brotlicommon PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${BROTLI_INCLUDE_DIRS}")
+    set_property(TARGET brotli::brotlicommon PROPERTY INTERFACE_LINK_LIBRARIES "${BROTLICOMMON_LIBRARY}")
+    add_library(brotli::brotlidec INTERFACE IMPORTED)
+    set_property(TARGET brotli::brotlidec PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${BROTLI_INCLUDE_DIRS}")
+    set_property(TARGET brotli::brotlidec PROPERTY INTERFACE_LINK_LIBRARIES "${BROTLIDEC_LIBRARY}")
+endif()
+
 #
 # bzip2
 # (provided through NIX)
