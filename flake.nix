@@ -11,20 +11,25 @@
       let
         overlays = [
           (final: prev: {
+
             abseil-cpp = prev.callPackage ./nix-overlays/abseil-cpp {
               cxxStandard = "23";
               stdenv = if prev.stdenv.isDarwin then prev.llvmPackages_17.libcxxStdenv else prev.gcc13Stdenv;
             };
+
             protobuf = prev.callPackage ./nix-overlays/protobuf {
               cxxStandard = "23";
               stdenv = if prev.stdenv.isDarwin then prev.llvmPackages_17.libcxxStdenv else prev.gcc13Stdenv;
             };
+
             # The iiif-validator and opentelemetry-cpp are not yet part of nixpkgs, so we need to add it as an overlay
             iiif-validator = prev.callPackage ./nix-overlays/iiif-validator { };
-            opentelemetry-cpp = final.callPackage ./nix-overlays/opentelemetry-cpp {
+
+            opentelemetry-cpp = prev.callPackage ./nix-overlays/opentelemetry-cpp {
               cxxStandard = "23";
               stdenv = if prev.stdenv.isDarwin then prev.llvmPackages_17.libcxxStdenv else prev.gcc13Stdenv;
             };
+
             libtiff-patched = prev.callPackage ./nix-overlays/libtiff {
               cxxStandard = "23";
               stdenv = if prev.stdenv.isDarwin then prev.llvmPackages_17.libcxxStdenv else prev.gcc13Stdenv;
@@ -40,7 +45,9 @@
               zlib = prev.pkgsStatic.zlib;
               zstd = prev.pkgsStatic.zstd;
             };
+
             kakadu = prev.callPackage ./nix-overlays/kakadu {
+              # kakadu makefile is handcrafted and hardcodes gcc under linux and clang under darwin
               cxxStandard = "23";
               stdenv = if prev.stdenv.isDarwin then prev.llvmPackages_17.libcxxStdenv else prev.gcc13Stdenv;
             };
@@ -55,7 +62,7 @@
         # kakadu makefile is handcrafted and hardcodes gcc under linux
         devShells.custom = pkgs.mkShell.override { stdenv = if pkgs.stdenv.isDarwin then pkgs.clang17Stdenv else pkgs.gcc13Stdenv; } {
           # devShells.default = pkgs.mkShell.override { stdenv = pkgs.gcc13Stdenv; } {
-          name = "sipi";
+          name = "sipi dev shell";
 
           # nativeBuildInputs = with pkgs; [ git cmake openssl cacert pkg-config autoconf unzip cachix ];
 
@@ -170,6 +177,7 @@
         # in package.nix with what's inside the `pkgs` attribute.
         packages.default = pkgs.callPackage ./default.nix
           {
+            inherit (pkgs) kakadu;
             inherit (pkgs.pkgsStatic) brotli bzip2 curl expat libiconv libpsl libssh2 libunistring libwebp nghttp2 openssl sqlite;
             xxd = pkgs.unixtools.xxd;
 

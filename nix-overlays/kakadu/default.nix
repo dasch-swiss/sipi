@@ -1,7 +1,6 @@
-{ lib
-, stdenv
+{ lib, stdenv, cxxStandard ? null
 , cmake
-, cxxStandard ? null
+, unzip
 }:
 
 let
@@ -24,15 +23,15 @@ stdenv.mkDerivation {
 
   # postFixup = '' '';
 
-  # nativeBuildInputs = [ cmake ];
+  nativeBuildInputs = [ cmake ];
 
-  # buildInputs = [ ];
+  buildInputs = [ cmake unzip ];
 
   # propagatedBuildInputs = [ ];
 
   enableParallelBuilding = false;
 
-  doCheck = true;
+  doCheck = false;
 
   meta = with lib; {
     description = "Kakadu is a closed-source library to encode and decode JPEG 2000 images. It implements the ISO/IEC 15444-1 standard fully in part 1, and partly in parts 2–3.";

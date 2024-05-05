@@ -1,6 +1,4 @@
-{ lib
-, stdenv
-
+{ lib, stdenv, cxxStandard
 , cmake
 , git
 , cacert
@@ -60,8 +58,6 @@
 , python311Full
 , python311Packages
 , iiif-validator
-
-, cxxStandard
 }:
 
 let
@@ -82,6 +78,7 @@ stdenv.mkDerivation {
   outputs = [ "out" ];
 
   strictDeps = true;
+
   nativeBuildInputs = [
     cmake
     git
