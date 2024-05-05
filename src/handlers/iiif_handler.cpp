@@ -3,7 +3,7 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#include "iiif_handler.hpp"
+#include "handlers/iiif_handler.hpp"
 
 #include <regex>
 

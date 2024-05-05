@@ -8,7 +8,7 @@ set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
 
 ExternalProject_Add(project_luarocks
-        DEPENDS lua
+        DEPENDS project_lua
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
         URL http://luarocks.github.io/luarocks/releases/luarocks-3.3.1.tar.gz
         ${timestamp_policy}

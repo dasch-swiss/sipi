@@ -105,14 +105,14 @@ compile: ## compile SIPI inside Docker with Debug symbols
 		--rm \
 		-it \
 		-v ${PWD}:/tmp/sipi \
-		$(SIPI_BASE) /bin/sh -c "mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && cd /tmp/sipi/cmake-build-debug-inside-docker && cmake -DMAKE_DEBUG:BOOL=ON .. && make"
+		$(SIPI_BASE) /bin/sh -c "mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && cd /tmp/sipi/cmake-build-debug-inside-docker && cmake -DCMAKE_BUILD_TYPE=Debug .. && make"
 
 .PHONY: compile-ci
 compile-ci: ## compile SIPI inside Docker with Debug symbols (no it)
 	docker run \
 		--rm \
 		-v ${PWD}:/tmp/sipi \
-		$(SIPI_BASE) /bin/sh -c "mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && cd /tmp/sipi/cmake-build-debug-inside-docker && cmake -DMAKE_DEBUG:BOOL=ON .. && make"
+		$(SIPI_BASE) /bin/sh -c "mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && cd /tmp/sipi/cmake-build-debug-inside-docker && cmake -DCMAKE_BUILD_TYPE=Debug .. && make"
 
 .PHONY: test
 test: ## compile and run tests inside Docker with Debug symbols
@@ -121,7 +121,7 @@ test: ## compile and run tests inside Docker with Debug symbols
     	--rm \
     	-it \
     	-v ${PWD}:/tmp/sipi \
-    	$(SIPI_BASE) /bin/sh -c "mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && cd /tmp/sipi/cmake-build-debug-inside-docker && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
+    	$(SIPI_BASE) /bin/sh -c "mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && cd /tmp/sipi/cmake-build-debug-inside-docker && cmake -DCMAKE_BUILD_TYPE=Debug .. && make && ctest --verbose"
 
 .PHONY: test-ci
 test-ci: ## compile and run tests inside Docker with Debug symbols (no it)
@@ -129,7 +129,7 @@ test-ci: ## compile and run tests inside Docker with Debug symbols (no it)
 	docker run \
 		--rm \
 		-v ${PWD}:/tmp/sipi \
-		$(SIPI_BASE) /bin/sh -c "mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && cd /tmp/sipi/cmake-build-debug-inside-docker && cmake -DMAKE_DEBUG:BOOL=ON .. && make && ctest --verbose"
+		$(SIPI_BASE) /bin/sh -c "mkdir -p /tmp/sipi/cmake-build-debug-inside-docker && cd /tmp/sipi/cmake-build-debug-inside-docker && cmake -DCMAKE_BUILD_TYPE=Debug .. && make && ctest --verbose"
 
 .PHONY: test-e2e
 test-e2e: ## run end-to-end locally (needs local Nix develop shell)
@@ -149,7 +149,7 @@ test-smoke-ci: ## run smoke tests against (already) locally published Sipi Docke
 
 .PHONY: build
 build: ## build SIPI (inside NIX develop shell)
-	cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo
+	cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug
 	cd build && cmake --build . --parallel 1
 
 .PHONY: run

@@ -29,24 +29,24 @@ jobs:
         compiler: [ gcc ]
         runs-on: [ buildjet-4vcpu-ubuntu-2204, buildjet-4vcpu-ubuntu-2204-arm ]
     steps:
-      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+      - name: checkout source
+        uses: actions/checkout@v4
         with:
-          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+          fetch-depth: 0
+      - uses: extractions/setup-just@v1
       - uses: cachix/install-nix-action@v26
         with:
+          nix_path: nixpkgs=channel:nixos-unstable
           github_access_token: ${{ secrets.GH_TOKEN }}
-      - run: |
-          nix \
-            --extra-experimental-features "nix-command flakes" \
-            --option filter-syscalls false \
-            develop --command bash -c "cmake -S . -B ./build -DCODE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug --log-context && cmake --build ./build --parallel 4 && cd build && ctest --output-on-failure"
+      - name: fix git config
+        run: |
+          git config --global --unset http.proxy
+          git config --global --unset https.proxy
+      - name: Build and run tests
+        run: nix develop --command bash -c "cmake -S . -B ./build -DCODE_COVERAGE:BOOL=ON -DCMAKE_BUILD_TYPE:STRING=Debug --log-context && cmake --build ./build --parallel 4 && ctest --test-dir ./build/test --parallel --output-on-failure"
       - name: Gather code coverage
         if: ${{ matrix.runs-on == 'buildjet-4vcpu-ubuntu-2204' }}
-        run: |
-          nix \
-            --extra-experimental-features "nix-command flakes" \
-            --option filter-syscalls false \
-            develop --command bash -c "cd build && gcovr -j 1 --delete --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable gcov --gcov-ignore-parse-errors=negative_hits.warn_once_per_file"
+        run: nix develop --command bash -c "cd build && gcovr -j 1 --delete --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable gcov --gcov-ignore-parse-errors=negative_hits.warn_once_per_file"
       - name: Upload coverage reports to Codecov
         if: ${{ matrix.runs-on == 'buildjet-4vcpu-ubuntu-2204' }}
         uses: codecov/codecov-action@v4.3.0

@@ -1,3 +1,19 @@
+#project(jansson_builder C CXX)
+#include(FetchContent)
+#
+#set(JANSSON_BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared library")
+#set(JANSSON_BUILD_DOCS OFF CACHE BOOL "Build documentation")
+#set(JANSSON_EXAMPLES OFF CACHE BOOL "Build examples")
+#set(JANSSON_WITHOUT_TESTS ON CACHE BOOL "Do not build tests")
+#set(JANSSON_INSTALL_LIB_DIR ${CMAKE_BINARY_DIR}/local/lib CACHE PATH "Path to the local lib directory")
+#
+#FetchContent_Declare(
+#        jansson
+#        URL https://github.com/akheron/jansson/releases/download/v2.14/jansson-2.14.tar.gz
+#        URL_HASH SHA256=5798d010e41cf8d76b66236cfb2f2543c8d082181d16bc3085ab49538d4b9929
+#)
+#FetchContent_MakeAvailable(jansson)
+
 project(libjansson_builder C CXX)
 include(ExternalProject)
 

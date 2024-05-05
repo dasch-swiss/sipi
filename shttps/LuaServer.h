@@ -20,7 +20,7 @@
 #include "Connection.h"
 #include "Error.h"
 
-#include "lua.hpp"
+#include <lua.hpp>
 
 
 namespace shttps {

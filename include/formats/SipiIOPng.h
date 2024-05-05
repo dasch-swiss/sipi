@@ -11,8 +11,10 @@
 
 #include <string>
 
-#include "../../src/SipiImage.hpp"
 #include "SipiIO.h"
+#include "SipiImage.hpp"
+#include "parsers/SipiRegion.h"
+#include "parsers/SipiSize.h"
 
 namespace Sipi {
 

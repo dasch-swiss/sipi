@@ -4,6 +4,9 @@ inputs:
   DASCHBOT_PAT:
     description: "daschbot's private access token"
     required: true
+  GIT_CRYPT_KEY:
+    description: "The key to decrypt files with git-crypt"
+    required: true
 
 runs:
   using: "composite"
@@ -12,6 +15,10 @@ runs:
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
+    - name: Unlock secrets
+      uses: sliteteam/github-action-git-crypt-unlock@1.2.0
+      env:
+        GIT_CRYPT_KEY: ${{ secrets.GIT_CRYPT_KEY }}
     - name: checkout private ci-assets
       uses: actions/checkout@v4
       with:

@@ -1,31 +1,36 @@
 # syntax=docker/dockerfile:1.3
 
-# Expose (global) variables (ARGs before FROM can only be used on FROM lines and not afterwards)
-ARG SIPI_BASE=daschswiss/sipi-base:2.23.0
-ARG UBUNTU_BASE=ubuntu:22.04
+# Nix builder
+FROM nixos/nix:2.22.0 AS builder
 
-# STAGE 1: Build
-FROM $SIPI_BASE as builder
+# Copy our source and setup our working dir.
+COPY . /tmp/src
+WORKDIR /tmp/src
 
-WORKDIR /tmp/sipi
+# Enable the Nix experimental features.
+RUN echo "experimental-features = nix-command flakes" >> /etc/nix/nix.conf
 
-# Add everything to image.
-COPY . .
-
-# this can be provided when the image is built
-ARG VERSION=OFF
+# Install and use cachix for caching .
+RUN nix-env -iA cachix -f https://cachix.org/api/v1/install
+RUN --mount=type=secret,id=CACHIX_AUTH_TOKEN cachix authtoken $(cat /run/secrets/CACHIX_AUTH_TOKEN) \
+    && cachix use dasch-swiss \
+    && nix develop --profile dev-profile -c true \
+    && cachix push dasch-swiss dev-profile
 
 # Build SIPI and run unit tests.
-RUN cmake -S . -B ./build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DEXT_PROVIDED_VERSION=$VERSION --log-context
-RUN cmake --build ./build --parallel 4
-RUN cd build && ctest --output-on-failure
+RUN nix build
 
-# STAGE 2: Setup
-FROM $UBUNTU_BASE as final
+# Copy the Nix store closure into a directory. The Nix store closure is the
+# entire set of Nix store values that we need for our build.
+RUN mkdir /tmp/nix-store-closure
+RUN cp -R $(nix-store -qR result/) /tmp/nix-store-closure
+
+# Final image is based on scratch. We copy a bunch of Nix dependencies
+# but they're fully self-contained so we don't need Nix anymore.
+FROM ubuntu:24.04
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
-RUN echo "I am running on $BUILDPLATFORM, building for $TARGETPLATFORM"
 
 LABEL maintainer="support@dasch.swiss"
 
@@ -33,6 +38,7 @@ LABEL maintainer="support@dasch.swiss"
 ARG DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/Zurich
 
+# Install some basic tools
 RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list  \
   && apt-get clean \
   && apt-get -qq update  \
@@ -45,45 +51,7 @@ RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list  \
     software-properties-common \
   && apt-get clean
 
-RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
-  && apt-get clean \
-  && apt-get update \
-  && apt-get install -qyyy --no-install-recommends \
-    curl \
-    openssl \
-    locales \
-    uuid \
-    ffmpeg \
-    at \
-    bc \
-    imagemagick \
-    libmagic1 \
-    file \
-  && apt-get clean
-
-# add locales
-RUN locale-gen en_US.UTF-8 && \
-    locale-gen sr_RS.UTF-8
-
-ENV LC_ALL=en_US.UTF-8
-ENV LANG=en_US.UTF-8
-ENV LANGUAGE=en_US.UTF-8
-
-WORKDIR /sipi
-
-EXPOSE 1024
-
-RUN mkdir -p /sipi/images/knora && \
-    mkdir -p /sipi/cache
-
-# Copy Sipi binary and other files from the build stage
-COPY --from=builder /tmp/sipi/build/sipi /sipi/sipi
-COPY --from=builder /tmp/sipi/config/sipi.config.lua /sipi/config/sipi.config.lua
-COPY --from=builder /tmp/sipi/config/sipi.init.lua /sipi/config/sipi.init.lua
-COPY --from=builder /tmp/sipi/server/test.html /sipi/server/test.html
-COPY --from=builder /tmp/sipi/scripts/test_functions.lua /sipi/scripts/test_functions.lua
-COPY --from=builder /tmp/sipi/scripts/send_response.lua /sipi/scripts/send_response.lua
-
+# Install pid1 for reaping zombies.
 RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
         curl -L https://github.com/fpco/pid1-rs/releases/download/v0.1.2/pid1-x86_64-unknown-linux-musl -o /usr/sbin/pid1 && chmod +x /usr/sbin/pid1; \
     elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
@@ -91,6 +59,24 @@ RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
     else \
         echo "No supported target architecture selected"; \
     fi
+
+WORKDIR /sipi
+
+RUN mkdir -p /sipi/images/knora \
+    && mkdir -p /sipi/cache
+
+# Copy /nix/store
+COPY --from=builder /tmp/nix-store-closure /nix/store
+
+# Copy Sipi binary and other files from the build stage
+COPY --from=builder /tmp/sipi/result/bin/sipi /sipi/sipi
+COPY --from=builder /tmp/sipi/config/sipi.config.lua /sipi/config/sipi.config.lua
+COPY --from=builder /tmp/sipi/config/sipi.init.lua /sipi/config/sipi.init.lua
+COPY --from=builder /tmp/sipi/server/test.html /sipi/server/test.html
+COPY --from=builder /tmp/sipi/scripts/test_functions.lua /sipi/scripts/test_functions.lua
+COPY --from=builder /tmp/sipi/scripts/send_response.lua /sipi/scripts/send_response.lua
+
+EXPOSE 1024
 
 ENTRYPOINT [ "/usr/sbin/pid1", "--verbose", "--", "/sipi/sipi" ]
 

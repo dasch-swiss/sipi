@@ -19,7 +19,7 @@ the Internet. SIPI offers a flexible framework for specifying
 authentication and authorization logic in [Lua](https://www.lua.org/)
 scripts, and supports restricted access to images, either by reducing
 image dimensions or by adding watermarks. It can easily be integrated
-with [Knora](https://dsp.dasch.swiss/). In addition SIPI preserves most of
+with [Knora](https://dsp.dasch.swiss/). In addition, SIPI preserves most of
 the [EXIF](http://www.exif.org),
 [IPTC](https://iptc.org/standards/photo-metadata/iptc-standard/) and
 [XMP](http://www.adobe.com/products/xmp.html) metadata and can preserve
@@ -63,36 +63,59 @@ The documentation is online at https://sipi.io.
 To build it locally, you will need [MkDocs](https://www.mkdocs.org/).
 In the root the source tree, type:
 
-```
+```bash
 make docs-build
 ```
 
 You will then find the manual under `site/index.html`.
 
-## Building from source
+## Building from Source
 
-All should be run from inside the root of the repository.
+All commands should be run from inside the root of the repository.
 
-### Build and run inside Docker - recommended
+### Setup Nix (One-time setup)
+
+1. **Install Nix**:
+  - On Linux and macOS, you can install Nix using the following command:
+    ```bash
+    sh <(curl -L https://nixos.org/nix/install) --daemon
+    ```
+  - Follow the instructions displayed on the screen to complete the installation.
+
+2. **Enable Nix Flakes**:
+- After installing Nix, enable the experimental flakes feature
+  ```bash
+  mkdir -p ~/.config/nix
+  echo 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
+  ```
+
+3. **Enter the development environment**:
+  - After installing Nix, you can enter the development environment configured specifically for this project by running:
+    ```bash
+    nix develop
+    ```
+
+### Build and Run Using Nix
+
+Once inside the `nix develop` shell, you can use the following commands to build and run the application:
+
 ```bash
-$ make compile
-$ make test
-$ make run
+just build
+just test
+just run
 ```
 
-### Build under macOS - not recommended. You are on your own. We warned you ;-)
+This approach ensures that all necessary dependencies are automatically provided by Nix, offering a reproducible build
+environment that works consistently across different systems.
 
-```bash
-$ (mkdir -p ./build-mac && cd build-mac && cmake .. && make && ctest --verbose)
-```
+**Note:** Building directly on macOS without Nix is not recommended and might lead to unpredictable build failures due
+to differences in system configurations and library versions. We strongly advise using the Nix approach for a more
+reliable and reproducible build process.
 
-## Sentry.io
-If you would like to use Sentry.io for error reporting, you can set the environment variable
-`SIPI_SENTRY_DSN` to the DSN of your Sentry project. If you do not set this variable, Sentry.io will not be used.
+### Additional Information
 
-Further variables can be set to configure the Sentry client:
-- `SIPI_SENTRY_ENVIRONMENT`: The environment in which the application is running. Defaults to `development`.
-- `SIPI_SENTRY_RELEASE`: The release version number of the application. 
+- Using Nix not only abstracts away OS-specific details but also significantly simplifies dependency management.
+- Should you encounter any issues with Nix, consider checking the official [Nix documentation](https://nixos.org/manual/nix/stable/) or the project's Nix scripts for any custom configurations that may affect the build process.
 
 ## Releases
 

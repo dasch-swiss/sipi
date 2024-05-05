@@ -22,9 +22,10 @@ SipiIptc::~SipiIptc() {}
 unsigned char *SipiIptc::iptcBytes(unsigned int &len)
 {
   Exiv2::DataBuf databuf = Exiv2::IptcParser::encode(iptcData);
-  unsigned char *buf = new unsigned char[databuf.size_];
-  memcpy(buf, databuf.pData_, databuf.size_);
-  len = databuf.size_;
+  unsigned char *buf = new unsigned char[databuf.size()];
+  // TODO: check if this is realy working. The original code was: memcpy(buf, databuf.pData, databuf.size());
+  memcpy(buf, databuf.c_data(), databuf.size());
+  len = databuf.size();
   return buf;
 }
 //============================================================================

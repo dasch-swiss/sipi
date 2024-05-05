@@ -14,7 +14,7 @@
 #include "tiff.h"
 #include "tiffio.h"
 
-#include "../../src/SipiImage.hpp"
+#include "SipiImage.hpp"
 // #include "metadata/SipiExif.h"
 #include "SipiIO.h"
 

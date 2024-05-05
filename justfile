@@ -1,3 +1,7 @@
+DOCKER_REPO := "daschswiss/sipi"
+BUILD_TAG := `git describe --tag --dirty --abbrev=7`
+DOCKER_IMAGE := DOCKER_REPO + ":" + BUILD_TAG
+
 # List all recipies
 default:
     just --list --unsorted
@@ -13,42 +17,72 @@ docker-run:
 
 # build and publish Sipi Docker image locally
 docker-build:
+    docker build \
+        --secret id=CACHIX_AUTH_TOKEN \
+        --progress auto \
+        --build-arg SIPI_BASE=daschswiss/sipi-base:2.23.0 \
+        --build-arg UBUNTU_BASE=ubuntu:22.04 \
+        --build-arg VERSION={{BUILD_TAG}} \
+        -t {{DOCKER_REPO}}:{{BUILD_TAG}} -t {{DOCKER_REPO}}:latest \
+        --load \
+        .
+
+# locally (unit) test and publish aarch64 Sipi Docker image with -aarch64 tag
+docker-build-aarch64:
 	docker buildx build \
 		--progress auto \
-		--build-arg SIPI_BASE=daschswiss/sipi-base:2.23.0 \
-		--build-arg UBUNTU_BASE=ubuntu:22.04 \
-		--build-arg BUILD_TAG=development \
-		-t daschswiss/sipi:development -t daschswiss/sipi:latest \
+		--platform linux/arm64 \
+		--build-arg VERSION={{BUILD_TAG}} \
+		-t {{DOCKER_REPO}}:{{BUILD_TAG}}-aarch64 -t {{DOCKER_REPO}}:latest \
 		--load \
 		.
-# run smoke tests against locally published Sipi Docker image
-test-smoke:
+
+# push previously build aarch64 image to Docker hub
+docker-push-aarch64:
+	docker push {{DOCKER_REPO}}:{{BUILD_TAG}}-aarch64
+
+# locally (unit) test and publish x86 Sipi Docker image with -amd64 tag
+docker-build-amd64:
+	docker buildx build \
+		--progress auto \
+		--platform linux/amd64 \
+		--build-arg VERSION={{BUILD_TAG}} \
+		-t {{DOCKER_REPO}}:{{BUILD_TAG}}-amd64 -t {{DOCKER_REPO}}:latest \
+		--load \
+		.
+
+# push previously build x86 image to Docker hub
+docker-push-amd64:
+	docker push {{DOCKER_REPO}}:{{BUILD_TAG}}-amd64
+
+## locally publish Sipi Docker image and run smoke tests against it
+smoke-test: docker-build
+	pytest -s test/smoke
+
+## run smoke tests against (already) locally published Sipi Docker image
+smoke-test-ci:
 	pytest -s test/smoke
 
 #
 # The following commands need to be run inside a Nix development shell
 #
 
-# Open the Nix development shell with the clang environment: `just clang`
-clang:
-	nix develop .#clang
-
-# Open the Nix development shell with the gcc environment: `just gcc`
-gcc:
+# Open the Nix development shell with all dependencies
+develop:
     nix develop
 
 # Build the `sipi` binary
 build:
-	cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DCODE_COVERAGE=ON
+	cmake -B build -S . -DCMAKE_BUILD_TYPE:STRING=Debug -DWITH_CODE_COVERAGE:BOOL=OFF
 	cmake --build ./build --parallel
 
 # Run the tests
 test: build
-    cd build && ctest --output-on-failure
+    cd ./build && ctest --output-on-failure
 
 # Print the test coverage (using gcov executable, thus assuming GCC)
 coverage: test
-    cd build && gcovr -j 4 --delete --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable gcov
+    cd build && gcovr -j 4 --delete --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable llvm-cov
 
 # Print the test coverage
 coverage1: test
@@ -70,3 +104,11 @@ valgrind:
 # query version of the project
 version:
     cmake -P query_version.cmake
+
+# Delete the build directory
+clean:
+    rm -rf build
+
+# Format all nix files
+nix-fmt:
+    nixpkgs-fmt .
