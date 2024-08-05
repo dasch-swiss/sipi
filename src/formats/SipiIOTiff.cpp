@@ -448,6 +448,7 @@ bool SipiIOTiff::read(SipiImage *img,
   if (nullptr != (tif = TIFFOpen(filepath.c_str(), "r"))) {
     TIFFSetErrorHandler(tiffError);
     TIFFSetWarningHandler(tiffWarning);
+    TIFFSetField(tif, TIFFTAG_JPEGCOLORMODE, JPEGCOLORMODE_RGB);
 
     //
     // OK, it's a TIFF file
