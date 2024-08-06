@@ -471,7 +471,6 @@ target_link_libraries(${PROJECT_NAME} ${LIBS}
         exiv2
         exiv2-xmp
         expat
-        zlib
         tiff
         webp
         jbigkit
