@@ -31,6 +31,7 @@ ExternalProject_Add(project_tiff
                     -DZLIB_LIBRARY=${CMAKE_BINARY_DIR}/local/lib/libz${CMAKE_STATIC_LIBRARY_SUFFIX}
                     -DZLIB_ROOT:BOOL=ON
                     -DZLIB_INCLUDE_DIR=${CMAKE_BINARY_DIR}/local/include
+                    -Dlibdeflate:BOOL=FALSE
         INSTALL_COMMAND make test
         COMMAND make install
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/local/extsrcs/libtiff-${LibTiffVersion}/libtiff/tif_dir.h ${CMAKE_BINARY_DIR}/local/include/
