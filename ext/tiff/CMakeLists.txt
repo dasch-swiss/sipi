@@ -13,7 +13,6 @@ ExternalProject_Add(project_tiff
         DEPENDS project_webp
         DEPENDS project_zstd
         DEPENDS project_png
-        DEPENDS project_zlib
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
         TEST_BEFORE_INSTALL 1
         URL https://download.osgeo.org/libtiff/tiff-${LibTiffVersion}.tar.gz
@@ -43,4 +42,4 @@ add_library(tiff STATIC IMPORTED GLOBAL)
 MESSAGE(STATUS "install dir" ${install_dir})
 set_property(TARGET tiff PROPERTY IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/local/lib/libtiff${CMAKE_STATIC_LIBRARY_SUFFIX})
 
-add_dependencies(tiff project_tiff zlib)
+add_dependencies(tiff project_tiff)
