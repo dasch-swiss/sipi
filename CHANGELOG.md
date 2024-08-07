@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.13.0](https://github.com/dasch-swiss/sipi/compare/v3.12.3...v3.13.0) (2024-08-07)
+
+
+### Features
+
+* Allow YCbCr/RGB autoconvert, update libtiff (DEV-3863) ([#451](https://github.com/dasch-swiss/sipi/issues/451)) ([ccc68bc](https://github.com/dasch-swiss/sipi/commit/ccc68bc797e59befac48e29cab15b638a0b1f8aa))
+
 ## [3.12.3](https://github.com/dasch-swiss/sipi/compare/v3.12.2...v3.12.3) (2024-07-23)
 
 
