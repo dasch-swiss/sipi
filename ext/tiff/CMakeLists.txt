@@ -1,15 +1,11 @@
 project(tiff_builder C CXX)
 include(ExternalProject)
 
-#
 # get libtiff-4.0.6
-#
-
-
 
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
-set(LibTiffVersion "4.1.0")
+set(LibTiffVersion "4.6.0")
 
 ExternalProject_Add(project_tiff
         DEPENDS project_jpeg
@@ -23,7 +19,6 @@ ExternalProject_Add(project_tiff
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
         ${timestamp_policy}
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/libtiff-${LibTiffVersion}
-        PATCH_COMMAND patch ${CMAKE_BINARY_DIR}/local/extsrcs/libtiff-${LibTiffVersion}/libtiff/tif_dirinfo.c < ${COMMON_PATCHES}/tiff-4.0.4.patch
         CMAKE_ARGS  -DBUILD_SHARED_LIBS=OFF
                     -DCMAKE_FIND_FRAMEWORK=NEVER
                     -DCMAKE_C_STANDARD_LIBRARIES="-lpthread"
@@ -32,6 +27,7 @@ ExternalProject_Add(project_tiff
                     -DCMAKE_INSTALL_LIBDIR=${CMAKE_BINARY_DIR}/local/lib
                     -DWEBP_LIBRARY=${CMAKE_BINARY_DIR}/local/lib/libwebp${CMAKE_STATIC_LIBRARY_SUFFIX}
                     -DWEBP_INCLUDE_DIR=${CMAKE_BINARY_DIR}/local/include
+                    -Dlibdeflate:BOOL=FALSE
         INSTALL_COMMAND make test
         COMMAND make install
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/local/extsrcs/libtiff-${LibTiffVersion}/libtiff/tif_dir.h ${CMAKE_BINARY_DIR}/local/include/

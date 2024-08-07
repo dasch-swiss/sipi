@@ -38,6 +38,7 @@ const std::string palette = "../../../../test/_test_data/images/unit/palette.tif
 const std::string wrongrotation = "../../../../test/_test_data/images/unit/image_orientation.jpg";
 const std::string watermark_correct = "../../../../test/_test_data/images/unit/watermark_correct.tif";
 const std::string watermark_incorrect = "../../../../test/_test_data/images/unit/watermark_incorrect.tif";
+const std::string tiffJpegScanlineBug = "../../../../test/_test_data/images/knora/tiffJpegScanlineBug.tif";
 
 // Check if configuration file can be found
 TEST(SipiImage, CheckIfTestImagesCanBeFound)
@@ -53,6 +54,7 @@ TEST(SipiImage, CheckIfTestImagesCanBeFound)
   EXPECT_TRUE(exists_file(wrongrotation));
   EXPECT_TRUE(exists_file(watermark_correct));
   EXPECT_TRUE(exists_file(watermark_incorrect));
+  EXPECT_TRUE(exists_file(tiffJpegScanlineBug));
 }
 
 TEST(SipiImage, ImageComparison)
@@ -350,4 +352,15 @@ TEST(SipiImage, CMYK_With_Alpha_Conversion)
 
   // now test if conversion to PNG is working
   ASSERT_NO_THROW(img2.write("png", tif_cmyk_with_alpha_converted_to_png));
+}
+
+// Convert Tiff with JPEG compression and automatic YCrCb conversion via TIFFTAG_JPEGCOLORMODE = JPEGCOLORMODE_RGB
+TEST(SipiImage, TiffJpegAutoRgbConvert)
+{
+  Sipi::SipiIOTiff::initLibrary();
+
+  Sipi::SipiImage img;
+
+  EXPECT_NO_THROW(img.read(tiffJpegScanlineBug));
+  EXPECT_NO_THROW(img.write("jpx", "../../../../test/_test_data/images/thumbs/tiffJpegScanlineBug.jp2"));
 }

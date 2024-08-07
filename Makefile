@@ -133,7 +133,7 @@ test-ci: ## compile and run tests inside Docker with Debug symbols (no it)
 
 .PHONY: test-e2e
 test-e2e: ## run end-to-end locally (needs local Nix develop shell)
-	pytest -s test/e2e --sipi-exec=./build/sipi
+	(cd test/e2e; pytest -s --sipi-exec=../../build/sipi)
 
 .PHONY: test-smoke
 test-smoke: docker-build ## run smoke tests against locally published Sipi Docker image
