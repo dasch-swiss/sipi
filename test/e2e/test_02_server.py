@@ -336,57 +336,59 @@ class TestServer:
     def test_json_info_validation(self, manager):
         """pass the info.json request tests"""
 
-        expected_result = {
-            '@context': 'http://iiif.io/api/image/3/context.json',
-            'id': 'http://127.0.0.1:1024/unit/_lena512.jp2',
-            'type': 'ImageService3',
-            'protocol': 'http://iiif.io/api/image',
-            'profile': 'level2',
-            'width': 512,
-            'height': 512,
-            'sizes': [
-                {'width': 256, 'height': 256},
-                {'width': 128, 'height': 128}
-            ],
-            'tiles': [{'width': 512, 'height': 512, 'scaleFactors': [1, 2, 3, 4]}],
-            'extraFormats': ['tif', 'jp2'],
-            'preferredFormats': ['jpg', 'tif', 'jp2', 'png'],
-            'extraFeatures': [
-                'baseUriRedirect',
-                'canonicalLinkHeader',
-                'cors',
-                'jsonldMediaType',
-                'mirroring',
-                'profileLinkHeader',
-                'regionByPct',
-                'regionByPx',
-                'regionSquare',
-                'rotationArbitrary',
-                'rotationBy90s',
-                'sizeByConfinedWh',
-                'sizeByH',
-                'sizeByPct',
-                'sizeByW',
-                'sizeByWh',
-                'sizeUpscaling'
-            ]
-        }
+        def expected_result(filename, proto='http'):
+            return {
+                '@context': 'http://iiif.io/api/image/3/context.json',
+                'id': proto + '://127.0.0.1:1024/unit/' + filename,
+                'type': 'ImageService3',
+                'protocol': 'http://iiif.io/api/image',
+                'profile': 'level2',
+                'width': 512,
+                'height': 512,
+                'sizes': [
+                    {'width': 256, 'height': 256},
+                    {'width': 128, 'height': 128}
+                ],
+                'tiles': [{'width': 512, 'height': 512, 'scaleFactors': [1, 2, 3, 4]}],
+                'extraFormats': ['tif', 'jp2'],
+                'preferredFormats': ['jpg', 'tif', 'jp2', 'png'],
+                'extraFeatures': [
+                    'baseUriRedirect',
+                    'canonicalLinkHeader',
+                    'cors',
+                    'jsonldMediaType',
+                    'mirroring',
+                    'profileLinkHeader',
+                    'regionByPct',
+                    'regionByPx',
+                    'regionSquare',
+                    'rotationArbitrary',
+                    'rotationBy90s',
+                    'sizeByConfinedWh',
+                    'sizeByH',
+                    'sizeByPct',
+                    'sizeByW',
+                    'sizeByWh',
+                    'sizeUpscaling'
+                ]
+            }
 
-        response_json = manager.post_file(
-            "/api/upload", manager.data_dir_path("unit/lena512.tif"), "image/tiff")
+        response_json = manager.post_file("/api/upload", manager.data_dir_path("unit/lena512.tif"), "image/tiff")
+
         filename = response_json["filename"]
-
-        manager.expect_status_code(
-            "/unit/{}/full/max/0/default.jpg".format(filename), 200)
+        manager.expect_status_code("/unit/{}/full/max/0/default.jpg".format(filename), 200)
 
         response_json = manager.get_json("/unit/{}/info.json".format(filename))
-        expected_result["id"] = "http://127.0.0.1:1024/unit/{}".format(
-            filename)
-        assert response_json == expected_result
+        assert response_json == expected_result(filename)
 
         # response_json = manager.get_json("/unit/{}/info.json".format(filename), use_ssl=True)
-        # expected_result["id"] = "https://127.0.0.1:1024/unit/{}".format(filename)
-        # assert response_json == expected_result
+        # assert response_json == expected_result(filename)
+
+        response_json = manager.get_json("/unit/{}/info.json".format(filename), use_forwarded_ssl=True)
+        assert response_json == expected_result(filename, proto='https')
+
+        response_json = manager.get_json("/unit/{}/info.json".format(filename), use_forwarded_ssl=False)
+        assert response_json == expected_result(filename, proto='http')
 
     def test_knora_json_for_video(self, manager):
         """pass the knora.json request for video"""
