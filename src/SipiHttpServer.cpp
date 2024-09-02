@@ -657,20 +657,13 @@ static void serve_info_json_file(Connection &conn_obj,
     json_object_set_new(root, "@context", json_string("http://sipi.io/api/file/3/context.json"));
   }
 
+  std::string proto = conn_obj.secure() ? std::string("https://") : std::string("http://");
   std::string host = conn_obj.header("host");
   std::string id;
   if (params[iiif_prefix] == "") {
-    if (conn_obj.secure()) {
-      id = std::string("https://") + host + "/" + params[iiif_identifier];
-    } else {
-      id = std::string("http://") + host + "/" + params[iiif_identifier];
-    }
+    id = proto + host + "/" + params[iiif_identifier];
   } else {
-    if (conn_obj.secure()) {
-      id = std::string("https://") + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier];
-    } else {
-      id = std::string("http://") + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier];
-    }
+    id = proto + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier];
   }
   json_object_set_new(root, "id", json_string(id.c_str()));
 
@@ -927,8 +920,10 @@ static void serve_knora_json_file(Connection &conn_obj,
   json_t *root = json_object();
   json_object_set_new(root, "@context", json_string("http://sipi.io/api/file/3/context.json"));
 
+  std::string proto = "http";
   std::string host = conn_obj.header("host");
   std::string id;
+
   if (params[iiif_prefix] == "") {
     if (conn_obj.secure()) {
       id = std::string("https://") + host + "/" + params[iiif_identifier];

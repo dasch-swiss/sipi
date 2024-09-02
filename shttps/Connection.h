@@ -428,7 +428,7 @@ public:
   /*!
    * Return true if a secure (SSL) connection is used
    */
-  inline bool secure(void) { return _secure; }
+  bool secure(void);
 
   /*!
    * Set the secure connection status

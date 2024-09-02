@@ -384,11 +384,11 @@ class TestServer:
         # response_json = manager.get_json("/unit/{}/info.json".format(filename), use_ssl=True)
         # assert response_json == expected_result(filename)
 
-        response_json = manager.get_json("/unit/{}/info.json".format(filename), use_forwarded_ssl=True)
-        assert response_json == expected_result(filename, proto='https')
-
         response_json = manager.get_json("/unit/{}/info.json".format(filename), use_forwarded_ssl=False)
         assert response_json == expected_result(filename, proto='http')
+
+        response_json = manager.get_json("/unit/{}/info.json".format(filename), use_forwarded_ssl=True)
+        assert response_json == expected_result(filename, proto='https')
 
     def test_knora_json_for_video(self, manager):
         """pass the knora.json request for video"""
