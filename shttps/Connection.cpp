@@ -867,6 +867,15 @@ Connection::~Connection()
 }
 //=============================================================================
 
+/*!
+ * Return true if a secure (SSL) connection is used
+ */
+bool Connection::secure(void)
+{
+  bool forwarded = !header("x-forwarded-proto").compare("https");
+  return _secure || forwarded;
+}
+
 int Connection::setupKeepAlive(int default_timeout)
 {
   if (_keep_alive) {
@@ -1607,4 +1616,4 @@ bool Connection::cleanupUploads(void)
 }
 //=============================================================================
 
-}
+}// namespace shttps

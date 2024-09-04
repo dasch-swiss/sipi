@@ -411,7 +411,7 @@ class SipiTestManager:
 
         return response.json()
 
-    def get_json(self, url_path, use_ssl=False):
+    def get_json(self, url_path, use_ssl=False, use_forwarded_ssl=None):
         """
         Sends a request which expects JSON
         :param url_path: a path that will be appended to the Sipi base URL to make the request.
@@ -423,8 +423,10 @@ class SipiTestManager:
         else:
             sipi_url = self.make_sipi_url(url_path)
 
+        x_forwarded_proto = {True: 'https', False: 'http'}.get(use_forwarded_ssl)
+
         try:
-            response = requests.get(sipi_url)
+            response = requests.get(sipi_url, headers={'X-Forwarded-Proto': x_forwarded_proto})
             response.raise_for_status()
         except:
             raise SipiTestError("post request to {} failed: {}".format(sipi_url, response.json()["message"]))
