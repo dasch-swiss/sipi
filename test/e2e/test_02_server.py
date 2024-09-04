@@ -393,23 +393,23 @@ class TestServer:
     def test_knora_json_for_video(self, manager):
         """pass the knora.json request for video"""
 
-        expected_result = {
-            "@context": "http://sipi.io/api/file/3/context.json",
-            "id": "http://127.0.0.1:1024/unit/8pdET49BfoJ-EeRcIbgcLch.mp4",
-            "checksumOriginal": "19cc4bccad39c89cc44936ef69565bb933d41a065fd59d666d58e5ef344e8149",
-            "checksumDerivative": "19cc4bccad39c89cc44936ef69565bb933d41a065fd59d666d58e5ef344e8149",
-            "internalMimeType": "video/mp4",
-            "fileSize": 475205,
-            "originalFilename": "Dummy.mp4",
-            "duration": 4.7000000000000002,
-            "fps": 30,
-            "height": 240,
-            "width": 320
-        }
+        def expected_result(proto):
+            return {
+                "@context": "http://sipi.io/api/file/3/context.json",
+                "id": proto + "://127.0.0.1:1024/unit/8pdET49BfoJ-EeRcIbgcLch.mp4",
+                "checksumOriginal": "19cc4bccad39c89cc44936ef69565bb933d41a065fd59d666d58e5ef344e8149",
+                "checksumDerivative": "19cc4bccad39c89cc44936ef69565bb933d41a065fd59d666d58e5ef344e8149",
+                "internalMimeType": "video/mp4",
+                "fileSize": 475205,
+                "originalFilename": "Dummy.mp4",
+                "duration": 4.7000000000000002,
+                "fps": 30,
+                "height": 240,
+                "width": 320
+            }
 
-        response_json = manager.get_json(
-            "/unit/8pdET49BfoJ-EeRcIbgcLch.mp4/knora.json")
-        assert response_json == expected_result
+        assert manager.get_json("/unit/8pdET49BfoJ-EeRcIbgcLch.mp4/knora.json") == expected_result('http')
+        assert manager.get_json("/unit/8pdET49BfoJ-EeRcIbgcLch.mp4/knora.json", use_forwarded_ssl=True) == expected_result('https')
 
     def test_handling_of_missing_sidecar_file_for_video(self, manager):
         """correctly handle missing sidecar file for video"""
