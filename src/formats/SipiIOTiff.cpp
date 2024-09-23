@@ -734,7 +734,7 @@ bool SipiIOTiff::read(SipiImage *img,
 
     if ((region == nullptr) || (region->getType() == SipiRegion::FULL)) {
       if (planar == PLANARCONFIG_CONTIG) {
-        uint32 i;
+        uint64 i;
         auto *dataptr = new uint8[img->ny * sll];
 
         for (i = 0; i < img->ny; i++) {
