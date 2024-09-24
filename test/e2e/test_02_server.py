@@ -18,21 +18,20 @@
 # See the GNU Affero General Public License for more details.
 # You should have received a copy of the GNU Affero General Public
 # License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
-import filecmp
-import pprint
-import shutil
 
-import pytest
 from pathlib import Path
+import datetime
+import filecmp
 import os
 import os.path
-import time
-import datetime
+import pprint
+import pytest
+import shutil
+import subprocess
 import sys
-
+import time
 
 # Tests basic functionality of the Sipi server.
-
 
 class TestServer:
     component = "The Sipi server"
@@ -161,6 +160,15 @@ class TestServer:
         downloaded_file_path = manager.download_file("/unit/{}/file".format(filename))
         assert filecmp.cmp(manager.data_dir_path("knora/test_odd.odd"), downloaded_file_path)
 
+    def test_head_response_should_be_empty(self, manager):
+        response_json = manager.post_file("/api/upload", manager.data_dir_path("unit/lena512.tif"), "image/tiff")
+
+        http_response = manager.expect_status_code("/unit/{}/full/max/0/default.jpg".format(response_json["filename"]), 200)
+        process = subprocess.run(['file', '-'], input=http_response.content, capture_output=True)
+        assert process.stdout.startswith(b'/dev/stdin: JPEG image data, JFIF standard 1.01, aspect ratio, density 1x1, segment length 16')
+
+        http_response = manager.expect_status_code("/unit/{}/full/max/0/default.jpg".format(response_json["filename"]), 200, method='head')
+        assert http_response.text == ""
 
     def test_mimeconsistency(self, manager):
         """upload any file and check mimetype consistency"""
