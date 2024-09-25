@@ -1191,6 +1191,7 @@ static void serve_iiif(Connection &conn_obj,
   const std::string &uri,
   std::vector<std::string> params)
 {
+  auto not_head_request = conn_obj.method() != Connection::HEAD;
   //
   // getting the identifier (which in case of a PDF or multipage TIFF my contain a page id (identifier@pagenum)
   //
@@ -1387,7 +1388,7 @@ static void serve_iiif(Connection &conn_obj,
     }
     }
     try {
-      conn_obj.sendFile(infile);
+      if (not_head_request) conn_obj.sendFile(infile);
     } catch (shttps::InputFailure iofail) {
       syslog(LOG_WARNING, "Browser unexpectedly closed connection");
     } catch (Sipi::SipiError &err) {
@@ -1430,7 +1431,7 @@ static void serve_iiif(Connection &conn_obj,
 
       try {
         //!> send the file from cache
-        conn_obj.sendFile(cachefile);
+        if (not_head_request) conn_obj.sendFile(cachefile);
         //!> from now on the cache file can be deleted again
       } catch (shttps::InputFailure err) {
         // -1 was thrown
@@ -1530,7 +1531,7 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.header("Content-Type", "image/jpeg");// set the header (mimetype)
       conn_obj.setChunkedTransfer();
       Sipi::SipiCompressionParams qp = { { JPEG_QUALITY, std::to_string(server->jpeg_quality()) } };
-      img.write("jpg", "HTTP", &qp);
+      if (not_head_request) img.write("jpg", "HTTP", &qp);
       break;
     }
     case SipiQualityFormat::JP2: {
@@ -1538,7 +1539,7 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.header("Link", canonical_header);
       conn_obj.header("Content-Type", "image/jp2");// set the header (mimetype)
       conn_obj.setChunkedTransfer();
-      img.write("jpx", "HTTP");
+      if (not_head_request) img.write("jpx", "HTTP");
       break;
     }
     case SipiQualityFormat::TIF: {
@@ -1547,7 +1548,7 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.header("Content-Type", "image/tiff");// set the header (mimetype)
       // no chunked transfer needed...
 
-      img.write("tif", "HTTP");
+      if (not_head_request) img.write("tif", "HTTP");
       break;
     }
     case SipiQualityFormat::PNG: {
@@ -1556,7 +1557,7 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.header("Content-Type", "image/png");// set the header (mimetype)
       conn_obj.setChunkedTransfer();
 
-      img.write("png", "HTTP");
+      if (not_head_request) img.write("png", "HTTP");
       break;
     }
     default: {
@@ -1701,6 +1702,7 @@ void SipiHttpServer::run()
 
   add_route(Connection::GET, "/favicon.ico", favicon_handler);
   add_route(Connection::GET, "/", iiif_handler);
+  add_route(Connection::HEAD, "/", iiif_handler);
 
   user_data(this);
 
