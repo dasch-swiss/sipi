@@ -333,11 +333,6 @@ unsigned char *read_watermark(const std::string &wmfile, int &nx, int &ny, int &
 
   TIFF_GET_FIELD(tif, TIFFTAG_SAMPLESPERPIXEL, &spp, 1);
 
-  if (spp != 1) {
-    TIFFClose(tif);
-    throw Sipi::SipiImageError("ERROR in read_watermark: ssp ≠ 1: " + wmfile);
-  }
-
   TIFF_GET_FIELD(tif, TIFFTAG_BITSPERSAMPLE, &bps, 1);
 
   if (bps != 8) {
