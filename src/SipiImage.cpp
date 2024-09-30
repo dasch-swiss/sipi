@@ -1701,6 +1701,36 @@ bool SipiImage::operator==(const SipiImage &rhs) const
 
 /*==========================================================================*/
 
+std::optional<double> SipiImage::compare(const SipiImage &rhs) const
+{
+  if ((nx != rhs.nx) || (ny != rhs.ny) || (nc != rhs.nc) || (bps != rhs.bps) || (photo != rhs.photo)) { return {}; }
+
+  double diff = 0;
+  double niters = 0;
+
+  switch (bps) {
+  case 8: {
+    byte *ltmp1 = pixels;
+    byte *ltmp2 = rhs.pixels;
+    for (size_t j = 0; j < ny; j++) {
+      for (size_t i = 0; i < nx; i++) {
+        for (size_t k = 0; k < nc; k++) {
+          niters++;
+          diff += abs(ltmp1[nc * (j * nx + i) + k] - ltmp2[nc * (j * nx + i) + k]) / 255.;
+        }
+      }
+    }
+    break;
+  }
+  case 16:
+    return 1;
+  }
+
+  return diff / niters;
+}
+
+/*==========================================================================*/
+
 
 std::ostream &operator<<(std::ostream &outstr, const SipiImage &rhs)
 {
