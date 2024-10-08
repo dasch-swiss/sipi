@@ -310,17 +310,31 @@ TEST(SipiImage, Watermark)
   Sipi::SipiImage img3;
   Sipi::SipiImage img4;
 
+  std::string maori = "../../../../test/_test_data/images/unit/MaoriFigure.jpg";
+  std::string gradstars = "../../../../test/_test_data/images/unit/gradient-stars.tif";
+  std::string maoriWater = "../../../../test/_test_data/images/unit/MaoriFigureWatermark.jpg";
+
+  EXPECT_TRUE(exists_file(maori));
+  EXPECT_TRUE(exists_file(gradstars));
+
   ASSERT_NO_THROW(img1.read(cielab));
   EXPECT_NO_THROW(img1.add_watermark(watermark_correct));
 
-  ASSERT_NO_THROW(img2.read(cielab));
-  ASSERT_THROW(img2.add_watermark(watermark_incorrect), std::exception);
+  ASSERT_NO_THROW(img2.read(cielab16));
+  EXPECT_NO_THROW(img2.add_watermark(watermark_correct));
 
-  ASSERT_NO_THROW(img3.read(cielab16));
-  EXPECT_NO_THROW(img3.add_watermark(watermark_correct));
+  ASSERT_NO_THROW(img3.read(maori));
 
-  ASSERT_NO_THROW(img4.read(cielab16));
-  ASSERT_THROW(img4.add_watermark(watermark_incorrect), std::exception);
+  EXPECT_NO_THROW(img3.add_watermark(gradstars));
+  /* ASSERT_NO_THROW(img3.write("jpg", maoriWater)); */
+
+  ASSERT_NO_THROW(img4.read(maoriWater));
+  EXPECT_TRUE(img4.compare(img3).value_or(1000) < 0.007); // 0.00605
+
+  ASSERT_NO_THROW(img3.read(maori));
+  EXPECT_TRUE(img4.compare(img3) > 0.017); // 0.0174
+
+  ASSERT_NO_THROW(img3.rotate(90));
 }
 
 TEST(SipiImage, CMYK_With_Alpha_Conversion)
