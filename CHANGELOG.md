@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.14.0](https://github.com/dasch-swiss/sipi/compare/v3.13.0...v3.14.0) (2024-10-08)
+
+
+### Features
+
+* Respect X-Forwarded-Proto (DEV-3499) ([#453](https://github.com/dasch-swiss/sipi/issues/453)) ([d5eaab3](https://github.com/dasch-swiss/sipi/commit/d5eaab3bb36114759861c98a419ecca6955d41ce))
+* Support IIIF Image's API HEAD requests (DEV-4072) ([#456](https://github.com/dasch-swiss/sipi/issues/456)) ([f3a9a96](https://github.com/dasch-swiss/sipi/commit/f3a9a9695a3c931e0d95144a07d1f7ba0bc182ae))
+* Watermarks with alpha support and respect to ratio (DEV-4072) ([#458](https://github.com/dasch-swiss/sipi/issues/458)) ([da34f6a](https://github.com/dasch-swiss/sipi/commit/da34f6af0c51ceb3a47607e6f9ce9e2541a7497d))
+
+
+### Bug Fixes
+
+* Fix planar BigTIFF ingestion (DEV-3384) ([#455](https://github.com/dasch-swiss/sipi/issues/455)) ([83c2c94](https://github.com/dasch-swiss/sipi/commit/83c2c949fc9dc0c97fbd777f77a11adf38eac883))
+
 ## [3.13.0](https://github.com/dasch-swiss/sipi/compare/v3.12.3...v3.13.0) (2024-08-07)
 
 
