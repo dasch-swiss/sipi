@@ -7,14 +7,14 @@
  * \brief Implements an IIIF server with many features.
  *
  */
-#include <syslog.h>
+#include <csignal>
 #include <dirent.h>
 #include <execinfo.h>
 #include <iostream>
-#include <csignal>
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
+#include <syslog.h>
 
 #include <thread>
 #include <unistd.h>
@@ -862,6 +862,7 @@ int main(int argc, char *argv[])
       }
     } catch (Sipi::SipiImageError &err) {
       std::cerr << err << std::endl;
+      exit(1);
     }
 
     //

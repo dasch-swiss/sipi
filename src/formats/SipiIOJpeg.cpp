@@ -742,6 +742,7 @@ bool SipiIOJpeg::read(SipiImage *img,
   img->pixels = new byte[img->ny * sll];
 
   try {
+    cinfo.err->msg_code = 0;
     linbuf = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, sll, 1);
     for (size_t i = 0; i < img->ny; i++) {
       jpeg_read_scanlines(&cinfo, linbuf, 1);
@@ -752,6 +753,14 @@ bool SipiIOJpeg::read(SipiImage *img,
     close(infile);
     throw SipiImageError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
   }
+
+  if (cinfo.err->msg_code == JWRN_HIT_MARKER) {
+    jpeg_destroy_decompress(&cinfo);
+    close(infile);
+    throw SipiImageError(
+      "Error reading JPEG file: corrupt JPEG data reported by libjpeg, code " + std::to_string(cinfo.err->msg_code));
+  }
+
   try {
     jpeg_finish_decompress(&cinfo);
   } catch (JpegError &jpgerr) {
