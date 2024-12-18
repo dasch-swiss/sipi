@@ -7,14 +7,14 @@
  * \brief Implements an IIIF server with many features.
  *
  */
-#include <syslog.h>
+#include <csignal>
 #include <dirent.h>
 #include <execinfo.h>
 #include <iostream>
-#include <csignal>
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
+#include <syslog.h>
 
 #include <thread>
 #include <unistd.h>
@@ -855,7 +855,7 @@ int main(int argc, char *argv[])
     try {
       img.readOriginal(optInFile, region, size,
         shttps::HashType::sha256);// convert to bps=8 in case of JPG output
-      // img.read(optInFile); //convert to bps=8 in case of JPG output
+      // img.read(optInFile); //convert to bps=8 in case of JPG  output
       if (format == "jpg") {
         img.to8bps();
         img.convertToIcc(Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_sRGB), 8);
