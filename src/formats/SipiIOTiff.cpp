@@ -333,6 +333,11 @@ unsigned char *read_watermark(const std::string &wmfile, int &nx, int &ny, int &
 
   TIFF_GET_FIELD(tif, TIFFTAG_SAMPLESPERPIXEL, &spp, 1);
 
+  if (spp != 1) {
+    TIFFClose(tif);
+    throw Sipi::SipiImageError("ERROR in read_watermark: ssp ≠ 1: " + wmfile);
+  }
+
   TIFF_GET_FIELD(tif, TIFFTAG_BITSPERSAMPLE, &bps, 1);
 
   if (bps != 8) {
@@ -729,7 +734,7 @@ bool SipiIOTiff::read(SipiImage *img,
 
     if ((region == nullptr) || (region->getType() == SipiRegion::FULL)) {
       if (planar == PLANARCONFIG_CONTIG) {
-        uint64 i;
+        uint32 i;
         auto *dataptr = new uint8[img->ny * sll];
 
         for (i = 0; i < img->ny; i++) {

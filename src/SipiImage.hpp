@@ -547,18 +547,12 @@ public:
   bool toBitonal();
 
   /*!
-   * Conclude similarity of two SipiImages, used in tests. Only tested with small differences.
-   *
-   * \returns Returns similarity index, returns in [0..1]
-   */
-  std::optional<double> compare(const SipiImage &rhs) const;
-
-  /*!
    * Add a watermark to a file...
    *
    * \param[in] wmfilename Path to watermarkfile (which must be a TIFF file at the moment)
    */
   void add_watermark(const std::string &wmfilename);
+
 
   /*!
    * Calculates the difference between 2 images.

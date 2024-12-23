@@ -657,13 +657,20 @@ static void serve_info_json_file(Connection &conn_obj,
     json_object_set_new(root, "@context", json_string("http://sipi.io/api/file/3/context.json"));
   }
 
-  std::string proto = conn_obj.secure() ? std::string("https://") : std::string("http://");
   std::string host = conn_obj.header("host");
   std::string id;
   if (params[iiif_prefix] == "") {
-    id = proto + host + "/" + params[iiif_identifier];
+    if (conn_obj.secure()) {
+      id = std::string("https://") + host + "/" + params[iiif_identifier];
+    } else {
+      id = std::string("http://") + host + "/" + params[iiif_identifier];
+    }
   } else {
-    id = proto + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier];
+    if (conn_obj.secure()) {
+      id = std::string("https://") + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier];
+    } else {
+      id = std::string("http://") + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier];
+    }
   }
   json_object_set_new(root, "id", json_string(id.c_str()));
 
@@ -920,14 +927,20 @@ static void serve_knora_json_file(Connection &conn_obj,
   json_t *root = json_object();
   json_object_set_new(root, "@context", json_string("http://sipi.io/api/file/3/context.json"));
 
-  std::string proto = conn_obj.secure() ? std::string("https://") : std::string("http://");
   std::string host = conn_obj.header("host");
   std::string id;
-
   if (params[iiif_prefix] == "") {
-    id = proto + host + "/" + params[iiif_identifier];
+    if (conn_obj.secure()) {
+      id = std::string("https://") + host + "/" + params[iiif_identifier];
+    } else {
+      id = std::string("http://") + host + "/" + params[iiif_identifier];
+    }
   } else {
-    id = proto + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier];
+    if (conn_obj.secure()) {
+      id = std::string("https://") + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier];
+    } else {
+      id = std::string("http://") + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier];
+    }
   }
   json_object_set_new(root, "id", json_string(id.c_str()));
 
@@ -1191,7 +1204,6 @@ static void serve_iiif(Connection &conn_obj,
   const std::string &uri,
   std::vector<std::string> params)
 {
-  auto not_head_request = conn_obj.method() != Connection::HEAD;
   //
   // getting the identifier (which in case of a PDF or multipage TIFF my contain a page id (identifier@pagenum)
   //
@@ -1388,7 +1400,7 @@ static void serve_iiif(Connection &conn_obj,
     }
     }
     try {
-      if (not_head_request) conn_obj.sendFile(infile);
+      conn_obj.sendFile(infile);
     } catch (shttps::InputFailure iofail) {
       syslog(LOG_WARNING, "Browser unexpectedly closed connection");
     } catch (Sipi::SipiError &err) {
@@ -1431,7 +1443,7 @@ static void serve_iiif(Connection &conn_obj,
 
       try {
         //!> send the file from cache
-        if (not_head_request) conn_obj.sendFile(cachefile);
+        conn_obj.sendFile(cachefile);
         //!> from now on the cache file can be deleted again
       } catch (shttps::InputFailure err) {
         // -1 was thrown
@@ -1531,7 +1543,7 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.header("Content-Type", "image/jpeg");// set the header (mimetype)
       conn_obj.setChunkedTransfer();
       Sipi::SipiCompressionParams qp = { { JPEG_QUALITY, std::to_string(server->jpeg_quality()) } };
-      if (not_head_request) img.write("jpg", "HTTP", &qp);
+      img.write("jpg", "HTTP", &qp);
       break;
     }
     case SipiQualityFormat::JP2: {
@@ -1539,7 +1551,7 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.header("Link", canonical_header);
       conn_obj.header("Content-Type", "image/jp2");// set the header (mimetype)
       conn_obj.setChunkedTransfer();
-      if (not_head_request) img.write("jpx", "HTTP");
+      img.write("jpx", "HTTP");
       break;
     }
     case SipiQualityFormat::TIF: {
@@ -1548,7 +1560,7 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.header("Content-Type", "image/tiff");// set the header (mimetype)
       // no chunked transfer needed...
 
-      if (not_head_request) img.write("tif", "HTTP");
+      img.write("tif", "HTTP");
       break;
     }
     case SipiQualityFormat::PNG: {
@@ -1557,7 +1569,7 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.header("Content-Type", "image/png");// set the header (mimetype)
       conn_obj.setChunkedTransfer();
 
-      if (not_head_request) img.write("png", "HTTP");
+      img.write("png", "HTTP");
       break;
     }
     default: {
@@ -1702,7 +1714,6 @@ void SipiHttpServer::run()
 
   add_route(Connection::GET, "/favicon.ico", favicon_handler);
   add_route(Connection::GET, "/", iiif_handler);
-  add_route(Connection::HEAD, "/", iiif_handler);
 
   user_data(this);
 
