@@ -8,7 +8,7 @@ set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
 ExternalProject_Add(project_bzip2
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        URL https://sourceforge.net/projects/bzip2/files/latest/download
+        URL https://gitlab.com/bzip2/bzip2/-/archive/bzip2-1.0.8/bzip2-bzip2-1.0.8.tar.bz2
         ${timestamp_policy}
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/bzip2
