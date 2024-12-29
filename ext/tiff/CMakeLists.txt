@@ -5,7 +5,7 @@ include(ExternalProject)
 
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
-set(LibTiffVersion "4.6.0")
+set(LibTiffVersion "4.7.0")
 
 ExternalProject_Add(project_tiff
         DEPENDS project_jpeg
