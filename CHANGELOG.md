@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.14.1](https://github.com/dasch-swiss/sipi/compare/v3.14.0...v3.14.1) (2024-12-29)
+
+
+### Bug Fixes
+
+* Fix broken links and disable libwebp building its CLI tool ([#462](https://github.com/dasch-swiss/sipi/issues/462)) ([de9e393](https://github.com/dasch-swiss/sipi/commit/de9e393fe5e0b335751bd6166fefb5727723c675))
+
 ## [3.14.0](https://github.com/dasch-swiss/sipi/compare/v3.13.0...v3.14.0) (2024-10-08)
 
 
