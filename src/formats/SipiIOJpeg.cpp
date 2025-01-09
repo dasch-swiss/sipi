@@ -757,8 +757,9 @@ bool SipiIOJpeg::read(SipiImage *img,
   if (cinfo.err->msg_code == JWRN_HIT_MARKER) {
     jpeg_destroy_decompress(&cinfo);
     close(infile);
-    throw SipiImageError(
-      "Error reading JPEG file: corrupt JPEG data reported by libjpeg, code " + std::to_string(cinfo.err->msg_code));
+    std::string error =
+      "Error reading JPEG file: corrupt JPEG data reported by libjpeg, code " + std::to_string(cinfo.err->msg_code);
+    throw SipiImageError(error).setFatal(true);
   }
 
   try {

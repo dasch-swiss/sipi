@@ -387,5 +387,10 @@ TEST(SipiImage, JpegCorruptWarn)
   Sipi::SipiIOTiff::initLibrary();
   Sipi::SipiImage img;
 
-  EXPECT_THROW(img.read(jpegCorrupt), Sipi::SipiImageError);
+  EXPECT_THROW(
+    try { img.read(jpegCorrupt); } catch (Sipi::SipiImageError const &ex) {
+      EXPECT_TRUE(ex.fatal == true);
+      throw;
+    },
+    Sipi::SipiImageError);
 }

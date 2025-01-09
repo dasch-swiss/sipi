@@ -19,6 +19,13 @@ class SipiImageError final : public std::exception
 {
 
 public:
+  bool fatal = false;
+  SipiImageError &setFatal(bool fatal_)
+  {
+    fatal = fatal_;
+    return *this;
+  }
+
   /*!
    * Constructor
    * \param[in] errnum_p if a unix system call is the reason for throwing this exception

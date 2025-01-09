@@ -862,7 +862,7 @@ int main(int argc, char *argv[])
       }
     } catch (Sipi::SipiImageError &err) {
       std::cerr << err << std::endl;
-      exit(1);
+      if (err.fatal == true) { exit(1); }
     }
 
     //
