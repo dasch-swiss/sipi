@@ -49,6 +49,7 @@ SipiImage::SipiImage()
   exif = nullptr;
   skip_metadata = SkipMetadata::SKIP_NONE;
   conobj = nullptr;
+  ensure_exif();
 };
 //============================================================================
 
@@ -137,7 +138,7 @@ SipiImage::SipiImage(size_t nx_p, size_t ny_p, size_t nc_p, size_t bps_p, Photom
   xmp = nullptr;
   icc = nullptr;
   iptc = nullptr;
-  exif = nullptr;
+  ensure_exif();
   skip_metadata = SkipMetadata::SKIP_NONE;
   conobj = nullptr;
 }
