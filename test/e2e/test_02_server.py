@@ -98,6 +98,11 @@ class TestServer:
         manager.expect_status_code(
             "/knora/DenyLeaves.jpg/full/max/0/default.jpg", 401)
 
+    def test_not_found(self, manager):
+        """return 401 Unauthorized if the user does not have permission to see the image"""
+        manager.expect_status_code(
+            "/file-should-be-missing-123", 404)
+
     def test_iiif_url_parsing(self, manager):
         """Return 400 for invalid IIIF URL's"""
         manager.expect_status_code("/unit//lena512.jp2", 400)

@@ -637,7 +637,7 @@ static void serve_info_json_file(Connection &conn_obj,
   try {
     access = check_file_access(conn_obj, serv, luaserver, params, prefix_as_path);
   } catch (SipiError &err) {
-    send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
+    send_error(conn_obj, Connection::NOT_FOUND, err);
     return;
   }
 
