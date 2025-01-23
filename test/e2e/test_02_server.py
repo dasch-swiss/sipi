@@ -99,7 +99,7 @@ class TestServer:
             "/knora/DenyLeaves.jpg/full/max/0/default.jpg", 401)
 
     def test_not_found(self, manager):
-        """return 401 Unauthorized if the user does not have permission to see the image"""
+        """return 404 Not Found if the file is missing. Sipi will try and fail to find this file in the image directory."""
         manager.expect_status_code(
             "/file-should-be-missing-123", 404)
 
