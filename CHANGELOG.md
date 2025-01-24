@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.15.0](https://github.com/dasch-swiss/sipi/compare/v3.14.0...v3.15.0) (2025-01-24)
+
+
+### Features
+
+* Return 404 for missing files (INFRA-735) ([#465](https://github.com/dasch-swiss/sipi/issues/465)) ([f54356f](https://github.com/dasch-swiss/sipi/commit/f54356f443f8bbb5dcb061384bd1aebbac4e85da))
+
+
+### Bug Fixes
+
+* Fix broken links and disable libwebp building its CLI tool ([#462](https://github.com/dasch-swiss/sipi/issues/462)) ([de9e393](https://github.com/dasch-swiss/sipi/commit/de9e393fe5e0b335751bd6166fefb5727723c675))
+* Prevent exif nullptr (DEV-4521) ([#464](https://github.com/dasch-swiss/sipi/issues/464)) ([4231f00](https://github.com/dasch-swiss/sipi/commit/4231f00e839a7209f27be4548cd2ab16d387b25b))
+
 ## [3.14.0](https://github.com/dasch-swiss/sipi/compare/v3.13.0...v3.14.0) (2024-10-08)
 
 
