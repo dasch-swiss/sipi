@@ -98,6 +98,11 @@ class TestServer:
         manager.expect_status_code(
             "/knora/DenyLeaves.jpg/full/max/0/default.jpg", 401)
 
+    def test_not_found(self, manager):
+        """return 404 Not Found if the file is missing. Sipi will try and fail to find this file in the image directory."""
+        manager.expect_status_code(
+            "/file-should-be-missing-123", 404)
+
     def test_iiif_url_parsing(self, manager):
         """Return 400 for invalid IIIF URL's"""
         manager.expect_status_code("/unit//lena512.jp2", 400)
