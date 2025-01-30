@@ -425,6 +425,400 @@ void SipiIOTiff::initLibrary()
 }
 //============================================================================
 
+template<typename T>
+void one2eight(const uint8_t *in, T *out, uint32_t len, uint8_t black, uint8_t white) {
+    static uint8_t mask[8] = {0b10000000,
+                              0b01000000,
+                              0b00100000,
+                              0b00010000,
+                              0b00001000,
+                              0b00000100,
+                              0b00000010,
+                              0b00000001};
+    uint32_t ii = 0;
+    for (uint32_t i = 0; i < len; i += 8) {
+        for (uint32_t k = 0; (k < 8) && ((k + i) < len); ++k) {
+            out[i + k] = mask[k] & in[ii] ? white : black;
+        }
+        ++ii;
+    }
+}
+
+template<typename T>
+void four2eight(const uint8_t *in, T *out, uint32_t len, bool is_palette = false) {
+    static uint8_t mask[2] = { 0b11110000, 0b00001111 };
+
+    if (is_palette) {
+        uint32_t ii = 0;
+        for (uint32_t i = 0; i < len; i += 2, ++ii) {
+            out[i] = (mask[0] & in[ii]) >> 4;
+            if ((i + 1) < len) {
+                out[i + 1] = mask[1] & in[ii];
+            }
+        }
+    }
+    else {
+        uint32_t ii = 0;
+        for (uint32_t i = 0; i < len; i += 2, ++ii) {
+            out[i] = mask[0] & in[ii];
+            if ((i + 1) < len) {
+                out[i + 1] = (mask[1] & in[ii]) << 4;
+            }
+        }
+    }
+}
+
+template<typename T>
+void twelve2sixteen(const uint8_t *in, T *out, uint32_t len, bool is_palette = false) {
+    static uint8_t mask[2] = { 0b11110000, 0b00001111 };
+    if (is_palette) {
+        uint32_t ii = 0;
+        for (uint32_t i = 0; i < len; i += 2, ii += 3) {
+            out[i] = (in[ii] << 4) | ((in[ii + 1] & mask[0]) >> 4);
+            if ((i + 1) < len) {
+                out[i + 1] = ((in[ii + 1] & mask[1]) << 8) | in[ii + 2];
+            }
+        }
+    }
+    else {
+        uint32_t ii = 0;
+        for (uint32_t i = 0; i < len; i += 2, ii += 3) {
+            out[i] = (in[ii] << 8) | (in[ii + 1] & mask[0]);
+            if ((i + 1) < len) {
+                out[i + 1] = ((in[ii + 1] & mask[1]) << 12) | (in[ii + 2] << 4);
+            }
+        }
+    }
+}
+
+template<typename T>
+std::unique_ptr<T> separateToContig(std::unique_ptr<T> &&inbuf, uint32_t nx, uint32_t ny, uint32_t nc, uint32_t sll) {
+    auto tmpptr = std::make_unique<T>(nc * ny * nx);
+    for (uint32_t c = 0; c < nc; ++c) {
+        for (uint32_t y = 0; y < ny; ++y) {
+            for (uint32_t x = 0; x < nx; ++x) {
+                tmpptr[nc * (y * nx + x) + c] = inbuf.get()[c * ny * sll + y * nx + x];
+            }
+        }
+    }
+    return tmpptr;
+}
+
+template<typename T>
+std::vector<T> separateToContig(std::vector<T> &&inbuf, uint32_t nx, uint32_t ny, uint32_t nc, uint32_t sll) {
+    auto tmpptr = std::vector<T>(nc * ny * nx);
+    for (uint32_t c = 0; c < nc; ++c) {
+        for (uint32_t y = 0; y < ny; ++y) {
+            for (uint32_t x = 0; x < nx; ++x) {
+                tmpptr[nc * (y * nx + x) + c] = inbuf[c * ny * sll + y * nx + x];
+            }
+        }
+    }
+    return tmpptr;
+}
+
+template<typename T>
+static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y, uint32_t roi_w, uint32_t roi_h)
+{
+  uint16_t planar;
+  TIFF_GET_FIELD(tif, TIFFTAG_PLANARCONFIG, &planar, PLANARCONFIG_CONTIG)
+  uint16_t compression;
+  TIFF_GET_FIELD(tif, TIFFTAG_COMPRESSION, &compression, COMPRESSION_NONE)
+  auto sll = static_cast<uint32_t>(TIFFScanlineSize(tif));
+
+  uint32_t nx, ny, nc, bps;
+  TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &nx);
+  TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &ny);
+  uint16_t stmp;
+  TIFF_GET_FIELD(tif, TIFFTAG_SAMPLESPERPIXEL, &stmp, 1)
+  nc = static_cast<uint32_t>(stmp);
+
+  TIFF_GET_FIELD(tif, TIFFTAG_BITSPERSAMPLE, &stmp, 8)
+  bps = static_cast<uint32_t>(stmp);
+
+  if (1 != TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &stmp)) {
+    img->photo = PhotometricInterpretation::MINISBLACK;
+  } else {
+    img->photo = static_cast<PhotometricInterpretation>(stmp);
+  }
+
+  uint8_t black, white;
+  if (photo == PhotometricInterpretation::MINISBLACK) {
+    black = 0x00;// 0b0 -> 0x00
+    white = 0xff;// 0b1 -> 0xff
+  } else if (photo == PhotometricInterpretation::MINISWHITE) {
+    black = 0xff;// 0b0 -> 0xff
+    white = 0x00;// 0b1 -> 0x00
+  }
+
+  uint32_t psiz;
+  if (bps <= 8) {// 1, 4, 8 bit -> 8 bit
+    psiz = sizeof(uint8_t);
+  } else {// 12, 16 bit -> 16 bit
+    psiz = sizeof(uint16_t);
+  }
+
+  std::vector<T> inbuf(roi_h * roi_w * nc);
+  auto scanline = std::make_unique<uint8_t[]>(sll);
+  std::unique_ptr<T[]> line;
+  if (compression == COMPRESSION_NONE) {
+    if (planar == PLANARCONFIG_CONTIG) {// RGBRGBRGBRGB...
+      line = std::make_unique<T[]>(nx * nc);
+      for (uint32_t i = roi_y; i < roi_h; ++i) {
+        if (TIFFReadScanline(tif, scanline.get(), i, 0) != 1) {
+          TIFFClose(tif);
+          throw Sipi::SipiImageError("TIFFReadScanline failed on scanline {}" + std::to_string(i));
+        }
+        switch (bps) {
+        case 1:
+          one2eight<T>(scanline.get(), line.get(), nc * nx, black, white);
+          std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x, nc * roi_w);
+          break;
+        case 4:
+          four2eight<T>(scanline.get(), line.get(), nc * nx, photo == PhotometricInterpretation::PALETTE);
+          std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x, nc * roi_w);
+          break;
+        case 8:
+          std::memcpy(inbuf.data() + nc * i * roi_w, scanline.get() + nc * roi_x, nc * roi_w);
+          break;
+        case 12:
+          twelve2sixteen<T>(scanline.get(), line.get(), nc * nx, photo == PhotometricInterpretation::PALETTE);
+          std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x, nc * roi_w * psiz);
+          break;
+        case 16:
+          std::memcpy(inbuf.data() + nc * i * roi_w, scanline.get() + nc * roi_x * psiz, nc * roi_w * psiz);
+          break;
+        default:;
+        }
+      }
+    } else if (planar == PLANARCONFIG_SEPARATE) {// RRRRR…RRR GGGGG…GGGG BBBBB…BBB
+      line = std::make_unique<T[]>(nx);
+      for (uint32_t c = 0; c < nc; ++c) {
+        for (uint32_t i = roi_y; i < roi_h; ++i) {
+          if (TIFFReadScanline(tif, scanline.get(), i, c) == -1) {
+            TIFFClose(tif);
+            throw Sipi::SipiImageError("TIFFReadScanline failed on scanline {}" + std::to_string(i));
+          }
+          switch (bps) {
+          case 1:
+            one2eight<T>(scanline.get(), line.get(), nx, black, white);
+            std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x, roi_w);
+            break;
+          case 4:
+            four2eight<T>(scanline.get(), line.get(), nx, photo == PhotometricInterpretation::PALETTE);
+            std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x, roi_w);
+            break;
+          case 8:
+            std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, scanline.get() + roi_x, roi_w);
+            break;
+          case 12:
+            twelve2sixteen<T>(scanline.get(), line.get(), nx, photo == PhotometricInterpretation::PALETTE);
+            std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x, roi_w * psiz);
+            break;
+          case 16:
+            std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, scanline.get() + roi_x * psiz, roi_w * psiz);
+            break;
+          default:;
+          }
+        }
+      }
+      inbuf = separateToContig<T>(std::move(inbuf), roi_w, roi_h, nc, roi_w);
+    }
+  } else {// we do have compression....
+    if (planar == PLANARCONFIG_CONTIG) {// RGBRGBRGBRGB...
+      line = std::make_unique<T[]>(nx * nc);
+      int res;
+      for (uint32_t i = 0; i < ny; ++i) {
+        if (TIFFReadScanline(tif, scanline.get(), i, 0) != 1) {
+          TIFFClose(tif);
+          throw Sipi::SipiImageError(fmt::format("TIFFReadScanline failed on scanline {}", i));
+        }
+        if ((i >= roi_y) && (i < (roi_y + roi_h))) {
+          switch (bps) {
+          case 1:
+            one2eight<T>(scanline.get(), line.get(), nc * nx, black, white);
+            std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x, nc * roi_w);
+            break;
+          case 4:
+            four2eight<T>(scanline.get(), line.get(), nc * nx, photo == PhotometricInterpretation::PALETTE);
+            std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x, nc * roi_w);
+            break;
+          case 8:
+            std::memcpy(inbuf.data() + nc * (i - roi_y) * roi_w, scanline.get() + nc * roi_x, nc * roi_w);
+            break;
+          case 12:
+            twelve2sixteen<T>(scanline.get(), line.get(), nc * nx, photo == PhotometricInterpretation::PALETTE);
+            std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x * psiz, nc * roi_w * psiz);
+            break;
+          case 16:
+            std::memcpy(inbuf.data() + nc * i * roi_w, scanline.get() + nc * roi_x * psiz, nc * roi_w * psiz);
+            break;
+          default:;
+          }
+        }
+      }
+    } else if (planar == PLANARCONFIG_SEPARATE) {// RRRRR…RRR GGGGG…GGGG BBBBB…BBB
+      line = std::make_unique<T[]>(nx);
+      for (uint32_t c = 0; c < nc; ++c) {
+        for (uint32_t i = 0; i < ny; ++i) {
+          if (TIFFReadScanline(tif, scanline.get(), i, c) == -1) {
+            TIFFClose(tif);
+            /* throw Sipi::SipiImageError(__FILE__, __LINE__, */
+            /*                       fmt::format("TIFFReadScanline failed on scanline {}", i)); */
+          }
+          if ((i >= roi_y) && (i < (roi_y + roi_h))) {
+            switch (bps) {
+            case 1:
+              one2eight<T>(scanline.get(), line.get(), nx, black, white);
+              std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x, roi_w);
+              break;
+            case 4:
+              four2eight<T>(scanline.get(), line.get(), nx, photo == PhotometricInterpretation::PALETTE);
+              std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x, roi_w);
+              break;
+            case 8:
+              std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, scanline.get() + roi_x, roi_w);
+              break;
+            case 12:
+              twelve2sixteen<T>(scanline.get(), line.get(), nx, photo == PhotometricInterpretation::PALETTE);
+              std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x * psiz, roi_w * psiz);
+              break;
+            case 16:
+              std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, scanline.get() + roi_x * psiz, roi_w * psiz);
+              break;
+            default:;
+            }
+          }
+        }
+      }
+      inbuf = separateToContig<T>(std::move(inbuf), roi_w, roi_h, nc, roi_w);
+    }
+  }
+  return inbuf;
+}
+
+static const float epsilon = 1.0e-4;
+
+size_t epsilon_ceil(float a)
+{
+  if (fabs(floor(a) - a) < epsilon) { return static_cast<size_t>(floorf(a)); }
+  return static_cast<size_t>(ceilf(a));
+}
+
+size_t epsilon_ceil_division(float a, float b)
+{
+  //
+  // epsilontic:
+  // if a/b is x.00002, the result will be floorf(x), otherwise ceilf(x)
+  //
+  if (fabs(floorf(a / b) - (a / b)) < epsilon) { return static_cast<size_t>(floorf(a / b)); }
+  return static_cast<size_t>(ceilf(a / b));
+}
+
+size_t epsilon_floor(float a)
+{
+  if (fabs(ceilf(a) - a) < epsilon) { return static_cast<size_t>(ceilf(a)); }
+  return static_cast<size_t>(floorf(a));
+}
+
+size_t epsilon_floor_division(float a, float b)
+{
+  //
+  // epsilontic:
+  // if a/b is x.9998, the result will be ceilf(x), otherwise floor(x)
+  //
+  if (fabs(ceilf(a / b) - (a / b)) < epsilon) { return static_cast<size_t>(ceilf(a / b)); }
+  return static_cast<size_t>(floorf(a / b));
+}
+
+template<typename T>
+static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, uint32_t roi_w, uint32_t roi_h)
+{
+  uint16_t planar;
+  TIFF_GET_FIELD(tif, TIFFTAG_PLANARCONFIG, &planar, PLANARCONFIG_CONTIG)
+  uint32_t tile_width;
+  uint32_t tile_length;
+  TIFF_GET_FIELD(tif, TIFFTAG_TILEWIDTH, &tile_width, 0)
+  TIFF_GET_FIELD(tif, TIFFTAG_TILELENGTH, &tile_length, 0)
+  if ((tile_width == 0) || (tile_length == 0)) {
+    throw Sipi::SipiImageError(__FILE__, __LINE__, "Expected tiled image, but no tile dimension given!");
+  }
+
+  uint32_t nx, ny, nc, bps;
+  TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &nx);
+  TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &ny);
+  uint32_t ntiles_x = epsilon_ceil_division(static_cast<float>(nx), static_cast<float>(tile_width));
+  uint32_t ntiles_y = epsilon_ceil_division(static_cast<float>(ny), static_cast<float>(tile_length));
+  uint32_t ntiles = TIFFNumberOfTiles(tif);
+  if (ntiles != (ntiles_x * ntiles_y)) {
+    throw Sipi::SipiImageError(__FILE__, __LINE__, "Number of tiles no consistent!");
+  }
+  uint32_t starttile_x = epsilon_floor_division(static_cast<float>(roi_x), static_cast<float>(tile_width));
+  uint32_t starttile_y = epsilon_floor_division(static_cast<float>(roi_y), static_cast<float>(tile_length));
+  uint32_t endtile_x = epsilon_ceil_division(static_cast<float>(roi_x + roi_w), static_cast<float>(tile_width));
+  uint32_t endtile_y = epsilon_ceil_division(static_cast<float>(roi_y + roi_h), static_cast<float>(tile_length));
+
+  uint16_t stmp;
+  TIFF_GET_FIELD(tif, TIFFTAG_SAMPLESPERPIXEL, &stmp, 1)
+  nc = static_cast<uint32_t>(stmp);
+
+  TIFF_GET_FIELD(tif, TIFFTAG_BITSPERSAMPLE, &stmp, 8)
+  bps = static_cast<uint32_t>(stmp);
+
+  if ((bps != 8) && (bps != 16)) {
+    throw Sipi::SipiImageError(
+      __FILE__, __LINE__, "{} bits per samples not supported for tiled tiffs!" + std::to_string(bps));
+  }
+
+  // nx = 30, tile_width = 8, roi_x = 5, roi_w = 20
+  // 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29
+  // 0 1 2 3 4 5 6 7|0 1  2  3  4  5  6  7| 0  1  2  3  4  5  6  7| 0  1  2  3  4  5  6  7|
+  // * * * * * 0 1 2 3 4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19  *  *  *  *  *  *  *
+  uint32_t tile_size = TIFFTileSize(tif);
+  auto tilebuf = std::make_unique<T[]>(bps == 8 ? tile_size : (tile_size >> 1));
+  auto inbuf = std::vector<T>(roi_w * roi_h * nc);
+  for (uint32_t ty = starttile_y; ty < endtile_y; ++ty) {
+    for (uint32_t tx = starttile_x; tx < endtile_x; ++tx) {
+      if (TIFFReadTile(tif, tilebuf.get(), tx * tile_width, ty * tile_length, 0, 0) < 0) {
+        TIFFClose(tif);
+        throw Sipi::SipiImageError(
+          __FILE__, __LINE__, "TIFFReadTile failed on tile ({}, {})" + std::string(tx) + std::string(ty));
+      }
+      if (planar == PLANARCONFIG_SEPARATE) {
+        tilebuf = separateToContig(std::move(tilebuf), tile_width, tile_length, nc, tile_width);
+      }
+      uint32_t start_in_x = (tx == starttile_x) ? (roi_x % tile_width) : 0;
+      uint32_t start_in_y = (ty == starttile_y) ? (roi_y % tile_length) : 0;
+      uint32_t ex;
+      if (tx == (endtile_x - 1)) {
+        ex = (roi_x + roi_w) % tile_width;
+        if (ex == 0) ex = tile_width;
+      } else {
+        ex = tile_width;
+      }
+      uint32_t len_x = ex - start_in_x;
+
+      uint32_t ey;
+      if (ty == (endtile_y - 1)) {
+        ey = (roi_y + roi_h) % tile_length;
+        if (ey == 0) ey = tile_length;
+      } else {
+        ey = tile_length;
+      }
+      uint32_t len_y = ey - start_in_y;
+
+      uint32_t start_out_x = (tx == starttile_x) ? 0 : (tx - starttile_x) * tile_width - roi_x;
+      uint32_t start_out_y = (ty == starttile_y) ? 0 : (ty - starttile_y) * tile_length - roi_y;
+      for (uint32_t y = start_in_y; y < (start_in_y + len_y); ++y) {
+        std::memcpy(inbuf.data() + nc * ((start_out_y + (y - start_in_y)) * roi_w + start_out_x),
+          tilebuf.get() + nc * (y * tile_width + start_in_x),
+          nc * len_x * sizeof(T));
+      }
+    }
+  }
+  return inbuf;
+}
+
 /**
  * TODO: SipiImage always assumes the image data to be in big endian format.
  * TIFF files can be in little endian format. Every TIFF file begins with a two-byte indicator of byte order:
@@ -758,51 +1152,9 @@ bool SipiIOTiff::read(SipiImage *img,
     }
     }
 
-    auto *dataptr = new uint8[sll];
     auto *inbuf = new uint8[ps * roi_w * roi_h * img->nc];
-
-    if (planar == PLANARCONFIG_CONTIG) {// RGBRGBRGBRGBRGBRGBRGBRGB
-      for (uint32 i = 0; i < roi_h; i++) {
-        if (TIFFReadScanline(tif, dataptr, roi_y + i, 0) == -1) {
-          delete[] dataptr;
-          delete[] inbuf;
-          TIFFClose(tif);
-          std::string msg = "TIFFReadScanline failed on scanline " + std::to_string(i) + " in file " + filepath;
-          throw Sipi::SipiImageError(msg);
-        }
-
-        memcpy(inbuf + ps * i * roi_w * img->nc, dataptr + ps * roi_x * img->nc, ps * roi_w * img->nc);
-      }
-
-      img->nx = roi_w;
-      img->ny = roi_h;
-      img->pixels = inbuf;
-    } else if (planar == PLANARCONFIG_SEPARATE) {// RRRRR…RRR GGGGG…GGGG BBBBB…BBB
-      for (uint32 j = 0; j < img->nc; j++) {
-        for (uint32 i = 0; i < roi_h; i++) {
-          if (TIFFReadScanline(tif, dataptr, roi_y + i, j) == -1) {
-            delete[] dataptr;
-            delete[] inbuf;
-            TIFFClose(tif);
-            std::string msg = "TIFFReadScanline failed on scanline " + std::to_string(i) + " in file " + filepath;
-            throw Sipi::SipiImageError(msg);
-          }
-
-          memcpy(inbuf + ps * roi_w * (j * roi_h + i), dataptr + ps * roi_x, ps * roi_w);
-        }
-      }
-
-      img->nx = roi_w;
-      img->ny = roi_h;
-      img->pixels = inbuf;
-
-      //
-      // rearrange the data to RGBRGBRGB…RGB
-      //
-      separateToContig(img, roi_w * ps);// convert to RGBRGBRGB...
-    }
-
-    delete[] dataptr;
+    auto pixdata = read_standard_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
+    memcpy(inbuf, pixdata.data(), pixdata.size() * sizeof(uint8_t));
     TIFFClose(tif);
 
     if (img->photo == PhotometricInterpretation::PALETTE) {
@@ -1548,7 +1900,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
   }
 
   if (count > 0) {
-    uint64 exif_dir_offset = 0L;
+    uint64_t exif_dir_offset = 0L;
     TIFFWriteCustomDirectory(tif, &exif_dir_offset);
     TIFFSetDirectory(tif, 0);
     TIFFSetField(tif, TIFFTAG_EXIFIFD, exif_dir_offset);
@@ -1556,308 +1908,6 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
   // TIFFCheckpointDirectory(tif);
 }
 //============================================================================
-
-
-template<typename T>
-static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y, uint32_t roi_w, uint32_t roi_h)
-{
-  uint16_t planar;
-  TIFF_GET_FIELD(tif, TIFFTAG_PLANARCONFIG, &planar, PLANARCONFIG_CONTIG)
-  uint16_t compression;
-  TIFF_GET_FIELD(tif, TIFFTAG_COMPRESSION, &compression, COMPRESSION_NONE)
-  auto sll = static_cast<uint32_t>(TIFFScanlineSize(tif));
-
-  uint32_t nx, ny, nc, bps;
-  TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &nx);
-  TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &ny);
-  uint16_t stmp;
-  TIFF_GET_FIELD(tif, TIFFTAG_SAMPLESPERPIXEL, &stmp, 1)
-  nc = static_cast<uint32_t>(stmp);
-
-  TIFF_GET_FIELD(tif, TIFFTAG_BITSPERSAMPLE, &stmp, 8)
-  bps = static_cast<uint32_t>(stmp);
-
-  TIFF_GET_FIELD(tif, TIFFTAG_PHOTOMETRIC, &stmp, PhotometricInterpretation::MINISBLACK)
-  auto photo = (PhotometricInterpretation)stmp;
-
-  uint8_t black, white;
-  if (photo == PhotometricInterpretation::MINISBLACK) {
-    black = 0x00;// 0b0 -> 0x00
-    white = 0xff;// 0b1 -> 0xff
-  } else if (photo == PhotometricInterpretation::MINISWHITE) {
-    black = 0xff;// 0b0 -> 0xff
-    white = 0x00;// 0b1 -> 0x00
-  }
-
-  uint32_t psiz;
-  if (bps <= 8) {// 1, 4, 8 bit -> 8 bit
-    psiz = sizeof(uint8_t);
-  } else {// 12, 16 bit -> 16 bit
-    psiz = sizeof(uint16_t);
-  }
-
-  std::vector<T> inbuf(roi_h * roi_w * nc);
-  auto scanline = std::make_unique<uint8_t[]>(sll);
-  std::unique_ptr<T[]> line;
-  if (compression == COMPRESSION_NONE) {
-    if (planar == PLANARCONFIG_CONTIG) {// RGBRGBRGBRGB...
-      line = std::make_unique<T[]>(nx * nc);
-      for (uint32_t i = roi_y; i < roi_h; ++i) {
-        if (TIFFReadScanline(tif, scanline.get(), i, 0) != 1) {
-          TIFFClose(tif);
-          throw Sipi::SipiImageError(__FILE__, __LINE__, "TIFFReadScanline failed on scanline {}" + std::to_string(i));
-        }
-        switch (bps) {
-        case 1:
-          one2eight<T>(scanline.get(), line.get(), nc * nx, black, white);
-          std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x, nc * roi_w);
-          break;
-        case 4:
-          four2eight<T>(scanline.get(), line.get(), nc * nx, photo == PhotometricInterpretation::PALETTE);
-          std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x, nc * roi_w);
-          break;
-        case 8:
-          std::memcpy(inbuf.data() + nc * i * roi_w, scanline.get() + nc * roi_x, nc * roi_w);
-          break;
-        case 12:
-          twelve2sixteen<T>(scanline.get(), line.get(), nc * nx, photo == PhotometricInterpretation::PALETTE);
-          std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x, nc * roi_w * psiz);
-          break;
-        case 16:
-          std::memcpy(inbuf.data() + nc * i * roi_w, scanline.get() + nc * roi_x * psiz, nc * roi_w * psiz);
-          break;
-        default:;
-        }
-      }
-    } else if (planar == PLANARCONFIG_SEPARATE) {// RRRRR…RRR GGGGG…GGGG BBBBB…BBB
-      line = std::make_unique<T[]>(nx);
-      for (uint32_t c = 0; c < nc; ++c) {
-        for (uint32_t i = roi_y; i < roi_h; ++i) {
-          if (TIFFReadScanline(tif, scanline.get(), i, c) == -1) {
-            TIFFClose(tif);
-            throw Sipi::SipiImageError(
-              __FILE__, __LINE__, "TIFFReadScanline failed on scanline {}" + std::to_string(i));
-          }
-          switch (bps) {
-          case 1:
-            one2eight<T>(scanline.get(), line.get(), nx, black, white);
-            std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x, roi_w);
-            break;
-          case 4:
-            four2eight<T>(scanline.get(), line.get(), nx, photo == PhotometricInterpretation::PALETTE);
-            std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x, roi_w);
-            break;
-          case 8:
-            std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, scanline.get() + roi_x, roi_w);
-            break;
-          case 12:
-            twelve2sixteen<T>(scanline.get(), line.get(), nx, photo == PhotometricInterpretation::PALETTE);
-            std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x, roi_w * psiz);
-            break;
-          case 16:
-            std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, scanline.get() + roi_x * psiz, roi_w * psiz);
-            break;
-          default:;
-          }
-        }
-      }
-      inbuf = separateToContig<T>(std::move(inbuf), roi_w, roi_h, nc, roi_w);
-    }
-  } else {// we do have compression....
-    if (planar == PLANARCONFIG_CONTIG) {// RGBRGBRGBRGB...
-      line = std::make_unique<T[]>(nx * nc);
-      int res;
-      for (uint32_t i = 0; i < ny; ++i) {
-        if (TIFFReadScanline(tif, scanline.get(), i, 0) != 1) {
-          TIFFClose(tif);
-          /* throw Sipi::SipiImageError(__FILE__, __LINE__, */
-          /*                       fmt::format("TIFFReadScanline failed on scanline {}", i)); */
-        }
-        if ((i >= roi_y) && (i < (roi_y + roi_h))) {
-          switch (bps) {
-          case 1:
-            one2eight<T>(scanline.get(), line.get(), nc * nx, black, white);
-            std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x, nc * roi_w);
-            break;
-          case 4:
-            four2eight<T>(scanline.get(), line.get(), nc * nx, photo == PhotometricInterpretation::PALETTE);
-            std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x, nc * roi_w);
-            break;
-          case 8:
-            std::memcpy(inbuf.data() + nc * (i - roi_y) * roi_w, scanline.get() + nc * roi_x, nc * roi_w);
-            break;
-          case 12:
-            twelve2sixteen<T>(scanline.get(), line.get(), nc * nx, photo == PhotometricInterpretation::PALETTE);
-            std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x * psiz, nc * roi_w * psiz);
-            break;
-          case 16:
-            std::memcpy(inbuf.data() + nc * i * roi_w, scanline.get() + nc * roi_x * psiz, nc * roi_w * psiz);
-            break;
-          default:;
-          }
-        }
-      }
-    } else if (planar == PLANARCONFIG_SEPARATE) {// RRRRR…RRR GGGGG…GGGG BBBBB…BBB
-      line = std::make_unique<T[]>(nx);
-      for (uint32_t c = 0; c < nc; ++c) {
-        for (uint32_t i = 0; i < ny; ++i) {
-          if (TIFFReadScanline(tif, scanline.get(), i, c) == -1) {
-            TIFFClose(tif);
-            /* throw Sipi::SipiImageError(__FILE__, __LINE__, */
-            /*                       fmt::format("TIFFReadScanline failed on scanline {}", i)); */
-          }
-          if ((i >= roi_y) && (i < (roi_y + roi_h))) {
-            switch (bps) {
-            case 1:
-              one2eight<T>(scanline.get(), line.get(), nx, black, white);
-              std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x, roi_w);
-              break;
-            case 4:
-              four2eight<T>(scanline.get(), line.get(), nx, photo == PhotometricInterpretation::PALETTE);
-              std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x, roi_w);
-              break;
-            case 8:
-              std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, scanline.get() + roi_x, roi_w);
-              break;
-            case 12:
-              twelve2sixteen<T>(scanline.get(), line.get(), nx, photo == PhotometricInterpretation::PALETTE);
-              std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x * psiz, roi_w * psiz);
-              break;
-            case 16:
-              std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, scanline.get() + roi_x * psiz, roi_w * psiz);
-              break;
-            default:;
-            }
-          }
-        }
-      }
-      inbuf = separateToContig<T>(std::move(inbuf), roi_w, roi_h, nc, roi_w);
-    }
-  }
-  return inbuf;
-}
-
-static const float epsilon = 1.0e-4;
-
-size_t epsilon_ceil(float a)
-{
-  if (fabs(floor(a) - a) < epsilon) { return static_cast<size_t>(floorf(a)); }
-  return static_cast<size_t>(ceilf(a));
-}
-
-size_t epsilon_ceil_division(float a, float b)
-{
-  //
-  // epsilontic:
-  // if a/b is x.00002, the result will be floorf(x), otherwise ceilf(x)
-  //
-  if (fabs(floorf(a / b) - (a / b)) < epsilon) { return static_cast<size_t>(floorf(a / b)); }
-  return static_cast<size_t>(ceilf(a / b));
-}
-
-size_t epsilon_floor(float a)
-{
-  if (fabs(ceilf(a) - a) < epsilon) { return static_cast<size_t>(ceilf(a)); }
-  return static_cast<size_t>(floorf(a));
-}
-
-size_t epsilon_floor_division(float a, float b)
-{
-  //
-  // epsilontic:
-  // if a/b is x.9998, the result will be ceilf(x), otherwise floor(x)
-  //
-  if (fabs(ceilf(a / b) - (a / b)) < epsilon) { return static_cast<size_t>(ceilf(a / b)); }
-  return static_cast<size_t>(floorf(a / b));
-}
-
-template<typename T>
-static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, uint32_t roi_w, uint32_t roi_h)
-{
-  uint16_t planar;
-  TIFF_GET_FIELD(tif, TIFFTAG_PLANARCONFIG, &planar, PLANARCONFIG_CONTIG)
-  uint32_t tile_width;
-  uint32_t tile_length;
-  TIFF_GET_FIELD(tif, TIFFTAG_TILEWIDTH, &tile_width, 0)
-  TIFF_GET_FIELD(tif, TIFFTAG_TILELENGTH, &tile_length, 0)
-  if ((tile_width == 0) || (tile_length == 0)) {
-    throw Sipi::SipiImageError(__FILE__, __LINE__, "Expected tiled image, but no tile dimension given!");
-  }
-
-  uint32_t nx, ny, nc, bps;
-  TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &nx);
-  TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &ny);
-  uint32_t ntiles_x = epsilon_ceil_division(static_cast<float>(nx), static_cast<float>(tile_width));
-  uint32_t ntiles_y = epsilon_ceil_division(static_cast<float>(ny), static_cast<float>(tile_length));
-  uint32_t ntiles = TIFFNumberOfTiles(tif);
-  if (ntiles != (ntiles_x * ntiles_y)) {
-    throw Sipi::SipiImageError(__FILE__, __LINE__, "Number of tiles no consistent!");
-  }
-  uint32_t starttile_x = epsilon_floor_division(static_cast<float>(roi_x), static_cast<float>(tile_width));
-  uint32_t starttile_y = epsilon_floor_division(static_cast<float>(roi_y), static_cast<float>(tile_length));
-  uint32_t endtile_x = epsilon_ceil_division(static_cast<float>(roi_x + roi_w), static_cast<float>(tile_width));
-  uint32_t endtile_y = epsilon_ceil_division(static_cast<float>(roi_y + roi_h), static_cast<float>(tile_length));
-
-  uint16_t stmp;
-  TIFF_GET_FIELD(tif, TIFFTAG_SAMPLESPERPIXEL, &stmp, 1)
-  nc = static_cast<uint32_t>(stmp);
-
-  TIFF_GET_FIELD(tif, TIFFTAG_BITSPERSAMPLE, &stmp, 8)
-  bps = static_cast<uint32_t>(stmp);
-
-  if ((bps != 8) && (bps != 16)) {
-    throw Sipi::SipiImageError(
-      __FILE__, __LINE__, "{} bits per samples not supported for tiled tiffs!" + std::to_string(bps));
-  }
-
-  // nx = 30, tile_width = 8, roi_x = 5, roi_w = 20
-  // 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29
-  // 0 1 2 3 4 5 6 7|0 1  2  3  4  5  6  7| 0  1  2  3  4  5  6  7| 0  1  2  3  4  5  6  7|
-  // * * * * * 0 1 2 3 4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19  *  *  *  *  *  *  *
-  uint32_t tile_size = TIFFTileSize(tif);
-  auto tilebuf = std::make_unique<T[]>(bps == 8 ? tile_size : (tile_size >> 1));
-  auto inbuf = std::vector<T>(roi_w * roi_h * nc);
-  for (uint32_t ty = starttile_y; ty < endtile_y; ++ty) {
-    for (uint32_t tx = starttile_x; tx < endtile_x; ++tx) {
-      if (TIFFReadTile(tif, tilebuf.get(), tx * tile_width, ty * tile_length, 0, 0) < 0) {
-        TIFFClose(tif);
-        throw Sipi::SipiImageError(
-          __FILE__, __LINE__, "TIFFReadTile failed on tile ({}, {})" + std::string(tx) + std::string(ty));
-      }
-      if (planar == PLANARCONFIG_SEPARATE) {
-        tilebuf = separateToContig(std::move(tilebuf), tile_width, tile_length, nc, tile_width);
-      }
-      uint32_t start_in_x = (tx == starttile_x) ? (roi_x % tile_width) : 0;
-      uint32_t start_in_y = (ty == starttile_y) ? (roi_y % tile_length) : 0;
-      uint32_t ex;
-      if (tx == (endtile_x - 1)) {
-        ex = (roi_x + roi_w) % tile_width;
-        if (ex == 0) ex = tile_width;
-      } else {
-        ex = tile_width;
-      }
-      uint32_t len_x = ex - start_in_x;
-
-      uint32_t ey;
-      if (ty == (endtile_y - 1)) {
-        ey = (roi_y + roi_h) % tile_length;
-        if (ey == 0) ey = tile_length;
-      } else {
-        ey = tile_length;
-      }
-      uint32_t len_y = ey - start_in_y;
-
-      uint32_t start_out_x = (tx == starttile_x) ? 0 : (tx - starttile_x) * tile_width - roi_x;
-      uint32_t start_out_y = (ty == starttile_y) ? 0 : (ty - starttile_y) * tile_length - roi_y;
-      for (uint32_t y = start_in_y; y < (start_in_y + len_y); ++y) {
-        std::memcpy(inbuf.data() + nc * ((start_out_y + (y - start_in_y)) * roi_w + start_out_x),
-          tilebuf.get() + nc * (y * tile_width + start_in_x),
-          nc * len_x * sizeof(T));
-      }
-    }
-  }
-  return inbuf;
-}
 
 void SipiIOTiff::separateToContig(SipiImage *img, unsigned int sll)
 {
