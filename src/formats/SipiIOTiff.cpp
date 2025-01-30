@@ -425,96 +425,77 @@ void SipiIOTiff::initLibrary()
 }
 //============================================================================
 
-template<typename T>
-void one2eight(const uint8_t *in, T *out, uint32_t len, uint8_t black, uint8_t white) {
-    static uint8_t mask[8] = {0b10000000,
-                              0b01000000,
-                              0b00100000,
-                              0b00010000,
-                              0b00001000,
-                              0b00000100,
-                              0b00000010,
-                              0b00000001};
+template<typename T> void one2eight(const uint8_t *in, T *out, uint32_t len, uint8_t black, uint8_t white)
+{
+  static uint8_t mask[8] = {
+    0b10000000, 0b01000000, 0b00100000, 0b00010000, 0b00001000, 0b00000100, 0b00000010, 0b00000001
+  };
+  uint32_t ii = 0;
+  for (uint32_t i = 0; i < len; i += 8) {
+    for (uint32_t k = 0; (k < 8) && ((k + i) < len); ++k) { out[i + k] = mask[k] & in[ii] ? white : black; }
+    ++ii;
+  }
+}
+
+template<typename T> void four2eight(const uint8_t *in, T *out, uint32_t len, bool is_palette = false)
+{
+  static uint8_t mask[2] = { 0b11110000, 0b00001111 };
+
+  if (is_palette) {
     uint32_t ii = 0;
-    for (uint32_t i = 0; i < len; i += 8) {
-        for (uint32_t k = 0; (k < 8) && ((k + i) < len); ++k) {
-            out[i + k] = mask[k] & in[ii] ? white : black;
-        }
-        ++ii;
+    for (uint32_t i = 0; i < len; i += 2, ++ii) {
+      out[i] = (mask[0] & in[ii]) >> 4;
+      if ((i + 1) < len) { out[i + 1] = mask[1] & in[ii]; }
     }
+  } else {
+    uint32_t ii = 0;
+    for (uint32_t i = 0; i < len; i += 2, ++ii) {
+      out[i] = mask[0] & in[ii];
+      if ((i + 1) < len) { out[i + 1] = (mask[1] & in[ii]) << 4; }
+    }
+  }
+}
+
+template<typename T> void twelve2sixteen(const uint8_t *in, T *out, uint32_t len, bool is_palette = false)
+{
+  static uint8_t mask[2] = { 0b11110000, 0b00001111 };
+  if (is_palette) {
+    uint32_t ii = 0;
+    for (uint32_t i = 0; i < len; i += 2, ii += 3) {
+      out[i] = (in[ii] << 4) | ((in[ii + 1] & mask[0]) >> 4);
+      if ((i + 1) < len) { out[i + 1] = ((in[ii + 1] & mask[1]) << 8) | in[ii + 2]; }
+    }
+  } else {
+    uint32_t ii = 0;
+    for (uint32_t i = 0; i < len; i += 2, ii += 3) {
+      out[i] = (in[ii] << 8) | (in[ii + 1] & mask[0]);
+      if ((i + 1) < len) { out[i + 1] = ((in[ii + 1] & mask[1]) << 12) | (in[ii + 2] << 4); }
+    }
+  }
 }
 
 template<typename T>
-void four2eight(const uint8_t *in, T *out, uint32_t len, bool is_palette = false) {
-    static uint8_t mask[2] = { 0b11110000, 0b00001111 };
-
-    if (is_palette) {
-        uint32_t ii = 0;
-        for (uint32_t i = 0; i < len; i += 2, ++ii) {
-            out[i] = (mask[0] & in[ii]) >> 4;
-            if ((i + 1) < len) {
-                out[i + 1] = mask[1] & in[ii];
-            }
-        }
+std::unique_ptr<T> separateToContig(std::unique_ptr<T> &&inbuf, uint32_t nx, uint32_t ny, uint32_t nc, uint32_t sll)
+{
+  auto tmpptr = std::make_unique<T>(nc * ny * nx);
+  for (uint32_t c = 0; c < nc; ++c) {
+    for (uint32_t y = 0; y < ny; ++y) {
+      for (uint32_t x = 0; x < nx; ++x) { tmpptr[nc * (y * nx + x) + c] = inbuf.get()[c * ny * sll + y * nx + x]; }
     }
-    else {
-        uint32_t ii = 0;
-        for (uint32_t i = 0; i < len; i += 2, ++ii) {
-            out[i] = mask[0] & in[ii];
-            if ((i + 1) < len) {
-                out[i + 1] = (mask[1] & in[ii]) << 4;
-            }
-        }
-    }
+  }
+  return tmpptr;
 }
 
 template<typename T>
-void twelve2sixteen(const uint8_t *in, T *out, uint32_t len, bool is_palette = false) {
-    static uint8_t mask[2] = { 0b11110000, 0b00001111 };
-    if (is_palette) {
-        uint32_t ii = 0;
-        for (uint32_t i = 0; i < len; i += 2, ii += 3) {
-            out[i] = (in[ii] << 4) | ((in[ii + 1] & mask[0]) >> 4);
-            if ((i + 1) < len) {
-                out[i + 1] = ((in[ii + 1] & mask[1]) << 8) | in[ii + 2];
-            }
-        }
+std::vector<T> separateToContig(std::vector<T> &&inbuf, uint32_t nx, uint32_t ny, uint32_t nc, uint32_t sll)
+{
+  auto tmpptr = std::vector<T>(nc * ny * nx);
+  for (uint32_t c = 0; c < nc; ++c) {
+    for (uint32_t y = 0; y < ny; ++y) {
+      for (uint32_t x = 0; x < nx; ++x) { tmpptr[nc * (y * nx + x) + c] = inbuf[c * ny * sll + y * nx + x]; }
     }
-    else {
-        uint32_t ii = 0;
-        for (uint32_t i = 0; i < len; i += 2, ii += 3) {
-            out[i] = (in[ii] << 8) | (in[ii + 1] & mask[0]);
-            if ((i + 1) < len) {
-                out[i + 1] = ((in[ii + 1] & mask[1]) << 12) | (in[ii + 2] << 4);
-            }
-        }
-    }
-}
-
-template<typename T>
-std::unique_ptr<T> separateToContig(std::unique_ptr<T> &&inbuf, uint32_t nx, uint32_t ny, uint32_t nc, uint32_t sll) {
-    auto tmpptr = std::make_unique<T>(nc * ny * nx);
-    for (uint32_t c = 0; c < nc; ++c) {
-        for (uint32_t y = 0; y < ny; ++y) {
-            for (uint32_t x = 0; x < nx; ++x) {
-                tmpptr[nc * (y * nx + x) + c] = inbuf.get()[c * ny * sll + y * nx + x];
-            }
-        }
-    }
-    return tmpptr;
-}
-
-template<typename T>
-std::vector<T> separateToContig(std::vector<T> &&inbuf, uint32_t nx, uint32_t ny, uint32_t nc, uint32_t sll) {
-    auto tmpptr = std::vector<T>(nc * ny * nx);
-    for (uint32_t c = 0; c < nc; ++c) {
-        for (uint32_t y = 0; y < ny; ++y) {
-            for (uint32_t x = 0; x < nx; ++x) {
-                tmpptr[nc * (y * nx + x) + c] = inbuf[c * ny * sll + y * nx + x];
-            }
-        }
-    }
-    return tmpptr;
+  }
+  return tmpptr;
 }
 
 template<typename T>
@@ -664,8 +645,7 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
         for (uint32_t i = 0; i < ny; ++i) {
           if (TIFFReadScanline(tif, scanline.get(), i, c) == -1) {
             TIFFClose(tif);
-            /* throw Sipi::SipiImageError(__FILE__, __LINE__, */
-            /*                       fmt::format("TIFFReadScanline failed on scanline {}", i)); */
+            throw Sipi::SipiImageError("TIFFReadScanline failed on scanline {}" + std::to_string(i));
           }
           if ((i >= roi_y) && (i < (roi_y + roi_h))) {
             switch (bps) {
@@ -742,7 +722,7 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
   TIFF_GET_FIELD(tif, TIFFTAG_TILEWIDTH, &tile_width, 0)
   TIFF_GET_FIELD(tif, TIFFTAG_TILELENGTH, &tile_length, 0)
   if ((tile_width == 0) || (tile_length == 0)) {
-    throw Sipi::SipiImageError(__FILE__, __LINE__, "Expected tiled image, but no tile dimension given!");
+    throw Sipi::SipiImageError("Expected tiled image, but no tile dimension given!");
   }
 
   uint32_t nx, ny, nc, bps;
@@ -752,7 +732,7 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
   uint32_t ntiles_y = epsilon_ceil_division(static_cast<float>(ny), static_cast<float>(tile_length));
   uint32_t ntiles = TIFFNumberOfTiles(tif);
   if (ntiles != (ntiles_x * ntiles_y)) {
-    throw Sipi::SipiImageError(__FILE__, __LINE__, "Number of tiles no consistent!");
+    throw Sipi::SipiImageError("Number of tiles no consistent!");
   }
   uint32_t starttile_x = epsilon_floor_division(static_cast<float>(roi_x), static_cast<float>(tile_width));
   uint32_t starttile_y = epsilon_floor_division(static_cast<float>(roi_y), static_cast<float>(tile_length));
@@ -768,7 +748,7 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
 
   if ((bps != 8) && (bps != 16)) {
     throw Sipi::SipiImageError(
-      __FILE__, __LINE__, "{} bits per samples not supported for tiled tiffs!" + std::to_string(bps));
+      "{} bits per samples not supported for tiled tiffs!" + std::to_string(bps));
   }
 
   // nx = 30, tile_width = 8, roi_x = 5, roi_w = 20
@@ -782,8 +762,7 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
     for (uint32_t tx = starttile_x; tx < endtile_x; ++tx) {
       if (TIFFReadTile(tif, tilebuf.get(), tx * tile_width, ty * tile_length, 0, 0) < 0) {
         TIFFClose(tif);
-        throw Sipi::SipiImageError(
-          __FILE__, __LINE__, "TIFFReadTile failed on tile ({}, {})" + std::string(tx) + std::string(ty));
+        throw Sipi::SipiImageError("TIFFReadTile failed on tile ({}, {})" + std::to_string(tx) + std::to_string(ty));
       }
       if (planar == PLANARCONFIG_SEPARATE) {
         tilebuf = separateToContig(std::move(tilebuf), tile_width, tile_length, nc, tile_width);
@@ -1122,6 +1101,12 @@ bool SipiIOTiff::read(SipiImage *img,
       }
     }
 
+    uint32_t tile_width = 0;
+    uint32_t tile_length = 0;
+    if (TIFFGetField(tif, TIFFTAG_TILEWIDTH, &tile_width) != 1) { tile_width = 0; }
+    if (TIFFGetField(tif, TIFFTAG_TILELENGTH, &tile_length) != 1) { tile_length = 0; }
+    bool is_tiled = tile_width != 0 && tile_length != 0;
+
     int32_t roi_x;
     int32_t roi_y;
     size_t roi_w;
@@ -1154,7 +1139,11 @@ bool SipiIOTiff::read(SipiImage *img,
     }
 
     auto *inbuf = new uint8[ps * roi_w * roi_h * img->nc];
-    auto pixdata = read_standard_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
+    std::vector<uint8_t> pixdata;
+    if (is_tiled)
+      pixdata = read_tiled_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
+    else
+      pixdata = read_standard_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
     memcpy(inbuf, pixdata.data(), pixdata.size() * sizeof(uint8_t));
     img->pixels = inbuf;
     TIFFClose(tif);
