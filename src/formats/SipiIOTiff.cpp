@@ -223,12 +223,12 @@ typedef struct _exif_tag
   int len;
   union {
     float f_val;
-    uint8 c_val;
+    uint8_t c_val;
     uint16 s_val;
     uint32 i_val;
     char *str_val;
     float *f_ptr;
-    uint8 *c_ptr;
+    uint8_t *c_ptr;
     uint16 *s_ptr;
     uint32 *i_ptr;
     void *ptr;
@@ -536,10 +536,11 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
   TIFF_GET_FIELD(tif, TIFFTAG_BITSPERSAMPLE, &stmp, 8)
   bps = static_cast<uint32_t>(stmp);
 
+  PhotometricInterpretation photo;
   if (1 != TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &stmp)) {
-    img->photo = PhotometricInterpretation::MINISBLACK;
+    photo = PhotometricInterpretation::MINISBLACK;
   } else {
-    img->photo = static_cast<PhotometricInterpretation>(stmp);
+    photo = static_cast<PhotometricInterpretation>(stmp);
   }
 
   uint8_t black, white;
@@ -631,7 +632,7 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
       for (uint32_t i = 0; i < ny; ++i) {
         if (TIFFReadScanline(tif, scanline.get(), i, 0) != 1) {
           TIFFClose(tif);
-          throw Sipi::SipiImageError(fmt::format("TIFFReadScanline failed on scanline {}", i));
+          throw Sipi::SipiImageError("TIFFReadScanline failed on scanline {}" + std::to_string(i));
         }
         if ((i >= roi_y) && (i < (roi_y + roi_h))) {
           switch (bps) {
@@ -1155,6 +1156,7 @@ bool SipiIOTiff::read(SipiImage *img,
     auto *inbuf = new uint8[ps * roi_w * roi_h * img->nc];
     auto pixdata = read_standard_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
     memcpy(inbuf, pixdata.data(), pixdata.size() * sizeof(uint8_t));
+    img->pixels = inbuf;
     TIFFClose(tif);
 
     if (img->photo == PhotometricInterpretation::PALETTE) {
