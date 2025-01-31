@@ -218,19 +218,19 @@ typedef enum {
 
 typedef struct _exif_tag
 {
-  uint16 tag_id;
+  uint16_t tag_id;
   ExifDataType_type datatype;
   int len;
   union {
     float f_val;
     uint8_t c_val;
-    uint16 s_val;
-    uint32 i_val;
+    uint16_t s_val;
+    uint32_t i_val;
     char *str_val;
     float *f_ptr;
     uint8_t *c_ptr;
-    uint16 *s_ptr;
-    uint32 *i_ptr;
+    uint16_t *s_ptr;
+    uint32_t *i_ptr;
     void *ptr;
     unsigned char _4cc[4];
     unsigned short _2st[2];
@@ -609,7 +609,6 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
   } else {// we do have compression....
     if (planar == PLANARCONFIG_CONTIG) {// RGBRGBRGBRGB...
       line = std::make_unique<T[]>(nx * nc);
-      int res;
       for (uint32_t i = 0; i < ny; ++i) {
         if (TIFFReadScanline(tif, scanline.get(), i, 0) != 1) {
           TIFFClose(tif);
@@ -731,9 +730,7 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
   uint32_t ntiles_x = epsilon_ceil_division(static_cast<float>(nx), static_cast<float>(tile_width));
   uint32_t ntiles_y = epsilon_ceil_division(static_cast<float>(ny), static_cast<float>(tile_length));
   uint32_t ntiles = TIFFNumberOfTiles(tif);
-  if (ntiles != (ntiles_x * ntiles_y)) {
-    throw Sipi::SipiImageError("Number of tiles no consistent!");
-  }
+  if (ntiles != (ntiles_x * ntiles_y)) { throw Sipi::SipiImageError("Number of tiles no consistent!"); }
   uint32_t starttile_x = epsilon_floor_division(static_cast<float>(roi_x), static_cast<float>(tile_width));
   uint32_t starttile_y = epsilon_floor_division(static_cast<float>(roi_y), static_cast<float>(tile_length));
   uint32_t endtile_x = epsilon_ceil_division(static_cast<float>(roi_x + roi_w), static_cast<float>(tile_width));
@@ -747,8 +744,7 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
   bps = static_cast<uint32_t>(stmp);
 
   if ((bps != 8) && (bps != 16)) {
-    throw Sipi::SipiImageError(
-      "{} bits per samples not supported for tiled tiffs!" + std::to_string(bps));
+    throw Sipi::SipiImageError("{} bits per samples not supported for tiled tiffs!" + std::to_string(bps));
   }
 
   // nx = 30, tile_width = 8, roi_x = 5, roi_w = 20
@@ -799,6 +795,30 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
   return inbuf;
 }
 
+// get the resolutions of pyramid if available
+std::vector<SubImageInfo> read_resolutions(SipiImage *img, TIFF *tif)
+{
+  std::vector<SubImageInfo> resolutions;
+  do {
+    uint32_t tmp_width;
+    uint32_t tmp_height;
+    uint32_t tile_width;
+    uint32_t tile_length;
+    TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &tmp_width);
+    TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &tmp_height);
+    if (TIFFGetField(tif, TIFFTAG_TILEWIDTH, &tile_width) != 1) { tile_width = 0; }
+    if (TIFFGetField(tif, TIFFTAG_TILELENGTH, &tile_length) != 1) { tile_length = 0; }
+    uint32_t reduce_w = std::lroundf(static_cast<float>(img->getNx()) / static_cast<float>(tmp_width));
+    uint32_t reduce_h = std::lroundf(static_cast<float>(img->getNy()) / static_cast<float>(tmp_height));
+    uint32_t reduce = reduce_w;
+    resolutions.push_back({ reduce, tmp_width, tmp_height, tile_width, tile_length });
+  } while (TIFFReadDirectory(tif));
+
+  TIFFSetDirectory(tif, 0);
+
+  return resolutions;
+}
+
 /**
  * TODO: SipiImage always assumes the image data to be in big endian format.
  * TIFF files can be in little endian format. Every TIFF file begins with a two-byte indicator of byte order:
@@ -822,7 +842,7 @@ bool SipiIOTiff::read(SipiImage *img,
     //
     // OK, it's a TIFF file
     //
-    uint16 safo, ori, planar, stmp;
+    uint16_t safo, ori, planar, stmp;
 
     (void)TIFFSetWarningHandler(nullptr);
 
@@ -862,13 +882,13 @@ bool SipiIOTiff::read(SipiImage *img,
     //
 
 
-    std::vector<uint16> rcm;
-    std::vector<uint16> gcm;
-    std::vector<uint16> bcm;
+    std::vector<uint16_t> rcm;
+    std::vector<uint16_t> gcm;
+    std::vector<uint16_t> bcm;
 
     int colmap_len = 0;
     if (img->photo == PhotometricInterpretation::PALETTE) {
-      uint16 *_rcm = nullptr, *_gcm = nullptr, *_bcm = nullptr;
+      uint16_t *_rcm = nullptr, *_gcm = nullptr, *_bcm = nullptr;
       if (TIFFGetField(tif, TIFFTAG_COLORMAP, &_rcm, &_gcm, &_bcm) == 0) {
         TIFFClose(tif);
         std::string msg = "TIFFGetField of TIFFTAG_COLORMAP failed: " + filepath;
@@ -893,7 +913,7 @@ bool SipiIOTiff::read(SipiImage *img,
     TIFF_GET_FIELD(tif, TIFFTAG_PLANARCONFIG, &planar, PLANARCONFIG_CONTIG);
     TIFF_GET_FIELD(tif, TIFFTAG_SAMPLEFORMAT, &safo, SAMPLEFORMAT_UINT);
 
-    uint16 *es;
+    uint16_t *es;
     int eslen = 0;
     if (TIFFGetField(tif, TIFFTAG_EXTRASAMPLES, &eslen, &es) == 1) {
       for (int i = 0; i < eslen; i++) {
@@ -1101,6 +1121,8 @@ bool SipiIOTiff::read(SipiImage *img,
       }
     }
 
+    auto r = read_resolutions(img, tif);
+
     uint32_t tile_width = 0;
     uint32_t tile_length = 0;
     if (TIFFGetField(tif, TIFFTAG_TILEWIDTH, &tile_width) != 1) { tile_width = 0; }
@@ -1127,18 +1149,13 @@ bool SipiIOTiff::read(SipiImage *img,
       throw Sipi::SipiImageError(msg);
     }
 
-    case 8: {
+    case 8:
       ps = 1;
-      break;
-    }
-
-    case 16: {
+    case 16:
       ps = 2;
-      break;
-    }
     }
 
-    auto *inbuf = new uint8[ps * roi_w * roi_h * img->nc];
+    auto *inbuf = new uint8_t[ps * roi_w * roi_h * img->nc];
     std::vector<uint8_t> pixdata;
     if (is_tiled)
       pixdata = read_tiled_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
@@ -1152,24 +1169,24 @@ bool SipiIOTiff::read(SipiImage *img,
       //
       // ok, we have a palette color image we have to convert to RGB...
       //
-      uint16 cm_max = 0;
+      uint16_t cm_max = 0;
       for (int i = 0; i < colmap_len; i++) {
         if (rcm[i] > cm_max) cm_max = rcm[i];
         if (gcm[i] > cm_max) cm_max = gcm[i];
         if (bcm[i] > cm_max) cm_max = bcm[i];
       }
-      auto *dataptr = new uint8[3 * img->nx * img->ny];
+      auto *dataptr = new uint8_t[3 * img->nx * img->ny];
       if (cm_max <= 256) {// we have a colomap with entries form 0 - 255
         for (size_t i = 0; i < img->nx * img->ny; i++) {
-          dataptr[3 * i] = (uint8)rcm[img->pixels[i]];
-          dataptr[3 * i + 1] = (uint8)gcm[img->pixels[i]];
-          dataptr[3 * i + 2] = (uint8)bcm[img->pixels[i]];
+          dataptr[3 * i] = (uint8_t)rcm[img->pixels[i]];
+          dataptr[3 * i + 1] = (uint8_t)gcm[img->pixels[i]];
+          dataptr[3 * i + 2] = (uint8_t)bcm[img->pixels[i]];
         }
       } else {// we have a colormap with entries > 255, assuming 16 bit
         for (size_t i = 0; i < img->nx * img->ny; i++) {
-          dataptr[3 * i] = (uint8)(rcm[img->pixels[i]] >> 8);
-          dataptr[3 * i + 1] = (uint8)(gcm[img->pixels[i]] >> 8);
-          dataptr[3 * i + 2] = (uint8)(bcm[img->pixels[i]] >> 8);
+          dataptr[3 * i] = (uint8_t)(rcm[img->pixels[i]] >> 8);
+          dataptr[3 * i + 1] = (uint8_t)(gcm[img->pixels[i]] >> 8);
+          dataptr[3 * i + 2] = (uint8_t)(bcm[img->pixels[i]] >> 8);
         }
       }
       delete[] img->pixels;
@@ -1367,7 +1384,7 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
 {
   TIFF *tif;
   MEMTIFF *memtif = nullptr;
-  auto rowsperstrip = (uint32)-1;
+  auto rowsperstrip = (uint32_t)-1;
   if ((filepath == "stdout:") || (filepath == "HTTP")) {
     memtif = memTiffOpen();
     tif = TIFFClientOpen("MEMTIFF",
@@ -1410,13 +1427,13 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
     }
 
     if (its_1_bit) {
-      TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, (uint16)1);
+      TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, (uint16_t)1);
       TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_CCITTFAX4);// that's out default....
     } else {
-      TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, (uint16)img->bps);
+      TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, (uint16_t)img->bps);
     }
   } else {
-    TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, (uint16)img->bps);
+    TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, (uint16_t)img->bps);
   }
   if (img->photo == PhotometricInterpretation::CIELAB) {
     if (img->bps == 8) {
@@ -1594,7 +1611,7 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
 
 void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
 {
-  uint16 curdir = TIFFCurrentDirectory(tif);
+  uint16_t curdir = TIFFCurrentDirectory(tif);
 
   if (TIFFReadEXIFDirectory(tif, exif_offset)) {
     for (int i = 0; i < exiftag_list_len; i++) {
@@ -1662,7 +1679,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
 
       case EXIF_DT_RATIONAL_PTR: {
         float *tmpbuf;
-        uint16 len;
+        uint16_t len;
         if (TIFFGetField(tif, exiftag_list[i].tag_id, &len, &tmpbuf)) {
           auto *r = new Exiv2::Rational[len];
           for (int i; i < len; i++) { r[i] = SipiExif::toRational(tmpbuf[i]); }
@@ -1677,8 +1694,8 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
       }
 
       case EXIF_DT_UINT8_PTR: {
-        uint8 *tmpbuf;
-        uint16 len;
+        uint8_t *tmpbuf;
+        uint16_t len;
 
         if (TIFFGetField(tif, exiftag_list[i].tag_id, &len, &tmpbuf)) {
           try {
@@ -1691,8 +1708,8 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
       }
 
       case EXIF_DT_UINT16_PTR: {
-        uint16 *tmpbuf;
-        uint16 len;// in bytes !!
+        uint16_t *tmpbuf;
+        uint16_t len;// in bytes !!
         if (TIFFGetField(tif, exiftag_list[i].tag_id, &len, &tmpbuf)) {
           try {
             img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
@@ -1704,8 +1721,8 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
       }
 
       case EXIF_DT_UINT32_PTR: {
-        uint32 *tmpbuf;
-        uint16 len;
+        uint32_t *tmpbuf;
+        uint16_t len;
         if (TIFFGetField(tif, exiftag_list[i].tag_id, &len, &tmpbuf)) {
           try {
             img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
@@ -1718,7 +1735,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
 
       case EXIF_DT_PTR: {
         unsigned char *tmpbuf;
-        uint16 len;
+        uint16_t len;
 
         if (exiftag_list[i].len == 0) {
           if (TIFFGetField(tif, exiftag_list[i].tag_id, &len, &tmpbuf)) {
@@ -1778,7 +1795,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
     }
 
     case EXIF_DT_UINT8: {
-      uint8 uc;
+      uint8_t uc;
 
       if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", uc)) {
         TIFFSetField(tif, exiftag_list[i].tag_id, uc);
@@ -1789,7 +1806,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
     }
 
     case EXIF_DT_UINT16: {
-      uint16 us;
+      uint16_t us;
 
       if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", us)) {
         TIFFSetField(tif, exiftag_list[i].tag_id, us);
@@ -1800,7 +1817,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
     }
 
     case EXIF_DT_UINT32: {
-      uint32 ui;
+      uint32_t ui;
 
       if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", ui)) {
         TIFFSetField(tif, exiftag_list[i].tag_id, ui);
@@ -1839,7 +1856,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
     }
 
     case EXIF_DT_UINT8_PTR: {
-      std::vector<uint8> vuc;
+      std::vector<uint8_t> vuc;
 
       if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", vuc)) {
         int len = vuc.size();
@@ -1851,7 +1868,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
     }
 
     case EXIF_DT_UINT16_PTR: {
-      std::vector<uint16> vus;
+      std::vector<uint16_t> vus;
       if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", vus)) {
         int len = vus.size();
         TIFFSetField(tif, exiftag_list[i].tag_id, len, vus.data());
@@ -1861,7 +1878,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
     }
 
     case EXIF_DT_UINT32_PTR: {
-      std::vector<uint32> vui;
+      std::vector<uint32_t> vui;
 
       if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", vui)) {
         int len = vui.size();

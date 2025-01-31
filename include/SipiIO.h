@@ -53,6 +53,13 @@ enum Orientation : std::uint8_t {
   //!< The 0th row represents the visual left-hand side of the image, and the 0th column represents the visual bottom.
 };
 
+typedef struct SubImageInfo_ {
+    uint32_t reduce;
+    uint32_t width;
+    uint32_t height;
+    uint32_t tile_width;
+    uint32_t tile_height;
+} SubImageInfo;
 
 class SipiImgInfo
 {
@@ -69,6 +76,7 @@ public:
   std::string internalmimetype;
   std::string origname;
   std::string origmimetype;
+  std::vector<SubImageInfo> resolutions;
 
   SipiImgInfo() = default;
 };
