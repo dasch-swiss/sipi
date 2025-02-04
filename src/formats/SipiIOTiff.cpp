@@ -796,7 +796,7 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
 }
 
 // get the resolutions of pyramid if available
-std::vector<SubImageInfo> read_resolutions(SipiImage *img, TIFF *tif)
+std::vector<SubImageInfo> read_resolutions(uint64_t image_width, TIFF *tif)
 {
   std::vector<SubImageInfo> resolutions;
   do {
@@ -808,8 +808,7 @@ std::vector<SubImageInfo> read_resolutions(SipiImage *img, TIFF *tif)
     TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &tmp_height);
     if (TIFFGetField(tif, TIFFTAG_TILEWIDTH, &tile_width) != 1) { tile_width = 0; }
     if (TIFFGetField(tif, TIFFTAG_TILELENGTH, &tile_length) != 1) { tile_length = 0; }
-    uint32_t reduce_w = std::lroundf(static_cast<float>(img->getNx()) / static_cast<float>(tmp_width));
-    /* uint32_t reduce_h = std::lroundf(static_cast<float>(img->getNy()) / static_cast<float>(tmp_height)); */
+    uint32_t reduce_w = std::lroundf(static_cast<float>(image_width) / static_cast<float>(tmp_width));
     uint32_t reduce = reduce_w;
     resolutions.push_back({ reduce, tmp_width, tmp_height, tile_width, tile_length });
   } while (TIFFReadDirectory(tif));
@@ -1129,7 +1128,7 @@ bool SipiIOTiff::read(SipiImage *img,
       }
     }
 
-    auto resolutions = read_resolutions(img, tif);
+    auto resolutions = read_resolutions(img->getNx(), tif);
     int reduce = -1;
     size_t w, h;
     size_t out_w, out_h;
@@ -1400,6 +1399,8 @@ SipiImgInfo SipiIOTiff::getDim(const std::string &filepath)
       info.origname = se.origname();
       info.success = SipiImgInfo::ALL;
     }
+
+    info.resolutions = read_resolutions(tmp_width, tif);
 
     TIFFClose(tif);
   }
