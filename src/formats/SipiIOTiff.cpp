@@ -809,7 +809,7 @@ std::vector<SubImageInfo> read_resolutions(SipiImage *img, TIFF *tif)
     if (TIFFGetField(tif, TIFFTAG_TILEWIDTH, &tile_width) != 1) { tile_width = 0; }
     if (TIFFGetField(tif, TIFFTAG_TILELENGTH, &tile_length) != 1) { tile_length = 0; }
     uint32_t reduce_w = std::lroundf(static_cast<float>(img->getNx()) / static_cast<float>(tmp_width));
-    uint32_t reduce_h = std::lroundf(static_cast<float>(img->getNy()) / static_cast<float>(tmp_height));
+    /* uint32_t reduce_h = std::lroundf(static_cast<float>(img->getNy()) / static_cast<float>(tmp_height)); */
     uint32_t reduce = reduce_w;
     resolutions.push_back({ reduce, tmp_width, tmp_height, tile_width, tile_length });
   } while (TIFFReadDirectory(tif));
@@ -817,6 +817,16 @@ std::vector<SubImageInfo> read_resolutions(SipiImage *img, TIFF *tif)
   TIFFSetDirectory(tif, 0);
 
   return resolutions;
+}
+
+#include <iostream>
+std::ostream &operator<<(std::ostream &os, const SubImageInfo &s)
+{
+  return os << "Reduce: " << s.reduce << ", "
+            << "Width: " << s.width << ", "
+            << "Height: " << s.height << ", "
+            << "TW: " << s.tile_width << ", "
+            << "TH:" << s.tile_height;
 }
 
 /**
@@ -857,8 +867,6 @@ bool SipiIOTiff::read(SipiImage *img,
       std::string msg = "TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + filepath;
       throw Sipi::SipiImageError(msg);
     }
-
-    auto sll = static_cast<unsigned int>(TIFFScanlineSize(tif));
 
     TIFF_GET_FIELD(tif, TIFFTAG_SAMPLESPERPIXEL, &stmp, 1);
     img->nc = static_cast<size_t>(stmp);
@@ -1121,19 +1129,42 @@ bool SipiIOTiff::read(SipiImage *img,
       }
     }
 
-    auto r = read_resolutions(img, tif);
+    auto resolutions = read_resolutions(img, tif);
+    int reduce = -1;
+    size_t w, h;
+    size_t out_w, out_h;
+    bool redonly;
+    bool is_tiled;
+    uint32_t level = -1;
 
-    uint32_t tile_width = 0;
-    uint32_t tile_length = 0;
-    if (TIFFGetField(tif, TIFFTAG_TILEWIDTH, &tile_width) != 1) { tile_width = 0; }
-    if (TIFFGetField(tif, TIFFTAG_TILELENGTH, &tile_length) != 1) { tile_length = 0; }
-    bool is_tiled = tile_width != 0 && tile_length != 0;
+    printf("using level: %i, %i\n", level, reduce);
+    if (size) {
+      size->get_size(w, h, out_w, out_h, reduce, redonly);
+
+      for (auto r: resolutions) {
+        if (r.reduce > reduce) break;
+        ++level;
+      }
+      TIFFSetDirectory(tif, level);
+
+      img->nx = resolutions[level].width;
+      img->ny = resolutions[level].height;
+      if (region != nullptr) {
+        region->set_reduce(static_cast<float>(reduce));
+      }
+    } else {
+      level = 0;
+    }
+    printf("using level: %i, %i\n", level, reduce);
+    is_tiled = (resolutions[level].tile_width != 0) && (resolutions[level].tile_height != 0);
+
+    auto sll = static_cast<uint32_t>(TIFFScanlineSize(tif));
 
     int32_t roi_x;
     int32_t roi_y;
     size_t roi_w;
     size_t roi_h;
-    if ((region == nullptr) || (region->getType() == SipiRegion::FULL)) {
+    if (region == nullptr) {
       roi_x = 0;
       roi_y = 0;
       roi_w = img->nx;

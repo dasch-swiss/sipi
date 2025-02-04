@@ -9,8 +9,8 @@
 #ifndef _sipi_io_h
 #define _sipi_io_h
 
-#include <string>
 #include <cstdint>
+#include <string>
 #include <unordered_map>
 
 #include "iiifparser/SipiRegion.h"
@@ -53,12 +53,13 @@ enum Orientation : std::uint8_t {
   //!< The 0th row represents the visual left-hand side of the image, and the 0th column represents the visual bottom.
 };
 
-typedef struct SubImageInfo_ {
-    uint32_t reduce;
-    uint32_t width;
-    uint32_t height;
-    uint32_t tile_width;
-    uint32_t tile_height;
+typedef struct SubImageInfo_
+{
+  uint32_t reduce; // nx / width
+  uint32_t width;
+  uint32_t height;
+  uint32_t tile_width;
+  uint32_t tile_height;
 } SubImageInfo;
 
 class SipiImgInfo
@@ -81,7 +82,7 @@ public:
   SipiImgInfo() = default;
 };
 
-enum SipiCompressionParamName: std::uint8_t {
+enum SipiCompressionParamName : std::uint8_t {
   JPEG_QUALITY,
   J2K_Sprofile,
   J2K_Creversible,
