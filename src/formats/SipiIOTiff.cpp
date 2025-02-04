@@ -1192,6 +1192,8 @@ bool SipiIOTiff::read(SipiImage *img,
       pixdata = read_standard_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
     memcpy(inbuf, pixdata.data(), pixdata.size() * sizeof(uint8_t));
     img->pixels = inbuf;
+    img->nx = roi_w;
+    img->ny = roi_h;
     TIFFClose(tif);
 
     if (img->photo == PhotometricInterpretation::PALETTE) {
