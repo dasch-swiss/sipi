@@ -1137,7 +1137,6 @@ bool SipiIOTiff::read(SipiImage *img,
     bool is_tiled;
     uint32_t level = -1;
 
-    printf("using level: %i, %i\n", level, reduce);
     if (size) {
       size->get_size(w, h, out_w, out_h, reduce, redonly);
 
@@ -1155,7 +1154,6 @@ bool SipiIOTiff::read(SipiImage *img,
     } else {
       level = 0;
     }
-    printf("using level: %i, %i\n", level, reduce);
     is_tiled = (resolutions[level].tile_width != 0) && (resolutions[level].tile_height != 0);
 
     auto sll = static_cast<uint32_t>(TIFFScanlineSize(tif));

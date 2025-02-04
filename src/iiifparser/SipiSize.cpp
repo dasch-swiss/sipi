@@ -306,13 +306,11 @@ SipiSize::SizeType
     reduce_p = 0;
     float r = 100.F / percent;
     float s = 1.0;
-    printf("A SipiSize: percent = %f, r = %f, s = %f, max_reduce = %i, reduce_p = %i\n", percent, r, s, max_reduce, reduce_p);
 
     while ((2.0 * s <= r) && (reduce_p < max_reduce)) {
       s *= 2.0;
       reduce_p++;
     }
-    printf("B SipiSize: percent = %f, r = %f, s = %f, max_reduce = %i, reduce_p = %i\n", percent, r, s, max_reduce, reduce_p);
 
     if (fabs(s - r) < 1.0e-5) { redonly = true; }
     break;
