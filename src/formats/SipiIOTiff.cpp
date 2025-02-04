@@ -1135,12 +1135,13 @@ bool SipiIOTiff::read(SipiImage *img,
     size_t out_w, out_h;
     bool redonly;
     bool is_tiled;
-    uint32_t level = -1;
+    uint32_t level = 0;
 
     if (size) {
       size->get_size(w, h, out_w, out_h, reduce, redonly);
 
-      for (auto r: resolutions) {
+      level = -1;
+      for (auto r : resolutions) {
         if (r.reduce > reduce) break;
         ++level;
       }
@@ -1148,11 +1149,7 @@ bool SipiIOTiff::read(SipiImage *img,
 
       img->nx = resolutions[level].width;
       img->ny = resolutions[level].height;
-      if (region != nullptr) {
-        region->set_reduce(static_cast<float>(reduce));
-      }
-    } else {
-      level = 0;
+      if (region != nullptr) { region->set_reduce(static_cast<float>(reduce)); }
     }
     is_tiled = (resolutions[level].tile_width != 0) && (resolutions[level].tile_height != 0);
 
