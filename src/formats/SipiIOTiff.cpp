@@ -1130,7 +1130,7 @@ bool SipiIOTiff::read(SipiImage *img,
 
     auto resolutions = read_resolutions(img->getNx(), tif);
     int reduce = -1;
-    size_t w, h;
+    size_t w = img->nx, h = img->ny;
     size_t out_w, out_h;
     bool redonly;
     bool is_tiled;
