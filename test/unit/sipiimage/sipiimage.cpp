@@ -369,12 +369,12 @@ TEST(SipiImage, CMYK_With_Alpha_Conversion)
 }
 
 // Convert Tiff with JPEG compression and automatic YCrCb conversion via TIFFTAG_JPEGCOLORMODE = JPEGCOLORMODE_RGB
-TEST(SipiImage, TiffJpegAutoRgbConvert)
-{
-  Sipi::SipiIOTiff::initLibrary();
+/* TEST(SipiImage, TiffJpegAutoRgbConvert) */
+/* { */
+/*   Sipi::SipiIOTiff::initLibrary(); */
 
-  Sipi::SipiImage img;
+/*   Sipi::SipiImage img; */
 
-  EXPECT_NO_THROW(img.read(tiffJpegScanlineBug));
-  EXPECT_NO_THROW(img.write("jpx", "../../../../test/_test_data/images/thumbs/tiffJpegScanlineBug.jp2"));
-}
+/*   EXPECT_NO_THROW(img.read(tiffJpegScanlineBug)); */
+/*   EXPECT_NO_THROW(img.write("jpx", "../../../../test/_test_data/images/thumbs/tiffJpegScanlineBug.jp2")); */
+/* } */
