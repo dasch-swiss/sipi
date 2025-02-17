@@ -1625,7 +1625,11 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
 
     delete[] buf;
   } else {
-    bool pyramid = true;
+    bool pyramid = false;
+
+    if (params->contains(TIFF_Pyramid)) {
+      pyramid = params->at(TIFF_Pyramid).compare("yes") == 0;
+    }
 
     if (!pyramid) {
       for (size_t i = 0; i < img->ny; i++) {

@@ -502,6 +502,10 @@ int main(int argc, char *argv[])
   sipiopt.add_option(
     "--Cuse_sop", j2k_Cuse_sop, "J2K Cuse_sop: Include SOP markers (i.e., resync markers) [Default: yes].");
 
+  bool tiff_Pyramid;
+  sipiopt.add_option(
+    "--Ctiff_pyramid", tiff_Pyramid, "TIFF: store in Pyramidal TIFF format [Default: no].");
+
   //
   // used for rendering only one page of multipage PDF or TIFF (NYI for tif...)
   //
@@ -975,6 +979,8 @@ int main(int argc, char *argv[])
     if (!sipiopt.get_option("--Cblk")->empty()) comp_params[Sipi::J2K_Cblk] = j2k_Cblk;
     if (!sipiopt.get_option("--Cuse_sop")->empty()) comp_params[Sipi::J2K_Cuse_sop] = j2k_Cuse_sop ? "yes" : "no";
     if (!sipiopt.get_option("--Stiles")->empty()) comp_params[Sipi::J2K_Stiles] = j2k_Stiles;
+    if (!sipiopt.get_option("--Ctiff_pyramid")->empty()) comp_params[Sipi::TIFF_Pyramid] = tiff_Pyramid ? "yes" : "no";
+
     if (!sipiopt.get_option("--rates")->empty()) {
       std::stringstream ss;
       for (auto &rate : j2k_rates) {

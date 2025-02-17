@@ -93,7 +93,8 @@ enum SipiCompressionParamName : std::uint8_t {
   J2K_Cblk,
   J2K_Cuse_sop,
   J2K_Stiles,
-  J2K_rates
+  J2K_rates,
+  TIFF_Pyramid,
 };
 
 using SipiCompressionParams = std::unordered_map<int, std::string>;
