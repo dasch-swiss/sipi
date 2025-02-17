@@ -1641,11 +1641,12 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
 
         if (std::min(nnx, nny) <= 32) break;
 
-        uint32_t tw = 0, th = 0;
+        uint32_t tw = 0, th = tw;
         write_subfile(*img, tif, reduce, tw, th, "");
       }
     }
   }
+
   //
   // write exif data
   //
@@ -1692,6 +1693,7 @@ std::vector<T> doReduce(std::vector<T> &&inbuf, int reduce, size_t nx, size_t ny
 
   auto inbuf_raw = inbuf.data();
   auto outbuf_raw = outbuf.data();
+  reduce = 1 << reduce;
   if (reduce <= 1) {
     memcpy(outbuf_raw, inbuf_raw, nnx * nny * nc * sizeof(T));
   } else {
@@ -1733,42 +1735,42 @@ void SipiIOTiff::write_subfile(const SipiImage &img,
   /* } catch (const IIIFSizeError &err) {} */
 
   write_basic_tags(img, tif, nnx, nny, false, compression);
-  if (level > 1) { TIFFSetField(tif, TIFFTAG_SUBFILETYPE, FILETYPE_REDUCEDIMAGE); }
+  if (level > 0) { TIFFSetField(tif, TIFFTAG_SUBFILETYPE, FILETYPE_REDUCEDIMAGE); }
 
   if (tile_width == 0 || tile_height == 0) { TIFFDefaultTileSize(tif, &tile_width, &tile_height); }
   TIFFSetField(tif, TIFFTAG_TILEWIDTH, tile_width);
   TIFFSetField(tif, TIFFTAG_TILELENGTH, tile_height);
 
-  auto ntiles_x = static_cast<uint32_t>(ceilf(static_cast<float>(nnx) / static_cast<float>(tile_width)));
-  auto ntiles_y = static_cast<uint32_t>(ceilf(static_cast<float>(nny) / static_cast<float>(tile_height)));
-
   tsize_t tilesize = TIFFTileSize(tif);
 
   // reduce resolution of image: A reduce factor can be given, 0=no scaling, 1=0.5, 2=0.25, 3=0.125,...
-  {
-    std::vector<uint8_t> nbuf(img.pixels, img.pixels + img.nx * img.ny * img.nc * img.bps / 8);
-    if (level > 1) { nbuf = doReduce<uint8_t>(std::move(nbuf), level, img.nx, img.ny, img.nc, nnx, nny); }
-    auto tilebuf = std::vector<uint8_t>(tilesize);
-    for (uint32_t ty = 0; ty < ntiles_y; ++ty) {
-      for (uint32_t tx = 0; tx < ntiles_x; ++tx) {
-        for (uint32_t y = 0; y < tile_height; ++y) {
-          for (uint32_t x = 0; x < tile_width; ++x) {
-            for (uint32_t c = 0; c < img.nc; ++c) {
-              uint32_t xx = tx * tile_width + x;
-              uint32_t yy = ty * tile_height + y;
-              if ((xx < nnx) && (yy < nny)) {
-                tilebuf[img.nc * (y * tile_width + x) + c] = nbuf[img.nc * (yy * nnx + xx) + c];
-              } else {
-                tilebuf[img.nc * (y * tile_width + x) + c] = 0;
-              }
+  std::vector<uint8_t> nbuf(img.pixels, img.pixels + img.nx * img.ny * img.nc * img.bps / 8);
+
+  if (level > 0) { nbuf = doReduce<uint8_t>(std::move(nbuf), level, img.nx, img.ny, img.nc, nnx, nny); }
+
+  auto ntiles_x = static_cast<uint32_t>(ceilf(static_cast<float>(nnx) / static_cast<float>(tile_width)));
+  auto ntiles_y = static_cast<uint32_t>(ceilf(static_cast<float>(nny) / static_cast<float>(tile_height)));
+
+  auto tilebuf = std::vector<uint8_t>(tilesize);
+  for (uint32_t ty = 0; ty < ntiles_y; ++ty) {
+    for (uint32_t tx = 0; tx < ntiles_x; ++tx) {
+      for (uint32_t y = 0; y < tile_height; ++y) {
+        for (uint32_t x = 0; x < tile_width; ++x) {
+          for (uint32_t c = 0; c < img.nc; ++c) {
+            uint32_t xx = tx * tile_width + x;
+            uint32_t yy = ty * tile_height + y;
+            if ((xx < nnx) && (yy < nny)) {
+              tilebuf[img.nc * (y * tile_width + x) + c] = nbuf[img.nc * (yy * nnx + xx) + c];
+            } else {
+              tilebuf[img.nc * (y * tile_width + x) + c] = 0;
             }
           }
         }
-        TIFFWriteTile(tif, static_cast<void *>(tilebuf.data()), tx * tile_width, ty * tile_height, 0, 0);
       }
+      TIFFWriteTile(tif, static_cast<void *>(tilebuf.data()), tx * tile_width, ty * tile_height, 0, 0);
     }
-    TIFFWriteDirectory(tif);
   }
+  TIFFWriteDirectory(tif);
 }
 
 void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
