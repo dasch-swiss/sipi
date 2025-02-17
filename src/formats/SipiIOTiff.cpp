@@ -1735,7 +1735,6 @@ void SipiIOTiff::write_subfile(const SipiImage &img,
   bool redonly;
   /* try { */
   (void)size.get_size(img.nx, img.ny, nnx, nny, level, redonly);
-  printf("nnx nny: %ix%i (%ix)\n", nnx, nny, level);
   /* } catch (const IIIFSizeError &err) {} */
 
   write_basic_tags(img, tif, nnx, nny, false, compression);
