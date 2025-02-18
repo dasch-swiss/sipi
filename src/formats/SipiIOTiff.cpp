@@ -1128,6 +1128,7 @@ bool SipiIOTiff::read(SipiImage *img,
       }
     }
 
+    // TODO: the TIFFSetDirectory(tif, 0); in read_resolutions introduces a regression for JPEG auto-conversion test
     auto resolutions = read_resolutions(img->getNx(), tif);
     int reduce = -1;
     size_t w = img->nx, h = img->ny;
