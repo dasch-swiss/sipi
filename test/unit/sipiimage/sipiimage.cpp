@@ -39,6 +39,8 @@ const std::string wrongrotation = "../../../../test/_test_data/images/unit/image
 const std::string watermark_correct = "../../../../test/_test_data/images/unit/watermark_correct.tif";
 const std::string watermark_incorrect = "../../../../test/_test_data/images/unit/watermark_incorrect.tif";
 const std::string tiffJpegScanlineBug = "../../../../test/_test_data/images/knora/tiffJpegScanlineBug.tif";
+const std::string imgExifGps = "../../../../test/_test_data/images/unit/img_exif_gps.jpg";
+const std::string imgExifGpsTifOut = "../../../../test/_test_data/images/unit/img_exif_gps_out.tif";
 
 // Check if configuration file can be found
 TEST(SipiImage, CheckIfTestImagesCanBeFound)
@@ -329,10 +331,10 @@ TEST(SipiImage, Watermark)
   /* ASSERT_NO_THROW(img3.write("jpg", maoriWater)); */
 
   ASSERT_NO_THROW(img4.read(maoriWater));
-  EXPECT_TRUE(img4.compare(img3).value_or(1000) < 0.007); // 0.00605
+  EXPECT_TRUE(img4.compare(img3).value_or(1000) < 0.007);// 0.00605
 
   ASSERT_NO_THROW(img3.read(maori));
-  EXPECT_TRUE(img4.compare(img3) > 0.017); // 0.0174
+  EXPECT_TRUE(img4.compare(img3) > 0.017);// 0.0174
 
   ASSERT_NO_THROW(img3.rotate(90));
 }
@@ -378,3 +380,24 @@ TEST(SipiImage, CMYK_With_Alpha_Conversion)
 /*   EXPECT_NO_THROW(img.read(tiffJpegScanlineBug)); */
 /*   EXPECT_NO_THROW(img.write("jpx", "../../../../test/_test_data/images/thumbs/tiffJpegScanlineBug.jp2")); */
 /* } */
+
+TEST(SipiImage, TiffPyramidLayers)
+{
+  Sipi::SipiIOTiff::initLibrary();
+
+  Sipi::SipiImage img;
+  const std::shared_ptr<Sipi::SipiRegion> region;
+  const auto size = std::make_shared<Sipi::SipiSize>("red:2");
+
+  Sipi::SipiCompressionParams params = { { Sipi::TIFF_Pyramid, "yes" } };
+
+  EXPECT_NO_THROW(img.read(imgExifGps));
+  EXPECT_TRUE(img.getNx() == 4032);
+  EXPECT_TRUE(img.getNy() == 3024);
+
+  EXPECT_NO_THROW(img.write("tif", imgExifGpsTifOut));
+
+  EXPECT_NO_THROW(img.read(imgExifGpsTifOut, region, size));
+  EXPECT_TRUE(img.getNx() == 1008);
+  EXPECT_TRUE(img.getNy() == 756);
+}
