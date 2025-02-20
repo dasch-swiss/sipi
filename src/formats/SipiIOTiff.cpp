@@ -1182,12 +1182,27 @@ bool SipiIOTiff::read(SipiImage *img,
     }
 
     auto *inbuf = new uint8_t[ps * roi_w * roi_h * img->nc];
-    std::vector<uint8_t> pixdata;
-    if (is_tiled)
-      pixdata = read_tiled_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
-    else
-      pixdata = read_standard_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
-    memcpy(inbuf, pixdata.data(), pixdata.size() * sizeof(uint8_t));
+
+    if (img->bps <= 8) {
+      std::vector<uint8_t> pixdata;
+      if (is_tiled)
+        read_tiled_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
+      else
+        pixdata = read_standard_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
+
+      img->bps = 8;
+
+      memcpy(inbuf, pixdata.data(), pixdata.size() * img->bps / 8);
+    } else if (img->bps <= 16) {
+      std::vector<uint16_t> pixdata;
+      if (is_tiled)
+        pixdata = read_tiled_data<uint16_t>(tif, roi_x, roi_y, roi_w, roi_h);
+      else
+        pixdata = read_standard_data<uint16_t>(tif, roi_x, roi_y, roi_w, roi_h);
+      img->bps = 16;
+      memcpy(inbuf, pixdata.data(), pixdata.size() * img->bps / 8);
+    }
+
     img->pixels = inbuf;
     img->nx = roi_w;
     img->ny = roi_h;
