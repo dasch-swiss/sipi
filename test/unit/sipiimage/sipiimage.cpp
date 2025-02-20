@@ -370,6 +370,7 @@ TEST(SipiImage, CMYK_With_Alpha_Conversion)
   ASSERT_NO_THROW(img2.write("png", tif_cmyk_with_alpha_converted_to_png));
 }
 
+// BROKEN! See the remark about "TIFFSetDirectory(tif, 0);" in SipiIOTiff.cpp
 // Convert Tiff with JPEG compression and automatic YCrCb conversion via TIFFTAG_JPEGCOLORMODE = JPEGCOLORMODE_RGB
 /* TEST(SipiImage, TiffJpegAutoRgbConvert) */
 /* { */
