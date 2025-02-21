@@ -55,7 +55,7 @@ enum Orientation : std::uint8_t {
 
 typedef struct SubImageInfo_
 {
-  uint32_t reduce; // nx / width
+  uint32_t reduce; // equal to image.nx / SubImageInfo.width
   uint32_t width;
   uint32_t height;
   uint32_t tile_width;
