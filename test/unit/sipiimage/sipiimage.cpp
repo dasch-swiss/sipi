@@ -7,6 +7,8 @@
 
 #include "../../../src/SipiImage.hpp"
 #include "SipiIOTiff.h"
+#include <cmath>
+#include <ranges>
 
 // small function to check if file exist
 inline bool exists_file(const std::string &name)
@@ -386,19 +388,25 @@ TEST(SipiImage, TiffPyramidLayers)
 {
   Sipi::SipiIOTiff::initLibrary();
 
-  Sipi::SipiImage img;
-  const std::shared_ptr<Sipi::SipiRegion> region;
-  const auto size = std::make_shared<Sipi::SipiSize>("red:2");
+  for (int reduce : std::views::iota(0, 5)) {
+    reduce = 100 - (reduce * 10);
+    const int x = 4032, y = 3024;
 
-  Sipi::SipiCompressionParams params = { { Sipi::TIFF_Pyramid, "yes" } };
+    Sipi::SipiImage img;
+    const std::shared_ptr<Sipi::SipiRegion> region;
+    const auto size = std::make_shared<Sipi::SipiSize>("pct:" + std::to_string(reduce));
+    Sipi::SipiCompressionParams params = { { Sipi::TIFF_Pyramid, "yes" } };
 
-  EXPECT_NO_THROW(img.read(imgExifGps));
-  EXPECT_TRUE(img.getNx() == 4032);
-  EXPECT_TRUE(img.getNy() == 3024);
+    EXPECT_NO_THROW(img.read(imgExifGps));
+    EXPECT_TRUE(img.getNx() == x);
+    EXPECT_TRUE(img.getNy() == y);
 
-  EXPECT_NO_THROW(img.write("tif", imgExifGpsTifOut));
+    EXPECT_NO_THROW(img.write("tif", imgExifGpsTifOut, &params));
 
-  EXPECT_NO_THROW(img.read(imgExifGpsTifOut, region, size));
-  EXPECT_TRUE(img.getNx() == 1008);
-  EXPECT_TRUE(img.getNy() == 756);
+    EXPECT_NO_THROW(img.read(imgExifGpsTifOut, region, size));
+    printf("xy -> xy (%i): %ix%i -> %ix%i\n", reduce, x, y, img.getNx(), img.getNy());
+    printf("## %i %i\n", lround(static_cast<float>(x) * reduce / 100), lround(static_cast<float>(y) * reduce / 100));
+    EXPECT_TRUE(img.getNx() == round(static_cast<float>(x) * reduce / 100));
+    EXPECT_TRUE(img.getNy() == round(static_cast<float>(y) * reduce / 100));
+  }
 }
