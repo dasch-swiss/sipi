@@ -1188,7 +1188,7 @@ bool SipiIOTiff::read(SipiImage *img,
     if (img->bps <= 8) {
       std::vector<uint8_t> pixdata;
       if (is_tiled)
-        read_tiled_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
+        pixdata = read_tiled_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
       else
         pixdata = read_standard_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
 
