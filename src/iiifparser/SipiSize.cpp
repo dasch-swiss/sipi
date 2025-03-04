@@ -326,18 +326,11 @@ SipiSize::SizeType
       break;
     }
 
-    int sf = 1;
-    for (int i = 0; i < reduce; i++) sf *= 2;
+    int sf = 1 << reduce;
 
     w = static_cast<size_t>(ceilf(img_w_float / static_cast<float>(sf)));
     h = static_cast<size_t>(ceilf(img_h_float / static_cast<float>(sf)));
-    if (reduce > max_reduce) {
-      reduce_p = max_reduce;
-      redonly = false;
-    } else {
-      reduce_p = reduce;
-      redonly = true;
-    }
+    reduce_p = std::min(reduce, max_reduce);
     break;
   }
 

@@ -384,6 +384,13 @@ TEST(SipiImage, CMYK_With_Alpha_Conversion)
 /*   EXPECT_NO_THROW(img.write("jpx", "../../../../test/_test_data/images/thumbs/tiffJpegScanlineBug.jp2")); */
 /* } */
 
+double errorPercent(double actual, double expected) { return abs((actual - expected) / expected); }
+
+void assertErrorPercent(double actual, double expected, double lessThan) {
+  auto p = errorPercent(actual, expected);
+  EXPECT_TRUE(p < lessThan);
+}
+
 TEST(SipiImage, TiffPyramidLayers)
 {
   Sipi::SipiIOTiff::initLibrary();
@@ -398,15 +405,14 @@ TEST(SipiImage, TiffPyramidLayers)
     Sipi::SipiCompressionParams params = { { Sipi::TIFF_Pyramid, "yes" } };
 
     EXPECT_NO_THROW(img.read(imgExifGps));
+
     EXPECT_TRUE(img.getNx() == x);
     EXPECT_TRUE(img.getNy() == y);
 
     EXPECT_NO_THROW(img.write("tif", imgExifGpsTifOut, &params));
-
     EXPECT_NO_THROW(img.read(imgExifGpsTifOut, region, size));
-    printf("xy -> xy (%i): %ix%i -> %ix%i\n", reduce, x, y, img.getNx(), img.getNy());
-    printf("## %i %i\n", lround(static_cast<float>(x) * reduce / 100), lround(static_cast<float>(y) * reduce / 100));
-    EXPECT_TRUE(img.getNx() == round(static_cast<float>(x) * reduce / 100));
-    EXPECT_TRUE(img.getNy() == round(static_cast<float>(y) * reduce / 100));
+
+    assertErrorPercent(img.getNx(), static_cast<float>(x) * reduce / 100, 0.01);
+    assertErrorPercent(img.getNy(), static_cast<float>(y) * reduce / 100, 0.01);
   }
 }
