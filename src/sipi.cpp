@@ -7,14 +7,14 @@
  * \brief Implements an IIIF server with many features.
  *
  */
-#include <syslog.h>
+#include <csignal>
 #include <dirent.h>
 #include <execinfo.h>
 #include <iostream>
-#include <csignal>
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
+#include <syslog.h>
 
 #include <thread>
 #include <unistd.h>
@@ -308,6 +308,7 @@ void sig_handler(const int sig)
   msg += "\n" + get_stack_trace();
   sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "sig_handler", msg.c_str()));
   syslog(LOG_ERR, "%s", msg.c_str());
+  sentry_flush(2000);
 
   exit(1);
 }
@@ -333,6 +334,7 @@ void my_terminate_handler()
   msg += "\n" + get_stack_trace();
   sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "my_terminate_handler", msg.c_str()));
   syslog(LOG_ERR, "%s", msg.c_str());
+  sentry_flush(2000);
 
   std::abort();// Abort the program or perform other cleanup
 }
@@ -373,6 +375,8 @@ int main(int argc, char *argv[])
     sentry_options_t *options = sentry_options_new();
     sentry_options_set_dsn(options, sentry_dsn.c_str());
     sentry_options_set_database_path(options, "/tmp/.sentry-native");
+
+    sentry_options_set_symbolize_stacktraces(options, true);
 
     if (!sentry_release.empty()) {
       std::string sentryReleaseTag = std::string(BUILD_SCM_TAG);
