@@ -30,7 +30,7 @@
 #include "SipiCache.h"
 #include "SipiError.hpp"
 #include "shttps/Global.h"
-
+#include "Logger.h"
 
 namespace Sipi {
 
@@ -64,7 +64,7 @@ SipiCache::SipiCache(const std::string &cachedir_p,
   cachesize = 0;
   nfiles = 0;
 
-  syslog(LOG_INFO,
+  log_info(
     "Cache at \"%s\" cachesize=%lld nfiles=%d hysteresis=%f",
     _cachedir.c_str(),
     max_cachesize,
@@ -80,7 +80,7 @@ SipiCache::SipiCache(const std::string &cachedir_p,
     std::streampos length = cachefile.tellg();
     cachefile.seekg(0, cachefile.beg);
     int n = length / sizeof(SipiCache::FileCacheRecord);
-    syslog(LOG_INFO, "Reading cache file...");
+    log_info("Reading cache file...");
 
     for (int i = 0; i < n; i++) {
       SipiCache::FileCacheRecord fr;
@@ -91,7 +91,7 @@ SipiCache::SipiCache(const std::string &cachedir_p,
         //
         // we cannot find the file – probably it has been deleted => skip it
         //
-        syslog(LOG_DEBUG, "Cache could'nt find file \"%s\" on disk!", fr.cachepath);
+        log_debug("Cache could'nt find file \"%s\" on disk!", fr.cachepath);
         continue;
       }
 
@@ -110,7 +110,7 @@ SipiCache::SipiCache(const std::string &cachedir_p,
       cachesize += fr.fsize;
       nfiles++;
       cachetable[fr.canonical] = cr;
-      syslog(LOG_INFO, "File \"%s\" adding to cache", cr.cachepath.c_str());
+      log_info("File \"%s\" adding to cache", cr.cachepath.c_str());
     }
   }
 
@@ -135,7 +135,7 @@ SipiCache::SipiCache(const std::string &cachedir_p,
 
       if (!found) {
         std::string ff = _cachedir + "/" + file_on_disk;
-        syslog(LOG_INFO, "File \"%s\" not in cache file! Deleting...", file_on_disk.c_str());
+        log_info("File \"%s\" not in cache file! Deleting...", file_on_disk.c_str());
         remove(ff.c_str());
       }
 
@@ -165,7 +165,7 @@ SipiCache::SipiCache(const std::string &cachedir_p,
 
 SipiCache::~SipiCache()
 {
-  syslog(LOG_DEBUG, "Closing cache...");
+  log_debug("Closing cache...");
   std::string cachefilename = _cachedir + "/.sipicache";
   std::ofstream cachefile(cachefilename, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
 
@@ -185,7 +185,7 @@ SipiCache::~SipiCache()
       fr.fsize = ele.second.fsize;
       fr.access_time = ele.second.access_time;
       cachefile.write((char *)&fr, sizeof(SipiCache::FileCacheRecord));
-      syslog(LOG_DEBUG, "Writing \"%s\" to cache file...", ele.second.cachepath.c_str());
+      log_debug("Writing \"%s\" to cache file...", ele.second.cachepath.c_str());
     }
   }
 
@@ -275,12 +275,12 @@ int SipiCache::purge(bool use_lock)
     unsigned int nfiles_goal = max_nfiles * cache_hysteresis;
 
     for (const auto &ele : alist) {
-      syslog(LOG_DEBUG, "Purging from cache \"%s\"...", cachetable[ele.canonical].cachepath.c_str());
+      log_debug("Purging from cache \"%s\"...", cachetable[ele.canonical].cachepath.c_str());
       std::string delpath = _cachedir + "/" + cachetable[ele.canonical].cachepath;
 
       try {
         int cnt = blocked_files.at(delpath);
-        syslog(LOG_WARNING, "Couldn't remove cache file for %s: file in use (%d)!", ele.canonical.c_str(), cnt);
+        log_warn("Couldn't remove cache file for %s: file in use (%d)!", ele.canonical.c_str(), cnt);
       } catch (const std::out_of_range &ex) {
         ::unlink(delpath.c_str());
         cachesize -= cachetable[ele.canonical].fsize;
@@ -453,19 +453,19 @@ bool SipiCache::remove(const std::string &canonical_p)
   try {
     fr = cachetable.at(canonical_p);
   } catch (const std::out_of_range &oor) {
-    syslog(LOG_WARNING, "Couldn't remove cache for %s: not existing!", canonical_p.c_str());
+    log_warn("Couldn't remove cache for %s: not existing!", canonical_p.c_str());
     return false;// return empty string, because we didn't find the file in cache
   }
 
   std::string delpath = _cachedir + "/" + cachetable[canonical_p].cachepath;
   try {
     int cnt = blocked_files.at(delpath);
-    syslog(LOG_WARNING, "Couldn't remove cache for %s: file in use (%d)!", canonical_p.c_str(), cnt);
+    log_warn("Couldn't remove cache for %s: file in use (%d)!", canonical_p.c_str(), cnt);
     return false;
   } catch (const std::out_of_range &ex) {
     ;
   }
-  syslog(LOG_DEBUG, "Delete from cache \"%s\"...", cachetable[canonical_p].cachepath.c_str());
+  log_debug("Delete from cache \"%s\"...", cachetable[canonical_p].cachepath.c_str());
   ::remove(delpath.c_str());
   cachesize -= cachetable[canonical_p].fsize;
   cachetable.erase(canonical_p);

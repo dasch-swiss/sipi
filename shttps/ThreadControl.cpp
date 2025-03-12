@@ -10,6 +10,8 @@
 
 #include <source_location>
 
+#include "Logger.h"
+
 namespace shttps {
 
 ThreadControl::ThreadControl(int n_threads, void *(*start_routine)(void *), Server *serv)
@@ -24,7 +26,7 @@ ThreadControl::ThreadControl(int n_threads, void *(*start_routine)(void *), Serv
     int control_pipe[2];
     if (socketpair(PF_LOCAL, SOCK_STREAM, 0, control_pipe) != 0) {
       const auto loc = std::source_location::current();
-      syslog(LOG_ERR, "Creating pipe failed at [%s: %d]: %m", loc.file_name(), loc.line());
+      log_err("Creating pipe failed at [%s: %d]: %m", loc.file_name(), loc.line());
       return;
     }
     child_data.push_back({ control_pipe[1], control_pipe[0], serv });
@@ -40,7 +42,7 @@ ThreadControl::ThreadControl(int n_threads, void *(*start_routine)(void *), Serv
     pthread_attr_init(&tattr);
     if (pthread_create(&thread_data.tid, &tattr, start_routine, (void *)(&cd[n])) < 0) {
       const auto loc = std::source_location::current();
-      syslog(LOG_ERR, "Could not create thread at [%s: %d]: %m", loc.file_name(), loc.line());
+      log_err("Could not create thread at [%s: %d]: %m", loc.file_name(), loc.line());
       break;
     }
     thread_list.push_back(thread_data);
@@ -53,7 +55,7 @@ ThreadControl::~ThreadControl()
 {
   for (auto const &thread : thread_list) {
     int err = pthread_join(thread.tid, nullptr);
-    if (err != 0) { syslog(LOG_INFO, "pthread_join failed with error code: %s", strerror(err)); }
+    if (err != 0) { log_info("pthread_join failed with error code: %s", strerror(err)); }
   }
 }
 //=========================================================================
