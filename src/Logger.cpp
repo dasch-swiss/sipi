@@ -6,42 +6,19 @@
 #include <sstream>
 
 #include "Logger.h"
+#include "jansson.h"
 
-std::string escape_json_str(const std::string &s)
+// includes quotes
+std::string to_escaped_json_string(const std::string &input)
 {
-  std::ostringstream o;
-  for (auto c = s.cbegin(); c != s.cend(); c++) {
-    switch (*c) {
-    case '"':
-      o << "\\\"";
-      break;
-    case '\\':
-      o << "\\\\";
-      break;
-    case '\b':
-      o << "\\b";
-      break;
-    case '\f':
-      o << "\\f";
-      break;
-    case '\n':
-      o << "\\n";
-      break;
-    case '\r':
-      o << "\\r";
-      break;
-    case '\t':
-      o << "\\t";
-      break;
-    default:
-      if ('\x00' <= *c && *c <= '\x1f') {
-        o << "\\u" << std::hex << std::setw(4) << std::setfill('0') << static_cast<int>(*c);
-      } else {
-        o << *c;
-      }
-    }
-  }
-  return o.str();
+  json_t *json_str = json_string(input.c_str());
+  char *escaped_cstr = json_dumps(json_str, JSON_ENCODE_ANY);
+  std::string escaped_string(escaped_cstr);
+
+  free(escaped_cstr);
+  json_decref(json_str);
+
+  return escaped_string;
 }
 
 inline const char *LogLevelToString(LogLevel ll)
@@ -66,7 +43,7 @@ void log_format(LogLevel ll, const char *message, va_list args)
 {
   char format[vsnprintf_buf_size];
   vsnprintf(format, vsnprintf_buf_size, message, args);
-  printf("{\"level\": \"%s\", \"message\": \"%s\"}\n", LogLevelToString(ll), escape_json_str(format).c_str());
+  printf("{\"level\": \"%s\", \"message\": %s}\n", LogLevelToString(ll), to_escaped_json_string(format).c_str());
 }
 
 void log_debug(const char *message, ...)
