@@ -32,6 +32,7 @@
 
 
 #include "CLI11.hpp"
+#include "Logger.h"
 #include "SipiConf.h"
 #include "SipiFilenameHash.h"
 #include "SipiHttpServer.hpp"
