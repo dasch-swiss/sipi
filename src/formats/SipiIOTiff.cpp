@@ -382,6 +382,8 @@ unsigned char *read_watermark(const std::string &wmfile, int &nx, int &ny, int &
 
 static void tiffError(const char *module, const char *fmt, va_list argptr)
 {
+  if (std::string(module) == "TIFFSetField") return;
+
   log_err("ERROR IN TIFF! Module: %s", module);
   log_err(fmt, argptr);
 }
