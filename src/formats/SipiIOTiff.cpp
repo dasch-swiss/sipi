@@ -20,11 +20,11 @@
 
 #include "shttps/Connection.h"
 
+#include "Logger.h"
 #include "SipiError.hpp"
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
 #include "formats/SipiIOTiff.h"
-#include "Logger.h"
 
 
 #include "shttps/Global.h"
@@ -380,26 +380,22 @@ unsigned char *read_watermark(const std::string &wmfile, int &nx, int &ny, int &
 //============================================================================
 
 
-static void tiffError(const char *module, const char *fmt, va_list argptr)
+static void tiffError(const char *module, const char *fmt, va_list args)
 {
-  // due to erroneous UTF8 sequences in fmt values
-  if (std::string(module) == "TIFFSetField") return;
-  if (std::string(module) == "_TIFFSetField") return;
+  // silenced due to erroneous UTF8 sequences in fmt values, leading to segfaults, perhaps fixable.
 
-  log_err("ERROR IN TIFF! Module: %s", module);
-  log_err(fmt, argptr);
+  /* log_err("ERROR IN TIFF! Module: %s", module); */
+  /* log_err(fmt, argptr); */
 }
 //============================================================================
 
 
-static void tiffWarning(const char *module, const char *fmt, va_list argptr)
+static void tiffWarning(const char *module, const char *fmt, va_list args)
 {
-  // due to erroneous UTF8 sequences in fmt values
-  if (std::string(module) == "TIFFSetField") return;
-  if (std::string(module) == "_TIFFSetField") return;
+  // silenced due to erroneous UTF8 sequences in fmt values, leading to segfaults, perhaps fixable.
 
-  log_err("ERROR IN TIFF! Module: %s", module);
-  log_err(fmt, argptr);
+  /* log_err("ERROR IN TIFF! Module: %s", module); */
+  /* log_err(fmt, argptr); */
 }
 //============================================================================
 
@@ -1726,4 +1722,4 @@ unsigned char *SipiIOTiff::cvrt8BitTo1bit(const SipiImage &img, unsigned int &sl
 }
 //============================================================================
 
-}
+}// namespace Sipi
