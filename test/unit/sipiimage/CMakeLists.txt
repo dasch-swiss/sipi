@@ -67,6 +67,8 @@ add_executable(${TEST_NAME}
         ${PROJECT_SOURCE_DIR}/include/iiifparser/SipiSize.h
         ${PROJECT_SOURCE_DIR}/src/SipiCommon.cpp
         ${PROJECT_SOURCE_DIR}/include/SipiCommon.h
+        ${PROJECT_SOURCE_DIR}/src/Logger.cpp
+        ${PROJECT_SOURCE_DIR}/include/Logger.h
         ${PROJECT_SOURCE_DIR}/shttps/Global.h
         ${PROJECT_SOURCE_DIR}/shttps/Error.cpp
         ${PROJECT_SOURCE_DIR}/shttps/Error.h

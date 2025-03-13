@@ -34,12 +34,11 @@
 #include "iiifparser/SipiRotation.h"
 #include "iiifparser/SipiSize.h"
 
+#include "Logger.h"
 #include "SipiHttpServer.hpp"
-#include "handlers/iiif_handler.hpp"
-
 #include "favicon.h"
+#include "handlers/iiif_handler.hpp"
 #include "jansson.h"
-
 
 using namespace shttps;
 
@@ -73,7 +72,7 @@ static void send_error(Connection &conn_obj, Connection::StatusCodes code, const
   conn_obj.header("Content-Type", "text/plain");
 
   std::string http_err_name;
-  constexpr bool log_err(true);// True if the error should be logged.
+  constexpr bool log_err_b(true);// True if the error should be logged.
 
   switch (code) {
   case Connection::BAD_REQUEST:
@@ -112,12 +111,12 @@ static void send_error(Connection &conn_obj, Connection::StatusCodes code, const
 
   conn_obj.flush();
   // Log the error if appropriate.
-  if (log_err) {
+  if (log_err_b) {
     std::stringstream log_msg_stream;
     log_msg_stream << "GET " << conn_obj.uri() << " failed (" << http_err_name << ")";
 
     if (!errmsg.empty()) { log_msg_stream << ": " << errmsg; }
-    syslog(LOG_ERR, "%s", log_msg_stream.str().c_str());
+    log_err("%s", log_msg_stream.str().c_str());
   }
 }
 
@@ -604,7 +603,7 @@ static void serve_redirect(Connection &conn_obj, const std::vector<std::string> 
   conn_obj.header("Location", redirect);
   conn_obj.header("Content-Type", "text/plain");
   conn_obj << "Redirect to " << redirect;
-  syslog(LOG_INFO, "GET: redirect to %s", redirect.c_str());
+  log_info("GET: redirect to %s", redirect.c_str());
   conn_obj.flush();
 }
 
@@ -893,7 +892,7 @@ static void serve_knora_json_file(Connection &conn_obj,
 
   // set the origin
   const std::string origin = conn_obj.header("origin");
-  syslog(LOG_DEBUG, "knora_send_info: host header %s", origin.c_str());
+  log_debug("knora_send_info: host header %s", origin.c_str());
   if (origin.empty()) {
     conn_obj.header("Access-Control-Allow-Origin", "*");
   } else {
@@ -1112,7 +1111,7 @@ static void serve_file_download(Connection &conn_obj,
     };
 
     if (stat(requested_file.c_str(), &fstatbuf) != 0) {
-      syslog(LOG_ERR, "Cannot fstat file %s ", requested_file.c_str());
+      log_err("Cannot fstat file %s ", requested_file.c_str());
       send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR);
     }
     size_t fsize = fstatbuf.st_size;
@@ -1166,7 +1165,7 @@ static void serve_file_download(Connection &conn_obj,
     }
     conn_obj.flush();
   } else {
-    syslog(LOG_WARNING, "GET: %s not accessible", requested_file.c_str());
+    log_warn("GET: %s not accessible", requested_file.c_str());
     send_error(conn_obj, Connection::NOT_FOUND);
     conn_obj.flush();
   }
@@ -1277,7 +1276,7 @@ static void serve_iiif(Connection &conn_obj,
 
   if (access(infile.c_str(), R_OK) != 0) {
     // test, if file exists
-    syslog(LOG_INFO, "File %s not found", infile.c_str());
+    log_info("File %s not found", infile.c_str());
     send_error(conn_obj, Connection::NOT_FOUND);
     return;
   }
@@ -1390,7 +1389,7 @@ static void serve_iiif(Connection &conn_obj,
     try {
       if (not_head_request) conn_obj.sendFile(infile);
     } catch (shttps::InputFailure iofail) {
-      syslog(LOG_WARNING, "Browser unexpectedly closed connection");
+      log_warn("Browser unexpectedly closed connection");
     } catch (Sipi::SipiError &err) {
       send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
     }
@@ -1406,7 +1405,7 @@ static void serve_iiif(Connection &conn_obj,
     // we block the file from being deleted if successfull
 
     if (!cachefile.empty()) {
-      syslog(LOG_DEBUG, "Using cachefile %s", cachefile.c_str());
+      log_debug("Using cachefile %s", cachefile.c_str());
       conn_obj.status(Connection::OK);
       conn_obj.header("Cache-Control", "must-revalidate, post-check=0, pre-check=0");
       conn_obj.header("Link", canonical_header);
@@ -1435,11 +1434,11 @@ static void serve_iiif(Connection &conn_obj,
         //!> from now on the cache file can be deleted again
       } catch (shttps::InputFailure err) {
         // -1 was thrown
-        syslog(LOG_WARNING, "Browser unexpectedly closed connection");
+        log_warn("Browser unexpectedly closed connection");
         cache->deblock(cachefile);
         return;
       } catch (Sipi::SipiError &err) {
-        syslog(LOG_ERR, "Error sending cache file: \"%s\": %s", cachefile.c_str(), err.to_string().c_str());
+        log_err("Error sending cache file: \"%s\": %s", cachefile.c_str(), err.to_string().c_str());
         send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
         cache->deblock(cachefile);
         return;
@@ -1499,14 +1498,14 @@ static void serve_iiif(Connection &conn_obj,
       img.add_watermark(watermark);
     } catch (Sipi::SipiError &err) {
       send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
-      syslog(LOG_ERR, "GET %s: error adding watermark: %s", uri.c_str(), err.to_string().c_str());
+      log_err("GET %s: error adding watermark: %s", uri.c_str(), err.to_string().c_str());
       return;
     } catch (std::exception &err) {
       send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.what());
-      syslog(LOG_ERR, "GET %s: error adding watermark: %s", uri.c_str(), err.what());
+      log_err("GET %s: error adding watermark: %s", uri.c_str(), err.what());
       return;
     }
-    syslog(LOG_INFO, "GET %s: adding watermark", uri.c_str());
+    log_info("GET %s: adding watermark", uri.c_str());
   }
 
   img.connection(&conn_obj);
@@ -1562,7 +1561,7 @@ static void serve_iiif(Connection &conn_obj,
     }
     default: {
       // HTTP 400 (format not supported)
-      syslog(LOG_WARNING, "Unsupported file format requested! Supported are .jpg, .jp2, .tif, .png");
+      log_warn("Unsupported file format requested! Supported are .jpg, .jp2, .tif, .png");
       conn_obj.setBuffer();
       conn_obj.status(Connection::BAD_REQUEST);
       conn_obj.header("Content-Type", "text/plain");
@@ -1682,7 +1681,7 @@ void SipiHttpServer::cache(const std::string &cachedir_p,
     _cache = std::make_shared<SipiCache>(cachedir_p, max_cachesize_p, max_nfiles_p, cache_hysteresis_p);
   } catch (const SipiError &err) {
     _cache = nullptr;
-    syslog(LOG_WARNING, "Couldn't open cache directory %s: %s", cachedir_p.c_str(), err.to_string().c_str());
+    log_warn("Couldn't open cache directory %s: %s", cachedir_p.c_str(), err.to_string().c_str());
   }
 }
 
@@ -1692,12 +1691,12 @@ void SipiHttpServer::cache(const std::string &cachedir_p,
 void SipiHttpServer::run()
 {
   const int old_ll = setlogmask(LOG_MASK(LOG_INFO));
-  syslog(LOG_INFO, "SipiHttpServer starting ...");
+  log_info("SipiHttpServer starting ...");
   //
   // setting the image root
   //
-  syslog(LOG_INFO, "Serving images from %s", _imgroot.c_str());
-  syslog(LOG_DEBUG, "Salsah prefix: %s", _salsah_prefix.c_str());
+  log_info("Serving images from %s", _imgroot.c_str());
+  log_debug("Salsah prefix: %s", _salsah_prefix.c_str());
   setlogmask(old_ll);
 
   add_route(Connection::GET, "/favicon.ico", favicon_handler);

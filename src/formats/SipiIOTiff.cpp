@@ -20,6 +20,7 @@
 
 #include "shttps/Connection.h"
 
+#include "Logger.h"
 #include "SipiError.hpp"
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
@@ -379,18 +380,22 @@ unsigned char *read_watermark(const std::string &wmfile, int &nx, int &ny, int &
 //============================================================================
 
 
-static void tiffError(const char *module, const char *fmt, va_list argptr)
+static void tiffError(const char *module, const char *fmt, va_list args)
 {
-  syslog(LOG_ERR, "ERROR IN TIFF! Module: %s", module);
-  vsyslog(LOG_ERR, fmt, argptr);
+  // silenced due to erroneous UTF8 sequences in fmt values, leading to segfaults, perhaps fixable.
+
+  /* log_err("ERROR IN TIFF! Module: %s", module); */
+  /* log_err(fmt, argptr); */
 }
 //============================================================================
 
 
-static void tiffWarning(const char *module, const char *fmt, va_list argptr)
+static void tiffWarning(const char *module, const char *fmt, va_list args)
 {
-  syslog(LOG_ERR, "ERROR IN TIFF! Module: %s", module);
-  vsyslog(LOG_ERR, fmt, argptr);
+  // silenced due to erroneous UTF8 sequences in fmt values, leading to segfaults, perhaps fixable.
+
+  /* log_err("ERROR IN TIFF! Module: %s", module); */
+  /* log_err(fmt, argptr); */
 }
 //============================================================================
 
@@ -623,7 +628,7 @@ bool SipiIOTiff::read(SipiImage *img,
       try {
         img->iptc = std::make_shared<SipiIptc>(iptc_content, iptc_length);
       } catch (SipiError &err) {
-        syslog(LOG_ERR, "%s", err.to_string().c_str());
+        log_err("%s", err.to_string().c_str());
       }
     }
 
@@ -646,7 +651,7 @@ bool SipiIOTiff::read(SipiImage *img,
       try {
         img->xmp = std::make_shared<SipiXmp>(xmp_content, xmp_length);
       } catch (SipiError &err) {
-        syslog(LOG_ERR, "%s", err.to_string().c_str());
+        log_err("%s", err.to_string().c_str());
       }
     }
 
@@ -662,7 +667,7 @@ bool SipiIOTiff::read(SipiImage *img,
       try {
         img->icc = std::make_shared<SipiIcc>(icc_buf, icc_len);
       } catch (SipiError &err) {
-        syslog(LOG_ERR, "%s", err.to_string().c_str());
+        log_err("%s", err.to_string().c_str());
       }
     } else if (1 == TIFFGetField(tif, TIFFTAG_WHITEPOINT, &whitepoint_ti)) {
       whitepoint[0] = whitepoint_ti[0];
@@ -1197,7 +1202,7 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
 
       if (buf.size() > 0) { TIFFSetField(tif, TIFFTAG_ICCPROFILE, buf.size(), buf.data()); }
     } catch (SipiError &err) {
-      syslog(LOG_ERR, "%s", err.to_string().c_str());
+      log_err("%s", err.to_string().c_str());
     }
   }
   //
@@ -1208,7 +1213,7 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
       std::vector<unsigned char> buf = img->iptc->iptcBytes();
       if (buf.size() > 0) { TIFFSetField(tif, TIFFTAG_RICHTIFFIPTC, buf.size(), buf.data()); }
     } catch (SipiError &err) {
-      syslog(LOG_ERR, "%s", err.to_string().c_str());
+      log_err("%s", err.to_string().c_str());
     }
   }
 
@@ -1220,7 +1225,7 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
       std::string buf = img->xmp->xmpBytes();
       if (!buf.empty() > 0) { TIFFSetField(tif, TIFFTAG_XMLPACKET, buf.size(), buf.c_str()); }
     } catch (SipiError &err) {
-      syslog(LOG_ERR, "%s", err.to_string().c_str());
+      log_err("%s", err.to_string().c_str());
     }
   }
   //
@@ -1292,7 +1297,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
           try {
             img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", r);
           } catch (const SipiError &err) {
-            syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+            log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
         }
         break;
@@ -1304,7 +1309,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
           try {
             img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", uc);
           } catch (const SipiError &err) {
-            syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+            log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
         }
         break;
@@ -1316,7 +1321,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
           try {
             img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", us);
           } catch (const SipiError &err) {
-            syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+            log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
         }
         break;
@@ -1328,7 +1333,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
           try {
             img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", ui);
           } catch (const SipiError &err) {
-            syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+            log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
         }
         break;
@@ -1340,7 +1345,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
           try {
             img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", std::string(tmpstr));
           } catch (const SipiError &err) {
-            syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+            log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
         }
         break;
@@ -1355,7 +1360,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
           try {
             img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", r, len);
           } catch (const SipiError &err) {
-            syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+            log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
           delete[] r;
         }
@@ -1370,7 +1375,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
           try {
             img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
           } catch (const SipiError &err) {
-            syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+            log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
         }
         break;
@@ -1383,7 +1388,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
           try {
             img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
           } catch (const SipiError &err) {
-            syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+            log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
         }
         break;
@@ -1396,7 +1401,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
           try {
             img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
           } catch (const SipiError &err) {
-            syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+            log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
         }
         break;
@@ -1411,7 +1416,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
             try {
               img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
             } catch (const SipiError &err) {
-              syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+              log_err("Error writing EXIF data: %s", err.to_string().c_str());
             }
           }
         } else {
@@ -1420,7 +1425,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
             try {
               img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
             } catch (const SipiError &err) {
-              syslog(LOG_ERR, "Error writing EXIF data: %s", err.to_string().c_str());
+              log_err("Error writing EXIF data: %s", err.to_string().c_str());
             }
           }
         }
@@ -1717,4 +1722,4 @@ unsigned char *SipiIOTiff::cvrt8BitTo1bit(const SipiImage &img, unsigned int &sl
 }
 //============================================================================
 
-}
+}// namespace Sipi

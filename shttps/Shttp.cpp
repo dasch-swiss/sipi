@@ -13,6 +13,7 @@
 #include "Error.h"
 #include "Server.h"
 #include "LuaServer.h"
+#include "Logger.h"
 
 shttps::Server *serverptr = nullptr;
 
@@ -22,7 +23,7 @@ static sig_t old_broken_pipe_handler;
 static void sighandler(int sig) {
     if (serverptr != nullptr) {
         int old_ll = setlogmask(LOG_MASK(LOG_INFO));
-        syslog(LOG_INFO, "Got SIGINT, stopping server");
+        log_info("Got SIGINT, stopping server");
         setlogmask(old_ll);
         serverptr->stop();
     } else {

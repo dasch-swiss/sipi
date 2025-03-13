@@ -7,14 +7,14 @@
  * \brief Implements an IIIF server with many features.
  *
  */
-#include <syslog.h>
+#include <csignal>
 #include <dirent.h>
 #include <execinfo.h>
 #include <iostream>
-#include <csignal>
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
+#include <syslog.h>
 
 #include <thread>
 #include <unistd.h>
@@ -32,6 +32,7 @@
 
 
 #include "CLI11.hpp"
+#include "Logger.h"
 #include "SipiConf.h"
 #include "SipiFilenameHash.h"
 #include "SipiHttpServer.hpp"
@@ -307,7 +308,8 @@ void sig_handler(const int sig)
 
   msg += "\n" + get_stack_trace();
   sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "sig_handler", msg.c_str()));
-  syslog(LOG_ERR, "%s", msg.c_str());
+  log_err("%s", msg.c_str());
+  sentry_flush(2000);
 
   exit(1);
 }
@@ -332,7 +334,8 @@ void my_terminate_handler()
 
   msg += "\n" + get_stack_trace();
   sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "my_terminate_handler", msg.c_str()));
-  syslog(LOG_ERR, "%s", msg.c_str());
+  log_err("%s", msg.c_str());
+  sentry_flush(2000);
 
   std::abort();// Abort the program or perform other cleanup
 }
@@ -373,6 +376,8 @@ int main(int argc, char *argv[])
     sentry_options_t *options = sentry_options_new();
     sentry_options_set_dsn(options, sentry_dsn.c_str());
     sentry_options_set_database_path(options, "/tmp/.sentry-native");
+
+    sentry_options_set_symbolize_stacktraces(options, true);
 
     if (!sentry_release.empty()) {
       std::string sentryReleaseTag = std::string(BUILD_SCM_TAG);
@@ -836,14 +841,14 @@ int main(int argc, char *argv[])
       try {
         size = std::make_shared<Sipi::SipiSize>(optSize);
       } catch (std::exception &e) {
-        syslog(LOG_ERR, "Error in size parameter: %s", e.what());
+        log_err("Error in size parameter: %s", e.what());
         return EXIT_FAILURE;
       }
     } else if (!sipiopt.get_option("--scale")->empty()) {
       try {
         size = std::make_shared<Sipi::SipiSize>(optScale);
       } catch (std::exception &e) {
-        syslog(LOG_ERR, "Error in scale parameter: %s", e.what());
+        log_err("Error in scale parameter: %s", e.what());
         return EXIT_FAILURE;
       }
     }
@@ -1291,12 +1296,11 @@ int main(int argc, char *argv[])
 
 
       // TODO: At this point the config is loaded and we can initialize metrics
-      if (!optSipiSentryDsn.empty()) syslog(LOG_INFO, "SIPI_SENTRY_DSN: %s", optSipiSentryDsn.c_str());
+      if (!optSipiSentryDsn.empty()) log_info("SIPI_SENTRY_DSN: %s", optSipiSentryDsn.c_str());
 
-      if (!optSipiSentryEnvironment.empty())
-        syslog(LOG_INFO, "SIPI_SENTRY_ENVRONMENT: %s", optSipiSentryEnvironment.c_str());
+      if (!optSipiSentryEnvironment.empty()) log_info("SIPI_SENTRY_ENVRONMENT: %s", optSipiSentryEnvironment.c_str());
 
-      if (!optSipiSentryRelease.empty()) syslog(LOG_INFO, "SIPI_SENTRY_Release: %s", optSipiSentryRelease.c_str());
+      if (!optSipiSentryRelease.empty()) log_info("SIPI_SENTRY_Release: %s", optSipiSentryRelease.c_str());
 
       // Create object SipiHttpServer
       auto nthreads = sipiConf.getNThreads();
@@ -1305,9 +1309,9 @@ int main(int argc, char *argv[])
         sipiConf.getPort(), nthreads, sipiConf.getUseridStr(), sipiConf.getLogfile(), sipiConf.getLoglevel());
 
       int old_ll = setlogmask(LOG_MASK(LOG_INFO));
-      syslog(LOG_INFO, "BUILD_TIMESTAMP: %s", BUILD_TIMESTAMP);
-      syslog(LOG_INFO, "BUILD_SCM_TAG: %s", BUILD_SCM_TAG);
-      syslog(LOG_INFO, "BUILD_SCM_REVISION: %s", BUILD_SCM_REVISION);
+      log_info("BUILD_TIMESTAMP: %s", BUILD_TIMESTAMP);
+      log_info("BUILD_SCM_TAG: %s", BUILD_SCM_TAG);
+      log_info("BUILD_SCM_REVISION: %s", BUILD_SCM_REVISION);
       setlogmask(old_ll);
 
       server.ssl_port(sipiConf.getSSLPort());// set the secure connection port (-1 means no ssl socket)
@@ -1367,7 +1371,7 @@ int main(int argc, char *argv[])
       // start the server
       server.run();
     } catch (shttps::Error &err) {
-      syslog(LOG_ERR, "Error starting server: %s", err.what());
+      log_err("Error starting server: %s", err.what());
       std::cerr << err << '\n';
     }
   }
