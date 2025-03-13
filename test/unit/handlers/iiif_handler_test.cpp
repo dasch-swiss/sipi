@@ -15,6 +15,28 @@ TEST(iiif_handler, parse_correct_iiif_url)
   EXPECT_TRUE(result.has_value());
 }
 
+TEST(iiif_handler, parse_correct_iiif_url_asserts)
+{
+  std::vector<std::tuple<std::string, IIIFUriParseResult>> valid_base_uris = {
+    { "/iiif/2/image.jpg/full/200,/0/default.jpg",
+      IIIFUriParseResult{ IIIF, { "iiif/2", "image.jpg", "full", "200,", "0", "default.jpg" } } }
+  };
+
+  for (const auto &test_case : valid_base_uris) {
+    auto result = parse_iiif_uri(std::get<0>(test_case));
+
+    std::ostringstream actual;
+
+    if (result)
+      actual << *result;
+    else
+      actual << result.error();
+
+    EXPECT_EQ(result, std::get<1>(test_case)) << "for " << std::get<0>(test_case) << " expected "
+                                              << std::get<1>(test_case) << " got " << actual.str() << std::endl;
+  }
+}
+
 TEST(iiif_handler, parse_empty_iiif_url)
 {
   const auto result = parse_iiif_uri("");

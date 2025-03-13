@@ -34,6 +34,7 @@ private:
   int x, y;
   size_t w, h;
   bool canonical_ok;
+  float reduce = 1.F; // 2 = twice as small
 
 public:
   /*!
@@ -62,6 +63,7 @@ public:
     rw = (float)w;
     rh = (float)h;
     canonical_ok = false;
+    reduce = 1.F;
   };
 
   /*!
@@ -77,6 +79,8 @@ public:
    * \returns CoordType
    */
   inline CoordType getType() const { return coord_type; };
+
+  inline void set_reduce(float reduce_p) { reduce = reduce_p; }
 
   /*!
    * Get the region parameters to do the actual cropping. The parameters returned are

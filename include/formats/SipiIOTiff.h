@@ -40,6 +40,20 @@ private:
    */
   void writeExif(SipiImage *img, TIFF *tif);
 
+  static void write_basic_tags(const SipiImage &img,
+    TIFF *tif,
+    uint32_t nx,
+    uint32_t ny,
+    bool its_1_bit,
+    const std::string &compression);
+
+  static void write_subfile(const SipiImage &img,
+    TIFF *tif,
+    int level,
+    uint32_t &tile_width,
+    uint32_t &tile_height,
+    const std::string &compression = "");
+
   /*!
    * Converts an image from RRRRRR...GGGGGG...BBBBB to RGBRGBRGBRGB....
    * \param img Pointer to SipiImage instance
