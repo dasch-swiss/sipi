@@ -382,7 +382,9 @@ unsigned char *read_watermark(const std::string &wmfile, int &nx, int &ny, int &
 
 static void tiffError(const char *module, const char *fmt, va_list argptr)
 {
+  // due to erroneous UTF8 sequences in fmt values
   if (std::string(module) == "TIFFSetField") return;
+  if (std::string(module) == "_TIFFSetField") return;
 
   log_err("ERROR IN TIFF! Module: %s", module);
   log_err(fmt, argptr);
@@ -392,6 +394,10 @@ static void tiffError(const char *module, const char *fmt, va_list argptr)
 
 static void tiffWarning(const char *module, const char *fmt, va_list argptr)
 {
+  // due to erroneous UTF8 sequences in fmt values
+  if (std::string(module) == "TIFFSetField") return;
+  if (std::string(module) == "_TIFFSetField") return;
+
   log_err("ERROR IN TIFF! Module: %s", module);
   log_err(fmt, argptr);
 }
