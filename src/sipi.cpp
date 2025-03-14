@@ -14,7 +14,6 @@
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
-#include <syslog.h>
 
 #include <thread>
 #include <unistd.h>

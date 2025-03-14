@@ -10,7 +10,6 @@
 #include <mutex>
 #include <poll.h>
 #include <queue>
-#include <syslog.h>
 #include <unistd.h>
 #include <vector>
 

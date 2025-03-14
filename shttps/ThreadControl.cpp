@@ -6,7 +6,6 @@
 #include "ThreadControl.h"
 #include <cstring>
 #include <iostream>
-#include <syslog.h>
 
 #include <source_location>
 
