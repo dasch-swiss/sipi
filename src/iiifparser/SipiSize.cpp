@@ -49,7 +49,7 @@ SipiSize::SipiSize(std::string str)
       size_type = SizeType::PERCENTS;
       std::string percent_str = str.substr(4);
       percent = shttps::Parsing::parse_float(percent_str);
-      if (percent < 0.0) percent = 1.0;
+      if (percent <= 0.000000000001) percent = 1.0;
     } else if (str.find("red") != std::string::npos) {
       if (exclamation_mark)
         throw SipiError("Invalid IIIF size parameter: \"!" + str + "\": \"!\" not allowed here!");

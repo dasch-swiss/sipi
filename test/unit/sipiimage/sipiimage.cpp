@@ -329,10 +329,10 @@ TEST(SipiImage, Watermark)
   /* ASSERT_NO_THROW(img3.write("jpg", maoriWater)); */
 
   ASSERT_NO_THROW(img4.read(maoriWater));
-  EXPECT_TRUE(img4.compare(img3).value_or(1000) < 0.007); // 0.00605
+  EXPECT_TRUE(img4.compare(img3).value_or(1000) < 0.007);// 0.00605
 
   ASSERT_NO_THROW(img3.read(maori));
-  EXPECT_TRUE(img4.compare(img3) > 0.017); // 0.0174
+  EXPECT_TRUE(img4.compare(img3) > 0.017);// 0.0174
 
   ASSERT_NO_THROW(img3.rotate(90));
 }
@@ -377,4 +377,14 @@ TEST(SipiImage, TiffJpegAutoRgbConvert)
 
   EXPECT_NO_THROW(img.read(tiffJpegScanlineBug));
   EXPECT_NO_THROW(img.write("jpx", "../../../../test/_test_data/images/thumbs/tiffJpegScanlineBug.jp2"));
+}
+
+TEST(SipiImage, PercentParsing)
+{
+  Sipi::SipiIOTiff::initLibrary();
+  const std::shared_ptr<Sipi::SipiRegion> region;
+  const auto size = std::make_shared<Sipi::SipiSize>("pct:0");
+
+  Sipi::SipiImage img;
+  EXPECT_NO_THROW(img.read(leavesSmallWithAlpha, region, size));
 }
