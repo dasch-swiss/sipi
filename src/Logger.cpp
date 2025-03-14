@@ -68,8 +68,8 @@ void log_format(LogLevel ll, const char *message, va_list args)
 {
   char format[vsnprintf_buf_size];
   vsnprintf(format, vsnprintf_buf_size, message, args);
-  char *outfmt = "{\"level\": \"%s\", \"message\": %s}\n";
-  fprintf(stderr, outfmt, LogLevelToString(ll), escape_json_str(format).c_str());
+  std::string outfmt = "{\"level\": \"%s\", \"message\": \"%s\"}\n";
+  fprintf(stderr, outfmt.c_str(), LogLevelToString(ll), escape_json_str(format).c_str());
 }
 
 void log_debug(const char *message, ...)
