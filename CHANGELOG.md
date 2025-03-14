@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.1](https://github.com/dasch-swiss/sipi/compare/v3.15.0...v3.15.1) (2025-03-14)
+
+
+### Bug Fixes
+
+* Parse percentages for IIIF size more carefully (DEV-4636) ([#468](https://github.com/dasch-swiss/sipi/issues/468)) ([d9a8490](https://github.com/dasch-swiss/sipi/commit/d9a849073a1fe3201077f44b814d5a2fd75cac3f))
+
 ## [3.15.0](https://github.com/dasch-swiss/sipi/compare/v3.14.0...v3.15.0) (2025-01-24)
 
 
