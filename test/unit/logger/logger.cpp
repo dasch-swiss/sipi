@@ -20,7 +20,7 @@ bool valid_json(const char *text)
 TEST(Logger, CheckSyntax)
 {
   auto should = "{\"level\": \"DEBUG\", \"message\": \"The \\\"7\\\" cranks are turning!\"}\n";
-  auto out = log_sformat(LL_DEBUG, "The \"7\" cranks are turning!", 7);
+  auto out = log_sformat(LL_DEBUG, "The \"%i\" cranks are turning!", 7);
   EXPECT_TRUE(out == should);
   EXPECT_TRUE(valid_json(out.c_str()));
 }
