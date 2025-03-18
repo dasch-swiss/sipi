@@ -22,9 +22,10 @@ static sig_t old_broken_pipe_handler;
 
 static void sighandler(int sig) {
     if (serverptr != nullptr) {
-        int old_ll = setlogmask(LOG_MASK(LOG_INFO));
+        // TODO: setlogmask disabled entirely for now
+        // int old_ll = setlogmask(LOG_MASK(LOG_INFO));
         log_info("Got SIGINT, stopping server");
-        setlogmask(old_ll);
+        // setlogmask(old_ll);
         serverptr->stop();
     } else {
         exit(0);

@@ -1307,11 +1307,13 @@ int main(int argc, char *argv[])
       Sipi::SipiHttpServer server(
         sipiConf.getPort(), nthreads, sipiConf.getUseridStr(), sipiConf.getLogfile(), sipiConf.getLoglevel());
 
-      int old_ll = setlogmask(LOG_MASK(LOG_INFO));
+      // TODO: setlogmask disabled entirely for now
+      // int old_ll = setlogmask(LOG_MASK(LOG_INFO));
       log_info("BUILD_TIMESTAMP: %s", BUILD_TIMESTAMP);
       log_info("BUILD_SCM_TAG: %s", BUILD_SCM_TAG);
       log_info("BUILD_SCM_REVISION: %s", BUILD_SCM_REVISION);
-      setlogmask(old_ll);
+      // TODO: setlogmask disabled entirely for now
+      /* setlogmask(old_ll); */
 
       server.ssl_port(sipiConf.getSSLPort());// set the secure connection port (-1 means no ssl socket)
       std::string tmps = sipiConf.getSSLCertificate();
