@@ -53,9 +53,17 @@ inline const char *LogLevelToString(LogLevel ll)
     return "DEBUG";
   case LL_INFO:
     return "INFO";
-  case LL_WARN:
+  case LL_NOTICE:
+    return "NOTICE";
+  case LL_WARNING:
     return "WARN";
-  case LL_ERROR:
+  case LL_ERR:
+    return "ERROR";
+  case LL_CRIT:
+    return "ALERT";
+  case LL_ALERT:
+    return "EMERG";
+  case LL_EMERG:
     return "ERROR";
   default:
     return "Missing";
@@ -64,7 +72,7 @@ inline const char *LogLevelToString(LogLevel ll)
 
 const int vsnprintf_buf_size = 1000;
 
-void log_format(LogLevel ll, const char *message, va_list args)
+void log_vformat(LogLevel ll, const char *message, va_list args)
 {
   char format[vsnprintf_buf_size];
   vsnprintf(format, vsnprintf_buf_size, message, args);
@@ -72,11 +80,19 @@ void log_format(LogLevel ll, const char *message, va_list args)
   fprintf(stderr, outfmt.c_str(), LogLevelToString(ll), escape_json_str(format).c_str());
 }
 
+void log_format(LogLevel ll, const char *message, ...)
+{
+  va_list args;
+  va_start(args, message);
+  log_vformat(ll, message, args);
+  va_end(args);
+}
+
 void log_debug(const char *message, ...)
 {
   va_list args;
   va_start(args, message);
-  log_format(LL_DEBUG, message, args);
+  log_vformat(LL_DEBUG, message, args);
   va_end(args);
 }
 
@@ -84,7 +100,7 @@ void log_info(const char *message, ...)
 {
   va_list args;
   va_start(args, message);
-  log_format(LL_INFO, message, args);
+  log_vformat(LL_INFO, message, args);
   va_end(args);
 }
 
@@ -92,7 +108,7 @@ void log_warn(const char *message, ...)
 {
   va_list args;
   va_start(args, message);
-  log_format(LL_WARN, message, args);
+  log_vformat(LL_WARNING, message, args);
   va_end(args);
 }
 
@@ -100,6 +116,6 @@ void log_err(const char *message, ...)
 {
   va_list args;
   va_start(args, message);
-  log_format(LL_ERROR, message, args);
+  log_vformat(LL_ERR, message, args);
   va_end(args);
 }

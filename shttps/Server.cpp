@@ -505,23 +505,23 @@ Server::Server(int port_p,
   int ll;
 
   if (_loglevel == "DEBUG") {
-    ll = LOG_DEBUG;
+    ll = LL_DEBUG;
   } else if (_loglevel == "INFO") {
-    ll = LOG_INFO;
+    ll = LL_INFO;
   } else if (_loglevel == "NOTICE") {
-    ll = LOG_NOTICE;
+    ll = LL_NOTICE;
   } else if (_loglevel == "WARNING") {
-    ll = LOG_WARNING;
+    ll = LL_WARNING;
   } else if (_loglevel == "ERR") {
-    ll = LOG_ERR;
+    ll = LL_ERR;
   } else if (_loglevel == "CRIT") {
-    ll = LOG_CRIT;
+    ll = LL_CRIT;
   } else if (_loglevel == "ALERT") {
-    ll = LOG_ALERT;
+    ll = LL_ALERT;
   } else if (_loglevel == "EMERG") {
-    ll = LOG_EMERG;
+    ll = LL_EMERG;
   } else {
-    ll = LOG_ERR;
+    ll = LL_ERR;
   }
 
   // TODO: setlogmask disabled entirely for now
@@ -694,17 +694,12 @@ static int close_socket(const SocketControl::SocketInfo &socket_info)
   if (shutdown(socket_info.sid, SHUT_RDWR) < 0) {
     const auto loc = std::source_location::current();
     log_debug(
-      "Debug: shutting down socket at [%s: %d]: %m failed (client terminated already?)",
-      loc.file_name(),
-      loc.line());
+      "Debug: shutting down socket at [%s: %d]: %m failed (client terminated already?)", loc.file_name(), loc.line());
   }
 
   if (close(socket_info.sid) == -1) {
     const auto loc = std::source_location::current();
-    log_debug(
-      "Debug: closing socket at [%s: %d]: %m failed (client terminated already?)",
-      loc.file_name(),
-      loc.line());
+    log_debug("Debug: closing socket at [%s: %d]: %m failed (client terminated already?)", loc.file_name(), loc.line());
   }
 
   return 0;

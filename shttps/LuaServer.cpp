@@ -21,7 +21,6 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <syslog.h>
 #include <unistd.h>
 
 #include "Connection.h"
@@ -32,9 +31,8 @@
 #include "Server.h"
 #include "SockStream.h"
 #include "curl/curl.h"
-// #include "ChunkReader.h"
 
-#include "Parsing.h"
+#include "Logger.h"
 #include "jwt.h"
 #include "sole.hpp"
 #include <jansson.h>
@@ -2196,7 +2194,7 @@ static int lua_decode_jwt(lua_State *L)
 static int lua_logger(lua_State *L)
 {
   std::string message;
-  int level = LOG_ERR;
+  int level = LL_ERR;
   int top = lua_gettop(L);
 
   if (top < 1) {
@@ -2226,7 +2224,9 @@ static int lua_logger(lua_State *L)
     level = static_cast<int>(lua_tointeger(L, 2));
   }
 
-  if (!message.empty()) { syslog(level, "%s", message.c_str()); }
+  if (!message.empty()) {
+    log_format(static_cast<LogLevel>(level), "%s", message.c_str());
+  }
 
   lua_pop(L, top);
   lua_pushboolean(L, true);
@@ -2750,35 +2750,35 @@ void LuaServer::createGlobals(Connection &conn)
   lua_createtable(L, 0, 9);// table1 - "index_L1" - table2
 
   lua_pushstring(L, "LOG_EMERG");// table1 - "index_L1" - table2 - "index_L2"
-  lua_pushinteger(L, LOG_EMERG);
+  lua_pushinteger(L, LL_EMERG);
   lua_rawset(L, -3);// table1 - "index_L1" - table2
 
   lua_pushstring(L, "LOG_ALERT");// table1 - "index_L1" - table2 - "index_L2"
-  lua_pushinteger(L, LOG_ALERT);
+  lua_pushinteger(L, LL_ALERT);
   lua_rawset(L, -3);// table1 - "index_L1" - table2
 
   lua_pushstring(L, "LOG_CRIT");// table1 - "index_L1" - table2 - "index_L2"
-  lua_pushinteger(L, LOG_CRIT);
+  lua_pushinteger(L, LL_CRIT);
   lua_rawset(L, -3);// table1 - "index_L1" - table2
 
   lua_pushstring(L, "LOG_ERR");// table1 - "index_L1" - table2 - "index_L2"
-  lua_pushinteger(L, LOG_ERR);
+  lua_pushinteger(L, LL_ERR);
   lua_rawset(L, -3);// table1 - "index_L1" - table2
 
   lua_pushstring(L, "LOG_WARNING");// table1 - "index_L1" - table2 - "index_L2"
-  lua_pushinteger(L, LOG_WARNING);
+  lua_pushinteger(L, LL_WARNING);
   lua_rawset(L, -3);// table1 - "index_L1" - table2
 
   lua_pushstring(L, "LOG_NOTICE");// table1 - "index_L1" - table2 - "index_L2"
-  lua_pushinteger(L, LOG_NOTICE);
+  lua_pushinteger(L, LL_NOTICE);
   lua_rawset(L, -3);// table1 - "index_L1" - table2
 
   lua_pushstring(L, "LOG_INFO");// table1 - "index_L1" - table2 - "index_L2"
-  lua_pushinteger(L, LOG_INFO);
+  lua_pushinteger(L, LL_INFO);
   lua_rawset(L, -3);// table1 - "index_L1" - table2
 
   lua_pushstring(L, "LOG_DEBUG");// table1 - "index_L1" - table2 - "index_L2"
-  lua_pushinteger(L, LOG_DEBUG);
+  lua_pushinteger(L, LL_DEBUG);
   lua_rawset(L, -3);// table1 - "index_L1" - table2
 
   lua_rawset(L, -3);// table1
@@ -3301,4 +3301,4 @@ bool LuaServer::luaFunctionExists(const std::string &funcname)
   lua_pop(L, 1);
   return (ltype == LUA_TFUNCTION);
 }
-}
+}// namespace shttps
