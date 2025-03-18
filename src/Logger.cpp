@@ -70,14 +70,55 @@ inline const char *LogLevelToString(LogLevel ll)
   }
 }
 
-const int vsnprintf_buf_size = 1000;
+std::string vformat(const char *format, va_list args)
+{
+  va_list copy;
+  va_copy(copy, args);
+  int len = std::vsnprintf(nullptr, 0, format, copy);
+  va_end(copy);
+
+  if (len >= 0) {
+    std::string s(std::size_t(len) + 1, '\0');
+    std::vsnprintf(&s[0], s.size(), format, args);
+    s.resize(len);
+    return s;
+  }
+
+  const auto err = errno;
+  const auto ec = std::error_code(err, std::generic_category());
+  throw std::system_error(ec);
+}
+
+std::string format(const char *message, ...)
+{
+  va_list args;
+  va_start(args, message);
+  auto r = vformat(message, args);
+  va_end(args);
+  return r;
+}
+
+//
+
+std::string log_vsformat(LogLevel ll, const char *message, va_list args)
+{
+  std::string f = vformat(message, args);
+  return format("{\"level\": \"%s\", \"message\": \"%s\"}\n", LogLevelToString(ll), escape_json_str(f).c_str());
+}
+
+std::string log_sformat(LogLevel ll, const char *message, ...)
+{
+  va_list args;
+  va_start(args, message);
+  auto r = log_vsformat(ll, message, args);
+  va_end(args);
+  return r;
+}
 
 void log_vformat(LogLevel ll, const char *message, va_list args)
 {
-  char format[vsnprintf_buf_size];
-  vsnprintf(format, vsnprintf_buf_size, message, args);
-  std::string outfmt = "{\"level\": \"%s\", \"message\": \"%s\"}\n";
-  fprintf(stderr, outfmt.c_str(), LogLevelToString(ll), escape_json_str(format).c_str());
+  std::string outfmt = log_vsformat(ll, message, args);
+  fprintf(stderr, "%s", outfmt.c_str());
 }
 
 void log_format(LogLevel ll, const char *message, ...)
