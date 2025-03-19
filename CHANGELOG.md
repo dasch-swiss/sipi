@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.2](https://github.com/dasch-swiss/sipi/compare/v3.15.1...v3.15.2) (2025-03-19)
+
+
+### Bug Fixes
+
+* Logger.cpp in LuaServer.cpp, remove syslog, missing JSON quotes ([#470](https://github.com/dasch-swiss/sipi/issues/470)) ([b2899d7](https://github.com/dasch-swiss/sipi/commit/b2899d747b25b8476e1d35024c97f5d32b7c026f))
+
 ## [3.15.1](https://github.com/dasch-swiss/sipi/compare/v3.15.0...v3.15.1) (2025-03-14)
 
 
