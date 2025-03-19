@@ -1690,14 +1690,12 @@ void SipiHttpServer::cache(const std::string &cachedir_p,
 // here we add the main IIIF route to the server (iiif_handler)
 void SipiHttpServer::run()
 {
-  const int old_ll = setlogmask(LOG_MASK(LOG_INFO));
   log_info("SipiHttpServer starting ...");
   //
   // setting the image root
   //
   log_info("Serving images from %s", _imgroot.c_str());
   log_debug("Salsah prefix: %s", _salsah_prefix.c_str());
-  setlogmask(old_ll);
 
   add_route(Connection::GET, "/favicon.ico", favicon_handler);
   add_route(Connection::GET, "/", iiif_handler);

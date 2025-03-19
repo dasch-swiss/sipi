@@ -53,30 +53,87 @@ inline const char *LogLevelToString(LogLevel ll)
     return "DEBUG";
   case LL_INFO:
     return "INFO";
-  case LL_WARN:
+  case LL_NOTICE:
+    return "NOTICE";
+  case LL_WARNING:
     return "WARN";
-  case LL_ERROR:
+  case LL_ERR:
+    return "ERROR";
+  case LL_CRIT:
+    return "ALERT";
+  case LL_ALERT:
+    return "EMERG";
+  case LL_EMERG:
     return "ERROR";
   default:
     return "Missing";
   }
 }
 
-const int vsnprintf_buf_size = 1000;
-
-void log_format(LogLevel ll, const char *message, va_list args)
+std::string vformat(const char *format, va_list args)
 {
-  char format[vsnprintf_buf_size];
-  vsnprintf(format, vsnprintf_buf_size, message, args);
-  char *outfmt = "{\"level\": \"%s\", \"message\": %s}\n";
-  fprintf(stderr, outfmt, LogLevelToString(ll), escape_json_str(format).c_str());
+  va_list copy;
+  va_copy(copy, args);
+  int len = std::vsnprintf(nullptr, 0, format, copy);
+  va_end(copy);
+
+  if (len >= 0) {
+    std::string s(std::size_t(len) + 1, '\0');
+    std::vsnprintf(&s[0], s.size(), format, args);
+    s.resize(len);
+    return s;
+  }
+
+  const auto err = errno;
+  const auto ec = std::error_code(err, std::generic_category());
+  throw std::system_error(ec);
+}
+
+std::string format(const char *message, ...)
+{
+  va_list args;
+  va_start(args, message);
+  auto r = vformat(message, args);
+  va_end(args);
+  return r;
+}
+
+//
+
+std::string log_vsformat(LogLevel ll, const char *message, va_list args)
+{
+  std::string f = vformat(message, args);
+  return format("{\"level\": \"%s\", \"message\": \"%s\"}\n", LogLevelToString(ll), escape_json_str(f).c_str());
+}
+
+std::string log_sformat(LogLevel ll, const char *message, ...)
+{
+  va_list args;
+  va_start(args, message);
+  auto r = log_vsformat(ll, message, args);
+  va_end(args);
+  return r;
+}
+
+void log_vformat(LogLevel ll, const char *message, va_list args)
+{
+  std::string outfmt = log_vsformat(ll, message, args);
+  fprintf(stderr, "%s", outfmt.c_str());
+}
+
+void log_format(LogLevel ll, const char *message, ...)
+{
+  va_list args;
+  va_start(args, message);
+  log_vformat(ll, message, args);
+  va_end(args);
 }
 
 void log_debug(const char *message, ...)
 {
   va_list args;
   va_start(args, message);
-  log_format(LL_DEBUG, message, args);
+  log_vformat(LL_DEBUG, message, args);
   va_end(args);
 }
 
@@ -84,7 +141,7 @@ void log_info(const char *message, ...)
 {
   va_list args;
   va_start(args, message);
-  log_format(LL_INFO, message, args);
+  log_vformat(LL_INFO, message, args);
   va_end(args);
 }
 
@@ -92,7 +149,7 @@ void log_warn(const char *message, ...)
 {
   va_list args;
   va_start(args, message);
-  log_format(LL_WARN, message, args);
+  log_vformat(LL_WARNING, message, args);
   va_end(args);
 }
 
@@ -100,6 +157,6 @@ void log_err(const char *message, ...)
 {
   va_list args;
   va_start(args, message);
-  log_format(LL_ERROR, message, args);
+  log_vformat(LL_ERR, message, args);
   va_end(args);
 }

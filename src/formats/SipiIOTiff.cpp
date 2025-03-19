@@ -6,7 +6,6 @@
 #include <cassert>
 #include <cstdarg>
 #include <cstdlib>
-#include <syslog.h>
 
 #include <cmath>
 #include <cstdio>

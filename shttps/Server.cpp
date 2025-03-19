@@ -23,7 +23,6 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <syslog.h>
 #include <unistd.h>//write
 //
 // openssl includes
@@ -506,28 +505,24 @@ Server::Server(int port_p,
   int ll;
 
   if (_loglevel == "DEBUG") {
-    ll = LOG_DEBUG;
+    ll = LL_DEBUG;
   } else if (_loglevel == "INFO") {
-    ll = LOG_INFO;
+    ll = LL_INFO;
   } else if (_loglevel == "NOTICE") {
-    ll = LOG_NOTICE;
+    ll = LL_NOTICE;
   } else if (_loglevel == "WARNING") {
-    ll = LOG_WARNING;
+    ll = LL_WARNING;
   } else if (_loglevel == "ERR") {
-    ll = LOG_ERR;
+    ll = LL_ERR;
   } else if (_loglevel == "CRIT") {
-    ll = LOG_CRIT;
+    ll = LL_CRIT;
   } else if (_loglevel == "ALERT") {
-    ll = LOG_ALERT;
+    ll = LL_ALERT;
   } else if (_loglevel == "EMERG") {
-    ll = LOG_EMERG;
+    ll = LL_EMERG;
   } else {
-    ll = LOG_ERR;
+    ll = LL_ERR;
   }
-
-  // openlog(loggername, LOG_CONS | LOG_PERROR, LOG_DAEMON);
-  openlog(loggername, LOG_PERROR, LOG_DAEMON);
-  setlogmask(LOG_UPTO(ll));
 
   //
   // Her we check if we have to change to a different uid. This can only be done
@@ -542,14 +537,10 @@ Server::Server(int port_p,
 
       if (res != nullptr) {
         if (setuid(pwd.pw_uid) == 0) {
-          int old_ll = setlogmask(LOG_MASK(LOG_INFO));
           log_info("Server will run as user %s (%d)", userid_str.c_str(), getuid());
-          setlogmask(old_ll);
 
           if (setgid(pwd.pw_gid) == 0) {
-            int old_ll = setlogmask(LOG_MASK(LOG_INFO));
             log_info("Server will run with group-id %d", getgid());
-            setlogmask(old_ll);
           } else {
             log_err("setgid() failed! Reason: %m");
           }
@@ -693,17 +684,12 @@ static int close_socket(const SocketControl::SocketInfo &socket_info)
   if (shutdown(socket_info.sid, SHUT_RDWR) < 0) {
     const auto loc = std::source_location::current();
     log_debug(
-      "Debug: shutting down socket at [%s: %d]: %m failed (client terminated already?)",
-      loc.file_name(),
-      loc.line());
+      "Debug: shutting down socket at [%s: %d]: %m failed (client terminated already?)", loc.file_name(), loc.line());
   }
 
   if (close(socket_info.sid) == -1) {
     const auto loc = std::source_location::current();
-    log_debug(
-      "Debug: closing socket at [%s: %d]: %m failed (client terminated already?)",
-      loc.file_name(),
-      loc.line());
+    log_debug("Debug: closing socket at [%s: %d]: %m failed (client terminated already?)", loc.file_name(), loc.line());
   }
 
   return 0;
@@ -922,9 +908,7 @@ void Server::run()
     return;
   }
 
-  int old_ll = setlogmask(LOG_MASK(LOG_INFO));
   log_info("Starting shttps server with %d threads", _nthreads);
-  setlogmask(old_ll);
 
   log_info("Creating thread pool....");
   ThreadControl thread_control(_nthreads, socket_request_processor, this);
@@ -937,21 +921,15 @@ void Server::run()
     route.script = _scriptdir + "/" + route.script;
     add_route(route.method, route.route, script_handler, &(route.script));
 
-    old_ll = setlogmask(LOG_MASK(LOG_INFO));
     log_info("Added route %s with script %s", route.route.c_str(), route.script.c_str());
-    setlogmask(old_ll);
   }
 
   _sockfd = prepare_socket(_port);
-  old_ll = setlogmask(LOG_MASK(LOG_INFO));
   log_info("Server listening on HTTP port %d", _port);
-  setlogmask(old_ll);
 
   if (_ssl_port > 0) {
     _ssl_sockfd = prepare_socket(_ssl_port);
-    old_ll = setlogmask(LOG_MASK(LOG_INFO));
     log_info("Server listening on SSL port %d", _ssl_port);
-    setlogmask(old_ll);
   }
 
   if (socketpair(PF_LOCAL, SOCK_STREAM, 0, stoppipe) != 0) {
@@ -1172,9 +1150,7 @@ void Server::run()
     }
   }
 
-  old_ll = setlogmask(LOG_MASK(LOG_INFO));
   log_info("Server shutting down");
-  setlogmask(old_ll);
 
   // close(stoppipe[0]);
   // close(stoppipe[1]);

@@ -14,7 +14,6 @@
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
-#include <syslog.h>
 
 #include <thread>
 #include <unistd.h>
@@ -169,21 +168,21 @@ static void sipiConfGlobals(lua_State *L, shttps::Connection &conn, void *user_d
   lua_pushstring(L, "loglevel");// table1 - "index_L1"
   const std::string loglevel = conf->getLoglevel();
   if (loglevel == "LOG_EMERG") {
-    lua_pushinteger(L, LOG_EMERG);
+    lua_pushinteger(L, LL_EMERG);
   } else if (loglevel == "LOG_ALERT") {
-    lua_pushinteger(L, LOG_ALERT);
+    lua_pushinteger(L, LL_ALERT);
   } else if (loglevel == "LOG_CRIT") {
-    lua_pushinteger(L, LOG_CRIT);
+    lua_pushinteger(L, LL_CRIT);
   } else if (loglevel == "LOG_ERR") {
-    lua_pushinteger(L, LOG_ERR);
+    lua_pushinteger(L, LL_ERR);
   } else if (loglevel == "LOG_WARNING") {
-    lua_pushinteger(L, LOG_WARNING);
+    lua_pushinteger(L, LL_WARNING);
   } else if (loglevel == "LOG_NOTICE") {
-    lua_pushinteger(L, LOG_NOTICE);
+    lua_pushinteger(L, LL_NOTICE);
   } else if (loglevel == "LOG_INFO") {
-    lua_pushinteger(L, LOG_INFO);
+    lua_pushinteger(L, LL_INFO);
   } else if (loglevel == "LOG_DEBUG") {
-    lua_pushinteger(L, LOG_DEBUG);
+    lua_pushinteger(L, LL_DEBUG);
   } else {
     lua_pushinteger(L, -1);
   }
@@ -678,16 +677,15 @@ int main(int argc, char *argv[])
   std::string optLogfilePath = "Sipi";
   sipiopt.add_option("--logfile", optLogfilePath, "Name of the logfile (NYI).")->envname("SIPI_LOGFILE");
 
-  enum class LogLevel { DEBUG, INFO, NOTICE, WARNING, ERR, CRIT, ALERT, EMERG };
-  LogLevel optLogLevel = LogLevel::DEBUG;
-  std::vector<std::pair<std::string, LogLevel>> logLevelMap{ { "DEBUG", LogLevel::DEBUG },
-    { "INFO", LogLevel::INFO },
-    { "NOTICE", LogLevel::NOTICE },
-    { "WARNING", LogLevel::WARNING },
-    { "ERR", LogLevel::ERR },
-    { "CRIT", LogLevel::CRIT },
-    { "ALERT", LogLevel::ALERT },
-    { "EMERG", LogLevel::EMERG } };
+  LogLevel optLogLevel = LL_DEBUG;
+  std::vector<std::pair<std::string, LogLevel>> logLevelMap{ { "DEBUG", LL_DEBUG },
+    { "INFO", LL_INFO },
+    { "NOTICE", LL_NOTICE },
+    { "WARNING", LL_WARNING },
+    { "ERR", LL_ERR },
+    { "CRIT", LL_CRIT },
+    { "ALERT", LL_ALERT },
+    { "EMERG", LL_EMERG } };
   sipiopt
     .add_option("--loglevel",
       optLogLevel,
@@ -1218,28 +1216,28 @@ int main(int argc, char *argv[])
 
       std::string loglevelstring;
       switch (optLogLevel) {
-      case LogLevel::DEBUG:
+      case LL_DEBUG:
         loglevelstring = "DEBUG";
         break;
-      case LogLevel::INFO:
+      case LL_INFO:
         loglevelstring = "INFO";
         break;
-      case LogLevel::NOTICE:
+      case LL_NOTICE:
         loglevelstring = "NOTICE";
         break;
-      case LogLevel::WARNING:
+      case LL_WARNING:
         loglevelstring = "WARNING";
         break;
-      case LogLevel::ERR:
+      case LL_ERR:
         loglevelstring = "ERR";
         break;
-      case LogLevel::CRIT:
+      case LL_CRIT:
         loglevelstring = "CRIT";
         break;
-      case LogLevel::ALERT:
+      case LL_ALERT:
         loglevelstring = "ALERT";
         break;
-      case LogLevel::EMERG:
+      case LL_EMERG:
         loglevelstring = "EMERG";
         break;
       }
@@ -1308,11 +1306,9 @@ int main(int argc, char *argv[])
       Sipi::SipiHttpServer server(
         sipiConf.getPort(), nthreads, sipiConf.getUseridStr(), sipiConf.getLogfile(), sipiConf.getLoglevel());
 
-      int old_ll = setlogmask(LOG_MASK(LOG_INFO));
       log_info("BUILD_TIMESTAMP: %s", BUILD_TIMESTAMP);
       log_info("BUILD_SCM_TAG: %s", BUILD_SCM_TAG);
       log_info("BUILD_SCM_REVISION: %s", BUILD_SCM_REVISION);
-      setlogmask(old_ll);
 
       server.ssl_port(sipiConf.getSSLPort());// set the secure connection port (-1 means no ssl socket)
       std::string tmps = sipiConf.getSSLCertificate();

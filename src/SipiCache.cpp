@@ -23,7 +23,6 @@
 #include <cassert>
 #include <dirent.h>
 #include <sys/stat.h>
-#include <syslog.h>
 #include <unistd.h>
 
 

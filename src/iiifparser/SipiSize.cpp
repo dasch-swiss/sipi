@@ -5,7 +5,6 @@
 
 #include <cassert>
 #include <cstdlib>
-#include <syslog.h>
 
 #include <climits>
 #include <cmath>

@@ -22,7 +22,6 @@
 #include <semaphore.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <syslog.h>
 #include <unistd.h>
 
 #include <atomic>
@@ -34,16 +33,13 @@
 #include "openssl/err.h"
 #include "openssl/ssl.h"
 
+#include "Connection.h"
 #include "Error.h"
 #include "Global.h"
-
-#include "Connection.h"
+#include "Logger.h"
 #include "LuaServer.h"
-
 #include "SocketControl.h"
 #include "ThreadControl.h"
-
-
 #include "lua.hpp"
 
 /*
@@ -134,7 +130,7 @@ class Server
       const std::source_location &loc = std::source_location::current())
       : Error(msg, 0, loc), cSSL(cSSL_p){};
 
-    [[nodiscard]]  std::string to_string() const override
+    [[nodiscard]] std::string to_string() const override
     {
       std::stringstream ss;
       ss << "SSL-ERROR at [" << this->getFile() << ": " << this->getLine() << "] ";
@@ -345,7 +341,10 @@ public:
    *
    * \param[in] loglevel_p set the loglevel
    */
-  void loglevel(int loglevel_p) { setlogmask(LOG_UPTO(loglevel_p)); }
+  void loglevel(int loglevel_p)
+  {
+    // setlogmask used to be called here
+  }
 
   /*!
    * Run the server handling requests in an infinite loop
