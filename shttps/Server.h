@@ -343,7 +343,7 @@ public:
    */
   void loglevel(int loglevel_p)
   {
-    // setlogmask(LOG_UPTO(loglevel_p));
+    // setlogmask used to be called here
   }
 
   /*!

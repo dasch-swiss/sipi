@@ -524,11 +524,6 @@ Server::Server(int port_p,
     ll = LL_ERR;
   }
 
-  // TODO: setlogmask disabled entirely for now
-  // openlog(loggername, LOG_CONS | LOG_PERROR, LOG_DAEMON);
-  // openlog(loggername, LOG_PERROR, LOG_DAEMON);
-  // setlogmask(LOG_UPTO(ll));
-
   //
   // Her we check if we have to change to a different uid. This can only be done
   // if the server runs originally as root!
@@ -542,15 +537,10 @@ Server::Server(int port_p,
 
       if (res != nullptr) {
         if (setuid(pwd.pw_uid) == 0) {
-          // TODO: setlogmask disabled entirely for now
-          // int old_ll = setlogmask(LOG_MASK(LOG_INFO));
           log_info("Server will run as user %s (%d)", userid_str.c_str(), getuid());
-          /* setlogmask(old_ll); */
 
           if (setgid(pwd.pw_gid) == 0) {
-            /* int old_ll = setlogmask(LOG_MASK(LOG_INFO)); */
             log_info("Server will run with group-id %d", getgid());
-            /* setlogmask(old_ll); */
           } else {
             log_err("setgid() failed! Reason: %m");
           }
@@ -918,10 +908,7 @@ void Server::run()
     return;
   }
 
-  // TODO: setlogmask disabled entirely for now
-  // int old_ll = setlogmask(LOG_MASK(LOG_INFO));
   log_info("Starting shttps server with %d threads", _nthreads);
-  // setlogmask(old_ll);
 
   log_info("Creating thread pool....");
   ThreadControl thread_control(_nthreads, socket_request_processor, this);
@@ -934,21 +921,15 @@ void Server::run()
     route.script = _scriptdir + "/" + route.script;
     add_route(route.method, route.route, script_handler, &(route.script));
 
-    // old_ll = setlogmask(LOG_MASK(LOG_INFO));
     log_info("Added route %s with script %s", route.route.c_str(), route.script.c_str());
-    // setlogmask(old_ll);
   }
 
   _sockfd = prepare_socket(_port);
-  // old_ll = setlogmask(LOG_MASK(LOG_INFO));
   log_info("Server listening on HTTP port %d", _port);
-  // setlogmask(old_ll); */
 
   if (_ssl_port > 0) {
     _ssl_sockfd = prepare_socket(_ssl_port);
-    // old_ll = setlogmask(LOG_MASK(LOG_INFO));
     log_info("Server listening on SSL port %d", _ssl_port);
-    // setlogmask(old_ll);
   }
 
   if (socketpair(PF_LOCAL, SOCK_STREAM, 0, stoppipe) != 0) {
@@ -1169,9 +1150,7 @@ void Server::run()
     }
   }
 
-  // old_ll = setlogmask(LOG_MASK(LOG_INFO));
   log_info("Server shutting down");
-  // setlogmask(old_ll);
 
   // close(stoppipe[0]);
   // close(stoppipe[1]);
