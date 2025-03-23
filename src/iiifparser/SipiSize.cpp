@@ -306,6 +306,8 @@ SipiSize::SizeType
     float r = 100.F / percent;
     float s = 1.0;
 
+    // TODO: this calculation seems broken. This will prevent the smallest TIFF resolution level from being selected.
+    // This looks like an integer log2 / std::bit_width, but the relationship to redonly is unclear.
     while ((2.0 * s <= r) && (reduce_p < max_reduce)) {
       s *= 2.0;
       reduce_p++;
@@ -323,18 +325,11 @@ SipiSize::SizeType
       break;
     }
 
-    int sf = 1;
-    for (int i = 0; i < reduce; i++) sf *= 2;
+    int sf = 1 << reduce;
 
     w = static_cast<size_t>(ceilf(img_w_float / static_cast<float>(sf)));
     h = static_cast<size_t>(ceilf(img_h_float / static_cast<float>(sf)));
-    if (reduce > max_reduce) {
-      reduce_p = max_reduce;
-      redonly = false;
-    } else {
-      reduce_p = reduce;
-      redonly = true;
-    }
+    reduce_p = std::min(reduce, max_reduce);
     break;
   }
 
