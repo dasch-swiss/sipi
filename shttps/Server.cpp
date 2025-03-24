@@ -1071,14 +1071,14 @@ void Server::run()
             // we got input ready from normal listener socket
             SocketControl::SocketInfo sockid = accept_connection(sockets[i].fd, false);
             socket_control.add_dyn_socket(sockid);
-            log_info("Accepted connection from %s", sockid.peer_ip);//  ==> CHANGES open_sockets!!
+            log_debug("Accepted connection from %s", sockid.peer_ip);//  ==> CHANGES open_sockets!!
           } else if (i == socket_control.get_ssl_socket_id()) {
             //
             // external SSL request coming in
             //
             SocketControl::SocketInfo sockid = accept_connection(sockets[i].fd, true);
             socket_control.add_dyn_socket(sockid);
-            log_info("Accepted SSL connection from %s", sockid.peer_ip);//  ==> CHANGES open_sockets!!
+            log_debug("Accepted SSL connection from %s", sockid.peer_ip);//  ==> CHANGES open_sockets!!
           } else {
             //
             // DYN_SOCKET: a client socket (already accepted) has data -> dispatch the processing to a free thread
