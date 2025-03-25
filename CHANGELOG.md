@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.16.0](https://github.com/dasch-swiss/sipi/compare/v3.15.2...v3.16.0) (2025-03-24)
+
+
+### Features
+
+* Pyramidal TIFF support ([#466](https://github.com/dasch-swiss/sipi/issues/466)) ([807fccf](https://github.com/dasch-swiss/sipi/commit/807fccf0f62434679889ffd7a61b266eca81939a))
+
+
+### Bug Fixes
+
+* Drop "accepted connection from" from DEBUG to INFO ([e12f5e7](https://github.com/dasch-swiss/sipi/commit/e12f5e7a3f8cb8d9665f2878b37fa7eadd6947d0))
+
 ## [3.15.2](https://github.com/dasch-swiss/sipi/compare/v3.15.1...v3.15.2) (2025-03-19)
 
 
