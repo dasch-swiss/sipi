@@ -1221,7 +1221,7 @@ shttps::ThreadStatus Server::process_request(std::istream *ins,
       RequestHandler handler = get_handler(conn, &hd);
       handler(conn, luaserver, _user_data, hd);
     } catch (InputFailure iofail) {
-      log_err("Possibly socket closed by peer");
+      log_debug("Possibly socket closed by peer");
       return CLOSE;// or CLOSE ??
     }
 
