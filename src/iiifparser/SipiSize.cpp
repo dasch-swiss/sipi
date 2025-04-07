@@ -302,18 +302,10 @@ SipiSize::SizeType
 
     if (!upscaling && (w > img_w || h > img_h)) throw SipiSizeError(400, "Upscaling not allowed!");
 
-    reduce_p = 0;
-    float r = 100.F / percent;
-    float s = 1.0;
+    reduce_p = std::min(max_reduce, (int)std::floor(log2(100.F / percent)));
 
-    // TODO: this calculation seems broken. This will prevent the smallest TIFF resolution level from being selected.
-    // This looks like an integer log2 / std::bit_width, but the relationship to redonly is unclear.
-    while ((2.0 * s <= r) && (reduce_p < max_reduce)) {
-      s *= 2.0;
-      reduce_p++;
-    }
+    // if (fabs((float)(1 << reduce_p) - r) < 1.0e-5) { redonly = true; }
 
-    if (fabs(s - r) < 1.0e-5) { redonly = true; }
     break;
   }
   case SipiSize::REDUCE: {
@@ -351,15 +343,9 @@ SipiSize::SizeType
     }
     if (!upscaling && (w > img_w || h > img_h)) throw SipiSizeError(400, "Upscaling not allowed!");
 
-    float s = 1.0;
-    reduce_p = 0;
+    reduce_p = std::min(max_reduce, (int)std::floor(log2(100.F / r)));
 
-    while ((2.0 * s <= r) && (reduce_p < max_reduce)) {
-      s *= 2.0;
-      reduce_p++;
-    }
-
-    if (fabsf(s - r) < 1.0e-5) { redonly = true; }
+    // if (fabsf(s - r) < 1.0e-5) { redonly = true; }
     break;
   }
 

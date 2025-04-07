@@ -117,6 +117,8 @@ std::string log_sformat(LogLevel ll, const char *message, ...)
 
 void log_vformat(LogLevel ll, const char *message, va_list args)
 {
+  if (ll == LL_DEBUG) return;
+
   std::string outfmt = log_vsformat(ll, message, args);
   fprintf(stderr, "%s", outfmt.c_str());
 }

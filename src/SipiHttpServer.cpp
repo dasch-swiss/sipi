@@ -1574,7 +1574,7 @@ static void serve_iiif(Connection &conn_obj,
     if (conn_obj.isCacheFileOpen()) {
       conn_obj.closeCacheFile();
       //!>
-      //!> ATTENTION!!! Here we change the list of available cache files
+      //!> ATTENTION!!! Here we change the list of available cache files. Removable when debugging.
       //!>
       cache->add(infile, canonical, cachefile, img_w, img_h, tile_w, tile_h, clevels, numpages);
     }

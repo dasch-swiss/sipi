@@ -17,18 +17,23 @@ TEST(SipiSize, PixelsXY)
 
 TEST(SipiSize, Percent)
 {
-  auto size = Sipi::SipiSize("pct:25");
-  EXPECT_TRUE(size.getType() == Sipi::SipiSize::PERCENTS);
-
   size_t w, h;
-  int reduce;
   bool reduce_only;
 
-  size.get_size(400, 300, w, h, reduce, reduce_only);
-  EXPECT_TRUE(w == 100 && h == 75 && reduce == 2 && reduce_only == 1);
+  {
+    int reduce = 10000;
+    EXPECT_TRUE(Sipi::SipiSize("pct:25").get_size(400, 300, w, h, reduce, reduce_only) == Sipi::SipiSize::PERCENTS);
+    EXPECT_TRUE(w == 100 && h == 75 && reduce == 2) << w << "/" << h << "/" << reduce << "/" << reduce_only;
+  }
+
+  {
+    int reduce = 10000;
+    EXPECT_TRUE(Sipi::SipiSize("pct:10").get_size(400, 300, w, h, reduce, reduce_only) == Sipi::SipiSize::PERCENTS);
+    EXPECT_TRUE(w == 40 && h == 30 && reduce == 3) << w << "/" << h << "/" << reduce << "/" << reduce_only;
+  }
 }
 
-TEST(SipiSize, Maxdim)
+TEST(SipiSize, BangMaxdim)
 {
   auto size = Sipi::SipiSize("!200,200");
   EXPECT_TRUE(size.getType() == Sipi::SipiSize::MAXDIM);
@@ -38,5 +43,18 @@ TEST(SipiSize, Maxdim)
   bool reduce_only;
 
   size.get_size(400, 300, w, h, reduce, reduce_only);
-  EXPECT_TRUE(w == 200 && h == 150 && reduce == 1 && reduce_only == 1);
+  EXPECT_TRUE(w == 200 && h == 150 && reduce == 1 && reduce_only == 0);
+}
+
+TEST(SipiSize, Full)
+{
+  auto size = Sipi::SipiSize("max");
+  EXPECT_TRUE(size.getType() == Sipi::SipiSize::FULL);
+
+  size_t w, h;
+  int reduce;
+  bool reduce_only;
+
+  size.get_size(400, 300, w, h, reduce, reduce_only);
+  EXPECT_TRUE(w == 400 && h == 300 && reduce == 0 && reduce_only == 1);
 }

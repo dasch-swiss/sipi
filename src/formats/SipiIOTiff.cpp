@@ -751,10 +751,6 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
     throw Sipi::SipiImageError("{} bits per samples not supported for tiled tiffs!" + std::to_string(bps));
   }
 
-  // nx = 30, tile_width = 8, roi_x = 5, roi_w = 20
-  // 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29
-  // 0 1 2 3 4 5 6 7|0 1  2  3  4  5  6  7| 0  1  2  3  4  5  6  7| 0  1  2  3  4  5  6  7|
-  // * * * * * 0 1 2 3 4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19  *  *  *  *  *  *  *
   uint32_t tile_size = TIFFTileSize(tif);
   auto tilebuf = std::make_unique<T[]>(bps == 8 ? tile_size : (tile_size >> 1));
   auto inbuf = std::vector<T>(roi_w * roi_h * nc);
@@ -764,41 +760,29 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
         TIFFClose(tif);
         throw Sipi::SipiImageError("TIFFReadTile failed on tile ({}, {})" + std::to_string(tx) + std::to_string(ty));
       }
+
       if (planar == PLANARCONFIG_SEPARATE) {
         tilebuf = separateToContig(std::move(tilebuf), tile_width, tile_length, nc, tile_width);
       }
-      uint32_t start_in_x = (tx == starttile_x) ? (roi_x % tile_width) : 0;
-      uint32_t start_in_y = (ty == starttile_y) ? (roi_y % tile_length) : 0;
-      uint32_t ex;
-      if (tx == (endtile_x - 1)) {
-        ex = (roi_x + roi_w) % tile_width;
-        if (ex == 0) ex = tile_width;
-      } else {
-        ex = tile_width;
-      }
-      uint32_t len_x = ex - start_in_x;
 
-      uint32_t ey;
-      if (ty == (endtile_y - 1)) {
-        ey = (roi_y + roi_h) % tile_length;
-        if (ey == 0) ey = tile_length;
-      } else {
-        ey = tile_length;
-      }
-      uint32_t len_y = ey - start_in_y;
+      for (uint32_t tile_x = 0; tile_x < tile_width; tile_x++) {
+        for (uint32_t tile_y = 0; tile_y < tile_length; tile_y++) {
+          uint32_t final_x = (tx - starttile_x) * tile_width + tile_x;
+          uint32_t final_y = (ty - starttile_y) * tile_length + tile_y;
 
-      uint32_t start_out_x = (tx == starttile_x) ? 0 : (tx - starttile_x) * tile_width - roi_x;
-      uint32_t start_out_y = (ty == starttile_y) ? 0 : (ty - starttile_y) * tile_length - roi_y;
-      for (uint32_t y = start_in_y; y < (start_in_y + len_y); ++y) {
-        std::memcpy(inbuf.data() + nc * ((start_out_y + (y - start_in_y)) * roi_w + start_out_x),
-          tilebuf.get() + nc * (y * tile_width + start_in_x),
-          nc * len_x * sizeof(T));
+          if (final_x < roi_w && final_y < roi_h) {
+            uint32_t pixel_offset = nc * (final_y * roi_w + final_x);
+
+            for (uint32_t c = 0; c < nc; ++c) {
+              inbuf[pixel_offset + c] = tilebuf[(tile_x + tile_y * tile_width) * nc + c];
+            }
+          }
+        }
       }
     }
   }
   return inbuf;
 }
-
 // get the resolutions of pyramid if available
 std::vector<SubImageInfo> read_resolutions(uint64_t image_width, TIFF *tif)
 {
@@ -1145,17 +1129,19 @@ bool SipiIOTiff::read(SipiImage *img,
     if (size) {
       size->get_size(w, h, out_w, out_h, reduce, redonly);
 
-      level = -1;
-      for (auto r : resolutions) {
-        ++level;
-        if (r.reduce > reduce) break;
-      }
-      TIFFSetDirectory(tif, level);
-
+      // NOTE: if uncommented, region + pct:50 will not behave
+      // level = -1;
+      // for (auto r : resolutions) {
+      //   printf("[SipiIOTiff] resolution(%i) // %i > %i == %i\n", level, r.reduce, reduce, r.reduce > reduce);
+      //   ++level;
+      //   if (r.reduce > reduce) break;
+      // }
+      // printf("[SipiIOTiff] resolution level picked: %i\n", level);
+      // TIFFSetDirectory(tif, level);
 
       img->nx = resolutions[level].width;
       img->ny = resolutions[level].height;
-      if (region != nullptr) { region->set_reduce(static_cast<float>(reduce)); }
+      if (region != nullptr) region->set_reduce(reduce);
     }
     is_tiled = (resolutions[level].tile_width != 0) && (resolutions[level].tile_height != 0);
 
