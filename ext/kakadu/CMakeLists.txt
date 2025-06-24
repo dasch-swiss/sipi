@@ -9,7 +9,7 @@ message(STATUS ${CMAKE_BINARY_DIR}/local/lib)
 message(STATUS "VENDOR=${COMMON_VENDOR}")
 message(STATUS "KDU_MAKE=${KDU_MAKE}")
 
-set(KakaduVersion "v8_4_1-01382N")
+set(KakaduVersion "v8_5-01382N")
 
 ## patching the makefiles for arm64
 if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")

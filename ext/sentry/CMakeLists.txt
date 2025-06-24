@@ -5,7 +5,7 @@ include(ExternalProject)
 # get sentry https://docs.sentry.io/platforms/native/
 #
 
-set(SentryVersion "0.7.1")
+set(SentryVersion "0.9.0")
 
 ExternalProject_Add(project_sentry
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local

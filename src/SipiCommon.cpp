@@ -5,12 +5,6 @@
 
 #include "SipiCommon.h"
 
-namespace Sipi {
+#include <iostream>
 
-void memcpy(void *to, const void *from, size_t len)
-{
-  register char *toptr = (char *)to;
-  register char *fromptr = (char *)from;
-  while (toptr < (char *)to + len) { *toptr++ = *fromptr++; }
-}
-}// namespace Sipi
+namespace Sipi {}// namespace Sipi
