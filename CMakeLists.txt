@@ -119,7 +119,7 @@ endif ()
 # Dynamically compile the C++ standard library into the executable
 if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     message(STATUS "Compiling with Clang (-stdlib=libstdc++ and -static-libstdc++).")
-    target_compile_options(build_config INTERFACE -stdlib=libstdc++ -static-libstdc++ -stdlib=libc++)
+    target_compile_options(build_config INTERFACE -stdlib=libstdc++ -static-libstdc++)
 endif ()
 
 #
