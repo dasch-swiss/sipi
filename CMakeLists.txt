@@ -110,9 +110,8 @@ add_library(build_config INTERFACE)
 #
 # Statically compile the C++ standard library into the executable
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    # warning: "-static-libstdc++" is deprecated, the two lines below are commented out
-    # message(STATUS "Compiling with GCC (-static-libstdc++).") # and -lstdc++_libbacktrace.")
-    # target_link_options(build_config INTERFACE -static-libstdc++) # -lstdc++_libbacktrace)
+    message(STATUS "Compiling with GCC (-static-libstdc++).") # and -lstdc++_libbacktrace.")
+    target_link_options(build_config INTERFACE -static-libstdc++) # -lstdc++_libbacktrace)
 endif ()
 
 #
@@ -471,7 +470,7 @@ add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 
 target_link_libraries(${PROJECT_NAME} ${LIBS}
         lcms2
         exiv2
-        # exiv2-xmp
+        exiv2-xmp
         expat
         tiff
         webp
