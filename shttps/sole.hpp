@@ -82,7 +82,7 @@ uuid rebuild(const std::string &uustr);
 }// namespace sole
 
 namespace std {
-template<> struct hash<sole::uuid> : public std::__unary_function<sole::uuid, size_t>
+template<> struct hash<sole::uuid>
 {
 public:
   // hash functor: hash uuid to size_t value by pseudorandomizing transform
