@@ -16,7 +16,7 @@ RUN apt-get update \
   && apt-get clean
 
 # Set GCC 13 as the default gcc and g++
-RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 60 --slave /usr/bin/g++ g++ /usr/bin/g++-14
+RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 60 --slave /usr/bin/g++ g++ /usr/bin/g++-13
 
 # Verify the installation
 RUN gcc --version && g++ --version
