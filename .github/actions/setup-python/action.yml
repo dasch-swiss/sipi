@@ -19,4 +19,4 @@ runs:
     - name: Install PIP
       shell: bash
       run: |
-        curl -sS https://bootstrap.pypa.io/get-pip.py | sudo python3
+        which pip || curl -sS https://bootstrap.pypa.io/get-pip.py | sudo python3
