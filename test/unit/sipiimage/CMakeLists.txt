@@ -106,7 +106,7 @@ target_link_libraries(${TEST_NAME} libgtest)
 target_link_libraries(${TEST_NAME}
         lcms2
         exiv2
-        exiv2-xmp
+        # exiv2-xmp
         expat
         tiff
         webp

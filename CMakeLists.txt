@@ -470,7 +470,7 @@ add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 
 target_link_libraries(${PROJECT_NAME} ${LIBS}
         lcms2
         exiv2
-        exiv2-xmp
+        # exiv2-xmp
         expat
         tiff
         webp

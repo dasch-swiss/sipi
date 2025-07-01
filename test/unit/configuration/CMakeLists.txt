@@ -49,7 +49,7 @@ target_link_libraries(${TEST_NAME}
         ${LIBS}
         lcms2
         exiv2
-        exiv2-xmp
+        # exiv2-xmp
         expat
         tiff
         webp
