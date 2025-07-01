@@ -1,8 +1,8 @@
 # Lua image functions
-Through Lua scripting, SIPI allows a wide aea of utilities to analyze, manipulate and convert images to/from
-different formats. This functioanlity allows to use SIPI e.g. for offering image upload and converting these images
+Through Lua scripting, SIPI allows a wide area of utilities to analyze, manipulate and convert images to/from
+different formats. This functionality allows to use SIPI e.g. for offering image upload and converting these images
 into IIIF conformant long-term storage formats (e.g. JPEG2000). It allows to programmatically modify an image
-before delivering it to the client, ot to extract data from the images.
+before delivering it to the client, or to extract data from the images.
 
 The basic concept is a specialized Lua image object that offers all methods to manipulate images.
 
@@ -46,7 +46,7 @@ The meaning of the parameters are:
 - `region`: A region in IIIF format the image should be cropped to.
 - `size`: The size of the resulting image as valid IIIF size string.
 - `reduce`: An much faster alternative to size, if the image size will be
-  reduced by a integer factor (2=half size, 3=one thrid size etc.)
+  reduced by a integer factor (2=half size, 3=one third size etc.)
 - `original`: The original file name that should be recorded in the metadata
 - `hash`: The Hash algorithm that will be used for the hash of the pixel values. Valid
   entries are `md5`, `sha1`, `sha256`, `sha384` and `sha512`.
@@ -154,7 +154,7 @@ Parameters:
     -   `pdf` : writes a PDF file
 
 - `compression_params`: (optional) An optional Lua table with compression parameters (which are dependent on the
-  chosen output file format!) can be given. All compression parameters are optional. Buf if a compression parameter
+  chosen output file format!) can be given. All compression parameters are optional. But if a compression parameter
   table is give, it must have at least one entry.
   - JPEG format:
     - `quality`: Number between 1 and 100 (1 highest compression, worst quality, 100 lowest compression, best quality)      
@@ -186,7 +186,7 @@ Sends the file to the HTTP connection. As format-strings are allowed:
 
     img.mimetype_consistency(mimetype, original_filename)
     
-This method checks if the supplied mimetype (e.g. from received from the browser during upoad), the file according to
+This method checks if the supplied mimetype (e.g. from received from the browser during upload), the file according to
 the magic number ([file signature](https://en.wikipedia.org/wiki/List_of_file_signatures)) and the file extension are
 consistent. The parameters are:
 
