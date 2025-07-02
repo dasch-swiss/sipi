@@ -118,7 +118,7 @@ endif ()
 # Dynamically compile the C++ standard library into the executable
 if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     message(STATUS "Compiling with Clang (-stdlib=libstdc++ and -static-libstdc++).")
-    target_compile_options(build_config INTERFACE -stdlib=libstdc++ -static-libstdc++)
+    target_compile_options(build_config INTERFACE -stdlib=libc++)
 endif ()
 
 #
@@ -470,7 +470,6 @@ add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 
 target_link_libraries(${PROJECT_NAME} ${LIBS}
         lcms2
         exiv2
-        # exiv2-xmp
         expat
         tiff
         webp
