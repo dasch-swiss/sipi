@@ -1377,7 +1377,7 @@ int main(int argc, char *argv[])
       std::cerr << err << '\n';
     }
   }
-  // make sure everything flushes
+  // make sure everything flushes.
   sentry_close();
   return EXIT_SUCCESS;
 }
