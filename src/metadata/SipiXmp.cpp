@@ -46,7 +46,7 @@ SipiXmp::SipiXmp(const std::string &xmp)
           throw SipiError(thisSourceFile, __LINE__, "Could not parse XMP!");
       }
   }
-  catch(Exiv2::BasicError<char> &err) {
+  catch(Exiv2::Error &err) {
       throw SipiError(thisSourceFile, __LINE__, err.what());
   }
    */
@@ -65,7 +65,7 @@ SipiXmp::SipiXmp(const char *xmp)
           throw SipiError(thisSourceFile, __LINE__, "Could not parse XMP!");
       }
   }
-  catch(Exiv2::BasicError<char> &err) {
+  catch(Exiv2::Error &err) {
       throw SipiError(thisSourceFile, __LINE__, err.what());
   }
    */
@@ -85,7 +85,7 @@ SipiXmp::SipiXmp(const char *xmp, int len)
           throw SipiError(thisSourceFile, __LINE__, "Could not parse XMP!");
       }
   }
-  catch(Exiv2::BasicError<char> &err) {
+  catch(Exiv2::Error &err) {
       throw SipiError(thisSourceFile, __LINE__, err.what());
   }
    */
@@ -116,7 +116,7 @@ char *SipiXmp::xmpBytes(unsigned int &len)
           throw SipiError(thisSourceFile, __LINE__, "Failed to serialize XMP data!");
       }
   }
-  catch(Exiv2::BasicError<char> &err) {
+  catch(Exiv2::Error &err) {
       throw SipiError(thisSourceFile, __LINE__, err.what());
   }
   Exiv2::XmpParser::terminate();
