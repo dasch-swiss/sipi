@@ -110,10 +110,10 @@ Then:
 
 First, follow the instructions for ubuntu-build.
 
-Then, CMake has to be patched. Unfortunaltely the version of CMake
+Then, CMake has to be patched. Unfortunately the version of CMake
 provided by the Debian packages contains a bug and cannot find the
 OpenSSL libraries and includes. To apply the patch, go to the Sipi
-dicrectory and run:
+directory and run:
 
     sudo ./debian-cmake-patch.sh
 
