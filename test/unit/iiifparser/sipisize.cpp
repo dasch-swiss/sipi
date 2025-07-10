@@ -43,7 +43,7 @@ TEST(SipiSize, BangMaxdim)
   bool reduce_only;
 
   size.get_size(400, 300, w, h, reduce, reduce_only);
-  EXPECT_TRUE(w == 200 && h == 150 && reduce == 1 && reduce_only == 0);
+  EXPECT_TRUE(w == 200 && h == 150 && reduce == 1 && reduce_only == 1);
 }
 
 TEST(SipiSize, Full)
