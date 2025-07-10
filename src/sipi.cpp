@@ -1348,7 +1348,6 @@ int main(int argc, char *argv[])
         size_t nfiles = sipiConf.getCacheNFiles();
         float hysteresis = sipiConf.getCacheHysteresis();
         server.cache(cachedir, cachesize, nfiles, hysteresis);
-        server.cache().get()->purge();
       }
 
       server.imgroot(sipiConf.getImgRoot());
