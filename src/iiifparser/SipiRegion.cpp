@@ -71,10 +71,10 @@ SipiRegion::CoordType SipiRegion::crop_coords(size_t nx, size_t ny, int &p_x, in
 {
   switch (coord_type) {
   case COORDS: {
-    x = lroundf(rx);
-    y = lroundf(ry);
-    w = lroundf(rw);
-    h = lroundf(rh);
+    x = lroundf(rx/reduce);
+    y = lroundf(ry/reduce);
+    w = lroundf(rw/reduce);
+    h = lroundf(rh/reduce);
     break;
   }
   case SQUARE: {

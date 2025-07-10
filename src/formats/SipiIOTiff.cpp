@@ -1141,7 +1141,7 @@ bool SipiIOTiff::read(SipiImage *img,
 
       img->nx = resolutions[level].width;
       img->ny = resolutions[level].height;
-      if (region != nullptr) region->set_reduce(reduce);
+      if (region != nullptr) { region->set_reduce(static_cast<float>(reduce)); }
     }
     is_tiled = (resolutions[level].tile_width != 0) && (resolutions[level].tile_height != 0);
 
