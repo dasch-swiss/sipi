@@ -6,6 +6,7 @@
       "Bash(gcc:*)",
       "Bash(g++:*)",
       "Bash(just build)",
+      "Bash(just test:*)",
       "Bash(xxd:*)",
       "Bash(find:*)",
       "Bash(grep:*)",
