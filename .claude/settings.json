@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(echo $IN_NIX_SHELL)",
+      "Bash(ls:*)",
+      "Bash(gcc:*)",
+      "Bash(g++:*)",
+      "Bash(just build)",
+      "Bash(xxd:*)"
+    ],
+    "deny": []
+  }
+}
