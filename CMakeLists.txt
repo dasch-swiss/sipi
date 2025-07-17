@@ -382,16 +382,16 @@ add_custom_command(
         COMMENT "Generating ICC profile includes"
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/generated
         COMMAND cp ${PROJECT_SOURCE_DIR}/include/ICC-Profiles/AdobeRGB1998.icc ${CMAKE_BINARY_DIR}/generated/AdobeRGB1998.icc
-        COMMAND xxd -i AdobeRGB1998.icc AdobeRGB1998_icc.h
+        COMMAND ${PROJECT_SOURCE_DIR}/generate_icc_header.sh AdobeRGB1998.icc AdobeRGB1998_icc.h AdobeRGB1998_icc
         COMMAND rm ${CMAKE_BINARY_DIR}/generated/AdobeRGB1998.icc
         COMMAND cp ${PROJECT_SOURCE_DIR}/include/ICC-Profiles/USWebCoatedSWOP.icc ${CMAKE_BINARY_DIR}/generated/USWebCoatedSWOP.icc
-        COMMAND xxd -i USWebCoatedSWOP.icc USWebCoatedSWOP_icc.h
+        COMMAND ${PROJECT_SOURCE_DIR}/generate_icc_header.sh USWebCoatedSWOP.icc USWebCoatedSWOP_icc.h USWebCoatedSWOP_icc
         COMMAND rm ${CMAKE_BINARY_DIR}/generated/USWebCoatedSWOP.icc
         COMMAND cp ${PROJECT_SOURCE_DIR}/include/ICC-Profiles/YCC709.icm ${CMAKE_BINARY_DIR}/generated/YCC709.icm
-        COMMAND xxd -i YCC709.icm YCC709_icc.h
+        COMMAND ${PROJECT_SOURCE_DIR}/generate_icc_header.sh YCC709.icm YCC709_icc.h YCC709_icc
         COMMAND rm ${CMAKE_BINARY_DIR}/generated/YCC709.icm
         COMMAND cp ${PROJECT_SOURCE_DIR}/include/ICC-Profiles/Rec709-Rec1886.icc ${CMAKE_BINARY_DIR}/generated/Rec709-Rec1886.icc
-        COMMAND xxd -i Rec709-Rec1886.icc Rec709-Rec1886_icc.h
+        COMMAND ${PROJECT_SOURCE_DIR}/generate_icc_header.sh Rec709-Rec1886.icc Rec709-Rec1886_icc.h Rec709_Rec1886_icc
         COMMAND rm ${CMAKE_BINARY_DIR}/generated/Rec709-Rec1886.icc
 )
 
