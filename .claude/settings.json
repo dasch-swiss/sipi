@@ -6,7 +6,8 @@
       "Bash(gcc:*)",
       "Bash(g++:*)",
       "Bash(just build)",
-      "Bash(xxd:*)"
+      "Bash(xxd:*)",
+      "mcp__linear__get_issue"
     ],
     "deny": []
   }
