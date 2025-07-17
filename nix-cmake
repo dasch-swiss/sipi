@@ -36,5 +36,5 @@ if is_test_invocation(args):
 
 os.chdir(scriptDir)
 os.execvp("nix", [
-    "nix", "develop", "--command", "bash", "-c", cmd
+    "nix", "develop", ".#clang", "--command", "bash", "-c", cmd
 ])
