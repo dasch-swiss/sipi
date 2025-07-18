@@ -13,6 +13,8 @@ on:
     # run on midnight every day
     - cron: '0 0 * * *'
   pull_request:
+    types: [ opened, synchronize, reopened ]
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
