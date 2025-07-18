@@ -1,0 +1,20 @@
+
+{
+  "permissions": {
+    "allow": [
+      "Bash(echo $IN_NIX_SHELL)",
+      "Bash(ls:*)",
+      "Bash(gcc:*)",
+      "Bash(g++:*)",
+      "Bash(just build)",
+      "Bash(xxd:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(nix develop:*)",
+      "Bash(direnv allow:*)",
+      "Bash(docker run:*)",
+      "mcp__linear__get_issue"
+    ],
+    "deny": []
+  }
+}

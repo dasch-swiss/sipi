@@ -83,8 +83,8 @@
         ];
 
         devShells = rec {
+          # Use clang as default on macOS, gcc on Linux
           default = if pkgs.stdenv.isDarwin then clang else gcc;
-
 
           # devShells.clang describes a shell with the clang compiler
           clang = pkgs.mkShell.override {stdenv = pkgs.clang19Stdenv;} {

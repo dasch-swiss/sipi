@@ -41,6 +41,8 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     add_library(lib_${FUZZ_TARGET_NAME} STATIC
             ${FUZZ_TARGET_SOURCE_FILES}
     )
+    
+    add_dependencies(lib_${FUZZ_TARGET_NAME} lua)
 
     add_executable(${FUZZ_TARGET_NAME}
             iiif_handler_uri_parser_target.cpp
