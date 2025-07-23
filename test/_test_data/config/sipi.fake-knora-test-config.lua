@@ -202,6 +202,18 @@ sipi = {
     loglevel = "DEBUG"
 }
 
+fileserver = {
+    --
+    -- directory on disk where the documents for the normal webserver are located
+    --
+    docroot = './server',
+
+    --
+    -- URL route under which the normal webserver should respond to requests
+    --
+    wwwroute = '/server'
+}
+
 --
 -- here we define routes that are handled by lua scripts. A route is a defined url:
 -- http://<server-DNS>/<route>

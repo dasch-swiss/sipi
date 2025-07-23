@@ -79,8 +79,8 @@ ExternalProject_Add(
         URL http://www.lua.org/ftp/lua-5.3.1.tar.gz
         SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/lua-5.3.1
         CONFIGURE_COMMAND ls
-        BUILD_COMMAND make ${LUA_ARCH}
-        INSTALL_COMMAND make install INSTALL_TOP=${CMAKE_CURRENT_SOURCE_DIR}/local
+        BUILD_COMMAND make CC=${CMAKE_C_COMPILER} ${LUA_ARCH}
+        INSTALL_COMMAND make CC=${CMAKE_C_COMPILER} install INSTALL_TOP=${CMAKE_CURRENT_SOURCE_DIR}/local
         BUILD_IN_SOURCE 1
 )
 ExternalProject_Get_Property(project_lua install_dir)

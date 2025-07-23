@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.16.1](https://github.com/dasch-swiss/sipi/compare/v3.16.0...v3.16.1) (2025-07-23)
+
+
+### Bug Fixes
+
+* Also copy kakadu v8_5 for the upcoming PR ([04e456c](https://github.com/dasch-swiss/sipi/commit/04e456ce5a1174682eb61362f46b484e8fb0ffdf))
+* Don't reinstall, if it's present (e.g. with updated CI base image) ([4159054](https://github.com/dasch-swiss/sipi/commit/41590548e6f7413467e7886cbd8810c54a0495af))
+* Fix build on MacOS/CI ([#473](https://github.com/dasch-swiss/sipi/issues/473)) ([d06c2e9](https://github.com/dasch-swiss/sipi/commit/d06c2e994d95b766ce0fa9ce7c0eae3e7f5bbf54))
+* Streaming of large files ([#481](https://github.com/dasch-swiss/sipi/issues/481)) ([1845a00](https://github.com/dasch-swiss/sipi/commit/1845a0047fc30bbcf095c8230226e3cb90fae6ce))
+* TIFF tiled reading bug ([#478](https://github.com/dasch-swiss/sipi/issues/478)) ([a2ee1bf](https://github.com/dasch-swiss/sipi/commit/a2ee1bf4173d0c00e7705763bbd6e7f04050d344))
+
 ## [3.16.0](https://github.com/dasch-swiss/sipi/compare/v3.15.2...v3.16.0) (2025-03-24)
 
 

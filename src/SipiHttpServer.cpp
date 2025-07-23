@@ -1389,7 +1389,7 @@ static void serve_iiif(Connection &conn_obj,
     try {
       if (not_head_request) conn_obj.sendFile(infile);
     } catch (shttps::InputFailure iofail) {
-      log_warn("Browser unexpectedly closed connection");
+      log_debug("Browser unexpectedly closed connection");
     } catch (Sipi::SipiError &err) {
       send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
     }
@@ -1434,7 +1434,7 @@ static void serve_iiif(Connection &conn_obj,
         //!> from now on the cache file can be deleted again
       } catch (shttps::InputFailure err) {
         // -1 was thrown
-        log_warn("Browser unexpectedly closed connection");
+        log_debug("Browser unexpectedly closed connection");
         cache->deblock(cachefile);
         return;
       } catch (Sipi::SipiError &err) {
@@ -1574,7 +1574,7 @@ static void serve_iiif(Connection &conn_obj,
     if (conn_obj.isCacheFileOpen()) {
       conn_obj.closeCacheFile();
       //!>
-      //!> ATTENTION!!! Here we change the list of available cache files
+      //!> ATTENTION!!! Here we change the list of available cache files. Removable when debugging.
       //!>
       cache->add(infile, canonical, cachefile, img_w, img_h, tile_w, tile_h, clevels, numpages);
     }

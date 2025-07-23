@@ -386,7 +386,8 @@ TEST(SipiImage, CMYK_With_Alpha_Conversion)
 
 double errorPercent(double actual, double expected) { return abs((actual - expected) / expected); }
 
-void assertErrorPercent(double actual, double expected, double lessThan) {
+void assertErrorPercent(double actual, double expected, double lessThan)
+{
   auto p = errorPercent(actual, expected);
   EXPECT_TRUE(p < lessThan);
 }

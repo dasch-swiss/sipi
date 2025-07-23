@@ -58,6 +58,12 @@ def manager(request):
     manager.cleanup()
 
 
+@pytest.fixture(scope="session")
+def sipi_server_url(manager):
+    """Returns the base URL for the SIPI server."""
+    return manager.sipi_base_url
+
+
 class SipiTestManager:
     """Controls Sipi and Nginx during tests."""
 
