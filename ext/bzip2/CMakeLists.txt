@@ -13,8 +13,8 @@ ExternalProject_Add(project_bzip2
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/bzip2
         CONFIGURE_COMMAND ""
-        BUILD_COMMAND make PREFIX=${CMAKE_BINARY_DIR}/local
-        INSTALL_COMMAND make PREFIX=${CMAKE_BINARY_DIR}/local install
+        BUILD_COMMAND make CC=${CMAKE_C_COMPILER} PREFIX=${CMAKE_BINARY_DIR}/local
+        INSTALL_COMMAND make CC=${CMAKE_C_COMPILER} PREFIX=${CMAKE_BINARY_DIR}/local install
         BUILD_IN_SOURCE 1
 )
 
