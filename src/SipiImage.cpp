@@ -49,6 +49,7 @@ SipiImage::SipiImage()
   exif = nullptr;
   skip_metadata = SkipMetadata::SKIP_NONE;
   conobj = nullptr;
+  ensure_exif();
 };
 //============================================================================
 
@@ -137,7 +138,7 @@ SipiImage::SipiImage(size_t nx_p, size_t ny_p, size_t nc_p, size_t bps_p, Photom
   xmp = nullptr;
   icc = nullptr;
   iptc = nullptr;
-  exif = nullptr;
+  ensure_exif();
   skip_metadata = SkipMetadata::SKIP_NONE;
   conobj = nullptr;
 }
@@ -754,7 +755,7 @@ bool SipiImage::crop(const std::shared_ptr<SipiRegion> &region)
 
 
 /****************************************************************************/
-#define POSITION(x, y, c, n) ((n) * ((y) * nx + (x)) + c)
+#define POSITION(x, y, c, n) ((n) * ((y)*nx + (x)) + c)
 
 byte SipiImage::bilinn(byte buf[], const int nx, const double x, const double y, const int c, const int n)
 {
@@ -1367,6 +1368,7 @@ bool SipiImage::toBitonal()
 
 //============================================================================
 
+#define POSITION(w, x, y, c, n) ((n) * ((y)*w + (x)) + c)
 
 void SipiImage::add_watermark(const std::string &wmfilename)
 {
@@ -1374,44 +1376,41 @@ void SipiImage::add_watermark(const std::string &wmfilename)
   byte *wmbuf = read_watermark(wmfilename, wm_nx, wm_ny, wm_nc);
   if (wmbuf == nullptr) { throw SipiImageError("Cannot read watermark file " + wmfilename); }
 
-  auto xlut = shttps::make_unique<double[]>(nx);
-  auto ylut = shttps::make_unique<double[]>(ny);
+  // scaling is calculated with the middle point as point of origin
+  double wm_scale = ((double)wm_nx / wm_ny > (double)nx / ny) ? (double)wm_nx / nx : (double)wm_ny / ny;
 
-  // float *xlut = new float[nx];
-  // float *ylut = new float[ny];
-
-  for (size_t i = 0; i < nx; i++) { xlut[i] = (double)(wm_nx * i) / (double)nx; }
-
-  for (size_t j = 0; j < ny; j++) { ylut[j] = (double)(wm_ny * j) / (double)ny; }
+  // blending alpha coefficient (multiplies with alpha channel if there is one)
+  double wm_strength = 0.8;
 
   if (bps == 8) {
     auto *buf = pixels;
 
     for (size_t j = 0; j < ny; j++) {
       for (size_t i = 0; i < nx; i++) {
-        byte val = bilinn(wmbuf, wm_nx, xlut[i], ylut[j], 0, wm_nc);
+        double wm_i = (i - nx / 2.) * wm_scale + wm_nx / 2.;
+        double wm_j = (j - ny / 2.) * wm_scale + wm_ny / 2.;
+
         for (size_t k = 0; k < nc; k++) {
-          double nval = (buf[nc * (j * nx + i) + k] / 255.) * (1.0 + val / 2550.0) + val / 2550.0;
-          buf[nc * (j * nx + i) + k] = (nval > 1.0) ? 255 : (unsigned char)floorl(nval * 255. + .5);
+          if (!(abs(wm_i - wm_nx / 2.) < wm_nx / 2. && abs(wm_j - wm_ny / 2.) < wm_ny / 2.)) continue;
+
+          double wm_alpha = wm_nc == 4 ? bilinn(wmbuf, wm_nx, wm_i, wm_j, 3, wm_nc) : 1;
+          double wm_alpha_weak = wm_alpha / 255.0 * wm_strength;
+
+          double wm_color = bilinn(wmbuf, wm_nx, wm_i, wm_j, k, wm_nc) / 255.0;
+          double color = (buf[nc * (j * nx + i) + k] / 255.);
+          double blend = color * (1.0 - wm_alpha_weak) + wm_color * wm_alpha_weak;
+          buf[nc * (j * nx + i) + k] = std::clamp(blend * 255., 0., 255.);
         }
       }
     }
   } else if (bps == 16) {
-    auto *buf = reinterpret_cast<word *>(pixels);
-
-    for (size_t j = 0; j < ny; j++) {
-      for (size_t i = 0; i < nx; i++) {
-        for (size_t k = 0; k < nc; k++) {
-          byte val = bilinn(wmbuf, wm_nx, xlut[i], ylut[j], 0, wm_nc);
-          double nval = (buf[nc * (j * nx + i) + k] / 65535.0) * (1.0 + val / 655350.0) + val / 352500.;
-          buf[nc * (j * nx + i) + k] = (nval > 1.0) ? (word)65535 : (word)floorl(nval * 65535. + .5);
-        }
-      }
-    }
+    // 16bps support was never really finished, left unimplemented
   }
 
   delete[] wmbuf;
 }
+
+#undef POSITION
 
 /*==========================================================================*/
 
@@ -1699,6 +1698,36 @@ bool SipiImage::operator==(const SipiImage &rhs) const
   }
 
   return n_differences <= 0;
+}
+
+/*==========================================================================*/
+
+std::optional<double> SipiImage::compare(const SipiImage &rhs) const
+{
+  if ((nx != rhs.nx) || (ny != rhs.ny) || (nc != rhs.nc) || (bps != rhs.bps) || (photo != rhs.photo)) { return {}; }
+
+  double diff = 0;
+  double niters = 0;
+
+  switch (bps) {
+  case 8: {
+    byte *ltmp1 = pixels;
+    byte *ltmp2 = rhs.pixels;
+    for (size_t j = 0; j < ny; j++) {
+      for (size_t i = 0; i < nx; i++) {
+        for (size_t k = 0; k < nc; k++) {
+          niters++;
+          diff += abs(ltmp1[nc * (j * nx + i) + k] - ltmp2[nc * (j * nx + i) + k]) / 255.;
+        }
+      }
+    }
+    break;
+  }
+  case 16:
+    return 1;
+  }
+
+  return diff / niters;
 }
 
 /*==========================================================================*/

@@ -867,6 +867,15 @@ Connection::~Connection()
 }
 //=============================================================================
 
+/*!
+ * Return true if a secure (SSL) connection is used
+ */
+bool Connection::secure(void)
+{
+  bool forwarded = !header("x-forwarded-proto").compare("https");
+  return _secure || forwarded;
+}
+
 int Connection::setupKeepAlive(int default_timeout)
 {
   if (_keep_alive) {
@@ -1360,7 +1369,7 @@ void Connection::sendAndFlush(const void *buffer, size_t n)
 //=============================================================================
 
 
-void Connection::sendFile(const string &path, const size_t bufsize, size_t from, size_t to)
+void Connection::sendFile(const string &path, const size_t bufsize, const size_t from, const size_t to)
 {
   if (_finished) throw Error("Sending data already terminated!");
 
@@ -1377,39 +1386,39 @@ void Connection::sendFile(const string &path, const size_t bufsize, size_t from,
 
   if (stat(path.c_str(), &fstatbuf) != 0) { throw Error("Cannot fstat file: " + path); }
 
-  size_t fsize = fstatbuf.st_size;
-  size_t orig_fsize = fsize;
+
+  const size_t orig_fsize = fstatbuf.st_size;
 
   FILE *infile = fopen(path.c_str(), "rb");
 
   if (infile == nullptr) { throw Error("File not readable: " + path); }
 
-  if (from > 0) {
-    if (from < fsize) {
-      if (fseek(infile, from, SEEK_SET) < 0) {
-        fclose(infile);
-        throw Error("Cannot seek to position!");
-      }
-      fsize -= from;
-    } else {
+  if (from < orig_fsize) {
+    if (fseek(infile, from, SEEK_SET) < 0) {
       fclose(infile);
-      throw Error("Seek position beyond end of file!");
+      throw Error("Cannot seek to position!");
     }
+  } else {
+    fclose(infile);
+    throw Error("Seek position beyond end of file!");
   }
 
+  if (to >= orig_fsize) {
+    fclose(infile);
+    throw Error("Trying to read beyond end of file!");
+  }
+
+  // bytes needing to read and return
+  size_t read_size = orig_fsize;
   if (to > 0) {
-    if (to > orig_fsize) {
-      fclose(infile);
-      throw Error("Trying to read beyond end of file!");
-    }
-    fsize -= (orig_fsize - to - 1);
+    read_size = to - from + 1;
   }
 
   if (outbuf != nullptr) {
     char buf[bufsize];
     size_t n = 0;
     size_t nn = 0;
-    while ((nn < fsize) && ((n = fread(buf, sizeof(char), fsize - nn > bufsize ? bufsize : fsize - nn, infile)) > 0)) {
+    while ((nn < read_size) && ((n = fread(buf, sizeof(char), read_size - nn > bufsize ? bufsize : read_size - nn, infile)) > 0)) {
       add_to_outbuf(buf, n);
       nn += n;
     }
@@ -1418,7 +1427,7 @@ void Connection::sendFile(const string &path, const size_t bufsize, size_t from,
       if (_chunked_transfer_out) {
         send_header();
       } else {
-        send_header(fsize);
+        send_header(read_size);
       }
     }
 
@@ -1426,7 +1435,7 @@ void Connection::sendFile(const string &path, const size_t bufsize, size_t from,
     size_t n;
     size_t nn = 0;
 
-    while ((nn < fsize) && ((n = fread(buf, sizeof(char), fsize - nn > bufsize ? bufsize : fsize - nn, infile)) > 0)) {
+    while ((nn < read_size) && ((n = fread(buf, sizeof(char), read_size - nn > bufsize ? bufsize : read_size - nn, infile)) > 0)) {
       // send data here...
       if (_chunked_transfer_out) {
         *os << std::hex << n << "\r\n";
@@ -1607,4 +1616,4 @@ bool Connection::cleanupUploads(void)
 }
 //=============================================================================
 
-}
+}// namespace shttps

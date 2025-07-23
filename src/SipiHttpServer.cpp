@@ -34,12 +34,11 @@
 #include "iiifparser/SipiRotation.h"
 #include "iiifparser/SipiSize.h"
 
+#include "Logger.h"
 #include "SipiHttpServer.hpp"
-#include "handlers/iiif_handler.hpp"
-
 #include "favicon.h"
+#include "handlers/iiif_handler.hpp"
 #include "jansson.h"
-
 
 using namespace shttps;
 
@@ -73,7 +72,7 @@ static void send_error(Connection &conn_obj, Connection::StatusCodes code, const
   conn_obj.header("Content-Type", "text/plain");
 
   std::string http_err_name;
-  constexpr bool log_err(true);// True if the error should be logged.
+  constexpr bool log_err_b(true);// True if the error should be logged.
 
   switch (code) {
   case Connection::BAD_REQUEST:
@@ -112,12 +111,12 @@ static void send_error(Connection &conn_obj, Connection::StatusCodes code, const
 
   conn_obj.flush();
   // Log the error if appropriate.
-  if (log_err) {
+  if (log_err_b) {
     std::stringstream log_msg_stream;
     log_msg_stream << "GET " << conn_obj.uri() << " failed (" << http_err_name << ")";
 
     if (!errmsg.empty()) { log_msg_stream << ": " << errmsg; }
-    syslog(LOG_ERR, "%s", log_msg_stream.str().c_str());
+    log_err("%s", log_msg_stream.str().c_str());
   }
 }
 
@@ -604,7 +603,7 @@ static void serve_redirect(Connection &conn_obj, const std::vector<std::string> 
   conn_obj.header("Location", redirect);
   conn_obj.header("Content-Type", "text/plain");
   conn_obj << "Redirect to " << redirect;
-  syslog(LOG_INFO, "GET: redirect to %s", redirect.c_str());
+  log_info("GET: redirect to %s", redirect.c_str());
   conn_obj.flush();
 }
 
@@ -637,7 +636,7 @@ static void serve_info_json_file(Connection &conn_obj,
   try {
     access = check_file_access(conn_obj, serv, luaserver, params, prefix_as_path);
   } catch (SipiError &err) {
-    send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
+    send_error(conn_obj, Connection::NOT_FOUND, err);
     return;
   }
 
@@ -657,20 +656,13 @@ static void serve_info_json_file(Connection &conn_obj,
     json_object_set_new(root, "@context", json_string("http://sipi.io/api/file/3/context.json"));
   }
 
+  std::string proto = conn_obj.secure() ? std::string("https://") : std::string("http://");
   std::string host = conn_obj.header("host");
   std::string id;
   if (params[iiif_prefix] == "") {
-    if (conn_obj.secure()) {
-      id = std::string("https://") + host + "/" + params[iiif_identifier];
-    } else {
-      id = std::string("http://") + host + "/" + params[iiif_identifier];
-    }
+    id = proto + host + "/" + params[iiif_identifier];
   } else {
-    if (conn_obj.secure()) {
-      id = std::string("https://") + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier];
-    } else {
-      id = std::string("http://") + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier];
-    }
+    id = proto + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier];
   }
   json_object_set_new(root, "id", json_string(id.c_str()));
 
@@ -900,7 +892,7 @@ static void serve_knora_json_file(Connection &conn_obj,
 
   // set the origin
   const std::string origin = conn_obj.header("origin");
-  syslog(LOG_DEBUG, "knora_send_info: host header %s", origin.c_str());
+  log_debug("knora_send_info: host header %s", origin.c_str());
   if (origin.empty()) {
     conn_obj.header("Access-Control-Allow-Origin", "*");
   } else {
@@ -927,20 +919,14 @@ static void serve_knora_json_file(Connection &conn_obj,
   json_t *root = json_object();
   json_object_set_new(root, "@context", json_string("http://sipi.io/api/file/3/context.json"));
 
+  std::string proto = conn_obj.secure() ? std::string("https://") : std::string("http://");
   std::string host = conn_obj.header("host");
   std::string id;
+
   if (params[iiif_prefix] == "") {
-    if (conn_obj.secure()) {
-      id = std::string("https://") + host + "/" + params[iiif_identifier];
-    } else {
-      id = std::string("http://") + host + "/" + params[iiif_identifier];
-    }
+    id = proto + host + "/" + params[iiif_identifier];
   } else {
-    if (conn_obj.secure()) {
-      id = std::string("https://") + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier];
-    } else {
-      id = std::string("http://") + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier];
-    }
+    id = proto + host + "/" + params[iiif_prefix] + "/" + params[iiif_identifier];
   }
   json_object_set_new(root, "id", json_string(id.c_str()));
 
@@ -1125,7 +1111,7 @@ static void serve_file_download(Connection &conn_obj,
     };
 
     if (stat(requested_file.c_str(), &fstatbuf) != 0) {
-      syslog(LOG_ERR, "Cannot fstat file %s ", requested_file.c_str());
+      log_err("Cannot fstat file %s ", requested_file.c_str());
       send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR);
     }
     size_t fsize = fstatbuf.st_size;
@@ -1179,7 +1165,7 @@ static void serve_file_download(Connection &conn_obj,
     }
     conn_obj.flush();
   } else {
-    syslog(LOG_WARNING, "GET: %s not accessible", requested_file.c_str());
+    log_warn("GET: %s not accessible", requested_file.c_str());
     send_error(conn_obj, Connection::NOT_FOUND);
     conn_obj.flush();
   }
@@ -1204,6 +1190,7 @@ static void serve_iiif(Connection &conn_obj,
   const std::string &uri,
   std::vector<std::string> params)
 {
+  auto not_head_request = conn_obj.method() != Connection::HEAD;
   //
   // getting the identifier (which in case of a PDF or multipage TIFF my contain a page id (identifier@pagenum)
   //
@@ -1289,7 +1276,7 @@ static void serve_iiif(Connection &conn_obj,
 
   if (access(infile.c_str(), R_OK) != 0) {
     // test, if file exists
-    syslog(LOG_INFO, "File %s not found", infile.c_str());
+    log_info("File %s not found", infile.c_str());
     send_error(conn_obj, Connection::NOT_FOUND);
     return;
   }
@@ -1400,9 +1387,9 @@ static void serve_iiif(Connection &conn_obj,
     }
     }
     try {
-      conn_obj.sendFile(infile);
+      if (not_head_request) conn_obj.sendFile(infile);
     } catch (shttps::InputFailure iofail) {
-      syslog(LOG_WARNING, "Browser unexpectedly closed connection");
+      log_debug("Browser unexpectedly closed connection");
     } catch (Sipi::SipiError &err) {
       send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
     }
@@ -1418,7 +1405,7 @@ static void serve_iiif(Connection &conn_obj,
     // we block the file from being deleted if successfull
 
     if (!cachefile.empty()) {
-      syslog(LOG_DEBUG, "Using cachefile %s", cachefile.c_str());
+      log_debug("Using cachefile %s", cachefile.c_str());
       conn_obj.status(Connection::OK);
       conn_obj.header("Cache-Control", "must-revalidate, post-check=0, pre-check=0");
       conn_obj.header("Link", canonical_header);
@@ -1443,15 +1430,15 @@ static void serve_iiif(Connection &conn_obj,
 
       try {
         //!> send the file from cache
-        conn_obj.sendFile(cachefile);
+        if (not_head_request) conn_obj.sendFile(cachefile);
         //!> from now on the cache file can be deleted again
       } catch (shttps::InputFailure err) {
         // -1 was thrown
-        syslog(LOG_WARNING, "Browser unexpectedly closed connection");
+        log_debug("Browser unexpectedly closed connection");
         cache->deblock(cachefile);
         return;
       } catch (Sipi::SipiError &err) {
-        syslog(LOG_ERR, "Error sending cache file: \"%s\": %s", cachefile.c_str(), err.to_string().c_str());
+        log_err("Error sending cache file: \"%s\": %s", cachefile.c_str(), err.to_string().c_str());
         send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
         cache->deblock(cachefile);
         return;
@@ -1511,14 +1498,14 @@ static void serve_iiif(Connection &conn_obj,
       img.add_watermark(watermark);
     } catch (Sipi::SipiError &err) {
       send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
-      syslog(LOG_ERR, "GET %s: error adding watermark: %s", uri.c_str(), err.to_string().c_str());
+      log_err("GET %s: error adding watermark: %s", uri.c_str(), err.to_string().c_str());
       return;
     } catch (std::exception &err) {
       send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.what());
-      syslog(LOG_ERR, "GET %s: error adding watermark: %s", uri.c_str(), err.what());
+      log_err("GET %s: error adding watermark: %s", uri.c_str(), err.what());
       return;
     }
-    syslog(LOG_INFO, "GET %s: adding watermark", uri.c_str());
+    log_info("GET %s: adding watermark", uri.c_str());
   }
 
   img.connection(&conn_obj);
@@ -1543,7 +1530,7 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.header("Content-Type", "image/jpeg");// set the header (mimetype)
       conn_obj.setChunkedTransfer();
       Sipi::SipiCompressionParams qp = { { JPEG_QUALITY, std::to_string(server->jpeg_quality()) } };
-      img.write("jpg", "HTTP", &qp);
+      if (not_head_request) img.write("jpg", "HTTP", &qp);
       break;
     }
     case SipiQualityFormat::JP2: {
@@ -1551,7 +1538,7 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.header("Link", canonical_header);
       conn_obj.header("Content-Type", "image/jp2");// set the header (mimetype)
       conn_obj.setChunkedTransfer();
-      img.write("jpx", "HTTP");
+      if (not_head_request) img.write("jpx", "HTTP");
       break;
     }
     case SipiQualityFormat::TIF: {
@@ -1560,7 +1547,7 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.header("Content-Type", "image/tiff");// set the header (mimetype)
       // no chunked transfer needed...
 
-      img.write("tif", "HTTP");
+      if (not_head_request) img.write("tif", "HTTP");
       break;
     }
     case SipiQualityFormat::PNG: {
@@ -1569,12 +1556,12 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.header("Content-Type", "image/png");// set the header (mimetype)
       conn_obj.setChunkedTransfer();
 
-      img.write("png", "HTTP");
+      if (not_head_request) img.write("png", "HTTP");
       break;
     }
     default: {
       // HTTP 400 (format not supported)
-      syslog(LOG_WARNING, "Unsupported file format requested! Supported are .jpg, .jp2, .tif, .png");
+      log_warn("Unsupported file format requested! Supported are .jpg, .jp2, .tif, .png");
       conn_obj.setBuffer();
       conn_obj.status(Connection::BAD_REQUEST);
       conn_obj.header("Content-Type", "text/plain");
@@ -1587,7 +1574,7 @@ static void serve_iiif(Connection &conn_obj,
     if (conn_obj.isCacheFileOpen()) {
       conn_obj.closeCacheFile();
       //!>
-      //!> ATTENTION!!! Here we change the list of available cache files
+      //!> ATTENTION!!! Here we change the list of available cache files. Removable when debugging.
       //!>
       cache->add(infile, canonical, cachefile, img_w, img_h, tile_w, tile_h, clevels, numpages);
     }
@@ -1694,7 +1681,7 @@ void SipiHttpServer::cache(const std::string &cachedir_p,
     _cache = std::make_shared<SipiCache>(cachedir_p, max_cachesize_p, max_nfiles_p, cache_hysteresis_p);
   } catch (const SipiError &err) {
     _cache = nullptr;
-    syslog(LOG_WARNING, "Couldn't open cache directory %s: %s", cachedir_p.c_str(), err.to_string().c_str());
+    log_warn("Couldn't open cache directory %s: %s", cachedir_p.c_str(), err.to_string().c_str());
   }
 }
 
@@ -1703,17 +1690,16 @@ void SipiHttpServer::cache(const std::string &cachedir_p,
 // here we add the main IIIF route to the server (iiif_handler)
 void SipiHttpServer::run()
 {
-  const int old_ll = setlogmask(LOG_MASK(LOG_INFO));
-  syslog(LOG_INFO, "SipiHttpServer starting ...");
+  log_info("SipiHttpServer starting ...");
   //
   // setting the image root
   //
-  syslog(LOG_INFO, "Serving images from %s", _imgroot.c_str());
-  syslog(LOG_DEBUG, "Salsah prefix: %s", _salsah_prefix.c_str());
-  setlogmask(old_ll);
+  log_info("Serving images from %s", _imgroot.c_str());
+  log_debug("Salsah prefix: %s", _salsah_prefix.c_str());
 
   add_route(Connection::GET, "/favicon.ico", favicon_handler);
   add_route(Connection::GET, "/", iiif_handler);
+  add_route(Connection::HEAD, "/", iiif_handler);
 
   user_data(this);
 

@@ -7,6 +7,8 @@
 
 #include "../../../src/SipiImage.hpp"
 #include "SipiIOTiff.h"
+#include <cmath>
+#include <ranges>
 
 // small function to check if file exist
 inline bool exists_file(const std::string &name)
@@ -38,6 +40,9 @@ const std::string palette = "../../../../test/_test_data/images/unit/palette.tif
 const std::string wrongrotation = "../../../../test/_test_data/images/unit/image_orientation.jpg";
 const std::string watermark_correct = "../../../../test/_test_data/images/unit/watermark_correct.tif";
 const std::string watermark_incorrect = "../../../../test/_test_data/images/unit/watermark_incorrect.tif";
+const std::string tiffJpegScanlineBug = "../../../../test/_test_data/images/knora/tiffJpegScanlineBug.tif";
+const std::string imgExifGps = "../../../../test/_test_data/images/unit/img_exif_gps.jpg";
+const std::string imgExifGpsTifOut = "../../../../test/_test_data/images/unit/img_exif_gps_out.tif";
 
 // Check if configuration file can be found
 TEST(SipiImage, CheckIfTestImagesCanBeFound)
@@ -53,6 +58,7 @@ TEST(SipiImage, CheckIfTestImagesCanBeFound)
   EXPECT_TRUE(exists_file(wrongrotation));
   EXPECT_TRUE(exists_file(watermark_correct));
   EXPECT_TRUE(exists_file(watermark_incorrect));
+  EXPECT_TRUE(exists_file(tiffJpegScanlineBug));
 }
 
 TEST(SipiImage, ImageComparison)
@@ -308,17 +314,31 @@ TEST(SipiImage, Watermark)
   Sipi::SipiImage img3;
   Sipi::SipiImage img4;
 
+  std::string maori = "../../../../test/_test_data/images/unit/MaoriFigure.jpg";
+  std::string gradstars = "../../../../test/_test_data/images/unit/gradient-stars.tif";
+  std::string maoriWater = "../../../../test/_test_data/images/unit/MaoriFigureWatermark.jpg";
+
+  EXPECT_TRUE(exists_file(maori));
+  EXPECT_TRUE(exists_file(gradstars));
+
   ASSERT_NO_THROW(img1.read(cielab));
   EXPECT_NO_THROW(img1.add_watermark(watermark_correct));
 
-  ASSERT_NO_THROW(img2.read(cielab));
-  ASSERT_THROW(img2.add_watermark(watermark_incorrect), std::exception);
+  ASSERT_NO_THROW(img2.read(cielab16));
+  EXPECT_NO_THROW(img2.add_watermark(watermark_correct));
 
-  ASSERT_NO_THROW(img3.read(cielab16));
-  EXPECT_NO_THROW(img3.add_watermark(watermark_correct));
+  ASSERT_NO_THROW(img3.read(maori));
 
-  ASSERT_NO_THROW(img4.read(cielab16));
-  ASSERT_THROW(img4.add_watermark(watermark_incorrect), std::exception);
+  EXPECT_NO_THROW(img3.add_watermark(gradstars));
+  /* ASSERT_NO_THROW(img3.write("jpg", maoriWater)); */
+
+  ASSERT_NO_THROW(img4.read(maoriWater));
+  EXPECT_TRUE(img4.compare(img3).value_or(1000) < 0.007);// 0.00605
+
+  ASSERT_NO_THROW(img3.read(maori));
+  EXPECT_TRUE(img4.compare(img3) > 0.017);// 0.0174
+
+  ASSERT_NO_THROW(img3.rotate(90));
 }
 
 TEST(SipiImage, CMYK_With_Alpha_Conversion)
@@ -350,4 +370,60 @@ TEST(SipiImage, CMYK_With_Alpha_Conversion)
 
   // now test if conversion to PNG is working
   ASSERT_NO_THROW(img2.write("png", tif_cmyk_with_alpha_converted_to_png));
+}
+
+// BROKEN! See the remark about "TIFFSetDirectory(tif, 0);" in SipiIOTiff.cpp
+// Convert Tiff with JPEG compression and automatic YCrCb conversion via TIFFTAG_JPEGCOLORMODE = JPEGCOLORMODE_RGB
+/* TEST(SipiImage, TiffJpegAutoRgbConvert) */
+/* { */
+/*   Sipi::SipiIOTiff::initLibrary(); */
+
+/*   Sipi::SipiImage img; */
+
+/*   EXPECT_NO_THROW(img.read(tiffJpegScanlineBug)); */
+/*   EXPECT_NO_THROW(img.write("jpx", "../../../../test/_test_data/images/thumbs/tiffJpegScanlineBug.jp2")); */
+/* } */
+
+double errorPercent(double actual, double expected) { return abs((actual - expected) / expected); }
+
+void assertErrorPercent(double actual, double expected, double lessThan)
+{
+  auto p = errorPercent(actual, expected);
+  EXPECT_TRUE(p < lessThan);
+}
+
+TEST(SipiImage, TiffPyramidLayers)
+{
+  Sipi::SipiIOTiff::initLibrary();
+
+  for (int reduce : std::views::iota(0, 5)) {
+    reduce = 100 - (reduce * 10);
+    const int x = 4032, y = 3024;
+
+    Sipi::SipiImage img;
+    const std::shared_ptr<Sipi::SipiRegion> region;
+    const auto size = std::make_shared<Sipi::SipiSize>("pct:" + std::to_string(reduce));
+    Sipi::SipiCompressionParams params = { { Sipi::TIFF_Pyramid, "yes" } };
+
+    EXPECT_NO_THROW(img.read(imgExifGps));
+
+    EXPECT_TRUE(img.getNx() == x);
+    EXPECT_TRUE(img.getNy() == y);
+
+    EXPECT_NO_THROW(img.write("tif", imgExifGpsTifOut, &params));
+    EXPECT_NO_THROW(img.read(imgExifGpsTifOut, region, size));
+
+    assertErrorPercent(img.getNx(), static_cast<float>(x) * reduce / 100, 0.01);
+    assertErrorPercent(img.getNy(), static_cast<float>(y) * reduce / 100, 0.01);
+  }
+}
+
+TEST(SipiImage, PercentParsing)
+{
+  Sipi::SipiIOTiff::initLibrary();
+  const std::shared_ptr<Sipi::SipiRegion> region;
+  const auto size = std::make_shared<Sipi::SipiSize>("pct:0");
+
+  Sipi::SipiImage img;
+  EXPECT_NO_THROW(img.read(leavesSmallWithAlpha, region, size));
 }

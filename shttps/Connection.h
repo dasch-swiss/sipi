@@ -428,7 +428,7 @@ public:
   /*!
    * Return true if a secure (SSL) connection is used
    */
-  inline bool secure(void) { return _secure; }
+  bool secure(void);
 
   /*!
    * Set the secure connection status
@@ -733,11 +733,14 @@ public:
   void sendAndFlush(const void *buffer, size_t n);
 
   /*!
-   * Sends the data of a file to the connection
+   * Sends the data of a file to the connection. Supports HTTP range requests.
    *
    * \param[in] path Path to the file
+   * \param[in] bufsize Buffer size for reading chunks (default: 8192 bytes)
+   * \param[in] from Start byte position for range requests (0-based, inclusive, default: 0)
+   * \param[in] to End byte position for range requests (0-based, inclusive, default: 0 = whole file)
    */
-  void sendFile(const std::string &path, const size_t bufsize = 8192, size_t from = 0, size_t to = 0);
+  void sendFile(const std::string &path, const size_t bufsize = 8192, const size_t from = 0, const size_t to = 0);
 
   /*!
    * Send the given string to the output. Uses \method send

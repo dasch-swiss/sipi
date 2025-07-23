@@ -9,13 +9,13 @@ set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
 ExternalProject_Add(project_jpeg
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        URL https://github.com/dasch-swiss/sipi-third-party/raw/main/third-party/jpegsrc.v9c.tar.gz
+        URL https://ijg.org/files/jpegsrc.v9f.tar.gz
         ${timestamp_policy}
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
         #URL_HASH SHA256=650250979303a649e21f87b5ccd02672af1ea6954b911342ea491f351ceb7122
         #DOWNLOAD_EXTRACT_TIMESTAMP OLD
-        SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/libjpeg-v9c
-        CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/libjpeg-v9c/configure --prefix=${CMAKE_BINARY_DIR}/local --enable-shared --enable-static --libdir=${CMAKE_BINARY_DIR}/local/lib
+        SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/libjpeg-v9f
+        CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/libjpeg-v9f/configure --prefix=${CMAKE_BINARY_DIR}/local --enable-shared --enable-static --libdir=${CMAKE_BINARY_DIR}/local/lib
         BUILD_COMMAND make
         BUILD_IN_SOURCE 1
 )

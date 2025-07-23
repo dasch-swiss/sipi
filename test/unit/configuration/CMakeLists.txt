@@ -23,6 +23,7 @@ file(GLOB SRCS *.cpp)
 add_executable(${TEST_NAME}
         ${SRCS}
         ${PROJECT_SOURCE_DIR}/src/SipiConf.cpp ${PROJECT_SOURCE_DIR}/include/SipiConf.h
+        ${PROJECT_SOURCE_DIR}/src/Logger.cpp ${PROJECT_SOURCE_DIR}/include/Logger.h
         ${PROJECT_SOURCE_DIR}/src/SipiError.cpp
         ${PROJECT_SOURCE_DIR}/src/SipiError.hpp
         ${PROJECT_SOURCE_DIR}/shttps/Global.h
@@ -41,6 +42,8 @@ add_executable(${TEST_NAME}
         ${PROJECT_SOURCE_DIR}/shttps/makeunique.h ${PROJECT_SOURCE_DIR}/src/SipiFilenameHash.cpp ${PROJECT_SOURCE_DIR}/include/SipiFilenameHash.h
 )
 
+add_dependencies(${TEST_NAME} lua)
+
 target_link_libraries(${TEST_NAME}
         libgtest)
 
@@ -48,7 +51,6 @@ target_link_libraries(${TEST_NAME}
         ${LIBS}
         lcms2
         exiv2
-        exiv2-xmp
         expat
         tiff
         webp

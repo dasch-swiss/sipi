@@ -555,7 +555,7 @@ Path to the SSL key that SIPI uses.
 
     config.logfile
     
-Name of the logfile. SIPI is currently using the [syslog](https://en.wikipedia.org/wiki/Syslog) facility and the
+Name of the logfile. SIPI is currently using the built-in logger which logs to stdout and the
 logfile name is ignored. 
 (see [logfile](../sipi/#logfile) in configuration description).
 
@@ -1108,9 +1108,7 @@ Returns the current system time on the server in seconds since epoch.
 
     server.log(message, loglevel)
 
-Writes a message to
-[syslog](http://man7.org/linux/man-pages/man3/syslog.3.html). Severity
-levels are:
+Writes a message to the built-in logger. Severity levels are:
 
 -   `server.loglevel.LOG_EMERG`
 -   `server.loglevel.LOG_ALERT`

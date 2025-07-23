@@ -118,7 +118,7 @@ endif ()
 # Dynamically compile the C++ standard library into the executable
 if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     message(STATUS "Compiling with Clang (-stdlib=libstdc++ and -static-libstdc++).")
-    target_compile_options(build_config INTERFACE -stdlib=libstdc++ -static-libstdc++)
+    target_compile_options(build_config INTERFACE -stdlib=libc++)
 endif ()
 
 #
@@ -382,16 +382,16 @@ add_custom_command(
         COMMENT "Generating ICC profile includes"
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/generated
         COMMAND cp ${PROJECT_SOURCE_DIR}/include/ICC-Profiles/AdobeRGB1998.icc ${CMAKE_BINARY_DIR}/generated/AdobeRGB1998.icc
-        COMMAND xxd -i AdobeRGB1998.icc AdobeRGB1998_icc.h
+        COMMAND ${PROJECT_SOURCE_DIR}/generate_icc_header.sh AdobeRGB1998.icc AdobeRGB1998_icc.h AdobeRGB1998_icc
         COMMAND rm ${CMAKE_BINARY_DIR}/generated/AdobeRGB1998.icc
         COMMAND cp ${PROJECT_SOURCE_DIR}/include/ICC-Profiles/USWebCoatedSWOP.icc ${CMAKE_BINARY_DIR}/generated/USWebCoatedSWOP.icc
-        COMMAND xxd -i USWebCoatedSWOP.icc USWebCoatedSWOP_icc.h
+        COMMAND ${PROJECT_SOURCE_DIR}/generate_icc_header.sh USWebCoatedSWOP.icc USWebCoatedSWOP_icc.h USWebCoatedSWOP_icc
         COMMAND rm ${CMAKE_BINARY_DIR}/generated/USWebCoatedSWOP.icc
         COMMAND cp ${PROJECT_SOURCE_DIR}/include/ICC-Profiles/YCC709.icm ${CMAKE_BINARY_DIR}/generated/YCC709.icm
-        COMMAND xxd -i YCC709.icm YCC709_icc.h
+        COMMAND ${PROJECT_SOURCE_DIR}/generate_icc_header.sh YCC709.icm YCC709_icc.h YCC709_icc
         COMMAND rm ${CMAKE_BINARY_DIR}/generated/YCC709.icm
         COMMAND cp ${PROJECT_SOURCE_DIR}/include/ICC-Profiles/Rec709-Rec1886.icc ${CMAKE_BINARY_DIR}/generated/Rec709-Rec1886.icc
-        COMMAND xxd -i Rec709-Rec1886.icc Rec709-Rec1886_icc.h
+        COMMAND ${PROJECT_SOURCE_DIR}/generate_icc_header.sh Rec709-Rec1886.icc Rec709-Rec1886_icc.h Rec709_Rec1886_icc
         COMMAND rm ${CMAKE_BINARY_DIR}/generated/Rec709-Rec1886.icc
 )
 
@@ -439,6 +439,7 @@ add_executable(sipi
         ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiRegion.cpp ${PROJECT_SOURCE_DIR}/include/iiifparser/SipiRegion.h
         ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiSize.cpp include/iiifparser/SipiSize.h
         ${PROJECT_SOURCE_DIR}/src/SipiCommon.cpp ${PROJECT_SOURCE_DIR}/include/SipiCommon.h
+        ${PROJECT_SOURCE_DIR}/src/Logger.cpp ${PROJECT_SOURCE_DIR}/include/Logger.h
         ${PROJECT_SOURCE_DIR}/shttps/Global.h
         ${PROJECT_SOURCE_DIR}/shttps/Error.cpp ${PROJECT_SOURCE_DIR}/shttps/Error.h
         ${PROJECT_SOURCE_DIR}/shttps/Hash.cpp ${PROJECT_SOURCE_DIR}/shttps/Hash.h
@@ -469,7 +470,6 @@ add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 
 target_link_libraries(${PROJECT_NAME} ${LIBS}
         lcms2
         exiv2
-        exiv2-xmp
         expat
         tiff
         webp

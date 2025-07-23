@@ -23,13 +23,13 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <syslog.h>
 #include <unistd.h>//write
 //
 // openssl includes
 // #include "openssl/applink.c"
 
 
+#include "Logger.h"
 #include "LuaServer.h"
 #include "Parsing.h"
 #include "Server.h"
@@ -64,7 +64,7 @@ static void *sig_thread(void *arg)
     // Ignore any other signals. We must in particular ignore
     // SIGPIPE.
     if (sig == SIGINT || sig == SIGTERM) {
-      syslog(LOG_INFO, "Got SIGINT or SIGTERM, stopping server");
+      log_info("Got SIGINT or SIGTERM, stopping server");
       serverptr->stop();
       return nullptr;
     }
@@ -94,7 +94,7 @@ static void default_handler(Connection &conn, LuaServer &lua, void *user_data, v
     return;
   }
 
-  syslog(LOG_WARNING, "No handler available! Host: %s Uri: %s", conn.host().c_str(), conn.uri().c_str());
+  log_warn("No handler available! Host: %s Uri: %s", conn.host().c_str(), conn.uri().c_str());
 }
 //=========================================================================
 
@@ -121,7 +121,7 @@ void script_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, v
     conn.header("Content-Type", "text/text; charset=utf-8");
     conn << "File not found\n";
     conn.flush();
-    syslog(LOG_ERR, "script_handler: %s not readable!", script.c_str());
+    log_err("script_handler: %s not readable!", script.c_str());
     return;
   }
 
@@ -154,7 +154,7 @@ void script_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, v
           return;
         }
 
-        syslog(LOG_ERR, "script_handler: error executing lua script: %s", err.to_string().c_str());
+        log_err("script_handler: error executing lua script: %s", err.to_string().c_str());
         return;
       }
       conn.flush();
@@ -200,7 +200,7 @@ void script_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, v
             return;
           }
 
-          syslog(LOG_ERR, "script_handler: error executing lua chunk: %s", err.to_string().c_str());
+          log_err("script_handler: error executing lua chunk: %s", err.to_string().c_str());
           return;
         }
       }
@@ -213,7 +213,7 @@ void script_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, v
       conn.header("Content-Type", "text/text; charset=utf-8");
       conn << "Script has no valid extension: '" << extension << "' !";
       conn.flush();
-      syslog(LOG_ERR, "script_handler: error executing script, unknown extension: %s", extension.c_str());
+      log_err("script_handler: error executing script, unknown extension: %s", extension.c_str());
     }
   } catch (InputFailure iofail) {
     return;// we have an io error => just return, the thread will exit
@@ -227,7 +227,7 @@ void script_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, v
       return;
     }
 
-    syslog(LOG_ERR, "file_handler: internal error: %s", err.to_string().c_str());
+    log_err("file_handler: internal error: %s", err.to_string().c_str());
     return;
   }
 }
@@ -275,7 +275,7 @@ void file_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, voi
     conn.header("Content-Type", "text/text; charset=utf-8");
     conn << "File not found\n";
     conn.flush();
-    syslog(LOG_ERR, "file_handler: %s not readable", infile.c_str());
+    log_err("file_handler: %s not readable", infile.c_str());
     return;
   }
 
@@ -289,7 +289,7 @@ void file_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, voi
       conn.header("Content-Type", "text/text; charset=utf-8");
       conn << infile << " not aregular file\n";
       conn.flush();
-      syslog(LOG_ERR, "file_handler: %s is not regular file", infile.c_str());
+      log_err("file_handler: %s is not regular file", infile.c_str());
       return;
     }
   } else {
@@ -297,7 +297,7 @@ void file_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, voi
     conn.header("Content-Type", "text/text; charset=utf-8");
     conn << "Could not stat file" << infile << "\n";
     conn.flush();
-    syslog(LOG_ERR, "file_handler: Could not stat %s", infile.c_str());
+    log_err("file_handler: Could not stat %s", infile.c_str());
     return;
   }
 
@@ -339,11 +339,11 @@ void file_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, voi
           conn << "Lua Error:\r\n==========\r\n" << err << "\r\n";
           conn.flush();
         } catch (int i) {
-          syslog(LOG_ERR, "file_handler: error executing lua chunk!");
+          log_err("file_handler: error executing lua chunk!");
           return;
         }
 
-        syslog(LOG_ERR, "file_handler: error executing lua chunk: %s", err.to_string().c_str());
+        log_err("file_handler: error executing lua chunk: %s", err.to_string().c_str());
         return;
       }
 
@@ -388,7 +388,7 @@ void file_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, voi
             conn.flush();
           } catch (InputFailure iofail) {}
 
-          syslog(LOG_ERR, "file_handler: error executing lua chunk: %s", err.to_string().c_str());
+          log_err("file_handler: error executing lua chunk: %s", err.to_string().c_str());
           return;
         }
       }
@@ -431,12 +431,12 @@ void file_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, voi
         //
         std::regex re("bytes=\\s*(\\d+)-(\\d*)[\\D.*]?");
         std::cmatch m;
-        int start = 0;// lets assume beginning of file
-        int end = fsize - 1;// lets assume whole file
+        size_t start = 0;// let's assume the beginning of file
+        size_t end = fsize - 1;// let's assume a whole file
         if (std::regex_match(range.c_str(), m, re)) {
           if (m.size() < 2) { throw Error("Range expression invalid!"); }
-          start = std::stoi(m[1]);
-          if ((m.size() > 1) && !m[2].str().empty()) { end = std::stoi(m[2]); }
+          start = std::stoull(m[1]);
+          if ((m.size() > 1) && !m[2].str().empty()) { end = std::stoull(m[2]); }
         } else {
           throw Error("Range expression invalid!");
         }
@@ -468,7 +468,7 @@ void file_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, voi
       conn.flush();
     } catch (InputFailure iofail) {}
 
-    syslog(LOG_ERR, "file_handler: internal error: %s", err.to_string().c_str());
+    log_err("file_handler: internal error: %s", err.to_string().c_str());
     return;
   }
 }
@@ -505,28 +505,24 @@ Server::Server(int port_p,
   int ll;
 
   if (_loglevel == "DEBUG") {
-    ll = LOG_DEBUG;
+    ll = LL_DEBUG;
   } else if (_loglevel == "INFO") {
-    ll = LOG_INFO;
+    ll = LL_INFO;
   } else if (_loglevel == "NOTICE") {
-    ll = LOG_NOTICE;
+    ll = LL_NOTICE;
   } else if (_loglevel == "WARNING") {
-    ll = LOG_WARNING;
+    ll = LL_WARNING;
   } else if (_loglevel == "ERR") {
-    ll = LOG_ERR;
+    ll = LL_ERR;
   } else if (_loglevel == "CRIT") {
-    ll = LOG_CRIT;
+    ll = LL_CRIT;
   } else if (_loglevel == "ALERT") {
-    ll = LOG_ALERT;
+    ll = LL_ALERT;
   } else if (_loglevel == "EMERG") {
-    ll = LOG_EMERG;
+    ll = LL_EMERG;
   } else {
-    ll = LOG_ERR;
+    ll = LL_ERR;
   }
-
-  // openlog(loggername, LOG_CONS | LOG_PERROR, LOG_DAEMON);
-  openlog(loggername, LOG_PERROR, LOG_DAEMON);
-  setlogmask(LOG_UPTO(ll));
 
   //
   // Her we check if we have to change to a different uid. This can only be done
@@ -541,25 +537,21 @@ Server::Server(int port_p,
 
       if (res != nullptr) {
         if (setuid(pwd.pw_uid) == 0) {
-          int old_ll = setlogmask(LOG_MASK(LOG_INFO));
-          syslog(LOG_INFO, "Server will run as user %s (%d)", userid_str.c_str(), getuid());
-          setlogmask(old_ll);
+          log_info("Server will run as user %s (%d)", userid_str.c_str(), getuid());
 
           if (setgid(pwd.pw_gid) == 0) {
-            int old_ll = setlogmask(LOG_MASK(LOG_INFO));
-            syslog(LOG_INFO, "Server will run with group-id %d", getgid());
-            setlogmask(old_ll);
+            log_info("Server will run with group-id %d", getgid());
           } else {
-            syslog(LOG_ERR, "setgid() failed! Reason: %m");
+            log_err("setgid() failed! Reason: %m");
           }
         } else {
-          syslog(LOG_ERR, "setgid() failed! Reason: %m");
+          log_err("setgid() failed! Reason: %m");
         }
       } else {
-        syslog(LOG_ERR, "Could not get uid of user %s: you must start Sipi as root", userid_str.c_str());
+        log_err("Could not get uid of user %s: you must start Sipi as root", userid_str.c_str());
       }
     } else {
-      syslog(LOG_ERR, "Could not get uid of user %s: you must start Sipi as root", userid_str.c_str());
+      log_err("Could not get uid of user %s: you must start Sipi as root", userid_str.c_str());
     }
   }
   SSL_load_error_strings();
@@ -635,14 +627,14 @@ static int prepare_socket(int port)
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
   if (sockfd < 0) {
-    syslog(LOG_ERR, "Could not create socket: %m");
+    log_err("Could not create socket: %m");
     exit(1);
   }
 
   int optval = 1;
 
   if (::setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval) < 0) {
-    syslog(LOG_ERR, "Could not set socket option: %m");
+    log_err("Could not set socket option: %m");
     exit(1);
   }
 
@@ -655,12 +647,12 @@ static int prepare_socket(int port)
 
   /* Now bind the host address using bind() call.*/
   if (::bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-    syslog(LOG_ERR, "Could not bind socket: %m");
+    log_err("Could not bind socket: %m");
     exit(1);
   }
 
   if (::listen(sockfd, SOMAXCONN) < 0) {
-    syslog(LOG_ERR, "Could not listen on socket: %m");
+    log_err("Could not listen on socket: %m");
     exit(1);
   }
 
@@ -681,8 +673,7 @@ static int close_socket(const SocketControl::SocketInfo &socket_info)
       ;
     if (sstat < 0) {
       const auto loc = std::source_location::current();
-      syslog(LOG_WARNING,
-        "SSL socket error: shutdown of socket failed at [%s: %d] with error code %d",
+      log_warn("SSL socket error: shutdown of socket failed at [%s: %d] with error code %d",
         loc.file_name(),
         loc.line(),
         SSL_get_error(socket_info.ssl_sid, sstat));
@@ -692,18 +683,13 @@ static int close_socket(const SocketControl::SocketInfo &socket_info)
   }
   if (shutdown(socket_info.sid, SHUT_RDWR) < 0) {
     const auto loc = std::source_location::current();
-    syslog(LOG_DEBUG,
-      "Debug: shutting down socket at [%s: %d]: %m failed (client terminated already?)",
-      loc.file_name(),
-      loc.line());
+    log_debug(
+      "Debug: shutting down socket at [%s: %d]: %m failed (client terminated already?)", loc.file_name(), loc.line());
   }
 
   if (close(socket_info.sid) == -1) {
     const auto loc = std::source_location::current();
-    syslog(LOG_DEBUG,
-      "Debug: closing socket at [%s: %d]: %m failed (client terminated already?)",
-      loc.file_name(),
-      loc.line());
+    log_debug("Debug: closing socket at [%s: %d]: %m failed (client terminated already?)", loc.file_name(), loc.line());
   }
 
   return 0;
@@ -726,7 +712,7 @@ static void *socket_request_processor(void *arg)
     poll_status = poll(readfds, 1, -1);
     if (poll_status < 0) {
       const auto loc = std::source_location::current();
-      syslog(LOG_ERR, "Blocking poll on control pipe failed at [%s: %d]", loc.file_name(), loc.line());
+      log_err("Blocking poll on control pipe failed at [%s: %d]", loc.file_name(), loc.line());
       tdata->result = -1;
       return nullptr;
     }
@@ -792,10 +778,10 @@ static void *socket_request_processor(void *arg)
     } else if (readfds[0].revents == POLLHUP) {
       return nullptr;
     } else if (readfds[0].revents == POLLERR) {
-      syslog(LOG_ERR, "Thread pool got POLLERR message");
+      log_err("Thread pool got POLLERR message");
       return nullptr;
     } else {
-      syslog(LOG_ERR, "Thread pool got UNKNONW(!) message");
+      log_err("Thread pool got UNKNONW(!) message");
       return nullptr;
     }
   } while (true);
@@ -816,7 +802,7 @@ SocketControl::SocketInfo Server::accept_connection(int sock, bool ssl)
 
   if (socket_id.sid <= 0) {
     auto loc = std::source_location::current();
-    syslog(LOG_ERR, "Socket error  at [%s: %d]: %m", loc.file_name(), loc.line());
+    log_err("Socket error  at [%s: %d]: %m", loc.file_name(), loc.line());
     // ToDo: Perform appropriate action!
   }
   socket_id.type = SocketControl::NOOP;
@@ -842,52 +828,50 @@ SocketControl::SocketInfo Server::accept_connection(int sock, bool ssl)
   if (ssl) {
     try {
       if ((sslctx = SSL_CTX_new(SSLv23_server_method())) == nullptr) {
-        syslog(LOG_ERR, "OpenSSL error: SSL_CTX_new() failed");
+        log_err("OpenSSL error: SSL_CTX_new() failed");
         throw SSLError("OpenSSL error: SSL_CTX_new() failed");
       }
       SSL_CTX_set_options(sslctx, SSL_OP_SINGLE_DH_USE);
       if (SSL_CTX_use_certificate_file(sslctx, _ssl_certificate.c_str(), SSL_FILETYPE_PEM) != 1) {
         std::string msg = "OpenSSL error: SSL_CTX_use_certificate_file(" + _ssl_certificate + ") failed";
-        syslog(LOG_ERR, "%s", msg.c_str());
+        log_err("%s", msg.c_str());
         throw SSLError(msg);
       }
       if (SSL_CTX_use_PrivateKey_file(sslctx, _ssl_key.c_str(), SSL_FILETYPE_PEM) != 1) {
         std::string msg = "OpenSSL error: SSL_CTX_use_PrivateKey_file(" + _ssl_certificate + ") failed";
-        syslog(LOG_ERR, "%s", msg.c_str());
+        log_err("%s", msg.c_str());
         throw SSLError(msg);
       }
       if (!SSL_CTX_check_private_key(sslctx)) {
         std::string msg = "OpenSSL error: SSL_CTX_check_private_key() failed";
-        syslog(LOG_ERR, "%s", msg.c_str());
+        log_err("%s", msg.c_str());
         throw SSLError(msg);
       }
       if ((cSSL = SSL_new(sslctx)) == nullptr) {
         std::string msg = "OpenSSL error: SSL_new() failed";
-        syslog(LOG_ERR, "%s", msg.c_str());
+        log_err("%s", msg.c_str());
         throw SSLError(msg);
       }
       if (SSL_set_fd(cSSL, socket_id.sid) != 1) {
         std::string msg = "OpenSSL error: SSL_set_fd() failed";
-        syslog(LOG_ERR, "%s", msg.c_str());
+        log_err("%s", msg.c_str());
         throw SSLError(msg);
       }
 
       // Here is the SSL Accept portion.  Now all reads and writes must use SS
       if ((SSL_accept(cSSL)) <= 0) {
         std::string msg = "OpenSSL error: SSL_accept() failed";
-        syslog(LOG_ERR, "%s", msg.c_str());
+        log_err("%s", msg.c_str());
         throw SSLError(msg);
       }
     } catch (SSLError &err) {
-      syslog(LOG_ERR, "%s", err.to_string().c_str());
+      log_err("%s", err.to_string().c_str());
       int sstat;
 
       while ((sstat = SSL_shutdown(cSSL)) == 0)
         ;
 
-      if (sstat < 0) {
-        syslog(LOG_WARNING, "SSL socket error: shutdown (2) of socket failed: %d", SSL_get_error(cSSL, sstat));
-      }
+      if (sstat < 0) { log_warn("SSL socket error: shutdown (2) of socket failed: %d", SSL_get_error(cSSL, sstat)); }
 
       SSL_free(cSSL);
       SSL_CTX_free(sslctx);
@@ -904,7 +888,7 @@ SocketControl::SocketInfo Server::accept_connection(int sock, bool ssl)
  */
 void Server::run()
 {
-  syslog(LOG_DEBUG, "In Server::run");
+  log_debug("In Server::run");
   // Start a thread just to catch signals sent to the server process.
   pthread_t sighandler_thread;
   sigset_t set;
@@ -914,21 +898,19 @@ void Server::run()
   sigaddset(&set, SIGPIPE);
 
   int pthread_sigmask_result = pthread_sigmask(SIG_BLOCK, &set, nullptr);
-  if (pthread_sigmask_result != 0) { syslog(LOG_ERR, "pthread_sigmask failed! (err=%d)", pthread_sigmask_result); }
+  if (pthread_sigmask_result != 0) { log_err("pthread_sigmask failed! (err=%d)", pthread_sigmask_result); }
 
   //
   // start the thread that handles incoming signals (SIGTERM, SIGPIPE etc.)
   //
   if (pthread_create(&sighandler_thread, nullptr, &sig_thread, (void *)this) != 0) {
-    syslog(LOG_ERR, "Couldn't create thread: %s", strerror(errno));
+    log_err("Couldn't create thread: %s", strerror(errno));
     return;
   }
 
-  int old_ll = setlogmask(LOG_MASK(LOG_INFO));
-  syslog(LOG_INFO, "Starting shttps server with %d threads", _nthreads);
-  setlogmask(old_ll);
+  log_info("Starting shttps server with %d threads", _nthreads);
 
-  syslog(LOG_INFO, "Creating thread pool....");
+  log_info("Creating thread pool....");
   ThreadControl thread_control(_nthreads, socket_request_processor, this);
   SocketControl socket_control(thread_control);
 
@@ -939,26 +921,20 @@ void Server::run()
     route.script = _scriptdir + "/" + route.script;
     add_route(route.method, route.route, script_handler, &(route.script));
 
-    old_ll = setlogmask(LOG_MASK(LOG_INFO));
-    syslog(LOG_INFO, "Added route %s with script %s", route.route.c_str(), route.script.c_str());
-    setlogmask(old_ll);
+    log_info("Added route %s with script %s", route.route.c_str(), route.script.c_str());
   }
 
   _sockfd = prepare_socket(_port);
-  old_ll = setlogmask(LOG_MASK(LOG_INFO));
-  syslog(LOG_INFO, "Server listening on HTTP port %d", _port);
-  setlogmask(old_ll);
+  log_info("Server listening on HTTP port %d", _port);
 
   if (_ssl_port > 0) {
     _ssl_sockfd = prepare_socket(_ssl_port);
-    old_ll = setlogmask(LOG_MASK(LOG_INFO));
-    syslog(LOG_INFO, "Server listening on SSL port %d", _ssl_port);
-    setlogmask(old_ll);
+    log_info("Server listening on SSL port %d", _ssl_port);
   }
 
   if (socketpair(PF_LOCAL, SOCK_STREAM, 0, stoppipe) != 0) {
     auto loc = std::source_location::current();
-    syslog(LOG_ERR, "Creating pipe failed at [%s: %d]: %m", loc.file_name(), loc.line());
+    log_err("Creating pipe failed at [%s: %d]: %m", loc.file_name(), loc.line());
     return;
   }
 
@@ -975,7 +951,7 @@ void Server::run()
     int nsocks;
     if ((nsocks = poll(sockets, socket_control.get_sockets_size(), -1)) < 0) {
       auto loc = std::source_location::current();
-      syslog(LOG_ERR, "Blocking poll failed at [%s: %d]: %m", loc.file_name(), loc.line());
+      log_err("Blocking poll failed at [%s: %d]: %m", loc.file_name(), loc.line());
       running = false;
       break;
     }
@@ -1058,16 +1034,16 @@ void Server::run()
               //
               // a thread sent an EXIT message –– should not happen!!
               //
-              syslog(LOG_ERR, "A worker thread sent an EXIT message! This should never happen!");
+              log_err("A worker thread sent an EXIT message! This should never happen!");
               break;
             }
             case SocketControl::ERROR: {
-              syslog(LOG_ERR, "A worker thread sent an ERROR message! This should never happen!");
+              log_err("A worker thread sent an ERROR message! This should never happen!");
               // ToDo: React to this message
               break;
             }
             default: {
-              syslog(LOG_ERR, "A worker thread sent an non-dentifiable message! This should never happen!");
+              log_err("A worker thread sent an non-dentifiable message! This should never happen!");
               // error handling
             }
             }
@@ -1080,7 +1056,7 @@ void Server::run()
 
             SocketControl::SocketInfo msg =
               SocketControl::receive_control_message(sockets[i].fd);// read the message from the pipe
-            if (msg.type != SocketControl::EXIT) { syslog(LOG_ERR, "Got unexpected message from interrupt"); }
+            if (msg.type != SocketControl::EXIT) { log_err("Got unexpected message from interrupt"); }
 
             SocketControl::SocketInfo sockid;
             socket_control.remove(socket_control.get_http_socket_id(), sockid);// remove the HTTP socket
@@ -1095,14 +1071,14 @@ void Server::run()
             // we got input ready from normal listener socket
             SocketControl::SocketInfo sockid = accept_connection(sockets[i].fd, false);
             socket_control.add_dyn_socket(sockid);
-            syslog(LOG_INFO, "Accepted connection from %s", sockid.peer_ip);//  ==> CHANGES open_sockets!!
+            log_debug("Accepted connection from %s", sockid.peer_ip);//  ==> CHANGES open_sockets!!
           } else if (i == socket_control.get_ssl_socket_id()) {
             //
             // external SSL request coming in
             //
             SocketControl::SocketInfo sockid = accept_connection(sockets[i].fd, true);
             socket_control.add_dyn_socket(sockid);
-            syslog(LOG_INFO, "Accepted SSL connection from %s", sockid.peer_ip);//  ==> CHANGES open_sockets!!
+            log_debug("Accepted SSL connection from %s", sockid.peer_ip);//  ==> CHANGES open_sockets!!
           } else {
             //
             // DYN_SOCKET: a client socket (already accepted) has data -> dispatch the processing to a free thread
@@ -1114,7 +1090,7 @@ void Server::run()
               socket_control.remove(i, sockid);//  ==> CHANGES open_sockets!!
               sockid.type = SocketControl::PROCESS_REQUEST;
               int n = SocketControl::send_control_message(tinfo.control_pipe, sockid);
-              if (n < 0) { syslog(LOG_WARNING, "Got something unexpected..."); }
+              if (n < 0) { log_warn("Got something unexpected..."); }
             } else {// no thread available, push socket into waiting queue
               socket_control.move_to_waiting(i);//  ==> CHANGES open_sockets!!
             }
@@ -1153,20 +1129,20 @@ void Server::run()
             SocketControl::SocketInfo sockid;
             socket_control.remove(i, sockid);//  ==> CHANGES open_sockets!!
           } else {
-            syslog(LOG_ERR, "We got a HANGUP from an unknown socket (socket_id = %d)", i);
+            log_err("We got a HANGUP from an unknown socket (socket_id = %d)", i);
           }
         } else {
           // we've got something else...
-          if (sockets[i].revents & POLLERR) { syslog(LOG_DEBUG, "-->POLLERR"); }
-          if (sockets[i].revents & POLLHUP) { syslog(LOG_DEBUG, "-->POLLHUP"); }
-          if (sockets[i].revents & POLLIN) { syslog(LOG_DEBUG, "-->POLLIN"); }
-          if (sockets[i].revents & POLLNVAL) { syslog(LOG_DEBUG, "-->POLLNVAL"); }
-          if (sockets[i].revents & POLLOUT) { syslog(LOG_DEBUG, "-->POLLOUT"); }
-          if (sockets[i].revents & POLLPRI) { syslog(LOG_DEBUG, "-->POLLPRI"); }
-          if (sockets[i].revents & POLLRDBAND) { syslog(LOG_DEBUG, "-->POLLRDBAND"); }
-          if (sockets[i].revents & POLLRDNORM) { syslog(LOG_DEBUG, "-->POLLRDNORM"); }
-          if (sockets[i].revents & POLLWRBAND) { syslog(LOG_DEBUG, "-->POLLWRBAND"); }
-          if (sockets[i].revents & POLLWRNORM) { syslog(LOG_DEBUG, "-->POLLWRNORM"); }
+          if (sockets[i].revents & POLLERR) { log_debug("-->POLLERR"); }
+          if (sockets[i].revents & POLLHUP) { log_debug("-->POLLHUP"); }
+          if (sockets[i].revents & POLLIN) { log_debug("-->POLLIN"); }
+          if (sockets[i].revents & POLLNVAL) { log_debug("-->POLLNVAL"); }
+          if (sockets[i].revents & POLLOUT) { log_debug("-->POLLOUT"); }
+          if (sockets[i].revents & POLLPRI) { log_debug("-->POLLPRI"); }
+          if (sockets[i].revents & POLLRDBAND) { log_debug("-->POLLRDBAND"); }
+          if (sockets[i].revents & POLLRDNORM) { log_debug("-->POLLRDNORM"); }
+          if (sockets[i].revents & POLLWRBAND) { log_debug("-->POLLWRBAND"); }
+          if (sockets[i].revents & POLLWRNORM) { log_debug("-->POLLWRNORM"); }
           // running = false;
           // break; // accept returned something strange – probably we want to shutdown the server
         }
@@ -1174,9 +1150,7 @@ void Server::run()
     }
   }
 
-  old_ll = setlogmask(LOG_MASK(LOG_INFO));
-  syslog(LOG_INFO, "Server shutting down");
-  setlogmask(old_ll);
+  log_info("Server shutting down");
 
   // close(stoppipe[0]);
   // close(stoppipe[1]);
@@ -1207,7 +1181,7 @@ shttps::ThreadStatus Server::process_request(std::istream *ins,
   bool socket_reuse)
 {
   if (_tmpdir.empty()) {
-    syslog(LOG_WARNING, "_tmpdir is empty");
+    log_warn("_tmpdir is empty");
     throw Error("_tmpdir is empty");
   }
   if (ins->eof() || os->eof()) return CLOSE;
@@ -1247,11 +1221,11 @@ shttps::ThreadStatus Server::process_request(std::istream *ins,
       RequestHandler handler = get_handler(conn, &hd);
       handler(conn, luaserver, _user_data, hd);
     } catch (InputFailure iofail) {
-      syslog(LOG_ERR, "Possibly socket closed by peer");
+      log_debug("Possibly socket closed by peer");
       return CLOSE;// or CLOSE ??
     }
 
-    if (!conn.cleanupUploads()) { syslog(LOG_ERR, "Cleanup of uploaded files failed"); }
+    if (!conn.cleanupUploads()) { log_err("Cleanup of uploaded files failed"); }
 
     if (conn.keepAlive()) {
       return CONTINUE;
@@ -1259,10 +1233,10 @@ shttps::ThreadStatus Server::process_request(std::istream *ins,
       return CLOSE;
     }
   } catch (InputFailure iofail) {// "error" is thrown, if the socket was closed from the main thread...
-    syslog(LOG_DEBUG, "Socket connection: timeout or socket closed from main");
+    log_debug("Socket connection: timeout or socket closed from main");
     return CLOSE;
   } catch (Error &err) {
-    syslog(LOG_WARNING, "Internal server error: %s", err.to_string().c_str());
+    log_warn("Internal server error: %s", err.to_string().c_str());
     try {
       *os << "HTTP/1.1 500 INTERNAL_SERVER_ERROR\r\n";
       *os << "Content-Type: text/plain\r\n";
@@ -1271,7 +1245,7 @@ shttps::ThreadStatus Server::process_request(std::istream *ins,
       *os << "Content-Length: " << ss.str().length() << "\r\n\r\n";
       *os << ss.str();
     } catch (InputFailure iofail) {
-      syslog(LOG_DEBUG, "Possibly socket closed by peer");
+      log_debug("Possibly socket closed by peer");
     }
     return CLOSE;
   }
@@ -1286,4 +1260,4 @@ void Server::debugmsg(const int line, const std::string &msg)
 }
 //=========================================================================
 
-}
+}// namespace shttps

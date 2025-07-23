@@ -18,21 +18,20 @@
 # See the GNU Affero General Public License for more details.
 # You should have received a copy of the GNU Affero General Public
 # License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
-import filecmp
-import pprint
-import shutil
 
-import pytest
 from pathlib import Path
+import datetime
+import filecmp
 import os
 import os.path
-import time
-import datetime
+import pprint
+import pytest
+import shutil
+import subprocess
 import sys
-
+import time
 
 # Tests basic functionality of the Sipi server.
-
 
 class TestServer:
     component = "The Sipi server"
@@ -99,6 +98,11 @@ class TestServer:
         manager.expect_status_code(
             "/knora/DenyLeaves.jpg/full/max/0/default.jpg", 401)
 
+    def test_not_found(self, manager):
+        """return 404 Not Found if the file is missing. Sipi will try and fail to find this file in the image directory."""
+        manager.expect_status_code(
+            "/file-should-be-missing-123", 404)
+
     def test_iiif_url_parsing(self, manager):
         """Return 400 for invalid IIIF URL's"""
         manager.expect_status_code("/unit//lena512.jp2", 400)
@@ -161,6 +165,15 @@ class TestServer:
         downloaded_file_path = manager.download_file("/unit/{}/file".format(filename))
         assert filecmp.cmp(manager.data_dir_path("knora/test_odd.odd"), downloaded_file_path)
 
+    def test_head_response_should_be_empty(self, manager):
+        response_json = manager.post_file("/api/upload", manager.data_dir_path("unit/lena512.tif"), "image/tiff")
+
+        http_response = manager.expect_status_code("/unit/{}/full/max/0/default.jpg".format(response_json["filename"]), 200)
+        process = subprocess.run(['file', '-'], input=http_response.content, capture_output=True)
+        assert process.stdout.startswith(b'/dev/stdin: JPEG image data, JFIF standard 1.01, aspect ratio, density 1x1, segment length 16')
+
+        http_response = manager.expect_status_code("/unit/{}/full/max/0/default.jpg".format(response_json["filename"]), 200, method='head')
+        assert http_response.text == ""
 
     def test_mimeconsistency(self, manager):
         """upload any file and check mimetype consistency"""
@@ -336,78 +349,80 @@ class TestServer:
     def test_json_info_validation(self, manager):
         """pass the info.json request tests"""
 
-        expected_result = {
-            '@context': 'http://iiif.io/api/image/3/context.json',
-            'id': 'http://127.0.0.1:1024/unit/_lena512.jp2',
-            'type': 'ImageService3',
-            'protocol': 'http://iiif.io/api/image',
-            'profile': 'level2',
-            'width': 512,
-            'height': 512,
-            'sizes': [
-                {'width': 256, 'height': 256},
-                {'width': 128, 'height': 128}
-            ],
-            'tiles': [{'width': 512, 'height': 512, 'scaleFactors': [1, 2, 3, 4]}],
-            'extraFormats': ['tif', 'jp2'],
-            'preferredFormats': ['jpg', 'tif', 'jp2', 'png'],
-            'extraFeatures': [
-                'baseUriRedirect',
-                'canonicalLinkHeader',
-                'cors',
-                'jsonldMediaType',
-                'mirroring',
-                'profileLinkHeader',
-                'regionByPct',
-                'regionByPx',
-                'regionSquare',
-                'rotationArbitrary',
-                'rotationBy90s',
-                'sizeByConfinedWh',
-                'sizeByH',
-                'sizeByPct',
-                'sizeByW',
-                'sizeByWh',
-                'sizeUpscaling'
-            ]
-        }
+        def expected_result(filename, proto='http'):
+            return {
+                '@context': 'http://iiif.io/api/image/3/context.json',
+                'id': proto + '://127.0.0.1:1024/unit/' + filename,
+                'type': 'ImageService3',
+                'protocol': 'http://iiif.io/api/image',
+                'profile': 'level2',
+                'width': 512,
+                'height': 512,
+                'sizes': [
+                    {'width': 256, 'height': 256},
+                    {'width': 128, 'height': 128}
+                ],
+                'tiles': [{'width': 512, 'height': 512, 'scaleFactors': [1, 2, 3, 4]}],
+                'extraFormats': ['tif', 'jp2'],
+                'preferredFormats': ['jpg', 'tif', 'jp2', 'png'],
+                'extraFeatures': [
+                    'baseUriRedirect',
+                    'canonicalLinkHeader',
+                    'cors',
+                    'jsonldMediaType',
+                    'mirroring',
+                    'profileLinkHeader',
+                    'regionByPct',
+                    'regionByPx',
+                    'regionSquare',
+                    'rotationArbitrary',
+                    'rotationBy90s',
+                    'sizeByConfinedWh',
+                    'sizeByH',
+                    'sizeByPct',
+                    'sizeByW',
+                    'sizeByWh',
+                    'sizeUpscaling'
+                ]
+            }
 
-        response_json = manager.post_file(
-            "/api/upload", manager.data_dir_path("unit/lena512.tif"), "image/tiff")
+        response_json = manager.post_file("/api/upload", manager.data_dir_path("unit/lena512.tif"), "image/tiff")
+
         filename = response_json["filename"]
-
-        manager.expect_status_code(
-            "/unit/{}/full/max/0/default.jpg".format(filename), 200)
+        manager.expect_status_code("/unit/{}/full/max/0/default.jpg".format(filename), 200)
 
         response_json = manager.get_json("/unit/{}/info.json".format(filename))
-        expected_result["id"] = "http://127.0.0.1:1024/unit/{}".format(
-            filename)
-        assert response_json == expected_result
+        assert response_json == expected_result(filename)
 
         # response_json = manager.get_json("/unit/{}/info.json".format(filename), use_ssl=True)
-        # expected_result["id"] = "https://127.0.0.1:1024/unit/{}".format(filename)
-        # assert response_json == expected_result
+        # assert response_json == expected_result(filename)
+
+        response_json = manager.get_json("/unit/{}/info.json".format(filename), use_forwarded_ssl=False)
+        assert response_json == expected_result(filename, proto='http')
+
+        response_json = manager.get_json("/unit/{}/info.json".format(filename), use_forwarded_ssl=True)
+        assert response_json == expected_result(filename, proto='https')
 
     def test_knora_json_for_video(self, manager):
         """pass the knora.json request for video"""
 
-        expected_result = {
-            "@context": "http://sipi.io/api/file/3/context.json",
-            "id": "http://127.0.0.1:1024/unit/8pdET49BfoJ-EeRcIbgcLch.mp4",
-            "checksumOriginal": "19cc4bccad39c89cc44936ef69565bb933d41a065fd59d666d58e5ef344e8149",
-            "checksumDerivative": "19cc4bccad39c89cc44936ef69565bb933d41a065fd59d666d58e5ef344e8149",
-            "internalMimeType": "video/mp4",
-            "fileSize": 475205,
-            "originalFilename": "Dummy.mp4",
-            "duration": 4.7000000000000002,
-            "fps": 30,
-            "height": 240,
-            "width": 320
-        }
+        def expected_result(proto):
+            return {
+                "@context": "http://sipi.io/api/file/3/context.json",
+                "id": proto + "://127.0.0.1:1024/unit/8pdET49BfoJ-EeRcIbgcLch.mp4",
+                "checksumOriginal": "19cc4bccad39c89cc44936ef69565bb933d41a065fd59d666d58e5ef344e8149",
+                "checksumDerivative": "19cc4bccad39c89cc44936ef69565bb933d41a065fd59d666d58e5ef344e8149",
+                "internalMimeType": "video/mp4",
+                "fileSize": 475205,
+                "originalFilename": "Dummy.mp4",
+                "duration": 4.7000000000000002,
+                "fps": 30,
+                "height": 240,
+                "width": 320
+            }
 
-        response_json = manager.get_json(
-            "/unit/8pdET49BfoJ-EeRcIbgcLch.mp4/knora.json")
-        assert response_json == expected_result
+        assert manager.get_json("/unit/8pdET49BfoJ-EeRcIbgcLch.mp4/knora.json") == expected_result('http')
+        assert manager.get_json("/unit/8pdET49BfoJ-EeRcIbgcLch.mp4/knora.json", use_forwarded_ssl=True) == expected_result('https')
 
     def test_handling_of_missing_sidecar_file_for_video(self, manager):
         """correctly handle missing sidecar file for video"""

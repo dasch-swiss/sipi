@@ -5,6 +5,7 @@ on:
     # run on midnight every day
     - cron: '0 0 * * *'
   pull_request:
+    types: [ opened, synchronize, reopened ]
 
 jobs:
 

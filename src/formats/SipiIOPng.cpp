@@ -12,7 +12,6 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <syslog.h>
 #include <vector>
 
 #include <cstring>

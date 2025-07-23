@@ -9,7 +9,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     set(CMAKE_CXX_STANDARD 23)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
     set(CMAKE_C_COMPILER clang)
-    set(CMAKE_CXX_COMPILER clang)
+    set(CMAKE_CXX_COMPILER clang++)
 
     include_directories(
             ${CMAKE_SOURCE_DIR}/src
@@ -31,7 +31,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
             # TODO[4] Comment out these coverage options.
             -fsanitize-coverage=trace-cmp
             -fsanitize=fuzzer,address
-            -std=c++14
+            -std=c++23
     )
 
     link_libraries(
@@ -41,6 +41,8 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     add_library(lib_${FUZZ_TARGET_NAME} STATIC
             ${FUZZ_TARGET_SOURCE_FILES}
     )
+    
+    add_dependencies(lib_${FUZZ_TARGET_NAME} lua)
 
     add_executable(${FUZZ_TARGET_NAME}
             iiif_handler_uri_parser_target.cpp
@@ -49,6 +51,5 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     target_link_libraries(${FUZZ_TARGET_NAME}
             lib_${FUZZ_TARGET_NAME}
             -fsanitize=fuzzer
-            -fuse-ld=lld
     )
 endif()

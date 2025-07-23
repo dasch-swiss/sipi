@@ -68,6 +68,8 @@ struct IIIFUriParseResult
   }
 };
 
+std::ostream &operator<<(std::ostream &os, const IIIFUriParseResult &result);
+
 // Free function to parse an IIIF URL returning either the result or an error message
 [[nodiscard]] auto parse_iiif_uri(const std::string &uri) noexcept -> std::expected<IIIFUriParseResult, std::string>;
 }// namespace handlers::iiif_handler

@@ -680,7 +680,7 @@ bool SipiIOJpeg::read(SipiImage *img,
       if (pos != nullptr) {
         auto len = marker->data_length - (pos - (unsigned char *)marker->data) - 14;
         icc_buffer = static_cast<unsigned char *>(realloc(icc_buffer, icc_buffer_len + len));
-        Sipi::memcpy(icc_buffer + icc_buffer_len, pos + 14, (size_t)len);
+        memcpy(icc_buffer + icc_buffer_len, pos + 14, (size_t)len);
         icc_buffer_len += len;
       }
     } else if (marker->marker == JPEG_APP0 + 13) {
@@ -1169,8 +1169,8 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
       char start[] = "Exif\000\000";
       size_t start_l = sizeof(start) - 1;// remove trailing '\0';
       auto exifchunk = shttps::make_unique<unsigned char[]>(buf.size() + start_l);
-      Sipi::memcpy(exifchunk.get(), start, (size_t)start_l);
-      Sipi::memcpy(exifchunk.get() + start_l, buf.data(), (size_t)buf.size());
+      memcpy(exifchunk.get(), start, (size_t)start_l);
+      memcpy(exifchunk.get() + start_l, buf.data(), (size_t)buf.size());
 
       try {
         jpeg_write_marker(&cinfo, JPEG_APP0 + 1, (JOCTET *)exifchunk.get(), start_l + buf.size());
@@ -1192,8 +1192,8 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
       char start[] = "http://ns.adobe.com/xap/1.0/\000";
       size_t start_l = sizeof(start) - 1;// remove trailing '\0';
       auto xmpchunk = shttps::make_unique<char[]>(buf.size() + start_l);
-      Sipi::memcpy(xmpchunk.get(), start, (size_t)start_l);
-      Sipi::memcpy(xmpchunk.get() + start_l, buf.data(), (size_t)buf.size());
+      memcpy(xmpchunk.get(), start, (size_t)start_l);
+      memcpy(xmpchunk.get() + start_l, buf.data(), (size_t)buf.size());
       try {
         jpeg_write_marker(&cinfo, JPEG_APP0 + 1, (JOCTET *)xmpchunk.get(), start_l + buf.size());
       } catch (JpegError &jpgerr) {
@@ -1235,8 +1235,8 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
       start[12] = (unsigned char)(i + 1);
       start[13] = (unsigned char)n;
       if (n_nextwrite > n_towrite) n_nextwrite = n_towrite;
-      Sipi::memcpy(iccchunk.get(), start, (size_t)start_l);
-      Sipi::memcpy(iccchunk.get() + start_l, buf.data() + n_written, (size_t)n_nextwrite);
+      memcpy(iccchunk.get(), start, (size_t)start_l);
+      memcpy(iccchunk.get() + start_l, buf.data() + n_written, (size_t)n_nextwrite);
       try {
         jpeg_write_marker(&cinfo, ICC_MARKER, iccchunk.get(), n_nextwrite + start_l);
       } catch (JpegError &jpgerr) {
@@ -1264,9 +1264,9 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
       siz[3] = (unsigned char)(buf.size() & 0x000000ff);
 
       auto iptcchunk = shttps::make_unique<char[]>(start_l + 4 + buf.size());
-      Sipi::memcpy(iptcchunk.get(), start, (size_t)start_l);
-      Sipi::memcpy(iptcchunk.get() + start_l, siz, (size_t)4);
-      Sipi::memcpy(iptcchunk.get() + start_l + 4, buf.data(), (size_t)buf.size());
+      memcpy(iptcchunk.get(), start, (size_t)start_l);
+      memcpy(iptcchunk.get() + start_l, siz, (size_t)4);
+      memcpy(iptcchunk.get() + start_l + 4, buf.data(), (size_t)buf.size());
 
       try {
         jpeg_write_marker(&cinfo, JPEG_APP0 + 13, (JOCTET *)iptcchunk.get(), start_l + buf.size());

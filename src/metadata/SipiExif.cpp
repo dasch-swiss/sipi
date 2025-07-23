@@ -34,7 +34,7 @@ SipiExif::SipiExif(const unsigned char *exif, unsigned int len)
   //
   try {
     byteorder = Exiv2::ExifParser::decode(exifData, exif, (uint32_t)len);
-  } catch (Exiv2::BasicError<char> &exiverr) {
+  } catch (Exiv2::Error &exiverr) {
     throw SipiError(exiverr.what());
   }
 }

@@ -294,4 +294,16 @@ template<typename T> std::string vector_to_string(const std::vector<T> &vec)
 
   return IIIFUriParseResult{ request_type, params };
 }
+
+std::ostream &operator<<(std::ostream &os, const IIIFUriParseResult &result)
+{
+  os << "RequestType: " << result.request_type << ", Params: [";
+  for (size_t i = 0; i < result.params.size(); ++i) {
+    os << result.params[i];
+    if (i < result.params.size() - 1) { os << ", "; }
+  }
+  os << "]";
+  return os;
+}
+
 }// namespace handlers::iiif_handler

@@ -7,11 +7,10 @@
  * \brief Implements an IIIF server with many features.
  *
  */
-#include <syslog.h>
+#include <csignal>
 #include <dirent.h>
 #include <execinfo.h>
 #include <iostream>
-#include <csignal>
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
@@ -32,6 +31,7 @@
 
 
 #include "CLI11.hpp"
+#include "Logger.h"
 #include "SipiConf.h"
 #include "SipiFilenameHash.h"
 #include "SipiHttpServer.hpp"
@@ -168,21 +168,21 @@ static void sipiConfGlobals(lua_State *L, shttps::Connection &conn, void *user_d
   lua_pushstring(L, "loglevel");// table1 - "index_L1"
   const std::string loglevel = conf->getLoglevel();
   if (loglevel == "LOG_EMERG") {
-    lua_pushinteger(L, LOG_EMERG);
+    lua_pushinteger(L, LL_EMERG);
   } else if (loglevel == "LOG_ALERT") {
-    lua_pushinteger(L, LOG_ALERT);
+    lua_pushinteger(L, LL_ALERT);
   } else if (loglevel == "LOG_CRIT") {
-    lua_pushinteger(L, LOG_CRIT);
+    lua_pushinteger(L, LL_CRIT);
   } else if (loglevel == "LOG_ERR") {
-    lua_pushinteger(L, LOG_ERR);
+    lua_pushinteger(L, LL_ERR);
   } else if (loglevel == "LOG_WARNING") {
-    lua_pushinteger(L, LOG_WARNING);
+    lua_pushinteger(L, LL_WARNING);
   } else if (loglevel == "LOG_NOTICE") {
-    lua_pushinteger(L, LOG_NOTICE);
+    lua_pushinteger(L, LL_NOTICE);
   } else if (loglevel == "LOG_INFO") {
-    lua_pushinteger(L, LOG_INFO);
+    lua_pushinteger(L, LL_INFO);
   } else if (loglevel == "LOG_DEBUG") {
-    lua_pushinteger(L, LOG_DEBUG);
+    lua_pushinteger(L, LL_DEBUG);
   } else {
     lua_pushinteger(L, -1);
   }
@@ -307,7 +307,8 @@ void sig_handler(const int sig)
 
   msg += "\n" + get_stack_trace();
   sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "sig_handler", msg.c_str()));
-  syslog(LOG_ERR, "%s", msg.c_str());
+  log_err("%s", msg.c_str());
+  sentry_flush(2000);
 
   exit(1);
 }
@@ -332,7 +333,8 @@ void my_terminate_handler()
 
   msg += "\n" + get_stack_trace();
   sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "my_terminate_handler", msg.c_str()));
-  syslog(LOG_ERR, "%s", msg.c_str());
+  log_err("%s", msg.c_str());
+  sentry_flush(2000);
 
   std::abort();// Abort the program or perform other cleanup
 }
@@ -373,6 +375,8 @@ int main(int argc, char *argv[])
     sentry_options_t *options = sentry_options_new();
     sentry_options_set_dsn(options, sentry_dsn.c_str());
     sentry_options_set_database_path(options, "/tmp/.sentry-native");
+
+    sentry_options_set_symbolize_stacktraces(options, true);
 
     if (!sentry_release.empty()) {
       std::string sentryReleaseTag = std::string(BUILD_SCM_TAG);
@@ -501,6 +505,10 @@ int main(int argc, char *argv[])
   bool j2k_Cuse_sop;
   sipiopt.add_option(
     "--Cuse_sop", j2k_Cuse_sop, "J2K Cuse_sop: Include SOP markers (i.e., resync markers) [Default: yes].");
+
+  bool tiff_Pyramid;
+  sipiopt.add_option(
+    "--Ctiff_pyramid", tiff_Pyramid, "TIFF: store in Pyramidal TIFF format [Default: no].");
 
   //
   // used for rendering only one page of multipage PDF or TIFF (NYI for tif...)
@@ -673,16 +681,15 @@ int main(int argc, char *argv[])
   std::string optLogfilePath = "Sipi";
   sipiopt.add_option("--logfile", optLogfilePath, "Name of the logfile (NYI).")->envname("SIPI_LOGFILE");
 
-  enum class LogLevel { DEBUG, INFO, NOTICE, WARNING, ERR, CRIT, ALERT, EMERG };
-  LogLevel optLogLevel = LogLevel::DEBUG;
-  std::vector<std::pair<std::string, LogLevel>> logLevelMap{ { "DEBUG", LogLevel::DEBUG },
-    { "INFO", LogLevel::INFO },
-    { "NOTICE", LogLevel::NOTICE },
-    { "WARNING", LogLevel::WARNING },
-    { "ERR", LogLevel::ERR },
-    { "CRIT", LogLevel::CRIT },
-    { "ALERT", LogLevel::ALERT },
-    { "EMERG", LogLevel::EMERG } };
+  LogLevel optLogLevel = LL_DEBUG;
+  std::vector<std::pair<std::string, LogLevel>> logLevelMap{ { "DEBUG", LL_DEBUG },
+    { "INFO", LL_INFO },
+    { "NOTICE", LL_NOTICE },
+    { "WARNING", LL_WARNING },
+    { "ERR", LL_ERR },
+    { "CRIT", LL_CRIT },
+    { "ALERT", LL_ALERT },
+    { "EMERG", LL_EMERG } };
   sipiopt
     .add_option("--loglevel",
       optLogLevel,
@@ -836,14 +843,14 @@ int main(int argc, char *argv[])
       try {
         size = std::make_shared<Sipi::SipiSize>(optSize);
       } catch (std::exception &e) {
-        syslog(LOG_ERR, "Error in size parameter: %s", e.what());
+        log_err("Error in size parameter: %s", e.what());
         return EXIT_FAILURE;
       }
     } else if (!sipiopt.get_option("--scale")->empty()) {
       try {
         size = std::make_shared<Sipi::SipiSize>(optScale);
       } catch (std::exception &e) {
-        syslog(LOG_ERR, "Error in scale parameter: %s", e.what());
+        log_err("Error in scale parameter: %s", e.what());
         return EXIT_FAILURE;
       }
     }
@@ -975,6 +982,8 @@ int main(int argc, char *argv[])
     if (!sipiopt.get_option("--Cblk")->empty()) comp_params[Sipi::J2K_Cblk] = j2k_Cblk;
     if (!sipiopt.get_option("--Cuse_sop")->empty()) comp_params[Sipi::J2K_Cuse_sop] = j2k_Cuse_sop ? "yes" : "no";
     if (!sipiopt.get_option("--Stiles")->empty()) comp_params[Sipi::J2K_Stiles] = j2k_Stiles;
+    if (!sipiopt.get_option("--Ctiff_pyramid")->empty()) comp_params[Sipi::TIFF_Pyramid] = tiff_Pyramid ? "yes" : "no";
+
     if (!sipiopt.get_option("--rates")->empty()) {
       std::stringstream ss;
       for (auto &rate : j2k_rates) {
@@ -1213,28 +1222,28 @@ int main(int argc, char *argv[])
 
       std::string loglevelstring;
       switch (optLogLevel) {
-      case LogLevel::DEBUG:
+      case LL_DEBUG:
         loglevelstring = "DEBUG";
         break;
-      case LogLevel::INFO:
+      case LL_INFO:
         loglevelstring = "INFO";
         break;
-      case LogLevel::NOTICE:
+      case LL_NOTICE:
         loglevelstring = "NOTICE";
         break;
-      case LogLevel::WARNING:
+      case LL_WARNING:
         loglevelstring = "WARNING";
         break;
-      case LogLevel::ERR:
+      case LL_ERR:
         loglevelstring = "ERR";
         break;
-      case LogLevel::CRIT:
+      case LL_CRIT:
         loglevelstring = "CRIT";
         break;
-      case LogLevel::ALERT:
+      case LL_ALERT:
         loglevelstring = "ALERT";
         break;
-      case LogLevel::EMERG:
+      case LL_EMERG:
         loglevelstring = "EMERG";
         break;
       }
@@ -1291,12 +1300,11 @@ int main(int argc, char *argv[])
 
 
       // TODO: At this point the config is loaded and we can initialize metrics
-      if (!optSipiSentryDsn.empty()) syslog(LOG_INFO, "SIPI_SENTRY_DSN: %s", optSipiSentryDsn.c_str());
+      if (!optSipiSentryDsn.empty()) log_info("SIPI_SENTRY_DSN: %s", optSipiSentryDsn.c_str());
 
-      if (!optSipiSentryEnvironment.empty())
-        syslog(LOG_INFO, "SIPI_SENTRY_ENVRONMENT: %s", optSipiSentryEnvironment.c_str());
+      if (!optSipiSentryEnvironment.empty()) log_info("SIPI_SENTRY_ENVRONMENT: %s", optSipiSentryEnvironment.c_str());
 
-      if (!optSipiSentryRelease.empty()) syslog(LOG_INFO, "SIPI_SENTRY_Release: %s", optSipiSentryRelease.c_str());
+      if (!optSipiSentryRelease.empty()) log_info("SIPI_SENTRY_Release: %s", optSipiSentryRelease.c_str());
 
       // Create object SipiHttpServer
       auto nthreads = sipiConf.getNThreads();
@@ -1304,11 +1312,9 @@ int main(int argc, char *argv[])
       Sipi::SipiHttpServer server(
         sipiConf.getPort(), nthreads, sipiConf.getUseridStr(), sipiConf.getLogfile(), sipiConf.getLoglevel());
 
-      int old_ll = setlogmask(LOG_MASK(LOG_INFO));
-      syslog(LOG_INFO, "BUILD_TIMESTAMP: %s", BUILD_TIMESTAMP);
-      syslog(LOG_INFO, "BUILD_SCM_TAG: %s", BUILD_SCM_TAG);
-      syslog(LOG_INFO, "BUILD_SCM_REVISION: %s", BUILD_SCM_REVISION);
-      setlogmask(old_ll);
+      log_info("BUILD_TIMESTAMP: %s", BUILD_TIMESTAMP);
+      log_info("BUILD_SCM_TAG: %s", BUILD_SCM_TAG);
+      log_info("BUILD_SCM_REVISION: %s", BUILD_SCM_REVISION);
 
       server.ssl_port(sipiConf.getSSLPort());// set the secure connection port (-1 means no ssl socket)
       std::string tmps = sipiConf.getSSLCertificate();
@@ -1367,7 +1373,7 @@ int main(int argc, char *argv[])
       // start the server
       server.run();
     } catch (shttps::Error &err) {
-      syslog(LOG_ERR, "Error starting server: %s", err.what());
+      log_err("Error starting server: %s", err.what());
       std::cerr << err << '\n';
     }
   }

@@ -58,6 +58,12 @@ def manager(request):
     manager.cleanup()
 
 
+@pytest.fixture(scope="session")
+def sipi_server_url(manager):
+    """Returns the base URL for the SIPI server."""
+    return manager.sipi_base_url
+
+
 class SipiTestManager:
     """Controls Sipi and Nginx during tests."""
 
@@ -298,7 +304,7 @@ class SipiTestManager:
             raise SipiTestError(
                 "Sipi compare: pixels not identical {} {}:\n {}".format(downloaded_file_path, expected_file_path, compare_process.stdout))
 
-    def expect_status_code(self, url_path, status_code, headers=None):
+    def expect_status_code(self, url_path, status_code, headers=None, method='get'):
         """
         Requests a file and expects to get a particular HTTP status code.
 
@@ -308,15 +314,13 @@ class SipiTestManager:
         """
 
         sipi_url = self.make_sipi_url(url_path)
-        response = requests.get(sipi_url, headers=headers)
+        response = getattr(requests, method)(sipi_url, headers=headers)
 
         if response.status_code != status_code:
-            raise SipiTestError(
-                "Received status code {} for URL {}, expected {} (wrote {}). Response:\n{}".format(response.status_code,
-                                                                                                   sipi_url,
-                                                                                                   status_code,
-                                                                                                   self.sipi_log_file,
-                                                                                                   response.text))
+            format = "Received status code {} for URL {}, expected {} (wrote {}). Response:\n{}"
+            raise SipiTestError(format.format(response.status_code, sipi_url, status_code, self.sipi_log_file, response.text))
+
+        return response
 
     def get_image_info(self, url_path, headers=None):
         """
@@ -411,7 +415,7 @@ class SipiTestManager:
 
         return response.json()
 
-    def get_json(self, url_path, use_ssl=False):
+    def get_json(self, url_path, use_ssl=False, use_forwarded_ssl=None):
         """
         Sends a request which expects JSON
         :param url_path: a path that will be appended to the Sipi base URL to make the request.
@@ -423,8 +427,10 @@ class SipiTestManager:
         else:
             sipi_url = self.make_sipi_url(url_path)
 
+        x_forwarded_proto = {True: 'https', False: 'http'}.get(use_forwarded_ssl)
+
         try:
-            response = requests.get(sipi_url)
+            response = requests.get(sipi_url, headers={'X-Forwarded-Proto': x_forwarded_proto})
             response.raise_for_status()
         except:
             raise SipiTestError("post request to {} failed: {}".format(sipi_url, response.json()["message"]))

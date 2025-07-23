@@ -27,6 +27,7 @@ set(SOURCE_FILES
         ${IIIF_HANDLER_SOURCE_FILES}
 )
 add_executable(${TEST_NAME} ${SOURCE_FILES})
+add_dependencies(${TEST_NAME} lua)
 target_link_libraries(${TEST_NAME} libgtest)
 
 target_link_libraries(${TEST_NAME} build_config)

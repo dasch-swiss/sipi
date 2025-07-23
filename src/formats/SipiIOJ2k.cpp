@@ -10,7 +10,6 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <syslog.h>
 #include <vector>
 
 #include <cstring>
@@ -38,6 +37,7 @@
 #include "SipiError.hpp"
 #include "SipiImageError.hpp"
 #include "formats/SipiIOJ2k.h"
+#include "Logger.h"
 
 using namespace kdu_core;
 using namespace kdu_supp;
@@ -141,7 +141,7 @@ public:
 
   void flush(bool end_of_message = false)
   {
-    if (end_of_message) { syslog(LOG_WARNING, "%s", msg.c_str()); }
+    if (end_of_message) { log_warn("%s", msg.c_str()); }
   }
 };
 //=============================================================================
@@ -165,7 +165,7 @@ public:
   void flush(bool end_of_message = false)
   {
     if (end_of_message) {
-      syslog(LOG_ERR, "%s", msg.c_str());
+      log_err("%s", msg.c_str());
       throw KDU_ERROR_EXCEPTION;
     }
   }
@@ -251,7 +251,7 @@ bool SipiIOJ2k::read(SipiImage *img,
               img->xmp = std::make_shared<SipiXmp>(xmp_buf.get(),
                 xmp_len);// ToDo: Problem with thread safety!!!!!!!!!!!!!!
             } catch (SipiError &err) {
-              syslog(LOG_ERR, "%s", err.to_string().c_str());
+              log_err("%s", err.to_string().c_str());
             }
           } else if (memcmp(buf, iptc_uuid, 16) == 0) {
             auto iptc_len = box.get_remaining_bytes();
@@ -260,7 +260,7 @@ bool SipiIOJ2k::read(SipiImage *img,
             try {
               img->iptc = std::make_shared<SipiIptc>(iptc_buf.get(), iptc_len);
             } catch (SipiError &err) {
-              syslog(LOG_ERR, "%s", err.to_string().c_str());
+              log_err("%s", err.to_string().c_str());
             }
           } else if (memcmp(buf, exif_uuid, 16) == 0) {
             auto exif_len = box.get_remaining_bytes();
@@ -269,7 +269,7 @@ bool SipiIOJ2k::read(SipiImage *img,
             try {
               img->exif = std::make_shared<SipiExif>(exif_buf.get(), exif_len);
             } catch (SipiError &err) {
-              syslog(LOG_ERR, "%s", err.to_string().c_str());
+              log_err("%s", err.to_string().c_str());
             }
           }
         }
@@ -455,7 +455,7 @@ bool SipiIOJ2k::read(SipiImage *img,
         } else if (numcol == 4) {
           img->photo = PhotometricInterpretation::SEPARATED;
         } else {
-          syslog(LOG_ERR, "Unsupported number of colors: %d", numcol);
+          log_err("Unsupported number of colors: %d", numcol);
           throw SipiImageError("Unsupported number of colors: " + std::to_string(numcol));
         }
         int icc_len;
@@ -485,7 +485,7 @@ bool SipiIOJ2k::read(SipiImage *img,
       }
 
       default: {
-        syslog(LOG_ERR, "Unsupported ICC profile: %s", std::to_string(space).c_str());
+        log_err("Unsupported ICC profile: %s", std::to_string(space).c_str());
         throw SipiImageError("Unsupported ICC profile: " + std::to_string(space));
       }
       }
@@ -535,7 +535,7 @@ bool SipiIOJ2k::read(SipiImage *img,
       codestream.destroy();
       input->close();
       jpx_in.close();// Not really necessary here.
-      syslog(LOG_ERR, "Error while decompressing image: %s.", filepath.c_str());
+      log_err("Error while decompressing image: %s.", filepath.c_str());
       return false;
     }
     img->pixels = buffer8;
@@ -551,7 +551,7 @@ bool SipiIOJ2k::read(SipiImage *img,
       codestream.destroy();
       input->close();
       jpx_in.close();// Not really necessary here.
-      syslog(LOG_ERR, "Error while decompressing image: %s.", filepath.c_str());
+      log_err("Error while decompressing image: %s.", filepath.c_str());
       return false;
     }
     img->pixels = reinterpret_cast<byte *>(buffer16);
@@ -568,7 +568,7 @@ bool SipiIOJ2k::read(SipiImage *img,
       codestream.destroy();
       input->close();
       jpx_in.close();// Not really necessary here.
-      syslog(LOG_ERR, "Error while decompressing image: %s.", filepath.c_str());
+      log_err("Error while decompressing image: %s.", filepath.c_str());
       return false;
     }
     img->pixels = reinterpret_cast<byte *>(buffer16);
@@ -579,7 +579,7 @@ bool SipiIOJ2k::read(SipiImage *img,
     codestream.destroy();
     input->close();
     jpx_in.close();// Not really necessary here.
-    syslog(LOG_ERR, "Unsupported number of bits/sample: %ld !", img->bps);
+    log_err("Unsupported number of bits/sample: %ld !", img->bps);
     throw SipiImageError("Unsupported number of bits/sample!");
   }
   }

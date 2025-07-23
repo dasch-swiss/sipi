@@ -1,5 +1,83 @@
 # Changelog
 
+## [3.16.1](https://github.com/dasch-swiss/sipi/compare/v3.16.0...v3.16.1) (2025-07-23)
+
+
+### Bug Fixes
+
+* Also copy kakadu v8_5 for the upcoming PR ([04e456c](https://github.com/dasch-swiss/sipi/commit/04e456ce5a1174682eb61362f46b484e8fb0ffdf))
+* Don't reinstall, if it's present (e.g. with updated CI base image) ([4159054](https://github.com/dasch-swiss/sipi/commit/41590548e6f7413467e7886cbd8810c54a0495af))
+* Fix build on MacOS/CI ([#473](https://github.com/dasch-swiss/sipi/issues/473)) ([d06c2e9](https://github.com/dasch-swiss/sipi/commit/d06c2e994d95b766ce0fa9ce7c0eae3e7f5bbf54))
+* Streaming of large files ([#481](https://github.com/dasch-swiss/sipi/issues/481)) ([1845a00](https://github.com/dasch-swiss/sipi/commit/1845a0047fc30bbcf095c8230226e3cb90fae6ce))
+* TIFF tiled reading bug ([#478](https://github.com/dasch-swiss/sipi/issues/478)) ([a2ee1bf](https://github.com/dasch-swiss/sipi/commit/a2ee1bf4173d0c00e7705763bbd6e7f04050d344))
+
+## [3.16.0](https://github.com/dasch-swiss/sipi/compare/v3.15.2...v3.16.0) (2025-03-24)
+
+
+### Features
+
+* Pyramidal TIFF support ([#466](https://github.com/dasch-swiss/sipi/issues/466)) ([807fccf](https://github.com/dasch-swiss/sipi/commit/807fccf0f62434679889ffd7a61b266eca81939a))
+
+
+### Bug Fixes
+
+* Drop "accepted connection from" from DEBUG to INFO ([e12f5e7](https://github.com/dasch-swiss/sipi/commit/e12f5e7a3f8cb8d9665f2878b37fa7eadd6947d0))
+
+## [3.15.2](https://github.com/dasch-swiss/sipi/compare/v3.15.1...v3.15.2) (2025-03-19)
+
+
+### Bug Fixes
+
+* Logger.cpp in LuaServer.cpp, remove syslog, missing JSON quotes ([#470](https://github.com/dasch-swiss/sipi/issues/470)) ([b2899d7](https://github.com/dasch-swiss/sipi/commit/b2899d747b25b8476e1d35024c97f5d32b7c026f))
+
+## [3.15.1](https://github.com/dasch-swiss/sipi/compare/v3.15.0...v3.15.1) (2025-03-14)
+
+
+### Bug Fixes
+
+* Parse percentages for IIIF size more carefully (DEV-4636) ([#468](https://github.com/dasch-swiss/sipi/issues/468)) ([d9a8490](https://github.com/dasch-swiss/sipi/commit/d9a849073a1fe3201077f44b814d5a2fd75cac3f))
+
+## [3.15.0](https://github.com/dasch-swiss/sipi/compare/v3.14.0...v3.15.0) (2025-01-24)
+
+
+### Features
+
+* Return 404 for missing files (INFRA-735) ([#465](https://github.com/dasch-swiss/sipi/issues/465)) ([f54356f](https://github.com/dasch-swiss/sipi/commit/f54356f443f8bbb5dcb061384bd1aebbac4e85da))
+
+
+### Bug Fixes
+
+* Fix broken links and disable libwebp building its CLI tool ([#462](https://github.com/dasch-swiss/sipi/issues/462)) ([de9e393](https://github.com/dasch-swiss/sipi/commit/de9e393fe5e0b335751bd6166fefb5727723c675))
+* Prevent exif nullptr (DEV-4521) ([#464](https://github.com/dasch-swiss/sipi/issues/464)) ([4231f00](https://github.com/dasch-swiss/sipi/commit/4231f00e839a7209f27be4548cd2ab16d387b25b))
+
+## [3.14.0](https://github.com/dasch-swiss/sipi/compare/v3.13.0...v3.14.0) (2024-10-08)
+
+
+### Features
+
+* Respect X-Forwarded-Proto (DEV-3499) ([#453](https://github.com/dasch-swiss/sipi/issues/453)) ([d5eaab3](https://github.com/dasch-swiss/sipi/commit/d5eaab3bb36114759861c98a419ecca6955d41ce))
+* Support IIIF Image's API HEAD requests (DEV-4072) ([#456](https://github.com/dasch-swiss/sipi/issues/456)) ([f3a9a96](https://github.com/dasch-swiss/sipi/commit/f3a9a9695a3c931e0d95144a07d1f7ba0bc182ae))
+* Watermarks with alpha support and respect to ratio (DEV-4072) ([#458](https://github.com/dasch-swiss/sipi/issues/458)) ([da34f6a](https://github.com/dasch-swiss/sipi/commit/da34f6af0c51ceb3a47607e6f9ce9e2541a7497d))
+
+
+### Bug Fixes
+
+* Fix planar BigTIFF ingestion (DEV-3384) ([#455](https://github.com/dasch-swiss/sipi/issues/455)) ([83c2c94](https://github.com/dasch-swiss/sipi/commit/83c2c949fc9dc0c97fbd777f77a11adf38eac883))
+
+## [3.13.0](https://github.com/dasch-swiss/sipi/compare/v3.12.3...v3.13.0) (2024-08-07)
+
+
+### Features
+
+* Allow YCbCr/RGB autoconvert, update libtiff (DEV-3863) ([#451](https://github.com/dasch-swiss/sipi/issues/451)) ([ccc68bc](https://github.com/dasch-swiss/sipi/commit/ccc68bc797e59befac48e29cab15b638a0b1f8aa))
+
+## [3.12.3](https://github.com/dasch-swiss/sipi/compare/v3.12.2...v3.12.3) (2024-07-23)
+
+
+### Bug Fixes
+
+* Update ijg jpeg lib to v9f, partially fixes DEV-3474 ([#449](https://github.com/dasch-swiss/sipi/issues/449)) ([94e72fa](https://github.com/dasch-swiss/sipi/commit/94e72fa1cd3af41705e5f505e50bdaa28cee8b6b))
+
 ## [3.12.2](https://github.com/dasch-swiss/sipi/compare/v3.12.1...v3.12.2) (2024-04-07)
 
 

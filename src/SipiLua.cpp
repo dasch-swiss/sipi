@@ -5,6 +5,7 @@
 
 #include <cstring>
 #include <iostream>
+#include <set>
 
 #include "shttps/Connection.h"
 #include "shttps/Error.h"
