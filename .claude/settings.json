@@ -13,6 +13,7 @@
       "Bash(nix develop:*)",
       "Bash(direnv allow:*)",
       "Bash(docker run:*)",
+      "mcp__linear__list_teams",
       "mcp__linear__get_issue"
     ],
     "deny": []
