@@ -37,6 +37,9 @@ import re
 import hashlib
 import glob
 import sys
+import socket
+import urllib.request
+import urllib.error
 
 
 def pytest_addoption(parser):
@@ -124,23 +127,91 @@ class SipiTestManager:
 
         self.ab_command = "ab -v 2 -c {} -n {} -s {} {}"
 
+    def _is_port_available(self, port):
+        """Check if a port is available for binding."""
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(1)
+            result = sock.connect_ex(('127.0.0.1', port))
+            return result != 0
+
+    def _wait_for_port_available(self, port, timeout=10):
+        """Wait for a port to become available."""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            if self._is_port_available(port):
+                return True
+            time.sleep(0.5)
+        return False
+
+    def _kill_processes_on_ports(self, ports):
+        """Kill processes listening on specific ports."""
+        killed_any = False
+        for proc in psutil.process_iter(['pid', 'name']):
+            try:
+                if proc.info['name'] == 'sipi':
+                    # Check if this process is using any of our ports
+                    try:
+                        connections = proc.connections()
+                        for conn in connections:
+                            if hasattr(conn, 'laddr') and conn.laddr and conn.laddr.port in ports:
+                                print(f"Killing process {proc.info['pid']} (sipi) using port {conn.laddr.port}", file=sys.stderr)
+                                proc.terminate()
+                                killed_any = True
+                                break
+                    except (psutil.AccessDenied, psutil.NoSuchProcess):
+                        # If we can't get connections, just kill any sipi process
+                        print(f"Killing sipi process {proc.info['pid']} (couldn't check connections)", file=sys.stderr)
+                        proc.terminate()
+                        killed_any = True
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+        
+        if killed_any:
+            # Wait a bit for processes to terminate
+            time.sleep(2)
+            # Force kill any remaining processes
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    if proc.info['name'] == 'sipi':
+                        print(f"Force killing remaining sipi process {proc.info['pid']}", file=sys.stderr)
+                        proc.kill()
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    pass
+
+    def _check_sipi_health(self):
+        """Check if SIPI is responding to HTTP requests."""
+        try:
+            # Try to connect to a IIIF info.json endpoint (more appropriate for SIPI health check)
+            # This should return a 404 if the image doesn't exist, but still indicates server is responding
+            response = urllib.request.urlopen(f"http://127.0.0.1:{self.sipi_port}/test/info.json", timeout=2)
+            return response.getcode() in [200, 404, 400]  # Any response code indicates server is working
+        except urllib.error.HTTPError as e:
+            # HTTP errors (404, 400, etc.) indicate the server is responding, just not with what we want
+            return e.code in [200, 404, 400, 500]  # Any HTTP response means server is working
+        except (urllib.error.URLError, socket.timeout):
+            # These indicate connection problems (server not responding)
+            return False
+
     def start_sipi(self):
         """Starts Sipi and waits until it is ready to receive requests."""
 
         def check_for_ready_output(line):
             if self.sipi_ready_output in line:
+                print(f"Found ready message: {line}", file=sys.stderr)
                 self.sipi_started = True
             else:
-                print(line, file=sys.stderr)
+                print(f"SIPI: {line}", file=sys.stderr)
 
-        # Stop any existing Sipi process. This could happen if a previous test run crashed.
-        for proc in psutil.process_iter():
-            try:
-                if proc.name() == "sipi":
-                    proc.terminate()
-                    proc.wait()
-            except psutil.NoSuchProcess:
-                pass
+        # Stop any existing Sipi processes and free up ports
+        ports_to_check = [int(self.sipi_port), int(self.sipi_ssl_port)]
+        print(f"Checking ports {ports_to_check} for existing processes...", file=sys.stderr)
+        
+        self._kill_processes_on_ports(ports_to_check)
+        
+        # Wait for ports to become available
+        for port in ports_to_check:
+            if not self._wait_for_port_available(port, timeout=10):
+                raise SipiTestError(f"Port {port} is still in use after cleanup. Cannot start SIPI.")
 
         self.sipi_process = None
         self.sipi_started = False
@@ -155,31 +226,112 @@ class SipiTestManager:
         # Start a Sipi process and capture its output.
         sipi_args = shlex.split(self.sipi_command)
         sipi_start_time = time.time()
-        self.sipi_process = subprocess.Popen(sipi_args,
-                                             cwd=self.sipi_working_dir,
-                                             stdout=subprocess.PIPE,
-                                             stderr=subprocess.STDOUT,
-                                             universal_newlines=True)
+        print(f"Starting SIPI with command: {self.sipi_command}", file=sys.stderr)
+        print(f"Working directory: {self.sipi_working_dir}", file=sys.stderr)
+        
+        try:
+            # Set environment to ensure output is not buffered
+            env = os.environ.copy()
+            env['PYTHONUNBUFFERED'] = '1'
+            
+            self.sipi_process = subprocess.Popen(sipi_args,
+                                                 cwd=self.sipi_working_dir,
+                                                 stdout=subprocess.PIPE,
+                                                 stderr=subprocess.STDOUT,
+                                                 universal_newlines=True,
+                                                 bufsize=0,  # Unbuffered
+                                                 env=env)
+        except Exception as e:
+            raise SipiTestError(f"Failed to start SIPI process: {e}")
+        
+        # Give the process a moment to start before setting up output reader
+        time.sleep(0.1)
         self.sipi_output_reader = ProcessOutputReader(self.sipi_process.stdout, check_for_ready_output)
 
         # Wait until Sipi says it's ready to receive requests.
-        while (not self.sipi_started) and (not self.sipi_took_too_long):
+        log_based_ready = False
+        health_check_ready = False
+        
+        while (not self.sipi_took_too_long):
+            # Check if process has terminated unexpectedly
+            if self.sipi_process.poll() is not None:
+                self.write_sipi_log()
+                raise SipiTestError(
+                    f"SIPI process terminated unexpectedly with exit code {self.sipi_process.returncode} (wrote {self.sipi_log_file})")
+            
+            # Check for log-based readiness
+            if not log_based_ready and self.sipi_started:
+                print("SIPI log indicates server is ready", file=sys.stderr)
+                log_based_ready = True
+                
+            # Once we see the log message, also check health
+            if log_based_ready and not health_check_ready:
+                if self._check_sipi_health():
+                    print("SIPI health check passed", file=sys.stderr)
+                    health_check_ready = True
+                    break
+                    
             time.sleep(0.2)
             if time.time() - sipi_start_time > self.sipi_start_wait:
                 self.sipi_took_too_long = True
 
         if self.sipi_took_too_long:
-            raise SipiTestError(
-                "Sipi didn't start after {} seconds (wrote {})".format(self.sipi_start_wait, self.sipi_log_file))
+            # Wait a bit more for output to be collected
+            time.sleep(0.5)
+            self.write_sipi_log()
+            
+            # Get additional debug info
+            process_status = "unknown"
+            if self.sipi_process:
+                if self.sipi_process.poll() is None:
+                    process_status = "running"
+                else:
+                    process_status = f"exited with code {self.sipi_process.returncode}"
+            
+            error_msg = f"SIPI didn't start after {self.sipi_start_wait} seconds (wrote {self.sipi_log_file}). Process status: {process_status}"
+            if log_based_ready:
+                error_msg += ". Log indicated ready but health check failed."
+            else:
+                error_msg += ". No ready message found in logs."
+            
+            # Include some log output in the error for debugging
+            log_output = self.get_sipi_output()
+            if log_output:
+                error_msg += f"\nLast few lines of output:\n{log_output[-500:]}"
+            else:
+                error_msg += "\nNo output captured."
+                
+            raise SipiTestError(error_msg)
+        
+        print(f"SIPI started successfully in {time.time() - sipi_start_time:.2f} seconds", file=sys.stderr)
 
     def stop_sipi(self):
         """Sends SIGTERM to Sipi and waits for it to stop."""
 
         if self.sipi_process is not None:
-            self.sipi_process.send_signal(signal.SIGTERM)
-            self.sipi_process.wait(timeout=self.sipi_stop_wait)
-            self.sipi_process = None
-
+            print("Stopping SIPI process...", file=sys.stderr)
+            try:
+                # First try graceful shutdown
+                self.sipi_process.send_signal(signal.SIGTERM)
+                self.sipi_process.wait(timeout=self.sipi_stop_wait)
+                print("SIPI stopped gracefully", file=sys.stderr)
+            except subprocess.TimeoutExpired:
+                print("SIPI didn't stop gracefully, force killing...", file=sys.stderr)
+                self.sipi_process.kill()
+                self.sipi_process.wait(timeout=5)
+                print("SIPI force killed", file=sys.stderr)
+            except Exception as e:
+                print(f"Error stopping SIPI: {e}", file=sys.stderr)
+            finally:
+                self.sipi_process = None
+                
+        # Stop the output reader
+        if hasattr(self, 'sipi_output_reader') and self.sipi_output_reader:
+            self.sipi_output_reader.stop()
+                
+        # Also clean up any remaining processes on our ports
+        self._kill_processes_on_ports([int(self.sipi_port), int(self.sipi_ssl_port)])
+        
         self.write_sipi_log()
 
     def sipi_is_running(self):
@@ -556,23 +708,41 @@ class ProcessOutputReader:
         self.stream = stream
         self.line_func = line_func
         self.lines = []
+        self.lock = threading.Lock()
+        self.running = True
 
         def collect_lines():
-            while True:
-                line = self.stream.readline()
-                print(line, file=sys.stderr)
-                if line:
-                    self.lines.append(line)
-                    self.line_func(line)
-                else:
-                    return
+            try:
+                while self.running:
+                    line = self.stream.readline()
+                    if line:
+                        with self.lock:
+                            self.lines.append(line)
+                        # Call line_func outside the lock to avoid deadlock
+                        if self.line_func:
+                            self.line_func(line.rstrip())
+                    else:
+                        # Stream closed or EOF
+                        break
+            except Exception as e:
+                print(f"ProcessOutputReader error: {e}", file=sys.stderr)
+            finally:
+                with self.lock:
+                    self.running = False
 
         self.thread = threading.Thread(target=collect_lines)
         self.thread.daemon = True
         self.thread.start()
 
     def get_output(self):
-        return "".join(self.lines)
+        with self.lock:
+            return "".join(self.lines)
+    
+    def stop(self):
+        """Stop the output reader and wait for thread to finish."""
+        self.running = False
+        if self.thread.is_alive():
+            self.thread.join(timeout=2)
 
 
 def pytest_itemcollected(item):

@@ -722,21 +722,24 @@ int main(int argc, char *argv[])
     //
     // we query all information from just one file
     //
+    set_cli_mode(true);
     Sipi::SipiImage img;
     img.read(optInFile);
+    // Note: img << operator still uses std::cout directly
     std::cout << img << std::endl;
     return (0);
   } else if (!sipiopt.get_option("--compare")->empty()) {
     //
     // command line function: we want to compare pixelwise to files. After having done this, we exit
     //
+    set_cli_mode(true);
     if (!exists_file(optCompare[0])) {
-      std::cerr << "File not found: " << optCompare[0] << std::endl;
+      log_err("File not found: %s", optCompare[0].c_str());
       return EXIT_FAILURE;
     }
 
     if (!exists_file(optCompare[1])) {
-      std::cerr << "File not found: " << optCompare[1] << std::endl;
+      log_err("File not found: %s", optCompare[1].c_str());
       return EXIT_FAILURE;
     }
 
@@ -751,7 +754,7 @@ int main(int argc, char *argv[])
     }
 
     if (result) {
-      std::cerr << "Files identical!" << std::endl;
+      log_info("Files identical!");
     } else {
       double diffval = 0.;
       size_t maxdiff = 0;
@@ -770,8 +773,7 @@ int main(int argc, char *argv[])
         }
       }
       diffval /= static_cast<double>(img1.getNy() * img1.getNx() * img1.getNc());
-      std::cerr << "Files differ: avg: " << diffval << " max: " << maxdiff << "(" << max_x << ", " << max_y
-                << ") See diff.tif" << std::endl;
+      log_info("Files differ: avg: %.6f max: %zu (%zu, %zu) See diff.tif", diffval, maxdiff, max_x, max_y);
     }
 
     return (result) ? 0 : -1;
@@ -779,6 +781,7 @@ int main(int argc, char *argv[])
     //
     // Commandline conversion with input and output file given
     //
+    set_cli_mode(true);
 
     //
     // get the output format
@@ -816,7 +819,7 @@ int main(int argc, char *argv[])
         } else if (ext == "png") {
           format = "png";
         } else {
-          std::cerr << "Not a supported filename extension: '" << ext << "' !" << std::endl;
+          log_err("Not a supported filename extension: '%s'", ext.c_str());
           return EXIT_FAILURE;
         }
       }
@@ -1008,9 +1011,9 @@ int main(int argc, char *argv[])
     // there is a configuration file given on the command line. Thus we try to start SIPI in
     // server mode
     //
+    set_cli_mode(false);
 
     try {
-      std::cout << std::endl << "Ivan was here" << std::endl;
 
       Sipi::SipiConf sipiConf;
       bool config_loaded = false;
@@ -1280,7 +1283,7 @@ int main(int argc, char *argv[])
             int levels = SipiFilenameHash::check_levels(path);
             int new_levels = sipiConf.getSubdirLevels();
             if (levels != new_levels) {
-              std::cerr << "Subdir migration of " << path << "...." << std::endl;
+              log_info("Subdir migration of %s", path.c_str());
               SipiFilenameHash::migrateToLevels(path, new_levels);
             }
           }
@@ -1292,7 +1295,7 @@ int main(int argc, char *argv[])
         int levels = SipiFilenameHash::check_levels(sipiConf.getImgRoot());
         int new_levels = sipiConf.getSubdirLevels();
         if (levels != new_levels) {
-          std::cerr << "Subdir migration of " << sipiConf.getImgRoot() << "...." << std::endl;
+          log_info("Subdir migration of %s", sipiConf.getImgRoot().c_str());
           SipiFilenameHash::migrateToLevels(sipiConf.getImgRoot(), new_levels);
         }
       }
@@ -1374,7 +1377,7 @@ int main(int argc, char *argv[])
       server.run();
     } catch (shttps::Error &err) {
       log_err("Error starting server: %s", err.what());
-      std::cerr << err << '\n';
+      return EXIT_FAILURE;
     }
   }
   // make sure everything flushes
