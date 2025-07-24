@@ -32,7 +32,7 @@ sipi = {
     --
     -- port number the server is listening to
     --
-    port = 1024,
+    port = 8080,
 
     --
     -- Number of threads to use
@@ -165,7 +165,7 @@ sipi = {
     --
     -- If compiled with SSL support, the port the server is listening for secure connections
     --
-    ssl_port = 1025,
+    ssl_port = 8443,
 
     --
     -- If compiled with SSL support, the path to the certificate (must be .pem file)

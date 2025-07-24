@@ -136,7 +136,7 @@ class TestServer:
 
         expected_result = {
             "@context": "http://sipi.io/api/file/3/context.json",
-            "id": "http://127.0.0.1:1024/unit/{}".format(filename),
+            "id": "{}/unit/{}".format(manager.sipi_base_url, filename),
             "width": 373,
             "height": 496,
             "internalMimeType": "image/jp2",
@@ -155,7 +155,7 @@ class TestServer:
         response_json = manager.get_json("/unit/{}/knora.json".format(filename), False)
         expected_result = {
             '@context': 'http://sipi.io/api/file/3/context.json',
-            'id': 'http://127.0.0.1:1024/unit/_test_odd.odd',
+            'id': '{}/unit/_test_odd.odd'.format(manager.sipi_base_url),
             'internalMimeType': 'text/xml',
             'fileSize': 48002,
             'originalFilename': ''
@@ -285,7 +285,7 @@ class TestServer:
                 "mimetype": "image/tiff",
                 "expected_result": {
                     "@context": "http://sipi.io/api/file/3/context.json",
-                    "id": "http://127.0.0.1:1024/unit/",
+                    "id": "{}/unit/".format(manager.sipi_base_url),
                     "width": 512,
                     "height": 512,
                     "internalMimeType": "image/jp2",
@@ -298,7 +298,7 @@ class TestServer:
                 "sidecar": ["unit/test.info", "unit/_test.info"],
                 "expected_result": {
                     "@context": "http://sipi.io/api/file/3/context.json",
-                    "id": "http://127.0.0.1:1024/unit/",
+                    "id": "{}/unit/".format(manager.sipi_base_url),
                     "originalFilename": "test.csv",
                     "internalMimeType": "text/csv",
                     "checksumDerivative": "228beaf29a9cdc864f777107c8f1a7bf9243d4140a844b7117a81d7d91fa6e37",
@@ -352,7 +352,7 @@ class TestServer:
         def expected_result(filename, proto='http'):
             return {
                 '@context': 'http://iiif.io/api/image/3/context.json',
-                'id': proto + '://127.0.0.1:1024/unit/' + filename,
+                'id': proto + '://127.0.0.1:{}/unit/'.format(manager.sipi_port) + filename,
                 'type': 'ImageService3',
                 'protocol': 'http://iiif.io/api/image',
                 'profile': 'level2',
@@ -409,7 +409,7 @@ class TestServer:
         def expected_result(proto):
             return {
                 "@context": "http://sipi.io/api/file/3/context.json",
-                "id": proto + "://127.0.0.1:1024/unit/8pdET49BfoJ-EeRcIbgcLch.mp4",
+                "id": proto + "://127.0.0.1:{}/unit/8pdET49BfoJ-EeRcIbgcLch.mp4".format(manager.sipi_port),
                 "checksumOriginal": "19cc4bccad39c89cc44936ef69565bb933d41a065fd59d666d58e5ef344e8149",
                 "checksumDerivative": "19cc4bccad39c89cc44936ef69565bb933d41a065fd59d666d58e5ef344e8149",
                 "internalMimeType": "video/mp4",
@@ -429,7 +429,7 @@ class TestServer:
 
         expected_result = {
             "@context": "http://sipi.io/api/file/3/context.json",
-            "id": "http://127.0.0.1:1024/unit/has-missing-sidecar-file.mp4",
+            "id": "{}/unit/has-missing-sidecar-file.mp4".format(manager.sipi_base_url),
             "internalMimeType": "video/mp4",
             "fileSize": 475205,
         }
@@ -453,7 +453,7 @@ class TestServer:
         """Test the IIIF Auth Api that returns HTTP code 401 and a info.json"""
         expected_result = {
             "@context": "http://iiif.io/api/image/2/context.json",
-            "@id": "http://127.0.0.1:1024/auth/lena512.jp2",
+            "@id": "{}/auth/lena512.jp2".format(manager.sipi_base_url),
             "protocol": "http://iiif.io/api/image",
             "service": {
                 "@context": "http://iiif.io/api/auth/1/context.json",
@@ -520,7 +520,7 @@ class TestServer:
 
         expected_result = {
             '@context': 'http://iiif.io/api/image/3/context.json',
-            'id': 'http://127.0.0.1:1024/auth/lena512.jp2',
+            'id': '{}/auth/lena512.jp2'.format(manager.sipi_base_url),
             'type': 'ImageService3',
             'protocol': 'http://iiif.io/api/image',
             'profile': 'level2',

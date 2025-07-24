@@ -14,4 +14,8 @@ void log_info(const char *message, ...);
 void log_warn(const char *message, ...);
 void log_err(const char *message, ...);
 
+// CLI mode support
+void set_cli_mode(bool cli_mode);
+bool is_cli_mode();
+
 #endif

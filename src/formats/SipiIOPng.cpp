@@ -22,6 +22,7 @@
 
 #include "SipiImageError.hpp"
 #include "formats/SipiIOPng.h"
+#include "Logger.h"
 
 // bad hack in order to include definitions in png.h on debian systems
 #if !defined(PNG_TEXT_SUPPORTED)
@@ -111,13 +112,13 @@ void PngTextPtr::add_iTXt(char *key, char *data, unsigned int len)
 
 void sipi_error_fn(png_structp png_ptr, png_const_charp error_msg)
 {
-  std::cerr << "PNG ERROR: " << error_msg << std::endl;
+  log_err("PNG ERROR: %s", error_msg);
   throw Sipi::SipiError(error_msg);
 }
 
 void sipi_warning_fn(png_structp png_ptr, png_const_charp warning_msg)
 {
-  std::cerr << "PNG WARNING: " << warning_msg << std::endl;
+  log_warn("PNG WARNING: %s", warning_msg);
 }
 
 bool SipiIOPng::read(SipiImage *img,
@@ -493,7 +494,7 @@ void SipiIOPng::write(SipiImage *img, const std::string &filepath, const SipiCom
       }
       png_set_iCCP(png_ptr, info_ptr, "ICC", PNG_COMPRESSION_TYPE_BASE, icc_buf.data(), icc_buf.size());
     } catch (SipiError &err) {
-      std::cerr << err << std::endl;
+      log_err("PNG XMP metadata error: %s", err.to_string().c_str());
     }
   }
 

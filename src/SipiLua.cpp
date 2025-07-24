@@ -17,6 +17,7 @@
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
 #include "SipiLua.h"
+#include "Logger.h"
 
 
 namespace Sipi {
@@ -648,14 +649,14 @@ static int SImage_dims(lua_State *L)
 static void get_exif_string(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
 {
   std::string tagvalue;
-  std::cerr << "AA) ?=?=?=?=? =======> LUA: in get_exif_string(" << tagname << "): uval=" << tagvalue << std::endl;
+  log_debug("LUA: get_exif_string(%s) called", tagname.c_str());
   if (!exif->getValByKey(tagname, tagvalue)) {
     lua_pop(L, lua_gettop(L));
     lua_pushboolean(L, false);
     lua_pushstring(L, "Sipi.Image.exif(): requested exif tag not available");
     return;
   }
-  std::cerr << "BB) ?=?=?=?=? =======> LUA: in get_exif_string(" << tagname << "): uval=" << tagvalue << std::endl;
+  log_debug("LUA: get_exif_string(%s) found value: %s", tagname.c_str(), tagvalue.c_str());
   lua_pop(L, lua_gettop(L));
   lua_pushboolean(L, true);
   lua_pushstring(L, tagvalue.c_str());
@@ -778,13 +779,14 @@ static void get_exif_shortv(lua_State *L, const std::shared_ptr<SipiExif> &exif,
 static void get_exif_ushort(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
 {
   unsigned short uval{ 0 };
+  log_debug("LUA: get_exif_ushort(%s) called", tagname.c_str());
   if (!exif->getValByKey(tagname, uval)) {
     lua_pop(L, lua_gettop(L));
     lua_pushboolean(L, false);
     lua_pushstring(L, "SipiImage.exif(): requested exif tag not available");
     return;
   }
-  std::cerr << "?=?=?=?=? =======> LUA: in get_exif_ushort(" << tagname << "): uval=" << uval << std::endl;
+  log_debug("LUA: get_exif_ushort(%s) found value: %d", tagname.c_str(), uval);
   lua_pop(L, lua_gettop(L));
   lua_pushboolean(L, true);
   lua_pushinteger(L, uval);
@@ -1043,15 +1045,13 @@ static int SImage_get_exif(lua_State *L)
   };
 
   std::string tag{ tagname };
-  std::cerr << "?=?=?=?=? TAGNAME=" << tag << std::endl;
+  log_debug("LUA: exif tag requested: %s", tag.c_str());
   auto tagiter = taglist.find(tag);
   std::string fulltag{ "Exif." + tagiter->second.first + "." + tagiter->first };
   if (tagiter != taglist.end()) {
     switch (tagiter->second.second) {
     case EXIV2_ASCII:
-      std::cerr << "?=?=?=?=? Before LUA:get_exif" << std::endl;
       get_exif_string(L, exif, fulltag);
-      std::cerr << "?=?=?=?=? After LUA:get_exif" << std::endl;
       break;
     case EXIV2_ASCIIV:
       get_exif_stringv(L, exif, fulltag);
@@ -1075,9 +1075,7 @@ static int SImage_get_exif(lua_State *L)
       get_exif_shortv(L, exif, fulltag);
       break;
     case EXIV2_USHORT:
-      std::cerr << "?=?=?=?=? Before LUA:get_exif" << std::endl;
       get_exif_ushort(L, exif, fulltag);
-      std::cerr << "?=?=?=?=? After LUA:get_exif" << std::endl;
       break;
     case EXIV2_USHORTV:
       get_exif_ushortv(L, exif, fulltag);

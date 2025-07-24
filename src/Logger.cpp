@@ -9,6 +9,9 @@
 
 #include "Logger.h"
 
+// Global CLI mode flag
+static bool g_cli_mode = false;
+
 std::string escape_json_str(const std::string &s)
 {
   std::ostringstream o;
@@ -117,10 +120,26 @@ std::string log_sformat(LogLevel ll, const char *message, ...)
 
 void log_vformat(LogLevel ll, const char *message, va_list args)
 {
-  if (ll == LL_DEBUG) return;
+  if (ll == LL_DEBUG && !g_cli_mode) return;
 
-  std::string outfmt = log_vsformat(ll, message, args);
-  fprintf(stderr, "%s", outfmt.c_str());
+  if (g_cli_mode) {
+    // Simple format for CLI mode
+    std::string f = vformat(message, args);
+    if (ll >= LL_ERR) {
+      // Errors and critical messages go to stderr
+      fprintf(stderr, "%s\n", f.c_str());
+      fflush(stderr);
+    } else {
+      // Info, debug, warnings go to stdout
+      printf("%s\n", f.c_str());
+      fflush(stdout);
+    }
+  } else {
+    // JSON format to stdout for server mode (container/Grafana best practice)
+    std::string outfmt = log_vsformat(ll, message, args);
+    printf("%s", outfmt.c_str());
+    fflush(stdout);  // Ensure output is immediately flushed
+  }
 }
 
 void log_format(LogLevel ll, const char *message, ...)
@@ -161,4 +180,15 @@ void log_err(const char *message, ...)
   va_start(args, message);
   log_vformat(LL_ERR, message, args);
   va_end(args);
+}
+
+// CLI mode control functions
+void set_cli_mode(bool cli_mode)
+{
+  g_cli_mode = cli_mode;
+}
+
+bool is_cli_mode()
+{
+  return g_cli_mode;
 }

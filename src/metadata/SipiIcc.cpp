@@ -6,6 +6,7 @@
 #include "metadata/SipiIcc.h"
 
 #include <ctime>
+#include "Logger.h"
 
 #include "SipiError.hpp"
 #include "generated/AdobeRGB1998_icc.h"
@@ -19,14 +20,13 @@ namespace Sipi {
 
 void icc_error_logger(cmsContext ContextID, cmsUInt32Number ErrorCode, const char *Text)
 {
-  std::cerr << "ICC-CMS-ERROR: " << Text << '\n';
+  log_err("ICC-CMS-ERROR: %s", Text);
 }
 
 SipiIcc::SipiIcc(const unsigned char *icc_buf, int icc_len)
 {
   cmsSetLogErrorHandler(icc_error_logger);
   if ((icc_profile = cmsOpenProfileFromMem(icc_buf, icc_len)) == nullptr) {
-    std::cerr << "THROWING ERROR IN ICC" << '\n';
     throw SipiError("cmsOpenProfileFromMem failed");
   }
   unsigned int len = cmsGetProfileInfoASCII(icc_profile, cmsInfoDescription, cmsNoLanguage, cmsNoCountry, nullptr, 0);
