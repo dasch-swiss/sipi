@@ -447,7 +447,6 @@ void file_handler(shttps::Connection &conn, LuaServer &lua, void *user_data, voi
         conn.header("Pragma", "no-cache");
         conn.header("Accept-Ranges", "bytes");
         conn.header("Content-Length", std::to_string(end - start + 1));
-        conn.header("Content-Length", std::to_string(end - start + 1));
         std::stringstream ss;
         ss << "bytes " << start << "-" << end << "/" << fsize;
         conn.header("Content-Range", ss.str());

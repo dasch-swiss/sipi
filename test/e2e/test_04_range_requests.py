@@ -98,6 +98,32 @@ class TestRangeRequests:
         assert response.content == self.small_content[-1:]
         assert response.headers["Content-Range"] == f"bytes {last_byte_pos}-{last_byte_pos}/{len(self.small_content)}"
 
+    def test_small_file_open_ended_from_start(self):
+        """Test open-ended range from start (bytes=0-) - triggers DEV-5160 bug condition."""
+        url = f"{self.base_url}/server/small_test_file.bin"
+        headers = {"Range": "bytes=0-"}
+        response = requests.get(url, headers=headers)
+        
+        assert response.status_code == 206
+        assert len(response.content) == len(self.small_content)
+        assert response.content == self.small_content
+        expected_end = len(self.small_content) - 1
+        assert response.headers["Content-Range"] == f"bytes 0-{expected_end}/{len(self.small_content)}"
+
+    def test_small_file_open_ended_from_middle(self):
+        """Test open-ended range from middle (bytes=N-) - triggers DEV-5160 bug condition."""
+        url = f"{self.base_url}/server/small_test_file.bin"
+        start_pos = 500
+        headers = {"Range": f"bytes={start_pos}-"}
+        response = requests.get(url, headers=headers)
+        
+        assert response.status_code == 206
+        expected_size = len(self.small_content) - start_pos
+        assert len(response.content) == expected_size
+        assert response.content == self.small_content[start_pos:]
+        expected_end = len(self.small_content) - 1
+        assert response.headers["Content-Range"] == f"bytes {start_pos}-{expected_end}/{len(self.small_content)}"
+
     # TODO: Should be fixed
     # def test_small_file_range_beyond_file_size(self):
     #     """Test range request beyond file size (should fail)."""
@@ -167,6 +193,30 @@ class TestRangeRequests:
         assert response.status_code == 206
         assert len(response.content) == 1
         assert response.headers["Content-Range"] == f"bytes {last_byte_pos}-{last_byte_pos}/{self.large_size}"
+
+    def test_large_file_open_ended_from_start(self):
+        """Test open-ended range from start on large file - critical DEV-5160 case."""
+        url = f"{self.base_url}/server/large_test_file.bin"
+        headers = {"Range": "bytes=0-"}
+        response = requests.get(url, headers=headers)
+        
+        assert response.status_code == 206
+        assert len(response.content) == self.large_size
+        expected_end = self.large_size - 1
+        assert response.headers["Content-Range"] == f"bytes 0-{expected_end}/{self.large_size}"
+
+    def test_large_file_open_ended_from_middle(self):
+        """Test open-ended range from middle on large file - critical DEV-5160 case."""
+        url = f"{self.base_url}/server/large_test_file.bin"
+        start_pos = 5 * 1024 * 1024  # Start at 5MB
+        headers = {"Range": f"bytes={start_pos}-"}
+        response = requests.get(url, headers=headers)
+        
+        assert response.status_code == 206
+        expected_size = self.large_size - start_pos
+        assert len(response.content) == expected_size
+        expected_end = self.large_size - 1
+        assert response.headers["Content-Range"] == f"bytes {start_pos}-{expected_end}/{self.large_size}"
 
     # TODO: Should be fixed
     # def test_large_file_range_beyond_size(self):
