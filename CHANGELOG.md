@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.16.2](https://github.com/dasch-swiss/sipi/compare/v3.16.1...v3.16.2) (2025-07-25)
+
+
+### Bug Fixes
+
+* Streaming of large video files ([#486](https://github.com/dasch-swiss/sipi/issues/486)) ([7efc43e](https://github.com/dasch-swiss/sipi/commit/7efc43e547d2aee3b82a35708124b46665dbcbb7))
+
 ## [3.16.1](https://github.com/dasch-swiss/sipi/compare/v3.16.0...v3.16.1) (2025-07-23)
 
 
