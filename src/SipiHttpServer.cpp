@@ -1139,12 +1139,12 @@ static void serve_file_download(Connection &conn_obj,
       //
       std::regex re(R"(bytes=\s*(\d+)-(\d*)[\D.*]?)");
       std::cmatch m;
-      int start = 0;// lets assume beginning of file
-      int end = fsize - 1;// lets assume whole file
+      size_t start = 0;// lets assume beginning of file
+      size_t end = fsize - 1;// lets assume whole file
       if (std::regex_match(range.c_str(), m, re)) {
         if (m.size() < 2) { throw Error("Range expression invalid!"); }
-        start = std::stoi(m[1]);
-        if ((m.size() > 1) && !m[2].str().empty()) { end = std::stoi(m[2]); }
+        start = std::stoull(m[1]);
+        if ((m.size() > 1) && !m[2].str().empty()) { end = std::stoull(m[2]); }
       } else {
         throw Error("Range expression invalid!");
       }

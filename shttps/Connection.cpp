@@ -1371,7 +1371,9 @@ void Connection::sendAndFlush(const void *buffer, size_t n)
 
 void Connection::sendFile(const string &path, const size_t bufsize, const size_t from, const size_t to)
 {
-  if (_finished) throw Error("Sending data already terminated!");
+  if (_finished) {
+    throw Error("Sending data already terminated!");
+  }
 
   //
   // test if we have access to the file
@@ -1393,6 +1395,8 @@ void Connection::sendFile(const string &path, const size_t bufsize, const size_t
 
   if (infile == nullptr) { throw Error("File not readable: " + path); }
 
+  // seek to the starting position 'from' in the file
+  // so subsequent reads begin at the correct byte offset
   if (from < orig_fsize) {
     if (fseek(infile, from, SEEK_SET) < 0) {
       fclose(infile);
@@ -1403,16 +1407,17 @@ void Connection::sendFile(const string &path, const size_t bufsize, const size_t
     throw Error("Seek position beyond end of file!");
   }
 
-  if (to >= orig_fsize) {
-    fclose(infile);
-    throw Error("Trying to read beyond end of file!");
-  }
-
-  // bytes needing to read and return
-  size_t read_size = orig_fsize;
+  // calculate how many bytes to read from the current file position
+  // if 'to' is 0, read from 'from' to end of file
+  // if 'to' is specified, read the range [from, to] inclusive
+  size_t read_size = orig_fsize - from;
   if (to > 0) {
     read_size = to - from + 1;
   }
+  
+  // ensure read_size doesn't exceed available bytes from current file position
+  // this handles cases where the requested range extends beyond file end
+  read_size = std::min(read_size, orig_fsize - from);
 
   if (outbuf != nullptr) {
     char buf[bufsize];
