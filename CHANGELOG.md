@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.16.3](https://github.com/dasch-swiss/sipi/compare/v3.16.2...v3.16.3) (2025-08-25)
+
+
+### Bug Fixes
+
+* Trigger release creation ([025b5f7](https://github.com/dasch-swiss/sipi/commit/025b5f71aa1a3fe3f874ff88387bfe67604a910a))
+
 ## [3.16.2](https://github.com/dasch-swiss/sipi/compare/v3.16.1...v3.16.2) (2025-07-25)
 
 
