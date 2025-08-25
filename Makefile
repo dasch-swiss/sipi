@@ -8,7 +8,7 @@ include vars.mk
 
 # Version of the base Docker image
 SIPI_BASE := daschswiss/sipi-base:2.23.0
-UBUNTU_BASE := ubuntu:22.04
+UBUNTU_BASE := ubuntu:24.04
 
 .PHONY: docs-build
 docs-build: ## build docs into the local 'site' folder
