@@ -62,3 +62,6 @@ icc.zip
 /coverage
 /coverage.info
 *.gcov
+
+# Claude Code
+.claude/worktrees/
