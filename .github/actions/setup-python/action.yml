@@ -20,3 +20,7 @@ runs:
       shell: bash
       run: |
         which pip || curl -sS https://bootstrap.pypa.io/get-pip.py | sudo python3
+    - name: Upgrade pip and setuptools
+      shell: bash
+      run: |
+        pip3 install --upgrade pip setuptools wheel

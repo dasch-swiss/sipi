@@ -9,7 +9,7 @@ set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
 ExternalProject_Add(project_zlib
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        URL http://zlib.net/zlib-1.3.1.tar.gz
+        URL https://zlib.net/zlib-1.3.2.tar.gz
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
         ${timestamp_policy}
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/zlib
