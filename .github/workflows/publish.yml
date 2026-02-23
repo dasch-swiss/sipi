@@ -8,7 +8,7 @@ jobs:
   # Build for release and publish amd64
   amd64:
     if: startsWith(github.ref, 'refs/tags/')
-    runs-on: buildjet-4vcpu-ubuntu-2204
+    runs-on: ubuntu-24.04
     concurrency:
       group: ${{ github.ref }}-publish-amd64
       cancel-in-progress: true
@@ -31,7 +31,7 @@ jobs:
   # Build for release and publish aarch64
   aarch64:
     if: startsWith(github.ref, 'refs/tags/')
-    runs-on: buildjet-4vcpu-ubuntu-2204-arm
+    runs-on: ubuntu-24.04-arm
     concurrency:
       group: ${{ github.ref }}-publish-aarch64
       cancel-in-progress: true
