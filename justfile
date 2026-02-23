@@ -16,7 +16,7 @@ docker-build:
 	docker buildx build \
 		--progress auto \
 		--build-arg SIPI_BASE=daschswiss/sipi-base:2.23.0 \
-		--build-arg UBUNTU_BASE=ubuntu:22.04 \
+		--build-arg UBUNTU_BASE=ubuntu:24.04 \
 		--build-arg BUILD_TAG=development \
 		-t daschswiss/sipi:development -t daschswiss/sipi:latest \
 		--load \
