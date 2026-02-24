@@ -24,7 +24,7 @@ ExternalProject_Add(project_sentry
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
         ${timestamp_policy}
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/sentry-native
-        CMAKE_ARGS -DSENTRY_BACKEND=inproc -DSENTRY_BUILD_SHARED_LIBS=OFF -DCMAKE_PREFIX_PATH=${_SENTRY_PREFIX_PATH} -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local
+        CMAKE_ARGS -DSENTRY_BACKEND=inproc -DSENTRY_BUILD_SHARED_LIBS=OFF -DSENTRY_BUILD_EXAMPLES=OFF -DSENTRY_BUILD_TESTS=OFF -DCMAKE_PREFIX_PATH=${_SENTRY_PREFIX_PATH} -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local
 )
 ExternalProject_Get_Property(project_sentry install_dir)
 

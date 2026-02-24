@@ -18,6 +18,13 @@
 namespace Sipi {
 
 /*!
+ * Operating mode for Sentry flush behavior.
+ * CLI mode blocks briefly to ensure events are sent before process exit.
+ * Server mode uses non-blocking flush to avoid stalling request threads.
+ */
+enum class SipiMode { CLI, Server };
+
+/*!
  * Context about an image being processed, used for Sentry error reporting.
  * Fields may be empty/zero if the image was not successfully read.
  */
@@ -128,20 +135,26 @@ inline void populate_from_image(ImageContext &ctx, const SipiImage &img)
 /*!
  * Capture an image processing error to Sentry with rich context.
  *
+ * Thread-safe: all tags and context are attached directly to the event object
+ * rather than the global scope, so concurrent calls from different request
+ * threads cannot interfere with each other.
+ *
  * Safe to call when Sentry is not initialized (sentry-native API calls no-op).
  *
  * \param[in] error_message The error message from the exception
  * \param[in] phase Processing phase: "read", "convert", or "write"
  * \param[in] ctx Image context with metadata about the image being processed
- * \param[in] mode Operating mode: "cli" or "server"
+ * \param[in] mode Operating mode (default: CLI)
  * \param[in] level Sentry event level (default: SENTRY_LEVEL_ERROR)
  */
 inline void capture_image_error(const std::string &error_message,
   const std::string &phase,
   const ImageContext &ctx,
-  const std::string &mode = "cli",
+  SipiMode mode = SipiMode::CLI,
   sentry_level_e level = SENTRY_LEVEL_ERROR)
 {
+  const char *mode_str = (mode == SipiMode::CLI) ? "cli" : "server";
+
   sentry_value_t event = sentry_value_new_event();
   sentry_value_set_by_key(event, "level", sentry_value_new_string(
     level == SENTRY_LEVEL_ERROR ? "error" :
@@ -152,21 +165,23 @@ inline void capture_image_error(const std::string &error_message,
   sentry_value_set_by_key(message, "formatted", sentry_value_new_string(error_message.c_str()));
   sentry_value_set_by_key(event, "message", message);
 
-  // Set searchable tags
-  sentry_set_tag("sipi.mode", mode.c_str());
-  sentry_set_tag("sipi.phase", phase.c_str());
+  // Set searchable tags directly on the event (not the global scope) for thread safety.
+  sentry_value_t tags = sentry_value_new_object();
+  sentry_value_set_by_key(tags, "sipi.mode", sentry_value_new_string(mode_str));
+  sentry_value_set_by_key(tags, "sipi.phase", sentry_value_new_string(phase.c_str()));
   if (!ctx.output_format.empty()) {
-    sentry_set_tag("sipi.output_format", ctx.output_format.c_str());
+    sentry_value_set_by_key(tags, "sipi.output_format", sentry_value_new_string(ctx.output_format.c_str()));
   }
   if (!ctx.colorspace.empty()) {
-    sentry_set_tag("sipi.colorspace", ctx.colorspace.c_str());
+    sentry_value_set_by_key(tags, "sipi.colorspace", sentry_value_new_string(ctx.colorspace.c_str()));
   }
   if (ctx.bps > 0) {
-    sentry_set_tag("sipi.bps", std::to_string(ctx.bps).c_str());
+    sentry_value_set_by_key(tags, "sipi.bps", sentry_value_new_string(std::to_string(ctx.bps).c_str()));
   }
   if (!ctx.request_uri.empty()) {
-    sentry_set_tag("sipi.request_uri", ctx.request_uri.c_str());
+    sentry_value_set_by_key(tags, "sipi.request_uri", sentry_value_new_string(ctx.request_uri.c_str()));
   }
+  sentry_value_set_by_key(event, "tags", tags);
 
   // Build "Image" context with full details
   sentry_value_t image_ctx = sentry_value_new_object();
@@ -202,7 +217,8 @@ inline void capture_image_error(const std::string &error_message,
     sentry_value_set_by_key(image_data, "orientation", sentry_value_new_string(ctx.orientation.c_str()));
   }
   if (ctx.file_size_bytes > 0) {
-    sentry_value_set_by_key(image_data, "file_size_bytes", sentry_value_new_int32(static_cast<int32_t>(ctx.file_size_bytes)));
+    sentry_value_set_by_key(image_data, "file_size_bytes",
+      sentry_value_new_double(static_cast<double>(ctx.file_size_bytes)));
   }
   if (!ctx.request_uri.empty()) {
     sentry_value_set_by_key(image_data, "request_uri", sentry_value_new_string(ctx.request_uri.c_str()));
@@ -219,7 +235,7 @@ inline void capture_image_error(const std::string &error_message,
 
   // In CLI mode, block briefly to ensure the event is sent before process exit.
   // In server mode, use non-blocking flush to avoid stalling request threads.
-  sentry_flush(mode == "cli" ? 2000 : 0);
+  sentry_flush(mode == SipiMode::CLI ? 2000 : 0);
 }
 
 }// namespace Sipi
