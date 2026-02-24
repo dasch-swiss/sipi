@@ -52,6 +52,15 @@ docker-test-build-aarch64: ## locally (unit) test and publish aarch64 Sipi Docke
 		-t $(DOCKER_IMAGE)-aarch64 -t $(DOCKER_REPO):latest \
 		--load \
 		.
+	docker buildx build \
+		--platform linux/arm64 \
+		--build-arg SIPI_BASE=$(SIPI_BASE) \
+		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		--build-arg VERSION=$(BUILD_TAG) \
+		--target debug-symbols \
+		--output type=local,dest=./debug-out \
+		.
+	mv ./debug-out/sipi.debug ./sipi-aarch64.debug && rm -rf ./debug-out
 
 .PHONY: docker-push-aarch64
 docker-push-aarch64: ## push previously build aarch64 image to Docker hub
@@ -68,6 +77,15 @@ docker-test-build-amd64: ## locally (unit) test and publish x86 Sipi Docker imag
 		-t $(DOCKER_IMAGE)-amd64 -t $(DOCKER_REPO):latest \
 		--load \
 		.
+	docker buildx build \
+		--platform linux/amd64 \
+		--build-arg SIPI_BASE=$(SIPI_BASE) \
+		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		--build-arg VERSION=$(BUILD_TAG) \
+		--target debug-symbols \
+		--output type=local,dest=./debug-out \
+		.
+	mv ./debug-out/sipi.debug ./sipi-amd64.debug && rm -rf ./debug-out
 
 .PHONY: docker-push-amd64
 docker-push-amd64: ## push previously build x86 image to Docker hub

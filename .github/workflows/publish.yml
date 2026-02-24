@@ -24,16 +24,10 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: make docker-test-build-amd64 # two stage build, where test is run in the first stage
+      - run: make docker-test-build-amd64 # builds image + extracts sipi-amd64.debug
       - run: make test-smoke-ci
       - name: Push image to Docker hub
         run: make docker-push-amd64
-      - name: Extract debug symbols (cache hit — no rebuild)
-        run: |
-          docker buildx build --platform linux/amd64 --target debug-symbols \
-            --build-arg VERSION=$(git describe --tag --dirty --abbrev=7) \
-            --output type=local,dest=./debug-out .
-          mv ./debug-out/sipi.debug ./sipi-amd64.debug || true
       - name: Upload debug symbols to Sentry
         if: hashFiles('sipi-amd64.debug') != ''
         run: |
@@ -66,16 +60,10 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: make docker-test-build-aarch64 # two stage build, where test is run in the first stage
+      - run: make docker-test-build-aarch64 # builds image + extracts sipi-aarch64.debug
       - run: make test-smoke-ci
       - name: Push image to Docker hub
         run: make docker-push-aarch64
-      - name: Extract debug symbols (cache hit — no rebuild)
-        run: |
-          docker buildx build --platform linux/arm64 --target debug-symbols \
-            --build-arg VERSION=$(git describe --tag --dirty --abbrev=7) \
-            --output type=local,dest=./debug-out .
-          mv ./debug-out/sipi.debug ./sipi-aarch64.debug || true
       - name: Upload debug symbols to Sentry
         if: hashFiles('sipi-aarch64.debug') != ''
         run: |
