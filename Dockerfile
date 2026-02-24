@@ -25,7 +25,11 @@ RUN cd build && ctest --output-on-failure
 RUN objcopy --only-keep-debug ./build/sipi ./build/sipi.debug \
     && strip ./build/sipi
 
-# STAGE 2: Setup
+# STAGE 2: Debug symbols (used by CI to extract .debug file without rebuilding)
+FROM scratch as debug-symbols
+COPY --from=builder /tmp/sipi/build/sipi.debug /sipi.debug
+
+# STAGE 3: Setup
 FROM $UBUNTU_BASE as final
 
 ARG TARGETPLATFORM

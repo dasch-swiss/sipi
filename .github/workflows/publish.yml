@@ -28,14 +28,12 @@ jobs:
       - run: make test-smoke-ci
       - name: Push image to Docker hub
         run: make docker-push-amd64
-      - name: Extract debug symbols from builder stage
+      - name: Extract debug symbols (cache hit — no rebuild)
         run: |
-          docker buildx build --platform linux/amd64 --target builder \
+          docker buildx build --platform linux/amd64 --target debug-symbols \
             --build-arg VERSION=$(git describe --tag --dirty --abbrev=7) \
-            -t sipi-builder-amd64 --load .
-          CONTAINER_ID=$(docker create sipi-builder-amd64)
-          docker cp "$CONTAINER_ID":/tmp/sipi/build/sipi.debug ./sipi-amd64.debug || true
-          docker rm "$CONTAINER_ID"
+            --output type=local,dest=./debug-out .
+          mv ./debug-out/sipi.debug ./sipi-amd64.debug || true
       - name: Upload debug symbols to Sentry
         if: hashFiles('sipi-amd64.debug') != ''
         run: |
@@ -72,14 +70,12 @@ jobs:
       - run: make test-smoke-ci
       - name: Push image to Docker hub
         run: make docker-push-aarch64
-      - name: Extract debug symbols from builder stage
+      - name: Extract debug symbols (cache hit — no rebuild)
         run: |
-          docker buildx build --platform linux/arm64 --target builder \
+          docker buildx build --platform linux/arm64 --target debug-symbols \
             --build-arg VERSION=$(git describe --tag --dirty --abbrev=7) \
-            -t sipi-builder-aarch64 --load .
-          CONTAINER_ID=$(docker create sipi-builder-aarch64)
-          docker cp "$CONTAINER_ID":/tmp/sipi/build/sipi.debug ./sipi-aarch64.debug || true
-          docker rm "$CONTAINER_ID"
+            --output type=local,dest=./debug-out .
+          mv ./debug-out/sipi.debug ./sipi-aarch64.debug || true
       - name: Upload debug symbols to Sentry
         if: hashFiles('sipi-aarch64.debug') != ''
         run: |
