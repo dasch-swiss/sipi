@@ -10,6 +10,7 @@
 
 #include <cstring>
 
+#include "Logger.h"
 #include "SipiFilenameHash.h"
 #include "shttps/Error.h"
 
@@ -198,7 +199,7 @@ static bool remove_level(const std::string &path, int cur_level)
       for (auto fname : filelist) {
         std::string newfname = path.substr(0, pos) + "/" + fname;
         std::string oldfname = path + "/" + fname;
-        std::cerr << "rename oldfname: " << oldfname << " newfname: " << newfname << std::endl;
+        log_debug("rename oldfname: %s newfname: %s", oldfname.c_str(), newfname.c_str());
         if (rename(oldfname.c_str(), newfname.c_str())) {
           throw shttps::Error("Rename/move failed!", errno);
         }
@@ -227,12 +228,12 @@ static bool remove_level(const std::string &path, int cur_level)
 void SipiFilenameHash::migrateToLevels(const std::string &imgdir, int levels)
 {
   int act_levels = check_levels(imgdir);
-  std::cerr << "act_levels=" << act_levels << " levels=" << levels << '\n';
+  log_debug("act_levels=%d levels=%d", act_levels, levels);
   if (levels > act_levels) { for (int i = 0; i < (levels - act_levels); i++) { add_level(imgdir, 0); } } else if (
     levels < act_levels) {
-    std::cerr << "Removing levels..." << '\n';
+    log_debug("Removing levels...");
     for (int i = 0; i < (act_levels - levels); i++) {
-      std::cerr << "Remove a level..........." << '\n';
+      log_debug("Remove a level...");
       (void)remove_level(imgdir, 0);
     }
   }

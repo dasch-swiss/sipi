@@ -18,6 +18,7 @@
 #include "shttps/Connection.h"
 #include "shttps/makeunique.h"
 
+#include "Logger.h"
 #include "SipiCommon.h"
 #include "SipiError.hpp"
 #include "SipiIO.h"
@@ -668,7 +669,7 @@ bool SipiIOJpeg::read(SipiImage *img,
 
           img->xmp = std::make_shared<SipiXmp>(xmpstr);
         } catch (SipiError &err) {
-          std::cerr << "Failed to parse XMP..." << '\n';
+          log_warn("Failed to parse XMP metadata from JPEG");
         }
       }
     } else if (marker->marker == JPEG_APP0 + 2) {
@@ -1234,7 +1235,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
         buf = img->icc->iccBytes();
       }
     } catch (SipiError &err) {
-      std::cerr << err << std::endl;
+      log_err("Error writing ICC profile in JPEG: %s", err.what());
     }
     unsigned char start[14] = {
       0x49, 0x43, 0x43, 0x5F, 0x50, 0x52, 0x4F, 0x46, 0x49, 0x4C, 0x45, 0x0
@@ -1265,7 +1266,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
       n_towrite -= n_nextwrite;
       n_written += n_nextwrite;
     }
-    if (n_towrite != 0) { std::cerr << "Hoppla!" << '\n'; }
+    if (n_towrite != 0) { log_warn("Incomplete JPEG ICC write: %u bytes remaining", n_towrite); }
   }
 
   if (img->iptc != nullptr) {

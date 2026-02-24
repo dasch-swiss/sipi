@@ -13,5 +13,7 @@ void log_debug(const char *message, ...);
 void log_info(const char *message, ...);
 void log_warn(const char *message, ...);
 void log_err(const char *message, ...);
+void set_cli_mode(bool cli);
+bool is_cli_mode();
 
 #endif
