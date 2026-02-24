@@ -168,21 +168,21 @@ static void sipiConfGlobals(lua_State *L, shttps::Connection &conn, void *user_d
 
   lua_pushstring(L, "loglevel");// table1 - "index_L1"
   const std::string loglevel = conf->getLoglevel();
-  if (loglevel == "LOG_EMERG") {
+  if (loglevel == "EMERG") {
     lua_pushinteger(L, LL_EMERG);
-  } else if (loglevel == "LOG_ALERT") {
+  } else if (loglevel == "ALERT") {
     lua_pushinteger(L, LL_ALERT);
-  } else if (loglevel == "LOG_CRIT") {
+  } else if (loglevel == "CRIT") {
     lua_pushinteger(L, LL_CRIT);
-  } else if (loglevel == "LOG_ERR") {
+  } else if (loglevel == "ERR") {
     lua_pushinteger(L, LL_ERR);
-  } else if (loglevel == "LOG_WARNING") {
+  } else if (loglevel == "WARNING") {
     lua_pushinteger(L, LL_WARNING);
-  } else if (loglevel == "LOG_NOTICE") {
+  } else if (loglevel == "NOTICE") {
     lua_pushinteger(L, LL_NOTICE);
-  } else if (loglevel == "LOG_INFO") {
+  } else if (loglevel == "INFO") {
     lua_pushinteger(L, LL_INFO);
-  } else if (loglevel == "LOG_DEBUG") {
+  } else if (loglevel == "DEBUG") {
     lua_pushinteger(L, LL_DEBUG);
   } else {
     lua_pushinteger(L, -1);
@@ -1294,6 +1294,21 @@ int main(int argc, char *argv[])
         sipiConf.setLogLevel(loglevelstring);
       } else {
         if (!sipiopt.get_option("--loglevel")->empty()) sipiConf.setLogLevel(loglevelstring);
+      }
+
+      // Apply the resolved log level to the Logger
+      {
+        const std::string &resolved = sipiConf.getLoglevel();
+        LogLevel resolvedLevel = LL_INFO;// default
+        if (resolved == "DEBUG") resolvedLevel = LL_DEBUG;
+        else if (resolved == "INFO") resolvedLevel = LL_INFO;
+        else if (resolved == "NOTICE") resolvedLevel = LL_NOTICE;
+        else if (resolved == "WARNING") resolvedLevel = LL_WARNING;
+        else if (resolved == "ERR") resolvedLevel = LL_ERR;
+        else if (resolved == "CRIT") resolvedLevel = LL_CRIT;
+        else if (resolved == "ALERT") resolvedLevel = LL_ALERT;
+        else if (resolved == "EMERG") resolvedLevel = LL_EMERG;
+        set_log_level(resolvedLevel);
       }
 
       //
