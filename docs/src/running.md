@@ -23,8 +23,38 @@ Running Sipi As a Server
 
     local/bin/sipi --config [config file]
 
-Sipi logs its operations using
-[syslog](http://man7.org/linux/man-pages/man3/syslog.3.html).
+### Logging
+
+SIPI uses two logging modes depending on how it is running:
+
+- **CLI mode** (`--file`, `--compare`, `--query`): Plain text output.
+  Errors go to **stderr**, informational messages go to **stdout**.
+  This is the standard Unix convention for command-line tools.
+
+- **Server mode** (`--config`): JSON-formatted log lines go to **stdout**.
+  This follows container best practices — Docker, Kubernetes, and log
+  collectors (Grafana Loki, Fluentd) expect structured logs on stdout.
+  Each line is a JSON object: `{"level": "INFO", "message": "..."}`.
+
+### Log Levels
+
+SIPI supports the following log levels (in order of increasing severity):
+
+| Level | Description |
+| ----- | ----------- |
+| `DEBUG` | Detailed diagnostic information. **Suppressed by default** in all modes. |
+| `INFO` | Normal operational messages (routes added, server started, migrations). |
+| `NOTICE` | Significant but normal events. |
+| `WARNING` | Something unexpected but recoverable (e.g., failed XMP parse, incomplete metadata write). |
+| `ERR` | Errors that affect a specific operation (e.g., image processing failure, ICC error). |
+| `CRIT` | Critical errors. |
+| `ALERT` | Conditions requiring immediate attention. |
+| `EMERG` | System-wide emergencies. |
+
+**For production:** The default configuration (DEBUG suppressed, all other levels
+emitted) is appropriate for production use. No additional log level configuration
+is needed. Warnings and errors will appear in the log output alongside
+informational messages about server startup and routing.
 
 Command-line Options
 --------------------

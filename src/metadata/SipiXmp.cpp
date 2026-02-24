@@ -25,10 +25,8 @@ void xmplock_func(void *pLockData, bool lockUnlock)
 {
   auto *m = static_cast<XmpMutex *>(pLockData);
   if (lockUnlock) {
-    std::cerr << "XMP-LOCK!" << '\n';
     m->lock.lock();
   } else {
-    std::cerr << "XMP-UNLOCK!" << '\n';
     m->lock.unlock();
   }
 }

@@ -9,6 +9,11 @@
 
 #include "Logger.h"
 
+static bool g_cli_mode = false;
+
+void set_cli_mode(bool cli) { g_cli_mode = cli; }
+bool is_cli_mode() { return g_cli_mode; }
+
 std::string escape_json_str(const std::string &s)
 {
   std::ostringstream o;
@@ -119,8 +124,19 @@ void log_vformat(LogLevel ll, const char *message, va_list args)
 {
   if (ll == LL_DEBUG) return;
 
-  std::string outfmt = log_vsformat(ll, message, args);
-  fprintf(stderr, "%s", outfmt.c_str());
+  if (g_cli_mode) {
+    // CLI mode: plain text, errors→stderr, others→stdout
+    std::string msg = vformat(message, args);
+    if (ll >= LL_ERR) {
+      fprintf(stderr, "%s\n", msg.c_str());
+    } else {
+      fprintf(stdout, "%s\n", msg.c_str());
+    }
+  } else {
+    // Server mode: JSON format→stdout (container best practice)
+    std::string outfmt = log_vsformat(ll, message, args);
+    fprintf(stdout, "%s", outfmt.c_str());
+  }
 }
 
 void log_format(LogLevel ll, const char *message, ...)
