@@ -6,6 +6,7 @@
 #include "gtest/gtest.h"
 
 #include "../../../src/SipiImage.hpp"
+#include "../../../src/SipiImageError.hpp"
 #include "SipiIOTiff.h"
 #include <cmath>
 #include <ranges>
@@ -426,4 +427,113 @@ TEST(SipiImage, PercentParsing)
 
   Sipi::SipiImage img;
   EXPECT_NO_THROW(img.read(leavesSmallWithAlpha, region, size));
+}
+
+// ================================================================
+// Constructor error path tests — verify enriched error messages
+// ================================================================
+
+TEST(SipiImage, ConstructorRgbChannelMismatchIncludesChannelCount)
+{
+  // RGB expects 3 or 4 channels; passing 1 should throw with the channel count in the message
+  try {
+    Sipi::SipiImage img(100, 100, 1, 8, Sipi::PhotometricInterpretation::RGB);
+    FAIL() << "Expected SipiImageError for RGB with 1 channel";
+  } catch (const Sipi::SipiImageError &e) {
+    std::string msg = e.what();
+    EXPECT_NE(msg.find("1 channels"), std::string::npos) << "Error should include channel count, got: " << msg;
+    EXPECT_NE(msg.find("RGB"), std::string::npos) << "Error should mention RGB, got: " << msg;
+  }
+}
+
+TEST(SipiImage, ConstructorRgbWith5ChannelsThrows)
+{
+  try {
+    Sipi::SipiImage img(50, 50, 5, 8, Sipi::PhotometricInterpretation::RGB);
+    FAIL() << "Expected SipiImageError for RGB with 5 channels";
+  } catch (const Sipi::SipiImageError &e) {
+    std::string msg = e.what();
+    EXPECT_NE(msg.find("5 channels"), std::string::npos) << "Error should include channel count, got: " << msg;
+  }
+}
+
+TEST(SipiImage, ConstructorUnsupportedBpsIncludesBpsValue)
+{
+  // Only 8 and 16 bps are supported; passing 32 should throw with the bps value
+  try {
+    Sipi::SipiImage img(100, 100, 3, 32, Sipi::PhotometricInterpretation::RGB);
+    FAIL() << "Expected SipiImageError for unsupported bps=32";
+  } catch (const Sipi::SipiImageError &e) {
+    std::string msg = e.what();
+    EXPECT_NE(msg.find("32"), std::string::npos) << "Error should include bps value, got: " << msg;
+    EXPECT_NE(msg.find("8 and 16"), std::string::npos) << "Error should mention supported values, got: " << msg;
+  }
+}
+
+TEST(SipiImage, ConstructorUnsupportedBps4Throws)
+{
+  try {
+    Sipi::SipiImage img(100, 100, 3, 4, Sipi::PhotometricInterpretation::RGB);
+    FAIL() << "Expected SipiImageError for unsupported bps=4";
+  } catch (const Sipi::SipiImageError &e) {
+    std::string msg = e.what();
+    EXPECT_NE(msg.find("4"), std::string::npos) << "Error should include bps value, got: " << msg;
+  }
+}
+
+TEST(SipiImage, ConstructorZeroDimensionsIncludesDimensions)
+{
+  // Zero width should result in zero buffer → throw with dimensions
+  try {
+    Sipi::SipiImage img(0, 100, 3, 8, Sipi::PhotometricInterpretation::RGB);
+    FAIL() << "Expected SipiImageError for zero-width image";
+  } catch (const Sipi::SipiImageError &e) {
+    std::string msg = e.what();
+    EXPECT_NE(msg.find("0x100"), std::string::npos) << "Error should include dimensions, got: " << msg;
+  }
+}
+
+TEST(SipiImage, ConstructorZeroHeightIncludesDimensions)
+{
+  try {
+    Sipi::SipiImage img(100, 0, 3, 8, Sipi::PhotometricInterpretation::RGB);
+    FAIL() << "Expected SipiImageError for zero-height image";
+  } catch (const Sipi::SipiImageError &e) {
+    std::string msg = e.what();
+    EXPECT_NE(msg.find("100x0"), std::string::npos) << "Error should include dimensions, got: " << msg;
+  }
+}
+
+TEST(SipiImage, ConstructorGrayscaleChannelMismatchThrows)
+{
+  // MINISBLACK expects 1 or 2 channels; 3 should throw
+  try {
+    Sipi::SipiImage img(100, 100, 3, 8, Sipi::PhotometricInterpretation::MINISBLACK);
+    FAIL() << "Expected SipiImageError for MINISBLACK with 3 channels";
+  } catch (const Sipi::SipiImageError &e) {
+    std::string msg = e.what();
+    EXPECT_NE(msg.find("Mismatch"), std::string::npos) << "Error should mention mismatch, got: " << msg;
+  }
+}
+
+TEST(SipiImage, ConstructorValidRgb8bpsSucceeds)
+{
+  // Valid construction should not throw
+  EXPECT_NO_THROW(Sipi::SipiImage(100, 100, 3, 8, Sipi::PhotometricInterpretation::RGB));
+}
+
+TEST(SipiImage, ConstructorValidRgba16bpsSucceeds)
+{
+  EXPECT_NO_THROW(Sipi::SipiImage(50, 50, 4, 16, Sipi::PhotometricInterpretation::RGB));
+}
+
+TEST(SipiImage, ConstructorValidGrayscaleSucceeds)
+{
+  EXPECT_NO_THROW(Sipi::SipiImage(200, 200, 1, 8, Sipi::PhotometricInterpretation::MINISBLACK));
+}
+
+TEST(SipiImage, GetIccReturnsNullForNewImage)
+{
+  Sipi::SipiImage img(10, 10, 3, 8, Sipi::PhotometricInterpretation::RGB);
+  EXPECT_EQ(img.getIcc(), nullptr) << "Newly constructed image should have no ICC profile";
 }
