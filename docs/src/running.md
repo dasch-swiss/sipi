@@ -42,7 +42,7 @@ SIPI supports the following log levels (in order of increasing severity):
 
 | Level | Description |
 | ----- | ----------- |
-| `DEBUG` | Detailed diagnostic information. **Suppressed by default** in all modes. |
+| `DEBUG` | Detailed diagnostic information. |
 | `INFO` | Normal operational messages (routes added, server started, migrations). |
 | `NOTICE` | Significant but normal events. |
 | `WARNING` | Something unexpected but recoverable (e.g., failed XMP parse, incomplete metadata write). |
@@ -51,10 +51,17 @@ SIPI supports the following log levels (in order of increasing severity):
 | `ALERT` | Conditions requiring immediate attention. |
 | `EMERG` | System-wide emergencies. |
 
-**For production:** The default configuration (DEBUG suppressed, all other levels
-emitted) is appropriate for production use. No additional log level configuration
-is needed. Warnings and errors will appear in the log output alongside
-informational messages about server startup and routing.
+The log level controls which messages are emitted. Setting a level suppresses
+all messages below it. For example, `WARNING` shows only WARNING, ERR, CRIT,
+ALERT, and EMERG — suppressing DEBUG, INFO, and NOTICE.
+
+The log level can be configured in three ways (in order of precedence):
+
+1. **CLI option**: `--loglevel WARNING`
+2. **Environment variable**: `SIPI_LOGLEVEL=WARNING`
+3. **Lua config**: `loglevel = "WARNING"` (in the `sipi` block)
+
+If none is specified, the default level is `INFO`.
 
 Command-line Options
 --------------------

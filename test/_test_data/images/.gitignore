@@ -1,4 +1,5 @@
-thumbs/
+thumbs/*
+!thumbs/.gitkeep
 tmp/
 test_tmp/
 images/

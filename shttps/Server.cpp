@@ -501,28 +501,6 @@ Server::Server(int port_p,
   running = false;
   _keep_alive_timeout = 20;
 
-  int ll;
-
-  if (_loglevel == "DEBUG") {
-    ll = LL_DEBUG;
-  } else if (_loglevel == "INFO") {
-    ll = LL_INFO;
-  } else if (_loglevel == "NOTICE") {
-    ll = LL_NOTICE;
-  } else if (_loglevel == "WARNING") {
-    ll = LL_WARNING;
-  } else if (_loglevel == "ERR") {
-    ll = LL_ERR;
-  } else if (_loglevel == "CRIT") {
-    ll = LL_CRIT;
-  } else if (_loglevel == "ALERT") {
-    ll = LL_ALERT;
-  } else if (_loglevel == "EMERG") {
-    ll = LL_EMERG;
-  } else {
-    ll = LL_ERR;
-  }
-
   //
   // Her we check if we have to change to a different uid. This can only be done
   // if the server runs originally as root!

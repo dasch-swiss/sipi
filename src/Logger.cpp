@@ -10,9 +10,12 @@
 #include "Logger.h"
 
 static bool g_cli_mode = false;
+static LogLevel g_log_level = LL_INFO;
 
 void set_cli_mode(bool cli) { g_cli_mode = cli; }
 bool is_cli_mode() { return g_cli_mode; }
+void set_log_level(LogLevel level) { g_log_level = level; }
+LogLevel get_log_level() { return g_log_level; }
 
 std::string escape_json_str(const std::string &s)
 {
@@ -122,7 +125,7 @@ std::string log_sformat(LogLevel ll, const char *message, ...)
 
 void log_vformat(LogLevel ll, const char *message, va_list args)
 {
-  if (ll == LL_DEBUG) return;
+  if (ll < g_log_level) return;
 
   if (g_cli_mode) {
     // CLI mode: plain text, errors→stderr, others→stdout
@@ -131,11 +134,14 @@ void log_vformat(LogLevel ll, const char *message, va_list args)
       fprintf(stderr, "%s\n", msg.c_str());
     } else {
       fprintf(stdout, "%s\n", msg.c_str());
+      fflush(stdout);
     }
   } else {
     // Server mode: JSON format→stdout (container best practice)
+    // fflush required because stdout is fully buffered when piped
     std::string outfmt = log_vsformat(ll, message, args);
     fprintf(stdout, "%s", outfmt.c_str());
+    fflush(stdout);
   }
 }
 
