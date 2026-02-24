@@ -36,6 +36,7 @@
 
 #include "Logger.h"
 #include "SipiHttpServer.hpp"
+#include "SipiSentry.h"
 #include "favicon.h"
 #include "handlers/iiif_handler.hpp"
 #include "jansson.h"
@@ -1302,6 +1303,11 @@ static void serve_iiif(Connection &conn_obj,
       Sipi::SipiImage img;
       info = img.getDim(infile);
     } catch (SipiImageError &err) {
+      ImageContext sentry_ctx;
+      sentry_ctx.input_file = infile;
+      sentry_ctx.file_size_bytes = get_file_size(infile);
+      sentry_ctx.request_uri = uri;
+      capture_image_error(err.to_string(), "read", sentry_ctx, "server");
       send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());
       return;
     }
@@ -1453,6 +1459,12 @@ static void serve_iiif(Connection &conn_obj,
   try {
     img.read(infile, region, size, quality_format.format() == SipiQualityFormat::JPG, server->scaling_quality());
   } catch (const SipiImageError &err) {
+    ImageContext sentry_ctx;
+    sentry_ctx.input_file = infile;
+    sentry_ctx.file_size_bytes = get_file_size(infile);
+    sentry_ctx.request_uri = uri;
+    populate_from_image(sentry_ctx, img);
+    capture_image_error(err.to_string(), "read", sentry_ctx, "server");
     send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());
     return;
   } catch (const SipiSizeError &err) {
@@ -1467,6 +1479,12 @@ static void serve_iiif(Connection &conn_obj,
     try {
       img.rotate(angle, mirror);
     } catch (Sipi::SipiError &err) {
+      ImageContext sentry_ctx;
+      sentry_ctx.input_file = infile;
+      sentry_ctx.file_size_bytes = get_file_size(infile);
+      sentry_ctx.request_uri = uri;
+      populate_from_image(sentry_ctx, img);
+      capture_image_error(err.to_string(), "convert", sentry_ctx, "server");
       send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
       return;
     }
@@ -1497,10 +1515,22 @@ static void serve_iiif(Connection &conn_obj,
     try {
       img.add_watermark(watermark);
     } catch (Sipi::SipiError &err) {
+      ImageContext sentry_ctx;
+      sentry_ctx.input_file = infile;
+      sentry_ctx.file_size_bytes = get_file_size(infile);
+      sentry_ctx.request_uri = uri;
+      populate_from_image(sentry_ctx, img);
+      capture_image_error(err.to_string(), "convert", sentry_ctx, "server");
       send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
       log_err("GET %s: error adding watermark: %s", uri.c_str(), err.to_string().c_str());
       return;
     } catch (std::exception &err) {
+      ImageContext sentry_ctx;
+      sentry_ctx.input_file = infile;
+      sentry_ctx.file_size_bytes = get_file_size(infile);
+      sentry_ctx.request_uri = uri;
+      populate_from_image(sentry_ctx, img);
+      capture_image_error(err.what(), "convert", sentry_ctx, "server");
       send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.what());
       log_err("GET %s: error adding watermark: %s", uri.c_str(), err.what());
       return;
@@ -1583,6 +1613,13 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.closeCacheFile();
       unlink(cachefile.c_str());
     }
+    ImageContext sentry_ctx;
+    sentry_ctx.input_file = infile;
+    sentry_ctx.file_size_bytes = get_file_size(infile);
+    sentry_ctx.request_uri = uri;
+    sentry_ctx.output_format = format_type_to_string(quality_format.format());
+    populate_from_image(sentry_ctx, img);
+    capture_image_error(err.to_string(), "write", sentry_ctx, "server");
     send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
     return;
   } catch (Sipi::SipiImageError &err) {
@@ -1590,6 +1627,13 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.closeCacheFile();
       unlink(cachefile.c_str());
     }
+    ImageContext sentry_ctx;
+    sentry_ctx.input_file = infile;
+    sentry_ctx.file_size_bytes = get_file_size(infile);
+    sentry_ctx.request_uri = uri;
+    sentry_ctx.output_format = format_type_to_string(quality_format.format());
+    populate_from_image(sentry_ctx, img);
+    capture_image_error(err.what(), "write", sentry_ctx, "server");
     send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.what());
     return;
   }

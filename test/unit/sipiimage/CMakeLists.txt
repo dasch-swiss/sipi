@@ -99,9 +99,12 @@ add_executable(${TEST_NAME}
         ${PROJECT_SOURCE_DIR}/include/SipiFilenameHash.h
 
 )
-add_dependencies(${TEST_NAME} icc_profiles lua)
+add_dependencies(${TEST_NAME} icc_profiles lua sentry)
 
 target_link_libraries(${TEST_NAME} libgtest)
+
+# sentry is needed because SipiHttpServer.cpp includes SipiSentry.h
+target_link_libraries(${TEST_NAME} sentry)
 
 target_link_libraries(${TEST_NAME}
         lcms2
