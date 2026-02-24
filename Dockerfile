@@ -15,10 +15,15 @@ COPY . .
 # this can be provided when the image is built
 ARG VERSION=OFF
 
-# Build SIPI and run unit tests.
-RUN cmake -S . -B ./build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DEXT_PROVIDED_VERSION=$VERSION --log-context
+# Build SIPI with debug info (RelWithDebInfo = -O3 -g) and run unit tests.
+RUN cmake -S . -B ./build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEXT_PROVIDED_VERSION=$VERSION --log-context
 RUN cmake --build ./build --parallel 4
 RUN cd build && ctest --output-on-failure
+
+# Extract debug symbols into a separate file, then strip the binary.
+# The .debug file is used by Sentry for stack trace symbolication.
+RUN objcopy --only-keep-debug ./build/sipi ./build/sipi.debug \
+    && strip ./build/sipi
 
 # STAGE 2: Setup
 FROM $UBUNTU_BASE as final

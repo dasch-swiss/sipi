@@ -28,6 +28,26 @@ jobs:
       - run: make test-smoke-ci
       - name: Push image to Docker hub
         run: make docker-push-amd64
+      - name: Extract debug symbols from builder stage
+        run: |
+          docker buildx build --platform linux/amd64 --target builder \
+            --build-arg VERSION=$(git describe --tag --dirty --abbrev=7) \
+            -t sipi-builder-amd64 --load .
+          CONTAINER_ID=$(docker create sipi-builder-amd64)
+          docker cp "$CONTAINER_ID":/tmp/sipi/build/sipi.debug ./sipi-amd64.debug || true
+          docker rm "$CONTAINER_ID"
+      - name: Upload debug symbols to Sentry
+        if: hashFiles('sipi-amd64.debug') != ''
+        run: |
+          curl -sL https://sentry.io/get-cli/ | bash
+          sentry-cli debug-files upload \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT" \
+            sipi-amd64.debug
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
 
   # Build for release and publish aarch64
   aarch64:
@@ -52,6 +72,26 @@ jobs:
       - run: make test-smoke-ci
       - name: Push image to Docker hub
         run: make docker-push-aarch64
+      - name: Extract debug symbols from builder stage
+        run: |
+          docker buildx build --platform linux/arm64 --target builder \
+            --build-arg VERSION=$(git describe --tag --dirty --abbrev=7) \
+            -t sipi-builder-aarch64 --load .
+          CONTAINER_ID=$(docker create sipi-builder-aarch64)
+          docker cp "$CONTAINER_ID":/tmp/sipi/build/sipi.debug ./sipi-aarch64.debug || true
+          docker rm "$CONTAINER_ID"
+      - name: Upload debug symbols to Sentry
+        if: hashFiles('sipi-aarch64.debug') != ''
+        run: |
+          curl -sL https://sentry.io/get-cli/ | bash
+          sentry-cli debug-files upload \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT" \
+            sipi-aarch64.debug
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
 
   # Publish manifest combining aarch64 and amd64 images
   manifest:

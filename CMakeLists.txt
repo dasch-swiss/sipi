@@ -78,6 +78,11 @@ endif ()
 #  RelWithDebInfo : w/ debug symbols, w/ optimization
 option(CMAKE_BUILD_TYPE "The default build type is RelWithDebInfo" Debug)
 
+# Ensure RelWithDebInfo keeps full optimization with debug symbols.
+# This is used in Docker production builds for Sentry symbolication.
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g -DNDEBUG" CACHE STRING "C flags for RelWithDebInfo" FORCE)
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -DNDEBUG" CACHE STRING "C++ flags for RelWithDebInfo" FORCE)
+
 
 #
 # Here we determine the compiler and compiler version. We need clang >= 15 or g++ >= 13
