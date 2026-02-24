@@ -92,7 +92,13 @@ If you would like to use Sentry.io for error reporting, you can set the environm
 
 Further variables can be set to configure the Sentry client:
 - `SIPI_SENTRY_ENVIRONMENT`: The environment in which the application is running. Defaults to `development`.
-- `SIPI_SENTRY_RELEASE`: The release version number of the application. 
+- `SIPI_SENTRY_RELEASE`: The release version number of the application.
+
+Sentry captures two categories of events:
+- **Fatal crashes** (SIGSEGV, SIGABRT) — captured in both server and CLI modes.
+- **Image processing failures** (CLI mode) — when a CLI conversion fails, a Sentry event is sent with rich image context (dimensions, colorspace, channels, bits/sample, ICC profile type, file paths). Events are tagged with `sipi.phase`, `sipi.colorspace`, `sipi.bps`, and `sipi.output_format` for filtering and alerting.
+
+See [docs/src/running.md](docs/src/running.md) for full details on CLI exit codes, error output format, and integration guidance for calling services.
 
 ## Releases
 

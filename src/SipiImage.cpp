@@ -106,10 +106,10 @@ SipiImage::SipiImage(size_t nx_p, size_t ny_p, size_t nc_p, size_t bps_p, Photom
   }
 
   if ((photo == PhotometricInterpretation::RGB) && !((nc == 3) || (nc == 4))) {
-    throw SipiImageError("Mismatch in Photometric interpretation and number of channels");
+    throw SipiImageError("Mismatch: photometric interpretation is RGB but image has " + std::to_string(nc) + " channels (expected 3 or 4)");
   }
 
-  if ((bps != 8) && (bps != 16)) { throw SipiImageError("Bits per samples not supported by Sipi"); }
+  if ((bps != 8) && (bps != 16)) { throw SipiImageError("Unsupported bits/sample (" + std::to_string(bps) + "), only 8 and 16 are supported"); }
 
   size_t bufsiz;
 
@@ -132,7 +132,7 @@ SipiImage::SipiImage(size_t nx_p, size_t ny_p, size_t nc_p, size_t bps_p, Photom
   if (bufsiz > 0) {
     pixels = new byte[bufsiz];
   } else {
-    throw SipiImageError("Image with no content");
+    throw SipiImageError("Image has no pixel content (dimensions: " + std::to_string(nx) + "x" + std::to_string(ny) + ", bps: " + std::to_string(bps) + " — file may be corrupt or empty)");
   }
 
   xmp = nullptr;
@@ -439,7 +439,11 @@ void SipiImage::convertToIcc(const SipiIcc &target_icc_p, int new_bps)
     }
 
     default: {
-      throw SipiImageError("Cannot assign ICC profile to image with nc=" + std::to_string(nc));
+      throw SipiImageError("Cannot assign ICC profile to image: unsupported channel count nc=" + std::to_string(nc)
+        + " (expected 1, 3, or 4)"
+        + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+        + ", bps=" + std::to_string(bps)
+        + ", colorspace=" + to_string(photo));
     }
     }
   }
@@ -456,7 +460,15 @@ void SipiImage::convertToIcc(const SipiIcc &target_icc_p, int new_bps)
   hTransform = cmsCreateTransform(
     icc->getIccProfile(), in_formatter, target_icc_p.getIccProfile(), out_formatter, INTENT_PERCEPTUAL, 0);
 
-  if (hTransform == nullptr) { throw SipiImageError("Couldn't create color transform"); }
+  if (hTransform == nullptr) {
+    throw SipiImageError("Failed to create color transform"
+      + std::string(", dimensions=") + std::to_string(nx) + "x" + std::to_string(ny)
+      + ", channels=" + std::to_string(nc)
+      + ", bps=" + std::to_string(bps)
+      + ", colorspace=" + to_string(photo)
+      + ", source_profile_type=" + std::to_string(static_cast<int>(icc->getProfileType()))
+      + ", target_profile_type=" + std::to_string(static_cast<int>(target_icc_p.getProfileType())));
+  }
 
   byte *inbuf = pixels;
   byte *outbuf = new byte[nx * ny * nnc * new_bps / 8];
@@ -1472,7 +1484,7 @@ SipiImage &SipiImage::operator-=(const SipiImage &rhs)
   default: {
     delete[] diffbuf;
     delete new_rhs;
-    throw SipiImageError("Bits per pixels not supported");
+    throw SipiImageError("Unsupported bits/sample (" + std::to_string(bps) + ") for image diff operation, only 8 and 16 are supported");
   }
   }
 
@@ -1521,7 +1533,7 @@ SipiImage &SipiImage::operator-=(const SipiImage &rhs)
   default: {
     delete[] diffbuf;
     delete new_rhs;
-    throw SipiImageError("Bits per pixels not supported");
+    throw SipiImageError("Unsupported bits/sample (" + std::to_string(bps) + ") for image diff operation, only 8 and 16 are supported");
   }
   }
 
@@ -1598,7 +1610,7 @@ SipiImage &SipiImage::operator+=(const SipiImage &rhs)
   default: {
     delete[] diffbuf;
     delete new_rhs;
-    throw SipiImageError("Bits per pixels not supported");
+    throw SipiImageError("Unsupported bits/sample (" + std::to_string(bps) + ") for image diff operation, only 8 and 16 are supported");
   }
   }
 
@@ -1644,7 +1656,7 @@ SipiImage &SipiImage::operator+=(const SipiImage &rhs)
   default: {
     delete[] diffbuf;
     delete new_rhs;
-    throw SipiImageError("Bits per pixels not supported");
+    throw SipiImageError("Unsupported bits/sample (" + std::to_string(bps) + ") for image diff operation, only 8 and 16 are supported");
   }
   }
 

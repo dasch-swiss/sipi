@@ -509,7 +509,8 @@ bool SipiIOJ2k::read(SipiImage *img,
       break;
     }
     default: {
-      throw SipiImageError("No meaningful photometric interpretation possible");
+      throw SipiImageError("Cannot determine photometric interpretation for JPEG2000 file \""
+        + filepath + "\": unsupported number of color channels (" + std::to_string(numcol) + ")");
     }
     }// switch(numcol)
   }
@@ -579,8 +580,10 @@ bool SipiIOJ2k::read(SipiImage *img,
     codestream.destroy();
     input->close();
     jpx_in.close();// Not really necessary here.
-    log_err("Unsupported number of bits/sample: %ld !", img->bps);
-    throw SipiImageError("Unsupported number of bits/sample!");
+    log_err("Unsupported number of bits/sample: %ld in file %s", img->bps, filepath.c_str());
+    throw SipiImageError("Cannot read JPEG2000: unsupported bits/sample (" + std::to_string(img->bps)
+      + ") in file \"" + filepath + "\" (dimensions: " + std::to_string(img->nx) + "x"
+      + std::to_string(img->ny) + ", channels: " + std::to_string(img->nc) + ")");
   }
   }
   decompressor.finish();
@@ -1236,7 +1239,11 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
         stripe_start += img->ny - stripe_start;
       }
     } else {
-      throw SipiImageError("Unsupported number of bits/sample!");
+      throw SipiImageError("Unsupported number of bits/sample for JPEG2000 write: bps="
+        + std::to_string(img->bps) + " (only 8 and 16 supported)"
+        + ", file=" + filepath
+        + ", dimensions=" + std::to_string(img->nx) + "x" + std::to_string(img->ny)
+        + ", channels=" + std::to_string(img->nc));
     }
     compressor.finish(0, NULL, NULL, env_ref);
     // Finally, cleanup
@@ -1251,7 +1258,12 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
     }
     if (http != nullptr) { delete http; }
   } catch (kdu_exception e) {
-    throw SipiImageError("Problem writing a JPEG2000 image!");
+    throw SipiImageError("Failed writing JPEG2000 image (Kakadu exception " + std::to_string(e) + ")"
+      + ", file=" + filepath
+      + ", dimensions=" + std::to_string(img->nx) + "x" + std::to_string(img->ny)
+      + ", channels=" + std::to_string(img->nc)
+      + ", bps=" + std::to_string(img->bps)
+      + ", colorspace=" + to_string(img->photo));
   }
 }
 }// namespace Sipi
