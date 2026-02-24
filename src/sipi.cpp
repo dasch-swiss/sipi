@@ -7,11 +7,8 @@
  * \brief Implements an IIIF server with many features.
  *
  */
-#include <csignal>
 #include <dirent.h>
-#include <execinfo.h>
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <sys/stat.h>
 
@@ -267,58 +264,12 @@ private:
 };
 
 /*!
- * Print a stack trace.
- *
- * This function is called when a signal is received that would normally terminate the program
- * with a core dump. It logs out a stack trace.
- */
-auto get_stack_trace() -> std::string
-{
-  void *array[15];
-
-  const auto size = backtrace(array, 15);
-  char **strings = backtrace_symbols(array, size);
-
-  std::ostringstream errStream;
-  errStream << "Obtained " << size << " stack frames.\n";
-
-  for (auto i = 0; i < size; i++) { errStream << strings[i] << '\n'; }
-
-  return errStream.str();
-}
-
-/*!
- * Handle a signal.
- *
- * This function is called when a signal is received that would normally terminate the program
- * with a core dump. It prints a stack trace to stderr and exits with an error code.
- *
- * @param sig the signal number.
- */
-void sig_handler(const int sig)
-{
-  std::string msg;
-  if (sig == SIGSEGV) {
-    msg = "SIGSEGV: segmentation fault.";
-  } else if (sig == SIGABRT) {
-    msg = "SIGABRT: abort.";
-  } else {
-    msg = "Caught signal " + std::to_string(sig);
-  }
-
-  msg += "\n" + get_stack_trace();
-  sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "sig_handler", msg.c_str()));
-  log_err("%s", msg.c_str());
-  sentry_flush(2000);
-
-  exit(1);
-}
-
-/*!
  * Handle any unhandled exceptions.
  *
- * This function is called when an unhandled exception is thrown. It logs out the exception
- * and aborts the program.
+ * This function is called when an unhandled exception is thrown. It sends the exception
+ * message to Sentry as a fatal event, then aborts the program. The subsequent SIGABRT
+ * is caught by sentry-native's inproc backend, which produces a proper crash event
+ * with symbolicated stack traces.
  */
 void my_terminate_handler()
 {
@@ -332,12 +283,11 @@ void my_terminate_handler()
     msg = "Unhandled unknown exception caught";
   }
 
-  msg += "\n" + get_stack_trace();
   sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "my_terminate_handler", msg.c_str()));
   log_err("%s", msg.c_str());
   sentry_flush(2000);
 
-  std::abort();// Abort the program or perform other cleanup
+  std::abort();// Triggers SIGABRT → caught by sentry-native inproc backend
 }
 
 /*!
@@ -350,11 +300,12 @@ void my_terminate_handler()
 int main(int argc, char *argv[])
 {
 
-  // install signal handler
-  signal(SIGSEGV, sig_handler);
-  signal(SIGABRT, sig_handler);
-
-  // set top level exception handler
+  // Set top-level exception handler. Unhandled C++ exceptions are sent to Sentry
+  // as message events, then std::abort() is called. The resulting SIGABRT is caught
+  // by sentry-native's inproc backend, which produces a proper crash event with
+  // symbolicated stack traces.
+  // Note: SIGSEGV/SIGABRT signal handlers are installed automatically by sentry_init()
+  // when using the inproc backend — no manual signal() calls needed.
   std::set_terminate(my_terminate_handler);
 
   // Attempt to read the environment variable
