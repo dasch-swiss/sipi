@@ -28,13 +28,16 @@ jobs:
       - run: make test-smoke-ci
       - name: Push image to Docker hub
         run: make docker-push-amd64
+      - name: Install sentry-cli
+        if: hashFiles('sipi-amd64.debug') != ''
+        run: npm install -g @sentry/cli
       - name: Upload debug symbols to Sentry
         if: hashFiles('sipi-amd64.debug') != ''
         run: |
-          curl -sL https://sentry.io/get-cli/ | bash
           sentry-cli debug-files upload \
             --org "$SENTRY_ORG" \
             --project "$SENTRY_PROJECT" \
+            --release "$GITHUB_REF_NAME" \
             sipi-amd64.debug
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -64,13 +67,16 @@ jobs:
       - run: make test-smoke-ci
       - name: Push image to Docker hub
         run: make docker-push-aarch64
+      - name: Install sentry-cli
+        if: hashFiles('sipi-aarch64.debug') != ''
+        run: npm install -g @sentry/cli
       - name: Upload debug symbols to Sentry
         if: hashFiles('sipi-aarch64.debug') != ''
         run: |
-          curl -sL https://sentry.io/get-cli/ | bash
           sentry-cli debug-files upload \
             --org "$SENTRY_ORG" \
             --project "$SENTRY_PROJECT" \
+            --release "$GITHUB_REF_NAME" \
             sipi-aarch64.debug
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}

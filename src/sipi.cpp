@@ -270,6 +270,12 @@ private:
  * message to Sentry as a fatal event, then aborts the program. The subsequent SIGABRT
  * is caught by sentry-native's inproc backend, which produces a proper crash event
  * with symbolicated stack traces.
+ *
+ * NOTE: This intentionally produces TWO Sentry events per unhandled exception:
+ * 1. A message event (from here) carrying the exception text
+ * 2. A crash event (from inproc SIGABRT handler) with the symbolicated stack trace
+ * Sentry groups these separately, which is useful: the message event identifies
+ * the exception, while the crash event provides the full native stack trace.
  */
 void my_terminate_handler()
 {
