@@ -100,6 +100,80 @@ Command-line Options
       --help
                         Print usage and exit.
 
+Exit Codes and Error Handling
+-----------------------------
+
+### Exit Codes
+
+When running SIPI as a command-line image converter, the process exit code indicates
+whether the conversion succeeded:
+
+- **0** — Success. The output file was written correctly.
+- **1** (`EXIT_FAILURE`) — Image processing error. The image could not be read,
+  converted, or written.
+
+**Important for calling services:** Always check the exit code. A non-zero exit code
+means the output file was not produced (or is incomplete).
+
+### Error Output
+
+On failure, SIPI prints a short error message to **stderr** indicating the failure
+phase and the specific error. The format is:
+
+    Error <phase> image: <details>
+
+Where `<phase>` is one of `reading`, `converting`, or `writing`. Example:
+
+    Error reading image: Unsupported JPEG colorspace YCCK (file=input.jpg, dimensions=2048x1536, components=4)
+
+### Sentry Integration (CLI Mode)
+
+When the `SIPI_SENTRY_DSN` environment variable is set, CLI conversion failures
+automatically send a Sentry event with rich image context. This allows developers
+to diagnose failures without reproducing them locally.
+
+Each Sentry event includes:
+
+- **Tags** (indexed, searchable, filterable in Sentry):
+    - `sipi.mode` — always `cli` for command-line conversions
+    - `sipi.phase` — `read`, `convert`, or `write`
+    - `sipi.output_format` — the target format (e.g., `jpx`, `jpg`, `tif`, `png`)
+    - `sipi.colorspace` — the image's photometric interpretation
+    - `sipi.bps` — bits per sample
+
+- **Context** ("Image" context with structured data):
+    - `input_file`, `output_file` — file paths
+    - `width`, `height` — image dimensions (if read successfully)
+    - `channels` — number of color channels
+    - `bps` — bits per sample
+    - `colorspace` — photometric interpretation
+    - `icc_profile_type` — ICC profile type (e.g., sRGB, AdobeRGB, CMYK)
+    - `orientation` — EXIF orientation
+    - `file_size_bytes` — input file size
+
+### Common Failure Causes
+
+| Error | Meaning |
+| ----- | ------- |
+| Unsupported colorspace (YCCK, unknown) | The JPEG uses a colorspace SIPI cannot convert. Re-encode the source image in sRGB. |
+| Unsupported bits/sample | Only 8 and 16 bits/sample are supported. Images with other bit depths must be converted first. |
+| Channel/colorspace mismatch | The number of channels does not match the declared colorspace (e.g., 4 channels but RGB). The file metadata may be corrupt. |
+| ICC profile incompatible | The ICC profile does not match the channel count (e.g., CMYK profile on a 3-channel image). |
+| Corrupt or truncated file | The input file is incomplete or damaged. |
+| Unsupported TIFF tiling | The TIFF tile configuration is inconsistent or uses unsupported bit depths. |
+
+### Integration Notes for Calling Services
+
+If you call SIPI CLI from another service (e.g., a Java service):
+
+1. **Check the exit code.** Non-zero means failure — do not assume the output file
+   exists or is valid.
+2. **Parse stderr** (optional). The first line of stderr contains a human-readable
+   error message with the failure phase and details.
+3. **Set `SIPI_SENTRY_DSN`** to get full diagnostics server-side. Use the Sentry
+   tags `sipi.phase`, `sipi.colorspace`, `sipi.bps`, and `sipi.output_format` to
+   build alerts and filters for specific failure patterns.
+
 Configuration Files
 -------------------
 

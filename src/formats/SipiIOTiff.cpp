@@ -553,7 +553,9 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
       for (uint32_t i = roi_y; i < roi_h; ++i) {
         if (TIFFReadScanline(tif, scanline.get(), i, 0) != 1) {
           TIFFClose(tif);
-          throw Sipi::SipiImageError("TIFFReadScanline failed on scanline {}" + std::to_string(i));
+          throw Sipi::SipiImageError("TIFFReadScanline failed on scanline " + std::to_string(i)
+            + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+            + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps));
         }
         switch (bps) {
         case 1:
@@ -583,7 +585,9 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
         for (uint32_t i = roi_y; i < roi_h; ++i) {
           if (TIFFReadScanline(tif, scanline.get(), i, c) == -1) {
             TIFFClose(tif);
-            throw Sipi::SipiImageError("TIFFReadScanline failed on scanline {}" + std::to_string(i));
+            throw Sipi::SipiImageError("TIFFReadScanline failed on scanline " + std::to_string(i)
+              + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+              + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps));
           }
           switch (bps) {
           case 1:
@@ -616,7 +620,9 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
       for (uint32_t i = 0; i < ny; ++i) {
         if (TIFFReadScanline(tif, scanline.get(), i, 0) != 1) {
           TIFFClose(tif);
-          throw Sipi::SipiImageError("TIFFReadScanline failed on scanline {}" + std::to_string(i));
+          throw Sipi::SipiImageError("TIFFReadScanline failed on scanline " + std::to_string(i)
+            + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+            + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps));
         }
         if ((i >= roi_y) && (i < (roi_y + roi_h))) {
           switch (bps) {
@@ -648,7 +654,9 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
         for (uint32_t i = 0; i < ny; ++i) {
           if (TIFFReadScanline(tif, scanline.get(), i, c) == -1) {
             TIFFClose(tif);
-            throw Sipi::SipiImageError("TIFFReadScanline failed on scanline {}" + std::to_string(i));
+            throw Sipi::SipiImageError("TIFFReadScanline failed on scanline " + std::to_string(i)
+              + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+              + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps));
           }
           if ((i >= roi_y) && (i < (roi_y + roi_h))) {
             switch (bps) {
@@ -734,7 +742,13 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
   uint32_t ntiles_x = epsilon_ceil_division(static_cast<float>(nx), static_cast<float>(tile_width));
   uint32_t ntiles_y = epsilon_ceil_division(static_cast<float>(ny), static_cast<float>(tile_length));
   uint32_t ntiles = TIFFNumberOfTiles(tif);
-  if (ntiles != (ntiles_x * ntiles_y)) { throw Sipi::SipiImageError("Number of tiles no consistent!"); }
+  if (ntiles != (ntiles_x * ntiles_y)) {
+    throw Sipi::SipiImageError("Number of tiles not consistent: expected " + std::to_string(ntiles_x * ntiles_y)
+      + " (" + std::to_string(ntiles_x) + "x" + std::to_string(ntiles_y) + ")"
+      + ", got " + std::to_string(ntiles)
+      + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+      + ", tile=" + std::to_string(tile_width) + "x" + std::to_string(tile_length));
+  }
   uint32_t starttile_x = epsilon_floor_division(static_cast<float>(roi_x), static_cast<float>(tile_width));
   uint32_t starttile_y = epsilon_floor_division(static_cast<float>(roi_y), static_cast<float>(tile_length));
   uint32_t endtile_x = epsilon_ceil_division(static_cast<float>(roi_x + roi_w), static_cast<float>(tile_width));
@@ -748,7 +762,10 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
   bps = static_cast<uint32_t>(stmp);
 
   if ((bps != 8) && (bps != 16)) {
-    throw Sipi::SipiImageError("{} bits per samples not supported for tiled tiffs!" + std::to_string(bps));
+    throw Sipi::SipiImageError(std::to_string(bps) + " bits/sample not supported for tiled TIFFs (only 8 and 16 supported)"
+      + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+      + ", channels=" + std::to_string(nc)
+      + ", tile=" + std::to_string(tile_width) + "x" + std::to_string(tile_length));
   }
 
   uint32_t tile_size = TIFFTileSize(tif);
@@ -758,7 +775,9 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
     for (uint32_t tx = starttile_x; tx < endtile_x; ++tx) {
       if (TIFFReadTile(tif, tilebuf.get(), tx * tile_width, ty * tile_length, 0, 0) < 0) {
         TIFFClose(tif);
-        throw Sipi::SipiImageError("TIFFReadTile failed on tile ({}, {})" + std::to_string(tx) + std::to_string(ty));
+        throw Sipi::SipiImageError("TIFFReadTile failed on tile (" + std::to_string(tx) + ", " + std::to_string(ty) + ")"
+          + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+          + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps));
       }
 
       if (planar == PLANARCONFIG_SEPARATE) {
@@ -1359,7 +1378,7 @@ bool SipiIOTiff::read(SipiImage *img,
       }
     }
     if (force_bps_8) {
-      if (!img->to8bps()) { throw Sipi::SipiImageError("Cannont convert to 8 Bits(sample"); }
+      if (!img->to8bps()) { throw Sipi::SipiImageError("Cannot convert to 8 bits/sample"); }
     }
     return true;
   }

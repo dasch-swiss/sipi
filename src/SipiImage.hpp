@@ -205,6 +205,12 @@ public:
    */
   [[nodiscard]] std::shared_ptr<SipiExif> getExif() const { return exif; };
 
+  /**
+   * Get the ICC color profile of the image.
+   * \return ICC profile, or nullptr if not set
+   */
+  [[nodiscard]] std::shared_ptr<SipiIcc> getIcc() const { return icc; }
+
   /*!
    * Get orientation
    * @return Returns orientation tag

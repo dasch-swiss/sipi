@@ -637,7 +637,7 @@ bool SipiIOJpeg::read(SipiImage *img,
           } while ((ll < marker->data_length) && (*s != '\0'));
           if (ll == marker->data_length) {
             // we didn't find anything....
-            throw SipiError("XMP Problem");
+            throw SipiImageError("Failed to parse XMP metadata: no valid XMP data found in JPEG file \"" + filepath + "\"");
           }
           // now we start reading the data
           while ((ll < marker->data_length) && (*pos != '>')) {
@@ -728,13 +728,19 @@ bool SipiIOJpeg::read(SipiImage *img,
     break;
   }
   case JCS_YCCK: {
-    throw SipiImageError("Unsupported JPEG colorspace (JCS_YCCK)!");
+    throw SipiImageError("Unsupported JPEG colorspace JCS_YCCK in file \"" + filepath
+      + "\" (dimensions: " + std::to_string(img->nx) + "x" + std::to_string(img->ny)
+      + ", components: " + std::to_string(cinfo.output_components) + ")");
   }
   case JCS_UNKNOWN: {
-    throw SipiImageError("Unsupported JPEG colorspace (JCS_UNKNOWN)!");
+    throw SipiImageError("Unsupported JPEG colorspace JCS_UNKNOWN in file \"" + filepath
+      + "\" (dimensions: " + std::to_string(img->nx) + "x" + std::to_string(img->ny)
+      + ", components: " + std::to_string(cinfo.output_components) + ")");
   }
   default: {
-    throw SipiImageError("Unsupported JPEG colorspace!");
+    throw SipiImageError("Unsupported JPEG colorspace (code: " + std::to_string(colspace) + ") in file \"" + filepath
+      + "\" (dimensions: " + std::to_string(img->nx) + "x" + std::to_string(img->ny)
+      + ", components: " + std::to_string(cinfo.output_components) + ")");
   }
   }
   int sll = cinfo.output_components * cinfo.output_width * sizeof(uint8);
@@ -1093,7 +1099,9 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   case PhotometricInterpretation::MINISBLACK: {
     if (img->nc != 1) {
       jpeg_destroy_compress(&cinfo);
-      throw SipiImageError("Num of components not 1 (nc = " + std::to_string(img->nc) + ")!");
+      throw SipiImageError("Cannot write JPEG: grayscale (MINISBLACK) requires 1 channel, got "
+        + std::to_string(img->nc) + " (dimensions: " + std::to_string(img->nx) + "x"
+        + std::to_string(img->ny) + ", bps: " + std::to_string(img->bps) + ")");
     }
     cinfo.in_color_space = JCS_GRAYSCALE;
     cinfo.jpeg_color_space = JCS_GRAYSCALE;
@@ -1102,7 +1110,9 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   case PhotometricInterpretation::RGB: {
     if (img->nc != 3) {
       jpeg_destroy_compress(&cinfo);
-      throw SipiImageError("Num of components not 3 (nc = " + std::to_string(img->nc) + ")!");
+      throw SipiImageError("Cannot write JPEG: RGB requires 3 channels, got "
+        + std::to_string(img->nc) + " (dimensions: " + std::to_string(img->nx) + "x"
+        + std::to_string(img->ny) + ", bps: " + std::to_string(img->bps) + ")");
     }
     cinfo.in_color_space = JCS_RGB;
     cinfo.jpeg_color_space = JCS_RGB;
@@ -1111,7 +1121,9 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   case PhotometricInterpretation::SEPARATED: {
     if (img->nc != 4) {
       jpeg_destroy_compress(&cinfo);
-      throw SipiImageError("Num of components not 3 (nc = " + std::to_string(img->nc) + ")!");
+      throw SipiImageError("Cannot write JPEG: CMYK (SEPARATED) requires 4 channels, got "
+        + std::to_string(img->nc) + " (dimensions: " + std::to_string(img->nx) + "x"
+        + std::to_string(img->ny) + ", bps: " + std::to_string(img->bps) + ")");
     }
     cinfo.in_color_space = JCS_CMYK;
     cinfo.jpeg_color_space = JCS_CMYK;
@@ -1120,7 +1132,9 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   case PhotometricInterpretation::YCBCR: {
     if (img->nc != 3) {
       jpeg_destroy_compress(&cinfo);
-      throw SipiImageError("Num of components not 3 (nc = " + std::to_string(img->nc) + ")!");
+      throw SipiImageError("Cannot write JPEG: YCbCr requires 3 channels, got "
+        + std::to_string(img->nc) + " (dimensions: " + std::to_string(img->nx) + "x"
+        + std::to_string(img->ny) + ", bps: " + std::to_string(img->bps) + ")");
     }
     cinfo.in_color_space = JCS_YCbCr;
     cinfo.jpeg_color_space = JCS_YCbCr;
@@ -1134,7 +1148,9 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   }
   default: {
     jpeg_destroy_compress(&cinfo);
-    throw SipiImageError("Unsupported JPEG colorspace: " + to_string(img->photo));
+    throw SipiImageError("Cannot write JPEG: unsupported colorspace " + to_string(img->photo)
+      + " (dimensions: " + std::to_string(img->nx) + "x" + std::to_string(img->ny)
+      + ", channels: " + std::to_string(img->nc) + ", bps: " + std::to_string(img->bps) + ")");
   }
   }
   cinfo.progressive_mode = TRUE;

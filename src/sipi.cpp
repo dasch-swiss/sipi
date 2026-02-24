@@ -39,6 +39,7 @@
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
 #include "SipiLua.h"
+#include "SipiSentry.h"
 #include "formats/SipiIOTiff.h"
 
 #include "generated/SipiVersion.h"
@@ -856,122 +857,153 @@ int main(int argc, char *argv[])
     }
 
     //
+    // Prepare Sentry context for error reporting
+    //
+    Sipi::ImageContext sentry_ctx;
+    sentry_ctx.input_file = optInFile;
+    sentry_ctx.output_file = optOutFile;
+    sentry_ctx.output_format = format;
+    sentry_ctx.file_size_bytes = Sipi::get_file_size(optInFile);
+
+    //
     // read the input image
     //
     Sipi::SipiImage img;
     try {
-      img.readOriginal(optInFile, region, size,
-        shttps::HashType::sha256);// convert to bps=8 in case of JPG output
-      // img.read(optInFile); //convert to bps=8 in case of JPG output
+      img.readOriginal(optInFile, region, size, shttps::HashType::sha256);
       if (format == "jpg") {
         img.to8bps();
         img.convertToIcc(Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_sRGB), 8);
       }
-    } catch (Sipi::SipiImageError &err) {
-      std::cerr << err << std::endl;
+    } catch (const Sipi::SipiImageError &err) {
+      Sipi::populate_from_image(sentry_ctx, img);
+      Sipi::capture_image_error(err.what(), "read", sentry_ctx);
+      log_err("Error reading image: %s", err.what());
+      sentry_close();
+      return EXIT_FAILURE;
+    } catch (const std::exception &err) {
+      Sipi::populate_from_image(sentry_ctx, img);
+      Sipi::capture_image_error(err.what(), "read", sentry_ctx);
+      log_err("Error reading image: %s", err.what());
+      sentry_close();
+      return EXIT_FAILURE;
     }
 
     //
-    // enforce orientation topleft?
+    // image processing: orientation, metadata, ICC, rotation, watermark
     //
-    if (!sipiopt.get_option("--topleft")->empty()) {
-      Sipi::Orientation orientation = img.getOrientation();
-      std::shared_ptr<Sipi::SipiExif> exif = img.getExif();
-      if (exif != nullptr) {
-        unsigned short ori;
-        if (exif->getValByKey("Exif.Image.Orientation", ori)) { orientation = static_cast<Sipi::Orientation>(ori); }
-      }
-      switch (orientation) {
-      case Sipi::TOPLEFT:// 1
-        break;
-      case Sipi::TOPRIGHT:// 2
-        img.rotate(0., true);
-        break;
-      case Sipi::BOTRIGHT:// 3
-        img.rotate(180., false);
-        break;
-      case Sipi::BOTLEFT:// 4
-        img.rotate(180., true);
-        break;
-      case Sipi::LEFTTOP:// 5
-        img.rotate(270., true);
-        break;
-      case Sipi::RIGHTTOP:// 6
-        img.rotate(90., false);
-        break;
-      case Sipi::RIGHTBOT:// 7
-        img.rotate(90., true);
-        break;
-      case Sipi::LEFTBOT:// 8
-        img.rotate(270., false);
-        break;
-      default:;// nothing to do...
-      }
-      exif->addKeyVal("Exif.Image.Orientation", static_cast<unsigned short>(Sipi::TOPLEFT));
-      img.setOrientation(Sipi::TOPLEFT);
+    try {
+      //
+      // enforce orientation topleft?
+      //
+      if (!sipiopt.get_option("--topleft")->empty()) {
+        Sipi::Orientation orientation = img.getOrientation();
+        std::shared_ptr<Sipi::SipiExif> exif = img.getExif();
+        if (exif != nullptr) {
+          unsigned short ori;
+          if (exif->getValByKey("Exif.Image.Orientation", ori)) { orientation = static_cast<Sipi::Orientation>(ori); }
+        }
+        switch (orientation) {
+        case Sipi::TOPLEFT:// 1
+          break;
+        case Sipi::TOPRIGHT:// 2
+          img.rotate(0., true);
+          break;
+        case Sipi::BOTRIGHT:// 3
+          img.rotate(180., false);
+          break;
+        case Sipi::BOTLEFT:// 4
+          img.rotate(180., true);
+          break;
+        case Sipi::LEFTTOP:// 5
+          img.rotate(270., true);
+          break;
+        case Sipi::RIGHTTOP:// 6
+          img.rotate(90., false);
+          break;
+        case Sipi::RIGHTBOT:// 7
+          img.rotate(90., true);
+          break;
+        case Sipi::LEFTBOT:// 8
+          img.rotate(270., false);
+          break;
+        default:;// nothing to do...
+        }
+        exif->addKeyVal("Exif.Image.Orientation", static_cast<unsigned short>(Sipi::TOPLEFT));
+        img.setOrientation(Sipi::TOPLEFT);
 
-      orientation = img.getOrientation();
-      std::shared_ptr<Sipi::SipiExif> exif2 = img.getExif();
-      if (exif2 != nullptr) {
-        unsigned short ori;
-        if (exif2->getValByKey("Exif.Image.Orientation", ori)) { orientation = static_cast<Sipi::Orientation>(ori); }
+        orientation = img.getOrientation();
+        std::shared_ptr<Sipi::SipiExif> exif2 = img.getExif();
+        if (exif2 != nullptr) {
+          unsigned short ori;
+          if (exif2->getValByKey("Exif.Image.Orientation", ori)) { orientation = static_cast<Sipi::Orientation>(ori); }
+        }
       }
+
+      //
+      // if we want to remove all metadata from the file...
+      //
+      if (!sipiopt.get_option("--skipmeta")->empty()) { img.setSkipMetadata(Sipi::SkipMetadata::SKIP_ALL); }
+
+      //
+      // color profile processing
+      //
+      if (!sipiopt.get_option("--icc")->empty()) {
+        Sipi::SipiIcc icc;
+        switch (optIcc) {
+        case OptIcc::sRGB:
+          icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_sRGB);
+          break;
+        case OptIcc::AdobeRGB:
+          icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_AdobeRGB);
+          break;
+        case OptIcc::GRAY:
+          icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_GRAY_D50);
+          break;
+        case OptIcc::none:
+          break;
+        }
+        img.convertToIcc(icc, img.getBps());
+      }
+
+      //
+      // mirroring and rotation
+      //
+      if (!(sipiopt.get_option("--mirror")->empty() && sipiopt.get_option("--rotate")->empty())) {
+        switch (optMirror) {
+        case OptMirror::vertical: {
+          img.rotate(optRotate + 180.0F, true);
+          break;
+        }
+        case OptMirror::horizontal: {
+          img.rotate(optRotate, true);
+          break;
+        }
+        case OptMirror::none: {
+          if (optRotate != 0.0F) { img.rotate(optRotate, false); }
+          break;
+        }
+        }
+      }
+
+      if (!sipiopt.get_option("--watermark")->empty()) { img.add_watermark(optWatermark); }
+    } catch (const Sipi::SipiImageError &err) {
+      Sipi::populate_from_image(sentry_ctx, img);
+      Sipi::capture_image_error(err.what(), "convert", sentry_ctx);
+      log_err("Error processing image: %s", err.what());
+      sentry_close();
+      return EXIT_FAILURE;
+    } catch (const std::exception &err) {
+      Sipi::populate_from_image(sentry_ctx, img);
+      Sipi::capture_image_error(err.what(), "convert", sentry_ctx);
+      log_err("Error processing image: %s", err.what());
+      sentry_close();
+      return EXIT_FAILURE;
     }
-
-    //
-    // if we want to remove all metadata from the file...
-    //
-    std::string skipmeta("none");
-
-    if (!sipiopt.get_option("--skipmeta")->empty()) { img.setSkipMetadata(Sipi::SkipMetadata::SKIP_ALL); }
-
-    //
-    // color profile processing
-    //
-    if (!sipiopt.get_option("--icc")->empty()) {
-      Sipi::SipiIcc icc;
-      switch (optIcc) {
-      case OptIcc::sRGB:
-        icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_sRGB);
-        break;
-      case OptIcc::AdobeRGB:
-        icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_AdobeRGB);
-        break;
-      case OptIcc::GRAY:
-        icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_GRAY_D50);
-        break;
-      case OptIcc::none:
-        break;
-      }
-      img.convertToIcc(icc, img.getBps());
-    }
-
-    //
-    // mirroring and rotation
-    //
-    if (!(sipiopt.get_option("--mirror")->empty() && sipiopt.get_option("--rotate")->empty())) {
-      switch (optMirror) {
-      case OptMirror::vertical: {
-        img.rotate(optRotate + 180.0F, true);
-        break;
-      }
-      case OptMirror::horizontal: {
-        img.rotate(optRotate, true);
-        break;
-      }
-      case OptMirror::none: {
-        if (optRotate != 0.0F) { img.rotate(optRotate, false); }
-        break;
-      }
-      }
-    }
-
-    if (!sipiopt.get_option("--watermark")->empty()) { img.add_watermark(optWatermark); }
 
     //
     // write the output file
     //
-    // int quality = 80
     Sipi::SipiCompressionParams comp_params;
     if (!sipiopt.get_option("--quality")->empty()) comp_params[Sipi::JPEG_QUALITY] = optJpegQuality;
     if (!sipiopt.get_option("--Sprofile")->empty()) comp_params[Sipi::J2K_Sprofile] = j2k_Sprofile;
@@ -998,8 +1030,18 @@ int main(int argc, char *argv[])
 
     try {
       img.write(format, optOutFile, &comp_params);
-    } catch (Sipi::SipiImageError &err) {
-      std::cerr << err << '\n';
+    } catch (const Sipi::SipiImageError &err) {
+      Sipi::populate_from_image(sentry_ctx, img);
+      Sipi::capture_image_error(err.what(), "write", sentry_ctx);
+      log_err("Error writing image: %s", err.what());
+      sentry_close();
+      return EXIT_FAILURE;
+    } catch (const std::exception &err) {
+      Sipi::populate_from_image(sentry_ctx, img);
+      Sipi::capture_image_error(err.what(), "write", sentry_ctx);
+      log_err("Error writing image: %s", err.what());
+      sentry_close();
+      return EXIT_FAILURE;
     }
 
     if (!sipiopt.get_option("--salsah")->empty()) { std::cout << img.getNx() << " " << img.getNy() << std::endl; }
