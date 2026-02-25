@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.17.0](https://github.com/dasch-swiss/sipi/compare/v3.16.3...v3.17.0) (2026-02-25)
+
+
+### Features
+
+* Add SARIF code scanning and SBOM generation to Scout integration ([6e89131](https://github.com/dasch-swiss/sipi/commit/6e89131a1c81dee6d6e91a27ae53cb5f452cd14c))
+* Add server-side Sentry error capture and debug symbol upload ([9a7454a](https://github.com/dasch-swiss/sipi/commit/9a7454a1647f927773a7bb96a374b381cdffb09e))
+* Improve error messages, CLI exit codes, and Sentry integration for image processing failures ([a49324b](https://github.com/dasch-swiss/sipi/commit/a49324bc8e991acdeefa4f2edabd020e220308bc))
+* Integrate Docker Scout CVE scanning and rename aarch64 to arm64 ([9949313](https://github.com/dasch-swiss/sipi/commit/9949313686999c8932210cc4ed51527fdb4cc22c))
+* Switch sentry-native to inproc backend for proper crash handling ([c62900d](https://github.com/dasch-swiss/sipi/commit/c62900d465520638c9d01c5a77c9d36a309f1ce4))
+
+
+### Bug Fixes
+
+* Address review feedback on Sentry integration ([0fe9b81](https://github.com/dasch-swiss/sipi/commit/0fe9b816c6dea6af57f667c350d5b65a7258f90e))
+* Avoid full Docker rebuild for debug symbol extraction ([d86c67f](https://github.com/dasch-swiss/sipi/commit/d86c67fd447b7a44d5ed9fc25762545d35277f2a))
+* Update zlib to 1.3.2 and fix setuptools on Ubuntu 24.04 ([e161b55](https://github.com/dasch-swiss/sipi/commit/e161b558c72ff65ff8cd722816f5d8cb21498a72))
+* Upgrade setuptools in workflows before install-requirements ([f86180f](https://github.com/dasch-swiss/sipi/commit/f86180fba5c1eade5f1e230b6d2e05b22591a8c6))
+
 ## [3.16.3](https://github.com/dasch-swiss/sipi/compare/v3.16.2...v3.16.3) (2025-08-25)
 
 
