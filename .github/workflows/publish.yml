@@ -28,6 +28,13 @@ jobs:
       - run: make test-smoke-ci
       - name: Push image to Docker hub
         run: make docker-push-amd64
+      - name: Docker Scout — record production
+        uses: docker/scout-action@v1
+        with:
+          command: environment
+          image: registry://daschswiss/sipi:${{ github.ref_name }}-amd64
+          environment: production
+          organization: daschswiss
       - name: Install sentry-cli
         if: hashFiles('sipi-amd64.debug') != ''
         run: npm install -g @sentry/cli
@@ -44,12 +51,12 @@ jobs:
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
 
-  # Build for release and publish aarch64
-  aarch64:
+  # Build for release and publish arm64
+  arm64:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04-arm
     concurrency:
-      group: ${{ github.ref }}-publish-aarch64
+      group: ${{ github.ref }}-publish-arm64
       cancel-in-progress: true
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
@@ -63,30 +70,37 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: make docker-test-build-aarch64 # builds image + extracts sipi-aarch64.debug
+      - run: make docker-test-build-arm64 # builds image + extracts sipi-arm64.debug
       - run: make test-smoke-ci
       - name: Push image to Docker hub
-        run: make docker-push-aarch64
+        run: make docker-push-arm64
+      - name: Docker Scout — record production
+        uses: docker/scout-action@v1
+        with:
+          command: environment
+          image: registry://daschswiss/sipi:${{ github.ref_name }}-arm64
+          environment: production
+          organization: daschswiss
       - name: Install sentry-cli
-        if: hashFiles('sipi-aarch64.debug') != ''
+        if: hashFiles('sipi-arm64.debug') != ''
         run: npm install -g @sentry/cli
       - name: Upload debug symbols to Sentry
-        if: hashFiles('sipi-aarch64.debug') != ''
+        if: hashFiles('sipi-arm64.debug') != ''
         run: |
           sentry-cli debug-files upload \
             --org "$SENTRY_ORG" \
             --project "$SENTRY_PROJECT" \
             --release "$GITHUB_REF_NAME" \
-            sipi-aarch64.debug
+            sipi-arm64.debug
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
 
-  # Publish manifest combining aarch64 and amd64 images
+  # Publish manifest combining arm64 and amd64 images
   manifest:
     runs-on: ubuntu-latest
-    needs: [ amd64, aarch64 ]
+    needs: [ amd64, arm64 ]
     if: startsWith(github.ref, 'refs/tags')
     steps:
       - uses: actions/checkout@v4
