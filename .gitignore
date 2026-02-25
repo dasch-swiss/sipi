@@ -65,3 +65,4 @@ icc.zip
 
 # Claude Code
 .claude/worktrees/
+.claude/settings.local.json
