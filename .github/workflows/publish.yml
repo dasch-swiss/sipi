@@ -35,6 +35,18 @@ jobs:
           image: registry://daschswiss/sipi:${{ github.ref_name }}-amd64
           environment: production
           organization: daschswiss
+      - name: Docker Scout — generate SBOM
+        uses: docker/scout-action@v1
+        with:
+          command: sbom
+          image: registry://daschswiss/sipi:${{ github.ref_name }}-amd64
+          output: sbom-amd64.spdx.json
+          organization: daschswiss
+      - name: Upload SBOM as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-amd64
+          path: sbom-amd64.spdx.json
       - name: Install sentry-cli
         if: hashFiles('sipi-amd64.debug') != ''
         run: npm install -g @sentry/cli
@@ -81,6 +93,18 @@ jobs:
           image: registry://daschswiss/sipi:${{ github.ref_name }}-arm64
           environment: production
           organization: daschswiss
+      - name: Docker Scout — generate SBOM
+        uses: docker/scout-action@v1
+        with:
+          command: sbom
+          image: registry://daschswiss/sipi:${{ github.ref_name }}-arm64
+          output: sbom-arm64.spdx.json
+          organization: daschswiss
+      - name: Upload SBOM as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-arm64
+          path: sbom-arm64.spdx.json
       - name: Install sentry-cli
         if: hashFiles('sipi-arm64.debug') != ''
         run: npm install -g @sentry/cli
