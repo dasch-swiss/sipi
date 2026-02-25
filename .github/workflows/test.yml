@@ -3,7 +3,7 @@
 #     - a debug build
 #     - with code coverage enabled
 #     - using the GCC compiler
-#     - on amd64 and aarch64 architectures
+#     - on amd64 and arm64 architectures
 #     - and runs the test suite (e2e, unit, approval)
 
 permissions:

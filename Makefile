@@ -41,15 +41,15 @@ docker-build: ## build and publish Sipi Docker image locally
 		--load \
 		.
 
-.PHONY: docker-test-build-aarch64
-docker-test-build-aarch64: ## locally (unit) test and publish aarch64 Sipi Docker image with -aarch64 tag
+.PHONY: docker-test-build-arm64
+docker-test-build-arm64: ## locally (unit) test and publish arm64 Sipi Docker image with -arm64 tag
 	docker buildx build \
 		--progress auto \
 		--platform linux/arm64 \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		--build-arg VERSION=$(BUILD_TAG) \
-		-t $(DOCKER_IMAGE)-aarch64 -t $(DOCKER_REPO):latest \
+		-t $(DOCKER_IMAGE)-arm64 -t $(DOCKER_REPO):latest \
 		--load \
 		.
 	docker buildx build \
@@ -60,11 +60,11 @@ docker-test-build-aarch64: ## locally (unit) test and publish aarch64 Sipi Docke
 		--target debug-symbols \
 		--output type=local,dest=./debug-out \
 		.
-	mv ./debug-out/sipi.debug ./sipi-aarch64.debug && rm -rf ./debug-out
+	mv ./debug-out/sipi.debug ./sipi-arm64.debug && rm -rf ./debug-out
 
-.PHONY: docker-push-aarch64
-docker-push-aarch64: ## push previously build aarch64 image to Docker hub
-	docker push $(DOCKER_IMAGE)-aarch64
+.PHONY: docker-push-arm64
+docker-push-arm64: ## push previously built arm64 image to Docker hub
+	docker push $(DOCKER_IMAGE)-arm64
 
 .PHONY: docker-test-build-amd64
 docker-test-build-amd64: ## locally (unit) test and publish x86 Sipi Docker image with -amd64 tag
@@ -92,10 +92,10 @@ docker-push-amd64: ## push previously build x86 image to Docker hub
 	docker push $(DOCKER_IMAGE)-amd64
 
 .PHONY: docker-publish-manifest
-docker-publish-manifest: ## publish Docker manifest combining aarch64 and x86 published images
-	docker manifest create $(DOCKER_IMAGE) --amend $(DOCKER_IMAGE)-amd64 --amend $(DOCKER_IMAGE)-aarch64
+docker-publish-manifest: ## publish Docker manifest combining arm64 and amd64 published images
+	docker manifest create $(DOCKER_IMAGE) --amend $(DOCKER_IMAGE)-amd64 --amend $(DOCKER_IMAGE)-arm64
 	docker manifest annotate --arch amd64 --os linux $(DOCKER_IMAGE) $(DOCKER_IMAGE)-amd64
-	docker manifest annotate --arch arm64 --os linux $(DOCKER_IMAGE) $(DOCKER_IMAGE)-aarch64
+	docker manifest annotate --arch arm64 --os linux $(DOCKER_IMAGE) $(DOCKER_IMAGE)-arm64
 	docker manifest inspect $(DOCKER_IMAGE)
 	docker manifest push $(DOCKER_IMAGE)
 
