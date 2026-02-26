@@ -43,7 +43,7 @@ jobs:
           output: sbom-amd64.spdx.json
           organization: daschswiss
       - name: Upload SBOM as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sbom-amd64
           path: sbom-amd64.spdx.json
@@ -101,7 +101,7 @@ jobs:
           output: sbom-arm64.spdx.json
           organization: daschswiss
       - name: Upload SBOM as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sbom-arm64
           path: sbom-arm64.spdx.json
