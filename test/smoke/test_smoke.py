@@ -25,6 +25,20 @@ def setup_module():
     return container
 
 
+def wait_for_sipi(url="http://localhost:1024", timeout=30, interval=0.5):
+    """Poll the server until it responds or timeout is reached."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            r = requests.get(url, timeout=2)
+            if r.status_code < 500:
+                return
+        except (requests.ConnectionError, requests.Timeout):
+            pass
+        time.sleep(interval)
+    raise TimeoutError(f"SIPI did not start within {timeout}s")
+
+
 def get_logs(container_id):
     logs_cmd = "docker logs " + container_id
     result = subprocess.run(
@@ -39,7 +53,7 @@ def test_get_image():
     """ This test gets the lena512.jp2 image. """
     container = setup_module()
     with container:
-        time.sleep(1)
+        wait_for_sipi()
         r = requests.get("http://localhost:1024/unit/lena512.jp2/full/max/0/default.jpg")
         assert r.status_code == 200
 
@@ -48,7 +62,7 @@ def test_get_test_html():
     """ This test gets the test.html file. """
     container = setup_module()
     with container:
-        time.sleep(1)
+        wait_for_sipi()
         r = requests.get("http://localhost:1024/server/test.html")
         assert r.status_code == 200
 
@@ -57,6 +71,6 @@ def test_luafunctions():
     """ This tests the call to /test/lua_functions """
     container = setup_module()
     with container:
-        time.sleep(1)
+        wait_for_sipi()
         r = requests.get("http://localhost:1024/test/luafunctions")
         assert r.status_code == 200
