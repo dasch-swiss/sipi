@@ -54,6 +54,7 @@ jobs:
           command: cves
           image: local://daschswiss/sipi:latest
           sarif-file: scout-results.sarif
+          only-severities: critical,high
           organization: daschswiss
       - name: Upload SARIF to GitHub Security
         if: github.event_name == 'pull_request'
