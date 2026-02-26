@@ -2,3 +2,7 @@
 .md-tabs {
   background-color: rgb(89, 73, 167) !important;
 }
+
+.md-grid {
+  max-width: 1440px;
+}

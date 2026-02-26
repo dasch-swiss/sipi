@@ -33,7 +33,7 @@ used!*
 ## Preflight function
 It is possible to define a LUA pre-flight function for *IIIF*-requests and independently one for *file*-requests
 (indicated by a _/file_ postfix in the URL). Both are optional and are best located in the init-script (see
-[configuarion options](../sipi/#setup-of-directories-needed) of SIPI). It is executed after the incoming
+[configuration options](../guide/sipi.md#setup-of-sipi-directories) of SIPI). It is executed after the incoming
 HTTP request data has been processed but before an action to respond to the request has been taken. It should
 be noted that the pre-flight script is only executed for IIIF-specific requests (either using the IIIF URL-syntax or the
 _/file_ postfix). All other HTTP requests are being directed to "normal" HTTP-server part of SIPI.
@@ -95,7 +95,7 @@ to access an authorization server to check if the user (identified by a cookie) 
 using [Json Web Tokens](https://jwt.io) (JWT) which are supported by SIPI specific LUA functions. Please note that the
 SIPI JTW-functions support an arbitrary payload that has not to follow the JWT recommendations. In order to encode, the
 JWT_ALG_HS256 is beeing used together with the key that is defined in the SIPI configuration as
-[jwt_secret](../sipi/#jwt-secret).
+[jwt_secret](../guide/sipi.md#jwt-secret).
 ```lua
 function pre_flight(prefix, identifier, cookie) 
     --
@@ -405,91 +405,91 @@ as command line option when starting the server.
     config.hostname
     
 The hostname  SIPI is configures to run on
-(see [hostname](../sipi/#hostname) in configuration description).
+(see [hostname](../guide/sipi.md#hostname) in configuration description).
 
 #### config.port
 
     config.port
     
 Portnumber where the SIPI server listens
-(see [serverport](../sipi/#port) in configuration description).
+(see [serverport](../guide/sipi.md#portnum) in configuration description).
 
 #### config.sslport
 
     config.sslport
     
 Portnumber for SSL connections of SIPI
-(see [sslport](../sipi/#sslport) in configuration description).
+(see [sslport](../guide/sipi.md#sslport) in configuration description).
 
 ####config.imgroot
 
     config.imgroot
     
 Root directory for IIIF-served images
-(see [imgroot](../sipi/#imgroot) in configuration description).
+(see [imgroot](../guide/sipi.md#imgroot) in configuration description).
 
 #### config.docroot
 
     config.docroot
 
 Root directory for WEB-Server
-(see [docroot](../sipi/#docroot) in configuration description).
+(see [docroot](../guide/sipi.md#docroot) in configuration description).
 
 #### config.max\_temp\_file\_age
 
     config.max_temp_file_age
     
 maximum age of temporary files
-(see [max_temp_file_age](../sipi/#maxtmpfileage) in configuration description).
+(see [max_temp_file_age](../guide/sipi.md#maxtmpfileage) in configuration description).
 
 #### config.prefix\_as\_path
 
     config.prefix_as_path`
     
 `true` if the prefix should be used as path info
-(see [prefix_as_path](../sipi/#prefixaspath) in configuration description).
+(see [prefix_as_path](../guide/sipi.md#prefixaspath) in configuration description).
 
 #### config.init\_script
 
     config.init_script
     
 Path to initialization script
-(see [initscript](../sipi/#initscript) in configuration description).
+(see [initscript](../guide/sipi.md#scriptinit) in configuration description).
 
 #### config.scriptdir
 
     config.scriptdir
 
 Path to script directory.
-(see [scriptdir](../sipi/#scriptdir) in configuration description).
+(see [scriptdir](../guide/sipi.md#scriptdir) in configuration description).
 
 #### config.cache\_dir
 
     config.cache_dir
     
 Path to cache directory for iIIF served images.
-(see [cachedir](../sipi/#cachedir) in configuration description).
+(see [cachedir](../guide/sipi.md#cachedir) in configuration description).
 
 #### config.cache\_size
 
     config.cache_size
     
 Maximal size of cache
-(see [cachesize](../sipi/#cachesize) in configuration description).
+(see [cachesize](../guide/sipi.md#cachesize) in configuration description).
 
 #### config.cache\_n\_files
 
     config.cache_n_files
     
 Maximal number of files in cache.
-(see [cache_nfiles](../sipi/#cachenfiles) in configuration description).
+(see [cache_nfiles](../guide/sipi.md#cachenfiles) in configuration description).
 
 #### config.cache\_hysteresis
 
     config.cache_hysteresis
     
 Amount of data to be purged if cache reaches maximum size.
-(see [cache_hysteresis](../sipi/#hysteresis) in configuration description).
+(see [cache_hysteresis](../guide/sipi.md#hysteresis) in configuration description).
 
 #### config.jpeg\_quality
 
@@ -500,56 +500,56 @@ allows to configure the compression quality system wide with this parameter. All
 \[1..100\] where 1 the worst quality (and highest compression factor = smallest file size) and 100 the highest
 quality (with lowest compression factor = biggest file size). Please note that SIPI is not able to provide
 lossless compression for JPEG files.
-(see [jpeg_quality](../sipi/#jpegquality) in configuration description).
+(see [jpeg_quality](../guide/sipi.md#jpegquality) in configuration description).
 
 #### config.keep\_alive
 
     config.keep_alive
     
 Maximal keep-alive time for HTTP requests that ask for a keep-alive connection.
-(see [keep_alive](../sipi/#keepalive) in configuration description).
+(see [keep_alive](../guide/sipi.md#keepalive) in configuration description).
 
 #### config.thumb\_size
 
     config.thumb_size
     
 Default thumbnail image size.
-(see [thumb_size](../sipi/#thumbsize) in configuration description).
+(see [thumb_size](../guide/sipi.md#thumbsize) in configuration description).
 
 #### config.n\_threads
 
     config.n_threads
     
 Number of worker threads SIPI uses.
-(see [nthreads](../sipi/#nthreads) in configuration description).
+(see [nthreads](../guide/sipi.md#nthreads) in configuration description).
 
 #### config.max\_post\_size
 
     config.max_post_size
     
 Maximal size of POST data allowed
-(see [max_post_size](../sipi/#maxpostsize) in configuration description).
+(see [max_post_size](../guide/sipi.md#maxpostsize) in configuration description).
 
 #### config.tmpdir
 
     config.tmpdir
     
 Temporary directory to store uploads.
-(see [tmpdir](../sipi/#tmpdir) in configuration description).
+(see [tmpdir](../guide/sipi.md#tmpdir) in configuration description).
 
 #### config.ssl/_certificate
 
     config.ssl_certificate
     
 Path to the SSL certificate that SIPI uses.
-(see [ssl_certificate](../sipi/#sslcertificate) in configuration description).
+(see [ssl_certificate](../guide/sipi.md#sslcertificate) in configuration description).
 
 #### config.ssl/_key
 
     config.ssl_key
     
 Path to the SSL key that SIPI uses.
-(see [ssl_key](../sipi/#sslkey) in configuration description).
+(see [ssl_key](../guide/sipi.md#sslkey) in configuration description).
 
 #### config.logfile
 
@@ -557,28 +557,28 @@ Path to the SSL key that SIPI uses.
     
 Name of the logfile. SIPI is currently using the built-in logger which logs to stdout and the
 logfile name is ignored. 
-(see [logfile](../sipi/#logfile) in configuration description).
+(see [logfile](../guide/sipi.md#logfile) in configuration description).
 
 #### config.loglevel
 
     config.loglevel
     
 Indicates what should be logged. The variable contains a integer that corresponds to the syslog level.
-(see [loglevel](../sipi/#loglevel) in configuration description).
+(see [loglevel](../guide/sipi.md#loglevel) in configuration description).
 
 #### config.adminuser
 
     config.adminuser
     
 Name of admin user.
-(see [user](../sipi/#configuration-of-administrator-access) in configuration description).
+(see [user](../guide/sipi.md#configuration-of-administrator-access) in configuration description).
 
 #### config.password
 
     config.password
     
 Password (plain text, not encrypted) of admin user (*use with caution*)!
-(see [password](../sipi/#configuration-of-administrator-access) in configuration description).
+(see [password](../guide/sipi.md#configuration-of-administrator-access) in configuration description).
 
 ### SIPI Server Variables
 Sipi server variables are dependent on the incoming request and are created by SIPI automatically for each
@@ -1148,6 +1148,299 @@ Converts a canonical UUID string to a Base62-encoded UUID. Returns
 Converts a Base62-encoded UUID to canonical form. Returns `true, uuid`
 on success or `false, errormsg` on failure.
 
+
+## Cache Management Functions
+
+The following functions are available for managing the SIPI image cache from Lua scripts.
+
+#### cache.size
+
+```lua
+success, size = cache.size()
+```
+
+Returns the current total size of cached files in bytes. Returns `nil` if no cache is configured.
+
+#### cache.max_size
+
+```lua
+success, max = cache.max_size()
+```
+
+Returns the configured maximum cache size limit in bytes.
+
+#### cache.nfiles
+
+```lua
+success, count = cache.nfiles()
+```
+
+Returns the current number of files in the cache.
+
+#### cache.max_nfiles
+
+```lua
+success, max = cache.max_nfiles()
+```
+
+Returns the configured maximum number of files allowed in cache.
+
+#### cache.path
+
+```lua
+path = cache.path()
+```
+
+Returns the filesystem path to the cache directory, or `nil` if no cache is configured.
+
+#### cache.filelist
+
+```lua
+filelist = cache.filelist([sortmethod])
+```
+
+Returns a table of cached files with metadata. The optional `sortmethod` parameter controls sorting:
+
+- `"AT_ASC"` — sort by access time, ascending
+- `"AT_DESC"` — sort by access time, descending
+- `"FS_ASC"` — sort by file size, ascending
+- `"FS_DESC"` — sort by file size, descending
+
+Each entry in the returned table contains:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `canonical` | string | Canonical cache key |
+| `origpath` | string | Original file path |
+| `cachepath` | string | Cache file path |
+| `size` | integer | File size in bytes |
+| `last_access` | string | Last access time (`"YYYY-MM-DD HH:MM:SS"`) |
+
+Returns `nil` if no cache is configured.
+
+#### cache.delete
+
+```lua
+success = cache.delete(canonical)
+```
+
+Deletes a specific cached file by its canonical key. Returns `true` on success, `false` otherwise.
+
+#### cache.purge
+
+```lua
+count = cache.purge()
+```
+
+Purges cache entries based on configured purge criteria (LRU). Returns the number of files purged, or `nil` if no cache is configured.
+
+## Filesystem Helper Functions
+
+The `server.fs` table provides filesystem operations. All functions return `(true, result)` on success or `(false, error_message)` on failure.
+
+#### server.fs.exists
+
+```lua
+success, exists = server.fs.exists(filepath)
+```
+
+Check if a file or directory exists. Returns `true/false` for the existence check.
+
+#### server.fs.ftype
+
+```lua
+success, filetype = server.fs.ftype(filepath)
+```
+
+Get the type of a path. Returns one of: `"FILE"`, `"DIRECTORY"`, `"CHARDEV"`, `"BLOCKDEV"`, `"LINK"`, `"FIFO"`, `"SOCKET"`, `"UNKNOWN"`.
+
+#### server.fs.modtime
+
+```lua
+success, timestamp = server.fs.modtime(filepath)
+```
+
+Get the modification time of a file as a Unix timestamp (seconds since epoch).
+
+#### server.fs.readdir
+
+```lua
+success, filenames = server.fs.readdir(dirpath)
+```
+
+List all files and directories in a directory. Returns a Lua table of filenames (excludes `.` and `..`).
+
+#### server.fs.is_readable
+
+```lua
+success, readable = server.fs.is_readable(filepath)
+```
+
+Check if a file is readable by the current process.
+
+#### server.fs.is_writeable
+
+```lua
+success, writeable = server.fs.is_writeable(filepath)
+```
+
+Check if a file is writable by the current process.
+
+#### server.fs.is_executable
+
+```lua
+success, executable = server.fs.is_executable(filepath)
+```
+
+Check if a file is executable by the current process.
+
+#### server.fs.unlink
+
+```lua
+success, errmsg = server.fs.unlink(filepath)
+```
+
+Delete a file from the filesystem.
+
+#### server.fs.mkdir
+
+```lua
+success, errmsg = server.fs.mkdir(dirname, mode)
+```
+
+Create a new directory. `mode` is a Unix permission integer (e.g., `tonumber('0755', 8)`).
+
+#### server.fs.rmdir
+
+```lua
+success, errmsg = server.fs.rmdir(dirname)
+```
+
+Remove an empty directory.
+
+#### server.fs.getcwd
+
+```lua
+success, cwd = server.fs.getcwd()
+```
+
+Get the current working directory.
+
+#### server.fs.chdir
+
+```lua
+success, old_dir = server.fs.chdir(newdir)
+```
+
+Change the current working directory. Returns the previous working directory on success.
+
+#### server.fs.copyFile
+
+```lua
+success, errmsg = server.fs.copyFile(source, target)
+```
+
+Copy a file from source to target.
+
+#### server.fs.moveFile
+
+```lua
+success, errmsg = server.fs.moveFile(source, target)
+```
+
+Move/rename a file. `source` can be a file path (string) or an uploaded file index (integer, 1-based).
+
+## Server Request Properties
+
+The following read-only properties are available on the `server` table within request handlers:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `server.method` | string | HTTP method: `"GET"`, `"POST"`, `"PUT"`, `"DELETE"`, `"HEAD"`, `"OPTIONS"` |
+| `server.uri` | string | The complete request URI/path |
+| `server.host` | string | The Host header value |
+| `server.client_ip` | string | Client's IP address |
+| `server.client_port` | integer | Client's port number |
+| `server.secure` | boolean | Whether the connection is HTTPS |
+| `server.has_openssl` | boolean | Whether OpenSSL is available |
+| `server.route` | string | The matched route (if using routing) |
+| `server.content` | string | Raw POST/PUT body content |
+| `server.content_type` | string | Content-Type header value |
+| `server.docroot` | string | Document root path |
+
+### Request Data Tables
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `server.header` | table | HTTP request headers (name-value pairs) |
+| `server.cookies` | table | Cookie name-value pairs |
+| `server.get` | table | URL query parameters |
+| `server.post` | table | POST form parameters |
+| `server.request` | table | Path parameters |
+
+### Uploaded Files
+
+`server.uploads` is a table of uploaded files (1-based indexing). Each entry contains:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fieldname` | string | Form field name |
+| `origname` | string | Original filename |
+| `tmpname` | string | Temporary file path on server |
+| `mimetype` | string | MIME type of the uploaded file |
+| `filesize` | integer | File size in bytes |
+
+## Additional Server Functions
+
+#### server.setBuffer
+
+```lua
+success, errmsg = server.setBuffer([bufsize], [incsize])
+```
+
+Enable response buffering with optional buffer size and increment size (in bytes).
+
+#### server.sendCookie
+
+```lua
+success, errmsg = server.sendCookie(name, value [, options])
+```
+
+Set a cookie in the HTTP response. The optional `options` table can contain:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `path` | string | Cookie path |
+| `domain` | string | Cookie domain |
+| `expires` | integer | Expiration (seconds since epoch) |
+| `secure` | boolean | Secure flag |
+| `http_only` | boolean | HTTP-only flag |
+
+#### server.requireAuth
+
+```lua
+auth = server.requireAuth()
+```
+
+Parse authentication information from the request. Returns a table with:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | string | `"NOAUTH"`, `"BASIC"`, `"BEARER"`, or `"ERROR"` |
+| `username` | string | Username (BASIC auth only) |
+| `password` | string | Password (BASIC auth only) |
+| `token` | string | Bearer token (BEARER auth only) |
+| `message` | string | Error message (ERROR status only) |
+
+## Utility Functions
+
+#### helper.filename_hash
+
+```lua
+success, hashed_path = helper.filename_hash(filename)
+```
+
+Convert a filename into a hashed filesystem path, using SIPI's internal hash algorithm for cache file organization.
 
 ## Installing Lua modules
 

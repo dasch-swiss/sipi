@@ -1,21 +1,22 @@
 site_name: SIPI Documentation
+site_url: https://sipi.io
 
 repo_url: https://github.com/dasch-swiss/sipi
 repo_name: dasch-swiss/sipi
 edit_uri: blob/main/docs/
-copyright: "&copy; 2017 - 2021 <a href='https://dasch.swiss' target='_blank'>Data and Service Center for the Humanities (DaSCH)</a>"
+copyright: "&copy; 2017 - 2026 <a href='https://dasch.swiss' target='_blank'>Data and Service Center for the Humanities (DaSCH)</a>"
 
 nav:
-  - Overview: index.md
-  - Introduction: introduction.md
-  - Basic information and Reference: sipi.md
-  - Lua integration: lua.md
-  - Lua imaging functions: lua-image.md
-  - Sqlite3 integration: sqlite.md
-  - Building: building.md
-  - Running: running.md
-  - Developing: developing.md
-  - Release-Notes: 0-release-notes/index.md
+  - Overview: guide/index.md
+  - Introduction: guide/introduction.md
+  - Reference: guide/sipi.md
+  - Running: guide/running.md
+  - Lua Integration: lua/index.md
+  - Lua Image Functions: lua/lua-image.md
+  - SQLite Integration: lua/sqlite.md
+  - Building: development/building.md
+  - Developing: development/developing.md
+  - Release Notes: release-notes/index.md
 
 theme:
   name: material
@@ -24,10 +25,50 @@ theme:
   palette:
     primary: 'deep blue'
     accent: 'deep blue'
-  feature:
-    tabs: false
+  features:
+    - search.suggest
+    - search.highlight
+    - navigation.sections
+    - toc.integrate
+    - content.code.copy
 
 docs_dir: src
 
 extra_css:
   - 'assets/style/theme.css'
+
+markdown_extensions:
+  - tables
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - llmstxt:
+      markdown_description: >
+        SIPI is a multithreaded, high-performance IIIF-compatible media server
+        written in C++. It provides image format conversions, metadata preservation,
+        and a Lua scripting interface.
+      full_output: llms-full.txt
+      sections:
+        "Overview":
+          - guide/index.md: "Project overview and features"
+        "User Guide":
+          - guide/introduction.md: "IIIF concepts and SIPI use cases"
+          - guide/running.md: "CLI usage, server mode, logging, error codes"
+          - guide/sipi.md: "IIIF URL syntax, configuration reference"
+        "Lua Scripting":
+          - lua/index.md: "Lua integration and server API"
+          - lua/lua-image.md: "Lua image manipulation functions"
+          - lua/sqlite.md: "SQLite integration from Lua"
+        "Development":
+          - development/building.md: "Build instructions"
+          - development/developing.md: "Development guide"
+        "Release Notes":
+          - release-notes/index.md
