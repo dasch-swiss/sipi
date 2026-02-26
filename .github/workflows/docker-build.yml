@@ -33,7 +33,11 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: make docker-test-build-amd64 # two stage build, where test is run in the first stage
+      - name: Build and test Docker image
+        run: make docker-test-build-amd64
+        env:
+          DOCKER_CACHE_FROM: "--cache-from type=gha,scope=amd64,url=${{ env.ACTIONS_CACHE_URL }},token=${{ env.ACTIONS_RUNTIME_TOKEN }}"
+          DOCKER_CACHE_TO: "--cache-to type=gha,mode=max,scope=amd64,url=${{ env.ACTIONS_CACHE_URL }},token=${{ env.ACTIONS_RUNTIME_TOKEN }}"
       - run: make test-smoke-ci
       - name: Docker Scout — compare to production
         if: github.event_name == 'pull_request'
@@ -81,7 +85,11 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: make docker-test-build-arm64 # two stage build, where test is run in the first stage
+      - name: Build and test Docker image
+        run: make docker-test-build-arm64
+        env:
+          DOCKER_CACHE_FROM: "--cache-from type=gha,scope=arm64,url=${{ env.ACTIONS_CACHE_URL }},token=${{ env.ACTIONS_RUNTIME_TOKEN }}"
+          DOCKER_CACHE_TO: "--cache-to type=gha,mode=max,scope=arm64,url=${{ env.ACTIONS_CACHE_URL }},token=${{ env.ACTIONS_RUNTIME_TOKEN }}"
       - run: make test-smoke-ci
       - name: Docker Scout — compare to production
         if: github.event_name == 'pull_request'

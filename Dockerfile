@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.3
+# syntax=docker/dockerfile:1
 
 # Expose (global) variables (ARGs before FROM can only be used on FROM lines and not afterwards)
 ARG SIPI_BASE=daschswiss/sipi-base:2.23.0-2
@@ -9,15 +9,32 @@ FROM $SIPI_BASE as builder
 
 WORKDIR /tmp/sipi
 
-# Add everything to image.
-COPY . .
+# Copy build system and source files only (not docs, CI configs, etc.)
+# so that non-build changes don't invalidate the Docker layer cache.
+COPY CMakeLists.txt version.txt generate_icc_header.sh ./
+COPY cmake/ cmake/
+COPY ext/ ext/
+COPY vendor/ vendor/
+COPY include/ include/
+COPY src/ src/
+COPY shttps/ shttps/
+COPY fuzz/ fuzz/
+COPY test/ test/
+COPY patches/ patches/
 
 # this can be provided when the image is built
 ARG VERSION=OFF
 
 # Build SIPI with debug info (RelWithDebInfo = -O3 -g) and run unit tests.
 RUN cmake -S . -B ./build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEXT_PROVIDED_VERSION=$VERSION --log-context
-RUN cmake --build ./build --parallel 4
+RUN cmake --build ./build --parallel $(nproc)
+
+# Copy runtime and test-config files before running tests (configuration_tests
+# needs config/sipi.config.lua; also needed by final stage COPY --from=builder).
+COPY config/ config/
+COPY scripts/ scripts/
+COPY server/ server/
+
 RUN cd build && ctest --output-on-failure
 
 # Extract debug symbols into a separate file, then strip the binary.

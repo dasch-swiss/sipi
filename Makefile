@@ -10,6 +10,10 @@ include vars.mk
 SIPI_BASE := daschswiss/sipi-base:2.23.0
 UBUNTU_BASE := ubuntu:24.04
 
+# Docker buildx cache flags (empty by default for local builds, set in CI)
+DOCKER_CACHE_FROM ?=
+DOCKER_CACHE_TO ?=
+
 .PHONY: docs-build
 docs-build: ## build docs into the local 'site' folder
 	@$(MAKE) -C docs docs-build
@@ -34,6 +38,8 @@ install-requirements: docs-install-requirements ## install requirements for docu
 docker-build: ## build and publish Sipi Docker image locally
 	docker buildx build \
 		--progress auto \
+		$(DOCKER_CACHE_FROM) \
+		$(DOCKER_CACHE_TO) \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		--build-arg VERSION=$(BUILD_TAG) \
@@ -46,6 +52,8 @@ docker-test-build-arm64: ## locally (unit) test and publish arm64 Sipi Docker im
 	docker buildx build \
 		--progress auto \
 		--platform linux/arm64 \
+		$(DOCKER_CACHE_FROM) \
+		$(DOCKER_CACHE_TO) \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		--build-arg VERSION=$(BUILD_TAG) \
@@ -54,6 +62,7 @@ docker-test-build-arm64: ## locally (unit) test and publish arm64 Sipi Docker im
 		.
 	docker buildx build \
 		--platform linux/arm64 \
+		$(DOCKER_CACHE_FROM) \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		--build-arg VERSION=$(BUILD_TAG) \
@@ -71,6 +80,8 @@ docker-test-build-amd64: ## locally (unit) test and publish x86 Sipi Docker imag
 	docker buildx build \
 		--progress auto \
 		--platform linux/amd64 \
+		$(DOCKER_CACHE_FROM) \
+		$(DOCKER_CACHE_TO) \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		--build-arg VERSION=$(BUILD_TAG) \
@@ -79,6 +90,7 @@ docker-test-build-amd64: ## locally (unit) test and publish x86 Sipi Docker imag
 		.
 	docker buildx build \
 		--platform linux/amd64 \
+		$(DOCKER_CACHE_FROM) \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
 		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
 		--build-arg VERSION=$(BUILD_TAG) \
@@ -168,7 +180,7 @@ test-smoke-ci: ## run smoke tests against (already) locally published Sipi Docke
 .PHONY: build
 build: ## build SIPI (inside NIX develop shell)
 	cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo
-	cd build && cmake --build . --parallel 1
+	cd build && cmake --build . --parallel $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 
 .PHONY: run
 run: compile ## run SIPI (inside NIX develop shell)

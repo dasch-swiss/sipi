@@ -24,7 +24,11 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: make docker-test-build-amd64 # builds image + extracts sipi-amd64.debug
+      - name: Build and test Docker image
+        run: make docker-test-build-amd64
+        env:
+          DOCKER_CACHE_FROM: "--cache-from type=gha,scope=publish-amd64,url=${{ env.ACTIONS_CACHE_URL }},token=${{ env.ACTIONS_RUNTIME_TOKEN }}"
+          DOCKER_CACHE_TO: "--cache-to type=gha,mode=max,scope=publish-amd64,url=${{ env.ACTIONS_CACHE_URL }},token=${{ env.ACTIONS_RUNTIME_TOKEN }}"
       - run: make test-smoke-ci
       - name: Push image to Docker hub
         run: make docker-push-amd64
@@ -82,7 +86,11 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: make docker-test-build-arm64 # builds image + extracts sipi-arm64.debug
+      - name: Build and test Docker image
+        run: make docker-test-build-arm64
+        env:
+          DOCKER_CACHE_FROM: "--cache-from type=gha,scope=publish-arm64,url=${{ env.ACTIONS_CACHE_URL }},token=${{ env.ACTIONS_RUNTIME_TOKEN }}"
+          DOCKER_CACHE_TO: "--cache-to type=gha,mode=max,scope=publish-arm64,url=${{ env.ACTIONS_CACHE_URL }},token=${{ env.ACTIONS_RUNTIME_TOKEN }}"
       - run: make test-smoke-ci
       - name: Push image to Docker hub
         run: make docker-push-arm64
