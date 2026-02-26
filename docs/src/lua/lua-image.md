@@ -149,8 +149,10 @@ Parameters:
 - `filepath`: Path to output file. The file format is determined by the filename extension. Supported are
     -   `jpg` : writes a JPEG file
     -   `tif` : writes a TIFF file
-    -   `png` : writes a png file
-    -   `jpx` : writes a JPGE2000 file
+    -   `png` : writes a PNG file
+    -   `jpx` : writes a JPEG2000 file
+    -   `webp` : writes a WebP file
+    -   `gif` : writes a GIF file
     -   `pdf` : writes a PDF file
 
 - `compression_params`: (optional) An optional Lua table with compression parameters (which are dependent on the
@@ -175,26 +177,53 @@ Parameters:
 
     success, errormsg = img.send(format)
 
-Sends the file to the HTTP connection. As format-strings are allowed:
+Sends the file to the HTTP connection. Supported format strings:
 
--   `jpg` : writes a JPEG file
--   `tif` : writes a TIFF file
--   `png` : writes a png file
--   `jpx` : writes a JPGE2000 file
+-   `jpg` : sends a JPEG file
+-   `tif` : sends a TIFF file
+-   `png` : sends a PNG file
+-   `jpx` : sends a JPEG2000 file
+-   `webp` : sends a WebP file
+-   `gif` : sends a GIF file
 
-### SipiImage.mimetype_consistency(mimetype)
+### SipiImage.mimetype_consistency(mimetype, filename)
 
-    img.mimetype_consistency(mimetype, original_filename)
-    
-This method checks if the supplied mimetype (e.g. from received from the browser during upload), the file according to
-the magic number ([file signature](https://en.wikipedia.org/wiki/List_of_file_signatures)) and the file extension are
-consistent. The parameters are:
+```lua
+success, consistent = img:mimetype_consistency(mimetype, original_filename)
+```
 
-- `mimetype`: The expected mimetype.
-- `filename`: The original filename with extension.
+This method checks if the supplied MIME type (e.g. received from the browser during upload), the file's
+magic number ([file signature](https://en.wikipedia.org/wiki/List_of_file_signatures)), and the file extension are
+consistent.
 
-Please note that mimetype handling can be quite complex, since the correspondence between file extensions and
-mimetypes is not unambiguous. In addition the file signature can not identify all mimetypes. For example, A "comma
-seperated value" value file (extension `.csv`) can have a mimetype of `application/csv`, `text/csv`, `text/x-csv`,
+**Parameters:**
+
+- `mimetype` (string): The expected MIME type (e.g., `"image/tiff"`).
+- `original_filename` (string): The original filename with extension (e.g., `"photo.tif"`).
+
+**Returns:** `(true, boolean)` on success where the boolean indicates consistency, or `(false, error_message)` on failure.
+
+Please note that MIME type handling can be quite complex, since the correspondence between file extensions and
+MIME types is not unambiguous. In addition the file signature cannot identify all MIME types. For example, a "comma
+separated values" file (extension `.csv`) can have a MIME type of `application/csv`, `text/csv`, `text/x-csv`,
 `application/vnd.ms-excel` and more. However, the file signature will usually return `text/plain`. SIPI tries to cope
 with these ambiguities.
+
+### Example: Image Processing Pipeline
+
+```lua
+-- Read an image, crop, scale, rotate, and write to a new format
+img = SipiImage.new("input.tif")
+img:crop("100,100,500,500")
+img:scale("400,")
+img:rotate("90")
+img:write("output.jpx")
+```
+
+```lua
+-- Process an uploaded file and send the result via HTTP
+img = SipiImage.new(1)  -- first uploaded file
+img:topleft()
+img:scale("!800,800")
+img:send("jpg")
+```

@@ -40,8 +40,10 @@ The parts do have the following meaning:
   - `tif`: The image is delivered as TIFF image.
   - `png`: The image is delivered as PNG image.
   - `jpx`: The image is delivered as JPEG2000 image.
-  
-  *NOTE*: PDF's are not supported. I consider PDF to be a __document format__ and *not* to be an image format.
+  - `webp`: The image is delivered as WebP image.
+  - `gif`: The image is delivered as GIF image.
+
+  *NOTE*: PDF's are not supported as an output format. PDF is considered a __document format__ and *not* an image format.
 
 
 ## The SIPI Executable
@@ -78,7 +80,7 @@ is ignored for comparison:
 In command line mode, SIPI supports the following options:
 
 - `-h`, `--help`: Display a short help with all options available
-- `-F <fmt>`, `--format <fmt>`: The format of the output file. Valid are `jpx`, `jp2`, `jpg`, `png` and `pdf`.
+- `-F <fmt>`, `--format <fmt>`: The format of the output file. Valid are `jpx`, `jp2`, `jpg`, `png`, `tif`, `webp`, and `gif`.
 - `-I <profile>`, `--icc <profile>`: Convert the outfile to the given ICC color profile. Supported profiles are `sRGB`,
   `AdobeRGB` and `GRAY`.
 - `-q <num>`, `--quality <num>`: Only used for the JPEG format. Ignored for all other formats. Its a number between 1 and
