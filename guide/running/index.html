@@ -1,0 +1,1538 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://sipi.io/guide/running/">
+      
+      
+        <link rel="prev" href="../sipi/">
+      
+      
+        <link rel="next" href="../../lua/">
+      
+      
+      <link rel="icon" href="../../assets/images/dasch-favicon.ico">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>Running - SIPI Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.bcfcd587.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/style/theme.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-blue" data-md-color-accent="deep-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#running-sipi" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="SIPI Documentation" class="md-header__button md-logo" aria-label="SIPI Documentation" data-md-component="logo">
+      
+  <img src="../../assets/images/dasch-icon-white.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            SIPI Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Running
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dasch-swiss/sipi" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dasch-swiss/sipi
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="SIPI Documentation" class="md-nav__button md-logo" aria-label="SIPI Documentation" data-md-component="logo">
+      
+  <img src="../../assets/images/dasch-icon-white.svg" alt="logo">
+
+    </a>
+    SIPI Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dasch-swiss/sipi" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dasch-swiss/sipi
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../introduction/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Introduction
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sipi/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Running
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Running
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#quick-start-with-docker" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quick Start with Docker
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-sipi-as-a-command-line-image-converter" class="md-nav__link">
+    <span class="md-ellipsis">
+      Running SIPI as a Command-line Image Converter
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-sipi-as-a-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      Running SIPI as a Server
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#logging" class="md-nav__link">
+    <span class="md-ellipsis">
+      Logging
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Logging">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#log-levels" class="md-nav__link">
+    <span class="md-ellipsis">
+      Log Levels
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#command-line-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      Command-line Options
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Command-line Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#image-conversion-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image Conversion Options
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#query-and-compare" class="md-nav__link">
+    <span class="md-ellipsis">
+      Query and Compare
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#jpeg2000-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      JPEG2000 Options
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#server-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      Server Options
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sentry-error-reporting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Sentry Error Reporting
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deprecated-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      Deprecated Options
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      Environment Variables
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exit-codes-and-error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      Exit Codes and Error Handling
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Exit Codes and Error Handling">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#exit-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Exit Codes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#error-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      Error Output
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sentry-integration-cli-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      Sentry Integration (CLI Mode)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#common-failure-causes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common Failure Causes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#integration-notes-for-calling-services" class="md-nav__link">
+    <span class="md-ellipsis">
+      Integration Notes for Calling Services
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration Files
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration Files">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#https-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      HTTPS Support
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#iiif-prefixes" class="md-nav__link">
+    <span class="md-ellipsis">
+      IIIF Prefixes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lua/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Lua Integration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lua/lua-image/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Lua Image Functions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lua/sqlite/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SQLite Integration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/building/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Building
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/developing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Developing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release-notes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Release Notes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="running-sipi">Running SIPI<a class="headerlink" href="#running-sipi" title="Permanent link">&para;</a></h1>
+<p>SIPI can be run either as a command-line image converter or as an IIIF media server.</p>
+<h2 id="quick-start-with-docker">Quick Start with Docker<a class="headerlink" href="#quick-start-with-docker" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>docker<span class="w"> </span>run<span class="w"> </span>-p<span class="w"> </span><span class="m">1024</span>:1024<span class="w"> </span>daschswiss/sipi
+</code></pre></div>
+<h2 id="running-sipi-as-a-command-line-image-converter">Running SIPI as a Command-line Image Converter<a class="headerlink" href="#running-sipi-as-a-command-line-image-converter" title="Permanent link">&para;</a></h2>
+<p>Convert an image file to another format:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>sipi<span class="w"> </span>--format<span class="w"> </span>jpg<span class="w"> </span>-f<span class="w"> </span>input.tif<span class="w"> </span>output.jpg
+</code></pre></div>
+<p>Query image file information:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>sipi<span class="w"> </span>--query<span class="w"> </span>input.tif
+</code></pre></div>
+<p>Compare two image files pixel-wise:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>sipi<span class="w"> </span>--compare<span class="w"> </span>file1.tif<span class="w"> </span>file2.jpg
+</code></pre></div>
+<h2 id="running-sipi-as-a-server">Running SIPI as a Server<a class="headerlink" href="#running-sipi-as-a-server" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>sipi<span class="w"> </span>--config<span class="w"> </span>config/sipi.config.lua
+</code></pre></div>
+<h2 id="logging">Logging<a class="headerlink" href="#logging" title="Permanent link">&para;</a></h2>
+<p>SIPI uses two logging modes depending on how it is running:</p>
+<ul>
+<li>
+<p><strong>CLI mode</strong> (<code>--file</code>, <code>--compare</code>, <code>--query</code>): Plain text output.
+  Errors go to <strong>stderr</strong>, informational messages go to <strong>stdout</strong>.
+  This is the standard Unix convention for command-line tools.</p>
+</li>
+<li>
+<p><strong>Server mode</strong> (<code>--config</code>): JSON-formatted log lines go to <strong>stdout</strong>.
+  This follows container best practices — Docker, Kubernetes, and log
+  collectors (Grafana Loki, Fluentd) expect structured logs on stdout.
+  Each line is a JSON object: <code>{"level": "INFO", "message": "..."}</code>.</p>
+</li>
+</ul>
+<h3 id="log-levels">Log Levels<a class="headerlink" href="#log-levels" title="Permanent link">&para;</a></h3>
+<p>SIPI supports the following log levels (in order of increasing severity):</p>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DEBUG</code></td>
+<td>Detailed diagnostic information.</td>
+</tr>
+<tr>
+<td><code>INFO</code></td>
+<td>Normal operational messages (routes added, server started, migrations).</td>
+</tr>
+<tr>
+<td><code>NOTICE</code></td>
+<td>Significant but normal events.</td>
+</tr>
+<tr>
+<td><code>WARNING</code></td>
+<td>Something unexpected but recoverable (e.g., failed XMP parse, incomplete metadata write).</td>
+</tr>
+<tr>
+<td><code>ERR</code></td>
+<td>Errors that affect a specific operation (e.g., image processing failure, ICC error).</td>
+</tr>
+<tr>
+<td><code>CRIT</code></td>
+<td>Critical errors.</td>
+</tr>
+<tr>
+<td><code>ALERT</code></td>
+<td>Conditions requiring immediate attention.</td>
+</tr>
+<tr>
+<td><code>EMERG</code></td>
+<td>System-wide emergencies.</td>
+</tr>
+</tbody>
+</table>
+<p>The log level controls which messages are emitted. Setting a level suppresses
+all messages below it. For example, <code>WARNING</code> shows only WARNING, ERR, CRIT,
+ALERT, and EMERG — suppressing DEBUG, INFO, and NOTICE.</p>
+<p>The log level can be configured in three ways (in order of precedence):</p>
+<ol>
+<li><strong>CLI option</strong>: <code>--loglevel WARNING</code></li>
+<li><strong>Environment variable</strong>: <code>SIPI_LOGLEVEL=WARNING</code></li>
+<li><strong>Lua config</strong>: <code>loglevel = "WARNING"</code> (in the <code>sipi</code> block)</li>
+</ol>
+<p>If none is specified, the default level is <code>INFO</code>.</p>
+<h2 id="command-line-options">Command-line Options<a class="headerlink" href="#command-line-options" title="Permanent link">&para;</a></h2>
+<h3 id="image-conversion-options">Image Conversion Options<a class="headerlink" href="#image-conversion-options" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Short</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--file &lt;path&gt;</code></td>
+<td><code>-f</code></td>
+<td>Input file to be converted. Usage: <code>sipi [options] -f infile outfile</code></td>
+</tr>
+<tr>
+<td><code>--format &lt;fmt&gt;</code></td>
+<td><code>-F</code></td>
+<td>Output format: <code>jpx</code>, <code>jp2</code>, <code>jpg</code>, <code>tif</code>, <code>png</code>, <code>webp</code>, <code>gif</code></td>
+</tr>
+<tr>
+<td><code>--icc &lt;profile&gt;</code></td>
+<td><code>-I</code></td>
+<td>Convert to ICC profile: <code>none</code>, <code>sRGB</code>, <code>AdobeRGB</code>, <code>GRAY</code></td>
+</tr>
+<tr>
+<td><code>--quality &lt;1-100&gt;</code></td>
+<td><code>-q</code></td>
+<td>JPEG compression quality (1 = highest compression, 100 = best quality)</td>
+</tr>
+<tr>
+<td><code>--pagenum &lt;n&gt;</code></td>
+<td><code>-n</code></td>
+<td>Page number for multi-page PDF/TIFF input files</td>
+</tr>
+<tr>
+<td><code>--region &lt;x,y,w,h&gt;</code></td>
+<td><code>-r</code></td>
+<td>Select a region of interest (4 integer values)</td>
+</tr>
+<tr>
+<td><code>--reduce &lt;factor&gt;</code></td>
+<td><code>-R</code></td>
+<td>Reduce image size by factor (faster than <code>--scale</code>)</td>
+</tr>
+<tr>
+<td><code>--size &lt;w,h&gt;</code></td>
+<td><code>-s</code></td>
+<td>Resize image to given dimensions</td>
+</tr>
+<tr>
+<td><code>--scale &lt;percent&gt;</code></td>
+<td><code>-S</code></td>
+<td>Resize image by percentage</td>
+</tr>
+<tr>
+<td><code>--mirror &lt;dir&gt;</code></td>
+<td><code>-m</code></td>
+<td>Mirror image: <code>none</code>, <code>horizontal</code>, <code>vertical</code></td>
+</tr>
+<tr>
+<td><code>--rotate &lt;angle&gt;</code></td>
+<td><code>-o</code></td>
+<td>Rotate image by degrees (0.0 - 360.0)</td>
+</tr>
+<tr>
+<td><code>--skipmeta</code></td>
+<td><code>-k</code></td>
+<td>Strip all metadata from the output file</td>
+</tr>
+<tr>
+<td><code>--topleft</code></td>
+<td></td>
+<td>Enforce TOPLEFT orientation</td>
+</tr>
+<tr>
+<td><code>--watermark &lt;file&gt;</code></td>
+<td><code>-w</code></td>
+<td>Overlay a watermark (single-channel grayscale TIFF)</td>
+</tr>
+<tr>
+<td><code>--Ctiff_pyramid</code></td>
+<td></td>
+<td>Store output in pyramidal TIFF format</td>
+</tr>
+</tbody>
+</table>
+<h3 id="query-and-compare">Query and Compare<a class="headerlink" href="#query-and-compare" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Short</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--query</code></td>
+<td><code>-x</code></td>
+<td>Dump all information about the given file</td>
+</tr>
+<tr>
+<td><code>--compare &lt;f1&gt; &lt;f2&gt;</code></td>
+<td><code>-C</code></td>
+<td>Compare two files pixel-wise</td>
+</tr>
+</tbody>
+</table>
+<h3 id="jpeg2000-options">JPEG2000 Options<a class="headerlink" href="#jpeg2000-options" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--Sprofile &lt;val&gt;</code></td>
+<td>J2K profile: <code>PROFILE0</code>, <code>PROFILE1</code>, <code>PROFILE2</code>, <code>PART2</code>, <code>CINEMA2K</code>, <code>CINEMA4K</code>, <code>BROADCAST</code>, <code>CINEMA2S</code>, <code>CINEMA4S</code>, <code>CINEMASS</code>, <code>IMF</code></td>
+</tr>
+<tr>
+<td><code>--rates &lt;string&gt;</code></td>
+<td>Bit-rate(s) for quality layers (<code>-1</code> for lossless final layer)</td>
+</tr>
+<tr>
+<td><code>--Clayers &lt;n&gt;</code></td>
+<td>Number of quality layers (default: 8)</td>
+</tr>
+<tr>
+<td><code>--Clevels &lt;n&gt;</code></td>
+<td>Number of wavelet decomposition levels (default: 8)</td>
+</tr>
+<tr>
+<td><code>--Corder &lt;val&gt;</code></td>
+<td>Progression order: <code>LRCP</code>, <code>RLCP</code>, <code>RPCL</code>, <code>PCRL</code>, <code>CPRL</code> (default: <code>RPCL</code>)</td>
+</tr>
+<tr>
+<td><code>--Stiles &lt;string&gt;</code></td>
+<td>Tile dimensions <code>"{tx,ty}"</code> (default: <code>"{256,256}"</code>)</td>
+</tr>
+<tr>
+<td><code>--Cprecincts &lt;string&gt;</code></td>
+<td>Precinct dimensions <code>"{px,py}"</code> (default: <code>"{256,256}"</code>)</td>
+</tr>
+<tr>
+<td><code>--Cblk &lt;string&gt;</code></td>
+<td>Code-block dimensions <code>"{dx,dy}"</code> (default: <code>"{64,64}"</code>)</td>
+</tr>
+<tr>
+<td><code>--Cuse_sop &lt;val&gt;</code></td>
+<td>Include SOP markers (default: yes)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="server-options">Server Options<a class="headerlink" href="#server-options" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Short</th>
+<th>Env Var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--config &lt;file&gt;</code></td>
+<td><code>-c</code></td>
+<td><code>SIPI_CONFIGFILE</code></td>
+<td></td>
+<td>Lua configuration file for server mode</td>
+</tr>
+<tr>
+<td><code>--serverport &lt;n&gt;</code></td>
+<td></td>
+<td><code>SIPI_SERVERPORT</code></td>
+<td><code>80</code></td>
+<td>HTTP port</td>
+</tr>
+<tr>
+<td><code>--sslport &lt;n&gt;</code></td>
+<td></td>
+<td><code>SIPI_SSLPORT</code></td>
+<td><code>443</code></td>
+<td>HTTPS port</td>
+</tr>
+<tr>
+<td><code>--hostname &lt;name&gt;</code></td>
+<td></td>
+<td><code>SIPI_HOSTNAME</code></td>
+<td><code>localhost</code></td>
+<td>Public DNS hostname</td>
+</tr>
+<tr>
+<td><code>--keepalive &lt;sec&gt;</code></td>
+<td></td>
+<td><code>SIPI_KEEPALIVE</code></td>
+<td><code>5</code></td>
+<td>HTTP keep-alive timeout in seconds</td>
+</tr>
+<tr>
+<td><code>--nthreads &lt;n&gt;</code></td>
+<td><code>-t</code></td>
+<td><code>SIPI_NTHREADS</code></td>
+<td>CPU cores</td>
+<td>Number of worker threads</td>
+</tr>
+<tr>
+<td><code>--maxpost &lt;size&gt;</code></td>
+<td></td>
+<td><code>SIPI_MAXPOSTSIZE</code></td>
+<td><code>300M</code></td>
+<td>Maximum POST upload size</td>
+</tr>
+<tr>
+<td><code>--imgroot &lt;path&gt;</code></td>
+<td></td>
+<td><code>SIPI_IMGROOT</code></td>
+<td><code>./images</code></td>
+<td>Image repository root directory</td>
+</tr>
+<tr>
+<td><code>--docroot &lt;path&gt;</code></td>
+<td></td>
+<td><code>SIPI_DOCROOT</code></td>
+<td><code>./server</code></td>
+<td>Web server document root</td>
+</tr>
+<tr>
+<td><code>--wwwroute &lt;path&gt;</code></td>
+<td></td>
+<td><code>SIPI_WWWROUTE</code></td>
+<td><code>/server</code></td>
+<td>URL route for web server</td>
+</tr>
+<tr>
+<td><code>--scriptdir &lt;path&gt;</code></td>
+<td></td>
+<td><code>SIPI_SCRIPTDIR</code></td>
+<td><code>./scripts</code></td>
+<td>Directory for Lua route scripts</td>
+</tr>
+<tr>
+<td><code>--tmpdir &lt;path&gt;</code></td>
+<td></td>
+<td><code>SIPI_TMPDIR</code></td>
+<td><code>./tmp</code></td>
+<td>Temporary files directory</td>
+</tr>
+<tr>
+<td><code>--maxtmpage &lt;sec&gt;</code></td>
+<td></td>
+<td><code>SIPI_MAXTMPAGE</code></td>
+<td><code>86400</code></td>
+<td>Max age of temp files in seconds</td>
+</tr>
+<tr>
+<td><code>--initscript &lt;path&gt;</code></td>
+<td></td>
+<td><code>SIPI_INITSCRIPT</code></td>
+<td><code>./config/sipi.init.lua</code></td>
+<td>Path to Lua init script</td>
+</tr>
+<tr>
+<td><code>--cachedir &lt;path&gt;</code></td>
+<td></td>
+<td><code>SIPI_CACHEDIR</code></td>
+<td><code>./cache</code></td>
+<td>Cache directory</td>
+</tr>
+<tr>
+<td><code>--cachesize &lt;size&gt;</code></td>
+<td></td>
+<td><code>SIPI_CACHESIZE</code></td>
+<td><code>200M</code></td>
+<td>Maximum cache size</td>
+</tr>
+<tr>
+<td><code>--cachenfiles &lt;n&gt;</code></td>
+<td></td>
+<td><code>SIPI_CACHENFILES</code></td>
+<td><code>200</code></td>
+<td>Maximum number of cached files</td>
+</tr>
+<tr>
+<td><code>--cachehysteresis &lt;f&gt;</code></td>
+<td></td>
+<td><code>SIPI_CACHEHYSTERESIS</code></td>
+<td><code>0.15</code></td>
+<td>Cache purge ratio (0.0 - 1.0)</td>
+</tr>
+<tr>
+<td><code>--thumbsize &lt;size&gt;</code></td>
+<td></td>
+<td><code>SIPI_THUMBSIZE</code></td>
+<td><code>!128,128</code></td>
+<td>Default thumbnail size (IIIF syntax)</td>
+</tr>
+<tr>
+<td><code>--sslcert &lt;path&gt;</code></td>
+<td></td>
+<td><code>SIPI_SSLCERTIFICATE</code></td>
+<td><code>./certificate/certificate.pem</code></td>
+<td>SSL certificate path</td>
+</tr>
+<tr>
+<td><code>--sslkey &lt;path&gt;</code></td>
+<td></td>
+<td><code>SIPI_SSLKEY</code></td>
+<td><code>./certificate/key.pem</code></td>
+<td>SSL key file path</td>
+</tr>
+<tr>
+<td><code>--jwtkey &lt;string&gt;</code></td>
+<td></td>
+<td><code>SIPI_JWTKEY</code></td>
+<td></td>
+<td>JWT shared secret (42 chars)</td>
+</tr>
+<tr>
+<td><code>--loglevel &lt;level&gt;</code></td>
+<td></td>
+<td><code>SIPI_LOGLEVEL</code></td>
+<td><code>DEBUG</code></td>
+<td>Log level (see Logging section)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="sentry-error-reporting">Sentry Error Reporting<a class="headerlink" href="#sentry-error-reporting" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Env Var</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--sentry-dsn &lt;url&gt;</code></td>
+<td><code>SIPI_SENTRY_DSN</code></td>
+<td>Sentry DSN for error reporting</td>
+</tr>
+<tr>
+<td><code>--sentry-release &lt;ver&gt;</code></td>
+<td><code>SIPI_SENTRY_RELEASE</code></td>
+<td>Sentry release version</td>
+</tr>
+<tr>
+<td><code>--sentry-environment &lt;env&gt;</code></td>
+<td><code>SIPI_SENTRY_ENVIRONMENT</code></td>
+<td>Sentry environment name</td>
+</tr>
+</tbody>
+</table>
+<h3 id="deprecated-options">Deprecated Options<a class="headerlink" href="#deprecated-options" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--salsah</code></td>
+<td>Legacy flag for old SALSAH system conversions</td>
+</tr>
+<tr>
+<td><code>--subdirlevels &lt;n&gt;</code></td>
+<td>Number of subdirectory levels (deprecated)</td>
+</tr>
+<tr>
+<td><code>--subdirexcludes &lt;dirs&gt;</code></td>
+<td>Directories excluded from subdir calculations</td>
+</tr>
+<tr>
+<td><code>--pathprefix</code></td>
+<td>Treat IIIF prefix as file path (deprecated)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="environment-variables">Environment Variables<a class="headerlink" href="#environment-variables" title="Permanent link">&para;</a></h2>
+<p>All server options can be configured via environment variables. Environment variables
+override Lua configuration file values but are themselves overridden by command-line
+flags.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>CLI Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SIPI_CONFIGFILE</code></td>
+<td><code>--config</code></td>
+<td></td>
+<td>Configuration file path</td>
+</tr>
+<tr>
+<td><code>SIPI_SERVERPORT</code></td>
+<td><code>--serverport</code></td>
+<td><code>80</code></td>
+<td>HTTP port</td>
+</tr>
+<tr>
+<td><code>SIPI_SSLPORT</code></td>
+<td><code>--sslport</code></td>
+<td><code>443</code></td>
+<td>HTTPS port</td>
+</tr>
+<tr>
+<td><code>SIPI_HOSTNAME</code></td>
+<td><code>--hostname</code></td>
+<td><code>localhost</code></td>
+<td>Public hostname</td>
+</tr>
+<tr>
+<td><code>SIPI_KEEPALIVE</code></td>
+<td><code>--keepalive</code></td>
+<td><code>5</code></td>
+<td>Keep-alive timeout (seconds)</td>
+</tr>
+<tr>
+<td><code>SIPI_NTHREADS</code></td>
+<td><code>--nthreads</code></td>
+<td>CPU cores</td>
+<td>Worker threads</td>
+</tr>
+<tr>
+<td><code>SIPI_MAXPOSTSIZE</code></td>
+<td><code>--maxpost</code></td>
+<td><code>300M</code></td>
+<td>Max POST size</td>
+</tr>
+<tr>
+<td><code>SIPI_IMGROOT</code></td>
+<td><code>--imgroot</code></td>
+<td><code>./images</code></td>
+<td>Image root directory</td>
+</tr>
+<tr>
+<td><code>SIPI_DOCROOT</code></td>
+<td><code>--docroot</code></td>
+<td><code>./server</code></td>
+<td>Document root</td>
+</tr>
+<tr>
+<td><code>SIPI_WWWROUTE</code></td>
+<td><code>--wwwroute</code></td>
+<td><code>/server</code></td>
+<td>Web server route</td>
+</tr>
+<tr>
+<td><code>SIPI_SCRIPTDIR</code></td>
+<td><code>--scriptdir</code></td>
+<td><code>./scripts</code></td>
+<td>Lua scripts directory</td>
+</tr>
+<tr>
+<td><code>SIPI_TMPDIR</code></td>
+<td><code>--tmpdir</code></td>
+<td><code>./tmp</code></td>
+<td>Temporary directory</td>
+</tr>
+<tr>
+<td><code>SIPI_MAXTMPAGE</code></td>
+<td><code>--maxtmpage</code></td>
+<td><code>86400</code></td>
+<td>Max temp file age</td>
+</tr>
+<tr>
+<td><code>SIPI_INITSCRIPT</code></td>
+<td><code>--initscript</code></td>
+<td><code>./config/sipi.init.lua</code></td>
+<td>Init script path</td>
+</tr>
+<tr>
+<td><code>SIPI_CACHEDIR</code></td>
+<td><code>--cachedir</code></td>
+<td><code>./cache</code></td>
+<td>Cache directory</td>
+</tr>
+<tr>
+<td><code>SIPI_CACHESIZE</code></td>
+<td><code>--cachesize</code></td>
+<td><code>200M</code></td>
+<td>Max cache size</td>
+</tr>
+<tr>
+<td><code>SIPI_CACHENFILES</code></td>
+<td><code>--cachenfiles</code></td>
+<td><code>200</code></td>
+<td>Max cached files</td>
+</tr>
+<tr>
+<td><code>SIPI_CACHEHYSTERESIS</code></td>
+<td><code>--cachehysteresis</code></td>
+<td><code>0.15</code></td>
+<td>Cache purge ratio</td>
+</tr>
+<tr>
+<td><code>SIPI_THUMBSIZE</code></td>
+<td><code>--thumbsize</code></td>
+<td><code>!128,128</code></td>
+<td>Thumbnail size</td>
+</tr>
+<tr>
+<td><code>SIPI_SSLCERTIFICATE</code></td>
+<td><code>--sslcert</code></td>
+<td><code>./certificate/certificate.pem</code></td>
+<td>SSL certificate</td>
+</tr>
+<tr>
+<td><code>SIPI_SSLKEY</code></td>
+<td><code>--sslkey</code></td>
+<td><code>./certificate/key.pem</code></td>
+<td>SSL key</td>
+</tr>
+<tr>
+<td><code>SIPI_JWTKEY</code></td>
+<td><code>--jwtkey</code></td>
+<td></td>
+<td>JWT secret</td>
+</tr>
+<tr>
+<td><code>SIPI_JPEGQUALITY</code></td>
+<td><code>--quality</code></td>
+<td><code>60</code></td>
+<td>JPEG quality</td>
+</tr>
+<tr>
+<td><code>SIPI_LOGLEVEL</code></td>
+<td><code>--loglevel</code></td>
+<td><code>DEBUG</code></td>
+<td>Log level</td>
+</tr>
+<tr>
+<td><code>SIPI_SENTRY_DSN</code></td>
+<td><code>--sentry-dsn</code></td>
+<td></td>
+<td>Sentry DSN</td>
+</tr>
+<tr>
+<td><code>SIPI_SENTRY_RELEASE</code></td>
+<td><code>--sentry-release</code></td>
+<td></td>
+<td>Sentry release</td>
+</tr>
+<tr>
+<td><code>SIPI_SENTRY_ENVIRONMENT</code></td>
+<td><code>--sentry-environment</code></td>
+<td></td>
+<td>Sentry environment</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Configuration precedence</strong> (highest to lowest):</p>
+<ol>
+<li>Command-line flags</li>
+<li>Environment variables</li>
+<li>Lua configuration file</li>
+</ol>
+<h2 id="exit-codes-and-error-handling">Exit Codes and Error Handling<a class="headerlink" href="#exit-codes-and-error-handling" title="Permanent link">&para;</a></h2>
+<h3 id="exit-codes">Exit Codes<a class="headerlink" href="#exit-codes" title="Permanent link">&para;</a></h3>
+<p>When running SIPI as a command-line image converter, the process exit code indicates
+whether the conversion succeeded:</p>
+<ul>
+<li><strong>0</strong> — Success. The output file was written correctly.</li>
+<li><strong>1</strong> (<code>EXIT_FAILURE</code>) — Image processing error. The image could not be read,
+  converted, or written.</li>
+</ul>
+<p><strong>Important for calling services:</strong> Always check the exit code. A non-zero exit code
+means the output file was not produced (or is incomplete).</p>
+<h3 id="error-output">Error Output<a class="headerlink" href="#error-output" title="Permanent link">&para;</a></h3>
+<p>On failure, SIPI prints a short error message to <strong>stderr</strong> indicating the failure
+phase and the specific error. The format is:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>Error &lt;phase&gt; image: &lt;details&gt;
+</code></pre></div>
+<p>Where <code>&lt;phase&gt;</code> is one of <code>reading</code>, <code>converting</code>, or <code>writing</code>. Example:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>Error reading image: Unsupported JPEG colorspace YCCK (file=input.jpg, dimensions=2048x1536, components=4)
+</code></pre></div>
+<h3 id="sentry-integration-cli-mode">Sentry Integration (CLI Mode)<a class="headerlink" href="#sentry-integration-cli-mode" title="Permanent link">&para;</a></h3>
+<p>When the <code>SIPI_SENTRY_DSN</code> environment variable is set, CLI conversion failures
+automatically send a Sentry event with rich image context. This allows developers
+to diagnose failures without reproducing them locally.</p>
+<p>Each Sentry event includes:</p>
+<ul>
+<li>
+<p><strong>Tags</strong> (indexed, searchable, filterable in Sentry):</p>
+<ul>
+<li><code>sipi.mode</code> — always <code>cli</code> for command-line conversions</li>
+<li><code>sipi.phase</code> — <code>read</code>, <code>convert</code>, or <code>write</code></li>
+<li><code>sipi.output_format</code> — the target format (e.g., <code>jpx</code>, <code>jpg</code>, <code>tif</code>, <code>png</code>)</li>
+<li><code>sipi.colorspace</code> — the image's photometric interpretation</li>
+<li><code>sipi.bps</code> — bits per sample</li>
+</ul>
+</li>
+<li>
+<p><strong>Context</strong> ("Image" context with structured data):</p>
+<ul>
+<li><code>input_file</code>, <code>output_file</code> — file paths</li>
+<li><code>width</code>, <code>height</code> — image dimensions (if read successfully)</li>
+<li><code>channels</code> — number of color channels</li>
+<li><code>bps</code> — bits per sample</li>
+<li><code>colorspace</code> — photometric interpretation</li>
+<li><code>icc_profile_type</code> — ICC profile type (e.g., sRGB, AdobeRGB, CMYK)</li>
+<li><code>orientation</code> — EXIF orientation</li>
+<li><code>file_size_bytes</code> — input file size</li>
+</ul>
+</li>
+</ul>
+<h3 id="common-failure-causes">Common Failure Causes<a class="headerlink" href="#common-failure-causes" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Error</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Unsupported colorspace (YCCK, unknown)</td>
+<td>The JPEG uses a colorspace SIPI cannot convert. Re-encode the source image in sRGB.</td>
+</tr>
+<tr>
+<td>Unsupported bits/sample</td>
+<td>Only 8 and 16 bits/sample are supported. Images with other bit depths must be converted first.</td>
+</tr>
+<tr>
+<td>Channel/colorspace mismatch</td>
+<td>The number of channels does not match the declared colorspace (e.g., 4 channels but RGB). The file metadata may be corrupt.</td>
+</tr>
+<tr>
+<td>ICC profile incompatible</td>
+<td>The ICC profile does not match the channel count (e.g., CMYK profile on a 3-channel image).</td>
+</tr>
+<tr>
+<td>Corrupt or truncated file</td>
+<td>The input file is incomplete or damaged.</td>
+</tr>
+<tr>
+<td>Unsupported TIFF tiling</td>
+<td>The TIFF tile configuration is inconsistent or uses unsupported bit depths.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="integration-notes-for-calling-services">Integration Notes for Calling Services<a class="headerlink" href="#integration-notes-for-calling-services" title="Permanent link">&para;</a></h3>
+<p>If you call SIPI CLI from another service (e.g., a Java service):</p>
+<ol>
+<li><strong>Check the exit code.</strong> Non-zero means failure — do not assume the output file
+   exists or is valid.</li>
+<li><strong>Parse stderr</strong> (optional). The first line of stderr contains a human-readable
+   error message with the failure phase and details.</li>
+<li><strong>Set <code>SIPI_SENTRY_DSN</code></strong> to get full diagnostics server-side. Use the Sentry
+   tags <code>sipi.phase</code>, <code>sipi.colorspace</code>, <code>sipi.bps</code>, and <code>sipi.output_format</code> to
+   build alerts and filters for specific failure patterns.</li>
+</ol>
+<h2 id="configuration-files">Configuration Files<a class="headerlink" href="#configuration-files" title="Permanent link">&para;</a></h2>
+<p>SIPI's configuration file is written in <a href="https://www.lua.org/">Lua</a>. You
+can make your own configuration file by adapting
+<code>config/sipi.config.lua</code>.</p>
+<ul>
+<li>Check that the port number is correct and that your operating
+  system's firewall does not block it.</li>
+<li>Set <code>imgroot</code> to the directory containing the files to be served.</li>
+<li>Create the directory <code>cache</code> in the top-level directory of the
+  source tree.</li>
+</ul>
+<p>For more information, see the comments in <code>config/sipi.config.lua</code> and the
+<a href="../sipi/">Reference</a> page for all configuration parameters.</p>
+<h3 id="https-support">HTTPS Support<a class="headerlink" href="#https-support" title="Permanent link">&para;</a></h3>
+<p>SIPI supports SSL/TLS encryption if the
+<a href="https://www.openssl.org/">OpenSSL</a> library is installed. You will need
+to install a certificate; see <code>config/sipi.config.lua</code> for instructions.</p>
+<h3 id="iiif-prefixes">IIIF Prefixes<a class="headerlink" href="#iiif-prefixes" title="Permanent link">&para;</a></h3>
+<p>SIPI supports <a href="https://iiif.io/api/image/3.0/#21-image-request-uri-syntax">IIIF Image API
+URLs</a>.</p>
+<p>If the configuration property <code>prefix_as_path</code> is set to <code>true</code>, the
+IIIF <code>prefix</code> portion of the URL is interpreted as a subdirectory of
+<code>imgroot</code>, and SIPI looks for the requested image file in that
+subdirectory. Otherwise, it looks for the file in <code>imgroot</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      &copy; 2017 - 2026 <a href='https://dasch.swiss' target='_blank'>Data and Service Center for the Humanities (DaSCH)</a>
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["search.suggest", "search.highlight", "navigation.sections", "toc.integrate", "content.code.copy"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+    
+  </body>
+</html>
