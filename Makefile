@@ -39,7 +39,16 @@ docker-build: ## build and publish Sipi Docker image locally
 		$(DOCKER_CACHE_TO) \
 		-t $(DOCKER_IMAGE) -t $(DOCKER_REPO):latest \
 		--load \
-		.
+		. \
+	|| ( echo "Build failed, retrying without GHA cache..." && \
+	docker buildx build \
+		--progress auto \
+		--build-arg SIPI_BASE=$(SIPI_BASE) \
+		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		--build-arg VERSION=$(BUILD_TAG) \
+		-t $(DOCKER_IMAGE) -t $(DOCKER_REPO):latest \
+		--load \
+		. )
 
 .PHONY: docker-test-build-arm64
 docker-test-build-arm64: ## build + test arm64 Docker image, extract debug symbols
@@ -53,7 +62,17 @@ docker-test-build-arm64: ## build + test arm64 Docker image, extract debug symbo
 		$(DOCKER_CACHE_TO) \
 		-t $(DOCKER_IMAGE)-arm64 -t $(DOCKER_REPO):latest \
 		--load \
-		.
+		. \
+	|| ( echo "Build failed, retrying without GHA cache..." && \
+	docker buildx build \
+		--progress auto \
+		--platform linux/arm64 \
+		--build-arg SIPI_BASE=$(SIPI_BASE) \
+		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		--build-arg VERSION=$(BUILD_TAG) \
+		-t $(DOCKER_IMAGE)-arm64 -t $(DOCKER_REPO):latest \
+		--load \
+		. )
 	docker buildx build \
 		--platform linux/arm64 \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
@@ -63,7 +82,16 @@ docker-test-build-arm64: ## build + test arm64 Docker image, extract debug symbo
 		$(DOCKER_CACHE_TO) \
 		--target debug-symbols \
 		--output type=local,dest=./debug-out \
-		.
+		. \
+	|| ( echo "Debug symbols build failed, retrying without GHA cache..." && \
+	docker buildx build \
+		--platform linux/arm64 \
+		--build-arg SIPI_BASE=$(SIPI_BASE) \
+		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		--build-arg VERSION=$(BUILD_TAG) \
+		--target debug-symbols \
+		--output type=local,dest=./debug-out \
+		. )
 	mv ./debug-out/sipi.debug ./sipi-arm64.debug && rm -rf ./debug-out
 
 .PHONY: docker-push-arm64
@@ -82,7 +110,17 @@ docker-test-build-amd64: ## build + test amd64 Docker image, extract debug symbo
 		$(DOCKER_CACHE_TO) \
 		-t $(DOCKER_IMAGE)-amd64 -t $(DOCKER_REPO):latest \
 		--load \
-		.
+		. \
+	|| ( echo "Build failed, retrying without GHA cache..." && \
+	docker buildx build \
+		--progress auto \
+		--platform linux/amd64 \
+		--build-arg SIPI_BASE=$(SIPI_BASE) \
+		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		--build-arg VERSION=$(BUILD_TAG) \
+		-t $(DOCKER_IMAGE)-amd64 -t $(DOCKER_REPO):latest \
+		--load \
+		. )
 	docker buildx build \
 		--platform linux/amd64 \
 		--build-arg SIPI_BASE=$(SIPI_BASE) \
@@ -92,7 +130,16 @@ docker-test-build-amd64: ## build + test amd64 Docker image, extract debug symbo
 		$(DOCKER_CACHE_TO) \
 		--target debug-symbols \
 		--output type=local,dest=./debug-out \
-		.
+		. \
+	|| ( echo "Debug symbols build failed, retrying without GHA cache..." && \
+	docker buildx build \
+		--platform linux/amd64 \
+		--build-arg SIPI_BASE=$(SIPI_BASE) \
+		--build-arg UBUNTU_BASE=$(UBUNTU_BASE) \
+		--build-arg VERSION=$(BUILD_TAG) \
+		--target debug-symbols \
+		--output type=local,dest=./debug-out \
+		. )
 	mv ./debug-out/sipi.debug ./sipi-amd64.debug && rm -rf ./debug-out
 
 .PHONY: docker-push-amd64
@@ -117,7 +164,15 @@ docker-build-sipi-dev-env: ## build Sipi remote development environment Docker i
 		-t daschswiss/remote-sipi-env:1.0 \
 		--load \
 		-f ./Dockerfile.sipi-dev-env \
-		.
+		. \
+	|| ( echo "Build failed, retrying without GHA cache..." && \
+	docker buildx build \
+		--progress auto \
+		--build-arg UID=$(shell id -u) \
+		-t daschswiss/remote-sipi-env:1.0 \
+		--load \
+		-f ./Dockerfile.sipi-dev-env \
+		. )
 
 #####################################
 # Smoke tests (run against Docker image)

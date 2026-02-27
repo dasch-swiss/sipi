@@ -31,7 +31,11 @@ ARG VERSION=OFF
 
 # Configure, build, and test
 RUN cmake -S . -B ./build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEXT_PROVIDED_VERSION=$VERSION --log-context
-RUN cmake --build ./build --parallel $(nproc)
+RUN cmake --build ./build --parallel $(nproc) || \
+    { echo "Build attempt 1 failed, retrying in 15s..." && sleep 15 && \
+      cmake --build ./build --parallel $(nproc); } || \
+    { echo "Build attempt 2 failed, retrying in 30s..." && sleep 30 && \
+      cmake --build ./build --parallel $(nproc); }
 RUN cd build && ctest --output-on-failure
 
 # Extract debug symbols into a separate file, then strip the binary.
@@ -108,9 +112,9 @@ COPY --from=builder /tmp/sipi/scripts/test_functions.lua /sipi/scripts/test_func
 COPY --from=builder /tmp/sipi/scripts/send_response.lua /sipi/scripts/send_response.lua
 
 RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
-        curl -L https://github.com/fpco/pid1-rs/releases/download/v0.1.2/pid1-x86_64-unknown-linux-musl -o /usr/sbin/pid1 && chmod +x /usr/sbin/pid1; \
+        curl -fL --retry 3 --retry-delay 10 --retry-all-errors https://github.com/fpco/pid1-rs/releases/download/v0.1.2/pid1-x86_64-unknown-linux-musl -o /usr/sbin/pid1 && chmod +x /usr/sbin/pid1; \
     elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
-        curl -L https://github.com/fpco/pid1-rs/releases/download/v0.1.2/pid1-aarch64-unknown-linux-musl -o /usr/sbin/pid1 && chmod +x /usr/sbin/pid1; \
+        curl -fL --retry 3 --retry-delay 10 --retry-all-errors https://github.com/fpco/pid1-rs/releases/download/v0.1.2/pid1-aarch64-unknown-linux-musl -o /usr/sbin/pid1 && chmod +x /usr/sbin/pid1; \
     else \
         echo "No supported target architecture selected"; \
     fi
