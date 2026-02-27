@@ -56,7 +56,6 @@ jobs:
           sentry-cli debug-files upload \
             --org "$SENTRY_ORG" \
             --project "$SENTRY_PROJECT" \
-            --release "$GITHUB_REF_NAME" \
             sipi-amd64.debug
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -114,7 +113,6 @@ jobs:
           sentry-cli debug-files upload \
             --org "$SENTRY_ORG" \
             --project "$SENTRY_PROJECT" \
-            --release "$GITHUB_REF_NAME" \
             sipi-arm64.debug
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
