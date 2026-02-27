@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.17.1](https://github.com/dasch-swiss/sipi/compare/v3.17.0...v3.17.1) (2026-02-27)
+
+
+### Bug Fixes
+
+* **ci:** Add retry logic for transient download and cache failures ([f8d7e03](https://github.com/dasch-swiss/sipi/commit/f8d7e03e6d1600ccbd54ee811f0b2a298738b2d5))
+* **ci:** Expose GHA cache variables to Make for Docker layer caching ([bba3cc3](https://github.com/dasch-swiss/sipi/commit/bba3cc3211c59004c5b4b8b3f365c827431fc434))
+* **ci:** Filter Docker Scout SARIF to critical/high severities ([3b27580](https://github.com/dasch-swiss/sipi/commit/3b27580dce3841717c6f369e207960ea5836e19d))
+* **ci:** Remove invalid --release flag from sentry-cli debug-files upload ([bdc8c78](https://github.com/dasch-swiss/sipi/commit/bdc8c78aa46c73e51cd0764a7f4986e578edb09c))
+* **test:** Replace fixed sleep with readiness polling in smoke tests ([ce4af8c](https://github.com/dasch-swiss/sipi/commit/ce4af8c317c15c16b81726ad4e2ea3b6500ac1f2))
+
 ## [3.17.0](https://github.com/dasch-swiss/sipi/compare/v3.16.3...v3.17.0) (2026-02-25)
 
 
