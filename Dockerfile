@@ -1,23 +1,37 @@
-# syntax=docker/dockerfile:1.3
+# syntax=docker/dockerfile:1
 
 # Expose (global) variables (ARGs before FROM can only be used on FROM lines and not afterwards)
-ARG SIPI_BASE=daschswiss/sipi-base:2.23.0-2
+ARG SIPI_BASE=daschswiss/sipi-base:2.23.0
 ARG UBUNTU_BASE=ubuntu:24.04
 
 # STAGE 1: Build
-FROM $SIPI_BASE as builder
+FROM $SIPI_BASE AS builder
 
 WORKDIR /tmp/sipi
 
-# Add everything to image.
-COPY . .
+# Copy all source files needed for cmake configure + build + test.
+# The .dockerignore excludes docs, CI configs, smoke/e2e tests, and build artifacts
+# to keep the Docker build context small.
+COPY CMakeLists.txt version.txt generate_icc_header.sh ./
+COPY cmake/ cmake/
+COPY ext/ ext/
+COPY vendor/ vendor/
+COPY include/ include/
+COPY src/ src/
+COPY shttps/ shttps/
+COPY fuzz/ fuzz/
+COPY patches/ patches/
+COPY test/ test/
+COPY config/ config/
+COPY scripts/ scripts/
+COPY server/ server/
 
 # this can be provided when the image is built
 ARG VERSION=OFF
 
-# Build SIPI with debug info (RelWithDebInfo = -O3 -g) and run unit tests.
+# Configure, build, and test
 RUN cmake -S . -B ./build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEXT_PROVIDED_VERSION=$VERSION --log-context
-RUN cmake --build ./build --parallel 4
+RUN cmake --build ./build --parallel $(nproc)
 RUN cd build && ctest --output-on-failure
 
 # Extract debug symbols into a separate file, then strip the binary.
@@ -26,11 +40,11 @@ RUN objcopy --only-keep-debug ./build/sipi ./build/sipi.debug \
     && strip ./build/sipi
 
 # STAGE 2: Debug symbols (used by CI to extract .debug file without rebuilding)
-FROM scratch as debug-symbols
+FROM scratch AS debug-symbols
 COPY --from=builder /tmp/sipi/build/sipi.debug /sipi.debug
 
 # STAGE 3: Setup
-FROM $UBUNTU_BASE as final
+FROM $UBUNTU_BASE AS final
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM

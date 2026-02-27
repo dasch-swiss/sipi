@@ -71,20 +71,29 @@ You will then find the manual under `site/index.html`.
 
 ## Building from source
 
-All should be run from inside the root of the repository.
+All commands are run from the repository root via `make`. Run `make help` for a full list of targets.
 
-### Build and run inside Docker - recommended
+### Build and test with Docker (recommended)
 ```bash
-$ make compile
-$ make test
-$ make run
+make docker-build    # build Docker image (compiles + runs unit tests)
+make test-smoke      # run smoke tests against Docker image
 ```
 
-### Build under macOS - not recommended. You are on your own. We warned you ;-)
-
+### Build and test with Nix (native development)
 ```bash
-$ (mkdir -p ./build-mac && cd build-mac && cmake .. && make && ctest --verbose)
+nix develop          # enter Nix development shell (GCC)
+make nix-build       # build SIPI (debug + coverage)
+make nix-test        # run unit tests
+make nix-test-e2e    # run end-to-end tests
+make nix-run         # start SIPI server
 ```
+
+### Build on macOS (not recommended)
+```bash
+mkdir -p ./build-mac && cd build-mac && cmake .. && make && ctest --verbose
+```
+
+See [Building SIPI from Source Code](https://sipi.io/development/building/) for full details.
 
 ## Sentry.io
 If you would like to use Sentry.io for error reporting, you can set the environment variable

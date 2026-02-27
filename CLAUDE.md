@@ -8,63 +8,40 @@ SIPI (Simple Image Presentation Interface) is a multithreaded, high-performance,
 
 ## Build System and Common Commands
 
+All targets are in a single `Makefile`. Run `make help` for a complete list.
+
 ### Docker-based Development (Recommended)
 ```bash
-# Compile SIPI with debug symbols
-make compile
-
-# Run tests
-make test
-
-# Build and run server
-make run
-
-# Build Docker image
-make docker-build
-
-# Run smoke tests
-make test-smoke
+make docker-build       # build Docker image (compiles + runs unit tests)
+make test-smoke         # run smoke tests against Docker image
+make docker-test-build-amd64   # build + test for amd64 (CI)
+make docker-test-build-arm64   # build + test for arm64 (CI)
 ```
 
 ### Native Development (with Nix)
+
+All `nix-*` targets must be run inside a Nix development shell:
+
 ```bash
-# Enter Nix development shell
-nix develop .#clang    # or `just clang`
-nix develop           # gcc environment, or `just gcc`
-
-# Build project
-just build            # or cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug
-cmake --build ./build --parallel
-
-# Run tests
-just test             # or cd build && ctest --output-on-failure
-
-# Generate test coverage
-just coverage         # uses gcovr
-just coverage1        # uses lcov with HTML output
-
-# Run SIPI server
-just run              # or ./build/sipi --config=config/sipi.config.lua
-
-# Run with Valgrind
-just valgrind
+nix develop             # GCC environment (default, used by CI)
+nix develop .#clang     # Clang environment (alternative)
 ```
 
-### macOS Development (Not Recommended)
 ```bash
-mkdir -p ./build-mac && cd build-mac && cmake .. && make && ctest --verbose
+make nix-build          # build SIPI (debug + coverage)
+make nix-test           # run unit tests
+make nix-test-e2e       # run end-to-end tests
+make nix-coverage       # generate XML coverage report (gcovr)
+make nix-coverage-html  # generate HTML coverage report (lcov)
+make nix-run            # start SIPI server
+make nix-valgrind       # run with Valgrind
+make nix-doxygen-serve  # serve doxygen API docs
 ```
 
 ### Documentation
 ```bash
-# Build documentation
-make docs-build
-
-# Serve documentation locally
-make docs-serve
-
-# Serve doxygen docs (after building via cmake)
-just doxygen-serve
+make docs-build         # build documentation site
+make docs-serve         # serve documentation locally
 ```
 
 ## High-Level Architecture
@@ -136,21 +113,21 @@ just doxygen-serve
 
 ### Testing Structure
 
-**Unit Tests (`test/unit/`)**
+**Unit Tests (`test/unit/`)** — `make nix-test`
 - GoogleTest framework with ApprovalTests
 - Tests for configuration, iiifparser, sipiimage, logger, handlers
 - Run specific test: `cd build && test/unit/[component]/[component]`
 
-**End-to-End Tests (`test/e2e/`)**
+**End-to-End Tests (`test/e2e/`)** — `make nix-test-e2e`
 - Python pytest-based tests
-- Run with: `pytest -s --sipi-exec=./build/sipi` (from test/e2e/)
+- Requires a native build (not Docker)
 
-**Approval Tests (`test/approval/`)**
+**Approval Tests (`test/approval/`)** — included in `make nix-test`
 - Snapshot-based testing for regression detection
 
-**Smoke Tests (`test/smoke/`)**
+**Smoke Tests (`test/smoke/`)** — `make test-smoke`
 - Tests against Docker images
-- Run with: `pytest -s test/smoke`
+- Requires a built Docker image (`make docker-build`)
 
 ### Dependencies
 
@@ -172,10 +149,9 @@ just doxygen-serve
 ### Important Files
 
 - `CMakeLists.txt` - Main build configuration
-- `Makefile` - Docker-based build targets
-- `justfile` - Nix-based development commands
+- `Makefile` - All build targets (Docker, Nix, docs, CI)
 - `version.txt` - Version information
-- `vars.mk` - Build variables
+- `vars.mk` - Build variables (Docker repo, build tag)
 - `flake.nix` - Nix development environment
 
 ### Development Notes

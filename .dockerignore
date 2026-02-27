@@ -1,16 +1,49 @@
+# Version control
 .git
 .gitignore
+
+# CI/CD and tooling
+.github/
+.claude/
+
+# Build artifacts
 build/
 build-linux/
 build-mac/
-cmake-build-debug/
-cmake-build-debug-remote/
-cmake-build-debug-inside-docker/
-cmake-build-relwithdebinfo-inside-docker/
-cmake-build-dockerdebug/
-Dockerfile
-README.md
+cmake-build-*/
+debug-out/
+
+# Documentation
+docs/
+doxygen/
+
+# Files not needed in Docker build
+certificate/
+db/
+
+# Tests that run outside Docker (smoke tests use the built image, e2e runs natively)
+test/smoke/
+test/e2e/
+# NOTE: test/_test_data/ and test/unit/ must NOT be excluded (needed by ctest)
+
+# Python artifacts
 **/__pycache__/
 wheels/
 pip-log.txt
 pip-wheel-metadata/
+
+# Build system files (not needed inside Docker)
+Makefile
+vars.mk
+justfile
+.dockerignore
+.editorconfig
+.clang-*
+LICENSE
+
+# Dockerfiles (prevent recursive inclusion)
+Dockerfile
+Dockerfile.*
+
+# Documentation files
+*.md

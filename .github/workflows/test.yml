@@ -26,8 +26,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # run on stable and beta to ensure that tests won't break on the next version of the rust
-        # toolchain
         compiler: [ gcc ]
         runs-on: [ ubuntu-24.04, ubuntu-24.04-arm ]
     steps:
@@ -41,14 +39,14 @@ jobs:
           nix \
             --extra-experimental-features "nix-command flakes" \
             --option filter-syscalls false \
-            develop --command bash -c "cmake -S . -B ./build -DCODE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug --log-context && cmake --build ./build --parallel 4 && cd build && ctest --output-on-failure"
+            develop --command bash -c "make nix-build && make nix-test && make nix-test-e2e"
       - name: Gather code coverage
         if: ${{ matrix.runs-on == 'ubuntu-24.04' }}
         run: |
           nix \
             --extra-experimental-features "nix-command flakes" \
             --option filter-syscalls false \
-            develop --command bash -c "cd build && gcovr -j 1 --delete --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable gcov --gcov-ignore-parse-errors=negative_hits.warn_once_per_file"
+            develop --command bash -c "make nix-coverage"
       - name: Upload coverage reports to Codecov
         if: ${{ matrix.runs-on == 'ubuntu-24.04' }}
         uses: codecov/codecov-action@v5.5.2
