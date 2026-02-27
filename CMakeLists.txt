@@ -539,19 +539,6 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/config/sipi.config.lua
 # adds google tests defined in the test/unit and test/approval subdirectories
 add_subdirectory(test)
 
-# custom target to only run 'e2e' tests
-add_custom_target(e2e
-        DEPENDS sipi
-        COMMAND pytest -s --sipi-exec=${CMAKE_BINARY_DIR}/sipi
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test/e2e)
-
-# enables running of 'e2e' tests when `make test` is executed
-add_test(NAME all_python_based_e2e_tests
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test/e2e
-        COMMAND pytest -s --sipi-exec=$<TARGET_FILE:sipi>)
-
-set_property(TEST all_python_based_e2e_tests PROPERTY LABELS e2e)
-
 #-------------------
 # Fuzz testing
 #-------------------
