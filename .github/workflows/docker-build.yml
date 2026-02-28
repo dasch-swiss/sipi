@@ -64,7 +64,7 @@ jobs:
           organization: daschswiss
       - name: Upload SARIF to GitHub Security
         if: github.event_name == 'pull_request'
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: scout-results.sarif
 
