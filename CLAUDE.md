@@ -142,9 +142,9 @@ make docs-serve         # serve documentation locally
 - Error reporting: sentry
 
 **System Dependencies**
-- OpenSSL, libcurl, libmagic (via pkg-config)
 - Threads (pthread)
 - iconv (macOS)
+- Note: OpenSSL, libcurl, and libmagic are now built from source (see `ext/`)
 
 ### Important Files
 

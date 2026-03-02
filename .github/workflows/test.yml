@@ -1,24 +1,25 @@
-# This is the main CI workflow that runs the test suite on all pull requests.
-# It runs the following inside a Nix development shell and ubuntu-24.04 runner:
-#     - a debug build
-#     - with code coverage enabled
-#     - using the GCC compiler
-#     - on amd64 and arm64 architectures
-#     - and runs the test suite (e2e, unit, approval)
+# Main CI workflow for pull requests and scheduled verification.
+# Includes:
+#   - Existing Nix/GCC build+unit+e2e matrix on Linux amd64/arm64
+#   - Zig static Linux validation (Release, full unit+e2e) on internal PRs
+#   - Zig native macOS arm64 build + dylib audit on internal PRs
 
 permissions:
   contents: read
+
 on:
   schedule:
     # run on midnight every day
     - cron: '0 0 * * *'
   pull_request:
-    types: [ opened, synchronize, reopened ]
+    types: [opened, synchronize, reopened]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
+
 name: test
+
 jobs:
   test:
     runs-on: ${{ matrix.runs-on }}
@@ -26,8 +27,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [ gcc ]
-        runs-on: [ ubuntu-24.04, ubuntu-24.04-arm ]
+        compiler: [gcc]
+        runs-on: [ubuntu-24.04, ubuntu-24.04-arm]
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
@@ -53,3 +54,129 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: dasch-swiss/sipi
+
+  zig-static-linux:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ${{ matrix.runner }}
+    name: zig-static / ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-linux-musl
+            arch: amd64
+            runner: ubuntu-24.04
+          - target: aarch64-linux-musl
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+        with:
+          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Verify Zig installation
+        run: |
+          zig version
+          zig cc --version
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build autoconf automake libtool binutils
+
+      - name: Configure static build
+        run: |
+          cmake -S . -B build-static \
+            -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/zig-toolchain.cmake \
+            -DZIG_TARGET=${{ matrix.target }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
+
+      - name: Build
+        run: cmake --build build-static --parallel $(nproc)
+
+      - name: Run unit tests
+        run: cd build-static && ctest --output-on-failure
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GH_TOKEN }}
+
+      - name: Run end-to-end tests
+        run: |
+          nix \
+            --extra-experimental-features "nix-command flakes" \
+            --option filter-syscalls false \
+            develop --command bash -c "cd test/e2e && pytest -s --sipi-exec=${GITHUB_WORKSPACE}/build-static/sipi"
+
+      - name: Verify static linkage
+        run: |
+          file build-static/sipi
+          if ldd build-static/sipi 2>&1 | grep -q "not a dynamic executable\|statically linked"; then
+            echo "Binary reports as statically linked"
+          else
+            echo "Unexpected dynamic linkage according to ldd"
+            ldd build-static/sipi
+            exit 1
+          fi
+
+          if readelf -d build-static/sipi | grep -q '(NEEDED)'; then
+            echo "Unexpected dynamic dependencies (NEEDED) found:"
+            readelf -d build-static/sipi | grep '(NEEDED)'
+            exit 1
+          fi
+
+  zig-macos-arm64:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-14
+    name: zig-macos / arm64 dylib-audit
+    steps:
+      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+        with:
+          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Verify Zig installation
+        run: |
+          zig version
+          zig cc --version
+
+      - name: Install build dependencies
+        run: |
+          brew update
+          brew install cmake autoconf automake libtool
+
+      - name: Configure Release build
+        run: |
+          cmake -S . -B build-zig-macos \
+            -G "Unix Makefiles" \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/zig-toolchain.cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
+
+      - name: Build
+        run: cmake --build build-zig-macos --parallel $(sysctl -n hw.ncpu)
+
+      - name: Audit runtime dylibs
+        run: |
+          otool -L build-zig-macos/sipi
+          deps="$(otool -L build-zig-macos/sipi | tail -n +2 | awk '{print $1}')"
+          dep_count="$(printf '%s\n' "$deps" | sed '/^$/d' | wc -l | tr -d ' ')"
+
+          if [ "$dep_count" -ne 1 ] || [ "$deps" != "/usr/lib/libSystem.B.dylib" ]; then
+            echo "Unexpected dylib set detected:"
+            printf '%s\n' "$deps"
+            exit 1
+          fi
+
+          echo "macOS dylib policy satisfied"

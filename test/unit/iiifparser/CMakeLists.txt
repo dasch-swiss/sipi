@@ -25,7 +25,7 @@ add_executable(
 target_link_libraries(
   ${TEST_NAME}
   libgtest
-  magic
+  magic_static
 )
 
 target_link_libraries(${TEST_NAME} build_config)

@@ -15,6 +15,7 @@ nav:
   - Lua Image Functions: lua/lua-image.md
   - SQLite Integration: lua/sqlite.md
   - Building: development/building.md
+  - CI and Release: development/ci.md
   - Developing: development/developing.md
   - Release Notes: release-notes/index.md
 
@@ -69,6 +70,7 @@ plugins:
           - lua/sqlite.md: "SQLite integration from Lua"
         "Development":
           - development/building.md: "Build instructions"
+          - development/ci.md: "CI and release pipeline guide"
           - development/developing.md: "Development guide"
         "Release Notes":
           - release-notes/index.md

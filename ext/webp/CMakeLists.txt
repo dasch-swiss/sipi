@@ -17,9 +17,12 @@ ExternalProject_Add(project_webp
         CMAKE_ARGS  -DBUILD_SHARED_LIBS=OFF
                     -DWEBP_BUILD_ANIM_UTILS=OFF
                     -DWEBP_BUILD_VWEBP=OFF
+                    -DCMAKE_DISABLE_FIND_PACKAGE_TIFF=TRUE
                     -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/local
                     -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local
                     -DWEBP_BUILD_CWEBP=OFF
+                    -DWEBP_BUILD_GIF2WEBP=OFF
+                    -DCMAKE_DISABLE_FIND_PACKAGE_GIF=TRUE
         )
 ExternalProject_Get_Property(project_webp install_dir)
 

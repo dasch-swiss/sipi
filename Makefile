@@ -256,6 +256,69 @@ docs-install-requirements: ## install requirements for documentation
 	@$(MAKE) -C docs docs-install-requirements
 
 #####################################
+# Zig toolchain builds
+#####################################
+
+# Zig target for cross-compilation (empty = native build)
+ZIG_TARGET ?=
+
+# Common cmake flags for Zig builds
+ZIG_CMAKE_FLAGS = -G "Unix Makefiles" \
+	-DCMAKE_TOOLCHAIN_FILE=cmake/zig-toolchain.cmake \
+	--log-context
+
+.PHONY: zig-build-local
+zig-build-local: ## build SIPI for local dev using Zig (no Nix required, macOS/Linux)
+	cmake -B build -S . \
+		$(ZIG_CMAKE_FLAGS) \
+		-DCMAKE_BUILD_TYPE=Debug
+	cmake --build build --parallel $(NPROC)
+
+.PHONY: zig-test
+zig-test: ## run unit tests (after zig-build-local)
+	cd build && ctest --output-on-failure
+
+.PHONY: zig-test-e2e
+zig-test-e2e: ## run e2e tests against Zig build (after zig-build-local)
+	@if [ ! -x "$(PWD)/build/sipi" ]; then \
+		echo "Missing build/sipi. Run 'make zig-build-local' first."; \
+		exit 1; \
+	fi
+	@if pytest --version >/dev/null 2>&1; then \
+		cd test/e2e && pytest -s --sipi-exec=../../build/sipi; \
+	elif python3 -m pytest --version >/dev/null 2>&1; then \
+		cd test/e2e && python3 -m pytest -s --sipi-exec=../../build/sipi; \
+	else \
+		echo "pytest not available in the current shell, running via nix develop..."; \
+		nix --extra-experimental-features "nix-command flakes" --option filter-syscalls false develop --command bash -c "cd test/e2e && pytest -s --sipi-exec=$(PWD)/build/sipi"; \
+	fi
+
+.PHONY: zig-run
+zig-run: ## run SIPI server (after zig-build-local)
+	$(PWD)/build/sipi --config=$(PWD)/config/sipi.config.lua
+
+.PHONY: zig-build-static
+zig-build-static: ## build fully static Linux binary (set ZIG_TARGET for cross-compile)
+	cmake -B build-static -S . \
+		$(ZIG_CMAKE_FLAGS) \
+		-DZIG_TARGET=$(ZIG_TARGET) \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
+	cmake --build build-static --parallel $(NPROC)
+
+.PHONY: zig-build-amd64
+zig-build-amd64: ## build static SIPI binary for Linux amd64
+	$(MAKE) zig-build-static ZIG_TARGET=x86_64-linux-musl
+
+.PHONY: zig-build-arm64
+zig-build-arm64: ## build static SIPI binary for Linux arm64
+	$(MAKE) zig-build-static ZIG_TARGET=aarch64-linux-musl
+
+.PHONY: zig-clean
+zig-clean: ## clean Zig build artifacts
+	@rm -rf build-static/
+
+#####################################
 # Utilities
 #####################################
 

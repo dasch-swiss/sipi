@@ -71,56 +71,57 @@ std::vector<unsigned char> SipiExif::exifBytes()
 
 Exiv2::Rational SipiExif::toRational(float f)
 {
-  int numerator = 0;
-  int denominator = 0;
-  if (f == 0.0F) {
-    numerator = 0;
-    denominator = 1;
-  } else if (f == floorf(f)) {
-    numerator = (int)f;
-    denominator = 1;
-  } else if (f > 0.0F) {
-    if (f < 1.0F) {
-      numerator = (int)(f * static_cast<float>(LONG_MAX));
-      denominator = INT_MAX;
-    } else {
-      numerator = INT_MAX;
-      denominator = (int)(static_cast<float>(INT_MAX) / f);
-    }
-  } else {
-    if (f > -1.0F) {
-      numerator = (int)(f * static_cast<float>(INT_MAX));
-      denominator = INT_MAX;
-    } else {
-      numerator = INT_MAX;
-      denominator = (int)(static_cast<float>(INT_MAX) / f);
-    }
+  if (!std::isfinite(f)) { return std::make_pair(0, 1); }
+
+  const double value = static_cast<double>(f);
+  if (value == 0.0) { return std::make_pair(0, 1); }
+  if (std::trunc(value) == value && value >= static_cast<double>(INT_MIN) && value <= static_cast<double>(INT_MAX)) {
+    return std::make_pair(static_cast<int>(value), 1);
   }
+
+  int denominator = INT_MAX;
+  double scaled = value * static_cast<double>(denominator);
+  while ((scaled > static_cast<double>(INT_MAX) || scaled < static_cast<double>(INT_MIN)) && denominator > 1) {
+    denominator /= 10;
+    scaled = value * static_cast<double>(denominator);
+  }
+
+  if (denominator < 1) { denominator = 1; }
+
+  if (scaled > static_cast<double>(INT_MAX)) { scaled = static_cast<double>(INT_MAX); }
+  if (scaled < static_cast<double>(INT_MIN)) { scaled = static_cast<double>(INT_MIN); }
+
+  int numerator = static_cast<int>(std::round(scaled));
+  if (numerator == 0) { numerator = (value > 0.0) ? 1 : -1; }
+
   return std::make_pair(numerator, denominator);
 }
 //============================================================================
 
 Exiv2::URational SipiExif::toURational(float f)
 {
-  unsigned int numerator;
-  unsigned int denominator;
-
+  if (!std::isfinite(f)) throw SipiError("Cannot convert non-finite float to URational!");
   if (f < 0.0F) throw SipiError("Cannot convert negative float to URational!");
 
-  if (f == 0.0F) {
-    numerator = 0;
-    denominator = 1;
-  } else if (f == (float)((int)f)) {
-    numerator = (int)f;
-    denominator = 1;
+  const double value = static_cast<double>(f);
+  if (value == 0.0) { return std::make_pair(0U, 1U); }
+  if (std::trunc(value) == value && value <= static_cast<double>(UINT_MAX)) {
+    return std::make_pair(static_cast<unsigned int>(value), 1U);
   }
-  if (f < 1.0F) {
-    numerator = (int)(f * static_cast<float>(UINT_MAX));
-    denominator = UINT_MAX;
-  } else {
-    numerator = UINT_MAX;
-    denominator = (int)(static_cast<float>(UINT_MAX) / f);
+
+  unsigned int denominator = UINT_MAX;
+  double scaled = value * static_cast<double>(denominator);
+  while (scaled > static_cast<double>(UINT_MAX) && denominator > 1U) {
+    denominator /= 10U;
+    scaled = value * static_cast<double>(denominator);
   }
+
+  if (denominator < 1U) { denominator = 1U; }
+  if (scaled > static_cast<double>(UINT_MAX)) { scaled = static_cast<double>(UINT_MAX); }
+
+  auto numerator = static_cast<unsigned int>(std::round(scaled));
+  if (numerator == 0U) { numerator = 1U; }
+
   return std::make_pair(numerator, denominator);
 }
 //============================================================================

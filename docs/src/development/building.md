@@ -46,6 +46,51 @@ make docker-test-build-amd64
 make docker-test-build-arm64
 ```
 
+## Building with Zig (Experimental, Parallel to Docker)
+
+Zig-based builds are enabled for local development and static Linux binary
+production, but Docker remains a first-class release path during rollout.
+For CI/release workflow details (validation jobs, gates, and artifact publishing),
+see [CI and Release](ci.md).
+
+### Prerequisites
+
+1. Place the Kakadu archive `v8_5-01382N.zip` in the `vendor/` directory
+2. Install Zig `0.15.2`
+3. Install build tools (`cmake`, `autoconf`, `automake`, `libtool`)
+
+OpenSSL, libcurl, and libmagic are built from source by SIPI's CMake build;
+they do not need to be preinstalled as system libraries.
+
+### Local Zig build
+
+```bash
+make zig-build-local
+make zig-test
+make zig-test-e2e
+make zig-run
+```
+
+### Static Linux Zig builds
+
+```bash
+make zig-build-amd64   # x86_64-linux-musl
+make zig-build-arm64   # aarch64-linux-musl
+```
+
+### Validation commands
+
+```bash
+# Linux static binary must not have dynamic NEEDED entries
+readelf -d build-static/sipi | grep NEEDED
+
+# Should report static
+ldd build-static/sipi
+
+# macOS policy: only libSystem is allowed
+otool -L build-zig-macos/sipi
+```
+
 ## Building with Nix (Native Development)
 
 For native development, SIPI uses [Nix](https://nixos.org/) to provide
@@ -107,7 +152,7 @@ make nix-coverage-html
 make nix-valgrind
 ```
 
-## Building on macOS (Not Recommended)
+## Building on macOS without Zig (Not Recommended)
 
 Building directly on macOS without Nix is unsupported but possible:
 
@@ -115,8 +160,9 @@ Building directly on macOS without Nix is unsupported but possible:
 mkdir -p ./build-mac && cd build-mac && cmake .. && make && ctest --verbose
 ```
 
-You will need CMake, a C++23-compatible compiler, and all system
-dependencies (OpenSSL, libcurl, libmagic) installed via Homebrew.
+You will need CMake and a C++23-compatible compiler. All library
+dependencies (including OpenSSL, libcurl, libmagic) are built from
+source automatically by the build system.
 
 ## All Make Targets
 
@@ -133,6 +179,10 @@ Key target groups:
 | `docker-build` | Build Docker image locally |
 | `docker-test-build-{amd64,arm64}` | Build + test for specific architecture |
 | `test-smoke` | Run smoke tests against Docker image |
+| `zig-build-local` | Build SIPI natively with Zig (experimental) |
+| `zig-test` | Run unit tests for Zig local build |
+| `zig-test-e2e` | Run end-to-end tests for Zig local build |
+| `zig-build-{amd64,arm64}` | Build static Linux binaries with Zig (experimental) |
 | `nix-build` | Build SIPI natively (debug + coverage) |
 | `nix-test` | Run unit tests |
 | `nix-test-e2e` | Run end-to-end tests |

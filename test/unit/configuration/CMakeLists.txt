@@ -59,30 +59,19 @@ target_link_libraries(${TEST_NAME}
         kdu_aux
         kdu
         xz
-        magic
+        magic_static
         lua
         jansson
         sqlite3
-        dl
-        pthread
         ${CURL_LIBRARIES}
         ${OPENSSL_LIBRARIES}
-        crypto
         jpeg
         bzip2
         zstd
         z
         m
         lzma
-        Threads::Threads
-        ${CMAKE_DL_LIBS})
-
-
-if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-    target_link_libraries(${TEST_NAME} iconv intl)
-else()
-    target_link_libraries(${TEST_NAME} rt)
-endif()
+        ${SIPI_RUNTIME_SYSTEM_LIBS})
 
 target_link_libraries(${TEST_NAME} build_config)
 if (CODE_COVERAGE)

@@ -33,11 +33,13 @@
           lcov # code coverage helper tool
 
           # Build dependencies
+          # Note: OpenSSL, libcurl, and libmagic libraries are built from source
+          # by the build system (ext/). The packages below provide CLI tools only.
           asio # networking library needed for crow (microframework for the web)
-          curl
+          curl # curl CLI (library built from source)
           exiv2
           ffmpeg
-          file # libmagic-dev
+          file # file CLI + autoreconf deps for libmagic build
           gettext
           glibcLocales # locales
           gperf
@@ -47,7 +49,7 @@
           libuuid # uuid und uuid-dev
           # numactl # libnuma-dev not available on mac
           libwebp
-          openssl # libssl-dev
+          openssl # openssl CLI (library built from source)
           readline70 # libreadline-dev
 
           # Other stuff

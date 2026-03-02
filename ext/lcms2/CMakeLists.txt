@@ -7,6 +7,8 @@ include(ExternalProject)
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
 ExternalProject_Add(project_lcms2
+        DEPENDS project_jpeg
+        DEPENDS project_tiff
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
         URL https://github.com/mm2/Little-CMS/releases/download/lcms2.16/lcms2-2.16.tar.gz
         ${timestamp_policy}

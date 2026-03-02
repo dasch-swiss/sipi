@@ -218,34 +218,25 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
 #
-# libmagic
-# (used to be build locally from source was moved to prerequisites)
+# Keep explicit Unix system libs for non-Zig-static builds only.
+# For musl static Zig builds, pthread/dl/rt are provided by libc.
 #
-find_package(LibMagic REQUIRED)
-if (LIBMAGIC_FOUND)
-    include_directories(${LibMagic_INCLUDE_DIR})
+set(SIPI_RUNTIME_SYSTEM_LIBS Threads::Threads ${CMAKE_DL_LIBS})
+if (NOT ZIG_STATIC_BUILD AND NOT CMAKE_SYSTEM_NAME MATCHES "Darwin")
+    list(APPEND SIPI_RUNTIME_SYSTEM_LIBS rt)
 endif ()
 
 #
-# openssl
-# (used to be build locally from source was moved to prerequisites)
+# OpenSSL, libcurl, and libmagic are built from source (see ext/).
+# Set compatibility variables so test CMakeLists and ext/sentry can find them.
 #
-find_package(OpenSSL REQUIRED)
-if (OPENSSL_FOUND)
-    message(STATUS "OpenSSL dirs: ${OPENSSL_INCLUDE_DIR}")
-    message(STATUS "OpenSSL libs: ${OPENSSL_LIBRARIES}")
-    include_directories(${OPENSSL_INCLUDE_DIR})
-endif ()
-
-#
-# libcurl
-# (used to be build locally from source was moved to prerequisites)
-find_package(CURL REQUIRED)
-if (CURL_FOUND)
-    message(STATUS "curl dirs: ${CURL_INCLUDE_DIRS}")
-    message(STATUS "curl libs: ${CURL_LIBRARIES}")
-    include_directories(${CURL_INCLUDE_DIRS})
-endif ()
+set(OPENSSL_INCLUDE_DIR ${CMAKE_BINARY_DIR}/local/include)
+set(OPENSSL_LIBRARIES openssl_ssl openssl_crypto)
+set(CURL_INCLUDE_DIR ${CMAKE_BINARY_DIR}/local/include)
+set(CURL_INCLUDE_DIRS ${CMAKE_BINARY_DIR}/local/include)
+set(CURL_LIBRARIES curl_static)
+set(LibMagic_INCLUDE_DIR ${CMAKE_BINARY_DIR}/local/include)
+include_directories(${CMAKE_BINARY_DIR}/local/include)
 
 #find_package(JBIG REQUIRED)
 #include_directories(${JBIG_INCLUDE_DIR})
@@ -274,13 +265,6 @@ CHECK_INCLUDE_FILES(malloc.h HAVE_MALLOC_H)
 # write out the malloc and atimespec information
 configure_file(${PROJECT_SOURCE_DIR}/include/SipiConfig.h.in ${CMAKE_BINARY_DIR}/generated/SipiConfig.h)
 
-#
-# "standard" packages that are required for sipi
-#
-if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
-    find_package(ICONV REQUIRED)
-endif ()
-
 #find_package(MATH REQUIRED)
 
 message(STATUS "Adding external dependencies ...")
@@ -293,6 +277,9 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/local/lib)
 add_subdirectory(${COMMON_EXT}/xz)
 add_subdirectory(${COMMON_EXT}/zlib)
 add_subdirectory(${COMMON_EXT}/zstd)
+add_subdirectory(${COMMON_EXT}/openssl)
+add_subdirectory(${COMMON_EXT}/curl)
+add_subdirectory(${COMMON_EXT}/libmagic)
 add_subdirectory(${COMMON_EXT}/jpeg)
 add_subdirectory(${COMMON_EXT}/jbigkit)
 add_subdirectory(${COMMON_EXT}/webp)
@@ -467,7 +454,7 @@ add_executable(sipi
 
 add_dependencies(sipi icc_profiles)
 
-add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 exiv2 jansson lua sqlite3 kdu kdu_aux sentry)
+add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 exiv2 jansson lua sqlite3 kdu kdu_aux sentry openssl_ssl openssl_crypto curl_static magic_static)
 
 
 # !!! ORDER MATTERS !!!
@@ -483,32 +470,24 @@ target_link_libraries(${PROJECT_NAME} ${LIBS}
         kdu_aux
         kdu
         xz
-        magic
+        magic_static
         lua
         jansson
         sqlite3
-        dl
-        pthread
-        ${CURL_LIBRARIES}
-        ${OPENSSL_LIBRARIES}
+        curl_static
+        openssl_ssl
+        openssl_crypto
         jpeg
         bzip2
         zstd
         z
         m
         lzma
-        Threads::Threads
-        ${CMAKE_DL_LIBS}
+        ${SIPI_RUNTIME_SYSTEM_LIBS}
 )
 
 # add the sentry libraries
 target_link_libraries(sipi sentry)
-
-if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
-    target_link_libraries(sipi iconv intl)
-else ()
-    target_link_libraries(sipi rt)
-endif ()
 
 #
 # apply the compiler and linker flags
@@ -543,4 +522,6 @@ add_subdirectory(test)
 # Fuzz testing
 #-------------------
 
-add_subdirectory(fuzz)
+if (NOT ZIG_TOOLCHAIN)
+    add_subdirectory(fuzz)
+endif ()

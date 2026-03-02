@@ -12,7 +12,13 @@ ExternalProject_Add(project_xz
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
         ${timestamp_policy}
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/xz-5.2.5
-        CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/xz-5.2.5/configure --prefix=${CMAKE_BINARY_DIR}/local --libdir=${CMAKE_BINARY_DIR}/local/lib
+        CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/xz-5.2.5/configure
+        --prefix=${CMAKE_BINARY_DIR}/local
+        --libdir=${CMAKE_BINARY_DIR}/local/lib
+        --enable-static
+        --disable-shared
+        CC=${CMAKE_C_COMPILER}
+        CXX=${CMAKE_CXX_COMPILER}
         BUILD_COMMAND make
         BUILD_IN_SOURCE 1
 )
