@@ -1,0 +1,10 @@
+#!/bin/sh
+# Wrapper script for using "zig cc" as CMAKE_C_COMPILER.
+#
+# CMake requires CMAKE_C_COMPILER to be a single executable path.
+# This wrapper solves the "two-word command" problem by delegating to "zig cc".
+#
+# CMake passes target/cross flags (including -target) to this wrapper via
+# compiler and linker flags initialized in cmake/zig-toolchain.cmake.
+
+exec zig cc "$@"

@@ -8,13 +8,8 @@ include(ExternalProject)
 set(SentryVersion "0.9.0")
 
 # The inproc backend compiles the curl transport, which needs to find libcurl.
-# Derive the curl prefix from CURL_INCLUDE_DIR (set by find_package(CURL) in the parent).
-if (CURL_INCLUDE_DIR)
-    get_filename_component(_CURL_PREFIX "${CURL_INCLUDE_DIR}" DIRECTORY)
-    set(_SENTRY_PREFIX_PATH "${CMAKE_BINARY_DIR}/local;${_CURL_PREFIX}")
-else()
-    set(_SENTRY_PREFIX_PATH "${CMAKE_BINARY_DIR}/local")
-endif()
+# All dependencies (including curl) are built from source into CMAKE_BINARY_DIR/local.
+set(_SENTRY_PREFIX_PATH "${CMAKE_BINARY_DIR}/local")
 
 ExternalProject_Add(project_sentry
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
@@ -31,4 +26,5 @@ ExternalProject_Get_Property(project_sentry install_dir)
 add_library(sentry STATIC IMPORTED GLOBAL)
 set_property(TARGET sentry PROPERTY IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/local/lib/libsentry${CMAKE_STATIC_LIBRARY_SUFFIX})
 
+add_dependencies(project_sentry project_curl)
 add_dependencies(sentry project_sentry)

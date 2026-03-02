@@ -68,7 +68,7 @@ template<typename T> std::string vector_to_string(const std::vector<T> &vec)
 
   if (old_pos != uri.length()) { parts.push_back(shttps::urldecode(uri.substr(old_pos, std::string::npos))); }
 
-  if (parts.empty()) { return std::unexpected("No parameters/path given"); }
+  if (parts.empty()) { return std::expected<IIIFUriParseResult, std::string>(std::unexpect, "No parameters/path given"); }
 
   // std::cout << ">> parts found: " << vector_to_string(parts) << std::endl;
 
@@ -135,7 +135,7 @@ template<typename T> std::string vector_to_string(const std::vector<T> &vec)
         // we have no prefix
         params.emplace_back("");// iiif_prefix
       } else {
-        return std::unexpected("IIIF url not correctly formatted");
+        return std::expected<IIIFUriParseResult, std::string>(std::unexpect, "IIIF url not correctly formatted");
       }
       params.push_back(parts[parts.size() - 5]);// iiif_identifier
       params.push_back(parts[parts.size() - 4]);// iiif_region
@@ -159,7 +159,7 @@ template<typename T> std::string vector_to_string(const std::vector<T> &vec)
         // we have no prefix
         params.emplace_back("");// iiif_prefix
       } else {
-        return std::unexpected("IIIF url not correctly formatted!");
+        return std::expected<IIIFUriParseResult, std::string>(std::unexpect, "IIIF url not correctly formatted!");
       }
       params.push_back(parts[parts.size() - 2]);// iiif_identifier
       request_type = INFO_JSON;
@@ -179,7 +179,7 @@ template<typename T> std::string vector_to_string(const std::vector<T> &vec)
         // we have no prefix
         params.emplace_back("");// iiif_prefix
       } else {
-        return std::unexpected("IIIF url not correctly formatted");
+        return std::expected<IIIFUriParseResult, std::string>(std::unexpect, "IIIF url not correctly formatted");
       }
       params.push_back(parts[parts.size() - 2]);// iiif_identifier
       request_type = KNORA_JSON;
@@ -189,7 +189,7 @@ template<typename T> std::string vector_to_string(const std::vector<T> &vec)
       //
       if (qualform_ok) {
         // we have a valid quality format but the rest of the URL is not valid
-        return std::unexpected("IIIF url not correctly formatted");
+        return std::expected<IIIFUriParseResult, std::string>(std::unexpect, "IIIF url not correctly formatted");
       }
 
       // or something like "/unit/lena512.jp2/full/max/0/garbage.garbage"
@@ -198,7 +198,7 @@ template<typename T> std::string vector_to_string(const std::vector<T> &vec)
         std::stringstream errmsg;
         errmsg << "IIIF url not correctly formatted:";
         if (!qualform_ok && !parts.empty()) errmsg << " Error in quality: \"" << parts[parts.size() - 1] << "\"!";
-        return std::unexpected(errmsg.str());
+        return std::expected<IIIFUriParseResult, std::string>(std::unexpect, errmsg.str());
       }
 
       if (parts.size() >= 2) {
@@ -210,7 +210,9 @@ template<typename T> std::string vector_to_string(const std::vector<T> &vec)
         // we have a prefix
         std::stringstream prefix;
         for (size_t i = 0; i < (parts.size() - 1); i++) {
-          if (parts[i].empty()) { return std::unexpected("IIIF url not correctly formatted!"); }
+          if (parts[i].empty()) {
+            return std::expected<IIIFUriParseResult, std::string>(std::unexpect, "IIIF url not correctly formatted!");
+          }
           if (!prefix.str().empty()) { prefix << "/"; }
           prefix << parts[i];
         }
@@ -228,7 +230,7 @@ template<typename T> std::string vector_to_string(const std::vector<T> &vec)
         if (!rotation_ok && (parts.size() > 1)) errmsg << " Error in rotation: \"" << parts[parts.size() - 2] << "\"!";
         if (!size_ok && (parts.size() > 2)) errmsg << " Error in size: \"" << parts[parts.size() - 3] << "\"!";
         if (!region_ok && (parts.size() > 3)) errmsg << " Error in region: \"" << parts[parts.size() - 4] << "\"!";
-        return std::unexpected(errmsg.str());
+        return std::expected<IIIFUriParseResult, std::string>(std::unexpect, errmsg.str());
       }
       params.push_back(parts[parts.size() - 1]);// iiif_identifier
       request_type = REDIRECT;
@@ -255,7 +257,7 @@ template<typename T> std::string vector_to_string(const std::vector<T> &vec)
       //
       params.emplace_back("");// iiif_prefix
     } else {
-      return std::unexpected("IIIF url not correctly formatted!");
+      return std::expected<IIIFUriParseResult, std::string>(std::unexpect, "IIIF url not correctly formatted!");
     }
     params.push_back(parts[parts.size() - 2]);// iiif_identifier
     request_type = FILE_DOWNLOAD;
@@ -271,13 +273,15 @@ template<typename T> std::string vector_to_string(const std::vector<T> &vec)
       std::stringstream errmsg;
       errmsg << "IIIF url not correctly formatted:";
       if (!qualform_ok && !parts.empty()) errmsg << " Error in quality: \"" << parts[parts.size() - 1] << "\"!";
-      return std::unexpected(errmsg.str());
+      return std::expected<IIIFUriParseResult, std::string>(std::unexpect, errmsg.str());
     }
     if (parts.size() >= 2) {
       // we have a prefix
       std::stringstream prefix;
       for (size_t i = 0; i < (parts.size() - 1); i++) {
-        if (parts[i].empty()) { return std::unexpected("IIIF url not correctly formatted!"); }
+        if (parts[i].empty()) {
+          return std::expected<IIIFUriParseResult, std::string>(std::unexpect, "IIIF url not correctly formatted!");
+        }
         if (!prefix.str().empty()) { prefix << "/"; }
         prefix << parts[i];
       }
@@ -286,7 +290,7 @@ template<typename T> std::string vector_to_string(const std::vector<T> &vec)
       // we have no prefix
       params.emplace_back("");// iiif_prefix
     } else {
-      return std::unexpected("IIIF url not correctly formatted!");
+      return std::expected<IIIFUriParseResult, std::string>(std::unexpect, "IIIF url not correctly formatted!");
     }
     params.push_back(parts[parts.size() - 1]);// iiif_identifier
     request_type = REDIRECT;

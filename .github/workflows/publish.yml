@@ -1,17 +1,28 @@
 name: publish
 
 on:
-  # This triggers for any tag or branch creation. We'll filter for tags in the job.
-  create:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  # Build for release and publish amd64
-  amd64:
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-24.04
-    concurrency:
-      group: ${{ github.ref }}-publish-amd64
-      cancel-in-progress: true
+  validate-docker:
+    runs-on: ${{ matrix.runner }}
+    name: validate-docker / ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            build_target: docker-test-build-amd64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            build_target: docker-test-build-arm64
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
@@ -30,51 +41,152 @@ jobs:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env['ACTIONS_CACHE_URL'] || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env['ACTIONS_RUNTIME_TOKEN'] || '');
-      - run: make docker-test-build-amd64 # builds image + extracts sipi-amd64.debug
+      - run: make ${{ matrix.build_target }}
       - run: make test-smoke-ci
-      - name: Push image to Docker hub
-        run: make docker-push-amd64
-      - name: Docker Scout — record production
-        uses: docker/scout-action@v1
+
+  validate-static:
+    runs-on: ${{ matrix.runner }}
+    name: validate-static / ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-linux-musl
+            arch: amd64
+            runner: ubuntu-24.04
+          - target: aarch64-linux-musl
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
-          command: environment
-          image: registry://daschswiss/sipi:${{ github.ref_name }}-amd64
-          environment: production
-          organization: daschswiss
-      - name: Docker Scout — generate SBOM
-        uses: docker/scout-action@v1
+          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
         with:
-          command: sbom
-          image: registry://daschswiss/sipi:${{ github.ref_name }}-amd64
-          output: sbom-amd64.spdx.json
-          organization: daschswiss
-      - name: Upload SBOM as artifact
+          version: 0.15.2
+
+      - name: Verify Zig installation
+        run: |
+          zig version
+          zig cc --version
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build autoconf automake libtool binutils
+
+      - name: Determine version
+        run: |
+          echo "VERSION=$(git describe --tag --dirty --abbrev=7)" >> $GITHUB_ENV
+
+      - name: Configure static build
+        run: |
+          cmake -S . -B build-static \
+            -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/zig-toolchain.cmake \
+            -DZIG_TARGET=${{ matrix.target }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
+            -DEXT_PROVIDED_VERSION=${{ env.VERSION }}
+
+      - name: Build
+        run: cmake --build build-static --parallel $(nproc)
+
+      - name: Run unit tests
+        run: cd build-static && ctest --output-on-failure
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GH_TOKEN }}
+
+      - name: Run end-to-end tests
+        run: |
+          nix \
+            --extra-experimental-features "nix-command flakes" \
+            --option filter-syscalls false \
+            develop --command bash -c "cd test/e2e && pytest -s --sipi-exec=${GITHUB_WORKSPACE}/build-static/sipi"
+
+      - name: Verify static linkage
+        run: |
+          file build-static/sipi
+          if ldd build-static/sipi 2>&1 | grep -q "not a dynamic executable\|statically linked"; then
+            echo "Binary reports as statically linked"
+          else
+            echo "Unexpected dynamic linkage according to ldd"
+            ldd build-static/sipi
+            exit 1
+          fi
+
+          if readelf -d build-static/sipi | grep -q '(NEEDED)'; then
+            echo "Unexpected dynamic dependencies (NEEDED) found:"
+            readelf -d build-static/sipi | grep '(NEEDED)'
+            exit 1
+          fi
+
+      - name: Package release archive and split debug symbols
+        run: |
+          mkdir -p release/sipi-${{ env.VERSION }}-${{ matrix.arch }}
+          mkdir -p release/debug
+
+          cp build-static/sipi release/sipi-${{ env.VERSION }}-${{ matrix.arch }}/sipi
+
+          objcopy --only-keep-debug \
+            release/sipi-${{ env.VERSION }}-${{ matrix.arch }}/sipi \
+            release/debug/sipi-linux-${{ matrix.arch }}.debug
+
+          strip release/sipi-${{ env.VERSION }}-${{ matrix.arch }}/sipi
+
+          objcopy --add-gnu-debuglink=release/debug/sipi-linux-${{ matrix.arch }}.debug \
+            release/sipi-${{ env.VERSION }}-${{ matrix.arch }}/sipi
+
+          cp config/sipi.config.lua release/sipi-${{ env.VERSION }}-${{ matrix.arch }}/
+          cp config/sipi.init.lua release/sipi-${{ env.VERSION }}-${{ matrix.arch }}/
+          cp -r scripts/ release/sipi-${{ env.VERSION }}-${{ matrix.arch }}/scripts/
+          cp -r server/ release/sipi-${{ env.VERSION }}-${{ matrix.arch }}/server/
+
+          tar czf release/sipi-${{ env.VERSION }}-linux-${{ matrix.arch }}.tar.gz -C release sipi-${{ env.VERSION }}-${{ matrix.arch }}/
+          sha256sum release/sipi-${{ env.VERSION }}-linux-${{ matrix.arch }}.tar.gz > release/sipi-${{ env.VERSION }}-linux-${{ matrix.arch }}.tar.gz.sha256
+
+      - name: Upload static artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: sbom-amd64
-          path: sbom-amd64.spdx.json
-      - name: Install sentry-cli
-        if: hashFiles('sipi-amd64.debug') != ''
-        run: npm install -g @sentry/cli
-      - name: Upload debug symbols to Sentry
-        if: hashFiles('sipi-amd64.debug') != ''
-        run: |
-          sentry-cli debug-files upload \
-            --org "$SENTRY_ORG" \
-            --project "$SENTRY_PROJECT" \
-            sipi-amd64.debug
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          name: static-linux-${{ matrix.arch }}
+          path: |
+            release/*.tar.gz
+            release/*.sha256
+            release/debug/*.debug
 
-  # Build for release and publish arm64
-  arm64:
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-24.04-arm
-    concurrency:
-      group: ${{ github.ref }}-publish-arm64
-      cancel-in-progress: true
+  release-gate:
+    runs-on: ubuntu-latest
+    needs: [validate-docker, validate-static]
+    steps:
+      - name: Validation gate
+        run: echo "Docker and static validation passed; publish side effects may proceed."
+
+  publish-docker:
+    runs-on: ${{ matrix.runner }}
+    needs: [release-gate]
+    name: publish-docker / ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            build_target: docker-test-build-amd64
+            push_target: docker-push-amd64
+            debug_file: sipi-amd64.debug
+            sbom_file: sbom-amd64.spdx.json
+            sbom_name: sbom-amd64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            build_target: docker-test-build-arm64
+            push_target: docker-push-arm64
+            debug_file: sipi-arm64.debug
+            sbom_file: sbom-arm64.spdx.json
+            sbom_name: sbom-arm64
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
@@ -93,49 +205,56 @@ jobs:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env['ACTIONS_CACHE_URL'] || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env['ACTIONS_RUNTIME_TOKEN'] || '');
-      - run: make docker-test-build-arm64 # builds image + extracts sipi-arm64.debug
+
+      - run: make ${{ matrix.build_target }}
       - run: make test-smoke-ci
-      - name: Push image to Docker hub
-        run: make docker-push-arm64
+      - name: Push image to Docker Hub
+        run: make ${{ matrix.push_target }}
+
       - name: Docker Scout — record production
         uses: docker/scout-action@v1
         with:
           command: environment
-          image: registry://daschswiss/sipi:${{ github.ref_name }}-arm64
+          image: registry://daschswiss/sipi:${{ github.ref_name }}-${{ matrix.arch }}
           environment: production
           organization: daschswiss
+
       - name: Docker Scout — generate SBOM
         uses: docker/scout-action@v1
         with:
           command: sbom
-          image: registry://daschswiss/sipi:${{ github.ref_name }}-arm64
-          output: sbom-arm64.spdx.json
+          image: registry://daschswiss/sipi:${{ github.ref_name }}-${{ matrix.arch }}
+          output: ${{ matrix.sbom_file }}
           organization: daschswiss
-      - name: Upload SBOM as artifact
+
+      - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sbom-arm64
-          path: sbom-arm64.spdx.json
+          name: ${{ matrix.sbom_name }}
+          path: ${{ matrix.sbom_file }}
+
       - name: Install sentry-cli
-        if: hashFiles('sipi-arm64.debug') != ''
         run: npm install -g @sentry/cli
-      - name: Upload debug symbols to Sentry
-        if: hashFiles('sipi-arm64.debug') != ''
-        run: |
-          sentry-cli debug-files upload \
-            --org "$SENTRY_ORG" \
-            --project "$SENTRY_PROJECT" \
-            sipi-arm64.debug
+
+      - name: Upload Docker debug symbols to Sentry
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          if [ -f "${{ matrix.debug_file }}" ]; then
+            sentry-cli debug-files upload \
+              --org "$SENTRY_ORG" \
+              --project "$SENTRY_PROJECT" \
+              "${{ matrix.debug_file }}"
+          else
+            echo "Expected debug symbol file not found: ${{ matrix.debug_file }}"
+            exit 1
+          fi
 
-  # Publish manifest combining arm64 and amd64 images
   manifest:
     runs-on: ubuntu-latest
-    needs: [ amd64, arm64 ]
-    if: startsWith(github.ref, 'refs/tags')
+    needs: [publish-docker]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -146,11 +265,63 @@ jobs:
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       - run: make docker-publish-manifest
 
-  # Publish release to Sentry allowing us to track more
+  publish-static-release:
+    runs-on: ubuntu-latest
+    needs: [release-gate]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download static artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: static-linux-*
+          merge-multiple: true
+          path: artifacts/
+
+      - name: Show collected artifacts
+        run: find artifacts -maxdepth 3 -type f | sort
+
+      - name: Install sentry-cli
+        run: npm install -g @sentry/cli
+
+      - name: Upload static debug symbols to Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          shopt -s nullglob globstar
+          debug_files=(artifacts/**/*.debug)
+          if [ ${#debug_files[@]} -eq 0 ]; then
+            echo "No static debug symbol files found"
+            exit 1
+          fi
+
+          for debug_file in "${debug_files[@]}"; do
+            echo "Uploading $debug_file"
+            sentry-cli debug-files upload \
+              --org "$SENTRY_ORG" \
+              --project "$SENTRY_PROJECT" \
+              "$debug_file"
+          done
+
+      - name: Attach static assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.sha256
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
+
   sentry:
     runs-on: ubuntu-latest
-    needs: [ manifest ]
-    if: startsWith(github.ref, 'refs/tags')
+    needs: [manifest, publish-static-release]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -165,10 +336,9 @@ jobs:
         with:
           version: ${{ env.RELEASE_VERSION }}
 
-  # Publish documentation
   docs:
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags')
+    needs: [release-gate]
     steps:
       - uses: actions/checkout@v4
       - uses: mhausenblas/mkdocs-deploy-gh-pages@master
