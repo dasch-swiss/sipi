@@ -3,6 +3,7 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <string>
@@ -18,6 +19,7 @@
 #include "shttps/Parsing.h"
 #include "shttps/makeunique.h"
 
+#include "Logger.h"
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
 #include "formats/SipiIOJ2k.h"
@@ -769,12 +771,22 @@ bool SipiImage::crop(const std::shared_ptr<SipiRegion> &region)
 /****************************************************************************/
 #define POSITION(x, y, c, n) ((n) * ((y)*nx + (x)) + c)
 
-byte SipiImage::bilinn(byte buf[], const int nx, const double x, const double y, const int c, const int n)
+byte SipiImage::bilinn(byte buf[], const int nx, const int ny, const double x, const double y, const int c, const int n)
 {
-  const auto ix = static_cast<int>(x);
-  const auto iy = static_cast<int>(y);
-  const auto rx = x - static_cast<double>(ix);
-  const auto ry = y - static_cast<double>(iy);
+  // Degenerate buffer — interpolation needs at least 2x2
+  if (nx < 2 || ny < 2) { return buf[n * c]; }
+
+  auto ix = static_cast<int>(x);
+  auto iy = static_cast<int>(y);
+
+  // Clamp to valid interpolation range: ix in [0, nx-2], iy in [0, ny-2]
+  if (ix < 0) { ix = 0; }
+  if (iy < 0) { iy = 0; }
+  if (ix >= nx - 1) { ix = nx - 2; }
+  if (iy >= ny - 1) { iy = ny - 2; }
+
+  const auto rx = std::clamp(x - static_cast<double>(ix), 0.0, 1.0);
+  const auto ry = std::clamp(y - static_cast<double>(iy), 0.0, 1.0);
 
   constexpr double Threshold = 1.0e-2;
 
@@ -798,12 +810,22 @@ byte SipiImage::bilinn(byte buf[], const int nx, const double x, const double y,
 
 /*==========================================================================*/
 
-word SipiImage::bilinn(word buf[], const int nx, const double x, const double y, const int c, const int n)
+word SipiImage::bilinn(word buf[], const int nx, const int ny, const double x, const double y, const int c, const int n)
 {
-  const auto ix = static_cast<int>(x);
-  const auto iy = static_cast<int>(y);
-  const auto rx = x - static_cast<double>(ix);
-  const auto ry = y - static_cast<double>(iy);
+  // Degenerate buffer — interpolation needs at least 2x2
+  if (nx < 2 || ny < 2) { return buf[n * c]; }
+
+  auto ix = static_cast<int>(x);
+  auto iy = static_cast<int>(y);
+
+  // Clamp to valid interpolation range: ix in [0, nx-2], iy in [0, ny-2]
+  if (ix < 0) { ix = 0; }
+  if (iy < 0) { iy = 0; }
+  if (ix >= nx - 1) { ix = nx - 2; }
+  if (iy >= ny - 1) { iy = ny - 2; }
+
+  const auto rx = std::clamp(x - static_cast<double>(ix), 0.0, 1.0);
+  const auto ry = std::clamp(y - static_cast<double>(iy), 0.0, 1.0);
 
   constexpr double Threshold = 1.0e-2;
 
@@ -831,6 +853,11 @@ word SipiImage::bilinn(word buf[], const int nx, const double x, const double y,
 
 bool SipiImage::scaleFast(size_t nnx, size_t nny)
 {
+  if (nnx <= 1 || nny <= 1 || nx <= 1 || ny <= 1) {
+    log_warn("scaleFast: degenerate dimensions (src=%zux%zu, dst=%zux%zu), skipping", nx, ny, nnx, nny);
+    return false;
+  }
+
   auto xlut = shttps::make_unique<size_t[]>(nnx);
   auto ylut = shttps::make_unique<size_t[]>(nny);
 
@@ -871,6 +898,11 @@ bool SipiImage::scaleFast(size_t nnx, size_t nny)
 
 bool SipiImage::scaleMedium(size_t nnx, size_t nny)
 {
+  if (nnx <= 1 || nny <= 1 || nx <= 1 || ny <= 1) {
+    log_warn("scaleMedium: degenerate dimensions (src=%zux%zu, dst=%zux%zu), skipping", nx, ny, nnx, nny);
+    return false;
+  }
+
   auto xlut = shttps::make_unique<double[]>(nnx);
   auto ylut = shttps::make_unique<double[]>(nny);
 
@@ -886,7 +918,7 @@ bool SipiImage::scaleMedium(size_t nnx, size_t nny)
       ry = ylut[j];
       for (size_t i = 0; i < nnx; i++) {
         rx = xlut[i];
-        for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nnx + i) + k] = bilinn(inbuf, nx, rx, ry, k, nc); }
+        for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nnx + i) + k] = bilinn(inbuf, nx, ny, rx, ry, k, nc); }
       }
     }
 
@@ -901,7 +933,7 @@ bool SipiImage::scaleMedium(size_t nnx, size_t nny)
       ry = ylut[j];
       for (size_t i = 0; i < nnx; i++) {
         rx = xlut[i];
-        for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nnx + i) + k] = bilinn(inbuf, nx, rx, ry, k, nc); }
+        for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nnx + i) + k] = bilinn(inbuf, nx, ny, rx, ry, k, nc); }
       }
     }
 
@@ -921,6 +953,11 @@ bool SipiImage::scaleMedium(size_t nnx, size_t nny)
 
 bool SipiImage::scale(size_t nnx, size_t nny)
 {
+  if (nnx <= 1 || nny <= 1 || nx <= 1 || ny <= 1) {
+    log_warn("scale: degenerate dimensions (src=%zux%zu, dst=%zux%zu), skipping", nx, ny, nnx, nny);
+    return false;
+  }
+
   size_t iix = 1, iiy = 1;
   size_t nnnx, nnny;
 
@@ -959,7 +996,7 @@ bool SipiImage::scale(size_t nnx, size_t nny)
       ry = ylut[j];
       for (size_t i = 0; i < nnnx; i++) {
         rx = xlut[i];
-        for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nnnx + i) + k] = bilinn(inbuf, nx, rx, ry, k, nc); }
+        for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nnnx + i) + k] = bilinn(inbuf, nx, ny, rx, ry, k, nc); }
       }
     }
 
@@ -974,7 +1011,7 @@ bool SipiImage::scale(size_t nnx, size_t nny)
       ry = ylut[j];
       for (size_t i = 0; i < nnnx; i++) {
         rx = xlut[i];
-        for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nnnx + i) + k] = bilinn(inbuf, nx, rx, ry, k, nc); }
+        for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nnnx + i) + k] = bilinn(inbuf, nx, ny, rx, ry, k, nc); }
       }
     }
 
@@ -1233,7 +1270,7 @@ bool SipiImage::rotate(float angle, bool mirror)
           if ((rx < 0.0) || (rx >= (double)(nx - 1)) || (ry < 0.0) || (ry >= (double)(ny - 1))) {
             for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nnx + i) + k] = bg; }
           } else {
-            for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nnx + i) + k] = bilinn(inbuf, nx, rx, ry, k, nc); }
+            for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nnx + i) + k] = bilinn(inbuf, nx, ny, rx, ry, k, nc); }
           }
         }
       }
@@ -1253,7 +1290,7 @@ bool SipiImage::rotate(float angle, bool mirror)
           if ((rx < 0.0) || (rx >= (double)(nx - 1)) || (ry < 0.0) || (ry >= (double)(ny - 1))) {
             for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nnx + i) + k] = bg; }
           } else {
-            for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nnx + i) + k] = bilinn(inbuf, nx, rx, ry, k, nc); }
+            for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nnx + i) + k] = bilinn(inbuf, nx, ny, rx, ry, k, nc); }
           }
         }
       }
@@ -1405,10 +1442,10 @@ void SipiImage::add_watermark(const std::string &wmfilename)
         for (size_t k = 0; k < nc; k++) {
           if (!(abs(wm_i - wm_nx / 2.) < wm_nx / 2. && abs(wm_j - wm_ny / 2.) < wm_ny / 2.)) continue;
 
-          double wm_alpha = wm_nc == 4 ? bilinn(wmbuf, wm_nx, wm_i, wm_j, 3, wm_nc) : 1;
+          double wm_alpha = wm_nc == 4 ? bilinn(wmbuf, wm_nx, wm_ny, wm_i, wm_j, 3, wm_nc) : 1;
           double wm_alpha_weak = wm_alpha / 255.0 * wm_strength;
 
-          double wm_color = bilinn(wmbuf, wm_nx, wm_i, wm_j, k, wm_nc) / 255.0;
+          double wm_color = bilinn(wmbuf, wm_nx, wm_ny, wm_i, wm_j, k, wm_nc) / 255.0;
           double color = (buf[nc * (j * nx + i) + k] / 255.);
           double blend = color * (1.0 - wm_alpha_weak) + wm_color * wm_alpha_weak;
           buf[nc * (j * nx + i) + k] = std::clamp(blend * 255., 0., 255.);
