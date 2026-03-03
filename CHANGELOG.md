@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.2](https://github.com/dasch-swiss/sipi/compare/v3.17.1...v3.17.2) (2026-03-03)
+
+
+### Bug Fixes
+
+* Correct degenerate-buffer fallback in bilinn from buf[n*c] to buf[c] ([5f996fe](https://github.com/dasch-swiss/sipi/commit/5f996fe9917060e57dbbc199b533bf04a4bca9c4))
+* Prevent segfault in bilinn() bilinear interpolation during image scaling ([ba84f8b](https://github.com/dasch-swiss/sipi/commit/ba84f8b2eba1f7b560289cf2b503d96b18f4956c))
+
 ## [3.17.1](https://github.com/dasch-swiss/sipi/compare/v3.17.0...v3.17.1) (2026-02-27)
 
 
