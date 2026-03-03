@@ -549,6 +549,8 @@ TEST(SipiImage, ScaleBoundaryDoesNotCrash)
   const std::shared_ptr<Sipi::SipiRegion> region;
   const auto size = std::make_shared<Sipi::SipiSize>("2,2");
   EXPECT_NO_THROW(img.read(leavesSmallNoAlpha, region, size));
+  EXPECT_EQ(img.getNx(), 2u);
+  EXPECT_EQ(img.getNy(), 2u);
 }
 
 TEST(SipiImage, ScaleToSmallPercentDoesNotCrash)

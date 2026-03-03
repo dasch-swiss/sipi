@@ -774,7 +774,7 @@ bool SipiImage::crop(const std::shared_ptr<SipiRegion> &region)
 byte SipiImage::bilinn(byte buf[], const int nx, const int ny, const double x, const double y, const int c, const int n)
 {
   // Degenerate buffer — interpolation needs at least 2x2
-  if (nx < 2 || ny < 2) { return buf[n * c]; }
+  if (nx < 2 || ny < 2) { return buf[c]; }
 
   auto ix = static_cast<int>(x);
   auto iy = static_cast<int>(y);
@@ -813,7 +813,7 @@ byte SipiImage::bilinn(byte buf[], const int nx, const int ny, const double x, c
 word SipiImage::bilinn(word buf[], const int nx, const int ny, const double x, const double y, const int c, const int n)
 {
   // Degenerate buffer — interpolation needs at least 2x2
-  if (nx < 2 || ny < 2) { return buf[n * c]; }
+  if (nx < 2 || ny < 2) { return buf[c]; }
 
   auto ix = static_cast<int>(x);
   auto iy = static_cast<int>(y);
