@@ -1,0 +1,30 @@
+# SIPI Documentation
+
+SIPI is a multithreaded, high-performance IIIF-compatible media server written in C++. It provides image format conversions, metadata preservation, and a Lua scripting interface.
+
+
+## Overview
+
+- [Overview](https://sipi.io/guide/index.md): Project overview and features
+
+## User Guide
+
+- [Introduction](https://sipi.io/guide/introduction/index.md): IIIF concepts and SIPI use cases
+- [Running](https://sipi.io/guide/running/index.md): CLI usage, server mode, logging, error codes
+- [Reference](https://sipi.io/guide/sipi/index.md): IIIF URL syntax, configuration reference
+
+## Lua Scripting
+
+- [Lua Integration](https://sipi.io/lua/index.md): Lua integration and server API
+- [Lua Image Functions](https://sipi.io/lua/lua-image/index.md): Lua image manipulation functions
+- [SQLite Integration](https://sipi.io/lua/sqlite/index.md): SQLite integration from Lua
+
+## Development
+
+- [Building](https://sipi.io/development/building/index.md): Build instructions
+- [Developing](https://sipi.io/development/developing/index.md): Development guide
+
+## Release Notes
+
+- [Release Notes](https://sipi.io/release-notes/index.md)
+

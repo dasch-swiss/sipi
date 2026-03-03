@@ -1,0 +1,774 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://sipi.io/guide/introduction/">
+      
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../sipi/">
+      
+      
+      <link rel="icon" href="../../assets/images/dasch-favicon.ico">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>Introduction - SIPI Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.bcfcd587.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/style/theme.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-blue" data-md-color-accent="deep-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#simple-image-presentation-interface-sipi-introduction" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="SIPI Documentation" class="md-header__button md-logo" aria-label="SIPI Documentation" data-md-component="logo">
+      
+  <img src="../../assets/images/dasch-icon-white.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            SIPI Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Introduction
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dasch-swiss/sipi" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dasch-swiss/sipi
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="SIPI Documentation" class="md-nav__button md-logo" aria-label="SIPI Documentation" data-md-component="logo">
+      
+  <img src="../../assets/images/dasch-icon-white.svg" alt="logo">
+
+    </a>
+    SIPI Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dasch-swiss/sipi" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dasch-swiss/sipi
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Introduction
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Introduction
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-sipi" class="md-nav__link">
+    <span class="md-ellipsis">
+      What is SIPI?
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What is SIPI?">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-a-iiif-image-api-v3-level-2-conformant-image-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. A IIIF Image API V3 level 2 conformant image server
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-an-ordinary-http-webserver" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. An ordinary HTTP webserver
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-an-image-format-conversion-tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. An image format conversion tool
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. An image format conversion tool">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#generic-format-conversions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Generic format conversions
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#preservation-metadata-sipi-specific" class="md-nav__link">
+    <span class="md-ellipsis">
+      Preservation metadata (SIPI specific)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-integrated-sqlite3-database" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Integrated sqlite3 Database
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#who-is-behind-sipi" class="md-nav__link">
+    <span class="md-ellipsis">
+      Who is behind SIPI?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-to-get-sipi" class="md-nav__link">
+    <span class="md-ellipsis">
+      How to get SIPI?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sipi-as-iiif-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      SIPI as IIIF-Server
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI as IIIF-Server">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#extensions-to-the-iiif-standard" class="md-nav__link">
+    <span class="md-ellipsis">
+      Extensions to the IIIF-Standard
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Extensions to the IIIF-Standard">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#preflight-script" class="md-nav__link">
+    <span class="md-ellipsis">
+      Preflight script
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#access-to-non-image-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Access to non-image files
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sipi/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../running/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Running
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lua/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Lua Integration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lua/lua-image/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Lua Image Functions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lua/sqlite/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SQLite Integration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/building/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Building
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/developing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Developing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release-notes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Release Notes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="simple-image-presentation-interface-sipi-introduction">Simple Image Presentation Interface (SIPI) - Introduction<a class="headerlink" href="#simple-image-presentation-interface-sipi-introduction" title="Permanent link">&para;</a></h1>
+<h2 id="what-is-sipi">What is SIPI?<a class="headerlink" href="#what-is-sipi" title="Permanent link">&para;</a></h2>
+<h3 id="1-a-iiif-image-api-v3-level-2-conformant-image-server">1. A IIIF Image API V3 level 2 conformant image server<a class="headerlink" href="#1-a-iiif-image-api-v3-level-2-conformant-image-server" title="Permanent link">&para;</a></h3>
+<ul>
+<li>SIPI is a full multithreaded, high performance, level2 compliant <a href="https://iiif.io/api/image/3.0">IIIF Image API 3.0</a> written in C++. For the
+  JPEG2000 implementation, it relies on the commercial <a href="https://kakadusoftware.com">kakadu-library</a>, but otherwise it is
+  completely open source on <a href="https://github.com/dasch-swiss/sipi">GitHub</a>. It offers special support for multipage PDFs
+  (through a SIPI-specific extensions to the IIIF Image API).</li>
+<li>SIPI has been designed for the long term preservation of images, intended for the needs of the cultural heritage field. Thus it offers
+  some unique features for this purpose:</li>
+<li>all file format conversions try to preserve all metadata (EXIF, XMP, IPTC etc.). These functionality is based
+    on the open source <a href="https://www.exiv2.org">exiv2 library</a>.</li>
+<li>SIPI can deal with and convert ICC color profiles based on the <a href="http://www.littlecms.com">littlecms library</a>.</li>
+<li>SIPI can embed important preservation data such as the checksum of the pixel values, original filename etc. in the file
+    headers.</li>
+<li>it supports SSL (https://…)</li>
+<li>SIPI embeds the scripting language <a href="https://www.lua.org">LUA</a> that allows a very flexible, highly customizable 
+  deployment that can be adapted to the enviroment SIPI is being used in. Before serving any request, a configurable
+  LUA script ("pre flight script") is being executed that can check access rights, restrictions or other stuff. SIPI LUA
+  has been extended with many SIPI-specific functions (including image conversion, HTTP-client etc.)</li>
+</ul>
+<h3 id="2-an-ordinary-http-webserver">2. An ordinary HTTP webserver<a class="headerlink" href="#2-an-ordinary-http-webserver" title="Permanent link">&para;</a></h3>
+<ul>
+<li>SIPI is also a normal webserver that is able to deliver arbitrary files. It also implements LUA embedded into HTML
+  pages.</li>
+<li>Using SIPI LUA scripts and routing, RESTful interfaces may be implemented. E.g. image upload and conversions may
+  by supported.</li>
+</ul>
+<h3 id="3-an-image-format-conversion-tool">3. An image format conversion tool<a class="headerlink" href="#3-an-image-format-conversion-tool" title="Permanent link">&para;</a></h3>
+<h4 id="generic-format-conversions">Generic format conversions<a class="headerlink" href="#generic-format-conversions" title="Permanent link">&para;</a></h4>
+<ul>
+<li>image format conversion are supported between TIFF, JPEG2000, JPG and PNG. SIPI can
+  be used either as standalone command line tool or in server mode using <a href="https://www.lua.org">LUA</a> scripting.</li>
+<li>SIPI preserves most embedded metadata (EXIF, IPTC, TIFF, XMP) and is preserving and/or converting ICC color profiles.</li>
+</ul>
+<h4 id="preservation-metadata-sipi-specific">Preservation metadata (SIPI specific)<a class="headerlink" href="#preservation-metadata-sipi-specific" title="Permanent link">&para;</a></h4>
+<ul>
+<li>SIPI is able to add SIPI specific metadata to most file formats. These metadata are relevant for long-term
+  preservation and include the following information:<ul>
+<li><code>original filename</code>: The original file name before conversion</li>
+<li><code>original mimetype</code>: The mimetype of the original image before conversion</li>
+<li><code>pixel checksum</code>: A checksum (e.g. SHA-256) of the original pixel values. This checksum can be used to verify that
+  a format conversion didn't alter the image content.</li>
+<li><code>icc profile</code>: (optional) The raw ICC profile as binary string. This field is added if the destination file 
+    format has no standard way to embed ICC color profiles (e.g. JPEG).</li>
+</ul>
+</li>
+</ul>
+<h3 id="4-integrated-sqlite3-database">4. Integrated sqlite3 Database<a class="headerlink" href="#4-integrated-sqlite3-database" title="Permanent link">&para;</a></h3>
+<p>SIPI has an integrated sqlite3 database that can be used with special LUA extensions. Thus, SIPI can be used as a
+standalone media server with extended functionality. The sqlite3 database may be used to store metadata about
+images, user data etc.</p>
+<h2 id="who-is-behind-sipi">Who is behind SIPI?<a class="headerlink" href="#who-is-behind-sipi" title="Permanent link">&para;</a></h2>
+<p>SIPI is developed and maintained by Lukas Rosenthaler, professor for Digital Humanities at the University of Basel, in
+collaboration with the "Data and Service Center for the Humanities" (<a href="https://dasch.swiss">DaSCH</a>.</p>
+<h2 id="how-to-get-sipi">How to get SIPI?<a class="headerlink" href="#how-to-get-sipi" title="Permanent link">&para;</a></h2>
+<ul>
+<li>The easiest way is to use the docker image provided on dockerhup <a href="https://hub.docker.com/r/daschswiss/sipi">daschswiss/sipi</a>.
+  The dockerized version has the binary kakadu library compiled in.</li>
+<li>You can compile SIPI from the sources on <a href="https://github.com/dasch-swiss/sipi">github</a>. Since SIPI uses many
+  third-party open source libraries, compiling Yourself is tedious and my be frustrating (but possible). <em>You have to
+  provide the licensed source of kakadu by Yourself</em>. See <a href="https://kakadusoftware.com">kakadu software</a> on how to get a
+  licensed version of the kakadu code. SIPI should compile on Linux (Ubuntu) and Apple OS X.</li>
+</ul>
+<h2 id="sipi-as-iiif-server">SIPI as IIIF-Server<a class="headerlink" href="#sipi-as-iiif-server" title="Permanent link">&para;</a></h2>
+<h3 id="extensions-to-the-iiif-standard">Extensions to the IIIF-Standard<a class="headerlink" href="#extensions-to-the-iiif-standard" title="Permanent link">&para;</a></h3>
+<h4 id="preflight-script">Preflight script<a class="headerlink" href="#preflight-script" title="Permanent link">&para;</a></h4>
+<ul>
+<li>Before executing a IIIF request, a freely configurable LUA-script is being called. This script must return the
+  permission to access the resource ("allow", "restrict" "deny") and the final path to the resource. This allows
+  to handle access rights etc. Within the LUA-script, permission databases etc. may be accessed through RESTful
+  services or using the internal SQLite database. In addition, the path to the resource may be redirected or other
+  limitations imposed (size, watermark etc.).</li>
+<li>The preflight script has access to the full HTTP(s) header including cookies and Authorization information. There are
+  also utility functions to decode JSON Web Tokens (<a href="https://jwt.io">JWT</a>).</li>
+</ul>
+<h4 id="access-to-non-image-files">Access to non-image files<a class="headerlink" href="#access-to-non-image-files" title="Permanent link">&para;</a></h4>
+<p>Sometimes it would be helpful to deliver non-image files such as XML, CSV etc. from the same directory tree as the
+IIIF-conformant images:
+- The url to download a file must have the form <code>http(s)://{server}/{prefix}/{fileid}/file</code>. The clause
+  <em>/file</em> at the end indicates that the file should bypass any IIIF URl processing and just be served as file.
+- Also in this case, a <em>preflight script</em> may be configured to control access to such file resources.
+- if the url has the form <code>http(s)://{server}/{prefix}/{fileid}/info.json</code>, SIPI returns a JSON containing
+  information about the file. The JSON has the from:
+  <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">&quot;@context&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://sipi.io/api/file/3/context.json&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://localhost:1025/images/csv_test.csv&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">&quot;internalMimeType&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;text/csv&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="nt">&quot;fileSize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">36</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">}</span>
+</code></pre></div>
+  Please note that SIPI determines the mimetype using the magic number. Due to the limitations thereof the mimetype
+- may not be determined exactly.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      &copy; 2017 - 2026 <a href='https://dasch.swiss' target='_blank'>Data and Service Center for the Humanities (DaSCH)</a>
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["search.suggest", "search.highlight", "navigation.sections", "toc.integrate", "content.code.copy"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+    
+  </body>
+</html>

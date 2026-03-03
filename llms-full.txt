@@ -1,0 +1,2747 @@
+# SIPI Documentation
+
+SIPI is a multithreaded, high-performance IIIF-compatible media server written in C++. It provides image format conversions, metadata preservation, and a Lua scripting interface.
+
+
+# Overview
+
+# Overview
+
+SIPI is a multithreaded, high-performance, IIIF compatible media server developed by the [Data and Service Center for the Humanities](https://dasch.swiss) at the [University of Basel](https://www.unibas.ch/en.html). It is designed to be used by archives, libraries, and other institutions that need to preserve high-quality images while making them available online.
+
+SIPI implements the Image API 3.0 of the International Image Interoperability Framework ([IIIF](http://iiif.io/)), and efficiently converts between image formats, preserving metadata contained in image files. In particular, if images are stored in [JPEG 2000](https://jpeg.org/jpeg2000/) format, SIPI can convert them on the fly to formats that are commonly used on the Internet. SIPI offers a flexible framework for specifying authentication and authorization logic in [Lua](https://www.lua.org/) scripts, and supports restricted access to images, either by reducing image dimensions or by adding watermarks. It can easily be integrated with [Knora](http://www.knora.org/). In addition SIPI preserves most of the [EXIF](http://www.exif.org), [IPTC](https://iptc.org/standards/photo-metadata/iptc-standard/) and [XMP](http://www.adobe.com/products/xmp.html) metadata and can preserve or transform [ICC](https://en.wikipedia.org/wiki/ICC_profile) color profiles.
+
+In addition, a simple webserver is integrated. The server is able to serve most common file types. In addition Lua scripts and embedded Lua (i.e., Lua embedded into HTML pages using the tags <lua>…</lua> are supported.
+
+SIPI can also be used from the command line to convert images to/from TIFF, [JPEG 2000](https://jpeg.org/jpeg2000/), JPEG, PNG, and WebP formats. For all these conversions, SIPI tries to preserve all embedded metadata such as
+
+- [IPTC](https://iptc.org/standards/photo-metadata/iptc-standard/)
+- [EXIF](http://www.exif.org)
+- [XMP](http://www.adobe.com/products/xmp.html)
+- [ICC](https://en.wikipedia.org/wiki/ICC_profile) color profiles. However, due to the limitations of some file formats, it cannot be guaranteed that all metadata and ICC profiles are preserved.
+- [JPEG2000](https://jpeg.org/jpeg2000/) (J2k) does not allow all types of ICC profiles profiles. Unsupported profile types will be added to the J2k header as comment and will be reinstated if the J2k file is converted back to the TIFF-format.
+
+SIPI is a [free software](http://www.gnu.org/philosophy/free-sw.en.html), released under the [GNU Affero General Public License](http://www.gnu.org/licenses/agpl-3.0.en.html). It is written in C++ and runs on Linux and macOS. Note: In order to compile SIPI, the user has to provide a licensed source of the [kakadu software](https://kakadusoftware.com).
+
+SIPI runs on Linux (including Debian, Ubuntu, and CentOS) and macOS.
+
+Freely distributable binary releases are available as Docker images: [daschswiss/sipi](https://hub.docker.com/r/daschswiss/sipi).
+# User Guide
+
+# Simple Image Presentation Interface (SIPI) - Introduction
+
+## What is SIPI?
+
+### 1. A IIIF Image API V3 level 2 conformant image server
+
+- SIPI is a full multithreaded, high performance, level2 compliant [IIIF Image API 3.0](https://iiif.io/api/image/3.0) written in C++. For the JPEG2000 implementation, it relies on the commercial [kakadu-library](https://kakadusoftware.com), but otherwise it is completely open source on [GitHub](https://github.com/dasch-swiss/sipi). It offers special support for multipage PDFs (through a SIPI-specific extensions to the IIIF Image API).
+- SIPI has been designed for the long term preservation of images, intended for the needs of the cultural heritage field. Thus it offers some unique features for this purpose:
+- all file format conversions try to preserve all metadata (EXIF, XMP, IPTC etc.). These functionality is based on the open source [exiv2 library](https://www.exiv2.org).
+- SIPI can deal with and convert ICC color profiles based on the [littlecms library](http://www.littlecms.com).
+- SIPI can embed important preservation data such as the checksum of the pixel values, original filename etc. in the file headers.
+- it supports SSL (https://…)
+- SIPI embeds the scripting language [LUA](https://www.lua.org) that allows a very flexible, highly customizable deployment that can be adapted to the enviroment SIPI is being used in. Before serving any request, a configurable LUA script ("pre flight script") is being executed that can check access rights, restrictions or other stuff. SIPI LUA has been extended with many SIPI-specific functions (including image conversion, HTTP-client etc.)
+
+### 2. An ordinary HTTP webserver
+
+- SIPI is also a normal webserver that is able to deliver arbitrary files. It also implements LUA embedded into HTML pages.
+- Using SIPI LUA scripts and routing, RESTful interfaces may be implemented. E.g. image upload and conversions may by supported.
+
+### 3. An image format conversion tool
+
+#### Generic format conversions
+
+- image format conversion are supported between TIFF, JPEG2000, JPG and PNG. SIPI can be used either as standalone command line tool or in server mode using [LUA](https://www.lua.org) scripting.
+- SIPI preserves most embedded metadata (EXIF, IPTC, TIFF, XMP) and is preserving and/or converting ICC color profiles.
+
+#### Preservation metadata (SIPI specific)
+
+- SIPI is able to add SIPI specific metadata to most file formats. These metadata are relevant for long-term preservation and include the following information:
+  - `original filename`: The original file name before conversion
+  - `original mimetype`: The mimetype of the original image before conversion
+  - `pixel checksum`: A checksum (e.g. SHA-256) of the original pixel values. This checksum can be used to verify that a format conversion didn't alter the image content.
+  - `icc profile`: (optional) The raw ICC profile as binary string. This field is added if the destination file format has no standard way to embed ICC color profiles (e.g. JPEG).
+
+### 4. Integrated sqlite3 Database
+
+SIPI has an integrated sqlite3 database that can be used with special LUA extensions. Thus, SIPI can be used as a standalone media server with extended functionality. The sqlite3 database may be used to store metadata about images, user data etc.
+
+## Who is behind SIPI?
+
+SIPI is developed and maintained by Lukas Rosenthaler, professor for Digital Humanities at the University of Basel, in collaboration with the "Data and Service Center for the Humanities" ([DaSCH](https://dasch.swiss).
+
+## How to get SIPI?
+
+- The easiest way is to use the docker image provided on dockerhup [daschswiss/sipi](https://hub.docker.com/r/daschswiss/sipi). The dockerized version has the binary kakadu library compiled in.
+- You can compile SIPI from the sources on [github](https://github.com/dasch-swiss/sipi). Since SIPI uses many third-party open source libraries, compiling Yourself is tedious and my be frustrating (but possible). *You have to provide the licensed source of kakadu by Yourself*. See [kakadu software](https://kakadusoftware.com) on how to get a licensed version of the kakadu code. SIPI should compile on Linux (Ubuntu) and Apple OS X.
+
+## SIPI as IIIF-Server
+
+### Extensions to the IIIF-Standard
+
+#### Preflight script
+
+- Before executing a IIIF request, a freely configurable LUA-script is being called. This script must return the permission to access the resource ("allow", "restrict" "deny") and the final path to the resource. This allows to handle access rights etc. Within the LUA-script, permission databases etc. may be accessed through RESTful services or using the internal SQLite database. In addition, the path to the resource may be redirected or other limitations imposed (size, watermark etc.).
+- The preflight script has access to the full HTTP(s) header including cookies and Authorization information. There are also utility functions to decode JSON Web Tokens ([JWT](https://jwt.io)).
+
+#### Access to non-image files
+
+Sometimes it would be helpful to deliver non-image files such as XML, CSV etc. from the same directory tree as the IIIF-conformant images:
+
+- The url to download a file must have the form `http(s)://{server}/{prefix}/{fileid}/file`. The clause */file* at the end indicates that the file should bypass any IIIF URl processing and just be served as file.
+- Also in this case, a *preflight script* may be configured to control access to such file resources.
+- if the url has the form `http(s)://{server}/{prefix}/{fileid}/info.json`, SIPI returns a JSON containing information about the file. The JSON has the from:
+
+```
+{
+  "@context": "http://sipi.io/api/file/3/context.json",
+  "id": "https://localhost:1025/images/csv_test.csv",
+  "internalMimeType": "text/csv",
+  "fileSize": 36
+}
+```
+
+Please note that SIPI determines the mimetype using the magic number. Due to the limitations thereof the mimetype
+
+- may not be determined exactly.
+
+# Running SIPI
+
+SIPI can be run either as a command-line image converter or as an IIIF media server.
+
+## Quick Start with Docker
+
+```
+docker run -p 1024:1024 daschswiss/sipi
+```
+
+## Running SIPI as a Command-line Image Converter
+
+Convert an image file to another format:
+
+```
+sipi --format jpg -f input.tif output.jpg
+```
+
+Query image file information:
+
+```
+sipi --query input.tif
+```
+
+Compare two image files pixel-wise:
+
+```
+sipi --compare file1.tif file2.jpg
+```
+
+## Running SIPI as a Server
+
+```
+sipi --config config/sipi.config.lua
+```
+
+## Logging
+
+SIPI uses two logging modes depending on how it is running:
+
+- **CLI mode** (`--file`, `--compare`, `--query`): Plain text output. Errors go to **stderr**, informational messages go to **stdout**. This is the standard Unix convention for command-line tools.
+- **Server mode** (`--config`): JSON-formatted log lines go to **stdout**. This follows container best practices — Docker, Kubernetes, and log collectors (Grafana Loki, Fluentd) expect structured logs on stdout. Each line is a JSON object: `{"level": "INFO", "message": "..."}`.
+
+### Log Levels
+
+SIPI supports the following log levels (in order of increasing severity):
+
+| Level     | Description                                                                               |
+| --------- | ----------------------------------------------------------------------------------------- |
+| `DEBUG`   | Detailed diagnostic information.                                                          |
+| `INFO`    | Normal operational messages (routes added, server started, migrations).                   |
+| `NOTICE`  | Significant but normal events.                                                            |
+| `WARNING` | Something unexpected but recoverable (e.g., failed XMP parse, incomplete metadata write). |
+| `ERR`     | Errors that affect a specific operation (e.g., image processing failure, ICC error).      |
+| `CRIT`    | Critical errors.                                                                          |
+| `ALERT`   | Conditions requiring immediate attention.                                                 |
+| `EMERG`   | System-wide emergencies.                                                                  |
+
+The log level controls which messages are emitted. Setting a level suppresses all messages below it. For example, `WARNING` shows only WARNING, ERR, CRIT, ALERT, and EMERG — suppressing DEBUG, INFO, and NOTICE.
+
+The log level can be configured in three ways (in order of precedence):
+
+1. **CLI option**: `--loglevel WARNING`
+1. **Environment variable**: `SIPI_LOGLEVEL=WARNING`
+1. **Lua config**: `loglevel = "WARNING"` (in the `sipi` block)
+
+If none is specified, the default level is `INFO`.
+
+## Command-line Options
+
+### Image Conversion Options
+
+| Flag                 | Short | Description                                                            |
+| -------------------- | ----- | ---------------------------------------------------------------------- |
+| `--file <path>`      | `-f`  | Input file to be converted. Usage: `sipi [options] -f infile outfile`  |
+| `--format <fmt>`     | `-F`  | Output format: `jpx`, `jp2`, `jpg`, `tif`, `png`, `webp`, `gif`        |
+| `--icc <profile>`    | `-I`  | Convert to ICC profile: `none`, `sRGB`, `AdobeRGB`, `GRAY`             |
+| `--quality <1-100>`  | `-q`  | JPEG compression quality (1 = highest compression, 100 = best quality) |
+| `--pagenum <n>`      | `-n`  | Page number for multi-page PDF/TIFF input files                        |
+| `--region <x,y,w,h>` | `-r`  | Select a region of interest (4 integer values)                         |
+| `--reduce <factor>`  | `-R`  | Reduce image size by factor (faster than `--scale`)                    |
+| `--size <w,h>`       | `-s`  | Resize image to given dimensions                                       |
+| `--scale <percent>`  | `-S`  | Resize image by percentage                                             |
+| `--mirror <dir>`     | `-m`  | Mirror image: `none`, `horizontal`, `vertical`                         |
+| `--rotate <angle>`   | `-o`  | Rotate image by degrees (0.0 - 360.0)                                  |
+| `--skipmeta`         | `-k`  | Strip all metadata from the output file                                |
+| `--topleft`          |       | Enforce TOPLEFT orientation                                            |
+| `--watermark <file>` | `-w`  | Overlay a watermark (single-channel grayscale TIFF)                    |
+| `--Ctiff_pyramid`    |       | Store output in pyramidal TIFF format                                  |
+
+### Query and Compare
+
+| Flag                  | Short | Description                               |
+| --------------------- | ----- | ----------------------------------------- |
+| `--query`             | `-x`  | Dump all information about the given file |
+| `--compare <f1> <f2>` | `-C`  | Compare two files pixel-wise              |
+
+### JPEG2000 Options
+
+| Flag                    | Description                                                                                                                              |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `--Sprofile <val>`      | J2K profile: `PROFILE0`, `PROFILE1`, `PROFILE2`, `PART2`, `CINEMA2K`, `CINEMA4K`, `BROADCAST`, `CINEMA2S`, `CINEMA4S`, `CINEMASS`, `IMF` |
+| `--rates <string>`      | Bit-rate(s) for quality layers (`-1` for lossless final layer)                                                                           |
+| `--Clayers <n>`         | Number of quality layers (default: 8)                                                                                                    |
+| `--Clevels <n>`         | Number of wavelet decomposition levels (default: 8)                                                                                      |
+| `--Corder <val>`        | Progression order: `LRCP`, `RLCP`, `RPCL`, `PCRL`, `CPRL` (default: `RPCL`)                                                              |
+| `--Stiles <string>`     | Tile dimensions `"{tx,ty}"` (default: `"{256,256}"`)                                                                                     |
+| `--Cprecincts <string>` | Precinct dimensions `"{px,py}"` (default: `"{256,256}"`)                                                                                 |
+| `--Cblk <string>`       | Code-block dimensions `"{dx,dy}"` (default: `"{64,64}"`)                                                                                 |
+| `--Cuse_sop <val>`      | Include SOP markers (default: yes)                                                                                                       |
+
+### Server Options
+
+| Flag                    | Short | Env Var                | Default                         | Description                            |
+| ----------------------- | ----- | ---------------------- | ------------------------------- | -------------------------------------- |
+| `--config <file>`       | `-c`  | `SIPI_CONFIGFILE`      |                                 | Lua configuration file for server mode |
+| `--serverport <n>`      |       | `SIPI_SERVERPORT`      | `80`                            | HTTP port                              |
+| `--sslport <n>`         |       | `SIPI_SSLPORT`         | `443`                           | HTTPS port                             |
+| `--hostname <name>`     |       | `SIPI_HOSTNAME`        | `localhost`                     | Public DNS hostname                    |
+| `--keepalive <sec>`     |       | `SIPI_KEEPALIVE`       | `5`                             | HTTP keep-alive timeout in seconds     |
+| `--nthreads <n>`        | `-t`  | `SIPI_NTHREADS`        | CPU cores                       | Number of worker threads               |
+| `--maxpost <size>`      |       | `SIPI_MAXPOSTSIZE`     | `300M`                          | Maximum POST upload size               |
+| `--imgroot <path>`      |       | `SIPI_IMGROOT`         | `./images`                      | Image repository root directory        |
+| `--docroot <path>`      |       | `SIPI_DOCROOT`         | `./server`                      | Web server document root               |
+| `--wwwroute <path>`     |       | `SIPI_WWWROUTE`        | `/server`                       | URL route for web server               |
+| `--scriptdir <path>`    |       | `SIPI_SCRIPTDIR`       | `./scripts`                     | Directory for Lua route scripts        |
+| `--tmpdir <path>`       |       | `SIPI_TMPDIR`          | `./tmp`                         | Temporary files directory              |
+| `--maxtmpage <sec>`     |       | `SIPI_MAXTMPAGE`       | `86400`                         | Max age of temp files in seconds       |
+| `--initscript <path>`   |       | `SIPI_INITSCRIPT`      | `./config/sipi.init.lua`        | Path to Lua init script                |
+| `--cachedir <path>`     |       | `SIPI_CACHEDIR`        | `./cache`                       | Cache directory                        |
+| `--cachesize <size>`    |       | `SIPI_CACHESIZE`       | `200M`                          | Maximum cache size                     |
+| `--cachenfiles <n>`     |       | `SIPI_CACHENFILES`     | `200`                           | Maximum number of cached files         |
+| `--cachehysteresis <f>` |       | `SIPI_CACHEHYSTERESIS` | `0.15`                          | Cache purge ratio (0.0 - 1.0)          |
+| `--thumbsize <size>`    |       | `SIPI_THUMBSIZE`       | `!128,128`                      | Default thumbnail size (IIIF syntax)   |
+| `--sslcert <path>`      |       | `SIPI_SSLCERTIFICATE`  | `./certificate/certificate.pem` | SSL certificate path                   |
+| `--sslkey <path>`       |       | `SIPI_SSLKEY`          | `./certificate/key.pem`         | SSL key file path                      |
+| `--jwtkey <string>`     |       | `SIPI_JWTKEY`          |                                 | JWT shared secret (42 chars)           |
+| `--loglevel <level>`    |       | `SIPI_LOGLEVEL`        | `DEBUG`                         | Log level (see Logging section)        |
+
+### Sentry Error Reporting
+
+| Flag                         | Env Var                   | Description                    |
+| ---------------------------- | ------------------------- | ------------------------------ |
+| `--sentry-dsn <url>`         | `SIPI_SENTRY_DSN`         | Sentry DSN for error reporting |
+| `--sentry-release <ver>`     | `SIPI_SENTRY_RELEASE`     | Sentry release version         |
+| `--sentry-environment <env>` | `SIPI_SENTRY_ENVIRONMENT` | Sentry environment name        |
+
+### Deprecated Options
+
+| Flag                      | Description                                   |
+| ------------------------- | --------------------------------------------- |
+| `--salsah`                | Legacy flag for old SALSAH system conversions |
+| `--subdirlevels <n>`      | Number of subdirectory levels (deprecated)    |
+| `--subdirexcludes <dirs>` | Directories excluded from subdir calculations |
+| `--pathprefix`            | Treat IIIF prefix as file path (deprecated)   |
+
+## Environment Variables
+
+All server options can be configured via environment variables. Environment variables override Lua configuration file values but are themselves overridden by command-line flags.
+
+| Variable                  | CLI Flag               | Default                         | Description                  |
+| ------------------------- | ---------------------- | ------------------------------- | ---------------------------- |
+| `SIPI_CONFIGFILE`         | `--config`             |                                 | Configuration file path      |
+| `SIPI_SERVERPORT`         | `--serverport`         | `80`                            | HTTP port                    |
+| `SIPI_SSLPORT`            | `--sslport`            | `443`                           | HTTPS port                   |
+| `SIPI_HOSTNAME`           | `--hostname`           | `localhost`                     | Public hostname              |
+| `SIPI_KEEPALIVE`          | `--keepalive`          | `5`                             | Keep-alive timeout (seconds) |
+| `SIPI_NTHREADS`           | `--nthreads`           | CPU cores                       | Worker threads               |
+| `SIPI_MAXPOSTSIZE`        | `--maxpost`            | `300M`                          | Max POST size                |
+| `SIPI_IMGROOT`            | `--imgroot`            | `./images`                      | Image root directory         |
+| `SIPI_DOCROOT`            | `--docroot`            | `./server`                      | Document root                |
+| `SIPI_WWWROUTE`           | `--wwwroute`           | `/server`                       | Web server route             |
+| `SIPI_SCRIPTDIR`          | `--scriptdir`          | `./scripts`                     | Lua scripts directory        |
+| `SIPI_TMPDIR`             | `--tmpdir`             | `./tmp`                         | Temporary directory          |
+| `SIPI_MAXTMPAGE`          | `--maxtmpage`          | `86400`                         | Max temp file age            |
+| `SIPI_INITSCRIPT`         | `--initscript`         | `./config/sipi.init.lua`        | Init script path             |
+| `SIPI_CACHEDIR`           | `--cachedir`           | `./cache`                       | Cache directory              |
+| `SIPI_CACHESIZE`          | `--cachesize`          | `200M`                          | Max cache size               |
+| `SIPI_CACHENFILES`        | `--cachenfiles`        | `200`                           | Max cached files             |
+| `SIPI_CACHEHYSTERESIS`    | `--cachehysteresis`    | `0.15`                          | Cache purge ratio            |
+| `SIPI_THUMBSIZE`          | `--thumbsize`          | `!128,128`                      | Thumbnail size               |
+| `SIPI_SSLCERTIFICATE`     | `--sslcert`            | `./certificate/certificate.pem` | SSL certificate              |
+| `SIPI_SSLKEY`             | `--sslkey`             | `./certificate/key.pem`         | SSL key                      |
+| `SIPI_JWTKEY`             | `--jwtkey`             |                                 | JWT secret                   |
+| `SIPI_JPEGQUALITY`        | `--quality`            | `60`                            | JPEG quality                 |
+| `SIPI_LOGLEVEL`           | `--loglevel`           | `DEBUG`                         | Log level                    |
+| `SIPI_SENTRY_DSN`         | `--sentry-dsn`         |                                 | Sentry DSN                   |
+| `SIPI_SENTRY_RELEASE`     | `--sentry-release`     |                                 | Sentry release               |
+| `SIPI_SENTRY_ENVIRONMENT` | `--sentry-environment` |                                 | Sentry environment           |
+
+**Configuration precedence** (highest to lowest):
+
+1. Command-line flags
+1. Environment variables
+1. Lua configuration file
+
+## Exit Codes and Error Handling
+
+### Exit Codes
+
+When running SIPI as a command-line image converter, the process exit code indicates whether the conversion succeeded:
+
+- **0** — Success. The output file was written correctly.
+- **1** (`EXIT_FAILURE`) — Image processing error. The image could not be read, converted, or written.
+
+**Important for calling services:** Always check the exit code. A non-zero exit code means the output file was not produced (or is incomplete).
+
+### Error Output
+
+On failure, SIPI prints a short error message to **stderr** indicating the failure phase and the specific error. The format is:
+
+```
+Error <phase> image: <details>
+```
+
+Where `<phase>` is one of `reading`, `converting`, or `writing`. Example:
+
+```
+Error reading image: Unsupported JPEG colorspace YCCK (file=input.jpg, dimensions=2048x1536, components=4)
+```
+
+### Sentry Integration (CLI Mode)
+
+When the `SIPI_SENTRY_DSN` environment variable is set, CLI conversion failures automatically send a Sentry event with rich image context. This allows developers to diagnose failures without reproducing them locally.
+
+Each Sentry event includes:
+
+- **Tags** (indexed, searchable, filterable in Sentry):
+
+  - `sipi.mode` — always `cli` for command-line conversions
+  - `sipi.phase` — `read`, `convert`, or `write`
+  - `sipi.output_format` — the target format (e.g., `jpx`, `jpg`, `tif`, `png`)
+  - `sipi.colorspace` — the image's photometric interpretation
+  - `sipi.bps` — bits per sample
+
+- **Context** ("Image" context with structured data):
+
+  - `input_file`, `output_file` — file paths
+  - `width`, `height` — image dimensions (if read successfully)
+  - `channels` — number of color channels
+  - `bps` — bits per sample
+  - `colorspace` — photometric interpretation
+  - `icc_profile_type` — ICC profile type (e.g., sRGB, AdobeRGB, CMYK)
+  - `orientation` — EXIF orientation
+  - `file_size_bytes` — input file size
+
+### Common Failure Causes
+
+| Error                                  | Meaning                                                                                                                     |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Unsupported colorspace (YCCK, unknown) | The JPEG uses a colorspace SIPI cannot convert. Re-encode the source image in sRGB.                                         |
+| Unsupported bits/sample                | Only 8 and 16 bits/sample are supported. Images with other bit depths must be converted first.                              |
+| Channel/colorspace mismatch            | The number of channels does not match the declared colorspace (e.g., 4 channels but RGB). The file metadata may be corrupt. |
+| ICC profile incompatible               | The ICC profile does not match the channel count (e.g., CMYK profile on a 3-channel image).                                 |
+| Corrupt or truncated file              | The input file is incomplete or damaged.                                                                                    |
+| Unsupported TIFF tiling                | The TIFF tile configuration is inconsistent or uses unsupported bit depths.                                                 |
+
+### Integration Notes for Calling Services
+
+If you call SIPI CLI from another service (e.g., a Java service):
+
+1. **Check the exit code.** Non-zero means failure — do not assume the output file exists or is valid.
+1. **Parse stderr** (optional). The first line of stderr contains a human-readable error message with the failure phase and details.
+1. **Set `SIPI_SENTRY_DSN`** to get full diagnostics server-side. Use the Sentry tags `sipi.phase`, `sipi.colorspace`, `sipi.bps`, and `sipi.output_format` to build alerts and filters for specific failure patterns.
+
+## Configuration Files
+
+SIPI's configuration file is written in [Lua](https://www.lua.org/). You can make your own configuration file by adapting `config/sipi.config.lua`.
+
+- Check that the port number is correct and that your operating system's firewall does not block it.
+- Set `imgroot` to the directory containing the files to be served.
+- Create the directory `cache` in the top-level directory of the source tree.
+
+For more information, see the comments in `config/sipi.config.lua` and the [Reference](https://sipi.io/guide/sipi/index.md) page for all configuration parameters.
+
+### HTTPS Support
+
+SIPI supports SSL/TLS encryption if the [OpenSSL](https://www.openssl.org/) library is installed. You will need to install a certificate; see `config/sipi.config.lua` for instructions.
+
+### IIIF Prefixes
+
+SIPI supports [IIIF Image API URLs](https://iiif.io/api/image/3.0/#21-image-request-uri-syntax).
+
+If the configuration property `prefix_as_path` is set to `true`, the IIIF `prefix` portion of the URL is interpreted as a subdirectory of `imgroot`, and SIPI looks for the requested image file in that subdirectory. Otherwise, it looks for the file in `imgroot`.
+
+# Basic Information and Reference
+
+This section provides the basic information to use SIPI as a high performance, versatile media server implementing the [IIIF](https://iiif.io) standards that can be used in many different settings, from a small standalone server providing basic metadata to the deployment in a complex environment. For more information about the IIIF standard see <https://iiif.io>. The basic idea is that an image or rectangular region of an image can be downloaded (e.g. to the browser) with a given width and height, rotation, image quality and format. All parameters are provided with the IIIF conformant URL that has the following form:
+
+`http(s)://{server}/{prefix}/{identifier}/{region}/{size}/{rotation}/{quality}.{format}`
+
+The parts do have the following meaning:
+
+- `{server}`: The DNS name of the server, eg. `iiif.dasch.swiss`. The server may include a portnumber, eg. `iiif2.dasch.swiss:8080`.
+- `{prefix}`: A path (that may include `/`'s) to organize the assets. Usually the prefix reflect the internal directory or folder hierarchy. However this can be overridden using special features of SIPI (see pre-flight-script and sipi configuration file).
+- `{identifier}`: The identifier of the requested image. By default, it is the filename and its extension.
+- `{region}`: a region of interest that should be displayed. `full` indicates that the whole image is being requested. For more details see [IIIF regions](https://iiif.io/api/image/3.0/#41-region)
+- `{size}`: The size of the displayed image (part). `max` indicates the the "natural" maximal resolution should be used. For more details see [IIIF size](https://iiif.io/api/image/3.0/#42-size)
+- `{rotations}`: The image can be rotated and mirrored before being transmitted to the client. SIPI allows for arbitrary rotations. The Value `0` indicates no rotation. For more details see [IIIF rotation](https://iiif.io/api/image/3.0/#43-rotation)
+- `{quality}`: The quality parameter determines whether the image is delivered in color, grayscale or black and white. Valid values are:
+- `default`: the "natural" quality of the original image
+- `color`: A color representation
+- `gray`: A gray value representation
+- `bitonal`: A bitonal representation
+
+All quality values are supported by SIPI
+
+- `{format}`: The file format that should be delivered. SIPI supports the following formats, irrelevant on the format the image as in the repository of SIPI:
+- `jpg`: The image is delivered as JPEG image. Unfortunately the IIIF standard does not allow the dynamic selection of the compression ratio used in creating the JPEG. However, a server wide rate may be set in the configuration file.
+- `tif`: The image is delivered as TIFF image.
+- `png`: The image is delivered as PNG image.
+- `jpx`: The image is delivered as JPEG2000 image.
+- `webp`: The image is delivered as WebP image.
+- `gif`: The image is delivered as GIF image.
+
+*NOTE*: PDF's are not supported as an output format. PDF is considered a **document format** and *not* an image format.
+
+## The SIPI Executable
+
+The SIPI executable is a statically linked program that can be started as
+
+- *command line tool* to perform image operations, mainly format conversions
+- *as server deamon* that provides IIIF conforming media server
+
+### Using SIPI as Command Line Tool
+
+The SIPI command line mode can be used for the following tasks:
+
+#### Format Conversions:
+
+```
+/path/to/sipi infile outfile [options]
+```
+
+#### Print Information about File and Metadata:
+
+```
+/path/to/sipi -x infile
+/path/to/sipi --query infile
+```
+
+#### Compare two Images pixelwise
+
+The images may have different formats: if the have exactely the same pixels, they are considered identical). Metadata is ignored for comparison:
+
+```
+/path/to/sipi -C file1 file2
+/path/to/sipi --compare file1 file2
+```
+
+#### General Options for the Command Line Use
+
+In command line mode, SIPI supports the following options:
+
+- `-h`, `--help`: Display a short help with all options available
+- `-F <fmt>`, `--format <fmt>`: The format of the output file. Valid are `jpx`, `jp2`, `jpg`, `png`, `tif`, `webp`, and `gif`.
+- `-I <profile>`, `--icc <profile>`: Convert the outfile to the given ICC color profile. Supported profiles are `sRGB`, `AdobeRGB` and `GRAY`.
+- `-q <num>`, `--quality <num>`: Only used for the JPEG format. Ignored for all other formats. Its a number between 1 and 100, where 1 is equivalent to the highest compression ratio and lowest quality, 100 to the lowest compression ration and highest quality of the output image.
+- `-n <num>`, `--pagenum <num>`: Only for input files in multi-page PDF format: sets the page that should be converted. Ignored for all other input file formats.
+- `-r <x> <y> <nx> <ny>`, `--region <x> <y> <nx> <ny>`: Selects a region of interest that should be converted. Needs 4 integer values: `left_upper_corner_X`, `left_upper_corner_Y`, `width`, `height`.
+- `-s <iiif-size>`, `--size <iif-size>`: The size of the resulting image. The option requires a string parameter formatted according to the size-syntax of IIIF [see IIIF-Size](https://iiif.io/api/image/3.0/#42-size). Not giving this parameters results in having the maximalsize (as the value `"max"`would give).
+- `-s <num>`, `--scale <num>`: Scaling the image size by the given number (interpreted as percentage). Percentage must be given as integer value. It may be bigger than 100 to upscale an image.
+- `-R <num>`, `--reduce <num>`: Reduce the size of the image by the given factor. Thus `-R 2`would resize the image to half of the original size. Using `--reduce` is usually much faster than using `--scale`, e.g. `--reduce 2` is faster than `--scale 50`.
+- `-m <val>`, `--mirror <val>`: Takes either `horizontal` or `vertical`as parameter to mirror the image appropriately.
+- `-o <angle>`, `--rotate <angle>`: Rotates the image by the given angle. The angle must be a floating point (or integer) value between `0.0`and `w60.0`.
+- `-k`, `--skipmeta`: Strip all metadata from inputfile.
+- `-w <filepath>`, `--watermark <filepath>`: Overlays a watermark to the output image. must be a single channel, gray valued TIFF. That is, the TIFF file must have the following tag values: SAMPLESPERPIXEL = 1, BITSPERSAMPLE = 8, PHOTOMETRIC = PHOTOMETRIC_MINISBLACK.
+
+#### JPEG2000 Specific Options
+
+Usually, the SIPI command line tool is used to create JPEG2000 images suitable for a IIIF repository. SIPI supports the following JPEG2000 specific options. For a in detail description of these options consult the kakadu documentation!
+
+- `--Sprofile <profile>`: The following JPEG2000 profiles are supported: `PROFILE0`, `PROFILE1`, `PROFILE2`, `PART2`, `CINEMA2K`, `CINEMA4K`, `BROADCAST`, `CINEMA2S`, `CINEMA4S`, `CINEMASS`, `IMF`. Default: `PART2`.
+- `--rates <string>`: One or more bit-rates (see kdu_compress help!). A value "-1" may be used in place of the first bit-rate in the list to indicate that the final quality layer should include all compressed bits.
+- `--Clayers <num>`:Number of quality layers. Default: 8.
+- `--Clevels <num>`: Number of wavelet decomposition levels, or stages. Default: 8.
+- `--Corder <val>`: Progression order. The four character identifiers have the following interpretation: L=layer; R=resolution; C=component; P=position. The first character in the identifier refers to the index which progresses most slowly, while the last refers to the index which progresses most quickly. Thus must be one of `LRCP`, `RLCP`, `RPCL`, `PCRL`, `CPRL`, Default: `RPCL`.
+- `--Stiles <string>`: Tiles dimensions `"{tx,ty}"`. Default: `"{256,256}"`.
+- `--Cprecincts <string>`: Precinct dimensions `"{px,py}"` (must be powers of 2). Default: `"{256,256}"`.
+- `--Cblk <string>`: Nominal code-block dimensions `"{dx,dy}"`(must be powers of 2, no less than 4 and no greater than 1024, whose product may not exceed 4096). Default: `"{64,64}"`.
+- `--Cuse_sop <val>`: Include SOP markers (i.e., resync markers). Default: yes.
+
+### Using SIPI as IIIF Media Server
+
+In order to use SIPI as IIIF media server, some setup work has to be done. The *configuration* of SIPI can be done using a configuration file (that is written in LUA) and/or using environment variables, and/or command line options.
+
+The priority is as follows: *`configuration file parameters` are overwritten by `environment variables` are overwritten by `command line options`*.
+
+The SIPI server requires a few directories to be setup and listed in the configuration file. Then the SIPI server is launched as follows:
+
+```
+/path/to/sipi --config /path/to/config-file.lua
+```
+
+#### SIPI specific extensions to IIIF
+
+SIPI implements some backwards compatible, non-standard extensions to the IIIF Image API:
+
+##### Access to a raw files
+
+Sometimes it may be usefull to store non-image files such as XML-sidecars, manifests as JSON or complete PDF's, etc. in the same environment as the images. For this reason SIPI supports an extension of the IIIF API:
+
+```
+http(s)://{server}/{prefix}/{identifier}/file
+```
+
+The `/file`-path at the end of the URL makes SIPI to send the file as it is. Thus, for example a manifest file could be accessed by
+
+```
+https://iiif.my.server/images/myimage.json/file
+```
+
+This works also for PDF's. The URL
+
+```
+https://iiif.my.server/images/mydocument.pdf/file
+```
+
+will download the PDF in toto to be opened by an external viewer or the webapplication.
+
+It is possible to use the IIIF-`info.json` syntax also on non-image files. In this case the `info.json` has the following format:
+
+```
+{
+   "@context": "http://sipi.io/api/file/3/context.json",
+   "id": "http://localhost:1024/images/test.csv",
+   "mimeType": "text/comma-separated-values",
+   "fileSize": 327
+}
+```
+
+#### Setup of SIPI Directories
+
+SIPI needs the following directories and files setup and accessible (the real names of the directories must be indicated in the configuration file). The following configuration parameters are in the `sipi`-table of the configuration script:
+
+- `imgroot=path`: This is the top-directory of the media file repository. SIPI should at least have read access to it. If SIPI is used to upload and convert files, it must also have write access. The path may be given as absolute path or as relative path.\
+  *Cmdline option: `--imgroot`*\
+  *Environment variable: `SIPI_IMGROOT`*\
+  *Default: `./images`*
+- `initscript=path/to/init.lua`: SIPI needs a minmal set of LUA functions that can be adapted to the local installation. These mandatory functions are definied in a init-script (usually it can be found in the config directory where also the configuration file is located).\
+  *Cmdline option: `--initscript`*\
+  *Environment variable: `SIPI_INITSCRIPT`*\
+  *Default: `./config/sipi.init.lua`*
+- `tmpdir=path`: For the support of multipart POST SIPI requires read/write access to a directory to save temporary files.\
+  *Cmdline option: `--tmpdir`*\
+  *Environment variable: `SIPI_IMGROOT`*\
+  *Default: `./tmp`*
+- `scriptdir=path`: Path to the directory where the LUA-scripts for the routes (e.g. RESTful services) can be found.\
+  *Cmdline option: `--scriptdir`*\
+  *Environment variable: `SIPI_SCRIPTDIR`*\
+  *Default: `./scripts`*
+- `cachedir=path`: SIPI may optionally use a cache directory to store converted image in order to avoid computationally intensive conversions if a specific variant is requested several times. Sipi starts with a warning if the cache directory is defined but not existing.\
+  *Cmdline option: `--cachedir`*\
+  *Environment variable: `SIPI_CACHEDIR`*\
+  *Default: `./cache`*
+
+In addition, SIPI can act as a webserver that offers image upload and conversion as web service. In order to use this feature, a server directory has to be defined. This definition ist in the `fileserver`-table of the configuration file:
+
+- `docroot=path`: Path to the document root of the SIPI web server.\
+  *Cmdline option: `--docroot`*\
+  *Environment variable: `SIPI_DOCROOT`*\
+  *Default: `./server`*
+
+#### SIPI Configuration Parameters
+
+The following configuration parameters are used by the SIPI server:
+
+- `hostname=dns-name`: The DNS name that SIPI shall show to the outside world. It should be the dns name the client uses to access the SIPI server (and not internal hostnames by proxies etc.). *Cmdline option: `--hostname`*\
+  *Environment variable: `SIPI_HOSTNAME`*\
+  *Default: `localhost`*
+- `port=portnum`: Portnumber SIPI should listen on for incoming HTTP requests.\
+  *Cmdline option: `--serverport`*\
+  *Environment variable: `SIPI_SERVERPORT`*\
+  *Default: `80`*
+- `ssl_port=portnum`: Portnumber SIPI should listen on for incoming SHTTP requests (using SSL).\
+  *Cmdline option: `--sslport`*\
+  *Environment variable: `SIPI_SSLPORT`*\
+  *Default: `443`*
+- `nthreads=num`: Number of worker threads that SIPI allocates. SIPI is a mutlithreaded server and pre-allocates a given number of working threads that can be configured.\
+  *Cmdline option: `--nthreads`*\
+  *Environment variable: `SIPI_NTHREADS`*\
+  *Default: number of hardware cores as given by `std::thread::hardware_concurrency()`*
+- `prefix_as_path=bool`: If `true`, the prefix is used as path within the image root directory. If false, the prefix is ignored and it is assumed that all images are directly located in the image root.\
+  *Cmdline option: `--pathprefix`*\
+  *Environment variable: `SIPI_PATHPREFIX`*\
+  *Default: `false`*
+- `ssl_certificate=path`: Path to the SSL certificate. Is mandatory if SSL is to be used.\
+  *Cmdline option: `--sslcert`*\
+  *Environment variable: `SIPI_SSLCERTIFICATE`*\
+  *Default: `./certificate/certificate.pem`*
+- `ssl_key=path`: Path to the SSL key file. Is mandatory if SSL is to be used.\
+  *Cmdline option: `--sslkey`*\
+  *Environment variable: `SIPI_SSLKEY`*\
+  *Default: `./certificate/key.pem`*
+- `jwt_secret=string`: Shared secret to encode web tokens.\
+  *Cmdline option: `--jwtkey`*\
+  *Environment variable: `SIPI_JWTKEY`*\
+  *Default: `UP 4888, nice 4-8-4 steam engine`*
+- `max_post_size=amount`: Maximal size a file upload may have. The amount has the form "" where `number` is an integer value and `type`an "M" for Megabytes, "G" for Gigabytes and "" (empty) for bytes.\
+  *Cmdline option: `--maxpost`*\
+  *Environment variable: `SIPI_MAXPOSTSIZE`*\
+  *Default: `300M`*
+- `keep_alive` : Number of seconds a connection (socket) remains open at maximum ("keep-alive"), if a client requests a "keep-alive" connection in the request header. For more information see [Keep-Alive](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Keep-Alive).\
+  *Cmdline option: `--keepalive`*\
+  *Environment variable: `SIPI_KEEPALIVE`*\
+  *Default: `5`*
+- `jpeg_quality=num`: Compression parameter when producing JPEG output. Must be a number between 1 and 100. Unfortunately, the IIIF Image API does not allow to give a JPEG quality (=compression) on the IIIF URL. SIPI allows to configure the compression quality system wide with this parameter. Allowed values are in he range [1..100] where 1 the worst quality (and highest compression factor = smallest file size) and 100 the highest quality (with the lowest compression factor = biggest file size). Please note that SIPI is not able to provide lossless compression for JPEG files.\
+  *Cmdline option: `--quality`*\
+  *Environment variable: `SIPI_JPEGQUALITY`*\
+  *Default: `60`*
+- `thumb_size=string`: Default size for thumbnails. Parameter must be IIIF conformant size string. This configuration parameter can be used to define a default value for creating thumbnails. It has no direct implications but can be used in LUA scripts (e.g. the pre_flight-function).\
+  *Cmdline option: `--thumbsize`*\
+  *Environment variable: `SIPI_THUMBSIZE`*\
+  *Default: `!128,128`*
+- `logfile=path`: SIPI uses [syslog](https://en.wikipedia.org/wiki/Syslog) as logging facility. The logging name is `Sipi`. It supports the following levels: "EMERGENCY", "ALERT", "CRITICAL", "ERROR", "WARNING", "NOTICE", "INFORMATIONAL", "DEBUG".\
+  *Cmdline option: `--logfile`*\
+  *Environment variable: `SIPI_LOGFILE`*\
+  *Default: `Sipi`*
+- `loglevel=level`: SIPI uses syslog as logging facility. The logging name is `Sipi`. It supports the following levels: "EMERGENCY", "ALERT", "CRITICAL", "ERROR", "WARNING", "NOTICE", "INFORMATIONAL", "DEBUG".\
+  *Cmdline option: `--loglevel`*\
+  *Environment variable: `SIPI_LOGLEVEL`*\
+  *Default: `DEBUG`*
+- `max_temp_file_age=num`: The maximum allowed age of temporary files (in seconds) before they are deleted.\
+  *Cmdline option: `--maxtmpage`*\
+  *Environment variable: `SIPI_MAXTMPAGE`*\
+  *Default: `86400`* (one day)
+
+#### Cache Configuration
+
+SIPI may optionally use a cache directory to store converted image in order to avoid computationally intensive conversions if a specific variant is requested several times. The cache is based on timestamps and the canonical IIIF URL. Before an image is being converted, the canonical URL is determined. If a file associated with this canonical URL is in the cache directory, the timestamp of the original file in the repository is compated to the cached file. If the cached file is newer, it will be served. If the file in the repository is newer, the cache file (which is outdated) will be deleted and replaced be the newly converted repository file (that is being sent to the client).
+
+The following configuration parameters determine the behaviour of the cache:
+
+- `cachedir=path`: SIPI may optionally use a cache directory to store converted image in order to avoid computationally intensive conversions if a specific variant is requested several times. Sipi starts with a warning if the cache directory is defined but not existing.\
+  *Cmdline option: `--cachedir`*\
+  *Environment variable: `SIPI_CACHEDIR`*\
+  *Default: `./cache`*
+- `cachesize=amount`: The maximal size of the cache. The cache will be purged if either the maximal size or maximal number of files is reached. The amount has the form "M" with M indication Megabytes.\
+  *Cmdline option: `--cachesize`*\
+  *Environment variable: `SIPI_CACHESIZE`*\
+  *Default: `200M`*
+- `cache_nfiles=num`: The maximal number of files to be cached. The cache will be purged if either the maximal size or maximal number of files is reached.\
+  *Cmdline option: `--cachenfiles`*\
+  *Environment variable: `SIPI_CACHENFILES`*\
+  *Default: `200`*
+- `cache_hysteresis=float`: If the cache becomes full, the given percentage of file space is marked for reuse and purged.\
+  *Cmdline option: `--cachehysteresis`*\
+  *Environment variable: `SIPI_CACHEHYSTERESIS`*\
+  *Default: `0.15`*
+
+#### Configuration of the HTTP File Server
+
+SIPI offers HTTP file server for HTML and other files. Files with the ending `.elua` are HTTP-files with embeded LUA code. Everything between the ... tags is interpreted as LUA code and the output embedded in the data stream for the client.
+
+All configurations for the HTTP server are in the `fileserver` table:
+
+- `docroot=path`: Path to the document root of the file server.\
+  *Cmdline option: `--docroot`*\
+  *Environment variable: `SSIPI_DOCROOT`*\
+  *Default: `./server`*
+- `wwwroute=string`: Route for the file server should respond to requests.That is, a file with the name "dada.html" is accessed with `http://dnsname/server/dada.html`, if the `wwwroute`is set to `/server`.\
+  *Cmdline option: `--wwwroute`*\
+  *Environment variable: `SIPI_WWWROUTE`*\
+  *Default: `/server`*
+
+#### Configuration of Administrator Access
+
+SIPI allows special administrator access for some tasks. In order to allow for this, an administrator has to be defined as follows:
+
+```
+admin = {
+    --
+    -- username of admin user
+    --
+    user = 'admin',
+
+    --
+    -- Administration password
+    --
+    password = 'Sipi-Admin'
+}
+```
+
+If You're using the administrator user, please make sure that the config file is not exposed!
+
+#### Routing Table
+
+SIPI allows to implement RESTful interfaces or other services based on LUA-scripts which are located in the scripts directory. In order to use these LUA-scripts as endpoints, the appropriate routes have to be defined in the `routes` table. An entry has the following form:
+
+- `method`: the HTTP request. Supported are `GET`, `POST`, `PUT` and `DELETE`.
+- `route`: A URL path that may contain `/`'s.
+- `script`: Name of the LUA script in the script directory.
+
+Thus, the routing section of a SIPI configuration file may look as follows:
+
+```
+routes = {
+    {
+        method = 'DELETE',
+        route = '/api/cache',
+        script = 'cache.lua'
+    },
+    {
+        method = 'GET',
+        route = '/api/cache',
+        script = 'cache.lua'
+    },
+    {
+        method = 'POST',
+        route = '/api/upload',
+        script = 'upload.lua'
+    },
+    {
+        method = 'GET',
+        route = '/sqlite',
+        script = 'test_sqlite.lua'
+    }
+}
+```
+# Lua Scripting
+
+# SIPI Lua Interface
+
+SIPI has an embedded [LUA](http://www.lua.org) interpreter. LUA is a simple script language that was developped specifically to be embedded into applications. For example the games [minecraft](https://www.minecraft.net) and [World of Warcraft](https://worldofwarcraft.com/de-de/) make extensive use of LUA scripting for customization and programming extensions.
+
+Each HTTP request to SIPI invokes a recent, independent lua-instance (Version 5.3.5). Therefore, LUA may be used in the following contexts:
+
+- Preflight function
+- Embedded in HTML pages
+- RESTful services using the SIPI routing
+
+Each lua-instance in SIPI includes additional SIPI-specific information:
+
+- global variables about the SIPI configuration
+- information about the current HTTP request
+- SIPI specific functions for
+- processing the request and send back information
+- getting image information and transforming images
+- querying and changing the SIPI runtime configuration (e.g. the cache)
+
+In general, the SIPI LUA function make use that a Lua function's return value may consist of more than one element (see [Multiple Results](http://www.lua.org/pil/5.3.html)):
+
+Sipi provides the [LuaRocks](https://luarocks.org/) package manager which must be used in the context of SIPI.
+
+*The Lua interpreter in Sipi runs in a multithreaded environment: each request runs in its own thread and has its own Lua interpreter. Therefore, only Lua packages that are known to be thread-safe may be used!*
+
+## Preflight function
+
+It is possible to define a LUA pre-flight function for *IIIF*-requests and independently one for *file*-requests (indicated by a */file* postfix in the URL). Both are optional and are best located in the init-script (see [configuration options](https://sipi.io/guide/sipi/#setup-of-sipi-directories) of SIPI). It is executed after the incoming HTTP request data has been processed but before an action to respond to the request has been taken. It should be noted that the pre-flight script is only executed for IIIF-specific requests (either using the IIIF URL-syntax or the */file* postfix). All other HTTP requests are being directed to "normal" HTTP-server part of SIPI. These can utilize the lua functionality by embedding LUA commands within the HTML.
+
+### IIIF preflight function
+
+The IIIF preflight function must have the name **pre_flight** with the following signature:
+
+```
+function pre_flight(prefix,identifier,cookie)
+
+    return "allow", filepath
+end
+```
+
+The preflight function takes 3 parameter:
+
+- `prefix`: This is the prefix that is given on the IIIF url [mandatory]\
+  *http(s)://{server}/**{prefix}**/{id}/{region}/{size}/{rotation}/{quality}.{format}*\
+  Please note that the prefix may contain several "/" that can be used as path to the repository file
+- `identifier`: The image identifier (which must not correspond to an actual filename in the media files repositoy of the SIPI IIIF server) [mandatory]
+- `cookie`: A cookie containing authorization information. Usually the cookie contains a Json Web Token [optional]
+
+The pre-flight function must return at least 2 parameters:
+
+- `permission`: A string or a table indication the permission to read the image. In a simple case it's either the string `"allow"` or `"deny"`.\
+  To allow more flexibility, the following permission tables are supported:
+  - Restricted access with watermark. The watermark must be a TIFF file with a single 8-bit channel (gray value image). For example:\
+    `{ type = 'restrict', watermark = './wm/mywatermark.tif' }`
+  - Restricted access with size limitation. The size must be a [IIIF size expression](https://iiif.io/api/image/3.0/#42-size). For example:\
+    `{ type = 'restrict', size='!256,256' }`
+  - SIPI also supports the [IIIF Authentification API](https://iiif.io/api/auth/1.0/). See section IIIF Authentification on how to implement this feature in the pre-flight function.
+- `filepath`: The path to the master image file in the media files repository. This path can be assembled using the `prefix` and `identifier` using any additional information (e.g. accessing a database or using the LUA restful client)
+
+The most simple working pre-flight looks as follows assuming that the `identifier`is the name of the master image file in the repository and the `prefix` is the path:
+
+```
+function pre_flight(prefix, identifier, cookie)
+    if config.prefix_as_path then
+        filepath = config.imgroot .. '/' .. prefix .. '/' .. identifier
+    else
+        filepath = config.imgroot .. '/' .. identifier
+    end
+    return 'allow', filepath
+end
+```
+
+Above example preflight function allows all files to be served without restriction.
+
+#### More complex example of preflight function
+
+The following example uses some SIPI lua funtions to access an authorization server to check if the user (identified by a cookie) is allowed to see the specific image. We are using [Json Web Tokens](https://jwt.io) (JWT) which are supported by SIPI specific LUA functions. Please note that the SIPI JTW-functions support an arbitrary payload that has not to follow the JWT recommendations. In order to encode, the JWT_ALG_HS256 is beeing used together with the key that is defined in the SIPI configuration as [jwt_secret](https://sipi.io/guide/sipi/#jwt-secret).
+
+```
+function pre_flight(prefix, identifier, cookie) 
+    --
+    -- make up the file path
+    --
+    if config.prefix_as_path then
+        filepath = config.imgroot .. '/' .. prefix .. '/' .. identifier
+    else
+        filepath = config.imgroot .. '/' .. identifier
+    end
+    --
+    -- we need a cookie containing the user information that will be
+    -- sent to the authorization server. In this
+    -- example, the content does not follow the JWT rules
+    -- (which is possible to pack any table into a JWT encoded token)
+    --
+    if cookie then
+        --
+        -- we decode the cookie in order to get a table of key/value pairs
+        --
+        success, userinfo = server.decode_jwt(cookie)
+        if not success then
+            return 'deny', filepath
+        end
+        --
+        -- prepare the RESTful call to the authorization server
+        --
+
+        -- add the image identifier to the info table:
+        userinfo["imgid"] = identifier
+        -- encode the userinfo to a JWT-like token:
+        local new_cookie = server.generate_jwt(userinfo) 
+        local url = 'http://auth.institution.org/api/getauth/' .. identifier
+        local auth_information = { Cookie = new_cookie }
+        --
+        -- make the HTTP request with a timeout of 500 ms
+        --
+        success, result = server.http('GET', url, auth_information, 500) 
+        if success then
+            --
+            -- we got a response from the server
+            --
+            success, response_json = server.json_to_table(result.body)
+            if success then  -- everything OK
+                return {
+                            type = response_json.type,
+                            restriction = response_json.restriction
+                        }, filepath
+            else
+                return 'deny', filepath
+            end
+        else
+            return 'deny', filepath
+        end
+    else
+        return 'deny', filepath
+    end
+end
+```
+
+Above example assumes that the cookie data is a string that contains encrypted user data from a table (key/value pair). Jason Web Token. This token is decoded and the information about the image to be displayed is added. Then the information is encoded as a new token that ist transmitted to the RESTful interface of the authentification server. The answer is assumed to be json containing information about the type ('allow', 'deny', 'restrict') and the restriction settings. The pre-flight function uses the following SIPI-specific LUA global variables and function:
+
+- [config.imgroot](#configimgroot): (Global variable) Root directory of the image repository.
+- [server.http()](#serverhttp): (Function) Used to create a RESTful GET request.
+- [server.generate_jwt()](#servergenerate_jwt): (Function) Create a new JWT token from a key/value table.
+- [server.json_to_table()](#serverjson_to_table): (function) Convert a JSON into a LUA table.
+
+### File preflight function
+
+An URL in the form `http(s)://{server}/{prefix}/{identifier}/file` serves the given file as binary object (including propere mimetype in the header etc.). The file has to reside in the directory tree defined for IIIF requests. In these cases, a preflight script name `file_pre_flight` is being called if defined. Its signature is as follows:
+
+```
+function file_pre_flight(filepath, cookie)
+
+end
+```
+
+A simple example allowing access only to the file *"unit/test.csv"* would be:
+
+```
+function file_pre_flight(filepath, cookie)
+    if filepath == "./images/unit/test.csv" then
+        return "allow", filepath
+    else
+        return "deny", ""
+    end
+end
+```
+
+This script would deny all other file access and the SIPI IIIF server responds with a `401 Unauthorized` error.
+
+## LUA embedded in HTML
+
+The HTTP server that is included in SIPI can serve any type of file which are just transfered as is to the client. However, if a file has an extension of `.elua`, it is assumed to be a HTML file with embedded LUA code. ALL SIPI-specific LUA functions and global variables are available.
+
+Embedding works with the special tag `<lua>` and `</lua>`. All text between the opening and closing tag is interpreted as LUA code. SIPI provides an extra LUA function to output data to the client ([server.print](#serverprint)). Thus, dynamic, server-generated HTML may be created. A sample page that displays some information about the server configuration and client info could like follows:
+
+```
+<html>
+    <head>
+        <title>SIPI Configuration Info</title>
+    </head>
+    <body>
+    <h1>SIPI Configuration Info</h1>
+    <h2>Configuration variables</h2>
+    <table>
+        <tr>
+            <td>imgroot</td>
+            <td>:</td>
+            <td><lua>server.print(config.imgroot)</lua></td>
+        </tr>
+        <tr>
+            <td>docroot</td>
+            <td>:</td>
+            <td><lua>server.print(server.docroot)</lua></td>
+        </tr>
+        <tr>
+            <td>hostname</td>
+            <td>:</td>
+            <td><lua>server.print(config.hostname)</lua></td>
+        </tr>
+        <tr>
+            <td>scriptdir</td>
+            <td>:</td>
+            <td><lua>server.print(config.scriptdir)</lua></td>
+        </tr>
+        <tr>
+            <td>cachedir</td>
+            <td>:</td>
+            <td><lua>server.print(config.cache_dir)</lua></td>
+        </tr>
+        <tr>
+            <td>tmpdir</td>
+            <td>:</td>
+            <td><lua>server.print(config.tmpdir)</lua></td>
+        </tr>
+        <tr>
+            <td>port</td>
+            <td>:</td>
+            <td><lua>server.print(config.port)</lua></td>
+        </tr>
+        <lua>
+            if server.has_openssl then
+                server.print('<tr><td>SSL port</td><td>:</td><td>' ..
+                             config.sslport .. '</td></tr>')
+            end
+        </lua>
+        <tr>
+            <td>number of threads:</td>
+            <td>:</td>
+            <td><lua>server.print(config.n_threads)</lua></td>
+        </tr>
+        <tr>
+            <td>maximal post size:</td>
+            <td>:</td>
+            <td><lua>server.print(config.max_post_size)</lua></td>
+        </tr>
+    </table>
+    <h2>Client information</h2>
+    <table>
+        <tr>
+            <td>Host in request</td>
+            <td>:</td>
+            <td><lua>server.print(server.host)</lua></td>
+        </tr>
+        <tr>
+            <td>IP of client</td>
+            <td>:</td>
+            <td><lua>server.print(server.client_ip)</lua></td>
+        </tr>
+        <tr>
+            <td>URL path</td>
+            <td>:</td>
+            <td><lua>server.print(server.uri)</lua></td>
+            </tr>
+    </table>
+
+    <p>Important Note: "IP of client" and "Host in request" may
+       indicate the information of a proxy and notof the actual
+       client!</p>
+    <h2>Request Header Information</h2>
+    <table>
+        <lua>
+            for key, val in pairs(server.header) do
+                server.print('<tr><td>' .. key ..
+                             '</td><td>:</td><td>' .. val .
+                             '</td></tr>')
+            end
+        </lua>
+    </table>
+    </body>
+</html>
+```
+
+### Embedded LUA and enforcing SSL
+
+The supplied example initialization file offers a LUA function that enforces the use of a SSL encryption page proteced by a user name and password. It is used as follows by adding the following code *before the `<html>` opening tag*:
+
+```
+<lua>
+    if server.secure then
+        protocol = 'https://'
+    else
+        protocol = 'http://'
+    end
+
+    success,token = authorize_page('admin.sipi.org',
+                                   'administrator',
+                                    extecteduser, expectedPassword)
+    if not success then
+        return
+    end
+</lua>
+```
+
+where `expectedUser` and `extectedPassword` are the user/password combination the user is expected to enter.
+
+### File uploads to SIPI
+
+The SIPI specific LUA function allow the upload of files using POST requests with `multipart/form-data` content. The global variable `server.uploads` contains\`the information about the uploads. The following variables and function help to deal with uploads:
+
+- [server.uploads](#serveruploads) : information about the files in the upload request.
+- [server.copyTmpfile](#servercopytmpfile) : copies a fie from the upload location to the destination directory.
+
+In addition the file system functions that SIPI provides may be used.
+
+See the scripts `upload.elua` and `do-upload.elua` in the server directory, and `upload.lua` in the scripts directory for a working example.
+
+## RESTful API and custom routes
+
+Custom routes to implement a RESTful API can be defined in Sipi's configuration file using the `routes` configuration variable. For example:
+
+```
+routes = {
+    {
+        method = 'GET',
+        route = '/status',
+        script = 'get_repository_status.lua'
+    },
+    {
+        method = 'POST',
+        route = '/make_thumbnail',
+        script = 'make_image_thumbnail.lua'
+    }
+}
+```
+
+Sipi looks for these scripts in the directory specified by `scriptdir` in its configuration file. The first route that matches the beginning of the requested URL path will be used.
+
+## IIIF Authentication API 1.0 in SIPI
+
+The `pre_flight` function is also responsible for activating the IIIF Auth API. In order to do so, the pre_flight script returns a table that contains all necessary information. For details about the IIIF Authentication API 1.0 see the [IIIF documentation](https://iiif.io/api/auth/1.0/). The following fields have to be returned by the `pre_flight`-function as LUA-table:
+
+- `type`: String giving the type. Valid are:\
+  `"login"`, `"clickthrough"`, `""kiosk"` or `"external"`.
+- `cookieUrl`: URL where to get a valid IIIF Auth cookie for this service.
+- `tokenUrl`: URL where to get a valid IIIF Auth token for this service.
+- `confirmLabel`: Label to display in confirmation box.
+- `description`: Description for login window.
+- `failureDescription`: Information, if login fails.
+- `failureHeader`: Header for failure window.
+- `header`: Header of login window
+- `label`: Label of the login window
+
+In addition, the filepath has to be returns. A full response may look as follows:
+
+```
+return {
+   type = 'login',
+    cookieUrl = 'https://localhost/iiif-cookie.html',
+    tokenUrl = 'https://localhost/iiif-token.php',
+    confirmLabel =  'Login to SIPI',
+    description = 'This Example requires a demo login!',
+    failureDescription = '<a href="http://example.org/policy">Access Policy</a>',
+    failureHeader = 'Authentication Failed',
+    header = 'Please Log In',
+    label = 'Login to SIPI',
+}, filepath
+```
+
+SIPI will use this information returned by the `pre_flight` function to return the appropriate responses to the client requests based on the IIIF Authentication API 1.0. Check for support of the IIIF Authentication API 1.0 for [mirador](https://projectmirador.org) and [universalviewer](https://universalviewer.io), both applications which suppport the IIIF standards.
+
+## SIPI variables available to Lua scripts
+
+There are many globally accessible LUA variables made available which reflext the configuration of SIPI and the state of the server and request. This variables a read only and created for every request.
+
+### SIPI configuration variables
+
+This variables are defined ither in the configuration file if SIPI, in environemt variables at startup or as command line option when starting the server.
+
+#### config.hostname
+
+```
+config.hostname
+```
+
+The hostname SIPI is configures to run on (see [hostname](https://sipi.io/guide/sipi/#hostname) in configuration description).
+
+#### config.port
+
+```
+config.port
+```
+
+Portnumber where the SIPI server listens (see [serverport](https://sipi.io/guide/sipi/#portnum) in configuration description).
+
+#### config.sslport
+
+```
+config.sslport
+```
+
+Portnumber for SSL connections of SIPI (see [sslport](https://sipi.io/guide/sipi/#sslport) in configuration description).
+
+#### config.imgroot
+
+```
+config.imgroot
+```
+
+Root directory for IIIF-served images (see [imgroot](https://sipi.io/guide/sipi/#imgroot) in configuration description).
+
+#### config.docroot
+
+```
+config.docroot
+```
+
+Root directory for WEB-Server (see [docroot](https://sipi.io/guide/sipi/#docroot) in configuration description).
+
+#### config.max_temp_file_age
+
+```
+config.max_temp_file_age
+```
+
+maximum age of temporary files (see [max_temp_file_age](https://sipi.io/guide/sipi/#maxtmpfileage) in configuration description).
+
+#### config.prefix_as_path
+
+```
+config.prefix_as_path`
+```
+
+`true` if the prefix should be used as path info (see [prefix_as_path](https://sipi.io/guide/sipi/#prefixaspath) in configuration description).
+
+#### config.init_script
+
+```
+config.init_script
+```
+
+Path to initialization script (see [initscript](https://sipi.io/guide/sipi/#scriptinit) in configuration description).
+
+#### config.scriptdir
+
+```
+config.scriptdir
+```
+
+Path to script directory. (see [scriptdir](https://sipi.io/guide/sipi/#scriptdir) in configuration description).
+
+#### config.cache_dir
+
+```
+config.cache_dir
+```
+
+Path to cache directory for iIIF served images. (see [cachedir](https://sipi.io/guide/sipi/#cachedir) in configuration description).
+
+#### config.cache_size
+
+```
+config.cache_size
+```
+
+Maximal size of cache (see [cachesize](https://sipi.io/guide/sipi/#cachesize) in configuration description).
+
+#### config.cache_n_files
+
+```
+config.cache_n_files
+```
+
+Maximal number of files in cache. (see [cache_nfiles](https://sipi.io/guide/sipi/#cachenfiles) in configuration description).
+
+#### config.cache_hysteresis
+
+```
+config.cache_hysteresis
+```
+
+Amount of data to be purged if cache reaches maximum size. (see [cache_hysteresis](https://sipi.io/guide/sipi/#hysteresis) in configuration description).
+
+#### config.jpeg_quality
+
+```
+config.jpeg_quality
+```
+
+Unfortunately, the IIIF Image API does not allow to give a JPEG quality (=compression) on the IIIF URL. SIPI allows to configure the compression quality system wide with this parameter. Allowed values are in he range [1..100] where 1 the worst quality (and highest compression factor = smallest file size) and 100 the highest quality (with lowest compression factor = biggest file size). Please note that SIPI is not able to provide lossless compression for JPEG files. (see [jpeg_quality](https://sipi.io/guide/sipi/#jpegquality) in configuration description).
+
+#### config.keep_alive
+
+```
+config.keep_alive
+```
+
+Maximal keep-alive time for HTTP requests that ask for a keep-alive connection. (see [keep_alive](https://sipi.io/guide/sipi/#keepalive) in configuration description).
+
+#### config.thumb_size
+
+```
+config.thumb_size
+```
+
+Default thumbnail image size. (see [thumb_size](https://sipi.io/guide/sipi/#thumbsize) in configuration description).
+
+#### config.n_threads
+
+```
+config.n_threads
+```
+
+Number of worker threads SIPI uses. (see [nthreads](https://sipi.io/guide/sipi/#nthreads) in configuration description).
+
+#### config.max_post_size
+
+```
+config.max_post_size
+```
+
+Maximal size of POST data allowed (see [max_post_size](https://sipi.io/guide/sipi/#maxpostsize) in configuration description).
+
+#### config.tmpdir
+
+```
+config.tmpdir
+```
+
+Temporary directory to store uploads. (see [tmpdir](https://sipi.io/guide/sipi/#tmpdir) in configuration description).
+
+#### config.ssl/\_certificate
+
+```
+config.ssl_certificate
+```
+
+Path to the SSL certificate that SIPI uses. (see [ssl_certificate](https://sipi.io/guide/sipi/#sslcertificate) in configuration description).
+
+#### config.ssl/\_key
+
+```
+config.ssl_key
+```
+
+Path to the SSL key that SIPI uses. (see [ssl_key](https://sipi.io/guide/sipi/#sslkey) in configuration description).
+
+#### config.logfile
+
+```
+config.logfile
+```
+
+Name of the logfile. SIPI is currently using the built-in logger which logs to stdout and the logfile name is ignored. (see [logfile](https://sipi.io/guide/sipi/#logfile) in configuration description).
+
+#### config.loglevel
+
+```
+config.loglevel
+```
+
+Indicates what should be logged. The variable contains a integer that corresponds to the syslog level. (see [loglevel](https://sipi.io/guide/sipi/#loglevel) in configuration description).
+
+#### config.adminuser
+
+```
+config.adminuser
+```
+
+Name of admin user. (see [user](https://sipi.io/guide/sipi/#configuration-of-administrator-access) in configuration description).
+
+#### config.password
+
+```
+config.password
+```
+
+Password (plain text, not encrypted) of admin user (*use with caution*)! (see [password](https://sipi.io/guide/sipi/#configuration-of-administrator-access) in configuration description).
+
+### SIPI Server Variables
+
+Sipi server variables are dependent on the incoming request and are created by SIPI automatically for each request.
+
+#### server.method
+
+```
+server.method
+```
+
+The HTTP request method. Is one of `OPTIONS`, `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `TRACE`, `CONNECT` or `OTHER`.
+
+#### server.has_openssl
+
+```
+server.has_openssl
+```
+
+`true` if OpenSSL is available. This variable is determined compilation time. Usually SSL should be included, but SIPI can be compiled without SSL support. There is no option in the configuration file for this.
+
+#### server.secure
+
+```
+server.secure
+```
+
+`true` if the connection was made over HTTPS using SSL.
+
+#### server.host
+
+```
+server.host
+```
+
+The hostname of the Sipi server that was used in the request.
+
+#### server.client_ip
+
+```
+server.client_ip
+```
+
+The IPv4 or IPv6 address of the client connecting to Sipi.
+
+#### server.client_port
+
+```
+server.client_port
+```
+
+The port number of the client socket.
+
+#### server.uri
+
+```
+server.uri
+```
+
+The URL path used to access Sipi (does not include the hostname).
+
+#### server.header
+
+```
+server.header
+```
+
+A table containing all the HTTP request headers(in lowercase).
+
+#### server.cookies
+
+```
+server.cookies
+```
+
+A table of the cookies that were sent with the request.
+
+#### server.get
+
+```
+server.get
+```
+
+A table of GET request parameters.
+
+#### server.post
+
+```
+server.post
+```
+
+A table of POST or PUT request parameters.
+
+#### server.request
+
+```
+server.request
+```
+
+All request parameters.
+
+#### server.content
+
+```
+server.content
+```
+
+If the request had a body, the variable contains the body data. Otherwise it's `nil`.
+
+#### server.content_type
+
+```
+server.content_type
+```
+
+Returns the content type of the request. If there is no type or no content, this variable is `nil`.
+
+#### server.uploads
+
+```
+server.uploads
+```
+
+This is an array of upload parameters, one per file. Each one is a table containing:
+
+- `fieldname`: the name of the form field.
+- `origname`: the original filename.
+- `tmpname`: a temporary path to the uploaded file.
+- `mimetype`: the MIME type of the uploaded file as provided by the browser.
+- `filesize`: the size of uploaded file in bytes.
+
+The upload can be accessed as follows:
+
+```
+for index, value in pairs(server.uploads) do
+    --
+    -- copy the uploaded file to the image repository using the original name
+    --
+    server.copyTmpfile(index, config.imgdir .. '/' .. value["origname"])
+end
+```
+
+### Knora-specific variables
+
+The development of SIPI came out of the need to have a flexible, high performance IIIF server for the Swiss National research infrastructure [Data and Service Center for the Humanities](https://dasch.swiss) (DaSCH). The aim of the DaSCH is to guarantee long-term accessibility of research data from the Humanities. The operates a specialized platform [Knora](https://knora.org). The following variables are for internal use only.
+
+#### config.knora_path
+
+```
+config.knora_path
+```
+
+Path to knora REST API (only for SIPI used with Knora)
+
+#### config.knora_port
+
+```
+config.knora_port
+```
+
+Port that the Knora API uses
+
+## SIPI functions available to Lua scripts
+
+Sipi provides the following functions that can be called from Lua scripts. Each function returns two values. The first value is `true` if the operation succeeded, `false` otherwise. If the operation succeeded, the second value is the result of the operation, otherwise it is an error message.
+
+### SIPI Connection Functions
+
+These LUA function alter the way the HTTP connection is handled.
+
+#### server.setBuffer
+
+```
+success, errmsg = server.setBuffer([bufsize][,incsize])
+```
+
+Activates the the connection buffer. Optionally the buffer size and increment size can be given. Returns `true, nil` on success or `false, errormsg` on failure.
+
+#### server.sendHeader
+
+```
+success, errormsg = server.sendHeader(key, value)
+```
+
+Sets an HTTP response header. Returns `true, nil` on success or `false, errormsg` on failure.
+
+#### server.sendCookie
+
+```
+success, errormsg = server.sendCookie(key, value [, options-table])
+```
+
+Sets a cookie in the HTTP response. Returns `true, nil` on success or `false, errormsg` on failure. The optional `options-table` is a Lua table containing the following keys:
+
+- `path`
+- `domain`
+- `expires` (value in seconds)
+- `secure` (boolean)
+- `http_only` (boolean)
+
+#### server.sendStatus
+
+```
+server.sendStatus(code)
+```
+
+Sends an HTTP status code. This function is always successful and returns nothing.
+
+#### server.print
+
+```
+success, errormsg = server.print(values)
+```
+
+Prints variables and/or strings over the HTTP connection to the client that originated the request. Returns `true, nil` on success or `false, errormsg` on failure.
+
+#### server.requireAuth
+
+```
+success, table = server.requireAuth()
+```
+
+This function retrieves HTTP authentication data that was supplied after sending a `'WWW-Authenticate'`-header (e.g. by issuing a the following commands to enter the HTTP login dialog:
+
+```
+    server.setBuffer()
+    server.sendStatus(401);
+    server.sendHeader('WWW-Authenticate', 'Basic realm="Sipi"')
+```
+
+It returns `true, table` on success or `false, errormsg` on failure. The result of the authorization is returned as table with the following elements:
+
+- `status`: Either `BASIC`, `BEARER`, `NOAUTH` (no authorization header) or `ERROR`
+- `username`: A string containing the supplied username (only existing if stats is `BASIC`)
+- `password`: A string containing the supplied password (only existing if stats is `BASIC`)
+- `token`: A string containing the raw token information (only if status `BEARER`)
+- `message`: A string containing the error message (only if status `ERROR`)
+
+Example:
+
+```
+success, auth = server.requireAuth()
+if not success then
+    server.sendStatus(501)
+    server.print("Error in getting authentication scheme!")
+    return -1
+end
+
+if auth.status == 'BASIC' then
+    --
+    -- everything OK, let's create the token for further
+    -- calls and ad it to a cookie
+    --
+    if auth.username == config.adminuser and
+       auth.password == config.password then
+        tokendata = {
+            iss = "sipi.unibas.ch",
+            aud = "knora.org",
+            user = auth.username
+        }
+        success, token = server.generate_jwt(tokendata)
+        if not success then
+            server.sendStatus(501)
+            server.print("Could not generate JWT!")
+            return -1
+        end
+        success, errormsg = server.sendCookie('sipi',
+                                              token,
+                                              {path = '/', expires = 3600})
+        if not success then
+            server.sendStatus(501)
+            server.print("Couldn't send cookie with JWT!")
+            return -1
+        end
+    else
+        server.sendStatus(401)
+        server.sendHeader('WWW-Authenticate', 'Basic realm="Sipi"')
+        server.print("Wrong credentials!")
+        return -1
+    end
+elseif auth.status == 'BEARER' then
+    success, jwt = server.decode_jwt(auth.token)
+    if not success then
+        server.sendStatus(501)
+        server.print("Couldn't deocde JWT!")
+        return -1
+    end
+    if (jwt.iss ~= 'sipi.unibas.ch') or
+       (jwt.aud ~= 'knora.org') or
+       (jwt.user ~= config.adminuser) then
+        server.sendStatus(401)
+        server.sendHeader('WWW-Authenticate', 'Basic realm="Sipi"')
+        return -1
+    end
+elseif auth.status == 'NOAUTH' then
+    server.setBuffer()
+    server.sendStatus(401);
+    server.sendHeader('WWW-Authenticate', 'Basic realm="Sipi"')
+    return -1
+else
+    server.status(401)
+    server.sendHeader('WWW-Authenticate', 'Basic realm="Sipi"')
+    return -1
+end
+```
+
+### SIPI File System Function
+
+These functions offer tools to manipuale files and directories, and to gather file information.
+
+#### server.fs.ftype
+
+```
+success, filetype = server.fs.ftype(filepath)
+```
+
+Checks the filetype of a given filepath. Returns either `true, filetype` (with filetype one of `"FILE"`, `"DIRECTORY"`, `"CHARDEV"`, `"BLOCKDEV"`, `"LINK"`, `"SOCKET"` or `"UNKNOWN"`) or `false, errormsg`.
+
+#### server.fs.modtime
+
+```
+success, modtime = server.fs.modtime(filepath)
+```
+
+Retrieves the last modification date of a file in seconds since epoch UTC. Returns either `true`, `modtime` or `false`, `errormsg`.
+
+#### server.fs.is_readable
+
+```
+success, readable = server.fs.is_readable(filepath)
+```
+
+Checks if a file is readable. Returns `true, readable` (boolean) on success or `false, errormsg` on failure.
+
+#### server.fs.is_writeable
+
+```
+success, writeable = server.fs.is_writeable(filepath)
+```
+
+Checks if a file is writeable. Returns `true, writeable` (boolean) on success or `false, errormsg` on failure.
+
+#### server.fs.is_executable
+
+```
+success, errormsg = server.fs.is_executable(filepath)
+```
+
+Checks if a file is executable. Returns `true, executable` (boolean) on success or `false, errormsg` on failure.
+
+#### server.fs.exists
+
+```
+success, exists = server.fs.exists(filepath)
+```
+
+Checks if a file exists. Checks if a file exists. Returns `true, exists` (boolean) on success or `false, errormsg` on failure.
+
+#### server.fs.unlink
+
+```
+success, errormsg = server.fs.unlink(filename)
+```
+
+Deletes a file from the file system. The file must exist and the user must have write access. Returns `true, nil` on success or `false, errormsg` on failure.
+
+#### server.fs.mkdir
+
+```
+success, errormsg = server.fs.mkdir(dirname, [tonumber('0755', 8)])
+```
+
+Creates a new directory, optionally with the specified permissions. Returns `true, nil` on success or `false, errormsg` on failure.
+
+#### server.fs.rmdir
+
+```
+success, errormsg = server.fs.rmdir(dirname)
+```
+
+Deletes a directory. Returns `true, nil` on success or `false, errormsg` on failure.
+
+#### server.fs.getcwd
+
+```
+success, curdir = server.fs.getcwd()
+```
+
+Gets the current working directory. Returns `true, current_dir` on success or `false, errormsg` on failure.
+
+#### server.fs.readdir
+
+```
+success, filenames = server.fs.readdir(dirname)
+```
+
+Gets the names of the files in a directory, not including `.` and `..`. Returns `true, table` on success or `false, errormsg` on failure.
+
+#### server.fs.chdir
+
+```
+success, oldir = server.fs.chdir(newdir)
+```
+
+Change working directory. Returns `true, olddir` on success or `false, errormsg` on failure.
+
+#### server.fs.copyFile
+
+```
+success, errormsg = server.fs.copyFile(source, destination)
+```
+
+Copies a file from source to destination. Returns `true, nil`on success or `false, errormsg` on failure.
+
+#### server.fs.moveFile
+
+```
+success, errormsg = server.fs.moveFile(from, to)
+```
+
+Moves a file. The move connot cross filesystem boundaries! `true, nil`on success or `false, errormsg` on failure.
+
+### Other Helper Function
+
+#### server.http
+
+```
+success, result = server.http(method, "http://server.domain[:port]/path/file" [, header] [, timeout])
+```
+
+Performs an HTTP request using curl. Currently implements only GET requests. Parameters:
+
+- `method`: The HTTP request method. Currently must be `"GET"`.
+- `url`: The HTTP URL.
+- `header`: An optional table of key-value pairs representing HTTP request headers.
+- `timeout`: An optional number of milliseconds until the connection times out.
+
+Authentication is not yet supported.
+
+The result is a table:
+
+```
+result = {
+    status_code = value -- HTTP status code returned
+    erromsg = "error description" -- only if success is false
+    header = {
+        name = value [, name = value, ...]
+    },
+    certificate = { -- only if HTTPS connection
+        subject = value,
+        issuer = value
+    },
+    body = data,
+    duration = milliseconds
+}
+```
+
+Example:
+
+```
+success, result = server.http("GET", "http://www.salsah.org/api/resources/1", 100)
+
+if (result.success) then
+   server.print("<table>")
+   server.print("<tr><th>Field</th><th>Value</th></tr>")
+   for k,v in pairs(server.header) do
+       server.print("<tr><td>", k, "</td><td>", v, "</td></tr>")
+   end
+   server.print("</table><hr/>")
+
+   server.print("Duration: ", result.duration, " ms<br/><hr/>")
+   server.print("Body:<br/>", result.body)
+else
+   server.print("ERROR: ", result.errmsg)
+end
+```
+
+#### server.table_to_json
+
+```
+success, jsonstr = server.table\_to\_json(table)
+```
+
+Converts a (nested) Lua table to a JSON string. Returns `true, jsonstr` on success or `false, errormsg` on failure.
+
+#### server.json_to_table
+
+```
+success, table = server.json_to_table(jsonstr)
+```
+
+Converts a JSON string to a (nested) Lua table. Returns `true, table` on success or `false, errormsg` on failure.
+
+#### server.generate_jwt
+
+```
+success, token = server.generate_jwt(table)
+```
+
+Generates a [JSON Web Token](https://jwt.io/) (JWT) with the supplied table as payload. Returns `true, token` on success or `false, errormsg` on failure. The internal may contain arbitrary keys and/or may contains the JWT claims as follows. (The type `IntDate` is a number of seconds since 1970-01-01T0:0:0Z):
+
+- `iss` (string => StringOrURI) OPT: principal that issued the JWT.
+- `exp` (number => IntDate) OPT: expiration time on or after which the token MUST NOT be accepted for processing.
+- `nbf` (number => IntDate) OPT: identifies the time before which the token MUST NOT be accepted for processing.
+- `iat` (number => IntDate) OPT: identifies the time at which the JWT was issued.
+- `aud` (string => StringOrURI) OPT: identifies the audience that the JWT is intended for. The audience value is a string, typically the base address of the resource being accessed, such as `https://contoso.com`.
+- `prn` (string => StringOrURI) OPT: identifies the subject of the JWT.
+- `jti` (string => String) OPT: provides a unique identifier for the JWT.
+
+#### server.decode_jwt
+
+```
+success, table = server.decode_jwt(token)
+```
+
+Decodes a [JSON Web Token](https://jwt.io/) (JWT) and returns its content as table. Returns `true, table` on success or `false, errormsg` on failure.
+
+#### server.parse_mimetype
+
+```
+success, mimetype = server.parse_mimetype(str)
+```
+
+Parses a mimtype HTTP header string and returns a pair containing the actual mimetype and the charset used (if available). It returns `true, pair` with pair as mimetype and charset on success, `false, errormsg` on failure.
+
+#### server.file_mimetype
+
+```
+success, table = server.file_mimetype(path)
+success, table = server.file_mimetype(index)
+```
+
+Determines the mimetype of a file. The *first* form is used if the file path is known. The *second* form can be used for uploads by passing the upload file index. It returns `true, table` on success or `false, errormsg` on failure. The table has 2 members: - `mimetype` - `charset`
+
+#### server.file_mimeconsistency
+
+```
+success, is_consistent = server.file_mimeconsistency(path)
+success, is_consistent = server.file_mimeconsistency(index)
+```
+
+Checks if the file extension and the mimetype determined by the magic of the file is consistent. The *first* form requires a path (including the filename with extension), the *second* can be used for checking uploads by passing the file index. It returns `true, is_consistent` on success or `false, errormsg` in case of an error. `is_consistent` is true if the mimetype corresponds to the file extension.
+
+#### server.copyTmpfile
+
+```
+success, errormsg = server.copyTmpfile(from, to)
+```
+
+Sipi saves each uploaded file in a temporary location (given by the config variable `tmpdir`) and deletes it after the request has been served. This function is used to copy the file to another location where it can be retrieved later. Returns `true, nil` on success or `false, errormsg` on failure.
+
+Parameters:
+
+- `from`: an index (integer value) of array server.uploads.
+- `target`: destination path
+
+#### server.systime
+
+```
+systime = server.systime()
+```
+
+Returns the current system time on the server in seconds since epoch.
+
+#### server.log
+
+```
+server.log(message, loglevel)
+```
+
+Writes a message to the built-in logger. Severity levels are:
+
+- `server.loglevel.LOG_EMERG`
+- `server.loglevel.LOG_ALERT`
+- `server.loglevel.LOG_CRIT`
+- `server.loglevel.LOG_ERR`
+- `server.loglevel.LOG_WARNING`
+- `server.loglevel.LOG_NOTICE`
+- `server.loglevel.LOG_INFO`
+- `server.loglevel.LOG_DEBUG`
+
+#### server.uuid
+
+```
+success, uuid = server.uuid()
+```
+
+Generates a random UUID version 4 identifier in canonical form, as described in [RFC 4122](https://tools.ietf.org/html/rfc4122). Returns `true, uuid` on success or `false, errormsg` on failure.
+
+#### server.uuid62
+
+```
+success, uuid62 = server.uuid62()
+```
+
+Generates a Base62-encoded UUID. Returns `true, uuid62` on success or `false, errormsg` on failure.
+
+#### server.uuid_to_base62
+
+```
+success, uuid62 = server.uuid_to_base62(uuid)
+```
+
+Converts a canonical UUID string to a Base62-encoded UUID. Returns `true, uuid62` on success or `false, errormsg` on failure.
+
+#### server.base62_to_uuid
+
+```
+success, uuid = server.base62_to_uuid(uuid62)
+```
+
+Converts a Base62-encoded UUID to canonical form. Returns `true, uuid` on success or `false, errormsg` on failure.
+
+## Cache Management Functions
+
+The following functions are available for managing the SIPI image cache from Lua scripts.
+
+#### cache.size
+
+```
+success, size = cache.size()
+```
+
+Returns the current total size of cached files in bytes. Returns `nil` if no cache is configured.
+
+#### cache.max_size
+
+```
+success, max = cache.max_size()
+```
+
+Returns the configured maximum cache size limit in bytes.
+
+#### cache.nfiles
+
+```
+success, count = cache.nfiles()
+```
+
+Returns the current number of files in the cache.
+
+#### cache.max_nfiles
+
+```
+success, max = cache.max_nfiles()
+```
+
+Returns the configured maximum number of files allowed in cache.
+
+#### cache.path
+
+```
+path = cache.path()
+```
+
+Returns the filesystem path to the cache directory, or `nil` if no cache is configured.
+
+#### cache.filelist
+
+```
+filelist = cache.filelist([sortmethod])
+```
+
+Returns a table of cached files with metadata. The optional `sortmethod` parameter controls sorting:
+
+- `"AT_ASC"` — sort by access time, ascending
+- `"AT_DESC"` — sort by access time, descending
+- `"FS_ASC"` — sort by file size, ascending
+- `"FS_DESC"` — sort by file size, descending
+
+Each entry in the returned table contains:
+
+| Field         | Type    | Description                                |
+| ------------- | ------- | ------------------------------------------ |
+| `canonical`   | string  | Canonical cache key                        |
+| `origpath`    | string  | Original file path                         |
+| `cachepath`   | string  | Cache file path                            |
+| `size`        | integer | File size in bytes                         |
+| `last_access` | string  | Last access time (`"YYYY-MM-DD HH:MM:SS"`) |
+
+Returns `nil` if no cache is configured.
+
+#### cache.delete
+
+```
+success = cache.delete(canonical)
+```
+
+Deletes a specific cached file by its canonical key. Returns `true` on success, `false` otherwise.
+
+#### cache.purge
+
+```
+count = cache.purge()
+```
+
+Purges cache entries based on configured purge criteria (LRU). Returns the number of files purged, or `nil` if no cache is configured.
+
+## Filesystem Helper Functions
+
+The `server.fs` table provides filesystem operations. All functions return `(true, result)` on success or `(false, error_message)` on failure.
+
+#### server.fs.exists
+
+```
+success, exists = server.fs.exists(filepath)
+```
+
+Check if a file or directory exists. Returns `true/false` for the existence check.
+
+#### server.fs.ftype
+
+```
+success, filetype = server.fs.ftype(filepath)
+```
+
+Get the type of a path. Returns one of: `"FILE"`, `"DIRECTORY"`, `"CHARDEV"`, `"BLOCKDEV"`, `"LINK"`, `"FIFO"`, `"SOCKET"`, `"UNKNOWN"`.
+
+#### server.fs.modtime
+
+```
+success, timestamp = server.fs.modtime(filepath)
+```
+
+Get the modification time of a file as a Unix timestamp (seconds since epoch).
+
+#### server.fs.readdir
+
+```
+success, filenames = server.fs.readdir(dirpath)
+```
+
+List all files and directories in a directory. Returns a Lua table of filenames (excludes `.` and `..`).
+
+#### server.fs.is_readable
+
+```
+success, readable = server.fs.is_readable(filepath)
+```
+
+Check if a file is readable by the current process.
+
+#### server.fs.is_writeable
+
+```
+success, writeable = server.fs.is_writeable(filepath)
+```
+
+Check if a file is writable by the current process.
+
+#### server.fs.is_executable
+
+```
+success, executable = server.fs.is_executable(filepath)
+```
+
+Check if a file is executable by the current process.
+
+#### server.fs.unlink
+
+```
+success, errmsg = server.fs.unlink(filepath)
+```
+
+Delete a file from the filesystem.
+
+#### server.fs.mkdir
+
+```
+success, errmsg = server.fs.mkdir(dirname, mode)
+```
+
+Create a new directory. `mode` is a Unix permission integer (e.g., `tonumber('0755', 8)`).
+
+#### server.fs.rmdir
+
+```
+success, errmsg = server.fs.rmdir(dirname)
+```
+
+Remove an empty directory.
+
+#### server.fs.getcwd
+
+```
+success, cwd = server.fs.getcwd()
+```
+
+Get the current working directory.
+
+#### server.fs.chdir
+
+```
+success, old_dir = server.fs.chdir(newdir)
+```
+
+Change the current working directory. Returns the previous working directory on success.
+
+#### server.fs.copyFile
+
+```
+success, errmsg = server.fs.copyFile(source, target)
+```
+
+Copy a file from source to target.
+
+#### server.fs.moveFile
+
+```
+success, errmsg = server.fs.moveFile(source, target)
+```
+
+Move/rename a file. `source` can be a file path (string) or an uploaded file index (integer, 1-based).
+
+## Server Request Properties
+
+The following read-only properties are available on the `server` table within request handlers:
+
+| Property              | Type    | Description                                                                |
+| --------------------- | ------- | -------------------------------------------------------------------------- |
+| `server.method`       | string  | HTTP method: `"GET"`, `"POST"`, `"PUT"`, `"DELETE"`, `"HEAD"`, `"OPTIONS"` |
+| `server.uri`          | string  | The complete request URI/path                                              |
+| `server.host`         | string  | The Host header value                                                      |
+| `server.client_ip`    | string  | Client's IP address                                                        |
+| `server.client_port`  | integer | Client's port number                                                       |
+| `server.secure`       | boolean | Whether the connection is HTTPS                                            |
+| `server.has_openssl`  | boolean | Whether OpenSSL is available                                               |
+| `server.route`        | string  | The matched route (if using routing)                                       |
+| `server.content`      | string  | Raw POST/PUT body content                                                  |
+| `server.content_type` | string  | Content-Type header value                                                  |
+| `server.docroot`      | string  | Document root path                                                         |
+
+### Request Data Tables
+
+| Property         | Type  | Description                             |
+| ---------------- | ----- | --------------------------------------- |
+| `server.header`  | table | HTTP request headers (name-value pairs) |
+| `server.cookies` | table | Cookie name-value pairs                 |
+| `server.get`     | table | URL query parameters                    |
+| `server.post`    | table | POST form parameters                    |
+| `server.request` | table | Path parameters                         |
+
+### Uploaded Files
+
+`server.uploads` is a table of uploaded files (1-based indexing). Each entry contains:
+
+| Field       | Type    | Description                    |
+| ----------- | ------- | ------------------------------ |
+| `fieldname` | string  | Form field name                |
+| `origname`  | string  | Original filename              |
+| `tmpname`   | string  | Temporary file path on server  |
+| `mimetype`  | string  | MIME type of the uploaded file |
+| `filesize`  | integer | File size in bytes             |
+
+## Additional Server Functions
+
+#### server.setBuffer
+
+```
+success, errmsg = server.setBuffer([bufsize], [incsize])
+```
+
+Enable response buffering with optional buffer size and increment size (in bytes).
+
+#### server.sendCookie
+
+```
+success, errmsg = server.sendCookie(name, value [, options])
+```
+
+Set a cookie in the HTTP response. The optional `options` table can contain:
+
+| Key         | Type    | Description                      |
+| ----------- | ------- | -------------------------------- |
+| `path`      | string  | Cookie path                      |
+| `domain`    | string  | Cookie domain                    |
+| `expires`   | integer | Expiration (seconds since epoch) |
+| `secure`    | boolean | Secure flag                      |
+| `http_only` | boolean | HTTP-only flag                   |
+
+#### server.requireAuth
+
+```
+auth = server.requireAuth()
+```
+
+Parse authentication information from the request. Returns a table with:
+
+| Field      | Type   | Description                                     |
+| ---------- | ------ | ----------------------------------------------- |
+| `status`   | string | `"NOAUTH"`, `"BASIC"`, `"BEARER"`, or `"ERROR"` |
+| `username` | string | Username (BASIC auth only)                      |
+| `password` | string | Password (BASIC auth only)                      |
+| `token`    | string | Bearer token (BEARER auth only)                 |
+| `message`  | string | Error message (ERROR status only)               |
+
+## Utility Functions
+
+#### helper.filename_hash
+
+```
+success, hashed_path = helper.filename_hash(filename)
+```
+
+Convert a filename into a hashed filesystem path, using SIPI's internal hash algorithm for cache file organization.
+
+## Installing Lua modules
+
+To install Lua modules that can be used in Lua scripts, use `local/bin/luarocks`. Make sure that the location where the modules are stored is in the Lua package path, which is printed by local/bin/lurocks path. The Lua paths will be used by the Lua interpreter when loading modules in a script with `require` (see [Using LuaRocks to install packages in the current directory](http://leafo.net/guides/customizing-the-luarocks-tree.html)).
+
+For example, using `local/bin/luarocks install --local package`, the package will be installed in `~/.luarocks/`. To include this path in the Lua's interpreter package search path, you can use an environment variable. Running `local/bin/luarocks path` outputs the code you can use to do so. Alternatively, you can build the package path at the beginning of a Lua file by setting `package.path` and `package.cpath` (see [Running scripts with packages](http://leafo.net/guides/customizing-the-luarocks-tree.html#the-install-locations/using-a-custom-directory/quick-guide/running-scripts-with-packages)).
+
+# Lua image functions
+
+Through Lua scripting, SIPI allows a wide area of utilities to analyze, manipulate and convert images to/from different formats. This functionality allows to use SIPI e.g. for offering image upload and converting these images into IIIF conformant long-term storage formats (e.g. JPEG2000). It allows to programmatically modify an image before delivering it to the client, or to extract data from the images.
+
+The basic concept is a specialized Lua image object that offers all methods to manipulate images.
+
+### SipiImage.new(filename)
+
+This method creates a new image object by reading an image file that has to be located somewhere on the SIPI server.
+
+The simple forms are:
+
+```
+img = SipiImage.new("filepath")
+img = SipiImage.new(index)
+```
+
+The first variant opens a file given by "filepath", the second variant opens an uploaded file directly using the integer index to the uploaded files.
+
+If the index of an uploaded file is passed as an argument, this method adds additional metadata to the `SipiImage` object that is constructed: the file's original name, its MIME type, and its SHA256 checksum. When the `SipiImage` object is then written to another file, this metadata will be stored in an extra header record.
+
+If a filename is passed, the method does not add this metadata.
+
+The more complex form is as follows:
+
+```
+img = SipiImage.new("filename", {
+        region=<iiif-region-string>,
+        size=<iiif-size-string>,
+        reduce=<integer>,
+        original=origfilename,
+        hash="md5"|"sha1"|"sha256"|"sha384"|"sha512"
+      })
+```
+
+This creates a new Lua image object and loads the given image into. The second form allows to indicate a region, the size or a reduce factor and the original filename. The `hash` parameter indicates that the given checksum should be calculated out of the pixel values and written into the header. All parameters are optional, but at least one has to given. The meaning of the parameters are:
+
+- `region`: A region in IIIF format the image should be cropped to.
+- `size`: The size of the resulting image as valid IIIF size string.
+- `reduce`: An much faster alternative to size, if the image size will be reduced by a integer factor (2=half size, 3=one third size etc.)
+- `original`: The original file name that should be recorded in the metadata
+- `hash`: The Hash algorithm that will be used for the hash of the pixel values. Valid entries are `md5`, `sha1`, `sha256`, `sha384` and `sha512`.
+
+For example to read an image and include the SIPI preservation metadata, the function is called as follows:
+
+```
+SipiImage.new("path_to_file", { original="my_image.tif", hash="md5" }
+```
+
+This call will include the preservation metadata (please note that in this case the original filename is mandatory, since Lua has know direct knowledge about the original filename. The filepath given as first parameter must not and normally does not correspond to the original filename). The `hash`-parameter indicates to use the md5-algorithm for the has of the pixel values.
+
+### SipiImage.dims()
+
+```
+  success, dims = img.dims()
+  if success then
+      server.print('nx=', dims.nx, ' ny=', dims.ny, ' ori=', dims.orientation)
+  end
+```
+
+This method returns basic information about the image. It returns a Lua table withg the following items:
+
+- *nx*: Number of pixels in X direction (image width)
+- *ny*: Number of pixels in Y direction (image height)
+- *orientation*: Orientation of image which is an integer with the following meaning:
+- *1*: (TOPLEFT) The 0th row represents the visual top of the image, and the 0th column represents the visual left-hand side.
+- *2*: (TOPRIGHT) The 0th row represents the visual top of the image, and the 0th column represents the visual right-hand side.
+- *3*: (BOTRIGHT) The 0th row represents the visual bottom of the image, and the 0th column represents the visual right-hand side.
+- *4*: (BOTLEFT) The 0th row represents the visual bottom of the image, and the 0th column represents the visual left-hand side.
+- *5*: (LEFTTOP) The 0th row represents the visual left-hand side of the image, and the 0th column represents the visual top.
+- *6*: (RIGHTTOP) The 0th row represents the visual right-hand side of the image, and the 0th column represents the visual top.
+- *7*: (RIGHTBOT) The 0th row represents the visual right-hand side of the image, and the 0th column represents the visual bottom.
+- *8*: (LEFTBOT) The 0th row represents the visual left-hand side of the image, and the 0th column represents the visual bottom.
+
+### SipiImage.exif(<EXIF-parameter-name>)
+
+```
+success, value-or-errormsg = img:exit(<EXIF-parameter-name>)
+```
+
+Return the value of an exif parameter. The following EXIF parameters are supported:
+
+- *"Orientation"*: Orientation (integer)
+- *"Compression"*: Compression method (integer)
+- *"PhotometricInterpretation"*: The photometric interpretation (integer)
+- *"SamplesPerPixel"*: Samples per pixel (integer)
+- *"ResolutionUnit"*: 1=none, 2=inches, 3=cm (integer)
+- *"PlanarConfiguration"*: Planar configuration, 1=chunky, 2=planar (integer)
+- *"DocumentName"*: Document name (string)
+- *"Make"*: Make of camera or scanner (string)
+- *"Model"*: Model of camera or scanner (string)
+- *"Software"*: Software used for capture (string)
+- *"Artist"*: Artist that created the image (string)
+- *"DateTime"*: Date and time of creation (string)
+- *"ImageDescription"*: Image description
+- *"Copyright"*: Copyright info
+-
+
+### SipiImage.crop(<iiif-region-string>)
+
+```
+success, errormsg = img.crop(<IIIF-region-string>)
+```
+
+Crops the image to the given rectangular region. The parameter must be a valid IIIF-region string.
+
+### SipiImage.scale(<iiif-size-string>)
+
+```
+success, errormsg = img.scale(<iiif-size-string>)
+```
+
+Resizes the image to the given size as IIIF-conformant size string.
+
+### SipiImage.rotate(<iiif-rotation-string>)
+
+```
+success, errormsg = img.rotate(<iiif-rotation-string>)
+```
+
+Rotates and/or mirrors the image according the given iiif-conformant rotation string.
+
+### SipiImage.topleft()
+
+Rotates an image to the standard TOPLEFT orientation if necessary. Please note that viewers using tiling (e.g. [openseadragon](https://openseadragon.github.io)) require images in TOPLEFT rotation. Thus, it is highly recommended that all images served by SIPI IIIF will be set to TOPLEFT orientation. This process may involve rotation of 90, 180 or 270 degrees and possible mirroring which does *not* change the pixel values through interpolation.
+
+### SipiImage.watermark(wm-file-path)
+
+```
+success, errormsg = img.watermark(wm-file-path)
+```
+
+Applies the given watermark file to the image. The watermark file must be a single channel 8-Bit gray value TIFF file.
+
+### SipiImage.write(filepath, [compression_params])
+
+```
+success, errormsg = img.write(filepath)
+success, errormsg = img.write('HTTP.jpg')
+```
+
+The first version write the image to a file in the SIPI server, the second writes the file to the HTTP connection (which is done whenever the basename of the output file is `HTTP`):
+
+Parameters:
+
+- `filepath`: Path to output file. The file format is determined by the filename extension. Supported are
+
+  - `jpg` : writes a JPEG file
+  - `tif` : writes a TIFF file
+  - `png` : writes a PNG file
+  - `jpx` : writes a JPEG2000 file
+  - `webp` : writes a WebP file
+  - `gif` : writes a GIF file
+  - `pdf` : writes a PDF file
+
+- `compression_params`: (optional) An optional Lua table with compression parameters (which are dependent on the chosen output file format!) can be given. All compression parameters are optional. But if a compression parameter table is give, it must have at least one entry.
+
+- JPEG format:
+
+  - `quality`: Number between 1 and 100 (1 highest compression, worst quality, 100 lowest compression, best quality)
+
+- JPEG2000 format:
+
+  - `Sprofile`: Any of `PROFILE0`, `PROFILE1`, `PROFILE2`, `PART2`, `CINEMA2K`, `CINEMA4K`, `BROADCAST`, `CINEMA2S`, `CINEMA4S`, `CINEMASS`, `IMF`. Defaults to `PART2`.
+  - `Creversible`: Use the reversible compression algorithms of JPEG2000. Must be string `yes` or `no`. Defaults to `yes`.
+  - `Clayers`: Number of layers to use.
+  - `Clevels`: Number of levels to use.
+  - `Corder`: Ordering of file components. Must be one of the following strings: `LRCP`, `RLCP`, `RPCL`, `PCRL` or `CPRL`.
+  - `Cprecincts`: A kakadu conformant precinct string.
+  - `rates`: rates string as used in kakadu.
+
+### SipiImage.send(format)
+
+```
+success, errormsg = img.send(format)
+```
+
+Sends the file to the HTTP connection. Supported format strings:
+
+- `jpg` : sends a JPEG file
+- `tif` : sends a TIFF file
+- `png` : sends a PNG file
+- `jpx` : sends a JPEG2000 file
+- `webp` : sends a WebP file
+- `gif` : sends a GIF file
+
+### SipiImage.mimetype_consistency(mimetype, filename)
+
+```
+success, consistent = img:mimetype_consistency(mimetype, original_filename)
+```
+
+This method checks if the supplied MIME type (e.g. received from the browser during upload), the file's magic number ([file signature](https://en.wikipedia.org/wiki/List_of_file_signatures)), and the file extension are consistent.
+
+**Parameters:**
+
+- `mimetype` (string): The expected MIME type (e.g., `"image/tiff"`).
+- `original_filename` (string): The original filename with extension (e.g., `"photo.tif"`).
+
+**Returns:** `(true, boolean)` on success where the boolean indicates consistency, or `(false, error_message)` on failure.
+
+Please note that MIME type handling can be quite complex, since the correspondence between file extensions and MIME types is not unambiguous. In addition the file signature cannot identify all MIME types. For example, a "comma separated values" file (extension `.csv`) can have a MIME type of `application/csv`, `text/csv`, `text/x-csv`, `application/vnd.ms-excel` and more. However, the file signature will usually return `text/plain`. SIPI tries to cope with these ambiguities.
+
+### Example: Image Processing Pipeline
+
+```
+-- Read an image, crop, scale, rotate, and write to a new format
+img = SipiImage.new("input.tif")
+img:crop("100,100,500,500")
+img:scale("400,")
+img:rotate("90")
+img:write("output.jpx")
+```
+
+```
+-- Process an uploaded file and send the result via HTTP
+img = SipiImage.new(1)  -- first uploaded file
+img:topleft()
+img:scale("!800,800")
+img:send("jpg")
+```
+
+# Using SQLite in SIPI
+
+Sipi supports [SQLite](https://www.sqlite.org/) 3 databases, which can be accessed from Lua scripts. You should use [pcall](https://www.lua.org/pil/8.4.html) to handle errors that may be returned by SQLite.
+
+## Opening an SQLite Database
+
+```
+db = sqlite(path_to_db, access)
+```
+
+This creates a new opaque database object. The parameters are:
+
+- `path_to_db`: path to the sqlite3 database file.
+- `access`: Method of opening the database. Allowed are
+  - `'RO'`: readonly access. The file must exist and the SPIP server must have read access to it.
+  - `'RW'`: read and write access. The file must exist and the SPIP server must have read/write access to it.
+  - `'CRW'`: If the database file does not exist, it will be created and opened with read/write access.
+
+To destroy the database object and free all resources, you can do this:
+
+```
+db = ~db
+```
+
+However, Lua's garbage collection will destroy the database object and free all resources when they are no longer used.
+
+### Preparing a Query
+
+The SIPI sqlite interface supports direct queries as well as prepared statements. A direct query is constructed as follows:
+
+```
+qry = db << 'SELECT * FROM image'
+```
+
+Or, if you want to use a prepared query statement:
+
+```
+qry = db << 'INSERT INTO image (id, description) VALUES (?,?)'
+```
+
+The result of the `<<` operator (`qry`) will then be a query object containing a prepared query. If the query object is not needed anymore, it may be destroyed:
+
+```
+qry = ~qry
+```
+
+Query objects should be destroyed explicitly if not needed any longer.
+
+### Executing a Query
+
+Excuting (calling) a query objects gets the next row of data. If there are no more rows, `nil` is returned. The row is returned as array of values.
+
+```
+row = qry()
+while (row) do
+    print(row[0], ' -> ', row[1])
+    row = qry()
+end
+```
+
+Or with a prepared statement:
+
+```
+row = qry('SGV_1960_00315', 'This is an image of a steam engine...')
+```
+
+The second way is used for prepared queries that contain parameters.
+# Development
+
+# Building SIPI from Source Code
+
+## Prerequisites
+
+### Kakadu (JPEG 2000)
+
+To build SIPI from source code, you must have [Kakadu](http://kakadusoftware.com/), a JPEG 2000 development toolkit that is not provided with SIPI and must be licensed separately. The Kakadu source code archive `v8_5-01382N.zip` must be placed in the `vendor` subdirectory of the source tree before building.
+
+### Adobe ICC Color Profiles
+
+SIPI uses the Adobe ICC Color profiles, which are automatically downloaded by the build process. The user is responsible for reading and agreeing with Adobe's license conditions, which are specified in the file `Color Profile EULA.pdf`.
+
+## Building with Docker (Recommended)
+
+The simplest way to build SIPI is using Docker. This requires [Docker](https://www.docker.com/) with [buildx](https://docs.docker.com/buildx/working-with-buildx/) support.
+
+All commands are run from the repository root via `make`:
+
+```
+# Build Docker image (compiles SIPI, runs unit tests inside container)
+make docker-build
+
+# Run smoke tests against the locally built Docker image
+make test-smoke
+```
+
+The Docker build uses a pre-built base image (`daschswiss/sipi-base`) that includes all system dependencies. The `Dockerfile` handles cmake configuration, compilation, unit testing, and debug symbol extraction in a multi-stage build.
+
+### Platform-specific builds (used by CI)
+
+```
+# Build for specific architectures (used in CI release pipeline)
+make docker-test-build-amd64
+make docker-test-build-arm64
+```
+
+## Building with Nix (Native Development)
+
+For native development, SIPI uses [Nix](https://nixos.org/) to provide a reproducible development environment with all required dependencies.
+
+### Setup
+
+1. [Install Nix](https://nixos.org/download.html)
+1. Place the Kakadu archive `v8_5-01382N.zip` in the `vendor/` directory
+1. Enter the Nix development shell:
+
+```
+# GCC environment (default, used by CI)
+nix develop
+
+# Clang environment (alternative)
+nix develop .#clang
+```
+
+### Build and Test
+
+All `nix-*` targets must be run from inside a Nix development shell:
+
+```
+# Build SIPI (debug mode with code coverage enabled)
+make nix-build
+
+# Run unit tests
+make nix-test
+
+# Run end-to-end tests
+make nix-test-e2e
+
+# Run all three in sequence (as CI does)
+make nix-build && make nix-test && make nix-test-e2e
+```
+
+### Run the Server
+
+```
+# Start SIPI with the default config
+make nix-run
+```
+
+### Code Coverage
+
+```
+# Generate XML coverage report (gcovr, used by CI/Codecov)
+make nix-coverage
+
+# Generate HTML coverage report (lcov, for local viewing)
+make nix-coverage-html
+```
+
+### Debugging
+
+```
+# Run SIPI with Valgrind for memory leak detection
+make nix-valgrind
+```
+
+## Building on macOS (Not Recommended)
+
+Building directly on macOS without Nix is unsupported but possible:
+
+```
+mkdir -p ./build-mac && cd build-mac && cmake .. && make && ctest --verbose
+```
+
+You will need CMake, a C++23-compatible compiler, and all system dependencies (OpenSSL, libcurl, libmagic) installed via Homebrew.
+
+## All Make Targets
+
+Run `make help` to see all available targets:
+
+```
+make help
+```
+
+Key target groups:
+
+| Target                            | Description                            |
+| --------------------------------- | -------------------------------------- |
+| `docker-build`                    | Build Docker image locally             |
+| `docker-test-build-{amd64,arm64}` | Build + test for specific architecture |
+| `test-smoke`                      | Run smoke tests against Docker image   |
+| `nix-build`                       | Build SIPI natively (debug + coverage) |
+| `nix-test`                        | Run unit tests                         |
+| `nix-test-e2e`                    | Run end-to-end tests                   |
+| `nix-coverage`                    | Generate XML coverage report           |
+| `nix-run`                         | Run SIPI server                        |
+| `nix-valgrind`                    | Run with Valgrind                      |
+| `docs-build`                      | Build documentation                    |
+| `docs-serve`                      | Serve documentation locally            |
+| `clean`                           | Remove build artifacts                 |
+
+## Documentation
+
+```
+# Build documentation site
+make docs-build
+
+# Serve documentation locally for preview
+make docs-serve
+
+# Serve doxygen API docs (must build with cmake first)
+make nix-doxygen-serve
+```
+
+# Developing SIPI
+
+## Using an IDE
+
+### CLion
+
+If you are using the [CLion](https://www.jetbrains.com/clion/) IDE, note that code introspection in the CLion editor may not work until it has run CMake. Open the project root directory (which contains `CMakeLists.txt`) and let CLion configure the project automatically.
+
+For Nix-based development, launch CLion from inside the Nix shell so it inherits all required environment variables and dependencies:
+
+```
+nix develop
+clion .
+```
+
+## Writing Tests
+
+We use two test frameworks: [GoogleTest](https://github.com/google/googletest) for unit tests and [pytest](http://doc.pytest.org/en/latest/) for end-to-end tests.
+
+### Unit Tests
+
+Unit tests live in `test/unit/` and use GoogleTest with ApprovalTests. Tests are organized by component:
+
+- `test/unit/configuration/` - Configuration parsing tests
+- `test/unit/iiifparser/` - IIIF URL parser tests
+- `test/unit/sipiimage/` - Image processing tests
+- `test/unit/logger/` - Logger tests
+- `test/unit/handlers/` - HTTP handler tests
+
+Run all unit tests:
+
+```
+make nix-test
+```
+
+Run a specific test binary directly:
+
+```
+cd build && test/unit/iiifparser/iiifparser
+```
+
+### End-to-End Tests
+
+End-to-end tests live in `test/e2e/` and use pytest. To add tests, create a Python file whose name begins with `test_` in the `test/e2e/` directory. The test fixtures in `test/e2e/conftest.py` handle starting and stopping a SIPI server and provide other testing utilities.
+
+Run e2e tests:
+
+```
+make nix-test-e2e
+```
+
+### Smoke Tests
+
+Smoke tests live in `test/smoke/` and run against a Docker image. They verify basic server functionality after a Docker build:
+
+```
+make test-smoke
+```
+
+### Approval Tests
+
+Approval tests live in `test/approval/` and use snapshot-based testing for regression detection.
+
+## Commit Message Schema
+
+We use [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+type(scope): subject
+body
+```
+
+Types:
+
+- `feat` - new feature (SemVer minor)
+- `fix` - bug fix (SemVer patch)
+- `docs` - documentation changes
+- `style` - formatting, no code change
+- `refactor` - refactoring production code
+- `test` - adding or refactoring tests
+- `build` - changes to build system or dependencies
+- `chore` - miscellaneous maintenance
+- `ci` - continuous integration changes
+- `perf` - performance improvements
+
+Breaking changes are indicated with `!`:
+
+```
+feat!: remove deprecated API endpoint
+```
+
+Example:
+
+```
+feat(HTTP server): support more authentication methods
+```
+# Release Notes
+
+# Release Notes
+
+Release notes are maintained on GitHub:
+
+- **[CHANGELOG.md](https://github.com/dasch-swiss/sipi/blob/main/CHANGELOG.md)** — Full changelog (auto-generated by [release-please](https://github.com/googleapis/release-please))
+- **[GitHub Releases](https://github.com/dasch-swiss/sipi/releases)** — Release artifacts and summaries
+- **[Docker Hub](https://hub.docker.com/r/daschswiss/sipi/tags)** — Published container images

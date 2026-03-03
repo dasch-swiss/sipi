@@ -1,0 +1,3127 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://sipi.io/lua/">
+      
+      
+        <link rel="prev" href="../guide/running/">
+      
+      
+        <link rel="next" href="lua-image/">
+      
+      
+      <link rel="icon" href="../assets/images/dasch-favicon.ico">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>Lua Integration - SIPI Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.bcfcd587.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/style/theme.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-blue" data-md-color-accent="deep-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#sipi-lua-interface" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="SIPI Documentation" class="md-header__button md-logo" aria-label="SIPI Documentation" data-md-component="logo">
+      
+  <img src="../assets/images/dasch-icon-white.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            SIPI Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Lua Integration
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dasch-swiss/sipi" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dasch-swiss/sipi
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="SIPI Documentation" class="md-nav__button md-logo" aria-label="SIPI Documentation" data-md-component="logo">
+      
+  <img src="../assets/images/dasch-icon-white.svg" alt="logo">
+
+    </a>
+    SIPI Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dasch-swiss/sipi" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dasch-swiss/sipi
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/introduction/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Introduction
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/sipi/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/running/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Running
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Lua Integration
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Lua Integration
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#preflight-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      Preflight function
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Preflight function">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#iiif-preflight-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      IIIF preflight function
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="IIIF preflight function">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#more-complex-example-of-preflight-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      More complex example of preflight function
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-preflight-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      File preflight function
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lua-embedded-in-html" class="md-nav__link">
+    <span class="md-ellipsis">
+      LUA embedded in HTML
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="LUA embedded in HTML">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#embedded-lua-and-enforcing-ssl" class="md-nav__link">
+    <span class="md-ellipsis">
+      Embedded LUA and enforcing SSL
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-uploads-to-sipi" class="md-nav__link">
+    <span class="md-ellipsis">
+      File uploads to SIPI
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#restful-api-and-custom-routes" class="md-nav__link">
+    <span class="md-ellipsis">
+      RESTful API and custom routes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#iiif-authentication-api-10-in-sipi" class="md-nav__link">
+    <span class="md-ellipsis">
+      IIIF Authentication API 1.0 in SIPI
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sipi-variables-available-to-lua-scripts" class="md-nav__link">
+    <span class="md-ellipsis">
+      SIPI variables available to Lua scripts
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI variables available to Lua scripts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sipi-configuration-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      SIPI configuration variables
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI configuration variables">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#confighostname" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.hostname
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configport" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.port
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configsslport" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.sslport
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configimgroot" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.imgroot
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configdocroot" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.docroot
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configmax_temp_file_age" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.max_temp_file_age
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configprefix_as_path" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.prefix_as_path
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configinit_script" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.init_script
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configscriptdir" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.scriptdir
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configcache_dir" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.cache_dir
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configcache_size" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.cache_size
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configcache_n_files" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.cache_n_files
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configcache_hysteresis" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.cache_hysteresis
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configjpeg_quality" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.jpeg_quality
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configkeep_alive" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.keep_alive
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configthumb_size" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.thumb_size
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#confign_threads" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.n_threads
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configmax_post_size" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.max_post_size
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configtmpdir" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.tmpdir
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configssl_certificate" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.ssl/_certificate
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configssl_key" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.ssl/_key
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configlogfile" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.logfile
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configloglevel" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.loglevel
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configadminuser" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.adminuser
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configpassword" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.password
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sipi-server-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      SIPI Server Variables
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI Server Variables">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#servermethod" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.method
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverhas_openssl" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.has_openssl
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serversecure" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.secure
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverhost" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.host
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverclient_ip" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.client_ip
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverclient_port" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.client_port
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serveruri" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.uri
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverheader" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.header
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servercookies" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.cookies
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverget" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.get
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverpost" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.post
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverrequest" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.request
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servercontent" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.content
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servercontent_type" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.content_type
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serveruploads" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.uploads
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#knora-specific-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      Knora-specific variables
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Knora-specific variables">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configknora_path" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.knora_path
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configknora_port" class="md-nav__link">
+    <span class="md-ellipsis">
+      config.knora_port
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sipi-functions-available-to-lua-scripts" class="md-nav__link">
+    <span class="md-ellipsis">
+      SIPI functions available to Lua scripts
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI functions available to Lua scripts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sipi-connection-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      SIPI Connection Functions
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI Connection Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#serversetbuffer" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.setBuffer
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serversendheader" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.sendHeader
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serversendcookie" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.sendCookie
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serversendstatus" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.sendStatus
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverprint" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.print
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverrequireauth" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.requireAuth
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sipi-file-system-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      SIPI File System Function
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SIPI File System Function">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#serverfsftype" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.ftype
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsmodtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.modtime
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsis_readable" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.is_readable
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsis_writeable" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.is_writeable
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsis_executable" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.is_executable
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsexists" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.exists
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsunlink" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.unlink
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsmkdir" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.mkdir
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsrmdir" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.rmdir
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsgetcwd" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.getcwd
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsreaddir" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.readdir
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfschdir" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.chdir
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfscopyfile" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.copyFile
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsmovefile" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.moveFile
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#other-helper-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      Other Helper Function
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Other Helper Function">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#serverhttp" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.http
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servertable_to_json" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.table_to_json
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverjson_to_table" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.json_to_table
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servergenerate_jwt" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.generate_jwt
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverdecode_jwt" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.decode_jwt
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverparse_mimetype" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.parse_mimetype
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfile_mimetype" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.file_mimetype
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfile_mimeconsistency" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.file_mimeconsistency
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#servercopytmpfile" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.copyTmpfile
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serversystime" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.systime
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverlog" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.log
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serveruuid" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.uuid
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serveruuid62" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.uuid62
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serveruuid_to_base62" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.uuid_to_base62
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverbase62_to_uuid" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.base62_to_uuid
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cache-management-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cache Management Functions
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cache Management Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cachesize" class="md-nav__link">
+    <span class="md-ellipsis">
+      cache.size
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cachemax_size" class="md-nav__link">
+    <span class="md-ellipsis">
+      cache.max_size
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cachenfiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      cache.nfiles
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cachemax_nfiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      cache.max_nfiles
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cachepath" class="md-nav__link">
+    <span class="md-ellipsis">
+      cache.path
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cachefilelist" class="md-nav__link">
+    <span class="md-ellipsis">
+      cache.filelist
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cachedelete" class="md-nav__link">
+    <span class="md-ellipsis">
+      cache.delete
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cachepurge" class="md-nav__link">
+    <span class="md-ellipsis">
+      cache.purge
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filesystem-helper-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Filesystem Helper Functions
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Filesystem Helper Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#serverfsexists_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.exists
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsftype_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.ftype
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsmodtime_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.modtime
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsreaddir_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.readdir
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsis_readable_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.is_readable
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsis_writeable_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.is_writeable
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsis_executable_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.is_executable
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsunlink_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.unlink
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsmkdir_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.mkdir
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsrmdir_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.rmdir
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsgetcwd_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.getcwd
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfschdir_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.chdir
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfscopyfile_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.copyFile
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverfsmovefile_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.fs.moveFile
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#server-request-properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      Server Request Properties
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Server Request Properties">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#request-data-tables" class="md-nav__link">
+    <span class="md-ellipsis">
+      Request Data Tables
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#uploaded-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Uploaded Files
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#additional-server-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Additional Server Functions
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Additional Server Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#serversetbuffer_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.setBuffer
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serversendcookie_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.sendCookie
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serverrequireauth_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      server.requireAuth
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#utility-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Utility Functions
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Utility Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#helperfilename_hash" class="md-nav__link">
+    <span class="md-ellipsis">
+      helper.filename_hash
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installing-lua-modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      Installing Lua modules
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="lua-image/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Lua Image Functions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="sqlite/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SQLite Integration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/building/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Building
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/developing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Developing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release-notes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Release Notes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="sipi-lua-interface">SIPI Lua Interface<a class="headerlink" href="#sipi-lua-interface" title="Permanent link">&para;</a></h1>
+<p>SIPI has an embedded <a href="http://www.lua.org">LUA</a> interpreter. LUA is a simple script language that was developped
+specifically to be embedded into applications. For example the games <a href="https://www.minecraft.net">minecraft</a> and
+<a href="https://worldofwarcraft.com/de-de/">World of Warcraft</a> make extensive use of LUA scripting for customization and programming extensions.</p>
+<p>Each HTTP request to SIPI invokes a recent, independent
+lua-instance (Version 5.3.5). Therefore, LUA may be used in the following contexts:</p>
+<ul>
+<li>Preflight function</li>
+<li>Embedded in HTML pages</li>
+<li>RESTful services using the SIPI routing</li>
+</ul>
+<p>Each lua-instance in SIPI includes additional SIPI-specific information:</p>
+<ul>
+<li>global variables about the SIPI configuration</li>
+<li>information about the current HTTP request</li>
+<li>SIPI specific functions for</li>
+<li>processing the request and send back information</li>
+<li>getting image information and transforming images</li>
+<li>querying and changing the SIPI runtime configuration (e.g. the cache)</li>
+</ul>
+<p>In general, the SIPI LUA function make use that a Lua function's return value may consist of
+more than one element (see <a href="http://www.lua.org/pil/5.3.html">Multiple Results</a>):</p>
+<p>Sipi provides the <a href="https://luarocks.org/">LuaRocks</a>
+package manager which must be used in the context of SIPI.</p>
+<p><em>The Lua interpreter in Sipi runs in a multithreaded environment: each
+request runs in its own thread and has its own Lua interpreter.
+Therefore, only Lua packages that are known to be thread-safe may be
+used!</em></p>
+<h2 id="preflight-function">Preflight function<a class="headerlink" href="#preflight-function" title="Permanent link">&para;</a></h2>
+<p>It is possible to define a LUA pre-flight function for <em>IIIF</em>-requests and independently one for <em>file</em>-requests
+(indicated by a <em>/file</em> postfix in the URL). Both are optional and are best located in the init-script (see
+<a href="../guide/sipi/#setup-of-sipi-directories">configuration options</a> of SIPI). It is executed after the incoming
+HTTP request data has been processed but before an action to respond to the request has been taken. It should
+be noted that the pre-flight script is only executed for IIIF-specific requests (either using the IIIF URL-syntax or the
+<em>/file</em> postfix). All other HTTP requests are being directed to "normal" HTTP-server part of SIPI.
+These can utilize the lua functionality by embedding LUA commands within the HTML.</p>
+<h3 id="iiif-preflight-function">IIIF preflight function<a class="headerlink" href="#iiif-preflight-function" title="Permanent link">&para;</a></h3>
+<p>The IIIF preflight function must have the name <strong>pre_flight</strong> with the following signature:</p>
+<p><div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kr">function</span> <span class="nf">pre_flight</span><span class="p">(</span><span class="n">prefix</span><span class="p">,</span><span class="n">identifier</span><span class="p">,</span><span class="n">cookie</span><span class="p">)</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="kr">return</span> <span class="s2">&quot;allow&quot;</span><span class="p">,</span> <span class="n">filepath</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="kr">end</span>
+</code></pre></div>
+The preflight function takes 3 parameter:</p>
+<ul>
+<li><code>prefix</code>: This is the prefix that is given on the IIIF url [mandatory]<br />
+<em>http(s)://{server}/<strong>{prefix}</strong>/{id}/{region}/{size}/{rotation}/{quality}.{format}</em><br />
+  Please note that the prefix may contain several "/" that can be used as path to the repository file</li>
+<li><code>identifier</code>: The image identifier (which must not correspond to an actual filename in the media files repositoy
+  of the SIPI IIIF server)
+  [mandatory]</li>
+<li><code>cookie</code>: A cookie containing authorization information. Usually the cookie contains a Json Web Token [optional]</li>
+</ul>
+<p>The pre-flight function must return at least 2 parameters:</p>
+<ul>
+<li><code>permission</code>: A string or a table indication the permission to read the image. In a simple case it's either the
+  string <code>"allow"</code> or <code>"deny"</code>.<br />
+  To allow more flexibility, the following permission tables are supported:  <ul>
+<li>Restricted access with watermark. The watermark must be a TIFF file with a single 8-bit channel (gray value
+image). For example:<br />
+<code>{ type = 'restrict', watermark = './wm/mywatermark.tif' }</code></li>
+<li>Restricted access with size limitation. The size must be a
+  <a href="https://iiif.io/api/image/3.0/#42-size">IIIF size expression</a>. For example:<br />
+<code>{ type = 'restrict', size='!256,256' }</code></li>
+<li>SIPI also supports the <a href="https://iiif.io/api/auth/1.0/">IIIF Authentification API</a>. See section <a href="">IIIF
+  Authentification</a> on how to implement this feature in the pre-flight function.</li>
+</ul>
+</li>
+<li><code>filepath</code>: The path to the master image file in the media files repository. This path can be assembled using the
+  <code>prefix</code> and <code>identifier</code> using any additional information (e.g. accessing a database or using the LUA restful client)</li>
+</ul>
+<p>The most simple working pre-flight looks as follows assuming that the <code>identifier</code>is the name of the master image
+file in the repository and the <code>prefix</code> is the path:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kr">function</span> <span class="nf">pre_flight</span><span class="p">(</span><span class="n">prefix</span><span class="p">,</span> <span class="n">identifier</span><span class="p">,</span> <span class="n">cookie</span><span class="p">)</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="kr">if</span> <span class="n">config</span><span class="p">.</span><span class="n">prefix_as_path</span> <span class="kr">then</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>        <span class="n">filepath</span> <span class="o">=</span> <span class="n">config</span><span class="p">.</span><span class="n">imgroot</span> <span class="o">..</span> <span class="s1">&#39;/&#39;</span> <span class="o">..</span> <span class="n">prefix</span> <span class="o">..</span> <span class="s1">&#39;/&#39;</span> <span class="o">..</span> <span class="n">identifier</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="kr">else</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>        <span class="n">filepath</span> <span class="o">=</span> <span class="n">config</span><span class="p">.</span><span class="n">imgroot</span> <span class="o">..</span> <span class="s1">&#39;/&#39;</span> <span class="o">..</span> <span class="n">identifier</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="kr">end</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="kr">return</span> <span class="s1">&#39;allow&#39;</span><span class="p">,</span> <span class="n">filepath</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="kr">end</span>
+</code></pre></div>
+Above example preflight function allows all files to be served without restriction.</p>
+<h4 id="more-complex-example-of-preflight-function">More complex example of preflight function<a class="headerlink" href="#more-complex-example-of-preflight-function" title="Permanent link">&para;</a></h4>
+<p>The following example uses some SIPI lua funtions
+to access an authorization server to check if the user (identified by a cookie) is allowed to see the specific image. We are
+using <a href="https://jwt.io">Json Web Tokens</a> (JWT) which are supported by SIPI specific LUA functions. Please note that the
+SIPI JTW-functions support an arbitrary payload that has not to follow the JWT recommendations. In order to encode, the
+JWT_ALG_HS256 is beeing used together with the key that is defined in the SIPI configuration as
+<a href="../guide/sipi/#jwt-secret">jwt_secret</a>.
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kr">function</span> <span class="nf">pre_flight</span><span class="p">(</span><span class="n">prefix</span><span class="p">,</span> <span class="n">identifier</span><span class="p">,</span> <span class="n">cookie</span><span class="p">)</span> 
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="c1">--</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="c1">-- make up the file path</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="c1">--</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="kr">if</span> <span class="n">config</span><span class="p">.</span><span class="n">prefix_as_path</span> <span class="kr">then</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        <span class="n">filepath</span> <span class="o">=</span> <span class="n">config</span><span class="p">.</span><span class="n">imgroot</span> <span class="o">..</span> <span class="s1">&#39;/&#39;</span> <span class="o">..</span> <span class="n">prefix</span> <span class="o">..</span> <span class="s1">&#39;/&#39;</span> <span class="o">..</span> <span class="n">identifier</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="kr">else</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>        <span class="n">filepath</span> <span class="o">=</span> <span class="n">config</span><span class="p">.</span><span class="n">imgroot</span> <span class="o">..</span> <span class="s1">&#39;/&#39;</span> <span class="o">..</span> <span class="n">identifier</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="kr">end</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="c1">--</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="c1">-- we need a cookie containing the user information that will be</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    <span class="c1">-- sent to the authorization server. In this</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="c1">-- example, the content does not follow the JWT rules</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>    <span class="c1">-- (which is possible to pack any table into a JWT encoded token)</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>    <span class="c1">--</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>    <span class="kr">if</span> <span class="n">cookie</span> <span class="kr">then</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>        <span class="c1">--</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>        <span class="c1">-- we decode the cookie in order to get a table of key/value pairs</span>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>        <span class="c1">--</span>
+<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>        <span class="n">success</span><span class="p">,</span> <span class="n">userinfo</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">decode_jwt</span><span class="p">(</span><span class="n">cookie</span><span class="p">)</span>
+<a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a>        <span class="kr">if</span> <span class="ow">not</span> <span class="n">success</span> <span class="kr">then</span>
+<a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a>            <span class="kr">return</span> <span class="s1">&#39;deny&#39;</span><span class="p">,</span> <span class="n">filepath</span>
+<a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a>        <span class="kr">end</span>
+<a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a>        <span class="c1">--</span>
+<a id="__codelineno-2-25" name="__codelineno-2-25" href="#__codelineno-2-25"></a>        <span class="c1">-- prepare the RESTful call to the authorization server</span>
+<a id="__codelineno-2-26" name="__codelineno-2-26" href="#__codelineno-2-26"></a>        <span class="c1">--</span>
+<a id="__codelineno-2-27" name="__codelineno-2-27" href="#__codelineno-2-27"></a>
+<a id="__codelineno-2-28" name="__codelineno-2-28" href="#__codelineno-2-28"></a>        <span class="c1">-- add the image identifier to the info table:</span>
+<a id="__codelineno-2-29" name="__codelineno-2-29" href="#__codelineno-2-29"></a>        <span class="n">userinfo</span><span class="p">[</span><span class="s2">&quot;imgid&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">identifier</span>
+<a id="__codelineno-2-30" name="__codelineno-2-30" href="#__codelineno-2-30"></a>        <span class="c1">-- encode the userinfo to a JWT-like token:</span>
+<a id="__codelineno-2-31" name="__codelineno-2-31" href="#__codelineno-2-31"></a>        <span class="kd">local</span> <span class="n">new_cookie</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">generate_jwt</span><span class="p">(</span><span class="n">userinfo</span><span class="p">)</span> 
+<a id="__codelineno-2-32" name="__codelineno-2-32" href="#__codelineno-2-32"></a>        <span class="kd">local</span> <span class="n">url</span> <span class="o">=</span> <span class="s1">&#39;http://auth.institution.org/api/getauth/&#39;</span> <span class="o">..</span> <span class="n">identifier</span>
+<a id="__codelineno-2-33" name="__codelineno-2-33" href="#__codelineno-2-33"></a>        <span class="kd">local</span> <span class="n">auth_information</span> <span class="o">=</span> <span class="p">{</span> <span class="n">Cookie</span> <span class="o">=</span> <span class="n">new_cookie</span> <span class="p">}</span>
+<a id="__codelineno-2-34" name="__codelineno-2-34" href="#__codelineno-2-34"></a>        <span class="c1">--</span>
+<a id="__codelineno-2-35" name="__codelineno-2-35" href="#__codelineno-2-35"></a>        <span class="c1">-- make the HTTP request with a timeout of 500 ms</span>
+<a id="__codelineno-2-36" name="__codelineno-2-36" href="#__codelineno-2-36"></a>        <span class="c1">--</span>
+<a id="__codelineno-2-37" name="__codelineno-2-37" href="#__codelineno-2-37"></a>        <span class="n">success</span><span class="p">,</span> <span class="n">result</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">http</span><span class="p">(</span><span class="s1">&#39;GET&#39;</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">auth_information</span><span class="p">,</span> <span class="mi">500</span><span class="p">)</span> 
+<a id="__codelineno-2-38" name="__codelineno-2-38" href="#__codelineno-2-38"></a>        <span class="kr">if</span> <span class="n">success</span> <span class="kr">then</span>
+<a id="__codelineno-2-39" name="__codelineno-2-39" href="#__codelineno-2-39"></a>            <span class="c1">--</span>
+<a id="__codelineno-2-40" name="__codelineno-2-40" href="#__codelineno-2-40"></a>            <span class="c1">-- we got a response from the server</span>
+<a id="__codelineno-2-41" name="__codelineno-2-41" href="#__codelineno-2-41"></a>            <span class="c1">--</span>
+<a id="__codelineno-2-42" name="__codelineno-2-42" href="#__codelineno-2-42"></a>            <span class="n">success</span><span class="p">,</span> <span class="n">response_json</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">json_to_table</span><span class="p">(</span><span class="n">result</span><span class="p">.</span><span class="n">body</span><span class="p">)</span>
+<a id="__codelineno-2-43" name="__codelineno-2-43" href="#__codelineno-2-43"></a>            <span class="kr">if</span> <span class="n">success</span> <span class="kr">then</span>  <span class="c1">-- everything OK</span>
+<a id="__codelineno-2-44" name="__codelineno-2-44" href="#__codelineno-2-44"></a>                <span class="kr">return</span> <span class="p">{</span>
+<a id="__codelineno-2-45" name="__codelineno-2-45" href="#__codelineno-2-45"></a>                            <span class="nb">type</span> <span class="o">=</span> <span class="n">response_json</span><span class="p">.</span><span class="n">type</span><span class="p">,</span>
+<a id="__codelineno-2-46" name="__codelineno-2-46" href="#__codelineno-2-46"></a>                            <span class="n">restriction</span> <span class="o">=</span> <span class="n">response_json</span><span class="p">.</span><span class="n">restriction</span>
+<a id="__codelineno-2-47" name="__codelineno-2-47" href="#__codelineno-2-47"></a>                        <span class="p">},</span> <span class="n">filepath</span>
+<a id="__codelineno-2-48" name="__codelineno-2-48" href="#__codelineno-2-48"></a>            <span class="kr">else</span>
+<a id="__codelineno-2-49" name="__codelineno-2-49" href="#__codelineno-2-49"></a>                <span class="kr">return</span> <span class="s1">&#39;deny&#39;</span><span class="p">,</span> <span class="n">filepath</span>
+<a id="__codelineno-2-50" name="__codelineno-2-50" href="#__codelineno-2-50"></a>            <span class="kr">end</span>
+<a id="__codelineno-2-51" name="__codelineno-2-51" href="#__codelineno-2-51"></a>        <span class="kr">else</span>
+<a id="__codelineno-2-52" name="__codelineno-2-52" href="#__codelineno-2-52"></a>            <span class="kr">return</span> <span class="s1">&#39;deny&#39;</span><span class="p">,</span> <span class="n">filepath</span>
+<a id="__codelineno-2-53" name="__codelineno-2-53" href="#__codelineno-2-53"></a>        <span class="kr">end</span>
+<a id="__codelineno-2-54" name="__codelineno-2-54" href="#__codelineno-2-54"></a>    <span class="kr">else</span>
+<a id="__codelineno-2-55" name="__codelineno-2-55" href="#__codelineno-2-55"></a>        <span class="kr">return</span> <span class="s1">&#39;deny&#39;</span><span class="p">,</span> <span class="n">filepath</span>
+<a id="__codelineno-2-56" name="__codelineno-2-56" href="#__codelineno-2-56"></a>    <span class="kr">end</span>
+<a id="__codelineno-2-57" name="__codelineno-2-57" href="#__codelineno-2-57"></a><span class="kr">end</span>
+</code></pre></div>
+Above example assumes that the cookie data is a string that contains encrypted user data from a table (key/value pair).
+Jason Web Token. This token is decoded and the information about the image to be displayed is added. Then the information
+is encoded as a new token that ist transmitted to the RESTful interface of the authentification server. The answer is
+assumed to be json containing information about the type ('allow', 'deny', 'restrict') and the restriction settings.
+The pre-flight function uses the following SIPI-specific LUA global variables and function:</p>
+<ul>
+<li><a href="#configimgroot">config.imgroot</a>: (Global variable) Root directory of the image repository.</li>
+<li><a href="#serverhttp">server.http()</a>: (Function) Used to create a RESTful GET request.</li>
+<li><a href="#servergenerate_jwt">server.generate_jwt()</a>: (Function) Create a new JWT token from a key/value table.</li>
+<li><a href="#serverjson_to_table">server.json_to_table()</a>: (function) Convert a JSON into a LUA table.</li>
+</ul>
+<h3 id="file-preflight-function">File preflight function<a class="headerlink" href="#file-preflight-function" title="Permanent link">&para;</a></h3>
+<p>An URL in the form <code>http(s)://{server}/{prefix}/{identifier}/file</code> serves the given file as binary object (including
+propere mimetype in the header etc.). The file has to reside in the directory tree defined for IIIF requests. In these
+cases, a preflight script name <code>file_pre_flight</code> is being called if defined. Its signature is as follows:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kr">function</span> <span class="nf">file_pre_flight</span><span class="p">(</span><span class="n">filepath</span><span class="p">,</span> <span class="n">cookie</span><span class="p">)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kr">end</span>
+</code></pre></div>
+A simple example allowing access only to the file <em>"unit/test.csv"</em> would be:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kr">function</span> <span class="nf">file_pre_flight</span><span class="p">(</span><span class="n">filepath</span><span class="p">,</span> <span class="n">cookie</span><span class="p">)</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="kr">if</span> <span class="n">filepath</span> <span class="o">==</span> <span class="s2">&quot;./images/unit/test.csv&quot;</span> <span class="kr">then</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>        <span class="kr">return</span> <span class="s2">&quot;allow&quot;</span><span class="p">,</span> <span class="n">filepath</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="kr">else</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>        <span class="kr">return</span> <span class="s2">&quot;deny&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="kr">end</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="kr">end</span>
+</code></pre></div>
+This script would deny all other file access and the SIPI IIIF server responds with a <code>401 Unauthorized</code> error.</p>
+<h2 id="lua-embedded-in-html">LUA embedded in HTML<a class="headerlink" href="#lua-embedded-in-html" title="Permanent link">&para;</a></h2>
+<p>The HTTP server that is included in SIPI can serve any type of file which are just transfered as is to the client.
+However, if a file has an extension of <code>.elua</code>, it is assumed to be a HTML file with embedded LUA code. ALL SIPI-specific
+LUA functions and global variables are available.</p>
+<p>Embedding works with the special tag <code>&lt;lua&gt;</code> and <code>&lt;/lua&gt;</code>. All text between the opening and closing tag is interpreted
+as LUA code. SIPI provides an extra LUA function to output data to the client (<a href="#serverprint">server.print</a>). Thus, dynamic,
+server-generated HTML may be created. A sample page that displays some information about the server configuration and
+client info could like follows:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">&lt;</span><span class="nt">html</span><span class="p">&gt;</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="p">&lt;</span><span class="nt">head</span><span class="p">&gt;</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>        <span class="p">&lt;</span><span class="nt">title</span><span class="p">&gt;</span>SIPI Configuration Info<span class="p">&lt;/</span><span class="nt">title</span><span class="p">&gt;</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="p">&lt;/</span><span class="nt">head</span><span class="p">&gt;</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="p">&lt;</span><span class="nt">body</span><span class="p">&gt;</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="p">&lt;</span><span class="nt">h1</span><span class="p">&gt;</span>SIPI Configuration Info<span class="p">&lt;/</span><span class="nt">h1</span><span class="p">&gt;</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="p">&lt;</span><span class="nt">h2</span><span class="p">&gt;</span>Configuration variables<span class="p">&lt;/</span><span class="nt">h2</span><span class="p">&gt;</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="p">&lt;</span><span class="nt">table</span><span class="p">&gt;</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>imgroot<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>:<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">lua</span><span class="p">&gt;</span>server.print(config.imgroot)<span class="p">&lt;/</span><span class="nt">lua</span><span class="p">&gt;&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>        <span class="p">&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>docroot<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>:<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">lua</span><span class="p">&gt;</span>server.print(server.docroot)<span class="p">&lt;/</span><span class="nt">lua</span><span class="p">&gt;&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>        <span class="p">&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>hostname<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>:<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">lua</span><span class="p">&gt;</span>server.print(config.hostname)<span class="p">&lt;/</span><span class="nt">lua</span><span class="p">&gt;&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a>        <span class="p">&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>scriptdir<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-26" name="__codelineno-5-26" href="#__codelineno-5-26"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>:<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-27" name="__codelineno-5-27" href="#__codelineno-5-27"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">lua</span><span class="p">&gt;</span>server.print(config.scriptdir)<span class="p">&lt;/</span><span class="nt">lua</span><span class="p">&gt;&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-28" name="__codelineno-5-28" href="#__codelineno-5-28"></a>        <span class="p">&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-29" name="__codelineno-5-29" href="#__codelineno-5-29"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-30" name="__codelineno-5-30" href="#__codelineno-5-30"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>cachedir<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-31" name="__codelineno-5-31" href="#__codelineno-5-31"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>:<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-32" name="__codelineno-5-32" href="#__codelineno-5-32"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">lua</span><span class="p">&gt;</span>server.print(config.cache_dir)<span class="p">&lt;/</span><span class="nt">lua</span><span class="p">&gt;&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-33" name="__codelineno-5-33" href="#__codelineno-5-33"></a>        <span class="p">&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-34" name="__codelineno-5-34" href="#__codelineno-5-34"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-35" name="__codelineno-5-35" href="#__codelineno-5-35"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>tmpdir<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-36" name="__codelineno-5-36" href="#__codelineno-5-36"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>:<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-37" name="__codelineno-5-37" href="#__codelineno-5-37"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">lua</span><span class="p">&gt;</span>server.print(config.tmpdir)<span class="p">&lt;/</span><span class="nt">lua</span><span class="p">&gt;&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-38" name="__codelineno-5-38" href="#__codelineno-5-38"></a>        <span class="p">&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-39" name="__codelineno-5-39" href="#__codelineno-5-39"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-40" name="__codelineno-5-40" href="#__codelineno-5-40"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>port<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-41" name="__codelineno-5-41" href="#__codelineno-5-41"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>:<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-42" name="__codelineno-5-42" href="#__codelineno-5-42"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">lua</span><span class="p">&gt;</span>server.print(config.port)<span class="p">&lt;/</span><span class="nt">lua</span><span class="p">&gt;&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-43" name="__codelineno-5-43" href="#__codelineno-5-43"></a>        <span class="p">&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-44" name="__codelineno-5-44" href="#__codelineno-5-44"></a>        <span class="p">&lt;</span><span class="nt">lua</span><span class="p">&gt;</span>
+<a id="__codelineno-5-45" name="__codelineno-5-45" href="#__codelineno-5-45"></a>            if server.has_openssl then
+<a id="__codelineno-5-46" name="__codelineno-5-46" href="#__codelineno-5-46"></a>                server.print(&#39;<span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;&lt;</span><span class="nt">td</span><span class="p">&gt;</span>SSL port<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">td</span><span class="p">&gt;</span>:<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">td</span><span class="p">&gt;</span>&#39; ..
+<a id="__codelineno-5-47" name="__codelineno-5-47" href="#__codelineno-5-47"></a>                             config.sslport .. &#39;<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>&#39;)
+<a id="__codelineno-5-48" name="__codelineno-5-48" href="#__codelineno-5-48"></a>            end
+<a id="__codelineno-5-49" name="__codelineno-5-49" href="#__codelineno-5-49"></a>        <span class="p">&lt;/</span><span class="nt">lua</span><span class="p">&gt;</span>
+<a id="__codelineno-5-50" name="__codelineno-5-50" href="#__codelineno-5-50"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-51" name="__codelineno-5-51" href="#__codelineno-5-51"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>number of threads:<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-52" name="__codelineno-5-52" href="#__codelineno-5-52"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>:<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-53" name="__codelineno-5-53" href="#__codelineno-5-53"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">lua</span><span class="p">&gt;</span>server.print(config.n_threads)<span class="p">&lt;/</span><span class="nt">lua</span><span class="p">&gt;&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-54" name="__codelineno-5-54" href="#__codelineno-5-54"></a>        <span class="p">&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-55" name="__codelineno-5-55" href="#__codelineno-5-55"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-56" name="__codelineno-5-56" href="#__codelineno-5-56"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>maximal post size:<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-57" name="__codelineno-5-57" href="#__codelineno-5-57"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>:<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-58" name="__codelineno-5-58" href="#__codelineno-5-58"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">lua</span><span class="p">&gt;</span>server.print(config.max_post_size)<span class="p">&lt;/</span><span class="nt">lua</span><span class="p">&gt;&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-59" name="__codelineno-5-59" href="#__codelineno-5-59"></a>        <span class="p">&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-60" name="__codelineno-5-60" href="#__codelineno-5-60"></a>    <span class="p">&lt;/</span><span class="nt">table</span><span class="p">&gt;</span>
+<a id="__codelineno-5-61" name="__codelineno-5-61" href="#__codelineno-5-61"></a>    <span class="p">&lt;</span><span class="nt">h2</span><span class="p">&gt;</span>Client information<span class="p">&lt;/</span><span class="nt">h2</span><span class="p">&gt;</span>
+<a id="__codelineno-5-62" name="__codelineno-5-62" href="#__codelineno-5-62"></a>    <span class="p">&lt;</span><span class="nt">table</span><span class="p">&gt;</span>
+<a id="__codelineno-5-63" name="__codelineno-5-63" href="#__codelineno-5-63"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-64" name="__codelineno-5-64" href="#__codelineno-5-64"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>Host in request<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-65" name="__codelineno-5-65" href="#__codelineno-5-65"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>:<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-66" name="__codelineno-5-66" href="#__codelineno-5-66"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">lua</span><span class="p">&gt;</span>server.print(server.host)<span class="p">&lt;/</span><span class="nt">lua</span><span class="p">&gt;&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-67" name="__codelineno-5-67" href="#__codelineno-5-67"></a>        <span class="p">&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-68" name="__codelineno-5-68" href="#__codelineno-5-68"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-69" name="__codelineno-5-69" href="#__codelineno-5-69"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>IP of client<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-70" name="__codelineno-5-70" href="#__codelineno-5-70"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>:<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-71" name="__codelineno-5-71" href="#__codelineno-5-71"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">lua</span><span class="p">&gt;</span>server.print(server.client_ip)<span class="p">&lt;/</span><span class="nt">lua</span><span class="p">&gt;&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-72" name="__codelineno-5-72" href="#__codelineno-5-72"></a>        <span class="p">&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-73" name="__codelineno-5-73" href="#__codelineno-5-73"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-74" name="__codelineno-5-74" href="#__codelineno-5-74"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>URL path<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-75" name="__codelineno-5-75" href="#__codelineno-5-75"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;</span>:<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-76" name="__codelineno-5-76" href="#__codelineno-5-76"></a>            <span class="p">&lt;</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">lua</span><span class="p">&gt;</span>server.print(server.uri)<span class="p">&lt;/</span><span class="nt">lua</span><span class="p">&gt;&lt;/</span><span class="nt">td</span><span class="p">&gt;</span>
+<a id="__codelineno-5-77" name="__codelineno-5-77" href="#__codelineno-5-77"></a>            <span class="p">&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-5-78" name="__codelineno-5-78" href="#__codelineno-5-78"></a>    <span class="p">&lt;/</span><span class="nt">table</span><span class="p">&gt;</span>
+<a id="__codelineno-5-79" name="__codelineno-5-79" href="#__codelineno-5-79"></a>
+<a id="__codelineno-5-80" name="__codelineno-5-80" href="#__codelineno-5-80"></a>    <span class="p">&lt;</span><span class="nt">p</span><span class="p">&gt;</span>Important Note: &quot;IP of client&quot; and &quot;Host in request&quot; may
+<a id="__codelineno-5-81" name="__codelineno-5-81" href="#__codelineno-5-81"></a>       indicate the information of a proxy and notof the actual
+<a id="__codelineno-5-82" name="__codelineno-5-82" href="#__codelineno-5-82"></a>       client!<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;</span>
+<a id="__codelineno-5-83" name="__codelineno-5-83" href="#__codelineno-5-83"></a>    <span class="p">&lt;</span><span class="nt">h2</span><span class="p">&gt;</span>Request Header Information<span class="p">&lt;/</span><span class="nt">h2</span><span class="p">&gt;</span>
+<a id="__codelineno-5-84" name="__codelineno-5-84" href="#__codelineno-5-84"></a>    <span class="p">&lt;</span><span class="nt">table</span><span class="p">&gt;</span>
+<a id="__codelineno-5-85" name="__codelineno-5-85" href="#__codelineno-5-85"></a>        <span class="p">&lt;</span><span class="nt">lua</span><span class="p">&gt;</span>
+<a id="__codelineno-5-86" name="__codelineno-5-86" href="#__codelineno-5-86"></a>            for key, val in pairs(server.header) do
+<a id="__codelineno-5-87" name="__codelineno-5-87" href="#__codelineno-5-87"></a>                server.print(&#39;<span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;&lt;</span><span class="nt">td</span><span class="p">&gt;</span>&#39; .. key ..
+<a id="__codelineno-5-88" name="__codelineno-5-88" href="#__codelineno-5-88"></a>                             &#39;<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">td</span><span class="p">&gt;</span>:<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">td</span><span class="p">&gt;</span>&#39; .. val .
+<a id="__codelineno-5-89" name="__codelineno-5-89" href="#__codelineno-5-89"></a>                             &#39;<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>&#39;)
+<a id="__codelineno-5-90" name="__codelineno-5-90" href="#__codelineno-5-90"></a>            end
+<a id="__codelineno-5-91" name="__codelineno-5-91" href="#__codelineno-5-91"></a>        <span class="p">&lt;/</span><span class="nt">lua</span><span class="p">&gt;</span>
+<a id="__codelineno-5-92" name="__codelineno-5-92" href="#__codelineno-5-92"></a>    <span class="p">&lt;/</span><span class="nt">table</span><span class="p">&gt;</span>
+<a id="__codelineno-5-93" name="__codelineno-5-93" href="#__codelineno-5-93"></a>    <span class="p">&lt;/</span><span class="nt">body</span><span class="p">&gt;</span>
+<a id="__codelineno-5-94" name="__codelineno-5-94" href="#__codelineno-5-94"></a><span class="p">&lt;/</span><span class="nt">html</span><span class="p">&gt;</span>
+</code></pre></div></p>
+<h3 id="embedded-lua-and-enforcing-ssl">Embedded LUA and enforcing SSL<a class="headerlink" href="#embedded-lua-and-enforcing-ssl" title="Permanent link">&para;</a></h3>
+<p>The supplied example initialization file offers a LUA function that enforces the use of a SSL encryption page
+proteced by a user name and password. It is used as follows by adding the following code
+<em>before the <code>&lt;html&gt;</code> opening tag</em>:</p>
+<p><div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="o">&lt;</span><span class="n">lua</span><span class="o">&gt;</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="kr">if</span> <span class="n">server</span><span class="p">.</span><span class="n">secure</span> <span class="kr">then</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>        <span class="n">protocol</span> <span class="o">=</span> <span class="s1">&#39;https://&#39;</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="kr">else</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>        <span class="n">protocol</span> <span class="o">=</span> <span class="s1">&#39;http://&#39;</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="kr">end</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">success</span><span class="p">,</span><span class="n">token</span> <span class="o">=</span> <span class="n">authorize_page</span><span class="p">(</span><span class="s1">&#39;admin.sipi.org&#39;</span><span class="p">,</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>                                   <span class="s1">&#39;administrator&#39;</span><span class="p">,</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>                                    <span class="n">extecteduser</span><span class="p">,</span> <span class="n">expectedPassword</span><span class="p">)</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="kr">if</span> <span class="ow">not</span> <span class="n">success</span> <span class="kr">then</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>        <span class="kr">return</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>    <span class="kr">end</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="o">&lt;/</span><span class="n">lua</span><span class="o">&gt;</span>
+</code></pre></div>
+where <code>expectedUser</code> and <code>extectedPassword</code> are the user/password combination the user is expected to enter.</p>
+<h3 id="file-uploads-to-sipi">File uploads to SIPI<a class="headerlink" href="#file-uploads-to-sipi" title="Permanent link">&para;</a></h3>
+<p>The SIPI specific LUA function allow the upload of files using POST requests with <code>multipart/form-data</code> content.
+The global variable <code>server.uploads</code> contains`the information about the uploads. The following variables and
+function help to deal with uploads:</p>
+<ul>
+<li><a href="#serveruploads">server.uploads</a> : information about the files in the upload request.</li>
+<li><a href="#servercopytmpfile">server.copyTmpfile</a> : copies a fie from the upload location to the destination directory.</li>
+</ul>
+<p>In addition the file system functions that SIPI provides may be used.</p>
+<p>See the scripts <code>upload.elua</code> and <code>do-upload.elua</code> in the server directory, and <code>upload.lua</code> in the scripts directory
+for a working example.</p>
+<h2 id="restful-api-and-custom-routes">RESTful API and custom routes<a class="headerlink" href="#restful-api-and-custom-routes" title="Permanent link">&para;</a></h2>
+<p>Custom routes to implement a RESTful API can be defined in Sipi's configuration file using the
+<code>routes</code> configuration variable. For example:</p>
+<div class="highlight"><pre><span></span><code>routes = {
+    {
+        method = &#39;GET&#39;,
+        route = &#39;/status&#39;,
+        script = &#39;get_repository_status.lua&#39;
+    },
+    {
+        method = &#39;POST&#39;,
+        route = &#39;/make_thumbnail&#39;,
+        script = &#39;make_image_thumbnail.lua&#39;
+    }
+}
+</code></pre></div>
+<p>Sipi looks for these scripts in the directory specified by <code>scriptdir</code>
+in its configuration file. The first route that matches the beginning of
+the requested URL path will be used.</p>
+<h2 id="iiif-authentication-api-10-in-sipi">IIIF Authentication API 1.0 in SIPI<a class="headerlink" href="#iiif-authentication-api-10-in-sipi" title="Permanent link">&para;</a></h2>
+<p>The <code>pre_flight</code> function is also responsible for activating the IIIF Auth API. In order to do so, the pre_flight script
+returns a table that contains all necessary information. For details about the IIIF Authentication API 1.0 see the
+<a href="https://iiif.io/api/auth/1.0/">IIIF documentation</a>. The following fields have to be returned by the
+<code>pre_flight</code>-function as LUA-table:</p>
+<ul>
+<li><code>type</code>: String giving the type. Valid are:<br />
+<code>"login"</code>, <code>"clickthrough"</code>, <code>""kiosk"</code> or <code>"external"</code>.</li>
+<li><code>cookieUrl</code>: URL where to get a valid IIIF Auth cookie for this service.</li>
+<li><code>tokenUrl</code>: URL where to get a valid IIIF Auth token for this service.</li>
+<li><code>confirmLabel</code>: Label to display in confirmation box.</li>
+<li><code>description</code>: Description for login window.</li>
+<li><code>failureDescription</code>: Information, if login fails.</li>
+<li><code>failureHeader</code>: Header for failure window.</li>
+<li><code>header</code>: Header of login window</li>
+<li><code>label</code>: Label of the login window</li>
+</ul>
+<p>In addition, the filepath has to be returns. A full response may look as follows:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kr">return</span> <span class="p">{</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>   <span class="nb">type</span> <span class="o">=</span> <span class="s1">&#39;login&#39;</span><span class="p">,</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">cookieUrl</span> <span class="o">=</span> <span class="s1">&#39;https://localhost/iiif-cookie.html&#39;</span><span class="p">,</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="n">tokenUrl</span> <span class="o">=</span> <span class="s1">&#39;https://localhost/iiif-token.php&#39;</span><span class="p">,</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">confirmLabel</span> <span class="o">=</span>  <span class="s1">&#39;Login to SIPI&#39;</span><span class="p">,</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="n">description</span> <span class="o">=</span> <span class="s1">&#39;This Example requires a demo login!&#39;</span><span class="p">,</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="n">failureDescription</span> <span class="o">=</span> <span class="s1">&#39;&lt;a href=&quot;http://example.org/policy&quot;&gt;Access Policy&lt;/a&gt;&#39;</span><span class="p">,</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>    <span class="n">failureHeader</span> <span class="o">=</span> <span class="s1">&#39;Authentication Failed&#39;</span><span class="p">,</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    <span class="n">header</span> <span class="o">=</span> <span class="s1">&#39;Please Log In&#39;</span><span class="p">,</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>    <span class="n">label</span> <span class="o">=</span> <span class="s1">&#39;Login to SIPI&#39;</span><span class="p">,</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="p">},</span> <span class="n">filepath</span>
+</code></pre></div>
+<p>SIPI will use this information returned by the <code>pre_flight</code> function to return the appropriate responses to the
+client requests based on the IIIF Authentication API 1.0. Check for support of the IIIF Authentication API 1.0
+for <a href="https://projectmirador.org">mirador</a> and <a href="https://universalviewer.io">universalviewer</a>, both applications which
+suppport the IIIF standards.</p>
+<h2 id="sipi-variables-available-to-lua-scripts">SIPI variables available to Lua scripts<a class="headerlink" href="#sipi-variables-available-to-lua-scripts" title="Permanent link">&para;</a></h2>
+<p>There are many globally accessible LUA variables made available which reflext the configuration of SIPI and the
+state of the server and request. This variables a read only and created for every request.</p>
+<h3 id="sipi-configuration-variables">SIPI configuration variables<a class="headerlink" href="#sipi-configuration-variables" title="Permanent link">&para;</a></h3>
+<p>This variables are defined ither in the configuration file if SIPI, in environemt variables at startup or
+as command line option when starting the server.</p>
+<h4 id="confighostname">config.hostname<a class="headerlink" href="#confighostname" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.hostname
+</code></pre></div>
+<p>The hostname  SIPI is configures to run on
+(see <a href="../guide/sipi/#hostname">hostname</a> in configuration description).</p>
+<h4 id="configport">config.port<a class="headerlink" href="#configport" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.port
+</code></pre></div>
+<p>Portnumber where the SIPI server listens
+(see <a href="../guide/sipi/#portnum">serverport</a> in configuration description).</p>
+<h4 id="configsslport">config.sslport<a class="headerlink" href="#configsslport" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.sslport
+</code></pre></div>
+<p>Portnumber for SSL connections of SIPI
+(see <a href="../guide/sipi/#sslport">sslport</a> in configuration description).</p>
+<h4 id="configimgroot">config.imgroot<a class="headerlink" href="#configimgroot" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.imgroot
+</code></pre></div>
+<p>Root directory for IIIF-served images
+(see <a href="../guide/sipi/#imgroot">imgroot</a> in configuration description).</p>
+<h4 id="configdocroot">config.docroot<a class="headerlink" href="#configdocroot" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.docroot
+</code></pre></div>
+<p>Root directory for WEB-Server
+(see <a href="../guide/sipi/#docroot">docroot</a> in configuration description).</p>
+<h4 id="configmax_temp_file_age">config.max_temp_file_age<a class="headerlink" href="#configmax_temp_file_age" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.max_temp_file_age
+</code></pre></div>
+<p>maximum age of temporary files
+(see <a href="../guide/sipi/#maxtmpfileage">max_temp_file_age</a> in configuration description).</p>
+<h4 id="configprefix_as_path">config.prefix_as_path<a class="headerlink" href="#configprefix_as_path" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.prefix_as_path`
+</code></pre></div>
+<p><code>true</code> if the prefix should be used as path info
+(see <a href="../guide/sipi/#prefixaspath">prefix_as_path</a> in configuration description).</p>
+<h4 id="configinit_script">config.init_script<a class="headerlink" href="#configinit_script" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.init_script
+</code></pre></div>
+<p>Path to initialization script
+(see <a href="../guide/sipi/#scriptinit">initscript</a> in configuration description).</p>
+<h4 id="configscriptdir">config.scriptdir<a class="headerlink" href="#configscriptdir" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.scriptdir
+</code></pre></div>
+<p>Path to script directory.
+(see <a href="../guide/sipi/#scriptdir">scriptdir</a> in configuration description).</p>
+<h4 id="configcache_dir">config.cache_dir<a class="headerlink" href="#configcache_dir" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.cache_dir
+</code></pre></div>
+<p>Path to cache directory for iIIF served images.
+(see <a href="../guide/sipi/#cachedir">cachedir</a> in configuration description).</p>
+<h4 id="configcache_size">config.cache_size<a class="headerlink" href="#configcache_size" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.cache_size
+</code></pre></div>
+<p>Maximal size of cache
+(see <a href="../guide/sipi/#cachesize">cachesize</a> in configuration description).</p>
+<h4 id="configcache_n_files">config.cache_n_files<a class="headerlink" href="#configcache_n_files" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.cache_n_files
+</code></pre></div>
+<p>Maximal number of files in cache.
+(see <a href="../guide/sipi/#cachenfiles">cache_nfiles</a> in configuration description).</p>
+<h4 id="configcache_hysteresis">config.cache_hysteresis<a class="headerlink" href="#configcache_hysteresis" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.cache_hysteresis
+</code></pre></div>
+<p>Amount of data to be purged if cache reaches maximum size.
+(see <a href="../guide/sipi/#hysteresis">cache_hysteresis</a> in configuration description).</p>
+<h4 id="configjpeg_quality">config.jpeg_quality<a class="headerlink" href="#configjpeg_quality" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.jpeg_quality
+</code></pre></div>
+<p>Unfortunately, the IIIF Image API does not allow to give a JPEG quality (=compression) on the IIIF URL. SIPI
+allows to configure the compression quality system wide with this parameter. Allowed values are in he range
+[1..100] where 1 the worst quality (and highest compression factor = smallest file size) and 100 the highest
+quality (with lowest compression factor = biggest file size). Please note that SIPI is not able to provide
+lossless compression for JPEG files.
+(see <a href="../guide/sipi/#jpegquality">jpeg_quality</a> in configuration description).</p>
+<h4 id="configkeep_alive">config.keep_alive<a class="headerlink" href="#configkeep_alive" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.keep_alive
+</code></pre></div>
+<p>Maximal keep-alive time for HTTP requests that ask for a keep-alive connection.
+(see <a href="../guide/sipi/#keepalive">keep_alive</a> in configuration description).</p>
+<h4 id="configthumb_size">config.thumb_size<a class="headerlink" href="#configthumb_size" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.thumb_size
+</code></pre></div>
+<p>Default thumbnail image size.
+(see <a href="../guide/sipi/#thumbsize">thumb_size</a> in configuration description).</p>
+<h4 id="confign_threads">config.n_threads<a class="headerlink" href="#confign_threads" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.n_threads
+</code></pre></div>
+<p>Number of worker threads SIPI uses.
+(see <a href="../guide/sipi/#nthreads">nthreads</a> in configuration description).</p>
+<h4 id="configmax_post_size">config.max_post_size<a class="headerlink" href="#configmax_post_size" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.max_post_size
+</code></pre></div>
+<p>Maximal size of POST data allowed
+(see <a href="../guide/sipi/#maxpostsize">max_post_size</a> in configuration description).</p>
+<h4 id="configtmpdir">config.tmpdir<a class="headerlink" href="#configtmpdir" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.tmpdir
+</code></pre></div>
+<p>Temporary directory to store uploads.
+(see <a href="../guide/sipi/#tmpdir">tmpdir</a> in configuration description).</p>
+<h4 id="configssl_certificate">config.ssl/_certificate<a class="headerlink" href="#configssl_certificate" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.ssl_certificate
+</code></pre></div>
+<p>Path to the SSL certificate that SIPI uses.
+(see <a href="../guide/sipi/#sslcertificate">ssl_certificate</a> in configuration description).</p>
+<h4 id="configssl_key">config.ssl/_key<a class="headerlink" href="#configssl_key" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.ssl_key
+</code></pre></div>
+<p>Path to the SSL key that SIPI uses.
+(see <a href="../guide/sipi/#sslkey">ssl_key</a> in configuration description).</p>
+<h4 id="configlogfile">config.logfile<a class="headerlink" href="#configlogfile" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.logfile
+</code></pre></div>
+<p>Name of the logfile. SIPI is currently using the built-in logger which logs to stdout and the
+logfile name is ignored. 
+(see <a href="../guide/sipi/#logfile">logfile</a> in configuration description).</p>
+<h4 id="configloglevel">config.loglevel<a class="headerlink" href="#configloglevel" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.loglevel
+</code></pre></div>
+<p>Indicates what should be logged. The variable contains a integer that corresponds to the syslog level.
+(see <a href="../guide/sipi/#loglevel">loglevel</a> in configuration description).</p>
+<h4 id="configadminuser">config.adminuser<a class="headerlink" href="#configadminuser" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.adminuser
+</code></pre></div>
+<p>Name of admin user.
+(see <a href="../guide/sipi/#configuration-of-administrator-access">user</a> in configuration description).</p>
+<h4 id="configpassword">config.password<a class="headerlink" href="#configpassword" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.password
+</code></pre></div>
+<p>Password (plain text, not encrypted) of admin user (<em>use with caution</em>)!
+(see <a href="../guide/sipi/#configuration-of-administrator-access">password</a> in configuration description).</p>
+<h3 id="sipi-server-variables">SIPI Server Variables<a class="headerlink" href="#sipi-server-variables" title="Permanent link">&para;</a></h3>
+<p>Sipi server variables are dependent on the incoming request and are created by SIPI automatically for each
+request.</p>
+<h4 id="servermethod">server.method<a class="headerlink" href="#servermethod" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>server.method
+</code></pre></div>
+<p>The HTTP request method. Is one of <code>OPTIONS</code>, <code>GET</code>, <code>HEAD</code>, <code>POST</code>, <code>PUT</code>, <code>DELETE</code>, <code>TRACE</code>, <code>CONNECT</code> or <code>OTHER</code>.</p>
+<h4 id="serverhas_openssl">server.has_openssl<a class="headerlink" href="#serverhas_openssl" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>server.has_openssl
+</code></pre></div>
+<p><code>true</code> if OpenSSL is available. This variable is determined compilation time. Usually SSL should be included, but SIPI
+can be compiled without SSL support. There is no option in the configuration file for this.</p>
+<h4 id="serversecure">server.secure<a class="headerlink" href="#serversecure" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>server.secure
+</code></pre></div>
+<p><code>true</code> if the connection was made over HTTPS using SSL.</p>
+<h4 id="serverhost">server.host<a class="headerlink" href="#serverhost" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>server.host
+</code></pre></div>
+<p>The hostname of the Sipi server that was used in the request.</p>
+<h4 id="serverclient_ip">server.client_ip<a class="headerlink" href="#serverclient_ip" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>server.client_ip
+</code></pre></div>
+<p>The IPv4 or IPv6 address of the client connecting to Sipi.</p>
+<h4 id="serverclient_port">server.client_port<a class="headerlink" href="#serverclient_port" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>server.client_port
+</code></pre></div>
+<p>The port number of the client socket.</p>
+<h4 id="serveruri">server.uri<a class="headerlink" href="#serveruri" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>server.uri
+</code></pre></div>
+<p>The URL path used to access Sipi (does not include the hostname).</p>
+<h4 id="serverheader">server.header<a class="headerlink" href="#serverheader" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>server.header
+</code></pre></div>
+<p>A table containing all the HTTP request headers(in lowercase).</p>
+<h4 id="servercookies">server.cookies<a class="headerlink" href="#servercookies" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>server.cookies
+</code></pre></div>
+<p>A table of the cookies that were sent with the request.</p>
+<h4 id="serverget">server.get<a class="headerlink" href="#serverget" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>server.get
+</code></pre></div>
+<p>A table of GET request parameters.</p>
+<h4 id="serverpost">server.post<a class="headerlink" href="#serverpost" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>server.post
+</code></pre></div>
+<p>A table of POST or PUT request parameters.</p>
+<h4 id="serverrequest">server.request<a class="headerlink" href="#serverrequest" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>server.request
+</code></pre></div>
+<p>All request parameters.</p>
+<h4 id="servercontent">server.content<a class="headerlink" href="#servercontent" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>server.content
+</code></pre></div>
+<p>If the request had a body, the variable contains the body data. Otherwise it's <code>nil</code>.</p>
+<h4 id="servercontent_type">server.content_type<a class="headerlink" href="#servercontent_type" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>server.content_type
+</code></pre></div>
+<p>Returns the content type of the request. If there is no type or no content, this variable is <code>nil</code>.</p>
+<h4 id="serveruploads">server.uploads<a class="headerlink" href="#serveruploads" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>server.uploads
+</code></pre></div>
+<p>This is an array of upload parameters, one per file. Each one is a table containing:</p>
+<ul>
+<li><code>fieldname</code>: the name of the form field.</li>
+<li><code>origname</code>: the original filename.</li>
+<li><code>tmpname</code>: a temporary path to the uploaded file.</li>
+<li><code>mimetype</code>: the MIME type of the uploaded file as provided by the browser.</li>
+<li><code>filesize</code>: the size of uploaded file in bytes.</li>
+</ul>
+<p>The upload can be accessed as follows:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kr">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">value</span> <span class="kr">in</span> <span class="nb">pairs</span><span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">uploads</span><span class="p">)</span> <span class="kr">do</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="c1">--</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="c1">-- copy the uploaded file to the image repository using the original name</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="c1">--</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    <span class="n">server</span><span class="p">.</span><span class="n">copyTmpfile</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">config</span><span class="p">.</span><span class="n">imgdir</span> <span class="o">..</span> <span class="s1">&#39;/&#39;</span> <span class="o">..</span> <span class="n">value</span><span class="p">[</span><span class="s2">&quot;origname&quot;</span><span class="p">])</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="kr">end</span>
+</code></pre></div></p>
+<h3 id="knora-specific-variables">Knora-specific variables<a class="headerlink" href="#knora-specific-variables" title="Permanent link">&para;</a></h3>
+<p>The development of SIPI came out of the need to have a flexible, high performance IIIF server for the Swiss National
+research infrastructure <a href="https://dasch.swiss">Data and Service Center for the Humanities</a> (DaSCH). The aim of the DaSCH
+is to guarantee long-term accessibility of research data from the Humanities. The operates a specialized platform
+<a href="https://knora.org">Knora</a>. The following variables are for internal use only.</p>
+<h4 id="configknora_path">config.knora_path<a class="headerlink" href="#configknora_path" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.knora_path
+</code></pre></div>
+<p>Path to knora REST API (only for SIPI used with Knora)</p>
+<h4 id="configknora_port">config.knora_port<a class="headerlink" href="#configknora_port" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>config.knora_port
+</code></pre></div>
+<p>Port that the Knora API uses</p>
+<h2 id="sipi-functions-available-to-lua-scripts">SIPI functions available to Lua scripts<a class="headerlink" href="#sipi-functions-available-to-lua-scripts" title="Permanent link">&para;</a></h2>
+<p>Sipi provides the following functions that can be called from Lua
+scripts. Each function returns two values. The first value is <code>true</code> if
+the operation succeeded, <code>false</code> otherwise. If the operation succeeded,
+the second value is the result of the operation, otherwise it is an
+error message.</p>
+<h3 id="sipi-connection-functions">SIPI Connection Functions<a class="headerlink" href="#sipi-connection-functions" title="Permanent link">&para;</a></h3>
+<p>These LUA function alter the way the HTTP connection is handled.</p>
+<h4 id="serversetbuffer">server.setBuffer<a class="headerlink" href="#serversetbuffer" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, errmsg = server.setBuffer([bufsize][,incsize])
+</code></pre></div>
+<p>Activates the the connection buffer. Optionally the buffer size and
+increment size can be given. Returns <code>true, nil</code> on success or
+<code>false, errormsg</code> on failure.</p>
+<h4 id="serversendheader">server.sendHeader<a class="headerlink" href="#serversendheader" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, errormsg = server.sendHeader(key, value)
+</code></pre></div>
+<p>Sets an HTTP response header. Returns <code>true, nil</code> on success or
+<code>false, errormsg</code> on failure.</p>
+<h4 id="serversendcookie">server.sendCookie<a class="headerlink" href="#serversendcookie" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, errormsg = server.sendCookie(key, value [, options-table])
+</code></pre></div>
+<p>Sets a cookie in the HTTP response. Returns <code>true, nil</code> on success or
+<code>false, errormsg</code> on failure. The optional <code>options-table</code> is a Lua
+table containing the following keys:</p>
+<ul>
+<li><code>path</code></li>
+<li><code>domain</code></li>
+<li><code>expires</code> (value in seconds)</li>
+<li><code>secure</code> (boolean)</li>
+<li><code>http_only</code> (boolean)</li>
+</ul>
+<h4 id="serversendstatus">server.sendStatus<a class="headerlink" href="#serversendstatus" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>server.sendStatus(code)
+</code></pre></div>
+<p>Sends an HTTP status code. This function is always successful and
+returns nothing.</p>
+<h4 id="serverprint">server.print<a class="headerlink" href="#serverprint" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, errormsg = server.print(values)
+</code></pre></div>
+<p>Prints variables and/or strings over the HTTP connection to the client that originated the request. Returns
+<code>true, nil</code> on success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverrequireauth">server.requireAuth<a class="headerlink" href="#serverrequireauth" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, table = server.requireAuth()
+</code></pre></div>
+<p>This function retrieves HTTP authentication data that was supplied after sending a <code>'WWW-Authenticate'</code>-header (e.g.
+by issuing a the following commands to enter the HTTP login dialog:</p>
+<div class="highlight"><pre><span></span><code>    server.setBuffer()
+    server.sendStatus(401);
+    server.sendHeader(&#39;WWW-Authenticate&#39;, &#39;Basic realm=&quot;Sipi&quot;&#39;)
+</code></pre></div>
+<p>It returns <code>true, table</code> on success or <code>false, errormsg</code> on failure. The result of the authorization
+is returned as table with the following elements:</p>
+<ul>
+<li><code>status</code>: Either <code>BASIC</code>, <code>BEARER</code>, <code>NOAUTH</code> (no authorization header) or <code>ERROR</code></li>
+<li><code>username</code>: A string containing the supplied username (only existing if stats is <code>BASIC</code>)</li>
+<li><code>password</code>: A string containing the supplied password (only existing if stats is <code>BASIC</code>)</li>
+<li><code>token</code>: A string containing the raw token information (only if status <code>BEARER</code>)</li>
+<li><code>message</code>: A string containing the error message (only if status <code>ERROR</code>)</li>
+</ul>
+<p>Example:</p>
+<div class="highlight"><pre><span></span><code>success, auth = server.requireAuth()
+if not success then
+    server.sendStatus(501)
+    server.print(&quot;Error in getting authentication scheme!&quot;)
+    return -1
+end
+
+if auth.status == &#39;BASIC&#39; then
+    --
+    -- everything OK, let&#39;s create the token for further
+    -- calls and ad it to a cookie
+    --
+    if auth.username == config.adminuser and
+       auth.password == config.password then
+        tokendata = {
+            iss = &quot;sipi.unibas.ch&quot;,
+            aud = &quot;knora.org&quot;,
+            user = auth.username
+        }
+        success, token = server.generate_jwt(tokendata)
+        if not success then
+            server.sendStatus(501)
+            server.print(&quot;Could not generate JWT!&quot;)
+            return -1
+        end
+        success, errormsg = server.sendCookie(&#39;sipi&#39;,
+                                              token,
+                                              {path = &#39;/&#39;, expires = 3600})
+        if not success then
+            server.sendStatus(501)
+            server.print(&quot;Couldn&#39;t send cookie with JWT!&quot;)
+            return -1
+        end
+    else
+        server.sendStatus(401)
+        server.sendHeader(&#39;WWW-Authenticate&#39;, &#39;Basic realm=&quot;Sipi&quot;&#39;)
+        server.print(&quot;Wrong credentials!&quot;)
+        return -1
+    end
+elseif auth.status == &#39;BEARER&#39; then
+    success, jwt = server.decode_jwt(auth.token)
+    if not success then
+        server.sendStatus(501)
+        server.print(&quot;Couldn&#39;t deocde JWT!&quot;)
+        return -1
+    end
+    if (jwt.iss ~= &#39;sipi.unibas.ch&#39;) or
+       (jwt.aud ~= &#39;knora.org&#39;) or
+       (jwt.user ~= config.adminuser) then
+        server.sendStatus(401)
+        server.sendHeader(&#39;WWW-Authenticate&#39;, &#39;Basic realm=&quot;Sipi&quot;&#39;)
+        return -1
+    end
+elseif auth.status == &#39;NOAUTH&#39; then
+    server.setBuffer()
+    server.sendStatus(401);
+    server.sendHeader(&#39;WWW-Authenticate&#39;, &#39;Basic realm=&quot;Sipi&quot;&#39;)
+    return -1
+else
+    server.status(401)
+    server.sendHeader(&#39;WWW-Authenticate&#39;, &#39;Basic realm=&quot;Sipi&quot;&#39;)
+    return -1
+end
+</code></pre></div>
+<h3 id="sipi-file-system-function">SIPI File System Function<a class="headerlink" href="#sipi-file-system-function" title="Permanent link">&para;</a></h3>
+<p>These functions offer tools to manipuale files and directories, and to gather file information.</p>
+<h4 id="serverfsftype">server.fs.ftype<a class="headerlink" href="#serverfsftype" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, filetype = server.fs.ftype(filepath)
+</code></pre></div>
+<p>Checks the filetype of a given filepath. Returns either <code>true, filetype</code>
+(with filetype one of <code>"FILE"</code>, <code>"DIRECTORY"</code>, <code>"CHARDEV"</code>, <code>"BLOCKDEV"</code>, <code>"LINK"</code>,
+<code>"SOCKET"</code> or <code>"UNKNOWN"</code>) or <code>false, errormsg</code>.</p>
+<h4 id="serverfsmodtime">server.fs.modtime<a class="headerlink" href="#serverfsmodtime" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, modtime = server.fs.modtime(filepath)
+</code></pre></div>
+<p>Retrieves the last modification date of a file in seconds since epoch
+UTC. Returns either <code>true</code>, <code>modtime</code> or <code>false</code>, <code>errormsg</code>.</p>
+<h4 id="serverfsis_readable">server.fs.is_readable<a class="headerlink" href="#serverfsis_readable" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, readable = server.fs.is_readable(filepath)
+</code></pre></div>
+<p>Checks if a file is readable. Returns <code>true, readable</code> (boolean) on
+success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfsis_writeable">server.fs.is_writeable<a class="headerlink" href="#serverfsis_writeable" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, writeable = server.fs.is_writeable(filepath)
+</code></pre></div>
+<p>Checks if a file is writeable. Returns <code>true, writeable</code> (boolean) on
+success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfsis_executable">server.fs.is_executable<a class="headerlink" href="#serverfsis_executable" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, errormsg = server.fs.is_executable(filepath)
+</code></pre></div>
+<p>Checks if a file is executable. Returns <code>true, executable</code> (boolean) on
+success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfsexists">server.fs.exists<a class="headerlink" href="#serverfsexists" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, exists = server.fs.exists(filepath)
+</code></pre></div>
+<p>Checks if a file exists. Checks if a file exists. Returns <code>true, exists</code>
+(boolean) on success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfsunlink">server.fs.unlink<a class="headerlink" href="#serverfsunlink" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, errormsg = server.fs.unlink(filename)
+</code></pre></div>
+<p>Deletes a file from the file system. The file must exist and the user
+must have write access. Returns <code>true, nil</code> on success or
+<code>false, errormsg</code> on failure.</p>
+<h4 id="serverfsmkdir">server.fs.mkdir<a class="headerlink" href="#serverfsmkdir" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, errormsg = server.fs.mkdir(dirname, [tonumber(&#39;0755&#39;, 8)])
+</code></pre></div>
+<p>Creates a new directory, optionally with the specified permissions.
+Returns <code>true, nil</code> on success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfsrmdir">server.fs.rmdir<a class="headerlink" href="#serverfsrmdir" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, errormsg = server.fs.rmdir(dirname)
+</code></pre></div>
+<p>Deletes a directory. Returns <code>true, nil</code> on success or <code>false, errormsg</code>
+on failure.</p>
+<h4 id="serverfsgetcwd">server.fs.getcwd<a class="headerlink" href="#serverfsgetcwd" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, curdir = server.fs.getcwd()
+</code></pre></div>
+<p>Gets the current working directory. Returns <code>true, current_dir</code> on
+success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfsreaddir">server.fs.readdir<a class="headerlink" href="#serverfsreaddir" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, filenames = server.fs.readdir(dirname)
+</code></pre></div>
+<p>Gets the names of the files in a directory, not including <code>.</code> and <code>..</code>.
+Returns <code>true, table</code> on success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfschdir">server.fs.chdir<a class="headerlink" href="#serverfschdir" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, oldir = server.fs.chdir(newdir)
+</code></pre></div>
+<p>Change working directory. Returns <code>true, olddir</code> on success or
+<code>false, errormsg</code> on failure.</p>
+<h4 id="serverfscopyfile">server.fs.copyFile<a class="headerlink" href="#serverfscopyfile" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, errormsg = server.fs.copyFile(source, destination)
+</code></pre></div>
+<p>Copies a file from source to destination. Returns <code>true, nil</code>on success
+or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfsmovefile">server.fs.moveFile<a class="headerlink" href="#serverfsmovefile" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, errormsg = server.fs.moveFile(from, to)
+</code></pre></div>
+<p>Moves a file. The move connot cross filesystem boundaries! <code>true, nil</code>on
+success or <code>false, errormsg</code> on failure.</p>
+<h3 id="other-helper-function">Other Helper Function<a class="headerlink" href="#other-helper-function" title="Permanent link">&para;</a></h3>
+<h4 id="serverhttp">server.http<a class="headerlink" href="#serverhttp" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, result = server.http(method, &quot;http://server.domain[:port]/path/file&quot; [, header] [, timeout])
+</code></pre></div>
+<p>Performs an HTTP request using curl. Currently implements only GET requests. Parameters:</p>
+<ul>
+<li><code>method</code>: The HTTP request method. Currently must be <code>"GET"</code>.</li>
+<li><code>url</code>: The HTTP URL.</li>
+<li><code>header</code>: An optional table of key-value pairs representing HTTP
+    request headers.</li>
+<li><code>timeout</code>: An optional number of milliseconds until the connection
+    times out.</li>
+</ul>
+<p>Authentication is not yet supported.</p>
+<p>The result is a table:</p>
+<div class="highlight"><pre><span></span><code>result = {
+    status_code = value -- HTTP status code returned
+    erromsg = &quot;error description&quot; -- only if success is false
+    header = {
+        name = value [, name = value, ...]
+    },
+    certificate = { -- only if HTTPS connection
+        subject = value,
+        issuer = value
+    },
+    body = data,
+    duration = milliseconds
+}
+</code></pre></div>
+<p>Example:</p>
+<div class="highlight"><pre><span></span><code>success, result = server.http(&quot;GET&quot;, &quot;http://www.salsah.org/api/resources/1&quot;, 100)
+
+if (result.success) then
+   server.print(&quot;&lt;table&gt;&quot;)
+   server.print(&quot;&lt;tr&gt;&lt;th&gt;Field&lt;/th&gt;&lt;th&gt;Value&lt;/th&gt;&lt;/tr&gt;&quot;)
+   for k,v in pairs(server.header) do
+       server.print(&quot;&lt;tr&gt;&lt;td&gt;&quot;, k, &quot;&lt;/td&gt;&lt;td&gt;&quot;, v, &quot;&lt;/td&gt;&lt;/tr&gt;&quot;)
+   end
+   server.print(&quot;&lt;/table&gt;&lt;hr/&gt;&quot;)
+
+   server.print(&quot;Duration: &quot;, result.duration, &quot; ms&lt;br/&gt;&lt;hr/&gt;&quot;)
+   server.print(&quot;Body:&lt;br/&gt;&quot;, result.body)
+else
+   server.print(&quot;ERROR: &quot;, result.errmsg)
+end
+</code></pre></div>
+<h4 id="servertable_to_json">server.table_to_json<a class="headerlink" href="#servertable_to_json" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, jsonstr = server.table\_to\_json(table)
+</code></pre></div>
+<p>Converts a (nested) Lua table to a JSON string. Returns <code>true, jsonstr</code>
+on success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverjson_to_table">server.json_to_table<a class="headerlink" href="#serverjson_to_table" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, table = server.json_to_table(jsonstr)
+</code></pre></div>
+<p>Converts a JSON string to a (nested) Lua table. Returns <code>true, table</code> on
+success or <code>false, errormsg</code> on failure.</p>
+<h4 id="servergenerate_jwt">server.generate_jwt<a class="headerlink" href="#servergenerate_jwt" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, token = server.generate_jwt(table)
+</code></pre></div>
+<p>Generates a <a href="https://jwt.io/">JSON Web Token</a> (JWT) with the supplied table as
+payload. Returns <code>true, token</code> on success or <code>false, errormsg</code> on
+failure. The internal may contain arbitrary keys and/or may contains the JWT
+claims as follows. (The type <code>IntDate</code> is a number of seconds since
+1970-01-01T0:0:0Z):</p>
+<ul>
+<li><code>iss</code> (string =&gt; StringOrURI) OPT: principal that issued the JWT.</li>
+<li><code>exp</code> (number =&gt; IntDate) OPT: expiration time on or after which
+    the token MUST NOT be accepted for processing.</li>
+<li><code>nbf</code> (number =&gt; IntDate) OPT: identifies the time before which
+    the token MUST NOT be accepted for processing.</li>
+<li><code>iat</code> (number =&gt; IntDate) OPT: identifies the time at which the
+    JWT was issued.</li>
+<li><code>aud</code> (string =&gt; StringOrURI) OPT: identifies the audience that
+    the JWT is intended for. The audience value is a string, typically
+    the base address of the resource being accessed, such as
+    <code>https://contoso.com</code>.</li>
+<li><code>prn</code> (string =&gt; StringOrURI) OPT: identifies the subject of
+    the JWT.</li>
+<li><code>jti</code> (string =&gt; String) OPT: provides a unique identifier for
+    the JWT.</li>
+</ul>
+<h4 id="serverdecode_jwt">server.decode_jwt<a class="headerlink" href="#serverdecode_jwt" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, table = server.decode_jwt(token)
+</code></pre></div>
+<p>Decodes a <a href="https://jwt.io/">JSON Web Token</a> (JWT) and returns its
+content as table. Returns <code>true, table</code> on success or <code>false, errormsg</code>
+on failure.</p>
+<h4 id="serverparse_mimetype">server.parse_mimetype<a class="headerlink" href="#serverparse_mimetype" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, mimetype = server.parse_mimetype(str)
+</code></pre></div>
+<p>Parses a mimtype HTTP header string and returns a pair containing the actual
+mimetype and the charset used (if available). It returns <code>true, pair</code> with pair as mimetype
+and charset on success, <code>false, errormsg</code> on failure.</p>
+<h4 id="serverfile_mimetype">server.file_mimetype<a class="headerlink" href="#serverfile_mimetype" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, table = server.file_mimetype(path)
+success, table = server.file_mimetype(index)
+</code></pre></div>
+<p>Determines the mimetype of a file. The <em>first</em> form is used if the file
+path is known. The <em>second</em> form can be used for uploads by passing the
+upload file index. It returns <code>true, table</code> on success or <code>false, errormsg</code> on
+failure. The table has 2 members: - <code>mimetype</code> - <code>charset</code></p>
+<h4 id="serverfile_mimeconsistency">server.file_mimeconsistency<a class="headerlink" href="#serverfile_mimeconsistency" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, is_consistent = server.file_mimeconsistency(path)
+success, is_consistent = server.file_mimeconsistency(index)
+</code></pre></div>
+<p>Checks if the file extension and the mimetype determined by the magic
+of the file is consistent. The <em>first</em> form requires a path (including the
+filename with extension), the <em>second</em> can be used for checking uploads by 
+passing the file index. It returns <code>true, is_consistent</code> on success or
+<code>false, errormsg</code> in case of an error. <code>is_consistent</code> is true if the
+mimetype corresponds to the file extension.</p>
+<h4 id="servercopytmpfile">server.copyTmpfile<a class="headerlink" href="#servercopytmpfile" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, errormsg = server.copyTmpfile(from, to)
+</code></pre></div>
+<p>Sipi saves each uploaded file in a temporary location (given by the
+config variable <code>tmpdir</code>) and deletes it after the request has been
+served. This function is used to copy the file to another location where
+it can be retrieved later. Returns <code>true, nil</code> on success or
+<code>false, errormsg</code> on failure.</p>
+<p>Parameters:</p>
+<ul>
+<li><code>from</code>:    an index (integer value) of array server.uploads.</li>
+<li><code>target</code>:  destination path</li>
+</ul>
+<h4 id="serversystime">server.systime<a class="headerlink" href="#serversystime" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>systime = server.systime()
+</code></pre></div>
+<p>Returns the current system time on the server in seconds since epoch.</p>
+<h4 id="serverlog">server.log<a class="headerlink" href="#serverlog" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>server.log(message, loglevel)
+</code></pre></div>
+<p>Writes a message to the built-in logger. Severity levels are:</p>
+<ul>
+<li><code>server.loglevel.LOG_EMERG</code></li>
+<li><code>server.loglevel.LOG_ALERT</code></li>
+<li><code>server.loglevel.LOG_CRIT</code></li>
+<li><code>server.loglevel.LOG_ERR</code></li>
+<li><code>server.loglevel.LOG_WARNING</code></li>
+<li><code>server.loglevel.LOG_NOTICE</code></li>
+<li><code>server.loglevel.LOG_INFO</code></li>
+<li><code>server.loglevel.LOG_DEBUG</code></li>
+</ul>
+<h4 id="serveruuid">server.uuid<a class="headerlink" href="#serveruuid" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, uuid = server.uuid()
+</code></pre></div>
+<p>Generates a random UUID version 4 identifier in canonical form, as
+described in <a href="https://tools.ietf.org/html/rfc4122">RFC 4122</a>. Returns
+<code>true, uuid</code> on success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serveruuid62">server.uuid62<a class="headerlink" href="#serveruuid62" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, uuid62 = server.uuid62()
+</code></pre></div>
+<p>Generates a Base62-encoded UUID. Returns <code>true, uuid62</code> on success or
+<code>false, errormsg</code> on failure.</p>
+<h4 id="serveruuid_to_base62">server.uuid_to_base62<a class="headerlink" href="#serveruuid_to_base62" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, uuid62 = server.uuid_to_base62(uuid)
+</code></pre></div>
+<p>Converts a canonical UUID string to a Base62-encoded UUID. Returns
+<code>true, uuid62</code> on success or <code>false, errormsg</code> on failure.</p>
+<h4 id="serverbase62_to_uuid">server.base62_to_uuid<a class="headerlink" href="#serverbase62_to_uuid" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>success, uuid = server.base62_to_uuid(uuid62)
+</code></pre></div>
+<p>Converts a Base62-encoded UUID to canonical form. Returns <code>true, uuid</code>
+on success or <code>false, errormsg</code> on failure.</p>
+<h2 id="cache-management-functions">Cache Management Functions<a class="headerlink" href="#cache-management-functions" title="Permanent link">&para;</a></h2>
+<p>The following functions are available for managing the SIPI image cache from Lua scripts.</p>
+<h4 id="cachesize">cache.size<a class="headerlink" href="#cachesize" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">size</span> <span class="o">=</span> <span class="n">cache</span><span class="p">.</span><span class="n">size</span><span class="p">()</span>
+</code></pre></div>
+<p>Returns the current total size of cached files in bytes. Returns <code>nil</code> if no cache is configured.</p>
+<h4 id="cachemax_size">cache.max_size<a class="headerlink" href="#cachemax_size" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">max</span> <span class="o">=</span> <span class="n">cache</span><span class="p">.</span><span class="n">max_size</span><span class="p">()</span>
+</code></pre></div>
+<p>Returns the configured maximum cache size limit in bytes.</p>
+<h4 id="cachenfiles">cache.nfiles<a class="headerlink" href="#cachenfiles" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">count</span> <span class="o">=</span> <span class="n">cache</span><span class="p">.</span><span class="n">nfiles</span><span class="p">()</span>
+</code></pre></div>
+<p>Returns the current number of files in the cache.</p>
+<h4 id="cachemax_nfiles">cache.max_nfiles<a class="headerlink" href="#cachemax_nfiles" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">max</span> <span class="o">=</span> <span class="n">cache</span><span class="p">.</span><span class="n">max_nfiles</span><span class="p">()</span>
+</code></pre></div>
+<p>Returns the configured maximum number of files allowed in cache.</p>
+<h4 id="cachepath">cache.path<a class="headerlink" href="#cachepath" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">path</span> <span class="o">=</span> <span class="n">cache</span><span class="p">.</span><span class="n">path</span><span class="p">()</span>
+</code></pre></div>
+<p>Returns the filesystem path to the cache directory, or <code>nil</code> if no cache is configured.</p>
+<h4 id="cachefilelist">cache.filelist<a class="headerlink" href="#cachefilelist" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">filelist</span> <span class="o">=</span> <span class="n">cache</span><span class="p">.</span><span class="n">filelist</span><span class="p">([</span><span class="n">sortmethod</span><span class="p">])</span>
+</code></pre></div>
+<p>Returns a table of cached files with metadata. The optional <code>sortmethod</code> parameter controls sorting:</p>
+<ul>
+<li><code>"AT_ASC"</code> — sort by access time, ascending</li>
+<li><code>"AT_DESC"</code> — sort by access time, descending</li>
+<li><code>"FS_ASC"</code> — sort by file size, ascending</li>
+<li><code>"FS_DESC"</code> — sort by file size, descending</li>
+</ul>
+<p>Each entry in the returned table contains:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>canonical</code></td>
+<td>string</td>
+<td>Canonical cache key</td>
+</tr>
+<tr>
+<td><code>origpath</code></td>
+<td>string</td>
+<td>Original file path</td>
+</tr>
+<tr>
+<td><code>cachepath</code></td>
+<td>string</td>
+<td>Cache file path</td>
+</tr>
+<tr>
+<td><code>size</code></td>
+<td>integer</td>
+<td>File size in bytes</td>
+</tr>
+<tr>
+<td><code>last_access</code></td>
+<td>string</td>
+<td>Last access time (<code>"YYYY-MM-DD HH:MM:SS"</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Returns <code>nil</code> if no cache is configured.</p>
+<h4 id="cachedelete">cache.delete<a class="headerlink" href="#cachedelete" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="n">success</span> <span class="o">=</span> <span class="n">cache</span><span class="p">.</span><span class="n">delete</span><span class="p">(</span><span class="n">canonical</span><span class="p">)</span>
+</code></pre></div>
+<p>Deletes a specific cached file by its canonical key. Returns <code>true</code> on success, <code>false</code> otherwise.</p>
+<h4 id="cachepurge">cache.purge<a class="headerlink" href="#cachepurge" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="n">count</span> <span class="o">=</span> <span class="n">cache</span><span class="p">.</span><span class="n">purge</span><span class="p">()</span>
+</code></pre></div>
+<p>Purges cache entries based on configured purge criteria (LRU). Returns the number of files purged, or <code>nil</code> if no cache is configured.</p>
+<h2 id="filesystem-helper-functions">Filesystem Helper Functions<a class="headerlink" href="#filesystem-helper-functions" title="Permanent link">&para;</a></h2>
+<p>The <code>server.fs</code> table provides filesystem operations. All functions return <code>(true, result)</code> on success or <code>(false, error_message)</code> on failure.</p>
+<h4 id="serverfsexists_1">server.fs.exists<a class="headerlink" href="#serverfsexists_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">exists</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">fs</span><span class="p">.</span><span class="n">exists</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+</code></pre></div>
+<p>Check if a file or directory exists. Returns <code>true/false</code> for the existence check.</p>
+<h4 id="serverfsftype_1">server.fs.ftype<a class="headerlink" href="#serverfsftype_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">filetype</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">fs</span><span class="p">.</span><span class="n">ftype</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+</code></pre></div>
+<p>Get the type of a path. Returns one of: <code>"FILE"</code>, <code>"DIRECTORY"</code>, <code>"CHARDEV"</code>, <code>"BLOCKDEV"</code>, <code>"LINK"</code>, <code>"FIFO"</code>, <code>"SOCKET"</code>, <code>"UNKNOWN"</code>.</p>
+<h4 id="serverfsmodtime_1">server.fs.modtime<a class="headerlink" href="#serverfsmodtime_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">timestamp</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">fs</span><span class="p">.</span><span class="n">modtime</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+</code></pre></div>
+<p>Get the modification time of a file as a Unix timestamp (seconds since epoch).</p>
+<h4 id="serverfsreaddir_1">server.fs.readdir<a class="headerlink" href="#serverfsreaddir_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">filenames</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">fs</span><span class="p">.</span><span class="n">readdir</span><span class="p">(</span><span class="n">dirpath</span><span class="p">)</span>
+</code></pre></div>
+<p>List all files and directories in a directory. Returns a Lua table of filenames (excludes <code>.</code> and <code>..</code>).</p>
+<h4 id="serverfsis_readable_1">server.fs.is_readable<a class="headerlink" href="#serverfsis_readable_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">readable</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">fs</span><span class="p">.</span><span class="n">is_readable</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+</code></pre></div>
+<p>Check if a file is readable by the current process.</p>
+<h4 id="serverfsis_writeable_1">server.fs.is_writeable<a class="headerlink" href="#serverfsis_writeable_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">writeable</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">fs</span><span class="p">.</span><span class="n">is_writeable</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+</code></pre></div>
+<p>Check if a file is writable by the current process.</p>
+<h4 id="serverfsis_executable_1">server.fs.is_executable<a class="headerlink" href="#serverfsis_executable_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">executable</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">fs</span><span class="p">.</span><span class="n">is_executable</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+</code></pre></div>
+<p>Check if a file is executable by the current process.</p>
+<h4 id="serverfsunlink_1">server.fs.unlink<a class="headerlink" href="#serverfsunlink_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">errmsg</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">fs</span><span class="p">.</span><span class="n">unlink</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+</code></pre></div>
+<p>Delete a file from the filesystem.</p>
+<h4 id="serverfsmkdir_1">server.fs.mkdir<a class="headerlink" href="#serverfsmkdir_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">errmsg</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">fs</span><span class="p">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">dirname</span><span class="p">,</span> <span class="n">mode</span><span class="p">)</span>
+</code></pre></div>
+<p>Create a new directory. <code>mode</code> is a Unix permission integer (e.g., <code>tonumber('0755', 8)</code>).</p>
+<h4 id="serverfsrmdir_1">server.fs.rmdir<a class="headerlink" href="#serverfsrmdir_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">errmsg</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">fs</span><span class="p">.</span><span class="n">rmdir</span><span class="p">(</span><span class="n">dirname</span><span class="p">)</span>
+</code></pre></div>
+<p>Remove an empty directory.</p>
+<h4 id="serverfsgetcwd_1">server.fs.getcwd<a class="headerlink" href="#serverfsgetcwd_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">cwd</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">fs</span><span class="p">.</span><span class="n">getcwd</span><span class="p">()</span>
+</code></pre></div>
+<p>Get the current working directory.</p>
+<h4 id="serverfschdir_1">server.fs.chdir<a class="headerlink" href="#serverfschdir_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">old_dir</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">fs</span><span class="p">.</span><span class="n">chdir</span><span class="p">(</span><span class="n">newdir</span><span class="p">)</span>
+</code></pre></div>
+<p>Change the current working directory. Returns the previous working directory on success.</p>
+<h4 id="serverfscopyfile_1">server.fs.copyFile<a class="headerlink" href="#serverfscopyfile_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">errmsg</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">fs</span><span class="p">.</span><span class="n">copyFile</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+</code></pre></div>
+<p>Copy a file from source to target.</p>
+<h4 id="serverfsmovefile_1">server.fs.moveFile<a class="headerlink" href="#serverfsmovefile_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">errmsg</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">fs</span><span class="p">.</span><span class="n">moveFile</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+</code></pre></div>
+<p>Move/rename a file. <code>source</code> can be a file path (string) or an uploaded file index (integer, 1-based).</p>
+<h2 id="server-request-properties">Server Request Properties<a class="headerlink" href="#server-request-properties" title="Permanent link">&para;</a></h2>
+<p>The following read-only properties are available on the <code>server</code> table within request handlers:</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server.method</code></td>
+<td>string</td>
+<td>HTTP method: <code>"GET"</code>, <code>"POST"</code>, <code>"PUT"</code>, <code>"DELETE"</code>, <code>"HEAD"</code>, <code>"OPTIONS"</code></td>
+</tr>
+<tr>
+<td><code>server.uri</code></td>
+<td>string</td>
+<td>The complete request URI/path</td>
+</tr>
+<tr>
+<td><code>server.host</code></td>
+<td>string</td>
+<td>The Host header value</td>
+</tr>
+<tr>
+<td><code>server.client_ip</code></td>
+<td>string</td>
+<td>Client's IP address</td>
+</tr>
+<tr>
+<td><code>server.client_port</code></td>
+<td>integer</td>
+<td>Client's port number</td>
+</tr>
+<tr>
+<td><code>server.secure</code></td>
+<td>boolean</td>
+<td>Whether the connection is HTTPS</td>
+</tr>
+<tr>
+<td><code>server.has_openssl</code></td>
+<td>boolean</td>
+<td>Whether OpenSSL is available</td>
+</tr>
+<tr>
+<td><code>server.route</code></td>
+<td>string</td>
+<td>The matched route (if using routing)</td>
+</tr>
+<tr>
+<td><code>server.content</code></td>
+<td>string</td>
+<td>Raw POST/PUT body content</td>
+</tr>
+<tr>
+<td><code>server.content_type</code></td>
+<td>string</td>
+<td>Content-Type header value</td>
+</tr>
+<tr>
+<td><code>server.docroot</code></td>
+<td>string</td>
+<td>Document root path</td>
+</tr>
+</tbody>
+</table>
+<h3 id="request-data-tables">Request Data Tables<a class="headerlink" href="#request-data-tables" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server.header</code></td>
+<td>table</td>
+<td>HTTP request headers (name-value pairs)</td>
+</tr>
+<tr>
+<td><code>server.cookies</code></td>
+<td>table</td>
+<td>Cookie name-value pairs</td>
+</tr>
+<tr>
+<td><code>server.get</code></td>
+<td>table</td>
+<td>URL query parameters</td>
+</tr>
+<tr>
+<td><code>server.post</code></td>
+<td>table</td>
+<td>POST form parameters</td>
+</tr>
+<tr>
+<td><code>server.request</code></td>
+<td>table</td>
+<td>Path parameters</td>
+</tr>
+</tbody>
+</table>
+<h3 id="uploaded-files">Uploaded Files<a class="headerlink" href="#uploaded-files" title="Permanent link">&para;</a></h3>
+<p><code>server.uploads</code> is a table of uploaded files (1-based indexing). Each entry contains:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fieldname</code></td>
+<td>string</td>
+<td>Form field name</td>
+</tr>
+<tr>
+<td><code>origname</code></td>
+<td>string</td>
+<td>Original filename</td>
+</tr>
+<tr>
+<td><code>tmpname</code></td>
+<td>string</td>
+<td>Temporary file path on server</td>
+</tr>
+<tr>
+<td><code>mimetype</code></td>
+<td>string</td>
+<td>MIME type of the uploaded file</td>
+</tr>
+<tr>
+<td><code>filesize</code></td>
+<td>integer</td>
+<td>File size in bytes</td>
+</tr>
+</tbody>
+</table>
+<h2 id="additional-server-functions">Additional Server Functions<a class="headerlink" href="#additional-server-functions" title="Permanent link">&para;</a></h2>
+<h4 id="serversetbuffer_1">server.setBuffer<a class="headerlink" href="#serversetbuffer_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">errmsg</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">setBuffer</span><span class="p">([</span><span class="n">bufsize</span><span class="p">],</span> <span class="p">[</span><span class="n">incsize</span><span class="p">])</span>
+</code></pre></div>
+<p>Enable response buffering with optional buffer size and increment size (in bytes).</p>
+<h4 id="serversendcookie_1">server.sendCookie<a class="headerlink" href="#serversendcookie_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">errmsg</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">sendCookie</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="p">[,</span> <span class="n">options</span><span class="p">])</span>
+</code></pre></div>
+<p>Set a cookie in the HTTP response. The optional <code>options</code> table can contain:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td>string</td>
+<td>Cookie path</td>
+</tr>
+<tr>
+<td><code>domain</code></td>
+<td>string</td>
+<td>Cookie domain</td>
+</tr>
+<tr>
+<td><code>expires</code></td>
+<td>integer</td>
+<td>Expiration (seconds since epoch)</td>
+</tr>
+<tr>
+<td><code>secure</code></td>
+<td>boolean</td>
+<td>Secure flag</td>
+</tr>
+<tr>
+<td><code>http_only</code></td>
+<td>boolean</td>
+<td>HTTP-only flag</td>
+</tr>
+</tbody>
+</table>
+<h4 id="serverrequireauth_1">server.requireAuth<a class="headerlink" href="#serverrequireauth_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a><span class="n">auth</span> <span class="o">=</span> <span class="n">server</span><span class="p">.</span><span class="n">requireAuth</span><span class="p">()</span>
+</code></pre></div>
+<p>Parse authentication information from the request. Returns a table with:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>"NOAUTH"</code>, <code>"BASIC"</code>, <code>"BEARER"</code>, or <code>"ERROR"</code></td>
+</tr>
+<tr>
+<td><code>username</code></td>
+<td>string</td>
+<td>Username (BASIC auth only)</td>
+</tr>
+<tr>
+<td><code>password</code></td>
+<td>string</td>
+<td>Password (BASIC auth only)</td>
+</tr>
+<tr>
+<td><code>token</code></td>
+<td>string</td>
+<td>Bearer token (BEARER auth only)</td>
+</tr>
+<tr>
+<td><code>message</code></td>
+<td>string</td>
+<td>Error message (ERROR status only)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="utility-functions">Utility Functions<a class="headerlink" href="#utility-functions" title="Permanent link">&para;</a></h2>
+<h4 id="helperfilename_hash">helper.filename_hash<a class="headerlink" href="#helperfilename_hash" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a><span class="n">success</span><span class="p">,</span> <span class="n">hashed_path</span> <span class="o">=</span> <span class="n">helper</span><span class="p">.</span><span class="n">filename_hash</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+</code></pre></div>
+<p>Convert a filename into a hashed filesystem path, using SIPI's internal hash algorithm for cache file organization.</p>
+<h2 id="installing-lua-modules">Installing Lua modules<a class="headerlink" href="#installing-lua-modules" title="Permanent link">&para;</a></h2>
+<p>To install Lua modules that can be used in Lua scripts, use
+<code>local/bin/luarocks</code>. Make sure that the location where the modules are
+stored is in the Lua package path, which is printed by
+local/bin/lurocks path. The Lua paths will be used by the Lua
+interpreter when loading modules in a script with <code>require</code> (see <a href="http://leafo.net/guides/customizing-the-luarocks-tree.html">Using
+LuaRocks to install packages in the current
+directory</a>).</p>
+<p>For example, using <code>local/bin/luarocks install --local package</code>, the
+package will be installed in <code>~/.luarocks/</code>. To include this path in the
+Lua's interpreter package search path, you can use an environment
+variable. Running <code>local/bin/luarocks path</code> outputs the code you can use
+to do so. Alternatively, you can build the package path at the beginning
+of a Lua file by setting <code>package.path</code> and <code>package.cpath</code> (see
+<a href="http://leafo.net/guides/customizing-the-luarocks-tree.html#the-install-locations/using-a-custom-directory/quick-guide/running-scripts-with-packages">Running scripts with
+packages</a>).</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      &copy; 2017 - 2026 <a href='https://dasch.swiss' target='_blank'>Data and Service Center for the Humanities (DaSCH)</a>
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "..", "features": ["search.suggest", "search.highlight", "navigation.sections", "toc.integrate", "content.code.copy"], "search": "../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+    
+  </body>
+</html>
