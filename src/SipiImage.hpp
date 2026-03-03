@@ -126,8 +126,8 @@ class SipiImage
 {
   static std::unordered_map<std::string, std::shared_ptr<SipiIO>>
     io;//!< member variable holding a map of I/O class instances for the different file formats
-  static byte bilinn(byte buf[], int nx, double x, double y, int c, int n);
-  static word bilinn(word buf[], int nx, double x, double y, int c, int n);
+  static byte bilinn(byte buf[], int nx, int ny, double x, double y, int c, int n);
+  static word bilinn(word buf[], int nx, int ny, double x, double y, int c, int n);
   void ensure_exif();
 
 protected:

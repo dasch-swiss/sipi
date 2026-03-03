@@ -537,3 +537,61 @@ TEST(SipiImage, GetIccReturnsNullForNewImage)
   Sipi::SipiImage img(10, 10, 3, 8, Sipi::PhotometricInterpretation::RGB);
   EXPECT_EQ(img.getIcc(), nullptr) << "Newly constructed image should have no ICC profile";
 }
+
+// ================================================================
+// Boundary-condition regression tests for bilinn() / scaling segfault
+// ================================================================
+
+TEST(SipiImage, ScaleBoundaryDoesNotCrash)
+{
+  Sipi::SipiIOTiff::initLibrary();
+  Sipi::SipiImage img;
+  const std::shared_ptr<Sipi::SipiRegion> region;
+  const auto size = std::make_shared<Sipi::SipiSize>("2,2");
+  EXPECT_NO_THROW(img.read(leavesSmallNoAlpha, region, size));
+}
+
+TEST(SipiImage, ScaleToSmallPercentDoesNotCrash)
+{
+  Sipi::SipiIOTiff::initLibrary();
+  Sipi::SipiImage img;
+  const std::shared_ptr<Sipi::SipiRegion> region;
+  const auto size = std::make_shared<Sipi::SipiSize>("pct:1");
+  EXPECT_NO_THROW(img.read(leavesSmallNoAlpha, region, size));
+}
+
+TEST(SipiImage, ScaleUpDoesNotCrash)
+{
+  Sipi::SipiIOTiff::initLibrary();
+  Sipi::SipiImage img;
+  const std::shared_ptr<Sipi::SipiRegion> region;
+  const auto size = std::make_shared<Sipi::SipiSize>("^1000,1000");
+  EXPECT_NO_THROW(img.read(leavesSmallNoAlpha, region, size));
+}
+
+TEST(SipiImage, ScaleAsymmetricDoesNotCrash)
+{
+  Sipi::SipiIOTiff::initLibrary();
+  Sipi::SipiImage img;
+  const std::shared_ptr<Sipi::SipiRegion> region;
+  const auto size = std::make_shared<Sipi::SipiSize>("2,100");
+  EXPECT_NO_THROW(img.read(leavesSmallNoAlpha, region, size));
+}
+
+TEST(SipiImage, ScaleToOnePixelDoesNotCrash)
+{
+  Sipi::SipiIOTiff::initLibrary();
+  Sipi::SipiImage img;
+  const std::shared_ptr<Sipi::SipiRegion> region;
+  const auto size = std::make_shared<Sipi::SipiSize>("1,1");
+  EXPECT_NO_THROW(img.read(leavesSmallNoAlpha, region, size));
+}
+
+TEST(SipiImage, ScaleBoundary16bpsDoesNotCrash)
+{
+  Sipi::SipiIOTiff::initLibrary();
+  Sipi::SipiImage img;
+  const std::shared_ptr<Sipi::SipiRegion> region;
+  const auto size = std::make_shared<Sipi::SipiSize>("2,2");
+  EXPECT_NO_THROW(img.read(png16bit, region, size));
+}

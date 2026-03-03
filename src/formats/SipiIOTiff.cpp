@@ -1739,7 +1739,7 @@ std::vector<T> doReduce(std::vector<T> &&inbuf, int reduce, size_t nx, size_t ny
               }
             }
           }
-          outbuf[nc * (y * nnx + x) + c] = tmp / cnt;
+          outbuf[nc * (y * nnx + x) + c] = (cnt > 0) ? tmp / cnt : 0;
         }
       }
     }
