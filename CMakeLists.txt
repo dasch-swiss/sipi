@@ -135,7 +135,7 @@ set(LINUX "Linux")
 math(EXPR BITS "8*${CMAKE_SIZEOF_VOID_P}")
 if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
     set(CMAKE_MACOSX_RPATH 1)
-    if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
+    if (${CMAKE_SYSTEM_PROCESSOR} MATCHES "x86_64")
         set(KDU_MAKE "Makefile-Mac-x86-${BITS}-gcc")
         set(KDU_ARCH "Mac-x86-${BITS}-gcc")
         set(KDU_EXEC_PLATFORM "Mac-x86-64-gcc")
@@ -147,7 +147,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
     set(LUA_ARCH "macosx")
     message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
 elseif (CMAKE_SYSTEM_NAME STREQUAL LINUX)
-    if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
+    if (${CMAKE_SYSTEM_PROCESSOR} MATCHES "x86_64")
         set(KDU_MAKE "Makefile-Linux-x86-${BITS}-gcc")
         set(KDU_ARCH "Linux-x86-${BITS}-gcc")
         set(KDU_EXEC_PLATFORM "Linux-x86-64-gcc")
@@ -156,7 +156,12 @@ elseif (CMAKE_SYSTEM_NAME STREQUAL LINUX)
         SET(KDU_ARCH "Linux-arm-${BITS}-gcc")
         SET(KDU_EXEC_PLATFORM "Linux-arm-64-gcc")
     endif ()
-    SET(LUA_ARCH "linux")
+    if(ZIG_STATIC_BUILD)
+        # musl sysroot has no readline — use the posix target which skips readline
+        SET(LUA_ARCH "posix")
+    else()
+        SET(LUA_ARCH "linux")
+    endif()
     message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
 endif ()
 message(STATUS "Compiling Kakadu for: ${KDU_ARCH}")
@@ -277,6 +282,7 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/local/lib)
 add_subdirectory(${COMMON_EXT}/xz)
 add_subdirectory(${COMMON_EXT}/zlib)
 add_subdirectory(${COMMON_EXT}/zstd)
+add_subdirectory(${COMMON_EXT}/bzip2)
 add_subdirectory(${COMMON_EXT}/openssl)
 add_subdirectory(${COMMON_EXT}/curl)
 add_subdirectory(${COMMON_EXT}/libmagic)
@@ -286,7 +292,6 @@ add_subdirectory(${COMMON_EXT}/webp)
 add_subdirectory(${COMMON_EXT}/expat)
 add_subdirectory(${COMMON_EXT}/png)
 add_subdirectory(${COMMON_EXT}/tiff)
-add_subdirectory(${COMMON_EXT}/bzip2)
 add_subdirectory(${COMMON_EXT}/lcms2)
 add_subdirectory(${COMMON_EXT}/exiv2)
 add_subdirectory(${COMMON_EXT}/jansson)
@@ -459,6 +464,7 @@ add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 
 
 # !!! ORDER MATTERS !!!
 # dependent targets need to be added before the target that depends on them
+# (static linker resolves symbols left-to-right)
 target_link_libraries(${PROJECT_NAME} ${LIBS}
         lcms2
         exiv2
@@ -474,6 +480,7 @@ target_link_libraries(${PROJECT_NAME} ${LIBS}
         lua
         jansson
         sqlite3
+        sentry
         curl_static
         openssl_ssl
         openssl_crypto
@@ -485,9 +492,6 @@ target_link_libraries(${PROJECT_NAME} ${LIBS}
         lzma
         ${SIPI_RUNTIME_SYSTEM_LIBS}
 )
-
-# add the sentry libraries
-target_link_libraries(sipi sentry)
 
 #
 # apply the compiler and linker flags

@@ -6,6 +6,12 @@ include(ExternalProject)
 #
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
+if(ZIG_STATIC_BUILD)
+    set(_lcms2_shared_flags --disable-shared --enable-static)
+else()
+    set(_lcms2_shared_flags "")
+endif()
+
 ExternalProject_Add(project_lcms2
         DEPENDS project_jpeg
         DEPENDS project_tiff
@@ -19,6 +25,11 @@ ExternalProject_Add(project_lcms2
         --with-jpeg=${CMAKE_BINARY_DIR}/local
         --with-tiff=${CMAKE_BINARY_DIR}/local
         --libdir=${CMAKE_BINARY_DIR}/local/lib
+        ${_lcms2_shared_flags}
+        ${ZIG_AUTOTOOLS_HOST}
+        CC=${CMAKE_C_COMPILER}
+        ${ZIG_EP_CPP}
+        ${ZIG_EP_CFLAGS}
         BUILD_COMMAND make
         INSTALL_COMMAND make PREFIX=${CMAKE_BINARY_DIR}/local install
         BUILD_IN_SOURCE 1

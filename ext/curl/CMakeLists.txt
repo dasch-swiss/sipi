@@ -14,6 +14,18 @@ if(APPLE AND ZIG_TOOLCHAIN)
     list(APPEND CURL_EXTRA_CONFIGURE_FLAGS --disable-ipv6)
 endif()
 
+# Zig musl static builds: configure needs -target in CFLAGS and -static in
+# LDFLAGS. musl bundles pthread/dl into libc so we set LIBS="" to prevent
+# configure from searching for separate -ldl/-lpthread.
+set(_curl_cflags "${CMAKE_C_FLAGS} -I${CMAKE_BINARY_DIR}/local/include")
+set(_curl_ldflags "-L${CMAKE_BINARY_DIR}/local/lib")
+set(_curl_libs "")
+if(DEFINED ZIG_STATIC_BUILD AND ZIG_STATIC_BUILD)
+    set(_curl_cflags "-target ${ZIG_TARGET} -O2 -I${CMAKE_BINARY_DIR}/local/include")
+    set(_curl_ldflags "-L${CMAKE_BINARY_DIR}/local/lib -static")
+    set(_curl_libs "LIBS=")
+endif()
+
 ExternalProject_Add(project_curl
     INSTALL_DIR ${CMAKE_BINARY_DIR}/local
     URL "https://curl.se/download/curl-8.12.1.tar.gz"
@@ -46,10 +58,13 @@ ExternalProject_Add(project_curl
         --disable-mqtt
         --disable-manual
         ${CURL_EXTRA_CONFIGURE_FLAGS}
+        ${ZIG_AUTOTOOLS_HOST}
         CC=${CMAKE_C_COMPILER}
         CXX=${CMAKE_CXX_COMPILER}
-        CFLAGS=-I${CMAKE_BINARY_DIR}/local/include
-        LDFLAGS=-L${CMAKE_BINARY_DIR}/local/lib
+        ${ZIG_EP_CPP}
+        "CFLAGS=${_curl_cflags}"
+        "LDFLAGS=${_curl_ldflags}"
+        ${_curl_libs}
     BUILD_COMMAND make -j4
     BUILD_IN_SOURCE 1
 )

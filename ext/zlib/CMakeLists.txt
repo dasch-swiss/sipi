@@ -13,7 +13,10 @@ ExternalProject_Add(project_zlib
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
         ${timestamp_policy}
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/zlib
-        CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/zlib/configure
+        CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env
+        CC=${CMAKE_C_COMPILER}
+        ${ZIG_EP_CFLAGS}
+        ${CMAKE_BINARY_DIR}/local/extsrcs/zlib/configure
         --prefix=${CMAKE_BINARY_DIR}/local
         --static
         # --shared

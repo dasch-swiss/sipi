@@ -1,4 +1,4 @@
-name: docker-build
+name: docker
 
 on:
   schedule:
@@ -110,7 +110,7 @@ jobs:
 
   # build documentation
   build_docs:
-    name: docs test run
+    name: docs
     runs-on: ubuntu-latest
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main

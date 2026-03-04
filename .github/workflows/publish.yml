@@ -51,108 +51,119 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-linux-musl
-            arch: amd64
+          - arch: amd64
             runner: ubuntu-24.04
-          - target: aarch64-linux-musl
-            arch: arm64
+            zig_target: x86_64-linux-musl
+          - arch: arm64
             runner: ubuntu-24.04-arm
+            zig_target: aarch64-linux-musl
     steps:
+      # --- Host: checkout + zig install (JS actions) ---
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
 
-      - name: Install Zig
-        uses: mlugg/setup-zig@v2
+      - uses: mlugg/setup-zig@v2
         with:
           version: 0.15.2
 
-      - name: Verify Zig installation
-        run: |
-          zig version
-          zig cc --version
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build autoconf automake libtool binutils
-
       - name: Determine version
         run: |
-          echo "VERSION=$(git describe --tag --dirty --abbrev=7)" >> $GITHUB_ENV
+          echo "VERSION=$(git describe --tag --dirty --abbrev=7)" >> "$GITHUB_ENV"
 
-      - name: Configure static build
+      # --- Alpine Docker: build ---
+      - name: Build in Alpine container
+        env:
+          ZIG_TARGET: ${{ matrix.zig_target }}
+          VERSION: ${{ env.VERSION }}
         run: |
-          cmake -S . -B build-static \
-            -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE=cmake/zig-toolchain.cmake \
-            -DZIG_TARGET=${{ matrix.target }} \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
-            -DEXT_PROVIDED_VERSION=${{ env.VERSION }}
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/src" \
+            -v "$(dirname $(which zig)):/zig-bin" \
+            -e ZIG_TARGET \
+            -e VERSION \
+            -w /src \
+            alpine:3.21 sh -c '
+              apk add --no-cache bash git cmake make autoconf automake libtool \
+                binutils ca-certificates curl tar xz readline-dev xxd unzip \
+                file pkgconf linux-headers lua5.3
+              ln -sf /usr/bin/lua5.3 /usr/local/bin/lua
+              export PATH="/zig-bin:$PATH"
+              cmake -S . -B build \
+                -G "Unix Makefiles" \
+                -DCMAKE_TOOLCHAIN_FILE=cmake/zig-toolchain.cmake \
+                -DZIG_TARGET=$ZIG_TARGET \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
+                -DEXT_PROVIDED_VERSION=$VERSION
+              cmake --build build --parallel $(nproc)
+            '
 
-      - name: Build
-        run: cmake --build build-static --parallel $(nproc)
-
-      - name: Run unit tests
-        run: cd build-static && ctest --output-on-failure
-
-      - uses: cachix/install-nix-action@v31
-        with:
-          github_access_token: ${{ secrets.GH_TOKEN }}
-
-      - name: Run end-to-end tests
-        run: |
-          nix \
-            --extra-experimental-features "nix-command flakes" \
-            --option filter-syscalls false \
-            develop --command bash -c "cd test/e2e && pytest -s --sipi-exec=${GITHUB_WORKSPACE}/build-static/sipi"
+      # --- Host: verify + test ---
+      - name: Fix build output permissions
+        run: sudo chown -R $(id -u):$(id -g) build
 
       - name: Verify static linkage
         run: |
-          file build-static/sipi
-          if ldd build-static/sipi 2>&1 | grep -q "not a dynamic executable\|statically linked"; then
-            echo "Binary reports as statically linked"
-          else
-            echo "Unexpected dynamic linkage according to ldd"
-            ldd build-static/sipi
-            exit 1
-          fi
+          file build/sipi
+          ldd build/sipi 2>&1 | grep -qi "not a dynamic\|statically linked\|not a valid dynamic"
+          ! readelf -d build/sipi | grep -q '(NEEDED)'
 
-          if readelf -d build-static/sipi | grep -q '(NEEDED)'; then
-            echo "Unexpected dynamic dependencies (NEEDED) found:"
-            readelf -d build-static/sipi | grep '(NEEDED)'
-            exit 1
-          fi
-
-      - name: Package release archive and split debug symbols
+      - name: Run unit tests
         run: |
-          mkdir -p release/sipi-${{ env.VERSION }}-${{ matrix.arch }}
+          failed=0
+          for test_dir in build/test/unit/*/; do
+            for bin in "$test_dir"/*; do
+              if [ -x "$bin" ] && [ -f "$bin" ]; then
+                echo "--- ${bin} ---"
+                (cd "$test_dir" && "./${bin##*/}") || failed=1
+              fi
+            done
+          done
+          if [ -x "build/test/approval/sipi.approvaltests" ]; then
+            echo "--- approval tests ---"
+            (cd build/test/approval && ./sipi.approvaltests) || failed=1
+          fi
+          [ "$failed" -eq 0 ] || exit 1
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nginx imagemagick apache2-utils
+          pip3 install --break-system-packages pytest requests psutil iiif-validator
+
+      - name: Run e2e tests
+        run: cd test/e2e && pytest -s --sipi-exec=$GITHUB_WORKSPACE/build/sipi
+
+      # --- Host: package release ---
+      - name: Package release archive
+        run: |
+          mkdir -p release/sipi-$VERSION-${{ matrix.arch }}
           mkdir -p release/debug
 
-          cp build-static/sipi release/sipi-${{ env.VERSION }}-${{ matrix.arch }}/sipi
+          cp build/sipi release/sipi-$VERSION-${{ matrix.arch }}/sipi
 
           objcopy --only-keep-debug \
-            release/sipi-${{ env.VERSION }}-${{ matrix.arch }}/sipi \
+            release/sipi-$VERSION-${{ matrix.arch }}/sipi \
             release/debug/sipi-linux-${{ matrix.arch }}.debug
 
-          strip release/sipi-${{ env.VERSION }}-${{ matrix.arch }}/sipi
+          strip release/sipi-$VERSION-${{ matrix.arch }}/sipi
 
           objcopy --add-gnu-debuglink=release/debug/sipi-linux-${{ matrix.arch }}.debug \
-            release/sipi-${{ env.VERSION }}-${{ matrix.arch }}/sipi
+            release/sipi-$VERSION-${{ matrix.arch }}/sipi
 
-          cp config/sipi.config.lua release/sipi-${{ env.VERSION }}-${{ matrix.arch }}/
-          cp config/sipi.init.lua release/sipi-${{ env.VERSION }}-${{ matrix.arch }}/
-          cp -r scripts/ release/sipi-${{ env.VERSION }}-${{ matrix.arch }}/scripts/
-          cp -r server/ release/sipi-${{ env.VERSION }}-${{ matrix.arch }}/server/
+          cp config/sipi.config.lua release/sipi-$VERSION-${{ matrix.arch }}/
+          cp config/sipi.init.lua release/sipi-$VERSION-${{ matrix.arch }}/
+          cp -r scripts/ release/sipi-$VERSION-${{ matrix.arch }}/scripts/
+          cp -r server/ release/sipi-$VERSION-${{ matrix.arch }}/server/
 
-          tar czf release/sipi-${{ env.VERSION }}-linux-${{ matrix.arch }}.tar.gz -C release sipi-${{ env.VERSION }}-${{ matrix.arch }}/
-          sha256sum release/sipi-${{ env.VERSION }}-linux-${{ matrix.arch }}.tar.gz > release/sipi-${{ env.VERSION }}-linux-${{ matrix.arch }}.tar.gz.sha256
+          tar czf release/sipi-$VERSION-linux-${{ matrix.arch }}.tar.gz -C release sipi-$VERSION-${{ matrix.arch }}/
+          sha256sum release/sipi-$VERSION-linux-${{ matrix.arch }}.tar.gz > release/sipi-$VERSION-linux-${{ matrix.arch }}.tar.gz.sha256
 
-      - name: Upload static artifacts
+      - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: static-linux-${{ matrix.arch }}
+          name: static-linux-release-${{ matrix.arch }}
           path: |
             release/*.tar.gz
             release/*.sha256
@@ -278,9 +289,9 @@ jobs:
       - name: Download static artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: static-linux-*
-          merge-multiple: true
+          pattern: static-linux-release-*
           path: artifacts/
+          merge-multiple: true
 
       - name: Show collected artifacts
         run: find artifacts -maxdepth 3 -type f | sort

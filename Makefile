@@ -274,6 +274,24 @@ zig-build-arm64: ## build static SIPI binary for Linux arm64
 zig-clean: ## clean Zig build artifacts
 	@rm -rf build-static/
 
+.PHONY: zig-static-docker-arm64
+zig-static-docker-arm64: ## build + test zig-static arm64 in Docker (mirrors CI)
+	docker buildx build -f Dockerfile.zig-static \
+		--progress auto \
+		--platform linux/arm64 \
+		--build-arg ZIG_TARGET=aarch64-linux-musl \
+		-t sipi-zig-static-arm64 \
+		.
+
+.PHONY: zig-static-docker-amd64
+zig-static-docker-amd64: ## build + test zig-static amd64 in Docker (mirrors CI)
+	docker buildx build -f Dockerfile.zig-static \
+		--progress auto \
+		--platform linux/amd64 \
+		--build-arg ZIG_TARGET=x86_64-linux-musl \
+		-t sipi-zig-static-amd64 \
+		.
+
 #####################################
 # Utilities
 #####################################

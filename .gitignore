@@ -63,6 +63,9 @@ icc.zip
 /coverage.info
 *.gcov
 
+# Zig toolchain build artifact (written by cmake/zig-toolchain.cmake)
+scripts/toolchains/.zig-target
+
 # Claude Code
 .claude/worktrees/
 .claude/settings.local.json

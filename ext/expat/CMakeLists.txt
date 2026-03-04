@@ -9,7 +9,7 @@ ExternalProject_Add(project_expat
         ${timestamp_policy}
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/expat
-        CMAKE_ARGS
+        CMAKE_ARGS ${ZIG_EP_CMAKE_ARGS}
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
         -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/local
         -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local

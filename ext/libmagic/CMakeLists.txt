@@ -46,6 +46,8 @@ ExternalProject_Add(project_libmagic
         --disable-shared
         CC=${CMAKE_C_COMPILER}
         CXX=${CMAKE_CXX_COMPILER}
+        ${ZIG_EP_CFLAGS}
+        ${ZIG_EP_CXXFLAGS}
     BUILD_COMMAND make -j4
     BUILD_IN_SOURCE 1
 )

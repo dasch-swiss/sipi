@@ -20,7 +20,7 @@ ExternalProject_Add(project_tiff
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
         ${timestamp_policy}
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/libtiff-${LibTiffVersion}
-        CMAKE_ARGS  -DBUILD_SHARED_LIBS=OFF
+        CMAKE_ARGS  ${ZIG_EP_CMAKE_ARGS} -DBUILD_SHARED_LIBS=OFF
                     -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                     -DCMAKE_FIND_FRAMEWORK=NEVER
                     -DCMAKE_FIND_LIBRARY_SUFFIXES=${CMAKE_STATIC_LIBRARY_SUFFIX}

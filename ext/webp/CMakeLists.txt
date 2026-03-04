@@ -14,13 +14,18 @@ ExternalProject_Add(project_webp
         ${timestamp_policy}
         #DOWNLOAD_EXTRACT_TIMESTAMP NEW
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/libwebp
-        CMAKE_ARGS  -DBUILD_SHARED_LIBS=OFF
+        CMAKE_ARGS  ${ZIG_EP_CMAKE_ARGS} -DBUILD_SHARED_LIBS=OFF
                     -DWEBP_BUILD_ANIM_UTILS=OFF
                     -DWEBP_BUILD_VWEBP=OFF
+                    -DWEBP_BUILD_WEBPINFO=OFF
+                    -DWEBP_BUILD_WEBPMUX=OFF
+                    -DWEBP_BUILD_EXTRAS=OFF
                     -DCMAKE_DISABLE_FIND_PACKAGE_TIFF=TRUE
                     -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/local
                     -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local
                     -DWEBP_BUILD_CWEBP=OFF
+                    -DWEBP_BUILD_DWEBP=OFF
+                    -DWEBP_BUILD_IMG2WEBP=OFF
                     -DWEBP_BUILD_GIF2WEBP=OFF
                     -DCMAKE_DISABLE_FIND_PACKAGE_GIF=TRUE
         )
