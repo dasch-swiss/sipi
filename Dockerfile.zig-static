@@ -1,0 +1,65 @@
+# syntax=docker/dockerfile:1
+#
+# Dockerfile for testing zig-static musl builds locally.
+# Uses Alpine 3.21 which provides musl-native /usr/include headers,
+# avoiding the glibc header contamination that occurs on Ubuntu.
+#
+# Usage:
+#   docker buildx build -f Dockerfile.zig-static \
+#     --build-arg ZIG_TARGET=aarch64-linux-musl \
+#     --platform linux/arm64 \
+#     -t sipi-zig-static .
+#
+# Or via Makefile:
+#   make zig-static-docker-arm64
+
+FROM alpine:3.21 AS builder
+
+ARG ZIG_VERSION=0.15.2
+ARG ZIG_TARGET=aarch64-linux-musl
+
+RUN apk add --no-cache \
+    bash cmake make autoconf automake libtool binutils \
+    ca-certificates curl tar xz \
+    readline-dev git xxd unzip file pkgconf \
+    linux-headers lua5.3 && \
+    ln -sf /usr/bin/lua5.3 /usr/local/bin/lua
+
+# Install Zig — auto-detect arch
+RUN ARCH=$(uname -m | sed 's/x86_64/x86_64/;s/aarch64/aarch64/') && \
+    curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-${ARCH}-linux-${ZIG_VERSION}.tar.xz" \
+      | tar -xJ -C /opt && \
+    ln -s /opt/zig-${ARCH}-linux-${ZIG_VERSION}/zig /usr/local/bin/zig
+
+RUN zig version
+
+WORKDIR /build/sipi
+
+# Copy source
+COPY CMakeLists.txt version.txt generate_icc_header.sh ./
+COPY cmake/ cmake/
+COPY ext/ ext/
+COPY vendor/ vendor/
+COPY include/ include/
+COPY src/ src/
+COPY shttps/ shttps/
+COPY fuzz/ fuzz/
+COPY patches/ patches/
+COPY test/ test/
+COPY config/ config/
+COPY scripts/ scripts/
+COPY server/ server/
+
+# Configure
+RUN cmake -S . -B ./build-static \
+    -G "Unix Makefiles" \
+    -DCMAKE_TOOLCHAIN_FILE=cmake/zig-toolchain.cmake \
+    -DZIG_TARGET=${ZIG_TARGET} \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
+
+# Build
+RUN cmake --build ./build-static --parallel $(nproc)
+
+# Test
+RUN cd build-static && ctest --output-on-failure

@@ -75,7 +75,10 @@ testing for regression detection.
 
 ## Commit Message Schema
 
-We use [Conventional Commits](https://www.conventionalcommits.org/):
+We use [Conventional Commits](https://www.conventionalcommits.org/).
+These prefixes drive [release-please](ci.md#release-automation-release-please)
+to automatically determine SemVer bumps and generate changelogs — **using the
+correct prefix is required, not optional**.
 
     type(scope): subject
     body

@@ -42,7 +42,7 @@ add_executable(${TEST_NAME}
         ${PROJECT_SOURCE_DIR}/shttps/makeunique.h ${PROJECT_SOURCE_DIR}/src/SipiFilenameHash.cpp ${PROJECT_SOURCE_DIR}/include/SipiFilenameHash.h
 )
 
-add_dependencies(${TEST_NAME} lua)
+add_dependencies(${TEST_NAME} lua openssl_ssl openssl_crypto curl_static sqlite3)
 
 target_link_libraries(${TEST_NAME}
         libgtest)

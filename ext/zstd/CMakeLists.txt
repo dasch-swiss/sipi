@@ -11,7 +11,7 @@ ExternalProject_Add(project_zstd
         ${timestamp_policy}
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/zstd
         SOURCE_SUBDIR build/cmake
-        CMAKE_ARGS
+        CMAKE_ARGS ${ZIG_EP_CMAKE_ARGS}
         -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/local
         -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local
         BUILD_IN_SOURCE 1

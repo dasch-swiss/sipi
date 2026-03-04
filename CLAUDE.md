@@ -9,168 +9,98 @@ SIPI (Simple Image Presentation Interface) is a multithreaded, high-performance,
 ## Build System and Common Commands
 
 All targets are in a single `Makefile`. Run `make help` for a complete list.
+For full build instructions (Docker, Zig, Nix, macOS), see [`docs/src/development/building.md`](docs/src/development/building.md).
 
-### Docker-based Development (Recommended)
-```bash
-make docker-build       # build Docker image (compiles + runs unit tests)
-make test-smoke         # run smoke tests against Docker image
-make docker-test-build-amd64   # build + test for amd64 (CI)
-make docker-test-build-arm64   # build + test for arm64 (CI)
-```
-
-### Native Development (with Nix)
-
-All `nix-*` targets must be run inside a Nix development shell:
+### Quick Reference
 
 ```bash
-nix develop             # GCC environment (default, used by CI)
-nix develop .#clang     # Clang environment (alternative)
-```
+# Docker (recommended for CI-like builds)
+make docker-build              # build image (compiles + unit tests)
+make test-smoke                # smoke tests against Docker image
 
-```bash
-make nix-build          # build SIPI (debug + coverage)
-make nix-test           # run unit tests
-make nix-test-e2e       # run end-to-end tests
-make nix-coverage       # generate XML coverage report (gcovr)
-make nix-coverage-html  # generate HTML coverage report (lcov)
-make nix-run            # start SIPI server
-make nix-valgrind       # run with Valgrind
-make nix-doxygen-serve  # serve doxygen API docs
-```
+# Zig (local dev, no Nix required)
+make zig-build-local           # build with Zig toolchain
+make zig-test                  # unit tests
+make zig-test-e2e              # end-to-end tests
 
-### Documentation
-```bash
-make docs-build         # build documentation site
-make docs-serve         # serve documentation locally
+# Nix (reproducible native dev — run inside `nix develop`)
+make nix-build                 # build (debug + coverage)
+make nix-test                  # unit tests
+make nix-test-e2e              # end-to-end tests
+
+# Documentation
+make docs-serve                # serve docs locally
 ```
 
 ## High-Level Architecture
 
 ### Core Components
 
-**Main Application (`src/sipi.cpp`)**
-- Entry point supporting both command-line and server modes
-- Uses CLI11 for argument parsing
-- Integrates with Sentry for error reporting
-- Handles global library initialization
-
-**SipiImage (`src/SipiImage.hpp`)**
-- Primary image processing class handling all image operations
-- Supports TIFF, JPEG2000, PNG, JPEG formats
-- Manages pixel data, metadata (EXIF, IPTC, XMP), and ICC color profiles
-- Provides scaling, rotation, cropping, color space conversion
-
-**SipiHttpServer (`src/SipiHttpServer.hpp`)**
-- Main HTTP server extending shttps::Server framework
-- Manages IIIF API endpoints and image serving
-- Handles caching, quality settings, and compression
-- Integrates with Lua scripting for custom request handling
-
-**IIIF Implementation (`include/iiifparser/`)**
-- Complete IIIF 2.0 URL parsing with components:
-  - `SipiIdentifier.h` - Image identifier handling
-  - `SipiRegion.h` - Region of interest parsing
-  - `SipiSize.h` - Size parameter handling
-  - `SipiRotation.h` - Rotation parameter parsing
-  - `SipiQualityFormat.h` - Quality and format parsing
-
-**Format Handlers (`include/formats/`)**
-- Abstract base class SipiIO for image I/O operations
-- Concrete implementations: SipiIOTiff, SipiIOJ2k, SipiIOJpeg, SipiIOPng
-- Handles reading/writing with region selection and scaling
-
-**SHTTPS Framework (`shttps/`)**
-- Custom HTTP server implementation with multi-threading
-- SSL/TLS support, connection pooling, keep-alive
-- Lua script integration for custom routes
-- JWT authentication support
-
-**Caching System (`include/SipiCache.h`)**
-- Intelligent file-based caching with size-based limits
-- LRU eviction policies and concurrent access protection
-- Canonical URL-based cache keys
-
-**Lua Integration (`include/SipiLua.h`)**
-- Lua bindings for SipiImage manipulation
-- Custom functions for image processing, database access, HTTP handling
-- Configuration and route handlers via Lua scripts
+| Component | Path | Purpose |
+|-----------|------|---------|
+| Main Application | `src/sipi.cpp` | Entry point (CLI + server modes), CLI11 arg parsing, Sentry integration |
+| SipiImage | `src/SipiImage.hpp` | Image processing: TIFF, JP2, PNG, JPEG; metadata (EXIF, IPTC, XMP); ICC profiles |
+| SipiHttpServer | `src/SipiHttpServer.hpp` | HTTP server, IIIF endpoints, caching, Lua scripting integration |
+| IIIF Parser | `include/iiifparser/` | IIIF URL parsing: identifier, region, size, rotation, quality/format |
+| Format Handlers | `include/formats/` | SipiIO base class + SipiIOTiff, SipiIOJ2k, SipiIOJpeg, SipiIOPng |
+| SHTTPS Framework | `shttps/` | HTTP server impl: threading, SSL/TLS, connection pooling, JWT auth |
+| Caching | `include/SipiCache.h` | File-based LRU cache with size limits and concurrent access protection |
+| Lua Integration | `include/SipiLua.h` | Lua bindings for image manipulation, HTTP handling, config/routes |
 
 ### Image Processing Pipeline
 
-1. **Request Reception**: HTTP server receives IIIF URL
-2. **URL Parsing**: IIIF parameters extracted and validated
-3. **Cache Check**: SipiCache checks for existing processed image
-4. **Image Loading**: SipiImage loads original via appropriate SipiIO handler
-5. **Processing**: Apply region selection, scaling, rotation, quality adjustments
-6. **Output**: Serve processed image or write to cache
+1. HTTP server receives IIIF URL
+2. IIIF parameters extracted and validated
+3. Cache check (SipiCache)
+4. Image loaded via appropriate SipiIO handler
+5. Processing: region, scaling, rotation, quality
+6. Serve processed image or write to cache
 
 ### Configuration
 
 - Main config: `config/sipi.config.lua`
 - Test config: `config/sipi.test-config.lua`
 - Debug config: `config/sipi.debug-config.lua`
-- Lua scripts in `scripts/` directory for custom functionality
-
-### Testing Structure
-
-**Unit Tests (`test/unit/`)** — `make nix-test`
-- GoogleTest framework with ApprovalTests
-- Tests for configuration, iiifparser, sipiimage, logger, handlers
-- Run specific test: `cd build && test/unit/[component]/[component]`
-
-**End-to-End Tests (`test/e2e/`)** — `make nix-test-e2e`
-- Python pytest-based tests
-- Requires a native build (not Docker)
-
-**Approval Tests (`test/approval/`)** — included in `make nix-test`
-- Snapshot-based testing for regression detection
-
-**Smoke Tests (`test/smoke/`)** — `make test-smoke`
-- Tests against Docker images
-- Requires a built Docker image (`make docker-build`)
+- Lua scripts: `scripts/` directory
 
 ### Dependencies
 
-**External Libraries (built from source in `ext/`)**
-- Image formats: libtiff, libpng, libjpeg, libwebp
-- Compression: zlib, bzip2, xz, zstd
-- JPEG2000: kakadu (requires license)
-- Metadata: exiv2, lcms2 (color profiles)
-- Lua: lua + luarocks
-- JSON: jansson
-- Database: sqlite3
-- Error reporting: sentry
+**External Libraries (built from source in `ext/`):**
+Image formats (libtiff, libpng, libjpeg, libwebp), compression (zlib, bzip2, xz, zstd), JPEG2000 (kakadu — requires license), metadata (exiv2, lcms2), Lua + luarocks, jansson, sqlite3, sentry, OpenSSL, libcurl, libmagic.
 
-**System Dependencies**
-- Threads (pthread)
-- iconv (macOS)
-- Note: OpenSSL, libcurl, and libmagic are now built from source (see `ext/`)
+**System Dependencies:** Threads (pthread), iconv (macOS only).
 
 ### Important Files
 
-- `CMakeLists.txt` - Main build configuration
-- `Makefile` - All build targets (Docker, Nix, docs, CI)
-- `version.txt` - Version information
-- `vars.mk` - Build variables (Docker repo, build tag)
-- `flake.nix` - Nix development environment
+- `CMakeLists.txt` — main build configuration
+- `Makefile` — all build targets (run `make help`)
+- `version.txt` — version information
+- `vars.mk` — Docker repo/tag variables
+- `flake.nix` — Nix development environment
 
-### Development Notes
+## Testing
 
-**Compiler Requirements**
-- C++23 standard required
-- Clang ≥ 15.0 or GCC ≥ 13.0
-- CMake ≥ 3.28
+For detailed testing guidance (frameworks, directory layout, how to add tests), see [`docs/src/development/developing.md`](docs/src/development/developing.md).
 
-**Build Types**
-- Debug: `-O0 -g` with debug symbols
-- Release: `-O3 -DNDEBUG` optimized
-- RelWithDebInfo: `-O3 -g` optimized with debug symbols
+- **Unit tests** (`test/unit/`): GoogleTest + ApprovalTests — `make nix-test` or `make zig-test`
+- **E2E tests** (`test/e2e/`): pytest — `make nix-test-e2e` or `make zig-test-e2e`
+- **Smoke tests** (`test/smoke/`): against Docker image — `make test-smoke`
+- **Approval tests** (`test/approval/`): snapshot-based regression — included in unit tests
 
-**Commit Message Format**
-Uses Conventional Commits with prefixes: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `test:`, `chore:`
+Run a specific test binary: `cd build && test/unit/<component>/<component>`
 
-**Error Reporting**
-Optional Sentry integration via environment variables:
-- `SIPI_SENTRY_DSN` - Sentry project DSN
-- `SIPI_SENTRY_ENVIRONMENT` - Environment name
-- `SIPI_SENTRY_RELEASE` - Release version
+## CI, Release, and Commit Messages
+
+For CI pipeline details (Zig validation gates, static artifact flow, Docker publishing), see [`docs/src/development/ci.md`](docs/src/development/ci.md).
+
+**Releases are automated via release-please.** Correct [Conventional Commit](https://www.conventionalcommits.org/) prefixes are required — they drive SemVer bumps and changelog generation. See [`docs/src/development/ci.md`](docs/src/development/ci.md) for the full prefix-to-release mapping and [`docs/src/development/developing.md`](docs/src/development/developing.md) for the commit message schema.
+
+Valid prefixes: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `build`, `chore`, `ci`, `perf`. Breaking changes use `!` suffix: `feat!: ...`
+
+## Development Notes
+
+**Compiler Requirements:** C++23, Clang >= 15.0 or GCC >= 13.0, CMake >= 3.28
+
+**Build Types:** Debug (`-O0 -g`), Release (`-O3 -DNDEBUG`), RelWithDebInfo (`-O3 -g`)
+
+**Error Reporting:** Optional Sentry integration via `SIPI_SENTRY_DSN`, `SIPI_SENTRY_ENVIRONMENT`, `SIPI_SENTRY_RELEASE` environment variables.

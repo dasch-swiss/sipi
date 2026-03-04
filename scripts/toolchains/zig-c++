@@ -4,7 +4,20 @@
 # CMake requires CMAKE_CXX_COMPILER to be a single executable path.
 # This wrapper solves the "two-word command" problem by delegating to "zig c++".
 #
-# CMake passes target/cross flags (including -target) to this wrapper via
-# compiler and linker flags initialized in cmake/zig-toolchain.cmake.
+# When cross-compiling, cmake/zig-toolchain.cmake writes the target triple
+# to .zig-target next to this script.  The wrapper injects -target
+# automatically so ALL consumers (ExternalProject deps, autotools, make)
+# get the correct cross-compilation target without forwarding flags.
 
-exec zig c++ "$@"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+TARGET_FILE="$SCRIPT_DIR/.zig-target"
+
+if [ -z "$ZIG_TARGET" ] && [ -f "$TARGET_FILE" ]; then
+    ZIG_TARGET="$(cat "$TARGET_FILE")"
+fi
+
+if [ -n "$ZIG_TARGET" ]; then
+    exec zig c++ -target "$ZIG_TARGET" "$@"
+else
+    exec zig c++ "$@"
+fi

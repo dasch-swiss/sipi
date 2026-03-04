@@ -78,10 +78,31 @@ make zig-build-amd64   # x86_64-linux-musl
 make zig-build-arm64   # aarch64-linux-musl
 ```
 
+### Static Zig builds in Docker (local CI mirror)
+
+For testing the zig-static build in a Docker container that mirrors the CI
+build environment (Alpine 3.21 + Zig). Alpine is used because its `/usr/include`
+contains musl headers natively, avoiding the glibc header contamination that
+occurs on Ubuntu (where zig cc unconditionally adds `/usr/include`).
+
+```bash
+make zig-static-docker-arm64   # build + unit test aarch64-linux-musl in Docker
+make zig-static-docker-amd64   # build + unit test x86_64-linux-musl in Docker
+```
+
+These use `Dockerfile.zig-static` which installs Zig, configures the
+toolchain, builds SIPI, and runs `ctest` — all inside the container. The
+local targets use `build-static/` as the build directory (CI uses `build/`).
+E2e tests are not included because the resulting Linux ELF binary cannot run
+on a macOS host. CI handles the portability proof by running e2e on a bare
+Ubuntu runner against the Alpine-built binary — see [CI and Release](ci.md)
+for details.
+
 ### Validation commands
 
 ```bash
 # Linux static binary must not have dynamic NEEDED entries
+# (local Makefile targets use build-static/; CI uses build/)
 readelf -d build-static/sipi | grep NEEDED
 
 # Should report static
@@ -183,6 +204,7 @@ Key target groups:
 | `zig-test` | Run unit tests for Zig local build |
 | `zig-test-e2e` | Run end-to-end tests for Zig local build |
 | `zig-build-{amd64,arm64}` | Build static Linux binaries with Zig (experimental) |
+| `zig-static-docker-{arm64,amd64}` | Build + test static binaries in Docker (local CI mirror) |
 | `nix-build` | Build SIPI natively (debug + coverage) |
 | `nix-test` | Run unit tests |
 | `nix-test-e2e` | Run end-to-end tests |
