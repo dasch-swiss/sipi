@@ -1,11 +1,32 @@
 # syntax=docker/dockerfile:1
 
-# Expose (global) variables (ARGs before FROM can only be used on FROM lines and not afterwards)
-ARG SIPI_BASE=daschswiss/sipi-base:2.23.0
-ARG UBUNTU_BASE=ubuntu:24.04
-
 # STAGE 1: Build
-FROM $SIPI_BASE AS builder
+FROM ubuntu:24.04 AS builder
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    pkg-config \
+    libreadline-dev \
+    autoconf \
+    automake \
+    libtool \
+    gettext \
+    locales \
+    curl \
+    wget \
+    file \
+    git \
+  && locale-gen en_US.UTF-8 \
+  && locale-gen sr_RS.UTF-8 \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+
+ENV LC_ALL=en_US.UTF-8
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US.UTF-8
 
 WORKDIR /tmp/sipi
 
@@ -47,8 +68,8 @@ RUN objcopy --only-keep-debug ./build/sipi ./build/sipi.debug \
 FROM scratch AS debug-symbols
 COPY --from=builder /tmp/sipi/build/sipi.debug /sipi.debug
 
-# STAGE 3: Setup
-FROM $UBUNTU_BASE AS final
+# STAGE 3: Runtime
+FROM ubuntu:24.04 AS final
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
@@ -56,41 +77,22 @@ RUN echo "I am running on $BUILDPLATFORM, building for $TARGETPLATFORM"
 
 LABEL maintainer="support@dasch.swiss"
 
-# Silence debconf messages
 ARG DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/Zurich
 
-RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list  \
-  && apt-get clean \
-  && apt-get -qq update  \
-  && apt-get -y install \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
-    wget \
-    byobu curl git htop man vim wget unzip \
     ca-certificates \
-    gnupg2 \
-    software-properties-common \
-  && apt-get clean
-
-RUN sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list \
-  && apt-get clean \
-  && apt-get update \
-  && apt-get install -qyyy --no-install-recommends \
     curl \
     openssl \
     locales \
-    uuid \
     ffmpeg \
-    at \
-    bc \
-    imagemagick \
     libmagic1 \
     file \
-  && apt-get clean
-
-# add locales
-RUN locale-gen en_US.UTF-8 && \
-    locale-gen sr_RS.UTF-8
+  && locale-gen en_US.UTF-8 \
+  && locale-gen sr_RS.UTF-8 \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
 
 ENV LC_ALL=en_US.UTF-8
 ENV LANG=en_US.UTF-8
