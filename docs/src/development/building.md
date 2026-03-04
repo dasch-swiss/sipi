@@ -33,10 +33,10 @@ make docker-build
 make test-smoke
 ```
 
-The Docker build uses a pre-built base image (`daschswiss/sipi-base`)
-that includes all system dependencies. The `Dockerfile` handles
-cmake configuration, compilation, unit testing, and debug symbol extraction
-in a multi-stage build.
+The Docker build uses `ubuntu:24.04` as the base image and installs only
+the minimal system dependencies needed for compilation. The `Dockerfile`
+handles cmake configuration, compilation, unit testing, and debug symbol
+extraction in a multi-stage build.
 
 ### Platform-specific builds (used by CI)
 
