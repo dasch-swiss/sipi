@@ -39,7 +39,11 @@
           curl # curl CLI (library built from source)
           exiv2
           ffmpeg
+          autoconf
+          automake
+          libtool # provides glibtoolize on macOS
           file # file CLI + autoreconf deps for libmagic build
+          m4 # GNU M4, required by glibtoolize during libmagic autoreconf
           gettext
           glibcLocales # locales
           gperf

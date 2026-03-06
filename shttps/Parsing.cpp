@@ -10,6 +10,7 @@
 #include "Parsing.h"
 
 #include "magic.h"
+#include "generated/magic_mgc.h"
 
 namespace shttps::Parsing {
 
@@ -151,7 +152,9 @@ std::pair<std::string, std::string> getFileMimetype(const std::string &fpath)
     throw Error(magic_error(handle));
   }
 
-  if (magic_load(handle, nullptr) != 0) { throw Error(magic_error(handle)); }
+  void *bufs[] = { magic_mgc };
+  size_t sizes[] = { magic_mgc_len };
+  if (magic_load_buffers(handle, bufs, sizes, 1) != 0) { throw Error(magic_error(handle)); }
 
 
   std::string mimestr(magic_file(handle, fpath.c_str()));
