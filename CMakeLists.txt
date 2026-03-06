@@ -396,6 +396,25 @@ add_custom_target(icc_profiles
         DEPENDS ${GENERATED_ICC_HEADERS}
 )
 
+#
+# generate embedded magic database (libmagic)
+#
+set(GENERATED_MAGIC_HEADER ${CMAKE_BINARY_DIR}/generated/magic_mgc.h)
+
+add_custom_command(
+        OUTPUT ${GENERATED_MAGIC_HEADER}
+        COMMENT "Generating embedded magic database header"
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/generated
+        COMMAND cp ${CMAKE_BINARY_DIR}/local/share/misc/magic.mgc ${CMAKE_BINARY_DIR}/generated/magic.mgc
+        COMMAND ${PROJECT_SOURCE_DIR}/generate_icc_header.sh magic.mgc magic_mgc.h magic_mgc
+        COMMAND rm ${CMAKE_BINARY_DIR}/generated/magic.mgc
+        DEPENDS project_libmagic
+)
+
+add_custom_target(magic_database
+        DEPENDS ${GENERATED_MAGIC_HEADER}
+)
+
 link_directories(${CMAKE_BINARY_DIR}/local/lib)
 
 include_directories(
@@ -457,7 +476,7 @@ add_executable(sipi
         ${PROJECT_SOURCE_DIR}/src/handlers/iiif_handler.hpp
 )
 
-add_dependencies(sipi icc_profiles)
+add_dependencies(sipi icc_profiles magic_database)
 
 add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 exiv2 jansson lua sqlite3 kdu kdu_aux sentry openssl_ssl openssl_crypto curl_static magic_static)
 

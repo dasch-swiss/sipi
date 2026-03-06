@@ -22,6 +22,8 @@ add_executable(
   ${PROJECT_SOURCE_DIR}/shttps/Parsing.cpp ${PROJECT_SOURCE_DIR}/shttps/Parsing.h
 )
 
+add_dependencies(${TEST_NAME} magic_database)
+
 target_link_libraries(
   ${TEST_NAME}
   libgtest

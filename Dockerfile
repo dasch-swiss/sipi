@@ -98,12 +98,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV LC_ALL=en_US.UTF-8
 ENV LANG=en_US.UTF-8
 ENV LANGUAGE=en_US.UTF-8
-# libmagic is statically linked into the sipi binary but its compiled-in
-# default magic file path (/tmp/sipi/build/local/share/misc/magic.mgc) doesn't
-# exist at runtime.  Copy the magic database from the build stage and point
-# the MAGIC env var at it.
-ENV MAGIC=/sipi/share/magic.mgc
-
 WORKDIR /sipi
 
 EXPOSE 1024
@@ -111,9 +105,9 @@ EXPOSE 1024
 RUN mkdir -p /sipi/images/knora && \
     mkdir -p /sipi/cache
 
-# Copy Sipi binary, magic database, and other files from the build stage
+# Copy Sipi binary and other files from the build stage
+# Note: magic database is embedded in the binary at build time
 COPY --from=builder /tmp/sipi/build/sipi /sipi/sipi
-COPY --from=builder /tmp/sipi/build/local/share/misc/magic.mgc /sipi/share/magic.mgc
 COPY --from=builder /tmp/sipi/config/sipi.config.lua /sipi/config/sipi.config.lua
 COPY --from=builder /tmp/sipi/config/sipi.init.lua /sipi/config/sipi.init.lua
 COPY --from=builder /tmp/sipi/server/test.html /sipi/server/test.html
