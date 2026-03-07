@@ -78,11 +78,11 @@ jobs:
           VERSION: ${{ env.VERSION }}
         run: |
           docker run --rm \
-            -v "$GITHUB_WORKSPACE:/src" \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
             -v "$(dirname $(which zig)):/zig-bin" \
             -e ZIG_TARGET \
             -e VERSION \
-            -w /src \
+            -w "$GITHUB_WORKSPACE" \
             alpine:3.21 sh -c '
               apk add --no-cache bash git cmake make autoconf automake libtool \
                 binutils ca-certificates curl tar xz readline-dev xxd unzip \
