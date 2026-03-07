@@ -16,6 +16,14 @@
 namespace Sipi {
 
 /*!
+ * Parse a human-readable size string into bytes.
+ * Supports suffixes: 'M' (megabytes), 'G' (gigabytes).
+ * Returns the value in bytes. "-1" returns -1 (unlimited).
+ * Throws std::invalid_argument on parse failure.
+ */
+long long parseSizeString(const std::string &str);
+
+/*!
  * This class is used to read the sipi server configuration from
  * a Lua configuration file.
  */
@@ -38,8 +46,7 @@ private:
   std::map<std::string, std::string> scaling_quality;
   std::string init_script;
   std::string cache_dir;
-  size_t cache_size;
-  float cache_hysteresis;
+  long long cache_size;
   int keep_alive;
   std::string thumb_size;
   size_t cache_n_files;
@@ -105,14 +112,11 @@ public:
   std::string getInitScript() { return init_script; }
   void setInitScript(const std::string &str) { init_script = str; }
 
-  size_t getCacheSize() const { return cache_size; }
-  void setCacheSize(const size_t i) { cache_size = i; }
+  long long getCacheSize() const { return cache_size; }
+  void setCacheSize(long long i) { cache_size = i; }
 
   std::string getCacheDir() { return cache_dir; }
   void setCacheDir(const std::string &str) { cache_dir = str; }
-
-  float getCacheHysteresis() const { return cache_hysteresis; }
-  void setCacheHysteresis(float f) { cache_hysteresis = f; }
 
   int getKeepAlive() const { return keep_alive; }
   void setKeepAlive(int i) { keep_alive = i; }

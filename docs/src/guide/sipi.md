@@ -312,13 +312,24 @@ The following configuration parameters are used by the SIPI server:
   *Default: `86400`* (one day)
   
 #### Cache Configuration
-SIPI may optionally use a cache directory to store converted image in order to avoid computationally
-intensive conversions if a specific variant is requested several times. The cache is based on timestamps and
-the canonical IIIF URL. Before an image is being converted, the canonical URL is determined. If a file associated with
-this canonical URL is in the cache directory, the timestamp of the original file in the repository is compated to the
-cached file. If the cached file is newer, it will be served. If the file in the repository is newer, the cache file
-(which is outdated) will be deleted and replaced be the newly converted repository file (that is being sent to the
-client).
+SIPI uses a file-based LRU cache to store converted images, avoiding expensive re-conversions when the same
+variant is requested multiple times. The cache is keyed by the canonical IIIF URL and validated against
+the source file's modification time — stale entries are automatically replaced.
+
+**Eviction:** When the cache reaches its size or file-count limit (high-water mark at 100%), LRU eviction
+removes the least-recently-used entries until usage drops to 80% (low-water mark). Both limits are enforced
+independently — whichever is reached first triggers eviction.
+
+**Special values for `cache_size`:**
+
+- `'-1'` — unlimited cache (no size eviction)
+- `'0'` — cache disabled entirely (no files are cached)
+- `'200M'`, `'1G'` — enforced limit with LRU eviction
+
+**Monitoring:** SIPI exposes Prometheus metrics at `GET /metrics` (text format). Cache counters
+(`sipi_cache_hits_total`, `sipi_cache_misses_total`, `sipi_cache_evictions_total`, `sipi_cache_skips_total`)
+and gauges (`sipi_cache_size_bytes`, `sipi_cache_files`, `sipi_cache_size_limit_bytes`, `sipi_cache_files_limit`)
+are available for monitoring cache health.
 
 The following configuration parameters determine the behaviour of the cache:
 

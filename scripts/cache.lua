@@ -24,7 +24,16 @@ function table.empty (self)
     return true
 end
 
-if not authorize_api('admin.sipi.org', 'administrator', config.adminuser) then
+local success, auth = server.requireAuth()
+if not success then
+    server.sendStatus(500)
+    server.log(auth, server.loglevel.LOG_ERR)
+    return
+end
+if auth.status ~= 'BASIC' or auth.username ~= config.adminuser or auth.password ~= config.password then
+    server.sendStatus(401)
+    server.sendHeader('WWW-Authenticate', 'Basic realm="SIPI Cache Admin"')
+    server.print("Wrong credentials!")
     return
 end
 

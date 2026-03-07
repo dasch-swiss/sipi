@@ -72,6 +72,9 @@ add_subdirectory(unit/configuration)
 
 add_subdirectory(unit/iiifparser)
 
+# Cache tests
+add_subdirectory(unit/cache)
+
 # SipiImage tests
 # To only run this single test, run from inside the build directory '(cd test/unit && ./sipiimage/sipiimage)'
 add_subdirectory(unit/sipiimage)

@@ -17,7 +17,16 @@
 -- You should have received a copy of the GNU Affero General Public
 -- License along with Sipi.  If not, see <http://www.gnu.org/licenses/>.
 
-if not authorize_api('admin.sipi.org', 'administrator', config.adminuser) then
+local success, auth = server.requireAuth()
+if not success then
+    server.sendStatus(500)
+    server.log(auth, server.loglevel.LOG_ERR)
+    return
+end
+if auth.status ~= 'BASIC' or auth.username ~= config.adminuser or auth.password ~= config.password then
+    server.sendStatus(401)
+    server.sendHeader('WWW-Authenticate', 'Basic realm="SIPI Admin"')
+    server.print("Wrong credentials!")
     return
 end
 

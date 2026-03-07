@@ -115,10 +115,6 @@ static void sipiConfGlobals(lua_State *L, shttps::Connection &conn, void *user_d
   lua_pushinteger(L, conf->getCacheSize());
   lua_rawset(L, -3);// table1
 
-  lua_pushstring(L, "cache_hysteresis");// table1 - "index_L1"
-  lua_pushnumber(L, conf->getCacheHysteresis());
-  lua_rawset(L, -3);// table1
-
   lua_pushstring(L, "jpeg_quality");// table1 - "index_L1"
   lua_pushinteger(L, conf->getJpegQuality());
   lua_rawset(L, -3);// table1
@@ -593,20 +589,26 @@ int main(int argc, char *argv[])
     ->envname("SIPI_INITSCRIPT")
     ->check(CLI::ExistingFile);
 
+  // Cache options — new names with deprecated aliases
   std::string optCachedir = "./cache";
-  sipiopt.add_option("--cachedir", optCachedir, "Path to cache folder.")->envname("SIPI_CACHEDIR");
+  sipiopt.add_option("--cache-dir", optCachedir, "Path to cache folder.")->envname("SIPI_CACHE_DIR");
+  // Deprecated aliases (accepted silently for backwards compatibility)
+  sipiopt.add_option("--cachedir", optCachedir, "DEPRECATED: use --cache-dir")->envname("SIPI_CACHEDIR");
 
   std::string optCacheSize = "200M";
-  sipiopt.add_option("--cachesize", optCacheSize, "Maximal size of cache, e.g. '500M'.")->envname("SIPI_CACHESIZE");
+  sipiopt.add_option("--cache-size", optCacheSize, "Cache size: '-1' (unlimited), '0' (disabled), or e.g. '200M'.")->envname("SIPI_CACHE_SIZE");
+  sipiopt.add_option("--cachesize", optCacheSize, "DEPRECATED: use --cache-size")->envname("SIPI_CACHESIZE");
 
   int optCacheNFiles = 200;
-  sipiopt.add_option("--cachenfiles", "The maximal number of files to be cached.")->envname("SIPI_CACHENFILES");
+  sipiopt.add_option("--cache-nfiles", optCacheNFiles, "Max number of files to cache (0=no limit).")->envname("SIPI_CACHE_NFILES");
+  sipiopt.add_option("--cachenfiles", optCacheNFiles, "DEPRECATED: use --cache-nfiles")->envname("SIPI_CACHENFILES");
 
-  double optCacheHysteresis = 0.15;
+  // Deprecated: cachehysteresis — accept but warn
+  double optCacheHysteresisIgnored = 0.0;
   sipiopt
     .add_option("--cachehysteresis",
-      optCacheHysteresis,
-      "If the cache becomes full, the given percentage of file space is marked for reuse (0.0 - 1.0).")
+      optCacheHysteresisIgnored,
+      "DEPRECATED: no longer supported (replaced by built-in 80% low-water mark)")
     ->envname("SIPI_CACHEHYSTERESIS");
 
   std::string optThumbSize = "!128,128";
@@ -1132,38 +1134,35 @@ int main(int argc, char *argv[])
         if (!sipiopt.get_option("--initscript")->empty()) sipiConf.setInitScript(optInitscript);
       }
 
-      if (!config_loaded) {
+      // Cache dir — CLI overrides Lua config
+      bool cachedir_from_cli = !sipiopt.get_option("--cache-dir")->empty()
+        || !sipiopt.get_option("--cachedir")->empty();
+      if (!config_loaded || cachedir_from_cli) {
         sipiConf.setCacheDir(optCachedir);
-      } else {
-        if (!sipiopt.get_option("--cachedir")->empty()) sipiConf.setCacheDir(optCachedir);
       }
 
-      l = optCacheSize.length();
-      c = optCacheSize[l - 1];
-      tsize_t cache_size;
-      if (c == 'M') {
-        cache_size = stoll(optCacheSize.substr(0, l - 1)) * 1024 * 1024;
-      } else if (c == 'G') {
-        cache_size = stoll(optCacheSize.substr(0, l - 1)) * 1024 * 1024 * 1024;
-      } else {
-        cache_size = stoll(optCacheSize);
-      }
-      if (!config_loaded) {
-        sipiConf.setCacheSize(cache_size);
-      } else {
-        if (!sipiopt.get_option("--cachesize")->empty()) sipiConf.setCacheSize(cache_size);
+      // Cache size — CLI overrides Lua config
+      bool cachesize_from_cli = !sipiopt.get_option("--cache-size")->empty()
+        || !sipiopt.get_option("--cachesize")->empty();
+      if (!config_loaded || cachesize_from_cli) {
+        long long cli_cache_size = Sipi::parseSizeString(optCacheSize);
+        if (cli_cache_size < -1) {
+          log_err("Invalid --cache-size value '%s'. Use '-1' (unlimited), '0' (disabled), or a positive value like '200M'.", optCacheSize.c_str());
+          return EXIT_FAILURE;
+        }
+        sipiConf.setCacheSize(cli_cache_size);
       }
 
-      if (!config_loaded) {
+      // Cache nfiles — CLI overrides Lua config
+      bool cachenfiles_from_cli = !sipiopt.get_option("--cache-nfiles")->empty()
+        || !sipiopt.get_option("--cachenfiles")->empty();
+      if (!config_loaded || cachenfiles_from_cli) {
         sipiConf.setCacheNFiles(optCacheNFiles);
-      } else {
-        if (!sipiopt.get_option("--cachenfiles")->empty()) sipiConf.setCacheNFiles(optCacheNFiles);
       }
 
-      if (!config_loaded) {
-        sipiConf.setCacheHysteresis(optCacheHysteresis);
-      } else {
-        if (!sipiopt.get_option("--cachehysteresis")->empty()) sipiConf.setCacheHysteresis(optCacheHysteresis);
+      // Warn if deprecated --cachehysteresis was used
+      if (!sipiopt.get_option("--cachehysteresis")->empty()) {
+        log_warn("--cachehysteresis is no longer supported (replaced by built-in 80%% low-water mark). Ignoring.");
       }
 
       if (!config_loaded) {
@@ -1355,14 +1354,17 @@ int main(int argc, char *argv[])
       //
       // cache parameter...
       //
-      std::string emptystr;
       std::string cachedir = sipiConf.getCacheDir();
+      long long conf_cache_size = sipiConf.getCacheSize();
 
-      if (!cachedir.empty()) {
-        size_t cachesize = sipiConf.getCacheSize();
+      if (conf_cache_size == 0) {
+        log_info("Caching is disabled (cache_size = 0)");
+      } else if (!cachedir.empty()) {
+        if (conf_cache_size == -1) {
+          log_info("Cache size is unlimited");
+        }
         size_t nfiles = sipiConf.getCacheNFiles();
-        float hysteresis = sipiConf.getCacheHysteresis();
-        server.cache(cachedir, cachesize, nfiles, hysteresis);
+        server.cache(cachedir, conf_cache_size, nfiles);
       }
 
       server.imgroot(sipiConf.getImgRoot());
@@ -1386,6 +1388,7 @@ int main(int argc, char *argv[])
       }
 
       // start the server
+      log_info("SIPI server starting on port %d...", sipiConf.getPort());
       server.run();
     } catch (shttps::Error &err) {
       log_err("Error starting server: %s", err.what());
