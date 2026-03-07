@@ -97,6 +97,8 @@ For CI pipeline details (Zig validation gates, static artifact flow, Docker publ
 
 Valid prefixes: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `build`, `chore`, `ci`, `perf`. Breaking changes use `!` suffix: `feat!: ...`
 
+For commit organization rules (how to group commits in PRs) and PR description format (optimized for learnings extraction), see [`docs/src/development/commit-conventions.md`](docs/src/development/commit-conventions.md).
+
 ## Development Notes
 
 **Compiler Requirements:** C++23, Clang >= 15.0 or GCC >= 13.0, CMake >= 3.28

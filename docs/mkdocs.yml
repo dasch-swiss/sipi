@@ -18,6 +18,7 @@ nav:
   - CI and Release: development/ci.md
   - Developing: development/developing.md
   - Downstream Dependencies: development/downstream-dependencies.md
+  - Commit and PR Conventions: development/commit-conventions.md
   - Release Notes: release-notes/index.md
 
 theme:
@@ -74,5 +75,6 @@ plugins:
           - development/ci.md: "CI and release pipeline guide"
           - development/developing.md: "Development guide"
           - development/downstream-dependencies.md: "Runtime packages and downstream consumers"
+          - development/commit-conventions.md: "Commit organization and PR description conventions"
         "Release Notes":
           - release-notes/index.md
