@@ -154,9 +154,8 @@ public:
   ScalingQuality scaling_quality() const { return _scaling_quality; }
 
   void cache(const std::string &cachedir_p,
-    size_t max_cachesize_p = 0,
-    size_t max_nfiles_p = 0,
-    float cache_hysteresis_p = 0.1);
+    long long max_cache_size_p = -1,
+    unsigned max_nfiles_p = 0);
 
   std::shared_ptr<SipiCache> cache() { return _cache; }
 };

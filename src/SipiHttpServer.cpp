@@ -1452,7 +1452,6 @@ static void serve_iiif(Connection &conn_obj,
       cache->deblock(cachefile);
       return;
     }
-    cache->deblock(cachefile);
   }
 
   Sipi::SipiImage img;
@@ -1542,15 +1541,19 @@ static void serve_iiif(Connection &conn_obj,
   conn_obj.header("Cache-Control", "must-revalidate, post-check=0, pre-check=0");
   std::string cachefile;
 
+  bool skip_cache = false;
+
   try {
     if (cache != nullptr) {
-      try {
-        //!> open the cache file to write into.
-        cachefile = cache->getNewCacheFileName();
-        conn_obj.openCacheFile(cachefile);
-      } catch (const shttps::Error &err) {
-        send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
-        return;
+      if (!skip_cache) {
+        try {
+          //!> open the cache file to write into.
+          cachefile = cache->getNewCacheFileName();
+          conn_obj.openCacheFile(cachefile);
+        } catch (const shttps::Error &err) {
+          send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
+          return;
+        }
       }
     }
     switch (quality_format.format()) {
@@ -1603,10 +1606,24 @@ static void serve_iiif(Connection &conn_obj,
 
     if (conn_obj.isCacheFileOpen()) {
       conn_obj.closeCacheFile();
-      //!>
-      //!> ATTENTION!!! Here we change the list of available cache files. Removable when debugging.
-      //!>
-      cache->add(infile, canonical, cachefile, img_w, img_h, tile_w, tile_h, clevels, numpages);
+
+      // Post-write check: if converted file exceeds cache_size, remove and skip
+      if (!skip_cache && cache != nullptr) {
+        long long max_cs = cache->getMaxCacheSize();
+        if (max_cs > 0) {
+          struct stat cache_stat;
+          if (stat(cachefile.c_str(), &cache_stat) == 0 && cache_stat.st_size > max_cs) {
+            log_warn("Converted file %s (%lld bytes) exceeds cache_size (%lld bytes), removing",
+              cachefile.c_str(), static_cast<long long>(cache_stat.st_size), max_cs);
+            ::unlink(cachefile.c_str());
+            skip_cache = true;
+          }
+        }
+      }
+
+      if (!skip_cache) {
+        cache->add(infile, canonical, cachefile, img_w, img_h, tile_w, tile_h, clevels, numpages);
+      }
     }
   } catch (Sipi::SipiError &err) {
     if (cache != nullptr) {
@@ -1717,12 +1734,11 @@ SipiHttpServer::SipiHttpServer(int port_p,
 //=========================================================================
 
 void SipiHttpServer::cache(const std::string &cachedir_p,
-  size_t max_cachesize_p,
-  size_t max_nfiles_p,
-  float cache_hysteresis_p)
+  long long max_cache_size_p,
+  unsigned max_nfiles_p)
 {
   try {
-    _cache = std::make_shared<SipiCache>(cachedir_p, max_cachesize_p, max_nfiles_p, cache_hysteresis_p);
+    _cache = std::make_shared<SipiCache>(cachedir_p, max_cache_size_p, max_nfiles_p);
   } catch (const SipiError &err) {
     _cache = nullptr;
     log_warn("Couldn't open cache directory %s: %s", cachedir_p.c_str(), err.to_string().c_str());

@@ -60,7 +60,7 @@ make docs-serve                # serve docs locally
 
 - Main config: `config/sipi.config.lua`
 - Test config: `config/sipi.test-config.lua`
-- Debug config: `config/sipi.debug-config.lua`
+- Local dev config: `config/sipi.localdev-config.lua`
 - Lua scripts: `scripts/` directory
 
 ### Dependencies

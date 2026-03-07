@@ -73,7 +73,7 @@ static int lua_cache_size(lua_State *L)
     return 1;
   }
 
-  unsigned long long size = cache->getCachesize();
+  unsigned long long size = cache->getCacheUsedBytes();
 
   lua_pushinteger(L, static_cast<lua_Integer>(size));
   return 1;
@@ -97,7 +97,7 @@ static int lua_cache_max_size(lua_State *L)
     return 1;
   }
 
-  unsigned long long maxsize = cache->getMaxCachesize();
+  long long maxsize = cache->getMaxCacheSize();
 
   lua_pushinteger(L, static_cast<lua_Integer>(maxsize));
   return 1;

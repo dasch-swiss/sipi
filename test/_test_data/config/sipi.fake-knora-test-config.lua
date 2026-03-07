@@ -111,26 +111,19 @@ sipi = {
     initscript = './config/sipi.init-knora.lua',
 
     --
-    -- path to the caching directory
+    -- path to the caching directory (auto-created if missing)
     --
-    cachedir = './cache',
+    cache_dir = './cache',
 
     --
-    -- maxcimal size of the cache
+    -- maximum cache size: '-1' = unlimited, '0' = disabled, or e.g. '200M', '1G'
     --
-    cachesize = '20M',
+    cache_size = '20M',
 
     --
-    -- maximal number of files to be cached
-    -- The cache will be purged if either the maximal size or maximal number
-    -- of files is reached
+    -- maximum number of files to cache (0 = no file count limit)
     --
     cache_nfiles = 8,
-
-    --
-    -- if the cache becomes full, the given percentage of file space is marked for reuse
-    --
-    cache_hysteresis = 0.15,
 
     --
     -- Path to the directory where the scripts for the routes defined below are to be found

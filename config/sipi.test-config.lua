@@ -57,28 +57,19 @@ sipi = {
     initscript = './config/sipi.init.lua',
 
     --
-    -- path to the caching directory
+    -- path to the caching directory (auto-created if missing)
     --
-    cachedir = './cache',
+    cache_dir = './cache',
 
     --
-    -- maximal size of the cache
-    -- The cache will be purged if either the maximal size or maximal number
-    -- of files is reached
+    -- maximum cache size: '-1' = unlimited, '0' = disabled, or e.g. '200M', '1G'
     --
-    cachesize = '200M',
+    cache_size = '200M',
 
     --
-    -- maximal number of files to be cached
-    -- The cache will be purged if either the maximal size or maximal number
-    -- of files is reached
+    -- maximum number of files to cache (0 = no file count limit)
     --
     cache_nfiles = 250,
-
-    --
-    -- if the cache becomes full, the given percentage of file space is marked for reuse
-    --
-    cache_hysteresis = 0.15,
 
     --
     -- Path to the directory where the scripts for the routes defined below are to be found

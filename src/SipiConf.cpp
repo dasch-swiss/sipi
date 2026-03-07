@@ -4,9 +4,29 @@
  */
 
 #include "SipiConf.h"
+#include "Logger.h"
+#include <stdexcept>
+#include <string>
 #include <thread>
 
 namespace Sipi {
+
+long long parseSizeString(const std::string &str)
+{
+  if (str.empty()) return 0;
+  if (str == "-1") return -1;
+
+  size_t l = str.length();
+  char c = str[l - 1];
+  if (c == 'M' || c == 'm') {
+    return std::stoll(str.substr(0, l - 1)) * 1024 * 1024;
+  } else if (c == 'G' || c == 'g') {
+    return std::stoll(str.substr(0, l - 1)) * 1024 * 1024 * 1024;
+  } else {
+    return std::stoll(str);
+  }
+}
+
 SipiConf::SipiConf() {}
 
 SipiConf::SipiConf(shttps::LuaServer &luacfg)
@@ -32,41 +52,61 @@ SipiConf::SipiConf(shttps::LuaServer &luacfg)
   };
   scaling_quality = luacfg.configStringTable("sipi", "scaling_quality", default_scaling_quality);
   init_script = luacfg.configString("sipi", "initscript", ".");
-  std::string cachesize_str = luacfg.configString("sipi", "cachesize", "0");
 
-  if (!cachesize_str.empty()) {
-    size_t l = cachesize_str.length();
-    char c = cachesize_str[l - 1];
-
-    if (c == 'M') {
-      cache_size = stoll(cachesize_str.substr(0, l - 1)) * 1024 * 1024;
-    } else if (c == 'G') {
-      cache_size = stoll(cachesize_str.substr(0, l - 1)) * 1024 * 1024 * 1024;
-    } else {
-      cache_size = stoll(cachesize_str);
-    }
+  // --- cache_dir: new key first, then deprecated key ---
+  std::string cache_dir_new = luacfg.configString("sipi", "cache_dir", "");
+  std::string cache_dir_old = luacfg.configString("sipi", "cachedir", "");
+  if (!cache_dir_new.empty() && !cache_dir_old.empty()) {
+    throw std::runtime_error("ERROR: Both 'cachedir' and 'cache_dir' specified. Remove the deprecated 'cachedir' key.");
+  } else if (!cache_dir_new.empty()) {
+    cache_dir = cache_dir_new;
+  } else if (!cache_dir_old.empty()) {
+    log_warn("Config key 'cachedir' is deprecated. Use 'cache_dir' instead.");
+    cache_dir = cache_dir_old;
+  } else {
+    cache_dir = "./cache";
   }
 
-  cache_dir = luacfg.configString("sipi", "cachedir", "");
-  cache_hysteresis = luacfg.configFloat("sipi", "cache_hysteresis", 0.1);
+  // --- cache_size: new key first, then deprecated key ---
+  std::string cache_size_new = luacfg.configString("sipi", "cache_size", "");
+  std::string cache_size_old = luacfg.configString("sipi", "cachesize", "");
+  std::string cachesize_str;
+  if (!cache_size_new.empty() && !cache_size_old.empty()) {
+    throw std::runtime_error("ERROR: Both 'cachesize' and 'cache_size' specified. Remove the deprecated 'cachesize' key.");
+  } else if (!cache_size_new.empty()) {
+    cachesize_str = cache_size_new;
+  } else if (!cache_size_old.empty()) {
+    log_warn("Config key 'cachesize' is deprecated. Use 'cache_size' instead.");
+    cachesize_str = cache_size_old;
+  } else {
+    cachesize_str = "200M"; // default
+  }
+
+  // Parse cache_size string: "-1" = unlimited, "0" = disabled, "200M" / "1G" = limit
+  cache_size = parseSizeString(cachesize_str);
+
+  if (cache_size < -1) {
+    throw std::runtime_error("ERROR: Invalid cache_size value '" + cachesize_str
+      + "'. Use '-1' (unlimited), '0' (disabled), or a positive value like '200M'.");
+  }
+
+  // --- cache_nfiles ---
+  cache_n_files = luacfg.configInteger("sipi", "cache_nfiles", 200);
+
+  // --- cache_hysteresis: warn if present, no longer supported ---
+  // Use sentinel default -1.0 to detect if the key is explicitly set
+  float hysteresis_check = luacfg.configFloat("sipi", "cache_hysteresis", -1.0f);
+  if (hysteresis_check >= 0.0f) {
+    log_warn("Config key 'cache_hysteresis' is no longer supported (replaced by built-in 80%% low-water mark). Remove it from your config.");
+  }
+
   keep_alive = luacfg.configInteger("sipi", "keep_alive", 20);
   thumb_size = luacfg.configString("sipi", "thumb_size", "!128,128");
-  cache_n_files = luacfg.configInteger("sipi", "cache_nfiles", 0);
   n_threads = luacfg.configInteger("sipi", "nthreads", 2 * std::thread::hardware_concurrency());
   std::string max_post_size_str = luacfg.configString("sipi", "max_post_size", "0");
-
-  if (!max_post_size_str.empty()) {
-    size_t l = max_post_size_str.length();
-    char c = max_post_size_str[l - 1];
-
-    if (c == 'M') {
-      max_post_size = stoll(max_post_size_str.substr(0, l - 1)) * 1024 * 1024;
-    } else if (c == 'G') {
-      max_post_size = stoll(max_post_size_str.substr(0, l - 1)) * 1024 * 1024 * 1024;
-    } else {
-      max_post_size = stoll(max_post_size_str);
-    }
-  }
+  long long parsed_post_size = parseSizeString(max_post_size_str);
+  if (parsed_post_size < 0) parsed_post_size = 0;
+  max_post_size = static_cast<size_t>(parsed_post_size);
 
   tmp_dir = luacfg.configString("sipi", "tmpdir", "/tmp");
   scriptdir = luacfg.configString("sipi", "scriptdir", "./scripts");

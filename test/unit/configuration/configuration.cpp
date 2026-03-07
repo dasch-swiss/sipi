@@ -63,7 +63,6 @@ TEST(Configuration, LoadConfigurationFile)
   EXPECT_EQ(sipiConf.getCacheDir(), "./cache");
   EXPECT_EQ(sipiConf.getCacheSize(), 20 * 1024 * 1024);
   EXPECT_EQ(sipiConf.getCacheNFiles(), 8);
-  EXPECT_EQ(sipiConf.getCacheHysteresis(), (float)0.15);
   EXPECT_EQ(sipiConf.getScriptDir(), "./scripts");
   EXPECT_EQ(sipiConf.getThumbSize(), "!128,128");
   EXPECT_EQ(sipiConf.getTmpDir(), "/tmp");

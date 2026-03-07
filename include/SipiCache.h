@@ -7,6 +7,7 @@
 #define __defined_sipi_cache_h
 
 #include <algorithm>
+#include <atomic>
 #include <ctime>
 #include <mutex>
 #include <string>
@@ -112,30 +113,24 @@ private:
   std::unordered_map<std::string, CacheRecord> cachetable;//!< Internal map of all cached files
   std::unordered_map<std::string, SizeRecord> sizetable;//!< Internal map of original file paths and image size
   std::unordered_map<std::string, int> blocked_files;
-  unsigned long long cachesize;//!< number of bytes in the cache
-  unsigned long long max_cachesize;//!< maximum number of bytes that can be cached
-  unsigned nfiles;//!< number of files in cache
+  std::atomic<unsigned long long> cache_used_bytes;//!< number of bytes in the cache
+  long long max_cache_size;//!< maximum number of bytes that can be cached (-1=unlimited, 0=disabled, >0=limit)
+  std::atomic<unsigned> nfiles;//!< number of files in cache
   unsigned max_nfiles;//!< maximum number of files that can be cached
-  float cache_hysteresis;//!< If files are purged, what percentage we go below the maximum
 public:
   /*!
-   * Create a Cache instance an initialized the cache.
+   * Create a Cache instance and initialize it.
    *
-   * Create the cache, read if available, the cache file containing all the files that
-   * are already in the cache directory. The size of the cache can be limited to a maximum number
-   * of files and a maxi,um size in bytes. The first limit that is readed will purge the cache.
+   * Reads the cache index file if available, rebuilds from disk if missing (crash recovery).
+   * The cache directory is created automatically if it does not exist.
    *
-   * \param[in] cachedir_p Path to the cache directory. The directory must exist!
-   * \param[in] max_cachesize_p Maximum size of the cache in bytes.
-   * \param[in] max_nfiles_p Maximum number of files in the cache.
-   * \param[in] cache_hysteresis_p If the maximum size of the cache is reached, some of the files that
-   * have not been accessed recently will be deleted. The cache_hysteresis (between 0.0 and 1.0) defines the
-   * amount of bytes that have to be cleared in relation to the max_cachesize_p.
+   * \param[in] cachedir_p Path to the cache directory (auto-created if missing).
+   * \param[in] max_cache_size_p Maximum cache size in bytes (-1=unlimited, 0=disabled, >0=limit).
+   * \param[in] max_nfiles_p Maximum number of files in the cache (0=no limit).
    */
   SipiCache(const std::string &cachedir_p,
-    long long max_cachesize_p = 0,
-    unsigned max_nfiles_p = 0,
-    float cache_hysteresis_p = 0.1);
+    long long max_cache_size_p = -1,
+    unsigned max_nfiles_p = 0);
 
   /*!
    * Cleans up the cache, serializes the actual cache content into a file and closes all caching
@@ -160,12 +155,12 @@ public:
 #endif
 
   /*!
-   * Purge the cache to make room for more files. Uses the cache_hysteresis, max_cachesize and max_nfiles values
-   * for the amount of files that should be purged.
+   * Purge the cache using LRU eviction. Triggers at 100% of size/file-count limits
+   * and evicts down to 80% (low-water mark).
    *
-   * \param[in] Use the cache-lock mutex
+   * \param[in] use_lock Whether to acquire the cache mutex (false when caller already holds it).
    *
-   * \returns Number of files being purged.
+   * \returns Number of files purged, or -1 if eviction was blocked.
    */
   int purge(bool use_lock = true);
 
@@ -180,7 +175,7 @@ public:
    */
   std::string check(const std::string &origpath_p, const std::string &canonical_p, bool block_file = false);
 
-  void deblock(std::string res);
+  void deblock(const std::string &res);
 
 
   /*!
@@ -218,13 +213,13 @@ public:
    * Get the current size of the cache in bytes
    * \returns Size of cache in bytes
    */
-  inline unsigned long long getCachesize(void) { return cachesize; }
+  inline unsigned long long getCacheUsedBytes(void) { return cache_used_bytes; }
 
   /*!
    * Get the maximal size of the cache
-   * \returns Maximal size of cache in bytes
+   * \returns Maximal size of cache in bytes (-1=unlimited, 0=disabled, >0=limit)
    */
-  inline unsigned long long getMaxCachesize(void) { return max_cachesize; }
+  inline long long getMaxCacheSize(void) { return max_cache_size; }
 
   /*!
    * get the number of cached files
