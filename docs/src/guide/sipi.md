@@ -68,7 +68,7 @@ The SIPI command line mode can be used for the following tasks:
 ```
 
 #### Compare two Images pixelwise
-The images may have different formats: if the have exactely the same pixels, they are considered identical). Metadata
+The images may have different formats: if the have exactly the same pixels, they are considered identical). Metadata
 is ignored for comparison:
 
 ```bash
@@ -144,7 +144,7 @@ launched as follows:
 SIPI implements some backwards compatible, non-standard extensions to the IIIF Image API:
 
 ##### Access to a raw files
-Sometimes it may be usefull to store non-image files such as XML-sidecars, manifests as JSON or complete PDF's, etc. in
+Sometimes it may be useful to store non-image files such as XML-sidecars, manifests as JSON or complete PDF's, etc. in
 the same environment as the images. For this reason SIPI supports an extension of the IIIF API:
 
     http(s)://{server}/{prefix}/{identifier}/file
@@ -183,8 +183,8 @@ configuration file). The following configuration parameters are in the `sipi`-ta
   *Environment variable: `SIPI_IMGROOT`*  
   *Default: `./images`*
   
-- <a name="scriptinit"></a>`initscript=path/to/init.lua`: SIPI needs a minmal set of LUA functions that can be adapted to the local installation.
-  These mandatory functions are definied in a init-script (usually it can be found in the config directory where also
+- <a name="scriptinit"></a>`initscript=path/to/init.lua`: SIPI needs a minimal set of LUA functions that can be adapted to the local installation.
+  These mandatory functions are defined in a init-script (usually it can be found in the config directory where also
   the configuration file is located).  
   *Cmdline option: `--initscript`*  
   *Environment variable: `SIPI_INITSCRIPT`*  
@@ -315,7 +315,7 @@ The following configuration parameters are used by the SIPI server:
 SIPI may optionally use a cache directory to store converted image in order to avoid computationally
 intensive conversions if a specific variant is requested several times. The cache is based on timestamps and
 the canonical IIIF URL. Before an image is being converted, the canonical URL is determined. If a file associated with
-this canonical URL is in the cache directory, the timestamp of the original file in the repository is compated to the
+this canonical URL is in the cache directory, the timestamp of the original file in the repository is compared to the
 cached file. If the cached file is newer, it will be served. If the file in the repository is newer, the cache file
 (which is outdated) will be deleted and replaced be the newly converted repository file (that is being sent to the
 client).
@@ -347,7 +347,7 @@ The following configuration parameters determine the behaviour of the cache:
   *Default: `0.15`*
   
 #### Configuration of the HTTP File Server
-SIPI offers  HTTP file server for HTML and other files. Files with the ending `.elua` are HTTP-files with embeded
+SIPI offers  HTTP file server for HTML and other files. Files with the ending `.elua` are HTTP-files with embedded
 LUA code. Everything between the <lua>...</lua> tags is interpreted as LUA code and the output embedded in the
 data stream for the client.
 
