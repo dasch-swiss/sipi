@@ -149,12 +149,16 @@ std::pair<std::string, std::string> getFileMimetype(const std::string &fpath)
 {
   magic_t handle;
   if ((handle = magic_open(MAGIC_MIME | MAGIC_PRESERVE_ATIME)) == nullptr) {
-    throw Error(magic_error(handle));
+    throw Error("magic_open() failed");
   }
 
   void *bufs[] = { magic_mgc };
   size_t sizes[] = { magic_mgc_len };
-  if (magic_load_buffers(handle, bufs, sizes, 1) != 0) { throw Error(magic_error(handle)); }
+  if (magic_load_buffers(handle, bufs, sizes, 1) != 0) {
+    std::string err = magic_error(handle);
+    magic_close(handle);
+    throw Error(err);
+  }
 
 
   std::string mimestr(magic_file(handle, fpath.c_str()));
