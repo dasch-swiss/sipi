@@ -37,6 +37,24 @@ jobs:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - name: pull LFS objects
+        run: |
+          git lfs install
+          echo "=== .gitattributes ==="
+          head -5 .gitattributes
+          echo "=== LFS env ==="
+          git lfs env | head -10
+          echo "=== LFS ls-files ==="
+          git lfs ls-files | head -5
+          echo "=== LFS fetch ==="
+          git lfs fetch --all
+          echo "=== LFS checkout ==="
+          git lfs checkout
+          echo "=== verify vendor ==="
+          ls -la vendor/*.tar.gz | head -3
+          echo "=== verify test images ==="
+          file test/_test_data/unit/lena512.tif 2>/dev/null || echo "lena512.tif not found"
+          file test/_test_data/unit/HasCommentBlock.JPG 2>/dev/null || echo "HasCommentBlock.JPG not found"
       - uses: cachix/install-nix-action@v31
         with:
           github_access_token: ${{ secrets.GH_TOKEN }}
@@ -78,6 +96,24 @@ jobs:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - name: pull LFS objects
+        run: |
+          git lfs install
+          echo "=== .gitattributes ==="
+          head -5 .gitattributes
+          echo "=== LFS env ==="
+          git lfs env | head -10
+          echo "=== LFS ls-files ==="
+          git lfs ls-files | head -5
+          echo "=== LFS fetch ==="
+          git lfs fetch --all
+          echo "=== LFS checkout ==="
+          git lfs checkout
+          echo "=== verify vendor ==="
+          ls -la vendor/*.tar.gz | head -3
+          echo "=== verify test images ==="
+          file test/_test_data/unit/lena512.tif 2>/dev/null || echo "lena512.tif not found"
+          file test/_test_data/unit/HasCommentBlock.JPG 2>/dev/null || echo "HasCommentBlock.JPG not found"
 
       - uses: mlugg/setup-zig@v2
         with:
@@ -155,6 +191,24 @@ jobs:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - name: pull LFS objects
+        run: |
+          git lfs install
+          echo "=== .gitattributes ==="
+          head -5 .gitattributes
+          echo "=== LFS env ==="
+          git lfs env | head -10
+          echo "=== LFS ls-files ==="
+          git lfs ls-files | head -5
+          echo "=== LFS fetch ==="
+          git lfs fetch --all
+          echo "=== LFS checkout ==="
+          git lfs checkout
+          echo "=== verify vendor ==="
+          ls -la vendor/*.tar.gz | head -3
+          echo "=== verify test images ==="
+          file test/_test_data/unit/lena512.tif 2>/dev/null || echo "lena512.tif not found"
+          file test/_test_data/unit/HasCommentBlock.JPG 2>/dev/null || echo "HasCommentBlock.JPG not found"
 
       - name: Install Zig
         uses: mlugg/setup-zig@v2

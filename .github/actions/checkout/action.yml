@@ -21,7 +21,9 @@ runs:
         restore-keys: lfs-
     - name: pull LFS objects
       shell: bash
-      run: git lfs pull
+      run: |
+        git lfs install --local
+        git lfs pull
     - name: checkout private ci-assets
       uses: actions/checkout@v4
       with:
