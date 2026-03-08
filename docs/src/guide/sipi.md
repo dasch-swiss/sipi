@@ -333,29 +333,27 @@ are available for monitoring cache health.
 
 The following configuration parameters determine the behaviour of the cache:
 
-- <a name="cachedir"></a>`cachedir=path`: SIPI may optionally use a cache directory to store converted image in order to avoid computationally
-  intensive conversions if a specific variant is requested several times. Sipi starts with a warning if the cache
-  directory is defined but not existing.  
-  *Cmdline option: `--cachedir`*  
-  *Environment variable: `SIPI_CACHEDIR`*  
+- <a name="cache_dir"></a>`cache_dir=path`: Path to the cache directory. Created automatically if missing.
+  *Cmdline option: `--cachedir`*
+  *Environment variable: `SIPI_CACHEDIR`*
   *Default: `./cache`*
 
-- <a name="cachesize"></a>`cachesize=amount`: The maximal size of the cache. The cache will be purged if either the maximal size or maximal
-  number of files is reached. The amount has the form "<number>M" with M indication Megabytes.  
-  *Cmdline option: `--cachesize`*  
-  *Environment variable: `SIPI_CACHESIZE`*  
+- <a name="cache_size"></a>`cache_size=amount`: Maximum cache size. Use `'-1'` for unlimited, `'0'` to disable,
+  or a size string like `'200M'` or `'1G'`. Eviction triggers at 100% and purges down to 80%.
+  *Cmdline option: `--cachesize`*
+  *Environment variable: `SIPI_CACHESIZE`*
   *Default: `200M`*
 
-- <a name="cachenfiles"></a>`cache_nfiles=num`: The maximal number of files to be cached. The cache will be purged if either the maximal size
-   or maximal number of files is reached.  
-  *Cmdline option: `--cachenfiles`*  
-  *Environment variable: `SIPI_CACHENFILES`*  
+- <a name="cache_nfiles"></a>`cache_nfiles=num`: Maximum number of cached files. Set to `0` for no file-count limit.
+  Eviction triggers when either size or file-count limit is reached.
+  *Cmdline option: `--cachenfiles`*
+  *Environment variable: `SIPI_CACHENFILES`*
   *Default: `200`*
 
-- <a name="hysteresis"></a>`cache_hysteresis=float`: If the cache becomes full, the given percentage of file space is marked for reuse and purged.  
-  *Cmdline option: `--cachehysteresis`*  
-  *Environment variable: `SIPI_CACHEHYSTERESIS`*  
-  *Default: `0.15`*
+!!! note "Deprecated keys"
+    The old configuration keys `cachedir`, `cachesize`, and `cache_hysteresis` are still accepted
+    with a deprecation warning. The `cache_hysteresis` parameter has been removed — eviction now
+    always uses a fixed 80% low-water mark. See `DEPRECATIONS.md` for details.
   
 #### Configuration of the HTTP File Server
 SIPI offers  HTTP file server for HTML and other files. Files with the ending `.elua` are HTTP-files with embeded

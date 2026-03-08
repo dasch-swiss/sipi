@@ -136,9 +136,8 @@ If none is specified, the default level is `INFO`.
 | `--maxtmpage <sec>` | | `SIPI_MAXTMPAGE` | `86400` | Max age of temp files in seconds |
 | `--initscript <path>` | | `SIPI_INITSCRIPT` | `./config/sipi.init.lua` | Path to Lua init script |
 | `--cachedir <path>` | | `SIPI_CACHEDIR` | `./cache` | Cache directory |
-| `--cachesize <size>` | | `SIPI_CACHESIZE` | `200M` | Maximum cache size |
-| `--cachenfiles <n>` | | `SIPI_CACHENFILES` | `200` | Maximum number of cached files |
-| `--cachehysteresis <f>` | | `SIPI_CACHEHYSTERESIS` | `0.15` | Cache purge ratio (0.0 - 1.0) |
+| `--cachesize <size>` | | `SIPI_CACHESIZE` | `200M` | Maximum cache size (`-1`=unlimited, `0`=disabled) |
+| `--cachenfiles <n>` | | `SIPI_CACHENFILES` | `200` | Maximum number of cached files (`0`=no limit) |
 | `--thumbsize <size>` | | `SIPI_THUMBSIZE` | `!128,128` | Default thumbnail size (IIIF syntax) |
 | `--sslcert <path>` | | `SIPI_SSLCERTIFICATE` | `./certificate/certificate.pem` | SSL certificate path |
 | `--sslkey <path>` | | `SIPI_SSLKEY` | `./certificate/key.pem` | SSL key file path |
@@ -185,9 +184,8 @@ flags.
 | `SIPI_MAXTMPAGE` | `--maxtmpage` | `86400` | Max temp file age |
 | `SIPI_INITSCRIPT` | `--initscript` | `./config/sipi.init.lua` | Init script path |
 | `SIPI_CACHEDIR` | `--cachedir` | `./cache` | Cache directory |
-| `SIPI_CACHESIZE` | `--cachesize` | `200M` | Max cache size |
-| `SIPI_CACHENFILES` | `--cachenfiles` | `200` | Max cached files |
-| `SIPI_CACHEHYSTERESIS` | `--cachehysteresis` | `0.15` | Cache purge ratio |
+| `SIPI_CACHESIZE` | `--cachesize` | `200M` | Max cache size (`-1`=unlimited, `0`=disabled) |
+| `SIPI_CACHENFILES` | `--cachenfiles` | `200` | Max cached files (`0`=no limit) |
 | `SIPI_THUMBSIZE` | `--thumbsize` | `!128,128` | Thumbnail size |
 | `SIPI_SSLCERTIFICATE` | `--sslcert` | `./certificate/certificate.pem` | SSL certificate |
 | `SIPI_SSLKEY` | `--sslkey` | `./certificate/key.pem` | SSL key |
