@@ -1394,7 +1394,11 @@ static void serve_iiif(Connection &conn_obj,
     }
     }
     try {
-      if (not_head_request) conn_obj.sendFile(infile);
+      if (not_head_request) {
+        conn_obj.sendFile(infile);
+      } else {
+        conn_obj.flush();
+      }
     } catch (shttps::InputFailure iofail) {
       log_debug("Browser unexpectedly closed connection");
     } catch (Sipi::SipiError &err) {
@@ -1437,7 +1441,11 @@ static void serve_iiif(Connection &conn_obj,
 
       try {
         //!> send the file from cache
-        if (not_head_request) conn_obj.sendFile(cachefile);
+        if (not_head_request) {
+          conn_obj.sendFile(cachefile);
+        } else {
+          conn_obj.flush();
+        }
         //!> from now on the cache file can be deleted again
       } catch (shttps::InputFailure err) {
         // -1 was thrown
@@ -1603,6 +1611,10 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj << "Unsupported file format requested! Supported are .jpg, .jp2, .tif, .png\n";
       conn_obj.flush();
     }
+    }
+
+    if (!not_head_request) {
+      conn_obj.flush();
     }
 
     if (conn_obj.isCacheFileOpen()) {
