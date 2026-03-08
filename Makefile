@@ -271,8 +271,8 @@ zig-build-arm64: ## build static SIPI binary for Linux arm64
 	$(MAKE) zig-build-static ZIG_TARGET=aarch64-linux-musl
 
 .PHONY: zig-clean
-zig-clean: ## clean Zig build artifacts
-	@rm -rf build-static/
+zig-clean: ## clean all Zig build artifacts (local + static)
+	@rm -rf build/ build-static/
 
 .PHONY: zig-static-docker-arm64
 zig-static-docker-arm64: ## build + test zig-static arm64 in Docker (mirrors CI)
