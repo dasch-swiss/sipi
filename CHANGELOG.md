@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.18.0](https://github.com/dasch-swiss/sipi/compare/v3.17.2...v3.18.0) (2026-03-08)
+
+
+### Features
+
+* Add Zig toolchain for static binary distribution ([634ea81](https://github.com/dasch-swiss/sipi/commit/634ea81dfb04190039c433f0f1d37418fb234207))
+* Eliminate docker-sipi-base, use ubuntu:24.04 ([684e9e3](https://github.com/dasch-swiss/sipi/commit/684e9e32bfac3d94b3e3be4f71af109d64795016))
+* Embed libmagic database into binary for portable runtime ([0550157](https://github.com/dasch-swiss/sipi/commit/0550157cfcb2b0bd8d9b5f47bfccd960384c4c36))
+* **metrics:** Add Prometheus cache metrics and /metrics endpoint ([4be73a3](https://github.com/dasch-swiss/sipi/commit/4be73a35a855d9abda89d195864645d72ca4d3e8))
+
+
+### Bug Fixes
+
+* Address review findings in magic handling and cross-compilation ([2510641](https://github.com/dasch-swiss/sipi/commit/2510641c4546d529be42f56f5ab591d31f8429fc))
+* **build:** Kakadu libtool conflict with Nix and zig-clean scope ([eaffd72](https://github.com/dasch-swiss/sipi/commit/eaffd72fdd1fdf0b265be3354288176980b0b39c))
+* **cache:** Rewrite cache management with LRU eviction, crash recovery, and config ([92429e1](https://github.com/dasch-swiss/sipi/commit/92429e1031735db3437b18b3ea1524c69696e0ed))
+* HEAD response and LFS case sensitivity for e2e tests ([f3741ea](https://github.com/dasch-swiss/sipi/commit/f3741eae559c7334cf04a65a437c96fb4d89963a))
+
 ## [3.17.2](https://github.com/dasch-swiss/sipi/compare/v3.17.1...v3.17.2) (2026-03-03)
 
 
