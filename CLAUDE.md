@@ -44,7 +44,8 @@ make docs-serve                # serve docs locally
 | IIIF Parser | `include/iiifparser/` | IIIF URL parsing: identifier, region, size, rotation, quality/format |
 | Format Handlers | `include/formats/` | SipiIO base class + SipiIOTiff, SipiIOJ2k, SipiIOJpeg, SipiIOPng |
 | SHTTPS Framework | `shttps/` | HTTP server impl: threading, SSL/TLS, connection pooling, JWT auth |
-| Caching | `include/SipiCache.h` | File-based LRU cache with size limits and concurrent access protection |
+| Caching | `include/SipiCache.h` | File-based LRU cache with dual-limit eviction (size + file count), crash recovery |
+| Metrics | `include/SipiMetrics.h` | Prometheus metrics singleton — cache counters/gauges exposed at `GET /metrics` |
 | Lua Integration | `include/SipiLua.h` | Lua bindings for image manipulation, HTTP handling, config/routes |
 
 ### Image Processing Pipeline
@@ -66,7 +67,7 @@ make docs-serve                # serve docs locally
 ### Dependencies
 
 **External Libraries (built from source in `ext/`):**
-Image formats (libtiff, libpng, libjpeg, libwebp), compression (zlib, bzip2, xz, zstd), JPEG2000 (kakadu — requires license), metadata (exiv2, lcms2), Lua + luarocks, jansson, sqlite3, sentry, OpenSSL, libcurl, libmagic.
+Image formats (libtiff, libpng, libjpeg, libwebp), compression (zlib, bzip2, xz, zstd), JPEG2000 (kakadu — requires license), metadata (exiv2, lcms2), Lua + luarocks, jansson, sqlite3, sentry, prometheus-cpp (core only), OpenSSL, libcurl, libmagic.
 
 **System Dependencies:** Threads (pthread), iconv (macOS only).
 
