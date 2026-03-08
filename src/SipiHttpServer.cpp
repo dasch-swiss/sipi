@@ -36,6 +36,7 @@
 
 #include "Logger.h"
 #include "SipiHttpServer.hpp"
+#include "SipiMetrics.h"
 #include "SipiSentry.h"
 #include "favicon.h"
 #include "handlers/iiif_handler.hpp"
@@ -1616,6 +1617,7 @@ static void serve_iiif(Connection &conn_obj,
             log_warn("Converted file %s (%lld bytes) exceeds cache_size (%lld bytes), removing",
               cachefile.c_str(), static_cast<long long>(cache_stat.st_size), max_cs);
             ::unlink(cachefile.c_str());
+            SipiMetrics::instance().cache_skips_total.Increment();
             skip_cache = true;
           }
         }
@@ -1710,6 +1712,16 @@ static void iiif_handler(Connection &conn_obj, shttps::LuaServer &luaserver, voi
 
 //=========================================================================
 
+static void metrics_handler(Connection &conn_obj, shttps::LuaServer &luaserver, void *user_data, void *dummy)
+{
+  std::string body = SipiMetrics::instance().serialize();
+  conn_obj.status(Connection::OK);
+  conn_obj.header("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+  conn_obj.send(body.data(), body.size());
+}
+
+//=========================================================================
+
 static void favicon_handler(Connection &conn_obj, shttps::LuaServer &luaserver, void *user_data, void *dummy)
 {
   conn_obj.status(Connection::OK);
@@ -1757,6 +1769,7 @@ void SipiHttpServer::run()
   log_info("Serving images from %s", _imgroot.c_str());
   log_debug("Salsah prefix: %s", _salsah_prefix.c_str());
 
+  add_route(Connection::GET, "/metrics", metrics_handler);
   add_route(Connection::GET, "/favicon.ico", favicon_handler);
   add_route(Connection::GET, "/", iiif_handler);
   add_route(Connection::HEAD, "/", iiif_handler);

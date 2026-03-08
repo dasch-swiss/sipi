@@ -18,12 +18,14 @@ add_executable(${TEST_NAME}
   ${SRCS}
   ${PROJECT_SOURCE_DIR}/src/SipiCache.cpp ${PROJECT_SOURCE_DIR}/include/SipiCache.h
   ${PROJECT_SOURCE_DIR}/src/SipiError.cpp ${PROJECT_SOURCE_DIR}/src/SipiError.hpp
+  ${PROJECT_SOURCE_DIR}/src/SipiMetrics.cpp ${PROJECT_SOURCE_DIR}/include/SipiMetrics.h
   ${PROJECT_SOURCE_DIR}/src/Logger.cpp ${PROJECT_SOURCE_DIR}/include/Logger.h
   ${PROJECT_SOURCE_DIR}/shttps/Error.cpp ${PROJECT_SOURCE_DIR}/shttps/Error.h
   ${PROJECT_SOURCE_DIR}/shttps/Global.h
 )
 
-target_link_libraries(${TEST_NAME} libgtest jansson)
+add_dependencies(${TEST_NAME} prometheus_core)
+target_link_libraries(${TEST_NAME} libgtest jansson prometheus_core)
 target_link_libraries(${TEST_NAME} ${SIPI_RUNTIME_SYSTEM_LIBS})
 
 target_link_libraries(${TEST_NAME} build_config)

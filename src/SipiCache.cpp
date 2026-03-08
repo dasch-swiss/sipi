@@ -28,6 +28,7 @@
 
 #include "SipiCache.h"
 #include "SipiError.hpp"
+#include "SipiMetrics.h"
 #include "shttps/Global.h"
 #include "Logger.h"
 
@@ -203,6 +204,16 @@ SipiCache::SipiCache(const std::string &cachedir_p,
   // Single summary line at INFO level
   log_info("Cache loaded: %u files (%.1f MB), %d skipped, %d orphans removed, %d evicted",
     nfiles.load(), static_cast<double>(cache_used_bytes.load()) / (1024.0 * 1024.0), skipped, orphans_removed, evicted > 0 ? evicted : 0);
+
+  // Update metrics gauges
+  auto &metrics = SipiMetrics::instance();
+  metrics.cache_size_bytes.Set(static_cast<double>(cache_used_bytes));
+  metrics.cache_files.Set(static_cast<double>(nfiles));
+  metrics.cache_size_limit_bytes.Set(static_cast<double>(max_cache_size));
+  metrics.cache_files_limit.Set(static_cast<double>(max_nfiles));
+  if (evicted > 0) {
+    metrics.cache_evictions_total.Increment(static_cast<double>(evicted));
+  }
 }
 
 //============================================================================
@@ -354,6 +365,14 @@ int SipiCache::purge(bool use_lock)
     cachetable.erase(ct_it);
   }
 
+  // Update metrics after eviction
+  if (n > 0) {
+    auto &metrics = SipiMetrics::instance();
+    metrics.cache_evictions_total.Increment(static_cast<double>(n));
+    metrics.cache_size_bytes.Set(static_cast<double>(cache_used_bytes));
+    metrics.cache_files.Set(static_cast<double>(nfiles));
+  }
+
   // Check if we couldn't free enough space (all remaining files blocked)
   bool size_ok = (max_cache_size <= 0) || (cache_used_bytes <= size_low);
   bool nfiles_ok = (max_nfiles == 0) || (nfiles <= nfiles_low);
@@ -386,6 +405,7 @@ std::string SipiCache::check(const std::string &origpath_p, const std::string &c
   std::lock_guard<std::mutex> locking_mutex_guard(locking);
   auto it = cachetable.find(canonical_p);
   if (it == cachetable.end()) {
+    SipiMetrics::instance().cache_misses_total.Increment();
     return res;// return empty string, because we didn't find the file in cache
   }
   fr = it->second;
@@ -399,8 +419,10 @@ std::string SipiCache::check(const std::string &origpath_p, const std::string &c
 
   if (tcompare(mtime, fr.mtime) > 0) {
     // original file is newer than cache, we have to replace it...
+    SipiMetrics::instance().cache_misses_total.Increment();
     return res;// return empty string, means "replace the file in the cache!"
   } else {
+    SipiMetrics::instance().cache_hits_total.Increment();
     std::string res = _cachedir + "/" + fr.cachepath;
     if (block_file) { blocked_files[res]++; }
     return res;
@@ -517,6 +539,10 @@ void SipiCache::add(const std::string &origpath_p,
   sizetable[origpath_p] = tmp_cr;
 
   ++nfiles;
+
+  auto &metrics = SipiMetrics::instance();
+  metrics.cache_size_bytes.Set(static_cast<double>(cache_used_bytes));
+  metrics.cache_files.Set(static_cast<double>(nfiles));
 }
 
 //============================================================================

@@ -300,6 +300,7 @@ add_subdirectory(${COMMON_EXT}/luarocks)
 add_subdirectory(${COMMON_EXT}/sqlite3)
 add_subdirectory(${COMMON_EXT}/kakadu)
 add_subdirectory(${COMMON_EXT}/sentry)
+add_subdirectory(${COMMON_EXT}/prometheus-cpp)
 
 message(STATUS "... adding external dependencies done.")
 
@@ -449,6 +450,7 @@ add_executable(sipi
         ${PROJECT_SOURCE_DIR}/src/handlers/iiif_handler.cpp
         ${PROJECT_SOURCE_DIR}/src/handlers/iiif_handler.hpp
         ${PROJECT_SOURCE_DIR}/src/SipiCache.cpp include/SipiCache.h
+        ${PROJECT_SOURCE_DIR}/src/SipiMetrics.cpp ${PROJECT_SOURCE_DIR}/include/SipiMetrics.h
         ${PROJECT_SOURCE_DIR}/src/SipiLua.cpp include/SipiLua.h
         ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiRotation.cpp include/iiifparser/SipiRotation.h
         ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiQualityFormat.cpp ${PROJECT_SOURCE_DIR}/include/iiifparser/SipiQualityFormat.h
@@ -478,7 +480,7 @@ add_executable(sipi
 
 add_dependencies(sipi icc_profiles magic_database)
 
-add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 exiv2 jansson lua sqlite3 kdu kdu_aux sentry openssl_ssl openssl_crypto curl_static magic_static)
+add_dependencies(sipi bzip2 zlib xz zstd jpeg jbigkit png webp tiff expat lcms2 exiv2 jansson lua sqlite3 kdu kdu_aux sentry prometheus_core openssl_ssl openssl_crypto curl_static magic_static)
 
 
 # !!! ORDER MATTERS !!!
@@ -500,6 +502,7 @@ target_link_libraries(${PROJECT_NAME} ${LIBS}
         jansson
         sqlite3
         sentry
+        prometheus_core
         curl_static
         openssl_ssl
         openssl_crypto

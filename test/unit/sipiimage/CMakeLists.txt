@@ -53,6 +53,8 @@ add_executable(${TEST_NAME}
         ${PROJECT_SOURCE_DIR}/src/handlers/iiif_handler.hpp
         ${PROJECT_SOURCE_DIR}/src/SipiCache.cpp
         ${PROJECT_SOURCE_DIR}/include/SipiCache.h
+        ${PROJECT_SOURCE_DIR}/src/SipiMetrics.cpp
+        ${PROJECT_SOURCE_DIR}/include/SipiMetrics.h
         ${PROJECT_SOURCE_DIR}/src/SipiLua.cpp
         ${PROJECT_SOURCE_DIR}/include/SipiLua.h
         ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiIdentifier.cpp
@@ -99,12 +101,13 @@ add_executable(${TEST_NAME}
         ${PROJECT_SOURCE_DIR}/include/SipiFilenameHash.h
 
 )
-add_dependencies(${TEST_NAME} icc_profiles magic_database lua sentry openssl_ssl openssl_crypto curl_static sqlite3)
+add_dependencies(${TEST_NAME} icc_profiles magic_database lua sentry prometheus_core openssl_ssl openssl_crypto curl_static sqlite3)
 
 target_link_libraries(${TEST_NAME} libgtest)
 
 # sentry is needed because SipiHttpServer.cpp includes SipiSentry.h
 target_link_libraries(${TEST_NAME} sentry)
+target_link_libraries(${TEST_NAME} prometheus_core)
 
 target_link_libraries(${TEST_NAME}
         lcms2
