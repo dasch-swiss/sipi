@@ -27,6 +27,11 @@ jobs:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - name: pull LFS objects
+        run: |
+          git lfs install
+          git lfs fetch --all
+          git lfs checkout
       - uses: dasch-swiss/sipi/.github/actions/setup-python@main
       - run: pip3 install --upgrade pip setuptools wheel
       - run: make install-requirements
@@ -62,6 +67,11 @@ jobs:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - name: pull LFS objects
+        run: |
+          git lfs install
+          git lfs fetch --all
+          git lfs checkout
 
       - uses: mlugg/setup-zig@v2
         with:
@@ -202,6 +212,11 @@ jobs:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - name: pull LFS objects
+        run: |
+          git lfs install
+          git lfs fetch --all
+          git lfs checkout
       - uses: dasch-swiss/sipi/.github/actions/setup-python@main
       - run: pip3 install --upgrade pip setuptools wheel
       - run: make install-requirements
