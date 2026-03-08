@@ -293,6 +293,22 @@ zig-static-docker-amd64: ## build + test zig-static amd64 in Docker (mirrors CI)
 		.
 
 #####################################
+# Vendor dependencies
+#####################################
+
+.PHONY: vendor-download
+vendor-download: ## download all dependency archives to vendor/
+	@scripts/vendor.sh download
+
+.PHONY: vendor-verify
+vendor-verify: ## verify SHA-256 checksums of vendored archives
+	@scripts/vendor.sh verify
+
+.PHONY: vendor-checksums
+vendor-checksums: ## print SHA-256 checksums for all vendor archives
+	@scripts/vendor.sh checksums
+
+#####################################
 # Utilities
 #####################################
 

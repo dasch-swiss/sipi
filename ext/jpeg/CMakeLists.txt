@@ -13,15 +13,22 @@ else()
     set(_jpeg_shared_flags --enable-shared --enable-static)
 endif()
 
+# Local vendor fallback — offline builds when archive present
+set(_local "${COMMON_VENDOR}/${DEP_JPEG_FILENAME}")
+if(EXISTS "${_local}")
+    set(_jpeg_url "${_local}")
+else()
+    set(_jpeg_url "${DEP_JPEG_URL}")
+endif()
+
 ExternalProject_Add(project_jpeg
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        URL https://ijg.org/files/jpegsrc.v9f.tar.gz
+        URL "${_jpeg_url}"
+        URL_HASH SHA256=${DEP_JPEG_SHA256}
         ${timestamp_policy}
-        DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
-        #URL_HASH SHA256=650250979303a649e21f87b5ccd02672af1ea6954b911342ea491f351ceb7122
-        #DOWNLOAD_EXTRACT_TIMESTAMP OLD
-        SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/libjpeg-v9f
-        CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/libjpeg-v9f/configure --prefix=${CMAKE_BINARY_DIR}/local ${_jpeg_shared_flags} --libdir=${CMAKE_BINARY_DIR}/local/lib
+        DOWNLOAD_DIR ""
+        SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/libjpeg-v${DEP_JPEG_VERSION}
+        CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/libjpeg-v${DEP_JPEG_VERSION}/configure --prefix=${CMAKE_BINARY_DIR}/local ${_jpeg_shared_flags} --libdir=${CMAKE_BINARY_DIR}/local/lib
         ${ZIG_AUTOTOOLS_HOST}
         CC=${CMAKE_C_COMPILER}
         ${ZIG_EP_CPP}

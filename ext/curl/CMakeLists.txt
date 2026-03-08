@@ -26,10 +26,19 @@ if(DEFINED ZIG_STATIC_BUILD AND ZIG_STATIC_BUILD)
     set(_curl_libs "LIBS=")
 endif()
 
+# Local vendor fallback — offline builds when archive present
+set(_local "${COMMON_VENDOR}/${DEP_CURL_FILENAME}")
+if(EXISTS "${_local}")
+    set(_curl_url "${_local}")
+else()
+    set(_curl_url "${DEP_CURL_URL}")
+endif()
+
 ExternalProject_Add(project_curl
     INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-    URL "https://curl.se/download/curl-8.12.1.tar.gz"
-    DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
+    URL "${_curl_url}"
+    URL_HASH SHA256=${DEP_CURL_SHA256}
+    DOWNLOAD_DIR ""
     ${timestamp_policy}
     SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/curl
     CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/curl/configure

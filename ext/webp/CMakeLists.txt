@@ -6,13 +6,21 @@ include(ExternalProject)
 #
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
+# Local vendor fallback — offline builds when archive present
+set(_local "${COMMON_VENDOR}/${DEP_WEBP_FILENAME}")
+if(EXISTS "${_local}")
+    set(_webp_url "${_local}")
+else()
+    set(_webp_url "${DEP_WEBP_URL}")
+endif()
+
 ExternalProject_Add(project_webp
         DEPENDS project_xz
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        URL https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.2.0.tar.gz
-        DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
+        URL "${_webp_url}"
+        URL_HASH SHA256=${DEP_WEBP_SHA256}
+        DOWNLOAD_DIR ""
         ${timestamp_policy}
-        #DOWNLOAD_EXTRACT_TIMESTAMP NEW
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/libwebp
         CMAKE_ARGS  ${ZIG_EP_CMAKE_ARGS} -DBUILD_SHARED_LIBS=OFF
                     -DWEBP_BUILD_ANIM_UTILS=OFF

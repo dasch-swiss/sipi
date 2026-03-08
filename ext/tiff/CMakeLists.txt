@@ -5,8 +5,15 @@ include(ExternalProject)
 
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
-set(LibTiffVersion "4.7.0")
 set(TIFF_STATIC_LIBLZMA "${CMAKE_BINARY_DIR}/local/lib/liblzma${CMAKE_STATIC_LIBRARY_SUFFIX}")
+
+# Local vendor fallback — offline builds when archive present
+set(_local "${COMMON_VENDOR}/${DEP_TIFF_FILENAME}")
+if(EXISTS "${_local}")
+    set(_tiff_url "${_local}")
+else()
+    set(_tiff_url "${DEP_TIFF_URL}")
+endif()
 
 ExternalProject_Add(project_tiff
         DEPENDS project_jpeg
@@ -16,10 +23,11 @@ ExternalProject_Add(project_tiff
         DEPENDS project_png
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
         TEST_COMMAND ""
-        URL https://download.osgeo.org/libtiff/tiff-${LibTiffVersion}.tar.gz
-        DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
+        URL "${_tiff_url}"
+        URL_HASH SHA256=${DEP_TIFF_SHA256}
+        DOWNLOAD_DIR ""
         ${timestamp_policy}
-        SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/libtiff-${LibTiffVersion}
+        SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/libtiff-${DEP_TIFF_VERSION}
         CMAKE_ARGS  ${ZIG_EP_CMAKE_ARGS} -DBUILD_SHARED_LIBS=OFF
                     -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                     -DCMAKE_FIND_FRAMEWORK=NEVER
@@ -39,7 +47,7 @@ ExternalProject_Add(project_tiff
                     -Dtiff-docs=OFF
         BUILD_COMMAND make -j4
         INSTALL_COMMAND make -j1 install
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/local/extsrcs/libtiff-${LibTiffVersion}/libtiff/tif_dir.h ${CMAKE_BINARY_DIR}/local/include/
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/local/extsrcs/libtiff-${DEP_TIFF_VERSION}/libtiff/tif_dir.h ${CMAKE_BINARY_DIR}/local/include/
         BUILD_IN_SOURCE 1
 )
 ExternalProject_Get_Property(project_tiff install_dir)

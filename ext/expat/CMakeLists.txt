@@ -3,11 +3,20 @@ include(ExternalProject)
 
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
+# Local vendor fallback — offline builds when archive present
+set(_local "${COMMON_VENDOR}/${DEP_EXPAT_FILENAME}")
+if(EXISTS "${_local}")
+    set(_expat_url "${_local}")
+else()
+    set(_expat_url "${DEP_EXPAT_URL}")
+endif()
+
 ExternalProject_Add(project_expat
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        URL https://github.com/libexpat/libexpat/releases/download/R_2_5_0/expat-2.5.0.tar.bz2
+        URL "${_expat_url}"
+        URL_HASH SHA256=${DEP_EXPAT_SHA256}
         ${timestamp_policy}
-        DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
+        DOWNLOAD_DIR ""
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/expat
         CMAKE_ARGS ${ZIG_EP_CMAKE_ARGS}
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5

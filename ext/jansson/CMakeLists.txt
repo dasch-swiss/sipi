@@ -9,13 +9,20 @@ set(JANSSON_INSTALL_LIB_DIR "lib/${BITS}")
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
 
+# Local vendor fallback — offline builds when archive present
+set(_local "${COMMON_VENDOR}/${DEP_JANSSON_FILENAME}")
+if(EXISTS "${_local}")
+    set(_jansson_url "${_local}")
+else()
+    set(_jansson_url "${DEP_JANSSON_URL}")
+endif()
+
 ExternalProject_Add(project_jansson
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        # GIT_REPOSITORY https://github.com/akheron/jansson.git
-        URL http://www.digip.org/jansson/releases/jansson-2.13.1.tar.gz
+        URL "${_jansson_url}"
+        URL_HASH SHA256=${DEP_JANSSON_SHA256}
         ${timestamp_policy}
-        DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
-        # DOWNLOAD_EXTRACT_TIMESTAMP OLD
+        DOWNLOAD_DIR ""
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/jansson
         CMAKE_ARGS ${ZIG_EP_CMAKE_ARGS}
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5

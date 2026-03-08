@@ -6,16 +6,23 @@ include(ExternalProject)
 #
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
-set(LibPngVersion "1.6.41")
+# Local vendor fallback — offline builds when archive present
+set(_local "${COMMON_VENDOR}/${DEP_PNG_FILENAME}")
+if(EXISTS "${_local}")
+    set(_png_url "${_local}")
+else()
+    set(_png_url "${DEP_PNG_URL}")
+endif()
 
 ExternalProject_Add(project_png
         DEPENDS project_zlib
         DEPENDS project_xz
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        URL https://sourceforge.net/projects/libpng/files/libpng16/${LibPngVersion}/libpng-${LibPngVersion}.tar.gz/download
+        URL "${_png_url}"
+        URL_HASH SHA256=${DEP_PNG_SHA256}
         ${timestamp_policy}
-        DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
-        SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/libpng-${LibPngVersion}
+        DOWNLOAD_DIR ""
+        SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/libpng-${DEP_PNG_VERSION}
         CMAKE_ARGS  ${ZIG_EP_CMAKE_ARGS} ${SHARED_OPTION}
         -DPNG_SHARED=OFF
         -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/local

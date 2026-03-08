@@ -1,5 +1,5 @@
 name: "Checkout"
-description: "Checkout code and ci-assets"
+description: "Checkout code, LFS objects, and ci-assets"
 inputs:
   DASCHBOT_PAT:
     description: "daschbot's private access token"
@@ -12,11 +12,21 @@ runs:
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
+        lfs: false  # don't auto-pull LFS — use cache instead
+    - name: restore LFS cache
+      uses: actions/cache@v4
+      with:
+        path: .git/lfs
+        key: lfs-${{ hashFiles('.gitattributes') }}-${{ hashFiles('vendor/**') }}
+        restore-keys: lfs-
+    - name: pull LFS objects
+      shell: bash
+      run: git lfs pull
     - name: checkout private ci-assets
       uses: actions/checkout@v4
       with:
         repository: dasch-swiss/dsp-ci-assets
-        token: ${{ inputs.DASCHBOT_PAT }} # `DASCHBOT_PAT` is a secret that contains your PAT
+        token: ${{ inputs.DASCHBOT_PAT }}
         path: ci
     - name: copy ci-assets
       shell: bash

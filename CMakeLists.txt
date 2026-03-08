@@ -40,6 +40,9 @@ include(CheckStructHasMember)
 include(CheckIncludeFiles)
 include(FindPackageHandleStandardArgs)
 
+# Centralized dependency manifest (versions, URLs, SHA-256 hashes)
+include(cmake/dependencies.cmake)
+
 # ------------------------------------------------------------------------------
 # Set our path variables
 # the build folder will hold all downloaded, built, and installed files

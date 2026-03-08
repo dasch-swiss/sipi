@@ -7,23 +7,29 @@ include_directories(
 
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
-set(Exiv2Version "v0.28.5")
-
 set(EXIV2_EXTRA_CMAKE_ARGS "")
 if(APPLE AND ZIG_TOOLCHAIN)
         # Keep macOS Zig builds free from explicit iconv linkage.
         list(APPEND EXIV2_EXTRA_CMAKE_ARGS -DCMAKE_DISABLE_FIND_PACKAGE_Iconv=TRUE)
 endif()
 
+# Local vendor fallback — offline builds when archive present
+set(_local "${COMMON_VENDOR}/${DEP_EXIV2_FILENAME}")
+if(EXISTS "${_local}")
+    set(_exiv2_url "${_local}")
+else()
+    set(_exiv2_url "${DEP_EXIV2_URL}")
+endif()
 
 ExternalProject_Add(project_exiv2
         DEPENDS project_expat
         DEPENDS project_png
         DEPENDS project_zlib
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        URL https://github.com/Exiv2/exiv2/archive/refs/tags/${Exiv2Version}.tar.gz
+        URL "${_exiv2_url}"
+        URL_HASH SHA256=${DEP_EXIV2_SHA256}
         ${timestamp_policy}
-        DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
+        DOWNLOAD_DIR ""
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/exiv2-trunk
         CMAKE_ARGS ${ZIG_EP_CMAKE_ARGS} -DBUILD_SHARED_LIBS=OFF -DEXIV2_ENABLE_INIH:BOOL=OFF -DEXIV2_ENABLE_BROTLI:BOOL=OFF -DEXIV2_BUILD_SAMPLES:BOOL=OFF -DEXIV2_BUILD_EXIV2_COMMAND=OFF -DEXIV2_ENABLE_NLS=OFF -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local -DCMAKE_INSTALL_LIBDIR=${CMAKE_BINARY_DIR}/local/lib ${EXIV2_EXTRA_CMAKE_ARGS}
 
