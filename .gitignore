@@ -66,6 +66,10 @@ icc.zip
 # Zig toolchain build artifact (written by cmake/zig-toolchain.cmake)
 scripts/toolchains/.zig-target
 
+# Kakadu is proprietary — injected by CI from dsp-ci-assets
+vendor/v8_4_1-*.zip
+vendor/v8_5-*.zip
+
 # Claude Code
 .claude/worktrees/
 .claude/settings.local.json

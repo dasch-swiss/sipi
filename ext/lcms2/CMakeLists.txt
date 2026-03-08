@@ -12,13 +12,22 @@ else()
     set(_lcms2_shared_flags "")
 endif()
 
+# Local vendor fallback — offline builds when archive present
+set(_local "${COMMON_VENDOR}/${DEP_LCMS2_FILENAME}")
+if(EXISTS "${_local}")
+    set(_lcms2_url "${_local}")
+else()
+    set(_lcms2_url "${DEP_LCMS2_URL}")
+endif()
+
 ExternalProject_Add(project_lcms2
         DEPENDS project_jpeg
         DEPENDS project_tiff
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        URL https://github.com/mm2/Little-CMS/releases/download/lcms2.16/lcms2-2.16.tar.gz
+        URL "${_lcms2_url}"
+        URL_HASH SHA256=${DEP_LCMS2_SHA256}
         ${timestamp_policy}
-        DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
+        DOWNLOAD_DIR ""
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/lcms2
         CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/lcms2/configure
         --prefix=${CMAKE_BINARY_DIR}/local

@@ -6,11 +6,20 @@ include(ExternalProject)
 #
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
+# Local vendor fallback — offline builds when archive present
+set(_local "${COMMON_VENDOR}/${DEP_BZIP2_FILENAME}")
+if(EXISTS "${_local}")
+    set(_bzip2_url "${_local}")
+else()
+    set(_bzip2_url "${DEP_BZIP2_URL}")
+endif()
+
 ExternalProject_Add(project_bzip2
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        URL https://gitlab.com/bzip2/bzip2/-/archive/bzip2-1.0.8/bzip2-bzip2-1.0.8.tar.bz2
+        URL "${_bzip2_url}"
+        URL_HASH SHA256=${DEP_BZIP2_SHA256}
         ${timestamp_policy}
-        DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
+        DOWNLOAD_DIR ""
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/bzip2
         CONFIGURE_COMMAND ""
         BUILD_COMMAND make CC=${CMAKE_C_COMPILER} ${ZIG_EP_CFLAGS} PREFIX=${CMAKE_BINARY_DIR}/local

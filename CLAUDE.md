@@ -28,6 +28,11 @@ make nix-build                 # build (debug + coverage)
 make nix-test                  # unit tests
 make nix-test-e2e              # end-to-end tests
 
+# Vendor dependencies
+make vendor-download           # download all dep archives to vendor/
+make vendor-verify             # verify SHA-256 checksums
+make vendor-checksums          # print checksums for manifest updates
+
 # Documentation
 make docs-serve                # serve docs locally
 ```

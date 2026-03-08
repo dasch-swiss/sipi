@@ -22,15 +22,23 @@ else()
     set(_luarocks_lua_bin_dir "${CMAKE_BINARY_DIR}/local/bin")
 endif()
 
+# Local vendor fallback — offline builds when archive present
+set(_local "${COMMON_VENDOR}/${DEP_LUAROCKS_FILENAME}")
+if(EXISTS "${_local}")
+    set(_luarocks_url "${_local}")
+else()
+    set(_luarocks_url "${DEP_LUAROCKS_URL}")
+endif()
+
 ExternalProject_Add(project_luarocks
         DEPENDS lua
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        URL http://luarocks.github.io/luarocks/releases/luarocks-3.3.1.tar.gz
+        URL "${_luarocks_url}"
+        URL_HASH SHA256=${DEP_LUAROCKS_SHA256}
         ${timestamp_policy}
-        DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
-        #DOWNLOAD_EXTRACT_TIMESTAMP NEW
-        SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/luarocks-3.3.1
-        CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/luarocks-3.3.1/configure
+        DOWNLOAD_DIR ""
+        SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/luarocks-${DEP_LUAROCKS_VERSION}
+        CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/luarocks-${DEP_LUAROCKS_VERSION}/configure
         --prefix=${CMAKE_BINARY_DIR}/local
         --with-lua-bin=${_luarocks_lua_bin_dir}
         --with-lua-include=${CMAKE_BINARY_DIR}/local/include

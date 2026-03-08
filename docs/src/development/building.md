@@ -17,6 +17,49 @@ downloaded by the build process. The user is responsible for reading
 and agreeing with Adobe's license conditions, which are specified in
 the file `Color Profile EULA.pdf`.
 
+## Vendored Dependencies
+
+SIPI builds all external libraries from source. Source archives are vendored in the
+`vendor/` directory and tracked with [Git LFS](https://git-lfs.com/). This ensures
+builds are reproducible and work offline — no internet access is needed during compilation.
+
+### First-time setup (Git LFS)
+
+After cloning the repository, pull the LFS objects:
+
+```bash
+git lfs install   # one-time setup
+git lfs pull      # download vendor archives and test images
+```
+
+### Dependency management
+
+All dependency metadata (version, URL, SHA-256 hash) is centralized in
+`cmake/dependencies.cmake`. The build system uses local archives from `vendor/`
+when present, and falls back to downloading from the URL if not.
+
+| Command | Description |
+|---------|-------------|
+| `make vendor-download` | Download all dependency archives to `vendor/` |
+| `make vendor-verify` | Verify SHA-256 checksums of all archives |
+| `make vendor-checksums` | Print current checksums (for updating the manifest) |
+
+### Updating a dependency
+
+1. Edit `cmake/dependencies.cmake` — update `DEP_<NAME>_VERSION`, `DEP_<NAME>_URL`, and `DEP_<NAME>_FILENAME`
+2. Run `make vendor-download` to fetch the new archive
+3. Run `make vendor-checksums` and update `DEP_<NAME>_SHA256` in the manifest
+4. Run `make vendor-verify` to confirm
+5. Clean build and test: `rm -rf build && make zig-build-local && make zig-test`
+
+### Adding a new dependency
+
+1. Add `DEP_<NAME>_*` variables to `cmake/dependencies.cmake`
+2. Create `ext/<name>/CMakeLists.txt` with the local fallback pattern (see existing deps for examples)
+3. Add `add_subdirectory(ext/<name>)` to the root `CMakeLists.txt`
+4. Run `make vendor-download` and `make vendor-checksums`
+5. Update the SHA-256 hash in the manifest
+
 ## Building with Docker (Recommended)
 
 The simplest way to build SIPI is using Docker. This requires
@@ -213,6 +256,9 @@ Key target groups:
 | `nix-valgrind` | Run with Valgrind |
 | `docs-build` | Build documentation |
 | `docs-serve` | Serve documentation locally |
+| `vendor-download` | Download all dependency archives to `vendor/` |
+| `vendor-verify` | Verify SHA-256 checksums of vendored archives |
+| `vendor-checksums` | Print SHA-256 checksums for all archives |
 | `clean` | Remove build artifacts |
 
 ## Documentation

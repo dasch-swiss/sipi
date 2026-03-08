@@ -127,6 +127,23 @@ make test-smoke
 Approval tests live in `test/approval/` and use snapshot-based
 testing for regression detection.
 
+## Managing Dependencies
+
+External library sources are vendored in `vendor/` and tracked with Git LFS.
+The manifest `cmake/dependencies.cmake` is the single source of truth for
+versions, download URLs, and SHA-256 hashes.
+
+See [Building: Vendored Dependencies](building.md#vendored-dependencies)
+for setup instructions and update/add workflows.
+
+Quick reference:
+
+```bash
+make vendor-download    # fetch all archives
+make vendor-verify      # check SHA-256 integrity
+make vendor-checksums   # print hashes for manifest updates
+```
+
 ## Commit Message Schema
 
 We use [Conventional Commits](https://www.conventionalcommits.org/).

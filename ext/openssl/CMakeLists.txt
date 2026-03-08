@@ -27,10 +27,19 @@ else()
     message(FATAL_ERROR "Unsupported OS for OpenSSL: ${CMAKE_SYSTEM_NAME}")
 endif()
 
+# Local vendor fallback — offline builds when archive present
+set(_local "${COMMON_VENDOR}/${DEP_OPENSSL_FILENAME}")
+if(EXISTS "${_local}")
+    set(_openssl_url "${_local}")
+else()
+    set(_openssl_url "${DEP_OPENSSL_URL}")
+endif()
+
 ExternalProject_Add(project_openssl
     INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-    URL "https://github.com/openssl/openssl/releases/download/openssl-3.4.1/openssl-3.4.1.tar.gz"
-    DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
+    URL "${_openssl_url}"
+    URL_HASH SHA256=${DEP_OPENSSL_SHA256}
+    DOWNLOAD_DIR ""
     ${timestamp_policy}
     SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/openssl
     CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/openssl/Configure

@@ -12,11 +12,20 @@ else()
     set(_sqlite3_shared_flags --enable-shared --enable-static)
 endif()
 
+# Local vendor fallback — offline builds when archive present
+set(_local "${COMMON_VENDOR}/${DEP_SQLITE3_FILENAME}")
+if(EXISTS "${_local}")
+    set(_sqlite3_url "${_local}")
+else()
+    set(_sqlite3_url "${DEP_SQLITE3_URL}")
+endif()
+
 ExternalProject_Add(project_sqlite3
         INSTALL_DIR ${CMAKE_BINARY_DIR}/local
-        URL "https://www.sqlite.org/2024/sqlite-autoconf-3450200.tar.gz"
-        DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
+        URL "${_sqlite3_url}"
+        URL_HASH SHA256=${DEP_SQLITE3_SHA256}
         ${timestamp_policy}
+        DOWNLOAD_DIR ""
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/sqlite
         CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/sqlite/configure --enable-fts5 --prefix=${CMAKE_BINARY_DIR}/local ${_sqlite3_shared_flags} --libdir=${CMAKE_BINARY_DIR}/local/lib
         ${ZIG_AUTOTOOLS_HOST}
