@@ -62,7 +62,15 @@ if(DEFINED ZIG_STATIC_BUILD AND ZIG_STATIC_BUILD)
 elseif (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     # when we compile with clang, we don't need to patch the makefiles
     set(PATCH_COMMAND_OVERRIDE "")
-    set(_KDU_BUILD_PREFIX "")
+    if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+        # Kakadu's macOS Makefile uses `libtool -static` (the macOS system tool).
+        # If Nix/direnv puts GNU libtool on PATH first, it shadows the system
+        # libtool and fails with "unrecognised option: -static".
+        # Prepend /usr/bin so the macOS libtool is always found.
+        set(_KDU_BUILD_PREFIX ${CMAKE_COMMAND} -E env "PATH=/usr/bin:$ENV{PATH}")
+    else()
+        set(_KDU_BUILD_PREFIX "")
+    endif()
     set(_KDU_CC_OVERRIDE "")
 else ()
     # when we compile with gcc, we need to patch the makefiles, so that the target uses GCC instead of Clang
