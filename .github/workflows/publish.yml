@@ -367,6 +367,8 @@ jobs:
     needs: [release-gate]
     steps:
       - uses: actions/checkout@v4
+      - name: Remove LFS hooks (not needed for docs deploy)
+        run: rm -f .git/hooks/pre-push
       - uses: mhausenblas/mkdocs-deploy-gh-pages@master
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
