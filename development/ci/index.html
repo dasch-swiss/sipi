@@ -8,20 +8,20 @@
       
       
       
-        <link rel="canonical" href="https://sipi.io/development/developing/">
+        <link rel="canonical" href="https://sipi.io/development/ci/">
       
       
-        <link rel="prev" href="../ci/">
+        <link rel="prev" href="../building/">
       
       
-        <link rel="next" href="../downstream-dependencies/">
+        <link rel="next" href="../developing/">
       
       <link rel="icon" href="../../assets/images/dasch-favicon.ico">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.1.20">
     
     
       
-        <title>Developing - SIPI Documentation</title>
+        <title>CI and Release - SIPI Documentation</title>
       
     
     
@@ -71,7 +71,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#developing-sipi" class="md-skip">
+        <a href="#ci-and-release" class="md-skip">
           Skip to content
         </a>
       
@@ -105,7 +105,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Developing
+              CI and Release
             
           </span>
         </div>
@@ -338,21 +338,6 @@
 
   
   
-  
-    <li class="md-nav__item">
-      <a href="../ci/" class="md-nav__link">
-        CI and Release
-      </a>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
     
   
   
@@ -365,12 +350,12 @@
       
       
         <label class="md-nav__link md-nav__link--active" for="__toc">
-          Developing
+          CI and Release
           <span class="md-nav__icon md-icon"></span>
         </label>
       
       <a href="./" class="md-nav__link md-nav__link--active">
-        Developing
+        CI and Release
       </a>
       
         
@@ -389,16 +374,51 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#using-an-ide" class="md-nav__link">
-    Using an IDE
+  <a href="#release-automation-release-please" class="md-nav__link">
+    Release Automation (release-please)
   </a>
   
-    <nav class="md-nav" aria-label="Using an IDE">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scope" class="md-nav__link">
+    Scope
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#zig-version-and-build-policy" class="md-nav__link">
+    Zig Version and Build Policy
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pull-request-ci" class="md-nav__link">
+    Pull Request CI
+  </a>
+  
+    <nav class="md-nav" aria-label="Pull Request CI">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#clion" class="md-nav__link">
-    CLion
+  <a href="#standard-test-matrix" class="md-nav__link">
+    Standard test matrix
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#zigstatic-pr-checks-native-per-arch-docker-in-ubuntu" class="md-nav__link">
+    Zig/static PR checks (native per-arch Docker-in-Ubuntu)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#forked-pr-behavior" class="md-nav__link">
+    Forked PR behavior
   </a>
   
 </li>
@@ -409,30 +429,23 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#running-locally" class="md-nav__link">
-    Running Locally
+  <a href="#tag-release-cicd" class="md-nav__link">
+    Tag Release CI/CD
   </a>
   
-    <nav class="md-nav" aria-label="Running Locally">
+    <nav class="md-nav" aria-label="Tag Release CI/CD">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#start-the-server" class="md-nav__link">
-    Start the server
+  <a href="#static-artifact-flow" class="md-nav__link">
+    Static artifact flow
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#try-some-requests" class="md-nav__link">
-    Try some requests
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#available-configs" class="md-nav__link">
-    Available configs
+  <a href="#release-attachment-and-symbols" class="md-nav__link">
+    Release attachment and symbols
   </a>
   
 </li>
@@ -443,57 +456,43 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#writing-tests" class="md-nav__link">
-    Writing Tests
+  <a href="#local-reproduction" class="md-nav__link">
+    Local Reproduction
   </a>
   
-    <nav class="md-nav" aria-label="Writing Tests">
+    <nav class="md-nav" aria-label="Local Reproduction">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#unit-tests" class="md-nav__link">
-    Unit Tests
+  <a href="#zig-local-workflow-native-build-e2e-on-host" class="md-nav__link">
+    Zig local workflow (native build + e2e on host)
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#end-to-end-tests" class="md-nav__link">
-    End-to-End Tests
+  <a href="#static-zig-build-in-docker-mirrors-ci-build-job" class="md-nav__link">
+    Static Zig build in Docker (mirrors CI build job)
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#smoke-tests" class="md-nav__link">
-    Smoke Tests
+  <a href="#linux-static-validation-commands" class="md-nav__link">
+    Linux static validation commands
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#approval-tests" class="md-nav__link">
-    Approval Tests
+  <a href="#macos-dylib-audit-command" class="md-nav__link">
+    macOS dylib audit command
   </a>
   
 </li>
         
       </ul>
     </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#managing-dependencies" class="md-nav__link">
-    Managing Dependencies
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#commit-message-schema" class="md-nav__link">
-    Commit Message Schema
-  </a>
   
 </li>
       
@@ -501,6 +500,21 @@
   
 </nav>
       
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../developing/" class="md-nav__link">
+        Developing
+      </a>
     </li>
   
 
@@ -568,149 +582,188 @@
   
 
 
-<h1 id="developing-sipi">Developing SIPI<a class="headerlink" href="#developing-sipi" title="Permanent link">&para;</a></h1>
-<h2 id="using-an-ide">Using an IDE<a class="headerlink" href="#using-an-ide" title="Permanent link">&para;</a></h2>
-<h3 id="clion">CLion<a class="headerlink" href="#clion" title="Permanent link">&para;</a></h3>
-<p>If you are using the <a href="https://www.jetbrains.com/clion/">CLion</a> IDE, note
-that code introspection in the CLion editor may not work until it has
-run CMake. Open the project root directory (which contains <code>CMakeLists.txt</code>)
-and let CLion configure the project automatically.</p>
-<p>For Nix-based development, launch CLion from inside the Nix shell so it
-inherits all required environment variables and dependencies:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>nix<span class="w"> </span>develop
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>clion<span class="w"> </span>.
-</code></pre></div>
-<h2 id="running-locally">Running Locally<a class="headerlink" href="#running-locally" title="Permanent link">&para;</a></h2>
-<p>A dedicated local development config is provided at
-<code>config/sipi.localdev-config.lua</code>. It points <code>imgroot</code> at the bundled test
-images and uses small cache limits (1 MB, 10 files) so IIIF requests work
-out of the box and cache eviction is easy to observe.</p>
-<h3 id="start-the-server">Start the server<a class="headerlink" href="#start-the-server" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>./build/sipi<span class="w"> </span>--config<span class="w"> </span>config/sipi.localdev-config.lua
-</code></pre></div>
-<p>The server starts on <code>http://localhost:1024</code>.</p>
-<h3 id="try-some-requests">Try some requests<a class="headerlink" href="#try-some-requests" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Fetch an IIIF image with a transformation (creates a cache entry)</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># Note: requests that need no processing (same format, full size, no rotation)</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># are served directly from the original file and bypass the cache.</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>curl<span class="w"> </span>http://localhost:1024/unit/gradient-stars.tif/full/max/0/default.jpg<span class="w"> </span>-o<span class="w"> </span>/tmp/test.jpg
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="c1"># Prometheus metrics (cache counters, gauges, no auth required)</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>curl<span class="w"> </span>http://localhost:1024/metrics
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="c1"># Cache file list via Lua API (requires admin credentials from config)</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>curl<span class="w"> </span>-u<span class="w"> </span>admin:Sipi-Admin<span class="w"> </span>http://localhost:1024/api/cache
-</code></pre></div>
-<p>Make several different image requests to fill the cache past its 1 MB / 10 file
-limits and watch the eviction metrics change:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Format conversions (TIF → JPG) trigger caching — all well under 2 MB</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>curl<span class="w"> </span>http://localhost:1024/unit/gradient-stars.tif/full/max/0/default.jpg<span class="w"> </span>-o<span class="w"> </span>/dev/null
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>curl<span class="w"> </span>http://localhost:1024/unit/lena512.tif/full/max/0/default.jpg<span class="w"> </span>-o<span class="w"> </span>/dev/null
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>curl<span class="w"> </span>http://localhost:1024/unit/cielab.tif/full/max/0/default.jpg<span class="w"> </span>-o<span class="w"> </span>/dev/null
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="c1"># Resized requests also trigger caching</span>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>curl<span class="w"> </span>http://localhost:1024/unit/MaoriFigure.jpg/full/200,/0/default.jpg<span class="w"> </span>-o<span class="w"> </span>/dev/null
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>curl<span class="w"> </span>http://localhost:1024/unit/MaoriFigureWatermark.jpg/full/200,/0/default.jpg<span class="w"> </span>-o<span class="w"> </span>/dev/null
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>curl<span class="w"> </span>http://localhost:1024/metrics<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>sipi_cache
-</code></pre></div>
-<h3 id="available-configs">Available configs<a class="headerlink" href="#available-configs" title="Permanent link">&para;</a></h3>
+<h1 id="ci-and-release">CI and Release<a class="headerlink" href="#ci-and-release" title="Permanent link">&para;</a></h1>
+<p>This page documents SIPI's CI pipeline, release automation, and the Zig/static
+build hardening that runs in parallel with Docker during rollout.</p>
+<h2 id="release-automation-release-please">Release Automation (release-please)<a class="headerlink" href="#release-automation-release-please" title="Permanent link">&para;</a></h2>
+<p>Releases are fully automated via <a href="https://github.com/googleapis/release-please">release-please</a>.
+When commits are merged to <code>main</code>, release-please reads their
+<a href="https://www.conventionalcommits.org/">Conventional Commit</a> prefixes to
+determine the SemVer bump and generate the changelog.</p>
+<p><strong>Configuration files:</strong></p>
+<ul>
+<li><code>.github/release-please/config.json</code> — changelog sections, release type</li>
+<li><code>.github/release-please/manifest.json</code> — current version</li>
+<li><code>.github/workflows/release-please.yml</code> — GitHub Actions workflow</li>
+</ul>
+<p><strong>How commit types map to releases:</strong></p>
 <table>
 <thead>
 <tr>
-<th>Config file</th>
-<th>Purpose</th>
+<th>Prefix</th>
+<th>SemVer Effect</th>
+<th>Changelog Section</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>config/sipi.config.lua</code></td>
-<td>Production-like defaults (<code>./images</code> imgroot, 20 MB cache)</td>
+<td><code>feat:</code></td>
+<td>minor bump</td>
+<td>Features</td>
 </tr>
 <tr>
-<td><code>config/sipi.localdev-config.lua</code></td>
-<td>Local development (test images, tiny cache, DEBUG logging)</td>
+<td><code>fix:</code></td>
+<td>patch bump</td>
+<td>Bug Fixes</td>
 </tr>
 <tr>
-<td><code>config/sipi.test-config.lua</code></td>
-<td>Automated test suite</td>
+<td><code>feat!:</code> / <code>fix!:</code></td>
+<td>major bump</td>
+<td>Breaking Changes</td>
+</tr>
+<tr>
+<td><code>perf:</code></td>
+<td>patch bump</td>
+<td>Performance Improvements</td>
+</tr>
+<tr>
+<td><code>docs:</code>, <code>style:</code>, <code>refactor:</code>, <code>test:</code>, <code>build:</code>, <code>ci:</code>, <code>chore:</code></td>
+<td>no bump</td>
+<td>hidden</td>
 </tr>
 </tbody>
 </table>
-<h2 id="writing-tests">Writing Tests<a class="headerlink" href="#writing-tests" title="Permanent link">&para;</a></h2>
-<p>We use two test frameworks:
-<a href="https://github.com/google/googletest">GoogleTest</a> for unit tests and
-<a href="http://doc.pytest.org/en/latest/">pytest</a> for end-to-end tests.</p>
-<h3 id="unit-tests">Unit Tests<a class="headerlink" href="#unit-tests" title="Permanent link">&para;</a></h3>
-<p>Unit tests live in <code>test/unit/</code> and use GoogleTest with ApprovalTests.
-Tests are organized by component:</p>
+<div class="admonition warning">
+<p class="admonition-title">Correct commit prefixes are critical</p>
+<p>A commit without a valid Conventional Commit prefix will be invisible to
+release-please — it won't trigger a release or appear in the changelog.
+See <a href="../developing/#commit-message-schema">Commit Message Schema</a> for the
+full format specification.</p>
+</div>
+<h2 id="scope">Scope<a class="headerlink" href="#scope" title="Permanent link">&para;</a></h2>
 <ul>
-<li><code>test/unit/configuration/</code> - Configuration parsing tests</li>
-<li><code>test/unit/iiifparser/</code> - IIIF URL parser tests</li>
-<li><code>test/unit/sipiimage/</code> - Image processing tests</li>
-<li><code>test/unit/logger/</code> - Logger tests</li>
-<li><code>test/unit/handlers/</code> - HTTP handler tests</li>
+<li>Keep Docker publishing and Zig/static artifacts in parallel.</li>
+<li>Enforce Zig/static validation as required gates before release side effects.</li>
+<li>Produce fully static Linux binaries (<code>x86_64-linux-musl</code>, <code>aarch64-linux-musl</code>).</li>
+<li>Enforce strict macOS Zig dylib policy (<code>/usr/lib/libSystem.B.dylib</code> only).</li>
 </ul>
-<p>Run all unit tests:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>make<span class="w"> </span>nix-test
-</code></pre></div>
-<p>Run a specific test binary directly:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nb">cd</span><span class="w"> </span>build<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>test/unit/iiifparser/iiifparser
-</code></pre></div>
-<h3 id="end-to-end-tests">End-to-End Tests<a class="headerlink" href="#end-to-end-tests" title="Permanent link">&para;</a></h3>
-<p>End-to-end tests live in <code>test/e2e/</code> and use pytest. To add tests,
-create a Python file whose name begins with <code>test_</code> in the <code>test/e2e/</code>
-directory. The test fixtures in <code>test/e2e/conftest.py</code> handle starting
-and stopping a SIPI server and provide other testing utilities.</p>
-<p>Run e2e tests:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>make<span class="w"> </span>nix-test-e2e
-</code></pre></div>
-<h3 id="smoke-tests">Smoke Tests<a class="headerlink" href="#smoke-tests" title="Permanent link">&para;</a></h3>
-<p>Smoke tests live in <code>test/smoke/</code> and run against a Docker image.
-They verify basic server functionality after a Docker build:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>make<span class="w"> </span>test-smoke
-</code></pre></div>
-<h3 id="approval-tests">Approval Tests<a class="headerlink" href="#approval-tests" title="Permanent link">&para;</a></h3>
-<p>Approval tests live in <code>test/approval/</code> and use snapshot-based
-testing for regression detection.</p>
-<h2 id="managing-dependencies">Managing Dependencies<a class="headerlink" href="#managing-dependencies" title="Permanent link">&para;</a></h2>
-<p>External library sources are vendored in <code>vendor/</code> and tracked with Git LFS.
-The manifest <code>cmake/dependencies.cmake</code> is the single source of truth for
-versions, download URLs, and SHA-256 hashes.</p>
-<p>See <a href="../building/#vendored-dependencies">Building: Vendored Dependencies</a>
-for setup instructions and update/add workflows.</p>
-<p>Quick reference:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>make<span class="w"> </span>vendor-download<span class="w">    </span><span class="c1"># fetch all archives</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>make<span class="w"> </span>vendor-verify<span class="w">      </span><span class="c1"># check SHA-256 integrity</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>make<span class="w"> </span>vendor-checksums<span class="w">   </span><span class="c1"># print hashes for manifest updates</span>
-</code></pre></div>
-<h2 id="commit-message-schema">Commit Message Schema<a class="headerlink" href="#commit-message-schema" title="Permanent link">&para;</a></h2>
-<p>We use <a href="https://www.conventionalcommits.org/">Conventional Commits</a>.
-These prefixes drive <a href="../ci/#release-automation-release-please">release-please</a>
-to automatically determine SemVer bumps and generate changelogs — <strong>using the
-correct prefix is required, not optional</strong>.</p>
-<div class="highlight"><pre><span></span><code>type(scope): subject
-body
-</code></pre></div>
-<p>Types:</p>
+<h2 id="zig-version-and-build-policy">Zig Version and Build Policy<a class="headerlink" href="#zig-version-and-build-policy" title="Permanent link">&para;</a></h2>
 <ul>
-<li><code>feat</code> - new feature (SemVer minor)</li>
-<li><code>fix</code> - bug fix (SemVer patch)</li>
-<li><code>docs</code> - documentation changes</li>
-<li><code>style</code> - formatting, no code change</li>
-<li><code>refactor</code> - refactoring production code</li>
-<li><code>test</code> - adding or refactoring tests</li>
-<li><code>build</code> - changes to build system or dependencies</li>
-<li><code>chore</code> - miscellaneous maintenance</li>
-<li><code>ci</code> - continuous integration changes</li>
-<li><code>perf</code> - performance improvements</li>
+<li>Zig is pinned to <code>0.15.2</code> in CI workflows.</li>
+<li>Linux static targets:</li>
+<li><code>x86_64-linux-musl</code> (amd64)</li>
+<li><code>aarch64-linux-musl</code> (arm64)</li>
+<li>CI uses <strong>native per-arch builds via Docker-in-Ubuntu</strong>: each architecture
+  gets its own runner (<code>ubuntu-24.04</code> for amd64, <code>ubuntu-24.04-arm</code> for arm64).
+  JS actions (checkout, setup-zig, upload-artifact) run on the bare Ubuntu host.
+  The build itself runs inside <code>docker run alpine:3.21</code> with the source
+  bind-mounted — Alpine is required because Zig has a bug where it doesn't
+  ignore <code>/usr/include</code> even with <code>-target</code>, and Ubuntu's glibc headers would
+  contaminate musl builds.</li>
+<li>LTO is disabled for musl static builds (<code>-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF</code>).</li>
 </ul>
-<p>Breaking changes are indicated with <code>!</code>:</p>
-<div class="highlight"><pre><span></span><code>feat!: remove deprecated API endpoint
+<h2 id="pull-request-ci">Pull Request CI<a class="headerlink" href="#pull-request-ci" title="Permanent link">&para;</a></h2>
+<p>Workflow: <code>.github/workflows/test.yml</code></p>
+<h3 id="standard-test-matrix">Standard test matrix<a class="headerlink" href="#standard-test-matrix" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Existing Nix/GCC test matrix still runs on:</li>
+<li><code>ubuntu-24.04</code></li>
+<li><code>ubuntu-24.04-arm</code></li>
+</ul>
+<h3 id="zigstatic-pr-checks-native-per-arch-docker-in-ubuntu">Zig/static PR checks (native per-arch Docker-in-Ubuntu)<a class="headerlink" href="#zigstatic-pr-checks-native-per-arch-docker-in-ubuntu" title="Permanent link">&para;</a></h3>
+<p>Each architecture gets a combined build+test job on its native runner. The build
+runs inside an Alpine Docker container, then tests run on the bare Ubuntu host —
+proving the static musl binaries are portable.</p>
+<p><strong><code>zig-static / {arch}</code></strong> — combined job per architecture:</p>
+<ol>
+<li><strong>Host (Ubuntu):</strong> JS actions run checkout and setup-zig.</li>
+<li><strong>Alpine Docker:</strong> <code>docker run alpine:3.21</code> with source bind-mounted:<ul>
+<li>Installs build prerequisites via <code>apk</code>.</li>
+<li>Zig binary (statically linked) is bind-mounted from host.</li>
+<li>CMake configure + build produces a static ELF binary.</li>
+</ul>
+</li>
+<li><strong>Host (Ubuntu):</strong> Verification and testing:<ul>
+<li>Static linkage verification (<code>ldd</code>, <code>readelf -d</code>).</li>
+<li>Unit tests (GoogleTest executables run directly).</li>
+<li>E2e dependencies installed via <code>apt-get</code> and <code>pip3</code>.</li>
+<li>Full e2e test suite (<code>test/e2e</code>).</li>
+</ul>
+</li>
+</ol>
+<p>This proves Alpine-built static binaries run on a glibc host that had no part
+in building them, and each architecture builds and tests natively.</p>
+<p><strong><code>zig-macos / arm64 dylib-audit</code>:</strong></p>
+<ul>
+<li>Native Release Zig build.</li>
+<li><code>otool -L</code> audit on <code>build-zig-macos/sipi</code>.</li>
+<li>Exactly one allowed dependency:</li>
+<li><code>/usr/lib/libSystem.B.dylib</code></li>
+</ul>
+<h3 id="forked-pr-behavior">Forked PR behavior<a class="headerlink" href="#forked-pr-behavior" title="Permanent link">&para;</a></h3>
+<p>Zig static jobs are intentionally skipped for forked PRs because private inputs
+(for example Kakadu/private dependency paths) are not available there.
+Standard CI behavior remains active for forks.</p>
+<h2 id="tag-release-cicd">Tag Release CI/CD<a class="headerlink" href="#tag-release-cicd" title="Permanent link">&para;</a></h2>
+<p>Workflow: <code>.github/workflows/publish.yml</code></p>
+<p>Trigger:
+- Tag push matching <code>v*</code></p>
+<p>Gate model:
+1. <code>validate-static / {arch}</code> builds, tests, and packages each architecture
+   natively (same Docker-in-Ubuntu pattern as PR workflow).
+2. <code>validate-docker</code> must pass.
+3. <code>release-gate</code> requires <code>validate-docker</code> and <code>validate-static</code>.
+4. Publish side effects run only after <code>release-gate</code> succeeds.</p>
+<h3 id="static-artifact-flow">Static artifact flow<a class="headerlink" href="#static-artifact-flow" title="Permanent link">&para;</a></h3>
+<p>Each architecture is built, tested, and packaged in its own <code>validate-static</code>
+job:</p>
+<ul>
+<li>Build static binary (native on each arch's runner).</li>
+<li>Verify static linkage.</li>
+<li>Run unit tests and e2e tests.</li>
+<li>Split debug symbols (<code>objcopy --only-keep-debug</code>).</li>
+<li>Strip binary.</li>
+<li>Add debug link (<code>objcopy --add-gnu-debuglink</code>).</li>
+<li>Package <code>.tar.gz</code> + <code>.sha256</code>.</li>
+<li>Upload <code>static-linux-release-{arch}</code> artifact.</li>
+</ul>
+<h3 id="release-attachment-and-symbols">Release attachment and symbols<a class="headerlink" href="#release-attachment-and-symbols" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Static archives/checksums are attached to the existing tag release.</li>
+<li>Static debug symbols are uploaded to Sentry per architecture.</li>
+<li>Docker debug symbols and SBOM flow continue in parallel.</li>
+</ul>
+<h2 id="local-reproduction">Local Reproduction<a class="headerlink" href="#local-reproduction" title="Permanent link">&para;</a></h2>
+<h3 id="zig-local-workflow-native-build-e2e-on-host">Zig local workflow (native build + e2e on host)<a class="headerlink" href="#zig-local-workflow-native-build-e2e-on-host" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>make<span class="w"> </span>zig-build-local
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>make<span class="w"> </span>zig-test
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>make<span class="w"> </span>zig-test-e2e
 </code></pre></div>
-<p>Example:</p>
-<div class="highlight"><pre><span></span><code>feat(HTTP server): support more authentication methods
+<h3 id="static-zig-build-in-docker-mirrors-ci-build-job">Static Zig build in Docker (mirrors CI build job)<a class="headerlink" href="#static-zig-build-in-docker-mirrors-ci-build-job" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>make<span class="w"> </span>zig-static-docker-arm64<span class="w">   </span><span class="c1"># Alpine build + ctest for arm64</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>make<span class="w"> </span>zig-static-docker-amd64<span class="w">   </span><span class="c1"># Alpine build + ctest for amd64</span>
 </code></pre></div>
+<p>These targets mirror the <code>validate-static</code> CI job: Alpine 3.21 container,
+Zig toolchain, cmake build, and unit tests. They do <strong>not</strong> run e2e tests.</p>
+<p>The CI's portability proof (e2e on bare Ubuntu) is not reproduced locally
+because the Docker targets produce a Linux ELF binary that cannot run on
+macOS. On a Linux workstation you could extract the binary and run e2e
+manually, but this is not wrapped in a Make target — CI is the authoritative
+portability check.</p>
+<h3 id="linux-static-validation-commands">Linux static validation commands<a class="headerlink" href="#linux-static-validation-commands" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># (local Makefile targets use build-static/; CI uses build/)</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>file<span class="w"> </span>build-static/sipi
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>ldd<span class="w"> </span>build-static/sipi
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>readelf<span class="w"> </span>-d<span class="w"> </span>build-static/sipi<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>NEEDED
+</code></pre></div>
+<p>Expected:
+- <code>ldd</code> indicates static.
+- <code>readelf</code> returns no <code>NEEDED</code> entries.</p>
+<h3 id="macos-dylib-audit-command">macOS dylib audit command<a class="headerlink" href="#macos-dylib-audit-command" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>otool<span class="w"> </span>-L<span class="w"> </span>build-zig-macos/sipi
+</code></pre></div>
+<p>Expected:
+- Only <code>/usr/lib/libSystem.B.dylib</code>.</p>
 
 
 

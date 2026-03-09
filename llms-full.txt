@@ -218,31 +218,30 @@ If none is specified, the default level is `INFO`.
 
 ### Server Options
 
-| Flag                    | Short | Env Var                | Default                         | Description                            |
-| ----------------------- | ----- | ---------------------- | ------------------------------- | -------------------------------------- |
-| `--config <file>`       | `-c`  | `SIPI_CONFIGFILE`      |                                 | Lua configuration file for server mode |
-| `--serverport <n>`      |       | `SIPI_SERVERPORT`      | `80`                            | HTTP port                              |
-| `--sslport <n>`         |       | `SIPI_SSLPORT`         | `443`                           | HTTPS port                             |
-| `--hostname <name>`     |       | `SIPI_HOSTNAME`        | `localhost`                     | Public DNS hostname                    |
-| `--keepalive <sec>`     |       | `SIPI_KEEPALIVE`       | `5`                             | HTTP keep-alive timeout in seconds     |
-| `--nthreads <n>`        | `-t`  | `SIPI_NTHREADS`        | CPU cores                       | Number of worker threads               |
-| `--maxpost <size>`      |       | `SIPI_MAXPOSTSIZE`     | `300M`                          | Maximum POST upload size               |
-| `--imgroot <path>`      |       | `SIPI_IMGROOT`         | `./images`                      | Image repository root directory        |
-| `--docroot <path>`      |       | `SIPI_DOCROOT`         | `./server`                      | Web server document root               |
-| `--wwwroute <path>`     |       | `SIPI_WWWROUTE`        | `/server`                       | URL route for web server               |
-| `--scriptdir <path>`    |       | `SIPI_SCRIPTDIR`       | `./scripts`                     | Directory for Lua route scripts        |
-| `--tmpdir <path>`       |       | `SIPI_TMPDIR`          | `./tmp`                         | Temporary files directory              |
-| `--maxtmpage <sec>`     |       | `SIPI_MAXTMPAGE`       | `86400`                         | Max age of temp files in seconds       |
-| `--initscript <path>`   |       | `SIPI_INITSCRIPT`      | `./config/sipi.init.lua`        | Path to Lua init script                |
-| `--cachedir <path>`     |       | `SIPI_CACHEDIR`        | `./cache`                       | Cache directory                        |
-| `--cachesize <size>`    |       | `SIPI_CACHESIZE`       | `200M`                          | Maximum cache size                     |
-| `--cachenfiles <n>`     |       | `SIPI_CACHENFILES`     | `200`                           | Maximum number of cached files         |
-| `--cachehysteresis <f>` |       | `SIPI_CACHEHYSTERESIS` | `0.15`                          | Cache purge ratio (0.0 - 1.0)          |
-| `--thumbsize <size>`    |       | `SIPI_THUMBSIZE`       | `!128,128`                      | Default thumbnail size (IIIF syntax)   |
-| `--sslcert <path>`      |       | `SIPI_SSLCERTIFICATE`  | `./certificate/certificate.pem` | SSL certificate path                   |
-| `--sslkey <path>`       |       | `SIPI_SSLKEY`          | `./certificate/key.pem`         | SSL key file path                      |
-| `--jwtkey <string>`     |       | `SIPI_JWTKEY`          |                                 | JWT shared secret (42 chars)           |
-| `--loglevel <level>`    |       | `SIPI_LOGLEVEL`        | `DEBUG`                         | Log level (see Logging section)        |
+| Flag                  | Short | Env Var               | Default                         | Description                                       |
+| --------------------- | ----- | --------------------- | ------------------------------- | ------------------------------------------------- |
+| `--config <file>`     | `-c`  | `SIPI_CONFIGFILE`     |                                 | Lua configuration file for server mode            |
+| `--serverport <n>`    |       | `SIPI_SERVERPORT`     | `80`                            | HTTP port                                         |
+| `--sslport <n>`       |       | `SIPI_SSLPORT`        | `443`                           | HTTPS port                                        |
+| `--hostname <name>`   |       | `SIPI_HOSTNAME`       | `localhost`                     | Public DNS hostname                               |
+| `--keepalive <sec>`   |       | `SIPI_KEEPALIVE`      | `5`                             | HTTP keep-alive timeout in seconds                |
+| `--nthreads <n>`      | `-t`  | `SIPI_NTHREADS`       | CPU cores                       | Number of worker threads                          |
+| `--maxpost <size>`    |       | `SIPI_MAXPOSTSIZE`    | `300M`                          | Maximum POST upload size                          |
+| `--imgroot <path>`    |       | `SIPI_IMGROOT`        | `./images`                      | Image repository root directory                   |
+| `--docroot <path>`    |       | `SIPI_DOCROOT`        | `./server`                      | Web server document root                          |
+| `--wwwroute <path>`   |       | `SIPI_WWWROUTE`       | `/server`                       | URL route for web server                          |
+| `--scriptdir <path>`  |       | `SIPI_SCRIPTDIR`      | `./scripts`                     | Directory for Lua route scripts                   |
+| `--tmpdir <path>`     |       | `SIPI_TMPDIR`         | `./tmp`                         | Temporary files directory                         |
+| `--maxtmpage <sec>`   |       | `SIPI_MAXTMPAGE`      | `86400`                         | Max age of temp files in seconds                  |
+| `--initscript <path>` |       | `SIPI_INITSCRIPT`     | `./config/sipi.init.lua`        | Path to Lua init script                           |
+| `--cachedir <path>`   |       | `SIPI_CACHEDIR`       | `./cache`                       | Cache directory                                   |
+| `--cachesize <size>`  |       | `SIPI_CACHESIZE`      | `200M`                          | Maximum cache size (`-1`=unlimited, `0`=disabled) |
+| `--cachenfiles <n>`   |       | `SIPI_CACHENFILES`    | `200`                           | Maximum number of cached files (`0`=no limit)     |
+| `--thumbsize <size>`  |       | `SIPI_THUMBSIZE`      | `!128,128`                      | Default thumbnail size (IIIF syntax)              |
+| `--sslcert <path>`    |       | `SIPI_SSLCERTIFICATE` | `./certificate/certificate.pem` | SSL certificate path                              |
+| `--sslkey <path>`     |       | `SIPI_SSLKEY`         | `./certificate/key.pem`         | SSL key file path                                 |
+| `--jwtkey <string>`   |       | `SIPI_JWTKEY`         |                                 | JWT shared secret (42 chars)                      |
+| `--loglevel <level>`  |       | `SIPI_LOGLEVEL`       | `DEBUG`                         | Log level (see Logging section)                   |
 
 ### Sentry Error Reporting
 
@@ -265,35 +264,34 @@ If none is specified, the default level is `INFO`.
 
 All server options can be configured via environment variables. Environment variables override Lua configuration file values but are themselves overridden by command-line flags.
 
-| Variable                  | CLI Flag               | Default                         | Description                  |
-| ------------------------- | ---------------------- | ------------------------------- | ---------------------------- |
-| `SIPI_CONFIGFILE`         | `--config`             |                                 | Configuration file path      |
-| `SIPI_SERVERPORT`         | `--serverport`         | `80`                            | HTTP port                    |
-| `SIPI_SSLPORT`            | `--sslport`            | `443`                           | HTTPS port                   |
-| `SIPI_HOSTNAME`           | `--hostname`           | `localhost`                     | Public hostname              |
-| `SIPI_KEEPALIVE`          | `--keepalive`          | `5`                             | Keep-alive timeout (seconds) |
-| `SIPI_NTHREADS`           | `--nthreads`           | CPU cores                       | Worker threads               |
-| `SIPI_MAXPOSTSIZE`        | `--maxpost`            | `300M`                          | Max POST size                |
-| `SIPI_IMGROOT`            | `--imgroot`            | `./images`                      | Image root directory         |
-| `SIPI_DOCROOT`            | `--docroot`            | `./server`                      | Document root                |
-| `SIPI_WWWROUTE`           | `--wwwroute`           | `/server`                       | Web server route             |
-| `SIPI_SCRIPTDIR`          | `--scriptdir`          | `./scripts`                     | Lua scripts directory        |
-| `SIPI_TMPDIR`             | `--tmpdir`             | `./tmp`                         | Temporary directory          |
-| `SIPI_MAXTMPAGE`          | `--maxtmpage`          | `86400`                         | Max temp file age            |
-| `SIPI_INITSCRIPT`         | `--initscript`         | `./config/sipi.init.lua`        | Init script path             |
-| `SIPI_CACHEDIR`           | `--cachedir`           | `./cache`                       | Cache directory              |
-| `SIPI_CACHESIZE`          | `--cachesize`          | `200M`                          | Max cache size               |
-| `SIPI_CACHENFILES`        | `--cachenfiles`        | `200`                           | Max cached files             |
-| `SIPI_CACHEHYSTERESIS`    | `--cachehysteresis`    | `0.15`                          | Cache purge ratio            |
-| `SIPI_THUMBSIZE`          | `--thumbsize`          | `!128,128`                      | Thumbnail size               |
-| `SIPI_SSLCERTIFICATE`     | `--sslcert`            | `./certificate/certificate.pem` | SSL certificate              |
-| `SIPI_SSLKEY`             | `--sslkey`             | `./certificate/key.pem`         | SSL key                      |
-| `SIPI_JWTKEY`             | `--jwtkey`             |                                 | JWT secret                   |
-| `SIPI_JPEGQUALITY`        | `--quality`            | `60`                            | JPEG quality                 |
-| `SIPI_LOGLEVEL`           | `--loglevel`           | `DEBUG`                         | Log level                    |
-| `SIPI_SENTRY_DSN`         | `--sentry-dsn`         |                                 | Sentry DSN                   |
-| `SIPI_SENTRY_RELEASE`     | `--sentry-release`     |                                 | Sentry release               |
-| `SIPI_SENTRY_ENVIRONMENT` | `--sentry-environment` |                                 | Sentry environment           |
+| Variable                  | CLI Flag               | Default                         | Description                                   |
+| ------------------------- | ---------------------- | ------------------------------- | --------------------------------------------- |
+| `SIPI_CONFIGFILE`         | `--config`             |                                 | Configuration file path                       |
+| `SIPI_SERVERPORT`         | `--serverport`         | `80`                            | HTTP port                                     |
+| `SIPI_SSLPORT`            | `--sslport`            | `443`                           | HTTPS port                                    |
+| `SIPI_HOSTNAME`           | `--hostname`           | `localhost`                     | Public hostname                               |
+| `SIPI_KEEPALIVE`          | `--keepalive`          | `5`                             | Keep-alive timeout (seconds)                  |
+| `SIPI_NTHREADS`           | `--nthreads`           | CPU cores                       | Worker threads                                |
+| `SIPI_MAXPOSTSIZE`        | `--maxpost`            | `300M`                          | Max POST size                                 |
+| `SIPI_IMGROOT`            | `--imgroot`            | `./images`                      | Image root directory                          |
+| `SIPI_DOCROOT`            | `--docroot`            | `./server`                      | Document root                                 |
+| `SIPI_WWWROUTE`           | `--wwwroute`           | `/server`                       | Web server route                              |
+| `SIPI_SCRIPTDIR`          | `--scriptdir`          | `./scripts`                     | Lua scripts directory                         |
+| `SIPI_TMPDIR`             | `--tmpdir`             | `./tmp`                         | Temporary directory                           |
+| `SIPI_MAXTMPAGE`          | `--maxtmpage`          | `86400`                         | Max temp file age                             |
+| `SIPI_INITSCRIPT`         | `--initscript`         | `./config/sipi.init.lua`        | Init script path                              |
+| `SIPI_CACHEDIR`           | `--cachedir`           | `./cache`                       | Cache directory                               |
+| `SIPI_CACHESIZE`          | `--cachesize`          | `200M`                          | Max cache size (`-1`=unlimited, `0`=disabled) |
+| `SIPI_CACHENFILES`        | `--cachenfiles`        | `200`                           | Max cached files (`0`=no limit)               |
+| `SIPI_THUMBSIZE`          | `--thumbsize`          | `!128,128`                      | Thumbnail size                                |
+| `SIPI_SSLCERTIFICATE`     | `--sslcert`            | `./certificate/certificate.pem` | SSL certificate                               |
+| `SIPI_SSLKEY`             | `--sslkey`             | `./certificate/key.pem`         | SSL key                                       |
+| `SIPI_JWTKEY`             | `--jwtkey`             |                                 | JWT secret                                    |
+| `SIPI_JPEGQUALITY`        | `--quality`            | `60`                            | JPEG quality                                  |
+| `SIPI_LOGLEVEL`           | `--loglevel`           | `DEBUG`                         | Log level                                     |
+| `SIPI_SENTRY_DSN`         | `--sentry-dsn`         |                                 | Sentry DSN                                    |
+| `SIPI_SENTRY_RELEASE`     | `--sentry-release`     |                                 | Sentry release                                |
+| `SIPI_SENTRY_ENVIRONMENT` | `--sentry-environment` |                                 | Sentry environment                            |
 
 **Configuration precedence** (highest to lowest):
 
@@ -378,7 +376,7 @@ SIPI's configuration file is written in [Lua](https://www.lua.org/). You can mak
 - Set `imgroot` to the directory containing the files to be served.
 - Create the directory `cache` in the top-level directory of the source tree.
 
-For more information, see the comments in `config/sipi.config.lua` and the [Reference](https://sipi.io/guide/sipi/index.md) page for all configuration parameters.
+For more information, see the comments in `config/sipi.config.lua` and the [Reference](../sipi/) page for all configuration parameters.
 
 ### HTTPS Support
 
@@ -634,26 +632,27 @@ The following configuration parameters are used by the SIPI server:
 
 #### Cache Configuration
 
-SIPI may optionally use a cache directory to store converted image in order to avoid computationally intensive conversions if a specific variant is requested several times. The cache is based on timestamps and the canonical IIIF URL. Before an image is being converted, the canonical URL is determined. If a file associated with this canonical URL is in the cache directory, the timestamp of the original file in the repository is compated to the cached file. If the cached file is newer, it will be served. If the file in the repository is newer, the cache file (which is outdated) will be deleted and replaced be the newly converted repository file (that is being sent to the client).
+SIPI uses a file-based LRU cache to store converted images, avoiding expensive re-conversions when the same variant is requested multiple times. The cache is keyed by the canonical IIIF URL and validated against the source file's modification time — stale entries are automatically replaced.
+
+**Eviction:** When the cache reaches its size or file-count limit (high-water mark at 100%), LRU eviction removes the least-recently-used entries until usage drops to 80% (low-water mark). Both limits are enforced independently — whichever is reached first triggers eviction.
+
+**Special values for `cache_size`:**
+
+- `'-1'` — unlimited cache (no size eviction)
+- `'0'` — cache disabled entirely (no files are cached)
+- `'200M'`, `'1G'` — enforced limit with LRU eviction
+
+**Monitoring:** SIPI exposes Prometheus metrics at `GET /metrics` (text format). Cache counters (`sipi_cache_hits_total`, `sipi_cache_misses_total`, `sipi_cache_evictions_total`, `sipi_cache_skips_total`) and gauges (`sipi_cache_size_bytes`, `sipi_cache_files`, `sipi_cache_size_limit_bytes`, `sipi_cache_files_limit`) are available for monitoring cache health.
 
 The following configuration parameters determine the behaviour of the cache:
 
-- `cachedir=path`: SIPI may optionally use a cache directory to store converted image in order to avoid computationally intensive conversions if a specific variant is requested several times. Sipi starts with a warning if the cache directory is defined but not existing.\
-  *Cmdline option: `--cachedir`*\
-  *Environment variable: `SIPI_CACHEDIR`*\
-  *Default: `./cache`*
-- `cachesize=amount`: The maximal size of the cache. The cache will be purged if either the maximal size or maximal number of files is reached. The amount has the form "M" with M indication Megabytes.\
-  *Cmdline option: `--cachesize`*\
-  *Environment variable: `SIPI_CACHESIZE`*\
-  *Default: `200M`*
-- `cache_nfiles=num`: The maximal number of files to be cached. The cache will be purged if either the maximal size or maximal number of files is reached.\
-  *Cmdline option: `--cachenfiles`*\
-  *Environment variable: `SIPI_CACHENFILES`*\
-  *Default: `200`*
-- `cache_hysteresis=float`: If the cache becomes full, the given percentage of file space is marked for reuse and purged.\
-  *Cmdline option: `--cachehysteresis`*\
-  *Environment variable: `SIPI_CACHEHYSTERESIS`*\
-  *Default: `0.15`*
+- `cache_dir=path`: Path to the cache directory. Created automatically if missing. *Cmdline option: `--cachedir`* *Environment variable: `SIPI_CACHEDIR`* *Default: `./cache`*
+- `cache_size=amount`: Maximum cache size. Use `'-1'` for unlimited, `'0'` to disable, or a size string like `'200M'` or `'1G'`. Eviction triggers at 100% and purges down to 80%. *Cmdline option: `--cachesize`* *Environment variable: `SIPI_CACHESIZE`* *Default: `200M`*
+- `cache_nfiles=num`: Maximum number of cached files. Set to `0` for no file-count limit. Eviction triggers when either size or file-count limit is reached. *Cmdline option: `--cachenfiles`* *Environment variable: `SIPI_CACHENFILES`* *Default: `200`*
+
+Deprecated keys
+
+The old configuration keys `cachedir`, `cachesize`, and `cache_hysteresis` are still accepted with a deprecation warning. The `cache_hysteresis` parameter has been removed — eviction now always uses a fixed 80% low-water mark. See `DEPRECATIONS.md` for details.
 
 #### Configuration of the HTTP File Server
 
@@ -753,7 +752,7 @@ Sipi provides the [LuaRocks](https://luarocks.org/) package manager which must b
 
 ## Preflight function
 
-It is possible to define a LUA pre-flight function for *IIIF*-requests and independently one for *file*-requests (indicated by a */file* postfix in the URL). Both are optional and are best located in the init-script (see [configuration options](https://sipi.io/guide/sipi/#setup-of-sipi-directories) of SIPI). It is executed after the incoming HTTP request data has been processed but before an action to respond to the request has been taken. It should be noted that the pre-flight script is only executed for IIIF-specific requests (either using the IIIF URL-syntax or the */file* postfix). All other HTTP requests are being directed to "normal" HTTP-server part of SIPI. These can utilize the lua functionality by embedding LUA commands within the HTML.
+It is possible to define a LUA pre-flight function for *IIIF*-requests and independently one for *file*-requests (indicated by a */file* postfix in the URL). Both are optional and are best located in the init-script (see [configuration options](../guide/sipi/#setup-of-sipi-directories) of SIPI). It is executed after the incoming HTTP request data has been processed but before an action to respond to the request has been taken. It should be noted that the pre-flight script is only executed for IIIF-specific requests (either using the IIIF URL-syntax or the */file* postfix). All other HTTP requests are being directed to "normal" HTTP-server part of SIPI. These can utilize the lua functionality by embedding LUA commands within the HTML.
 
 ### IIIF preflight function
 
@@ -802,7 +801,7 @@ Above example preflight function allows all files to be served without restricti
 
 #### More complex example of preflight function
 
-The following example uses some SIPI lua funtions to access an authorization server to check if the user (identified by a cookie) is allowed to see the specific image. We are using [Json Web Tokens](https://jwt.io) (JWT) which are supported by SIPI specific LUA functions. Please note that the SIPI JTW-functions support an arbitrary payload that has not to follow the JWT recommendations. In order to encode, the JWT_ALG_HS256 is beeing used together with the key that is defined in the SIPI configuration as [jwt_secret](https://sipi.io/guide/sipi/#jwt-secret).
+The following example uses some SIPI lua funtions to access an authorization server to check if the user (identified by a cookie) is allowed to see the specific image. We are using [Json Web Tokens](https://jwt.io) (JWT) which are supported by SIPI specific LUA functions. Please note that the SIPI JTW-functions support an arbitrary payload that has not to follow the JWT recommendations. In order to encode, the JWT_ALG_HS256 is beeing used together with the key that is defined in the SIPI configuration as [jwt_secret](../guide/sipi/#jwt-secret).
 
 ```
 function pre_flight(prefix, identifier, cookie) 
@@ -1100,7 +1099,7 @@ This variables are defined ither in the configuration file if SIPI, in environem
 config.hostname
 ```
 
-The hostname SIPI is configures to run on (see [hostname](https://sipi.io/guide/sipi/#hostname) in configuration description).
+The hostname SIPI is configures to run on (see [hostname](../guide/sipi/#hostname) in configuration description).
 
 #### config.port
 
@@ -1108,7 +1107,7 @@ The hostname SIPI is configures to run on (see [hostname](https://sipi.io/guide/
 config.port
 ```
 
-Portnumber where the SIPI server listens (see [serverport](https://sipi.io/guide/sipi/#portnum) in configuration description).
+Portnumber where the SIPI server listens (see [serverport](../guide/sipi/#portnum) in configuration description).
 
 #### config.sslport
 
@@ -1116,7 +1115,7 @@ Portnumber where the SIPI server listens (see [serverport](https://sipi.io/guide
 config.sslport
 ```
 
-Portnumber for SSL connections of SIPI (see [sslport](https://sipi.io/guide/sipi/#sslport) in configuration description).
+Portnumber for SSL connections of SIPI (see [sslport](../guide/sipi/#sslport) in configuration description).
 
 #### config.imgroot
 
@@ -1124,7 +1123,7 @@ Portnumber for SSL connections of SIPI (see [sslport](https://sipi.io/guide/sipi
 config.imgroot
 ```
 
-Root directory for IIIF-served images (see [imgroot](https://sipi.io/guide/sipi/#imgroot) in configuration description).
+Root directory for IIIF-served images (see [imgroot](../guide/sipi/#imgroot) in configuration description).
 
 #### config.docroot
 
@@ -1132,7 +1131,7 @@ Root directory for IIIF-served images (see [imgroot](https://sipi.io/guide/sipi/
 config.docroot
 ```
 
-Root directory for WEB-Server (see [docroot](https://sipi.io/guide/sipi/#docroot) in configuration description).
+Root directory for WEB-Server (see [docroot](../guide/sipi/#docroot) in configuration description).
 
 #### config.max_temp_file_age
 
@@ -1140,7 +1139,7 @@ Root directory for WEB-Server (see [docroot](https://sipi.io/guide/sipi/#docroot
 config.max_temp_file_age
 ```
 
-maximum age of temporary files (see [max_temp_file_age](https://sipi.io/guide/sipi/#maxtmpfileage) in configuration description).
+maximum age of temporary files (see [max_temp_file_age](../guide/sipi/#maxtmpfileage) in configuration description).
 
 #### config.prefix_as_path
 
@@ -1148,7 +1147,7 @@ maximum age of temporary files (see [max_temp_file_age](https://sipi.io/guide/si
 config.prefix_as_path`
 ```
 
-`true` if the prefix should be used as path info (see [prefix_as_path](https://sipi.io/guide/sipi/#prefixaspath) in configuration description).
+`true` if the prefix should be used as path info (see [prefix_as_path](../guide/sipi/#prefixaspath) in configuration description).
 
 #### config.init_script
 
@@ -1156,7 +1155,7 @@ config.prefix_as_path`
 config.init_script
 ```
 
-Path to initialization script (see [initscript](https://sipi.io/guide/sipi/#scriptinit) in configuration description).
+Path to initialization script (see [initscript](../guide/sipi/#scriptinit) in configuration description).
 
 #### config.scriptdir
 
@@ -1164,7 +1163,7 @@ Path to initialization script (see [initscript](https://sipi.io/guide/sipi/#scri
 config.scriptdir
 ```
 
-Path to script directory. (see [scriptdir](https://sipi.io/guide/sipi/#scriptdir) in configuration description).
+Path to script directory. (see [scriptdir](../guide/sipi/#scriptdir) in configuration description).
 
 #### config.cache_dir
 
@@ -1172,7 +1171,7 @@ Path to script directory. (see [scriptdir](https://sipi.io/guide/sipi/#scriptdir
 config.cache_dir
 ```
 
-Path to cache directory for iIIF served images. (see [cachedir](https://sipi.io/guide/sipi/#cachedir) in configuration description).
+Path to cache directory for iIIF served images. (see [cachedir](../guide/sipi/#cachedir) in configuration description).
 
 #### config.cache_size
 
@@ -1180,7 +1179,7 @@ Path to cache directory for iIIF served images. (see [cachedir](https://sipi.io/
 config.cache_size
 ```
 
-Maximal size of cache (see [cachesize](https://sipi.io/guide/sipi/#cachesize) in configuration description).
+Maximal size of cache (see [cachesize](../guide/sipi/#cachesize) in configuration description).
 
 #### config.cache_n_files
 
@@ -1188,7 +1187,7 @@ Maximal size of cache (see [cachesize](https://sipi.io/guide/sipi/#cachesize) in
 config.cache_n_files
 ```
 
-Maximal number of files in cache. (see [cache_nfiles](https://sipi.io/guide/sipi/#cachenfiles) in configuration description).
+Maximal number of files in cache. (see [cache_nfiles](../guide/sipi/#cachenfiles) in configuration description).
 
 #### config.cache_hysteresis
 
@@ -1196,7 +1195,7 @@ Maximal number of files in cache. (see [cache_nfiles](https://sipi.io/guide/sipi
 config.cache_hysteresis
 ```
 
-Amount of data to be purged if cache reaches maximum size. (see [cache_hysteresis](https://sipi.io/guide/sipi/#hysteresis) in configuration description).
+Amount of data to be purged if cache reaches maximum size. (see [cache_hysteresis](../guide/sipi/#hysteresis) in configuration description).
 
 #### config.jpeg_quality
 
@@ -1204,7 +1203,7 @@ Amount of data to be purged if cache reaches maximum size. (see [cache_hysteresi
 config.jpeg_quality
 ```
 
-Unfortunately, the IIIF Image API does not allow to give a JPEG quality (=compression) on the IIIF URL. SIPI allows to configure the compression quality system wide with this parameter. Allowed values are in he range [1..100] where 1 the worst quality (and highest compression factor = smallest file size) and 100 the highest quality (with lowest compression factor = biggest file size). Please note that SIPI is not able to provide lossless compression for JPEG files. (see [jpeg_quality](https://sipi.io/guide/sipi/#jpegquality) in configuration description).
+Unfortunately, the IIIF Image API does not allow to give a JPEG quality (=compression) on the IIIF URL. SIPI allows to configure the compression quality system wide with this parameter. Allowed values are in he range [1..100] where 1 the worst quality (and highest compression factor = smallest file size) and 100 the highest quality (with lowest compression factor = biggest file size). Please note that SIPI is not able to provide lossless compression for JPEG files. (see [jpeg_quality](../guide/sipi/#jpegquality) in configuration description).
 
 #### config.keep_alive
 
@@ -1212,7 +1211,7 @@ Unfortunately, the IIIF Image API does not allow to give a JPEG quality (=compre
 config.keep_alive
 ```
 
-Maximal keep-alive time for HTTP requests that ask for a keep-alive connection. (see [keep_alive](https://sipi.io/guide/sipi/#keepalive) in configuration description).
+Maximal keep-alive time for HTTP requests that ask for a keep-alive connection. (see [keep_alive](../guide/sipi/#keepalive) in configuration description).
 
 #### config.thumb_size
 
@@ -1220,7 +1219,7 @@ Maximal keep-alive time for HTTP requests that ask for a keep-alive connection. 
 config.thumb_size
 ```
 
-Default thumbnail image size. (see [thumb_size](https://sipi.io/guide/sipi/#thumbsize) in configuration description).
+Default thumbnail image size. (see [thumb_size](../guide/sipi/#thumbsize) in configuration description).
 
 #### config.n_threads
 
@@ -1228,7 +1227,7 @@ Default thumbnail image size. (see [thumb_size](https://sipi.io/guide/sipi/#thum
 config.n_threads
 ```
 
-Number of worker threads SIPI uses. (see [nthreads](https://sipi.io/guide/sipi/#nthreads) in configuration description).
+Number of worker threads SIPI uses. (see [nthreads](../guide/sipi/#nthreads) in configuration description).
 
 #### config.max_post_size
 
@@ -1236,7 +1235,7 @@ Number of worker threads SIPI uses. (see [nthreads](https://sipi.io/guide/sipi/#
 config.max_post_size
 ```
 
-Maximal size of POST data allowed (see [max_post_size](https://sipi.io/guide/sipi/#maxpostsize) in configuration description).
+Maximal size of POST data allowed (see [max_post_size](../guide/sipi/#maxpostsize) in configuration description).
 
 #### config.tmpdir
 
@@ -1244,7 +1243,7 @@ Maximal size of POST data allowed (see [max_post_size](https://sipi.io/guide/sip
 config.tmpdir
 ```
 
-Temporary directory to store uploads. (see [tmpdir](https://sipi.io/guide/sipi/#tmpdir) in configuration description).
+Temporary directory to store uploads. (see [tmpdir](../guide/sipi/#tmpdir) in configuration description).
 
 #### config.ssl/\_certificate
 
@@ -1252,7 +1251,7 @@ Temporary directory to store uploads. (see [tmpdir](https://sipi.io/guide/sipi/#
 config.ssl_certificate
 ```
 
-Path to the SSL certificate that SIPI uses. (see [ssl_certificate](https://sipi.io/guide/sipi/#sslcertificate) in configuration description).
+Path to the SSL certificate that SIPI uses. (see [ssl_certificate](../guide/sipi/#sslcertificate) in configuration description).
 
 #### config.ssl/\_key
 
@@ -1260,7 +1259,7 @@ Path to the SSL certificate that SIPI uses. (see [ssl_certificate](https://sipi.
 config.ssl_key
 ```
 
-Path to the SSL key that SIPI uses. (see [ssl_key](https://sipi.io/guide/sipi/#sslkey) in configuration description).
+Path to the SSL key that SIPI uses. (see [ssl_key](../guide/sipi/#sslkey) in configuration description).
 
 #### config.logfile
 
@@ -1268,7 +1267,7 @@ Path to the SSL key that SIPI uses. (see [ssl_key](https://sipi.io/guide/sipi/#s
 config.logfile
 ```
 
-Name of the logfile. SIPI is currently using the built-in logger which logs to stdout and the logfile name is ignored. (see [logfile](https://sipi.io/guide/sipi/#logfile) in configuration description).
+Name of the logfile. SIPI is currently using the built-in logger which logs to stdout and the logfile name is ignored. (see [logfile](../guide/sipi/#logfile) in configuration description).
 
 #### config.loglevel
 
@@ -1276,7 +1275,7 @@ Name of the logfile. SIPI is currently using the built-in logger which logs to s
 config.loglevel
 ```
 
-Indicates what should be logged. The variable contains a integer that corresponds to the syslog level. (see [loglevel](https://sipi.io/guide/sipi/#loglevel) in configuration description).
+Indicates what should be logged. The variable contains a integer that corresponds to the syslog level. (see [loglevel](../guide/sipi/#loglevel) in configuration description).
 
 #### config.adminuser
 
@@ -1284,7 +1283,7 @@ Indicates what should be logged. The variable contains a integer that correspond
 config.adminuser
 ```
 
-Name of admin user. (see [user](https://sipi.io/guide/sipi/#configuration-of-administrator-access) in configuration description).
+Name of admin user. (see [user](../guide/sipi/#configuration-of-administrator-access) in configuration description).
 
 #### config.password
 
@@ -1292,7 +1291,7 @@ Name of admin user. (see [user](https://sipi.io/guide/sipi/#configuration-of-adm
 config.password
 ```
 
-Password (plain text, not encrypted) of admin user (*use with caution*)! (see [password](https://sipi.io/guide/sipi/#configuration-of-administrator-access) in configuration description).
+Password (plain text, not encrypted) of admin user (*use with caution*)! (see [password](../guide/sipi/#configuration-of-administrator-access) in configuration description).
 
 ### SIPI Server Variables
 
@@ -2508,6 +2507,45 @@ To build SIPI from source code, you must have [Kakadu](http://kakadusoftware.com
 
 SIPI uses the Adobe ICC Color profiles, which are automatically downloaded by the build process. The user is responsible for reading and agreeing with Adobe's license conditions, which are specified in the file `Color Profile EULA.pdf`.
 
+## Vendored Dependencies
+
+SIPI builds all external libraries from source. Source archives are vendored in the `vendor/` directory and tracked with [Git LFS](https://git-lfs.com/). This ensures builds are reproducible and work offline — no internet access is needed during compilation.
+
+### First-time setup (Git LFS)
+
+After cloning the repository, pull the LFS objects:
+
+```
+git lfs install   # one-time setup
+git lfs pull      # download vendor archives and test images
+```
+
+### Dependency management
+
+All dependency metadata (version, URL, SHA-256 hash) is centralized in `cmake/dependencies.cmake`. The build system uses local archives from `vendor/` when present, and falls back to downloading from the URL if not.
+
+| Command                 | Description                                         |
+| ----------------------- | --------------------------------------------------- |
+| `make vendor-download`  | Download all dependency archives to `vendor/`       |
+| `make vendor-verify`    | Verify SHA-256 checksums of all archives            |
+| `make vendor-checksums` | Print current checksums (for updating the manifest) |
+
+### Updating a dependency
+
+1. Edit `cmake/dependencies.cmake` — update `DEP_<NAME>_VERSION`, `DEP_<NAME>_URL`, and `DEP_<NAME>_FILENAME`
+1. Run `make vendor-download` to fetch the new archive
+1. Run `make vendor-checksums` and update `DEP_<NAME>_SHA256` in the manifest
+1. Run `make vendor-verify` to confirm
+1. Clean build and test: `rm -rf build && make zig-build-local && make zig-test`
+
+### Adding a new dependency
+
+1. Add `DEP_<NAME>_*` variables to `cmake/dependencies.cmake`
+1. Create `ext/<name>/CMakeLists.txt` with the local fallback pattern (see existing deps for examples)
+1. Add `add_subdirectory(ext/<name>)` to the root `CMakeLists.txt`
+1. Run `make vendor-download` and `make vendor-checksums`
+1. Update the SHA-256 hash in the manifest
+
 ## Building with Docker (Recommended)
 
 The simplest way to build SIPI is using Docker. This requires [Docker](https://www.docker.com/) with [buildx](https://docs.docker.com/buildx/working-with-buildx/) support.
@@ -2522,7 +2560,7 @@ make docker-build
 make test-smoke
 ```
 
-The Docker build uses a pre-built base image (`daschswiss/sipi-base`) that includes all system dependencies. The `Dockerfile` handles cmake configuration, compilation, unit testing, and debug symbol extraction in a multi-stage build.
+The Docker build uses `ubuntu:24.04` as the base image and installs only the minimal system dependencies needed for compilation. The `Dockerfile` handles cmake configuration, compilation, unit testing, and debug symbol extraction in a multi-stage build.
 
 ### Platform-specific builds (used by CI)
 
@@ -2530,6 +2568,59 @@ The Docker build uses a pre-built base image (`daschswiss/sipi-base`) that inclu
 # Build for specific architectures (used in CI release pipeline)
 make docker-test-build-amd64
 make docker-test-build-arm64
+```
+
+## Building with Zig (Experimental, Parallel to Docker)
+
+Zig-based builds are enabled for local development and static Linux binary production, but Docker remains a first-class release path during rollout. For CI/release workflow details (validation jobs, gates, and artifact publishing), see [CI and Release](../ci/).
+
+### Prerequisites
+
+1. Place the Kakadu archive `v8_5-01382N.zip` in the `vendor/` directory
+1. Install Zig `0.15.2`
+1. Install build tools (`cmake`, `autoconf`, `automake`, `libtool`)
+
+OpenSSL, libcurl, and libmagic are built from source by SIPI's CMake build; they do not need to be preinstalled as system libraries.
+
+### Local Zig build
+
+```
+make zig-build-local
+make zig-test
+make zig-test-e2e
+make zig-run
+```
+
+### Static Linux Zig builds
+
+```
+make zig-build-amd64   # x86_64-linux-musl
+make zig-build-arm64   # aarch64-linux-musl
+```
+
+### Static Zig builds in Docker (local CI mirror)
+
+For testing the zig-static build in a Docker container that mirrors the CI build environment (Alpine 3.21 + Zig). Alpine is used because its `/usr/include` contains musl headers natively, avoiding the glibc header contamination that occurs on Ubuntu (where zig cc unconditionally adds `/usr/include`).
+
+```
+make zig-static-docker-arm64   # build + unit test aarch64-linux-musl in Docker
+make zig-static-docker-amd64   # build + unit test x86_64-linux-musl in Docker
+```
+
+These use `Dockerfile.zig-static` which installs Zig, configures the toolchain, builds SIPI, and runs `ctest` — all inside the container. The local targets use `build-static/` as the build directory (CI uses `build/`). E2e tests are not included because the resulting Linux ELF binary cannot run on a macOS host. CI handles the portability proof by running e2e on a bare Ubuntu runner against the Alpine-built binary — see [CI and Release](../ci/) for details.
+
+### Validation commands
+
+```
+# Linux static binary must not have dynamic NEEDED entries
+# (local Makefile targets use build-static/; CI uses build/)
+readelf -d build-static/sipi | grep NEEDED
+
+# Should report static
+ldd build-static/sipi
+
+# macOS policy: only libSystem is allowed
+otool -L build-zig-macos/sipi
 ```
 
 ## Building with Nix (Native Development)
@@ -2592,7 +2683,7 @@ make nix-coverage-html
 make nix-valgrind
 ```
 
-## Building on macOS (Not Recommended)
+## Building on macOS without Zig (Not Recommended)
 
 Building directly on macOS without Nix is unsupported but possible:
 
@@ -2600,7 +2691,7 @@ Building directly on macOS without Nix is unsupported but possible:
 mkdir -p ./build-mac && cd build-mac && cmake .. && make && ctest --verbose
 ```
 
-You will need CMake, a C++23-compatible compiler, and all system dependencies (OpenSSL, libcurl, libmagic) installed via Homebrew.
+You will need CMake and a C++23-compatible compiler. All library dependencies (including OpenSSL, libcurl, libmagic) are built from source automatically by the build system.
 
 ## All Make Targets
 
@@ -2612,20 +2703,28 @@ make help
 
 Key target groups:
 
-| Target                            | Description                            |
-| --------------------------------- | -------------------------------------- |
-| `docker-build`                    | Build Docker image locally             |
-| `docker-test-build-{amd64,arm64}` | Build + test for specific architecture |
-| `test-smoke`                      | Run smoke tests against Docker image   |
-| `nix-build`                       | Build SIPI natively (debug + coverage) |
-| `nix-test`                        | Run unit tests                         |
-| `nix-test-e2e`                    | Run end-to-end tests                   |
-| `nix-coverage`                    | Generate XML coverage report           |
-| `nix-run`                         | Run SIPI server                        |
-| `nix-valgrind`                    | Run with Valgrind                      |
-| `docs-build`                      | Build documentation                    |
-| `docs-serve`                      | Serve documentation locally            |
-| `clean`                           | Remove build artifacts                 |
+| Target                            | Description                                              |
+| --------------------------------- | -------------------------------------------------------- |
+| `docker-build`                    | Build Docker image locally                               |
+| `docker-test-build-{amd64,arm64}` | Build + test for specific architecture                   |
+| `test-smoke`                      | Run smoke tests against Docker image                     |
+| `zig-build-local`                 | Build SIPI natively with Zig (experimental)              |
+| `zig-test`                        | Run unit tests for Zig local build                       |
+| `zig-test-e2e`                    | Run end-to-end tests for Zig local build                 |
+| `zig-build-{amd64,arm64}`         | Build static Linux binaries with Zig (experimental)      |
+| `zig-static-docker-{arm64,amd64}` | Build + test static binaries in Docker (local CI mirror) |
+| `nix-build`                       | Build SIPI natively (debug + coverage)                   |
+| `nix-test`                        | Run unit tests                                           |
+| `nix-test-e2e`                    | Run end-to-end tests                                     |
+| `nix-coverage`                    | Generate XML coverage report                             |
+| `nix-run`                         | Run SIPI server                                          |
+| `nix-valgrind`                    | Run with Valgrind                                        |
+| `docs-build`                      | Build documentation                                      |
+| `docs-serve`                      | Serve documentation locally                              |
+| `vendor-download`                 | Download all dependency archives to `vendor/`            |
+| `vendor-verify`                   | Verify SHA-256 checksums of vendored archives            |
+| `vendor-checksums`                | Print SHA-256 checksums for all archives                 |
+| `clean`                           | Remove build artifacts                                   |
 
 ## Documentation
 
@@ -2639,6 +2738,169 @@ make docs-serve
 # Serve doxygen API docs (must build with cmake first)
 make nix-doxygen-serve
 ```
+
+# CI and Release
+
+This page documents SIPI's CI pipeline, release automation, and the Zig/static build hardening that runs in parallel with Docker during rollout.
+
+## Release Automation (release-please)
+
+Releases are fully automated via [release-please](https://github.com/googleapis/release-please). When commits are merged to `main`, release-please reads their [Conventional Commit](https://www.conventionalcommits.org/) prefixes to determine the SemVer bump and generate the changelog.
+
+**Configuration files:**
+
+- `.github/release-please/config.json` — changelog sections, release type
+- `.github/release-please/manifest.json` — current version
+- `.github/workflows/release-please.yml` — GitHub Actions workflow
+
+**How commit types map to releases:**
+
+| Prefix                                                             | SemVer Effect | Changelog Section        |
+| ------------------------------------------------------------------ | ------------- | ------------------------ |
+| `feat:`                                                            | minor bump    | Features                 |
+| `fix:`                                                             | patch bump    | Bug Fixes                |
+| `feat!:` / `fix!:`                                                 | major bump    | Breaking Changes         |
+| `perf:`                                                            | patch bump    | Performance Improvements |
+| `docs:`, `style:`, `refactor:`, `test:`, `build:`, `ci:`, `chore:` | no bump       | hidden                   |
+
+Correct commit prefixes are critical
+
+A commit without a valid Conventional Commit prefix will be invisible to release-please — it won't trigger a release or appear in the changelog. See [Commit Message Schema](../developing/#commit-message-schema) for the full format specification.
+
+## Scope
+
+- Keep Docker publishing and Zig/static artifacts in parallel.
+- Enforce Zig/static validation as required gates before release side effects.
+- Produce fully static Linux binaries (`x86_64-linux-musl`, `aarch64-linux-musl`).
+- Enforce strict macOS Zig dylib policy (`/usr/lib/libSystem.B.dylib` only).
+
+## Zig Version and Build Policy
+
+- Zig is pinned to `0.15.2` in CI workflows.
+- Linux static targets:
+- `x86_64-linux-musl` (amd64)
+- `aarch64-linux-musl` (arm64)
+- CI uses **native per-arch builds via Docker-in-Ubuntu**: each architecture gets its own runner (`ubuntu-24.04` for amd64, `ubuntu-24.04-arm` for arm64). JS actions (checkout, setup-zig, upload-artifact) run on the bare Ubuntu host. The build itself runs inside `docker run alpine:3.21` with the source bind-mounted — Alpine is required because Zig has a bug where it doesn't ignore `/usr/include` even with `-target`, and Ubuntu's glibc headers would contaminate musl builds.
+- LTO is disabled for musl static builds (`-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF`).
+
+## Pull Request CI
+
+Workflow: `.github/workflows/test.yml`
+
+### Standard test matrix
+
+- Existing Nix/GCC test matrix still runs on:
+- `ubuntu-24.04`
+- `ubuntu-24.04-arm`
+
+### Zig/static PR checks (native per-arch Docker-in-Ubuntu)
+
+Each architecture gets a combined build+test job on its native runner. The build runs inside an Alpine Docker container, then tests run on the bare Ubuntu host — proving the static musl binaries are portable.
+
+**`zig-static / {arch}`** — combined job per architecture:
+
+1. **Host (Ubuntu):** JS actions run checkout and setup-zig.
+1. **Alpine Docker:** `docker run alpine:3.21` with source bind-mounted:
+   - Installs build prerequisites via `apk`.
+   - Zig binary (statically linked) is bind-mounted from host.
+   - CMake configure + build produces a static ELF binary.
+1. **Host (Ubuntu):** Verification and testing:
+   - Static linkage verification (`ldd`, `readelf -d`).
+   - Unit tests (GoogleTest executables run directly).
+   - E2e dependencies installed via `apt-get` and `pip3`.
+   - Full e2e test suite (`test/e2e`).
+
+This proves Alpine-built static binaries run on a glibc host that had no part in building them, and each architecture builds and tests natively.
+
+**`zig-macos / arm64 dylib-audit`:**
+
+- Native Release Zig build.
+- `otool -L` audit on `build-zig-macos/sipi`.
+- Exactly one allowed dependency:
+- `/usr/lib/libSystem.B.dylib`
+
+### Forked PR behavior
+
+Zig static jobs are intentionally skipped for forked PRs because private inputs (for example Kakadu/private dependency paths) are not available there. Standard CI behavior remains active for forks.
+
+## Tag Release CI/CD
+
+Workflow: `.github/workflows/publish.yml`
+
+Trigger:
+
+- Tag push matching `v*`
+
+Gate model:
+
+1. `validate-static / {arch}` builds, tests, and packages each architecture natively (same Docker-in-Ubuntu pattern as PR workflow).
+1. `validate-docker` must pass.
+1. `release-gate` requires `validate-docker` and `validate-static`.
+1. Publish side effects run only after `release-gate` succeeds.
+
+### Static artifact flow
+
+Each architecture is built, tested, and packaged in its own `validate-static` job:
+
+- Build static binary (native on each arch's runner).
+- Verify static linkage.
+- Run unit tests and e2e tests.
+- Split debug symbols (`objcopy --only-keep-debug`).
+- Strip binary.
+- Add debug link (`objcopy --add-gnu-debuglink`).
+- Package `.tar.gz` + `.sha256`.
+- Upload `static-linux-release-{arch}` artifact.
+
+### Release attachment and symbols
+
+- Static archives/checksums are attached to the existing tag release.
+- Static debug symbols are uploaded to Sentry per architecture.
+- Docker debug symbols and SBOM flow continue in parallel.
+
+## Local Reproduction
+
+### Zig local workflow (native build + e2e on host)
+
+```
+make zig-build-local
+make zig-test
+make zig-test-e2e
+```
+
+### Static Zig build in Docker (mirrors CI build job)
+
+```
+make zig-static-docker-arm64   # Alpine build + ctest for arm64
+make zig-static-docker-amd64   # Alpine build + ctest for amd64
+```
+
+These targets mirror the `validate-static` CI job: Alpine 3.21 container, Zig toolchain, cmake build, and unit tests. They do **not** run e2e tests.
+
+The CI's portability proof (e2e on bare Ubuntu) is not reproduced locally because the Docker targets produce a Linux ELF binary that cannot run on macOS. On a Linux workstation you could extract the binary and run e2e manually, but this is not wrapped in a Make target — CI is the authoritative portability check.
+
+### Linux static validation commands
+
+```
+# (local Makefile targets use build-static/; CI uses build/)
+file build-static/sipi
+ldd build-static/sipi
+readelf -d build-static/sipi | grep NEEDED
+```
+
+Expected:
+
+- `ldd` indicates static.
+- `readelf` returns no `NEEDED` entries.
+
+### macOS dylib audit command
+
+```
+otool -L build-zig-macos/sipi
+```
+
+Expected:
+
+- Only `/usr/lib/libSystem.B.dylib`.
 
 # Developing SIPI
 
@@ -2654,6 +2916,56 @@ For Nix-based development, launch CLion from inside the Nix shell so it inherits
 nix develop
 clion .
 ```
+
+## Running Locally
+
+A dedicated local development config is provided at `config/sipi.localdev-config.lua`. It points `imgroot` at the bundled test images and uses small cache limits (1 MB, 10 files) so IIIF requests work out of the box and cache eviction is easy to observe.
+
+### Start the server
+
+```
+./build/sipi --config config/sipi.localdev-config.lua
+```
+
+The server starts on `http://localhost:1024`.
+
+### Try some requests
+
+```
+# Fetch an IIIF image with a transformation (creates a cache entry)
+# Note: requests that need no processing (same format, full size, no rotation)
+# are served directly from the original file and bypass the cache.
+curl http://localhost:1024/unit/gradient-stars.tif/full/max/0/default.jpg -o /tmp/test.jpg
+
+# Prometheus metrics (cache counters, gauges, no auth required)
+curl http://localhost:1024/metrics
+
+# Cache file list via Lua API (requires admin credentials from config)
+curl -u admin:Sipi-Admin http://localhost:1024/api/cache
+```
+
+Make several different image requests to fill the cache past its 1 MB / 10 file limits and watch the eviction metrics change:
+
+```
+# Format conversions (TIF → JPG) trigger caching — all well under 2 MB
+curl http://localhost:1024/unit/gradient-stars.tif/full/max/0/default.jpg -o /dev/null
+curl http://localhost:1024/unit/lena512.tif/full/max/0/default.jpg -o /dev/null
+curl http://localhost:1024/unit/cielab.tif/full/max/0/default.jpg -o /dev/null
+
+# Resized requests also trigger caching
+curl http://localhost:1024/unit/MaoriFigure.jpg/full/200,/0/default.jpg -o /dev/null
+curl http://localhost:1024/unit/MaoriFigureWatermark.jpg/full/200,/0/default.jpg -o /dev/null
+
+curl http://localhost:1024/metrics | grep sipi_cache
+```
+
+### Available configs
+
+| Config file                       | Purpose                                                    |
+| --------------------------------- | ---------------------------------------------------------- |
+| `config/sipi.config.lua`          | Production-like defaults (`./images` imgroot, 20 MB cache) |
+| `config/sipi.localdev-config.lua` | Local development (test images, tiny cache, DEBUG logging) |
+| `config/sipi.test-config.lua`     | Automated test suite                                       |
 
 ## Writing Tests
 
@@ -2703,9 +3015,23 @@ make test-smoke
 
 Approval tests live in `test/approval/` and use snapshot-based testing for regression detection.
 
+## Managing Dependencies
+
+External library sources are vendored in `vendor/` and tracked with Git LFS. The manifest `cmake/dependencies.cmake` is the single source of truth for versions, download URLs, and SHA-256 hashes.
+
+See [Building: Vendored Dependencies](../building/#vendored-dependencies) for setup instructions and update/add workflows.
+
+Quick reference:
+
+```
+make vendor-download    # fetch all archives
+make vendor-verify      # check SHA-256 integrity
+make vendor-checksums   # print hashes for manifest updates
+```
+
 ## Commit Message Schema
 
-We use [Conventional Commits](https://www.conventionalcommits.org/):
+We use [Conventional Commits](https://www.conventionalcommits.org/). These prefixes drive [release-please](../ci/#release-automation-release-please) to automatically determine SemVer bumps and generate changelogs — **using the correct prefix is required, not optional**.
 
 ```
 type(scope): subject
@@ -2736,6 +3062,118 @@ Example:
 ```
 feat(HTTP server): support more authentication methods
 ```
+
+# Downstream Dependencies
+
+This page documents which runtime packages the `daschswiss/sipi` Docker image provides and why, so downstream consumers don't need to rediscover this.
+
+## Sipi's Bundled Lua Scripts
+
+The Lua scripts shipped with Sipi (`sipi.config.lua`, `sipi.init.lua`, `test_functions.lua`, `send_response.lua`) have **no system tool dependencies**. They use only Sipi's built-in Lua API (`server.http()`, `server.decode_jwt()`, `server.parse_mimetype()`, etc.) — no `io.popen()` or `os.execute()` calls.
+
+## Runtime Image Packages
+
+The `daschswiss/sipi` Docker image (final stage) includes these packages:
+
+| Package                 | Required by                       | How it's used                                                                                                                                                                                  |
+| ----------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `curl`                  | `knora-sipi` healthcheck          | `healthcheck.sh`: `curl -sS --fail 'http://localhost:1024/...'`                                                                                                                                |
+| `openssl`               | sipi binary                       | TLS for outbound HTTPS connections                                                                                                                                                             |
+| `ca-certificates`       | sipi binary                       | TLS certificate trust store for HTTPS                                                                                                                                                          |
+| `locales`               | sipi binary                       | UTF-8 locale (`en_US.UTF-8`, `sr_RS.UTF-8`) for string handling                                                                                                                                |
+| `ffmpeg`                | dsp-ingest (`MovingImageService`) | `ffprobe` for video metadata (dimensions, duration, FPS). dsp-ingest runs `docker run --entrypoint ffprobe daschswiss/knora-sipi:...` in local dev, or calls `ffprobe` directly in production. |
+| `libmagic1` + `file`    | sipi binary                       | MIME type detection (linked at compile time; runtime `.mgc` database needed)                                                                                                                   |
+| `tzdata`                | system                            | Timezone support (`TZ=Europe/Zurich`)                                                                                                                                                          |
+| `sha256sum` (coreutils) | `knora-sipi` Lua scripts          | `util.lua:file_checksum()` calls `/usr/bin/sha256sum`                                                                                                                                          |
+
+### Packages Removed
+
+The following packages were previously included but had no downstream consumer: `imagemagick`, `at`, `bc`, `uuid`, `byobu`, `htop`, `man`, `vim`, `git`, `unzip`, `wget`, `gnupg2`, `software-properties-common`.
+
+## Downstream Consumers
+
+| Consumer                                  | Image                                                                        | What it uses from sipi container                                                                                 |
+| ----------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `knora-sipi` (dsp-api `sipi/` subproject) | `daschswiss/knora-sipi` (base: `daschswiss/sipi`)                            | Lua scripts + sipi HTTP server. Needs `curl`, `sha256sum`, `libmagic1`, `locales`, `openssl`, `ca-certificates`. |
+| dsp-ingest (`SipiClientLive`)             | `daschswiss/knora-sipi` (via `docker run` in local dev)                      | sipi CLI (`--query`, `--format`, `--topleft`). Needs the sipi binary.                                            |
+| dsp-ingest (`MovingImageService`)         | `daschswiss/knora-sipi` (via `docker run --entrypoint ffprobe` in local dev) | `ffprobe` for video metadata extraction. Needs `ffmpeg` package.                                                 |
+| dsp-tools                                 | `daschswiss/knora-sipi` (via Docker Compose)                                 | HTTP API only (port 1024). No direct tool dependencies on container internals.                                   |
+| fileidentification                        | none                                                                         | No dependency on sipi. Standalone tool with its own ffmpeg/imagemagick/libreoffice.                              |
+
+# Commit and PR Conventions
+
+## Commit Organization
+
+### Principle
+
+Group commits by user-visible impact, not by implementation journey.
+
+### Rules
+
+1. Each `feat:` or `fix:` commit = one changelog entry visible to developers deploying Sipi
+1. Internal work (`build:`, `ci:`, `refactor:`, `docs:`, `chore:`, `test:`) is hidden from changelog — squash aggressively
+1. Ask: "would a developer deploying Sipi care about this change?" If yes → `feat:` or `fix:`. If no → hidden type.
+1. Debugging journeys (trial-and-error, reverts, iterative fixes) belong in the PR description, not the commit history
+
+### Where context lives
+
+| Layer           | Audience                      | Content                           |
+| --------------- | ----------------------------- | --------------------------------- |
+| Commit messages | Release notes readers         | User-visible changes only         |
+| PR description  | Reviewers + future developers | Full context including challenges |
+| Learnings docs  | Future Claude + engineers     | Structured, searchable knowledge  |
+| Code comments   | Code readers                  | "Why not the obvious approach"    |
+
+## PR Description Format
+
+### Template
+
+```
+[LINEAR-ID](linear-url)
+
+## Motivation
+Why this work was needed. What problem it solves for users.
+
+## Summary
+1-3 bullet points of user-visible changes.
+
+## Key Changes
+### [Topic]
+- change details
+
+## Challenges and Decisions
+What was tried, what failed, and key architecture decisions.
+Structure as sub-sections when multiple challenges exist:
+
+### [Challenge title]
+**Problem:** description of the issue encountered
+**Tried:** approaches that didn't work and why
+**Solution:** what worked and why it's the right approach
+
+## Gotchas
+Things future developers should know. Each gotcha should be
+actionable — not just "this is hard" but "do X instead of Y".
+
+## Test Plan
+- [ ] verification steps
+```
+
+### Why this format matters
+
+The "Challenges and Decisions" section captures the debugging journey that would otherwise be lost when commits are squashed. The `/eng:workflows:compound` skill reads PR descriptions to generate structured learnings — well-structured challenges become high-quality learnings automatically.
+
+### What goes where
+
+| Information                        | Put it in...                        |
+| ---------------------------------- | ----------------------------------- |
+| New feature / breaking change      | Commit message (`feat:` / `feat!:`) |
+| Bug fix                            | Commit message (`fix:`)             |
+| Build/CI/refactor details          | Commit message (hidden type)        |
+| Why the work was needed            | PR Motivation section               |
+| What was tried and failed          | PR Challenges section               |
+| Architecture decisions + rationale | PR Challenges section               |
+| Things to watch out for            | PR Gotchas section                  |
+| Structured, searchable knowledge   | Learnings doc (dasch-specs)         |
 # Release Notes
 
 # Release Notes

@@ -8,20 +8,20 @@
       
       
       
-        <link rel="canonical" href="https://sipi.io/lua/sqlite/">
+        <link rel="canonical" href="https://sipi.io/development/commit-conventions/">
       
       
-        <link rel="prev" href="../lua-image/">
+        <link rel="prev" href="../downstream-dependencies/">
       
       
-        <link rel="next" href="../../development/building/">
+        <link rel="next" href="../../release-notes/">
       
       <link rel="icon" href="../../assets/images/dasch-favicon.ico">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.1.20">
     
     
       
-        <title>SQLite Integration - SIPI Documentation</title>
+        <title>Commit and PR Conventions - SIPI Documentation</title>
       
     
     
@@ -71,7 +71,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#using-sqlite-in-sipi" class="md-skip">
+        <a href="#commit-and-pr-conventions" class="md-skip">
           Skip to content
         </a>
       
@@ -105,7 +105,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              SQLite Integration
+              Commit and PR Conventions
             
           </span>
         </div>
@@ -280,7 +280,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../" class="md-nav__link">
+      <a href="../../lua/" class="md-nav__link">
         Lua Integration
       </a>
     </li>
@@ -295,8 +295,83 @@
   
   
     <li class="md-nav__item">
-      <a href="../lua-image/" class="md-nav__link">
+      <a href="../../lua/lua-image/" class="md-nav__link">
         Lua Image Functions
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lua/sqlite/" class="md-nav__link">
+        SQLite Integration
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../building/" class="md-nav__link">
+        Building
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ci/" class="md-nav__link">
+        CI and Release
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../developing/" class="md-nav__link">
+        Developing
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../downstream-dependencies/" class="md-nav__link">
+        Downstream Dependencies
       </a>
     </li>
   
@@ -320,12 +395,12 @@
       
       
         <label class="md-nav__link md-nav__link--active" for="__toc">
-          SQLite Integration
+          Commit and PR Conventions
           <span class="md-nav__icon md-icon"></span>
         </label>
       
       <a href="./" class="md-nav__link md-nav__link--active">
-        SQLite Integration
+        Commit and PR Conventions
       </a>
       
         
@@ -344,23 +419,64 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#opening-an-sqlite-database" class="md-nav__link">
-    Opening an SQLite Database
+  <a href="#commit-organization" class="md-nav__link">
+    Commit Organization
   </a>
   
-    <nav class="md-nav" aria-label="Opening an SQLite Database">
+    <nav class="md-nav" aria-label="Commit Organization">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#preparing-a-query" class="md-nav__link">
-    Preparing a Query
+  <a href="#principle" class="md-nav__link">
+    Principle
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#executing-a-query" class="md-nav__link">
-    Executing a Query
+  <a href="#rules" class="md-nav__link">
+    Rules
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#where-context-lives" class="md-nav__link">
+    Where context lives
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pr-description-format" class="md-nav__link">
+    PR Description Format
+  </a>
+  
+    <nav class="md-nav" aria-label="PR Description Format">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#template" class="md-nav__link">
+    Template
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-this-format-matters" class="md-nav__link">
+    Why this format matters
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-goes-where" class="md-nav__link">
+    What goes where
   </a>
   
 </li>
@@ -374,81 +490,6 @@
   
 </nav>
       
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../development/building/" class="md-nav__link">
-        Building
-      </a>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../development/ci/" class="md-nav__link">
-        CI and Release
-      </a>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../development/developing/" class="md-nav__link">
-        Developing
-      </a>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../development/downstream-dependencies/" class="md-nav__link">
-        Downstream Dependencies
-      </a>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../development/commit-conventions/" class="md-nav__link">
-        Commit and PR Conventions
-      </a>
     </li>
   
 
@@ -486,55 +527,132 @@
   
 
 
-<h1 id="using-sqlite-in-sipi">Using SQLite in SIPI<a class="headerlink" href="#using-sqlite-in-sipi" title="Permanent link">&para;</a></h1>
-<p>Sipi supports <a href="https://www.sqlite.org/">SQLite</a> 3 databases, which can
-be accessed from Lua scripts. You should use
-<a href="https://www.lua.org/pil/8.4.html">pcall</a> to handle errors that may be
-returned by SQLite.</p>
-<h2 id="opening-an-sqlite-database">Opening an SQLite Database<a class="headerlink" href="#opening-an-sqlite-database" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code>db = sqlite(path_to_db, access)
+<h1 id="commit-and-pr-conventions">Commit and PR Conventions<a class="headerlink" href="#commit-and-pr-conventions" title="Permanent link">&para;</a></h1>
+<h2 id="commit-organization">Commit Organization<a class="headerlink" href="#commit-organization" title="Permanent link">&para;</a></h2>
+<h3 id="principle">Principle<a class="headerlink" href="#principle" title="Permanent link">&para;</a></h3>
+<p>Group commits by user-visible impact, not by implementation journey.</p>
+<h3 id="rules">Rules<a class="headerlink" href="#rules" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Each <code>feat:</code> or <code>fix:</code> commit = one changelog entry visible to
+   developers deploying Sipi</li>
+<li>Internal work (<code>build:</code>, <code>ci:</code>, <code>refactor:</code>, <code>docs:</code>, <code>chore:</code>,
+   <code>test:</code>) is hidden from changelog — squash aggressively</li>
+<li>Ask: "would a developer deploying Sipi care about this change?"
+   If yes → <code>feat:</code> or <code>fix:</code>. If no → hidden type.</li>
+<li>Debugging journeys (trial-and-error, reverts, iterative fixes)
+   belong in the PR description, not the commit history</li>
+</ol>
+<h3 id="where-context-lives">Where context lives<a class="headerlink" href="#where-context-lives" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Audience</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Commit messages</td>
+<td>Release notes readers</td>
+<td>User-visible changes only</td>
+</tr>
+<tr>
+<td>PR description</td>
+<td>Reviewers + future developers</td>
+<td>Full context including challenges</td>
+</tr>
+<tr>
+<td>Learnings docs</td>
+<td>Future Claude + engineers</td>
+<td>Structured, searchable knowledge</td>
+</tr>
+<tr>
+<td>Code comments</td>
+<td>Code readers</td>
+<td>"Why not the obvious approach"</td>
+</tr>
+</tbody>
+</table>
+<h2 id="pr-description-format">PR Description Format<a class="headerlink" href="#pr-description-format" title="Permanent link">&para;</a></h2>
+<h3 id="template">Template<a class="headerlink" href="#template" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>[LINEAR-ID](linear-url)
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>## Motivation
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>Why this work was needed. What problem it solves for users.
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>## Summary
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>1-3 bullet points of user-visible changes.
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>## Key Changes
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>### [Topic]
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>- change details
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>## Challenges and Decisions
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>What was tried, what failed, and key architecture decisions.
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>Structure as sub-sections when multiple challenges exist:
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>### [Challenge title]
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>**Problem:** description of the issue encountered
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>**Tried:** approaches that didn&#39;t work and why
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>**Solution:** what worked and why it&#39;s the right approach
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>## Gotchas
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>Things future developers should know. Each gotcha should be
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>actionable — not just &quot;this is hard&quot; but &quot;do X instead of Y&quot;.
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>
+<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>## Test Plan
+<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>- [ ] verification steps
 </code></pre></div>
-<p>This creates a new opaque database object. The parameters are:</p>
-<ul>
-<li><code>path_to_db</code>: path to the sqlite3 database file.</li>
-<li><code>access</code>: Method of opening the database. Allowed are<ul>
-<li><code>'RO'</code>: readonly access. The file must exist and the SPIP server must have read access to it.</li>
-<li><code>'RW'</code>: read and write access. The file must exist and the SPIP server must have read/write access to it.</li>
-<li><code>'CRW'</code>: If the database file does not exist, it will be created and opened with read/write access.</li>
-</ul>
-</li>
-</ul>
-<p>To destroy the database object and free all resources, you can do this:</p>
-<div class="highlight"><pre><span></span><code>db = ~db
-</code></pre></div>
-<p>However, Lua's garbage collection will destroy the database object and
-free all resources when they are no longer used.</p>
-<h3 id="preparing-a-query">Preparing a Query<a class="headerlink" href="#preparing-a-query" title="Permanent link">&para;</a></h3>
-<p>The SIPI sqlite interface supports direct queries as well as prepared statements. A direct query is constructed as
-follows:</p>
-<div class="highlight"><pre><span></span><code>qry = db &lt;&lt; &#39;SELECT * FROM image&#39;
-</code></pre></div>
-<p>Or, if you want to use a prepared query statement:</p>
-<div class="highlight"><pre><span></span><code>qry = db &lt;&lt; &#39;INSERT INTO image (id, description) VALUES (?,?)&#39;
-</code></pre></div>
-<p>The result of the <code>&lt;&lt;</code> operator (<code>qry</code>) will then be a query object containing a prepared query. If the
-query object is not needed anymore, it may be destroyed:</p>
-<div class="highlight"><pre><span></span><code>qry = ~qry
-</code></pre></div>
-<p>Query objects should be destroyed explicitly if not needed any longer.</p>
-<h3 id="executing-a-query">Executing a Query<a class="headerlink" href="#executing-a-query" title="Permanent link">&para;</a></h3>
-<p>Excuting (calling) a query objects gets the next row of data. If there are no more rows, <code>nil</code> is returned. The row is
-returned as array of values.</p>
-<div class="highlight"><pre><span></span><code>row = qry()
-while (row) do
-    print(row[0], &#39; -&gt; &#39;, row[1])
-    row = qry()
-end
-</code></pre></div>
-<p>Or with a prepared statement:</p>
-<div class="highlight"><pre><span></span><code>row = qry(&#39;SGV_1960_00315&#39;, &#39;This is an image of a steam engine...&#39;)
-</code></pre></div>
-<p>The second way is used for prepared queries that contain parameters.</p>
+<h3 id="why-this-format-matters">Why this format matters<a class="headerlink" href="#why-this-format-matters" title="Permanent link">&para;</a></h3>
+<p>The "Challenges and Decisions" section captures the debugging journey
+that would otherwise be lost when commits are squashed. The
+<code>/eng:workflows:compound</code> skill reads PR descriptions to generate
+structured learnings — well-structured challenges become high-quality
+learnings automatically.</p>
+<h3 id="what-goes-where">What goes where<a class="headerlink" href="#what-goes-where" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Information</th>
+<th>Put it in...</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>New feature / breaking change</td>
+<td>Commit message (<code>feat:</code> / <code>feat!:</code>)</td>
+</tr>
+<tr>
+<td>Bug fix</td>
+<td>Commit message (<code>fix:</code>)</td>
+</tr>
+<tr>
+<td>Build/CI/refactor details</td>
+<td>Commit message (hidden type)</td>
+</tr>
+<tr>
+<td>Why the work was needed</td>
+<td>PR Motivation section</td>
+</tr>
+<tr>
+<td>What was tried and failed</td>
+<td>PR Challenges section</td>
+</tr>
+<tr>
+<td>Architecture decisions + rationale</td>
+<td>PR Challenges section</td>
+</tr>
+<tr>
+<td>Things to watch out for</td>
+<td>PR Gotchas section</td>
+</tr>
+<tr>
+<td>Structured, searchable knowledge</td>
+<td>Learnings doc (dasch-specs)</td>
+</tr>
+</tbody>
+</table>
 
 
 

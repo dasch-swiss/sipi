@@ -111,31 +111,30 @@ If none is specified, the default level is `INFO`.
 
 ### Server Options
 
-| Flag                    | Short | Env Var                | Default                         | Description                            |
-| ----------------------- | ----- | ---------------------- | ------------------------------- | -------------------------------------- |
-| `--config <file>`       | `-c`  | `SIPI_CONFIGFILE`      |                                 | Lua configuration file for server mode |
-| `--serverport <n>`      |       | `SIPI_SERVERPORT`      | `80`                            | HTTP port                              |
-| `--sslport <n>`         |       | `SIPI_SSLPORT`         | `443`                           | HTTPS port                             |
-| `--hostname <name>`     |       | `SIPI_HOSTNAME`        | `localhost`                     | Public DNS hostname                    |
-| `--keepalive <sec>`     |       | `SIPI_KEEPALIVE`       | `5`                             | HTTP keep-alive timeout in seconds     |
-| `--nthreads <n>`        | `-t`  | `SIPI_NTHREADS`        | CPU cores                       | Number of worker threads               |
-| `--maxpost <size>`      |       | `SIPI_MAXPOSTSIZE`     | `300M`                          | Maximum POST upload size               |
-| `--imgroot <path>`      |       | `SIPI_IMGROOT`         | `./images`                      | Image repository root directory        |
-| `--docroot <path>`      |       | `SIPI_DOCROOT`         | `./server`                      | Web server document root               |
-| `--wwwroute <path>`     |       | `SIPI_WWWROUTE`        | `/server`                       | URL route for web server               |
-| `--scriptdir <path>`    |       | `SIPI_SCRIPTDIR`       | `./scripts`                     | Directory for Lua route scripts        |
-| `--tmpdir <path>`       |       | `SIPI_TMPDIR`          | `./tmp`                         | Temporary files directory              |
-| `--maxtmpage <sec>`     |       | `SIPI_MAXTMPAGE`       | `86400`                         | Max age of temp files in seconds       |
-| `--initscript <path>`   |       | `SIPI_INITSCRIPT`      | `./config/sipi.init.lua`        | Path to Lua init script                |
-| `--cachedir <path>`     |       | `SIPI_CACHEDIR`        | `./cache`                       | Cache directory                        |
-| `--cachesize <size>`    |       | `SIPI_CACHESIZE`       | `200M`                          | Maximum cache size                     |
-| `--cachenfiles <n>`     |       | `SIPI_CACHENFILES`     | `200`                           | Maximum number of cached files         |
-| `--cachehysteresis <f>` |       | `SIPI_CACHEHYSTERESIS` | `0.15`                          | Cache purge ratio (0.0 - 1.0)          |
-| `--thumbsize <size>`    |       | `SIPI_THUMBSIZE`       | `!128,128`                      | Default thumbnail size (IIIF syntax)   |
-| `--sslcert <path>`      |       | `SIPI_SSLCERTIFICATE`  | `./certificate/certificate.pem` | SSL certificate path                   |
-| `--sslkey <path>`       |       | `SIPI_SSLKEY`          | `./certificate/key.pem`         | SSL key file path                      |
-| `--jwtkey <string>`     |       | `SIPI_JWTKEY`          |                                 | JWT shared secret (42 chars)           |
-| `--loglevel <level>`    |       | `SIPI_LOGLEVEL`        | `DEBUG`                         | Log level (see Logging section)        |
+| Flag                  | Short | Env Var               | Default                         | Description                                       |
+| --------------------- | ----- | --------------------- | ------------------------------- | ------------------------------------------------- |
+| `--config <file>`     | `-c`  | `SIPI_CONFIGFILE`     |                                 | Lua configuration file for server mode            |
+| `--serverport <n>`    |       | `SIPI_SERVERPORT`     | `80`                            | HTTP port                                         |
+| `--sslport <n>`       |       | `SIPI_SSLPORT`        | `443`                           | HTTPS port                                        |
+| `--hostname <name>`   |       | `SIPI_HOSTNAME`       | `localhost`                     | Public DNS hostname                               |
+| `--keepalive <sec>`   |       | `SIPI_KEEPALIVE`      | `5`                             | HTTP keep-alive timeout in seconds                |
+| `--nthreads <n>`      | `-t`  | `SIPI_NTHREADS`       | CPU cores                       | Number of worker threads                          |
+| `--maxpost <size>`    |       | `SIPI_MAXPOSTSIZE`    | `300M`                          | Maximum POST upload size                          |
+| `--imgroot <path>`    |       | `SIPI_IMGROOT`        | `./images`                      | Image repository root directory                   |
+| `--docroot <path>`    |       | `SIPI_DOCROOT`        | `./server`                      | Web server document root                          |
+| `--wwwroute <path>`   |       | `SIPI_WWWROUTE`       | `/server`                       | URL route for web server                          |
+| `--scriptdir <path>`  |       | `SIPI_SCRIPTDIR`      | `./scripts`                     | Directory for Lua route scripts                   |
+| `--tmpdir <path>`     |       | `SIPI_TMPDIR`         | `./tmp`                         | Temporary files directory                         |
+| `--maxtmpage <sec>`   |       | `SIPI_MAXTMPAGE`      | `86400`                         | Max age of temp files in seconds                  |
+| `--initscript <path>` |       | `SIPI_INITSCRIPT`     | `./config/sipi.init.lua`        | Path to Lua init script                           |
+| `--cachedir <path>`   |       | `SIPI_CACHEDIR`       | `./cache`                       | Cache directory                                   |
+| `--cachesize <size>`  |       | `SIPI_CACHESIZE`      | `200M`                          | Maximum cache size (`-1`=unlimited, `0`=disabled) |
+| `--cachenfiles <n>`   |       | `SIPI_CACHENFILES`    | `200`                           | Maximum number of cached files (`0`=no limit)     |
+| `--thumbsize <size>`  |       | `SIPI_THUMBSIZE`      | `!128,128`                      | Default thumbnail size (IIIF syntax)              |
+| `--sslcert <path>`    |       | `SIPI_SSLCERTIFICATE` | `./certificate/certificate.pem` | SSL certificate path                              |
+| `--sslkey <path>`     |       | `SIPI_SSLKEY`         | `./certificate/key.pem`         | SSL key file path                                 |
+| `--jwtkey <string>`   |       | `SIPI_JWTKEY`         |                                 | JWT shared secret (42 chars)                      |
+| `--loglevel <level>`  |       | `SIPI_LOGLEVEL`       | `DEBUG`                         | Log level (see Logging section)                   |
 
 ### Sentry Error Reporting
 
@@ -158,35 +157,34 @@ If none is specified, the default level is `INFO`.
 
 All server options can be configured via environment variables. Environment variables override Lua configuration file values but are themselves overridden by command-line flags.
 
-| Variable                  | CLI Flag               | Default                         | Description                  |
-| ------------------------- | ---------------------- | ------------------------------- | ---------------------------- |
-| `SIPI_CONFIGFILE`         | `--config`             |                                 | Configuration file path      |
-| `SIPI_SERVERPORT`         | `--serverport`         | `80`                            | HTTP port                    |
-| `SIPI_SSLPORT`            | `--sslport`            | `443`                           | HTTPS port                   |
-| `SIPI_HOSTNAME`           | `--hostname`           | `localhost`                     | Public hostname              |
-| `SIPI_KEEPALIVE`          | `--keepalive`          | `5`                             | Keep-alive timeout (seconds) |
-| `SIPI_NTHREADS`           | `--nthreads`           | CPU cores                       | Worker threads               |
-| `SIPI_MAXPOSTSIZE`        | `--maxpost`            | `300M`                          | Max POST size                |
-| `SIPI_IMGROOT`            | `--imgroot`            | `./images`                      | Image root directory         |
-| `SIPI_DOCROOT`            | `--docroot`            | `./server`                      | Document root                |
-| `SIPI_WWWROUTE`           | `--wwwroute`           | `/server`                       | Web server route             |
-| `SIPI_SCRIPTDIR`          | `--scriptdir`          | `./scripts`                     | Lua scripts directory        |
-| `SIPI_TMPDIR`             | `--tmpdir`             | `./tmp`                         | Temporary directory          |
-| `SIPI_MAXTMPAGE`          | `--maxtmpage`          | `86400`                         | Max temp file age            |
-| `SIPI_INITSCRIPT`         | `--initscript`         | `./config/sipi.init.lua`        | Init script path             |
-| `SIPI_CACHEDIR`           | `--cachedir`           | `./cache`                       | Cache directory              |
-| `SIPI_CACHESIZE`          | `--cachesize`          | `200M`                          | Max cache size               |
-| `SIPI_CACHENFILES`        | `--cachenfiles`        | `200`                           | Max cached files             |
-| `SIPI_CACHEHYSTERESIS`    | `--cachehysteresis`    | `0.15`                          | Cache purge ratio            |
-| `SIPI_THUMBSIZE`          | `--thumbsize`          | `!128,128`                      | Thumbnail size               |
-| `SIPI_SSLCERTIFICATE`     | `--sslcert`            | `./certificate/certificate.pem` | SSL certificate              |
-| `SIPI_SSLKEY`             | `--sslkey`             | `./certificate/key.pem`         | SSL key                      |
-| `SIPI_JWTKEY`             | `--jwtkey`             |                                 | JWT secret                   |
-| `SIPI_JPEGQUALITY`        | `--quality`            | `60`                            | JPEG quality                 |
-| `SIPI_LOGLEVEL`           | `--loglevel`           | `DEBUG`                         | Log level                    |
-| `SIPI_SENTRY_DSN`         | `--sentry-dsn`         |                                 | Sentry DSN                   |
-| `SIPI_SENTRY_RELEASE`     | `--sentry-release`     |                                 | Sentry release               |
-| `SIPI_SENTRY_ENVIRONMENT` | `--sentry-environment` |                                 | Sentry environment           |
+| Variable                  | CLI Flag               | Default                         | Description                                   |
+| ------------------------- | ---------------------- | ------------------------------- | --------------------------------------------- |
+| `SIPI_CONFIGFILE`         | `--config`             |                                 | Configuration file path                       |
+| `SIPI_SERVERPORT`         | `--serverport`         | `80`                            | HTTP port                                     |
+| `SIPI_SSLPORT`            | `--sslport`            | `443`                           | HTTPS port                                    |
+| `SIPI_HOSTNAME`           | `--hostname`           | `localhost`                     | Public hostname                               |
+| `SIPI_KEEPALIVE`          | `--keepalive`          | `5`                             | Keep-alive timeout (seconds)                  |
+| `SIPI_NTHREADS`           | `--nthreads`           | CPU cores                       | Worker threads                                |
+| `SIPI_MAXPOSTSIZE`        | `--maxpost`            | `300M`                          | Max POST size                                 |
+| `SIPI_IMGROOT`            | `--imgroot`            | `./images`                      | Image root directory                          |
+| `SIPI_DOCROOT`            | `--docroot`            | `./server`                      | Document root                                 |
+| `SIPI_WWWROUTE`           | `--wwwroute`           | `/server`                       | Web server route                              |
+| `SIPI_SCRIPTDIR`          | `--scriptdir`          | `./scripts`                     | Lua scripts directory                         |
+| `SIPI_TMPDIR`             | `--tmpdir`             | `./tmp`                         | Temporary directory                           |
+| `SIPI_MAXTMPAGE`          | `--maxtmpage`          | `86400`                         | Max temp file age                             |
+| `SIPI_INITSCRIPT`         | `--initscript`         | `./config/sipi.init.lua`        | Init script path                              |
+| `SIPI_CACHEDIR`           | `--cachedir`           | `./cache`                       | Cache directory                               |
+| `SIPI_CACHESIZE`          | `--cachesize`          | `200M`                          | Max cache size (`-1`=unlimited, `0`=disabled) |
+| `SIPI_CACHENFILES`        | `--cachenfiles`        | `200`                           | Max cached files (`0`=no limit)               |
+| `SIPI_THUMBSIZE`          | `--thumbsize`          | `!128,128`                      | Thumbnail size                                |
+| `SIPI_SSLCERTIFICATE`     | `--sslcert`            | `./certificate/certificate.pem` | SSL certificate                               |
+| `SIPI_SSLKEY`             | `--sslkey`             | `./certificate/key.pem`         | SSL key                                       |
+| `SIPI_JWTKEY`             | `--jwtkey`             |                                 | JWT secret                                    |
+| `SIPI_JPEGQUALITY`        | `--quality`            | `60`                            | JPEG quality                                  |
+| `SIPI_LOGLEVEL`           | `--loglevel`           | `DEBUG`                         | Log level                                     |
+| `SIPI_SENTRY_DSN`         | `--sentry-dsn`         |                                 | Sentry DSN                                    |
+| `SIPI_SENTRY_RELEASE`     | `--sentry-release`     |                                 | Sentry release                                |
+| `SIPI_SENTRY_ENVIRONMENT` | `--sentry-environment` |                                 | Sentry environment                            |
 
 **Configuration precedence** (highest to lowest):
 
@@ -271,7 +269,7 @@ SIPI's configuration file is written in [Lua](https://www.lua.org/). You can mak
 - Set `imgroot` to the directory containing the files to be served.
 - Create the directory `cache` in the top-level directory of the source tree.
 
-For more information, see the comments in `config/sipi.config.lua` and the [Reference](https://sipi.io/guide/sipi/index.md) page for all configuration parameters.
+For more information, see the comments in `config/sipi.config.lua` and the [Reference](../sipi/) page for all configuration parameters.
 
 ### HTTPS Support
 

@@ -25,7 +25,7 @@ Sipi provides the [LuaRocks](https://luarocks.org/) package manager which must b
 
 ## Preflight function
 
-It is possible to define a LUA pre-flight function for *IIIF*-requests and independently one for *file*-requests (indicated by a */file* postfix in the URL). Both are optional and are best located in the init-script (see [configuration options](https://sipi.io/guide/sipi/#setup-of-sipi-directories) of SIPI). It is executed after the incoming HTTP request data has been processed but before an action to respond to the request has been taken. It should be noted that the pre-flight script is only executed for IIIF-specific requests (either using the IIIF URL-syntax or the */file* postfix). All other HTTP requests are being directed to "normal" HTTP-server part of SIPI. These can utilize the lua functionality by embedding LUA commands within the HTML.
+It is possible to define a LUA pre-flight function for *IIIF*-requests and independently one for *file*-requests (indicated by a */file* postfix in the URL). Both are optional and are best located in the init-script (see [configuration options](../guide/sipi/#setup-of-sipi-directories) of SIPI). It is executed after the incoming HTTP request data has been processed but before an action to respond to the request has been taken. It should be noted that the pre-flight script is only executed for IIIF-specific requests (either using the IIIF URL-syntax or the */file* postfix). All other HTTP requests are being directed to "normal" HTTP-server part of SIPI. These can utilize the lua functionality by embedding LUA commands within the HTML.
 
 ### IIIF preflight function
 
@@ -74,7 +74,7 @@ Above example preflight function allows all files to be served without restricti
 
 #### More complex example of preflight function
 
-The following example uses some SIPI lua funtions to access an authorization server to check if the user (identified by a cookie) is allowed to see the specific image. We are using [Json Web Tokens](https://jwt.io) (JWT) which are supported by SIPI specific LUA functions. Please note that the SIPI JTW-functions support an arbitrary payload that has not to follow the JWT recommendations. In order to encode, the JWT_ALG_HS256 is beeing used together with the key that is defined in the SIPI configuration as [jwt_secret](https://sipi.io/guide/sipi/#jwt-secret).
+The following example uses some SIPI lua funtions to access an authorization server to check if the user (identified by a cookie) is allowed to see the specific image. We are using [Json Web Tokens](https://jwt.io) (JWT) which are supported by SIPI specific LUA functions. Please note that the SIPI JTW-functions support an arbitrary payload that has not to follow the JWT recommendations. In order to encode, the JWT_ALG_HS256 is beeing used together with the key that is defined in the SIPI configuration as [jwt_secret](../guide/sipi/#jwt-secret).
 
 ```
 function pre_flight(prefix, identifier, cookie) 
@@ -372,7 +372,7 @@ This variables are defined ither in the configuration file if SIPI, in environem
 config.hostname
 ```
 
-The hostname SIPI is configures to run on (see [hostname](https://sipi.io/guide/sipi/#hostname) in configuration description).
+The hostname SIPI is configures to run on (see [hostname](../guide/sipi/#hostname) in configuration description).
 
 #### config.port
 
@@ -380,7 +380,7 @@ The hostname SIPI is configures to run on (see [hostname](https://sipi.io/guide/
 config.port
 ```
 
-Portnumber where the SIPI server listens (see [serverport](https://sipi.io/guide/sipi/#portnum) in configuration description).
+Portnumber where the SIPI server listens (see [serverport](../guide/sipi/#portnum) in configuration description).
 
 #### config.sslport
 
@@ -388,7 +388,7 @@ Portnumber where the SIPI server listens (see [serverport](https://sipi.io/guide
 config.sslport
 ```
 
-Portnumber for SSL connections of SIPI (see [sslport](https://sipi.io/guide/sipi/#sslport) in configuration description).
+Portnumber for SSL connections of SIPI (see [sslport](../guide/sipi/#sslport) in configuration description).
 
 #### config.imgroot
 
@@ -396,7 +396,7 @@ Portnumber for SSL connections of SIPI (see [sslport](https://sipi.io/guide/sipi
 config.imgroot
 ```
 
-Root directory for IIIF-served images (see [imgroot](https://sipi.io/guide/sipi/#imgroot) in configuration description).
+Root directory for IIIF-served images (see [imgroot](../guide/sipi/#imgroot) in configuration description).
 
 #### config.docroot
 
@@ -404,7 +404,7 @@ Root directory for IIIF-served images (see [imgroot](https://sipi.io/guide/sipi/
 config.docroot
 ```
 
-Root directory for WEB-Server (see [docroot](https://sipi.io/guide/sipi/#docroot) in configuration description).
+Root directory for WEB-Server (see [docroot](../guide/sipi/#docroot) in configuration description).
 
 #### config.max_temp_file_age
 
@@ -412,7 +412,7 @@ Root directory for WEB-Server (see [docroot](https://sipi.io/guide/sipi/#docroot
 config.max_temp_file_age
 ```
 
-maximum age of temporary files (see [max_temp_file_age](https://sipi.io/guide/sipi/#maxtmpfileage) in configuration description).
+maximum age of temporary files (see [max_temp_file_age](../guide/sipi/#maxtmpfileage) in configuration description).
 
 #### config.prefix_as_path
 
@@ -420,7 +420,7 @@ maximum age of temporary files (see [max_temp_file_age](https://sipi.io/guide/si
 config.prefix_as_path`
 ```
 
-`true` if the prefix should be used as path info (see [prefix_as_path](https://sipi.io/guide/sipi/#prefixaspath) in configuration description).
+`true` if the prefix should be used as path info (see [prefix_as_path](../guide/sipi/#prefixaspath) in configuration description).
 
 #### config.init_script
 
@@ -428,7 +428,7 @@ config.prefix_as_path`
 config.init_script
 ```
 
-Path to initialization script (see [initscript](https://sipi.io/guide/sipi/#scriptinit) in configuration description).
+Path to initialization script (see [initscript](../guide/sipi/#scriptinit) in configuration description).
 
 #### config.scriptdir
 
@@ -436,7 +436,7 @@ Path to initialization script (see [initscript](https://sipi.io/guide/sipi/#scri
 config.scriptdir
 ```
 
-Path to script directory. (see [scriptdir](https://sipi.io/guide/sipi/#scriptdir) in configuration description).
+Path to script directory. (see [scriptdir](../guide/sipi/#scriptdir) in configuration description).
 
 #### config.cache_dir
 
@@ -444,7 +444,7 @@ Path to script directory. (see [scriptdir](https://sipi.io/guide/sipi/#scriptdir
 config.cache_dir
 ```
 
-Path to cache directory for iIIF served images. (see [cachedir](https://sipi.io/guide/sipi/#cachedir) in configuration description).
+Path to cache directory for iIIF served images. (see [cachedir](../guide/sipi/#cachedir) in configuration description).
 
 #### config.cache_size
 
@@ -452,7 +452,7 @@ Path to cache directory for iIIF served images. (see [cachedir](https://sipi.io/
 config.cache_size
 ```
 
-Maximal size of cache (see [cachesize](https://sipi.io/guide/sipi/#cachesize) in configuration description).
+Maximal size of cache (see [cachesize](../guide/sipi/#cachesize) in configuration description).
 
 #### config.cache_n_files
 
@@ -460,7 +460,7 @@ Maximal size of cache (see [cachesize](https://sipi.io/guide/sipi/#cachesize) in
 config.cache_n_files
 ```
 
-Maximal number of files in cache. (see [cache_nfiles](https://sipi.io/guide/sipi/#cachenfiles) in configuration description).
+Maximal number of files in cache. (see [cache_nfiles](../guide/sipi/#cachenfiles) in configuration description).
 
 #### config.cache_hysteresis
 
@@ -468,7 +468,7 @@ Maximal number of files in cache. (see [cache_nfiles](https://sipi.io/guide/sipi
 config.cache_hysteresis
 ```
 
-Amount of data to be purged if cache reaches maximum size. (see [cache_hysteresis](https://sipi.io/guide/sipi/#hysteresis) in configuration description).
+Amount of data to be purged if cache reaches maximum size. (see [cache_hysteresis](../guide/sipi/#hysteresis) in configuration description).
 
 #### config.jpeg_quality
 
@@ -476,7 +476,7 @@ Amount of data to be purged if cache reaches maximum size. (see [cache_hysteresi
 config.jpeg_quality
 ```
 
-Unfortunately, the IIIF Image API does not allow to give a JPEG quality (=compression) on the IIIF URL. SIPI allows to configure the compression quality system wide with this parameter. Allowed values are in he range [1..100] where 1 the worst quality (and highest compression factor = smallest file size) and 100 the highest quality (with lowest compression factor = biggest file size). Please note that SIPI is not able to provide lossless compression for JPEG files. (see [jpeg_quality](https://sipi.io/guide/sipi/#jpegquality) in configuration description).
+Unfortunately, the IIIF Image API does not allow to give a JPEG quality (=compression) on the IIIF URL. SIPI allows to configure the compression quality system wide with this parameter. Allowed values are in he range [1..100] where 1 the worst quality (and highest compression factor = smallest file size) and 100 the highest quality (with lowest compression factor = biggest file size). Please note that SIPI is not able to provide lossless compression for JPEG files. (see [jpeg_quality](../guide/sipi/#jpegquality) in configuration description).
 
 #### config.keep_alive
 
@@ -484,7 +484,7 @@ Unfortunately, the IIIF Image API does not allow to give a JPEG quality (=compre
 config.keep_alive
 ```
 
-Maximal keep-alive time for HTTP requests that ask for a keep-alive connection. (see [keep_alive](https://sipi.io/guide/sipi/#keepalive) in configuration description).
+Maximal keep-alive time for HTTP requests that ask for a keep-alive connection. (see [keep_alive](../guide/sipi/#keepalive) in configuration description).
 
 #### config.thumb_size
 
@@ -492,7 +492,7 @@ Maximal keep-alive time for HTTP requests that ask for a keep-alive connection. 
 config.thumb_size
 ```
 
-Default thumbnail image size. (see [thumb_size](https://sipi.io/guide/sipi/#thumbsize) in configuration description).
+Default thumbnail image size. (see [thumb_size](../guide/sipi/#thumbsize) in configuration description).
 
 #### config.n_threads
 
@@ -500,7 +500,7 @@ Default thumbnail image size. (see [thumb_size](https://sipi.io/guide/sipi/#thum
 config.n_threads
 ```
 
-Number of worker threads SIPI uses. (see [nthreads](https://sipi.io/guide/sipi/#nthreads) in configuration description).
+Number of worker threads SIPI uses. (see [nthreads](../guide/sipi/#nthreads) in configuration description).
 
 #### config.max_post_size
 
@@ -508,7 +508,7 @@ Number of worker threads SIPI uses. (see [nthreads](https://sipi.io/guide/sipi/#
 config.max_post_size
 ```
 
-Maximal size of POST data allowed (see [max_post_size](https://sipi.io/guide/sipi/#maxpostsize) in configuration description).
+Maximal size of POST data allowed (see [max_post_size](../guide/sipi/#maxpostsize) in configuration description).
 
 #### config.tmpdir
 
@@ -516,7 +516,7 @@ Maximal size of POST data allowed (see [max_post_size](https://sipi.io/guide/sip
 config.tmpdir
 ```
 
-Temporary directory to store uploads. (see [tmpdir](https://sipi.io/guide/sipi/#tmpdir) in configuration description).
+Temporary directory to store uploads. (see [tmpdir](../guide/sipi/#tmpdir) in configuration description).
 
 #### config.ssl/\_certificate
 
@@ -524,7 +524,7 @@ Temporary directory to store uploads. (see [tmpdir](https://sipi.io/guide/sipi/#
 config.ssl_certificate
 ```
 
-Path to the SSL certificate that SIPI uses. (see [ssl_certificate](https://sipi.io/guide/sipi/#sslcertificate) in configuration description).
+Path to the SSL certificate that SIPI uses. (see [ssl_certificate](../guide/sipi/#sslcertificate) in configuration description).
 
 #### config.ssl/\_key
 
@@ -532,7 +532,7 @@ Path to the SSL certificate that SIPI uses. (see [ssl_certificate](https://sipi.
 config.ssl_key
 ```
 
-Path to the SSL key that SIPI uses. (see [ssl_key](https://sipi.io/guide/sipi/#sslkey) in configuration description).
+Path to the SSL key that SIPI uses. (see [ssl_key](../guide/sipi/#sslkey) in configuration description).
 
 #### config.logfile
 
@@ -540,7 +540,7 @@ Path to the SSL key that SIPI uses. (see [ssl_key](https://sipi.io/guide/sipi/#s
 config.logfile
 ```
 
-Name of the logfile. SIPI is currently using the built-in logger which logs to stdout and the logfile name is ignored. (see [logfile](https://sipi.io/guide/sipi/#logfile) in configuration description).
+Name of the logfile. SIPI is currently using the built-in logger which logs to stdout and the logfile name is ignored. (see [logfile](../guide/sipi/#logfile) in configuration description).
 
 #### config.loglevel
 
@@ -548,7 +548,7 @@ Name of the logfile. SIPI is currently using the built-in logger which logs to s
 config.loglevel
 ```
 
-Indicates what should be logged. The variable contains a integer that corresponds to the syslog level. (see [loglevel](https://sipi.io/guide/sipi/#loglevel) in configuration description).
+Indicates what should be logged. The variable contains a integer that corresponds to the syslog level. (see [loglevel](../guide/sipi/#loglevel) in configuration description).
 
 #### config.adminuser
 
@@ -556,7 +556,7 @@ Indicates what should be logged. The variable contains a integer that correspond
 config.adminuser
 ```
 
-Name of admin user. (see [user](https://sipi.io/guide/sipi/#configuration-of-administrator-access) in configuration description).
+Name of admin user. (see [user](../guide/sipi/#configuration-of-administrator-access) in configuration description).
 
 #### config.password
 
@@ -564,7 +564,7 @@ Name of admin user. (see [user](https://sipi.io/guide/sipi/#configuration-of-adm
 config.password
 ```
 
-Password (plain text, not encrypted) of admin user (*use with caution*)! (see [password](https://sipi.io/guide/sipi/#configuration-of-administrator-access) in configuration description).
+Password (plain text, not encrypted) of admin user (*use with caution*)! (see [password](../guide/sipi/#configuration-of-administrator-access) in configuration description).
 
 ### SIPI Server Variables
 

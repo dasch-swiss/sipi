@@ -242,26 +242,27 @@ The following configuration parameters are used by the SIPI server:
 
 #### Cache Configuration
 
-SIPI may optionally use a cache directory to store converted image in order to avoid computationally intensive conversions if a specific variant is requested several times. The cache is based on timestamps and the canonical IIIF URL. Before an image is being converted, the canonical URL is determined. If a file associated with this canonical URL is in the cache directory, the timestamp of the original file in the repository is compated to the cached file. If the cached file is newer, it will be served. If the file in the repository is newer, the cache file (which is outdated) will be deleted and replaced be the newly converted repository file (that is being sent to the client).
+SIPI uses a file-based LRU cache to store converted images, avoiding expensive re-conversions when the same variant is requested multiple times. The cache is keyed by the canonical IIIF URL and validated against the source file's modification time — stale entries are automatically replaced.
+
+**Eviction:** When the cache reaches its size or file-count limit (high-water mark at 100%), LRU eviction removes the least-recently-used entries until usage drops to 80% (low-water mark). Both limits are enforced independently — whichever is reached first triggers eviction.
+
+**Special values for `cache_size`:**
+
+- `'-1'` — unlimited cache (no size eviction)
+- `'0'` — cache disabled entirely (no files are cached)
+- `'200M'`, `'1G'` — enforced limit with LRU eviction
+
+**Monitoring:** SIPI exposes Prometheus metrics at `GET /metrics` (text format). Cache counters (`sipi_cache_hits_total`, `sipi_cache_misses_total`, `sipi_cache_evictions_total`, `sipi_cache_skips_total`) and gauges (`sipi_cache_size_bytes`, `sipi_cache_files`, `sipi_cache_size_limit_bytes`, `sipi_cache_files_limit`) are available for monitoring cache health.
 
 The following configuration parameters determine the behaviour of the cache:
 
-- `cachedir=path`: SIPI may optionally use a cache directory to store converted image in order to avoid computationally intensive conversions if a specific variant is requested several times. Sipi starts with a warning if the cache directory is defined but not existing.\
-  *Cmdline option: `--cachedir`*\
-  *Environment variable: `SIPI_CACHEDIR`*\
-  *Default: `./cache`*
-- `cachesize=amount`: The maximal size of the cache. The cache will be purged if either the maximal size or maximal number of files is reached. The amount has the form "M" with M indication Megabytes.\
-  *Cmdline option: `--cachesize`*\
-  *Environment variable: `SIPI_CACHESIZE`*\
-  *Default: `200M`*
-- `cache_nfiles=num`: The maximal number of files to be cached. The cache will be purged if either the maximal size or maximal number of files is reached.\
-  *Cmdline option: `--cachenfiles`*\
-  *Environment variable: `SIPI_CACHENFILES`*\
-  *Default: `200`*
-- `cache_hysteresis=float`: If the cache becomes full, the given percentage of file space is marked for reuse and purged.\
-  *Cmdline option: `--cachehysteresis`*\
-  *Environment variable: `SIPI_CACHEHYSTERESIS`*\
-  *Default: `0.15`*
+- `cache_dir=path`: Path to the cache directory. Created automatically if missing. *Cmdline option: `--cachedir`* *Environment variable: `SIPI_CACHEDIR`* *Default: `./cache`*
+- `cache_size=amount`: Maximum cache size. Use `'-1'` for unlimited, `'0'` to disable, or a size string like `'200M'` or `'1G'`. Eviction triggers at 100% and purges down to 80%. *Cmdline option: `--cachesize`* *Environment variable: `SIPI_CACHESIZE`* *Default: `200M`*
+- `cache_nfiles=num`: Maximum number of cached files. Set to `0` for no file-count limit. Eviction triggers when either size or file-count limit is reached. *Cmdline option: `--cachenfiles`* *Environment variable: `SIPI_CACHENFILES`* *Default: `200`*
+
+Deprecated keys
+
+The old configuration keys `cachedir`, `cachesize`, and `cache_hysteresis` are still accepted with a deprecation warning. The `cache_hysteresis` parameter has been removed — eviction now always uses a fixed 80% low-water mark. See `DEPRECATIONS.md` for details.
 
 #### Configuration of the HTTP File Server
 

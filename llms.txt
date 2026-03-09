@@ -22,7 +22,10 @@ SIPI is a multithreaded, high-performance IIIF-compatible media server written i
 ## Development
 
 - [Building](https://sipi.io/development/building/index.md): Build instructions
+- [CI and Release](https://sipi.io/development/ci/index.md): CI and release pipeline guide
 - [Developing](https://sipi.io/development/developing/index.md): Development guide
+- [Downstream Dependencies](https://sipi.io/development/downstream-dependencies/index.md): Runtime packages and downstream consumers
+- [Commit and PR Conventions](https://sipi.io/development/commit-conventions/index.md): Commit organization and PR description conventions
 
 ## Release Notes
 
