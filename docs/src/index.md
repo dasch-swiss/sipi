@@ -28,3 +28,8 @@ Welcome to the documentation for **SIPI** (Simple Image Presentation Interface).
 ## Release Notes
 
 - **[Release Notes](release-notes/index.md)** — Version history
+
+## For LLMs
+
+- **[llms.txt](llms.txt)** — Summary for LLMs
+- **[llms-full.txt](llms-full.txt)** — Full documentation for LLMs
