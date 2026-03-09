@@ -7,6 +7,7 @@ edit_uri: blob/main/docs/
 copyright: "&copy; 2017 - 2026 <a href='https://dasch.swiss' target='_blank'>Data and Service Center for the Humanities (DaSCH)</a>"
 
 nav:
+  - Home: index.md
   - Overview: guide/index.md
   - Introduction: guide/introduction.md
   - Reference: guide/sipi.md
@@ -19,6 +20,7 @@ nav:
   - Developing: development/developing.md
   - Downstream Dependencies: development/downstream-dependencies.md
   - Commit and PR Conventions: development/commit-conventions.md
+  - Reviewer Guidelines: development/reviewer-guidelines.md
   - Release Notes: release-notes/index.md
 
 theme:
@@ -76,5 +78,6 @@ plugins:
           - development/developing.md: "Development guide"
           - development/downstream-dependencies.md: "Runtime packages and downstream consumers"
           - development/commit-conventions.md: "Commit organization and PR description conventions"
+          - development/reviewer-guidelines.md: "Code review checklist for human and AI reviewers"
         "Release Notes":
           - release-notes/index.md
