@@ -48,6 +48,7 @@ protected:
   int _jpeg_quality{};
   std::unordered_map<std::string, SipiCompressionParams> _j2k_compression_profiles;
   ScalingQuality _scaling_quality{};
+  size_t _max_pixel_limit{ 0 };//!< max output pixels (w*h) per request, 0 = unlimited
 
 public:
   /*!
@@ -152,6 +153,9 @@ public:
   }
 
   ScalingQuality scaling_quality() const { return _scaling_quality; }
+
+  void max_pixel_limit(size_t v) { _max_pixel_limit = v; }
+  size_t max_pixel_limit() const { return _max_pixel_limit; }
 
   void cache(const std::string &cachedir_p,
     long long max_cache_size_p = -1,

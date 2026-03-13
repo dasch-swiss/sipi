@@ -776,6 +776,14 @@ public:
   void flush();
 
   /*!
+   * Check if the peer (client) is still connected.
+   * Uses poll() on the underlying socket to detect POLLHUP/POLLERR.
+   *
+   * \returns true if the peer appears to still be connected, false otherwise
+   */
+  bool peerConnected() const;
+
+  /*!
    * Flags the connection to be reset
    */
   bool resetConnection() const { return _reset_connection; }

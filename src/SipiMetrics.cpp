@@ -38,6 +38,24 @@ SipiMetrics::SipiMetrics()
                         .Register(*registry_)
                         .Add({})),
 
+    image_too_large_total(prometheus::BuildCounter()
+                            .Name("sipi_image_too_large_total")
+                            .Help("Total requests rejected due to output pixel limit")
+                            .Register(*registry_)
+                            .Add({})),
+
+    client_disconnected_total(prometheus::BuildCounter()
+                                .Name("sipi_client_disconnected_total")
+                                .Help("Total requests aborted due to client disconnect during processing")
+                                .Register(*registry_)
+                                .Add({})),
+
+    memory_alloc_failures_total(prometheus::BuildCounter()
+                                  .Name("sipi_memory_alloc_failures_total")
+                                  .Help("Total memory allocation failures during image processing")
+                                  .Register(*registry_)
+                                  .Add({})),
+
     cache_size_bytes(prometheus::BuildGauge()
                        .Name("sipi_cache_size_bytes")
                        .Help("Current cache size in bytes")

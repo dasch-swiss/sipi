@@ -32,6 +32,9 @@ public:
   prometheus::Counter &cache_misses_total;
   prometheus::Counter &cache_evictions_total;
   prometheus::Counter &cache_skips_total;
+  prometheus::Counter &image_too_large_total;
+  prometheus::Counter &client_disconnected_total;
+  prometheus::Counter &memory_alloc_failures_total;
 
   // Gauges
   prometheus::Gauge &cache_size_bytes;

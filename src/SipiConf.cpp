@@ -117,6 +117,10 @@ SipiConf::SipiConf(shttps::LuaServer &luacfg)
   logfile = luacfg.configString("sipi", "logfile", "sipi.log");
   adminuser = luacfg.configString("admin", "user", "");
   password = luacfg.configString("admin", "password", "");
+  long long parsed_pixel_limit = luacfg.configInteger("sipi", "max_pixel_limit", 0);
+  if (parsed_pixel_limit < 0) parsed_pixel_limit = 0;
+  max_pixel_limit = static_cast<size_t>(parsed_pixel_limit);
+
   routes = luacfg.configRoute("routes");
   docroot = luacfg.configString("fileserver", "docroot", "");
   wwwroute = luacfg.configString("fileserver", "wwwroute", "");

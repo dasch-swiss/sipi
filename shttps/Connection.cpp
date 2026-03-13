@@ -20,11 +20,13 @@
 #include <arpa/inet.h>//inet_addrmktemp
 #include <cstdio>
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/stat.h>
 #include <unistd.h>//write
 
 #include "ChunkReader.h"
 #include "Connection.h"
+#include "SockStream.h"
 #include "Error.h"
 #include "Server.h"// TEMPORARY !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #include "makeunique.h"
@@ -839,6 +841,21 @@ Connection::Connection(Server *server_p,
   } else {
     throw Error("Invalid HTTP header!");
   }
+}
+//=============================================================================
+
+bool Connection::peerConnected() const
+{
+  if (os == nullptr) return true;
+  auto *sbuf = dynamic_cast<SockStream *>(os->rdbuf());
+  if (sbuf == nullptr) return true;
+  int fd = sbuf->socket_fd();
+  if (fd < 0) return true;
+
+  struct pollfd pfd = { fd, POLLOUT, 0 };
+  int ret = poll(&pfd, 1, 0);// non-blocking check
+  if (ret > 0 && (pfd.revents & (POLLHUP | POLLERR))) { return false; }
+  return true;
 }
 //=============================================================================
 

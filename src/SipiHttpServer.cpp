@@ -1341,6 +1341,20 @@ static void serve_iiif(Connection &conn_obj,
   // if restricted size is set and smaller, we use it
   if (!restricted_size->undefined() && (*size > *restricted_size)) { size = restricted_size; }
 
+  // Guard: check output pixel count against max_pixel_limit
+  if (server->max_pixel_limit() > 0 && tmp_r_w > 0 && tmp_r_h > 0) {
+    size_t output_pixels = tmp_r_w * tmp_r_h;
+    if (output_pixels > server->max_pixel_limit()) {
+      log_warn("Request rejected: output %zux%zu (%zu pixels) exceeds limit %zu: %s",
+        tmp_r_w, tmp_r_h, output_pixels, server->max_pixel_limit(), uri.c_str());
+      SipiMetrics::instance().image_too_large_total.Increment();
+      send_error(conn_obj,
+        Connection::BAD_REQUEST,
+        "Requested output dimensions too large (" + std::to_string(tmp_r_w) + "x" + std::to_string(tmp_r_h) + ")");
+      return;
+    }
+  }
+
   std::string cannonical_watermark = watermark.empty() ? "0" : "1";
 
   //.....................................................................
@@ -1463,9 +1477,26 @@ static void serve_iiif(Connection &conn_obj,
     }
   }
 
+  // Guard: check if client is still connected before expensive image loading
+  if (!conn_obj.peerConnected()) {
+    log_info("Client disconnected before image load, aborting: %s", uri.c_str());
+    SipiMetrics::instance().client_disconnected_total.Increment();
+    return;
+  }
+
   Sipi::SipiImage img;
   try {
     img.read(infile, region, size, quality_format.format() == SipiQualityFormat::JPG, server->scaling_quality());
+  } catch (const std::bad_alloc &) {
+    log_err("Memory allocation failed loading %s (%zux%zu)", infile.c_str(), img_w, img_h);
+    SipiMetrics::instance().memory_alloc_failures_total.Increment();
+    ImageContext sentry_ctx;
+    sentry_ctx.input_file = infile;
+    sentry_ctx.file_size_bytes = get_file_size(infile);
+    sentry_ctx.request_uri = uri;
+    capture_image_error("std::bad_alloc during image read", "read", sentry_ctx, SipiMode::Server);
+    send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Insufficient memory to process image");
+    return;
   } catch (const SipiImageError &err) {
     ImageContext sentry_ctx;
     sentry_ctx.input_file = infile;
@@ -1484,8 +1515,18 @@ static void serve_iiif(Connection &conn_obj,
   // now we rotate
   //
   if (mirror || (angle != 0.0)) {
+    if (!conn_obj.peerConnected()) {
+      log_info("Client disconnected before rotate, aborting: %s", uri.c_str());
+      SipiMetrics::instance().client_disconnected_total.Increment();
+      return;
+    }
     try {
       img.rotate(angle, mirror);
+    } catch (const std::bad_alloc &) {
+      log_err("Memory allocation failed during rotate: %s", infile.c_str());
+      SipiMetrics::instance().memory_alloc_failures_total.Increment();
+      send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Insufficient memory to process image");
+      return;
     } catch (Sipi::SipiError &err) {
       ImageContext sentry_ctx;
       sentry_ctx.input_file = infile;
@@ -1499,6 +1540,11 @@ static void serve_iiif(Connection &conn_obj,
   }
 
   if (quality_format.quality() != SipiQualityFormat::DEFAULT) {
+    if (!conn_obj.peerConnected()) {
+      log_info("Client disconnected before color conversion, aborting: %s", uri.c_str());
+      SipiMetrics::instance().client_disconnected_total.Increment();
+      return;
+    }
     switch (quality_format.quality()) {
     case SipiQualityFormat::COLOR:
       img.convertToIcc(SipiIcc(icc_sRGB), 8);
@@ -1520,6 +1566,11 @@ static void serve_iiif(Connection &conn_obj,
   // let's add a watermark if necessary
   //
   if (!watermark.empty()) {
+    if (!conn_obj.peerConnected()) {
+      log_info("Client disconnected before watermark, aborting: %s", uri.c_str());
+      SipiMetrics::instance().client_disconnected_total.Increment();
+      return;
+    }
     try {
       img.add_watermark(watermark);
     } catch (Sipi::SipiError &err) {
@@ -1544,6 +1595,13 @@ static void serve_iiif(Connection &conn_obj,
       return;
     }
     log_info("GET %s: adding watermark", uri.c_str());
+  }
+
+  // Final connection check before writing response
+  if (!conn_obj.peerConnected()) {
+    log_info("Client disconnected before response write, aborting: %s", uri.c_str());
+    SipiMetrics::instance().client_disconnected_total.Increment();
+    return;
   }
 
   img.connection(&conn_obj);

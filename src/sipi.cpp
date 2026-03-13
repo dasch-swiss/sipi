@@ -611,6 +611,13 @@ int main(int argc, char *argv[])
       "DEPRECATED: no longer supported (replaced by built-in 80% low-water mark)")
     ->envname("SIPI_CACHEHYSTERESIS");
 
+  size_t optMaxPixelLimit = 0;
+  sipiopt
+    .add_option("--max-pixel-limit",
+      optMaxPixelLimit,
+      "Max output pixels (width*height) per IIIF request. 0 = unlimited.")
+    ->envname("SIPI_MAX_PIXEL_LIMIT");
+
   std::string optThumbSize = "!128,128";
   sipiopt.add_option("--thumbsize", optThumbSize, "Size of the thumbnails (to be used within Lua).")
     ->envname("SIPI_THUMBSIZE");
@@ -1350,6 +1357,16 @@ int main(int argc, char *argv[])
       server.dirs_to_exclude(sipiConf.getSubdirExcludes());
       server.scaling_quality(sipiConf.getScalingQuality());
       server.jpeg_quality(sipiConf.getJpegQuality());
+
+      // max pixel limit — CLI/env overrides config file
+      {
+        size_t pixel_limit = sipiConf.getMaxPixelLimit();
+        if (optMaxPixelLimit > 0) pixel_limit = optMaxPixelLimit;
+        server.max_pixel_limit(pixel_limit);
+        if (pixel_limit > 0) {
+          log_info("Max output pixel limit: %zu", pixel_limit);
+        }
+      }
 
       //
       // cache parameter...

@@ -64,6 +64,7 @@ private:
   std::string jwt_secret;
   std::string adminuser;
   std::string password;
+  size_t max_pixel_limit{ 0 };//<! max output pixels (w*h) per IIIF request, 0 = unlimited
 
 public:
   SipiConf();
@@ -168,6 +169,9 @@ public:
 
   std::string getPassword() { return password; }
   inline void setPasswort(const std::string &str) { password = str; }
+
+  size_t getMaxPixelLimit() const { return max_pixel_limit; }
+  void setMaxPixelLimit(size_t v) { max_pixel_limit = v; }
 };
 
 }// namespace Sipi
