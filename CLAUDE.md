@@ -26,7 +26,8 @@ make zig-test-e2e              # end-to-end tests
 # Nix (reproducible native dev — run inside `nix develop`)
 make nix-build                 # build (debug + coverage)
 make nix-test                  # unit tests
-make nix-test-e2e              # end-to-end tests
+make rust-test-e2e             # Rust e2e tests (requires built sipi)
+make hurl-test                 # Hurl HTTP contract tests
 
 # Vendor dependencies
 make vendor-download           # download all dep archives to vendor/
@@ -86,10 +87,13 @@ Image formats (libtiff, libpng, libjpeg, libwebp), compression (zlib, bzip2, xz,
 
 ## Testing
 
-For detailed testing guidance (frameworks, directory layout, how to add tests), see [`docs/src/development/developing.md`](docs/src/development/developing.md).
+For the authoritative testing strategy (pyramid, layer definitions, decision tree, IIIF coverage matrix, feature inventory), see [`docs/src/development/testing-strategy.md`](docs/src/development/testing-strategy.md).
+
+For test framework details (how to run tests, directory layout, adding tests), see [`docs/src/development/developing.md`](docs/src/development/developing.md).
 
 - **Unit tests** (`test/unit/`): GoogleTest + ApprovalTests — `make nix-test` or `make zig-test`
-- **E2E tests** (`test/e2e/`): pytest — `make nix-test-e2e` or `make zig-test-e2e`
+- **E2E tests** (`test/e2e-rust/`): Rust (reqwest + cargo test) — `make rust-test-e2e` or `make zig-test-e2e`
+- **Hurl tests** (`test/hurl/`): HTTP contract tests — `make hurl-test`
 - **Smoke tests** (`test/smoke/`): against Docker image — `make test-smoke`
 - **Approval tests** (`test/approval/`): snapshot-based regression — included in unit tests
 

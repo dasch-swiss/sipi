@@ -32,6 +32,15 @@ determine the SemVer bump and generate the changelog.
     See [Commit Message Schema](developing.md#commit-message-schema) for the
     full format specification.
 
+## Nightly Fuzz Testing
+
+A nightly fuzz workflow (`.github/workflows/fuzz.yml`) runs libFuzzer against
+the IIIF URL parser to find crashes and edge cases. Fuzz corpora are persisted
+as artifacts across runs so coverage accumulates over time.
+
+See [Fuzzing](fuzzing.md) for details on the fuzz harness, corpus management,
+and how to reproduce crashes locally.
+
 ## Scope
 
 - Keep Docker publishing and Zig/static artifacts in parallel.

@@ -269,7 +269,4 @@ make docs-build
 
 # Serve documentation locally for preview
 make docs-serve
-
-# Serve doxygen API docs (must build with cmake first)
-make nix-doxygen-serve
 ```
