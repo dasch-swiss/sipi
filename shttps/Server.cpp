@@ -4,6 +4,7 @@
  */
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>// Needed for memset
 #include <iostream>
 #include <regex>
@@ -33,6 +34,7 @@
 #include "LuaServer.h"
 #include "Parsing.h"
 #include "Server.h"
+#include "SipiMetrics.h"
 #include "SockStream.h"
 #include "makeunique.h"
 
@@ -925,21 +927,32 @@ void Server::run()
     // blocking poll on input sockets waiting for *new* connections
     //
     pollfd *sockets = socket_control.get_sockets_arr();
+    // Cache snapshot-consistent indices. Operations like add_dyn_socket() and
+    // remove() modify generic_open_sockets mid-loop, which shifts the live
+    // indices returned by get_*() accessors. The poll(2) call and subsequent
+    // for-loop must use the snapshot that was passed to poll().
+    const int sockets_size = socket_control.get_sockets_size();
+    const int snap_n_msg = socket_control.get_n_msg_sockets();
+    const int snap_stop = socket_control.get_stop_socket_id();
+    const int snap_http = socket_control.get_http_socket_id();
+    const int snap_ssl = socket_control.get_ssl_socket_id();
+    const int snap_dyn_base = socket_control.get_dyn_socket_base();
+
     int nsocks;
-    if ((nsocks = poll(sockets, socket_control.get_sockets_size(), -1)) < 0) {
+    if ((nsocks = poll(sockets, sockets_size, -1)) < 0) {
       auto loc = std::source_location::current();
       log_err("Blocking poll failed at [%s: %d]: %m", loc.file_name(), loc.line());
       running = false;
       break;
     }
 
-    for (int i = 0; i < socket_control.get_sockets_size(); i++) {
+    for (int i = 0; i < sockets_size; i++) {
       if (sockets[i].revents) {
         if ((sockets[i].revents & POLLIN) || (sockets[i].revents & POLLPRI)) {
           //
           // we've got input on one of the sockets
           //
-          if (i < socket_control.get_n_msg_sockets()) {
+          if (i < snap_n_msg) {
             //
             // CONTROL_SOCKET: we got input from an internal thread...
             //
@@ -953,7 +966,7 @@ void Server::run()
               // available threads.
               //
               msg.type = SocketControl::NOOP;
-              socket_control.add_dyn_socket(msg);// add socket to list to pe polled ==> CHANGES open_sockets!!
+              socket_control.add_dyn_socket(msg);// add socket to list to be polled (next iteration)
               //
               // see if we have sockets waiting for a thread.If yes, we reuse this thread directly
               //
@@ -1026,7 +1039,7 @@ void Server::run()
             }
             // we got input ready from thread....
             // we expect  FINISHED or SOCKET_CLOSED
-          } else if (i == socket_control.get_stop_socket_id()) {
+          } else if (i == snap_stop) {
             //
             // STOP from interrupt thread: got input ready from stoppipe
             //
@@ -1041,21 +1054,21 @@ void Server::run()
             socket_control.close_all_dynsocks(close_socket);
             socket_control.broadcast_exit();// broadcast EXIT to all worker threads
             running = false;
-          } else if (i == socket_control.get_http_socket_id()) {
+          } else if (i == snap_http) {
             //
             // external HTTP request coming in
             //
             // we got input ready from normal listener socket
             SocketControl::SocketInfo sockid = accept_connection(sockets[i].fd, false);
             socket_control.add_dyn_socket(sockid);
-            log_debug("Accepted connection from %s", sockid.peer_ip);//  ==> CHANGES open_sockets!!
-          } else if (i == socket_control.get_ssl_socket_id()) {
+            log_debug("Accepted connection from %s", sockid.peer_ip);
+          } else if (i == snap_ssl) {
             //
             // external SSL request coming in
             //
             SocketControl::SocketInfo sockid = accept_connection(sockets[i].fd, true);
             socket_control.add_dyn_socket(sockid);
-            log_debug("Accepted SSL connection from %s", sockid.peer_ip);//  ==> CHANGES open_sockets!!
+            log_debug("Accepted SSL connection from %s", sockid.peer_ip);
           } else {
             //
             // DYN_SOCKET: a client socket (already accepted) has data -> dispatch the processing to a free thread
@@ -1064,12 +1077,12 @@ void Server::run()
             ThreadControl::ThreadMasterData tinfo;
             if (thread_control.thread_pop(tinfo)) {// thread available
               SocketControl::SocketInfo sockid;
-              socket_control.remove(i, sockid);//  ==> CHANGES open_sockets!!
+              socket_control.remove(i, sockid);
               sockid.type = SocketControl::PROCESS_REQUEST;
               int n = SocketControl::send_control_message(tinfo.control_pipe, sockid);
               if (n < 0) { log_warn("Got something unexpected..."); }
             } else {// no thread available, push socket into waiting queue
-              socket_control.move_to_waiting(i);//  ==> CHANGES open_sockets!!
+              socket_control.move_to_waiting(i);
             }
           }
         } else if (sockets[i].revents & POLLHUP) {
@@ -1077,34 +1090,34 @@ void Server::run()
           // we got a HANGUP from a socket
           //
 
-          if (i >= socket_control.get_dyn_socket_base()) {
+          if (snap_dyn_base >= 0 && i >= snap_dyn_base) {
             //
-            // ist a hangup from a dynamic client socket!
+            // it's a hangup from a dynamic client socket!
             // we close and remove it
             //
             SocketControl::SocketInfo sockid;
-            socket_control.remove(i, sockid);//  ==> CHANGES open_sockets!!
+            socket_control.remove(i, sockid);
             close_socket(sockid);
-          } else if (i < socket_control.get_n_msg_sockets()) {
+          } else if (i < snap_n_msg) {
             //
             // it's a hangup from one of the thread sockets -> thread exited
             //
             SocketControl::SocketInfo sockid;
-            socket_control.remove(i, sockid);//  ==> CHANGES open_sockets!!
+            socket_control.remove(i, sockid);
             thread_control.thread_delete(i);// delete the thread
             if (socket_control.get_n_msg_sockets() == 0) { running = false; }
-          } else if (i == socket_control.get_http_socket_id()) {
+          } else if (i == snap_http) {
             //
-            // The HTTP socked was being closed -> must be EXIT
-            //
-            SocketControl::SocketInfo sockid;
-            socket_control.remove(i, sockid);//  ==> CHANGES open_sockets!!
-          } else if (i == socket_control.get_ssl_socket_id()) {
-            //
-            // The HTTP socked was being closed -> must be EXIT - do nothing!
+            // The HTTP socket was being closed -> must be EXIT
             //
             SocketControl::SocketInfo sockid;
-            socket_control.remove(i, sockid);//  ==> CHANGES open_sockets!!
+            socket_control.remove(i, sockid);
+          } else if (i == snap_ssl) {
+            //
+            // The SSL socket was being closed -> must be EXIT - do nothing!
+            //
+            SocketControl::SocketInfo sockid;
+            socket_control.remove(i, sockid);
           } else {
             log_err("We got a HANGUP from an unknown socket (socket_id = %d)", i);
           }
@@ -1195,8 +1208,12 @@ shttps::ThreadStatus Server::process_request(std::istream *ins,
     void *hd = nullptr;
 
     try {
+      auto request_start = std::chrono::steady_clock::now();
       RequestHandler handler = get_handler(conn, &hd);
       handler(conn, luaserver, _user_data, hd);
+      auto request_end = std::chrono::steady_clock::now();
+      double duration_seconds = std::chrono::duration<double>(request_end - request_start).count();
+      SipiMetrics::instance().request_duration_seconds.Observe(duration_seconds);
     } catch (InputFailure iofail) {
       log_debug("Possibly socket closed by peer");
       return CLOSE;// or CLOSE ??
