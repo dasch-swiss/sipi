@@ -83,8 +83,10 @@ Unit tests live in `test/unit/` and use GoogleTest with ApprovalTests.
 Tests are organized by component:
 
 - `test/unit/configuration/` - Configuration parsing tests
+- `test/unit/filenamehash/` - Filename hashing tests
 - `test/unit/iiifparser/` - IIIF URL parser tests
 - `test/unit/sipiimage/` - Image processing tests
+- `test/unit/shttps/` - HTTP server utility tests
 - `test/unit/logger/` - Logger tests
 - `test/unit/handlers/` - HTTP handler tests
 
@@ -112,6 +114,48 @@ Run e2e tests:
 ```bash
 make nix-test-e2e
 ```
+
+### Rust End-to-End Tests
+
+Rust-based e2e tests live in `test/e2e-rust/` and use `reqwest` for HTTP
+requests, `serde_json` for JSON validation, and `insta` for golden baseline
+snapshots. They cover IIIF compliance, server behaviour, and upload
+functionality.
+
+Run Rust e2e tests:
+
+```bash
+make rust-test-e2e
+```
+
+!!! note "Sequential execution required"
+    Tests must run with `--test-threads=1` because each test starts its own
+    SIPI server instance on a unique port. The Makefile target handles this
+    automatically.
+
+### Hurl HTTP Contract Tests
+
+Declarative HTTP contract tests live in `test/hurl/` and use
+[Hurl](https://hurl.dev). Each `.hurl` file describes a sequence of HTTP
+requests and expected responses.
+
+Run Hurl tests:
+
+```bash
+make hurl-test
+```
+
+Current test files:
+
+- `file_access.hurl` — File access and permission checks
+- `lua_endpoints.hurl` — Lua script endpoint responses
+- `missing_sidecar.hurl` — Behaviour when sidecar files are absent
+- `sqlite_api.hurl` — SQLite API endpoint tests
+- `video_knora_json.hurl` — Video metadata JSON responses
+
+!!! note "Requires Hurl binary"
+    Hurl is available inside `nix develop`. Outside Nix, install it from
+    [hurl.dev](https://hurl.dev).
 
 ### Smoke Tests
 

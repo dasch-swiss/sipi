@@ -51,6 +51,15 @@ Checklist for human and AI reviewers. Not every item applies to every PR — use
 - [ ] Config example files updated alongside code changes
 - [ ] New fields mirror structure of similar existing fields
 
+## Testing Strategy Compliance
+
+- [ ] New tests placed in the correct pyramid layer — consult the [decision tree](testing-strategy.md#test-decision-tree)
+- [ ] New HTTP behavior tests are Rust e2e or Hurl (not Python) — Python tests are frozen
+- [ ] Tests verify behavior (dimensions, content, structure), not just status codes
+- [ ] Snapshot tests use `insta` with appropriate redactions for dynamic fields
+- [ ] No new `test/unit/` directories — C++ unit tests are frozen (maintain existing only)
+- [ ] If a gap from the [coverage matrix](testing-strategy.md#iiif-image-api-30-coverage-matrix) is closed, the matrix is updated
+
 ## Security
 
 - [ ] No path traversal possible via user-supplied inputs (IIIF identifiers, config paths, cache file names)
