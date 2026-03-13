@@ -1,0 +1,102 @@
+# Nightly load test: measures throughput and latency baselines using wrk.
+# Results are uploaded as CI artifacts for trend analysis.
+#
+# Runs at 04:00 UTC (after sanitizer at 03:00).
+# Not run on PRs — load tests are too slow and noisy for PR feedback.
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    # Run at 04:00 UTC every night
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+name: loadtest
+
+concurrency:
+  group: loadtest
+  cancel-in-progress: false
+
+jobs:
+  loadtest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    name: wrk / amd64
+    steps:
+      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+        with:
+          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - name: Pull LFS objects
+        run: |
+          git lfs install
+          git lfs fetch --all
+          git lfs checkout
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GH_TOKEN }}
+
+      - name: Install wrk
+        run: sudo apt-get update && sudo apt-get install -y wrk
+
+      - name: Build sipi
+        run: |
+          nix \
+            --extra-experimental-features "nix-command flakes" \
+            --option filter-syscalls false \
+            develop --command bash -c "make nix-build"
+
+      - name: Start sipi server
+        run: |
+          nix \
+            --extra-experimental-features "nix-command flakes" \
+            --option filter-syscalls false \
+            develop --command bash -c \
+              "cd test/_test_data && ../../build/sipi --config config/sipi.fake-knora-test-config.lua &"
+          # Wait for server readiness
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:1024/unit/lena512.jp2/info.json > /dev/null 2>&1 && break
+            sleep 1
+          done
+
+      - name: Run load tests
+        run: |
+          mkdir -p loadtest-results
+
+          echo "=== info.json throughput (30s, 4 threads, 16 connections) ==="
+          wrk -t4 -c16 -d30s http://127.0.0.1:1024/unit/lena512.jp2/info.json \
+            2>&1 | tee loadtest-results/info-json.txt
+
+          echo ""
+          echo "=== 256x256 JPEG throughput (30s, 4 threads, 16 connections) ==="
+          wrk -t4 -c16 -d30s http://127.0.0.1:1024/unit/lena512.jp2/full/256,256/0/default.jpg \
+            2>&1 | tee loadtest-results/image-256.txt
+
+          echo ""
+          echo "=== 512x512 JPEG throughput (30s, 2 threads, 8 connections) ==="
+          wrk -t2 -c8 -d30s http://127.0.0.1:1024/unit/lena512.jp2/full/512,512/0/default.jpg \
+            2>&1 | tee loadtest-results/image-512.txt
+
+          # Generate summary
+          echo "# Load Test Results - $(date -u +%Y-%m-%d)" > loadtest-results/summary.md
+          echo "" >> loadtest-results/summary.md
+          for f in loadtest-results/*.txt; do
+            echo "## $(basename "$f" .txt)" >> loadtest-results/summary.md
+            echo '```' >> loadtest-results/summary.md
+            cat "$f" >> loadtest-results/summary.md
+            echo '```' >> loadtest-results/summary.md
+            echo "" >> loadtest-results/summary.md
+          done
+
+      - name: Stop sipi server
+        if: always()
+        run: pkill -f "sipi.*fake-knora" || true
+
+      - name: Upload load test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: loadtest-results
+          retention-days: 90
+          path: loadtest-results/
