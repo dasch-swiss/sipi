@@ -1,6 +1,6 @@
 # Main CI workflow for pull requests and scheduled verification.
 # Includes:
-#   - Existing Nix/GCC build+unit+e2e matrix on Linux amd64/arm64
+#   - Nix/GCC build+unit matrix on Linux amd64/arm64 (Rust e2e + Hurl)
 #   - Zig static Linux validation (Release, full unit+e2e) on internal PRs
 #   - Zig native macOS arm64 build + dylib audit on internal PRs
 
@@ -23,7 +23,7 @@ name: test
 jobs:
   test:
     runs-on: ${{ matrix.runs-on }}
-    name: nix-gcc / ${{ matrix.arch }}
+    name: nix-clang / ${{ matrix.arch }}
 
     strategy:
       fail-fast: false
@@ -58,11 +58,18 @@ jobs:
       - uses: cachix/install-nix-action@v31
         with:
           github_access_token: ${{ secrets.GH_TOKEN }}
-      - run: |
+      - name: Build and test (unit)
+        run: |
           nix \
             --extra-experimental-features "nix-command flakes" \
             --option filter-syscalls false \
-            develop --command bash -c "make nix-build && make nix-test && make nix-test-e2e"
+            develop --command bash -c "make nix-build && make nix-test"
+      - name: Rust e2e and Hurl tests
+        run: |
+          nix \
+            --extra-experimental-features "nix-command flakes" \
+            --option filter-syscalls false \
+            develop --command bash -c "make rust-test-e2e && make hurl-test"
       - name: Gather code coverage
         if: ${{ matrix.arch == 'amd64' }}
         run: |
@@ -174,14 +181,9 @@ jobs:
           fi
           [ "$failed" -eq 0 ] || exit 1
 
-      - name: Install test dependencies
+      - name: Rust e2e tests
         run: |
-          sudo apt-get update
-          sudo apt-get install -y nginx imagemagick apache2-utils
-          pip3 install --break-system-packages pytest requests psutil iiif-validator
-
-      - name: Run e2e tests
-        run: cd test/e2e && pytest -s --sipi-exec=$GITHUB_WORKSPACE/build/sipi
+          cd test/e2e-rust && SIPI_BIN=$GITHUB_WORKSPACE/build/sipi cargo test -- --test-threads=1
 
   zig-macos-arm64:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository

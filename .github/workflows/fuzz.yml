@@ -1,0 +1,172 @@
+# Nightly / on-demand fuzz testing using libFuzzer (requires Clang).
+# Runs the IIIF URI parser fuzzer for a configurable duration.
+#
+# Corpus persistence: each run downloads the previous night's corpus,
+# merges new findings, and uploads the result. This means coverage
+# accumulates across runs instead of starting fresh each time.
+#
+# On crash: uploads reproducer artifacts (retained 90 days) and opens
+# a GitHub issue with the crash details so the team gets notified.
+
+permissions:
+  contents: read
+  issues: write
+
+on:
+  schedule:
+    # Run at 02:00 UTC every night
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Fuzz duration in seconds'
+        required: false
+        default: '600'
+
+name: fuzz
+
+concurrency:
+  group: fuzz
+  cancel-in-progress: false
+
+jobs:
+  fuzz-iiif-parser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    name: fuzz / iiif-uri-parser
+    steps:
+      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+        with:
+          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - name: Pull LFS objects
+        run: |
+          git lfs install
+          git lfs fetch --all
+          git lfs checkout
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GH_TOKEN }}
+
+      - name: Restore corpus from previous run
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: fuzz.yml
+          name: fuzz-corpus
+          path: fuzz-corpus-prev
+          if_no_artifact_found: warn
+          search_artifacts: true
+        continue-on-error: true
+
+      - name: Build fuzz target (Clang + libFuzzer)
+        run: |
+          nix \
+            --extra-experimental-features "nix-command flakes" \
+            --option filter-syscalls false \
+            develop .#clang --command bash -c "
+              cmake -S . -B build-fuzz \
+                -DCMAKE_BUILD_TYPE=Debug \
+                -DSIPI_ENABLE_FUZZ=ON
+              cmake --build build-fuzz --target iiif_handler_uri_parser_fuzz --parallel \$(nproc)
+            "
+
+      - name: Run fuzzer
+        id: fuzz
+        env:
+          FUZZ_DURATION: ${{ inputs.duration || '600' }}
+        run: |
+          if [[ ! "$FUZZ_DURATION" =~ ^[0-9]+$ ]]; then echo "Invalid duration: $FUZZ_DURATION"; exit 1; fi
+          nix \
+            --extra-experimental-features "nix-command flakes" \
+            --option filter-syscalls false \
+            develop .#clang --command bash -c "
+              cd build-fuzz/fuzz/handlers
+              mkdir -p corpus
+
+              # Merge previous corpus if it exists
+              if [ -d ../../../fuzz-corpus-prev ] && [ -n \"\$(ls ../../../fuzz-corpus-prev/ 2>/dev/null)\" ]; then
+                echo 'Restoring corpus from previous run...'
+                cp ../../../fuzz-corpus-prev/* corpus/ 2>/dev/null || true
+                echo \"Restored \$(ls corpus/ | wc -l) inputs from previous run\"
+              fi
+
+              # Run fuzzer: corpus/ is live (read+write), seed corpus is read-only
+              ./iiif_handler_uri_parser_fuzz corpus/ ../../../fuzz/handlers/corpus/ \
+                -max_total_time=\$FUZZ_DURATION \
+                -print_final_stats=1 2>&1 | tee fuzz-output.log
+
+              echo \"Corpus now has \$(ls corpus/ | wc -l) inputs\"
+            "
+
+      - name: Save corpus for next run
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-corpus
+          retention-days: 30
+          overwrite: true
+          path: build-fuzz/fuzz/handlers/corpus/
+
+      - name: Collect crash details
+        if: failure() && steps.fuzz.outcome == 'failure'
+        id: crashes
+        run: |
+          cd build-fuzz/fuzz/handlers
+          echo "## Crash files found:" > crash-summary.md
+          for f in crash-* oom-* timeout-*; do
+            [ -f "$f" ] || continue
+            echo "" >> crash-summary.md
+            echo "### $f" >> crash-summary.md
+            echo '```' >> crash-summary.md
+            xxd "$f" | head -20 >> crash-summary.md
+            echo '```' >> crash-summary.md
+            echo "**As text:** \`$(cat "$f" | tr -cd '[:print:]')\`" >> crash-summary.md
+          done
+          if [ -f fuzz-output.log ]; then
+            echo "" >> crash-summary.md
+            echo "### Fuzzer output (last 50 lines)" >> crash-summary.md
+            echo '```' >> crash-summary.md
+            tail -50 fuzz-output.log >> crash-summary.md
+            echo '```' >> crash-summary.md
+          fi
+          echo "has_crashes=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload crash artifacts
+        if: failure() && steps.fuzz.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes
+          retention-days: 90
+          path: |
+            build-fuzz/fuzz/handlers/crash-*
+            build-fuzz/fuzz/handlers/oom-*
+            build-fuzz/fuzz/handlers/timeout-*
+            build-fuzz/fuzz/handlers/fuzz-output.log
+
+      - name: Open GitHub issue for crash
+        if: failure() && steps.crashes.outputs.has_crashes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          cat > /tmp/fuzz-issue-body.md <<ISSUE_EOF
+          **Fuzzer found a crash in the IIIF URI parser.**
+
+          **Workflow run:** $RUN_URL
+          **Download crash reproducers:** Go to the workflow run → Artifacts → \`fuzz-crashes\`
+
+          ### How to reproduce locally
+
+          \`\`\`bash
+          # Download the crash file from the artifact, then:
+          nix develop .#clang
+          cmake -S . -B build-fuzz -DCMAKE_BUILD_TYPE=Debug -DSIPI_ENABLE_FUZZ=ON
+          cmake --build build-fuzz --target iiif_handler_uri_parser_fuzz -j\$(nproc)
+          cd build-fuzz/fuzz/handlers
+          ./iiif_handler_uri_parser_fuzz /path/to/crash-file
+          \`\`\`
+          ISSUE_EOF
+          cat build-fuzz/fuzz/handlers/crash-summary.md >> /tmp/fuzz-issue-body.md
+          gh issue create \
+            --title "Fuzz: crash in parse_iiif_uri ($(date +%Y-%m-%d))" \
+            --label "bug,fuzz" \
+            --body-file /tmp/fuzz-issue-body.md
