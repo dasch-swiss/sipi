@@ -60,7 +60,15 @@ SipiMetrics::SipiMetrics()
                         .Name("sipi_cache_files_limit")
                         .Help("Configured cache file count limit (0 = no limit)")
                         .Register(*registry_)
-                        .Add({}))
+                        .Add({})),
+
+    request_duration_seconds(
+      prometheus::BuildHistogram()
+        .Name("sipi_request_duration_seconds")
+        .Help("HTTP request duration in seconds")
+        .Register(*registry_)
+        .Add({}, prometheus::Histogram::BucketBoundaries{
+          0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0}))
 {
 }
 

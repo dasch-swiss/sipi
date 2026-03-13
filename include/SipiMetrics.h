@@ -11,6 +11,7 @@
 
 #include <prometheus/counter.h>
 #include <prometheus/gauge.h>
+#include <prometheus/histogram.h>
 #include <prometheus/registry.h>
 #include <prometheus/text_serializer.h>
 
@@ -37,6 +38,9 @@ public:
   prometheus::Gauge &cache_files;
   prometheus::Gauge &cache_size_limit_bytes;
   prometheus::Gauge &cache_files_limit;
+
+  // Histograms
+  prometheus::Histogram &request_duration_seconds;
 
 private:
   SipiMetrics();
