@@ -168,7 +168,7 @@ jobs:
           sha256sum release/sipi-$VERSION-linux-${{ matrix.arch }}.tar.gz > release/sipi-$VERSION-linux-${{ matrix.arch }}.tar.gz.sha256
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: static-linux-release-${{ matrix.arch }}
           path: |
@@ -248,7 +248,7 @@ jobs:
           organization: daschswiss
 
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.sbom_name }}
           path: ${{ matrix.sbom_file }}
