@@ -134,10 +134,6 @@ docker-publish-manifest: ## publish Docker manifest combining arm64 and amd64 im
 # Smoke tests (run against Docker image)
 #####################################
 
-.PHONY: install-requirements
-install-requirements: docs-install-requirements ## install pip requirements for smoke/e2e tests
-	pip3 install -r requirements.txt
-
 .PHONY: test-smoke
 test-smoke: docker-build ## build Docker image and run smoke tests
 	pytest -s test/smoke
@@ -159,13 +155,37 @@ nix-build: ## build SIPI (debug + coverage, inside Nix shell)
 nix-test: ## run unit tests (inside Nix shell)
 	cd build && ctest --output-on-failure
 
-.PHONY: nix-test-e2e
-nix-test-e2e: ## run e2e tests (inside Nix shell)
-	cd test/e2e && pytest -s --sipi-exec=../../build/sipi
+.PHONY: rust-test-e2e
+rust-test-e2e: ## run Rust e2e tests (requires built sipi in build/)
+	cd test/e2e-rust && SIPI_BIN=$(CURDIR)/build/sipi cargo test -- --test-threads=1
+
+.PHONY: fuzz-corpus-update
+fuzz-corpus-update: ## download CI fuzz corpus and merge into seed corpus
+	@echo "Downloading latest fuzz corpus from CI..."
+	rm -rf $(CURDIR)/.fuzz-corpus-ci
+	gh run download --name fuzz-corpus --dir $(CURDIR)/.fuzz-corpus-ci || \
+		{ echo "No fuzz-corpus artifact found. Has the fuzz workflow run yet?"; exit 1; }
+	@before=$$(ls fuzz/handlers/corpus/ | wc -l | tr -d ' '); \
+	for f in $(CURDIR)/.fuzz-corpus-ci/*; do \
+		hash=$$(shasum -a 256 "$$f" | cut -d' ' -f1 | head -c 16); \
+		cp "$$f" "fuzz/handlers/corpus/$$hash"; \
+	done; \
+	after=$$(ls fuzz/handlers/corpus/ | wc -l | tr -d ' '); \
+	echo "Corpus: $$before → $$after inputs ($$((after - before)) new)"
+	rm -rf $(CURDIR)/.fuzz-corpus-ci
+
+.PHONY: hurl-test
+hurl-test: ## run Hurl HTTP contract tests (requires built sipi in build/)
+	cd test/_test_data && $(CURDIR)/build/sipi --config config/sipi.fake-knora-test-config.lua & \
+	  SIPI_PID=$$!; \
+	  READY=0; for i in $$(seq 1 30); do curl -sf http://127.0.0.1:1024/unit/lena512.jp2/info.json > /dev/null 2>&1 && READY=1 && break; sleep 0.5; done; \
+	  if [ "$$READY" -ne 1 ]; then echo "ERROR: sipi failed to start within 15s"; kill $$SIPI_PID 2>/dev/null; exit 1; fi; \
+	  cd test/hurl && hurl --test --insecure --variable host=http://127.0.0.1:1024 *.hurl; \
+	  RESULT=$$?; kill $$SIPI_PID 2>/dev/null; wait $$SIPI_PID 2>/dev/null; exit $$RESULT
 
 .PHONY: nix-coverage
 nix-coverage: ## generate coverage XML report via gcovr (inside Nix shell)
-	cd build && gcovr -j $(NPROC) --delete --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable gcov --gcov-ignore-parse-errors=negative_hits.warn_once_per_file
+	cd build && gcovr -j $(NPROC) --delete --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable "llvm-cov gcov" --gcov-ignore-parse-errors=negative_hits.warn_once_per_file --gcov-ignore-errors=no_working_dir_found
 
 .PHONY: nix-coverage-html
 nix-coverage-html: ## generate coverage HTML report via lcov (inside Nix shell)
@@ -174,6 +194,19 @@ nix-coverage-html: ## generate coverage HTML report via lcov (inside Nix shell)
 		&& lcov --remove coverage.info '*/test/*' --output-file coverage.info \
 		&& genhtml coverage.info --output-directory coverage
 
+.PHONY: nix-coverage-full
+nix-coverage-full: ## run all tests then generate coverage report (inside Nix shell)
+nix-coverage-full: nix-build nix-test rust-test-e2e hurl-test nix-coverage
+
+.PHONY: nix-build-sanitized
+nix-build-sanitized: ## build SIPI with ASan+UBSan (inside Nix shell, Clang only)
+	cmake -B build-sanitized -S . -DCMAKE_BUILD_TYPE=Debug -DENABLE_SANITIZERS=ON --log-context
+	cmake --build ./build-sanitized --parallel $(NPROC)
+
+.PHONY: nix-test-sanitized
+nix-test-sanitized: nix-build-sanitized ## build with sanitizers and run unit tests (inside Nix shell)
+	cd build-sanitized && ASAN_OPTIONS=detect_leaks=1:halt_on_error=0 ctest --output-on-failure
+
 .PHONY: nix-run
 nix-run: ## run SIPI server (inside Nix shell)
 	$(PWD)/build/sipi --config=$(PWD)/config/sipi.config.lua
@@ -181,10 +214,6 @@ nix-run: ## run SIPI server (inside Nix shell)
 .PHONY: nix-valgrind
 nix-valgrind: ## run SIPI with Valgrind (inside Nix shell)
 	valgrind --leak-check=yes --track-origins=yes ./build/sipi --config=$(PWD)/config/sipi.config.lua
-
-.PHONY: nix-doxygen-serve
-nix-doxygen-serve: ## serve doxygen docs (build via cmake first, inside Nix shell)
-	cd ./doxygen/generated/html && python3 -m http.server
 
 .PHONY: build
 build: ## build SIPI with RelWithDebInfo (inside Nix shell)
@@ -235,19 +264,12 @@ zig-test: ## run unit tests (after zig-build-local)
 	cd build && ctest --output-on-failure
 
 .PHONY: zig-test-e2e
-zig-test-e2e: ## run e2e tests against Zig build (after zig-build-local)
+zig-test-e2e: ## run Rust e2e tests against Zig build (after zig-build-local)
 	@if [ ! -x "$(PWD)/build/sipi" ]; then \
 		echo "Missing build/sipi. Run 'make zig-build-local' first."; \
 		exit 1; \
 	fi
-	@if pytest --version >/dev/null 2>&1; then \
-		cd test/e2e && pytest -s --sipi-exec=../../build/sipi; \
-	elif python3 -m pytest --version >/dev/null 2>&1; then \
-		cd test/e2e && python3 -m pytest -s --sipi-exec=../../build/sipi; \
-	else \
-		echo "pytest not available in the current shell, running via nix develop..."; \
-		nix --extra-experimental-features "nix-command flakes" --option filter-syscalls false develop --command bash -c "cd test/e2e && pytest -s --sipi-exec=$(PWD)/build/sipi"; \
-	fi
+	cd test/e2e-rust && SIPI_BIN=$(CURDIR)/build/sipi cargo test -- --test-threads=1
 
 .PHONY: zig-run
 zig-run: ## run SIPI server (after zig-build-local)

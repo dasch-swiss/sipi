@@ -13,7 +13,7 @@ ExternalProject_Add(project_shttps
         DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/downloads
         ${timestamp_policy}
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/shttps
-        CMAKE_ARGS ${ZIG_EP_CMAKE_ARGS} -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local
+        CMAKE_ARGS ${ZIG_EP_CMAKE_ARGS} -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local -DCMAKE_INSTALL_LIBDIR=lib
         INSTALL_COMMAND make install
         BUILD_IN_SOURCE 1
 )

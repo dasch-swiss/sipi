@@ -24,6 +24,7 @@ ExternalProject_Add(project_zstd
         CMAKE_ARGS ${ZIG_EP_CMAKE_ARGS}
         -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/local
         -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local
+        -DCMAKE_INSTALL_LIBDIR=lib
         BUILD_IN_SOURCE 1
 )
 ExternalProject_Get_Property(project_zstd install_dir)

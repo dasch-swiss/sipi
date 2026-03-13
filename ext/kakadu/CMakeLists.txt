@@ -60,16 +60,49 @@ if(DEFINED ZIG_STATIC_BUILD AND ZIG_STATIC_BUILD)
     set(_KDU_BUILD_PREFIX ${CMAKE_COMMAND} -E env "CC=${CMAKE_CXX_COMPILER}" "AR=${CMAKE_AR}" "MAKEFLAGS=-e")
     set(_KDU_CC_OVERRIDE "")
 elseif (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
-    # when we compile with clang, we don't need to patch the makefiles
-    set(PATCH_COMMAND_OVERRIDE "")
     if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-        # Kakadu's macOS Makefile uses `libtool -static` (the macOS system tool).
+        # macOS: Kakadu ships macOS-specific Makefiles that use Clang natively,
+        # so no patching needed. Only fix the libtool PATH issue:
         # If Nix/direnv puts GNU libtool on PATH first, it shadows the system
         # libtool and fails with "unrecognised option: -static".
         # Prepend /usr/bin so the macOS libtool is always found.
+        set(PATCH_COMMAND_OVERRIDE "")
         set(_KDU_BUILD_PREFIX ${CMAKE_COMMAND} -E env "PATH=/usr/bin:$ENV{PATH}")
     else()
-        set(_KDU_BUILD_PREFIX "")
+        # Linux + Clang: Kakadu's Linux Makefiles hardcode CC = g++ and use
+        # GCC-specific flags. Patch them out, same approach as the Zig static
+        # build path (but without AR override — Clang uses the system ar).
+        set(_kdu_src "${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}")
+
+        if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+            set(_kdu_makefiles
+                ${_kdu_src}/coresys/make/Makefile-Linux-arm-64-gcc
+                ${_kdu_src}/apps/make/Makefile-Linux-arm-64-gcc
+                ${_kdu_src}/managed/make/Makefile-Linux-arm-64-gcc
+            )
+            set(PATCH_COMMAND_OVERRIDE
+                sed -i "s/-march=armv8\\.1-a//g" ${_kdu_makefiles}
+                COMMAND sed -i "s/-march=armv8-a//g" ${_kdu_makefiles}
+                COMMAND sed -i "s/^HAVE_ARM81 = 1/# HAVE_ARM81 = 1/" ${_kdu_makefiles}
+                COMMAND sed -i "s|-z noexecstack||" ${_kdu_makefiles}
+                COMMAND sed -i "s|CC = g++|CC = ${CMAKE_CXX_COMPILER}|" ${_kdu_makefiles}
+            )
+        elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+            set(_kdu_makefiles
+                ${_kdu_src}/coresys/make/Makefile-Linux-x86-64-gcc
+                ${_kdu_src}/apps/make/Makefile-Linux-x86-64-gcc
+                ${_kdu_src}/managed/make/Makefile-Linux-x86-64-gcc
+            )
+            set(PATCH_COMMAND_OVERRIDE
+                sed -i "s/-mno-avx256-split-unaligned-load//g" ${_kdu_makefiles}
+                COMMAND sed -i "s/-mno-avx256-split-unaligned-store//g" ${_kdu_makefiles}
+                COMMAND sed -i "s|-z noexecstack||" ${_kdu_makefiles}
+                COMMAND sed -i "s|CC = g++|CC = ${CMAKE_CXX_COMPILER}|" ${_kdu_makefiles}
+            )
+        endif()
+
+        set(_KDU_BUILD_PREFIX ${CMAKE_COMMAND} -E env
+            "CC=${CMAKE_CXX_COMPILER}" "MAKEFLAGS=-e")
     endif()
     set(_KDU_CC_OVERRIDE "")
 else ()

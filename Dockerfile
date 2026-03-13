@@ -6,7 +6,11 @@ FROM ubuntu:24.04 AS builder
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
+    clang \
+    libc++-dev \
+    libc++abi-dev \
+    make \
+    libc6-dev \
     cmake \
     pkg-config \
     libreadline-dev \
@@ -30,6 +34,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV LC_ALL=en_US.UTF-8
 ENV LANG=en_US.UTF-8
 ENV LANGUAGE=en_US.UTF-8
+ENV CC=clang
+ENV CXX=clang++
+# Force libc++ for ALL sub-builds — including ExternalProject deps
+# (exiv2, etc.) that don't inherit CMake's build_config interface target.
+# CXXFLAGS ensures .o files use libc++ headers; LDFLAGS ensures any
+# sub-build link steps also use libc++.
+ENV CXXFLAGS="-stdlib=libc++"
+ENV LDFLAGS="-stdlib=libc++ -Wno-unused-command-line-argument"
 
 WORKDIR /tmp/sipi
 

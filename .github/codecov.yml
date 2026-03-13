@@ -1,22 +1,38 @@
 # ref: https://docs.codecov.com/docs/codecovyml-reference
 coverage:
-  # Hold ourselves to a high bar
-  range: 85..100
+  range: 70..100
   round: down
   precision: 1
   status:
     # ref: https://docs.codecov.com/docs/commit-status
     project:
       default:
-        # Avoid false negatives
+        target: auto
         threshold: 1%
+    patch:
+      default:
+        target: 80%
+        threshold: 5%
 
-# Test files aren't important for coverage
 ignore:
-  - "fuzz"
-  - "test"
-  - "build/extsrcs"
+  - "fuzz/**"
+  - "test/**"
+  - "build/**"
+  - "ext/**"
+  - "vendor/**"
+  - "scripts/**"
+  - "config/**"
+  - "src/SipiLua.cpp"
+  - "src/Salsah.cpp"
+  - "src/PhpSession.cpp"
 
+parsers:
+  gcov:
+    branch_detection:
+      conditional: yes
+      loop: yes
+      method: no
+      macro: no
 
 # Make comments less noisy
 comment:

@@ -28,3 +28,10 @@
 !test2.csv
 !watermark_correct.tif
 !watermark_incorrect.tif
+!test\#image.jp2
+!img_exif_gps.jpg
+!image_orientation.jpg
+!gradient-stars.tif
+!watermark_alpha.tif
+!MaoriFigure.jpg
+!MaoriFigureWatermark.jpg
