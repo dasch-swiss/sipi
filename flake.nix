@@ -9,14 +9,8 @@
   outputs = { self, nixpkgs, flake-utils, ... }:
   flake-utils.lib.eachSystem ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"] (system:
     let
-        overlays = [
-            (final: prev: {
-                # The iiif-validator is not yet part of nixpkgs, so we need to add it as an overlay
-                iiif-validator = final.callPackage ./iiif-validator.nix { };
-            })
-        ];
         pkgs = import nixpkgs {
-            inherit system overlays;
+            inherit system;
         };
     in
     rec {
@@ -31,6 +25,7 @@
           cmake
           gcovr # code coverage helper tool
           lcov # code coverage helper tool
+          llvmPackages_19.llvm # llvm-cov, llvm-profdata (for gcovr coverage)
 
           # Build dependencies
           # Note: OpenSSL, libcurl, and libmagic libraries are built from source
@@ -57,11 +52,14 @@
           readline70 # libreadline-dev
 
           # Other stuff
-          # at
-          doxygen
           pkg-config
           unzip
           # valgrind
+
+          # Rust toolchain (for e2e test harness)
+          rustc
+          cargo
+          hurl
 
           # additional test dependencies
           nginx
@@ -72,28 +70,18 @@
           libxml2
           libxslt
 
-          # Python dependencies
-          python311Full
-          python311Packages.deprecation
-          python311Packages.docker
-          python311Packages.pip
-          python311Packages.psutil
-          python311Packages.pytest
-          python311Packages.requests
-          python311Packages.sphinx
-          python311Packages.testcontainers
-          python311Packages.wrapt
-
-          # added through overlay to nixpkgs
-          iiif-validator
         ];
 
         devShells = rec {
-          # Use clang as default on macOS, gcc on Linux
-          default = if pkgs.stdenv.isDarwin then clang else gcc;
+          # Use clang everywhere: simplifies sanitizer integration (ASan/UBSan/TSan),
+          # aligns all build environments (Docker, Nix CI, Nix local, Zig all use Clang),
+          # and eliminates "builds on GCC but warns on Clang" discrepancies.
+          default = clang;
 
-          # devShells.clang describes a shell with the clang compiler
-          clang = pkgs.mkShell.override {stdenv = pkgs.clang19Stdenv;} {
+          # devShells.clang describes a shell with the clang compiler and libc++.
+          # Uses libcxxStdenv so -stdlib=libc++ in CMakeLists.txt resolves correctly,
+          # matching Docker (libc++-dev), Zig (bundled libc++), and macOS (system libc++).
+          clang = pkgs.mkShell.override {stdenv = pkgs.llvmPackages_19.libcxxStdenv;} {
             name = "sipi";
 
             shellHook = ''

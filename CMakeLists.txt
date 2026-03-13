@@ -58,7 +58,6 @@ endif ()
 
 set(COMMON_SOURCE_FILES_DIR ${PROJECT_SOURCE_DIR}/src)
 set(COMMON_INCLUDE_FILES_DIR ${PROJECT_SOURCE_DIR}/include)
-set(COMMON_DOXYGEN ${PROJECT_SOURCE_DIR}/doxygen)
 set(COMMON_EXT ${PROJECT_SOURCE_DIR}/ext)
 set(COMMON_PATCHES ${PROJECT_SOURCE_DIR}/patches)
 set(COMMON_VENDOR ${PROJECT_SOURCE_DIR}/vendor)
@@ -123,10 +122,20 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
 endif ()
 
 #
-# Dynamically compile the C++ standard library into the executable
+# All Clang builds use libc++ for a consistent C++ standard library across
+# Docker, Nix, macOS, and Zig. The Dockerfile installs libc++-dev and
+# libc++abi-dev; the Nix flake uses llvmPackages_19.libcxxStdenv; Zig
+# bundles its own libc++; macOS/AppleClang uses libc++ by default.
 if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
-    message(STATUS "Compiling with Clang (-stdlib=libstdc++ and -static-libstdc++).")
+    message(STATUS "Compiling with Clang (-stdlib=libc++).")
     target_compile_options(build_config INTERFACE -stdlib=libc++)
+    target_link_options(build_config INTERFACE -stdlib=libc++)
+    # On Linux, statically link libc++ so the runtime container doesn't need it.
+    # macOS uses libc++ from the system and doesn't support static linking of it.
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT DEFINED ZIG_STATIC_BUILD)
+        message(STATUS "  Statically linking libc++ (-static-libstdc++).")
+        target_link_options(build_config INTERFACE -static-libstdc++)
+    endif ()
 endif ()
 
 #
@@ -214,6 +223,28 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES ".*Cla
     )
     target_link_options(coverage_config INTERFACE --coverage)
 endif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
+
+#
+# Sanitizers (ASan + UBSan)
+#
+
+add_library(sanitizer_config INTERFACE)
+
+option(ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer (Clang only)" OFF)
+if (ENABLE_SANITIZERS)
+    if (NOT CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
+        message(WARNING "ENABLE_SANITIZERS is designed for Clang. GCC sanitizer support may differ.")
+    endif ()
+    target_compile_options(sanitizer_config INTERFACE
+            -fsanitize=address,undefined
+            -fno-omit-frame-pointer
+            -fno-optimize-sibling-calls
+    )
+    target_link_options(sanitizer_config INTERFACE
+            -fsanitize=address,undefined
+    )
+    message(STATUS "Sanitizers enabled: ASan + UBSan")
+endif ()
 
 # on macOS, ignore frameworks
 # the complete environment should be provided through NIX
@@ -308,17 +339,6 @@ add_subdirectory(${COMMON_EXT}/prometheus-cpp)
 message(STATUS "... adding external dependencies done.")
 
 #
-# add a target to generate API documentation with Doxygen
-#
-find_package(Doxygen)
-if (DOXYGEN_FOUND)
-    add_custom_target(doc
-            ${DOXYGEN_EXECUTABLE} ${COMMON_DOXYGEN}/Doxyfile
-            WORKING_DIRECTORY ${COMMON_DOXYGEN}
-            COMMENT "Generating API documentation with Doxygen" VERBATIM
-    )
-endif (DOXYGEN_FOUND)
-
 #
 # get version from git if not provided externally
 #
@@ -525,6 +545,9 @@ target_link_libraries(sipi build_config)
 if (CODE_COVERAGE)
     target_link_libraries(sipi coverage_config)
 endif ()
+if (ENABLE_SANITIZERS)
+    target_link_libraries(sipi sanitizer_config)
+endif ()
 
 install(TARGETS sipi
         RUNTIME DESTINATION bin
@@ -550,7 +573,11 @@ add_subdirectory(test)
 #-------------------
 # Fuzz testing
 #-------------------
+# Fuzz targets link LLVM's libFuzzer runtime, which may be built against a
+# different C++ standard library (e.g. libstdc++ in Nix).  To avoid ABI
+# mismatch when the rest of the project uses libc++, fuzzing is opt-in.
+option(SIPI_ENABLE_FUZZ "Build fuzz targets (requires Clang + compatible libFuzzer)" OFF)
 
-if (NOT ZIG_TOOLCHAIN)
+if (SIPI_ENABLE_FUZZ AND NOT ZIG_TOOLCHAIN)
     add_subdirectory(fuzz)
 endif ()

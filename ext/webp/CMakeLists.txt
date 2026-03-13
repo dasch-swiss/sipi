@@ -31,6 +31,7 @@ ExternalProject_Add(project_webp
                     -DCMAKE_DISABLE_FIND_PACKAGE_TIFF=TRUE
                     -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/local
                     -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local
+                    -DCMAKE_INSTALL_LIBDIR=lib
                     -DWEBP_BUILD_CWEBP=OFF
                     -DWEBP_BUILD_DWEBP=OFF
                     -DWEBP_BUILD_IMG2WEBP=OFF

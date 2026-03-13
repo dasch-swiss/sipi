@@ -31,6 +31,7 @@ ExternalProject_Add(project_prometheus_cpp
             -DUSE_THIRDPARTY_LIBRARIES=OFF
             -DBUILD_SHARED_LIBS=OFF
             -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local
+            -DCMAKE_INSTALL_LIBDIR=lib
 )
 ExternalProject_Get_Property(project_prometheus_cpp install_dir)
 

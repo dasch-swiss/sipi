@@ -3,18 +3,22 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
+#include <string>
 
-bool FuzzMe(const uint8_t *Data, size_t DataSize) {
-  return DataSize >= 3 &&
-      Data[0] == 'F' &&
-      Data[1] == 'U' &&
-      Data[2] == 'Z' &&
-      Data[3] == 'Z';  // :‑<
-}
+#include "handlers/iiif_handler.hpp"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
-  FuzzMe(Data, Size);
+  // parse_iiif_uri is noexcept and returns std::expected — no crash expected.
+  // Fuzzer should find memory safety issues, not logic errors.
+  std::string input(reinterpret_cast<const char *>(Data), Size);
+  auto result = handlers::iiif_handler::parse_iiif_uri(input);
+
+  // Force use of result to prevent optimizer from eliminating the call
+  if (result.has_value()) {
+    volatile auto type = result->request_type;
+    (void)type;
+  }
   return 0;
 }

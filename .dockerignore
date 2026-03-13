@@ -15,7 +15,6 @@ debug-out/
 
 # Documentation
 docs/
-doxygen/
 
 # Files not needed in Docker build
 certificate/
