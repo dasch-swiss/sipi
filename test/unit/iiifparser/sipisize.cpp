@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 
-#include "../../../include/iiifparser/SipiSize.h"
+#include "iiifparser/SipiSize.h"
 
 TEST(SipiSize, PixelsXY)
 {
@@ -8,7 +8,7 @@ TEST(SipiSize, PixelsXY)
   EXPECT_TRUE(size.getType() == Sipi::SipiSize::PIXELS_XY);
 
   size_t w, h;
-  int reduce;
+  int reduce = 10000;
   bool reduce_only;
 
   size.get_size(400, 300, w, h, reduce, reduce_only);
@@ -33,19 +33,18 @@ TEST(SipiSize, Percent)
   }
 }
 
-// DISABLED! Breaks differently on different architectures in CI/docker. Probably indicates a bug.
-// TEST(SipiSize, BangMaxdim)
-// {
-//   auto size = Sipi::SipiSize("!200,200");
-//   EXPECT_TRUE(size.getType() == Sipi::SipiSize::MAXDIM);
+TEST(SipiSize, BangMaxdim)
+{
+  auto size = Sipi::SipiSize("!200,200");
+  EXPECT_TRUE(size.getType() == Sipi::SipiSize::MAXDIM);
 
-//   size_t w, h;
-//   int reduce;
-//   bool reduce_only;
+  size_t w, h;
+  int reduce = 10000;
+  bool reduce_only;
 
-//   size.get_size(400, 300, w, h, reduce, reduce_only);
-//   EXPECT_TRUE(w == 200 && h == 150 && reduce == 1 && reduce_only == 1);
-// }
+  size.get_size(400, 300, w, h, reduce, reduce_only);
+  EXPECT_TRUE(w == 200 && h == 150 && reduce == 1 && reduce_only == 1);
+}
 
 TEST(SipiSize, Full)
 {
@@ -53,7 +52,7 @@ TEST(SipiSize, Full)
   EXPECT_TRUE(size.getType() == Sipi::SipiSize::FULL);
 
   size_t w, h;
-  int reduce;
+  int reduce = 10000;
   bool reduce_only;
 
   size.get_size(400, 300, w, h, reduce, reduce_only);

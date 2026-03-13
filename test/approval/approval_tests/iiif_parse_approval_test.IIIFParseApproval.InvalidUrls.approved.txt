@@ -1,0 +1,11 @@
+URI: /prefix//image.jp2
+Error: IIIF url not correctly formatted
+URI: /prefix/image.jp2/max/0/default.jpg
+Error: IIIF url not correctly formatted
+URI: /prefix/image.jp2/full/max/default.jpg
+Error: IIIF url not correctly formatted
+URI: /prefix/image.jp2/full/max/!/default.jpg
+Error: IIIF url not correctly formatted
+URI: /prefix/image.jp2/full/max/0/jpg
+Error: IIIF url not correctly formatted: Error in quality: "jpg"!
+

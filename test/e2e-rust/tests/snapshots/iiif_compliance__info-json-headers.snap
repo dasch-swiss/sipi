@@ -1,0 +1,9 @@
+---
+source: tests/iiif_compliance.rs
+expression: snapshot
+---
+{
+  "access-control-allow-origin": "*",
+  "content-type": "application/json",
+  "link": "<http://iiif.io/api/image/3/context.json>; rel=\"http://www.w3.org/ns/json-ld#context\"; type=\"application/ld+json\""
+}

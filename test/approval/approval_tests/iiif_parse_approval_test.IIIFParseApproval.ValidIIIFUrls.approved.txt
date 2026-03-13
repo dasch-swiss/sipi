@@ -1,0 +1,11 @@
+URI: /prefix/image.jp2/full/max/0/default.jpg
+Result: request_type: IIIF, params: prefix, image.jp2, full, max, 0, default.jpg
+URI: /prefix/image.jp2/0,0,256,256/max/0/default.jpg
+Result: request_type: IIIF, params: prefix, image.jp2, 0,0,256,256, max, 0, default.jpg
+URI: /prefix/image.jp2/full/pct:50/90/default.png
+Result: request_type: IIIF, params: prefix, image.jp2, full, pct:50, 90, default.png
+URI: /prefix/image.jp2/square/256,/!180/gray.tif
+Result: request_type: IIIF, params: prefix, image.jp2, square, 256,, !180, gray.tif
+URI: /prefix/image.jp2/pct:10,10,50,50/,200/0/bitonal.jpg
+Result: request_type: IIIF, params: prefix, image.jp2, pct:10,10,50,50, ,200, 0, bitonal.jpg
+

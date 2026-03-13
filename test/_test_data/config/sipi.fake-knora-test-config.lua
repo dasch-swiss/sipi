@@ -195,6 +195,11 @@ sipi = {
     loglevel = "DEBUG"
 }
 
+admin = {
+    user = 'admin',
+    password = 'Sipi-Admin'
+}
+
 fileserver = {
     --
     -- directory on disk where the documents for the normal webserver are located
@@ -213,6 +218,16 @@ fileserver = {
 -- executes the given script defined below
 --
 routes = {
+    {
+        method = 'DELETE',
+        route = '/api/cache',
+        script = 'cache.lua'
+    },
+    {
+        method = 'GET',
+        route = '/api/cache',
+        script = 'cache.lua'
+    },
     {
         method = 'GET',
         route = '/read_write_lua',
@@ -292,5 +307,35 @@ routes = {
         method = 'GET',
         route = '/test_exif_gps',
         script = 'test_exif_gps.lua'
+    },
+    {
+        method = 'GET',
+        route = '/test_lua_error',
+        script = 'test_lua_error.lua'
+    },
+    {
+        method = 'GET',
+        route = '/test_image_ops',
+        script = 'test_image_ops.lua'
+    },
+    {
+        method = 'GET',
+        route = '/test_jwt_round_trip',
+        script = 'test_jwt_round_trip.lua'
+    },
+    {
+        method = 'GET',
+        route = '/test_uuid_round_trip',
+        script = 'test_uuid_round_trip.lua'
+    },
+    {
+        method = 'GET',
+        route = '/test_http_error',
+        script = 'test_http_error.lua'
+    },
+    {
+        method = 'GET',
+        route = '/test_thread_isolation',
+        script = 'test_thread_isolation.lua'
     }
 }

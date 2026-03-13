@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 
-#include "../../../include/iiifparser/SipiRegion.h"
+#include "iiifparser/SipiRegion.h"
 
 TEST(SipiRegion, Full)
 {
