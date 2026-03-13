@@ -1,0 +1,67 @@
+---
+source: tests/iiif_compliance.rs
+expression: json
+---
+{
+  "@context": "http://iiif.io/api/image/3/context.json",
+  "extraFeatures": [
+    "baseUriRedirect",
+    "canonicalLinkHeader",
+    "cors",
+    "jsonldMediaType",
+    "mirroring",
+    "profileLinkHeader",
+    "regionByPct",
+    "regionByPx",
+    "regionSquare",
+    "rotationArbitrary",
+    "rotationBy90s",
+    "sizeByConfinedWh",
+    "sizeByH",
+    "sizeByPct",
+    "sizeByW",
+    "sizeByWh",
+    "sizeUpscaling"
+  ],
+  "extraFormats": [
+    "tif",
+    "jp2"
+  ],
+  "height": 512,
+  "id": "[server_url]",
+  "preferredFormats": [
+    "jpg",
+    "tif",
+    "jp2",
+    "png"
+  ],
+  "profile": "level2",
+  "protocol": "http://iiif.io/api/image",
+  "sizes": [
+    {
+      "height": 256,
+      "width": 256
+    },
+    {
+      "height": 128,
+      "width": 128
+    }
+  ],
+  "tiles": [
+    {
+      "height": 512,
+      "scaleFactors": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "width": 512
+    }
+  ],
+  "type": "ImageService3",
+  "width": 512
+}

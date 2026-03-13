@@ -64,6 +64,22 @@ function pre_flight(prefix, identifier, cookie)
     end
 
 
+    -- Test-only prefixes for restrict/watermark testing
+    if prefix == "test_restrict" then
+        local actual_filepath = config.imgroot .. '/unit/' .. identifier
+        return {type = 'restrict', size = config.thumb_size}, actual_filepath
+    end
+
+    if prefix == "test_watermark" then
+        local actual_filepath = config.imgroot .. '/unit/' .. identifier
+        return {type = 'restrict', watermark = config.imgroot .. '/unit/watermark_correct.tif'}, actual_filepath
+    end
+
+    if prefix == "test_restrict_wm" then
+        local actual_filepath = config.imgroot .. '/unit/' .. identifier
+        return {type = 'restrict', size = config.thumb_size, watermark = config.imgroot .. '/unit/watermark_correct.tif'}, actual_filepath
+    end
+
     if prefix == "knora" then
 
         knora_cookie_header = nil

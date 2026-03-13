@@ -1,0 +1,9 @@
+URI: /prefix/image.jp2/info.json
+Result: request_type: INFO_JSON, params: prefix, image.jp2
+URI: /prefix/image.jp2/knora.json
+Result: request_type: KNORA_JSON, params: prefix, image.jp2
+URI: /prefix/image.jp2/file
+Result: request_type: FILE_DOWNLOAD, params: prefix, image.jp2
+URI: /prefix/image.jp2
+Result: request_type: REDIRECT, params: prefix, image.jp2
+
