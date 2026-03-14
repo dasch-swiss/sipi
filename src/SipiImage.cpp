@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -1522,8 +1523,6 @@ void SipiImage::add_watermark(const std::string &wmfilename)
 
 SipiImage &SipiImage::operator-=(const SipiImage &rhs)
 {
-  SipiImage *new_rhs = nullptr;
-
   if ((nc != rhs.nc) || (bps != rhs.bps) || (photo != rhs.photo)) {
     std::stringstream ss;
     ss << "Image op: images not compatible" << std::endl;
@@ -1532,23 +1531,29 @@ SipiImage &SipiImage::operator-=(const SipiImage &rhs)
     throw SipiImageError(ss.str());
   }
 
+  // R15: RAII for temporary resources
+  std::unique_ptr<SipiImage> new_rhs_guard;
+  const SipiImage *rhs_ptr = &rhs;
   if ((nx != rhs.nx) || (ny != rhs.ny)) {
-    new_rhs = new SipiImage(rhs);
-    new_rhs->scale(nx, ny);
+    new_rhs_guard = std::make_unique<SipiImage>(rhs);
+    new_rhs_guard->scale(nx, ny);
+    rhs_ptr = new_rhs_guard.get();
   }
 
-  int *diffbuf = new int[nx * ny * nc];
+  auto diffbuf = std::make_unique<int[]>(nx * ny * nc);
+
+  int *dbuf = diffbuf.get();
 
   switch (bps) {
   case 8: {
     byte *ltmp = pixels;
-    byte *rtmp = (new_rhs == nullptr) ? rhs.pixels : new_rhs->pixels;
+    byte *rtmp = rhs_ptr->pixels;
 
     for (size_t j = 0; j < ny; j++) {
       for (size_t i = 0; i < nx; i++) {
         for (size_t k = 0; k < nc; k++) {
           if (ltmp[nc * (j * nx + i) + k] != rtmp[nc * (j * nx + i) + k]) {
-            diffbuf[nc * (j * nx + i) + k] = ltmp[nc * (j * nx + i) + k] - rtmp[nc * (j * nx + i) + k];
+            dbuf[nc * (j * nx + i) + k] = ltmp[nc * (j * nx + i) + k] - rtmp[nc * (j * nx + i) + k];
           }
         }
       }
@@ -1559,13 +1564,13 @@ SipiImage &SipiImage::operator-=(const SipiImage &rhs)
 
   case 16: {
     word *ltmp = (word *)pixels;
-    word *rtmp = (new_rhs == nullptr) ? (word *)rhs.pixels : (word *)new_rhs->pixels;
+    word *rtmp = (word *)rhs_ptr->pixels;
 
     for (size_t j = 0; j < ny; j++) {
       for (size_t i = 0; i < nx; i++) {
         for (size_t k = 0; k < nc; k++) {
           if (ltmp[nc * (j * nx + i) + k] != rtmp[nc * (j * nx + i) + k]) {
-            diffbuf[nc * (j * nx + i) + k] = ltmp[nc * (j * nx + i) + k] - rtmp[nc * (j * nx + i) + k];
+            dbuf[nc * (j * nx + i) + k] = ltmp[nc * (j * nx + i) + k] - rtmp[nc * (j * nx + i) + k];
           }
         }
       }
@@ -1575,8 +1580,6 @@ SipiImage &SipiImage::operator-=(const SipiImage &rhs)
   }
 
   default: {
-    delete[] diffbuf;
-    delete new_rhs;
     throw SipiImageError("Unsupported bits/sample (" + std::to_string(bps) + ") for image diff operation, only 8 and 16 are supported");
   }
   }
@@ -1587,8 +1590,8 @@ SipiImage &SipiImage::operator-=(const SipiImage &rhs)
   for (size_t j = 0; j < ny; j++) {
     for (size_t i = 0; i < nx; i++) {
       for (size_t k = 0; k < nc; k++) {
-        if (diffbuf[nc * (j * nx + i) + k] > max) max = diffbuf[nc * (j * nx + i) + k];
-        if (diffbuf[nc * (j * nx + i) + k] < min) min = diffbuf[nc * (j * nx + i) + k];
+        if (dbuf[nc * (j * nx + i) + k] > max) max = dbuf[nc * (j * nx + i) + k];
+        if (dbuf[nc * (j * nx + i) + k] < min) min = dbuf[nc * (j * nx + i) + k];
       }
     }
   }
@@ -1601,7 +1604,7 @@ SipiImage &SipiImage::operator-=(const SipiImage &rhs)
     for (size_t j = 0; j < ny; j++) {
       for (size_t i = 0; i < nx; i++) {
         for (size_t k = 0; k < nc; k++) {
-          ltmp[nc * (j * nx + i) + k] = (byte)((diffbuf[nc * (j * nx + i) + k] + maxmax) * UCHAR_MAX / (2 * maxmax));
+          ltmp[nc * (j * nx + i) + k] = (byte)((dbuf[nc * (j * nx + i) + k] + maxmax) * UCHAR_MAX / (2 * maxmax));
         }
       }
     }
@@ -1615,7 +1618,7 @@ SipiImage &SipiImage::operator-=(const SipiImage &rhs)
     for (size_t j = 0; j < ny; j++) {
       for (size_t i = 0; i < nx; i++) {
         for (size_t k = 0; k < nc; k++) {
-          ltmp[nc * (j * nx + i) + k] = (word)((diffbuf[nc * (j * nx + i) + k] + maxmax) * USHRT_MAX / (2 * maxmax));
+          ltmp[nc * (j * nx + i) + k] = (word)((dbuf[nc * (j * nx + i) + k] + maxmax) * USHRT_MAX / (2 * maxmax));
         }
       }
     }
@@ -1624,33 +1627,28 @@ SipiImage &SipiImage::operator-=(const SipiImage &rhs)
   }
 
   default: {
-    delete[] diffbuf;
-    delete new_rhs;
     throw SipiImageError("Unsupported bits/sample (" + std::to_string(bps) + ") for image diff operation, only 8 and 16 are supported");
   }
   }
 
-  delete new_rhs;
-
-  delete[] diffbuf;
+  // RAII: diffbuf and new_rhs_guard auto-freed on scope exit
   return *this;
 }
 
 /*==========================================================================*/
 
-SipiImage &SipiImage::operator-(const SipiImage &rhs)
+// R14: Return by value — compiler applies RVO/NRVO
+SipiImage SipiImage::operator-(const SipiImage &rhs) const
 {
-  auto *lhs = new SipiImage(*this);
-  *lhs -= rhs;
-  return *lhs;
+  SipiImage result(*this);
+  result -= rhs;
+  return result;
 }
 
 /*==========================================================================*/
 
 SipiImage &SipiImage::operator+=(const SipiImage &rhs)
 {
-  SipiImage *new_rhs = nullptr;
-
   if ((nc != rhs.nc) || (bps != rhs.bps) || (photo != rhs.photo)) {
     std::stringstream ss;
     ss << "Image op: images not compatible" << std::endl;
@@ -1659,23 +1657,28 @@ SipiImage &SipiImage::operator+=(const SipiImage &rhs)
     throw SipiImageError(ss.str());
   }
 
+  // R15: RAII for temporary resources (also fixes new_rhs leak)
+  std::unique_ptr<SipiImage> new_rhs_guard;
+  const SipiImage *rhs_ptr = &rhs;
   if ((nx != rhs.nx) || (ny != rhs.ny)) {
-    new_rhs = new SipiImage(rhs);
-    new_rhs->scale(nx, ny);
+    new_rhs_guard = std::make_unique<SipiImage>(rhs);
+    new_rhs_guard->scale(nx, ny);
+    rhs_ptr = new_rhs_guard.get();
   }
 
-  int *diffbuf = new int[nx * ny * nc];
+  auto diffbuf = std::make_unique<int[]>(nx * ny * nc);
+  int *dbuf = diffbuf.get();
 
   switch (bps) {
   case 8: {
     byte *ltmp = pixels;
-    byte *rtmp = (new_rhs == nullptr) ? rhs.pixels : new_rhs->pixels;
+    byte *rtmp = rhs_ptr->pixels;
 
     for (size_t j = 0; j < ny; j++) {
       for (size_t i = 0; i < nx; i++) {
         for (size_t k = 0; k < nc; k++) {
           if (ltmp[nc * (j * nx + i) + k] != rtmp[nc * (j * nx + i) + k]) {
-            diffbuf[nc * (j * nx + i) + k] = ltmp[nc * (j * nx + i) + k] + rtmp[nc * (j * nx + i) + k];
+            dbuf[nc * (j * nx + i) + k] = ltmp[nc * (j * nx + i) + k] + rtmp[nc * (j * nx + i) + k];
           }
         }
       }
@@ -1685,13 +1688,14 @@ SipiImage &SipiImage::operator+=(const SipiImage &rhs)
 
   case 16: {
     word *ltmp = (word *)pixels;
-    word *rtmp = (new_rhs == nullptr) ? (word *)rhs.pixels : (word *)new_rhs->pixels;
+    word *rtmp = (word *)rhs_ptr->pixels;
 
     for (size_t j = 0; j < ny; j++) {
       for (size_t i = 0; i < nx; i++) {
         for (size_t k = 0; k < nc; k++) {
           if (ltmp[nc * (j * nx + i) + k] != rtmp[nc * (j * nx + i) + k]) {
-            diffbuf[nc * (j * nx + i) + k] = ltmp[nc * (j * nx + i) + k] - rtmp[nc * (j * nx + i) + k];
+            // BUG FIX: was subtraction (copy-paste from operator-=), should be addition
+            dbuf[nc * (j * nx + i) + k] = ltmp[nc * (j * nx + i) + k] + rtmp[nc * (j * nx + i) + k];
           }
         }
       }
@@ -1701,9 +1705,7 @@ SipiImage &SipiImage::operator+=(const SipiImage &rhs)
   }
 
   default: {
-    delete[] diffbuf;
-    delete new_rhs;
-    throw SipiImageError("Unsupported bits/sample (" + std::to_string(bps) + ") for image diff operation, only 8 and 16 are supported");
+    throw SipiImageError("Unsupported bits/sample (" + std::to_string(bps) + ") for image add operation, only 8 and 16 are supported");
   }
   }
 
@@ -1712,7 +1714,7 @@ SipiImage &SipiImage::operator+=(const SipiImage &rhs)
   for (size_t j = 0; j < ny; j++) {
     for (size_t i = 0; i < nx; i++) {
       for (size_t k = 0; k < nc; k++) {
-        if (diffbuf[nc * (j * nx + i) + k] > max) max = diffbuf[nc * (j * nx + i) + k];
+        if (dbuf[nc * (j * nx + i) + k] > max) max = dbuf[nc * (j * nx + i) + k];
       }
     }
   }
@@ -1724,7 +1726,7 @@ SipiImage &SipiImage::operator+=(const SipiImage &rhs)
     for (size_t j = 0; j < ny; j++) {
       for (size_t i = 0; i < nx; i++) {
         for (size_t k = 0; k < nc; k++) {
-          ltmp[nc * (j * nx + i) + k] = (byte)(diffbuf[nc * (j * nx + i) + k] * UCHAR_MAX / max);
+          ltmp[nc * (j * nx + i) + k] = (byte)(dbuf[nc * (j * nx + i) + k] * UCHAR_MAX / max);
         }
       }
     }
@@ -1738,7 +1740,7 @@ SipiImage &SipiImage::operator+=(const SipiImage &rhs)
     for (size_t j = 0; j < ny; j++) {
       for (size_t i = 0; i < nx; i++) {
         for (size_t k = 0; k < nc; k++) {
-          ltmp[nc * (j * nx + i) + k] = (word)(diffbuf[nc * (j * nx + i) + k] * USHRT_MAX / max);
+          ltmp[nc * (j * nx + i) + k] = (word)(dbuf[nc * (j * nx + i) + k] * USHRT_MAX / max);
         }
       }
     }
@@ -1747,24 +1749,22 @@ SipiImage &SipiImage::operator+=(const SipiImage &rhs)
   }
 
   default: {
-    delete[] diffbuf;
-    delete new_rhs;
-    throw SipiImageError("Unsupported bits/sample (" + std::to_string(bps) + ") for image diff operation, only 8 and 16 are supported");
+    throw SipiImageError("Unsupported bits/sample (" + std::to_string(bps) + ") for image add operation, only 8 and 16 are supported");
   }
   }
 
-  delete[] diffbuf;
-
+  // RAII: diffbuf and new_rhs_guard auto-freed on scope exit
   return *this;
 }
 
 /*==========================================================================*/
 
-SipiImage &SipiImage::operator+(const SipiImage &rhs)
+// R14: Return by value — compiler applies RVO/NRVO
+SipiImage SipiImage::operator+(const SipiImage &rhs) const
 {
-  auto *lhs = new SipiImage(*this);
-  *lhs += rhs;
-  return *lhs;
+  SipiImage result(*this);
+  result += rhs;
+  return result;
 }
 
 /*==========================================================================*/

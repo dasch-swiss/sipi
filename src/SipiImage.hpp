@@ -606,11 +606,11 @@ public:
    * \param[in] lhs left-hand side of "-" operator
    * \param[in] rhs right hand side of "-" operator
    */
-  SipiImage &operator-(const SipiImage &rhs);
+  SipiImage operator-(const SipiImage &rhs) const;
 
   SipiImage &operator+=(const SipiImage &rhs);
 
-  SipiImage &operator+(const SipiImage &rhs);
+  SipiImage operator+(const SipiImage &rhs) const;
 
   bool operator==(const SipiImage &rhs) const;
 
