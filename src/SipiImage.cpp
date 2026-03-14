@@ -82,18 +82,35 @@ SipiImage::SipiImage(const SipiImage &img_p)
   }
   }
 
-  if (bufsiz > 0) {
+  if (bufsiz > 0 && img_p.pixels != nullptr) {
     pixels = new byte[bufsiz];
     memcpy(pixels, img_p.pixels, bufsiz);
   }
 
-  xmp = std::make_shared<SipiXmp>(*img_p.xmp);
-  icc = std::make_shared<SipiIcc>(*img_p.icc);
-  iptc = std::make_shared<SipiIptc>(*img_p.iptc);
-  exif = std::make_shared<SipiExif>(*img_p.exif);
+  // R11: Null-check metadata before deep copy
+  if (img_p.xmp) xmp = std::make_shared<SipiXmp>(*img_p.xmp);
+  if (img_p.icc) icc = std::make_shared<SipiIcc>(*img_p.icc);
+  if (img_p.iptc) iptc = std::make_shared<SipiIptc>(*img_p.iptc);
+  if (img_p.exif) exif = std::make_shared<SipiExif>(*img_p.exif);
   emdata = img_p.emdata;
   skip_metadata = img_p.skip_metadata;
   conobj = img_p.conobj;
+}
+
+//============================================================================
+
+SipiImage::SipiImage(SipiImage &&other) noexcept
+  : nx(other.nx), ny(other.ny), nc(other.nc), bps(other.bps),
+    es(std::move(other.es)), orientation(other.orientation), photo(other.photo),
+    pixels(other.pixels), xmp(std::move(other.xmp)), icc(std::move(other.icc)),
+    iptc(std::move(other.iptc)), exif(std::move(other.exif)),
+    emdata(std::move(other.emdata)), conobj(other.conobj),
+    skip_metadata(other.skip_metadata)
+{
+  other.pixels = nullptr;
+  other.nx = 0;
+  other.ny = 0;
+  other.conobj = nullptr;
 }
 
 //============================================================================
@@ -154,12 +171,21 @@ SipiImage::~SipiImage() { delete[] pixels; }
 SipiImage &SipiImage::operator=(const SipiImage &img_p)
 {
   if (this != &img_p) {
+    // R12: Free old buffer before allocating new
+    delete[] pixels;
+    pixels = nullptr;
+
     nx = img_p.nx;
     ny = img_p.ny;
     nc = img_p.nc;
     bps = img_p.bps;
     orientation = img_p.orientation;
     es = img_p.es;
+    photo = img_p.photo;      // BUG FIX: missing in original operator=
+    emdata = img_p.emdata;    // BUG FIX: missing in original operator=
+    skip_metadata = img_p.skip_metadata;
+    conobj = img_p.conobj;
+
     size_t bufsiz;
 
     switch (bps) {
@@ -178,19 +204,49 @@ SipiImage &SipiImage::operator=(const SipiImage &img_p)
     }
     }
 
-    if (bufsiz > 0) {
+    if (bufsiz > 0 && img_p.pixels != nullptr) {
       pixels = new byte[bufsiz];
       memcpy(pixels, img_p.pixels, bufsiz);
     }
 
-    xmp = std::make_shared<SipiXmp>(*img_p.xmp);
-    icc = std::make_shared<SipiIcc>(*img_p.icc);
-    iptc = std::make_shared<SipiIptc>(*img_p.iptc);
-    exif = std::make_shared<SipiExif>(*img_p.exif);
-    skip_metadata = img_p.skip_metadata;
-    conobj = img_p.conobj;
+    // R11: Null-check metadata before deep copy, reset if source is null
+    if (img_p.xmp)  xmp  = std::make_shared<SipiXmp>(*img_p.xmp);   else xmp.reset();
+    if (img_p.icc)  icc  = std::make_shared<SipiIcc>(*img_p.icc);   else icc.reset();
+    if (img_p.iptc) iptc = std::make_shared<SipiIptc>(*img_p.iptc); else iptc.reset();
+    if (img_p.exif) exif = std::make_shared<SipiExif>(*img_p.exif); else exif.reset();
   }
 
+  return *this;
+}
+
+//============================================================================
+
+SipiImage &SipiImage::operator=(SipiImage &&other) noexcept
+{
+  if (this != &other) {
+    delete[] pixels;
+
+    nx = other.nx;
+    ny = other.ny;
+    nc = other.nc;
+    bps = other.bps;
+    es = std::move(other.es);
+    orientation = other.orientation;
+    photo = other.photo;
+    pixels = other.pixels;
+    xmp = std::move(other.xmp);
+    icc = std::move(other.icc);
+    iptc = std::move(other.iptc);
+    exif = std::move(other.exif);
+    emdata = std::move(other.emdata);
+    skip_metadata = other.skip_metadata;
+    conobj = other.conobj;
+
+    other.pixels = nullptr;
+    other.nx = 0;
+    other.ny = 0;
+    other.conobj = nullptr;
+  }
   return *this;
 }
 
