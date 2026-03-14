@@ -17,7 +17,7 @@
 int SipiFilenameHash::__levels = 0;
 
 SipiFilenameHash::SipiFilenameHash(const std::string &path_p)
-  : path(path_p)
+  : path(path_p), hash(hash_len, 0)
 {
   unsigned int hashval = 0;
 
@@ -26,39 +26,28 @@ SipiFilenameHash::SipiFilenameHash(const std::string &path_p)
 
   for (auto c : name) { hashval = ((hashval * seed) + c) % modval; }
 
-  hash = new std::vector<char>(hash_len, 0);
-
   for (int i = 0; i < hash_len; i++) {
-    (*hash)[i] = 'A' + hashval % numchars;
+    hash[i] = 'A' + hashval % numchars;
     hashval /= numchars;
   }
 }
 
-
-SipiFilenameHash::SipiFilenameHash(const SipiFilenameHash &other) { hash = new std::vector<char>(*(other.hash)); }
-
-SipiFilenameHash &SipiFilenameHash::operator=(const SipiFilenameHash &other)
-{
-  hash = new std::vector<char>(*(other.hash));
-  return *this;
-}
-
-SipiFilenameHash::~SipiFilenameHash() { delete hash; }
+// Copy constructor, assignment operator, and destructor are compiler-generated
+// (Rule of Zero). path and name are now correctly copied automatically.
 
 
 char &SipiFilenameHash::operator[](int index)
 {
   if ((index < 0) || (index >= hash_len)) { throw shttps::Error("Invalid hash index!"); }
-  return (*hash)[index];
+  return hash[index];
 }
 
 
 std::string SipiFilenameHash::filepath(void)
 {
-
-  std::string outfname = "";
+  std::string outfname;
   for (int i = 0; i < __levels; i++) {
-    char tmp[3] = { (*hash)[i], '/', '\0' };
+    char tmp[3] = { hash[i], '/', '\0' };
     outfname += tmp;
   }
   outfname += name;
