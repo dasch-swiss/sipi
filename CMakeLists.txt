@@ -543,8 +543,12 @@ target_link_libraries(${PROJECT_NAME} ${LIBS}
 # apply the compiler and linker flags
 #
 target_link_libraries(sipi build_config)
+message(STATUS "[sipi] CODE_COVERAGE=${CODE_COVERAGE}")
 if (CODE_COVERAGE)
+    message(STATUS "[sipi] Linking sipi with coverage_config")
     target_link_libraries(sipi coverage_config)
+else()
+    message(STATUS "[sipi] Coverage disabled — not linking coverage_config")
 endif ()
 if (ENABLE_SANITIZERS)
     target_link_libraries(sipi sanitizer_config)
