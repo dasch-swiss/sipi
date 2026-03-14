@@ -41,6 +41,7 @@
 #include "Logger.h"
 #include "SipiHttpServer.hpp"
 #include "SipiMetrics.h"
+#include "generated/SipiVersion.h"
 #include "SipiRateLimiter.h"
 #include "SipiSentry.h"
 #include "favicon.h"
@@ -2084,6 +2085,25 @@ static void iiif_handler(Connection &conn_obj, shttps::LuaServer &luaserver, voi
 
 //=========================================================================
 
+// R31-R33: Health endpoint handler
+static void health_handler(Connection &conn_obj, shttps::LuaServer &, void *user_data, void *)
+{
+  auto *server = static_cast<SipiHttpServer *>(user_data);
+  auto uptime = std::chrono::steady_clock::now() - server->start_time();
+  auto uptime_sec = std::chrono::duration_cast<std::chrono::seconds>(uptime).count();
+
+  std::string json = R"({"status":"ok","version":")" + std::string(VERSION)
+                   + R"(","uptime_seconds":)" + std::to_string(uptime_sec) + "}";
+
+  conn_obj.status(Connection::OK);
+  conn_obj.header("Content-Type", "application/json");
+  conn_obj.setBuffer();
+  conn_obj << json;
+  conn_obj.flush();
+}
+
+//=========================================================================
+
 static void metrics_handler(Connection &conn_obj, shttps::LuaServer &luaserver, void *user_data, void *dummy)
 {
   std::string body = SipiMetrics::instance().serialize();
@@ -2148,6 +2168,9 @@ void SipiHttpServer::run()
   log_info("Serving images from %s (resolved: %s)", _imgroot.c_str(), _resolved_imgroot.c_str());
   log_debug("Salsah prefix: %s", _salsah_prefix.c_str());
 
+  _start_time = std::chrono::steady_clock::now();
+
+  add_route(Connection::GET, "/health", health_handler);
   add_route(Connection::GET, "/metrics", metrics_handler);
   add_route(Connection::GET, "/favicon.ico", favicon_handler);
   add_route(Connection::GET, "/", iiif_handler);

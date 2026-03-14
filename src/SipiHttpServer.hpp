@@ -13,6 +13,7 @@
 #ifndef _defined_sipihttp_server_h
 #define _defined_sipihttp_server_h
 
+#include <chrono>
 #include <memory>
 #include <string>
 
@@ -52,6 +53,7 @@ protected:
   size_t _max_pixel_limit{ 0 };//!< max output pixels (w*h) per request, 0 = unlimited
   std::string _resolved_imgroot;  //!< realpath()-resolved image root, set at startup
   std::unique_ptr<SipiRateLimiter> _rate_limiter; //!< Per-client rate limiter (nullptr = disabled)
+  std::chrono::steady_clock::time_point _start_time; //!< Server start time for health endpoint
 
 public:
   /*!
@@ -164,6 +166,8 @@ public:
 
   void rate_limiter(std::unique_ptr<SipiRateLimiter> rl) { _rate_limiter = std::move(rl); }
   SipiRateLimiter *rate_limiter() { return _rate_limiter.get(); }
+
+  std::chrono::steady_clock::time_point start_time() const { return _start_time; }
 
   void cache(const std::string &cachedir_p,
     long long max_cache_size_p = -1,
