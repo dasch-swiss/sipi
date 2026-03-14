@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.19.0](https://github.com/dasch-swiss/sipi/compare/v3.18.0...v3.19.0) (2026-03-14)
+
+
+### Features
+
+* **metrics:** Add sipi_request_duration_seconds Prometheus histogram ([050f922](https://github.com/dasch-swiss/sipi/commit/050f922eb6260ec44a1a2c7b3a637821b5757925))
+
 ## [3.18.0](https://github.com/dasch-swiss/sipi/compare/v3.17.2...v3.18.0) (2026-03-08)
 
 
