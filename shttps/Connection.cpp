@@ -404,6 +404,30 @@ Connection::Connection(Server *server_p,
       _uri = fulluri;
     }
 
+    // R5/R6/R7: Reject null bytes in any form before handler dispatch.
+    // Layer 1: Reject percent-encoded null bytes (%00, case-insensitive).
+    // The raw URI is NOT URL-decoded here, so %00 exists as literal characters.
+    {
+      string lower_uri(fulluri.size(), '\0');
+      std::transform(fulluri.begin(), fulluri.end(), lower_uri.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+      if (lower_uri.find("%00") != string::npos) {
+        status(BAD_REQUEST);
+        header("Content-Type", "text/plain");
+        *os << "Bad Request: Invalid request";
+        flush();
+        throw INPUT_READ_FAIL;
+      }
+    }
+    // Layer 2: Reject literal null bytes (defense-in-depth).
+    if (fulluri.find('\0') != string::npos) {
+      status(BAD_REQUEST);
+      header("Content-Type", "text/plain");
+      *os << "Bad Request: Invalid request";
+      flush();
+      throw INPUT_READ_FAIL;
+    }
+
     process_header();
 
     if (ins->fail() || ins->eof()) { throw INPUT_READ_FAIL; }
