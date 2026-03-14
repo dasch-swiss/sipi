@@ -37,6 +37,7 @@ local
 build/
 build-linux/
 build-mac/
+build-fuzz/
 cmake-build-debug/
 cmake-build-debug-remote/
 cmake-build-debug-inside-docker/
