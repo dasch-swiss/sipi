@@ -254,6 +254,11 @@ impl SipiServer {
         self.child.id()
     }
 
+    /// Check if the server process has exited. Returns the exit status if so.
+    pub fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>> {
+        self.child.try_wait()
+    }
+
     /// Gracefully stop the server via SIGTERM.
     pub fn stop(&mut self) {
         let pid = Pid::from_raw(i32::try_from(self.child.id()).expect("PID overflows i32"));

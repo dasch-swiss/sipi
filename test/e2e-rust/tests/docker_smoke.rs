@@ -1,3 +1,8 @@
+// Only compile when the "docker" feature is enabled (or when run explicitly via --test docker_smoke).
+// This prevents these tests from running in `cargo test` (used by zig-test-e2e)
+// since they require a pre-built Docker image.
+#![cfg(feature = "docker")]
+
 /// Docker-image smoke tests — validates that the packaged Docker image works.
 ///
 /// Uses docker CLI directly (no testcontainers) for simplicity and to avoid
