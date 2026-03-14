@@ -136,6 +136,10 @@ SipiConf::SipiConf(shttps::LuaServer &luacfg)
   if (parsed_rl_threshold < 0) parsed_rl_threshold = 0;
   rate_limit_pixel_threshold = static_cast<size_t>(parsed_rl_threshold);
 
+  long long parsed_drain_timeout = luacfg.configInteger("sipi", "drain_timeout", 30);
+  if (parsed_drain_timeout < 1) parsed_drain_timeout = 30;
+  drain_timeout = static_cast<unsigned>(parsed_drain_timeout);
+
   routes = luacfg.configRoute("routes");
   docroot = luacfg.configString("fileserver", "docroot", "");
   wwwroute = luacfg.configString("fileserver", "wwwroute", "");

@@ -69,6 +69,7 @@ private:
   unsigned rate_limit_window{ 600 };       //!< sliding window in seconds (default 10 min)
   std::string rate_limit_mode_str{ "off" };//!< "off", "monitor", "enforce"
   size_t rate_limit_pixel_threshold{ 2000000 }; //!< requests below this are free (default 2MP)
+  unsigned drain_timeout{ 30 }; //!< seconds to wait for in-flight requests during shutdown
 
 public:
   SipiConf();
@@ -188,6 +189,9 @@ public:
 
   size_t getRateLimitPixelThreshold() const { return rate_limit_pixel_threshold; }
   void setRateLimitPixelThreshold(size_t v) { rate_limit_pixel_threshold = v; }
+
+  unsigned getDrainTimeout() const { return drain_timeout; }
+  void setDrainTimeout(unsigned v) { drain_timeout = v; }
 };
 
 }// namespace Sipi

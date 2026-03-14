@@ -647,6 +647,13 @@ int main(int argc, char *argv[])
       "Requests below this pixel count are free (default 2000000).")
     ->envname("SIPI_RATE_LIMIT_PIXEL_THRESHOLD");
 
+  unsigned optDrainTimeout = 30;
+  sipiopt
+    .add_option("--drain-timeout",
+      optDrainTimeout,
+      "Seconds to wait for in-flight requests during graceful shutdown (default 30).")
+    ->envname("SIPI_DRAIN_TIMEOUT");
+
   std::string optThumbSize = "!128,128";
   sipiopt.add_option("--thumbsize", optThumbSize, "Size of the thumbnails (to be used within Lua).")
     ->envname("SIPI_THUMBSIZE");
@@ -1419,6 +1426,14 @@ int main(int argc, char *argv[])
         } else {
           log_info("Rate limiting disabled");
         }
+      }
+
+      // Graceful shutdown drain timeout
+      {
+        unsigned dt = sipiConf.getDrainTimeout();
+        if (!sipiopt.get_option("--drain-timeout")->empty()) dt = optDrainTimeout;
+        server.drain_timeout(dt);
+        log_info("Drain timeout: %u seconds", dt);
       }
 
       //
