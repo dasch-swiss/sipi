@@ -66,16 +66,32 @@ impl SipiServer {
             .stderr(Stdio::piped());
 
         // Coverage support: when sipi is built with --coverage (gcov/llvm-cov),
-        // the .gcda paths embedded in the binary are relative to the build dir.
-        // Since we change cwd to working_dir, the .gcda files would be written
-        // to the wrong location. GCOV_PREFIX redirects them to the build dir
-        // so that gcovr finds them during coverage collection.
+        // .gcda paths are embedded in the binary. On CI (nix-clang), these are
+        // absolute paths that write to the build dir regardless of cwd.
+        // On local zig builds, paths may be relative — GCOV_PREFIX redirects
+        // them to the build dir so gcovr finds them.
+        //
+        // Only set GCOV_PREFIX for relative-path builds (zig). For absolute-path
+        // builds (nix-clang CI), GCOV_PREFIX would double the path and break gcov.
+        // Detect by checking if the sipi binary is under an absolute build path.
         let build_dir = find_sipi_bin()
             .parent()
             .expect("sipi binary should be in a build directory")
             .to_path_buf();
-        cmd.env("GCOV_PREFIX", &build_dir)
-            .env("GCOV_PREFIX_STRIP", "0");
+        // Strip the absolute prefix so gcda files land in build_dir, not build_dir/build_dir
+        // For a binary at /home/runner/work/sipi/sipi/build/sipi, the gcno paths are
+        // /home/runner/work/sipi/sipi/build/CMakeFiles/... — strip 6 components to get
+        // CMakeFiles/... then GCOV_PREFIX re-roots to build_dir.
+        // For relative builds (zig), paths are CMakeFiles/... with 0 components to strip.
+        if build_dir.is_absolute() {
+            // Count path components: /home/runner/work/sipi/sipi/build = 6
+            let strip = build_dir.components().count();
+            cmd.env("GCOV_PREFIX", &build_dir)
+                .env("GCOV_PREFIX_STRIP", strip.to_string());
+        } else {
+            cmd.env("GCOV_PREFIX", &build_dir)
+                .env("GCOV_PREFIX_STRIP", "0");
+        }
 
         let mut child = cmd.spawn().unwrap_or_else(|e| {
             panic!("Failed to start sipi at {}: {}", sipi_bin, e);
