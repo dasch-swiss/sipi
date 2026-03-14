@@ -242,6 +242,74 @@ validate_resolved_path(std::string_view file_path, std::string_view resolved_img
 //=========================================================================
 
 /*!
+ * R8: Strip CR, LF, null, and control characters from a string intended for use
+ * in HTTP headers. Preserves non-ASCII bytes (>= 0x80) so that the subsequent
+ * is_ascii check can route to RFC 6266 filename* encoding.
+ */
+[[nodiscard]] static std::string sanitize_header_value(std::string_view input)
+{
+  std::string result;
+  result.reserve(input.size());
+  for (unsigned char c : input) {
+    if (c == '\r' || c == '\n' || c == '\0' || (c < 0x20) || c == 0x7F) {
+      continue;
+    }
+    result += static_cast<char>(c);
+  }
+  return result;
+}
+
+/*!
+ * Check if a string contains only ASCII printable characters.
+ */
+[[nodiscard]] static bool is_ascii(std::string_view s)
+{
+  return std::all_of(s.begin(), s.end(),
+    [](unsigned char c) { return c >= 0x20 && c < 0x7F; });
+}
+
+/*!
+ * R9: Escape '"' and '\' per RFC 2616 quoted-string rules for use in
+ * Content-Disposition filename="..." parameters.
+ */
+[[nodiscard]] static std::string escape_quoted_string(std::string_view input)
+{
+  std::string result;
+  result.reserve(input.size());
+  for (char c : input) {
+    if (c == '"' || c == '\\') {
+      result += '\\';
+    }
+    result += c;
+  }
+  return result;
+}
+
+/*!
+ * R9: Percent-encode a string for use in RFC 6266 filename*=UTF-8''...
+ * Encodes all bytes except unreserved characters (RFC 3986 section 2.3).
+ */
+[[nodiscard]] static std::string percent_encode_rfc6266(std::string_view input)
+{
+  static const char hex[] = "0123456789ABCDEF";
+  std::string result;
+  result.reserve(input.size() * 3);
+  for (unsigned char c : input) {
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+        || c == '-' || c == '.' || c == '_' || c == '~') {
+      result += static_cast<char>(c);
+    } else {
+      result += '%';
+      result += hex[c >> 4];
+      result += hex[c & 0x0F];
+    }
+  }
+  return result;
+}
+
+//=========================================================================
+
+/*!
  * Gets the IIIF prefix, IIIF identifier, and cookie from the HTTP request, and passes them to the Lua pre-flight
  * function (whose name is given by the constant pre_flight_func_name).
  *
@@ -709,9 +777,10 @@ static void serve_redirect(Connection &conn_obj, const std::vector<std::string> 
     redirect += params[iiif_identifier] + "/info.json";
   }
 
-  conn_obj.header("Location", redirect);
+  // R10: Sanitize Location header to prevent CRLF injection
+  conn_obj.header("Location", sanitize_header_value(redirect));
   conn_obj.header("Content-Type", "text/plain");
-  conn_obj << "Redirect to " << redirect;
+  conn_obj << "Redirect to " << sanitize_header_value(redirect);
   log_info("GET: redirect to %s", redirect.c_str());
   conn_obj.flush();
 }
@@ -1294,7 +1363,17 @@ static void serve_file_download(Connection &conn_obj,
       std::stringstream ss;
       ss << "bytes " << start << "-" << end << "/" << fsize;
       conn_obj.header("Content-Range", ss.str());
-      conn_obj.header("Content-Disposition", std::string("inline; filename=") + urldecode(params[iiif_identifier]));
+      // R8/R9: Sanitize identifier for Content-Disposition header
+      {
+        auto safe_name = sanitize_header_value(urldecode(params[iiif_identifier]));
+        if (is_ascii(safe_name)) {
+          auto quoted = escape_quoted_string(safe_name);
+          conn_obj.header("Content-Disposition", "inline; filename=\"" + quoted + "\"");
+        } else {
+          conn_obj.header("Content-Disposition",
+            "inline; filename*=UTF-8''" + percent_encode_rfc6266(safe_name));
+        }
+      }
       conn_obj.header("Content-Transfer-Encoding: binary");
       conn_obj.header("Last-Modified", timebuf);
       conn_obj.sendFile(requested_file, 8192, start, end);
