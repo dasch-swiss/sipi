@@ -46,6 +46,10 @@ cmake-build-relwithdebinfo-inside-docker/
 cmake-build-relwithdebinfo-nix-develop/
 # ignore runtime cache directory
 /cache/
+# test-generated cache directories and configs
+test/_test_data/cache/
+test/_test_data/cache_test_*/
+test/_test_data/config/sipi.cache-test-*.lua
 
 #ignore ICC headers
 *_icc.h
