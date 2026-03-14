@@ -1397,7 +1397,7 @@ int main(int argc, char *argv[])
       // max pixel limit — CLI/env overrides config file
       {
         size_t pixel_limit = sipiConf.getMaxPixelLimit();
-        if (optMaxPixelLimit > 0) pixel_limit = optMaxPixelLimit;
+        if (!sipiopt.get_option("--max-pixel-limit")->empty()) pixel_limit = optMaxPixelLimit;
         server.max_pixel_limit(pixel_limit);
         if (pixel_limit > 0) {
           log_info("Max output pixel limit: %zu", pixel_limit);

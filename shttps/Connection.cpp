@@ -876,9 +876,29 @@ bool Connection::peerConnected() const
   int fd = sbuf->socket_fd();
   if (fd < 0) return true;
 
-  struct pollfd pfd = { fd, POLLOUT, 0 };
+  // Use POLLRDHUP (Linux 2.6.17+) to detect graceful client disconnect (TCP FIN).
+  // POLLHUP alone only triggers when both read and write are shut down, missing
+  // the common half-close scenario where the client sends FIN but the server
+  // socket is still in CLOSE_WAIT.
+#ifdef POLLRDHUP
+  struct pollfd pfd = { fd, POLLRDHUP, 0 };
   int ret = poll(&pfd, 1, 0);// non-blocking check
-  if (ret > 0 && (pfd.revents & (POLLHUP | POLLERR))) { return false; }
+  if (ret > 0 && (pfd.revents & (POLLHUP | POLLERR | POLLRDHUP))) { return false; }
+#else
+  // macOS: POLLRDHUP not available — fall back to POLLIN + check for EOF.
+  // If the socket is readable with zero bytes, the peer has disconnected.
+  struct pollfd pfd = { fd, POLLIN, 0 };
+  int ret = poll(&pfd, 1, 0);
+  if (ret > 0) {
+    if (pfd.revents & (POLLHUP | POLLERR)) { return false; }
+    if (pfd.revents & POLLIN) {
+      // Peek at available data — zero bytes means EOF (client sent FIN)
+      char buf;
+      ssize_t n = recv(fd, &buf, 1, MSG_PEEK | MSG_DONTWAIT);
+      if (n == 0) { return false; }// EOF — peer disconnected
+    }
+  }
+#endif
   return true;
 }
 //=============================================================================

@@ -1591,6 +1591,21 @@ static void serve_iiif(Connection &conn_obj,
   bool tmp_ro{ false };
   try {
     size->get_size(img_w, img_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
+  } catch (Sipi::SipiSizeError &err) {
+    send_error(conn_obj, Connection::BAD_REQUEST, err.to_string());
+    return;
+  } catch (Sipi::SipiError &err) {
+    send_error(conn_obj, Connection::BAD_REQUEST, err);
+    return;
+  }
+
+  // Save requested output dimensions before restricted_size may overwrite them.
+  // restricted_size->get_size() sets tmp_r_w/tmp_r_h to 0 when UNDEFINED (the
+  // common case), which would make the pixel limit check always false.
+  const size_t requested_w = tmp_r_w;
+  const size_t requested_h = tmp_r_h;
+
+  try {
     restricted_size->get_size(img_w, img_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
   } catch (Sipi::SipiSizeError &err) {
     send_error(conn_obj, Connection::BAD_REQUEST, err.to_string());
@@ -1604,8 +1619,9 @@ static void serve_iiif(Connection &conn_obj,
   if (!restricted_size->undefined() && (*size > *restricted_size)) { size = restricted_size; }
 
   // Guard: check output pixel count against max_pixel_limit
-  if (server->max_pixel_limit() > 0 && tmp_r_w > 0 && tmp_r_h > 0) {
-    size_t output_pixels = tmp_r_w * tmp_r_h;
+  // Use the saved dimensions from before restricted_size overwrote them.
+  if (server->max_pixel_limit() > 0 && requested_w > 0 && requested_h > 0) {
+    size_t output_pixels = requested_w * requested_h;
     if (output_pixels > server->max_pixel_limit()) {
       log_warn("Request rejected: output %zux%zu (%zu pixels) exceeds limit %zu: %s",
         tmp_r_w, tmp_r_h, output_pixels, server->max_pixel_limit(), uri.c_str());
@@ -1618,8 +1634,8 @@ static void serve_iiif(Connection &conn_obj,
   }
 
   // R23-R30: Per-client rate limiting
-  if (server->rate_limiter() != nullptr && tmp_r_w > 0 && tmp_r_h > 0) {
-    size_t request_pixels = tmp_r_w * tmp_r_h;
+  if (server->rate_limiter() != nullptr && requested_w > 0 && requested_h > 0) {
+    size_t request_pixels = requested_w * requested_h;
     auto client_id = resolve_client_id(conn_obj);
     auto result = server->rate_limiter()->check_and_record(client_id, request_pixels);
 
