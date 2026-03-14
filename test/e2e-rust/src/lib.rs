@@ -65,6 +65,18 @@ impl SipiServer {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
+        // Coverage support: when sipi is built with --coverage (gcov/llvm-cov),
+        // the .gcda paths embedded in the binary are relative to the build dir.
+        // Since we change cwd to working_dir, the .gcda files would be written
+        // to the wrong location. GCOV_PREFIX redirects them to the build dir
+        // so that gcovr finds them during coverage collection.
+        let build_dir = find_sipi_bin()
+            .parent()
+            .expect("sipi binary should be in a build directory")
+            .to_path_buf();
+        cmd.env("GCOV_PREFIX", &build_dir)
+            .env("GCOV_PREFIX_STRIP", "0");
+
         let mut child = cmd.spawn().unwrap_or_else(|e| {
             panic!("Failed to start sipi at {}: {}", sipi_bin, e);
         });
