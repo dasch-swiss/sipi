@@ -121,6 +121,21 @@ SipiConf::SipiConf(shttps::LuaServer &luacfg)
   if (parsed_pixel_limit < 0) parsed_pixel_limit = 0;
   max_pixel_limit = static_cast<size_t>(parsed_pixel_limit);
 
+  // Rate limiter configuration
+  long long parsed_rl_max = luacfg.configInteger("sipi", "rate_limit_max_pixels", 0);
+  if (parsed_rl_max < 0) parsed_rl_max = 0;
+  rate_limit_max_pixels = static_cast<size_t>(parsed_rl_max);
+
+  long long parsed_rl_window = luacfg.configInteger("sipi", "rate_limit_window", 600);
+  if (parsed_rl_window < 1) parsed_rl_window = 600;
+  rate_limit_window = static_cast<unsigned>(parsed_rl_window);
+
+  rate_limit_mode_str = luacfg.configString("sipi", "rate_limit_mode", "off");
+
+  long long parsed_rl_threshold = luacfg.configInteger("sipi", "rate_limit_pixel_threshold", 2000000);
+  if (parsed_rl_threshold < 0) parsed_rl_threshold = 0;
+  rate_limit_pixel_threshold = static_cast<size_t>(parsed_rl_threshold);
+
   routes = luacfg.configRoute("routes");
   docroot = luacfg.configString("fileserver", "docroot", "");
   wwwroute = luacfg.configString("fileserver", "wwwroute", "");

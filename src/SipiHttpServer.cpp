@@ -41,6 +41,7 @@
 #include "Logger.h"
 #include "SipiHttpServer.hpp"
 #include "SipiMetrics.h"
+#include "SipiRateLimiter.h"
 #include "SipiSentry.h"
 #include "favicon.h"
 #include "handlers/iiif_handler.hpp"
@@ -105,6 +106,9 @@ static void send_error(Connection &conn_obj, Connection::StatusCodes code, const
     break;
   case Connection::SERVICE_UNAVAILABLE:
     http_err_name = "Service Unavailable";
+    break;
+  case Connection::TOO_MANY_REQUESTS:
+    http_err_name = "Too Many Requests";
     break;
   default:
     http_err_name = "Unknown error";
@@ -305,6 +309,25 @@ validate_resolved_path(std::string_view file_path, std::string_view resolved_img
     }
   }
   return result;
+}
+
+//=========================================================================
+
+/*!
+ * R25: Resolve client identity for rate limiting.
+ * Priority: X-Forwarded-For (rightmost) > peer IP.
+ */
+static std::string resolve_client_id(Connection &conn_obj)
+{
+  std::string xff = conn_obj.header("X-Forwarded-For");
+  if (!xff.empty()) {
+    auto pos = xff.rfind(',');
+    auto ip = (pos != std::string::npos) ? xff.substr(pos + 1) : xff;
+    // Trim leading whitespace
+    size_t start = ip.find_first_not_of(" \t");
+    return (start != std::string::npos) ? ip.substr(start) : ip;
+  }
+  return conn_obj.peer_ip();
 }
 
 //=========================================================================
@@ -1591,6 +1614,47 @@ static void serve_iiif(Connection &conn_obj,
         "Requested output dimensions too large (" + std::to_string(tmp_r_w) + "x" + std::to_string(tmp_r_h) + ")");
       return;
     }
+  }
+
+  // R23-R30: Per-client rate limiting
+  if (server->rate_limiter() != nullptr && tmp_r_w > 0 && tmp_r_h > 0) {
+    size_t request_pixels = tmp_r_w * tmp_r_h;
+    auto client_id = resolve_client_id(conn_obj);
+    auto result = server->rate_limiter()->check_and_record(client_id, request_pixels);
+
+    auto &metrics = SipiMetrics::instance();
+
+    if (result.over_budget) {
+      std::string action = result.allowed ? "shadow_rejected" : "rejected";
+      // Structured log for per-IP detail (Loki queries)
+      log_warn("{\"event\":\"rate_limit_exceeded\",\"client_ip\":\"%s\","
+        "\"pixels_consumed\":%zu,\"budget\":%zu,\"window_seconds\":%u,"
+        "\"action\":\"%s\",\"request_pixels\":%zu,\"path\":\"%s\"}",
+        client_id.c_str(), result.pixels_consumed, result.budget,
+        server->rate_limiter()->mode() == RateLimitMode::MONITOR ? 0u : result.retry_after,
+        action.c_str(), request_pixels, uri.c_str());
+
+      metrics.rate_limit_decisions_total
+        .Add({{"action", action}}).Increment();
+
+      if (!result.allowed) {
+        conn_obj.header("Retry-After", std::to_string(result.retry_after));
+        send_error(conn_obj, Connection::TOO_MANY_REQUESTS,
+          "Rate limit exceeded. Try again in " + std::to_string(result.retry_after) + " seconds.");
+        return;
+      }
+    } else {
+      metrics.rate_limit_decisions_total
+        .Add({{"action", "allowed"}}).Increment();
+    }
+
+    // Near-limit warning (>80% of budget)
+    if (result.pixels_consumed > result.budget * 80 / 100) {
+      metrics.rate_limit_near_limit_total.Increment();
+    }
+
+    metrics.rate_limit_clients_tracked.Set(
+      static_cast<double>(server->rate_limiter()->tracked_clients()));
   }
 
   std::string cannonical_watermark = watermark.empty() ? "0" : "1";

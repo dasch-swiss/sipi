@@ -36,11 +36,16 @@ public:
   prometheus::Counter &client_disconnected_total;
   prometheus::Counter &memory_alloc_failures_total;
 
+  // Rate limiter counters (R30)
+  prometheus::Family<prometheus::Counter> &rate_limit_decisions_total;
+  prometheus::Counter &rate_limit_near_limit_total;
+
   // Gauges
   prometheus::Gauge &cache_size_bytes;
   prometheus::Gauge &cache_files;
   prometheus::Gauge &cache_size_limit_bytes;
   prometheus::Gauge &cache_files_limit;
+  prometheus::Gauge &rate_limit_clients_tracked;
 
   // Histograms
   prometheus::Histogram &request_duration_seconds;

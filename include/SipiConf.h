@@ -65,6 +65,10 @@ private:
   std::string adminuser;
   std::string password;
   size_t max_pixel_limit{ 0 };//<! max output pixels (w*h) per IIIF request, 0 = unlimited
+  size_t rate_limit_max_pixels{ 0 };       //!< max pixels per client per window, 0 = disabled
+  unsigned rate_limit_window{ 600 };       //!< sliding window in seconds (default 10 min)
+  std::string rate_limit_mode_str{ "off" };//!< "off", "monitor", "enforce"
+  size_t rate_limit_pixel_threshold{ 2000000 }; //!< requests below this are free (default 2MP)
 
 public:
   SipiConf();
@@ -172,6 +176,18 @@ public:
 
   size_t getMaxPixelLimit() const { return max_pixel_limit; }
   void setMaxPixelLimit(size_t v) { max_pixel_limit = v; }
+
+  size_t getRateLimitMaxPixels() const { return rate_limit_max_pixels; }
+  void setRateLimitMaxPixels(size_t v) { rate_limit_max_pixels = v; }
+
+  unsigned getRateLimitWindow() const { return rate_limit_window; }
+  void setRateLimitWindow(unsigned v) { rate_limit_window = v; }
+
+  std::string getRateLimitMode() const { return rate_limit_mode_str; }
+  void setRateLimitMode(const std::string &s) { rate_limit_mode_str = s; }
+
+  size_t getRateLimitPixelThreshold() const { return rate_limit_pixel_threshold; }
+  void setRateLimitPixelThreshold(size_t v) { rate_limit_pixel_threshold = v; }
 };
 
 }// namespace Sipi
