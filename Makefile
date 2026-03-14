@@ -136,11 +136,11 @@ docker-publish-manifest: ## publish Docker manifest combining arm64 and amd64 im
 
 .PHONY: test-smoke
 test-smoke: docker-build ## build Docker image and run smoke tests
-	pytest -s test/smoke
+	cd test/e2e-rust && cargo test --test docker_smoke -- --test-threads=1
 
 .PHONY: test-smoke-ci
 test-smoke-ci: ## run smoke tests against already-built Docker image
-	pytest -s test/smoke
+	cd test/e2e-rust && cargo test --test docker_smoke -- --test-threads=1
 
 #####################################
 # Nix targets (run inside Nix develop shell)
