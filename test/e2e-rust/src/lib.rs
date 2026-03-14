@@ -66,29 +66,20 @@ impl SipiServer {
             .stderr(Stdio::piped());
 
         // Coverage support: when sipi is built with --coverage (gcov/llvm-cov),
-        // .gcda paths are embedded in the binary. On CI (nix-clang), these are
-        // absolute paths that write to the build dir regardless of cwd.
-        // On local zig builds, paths may be relative — GCOV_PREFIX redirects
-        // them to the build dir so gcovr finds them.
+        // .gcda paths are embedded in the binary at compile time.
         //
-        // Only set GCOV_PREFIX for relative-path builds (zig). For absolute-path
-        // builds (nix-clang CI), GCOV_PREFIX would double the path and break gcov.
-        // Detect by checking if the sipi binary is under an absolute build path.
+        // CI (nix-clang): paths are absolute (/home/runner/.../build/CMakeFiles/...).
+        // The gcda files write to the correct location regardless of cwd.
+        // Do NOT set GCOV_PREFIX — it mangles absolute paths.
+        //
+        // Local (zig): paths are relative (CMakeFiles/...). When the test harness
+        // changes cwd to test/_test_data/, gcda files would land there instead of
+        // in build/. GCOV_PREFIX redirects them to the build dir.
         let build_dir = find_sipi_bin()
             .parent()
             .expect("sipi binary should be in a build directory")
             .to_path_buf();
-        // Strip the absolute prefix so gcda files land in build_dir, not build_dir/build_dir
-        // For a binary at /home/runner/work/sipi/sipi/build/sipi, the gcno paths are
-        // /home/runner/work/sipi/sipi/build/CMakeFiles/... — strip 6 components to get
-        // CMakeFiles/... then GCOV_PREFIX re-roots to build_dir.
-        // For relative builds (zig), paths are CMakeFiles/... with 0 components to strip.
-        if build_dir.is_absolute() {
-            // Count path components: /home/runner/work/sipi/sipi/build = 6
-            let strip = build_dir.components().count();
-            cmd.env("GCOV_PREFIX", &build_dir)
-                .env("GCOV_PREFIX_STRIP", strip.to_string());
-        } else {
+        if !build_dir.is_absolute() {
             cmd.env("GCOV_PREFIX", &build_dir)
                 .env("GCOV_PREFIX_STRIP", "0");
         }
