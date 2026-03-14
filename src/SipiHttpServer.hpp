@@ -49,6 +49,7 @@ protected:
   std::unordered_map<std::string, SipiCompressionParams> _j2k_compression_profiles;
   ScalingQuality _scaling_quality{};
   size_t _max_pixel_limit{ 0 };//!< max output pixels (w*h) per request, 0 = unlimited
+  std::string _resolved_imgroot;  //!< realpath()-resolved image root, set at startup
 
 public:
   /*!
@@ -156,6 +157,8 @@ public:
 
   void max_pixel_limit(size_t v) { _max_pixel_limit = v; }
   size_t max_pixel_limit() const { return _max_pixel_limit; }
+
+  std::string resolved_imgroot() const { return _resolved_imgroot; }
 
   void cache(const std::string &cachedir_p,
     long long max_cache_size_p = -1,

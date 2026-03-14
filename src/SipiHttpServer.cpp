@@ -4,19 +4,23 @@
  */
 
 #include <cassert>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <optional>
 #include <regex>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <sys/stat.h>
 #include <utility>
 #include <vector>
@@ -159,6 +163,81 @@ static void send_error(Connection &conn_obj, Connection::StatusCodes code, const
  * \param code the HTTP status code to be returned.
  */
 static void send_error(Connection &conn_obj, Connection::StatusCodes code) { send_error(conn_obj, code, ""); }
+
+//=========================================================================
+
+/*!
+ * R1: Check if a decoded string contains path traversal components.
+ *
+ * Checks for ".." as a path component (between '/' delimiters, at start, or at end).
+ * The input should already be URL-decoded. For double-encoded inputs (%252e%252e),
+ * callers should decode once more and re-check.
+ *
+ * \param decoded The URL-decoded string to check.
+ * \return true if traversal components are found.
+ */
+[[nodiscard]] static bool contains_traversal(std::string_view decoded)
+{
+  // Check for ".." as a complete path component
+  if (decoded == "..") { return true; }
+  if (decoded.starts_with("../")) { return true; }
+  if (decoded.ends_with("/..")) { return true; }
+  if (decoded.find("/../") != std::string_view::npos) { return true; }
+
+  // Also check for percent-encoded variants in case the input was not fully decoded.
+  // Case-insensitive check for %2e%2e (single-encoded dot-dot)
+  std::string lower(decoded.size(), '\0');
+  std::transform(decoded.begin(), decoded.end(), lower.begin(),
+    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  if (lower.find("%2e%2e") != std::string::npos) { return true; }
+  // Double-encoded: %252e%252e
+  if (lower.find("%252e%252e") != std::string::npos) { return true; }
+
+  return false;
+}
+
+/// Result of path validation: resolved path, file-not-found, or traversal detected.
+enum class PathValidation { OK, NOT_FOUND, TRAVERSAL };
+
+struct PathValidationResult {
+  PathValidation status;
+  std::string resolved_path;// only valid when status == OK
+};
+
+/*!
+ * R2: Validate that a resolved file path is within the image root directory.
+ *
+ * Resolves the file path via realpath() and verifies it starts with the
+ * resolved imgroot prefix. The imgroot must already be resolved via realpath()
+ * at server startup.
+ *
+ * Returns NOT_FOUND if the file doesn't exist (let caller handle 404),
+ * TRAVERSAL if the resolved path escapes imgroot (caller should return 400),
+ * or OK with the resolved path on success.
+ */
+[[nodiscard]] static PathValidationResult
+validate_resolved_path(std::string_view file_path, std::string_view resolved_imgroot)
+{
+  char resolved[PATH_MAX];
+  if (realpath(std::string(file_path).c_str(), resolved) == nullptr) {
+    // File doesn't exist — not a traversal, let the caller handle 404
+    return { PathValidation::NOT_FOUND, {} };
+  }
+
+  std::string_view resolved_view(resolved);
+  // Verify the resolved path starts with the resolved imgroot
+  if (!resolved_view.starts_with(resolved_imgroot)) {
+    return { PathValidation::TRAVERSAL, {} };
+  }
+  // Ensure the path is either exactly imgroot or continues with '/'
+  // (prevents imgroot="/foo/bar" matching "/foo/barbaz/file")
+  if (resolved_view.size() > resolved_imgroot.size()
+      && resolved_view[resolved_imgroot.size()] != '/') {
+    return { PathValidation::TRAVERSAL, {} };
+  }
+
+  return { PathValidation::OK, std::string(resolved) };
+}
 
 //=========================================================================
 
@@ -411,6 +490,20 @@ static std::unordered_map<std::string, std::string> check_file_access(Connection
   std::string infile;
 
   SipiIdentifier sid = SipiIdentifier(params[iiif_identifier]);
+
+  // R1: Early rejection of path traversal in identifier and prefix
+  const auto decoded_identifier = urldecode(sid.getIdentifier());
+  if (contains_traversal(decoded_identifier)) {
+    log_warn("Path traversal blocked: client=%s identifier=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_identifier].c_str());
+    throw SipiError("Invalid IIIF identifier");
+  }
+  if (prefix_as_path && contains_traversal(urldecode(params[iiif_prefix]))) {
+    log_warn("Path traversal blocked in prefix: client=%s prefix=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_prefix].c_str());
+    throw SipiError("Invalid IIIF identifier");
+  }
+
   std::unordered_map<std::string, std::string> pre_flight_info;
   if (luaserver.luaFunctionExists(iiif_preflight_funcname)) {
     pre_flight_info = call_iiif_preflight(conn_obj,
@@ -426,12 +519,26 @@ static std::unordered_map<std::string, std::string> check_file_access(Connection
     }
     pre_flight_info["type"] = "allow";
   }
+
+  // R2: Validate resolved path is within imgroot (covers Lua paths, prefix paths, and direct paths)
+  auto validated = validate_resolved_path(infile, serv->resolved_imgroot());
+  if (validated.status == PathValidation::TRAVERSAL) {
+    log_warn("Path traversal blocked (realpath): client=%s identifier=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_identifier].c_str());
+    // R3: Error responses contain no internal filesystem paths
+    throw SipiError("Invalid IIIF identifier");
+  }
+  if (validated.status == PathValidation::OK) {
+    infile = validated.resolved_path;
+  }
+  // If NOT_FOUND, keep original infile — access() below will fail with proper error
+
   //
   // test if we have access to the file
   //
   if (access(infile.c_str(), R_OK) != 0) {
-    // test, if file exists
-    throw SipiError("Cannot read image file: " + infile);
+    // R3: Do not leak internal filesystem path in error message
+    throw SipiError("Image file not accessible");
   }
   pre_flight_info["infile"] = infile;
   return pre_flight_info;
@@ -1080,6 +1187,20 @@ static void serve_file_download(Connection &conn_obj,
   bool prefix_as_path,
   std::vector<std::string> params)
 {
+  // R1: Early rejection of path traversal in identifier and prefix
+  if (contains_traversal(urldecode(params[iiif_identifier]))) {
+    log_warn("Path traversal blocked: client=%s identifier=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_identifier].c_str());
+    send_error(conn_obj, Connection::BAD_REQUEST, "Invalid IIIF identifier");
+    return;
+  }
+  if (prefix_as_path && contains_traversal(urldecode(params[iiif_prefix]))) {
+    log_warn("Path traversal blocked in prefix: client=%s prefix=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_prefix].c_str());
+    send_error(conn_obj, Connection::BAD_REQUEST, "Invalid IIIF identifier");
+    return;
+  }
+
   std::string requested_file;
   if (prefix_as_path && (!params[iiif_prefix].empty())) {
     requested_file = serv->imgroot() + "/" + urldecode(params[iiif_prefix]) + "/" + urldecode(params[iiif_identifier]);
@@ -1103,6 +1224,19 @@ static void serve_file_download(Connection &conn_obj,
       return;
     }
   }
+
+  // R2: Validate resolved path is within imgroot
+  auto validated = validate_resolved_path(requested_file, serv->resolved_imgroot());
+  if (validated.status == PathValidation::TRAVERSAL) {
+    log_warn("Path traversal blocked (realpath): client=%s identifier=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_identifier].c_str());
+    send_error(conn_obj, Connection::BAD_REQUEST, "Invalid IIIF identifier");
+    return;
+  }
+  if (validated.status == PathValidation::OK) {
+    requested_file = validated.resolved_path;
+  }
+
   if (access(requested_file.c_str(), R_OK) == 0) {
     std::string actual_mimetype = shttps::Parsing::getBestFileMimetype(requested_file);
     //
@@ -1198,6 +1332,20 @@ static void serve_iiif(Connection &conn_obj,
   //
   SipiIdentifier sid = urldecode(params[iiif_identifier]);
 
+  // R1: Early rejection of path traversal in identifier and prefix
+  if (contains_traversal(sid.getIdentifier())) {
+    log_warn("Path traversal blocked: client=%s identifier=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_identifier].c_str());
+    send_error(conn_obj, Connection::BAD_REQUEST, "Invalid IIIF identifier");
+    return;
+  }
+  if (prefix_as_path && contains_traversal(urldecode(params[iiif_prefix]))) {
+    log_warn("Path traversal blocked in prefix: client=%s prefix=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_prefix].c_str());
+    send_error(conn_obj, Connection::BAD_REQUEST, "Invalid IIIF identifier");
+    return;
+  }
+
   //
   // getting IIIF parameters
   //
@@ -1265,6 +1413,18 @@ static void serve_iiif(Connection &conn_obj,
     }
   }
 
+  // R2: Validate resolved path is within imgroot
+  auto validated = validate_resolved_path(infile, server->resolved_imgroot());
+  if (validated.status == PathValidation::TRAVERSAL) {
+    log_warn("Path traversal blocked (realpath): client=%s identifier=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_identifier].c_str());
+    send_error(conn_obj, Connection::BAD_REQUEST, "Invalid IIIF identifier");
+    return;
+  }
+  if (validated.status == PathValidation::OK) {
+    infile = validated.resolved_path;
+  }
+
   //
   // determine the mimetype of the file in the SIPI repo
   //
@@ -1277,8 +1437,7 @@ static void serve_iiif(Connection &conn_obj,
   if ((actual_mimetype == "image/jpx") || (actual_mimetype == "image/jp2")) in_format = SipiQualityFormat::JP2;
 
   if (access(infile.c_str(), R_OK) != 0) {
-    // test, if file exists
-    log_info("File %s not found", infile.c_str());
+    // R3: Do not leak internal filesystem path in error message
     send_error(conn_obj, Connection::NOT_FOUND);
     return;
   }
@@ -1834,9 +1993,16 @@ void SipiHttpServer::run()
 {
   log_info("SipiHttpServer starting ...");
   //
-  // setting the image root
+  // setting the image root — resolve via realpath() for path traversal prevention (R2)
   //
-  log_info("Serving images from %s", _imgroot.c_str());
+  char resolved_root[PATH_MAX];
+  if (realpath(_imgroot.c_str(), resolved_root) == nullptr) {
+    log_err("Cannot resolve imgroot path: %s", _imgroot.c_str());
+    throw SipiError("Cannot resolve imgroot path: " + _imgroot);
+  }
+  _resolved_imgroot = std::string(resolved_root);
+
+  log_info("Serving images from %s (resolved: %s)", _imgroot.c_str(), _resolved_imgroot.c_str());
   log_debug("Salsah prefix: %s", _salsah_prefix.c_str());
 
   add_route(Connection::GET, "/metrics", metrics_handler);
