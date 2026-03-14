@@ -598,7 +598,7 @@ RequestHandler Server::get_handler(Connection &conn, void **handler_data_p)
  * @param port Port number
  * @return Socket ID
  */
-static int prepare_socket(int port)
+static int prepare_socket(int port, bool required = true)
 {
   int sockfd;
   struct sockaddr_in serv_addr;
@@ -606,15 +606,18 @@ static int prepare_socket(int port)
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
   if (sockfd < 0) {
-    log_err("Could not create socket: %m");
-    exit(1);
+    log_err("Could not create socket for port %d: %s", port, strerror(errno));
+    if (required) exit(1);
+    return -1;
   }
 
   int optval = 1;
 
   if (::setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval) < 0) {
-    log_err("Could not set socket option: %m");
-    exit(1);
+    log_err("Could not set socket option for port %d: %s", port, strerror(errno));
+    close(sockfd);
+    if (required) exit(1);
+    return -1;
   }
 
   /* Initialize socket structure */
@@ -626,13 +629,17 @@ static int prepare_socket(int port)
 
   /* Now bind the host address using bind() call.*/
   if (::bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-    log_err("Could not bind socket: %m");
-    exit(1);
+    log_err("Could not bind socket on port %d: %s", port, strerror(errno));
+    close(sockfd);
+    if (required) exit(1);
+    return -1;
   }
 
   if (::listen(sockfd, SOMAXCONN) < 0) {
-    log_err("Could not listen on socket: %m");
-    exit(1);
+    log_err("Could not listen on port %d: %s", port, strerror(errno));
+    close(sockfd);
+    if (required) exit(1);
+    return -1;
   }
 
   return sockfd;
@@ -907,8 +914,13 @@ void Server::run()
   log_info("Server listening on HTTP port %d", _port);
 
   if (_ssl_port > 0) {
-    _ssl_sockfd = prepare_socket(_ssl_port);
-    log_info("Server listening on SSL port %d", _ssl_port);
+    _ssl_sockfd = prepare_socket(_ssl_port, false);
+    if (_ssl_sockfd >= 0) {
+      log_info("Server listening on SSL port %d", _ssl_port);
+    } else {
+      log_warn("SSL port %d bind failed — continuing without SSL", _ssl_port);
+      _ssl_port = 0;
+    }
   }
 
   if (socketpair(PF_LOCAL, SOCK_STREAM, 0, stoppipe) != 0) {

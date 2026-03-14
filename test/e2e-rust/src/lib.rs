@@ -100,7 +100,9 @@ impl SipiServer {
         let stdout = child.stdout.take().expect("stdout captured");
         let stdout_buf = Arc::new(Mutex::new(String::new()));
         let stdout_buf_clone = Arc::clone(&stdout_buf);
-        let ready_signal = "Server listening on SSL port";
+        let ready_signal_ssl = "Server listening on SSL port";
+        let ready_signal_http = "Server listening on HTTP port";
+        let ready_signal_no_ssl = "SSL port";// "SSL port N bind failed" also indicates startup complete
         let (tx, rx) = std::sync::mpsc::channel();
 
         std::thread::spawn(move || {
@@ -116,7 +118,8 @@ impl SipiServer {
                                 captured.drain(..drain);
                             }
                         }
-                        if l.contains(ready_signal) {
+                        // Detect readiness: SSL port listening, HTTP-only fallback, or SSL bind failure
+                        if l.contains(ready_signal_ssl) || l.contains(ready_signal_no_ssl) {
                             let _ = tx.send(());
                         }
                     }
