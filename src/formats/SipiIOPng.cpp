@@ -280,6 +280,7 @@ bool SipiIOPng::read(SipiImage *img,
     auto *tmp = (unsigned short *)buffer;
     for (int i = 0; i < img->nx * img->ny * img->nc; i++) { tmp[i] = ntohs(tmp[i]); }
   }
+  delete[] img->pixels;// free previous buffer if re-reading into same SipiImage
   img->pixels = buffer;
 
   delete[] row_pointers;
