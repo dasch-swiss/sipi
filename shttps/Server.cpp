@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>// Needed for memset
+#include <thread>
 #include <iostream>
 #include <regex>
 #include <string>
@@ -598,7 +599,7 @@ RequestHandler Server::get_handler(Connection &conn, void **handler_data_p)
  * @param port Port number
  * @return Socket ID
  */
-static int prepare_socket(int port)
+static int prepare_socket(int port, bool required = true)
 {
   int sockfd;
   struct sockaddr_in serv_addr;
@@ -606,15 +607,18 @@ static int prepare_socket(int port)
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
   if (sockfd < 0) {
-    log_err("Could not create socket: %m");
-    exit(1);
+    log_err("Could not create socket for port %d: %s", port, strerror(errno));
+    if (required) exit(1);
+    return -1;
   }
 
   int optval = 1;
 
   if (::setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval) < 0) {
-    log_err("Could not set socket option: %m");
-    exit(1);
+    log_err("Could not set socket option for port %d: %s", port, strerror(errno));
+    close(sockfd);
+    if (required) exit(1);
+    return -1;
   }
 
   /* Initialize socket structure */
@@ -626,13 +630,17 @@ static int prepare_socket(int port)
 
   /* Now bind the host address using bind() call.*/
   if (::bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-    log_err("Could not bind socket: %m");
-    exit(1);
+    log_err("Could not bind socket on port %d: %s", port, strerror(errno));
+    close(sockfd);
+    if (required) exit(1);
+    return -1;
   }
 
   if (::listen(sockfd, SOMAXCONN) < 0) {
-    log_err("Could not listen on socket: %m");
-    exit(1);
+    log_err("Could not listen on port %d: %s", port, strerror(errno));
+    close(sockfd);
+    if (required) exit(1);
+    return -1;
   }
 
   return sockfd;
@@ -705,6 +713,9 @@ static void *socket_request_processor(void *arg)
         //
         // here we process the request
         //
+        // R39: RAII guard for active connection counting
+        tdata->serv->_active_connections.fetch_add(1, std::memory_order_relaxed);
+
         std::unique_ptr<SockStream> sockstream;
         if (msg.ssl_sid != nullptr) {
           sockstream = make_unique<SockStream>(msg.ssl_sid);
@@ -728,6 +739,9 @@ static void *socket_request_processor(void *arg)
           // we have a normal connection and initiate processing of the request
           tstatus = tdata->serv->process_request(&ins, &os, tmpstr, msg.peer_port, false, keep_alive);
         }
+
+        tdata->serv->_active_connections.fetch_sub(1, std::memory_order_relaxed);
+
         //
         // send the finished message
         //
@@ -907,8 +921,13 @@ void Server::run()
   log_info("Server listening on HTTP port %d", _port);
 
   if (_ssl_port > 0) {
-    _ssl_sockfd = prepare_socket(_ssl_port);
-    log_info("Server listening on SSL port %d", _ssl_port);
+    _ssl_sockfd = prepare_socket(_ssl_port, false);
+    if (_ssl_sockfd >= 0) {
+      log_info("Server listening on SSL port %d", _ssl_port);
+    } else {
+      log_warn("SSL port %d bind failed — continuing without SSL", _ssl_port);
+      _ssl_port = 0;
+    }
   }
 
   if (socketpair(PF_LOCAL, SOCK_STREAM, 0, stoppipe) != 0) {
@@ -1048,9 +1067,35 @@ void Server::run()
               SocketControl::receive_control_message(sockets[i].fd);// read the message from the pipe
             if (msg.type != SocketControl::EXIT) { log_err("Got unexpected message from interrupt"); }
 
+            // R39: Phase 1 — stop accepting new connections
             SocketControl::SocketInfo sockid;
             socket_control.remove(socket_control.get_http_socket_id(), sockid);// remove the HTTP socket
             socket_control.remove(socket_control.get_ssl_socket_id(), sockid);// remove the SSL socket
+
+            // R39: Phase 2 — drain in-flight requests with timeout
+            {
+              auto drain_deadline = std::chrono::steady_clock::now()
+                                  + std::chrono::seconds(_drain_timeout);
+              int active = _active_connections.load(std::memory_order_relaxed);
+              if (active > 0) {
+                log_info("Draining %d active connections (timeout %us)...", active, _drain_timeout);
+              }
+              while (_active_connections.load(std::memory_order_relaxed) > 0) {
+                if (std::chrono::steady_clock::now() >= drain_deadline) {
+                  // R40: Force-close after timeout
+                  log_warn("Drain timeout, force-closing %d connections",
+                    _active_connections.load(std::memory_order_relaxed));
+                  break;
+                }
+                // Brief sleep to avoid busy-waiting
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+              }
+              if (_active_connections.load(std::memory_order_relaxed) == 0) {
+                // R41: Log completion
+                log_info("All connections drained, shutting down");
+              }
+            }
+
             socket_control.close_all_dynsocks(close_socket);
             socket_control.broadcast_exit();// broadcast EXIT to all worker threads
             running = false;

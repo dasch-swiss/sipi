@@ -46,6 +46,12 @@ SockStream::SockStream(SSL *cSSL_p, int in_bufsize_p, int out_bufsize_p, int put
   setp(out_buf, out_buf + out_bufsize);
 }
 
+int SockStream::socket_fd() const
+{
+  if (cSSL != nullptr) { return SSL_get_fd(cSSL); }
+  return sock;
+}
+
 SockStream::~SockStream()
 {
   delete[] in_buf;

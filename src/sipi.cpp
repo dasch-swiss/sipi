@@ -32,6 +32,7 @@
 #include "SipiConf.h"
 #include "SipiFilenameHash.h"
 #include "SipiHttpServer.hpp"
+#include "SipiRateLimiter.h"
 #include "SipiIO.h"
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
@@ -610,6 +611,48 @@ int main(int argc, char *argv[])
       optCacheHysteresisIgnored,
       "DEPRECATED: no longer supported (replaced by built-in 80% low-water mark)")
     ->envname("SIPI_CACHEHYSTERESIS");
+
+  size_t optMaxPixelLimit = 0;
+  sipiopt
+    .add_option("--max-pixel-limit",
+      optMaxPixelLimit,
+      "Max output pixels (width*height) per IIIF request. 0 = unlimited.")
+    ->envname("SIPI_MAX_PIXEL_LIMIT");
+
+  size_t optRateLimitMaxPixels = 0;
+  sipiopt
+    .add_option("--rate-limit-max-pixels",
+      optRateLimitMaxPixels,
+      "Max output pixels per client per window. 0 = disabled.")
+    ->envname("SIPI_RATE_LIMIT_MAX_PIXELS");
+
+  unsigned optRateLimitWindow = 600;
+  sipiopt
+    .add_option("--rate-limit-window",
+      optRateLimitWindow,
+      "Rate limit sliding window in seconds (default 600).")
+    ->envname("SIPI_RATE_LIMIT_WINDOW");
+
+  std::string optRateLimitMode = "off";
+  sipiopt
+    .add_option("--rate-limit-mode",
+      optRateLimitMode,
+      "Rate limit mode: off, monitor, enforce (default off).")
+    ->envname("SIPI_RATE_LIMIT_MODE");
+
+  size_t optRateLimitPixelThreshold = 2000000;
+  sipiopt
+    .add_option("--rate-limit-pixel-threshold",
+      optRateLimitPixelThreshold,
+      "Requests below this pixel count are free (default 2000000).")
+    ->envname("SIPI_RATE_LIMIT_PIXEL_THRESHOLD");
+
+  unsigned optDrainTimeout = 30;
+  sipiopt
+    .add_option("--drain-timeout",
+      optDrainTimeout,
+      "Seconds to wait for in-flight requests during graceful shutdown (default 30).")
+    ->envname("SIPI_DRAIN_TIMEOUT");
 
   std::string optThumbSize = "!128,128";
   sipiopt.add_option("--thumbsize", optThumbSize, "Size of the thumbnails (to be used within Lua).")
@@ -1350,6 +1393,48 @@ int main(int argc, char *argv[])
       server.dirs_to_exclude(sipiConf.getSubdirExcludes());
       server.scaling_quality(sipiConf.getScalingQuality());
       server.jpeg_quality(sipiConf.getJpegQuality());
+
+      // max pixel limit — CLI/env overrides config file
+      {
+        size_t pixel_limit = sipiConf.getMaxPixelLimit();
+        if (!sipiopt.get_option("--max-pixel-limit")->empty()) pixel_limit = optMaxPixelLimit;
+        server.max_pixel_limit(pixel_limit);
+        if (pixel_limit > 0) {
+          log_info("Max output pixel limit: %zu", pixel_limit);
+        }
+      }
+
+      // Rate limiter — CLI/env overrides config file
+      {
+        size_t rl_max = sipiConf.getRateLimitMaxPixels();
+        if (!sipiopt.get_option("--rate-limit-max-pixels")->empty()) rl_max = optRateLimitMaxPixels;
+
+        unsigned rl_window = sipiConf.getRateLimitWindow();
+        if (!sipiopt.get_option("--rate-limit-window")->empty()) rl_window = optRateLimitWindow;
+
+        std::string rl_mode_str = sipiConf.getRateLimitMode();
+        if (!sipiopt.get_option("--rate-limit-mode")->empty()) rl_mode_str = optRateLimitMode;
+
+        size_t rl_threshold = sipiConf.getRateLimitPixelThreshold();
+        if (!sipiopt.get_option("--rate-limit-pixel-threshold")->empty()) rl_threshold = optRateLimitPixelThreshold;
+
+        auto rl_mode = Sipi::parse_rate_limit_mode(rl_mode_str);
+        if (rl_mode != Sipi::RateLimitMode::OFF && rl_max > 0) {
+          server.rate_limiter(std::make_unique<Sipi::SipiRateLimiter>(rl_window, rl_max, rl_mode, rl_threshold));
+          log_info("Rate limiting enabled: mode=%s, %zu pixels per %u seconds, threshold=%zu",
+            rl_mode_str.c_str(), rl_max, rl_window, rl_threshold);
+        } else {
+          log_info("Rate limiting disabled");
+        }
+      }
+
+      // Graceful shutdown drain timeout
+      {
+        unsigned dt = sipiConf.getDrainTimeout();
+        if (!sipiopt.get_option("--drain-timeout")->empty()) dt = optDrainTimeout;
+        server.drain_timeout(dt);
+        log_info("Drain timeout: %u seconds", dt);
+      }
 
       //
       // cache parameter...
