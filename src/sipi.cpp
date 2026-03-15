@@ -1299,6 +1299,7 @@ int main(int argc, char *argv[])
             }
           }
         }
+        closedir(dirp);
       } else {
         //
         // the prefix is not used
