@@ -51,7 +51,7 @@ unsigned char *SipiExif::exifBytes(unsigned int &len)
     // we use blob
     binary_size = blob.size();
     tmpbuf = new unsigned char[binary_size];
-    memcpy(tmpbuf, blob.data(), binary_size);
+    if (binary_size > 0) memcpy(tmpbuf, blob.data(), binary_size);
     delete[] binaryExif;// cleanup tmpbuf!
     binaryExif = tmpbuf;
   }

@@ -1187,7 +1187,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
       size_t start_l = sizeof(start) - 1;// remove trailing '\0';
       auto exifchunk = shttps::make_unique<unsigned char[]>(buf.size() + start_l);
       memcpy(exifchunk.get(), start, (size_t)start_l);
-      memcpy(exifchunk.get() + start_l, buf.data(), (size_t)buf.size());
+      if (buf.size() > 0) memcpy(exifchunk.get() + start_l, buf.data(), (size_t)buf.size());
 
       try {
         jpeg_write_marker(&cinfo, JPEG_APP0 + 1, (JOCTET *)exifchunk.get(), start_l + buf.size());
@@ -1283,7 +1283,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
       auto iptcchunk = shttps::make_unique<char[]>(start_l + 4 + buf.size());
       memcpy(iptcchunk.get(), start, (size_t)start_l);
       memcpy(iptcchunk.get() + start_l, siz, (size_t)4);
-      memcpy(iptcchunk.get() + start_l + 4, buf.data(), (size_t)buf.size());
+      if (buf.size() > 0) memcpy(iptcchunk.get() + start_l + 4, buf.data(), (size_t)buf.size());
 
       try {
         jpeg_write_marker(&cinfo, JPEG_APP0 + 13, (JOCTET *)iptcchunk.get(), start_l + buf.size());

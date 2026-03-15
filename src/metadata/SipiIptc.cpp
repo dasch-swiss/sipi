@@ -23,7 +23,7 @@ unsigned char *SipiIptc::iptcBytes(unsigned int &len)
 {
   Exiv2::DataBuf databuf = Exiv2::IptcParser::encode(iptcData);
   unsigned char *buf = new unsigned char[databuf.size()];
-  memcpy(buf, databuf.data(), databuf.size());
+  if (databuf.size() > 0) memcpy(buf, databuf.data(), databuf.size());
   len = databuf.size();
   return buf;
 }

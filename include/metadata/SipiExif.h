@@ -262,7 +262,7 @@ public:
       v = Exiv2::Value::create(Exiv2::unsignedShort);
     } else if (typeid(T) == typeid(int32_t)) {
       v = Exiv2::Value::create(Exiv2::signedLong);
-    } else if (typeid(T) == typeid(int32_t)) {
+    } else if (typeid(T) == typeid(uint32_t)) {
       v = Exiv2::Value::create(Exiv2::unsignedLong);
     } else if (typeid(T) == typeid(float)) {
       v = Exiv2::Value::create(Exiv2::tiffFloat);
@@ -275,7 +275,7 @@ public:
     } else {
       throw SipiError("Unsupported type of addKeyVal(2)");
     }
-    v->read((unsigned char *)valptr, static_cast<long>(len * sizeof(unsigned short)), Exiv2::littleEndian);
+    v->read((unsigned char *)valptr, static_cast<long>(len * sizeof(T)), Exiv2::littleEndian);
     exifData.add(key, v.get());
   }
 

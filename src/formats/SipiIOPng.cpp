@@ -522,10 +522,12 @@ void SipiIOPng::write(SipiImage *img, const std::string &filepath, const SipiCom
     chunk_ptr.add_iTXt(xmp_tag, (char *)xmp_buf.data(), xmp_buf.size());
   }
 
+  // sipi_buf must outlive chunk_ptr — declared outside the if block
+  // to avoid stack-use-after-scope when png_set_text reads the pointer.
+  char sipi_buf[512 + 1] = {};
   if (es.is_set()) {
     std::string esstr = es;
     unsigned int len = esstr.length();
-    char sipi_buf[512 + 1];
     strncpy(sipi_buf, esstr.c_str(), 512);
     sipi_buf[512] = '\0';
     chunk_ptr.add_iTXt(sipi_tag, sipi_buf, len);
