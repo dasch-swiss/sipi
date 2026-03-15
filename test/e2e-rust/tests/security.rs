@@ -221,11 +221,13 @@ fn crlf_header_injection() {
         .send()
         .expect("CRLF injection request failed");
 
-    // Should not crash and should not have injected header
+    // R8: CRLF characters are sanitized from headers but the request itself
+    // may return 404 (file not found) since the filename with CRLF doesn't exist.
+    // The key security property is that no header injection occurs.
     let status = resp.status().as_u16();
     assert!(
-        status == 400 || status == 404 || status == 200,
-        "CRLF request should return valid status, got {}",
+        status == 400 || status == 404,
+        "CRLF request should return 400 or 404, got {}",
         status
     );
 

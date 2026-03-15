@@ -405,6 +405,7 @@ New test needed?
 - Snapshot tests (`insta`) live inside Rust e2e test files — they are e2e tests that use snapshot assertions
 - Tests needing cache verification require a cache-enabled server config (use `sipi.cache-test-config.lua` which has cache configured)
 - Python e2e tests have been retired and replaced by Rust e2e tests. See [Python Test Deprecation](#python-test-deprecation--parity-checklist) for the parity checklist
+- Flaky tests (e.g., races against file flush) should use the `retry_flaky()` helper — see [Flaky Test Handling](#flaky-test-handling)
 
 ## IIIF Image API 3.0 Coverage Matrix
 
@@ -855,6 +856,36 @@ When a C++ component is migrated to Rust:
 4. **Cleanup:** Remove corresponding C++ unit tests (they tested the old implementation)
 
 The `insta` golden baselines are critical — they capture exact C++ server behavior and detect any Rust implementation drift.
+
+## Flaky Test Handling
+
+Some e2e tests are inherently racy — for example, a test that uploads a file and immediately GETs the converted result may fail if the server hasn't flushed to disk yet. Rather than retrying at the CI job level, handle flakiness at the **test level** using the `retry_flaky()` helper from the test harness (`test/e2e-rust/src/lib.rs`):
+
+```rust
+use sipi_e2e::retry_flaky;
+
+#[test]
+fn my_flaky_test() {
+    let srv = server();
+    // ... setup ...
+
+    retry_flaky(3, || {
+        match client().get(&url).send() {
+            Ok(resp) if resp.status().as_u16() == 200 => Ok(()),
+            Ok(resp) => Err(format!("HTTP {}", resp.status())),
+            Err(e) => Err(format!("{}", e)),
+        }
+    });
+}
+```
+
+**Guidelines:**
+
+- `retry_flaky(max_attempts, closure)` retries the closure up to `max_attempts` times with a 2-second sleep between attempts
+- The closure returns `Ok(())` on success or `Err(message)` on failure
+- Failed attempts emit `[retry_flaky]` log lines for CI visibility
+- Only use for tests with a known race condition — do not mask real bugs with retries
+- If a test needs more than 3 retries, the underlying issue should be fixed instead
 
 ## Future Additions
 

@@ -65,6 +65,25 @@ impl SipiServer {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
+        // Coverage support: when sipi is built with --coverage (gcov/llvm-cov),
+        // .gcda paths are embedded in the binary at compile time.
+        //
+        // CI (nix-clang): paths are absolute (/home/runner/.../build/CMakeFiles/...).
+        // The gcda files write to the correct location regardless of cwd.
+        // Do NOT set GCOV_PREFIX — it mangles absolute paths.
+        //
+        // Local (zig): paths are relative (CMakeFiles/...). When the test harness
+        // changes cwd to test/_test_data/, gcda files would land there instead of
+        // in build/. GCOV_PREFIX redirects them to the build dir.
+        let build_dir = find_sipi_bin()
+            .parent()
+            .expect("sipi binary should be in a build directory")
+            .to_path_buf();
+        if !build_dir.is_absolute() {
+            cmd.env("GCOV_PREFIX", &build_dir)
+                .env("GCOV_PREFIX_STRIP", "0");
+        }
+
         let mut child = cmd.spawn().unwrap_or_else(|e| {
             panic!("Failed to start sipi at {}: {}", sipi_bin, e);
         });
@@ -100,7 +119,9 @@ impl SipiServer {
         let stdout = child.stdout.take().expect("stdout captured");
         let stdout_buf = Arc::new(Mutex::new(String::new()));
         let stdout_buf_clone = Arc::clone(&stdout_buf);
-        let ready_signal = "Server listening on SSL port";
+        let ready_signal_ssl = "Server listening on SSL port";
+        let ready_signal_http = "Server listening on HTTP port";
+        let ready_signal_no_ssl = "SSL port";// "SSL port N bind failed" also indicates startup complete
         let (tx, rx) = std::sync::mpsc::channel();
 
         std::thread::spawn(move || {
@@ -116,7 +137,8 @@ impl SipiServer {
                                 captured.drain(..drain);
                             }
                         }
-                        if l.contains(ready_signal) {
+                        // Detect readiness: SSL port listening, HTTP-only fallback, or SSL bind failure
+                        if l.contains(ready_signal_ssl) || l.contains(ready_signal_no_ssl) {
                             let _ = tx.send(());
                         }
                     }
@@ -251,6 +273,11 @@ impl SipiServer {
         self.child.id()
     }
 
+    /// Check if the server process has exited. Returns the exit status if so.
+    pub fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>> {
+        self.child.try_wait()
+    }
+
     /// Gracefully stop the server via SIGTERM.
     pub fn stop(&mut self) {
         let pid = Pid::from_raw(i32::try_from(self.child.id()).expect("PID overflows i32"));
@@ -328,4 +355,37 @@ pub fn http_client() -> reqwest::blocking::Client {
         .timeout(Duration::from_secs(30))
         .build()
         .expect("Failed to build HTTP client")
+}
+
+/// Retry a flaky test up to `max_attempts` times.
+///
+/// The closure should return `Ok(())` on success or `Err(message)` on failure.
+/// Between attempts, sleeps for 2 seconds. Panics if all attempts fail.
+///
+/// Use this for tests that are inherently racy (e.g., depend on the server
+/// flushing a file to disk before the GET arrives).
+pub fn retry_flaky<F>(max_attempts: u32, f: F)
+where
+    F: Fn() -> Result<(), String>,
+{
+    let mut last_err = String::new();
+    for attempt in 1..=max_attempts {
+        match f() {
+            Ok(()) => return,
+            Err(e) => {
+                last_err = e;
+                if attempt < max_attempts {
+                    eprintln!(
+                        "[retry_flaky] attempt {}/{} failed: {}",
+                        attempt, max_attempts, last_err
+                    );
+                    std::thread::sleep(Duration::from_secs(2));
+                }
+            }
+        }
+    }
+    panic!(
+        "Test failed after {} attempts. Last error: {}",
+        max_attempts, last_err
+    );
 }

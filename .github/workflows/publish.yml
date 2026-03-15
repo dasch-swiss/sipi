@@ -38,7 +38,7 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       - name: Expose GitHub Actions cache variables
-        uses: actions/github-script@v8
+        uses: actions/github-script@v7
         with:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env['ACTIONS_CACHE_URL'] || '');
@@ -220,7 +220,7 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       - name: Expose GitHub Actions cache variables
-        uses: actions/github-script@v8
+        uses: actions/github-script@v7
         with:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env['ACTIONS_CACHE_URL'] || '');
@@ -276,7 +276,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [publish-docker]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: docker/login-action@v3
@@ -291,7 +291,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -343,12 +343,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: [manifest, publish-static-release]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - run: |
           echo "RELEASE_VERSION=$(git describe --tag --dirty --abbrev=7)" >> $GITHUB_ENV
-      - uses: getsentry/action-release@v3
+      - uses: getsentry/action-release@v1
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
@@ -360,7 +360,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [release-gate]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       - name: Remove LFS hooks (not needed for docs deploy)
         run: rm -f .git/hooks/pre-push
       - uses: mhausenblas/mkdocs-deploy-gh-pages@master

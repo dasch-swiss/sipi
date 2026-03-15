@@ -69,6 +69,7 @@ endif()
 # Excludes src/sipi.cpp (has main()) and shttps/Shttp.cpp (manual test program)
 set(SIPI_TESTABLE_SRCS
     ${CMAKE_SOURCE_DIR}/src/SipiConf.cpp
+    ${CMAKE_SOURCE_DIR}/src/SipiRateLimiter.cpp
     ${CMAKE_SOURCE_DIR}/src/SipiError.cpp
     ${CMAKE_SOURCE_DIR}/src/metadata/SipiIcc.cpp
     ${CMAKE_SOURCE_DIR}/src/metadata/SipiXmp.cpp
