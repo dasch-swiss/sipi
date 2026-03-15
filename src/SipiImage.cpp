@@ -1442,10 +1442,14 @@ void SipiImage::add_watermark(const std::string &wmfilename)
         for (size_t k = 0; k < nc; k++) {
           if (!(abs(wm_i - wm_nx / 2.) < wm_nx / 2. && abs(wm_j - wm_ny / 2.) < wm_ny / 2.)) continue;
 
+          // Map channel index into watermark's channel range to prevent OOB
+          // when image has more channels than watermark (e.g., 3-ch CIELab + 1-ch grayscale wm)
+          size_t wm_k = k % static_cast<size_t>(wm_nc);
+
           double wm_alpha = wm_nc == 4 ? bilinn(wmbuf, wm_nx, wm_ny, wm_i, wm_j, 3, wm_nc) : 1;
           double wm_alpha_weak = wm_alpha / 255.0 * wm_strength;
 
-          double wm_color = bilinn(wmbuf, wm_nx, wm_ny, wm_i, wm_j, k, wm_nc) / 255.0;
+          double wm_color = bilinn(wmbuf, wm_nx, wm_ny, wm_i, wm_j, wm_k, wm_nc) / 255.0;
           double color = (buf[nc * (j * nx + i) + k] / 255.);
           double blend = color * (1.0 - wm_alpha_weak) + wm_color * wm_alpha_weak;
           buf[nc * (j * nx + i) + k] = std::clamp(blend * 255., 0., 255.);
