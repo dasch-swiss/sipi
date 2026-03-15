@@ -99,7 +99,7 @@ jobs:
 
       - name: Save corpus for next run
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-corpus
           retention-days: 30
@@ -132,7 +132,7 @@ jobs:
 
       - name: Upload crash artifacts
         if: failure() && steps.fuzz.outcome == 'failure'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-crashes
           retention-days: 90
