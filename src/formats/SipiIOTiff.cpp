@@ -1192,6 +1192,7 @@ bool SipiIOTiff::read(SipiImage *img,
       ps = 2;
     }
 
+    delete[] img->pixels;// free previous buffer if re-reading into same SipiImage
     auto *inbuf = new uint8_t[ps * roi_w * roi_h * img->nc];
 
     if (img->bps <= 8) {
@@ -1458,7 +1459,12 @@ void SipiIOTiff::write_basic_tags(const SipiImage &img,
     }
   }
   TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, img.nc);
-  if (!img.es.empty()) { TIFFSetField(tif, TIFFTAG_EXTRASAMPLES, img.es.size(), img.es.data()); }
+  if (!img.es.empty()) {
+    // libtiff expects uint16_t* for TIFFTAG_EXTRASAMPLES, not uint8_t*
+    std::vector<uint16_t> es_uint16(img.es.size());
+    for (size_t i = 0; i < img.es.size(); i++) { es_uint16[i] = static_cast<uint16_t>(img.es[i]); }
+    TIFFSetField(tif, TIFFTAG_EXTRASAMPLES, static_cast<uint16_t>(es_uint16.size()), es_uint16.data());
+  }
   TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, img.photo);
 }
 
@@ -1554,7 +1560,12 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
   }
   TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, img->nc);
 
-  if (img->es.size() > 0) { TIFFSetField(tif, TIFFTAG_EXTRASAMPLES, img->es.size(), img->es.data()); }
+  if (img->es.size() > 0) {
+    // libtiff expects uint16_t* for TIFFTAG_EXTRASAMPLES, not uint8_t*
+    std::vector<uint16_t> es_uint16(img->es.size());
+    for (size_t i = 0; i < img->es.size(); i++) { es_uint16[i] = static_cast<uint16_t>(img->es[i]); }
+    TIFFSetField(tif, TIFFTAG_EXTRASAMPLES, static_cast<uint16_t>(es_uint16.size()), es_uint16.data());
+  }
 
   TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, img->photo);
 
