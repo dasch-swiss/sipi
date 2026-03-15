@@ -11,10 +11,11 @@
 1. [Language Standard & Compiler Flags](#1-language-standard--compiler-flags)
 2. [C++23 Features to Adopt](#2-c23-features-to-adopt)
 3. [Core Style Rules](#3-core-style-rules)
-4. [Legacy Code Modernization](#4-legacy-code-modernization)
-5. [Tooling Configuration](#5-tooling-configuration)
-6. [CI Enforcement](#6-ci-enforcement)
-7. [Reference Anchors](#7-reference-anchors)
+4. [C Library Boundary Safety](#4-c-library-boundary-safety)
+5. [Legacy Code Modernization](#5-legacy-code-modernization)
+6. [Tooling Configuration](#6-tooling-configuration)
+7. [CI Enforcement](#7-ci-enforcement)
+8. [Reference Anchors](#8-reference-anchors)
 
 ---
 
@@ -663,7 +664,95 @@ For testing conventions, see [`testing-strategy.md`](testing-strategy.md).
 
 ---
 
-## 4. Legacy Code Modernization
+## 4. C Library Boundary Safety
+
+Sipi wraps several C libraries (libtiff, libpng, libjpeg, Kakadu, lcms2, Lua). These boundaries are where the type system cannot help — mismatched types compile silently and cause undefined behavior at runtime. Follow these rules for all code that calls C library APIs.
+
+### 4.1 Type Width at Variadic C APIs
+
+Variadic C functions (`TIFFSetField`, `TIFFGetField`, `printf`-family) perform **zero type checking** on arguments. The caller must match the exact type the API expects.
+
+```cpp
+// ❌ Silent heap-buffer-overflow — ExtraSamples is uint8_t, libtiff reads uint16_t
+TIFFSetField(tif, TIFFTAG_EXTRASAMPLES, es.size(), es.data());
+
+// ✅ Convert to the type the C API expects
+std::vector<uint16_t> es_u16(es.begin(), es.end());
+TIFFSetField(tif, TIFFTAG_EXTRASAMPLES,
+             static_cast<uint16_t>(es_u16.size()), es_u16.data());
+```
+
+**Rule:** When passing enum values or typed arrays to variadic C functions, always cast to the exact documented type. Add a comment citing the C library documentation.
+
+### 4.2 Ownership of Returned Raw Pointers
+
+When a C++ function returns a raw pointer from `new`/`new[]`, wrap it in RAII immediately at the call site. Do not pass it through multiple function calls before freeing.
+
+```cpp
+// ❌ Leak — caller forgets to delete[], or an exception skips cleanup
+kdu_byte *icc_bytes = (kdu_byte *)icc->iccBytes(icc_len);
+jp2_colour.init(icc_bytes);
+// icc_bytes leaked
+
+// ✅ RAII — freed automatically regardless of control flow
+auto icc_buf = std::unique_ptr<unsigned char[]>(icc->iccBytes(icc_len));
+jp2_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.get()));
+```
+
+**Rule:** Every raw pointer returned from `new`/`new[]` must be wrapped in `std::unique_ptr` within the same statement or the next line. If a C API takes ownership (frees the pointer itself), document this with `// ownership transferred to <api>`.
+
+### 4.3 RAII Wrappers for C Resource Handles
+
+C resource handles (`DIR*`, `FILE*`, `TIFF*`, `cmsHPROFILE`, `png_structp`) must use RAII so cleanup happens on all exit paths — including exceptions and early returns.
+
+```cpp
+// ❌ Leak on early return or exception — closedir never reached
+DIR *dirp = opendir(path.c_str());
+while (auto *dp = readdir(dirp)) { ... }
+// closedir(dirp);  ← easy to forget
+
+// ✅ RAII — closes on any exit path
+auto dirp = std::unique_ptr<DIR, decltype(&closedir)>(
+    opendir(path.c_str()), &closedir);
+if (!dirp) throw Error("...");
+while (auto *dp = readdir(dirp.get())) { ... }
+// closedir called automatically
+```
+
+For handles where the deleter is complex or used repeatedly, define a named RAII wrapper:
+
+```cpp
+struct TiffDeleter { void operator()(TIFF *t) const { if (t) TIFFClose(t); } };
+using TiffHandle = std::unique_ptr<TIFF, TiffDeleter>;
+
+TiffHandle tif(TIFFOpen(path.c_str(), "r"));
+```
+
+### 4.4 Multi-Buffer Dimension Consistency
+
+When operating on two image buffers simultaneously (e.g., watermark blending, image subtraction, compositing), every indexing expression must use dimensions from the **buffer being indexed**, not from the other buffer.
+
+```cpp
+// ❌ OOB — k iterates image channels, but indexes into watermark with fewer channels
+for (size_t k = 0; k < nc; k++) {                    // nc = image channels (3)
+    wm_color = bilinn(wmbuf, wm_nx, wm_ny, x, y, k, wm_nc);  // wm_nc = 1 → OOB when k≥1
+}
+
+// ✅ Clamp channel index to the target buffer's channel count
+for (size_t k = 0; k < nc; k++) {
+    size_t wm_k = std::min(k, static_cast<size_t>(wm_nc - 1));
+    wm_color = bilinn(wmbuf, wm_nx, wm_ny, x, y, wm_k, wm_nc);
+}
+```
+
+**Rule:** At every buffer indexing expression, verify that:
+1. The spatial coordinates (`x`, `y`) are bounded by the buffer's width/height
+2. The channel index (`c`) satisfies `c < n` where `n` is the buffer's channel count
+3. The `POSITION(x, y, c, n)` macro arguments come from the same buffer
+
+---
+
+## 5. Legacy Code Modernization
 
 Apply in priority order. Many are automatable with clang-tidy `--fix`.
 
@@ -689,7 +778,7 @@ Apply in priority order. Many are automatable with clang-tidy `--fix`.
 
 ---
 
-## 5. Tooling Configuration
+## 6. Tooling Configuration
 
 ### `.clang-format`
 
@@ -851,7 +940,7 @@ endif()
 
 ---
 
-## 6. CI Enforcement
+## 7. CI Enforcement
 
 ### GitHub Actions
 
@@ -902,7 +991,7 @@ jobs:
 
 ---
 
-## 7. Reference Anchors
+## 8. Reference Anchors
 
 | Resource | Notes |
 |---|---|
