@@ -695,7 +695,10 @@ bool SipiIOJpeg::read(SipiImage *img,
     }
     marker = marker->next;
   }
-  if (icc_buffer != nullptr) { img->icc = std::make_shared<SipiIcc>(icc_buffer, icc_buffer_len); }
+  if (icc_buffer != nullptr) {
+    img->icc = std::make_shared<SipiIcc>(icc_buffer, icc_buffer_len);
+    free(icc_buffer);// SipiIcc constructor copies the data
+  }
 
   try {
     jpeg_start_decompress(&cinfo);
@@ -746,6 +749,7 @@ bool SipiIOJpeg::read(SipiImage *img,
   }
   int sll = cinfo.output_components * cinfo.output_width * sizeof(uint8);
 
+  delete[] img->pixels;// free previous buffer if re-reading into same SipiImage
   img->pixels = new byte[img->ny * sll];
 
   try {
