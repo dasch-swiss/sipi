@@ -1,33 +1,37 @@
-# Nightly sanitizer build: ASan + UBSan on unit tests and e2e suite.
+# Sanitizer build: ASan + UBSan on unit tests and e2e suite.
 # Catches memory errors (buffer overflow, use-after-free, leaks) and
 # undefined behavior that functional tests miss.
 #
-# Runs on schedule (nightly) and on-demand via workflow_dispatch.
-# Uses a separate build directory (build-sanitized/) with Clang.
+# Runs on every PR that touches C++/build files. This is a merge gate —
+# sanitizer findings fail the PR check.
 #
-# On findings: uploads report artifacts and opens a GitHub issue
-# so the team gets notified (skips if an open issue already exists).
+# Also available on-demand via workflow_dispatch.
 
 permissions:
   contents: read
-  issues: write
 
 on:
-  schedule:
-    # Run at 03:00 UTC every night (after fuzz at 02:00)
-    - cron: '0 3 * * *'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'shttps/**'
+      - 'include/**'
+      - 'test/**'
+      - 'CMakeLists.txt'
+      - 'flake.nix'
+      - 'flake.lock'
   workflow_dispatch:
 
 name: sanitizer
 
 concurrency:
-  group: sanitizer
-  cancel-in-progress: false
+  group: sanitizer-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   sanitizer:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 30
     name: asan-ubsan / amd64
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
@@ -50,10 +54,9 @@ jobs:
             develop --command bash -c "make nix-build-sanitized"
 
       - name: Run unit tests under sanitizers
-        id: unit-tests
-        continue-on-error: true
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=0:log_path=/tmp/asan-unit
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.lsan_suppressions.txt
         run: |
           nix \
             --extra-experimental-features "nix-command flakes" \
@@ -61,10 +64,9 @@ jobs:
             develop --command bash -c "cd build-sanitized && ctest --output-on-failure"
 
       - name: Run e2e tests under sanitizers
-        id: e2e-tests
-        continue-on-error: true
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=0:log_path=/tmp/asan-e2e
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.lsan_suppressions.txt
         run: |
           nix \
             --extra-experimental-features "nix-command flakes" \
@@ -72,72 +74,34 @@ jobs:
             develop --command bash -c \
               "cd test/e2e-rust && SIPI_BIN=\$PWD/../../build-sanitized/sipi cargo test -- --test-threads=1"
 
-      - name: Collect sanitizer reports
-        id: collect
+      - name: Check for sanitizer findings
         if: always()
-        env:
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          mkdir -p sanitizer-reports
           HAS_FINDINGS=false
-          # Collect any ASan log files
           for f in /tmp/asan-unit.* /tmp/asan-e2e.*; do
-            [ -f "$f" ] && cp "$f" sanitizer-reports/ && HAS_FINDINGS=true || true
+            [ -f "$f" ] && HAS_FINDINGS=true && break || true
           done
-          echo "has_findings=$HAS_FINDINGS" >> "$GITHUB_OUTPUT"
-          # Summary
           if [ "$HAS_FINDINGS" = "true" ]; then
-            echo "## Sanitizer findings ($(date +%Y-%m-%d))" > sanitizer-reports/summary.md
-            echo "" >> sanitizer-reports/summary.md
-            echo "**Workflow run:** $RUN_URL" >> sanitizer-reports/summary.md
-            echo "" >> sanitizer-reports/summary.md
-            # Extract unique SUMMARY lines for the issue body
-            echo "### Unique findings" >> sanitizer-reports/summary.md
-            echo '```' >> sanitizer-reports/summary.md
-            grep -h "SUMMARY:" sanitizer-reports/asan-* 2>/dev/null | sort -u >> sanitizer-reports/summary.md || true
-            echo '```' >> sanitizer-reports/summary.md
-            echo "" >> sanitizer-reports/summary.md
-            # Full details per log file
-            for f in sanitizer-reports/asan-*; do
+            echo "::error::Sanitizer findings detected — PR cannot merge with memory safety issues"
+            echo ""
+            echo "=== Unique findings ==="
+            grep -h "SUMMARY:" /tmp/asan-unit.* /tmp/asan-e2e.* 2>/dev/null | sort -u || true
+            echo ""
+            echo "=== Full reports ==="
+            for f in /tmp/asan-unit.* /tmp/asan-e2e.*; do
               [ -f "$f" ] || continue
-              echo "### $(basename "$f")" >> sanitizer-reports/summary.md
-              echo '<details><summary>Full report</summary>' >> sanitizer-reports/summary.md
-              echo '' >> sanitizer-reports/summary.md
-              echo '```' >> sanitizer-reports/summary.md
-              head -100 "$f" >> sanitizer-reports/summary.md
-              echo '```' >> sanitizer-reports/summary.md
-              echo '</details>' >> sanitizer-reports/summary.md
-              echo "" >> sanitizer-reports/summary.md
+              echo "--- $(basename "$f") ---"
+              cat "$f"
+              echo ""
             done
-            echo "::warning::Sanitizer findings detected — see artifacts"
-          else
-            echo "No sanitizer findings." > sanitizer-reports/summary.md
-            echo "All tests passed cleanly under ASan + UBSan."
+            exit 1
           fi
+          echo "No sanitizer findings. All tests passed cleanly under ASan + UBSan."
 
       - name: Upload sanitizer reports
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: sanitizer-reports
           retention-days: 30
-          path: sanitizer-reports/
-
-      - name: Open GitHub issue for sanitizer findings
-        if: always() && steps.collect.outputs.has_findings == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          # Skip if an open sanitizer issue already exists
-          EXISTING=$(gh issue list --label "sanitizer" --state open --limit 1 --json number --jq '.[0].number // empty')
-          if [ -n "$EXISTING" ]; then
-            echo "Open sanitizer issue #$EXISTING already exists — adding comment instead"
-            gh issue comment "$EXISTING" \
-              --body "Nightly sanitizer run $(date +%Y-%m-%d) still has findings. [See run]($RUN_URL)"
-            exit 0
-          fi
-          gh issue create \
-            --title "Sanitizer: ASan/UBSan findings ($(date +%Y-%m-%d))" \
-            --label "bug,sanitizer" \
-            --body-file sanitizer-reports/summary.md
+          path: /tmp/asan-*

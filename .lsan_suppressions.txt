@@ -1,0 +1,6 @@
+# LeakSanitizer suppressions for known third-party library leaks.
+# These are process-exit leaks from embedded Lua VM state that is
+# not explicitly closed on server shutdown. Not per-request leaks.
+leak:luaM_realloc_
+leak:luaL_openlibs
+leak:luaopen_

@@ -18,6 +18,16 @@
 - Temporary buffers use RAII (`std::unique_ptr<byte[]>`) for exception safety
 - Move constructors and move assignment operators marked `noexcept`
 
+### C library boundary safety (FFI)
+- **Type width:** C library APIs often expect specific integer widths (`uint16_t`, `uint32_t`). When passing C++ enum values or vectors to C functions, verify the underlying type matches what the C API expects. Example: libtiff's `TIFFSetField(TIFFTAG_EXTRASAMPLES, ...)` expects `uint16_t*`, not `uint8_t*` — passing a `vector<uint8_t>` causes a heap-buffer-overflow via `memcpy`
+- **Ownership handoff:** When calling C++ functions that return raw `new[]` pointers (e.g., `SipiIcc::iccBytes(len)`), the caller **must** `delete[]` after use. If a C library takes ownership, document it. Prefer wrapping in `std::unique_ptr<T[]>` immediately after receiving the pointer
+- **RAII wrappers for C handles:** All C resource handles (`DIR*`, `FILE*`, `TIFF*`, `cmsHPROFILE`) must be wrapped in RAII — either `std::unique_ptr` with a custom deleter or a dedicated scope guard. Never rely on manual cleanup after a loop or before early returns
+- **Variadic C functions:** `TIFFSetField`, `TIFFGetField`, and similar variadic APIs perform no type checking. Mismatched argument types compile silently and cause UB at runtime. Always cast arguments to the exact type the API documents
+
+### Multi-buffer dimension safety
+- When operating across two image buffers (e.g., watermark + target image), verify that loop bounds match the buffer being indexed — especially channel count (`nc`), width (`nx`), and height (`ny`). A loop iterating `k < image.nc` must not index into a watermark buffer with fewer channels
+- The `POSITION(x, y, c, n)` macro encodes `n * (y * width + x) + c` — if `c >= n`, the access reads past the pixel boundary into adjacent data. Assert `c < n` at call sites or use `std::span` to make bounds explicit
+
 ### Resource exhaustion
 - Large allocations (`new byte[bufsiz]`) wrapped in `try`/`catch` for `std::bad_alloc`
 - Per-request pixel limit checked before expensive image processing
@@ -34,6 +44,7 @@
 - Memory fixes verified under ASan (no leaks, no UB)
 - New HTTP behavior tested in Rust e2e or Hurl (not Python — Python tests are frozen)
 - Tests verify behavior (dimensions, content, structure), not just HTTP status codes
+- **Sanitizer gate:** PRs touching `src/`, `shttps/`, `include/`, or `test/` automatically run the sanitizer CI workflow (`sanitizer.yml`). Zero findings required to merge
 
 ### Metrics
 - New metrics use correct Prometheus types (counter for monotonic, gauge for current state, histogram for distributions)

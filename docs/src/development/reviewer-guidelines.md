@@ -30,8 +30,12 @@ Checklist for human and AI reviewers. Not every item applies to every PR — use
 - [ ] Thread safety: shared data structures accessed under appropriate locks
 - [ ] No raw `new`/`delete` — use smart pointers or RAII
 - [ ] Error paths: resources cleaned up, partial state not left behind
+- [ ] C library calls: argument types match exactly (see [REVIEW.md](../../../REVIEW.md) "C library boundary safety" section)
+- [ ] Multi-buffer operations: loop bounds match the buffer being indexed, not a different buffer's dimensions
+- [ ] C resource handles (`DIR*`, `FILE*`, `TIFF*`) wrapped in RAII — no manual cleanup paths
 - [ ] GoogleTest unit tests added for new logic; existing tests updated if behavior changes
 - [ ] E2E tests added or updated for user-visible behavior changes
+- [ ] Sanitizer CI passes with zero findings for PRs touching `src/`
 
 ## Logging
 
