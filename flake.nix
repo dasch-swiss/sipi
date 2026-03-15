@@ -83,6 +83,9 @@
           # matching Docker (libc++-dev), Zig (bundled libc++), and macOS (system libc++).
           clang = pkgs.mkShell.override {stdenv = pkgs.llvmPackages_19.libcxxStdenv;} {
             name = "sipi";
+            # Disable Nix hardening wrappers so --coverage, ASan, and UBSan
+            # flags pass through to the compiler unmodified.
+            hardeningDisable = ["all"];
 
             shellHook = ''
               export PS1="\\u@\\h | nix-develop> "

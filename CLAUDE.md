@@ -111,6 +111,17 @@ For commit organization rules (how to group commits in PRs) and PR description f
 
 **Code review:** Use [`docs/src/development/reviewer-guidelines.md`](docs/src/development/reviewer-guidelines.md) as the review checklist for all PRs.
 
+## C++ Style Guide
+
+Follow [`docs/src/development/cpp-style-guide.md`](docs/src/development/cpp-style-guide.md) for all new and modified C++ code. Key rules:
+
+- **Ownership:** No raw owning `new`/`delete` — use `std::unique_ptr`, `std::make_unique`, or value semantics
+- **Error handling:** `std::expected<T, E>` for fallible operations, exceptions for truly unrecoverable conditions
+- **Input validation:** Validate all user input at HTTP handler boundaries before any file I/O or header construction
+- **`[[nodiscard]]`:** Apply to all functions where ignoring the return value is a bug
+- **const correctness:** Apply `const` everywhere it is valid
+- **Legacy code:** When modifying existing code, apply modernization opportunistically (see style guide Section 4)
+
 ## Development Notes
 
 **Compiler Requirements:** C++23, Clang >= 15.0 or GCC >= 13.0, CMake >= 3.28

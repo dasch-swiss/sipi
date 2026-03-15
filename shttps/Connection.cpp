@@ -20,11 +20,13 @@
 #include <arpa/inet.h>//inet_addrmktemp
 #include <cstdio>
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/stat.h>
 #include <unistd.h>//write
 
 #include "ChunkReader.h"
 #include "Connection.h"
+#include "SockStream.h"
 #include "Error.h"
 #include "Server.h"// TEMPORARY !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #include "makeunique.h"
@@ -400,6 +402,30 @@ Connection::Connection(Server *server_p,
       request_params = get_params;
     } else {
       _uri = fulluri;
+    }
+
+    // R5/R6/R7: Reject null bytes in any form before handler dispatch.
+    // Layer 1: Reject percent-encoded null bytes (%00, case-insensitive).
+    // The raw URI is NOT URL-decoded here, so %00 exists as literal characters.
+    {
+      string lower_uri(fulluri.size(), '\0');
+      std::transform(fulluri.begin(), fulluri.end(), lower_uri.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+      if (lower_uri.find("%00") != string::npos) {
+        status(BAD_REQUEST);
+        header("Content-Type", "text/plain");
+        *os << "Bad Request: Invalid request";
+        flush();
+        throw INPUT_READ_FAIL;
+      }
+    }
+    // Layer 2: Reject literal null bytes (defense-in-depth).
+    if (fulluri.find('\0') != string::npos) {
+      status(BAD_REQUEST);
+      header("Content-Type", "text/plain");
+      *os << "Bad Request: Invalid request";
+      flush();
+      throw INPUT_READ_FAIL;
     }
 
     process_header();
@@ -839,6 +865,41 @@ Connection::Connection(Server *server_p,
   } else {
     throw Error("Invalid HTTP header!");
   }
+}
+//=============================================================================
+
+bool Connection::peerConnected() const
+{
+  if (os == nullptr) return true;
+  auto *sbuf = dynamic_cast<SockStream *>(os->rdbuf());
+  if (sbuf == nullptr) return true;
+  int fd = sbuf->socket_fd();
+  if (fd < 0) return true;
+
+  // Use POLLRDHUP (Linux 2.6.17+) to detect graceful client disconnect (TCP FIN).
+  // POLLHUP alone only triggers when both read and write are shut down, missing
+  // the common half-close scenario where the client sends FIN but the server
+  // socket is still in CLOSE_WAIT.
+#ifdef POLLRDHUP
+  struct pollfd pfd = { fd, POLLRDHUP, 0 };
+  int ret = poll(&pfd, 1, 0);// non-blocking check
+  if (ret > 0 && (pfd.revents & (POLLHUP | POLLERR | POLLRDHUP))) { return false; }
+#else
+  // macOS: POLLRDHUP not available — fall back to POLLIN + check for EOF.
+  // If the socket is readable with zero bytes, the peer has disconnected.
+  struct pollfd pfd = { fd, POLLIN, 0 };
+  int ret = poll(&pfd, 1, 0);
+  if (ret > 0) {
+    if (pfd.revents & (POLLHUP | POLLERR)) { return false; }
+    if (pfd.revents & POLLIN) {
+      // Peek at available data — zero bytes means EOF (client sent FIN)
+      char buf;
+      ssize_t n = recv(fd, &buf, 1, MSG_PEEK | MSG_DONTWAIT);
+      if (n == 0) { return false; }// EOF — peer disconnected
+    }
+  }
+#endif
+  return true;
 }
 //=============================================================================
 

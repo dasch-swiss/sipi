@@ -11,6 +11,8 @@
 #define __shttp_server_h
 
 
+#include <atomic>
+#include <chrono>
 #include <csignal>
 #include <map>
 #include <mutex>
@@ -189,6 +191,12 @@ private:
   std::map<std::string, RequestHandler> handler[9];// request handlers for the different 9 request methods
   std::map<std::string, void *> handler_data[9];// request handlers for the different 9 request methods
   void *_user_data;//!< Some opaque user data that can be given to the Connection (for use within the handler)
+  unsigned _drain_timeout{30}; //!< Seconds to wait for in-flight requests during shutdown
+
+public:
+  std::atomic<int> _active_connections{0}; //!< Count of in-flight request handlers (public for worker thread access)
+
+private:
   std::string _initscript;
   std::vector<shttps::LuaRoute> _lua_routes;//!< This vector holds the routes that are served by lua scripts
   std::vector<GlobalFunc> lua_globals;
@@ -455,6 +463,9 @@ public:
    * \param[in] User data
    */
   inline void user_data(void *user_data_p) { _user_data = user_data_p; }
+
+  void drain_timeout(unsigned seconds) { _drain_timeout = seconds; }
+  unsigned drain_timeout() const { return _drain_timeout; }
 
   static void debugmsg(const int line, const std::string &msg);
 

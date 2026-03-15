@@ -116,6 +116,14 @@ public:
 
 
   /*!
+   * Returns the underlying socket file descriptor.
+   * For SSL connections, returns the fd from the SSL object.
+   *
+   * \returns Socket file descriptor, or -1 if not available
+   */
+  int socket_fd() const;
+
+  /*!
    * Destructor which frees all the resources, especially the input and output buffer
    */
   ~SockStream();

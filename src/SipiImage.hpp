@@ -163,6 +163,16 @@ public:
   SipiImage(const SipiImage &img_p);
 
   /*!
+   * Move constructor. Transfers ownership of pixel buffer and metadata.
+   */
+  SipiImage(SipiImage &&other) noexcept;
+
+  /*!
+   * Move assignment operator. Transfers ownership of pixel buffer and metadata.
+   */
+  SipiImage &operator=(SipiImage &&other) noexcept;
+
+  /*!
    * Create an empty image with the pixel buffer available, but all pixels set to 0
    *
    * \param[in] nx_p Dimension in x direction
@@ -596,11 +606,11 @@ public:
    * \param[in] lhs left-hand side of "-" operator
    * \param[in] rhs right hand side of "-" operator
    */
-  SipiImage &operator-(const SipiImage &rhs);
+  SipiImage operator-(const SipiImage &rhs) const;
 
   SipiImage &operator+=(const SipiImage &rhs);
 
-  SipiImage &operator+(const SipiImage &rhs);
+  SipiImage operator+(const SipiImage &rhs) const;
 
   bool operator==(const SipiImage &rhs) const;
 

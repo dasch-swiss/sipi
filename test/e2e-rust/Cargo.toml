@@ -17,5 +17,8 @@ proptest = "1"
 rstest = "0.24"
 rand = "0.9"
 
+[features]
+docker = []  # Enable Docker smoke tests (requires daschswiss/sipi:latest image)
+
 [dev-dependencies]
 tempfile = "3"

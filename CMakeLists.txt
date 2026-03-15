@@ -453,6 +453,7 @@ include_directories(
 add_executable(sipi
         ${PROJECT_SOURCE_DIR}/src/sipi.cpp
         ${PROJECT_SOURCE_DIR}/src/SipiConf.cpp include/SipiConf.h
+        ${PROJECT_SOURCE_DIR}/src/SipiRateLimiter.cpp ${PROJECT_SOURCE_DIR}/include/SipiRateLimiter.h
         ${PROJECT_SOURCE_DIR}/src/SipiError.cpp
         ${PROJECT_SOURCE_DIR}/src/SipiError.hpp
         ${PROJECT_SOURCE_DIR}/include/CLI11.hpp
