@@ -189,8 +189,15 @@ sipi = {
     --
     -- loglevel, one of "DEBUG", "INFO", "NOTICE", "WARNING", "ERR", "CRIT", "ALERT", "EMERG"
     --
-    loglevel = "DEBUG"
+    loglevel = "DEBUG",
     --loglevel = "ERR"
+
+    --
+    -- Maximum output pixels (width * height) per IIIF request.
+    -- Requests producing images larger than this are rejected with HTTP 400.
+    -- 0 = unlimited (default). Example: 100000000 = 100 megapixels.
+    --
+    max_pixel_limit = 0
 }
 
 admin = {

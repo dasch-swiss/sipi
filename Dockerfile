@@ -134,6 +134,9 @@ RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
         echo "No supported target architecture selected"; \
     fi
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -sf http://localhost:1024/health || exit 1
+
 ENTRYPOINT [ "/usr/sbin/pid1", "--verbose", "--", "/sipi/sipi" ]
 
 CMD [ "--config=/sipi/config/sipi.config.lua" ]

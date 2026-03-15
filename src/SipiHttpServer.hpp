@@ -13,10 +13,12 @@
 #ifndef _defined_sipihttp_server_h
 #define _defined_sipihttp_server_h
 
+#include <chrono>
 #include <memory>
 #include <string>
 
 #include "SipiCache.h"
+#include "SipiRateLimiter.h"
 #include "iiifparser/SipiQualityFormat.h"
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiRotation.h"
@@ -48,6 +50,10 @@ protected:
   int _jpeg_quality{};
   std::unordered_map<std::string, SipiCompressionParams> _j2k_compression_profiles;
   ScalingQuality _scaling_quality{};
+  size_t _max_pixel_limit{ 0 };//!< max output pixels (w*h) per request, 0 = unlimited
+  std::string _resolved_imgroot;  //!< realpath()-resolved image root, set at startup
+  std::unique_ptr<SipiRateLimiter> _rate_limiter; //!< Per-client rate limiter (nullptr = disabled)
+  std::chrono::steady_clock::time_point _start_time; //!< Server start time for health endpoint
 
 public:
   /*!
@@ -152,6 +158,16 @@ public:
   }
 
   ScalingQuality scaling_quality() const { return _scaling_quality; }
+
+  void max_pixel_limit(size_t v) { _max_pixel_limit = v; }
+  size_t max_pixel_limit() const { return _max_pixel_limit; }
+
+  std::string resolved_imgroot() const { return _resolved_imgroot; }
+
+  void rate_limiter(std::unique_ptr<SipiRateLimiter> rl) { _rate_limiter = std::move(rl); }
+  SipiRateLimiter *rate_limiter() { return _rate_limiter.get(); }
+
+  std::chrono::steady_clock::time_point start_time() const { return _start_time; }
 
   void cache(const std::string &cachedir_p,
     long long max_cache_size_p = -1,

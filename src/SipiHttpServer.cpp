@@ -4,19 +4,23 @@
  */
 
 #include <cassert>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <optional>
 #include <regex>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <sys/stat.h>
 #include <utility>
 #include <vector>
@@ -37,6 +41,8 @@
 #include "Logger.h"
 #include "SipiHttpServer.hpp"
 #include "SipiMetrics.h"
+#include "generated/SipiVersion.h"
+#include "SipiRateLimiter.h"
 #include "SipiSentry.h"
 #include "favicon.h"
 #include "handlers/iiif_handler.hpp"
@@ -102,6 +108,9 @@ static void send_error(Connection &conn_obj, Connection::StatusCodes code, const
   case Connection::SERVICE_UNAVAILABLE:
     http_err_name = "Service Unavailable";
     break;
+  case Connection::TOO_MANY_REQUESTS:
+    http_err_name = "Too Many Requests";
+    break;
   default:
     http_err_name = "Unknown error";
     break;
@@ -159,6 +168,168 @@ static void send_error(Connection &conn_obj, Connection::StatusCodes code, const
  * \param code the HTTP status code to be returned.
  */
 static void send_error(Connection &conn_obj, Connection::StatusCodes code) { send_error(conn_obj, code, ""); }
+
+//=========================================================================
+
+/*!
+ * R1: Check if a decoded string contains path traversal components.
+ *
+ * Checks for ".." as a path component (between '/' delimiters, at start, or at end).
+ * The input should already be URL-decoded. For double-encoded inputs (%252e%252e),
+ * callers should decode once more and re-check.
+ *
+ * \param decoded The URL-decoded string to check.
+ * \return true if traversal components are found.
+ */
+[[nodiscard]] static bool contains_traversal(std::string_view decoded)
+{
+  // Check for ".." as a complete path component
+  if (decoded == "..") { return true; }
+  if (decoded.starts_with("../")) { return true; }
+  if (decoded.ends_with("/..")) { return true; }
+  if (decoded.find("/../") != std::string_view::npos) { return true; }
+
+  // Also check for percent-encoded variants in case the input was not fully decoded.
+  // Case-insensitive check for %2e%2e (single-encoded dot-dot)
+  std::string lower(decoded.size(), '\0');
+  std::transform(decoded.begin(), decoded.end(), lower.begin(),
+    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  if (lower.find("%2e%2e") != std::string::npos) { return true; }
+  // Double-encoded: %252e%252e
+  if (lower.find("%252e%252e") != std::string::npos) { return true; }
+
+  return false;
+}
+
+/// Result of path validation: resolved path, file-not-found, or traversal detected.
+enum class PathValidation { OK, NOT_FOUND, TRAVERSAL };
+
+struct PathValidationResult {
+  PathValidation status;
+  std::string resolved_path;// only valid when status == OK
+};
+
+/*!
+ * R2: Validate that a resolved file path is within the image root directory.
+ *
+ * Resolves the file path via realpath() and verifies it starts with the
+ * resolved imgroot prefix. The imgroot must already be resolved via realpath()
+ * at server startup.
+ *
+ * Returns NOT_FOUND if the file doesn't exist (let caller handle 404),
+ * TRAVERSAL if the resolved path escapes imgroot (caller should return 400),
+ * or OK with the resolved path on success.
+ */
+[[nodiscard]] static PathValidationResult
+validate_resolved_path(std::string_view file_path, std::string_view resolved_imgroot)
+{
+  char resolved[PATH_MAX];
+  if (realpath(std::string(file_path).c_str(), resolved) == nullptr) {
+    // File doesn't exist — not a traversal, let the caller handle 404
+    return { PathValidation::NOT_FOUND, {} };
+  }
+
+  std::string_view resolved_view(resolved);
+  // Verify the resolved path starts with the resolved imgroot
+  if (!resolved_view.starts_with(resolved_imgroot)) {
+    return { PathValidation::TRAVERSAL, {} };
+  }
+  // Ensure the path is either exactly imgroot or continues with '/'
+  // (prevents imgroot="/foo/bar" matching "/foo/barbaz/file")
+  if (resolved_view.size() > resolved_imgroot.size()
+      && resolved_view[resolved_imgroot.size()] != '/') {
+    return { PathValidation::TRAVERSAL, {} };
+  }
+
+  return { PathValidation::OK, std::string(resolved) };
+}
+
+//=========================================================================
+
+/*!
+ * R8: Strip CR, LF, null, and control characters from a string intended for use
+ * in HTTP headers. Preserves non-ASCII bytes (>= 0x80) so that the subsequent
+ * is_ascii check can route to RFC 6266 filename* encoding.
+ */
+[[nodiscard]] static std::string sanitize_header_value(std::string_view input)
+{
+  std::string result;
+  result.reserve(input.size());
+  for (unsigned char c : input) {
+    if (c == '\r' || c == '\n' || c == '\0' || (c < 0x20) || c == 0x7F) {
+      continue;
+    }
+    result += static_cast<char>(c);
+  }
+  return result;
+}
+
+/*!
+ * Check if a string contains only ASCII printable characters.
+ */
+[[nodiscard]] static bool is_ascii(std::string_view s)
+{
+  return std::all_of(s.begin(), s.end(),
+    [](unsigned char c) { return c >= 0x20 && c < 0x7F; });
+}
+
+/*!
+ * R9: Escape '"' and '\' per RFC 2616 quoted-string rules for use in
+ * Content-Disposition filename="..." parameters.
+ */
+[[nodiscard]] static std::string escape_quoted_string(std::string_view input)
+{
+  std::string result;
+  result.reserve(input.size());
+  for (char c : input) {
+    if (c == '"' || c == '\\') {
+      result += '\\';
+    }
+    result += c;
+  }
+  return result;
+}
+
+/*!
+ * R9: Percent-encode a string for use in RFC 6266 filename*=UTF-8''...
+ * Encodes all bytes except unreserved characters (RFC 3986 section 2.3).
+ */
+[[nodiscard]] static std::string percent_encode_rfc6266(std::string_view input)
+{
+  static const char hex[] = "0123456789ABCDEF";
+  std::string result;
+  result.reserve(input.size() * 3);
+  for (unsigned char c : input) {
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+        || c == '-' || c == '.' || c == '_' || c == '~') {
+      result += static_cast<char>(c);
+    } else {
+      result += '%';
+      result += hex[c >> 4];
+      result += hex[c & 0x0F];
+    }
+  }
+  return result;
+}
+
+//=========================================================================
+
+/*!
+ * R25: Resolve client identity for rate limiting.
+ * Priority: X-Forwarded-For (rightmost) > peer IP.
+ */
+static std::string resolve_client_id(Connection &conn_obj)
+{
+  std::string xff = conn_obj.header("X-Forwarded-For");
+  if (!xff.empty()) {
+    auto pos = xff.rfind(',');
+    auto ip = (pos != std::string::npos) ? xff.substr(pos + 1) : xff;
+    // Trim leading whitespace
+    size_t start = ip.find_first_not_of(" \t");
+    return (start != std::string::npos) ? ip.substr(start) : ip;
+  }
+  return conn_obj.peer_ip();
+}
 
 //=========================================================================
 
@@ -411,6 +582,20 @@ static std::unordered_map<std::string, std::string> check_file_access(Connection
   std::string infile;
 
   SipiIdentifier sid = SipiIdentifier(params[iiif_identifier]);
+
+  // R1: Early rejection of path traversal in identifier and prefix
+  const auto decoded_identifier = urldecode(sid.getIdentifier());
+  if (contains_traversal(decoded_identifier)) {
+    log_warn("Path traversal blocked: client=%s identifier=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_identifier].c_str());
+    throw SipiError("Invalid IIIF identifier");
+  }
+  if (prefix_as_path && contains_traversal(urldecode(params[iiif_prefix]))) {
+    log_warn("Path traversal blocked in prefix: client=%s prefix=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_prefix].c_str());
+    throw SipiError("Invalid IIIF identifier");
+  }
+
   std::unordered_map<std::string, std::string> pre_flight_info;
   if (luaserver.luaFunctionExists(iiif_preflight_funcname)) {
     pre_flight_info = call_iiif_preflight(conn_obj,
@@ -426,12 +611,26 @@ static std::unordered_map<std::string, std::string> check_file_access(Connection
     }
     pre_flight_info["type"] = "allow";
   }
+
+  // R2: Validate resolved path is within imgroot (covers Lua paths, prefix paths, and direct paths)
+  auto validated = validate_resolved_path(infile, serv->resolved_imgroot());
+  if (validated.status == PathValidation::TRAVERSAL) {
+    log_warn("Path traversal blocked (realpath): client=%s identifier=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_identifier].c_str());
+    // R3: Error responses contain no internal filesystem paths
+    throw SipiError("Invalid IIIF identifier");
+  }
+  if (validated.status == PathValidation::OK) {
+    infile = validated.resolved_path;
+  }
+  // If NOT_FOUND, keep original infile — access() below will fail with proper error
+
   //
   // test if we have access to the file
   //
   if (access(infile.c_str(), R_OK) != 0) {
-    // test, if file exists
-    throw SipiError("Cannot read image file: " + infile);
+    // R3: Do not leak internal filesystem path in error message
+    throw SipiError("Image file not accessible");
   }
   pre_flight_info["infile"] = infile;
   return pre_flight_info;
@@ -602,9 +801,10 @@ static void serve_redirect(Connection &conn_obj, const std::vector<std::string> 
     redirect += params[iiif_identifier] + "/info.json";
   }
 
-  conn_obj.header("Location", redirect);
+  // R10: Sanitize Location header to prevent CRLF injection
+  conn_obj.header("Location", sanitize_header_value(redirect));
   conn_obj.header("Content-Type", "text/plain");
-  conn_obj << "Redirect to " << redirect;
+  conn_obj << "Redirect to " << sanitize_header_value(redirect);
   log_info("GET: redirect to %s", redirect.c_str());
   conn_obj.flush();
 }
@@ -1080,6 +1280,20 @@ static void serve_file_download(Connection &conn_obj,
   bool prefix_as_path,
   std::vector<std::string> params)
 {
+  // R1: Early rejection of path traversal in identifier and prefix
+  if (contains_traversal(urldecode(params[iiif_identifier]))) {
+    log_warn("Path traversal blocked: client=%s identifier=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_identifier].c_str());
+    send_error(conn_obj, Connection::BAD_REQUEST, "Invalid IIIF identifier");
+    return;
+  }
+  if (prefix_as_path && contains_traversal(urldecode(params[iiif_prefix]))) {
+    log_warn("Path traversal blocked in prefix: client=%s prefix=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_prefix].c_str());
+    send_error(conn_obj, Connection::BAD_REQUEST, "Invalid IIIF identifier");
+    return;
+  }
+
   std::string requested_file;
   if (prefix_as_path && (!params[iiif_prefix].empty())) {
     requested_file = serv->imgroot() + "/" + urldecode(params[iiif_prefix]) + "/" + urldecode(params[iiif_identifier]);
@@ -1103,6 +1317,19 @@ static void serve_file_download(Connection &conn_obj,
       return;
     }
   }
+
+  // R2: Validate resolved path is within imgroot
+  auto validated = validate_resolved_path(requested_file, serv->resolved_imgroot());
+  if (validated.status == PathValidation::TRAVERSAL) {
+    log_warn("Path traversal blocked (realpath): client=%s identifier=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_identifier].c_str());
+    send_error(conn_obj, Connection::BAD_REQUEST, "Invalid IIIF identifier");
+    return;
+  }
+  if (validated.status == PathValidation::OK) {
+    requested_file = validated.resolved_path;
+  }
+
   if (access(requested_file.c_str(), R_OK) == 0) {
     std::string actual_mimetype = shttps::Parsing::getBestFileMimetype(requested_file);
     //
@@ -1160,7 +1387,17 @@ static void serve_file_download(Connection &conn_obj,
       std::stringstream ss;
       ss << "bytes " << start << "-" << end << "/" << fsize;
       conn_obj.header("Content-Range", ss.str());
-      conn_obj.header("Content-Disposition", std::string("inline; filename=") + urldecode(params[iiif_identifier]));
+      // R8/R9: Sanitize identifier for Content-Disposition header
+      {
+        auto safe_name = sanitize_header_value(urldecode(params[iiif_identifier]));
+        if (is_ascii(safe_name)) {
+          auto quoted = escape_quoted_string(safe_name);
+          conn_obj.header("Content-Disposition", "inline; filename=\"" + quoted + "\"");
+        } else {
+          conn_obj.header("Content-Disposition",
+            "inline; filename*=UTF-8''" + percent_encode_rfc6266(safe_name));
+        }
+      }
       conn_obj.header("Content-Transfer-Encoding: binary");
       conn_obj.header("Last-Modified", timebuf);
       conn_obj.sendFile(requested_file, 8192, start, end);
@@ -1197,6 +1434,20 @@ static void serve_iiif(Connection &conn_obj,
   // getting the identifier (which in case of a PDF or multipage TIFF my contain a page id (identifier@pagenum)
   //
   SipiIdentifier sid = urldecode(params[iiif_identifier]);
+
+  // R1: Early rejection of path traversal in identifier and prefix
+  if (contains_traversal(sid.getIdentifier())) {
+    log_warn("Path traversal blocked: client=%s identifier=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_identifier].c_str());
+    send_error(conn_obj, Connection::BAD_REQUEST, "Invalid IIIF identifier");
+    return;
+  }
+  if (prefix_as_path && contains_traversal(urldecode(params[iiif_prefix]))) {
+    log_warn("Path traversal blocked in prefix: client=%s prefix=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_prefix].c_str());
+    send_error(conn_obj, Connection::BAD_REQUEST, "Invalid IIIF identifier");
+    return;
+  }
 
   //
   // getting IIIF parameters
@@ -1265,6 +1516,18 @@ static void serve_iiif(Connection &conn_obj,
     }
   }
 
+  // R2: Validate resolved path is within imgroot
+  auto validated = validate_resolved_path(infile, server->resolved_imgroot());
+  if (validated.status == PathValidation::TRAVERSAL) {
+    log_warn("Path traversal blocked (realpath): client=%s identifier=%s",
+      conn_obj.peer_ip().c_str(), params[iiif_identifier].c_str());
+    send_error(conn_obj, Connection::BAD_REQUEST, "Invalid IIIF identifier");
+    return;
+  }
+  if (validated.status == PathValidation::OK) {
+    infile = validated.resolved_path;
+  }
+
   //
   // determine the mimetype of the file in the SIPI repo
   //
@@ -1277,8 +1540,7 @@ static void serve_iiif(Connection &conn_obj,
   if ((actual_mimetype == "image/jpx") || (actual_mimetype == "image/jp2")) in_format = SipiQualityFormat::JP2;
 
   if (access(infile.c_str(), R_OK) != 0) {
-    // test, if file exists
-    log_info("File %s not found", infile.c_str());
+    // R3: Do not leak internal filesystem path in error message
     send_error(conn_obj, Connection::NOT_FOUND);
     return;
   }
@@ -1329,6 +1591,21 @@ static void serve_iiif(Connection &conn_obj,
   bool tmp_ro{ false };
   try {
     size->get_size(img_w, img_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
+  } catch (Sipi::SipiSizeError &err) {
+    send_error(conn_obj, Connection::BAD_REQUEST, err.to_string());
+    return;
+  } catch (Sipi::SipiError &err) {
+    send_error(conn_obj, Connection::BAD_REQUEST, err);
+    return;
+  }
+
+  // Save requested output dimensions before restricted_size may overwrite them.
+  // restricted_size->get_size() sets tmp_r_w/tmp_r_h to 0 when UNDEFINED (the
+  // common case), which would make the pixel limit check always false.
+  const size_t requested_w = tmp_r_w;
+  const size_t requested_h = tmp_r_h;
+
+  try {
     restricted_size->get_size(img_w, img_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
   } catch (Sipi::SipiSizeError &err) {
     send_error(conn_obj, Connection::BAD_REQUEST, err.to_string());
@@ -1340,6 +1617,62 @@ static void serve_iiif(Connection &conn_obj,
 
   // if restricted size is set and smaller, we use it
   if (!restricted_size->undefined() && (*size > *restricted_size)) { size = restricted_size; }
+
+  // Guard: check output pixel count against max_pixel_limit
+  // Use the saved dimensions from before restricted_size overwrote them.
+  if (server->max_pixel_limit() > 0 && requested_w > 0 && requested_h > 0) {
+    size_t output_pixels = requested_w * requested_h;
+    if (output_pixels > server->max_pixel_limit()) {
+      log_warn("Request rejected: output %zux%zu (%zu pixels) exceeds limit %zu: %s",
+        tmp_r_w, tmp_r_h, output_pixels, server->max_pixel_limit(), uri.c_str());
+      SipiMetrics::instance().image_too_large_total.Increment();
+      send_error(conn_obj,
+        Connection::BAD_REQUEST,
+        "Requested output dimensions too large (" + std::to_string(tmp_r_w) + "x" + std::to_string(tmp_r_h) + ")");
+      return;
+    }
+  }
+
+  // R23-R30: Per-client rate limiting
+  if (server->rate_limiter() != nullptr && requested_w > 0 && requested_h > 0) {
+    size_t request_pixels = requested_w * requested_h;
+    auto client_id = resolve_client_id(conn_obj);
+    auto result = server->rate_limiter()->check_and_record(client_id, request_pixels);
+
+    auto &metrics = SipiMetrics::instance();
+
+    if (result.over_budget) {
+      std::string action = result.allowed ? "shadow_rejected" : "rejected";
+      // Structured log for per-IP detail (Loki queries)
+      log_warn("{\"event\":\"rate_limit_exceeded\",\"client_ip\":\"%s\","
+        "\"pixels_consumed\":%zu,\"budget\":%zu,\"window_seconds\":%u,"
+        "\"action\":\"%s\",\"request_pixels\":%zu,\"path\":\"%s\"}",
+        client_id.c_str(), result.pixels_consumed, result.budget,
+        server->rate_limiter()->mode() == RateLimitMode::MONITOR ? 0u : result.retry_after,
+        action.c_str(), request_pixels, uri.c_str());
+
+      metrics.rate_limit_decisions_total
+        .Add({{"action", action}}).Increment();
+
+      if (!result.allowed) {
+        conn_obj.header("Retry-After", std::to_string(result.retry_after));
+        send_error(conn_obj, Connection::TOO_MANY_REQUESTS,
+          "Rate limit exceeded. Try again in " + std::to_string(result.retry_after) + " seconds.");
+        return;
+      }
+    } else {
+      metrics.rate_limit_decisions_total
+        .Add({{"action", "allowed"}}).Increment();
+    }
+
+    // Near-limit warning (>80% of budget)
+    if (result.pixels_consumed > result.budget * 80 / 100) {
+      metrics.rate_limit_near_limit_total.Increment();
+    }
+
+    metrics.rate_limit_clients_tracked.Set(
+      static_cast<double>(server->rate_limiter()->tracked_clients()));
+  }
 
   std::string cannonical_watermark = watermark.empty() ? "0" : "1";
 
@@ -1463,9 +1796,26 @@ static void serve_iiif(Connection &conn_obj,
     }
   }
 
+  // Guard: check if client is still connected before expensive image loading
+  if (!conn_obj.peerConnected()) {
+    log_info("Client disconnected before image load, aborting: %s", uri.c_str());
+    SipiMetrics::instance().client_disconnected_total.Increment();
+    return;
+  }
+
   Sipi::SipiImage img;
   try {
     img.read(infile, region, size, quality_format.format() == SipiQualityFormat::JPG, server->scaling_quality());
+  } catch (const std::bad_alloc &) {
+    log_err("Memory allocation failed loading %s (%zux%zu)", infile.c_str(), img_w, img_h);
+    SipiMetrics::instance().memory_alloc_failures_total.Increment();
+    ImageContext sentry_ctx;
+    sentry_ctx.input_file = infile;
+    sentry_ctx.file_size_bytes = get_file_size(infile);
+    sentry_ctx.request_uri = uri;
+    capture_image_error("std::bad_alloc during image read", "read", sentry_ctx, SipiMode::Server);
+    send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Insufficient memory to process image");
+    return;
   } catch (const SipiImageError &err) {
     ImageContext sentry_ctx;
     sentry_ctx.input_file = infile;
@@ -1484,8 +1834,18 @@ static void serve_iiif(Connection &conn_obj,
   // now we rotate
   //
   if (mirror || (angle != 0.0)) {
+    if (!conn_obj.peerConnected()) {
+      log_info("Client disconnected before rotate, aborting: %s", uri.c_str());
+      SipiMetrics::instance().client_disconnected_total.Increment();
+      return;
+    }
     try {
       img.rotate(angle, mirror);
+    } catch (const std::bad_alloc &) {
+      log_err("Memory allocation failed during rotate: %s", infile.c_str());
+      SipiMetrics::instance().memory_alloc_failures_total.Increment();
+      send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Insufficient memory to process image");
+      return;
     } catch (Sipi::SipiError &err) {
       ImageContext sentry_ctx;
       sentry_ctx.input_file = infile;
@@ -1499,6 +1859,11 @@ static void serve_iiif(Connection &conn_obj,
   }
 
   if (quality_format.quality() != SipiQualityFormat::DEFAULT) {
+    if (!conn_obj.peerConnected()) {
+      log_info("Client disconnected before color conversion, aborting: %s", uri.c_str());
+      SipiMetrics::instance().client_disconnected_total.Increment();
+      return;
+    }
     switch (quality_format.quality()) {
     case SipiQualityFormat::COLOR:
       img.convertToIcc(SipiIcc(icc_sRGB), 8);
@@ -1520,6 +1885,11 @@ static void serve_iiif(Connection &conn_obj,
   // let's add a watermark if necessary
   //
   if (!watermark.empty()) {
+    if (!conn_obj.peerConnected()) {
+      log_info("Client disconnected before watermark, aborting: %s", uri.c_str());
+      SipiMetrics::instance().client_disconnected_total.Increment();
+      return;
+    }
     try {
       img.add_watermark(watermark);
     } catch (Sipi::SipiError &err) {
@@ -1544,6 +1914,13 @@ static void serve_iiif(Connection &conn_obj,
       return;
     }
     log_info("GET %s: adding watermark", uri.c_str());
+  }
+
+  // Final connection check before writing response
+  if (!conn_obj.peerConnected()) {
+    log_info("Client disconnected before response write, aborting: %s", uri.c_str());
+    SipiMetrics::instance().client_disconnected_total.Increment();
+    return;
   }
 
   img.connection(&conn_obj);
@@ -1724,6 +2101,25 @@ static void iiif_handler(Connection &conn_obj, shttps::LuaServer &luaserver, voi
 
 //=========================================================================
 
+// R31-R33: Health endpoint handler
+static void health_handler(Connection &conn_obj, shttps::LuaServer &, void *user_data, void *)
+{
+  auto *server = static_cast<SipiHttpServer *>(user_data);
+  auto uptime = std::chrono::steady_clock::now() - server->start_time();
+  auto uptime_sec = std::chrono::duration_cast<std::chrono::seconds>(uptime).count();
+
+  std::string json = R"({"status":"ok","version":")" + std::string(VERSION)
+                   + R"(","uptime_seconds":)" + std::to_string(uptime_sec) + "}";
+
+  conn_obj.status(Connection::OK);
+  conn_obj.header("Content-Type", "application/json");
+  conn_obj.setBuffer();
+  conn_obj << json;
+  conn_obj.flush();
+}
+
+//=========================================================================
+
 static void metrics_handler(Connection &conn_obj, shttps::LuaServer &luaserver, void *user_data, void *dummy)
 {
   std::string body = SipiMetrics::instance().serialize();
@@ -1776,11 +2172,21 @@ void SipiHttpServer::run()
 {
   log_info("SipiHttpServer starting ...");
   //
-  // setting the image root
+  // setting the image root — resolve via realpath() for path traversal prevention (R2)
   //
-  log_info("Serving images from %s", _imgroot.c_str());
+  char resolved_root[PATH_MAX];
+  if (realpath(_imgroot.c_str(), resolved_root) == nullptr) {
+    log_err("Cannot resolve imgroot path: %s", _imgroot.c_str());
+    throw SipiError("Cannot resolve imgroot path: " + _imgroot);
+  }
+  _resolved_imgroot = std::string(resolved_root);
+
+  log_info("Serving images from %s (resolved: %s)", _imgroot.c_str(), _resolved_imgroot.c_str());
   log_debug("Salsah prefix: %s", _salsah_prefix.c_str());
 
+  _start_time = std::chrono::steady_clock::now();
+
+  add_route(Connection::GET, "/health", health_handler);
   add_route(Connection::GET, "/metrics", metrics_handler);
   add_route(Connection::GET, "/favicon.ico", favicon_handler);
   add_route(Connection::GET, "/", iiif_handler);
