@@ -26,13 +26,13 @@
 class SipiFilenameHash
 {
 private:
-  const int seed = 137;//!< an arbitrary seed value (no special meaning...)
-  const int numchars = 26;
-  const unsigned int modval = 308915776;// (26^6)
-  const int hash_len = 6;
+  static constexpr int seed = 137;//!< an arbitrary seed value (no special meaning...)
+  static constexpr int numchars = 26;
+  static constexpr unsigned int modval = 308915776;// (26^6)
+  static constexpr int hash_len = 6;
   std::string path;
   std::string name;
-  std::vector<char> *hash;//!< Pointer to a vector of chars
+  std::vector<char> hash;//!< Hash vector (value member, Rule of Zero)
   static int __levels;
 
 public:
@@ -44,25 +44,9 @@ public:
    */
   SipiFilenameHash(const std::string &path_p);
 
-  /*!
-   * Copy constructor (makes deep copy)
-   *
-   * @param other Reference to SipiFilenameHash instance
-   */
-  SipiFilenameHash(const SipiFilenameHash &other);
-
-  /*!
-   * Assignment copy operator (deep copy)
-   *
-   * @param other Reference to SipiFilenameHash instance
-   * @return
-   */
-  SipiFilenameHash &operator=(const SipiFilenameHash &other);
-
-  /*!
-   * Destructor which frees all allocated memory (pointer to vector)
-   */
-  virtual ~SipiFilenameHash();
+  // Rule of Zero: copy, assignment, and destructor are compiler-generated
+  // because all members are value types. path and name are now correctly
+  // copied automatically (R18 fix).
 
   inline static void setLevels(int l) { __levels = l; }
 
