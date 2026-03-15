@@ -27,8 +27,35 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--model claude-opus-4-6"
+          track_progress: "true"
+          include_fix_links: "false"
+          additional_permissions: |
+            actions: read
+          prompt: |
+            When asked to "review" a PR, perform a thorough code review following
+            the project's REVIEW.md checklist. Read REVIEW.md from the repository
+            root first, then review every changed file against each applicable section.
+
+            Post your findings as inline PR review comments on the specific lines
+            where issues are found. Use GitHub's review API to submit a single review
+            with all comments (not individual comments).
+
+            Classify each finding:
+            - 🔴 Request changes: security issues, memory safety violations, heap-buffer-overflow risks, type mismatches at C library boundaries
+            - 🟡 Comment: style violations, missing RAII wrappers, test gaps, documentation gaps
+            - 🟢 Approve: if no issues found
+
+            Pay special attention to the "C library boundary safety (FFI)" and
+            "Multi-buffer dimension safety" sections — these catch the class of
+            bugs that sanitizers find at runtime.
+
+            When reviewing, also check CI status — if the sanitizer workflow failed,
+            include its findings in your review.
+
+            For general "@claude" mentions (not "review"), respond normally.
