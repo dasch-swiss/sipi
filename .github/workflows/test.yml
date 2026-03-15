@@ -70,15 +70,6 @@ jobs:
             --extra-experimental-features "nix-command flakes" \
             --option filter-syscalls false \
             develop --command bash -c "make rust-test-e2e && make hurl-test"
-      - name: Debug gcda files
-        if: ${{ matrix.arch == 'amd64' }}
-        run: |
-          echo "=== gcda files in build/ ==="
-          find build/ -name '*.gcda' 2>/dev/null | head -20 || echo "No gcda files found in build/"
-          echo "=== gcda files anywhere ==="
-          find /home/runner/work/sipi/ -name '*.gcda' 2>/dev/null | head -20 || echo "No gcda files found anywhere"
-          echo "=== gcno files (should exist from build) ==="
-          find build/CMakeFiles/sipi.dir/ -name '*.gcno' 2>/dev/null | head -5 || echo "No gcno files"
       - name: Gather code coverage
         if: ${{ matrix.arch == 'amd64' }}
         run: |
