@@ -1,7 +1,7 @@
 mod common;
 
 use common::{client, server};
-use sipi_e2e::http_client;
+use sipi_e2e::{http_client, test_data_dir, SipiServer};
 
 // =============================================================================
 // Resource limits tests — verify server handles heavy load without crashes
@@ -224,6 +224,95 @@ fn transform_pipeline_memory() {
         .send()
         .expect("server should respond after transform pipeline");
     assert_eq!(health.status().as_u16(), 200);
+}
+
+#[test]
+fn pixel_limit_rejects_oversized_request() {
+    // Start a server with a low max_pixel_limit (10000 = ~100x100)
+    // and verify that a 512x512 request (262144 pixels) is rejected.
+    let test_data = test_data_dir();
+
+    // Write a config with low pixel limit
+    let config_content = r#"sipi = {
+    port = 1024,
+    nthreads = 4,
+    jpeg_quality = 60,
+    scaling_quality = { jpeg = "medium", tiff = "high", png = "high", j2k = "high" },
+    keep_alive = 5,
+    max_post_size = '300M',
+    imgroot = './images',
+    prefix_as_path = true,
+    subdir_levels = 0,
+    subdir_excludes = { "tmp", "thumb" },
+    initscript = './config/sipi.init-knora.lua',
+    cache_dir = './cache',
+    cache_size = '20M',
+    cache_nfiles = 8,
+    scriptdir = './scripts',
+    thumb_size = '!128,128',
+    tmpdir = '/tmp',
+    max_temp_file_age = 86400,
+    knora_path = 'localhost',
+    knora_port = '3434',
+    ssl_port = 1025,
+    ssl_certificate = './certificate/certificate.pem',
+    ssl_key = './certificate/key.pem',
+    jwt_secret = 'UP 4888, nice 4-8-4 steam engine',
+    logfile = "sipi.log",
+    loglevel = "DEBUG",
+    max_pixel_limit = 10000
+}
+
+admin = {
+    user = 'admin',
+    password = 'Sipi-Admin'
+}
+
+fileserver = {
+    docroot = './server',
+    wwwroute = '/server'
+}
+
+routes = {}
+"#;
+
+    let config_path = test_data.join("config/sipi.pixel-limit-test.lua");
+    std::fs::write(&config_path, config_content).expect("write pixel limit config");
+
+    let srv = SipiServer::start("config/sipi.pixel-limit-test.lua", &test_data);
+    let c = http_client();
+
+    // Request full-size image (512x512 = 262144 pixels, exceeds 10000 limit)
+    let resp = c
+        .get(format!(
+            "{}/unit/lena512.jp2/full/max/0/default.jpg",
+            srv.base_url
+        ))
+        .send()
+        .expect("pixel limit request failed");
+
+    assert_eq!(
+        resp.status().as_u16(),
+        400,
+        "request exceeding max_pixel_limit should return 400"
+    );
+
+    // Small request should still work (100x100 = 10000, within limit)
+    let resp = c
+        .get(format!(
+            "{}/unit/lena512.jp2/full/100,100/0/default.jpg",
+            srv.base_url
+        ))
+        .send()
+        .expect("small image request failed");
+
+    assert_eq!(
+        resp.status().as_u16(),
+        200,
+        "request within max_pixel_limit should return 200"
+    );
+
+    let _ = std::fs::remove_file(&config_path);
 }
 
 /// Extract a gauge metric value from Prometheus text format.

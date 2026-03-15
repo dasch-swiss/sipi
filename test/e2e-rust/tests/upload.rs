@@ -2,7 +2,7 @@ mod common;
 
 use common::{client, server};
 use reqwest::blocking::multipart;
-use sipi_e2e::{http_client, test_data_dir, SipiServer};
+use sipi_e2e::{http_client, retry_flaky, test_data_dir, SipiServer};
 use std::path::{Path, PathBuf};
 
 fn test_image_path(relative: &str) -> PathBuf {
@@ -43,21 +43,15 @@ fn upload_tiff_converts_to_jp2() {
     let filename = json["filename"].as_str().expect("no filename in response");
     assert!(!filename.is_empty());
 
-    // Verify the converted file is accessible via IIIF.
-    // Retry a few times — the server may still be flushing the converted file.
+    // Flaky: server may still be flushing the converted file when we GET it.
     let url = format!("{}/unit/{}/full/max/0/default.jpg", srv.base_url, filename);
-    let mut last_err = String::new();
-    for attempt in 0..3 {
-        if attempt > 0 {
-            std::thread::sleep(std::time::Duration::from_millis(500));
-        }
+    retry_flaky(3, || {
         match client().get(&url).send() {
-            Ok(resp) if resp.status().as_u16() == 200 => return,
-            Ok(resp) => last_err = format!("HTTP {}", resp.status()),
-            Err(e) => last_err = format!("{}", e),
+            Ok(resp) if resp.status().as_u16() == 200 => Ok(()),
+            Ok(resp) => Err(format!("HTTP {}", resp.status())),
+            Err(e) => Err(format!("{}", e)),
         }
-    }
-    panic!("GET converted image failed after 3 attempts: {}", last_err);
+    });
 }
 
 #[test]

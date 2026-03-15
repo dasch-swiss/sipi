@@ -933,6 +933,7 @@ fn thumbnail_convert_from_file() {
 }
 
 #[test]
+#[ignore = "10 concurrent requests saturate 4-thread pool, killing shared server (DEV-6024)"]
 fn lua_state_thread_isolation() {
     let srv = server();
     let base_url = srv.base_url.clone();

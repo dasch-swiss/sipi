@@ -1,0 +1,10 @@
+coverage:
+  status:
+    project:
+      default:
+        target: auto  # maintain current coverage level
+        threshold: 5% # allow 5% drop — coverage baseline is volatile during migration
+    patch:
+      default:
+        target: 40%
+        informational: true  # report but don't block PRs
