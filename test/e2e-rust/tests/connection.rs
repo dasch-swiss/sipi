@@ -196,7 +196,6 @@ fn graceful_shutdown() {
 }
 
 #[test]
-#[ignore = "keep-alive timeout test may be slow (needs to wait for timeout expiry)"]
 fn keepalive_timeout_enforcement() {
     // Open a keep-alive connection, idle for longer than keep_alive_timeout,
     // verify server closes it. Config has keep_alive = 5 seconds.

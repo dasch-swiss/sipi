@@ -314,7 +314,6 @@ fn empty_file_upload() {
 }
 
 #[test]
-#[ignore = "10 parallel uploads saturate 4-thread pool, killing server (DEV-6024)"]
 fn concurrent_file_uploads() {
     // Send 10 parallel POST uploads simultaneously, verify all succeed
     // or fail gracefully (no crashes).
