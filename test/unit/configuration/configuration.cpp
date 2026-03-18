@@ -51,7 +51,7 @@ TEST(Configuration, LoadConfigurationFile)
   EXPECT_EQ(sipiConf.getHostname(), "localhost");
   EXPECT_EQ(sipiConf.getPort(), 1024);
   EXPECT_EQ(sipiConf.getSSLPort(), 1025);
-  EXPECT_EQ(sipiConf.getNThreads(), 8);
+  EXPECT_EQ(sipiConf.getNThreads(), 0);// 0 = auto-detect from CPU cores
   EXPECT_EQ(sipiConf.getJpegQuality(), 60);
   EXPECT_EQ(sipiConf.getKeepAlive(), 5);
   EXPECT_EQ(sipiConf.getMaxPostSize(), 300 * 1024 * 1024);

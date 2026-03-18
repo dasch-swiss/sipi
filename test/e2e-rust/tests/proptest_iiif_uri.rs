@@ -103,9 +103,7 @@ fn arbitrary_uri_segment() -> impl Strategy<Value = String> {
 // ---------------------------------------------------------------------------
 
 proptest! {
-    // Reduced from 64 to 8 cases — 64 sequential requests can exhaust
-    // the 4-thread pool on slow arm64 CI runners (DEV-6024)
-    #![proptest_config(ProptestConfig::with_cases(8))]
+    #![proptest_config(ProptestConfig::with_cases(64))]
 
     /// Any structurally valid IIIF request should return a known HTTP status
     /// (200, 400, 404, 500, 501) — never cause a connection reset or timeout.
@@ -125,15 +123,16 @@ proptest! {
 
         let resp = client()
             .get(&url)
-            .timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(60))
             .send();
 
         match resp {
             Ok(r) => {
                 let status = r.status().as_u16();
-                // Server should respond with a valid HTTP status, not hang
+                // Server should respond with a valid HTTP status, not hang.
+                // 503 is acceptable — it means queue backpressure (all threads busy).
                 prop_assert!(
-                    [200, 400, 404, 500, 501].contains(&status),
+                    [200, 400, 404, 500, 501, 503].contains(&status),
                     "Unexpected status {} for URL: {}",
                     status,
                     url
@@ -168,7 +167,7 @@ proptest! {
 
         let resp = client()
             .get(&url)
-            .timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(60))
             .send();
 
         match resp {

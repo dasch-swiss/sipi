@@ -184,7 +184,6 @@ fn lua_read_write() {
 }
 
 #[test]
-#[ignore = "10 concurrent requests saturate 4-thread pool, deadlocking shared server (DEV-6024)"]
 fn concurrent_requests() {
     // Python: test_concurrency — verify sipi handles parallel image requests
     let srv = server();
@@ -933,7 +932,6 @@ fn thumbnail_convert_from_file() {
 }
 
 #[test]
-#[ignore = "10 concurrent requests saturate 4-thread pool, killing shared server (DEV-6024)"]
 fn lua_state_thread_isolation() {
     let srv = server();
     let base_url = srv.base_url.clone();

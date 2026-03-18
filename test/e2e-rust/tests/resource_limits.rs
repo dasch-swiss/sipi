@@ -8,7 +8,6 @@ use sipi_e2e::{http_client, test_data_dir, SipiServer};
 // =============================================================================
 
 #[test]
-#[ignore = "sends 100+ requests sequentially — slow in CI"]
 fn sustained_load_memory_growth() {
     // Send 100+ sequential requests for large images, check that /metrics
     // doesn't show unbounded growth in cache or memory.
@@ -84,7 +83,6 @@ fn sustained_load_memory_growth() {
 }
 
 #[test]
-#[ignore = "4 concurrent full-size decodes saturate CI thread pool — run locally"]
 fn concurrent_large_image_decode() {
     // Send nthreads (4) simultaneous requests for the largest test image,
     // verify all succeed and server remains responsive.
@@ -151,7 +149,6 @@ fn concurrent_large_image_decode() {
 }
 
 #[test]
-#[ignore = "full transform pipeline times out on slow CI hardware — run locally"]
 fn transform_pipeline_memory() {
     // Request large image with region+size+rotation+quality transforms,
     // exercising the worst-case memory path (multiple intermediate buffers).

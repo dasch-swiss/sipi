@@ -38,6 +38,8 @@ sipi = {
     -- Number of threads to use
     --
     nthreads = 4,
+    max_waiting_connections = 8, -- explicit: 2 * nthreads for deterministic e2e tests
+    queue_timeout = 30, -- generous timeout for slow CI
 
     --
     -- SIPI is using libjpeg to generate the JPEG images. libjpeg requires a quality value which
