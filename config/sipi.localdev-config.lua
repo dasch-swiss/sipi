@@ -15,7 +15,7 @@
 sipi = {
     hostname = 'localhost',
     port = 1024,
-    nthreads = 4,
+    nthreads = 0, -- auto-detect from CPU cores
     keep_alive = 5,
 
     -- Use bundled test images so IIIF requests work immediately

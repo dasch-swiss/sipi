@@ -46,7 +46,7 @@ sipi = {
     --
     -- Number of threads to use
     --
-    nthreads = 8,
+    nthreads = 0, -- auto-detect from CPU cores (container-aware)
 
     --
     -- SIPI is using libjpeg to generate the JPEG images. libjpeg requires a quality value which
