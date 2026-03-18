@@ -102,7 +102,7 @@ SipiConf::SipiConf(shttps::LuaServer &luacfg)
 
   keep_alive = luacfg.configInteger("sipi", "keep_alive", 20);
   thumb_size = luacfg.configString("sipi", "thumb_size", "!128,128");
-  n_threads = luacfg.configInteger("sipi", "nthreads", 2 * std::thread::hardware_concurrency());
+  n_threads = luacfg.configInteger("sipi", "nthreads", 0);// 0 = auto-detect from CPU cores
   std::string max_post_size_str = luacfg.configString("sipi", "max_post_size", "0");
   long long parsed_post_size = parseSizeString(max_post_size_str);
   if (parsed_post_size < 0) parsed_post_size = 0;
