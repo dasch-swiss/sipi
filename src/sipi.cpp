@@ -598,6 +598,14 @@ int main(int argc, char *argv[])
   sipiopt.add_option("-t,--nthreads", optNThreads, "Number of threads for SIPI server (0 = auto-detect from CPU cores)")
     ->envname("SIPI_NTHREADS");
 
+  size_t optMaxWaiting = 0;// 0 = 2*nthreads
+  sipiopt.add_option("--max-waiting", optMaxWaiting, "Max waiting connections before 503 (0 = 2*nthreads)")
+    ->envname("SIPI_MAX_WAITING");
+
+  unsigned int optQueueTimeout = 10;
+  sipiopt.add_option("--queue-timeout", optQueueTimeout, "Max seconds a request waits in queue before 503")
+    ->envname("SIPI_QUEUE_TIMEOUT");
+
   std::string optMaxPostSize = "300M";
   sipiopt
     .add_option("--maxpost", optMaxPostSize, "A string indicating the maximal size of a POST request, e.g. '300M'.")
@@ -1159,8 +1167,12 @@ int main(int argc, char *argv[])
 
       if (!config_loaded) {
         sipiConf.setNThreads(optNThreads);
+        sipiConf.setMaxWaitingConnections(optMaxWaiting);
+        sipiConf.setQueueTimeout(optQueueTimeout);
       } else {
         if (!sipiopt.get_option("--nthreads")->empty()) sipiConf.setNThreads(optNThreads);
+        if (!sipiopt.get_option("--max-waiting")->empty()) sipiConf.setMaxWaitingConnections(optMaxWaiting);
+        if (!sipiopt.get_option("--queue-timeout")->empty()) sipiConf.setQueueTimeout(optQueueTimeout);
       }
 
       size_t l = optMaxPostSize.length();
@@ -1522,6 +1534,8 @@ int main(int argc, char *argv[])
       server.imgroot(sipiConf.getImgRoot());
       server.initscript(sipiConf.getInitScript());
       server.keep_alive_timeout(sipiConf.getKeepAlive());
+      server.max_waiting_connections(sipiConf.getMaxWaitingConnections());
+      server.queue_timeout(sipiConf.getQueueTimeout());
 
       //
       // now we set the routes for the normal HTTP server file handling

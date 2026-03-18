@@ -40,7 +40,11 @@ public:
   prometheus::Family<prometheus::Counter> &rate_limit_decisions_total;
   prometheus::Counter &rate_limit_near_limit_total;
 
+  // Queue counters
+  prometheus::Counter &rejected_connections_total;
+
   // Gauges
+  prometheus::Gauge &waiting_connections;
   prometheus::Gauge &cache_size_bytes;
   prometheus::Gauge &cache_files;
   prometheus::Gauge &cache_size_limit_bytes;

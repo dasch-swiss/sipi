@@ -49,6 +49,18 @@ sipi = {
     nthreads = 0, -- auto-detect from CPU cores (container-aware)
 
     --
+    -- Maximum number of connections waiting in queue when all threads are busy.
+    -- When the queue is full, new connections get HTTP 503 with Retry-After: 5.
+    -- 0 = 2 * nthreads (auto-scaled).
+    --
+    max_waiting_connections = 0,
+
+    --
+    -- Maximum seconds a request may wait in the queue before being rejected with HTTP 503.
+    --
+    queue_timeout = 10,
+
+    --
     -- SIPI is using libjpeg to generate the JPEG images. libjpeg requires a quality value which
     -- corresponds to the compression rate. 100 is (almost) no compression and best quality, 0
     -- would be full compression and no quality. Reasonable values are between 30 and 95...

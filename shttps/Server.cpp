@@ -656,7 +656,8 @@ static int close_socket(const SocketControl::SocketInfo &socket_info)
 {
   if (socket_info.ssl_sid != nullptr) {
     int sstat;
-    while ((sstat = SSL_shutdown(socket_info.ssl_sid)) == 0)
+    int attempts = 0;
+    while ((sstat = SSL_shutdown(socket_info.ssl_sid)) == 0 && ++attempts < 3)
       ;
     if (sstat < 0) {
       const auto loc = std::source_location::current();
@@ -860,8 +861,8 @@ SocketControl::SocketInfo Server::accept_connection(int sock, bool ssl)
     } catch (SSLError &err) {
       log_err("%s", err.to_string().c_str());
       int sstat;
-
-      while ((sstat = SSL_shutdown(cSSL)) == 0)
+      int ssl_attempts = 0;
+      while ((sstat = SSL_shutdown(cSSL)) == 0 && ++ssl_attempts < 3)
         ;
 
       if (sstat < 0) { log_warn("SSL socket error: shutdown (2) of socket failed: %d", SSL_get_error(cSSL, sstat)); }
@@ -907,6 +908,13 @@ void Server::run()
   ThreadControl thread_control(_nthreads, socket_request_processor, this);
   SocketControl socket_control(thread_control);
 
+  // Configure queue limits
+  size_t max_waiting = _max_waiting_connections;
+  if (max_waiting == 0) max_waiting = 2 * _nthreads;// default: 2x thread count
+  socket_control.set_max_waiting_connections(max_waiting);
+  socket_control.set_queue_timeout(_queue_timeout);
+  log_info("Queue limits: max_waiting=%zu, queue_timeout=%ds", max_waiting, _queue_timeout);
+
   //
   // here we are adding the lua routes.
   //
@@ -940,6 +948,24 @@ void Server::run()
   socket_control.add_http_socket(_sockfd);// [1] -> normal socket we are listening on
   if (_ssl_port > 0) { socket_control.add_ssl_socket(_ssl_sockfd); }
 
+  // 503 rejection helper — sends response before closing, handles both HTTP and SSL sockets
+  static constexpr std::string_view HTTP_503_RESPONSE =
+    "HTTP/1.1 503 Service Unavailable\r\n"
+    "Content-Length: 0\r\n"
+    "Retry-After: 5\r\n"
+    "Connection: close\r\n\r\n";
+
+  auto reject_with_503 = [](const SocketControl::SocketInfo &si) {
+    if (si.ssl_sid != nullptr) {
+      (void)SSL_write(si.ssl_sid, HTTP_503_RESPONSE.data(), static_cast<int>(HTTP_503_RESPONSE.size()));
+    } else {
+      (void)::write(si.sid, HTTP_503_RESPONSE.data(), HTTP_503_RESPONSE.size());
+    }
+    close_socket(si);
+  };
+
+  auto last_sweep = std::chrono::steady_clock::now();
+
   running = true;
   while (running) {
     //
@@ -957,12 +983,40 @@ void Server::run()
     const int snap_ssl = socket_control.get_ssl_socket_id();
     const int snap_dyn_base = socket_control.get_dyn_socket_base();
 
+    // Use finite timeout (5s) to enable periodic queue sweep and keep-alive enforcement
     int nsocks;
-    if ((nsocks = poll(sockets, sockets_size, -1)) < 0) {
+    if ((nsocks = poll(sockets, sockets_size, 5000)) < 0) {
       auto loc = std::source_location::current();
       log_err("Blocking poll failed at [%s: %d]: %m", loc.file_name(), loc.line());
       running = false;
       break;
+    }
+
+    // Periodic maintenance on poll timeout — sweep expired waiting sockets and idle
+    // keep-alive connections. Only runs when nsocks == 0 (no events) to avoid mutating
+    // the socket vector between the poll snapshot and the event-processing loop.
+    if (nsocks == 0) {
+      auto now = std::chrono::steady_clock::now();
+      if ((now - last_sweep) >= std::chrono::seconds(5)) {
+        last_sweep = now;
+
+        // Collect expired sockets (lock released before I/O)
+        auto expired = socket_control.collect_expired_waiting();
+        for (const auto &si : expired) { reject_with_503(si); }
+        if (!expired.empty()) {
+          SipiMetrics::instance().rejected_connections_total.Increment(static_cast<double>(expired.size()));
+        }
+
+        // Collect idle keep-alive sockets (lock released before I/O)
+        if (_keep_alive_timeout > 0) {
+          auto idle = socket_control.collect_idle_dynsocks(_keep_alive_timeout);
+          for (const auto &si : idle) { close_socket(si); }
+        }
+
+        SipiMetrics::instance().waiting_connections.Set(
+          static_cast<double>(socket_control.waiting_queue_size()));
+      }
+      continue;// No events — restart poll
     }
 
     for (int i = sockets_size - 1; i >= 0; i--) {
@@ -990,7 +1044,7 @@ void Server::run()
               // see if we have sockets waiting for a thread.If yes, we reuse this thread directly
               //
               SocketControl::SocketInfo sockid;
-              if (socket_control.get_waiting(sockid)) {
+              if (socket_control.get_waiting(sockid, close_socket)) {
                 //
                 // We have a waiting socket. Get it and make the thread processing it!
                 //
@@ -1015,7 +1069,7 @@ void Server::run()
               // see if we have sockets waiting for a thread.If yes, we reuse this thread directly
               //
               SocketControl::SocketInfo sockid;
-              if (socket_control.get_waiting(sockid)) {
+              if (socket_control.get_waiting(sockid, close_socket)) {
                 //
                 // We have a waiting socket. Get it and make the thread processing it!
                 //
@@ -1096,6 +1150,10 @@ void Server::run()
               }
             }
 
+            {// drain queued sockets first
+              auto waiting = socket_control.collect_all_waiting();
+              for (const auto &si : waiting) { close_socket(si); }
+            }
             socket_control.close_all_dynsocks(close_socket);
             socket_control.broadcast_exit();// broadcast EXIT to all worker threads
             running = false;
@@ -1127,7 +1185,14 @@ void Server::run()
               int n = SocketControl::send_control_message(tinfo.control_pipe, sockid);
               if (n < 0) { log_warn("Got something unexpected..."); }
             } else {// no thread available, push socket into waiting queue
-              socket_control.move_to_waiting(i);
+              if (!socket_control.try_move_to_waiting(i)) {
+                // Queue full — reject with 503
+                SocketControl::SocketInfo sockid;
+                socket_control.remove(i, sockid);
+                reject_with_503(sockid);
+                SipiMetrics::instance().rejected_connections_total.Increment();
+                log_warn("Queue full — rejected connection from %s with 503", sockid.peer_ip);
+              }
             }
           }
         } else if (sockets[i].revents & POLLHUP) {
