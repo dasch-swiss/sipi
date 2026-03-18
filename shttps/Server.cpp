@@ -965,7 +965,7 @@ void Server::run()
       break;
     }
 
-    for (int i = 0; i < sockets_size; i++) {
+    for (int i = sockets_size - 1; i >= 0; i--) {
       if (sockets[i].revents) {
         if ((sockets[i].revents & POLLIN) || (sockets[i].revents & POLLPRI)) {
           //
