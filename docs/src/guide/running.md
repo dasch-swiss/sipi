@@ -125,8 +125,10 @@ If none is specified, the default level is `INFO`.
 | `--serverport <n>` | | `SIPI_SERVERPORT` | `80` | HTTP port |
 | `--sslport <n>` | | `SIPI_SSLPORT` | `443` | HTTPS port |
 | `--hostname <name>` | | `SIPI_HOSTNAME` | `localhost` | Public DNS hostname |
-| `--keepalive <sec>` | | `SIPI_KEEPALIVE` | `5` | HTTP keep-alive timeout in seconds |
-| `--nthreads <n>` | `-t` | `SIPI_NTHREADS` | CPU cores | Number of worker threads |
+| `--keepalive <sec>` | | `SIPI_KEEPALIVE` | `5` | HTTP keep-alive timeout in seconds (now enforced server-side) |
+| `--nthreads <n>` | `-t` | `SIPI_NTHREADS` | `0` (auto) | Worker threads (`0` = auto-detect from CPU cores, container-aware) |
+| `--max-waiting <n>` | | `SIPI_MAX_WAITING` | `2*nthreads` | Max queued connections before HTTP 503 rejection |
+| `--queue-timeout <sec>` | | `SIPI_QUEUE_TIMEOUT` | `10` | Max seconds a request waits in queue before 503 |
 | `--maxpost <size>` | | `SIPI_MAXPOSTSIZE` | `300M` | Maximum POST upload size |
 | `--imgroot <path>` | | `SIPI_IMGROOT` | `./images` | Image repository root directory |
 | `--docroot <path>` | | `SIPI_DOCROOT` | `./server` | Web server document root |
@@ -173,8 +175,10 @@ flags.
 | `SIPI_SERVERPORT` | `--serverport` | `80` | HTTP port |
 | `SIPI_SSLPORT` | `--sslport` | `443` | HTTPS port |
 | `SIPI_HOSTNAME` | `--hostname` | `localhost` | Public hostname |
-| `SIPI_KEEPALIVE` | `--keepalive` | `5` | Keep-alive timeout (seconds) |
-| `SIPI_NTHREADS` | `--nthreads` | CPU cores | Worker threads |
+| `SIPI_KEEPALIVE` | `--keepalive` | `5` | Keep-alive timeout (seconds, now enforced server-side) |
+| `SIPI_NTHREADS` | `--nthreads` | `0` (auto) | Worker threads (`0` = auto-detect, container-aware) |
+| `SIPI_MAX_WAITING` | `--max-waiting` | `2*nthreads` | Max queued connections before 503 |
+| `SIPI_QUEUE_TIMEOUT` | `--queue-timeout` | `10` | Max seconds in queue before 503 |
 | `SIPI_MAXPOSTSIZE` | `--maxpost` | `300M` | Max POST size |
 | `SIPI_IMGROOT` | `--imgroot` | `./images` | Image root directory |
 | `SIPI_DOCROOT` | `--docroot` | `./server` | Document root |

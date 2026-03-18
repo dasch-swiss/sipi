@@ -6,13 +6,13 @@
 #ifndef SIPI_SOCKETCONTROL_H
 #define SIPI_SOCKETCONTROL_H
 
+#include <chrono>
 #include <csignal>
 #include <cstring>
 #include <iostream>
 #include <map>
 #include <mutex>
 #include <queue>
-#include <unordered_set>
 #include <vector>
 
 #include <arpa/inet.h>//inet_addr
@@ -56,6 +56,10 @@ public:
     SSL_CTX *sslctx{};
     char peer_ip[INET6_ADDRSTRLEN]{};
     int peer_port{};
+    // Note: enqueue_time and last_activity are NOT part of SIData because
+    // SIData is the IPC wire format sent over socketpairs between threads.
+    // Time points are only meaningful within the event loop and are set fresh
+    // when a socket enters the waiting queue or poll set.
   };
 
   class SocketInfo
@@ -68,6 +72,8 @@ public:
     SSL_CTX *sslctx;
     char peer_ip[INET6_ADDRSTRLEN]{};
     int peer_port;
+    std::chrono::steady_clock::time_point enqueue_time{};   //!< set when moved to waiting queue
+    std::chrono::steady_clock::time_point last_activity{};  //!< set when added to poll set (for keep-alive)
 
     explicit SocketInfo(ControlMessageType type = NOOP,
       SocketType socket_type = CONTROL_SOCKET,
@@ -86,54 +92,36 @@ public:
       }
     }
 
-    SocketInfo(const SocketInfo &si)
-    {
-      type = si.type;
-      socket_type = si.socket_type;
-      sid = si.sid;
-      ssl_sid = si.ssl_sid;
-      sslctx = si.sslctx;
-      for (int i = 0; i < INET6_ADDRSTRLEN; i++) peer_ip[i] = si.peer_ip[i];
-      peer_port = si.peer_port;
-    }
+    // Rule of Five: all members are trivially copyable (enums, ints, pointers,
+    // char[], time_points), so compiler-generated copy/move is correct.
+    SocketInfo(const SocketInfo &) = default;
+    SocketInfo(SocketInfo &&) noexcept = default;
+    SocketInfo &operator=(const SocketInfo &) = default;
+    SocketInfo &operator=(SocketInfo &&) noexcept = default;
+    ~SocketInfo() = default;// Non-owning — does not free SSL* or close fd
 
     explicit SocketInfo(const SIData &data)
+      : type(data.type), socket_type(data.socket_type), sid(data.sid), ssl_sid(data.ssl_sid),
+        sslctx(data.sslctx), peer_port(data.peer_port)
+    // enqueue_time and last_activity intentionally left default-initialized (epoch).
+    // SIData is the IPC wire format — time points are set fresh by add_dyn_socket/try_move_to_waiting.
     {
-      type = data.type;
-      socket_type = data.socket_type;
-      sid = data.sid;
-      ssl_sid = data.ssl_sid;
-      sslctx = data.sslctx;
-      for (int i = 0; i < INET6_ADDRSTRLEN; i++) peer_ip[i] = data.peer_ip[i];
-      peer_port = data.peer_port;
-    }
-
-
-    SocketInfo &operator=(const SocketInfo &si)
-    {
-      if (this == &si) return *this;
-      type = si.type;
-      socket_type = si.socket_type;
-      sid = si.sid;
-      ssl_sid = si.ssl_sid;
-      sslctx = si.sslctx;
-      for (int i = 0; i < INET6_ADDRSTRLEN; i++) peer_ip[i] = si.peer_ip[i];
-      peer_port = si.peer_port;
-      return *this;
+      std::memcpy(peer_ip, data.peer_ip, INET6_ADDRSTRLEN);
     }
   };
 
 private:
-  std::mutex sockets_mutex;//!> protecting mutex
+  mutable std::mutex sockets_mutex;//!> protecting mutex
   std::vector<pollfd> open_sockets;//!> open sockets waiting for reading
   std::vector<SocketInfo> generic_open_sockets;//!> open socket-info's waiting for reading
   std::queue<SocketInfo> waiting_sockets;//!> Sockets that have input and are waiting for the thread
-  // std::unordered_set<SocketInfo, socket_info_hash> working_sockets; //!> Socket's that are currently working
   int n_msg_sockets;//!> Number of sockets communicating with the threads
   int stop_sock_id;//!> Index of the stopsocket (the thread that catches signals sens to this socket)
   int http_sock_id;//!> Index of the HTTP socckel
   int ssl_sock_id;//!> Index of the SSL socket
   int dyn_socket_base;//!> base index of the dynanic sockets created by accept
+  size_t max_waiting_connections{0};//!> Max queue size (0 = unlimited)
+  unsigned queue_timeout_seconds{10}; //!> Max seconds a socket can wait in queue
 
 public:
   /*!
@@ -171,16 +159,11 @@ public:
 
   int get_dyn_socket_base() const { return dyn_socket_base; }
 
-  int size() { return static_cast<int>(generic_open_sockets.size()); }
-
-  inline const pollfd &operator[](int index) { return open_sockets[index]; };
-
   void remove(int pos, SocketInfo &sockid);
 
-
-  void move_to_waiting(int pos);
-
-  bool get_waiting(SocketInfo &sockid);
+  //! Dequeue a waiting socket, checking liveness. Dead sockets are closed via closefunc.
+  //! Returns true if a live socket was found, false if queue is empty or all dead.
+  bool get_waiting(SocketInfo &sockid, int (*closefunc)(const SocketInfo &));
 
   static ssize_t send_control_message(int pipe_id, const SocketInfo &msg);
 
@@ -189,6 +172,28 @@ public:
   void broadcast_exit();
 
   void close_all_dynsocks(int (*closefunc)(const SocketInfo &));
+
+  void set_max_waiting_connections(size_t max) { max_waiting_connections = max; }
+
+  void set_queue_timeout(unsigned seconds) { queue_timeout_seconds = seconds; }
+
+  [[nodiscard]] size_t waiting_queue_size() const;
+
+  //! Move socket to waiting queue. Returns false if queue is full.
+  [[nodiscard]] bool try_move_to_waiting(int pos);
+
+  //! Sweep waiting queue, collecting expired sockets.
+  //! Returns vector of expired sockets to be closed by caller (outside any lock).
+  [[nodiscard]] std::vector<SocketInfo> collect_expired_waiting();
+
+  //! Drain all waiting sockets (used during shutdown).
+  //! Returns vector of sockets to be closed by caller (outside any lock).
+  [[nodiscard]] std::vector<SocketInfo> collect_all_waiting();
+
+  //! Sweep idle DYN_SOCKETs older than keep_alive_timeout from poll set.
+  //! Returns vector of reaped sockets to be closed by caller (outside any lock).
+  //! Must be called between poll() iterations (not during iteration over the poll set).
+  [[nodiscard]] std::vector<SocketInfo> collect_idle_dynsocks(int keep_alive_timeout_seconds);
 };
 
 }// namespace shttps

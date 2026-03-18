@@ -56,6 +56,12 @@ SipiMetrics::SipiMetrics()
                                   .Register(*registry_)
                                   .Add({})),
 
+    rejected_connections_total(prometheus::BuildCounter()
+                                 .Name("sipi_rejected_connections_total")
+                                 .Help("Total requests rejected with 503 due to queue full or timeout")
+                                 .Register(*registry_)
+                                 .Add({})),
+
     rate_limit_decisions_total(prometheus::BuildCounter()
                                  .Name("sipi_rate_limit_decisions_total")
                                  .Help("Rate limit decisions by action (allowed, rejected, shadow_rejected)")
@@ -66,6 +72,12 @@ SipiMetrics::SipiMetrics()
                                   .Help("Clients at >80% of pixel budget")
                                   .Register(*registry_)
                                   .Add({})),
+
+    waiting_connections(prometheus::BuildGauge()
+                          .Name("sipi_waiting_connections")
+                          .Help("Current number of requests in waiting queue")
+                          .Register(*registry_)
+                          .Add({})),
 
     cache_size_bytes(prometheus::BuildGauge()
                        .Name("sipi_cache_size_bytes")

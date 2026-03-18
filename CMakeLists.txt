@@ -264,6 +264,12 @@ set(SIPI_RUNTIME_SYSTEM_LIBS Threads::Threads ${CMAKE_DL_LIBS})
 if (NOT ZIG_STATIC_BUILD AND NOT CMAKE_SYSTEM_NAME MATCHES "Darwin")
     list(APPEND SIPI_RUNTIME_SYSTEM_LIBS rt)
 endif ()
+# macOS: native nix/clang builds need system frameworks that Zig builds handle differently.
+# - iconv: exiv2 uses it for character set conversion (Zig disables via CMAKE_DISABLE_FIND_PACKAGE_Iconv)
+# - CoreFoundation + SystemConfiguration: curl uses them for proxy detection on macOS
+if (CMAKE_SYSTEM_NAME MATCHES "Darwin" AND NOT ZIG_TOOLCHAIN)
+    list(APPEND SIPI_RUNTIME_SYSTEM_LIBS iconv "-framework CoreFoundation" "-framework SystemConfiguration")
+endif ()
 
 #
 # OpenSSL, libcurl, and libmagic are built from source (see ext/).

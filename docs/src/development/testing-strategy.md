@@ -306,7 +306,9 @@ Four layers, from fastest/narrowest to slowest/broadest:
 - Image metadata extraction
 - Any pure function with well-defined inputs/outputs
 
-**C++ freeze policy:** Existing GoogleTest suites (98 tests across 8 components) are maintained but not expanded. Bug fixes in existing tests are allowed. No new `test/unit/` directories.
+**C++ freeze policy:** Existing GoogleTest suites are maintained but generally not expanded. Bug fixes in existing tests are allowed. No new `test/unit/` directories.
+
+**Exception — replacement-target testing:** Components targeted for Rust replacement (e.g., shttps, Lua scripting, cache management) are covered with C++ unit tests that travel with the C++ code. When a component gets replaced by a Rust crate, its C++ tests go away cleanly. This is preferred over Rust e2e tests for testing C++ internals because: (1) C++ tests can test internal state directly without spinning up a server, (2) they don't create false test failures when the Rust replacement changes internal behavior while preserving the HTTP contract, (3) they document the existing behavior for the rewrite team.
 
 ### Layer 2: Snapshot / Golden Baseline Tests
 

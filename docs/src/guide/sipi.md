@@ -235,11 +235,12 @@ The following configuration parameters are used by the SIPI server:
   *Environment variable: `SIPI_SSLPORT`*  
   *Default: `443`*
   
-- <a name="nthreads"></a>`nthreads=num`: Number of worker threads that SIPI allocates. SIPI is a mutlithreaded server and pre-allocates a
-  given number of working threads that can be configured.  
-  *Cmdline option: `--nthreads`*  
-  *Environment variable: `SIPI_NTHREADS`*  
-  *Default: number of hardware cores as given by `std::thread::hardware_concurrency()`*
+- <a name="nthreads"></a>`nthreads=num`: Number of worker threads that SIPI allocates. SIPI is a multithreaded server and pre-allocates a
+  given number of working threads that can be configured. Set to `0` for auto-detection, which uses `cores - 1`
+  (minimum 2) and is container-aware (reads cgroups v1/v2 CPU limits inside Docker).
+  *Cmdline option: `--nthreads`*
+  *Environment variable: `SIPI_NTHREADS`*
+  *Default: `0` (auto-detect from CPU cores)*
   
 - <a name="prefixaspath"></a>`prefix_as_path=bool`: If `true`, the prefix is used as path within the image root directory. If false, the prefix
   is ignored and it is assumed that all images are directly located in the image root.  
@@ -272,9 +273,21 @@ The following configuration parameters are used by the SIPI server:
 - <a name="keepalive"></a>`keep_alive` : Number of seconds a connection (socket) remains open at maximum ("keep-alive"),
   if a client requests a "keep-alive" connection in the request header. For more information see
   [Keep-Alive](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Keep-Alive).  
-  *Cmdline option: `--keepalive`*  
-  *Environment variable: `SIPI_KEEPALIVE`*  
+  *Cmdline option: `--keepalive`*
+  *Environment variable: `SIPI_KEEPALIVE`*
   *Default: `5`*
+
+- <a name="max_waiting_connections"></a>`max_waiting_connections=num`: Maximum number of connections waiting in the queue when all worker threads are busy.
+  When the queue is full, new connections are rejected with HTTP 503 (Service Unavailable) and a `Retry-After: 5` header.
+  Set to `0` for automatic sizing (2 × nthreads).
+  *Cmdline option: `--max-waiting`*
+  *Environment variable: `SIPI_MAX_WAITING`*
+  *Default: `0` (2 × nthreads)*
+
+- <a name="queue_timeout"></a>`queue_timeout=seconds`: Maximum number of seconds a request may wait in the queue before being rejected with HTTP 503.
+  *Cmdline option: `--queue-timeout`*
+  *Environment variable: `SIPI_QUEUE_TIMEOUT`*
+  *Default: `10`*
 
 - <a name="jpegquality">`jpeg_quality=num`: Compression parameter when producing JPEG output. Must be a number
   between 1 and 100. Unfortunately, the IIIF Image API does not allow to give a JPEG quality (=compression) on the IIIF URL. SIPI
@@ -329,7 +342,9 @@ independently — whichever is reached first triggers eviction.
 **Monitoring:** SIPI exposes Prometheus metrics at `GET /metrics` (text format). Cache counters
 (`sipi_cache_hits_total`, `sipi_cache_misses_total`, `sipi_cache_evictions_total`, `sipi_cache_skips_total`)
 and gauges (`sipi_cache_size_bytes`, `sipi_cache_files`, `sipi_cache_size_limit_bytes`, `sipi_cache_files_limit`)
-are available for monitoring cache health.
+are available for monitoring cache health. Queue metrics (`sipi_waiting_connections` gauge for current queue
+depth, `sipi_rejected_connections_total` counter for 503 rejections due to queue full or timeout) are
+available for monitoring server load and backpressure behavior.
 
 The following configuration parameters determine the behaviour of the cache:
 
