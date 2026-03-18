@@ -12,6 +12,7 @@
 #include <string>
 #include <sys/stat.h>
 
+#include <fstream>
 #include <thread>
 #include <unistd.h>
 #include <utility>
@@ -42,8 +43,68 @@
 
 #include "generated/SipiVersion.h"
 
+#ifdef __linux__
+#include <sched.h>
+#endif
+
 // A macro for silencing incorrect compiler warnings about unused variables.
 #define _unused(x) ((void)(x))
+
+/*!
+ * Detect the number of CPU cores available to this process, with container awareness.
+ *
+ * Detection order (Linux):
+ *   1. cgroups v2 (/sys/fs/cgroup/cpu.max) — respects Docker --cpus
+ *   2. cgroups v1 (/sys/fs/cgroup/cpu/cpu.cfs_quota_us) — older Docker
+ *   3. sched_getaffinity() — respects Docker --cpuset-cpus
+ *   4. std::thread::hardware_concurrency() — host CPU count
+ *
+ * On macOS: falls through directly to hardware_concurrency().
+ */
+[[nodiscard]] static unsigned int detect_available_cores()
+{
+#ifdef __linux__
+  // 1. cgroups v2: /sys/fs/cgroup/cpu.max contains "quota period" or "max period"
+  if (std::ifstream cpu_max("/sys/fs/cgroup/cpu.max"); cpu_max.is_open()) {
+    std::string quota_str;
+    long period = 0;
+    cpu_max >> quota_str >> period;
+    if (quota_str != "max" && period > 0) {
+      try {
+        long quota = std::stol(quota_str);
+        if (quota > 0) {
+          return std::max(1u, static_cast<unsigned int>((quota + period - 1) / period));
+        }
+      } catch (...) {
+        // Parse failure — fall through
+      }
+    }
+  }
+
+  // 2. cgroups v1: separate quota/period files
+  if (std::ifstream cfs_quota("/sys/fs/cgroup/cpu/cpu.cfs_quota_us"); cfs_quota.is_open()) {
+    long quota = 0;
+    cfs_quota >> quota;
+    if (quota > 0) {// -1 means unlimited
+      long period = 100000;// default cfs period
+      if (std::ifstream cfs_period("/sys/fs/cgroup/cpu/cpu.cfs_period_us"); cfs_period.is_open()) {
+        cfs_period >> period;
+      }
+      return std::max(1u, static_cast<unsigned int>((quota + period - 1) / period));
+    }
+  }
+
+  // 3. CPU affinity (respects --cpuset-cpus)
+  cpu_set_t cpuset;
+  if (sched_getaffinity(0, sizeof(cpuset), &cpuset) == 0) {
+    int count = CPU_COUNT(&cpuset);
+    if (count > 0) return static_cast<unsigned int>(count);
+  }
+#endif
+  // 4. Fallback: hardware concurrency (works on macOS and Linux)
+  unsigned int cores = std::thread::hardware_concurrency();
+  return (cores > 0) ? cores : 4;
+}
 
 /*!
  * \mainpage
@@ -533,8 +594,9 @@ int main(int argc, char *argv[])
   sipiopt.add_option("--keepalive", optKeepAlive, "Number of seconds for the keeop-alive optioon of HTTP 1.1.")
     ->envname("SIPI_KEEPALIVE");
 
-  unsigned int optNThreads = std::thread::hardware_concurrency();
-  sipiopt.add_option("-t,--nthreads", optNThreads, "Number of threads for SIPI server")->envname("SIPI_NTHREADS");
+  unsigned int optNThreads = 0;// 0 = auto-detect from CPU cores
+  sipiopt.add_option("-t,--nthreads", optNThreads, "Number of threads for SIPI server (0 = auto-detect from CPU cores)")
+    ->envname("SIPI_NTHREADS");
 
   std::string optMaxPostSize = "300M";
   sipiopt
@@ -1366,7 +1428,11 @@ int main(int argc, char *argv[])
 
       // Create object SipiHttpServer
       auto nthreads = sipiConf.getNThreads();
-      if (nthreads < 1) { nthreads = std::thread::hardware_concurrency(); }
+      if (nthreads < 1) {
+        auto cores = detect_available_cores();
+        nthreads = std::max(2u, cores > 1 ? cores - 1 : cores);
+        log_info("Auto-detected %u CPU cores, starting %u worker threads", cores, nthreads);
+      }
       Sipi::SipiHttpServer server(
         sipiConf.getPort(), nthreads, sipiConf.getUseridStr(), sipiConf.getLogfile(), sipiConf.getLoglevel());
 
