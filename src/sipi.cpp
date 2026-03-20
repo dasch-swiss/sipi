@@ -598,8 +598,8 @@ int main(int argc, char *argv[])
   sipiopt.add_option("-t,--nthreads", optNThreads, "Number of threads for SIPI server (0 = auto-detect from CPU cores)")
     ->envname("SIPI_NTHREADS");
 
-  size_t optMaxWaiting = 0;// 0 = 2*nthreads
-  sipiopt.add_option("--max-waiting", optMaxWaiting, "Max waiting connections before 503 (0 = 2*nthreads)")
+  size_t optMaxWaiting = 0;// 0 = unlimited (timeout-only)
+  sipiopt.add_option("--max-waiting", optMaxWaiting, "Max waiting connections before 503 (0 = unlimited, timeout-only)")
     ->envname("SIPI_MAX_WAITING");
 
   unsigned int optQueueTimeout = 10;

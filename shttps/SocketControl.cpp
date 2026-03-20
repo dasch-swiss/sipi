@@ -109,12 +109,36 @@ bool SocketControl::get_waiting(SocketInfo &sockid, int (*closefunc)(const Socke
     while (!waiting_sockets.empty()) {
       sockid = waiting_sockets.front();
       waiting_sockets.pop();
-      // Liveness check: verify the TCP connection is still alive
-      struct pollfd pfd = {sockid.sid, POLLIN | POLLHUP, 0};
-      if (poll(&pfd, 1, 0) >= 0 && !(pfd.revents & (POLLHUP | POLLERR))) {
-        found = true;
-        break;
+      // Liveness check: verify the TCP connection is still alive.
+      // Use POLLRDHUP (Linux 2.6.17+) to detect graceful client disconnect (TCP FIN).
+      // POLLHUP alone only triggers when both read and write are shut down, missing
+      // the common half-close scenario (client sends FIN, server in CLOSE_WAIT).
+#ifdef POLLRDHUP
+      struct pollfd pfd = {sockid.sid, POLLRDHUP, 0};
+      if (poll(&pfd, 1, 0) > 0 && (pfd.revents & (POLLHUP | POLLERR | POLLRDHUP))) {
+        dead_sockets.push_back(sockid);
+        continue;
       }
+#else
+      // macOS: POLLRDHUP not available — fall back to POLLIN + check for EOF.
+      struct pollfd pfd = {sockid.sid, POLLIN, 0};
+      if (poll(&pfd, 1, 0) > 0) {
+        if (pfd.revents & (POLLHUP | POLLERR)) {
+          dead_sockets.push_back(sockid);
+          continue;
+        }
+        if (pfd.revents & POLLIN) {
+          char buf;
+          ssize_t n = recv(sockid.sid, &buf, 1, MSG_PEEK | MSG_DONTWAIT);
+          if (n == 0) {// EOF — peer disconnected
+            dead_sockets.push_back(sockid);
+            continue;
+          }
+        }
+      }
+#endif
+      found = true;
+      break;
       dead_sockets.push_back(sockid);
     }
   }

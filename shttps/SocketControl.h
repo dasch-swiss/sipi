@@ -163,7 +163,7 @@ public:
 
   //! Dequeue a waiting socket, checking liveness. Dead sockets are closed via closefunc.
   //! Returns true if a live socket was found, false if queue is empty or all dead.
-  bool get_waiting(SocketInfo &sockid, int (*closefunc)(const SocketInfo &));
+  [[nodiscard]] bool get_waiting(SocketInfo &sockid, int (*closefunc)(const SocketInfo &));
 
   static ssize_t send_control_message(int pipe_id, const SocketInfo &msg);
 

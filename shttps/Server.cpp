@@ -909,11 +909,16 @@ void Server::run()
   SocketControl socket_control(thread_control);
 
   // Configure queue limits
-  size_t max_waiting = _max_waiting_connections;
-  if (max_waiting == 0) max_waiting = 2 * _nthreads;// default: 2x thread count
-  socket_control.set_max_waiting_connections(max_waiting);
+  // max_waiting_connections=0 means unlimited (timeout-only protection).
+  // Tile bursts from IIIF viewers can easily exceed any fixed cap;
+  // the queue_timeout handles pathological growth instead.
+  socket_control.set_max_waiting_connections(_max_waiting_connections);
   socket_control.set_queue_timeout(_queue_timeout);
-  log_info("Queue limits: max_waiting=%zu, queue_timeout=%ds", max_waiting, _queue_timeout);
+  if (_max_waiting_connections > 0) {
+    log_info("Queue limits: max_waiting=%zu, queue_timeout=%ds", _max_waiting_connections, _queue_timeout);
+  } else {
+    log_info("Queue limits: unlimited (timeout-only), queue_timeout=%ds", _queue_timeout);
+  }
 
   //
   // here we are adding the lua routes.

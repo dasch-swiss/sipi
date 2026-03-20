@@ -279,10 +279,10 @@ The following configuration parameters are used by the SIPI server:
 
 - <a name="max_waiting_connections"></a>`max_waiting_connections=num`: Maximum number of connections waiting in the queue when all worker threads are busy.
   When the queue is full, new connections are rejected with HTTP 503 (Service Unavailable) and a `Retry-After: 5` header.
-  Set to `0` for automatic sizing (2 × nthreads).
+  Set to `0` for unlimited queue depth (protected by `queue_timeout` only). Use a positive value to impose a hard cap.
   *Cmdline option: `--max-waiting`*
   *Environment variable: `SIPI_MAX_WAITING`*
-  *Default: `0` (2 × nthreads)*
+  *Default: `0` (unlimited)*
 
 - <a name="queue_timeout"></a>`queue_timeout=seconds`: Maximum number of seconds a request may wait in the queue before being rejected with HTTP 503.
   *Cmdline option: `--queue-timeout`*

@@ -16,7 +16,7 @@ sipi = {
     hostname = 'localhost',
     port = 1024,
     nthreads = 0, -- auto-detect from CPU cores
-    max_waiting_connections = 0, -- 0 = 2 * nthreads (auto)
+    max_waiting_connections = 0, -- 0 = unlimited (timeout-only)
     queue_timeout = 10,
     keep_alive = 5,
 

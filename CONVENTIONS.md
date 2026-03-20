@@ -3,7 +3,9 @@
 Project-specific architectural context for the sipi repository. Used by planning, working, and compounding workflows to understand the codebase structure.
 
 For review-specific rules, see `REVIEW.md` in the sipi repository root.
-For the full C++23 style guide, see `sipi/docs/src/development/cpp-style-guide.md`.
+For the full C++23 style guide, see `docs/src/development/cpp-style-guide.md`.
+For commit and PR conventions, see `docs/src/development/commit-conventions.md`.
+For reviewer guidelines, see `docs/src/development/reviewer-guidelines.md`.
 
 ## Stack
 
