@@ -109,7 +109,7 @@ SipiConf::SipiConf(shttps::LuaServer &luacfg)
   }
   {
     int qt = luacfg.configInteger("sipi", "queue_timeout", 10);
-    queue_timeout = (qt < 0) ? 0 : static_cast<unsigned>(qt);// seconds
+    queue_timeout = (qt < 1) ? 1 : static_cast<unsigned>(qt);// seconds, minimum 1
   }
   std::string max_post_size_str = luacfg.configString("sipi", "max_post_size", "0");
   long long parsed_post_size = parseSizeString(max_post_size_str);

@@ -325,6 +325,37 @@ TEST_F(SocketControlTest, GetWaitingDiscardsDeadSockets)
   close(fd_alive_peer);
 }
 
+TEST_F(SocketControlTest, GetWaitingDiscardsHalfClosedSockets)
+{
+  // Simulate graceful client disconnect (TCP FIN / half-close).
+  // On Linux, shutdown(SHUT_WR) sends FIN but POLLHUP is NOT set —
+  // only POLLRDHUP (or POLLIN with readable EOF). This test verifies
+  // that get_waiting() detects this case and skips the dead socket.
+  auto [fd_halfclose, fd_halfclose_peer] = make_socketpair();
+  auto [fd_alive, fd_alive_peer] = make_socketpair();
+  ASSERT_NE(fd_halfclose, -1);
+  ASSERT_NE(fd_alive, -1);
+
+  sc->add_http_socket(50);
+  sc->add_dyn_socket(make_dyn_socket(fd_halfclose));
+  sc->add_dyn_socket(make_dyn_socket(fd_alive));
+
+  int base = sc->get_dyn_socket_base();
+  EXPECT_TRUE(sc->try_move_to_waiting(base));// fd_halfclose
+  EXPECT_TRUE(sc->try_move_to_waiting(base));// fd_alive
+
+  // Half-close: peer sends FIN (shutdown write side only)
+  shutdown(fd_halfclose_peer, SHUT_WR);
+
+  // get_waiting should skip the half-closed socket and return the live one
+  shttps::SocketControl::SocketInfo waiting;
+  EXPECT_TRUE(sc->get_waiting(waiting, noop_close));
+  EXPECT_EQ(waiting.sid, fd_alive);
+
+  close(fd_halfclose); close(fd_halfclose_peer);
+  close(fd_alive); close(fd_alive_peer);
+}
+
 TEST_F(SocketControlTest, GetWaitingReturnsFalseWhenAllDead)
 {
   auto [fd0, fd0_peer] = make_socketpair();
@@ -479,7 +510,7 @@ TEST_F(SocketControlTest, ForwardRemovalSkipsSockets_DocumentsBug)
 TEST_F(SocketControlTest, CollectExpiredWaitingRemovesStaleEntries)
 {
   sc->add_http_socket(50);
-  sc->set_queue_timeout(0);// 0 seconds = everything expires immediately
+  sc->set_queue_timeout(0);// 0 seconds = everything expires immediately (only valid in tests)
 
   sc->add_dyn_socket(make_dyn_socket(100));
   sc->add_dyn_socket(make_dyn_socket(101));
@@ -626,7 +657,7 @@ TEST_F(SocketControlTest, WaitingQueueSizeTracksCorrectly)
   EXPECT_EQ(sc->waiting_queue_size(), 2u);
 
   shttps::SocketControl::SocketInfo w;
-  sc->get_waiting(w, noop_close);
+  EXPECT_TRUE(sc->get_waiting(w, noop_close));
   EXPECT_EQ(sc->waiting_queue_size(), 1u);
 
   close(fd0); close(fd0_peer);

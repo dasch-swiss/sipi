@@ -70,8 +70,8 @@ private:
   std::string rate_limit_mode_str{ "off" };//!< "off", "monitor", "enforce"
   size_t rate_limit_pixel_threshold{ 2000000 }; //!< requests below this are free (default 2MP)
   unsigned drain_timeout{ 30 }; //!< seconds to wait for in-flight requests during shutdown
-  size_t max_waiting_connections{ 0 }; //!< max queue size before 503 (0 = 2*nthreads)
-  unsigned queue_timeout{ 10 }; //!< max seconds in waiting queue before 503
+  size_t max_waiting_connections{ 0 }; //!< max queue size before 503 (0 = unlimited, timeout-only)
+  unsigned queue_timeout{ 10 }; //!< max seconds in waiting queue before 503 (minimum 1)
 
 public:
   SipiConf();

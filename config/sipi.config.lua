@@ -51,7 +51,7 @@ sipi = {
     --
     -- Maximum number of connections waiting in queue when all threads are busy.
     -- When the queue is full, new connections get HTTP 503 with Retry-After: 5.
-    -- 0 = 2 * nthreads (auto-scaled).
+    -- 0 = unlimited (queue_timeout provides protection against unbounded growth).
     --
     max_waiting_connections = 0,
 

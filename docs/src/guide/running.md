@@ -127,7 +127,7 @@ If none is specified, the default level is `INFO`.
 | `--hostname <name>` | | `SIPI_HOSTNAME` | `localhost` | Public DNS hostname |
 | `--keepalive <sec>` | | `SIPI_KEEPALIVE` | `5` | HTTP keep-alive timeout in seconds (now enforced server-side) |
 | `--nthreads <n>` | `-t` | `SIPI_NTHREADS` | `0` (auto) | Worker threads (`0` = auto-detect from CPU cores, container-aware) |
-| `--max-waiting <n>` | | `SIPI_MAX_WAITING` | `2*nthreads` | Max queued connections before HTTP 503 rejection |
+| `--max-waiting <n>` | | `SIPI_MAX_WAITING` | `0` (unlimited) | Max queued connections before HTTP 503 rejection (`0` = unlimited, timeout-only) |
 | `--queue-timeout <sec>` | | `SIPI_QUEUE_TIMEOUT` | `10` | Max seconds a request waits in queue before 503 |
 | `--maxpost <size>` | | `SIPI_MAXPOSTSIZE` | `300M` | Maximum POST upload size |
 | `--imgroot <path>` | | `SIPI_IMGROOT` | `./images` | Image repository root directory |
@@ -177,7 +177,7 @@ flags.
 | `SIPI_HOSTNAME` | `--hostname` | `localhost` | Public hostname |
 | `SIPI_KEEPALIVE` | `--keepalive` | `5` | Keep-alive timeout (seconds, now enforced server-side) |
 | `SIPI_NTHREADS` | `--nthreads` | `0` (auto) | Worker threads (`0` = auto-detect, container-aware) |
-| `SIPI_MAX_WAITING` | `--max-waiting` | `2*nthreads` | Max queued connections before 503 |
+| `SIPI_MAX_WAITING` | `--max-waiting` | `0` (unlimited) | Max queued connections before 503 (`0` = unlimited, timeout-only) |
 | `SIPI_QUEUE_TIMEOUT` | `--queue-timeout` | `10` | Max seconds in queue before 503 |
 | `SIPI_MAXPOSTSIZE` | `--maxpost` | `300M` | Max POST size |
 | `SIPI_IMGROOT` | `--imgroot` | `./images` | Image root directory |

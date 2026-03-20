@@ -187,8 +187,8 @@ private:
   unsigned _nthreads;//!< maximum number of parallel threads for processing requests
   std::map<pthread_t, SocketControl::SocketInfo> thread_ids;//!< Map of active worker threads
   int _keep_alive_timeout;
-  size_t _max_waiting_connections{0}; //!< Max queue size (0 = 2*nthreads)
-  unsigned _queue_timeout{10}; //!< Max seconds in waiting queue
+  size_t _max_waiting_connections{0}; //!< Max queue size (0 = unlimited, timeout-only)
+  unsigned _queue_timeout{10}; //!< Max seconds in waiting queue (minimum 1)
   bool running;//!< Main runloop should keep on going
   std::map<std::string, RequestHandler> handler[9];// request handlers for the different 9 request methods
   std::map<std::string, void *> handler_data[9];// request handlers for the different 9 request methods
