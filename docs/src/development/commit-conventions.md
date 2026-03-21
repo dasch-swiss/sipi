@@ -29,7 +29,7 @@ Group commits by user-visible impact, not by implementation journey.
 ### Template
 
 ```
-[LINEAR-ID](linear-url)
+Fixes LINEAR-ID, LINEAR-ID, ...
 
 ## Motivation
 Why this work was needed. What problem it solves for users.
