@@ -144,6 +144,14 @@ SipiConf::SipiConf(shttps::LuaServer &luacfg)
   if (parsed_rl_threshold < 0) parsed_rl_threshold = 0;
   rate_limit_pixel_threshold = static_cast<size_t>(parsed_rl_threshold);
 
+  // Memory budget configuration
+  std::string max_decode_mem_str = luacfg.configString("sipi", "max_decode_memory", "0");
+  long long parsed_decode_mem = parseSizeString(max_decode_mem_str);
+  if (parsed_decode_mem < 0) parsed_decode_mem = 0;
+  max_decode_memory = static_cast<size_t>(parsed_decode_mem);
+
+  decode_memory_mode_str = luacfg.configString("sipi", "decode_memory_mode", "off");
+
   long long parsed_drain_timeout = luacfg.configInteger("sipi", "drain_timeout", 30);
   if (parsed_drain_timeout < 1) parsed_drain_timeout = 30;
   drain_timeout = static_cast<unsigned>(parsed_drain_timeout);

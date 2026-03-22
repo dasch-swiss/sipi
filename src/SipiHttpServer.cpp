@@ -42,7 +42,10 @@
 #include "SipiHttpServer.hpp"
 #include "SipiMetrics.h"
 #include "generated/SipiVersion.h"
+#include "SipiMemoryBudget.h"
+#include "SipiPeakMemory.h"
 #include "SipiRateLimiter.h"
+#include "iiifparser/SipiDecodeDims.h"
 #include "SipiSentry.h"
 #include "favicon.h"
 #include "handlers/iiif_handler.hpp"
@@ -1556,6 +1559,11 @@ static void serve_iiif(Connection &conn_obj,
   size_t tile_w = 0, tile_h = 0;
   int clevels = 0;
   int numpages = 0;
+  int img_nc = 0, img_bps = 0;  // for memory budget estimation
+  // Note: when cache->getSize() hits, nc/bps remain 0. estimate_peak_memory()
+  // defaults 0 to 4 channels / 8 bps — a conservative overestimate. This only
+  // matters on the rare cache-metadata-hit + file-miss path (race/eviction).
+  // Normal cache hits return early before the budget check runs.
 
   //
   // get image dimensions by accessing the file, needed for get_canonical...
@@ -1584,6 +1592,8 @@ static void serve_iiif(Connection &conn_obj,
     tile_h = info.tile_height;
     clevels = info.clevels;
     numpages = info.numpages;
+    img_nc = info.nc;
+    img_bps = info.bps;
   }
 
   size_t tmp_r_w{ 0L }, tmp_r_h{ 0L };
@@ -1794,6 +1804,55 @@ static void serve_iiif(Connection &conn_obj,
       cache->deblock(cachefile);
       return;
     }
+  }
+
+  // Memory budget check — only for requests that will decode (after cache/passthrough)
+  std::optional<MemoryBudgetGuard> budget_guard;
+  if (server->memory_budget() != nullptr) {
+    // Compute actual decode dimensions (with reduce levels + ROI)
+    auto ddims = compute_decode_dims(img_w, img_h, clevels, region, size);
+
+    // Estimate peak memory across the full processing pipeline
+    bool needs_icc = (quality_format.quality() == SipiQualityFormat::COLOR
+                      || quality_format.quality() == SipiQualityFormat::GRAY);
+    size_t estimated = estimate_peak_memory(
+        ddims.width, ddims.height, ddims.out_w, ddims.out_h,
+        img_nc, img_bps, static_cast<double>(angle), needs_icc);
+
+    // Record estimate in histogram for capacity planning
+    SipiMetrics::instance().decode_memory_estimate_bytes.Observe(static_cast<double>(estimated));
+
+    auto result = server->memory_budget()->try_acquire(estimated);
+
+    // Update gauge
+    SipiMetrics::instance().decode_memory_used_bytes.Set(static_cast<double>(result.used));
+
+    // Record decision
+    if (result.allowed && !result.over_budget) {
+      SipiMetrics::instance().decode_memory_acquired.Increment();
+    } else if (result.allowed && result.over_budget) {
+      SipiMetrics::instance().decode_memory_shadow_rejected.Increment();
+      log_warn("Memory budget over limit (monitor): %zu / %zu bytes for %s",
+          result.used, result.budget, uri.c_str());
+    } else {
+      SipiMetrics::instance().decode_memory_rejected.Increment();
+      log_warn("Memory budget exhausted (enforce): %zu / %zu bytes, rejecting %s",
+          result.used, result.budget, uri.c_str());
+      conn_obj.header("Retry-After", "5");
+      send_error(conn_obj, Connection::SERVICE_UNAVAILABLE, "Server memory budget exhausted");
+      return;
+    }
+
+    // Near-limit warning (>80%)
+    if (result.used > result.budget - result.budget / 5) {
+      SipiMetrics::instance().decode_memory_near_limit_total.Increment();
+    }
+
+    // RAII guard — releases budget on scope exit or exception
+    budget_guard.emplace(*server->memory_budget(), estimated, result.allowed, [server]() {
+      SipiMetrics::instance().decode_memory_used_bytes.Set(
+          static_cast<double>(server->memory_budget()->used()));
+    });
   }
 
   // Guard: check if client is still connected before expensive image loading

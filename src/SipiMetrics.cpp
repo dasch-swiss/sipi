@@ -4,6 +4,7 @@
  */
 
 #include "SipiMetrics.h"
+#include "generated/SipiVersion.h"
 
 SipiMetrics &SipiMetrics::instance()
 {
@@ -109,6 +110,48 @@ SipiMetrics::SipiMetrics()
                                  .Register(*registry_)
                                  .Add({})),
 
+    decode_memory_budget_bytes(prometheus::BuildGauge()
+                                  .Name("sipi_decode_memory_budget_bytes")
+                                  .Help("Configured decode memory budget in bytes")
+                                  .Register(*registry_)
+                                  .Add({})),
+
+    decode_memory_used_bytes(prometheus::BuildGauge()
+                                .Name("sipi_decode_memory_used_bytes")
+                                .Help("Currently allocated to in-flight decodes in bytes")
+                                .Register(*registry_)
+                                .Add({})),
+
+    decode_memory_decisions_total(prometheus::BuildCounter()
+                                    .Name("sipi_decode_memory_decisions_total")
+                                    .Help("Memory budget decisions by action (acquired, rejected, shadow_rejected)")
+                                    .Register(*registry_)),
+
+    // Pre-create counter children to avoid per-request map lookups
+    decode_memory_acquired(decode_memory_decisions_total.Add({{"action", "acquired"}})),
+    decode_memory_rejected(decode_memory_decisions_total.Add({{"action", "rejected"}})),
+    decode_memory_shadow_rejected(decode_memory_decisions_total.Add({{"action", "shadow_rejected"}})),
+
+    decode_memory_near_limit_total(prometheus::BuildCounter()
+                                     .Name("sipi_decode_memory_near_limit_total")
+                                     .Help("Acquisitions where usage > 80% of budget (early warning)")
+                                     .Register(*registry_)
+                                     .Add({})),
+
+    decode_memory_estimate_bytes(
+      prometheus::BuildHistogram()
+        .Name("sipi_decode_memory_estimate_bytes")
+        .Help("Distribution of per-request peak memory estimates in bytes")
+        .Register(*registry_)
+        .Add({}, prometheus::Histogram::BucketBoundaries{
+          1024, 10240, 102400, 1048576, 10485760, 104857600, 524288000, 1073741824, 2147483648.0})),
+
+    build_info(prometheus::BuildGauge()
+                  .Name("sipi_build_info")
+                  .Help("Sipi build metadata. Value is always 1.")
+                  .Register(*registry_)
+                  .Add({{"version", BUILD_SCM_TAG}, {"commit", BUILD_SCM_REVISION}})),
+
     request_duration_seconds(
       prometheus::BuildHistogram()
         .Name("sipi_request_duration_seconds")
@@ -117,6 +160,8 @@ SipiMetrics::SipiMetrics()
         .Add({}, prometheus::Histogram::BucketBoundaries{
           0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0}))
 {
+  // Set build info gauge to 1 (it's an info-style metric — value is always 1, labels carry metadata)
+  build_info.Set(1);
 }
 
 std::string SipiMetrics::serialize()

@@ -11,6 +11,9 @@
 #include <iostream>
 #include <string>
 #include <sys/stat.h>
+#ifdef __APPLE__
+#include <sys/sysctl.h>
+#endif
 
 #include <fstream>
 #include <thread>
@@ -33,6 +36,8 @@
 #include "SipiConf.h"
 #include "SipiFilenameHash.h"
 #include "SipiHttpServer.hpp"
+#include "SipiMemoryBudget.h"
+#include "SipiMetrics.h"
 #include "SipiRateLimiter.h"
 #include "SipiIO.h"
 #include "SipiImage.hpp"
@@ -104,6 +109,60 @@
   // 4. Fallback: hardware concurrency (works on macOS and Linux)
   unsigned int cores = std::thread::hardware_concurrency();
   return (cores > 0) ? cores : 4;
+}
+
+/// Detect available memory from container limits or system info.
+/// Returns bytes, or 0 if detection fails.
+[[nodiscard]] static size_t detect_available_memory()
+{
+#ifdef __linux__
+  // 1. cgroups v2: /sys/fs/cgroup/memory.max
+  if (std::ifstream mem_max("/sys/fs/cgroup/memory.max"); mem_max.is_open()) {
+    std::string limit_str;
+    mem_max >> limit_str;
+    if (limit_str != "max") {
+      try {
+        return static_cast<size_t>(std::stoll(limit_str));
+      } catch (...) {
+        // Parse failure — fall through
+      }
+    }
+  }
+
+  // 2. cgroups v1: /sys/fs/cgroup/memory/memory.limit_in_bytes
+  if (std::ifstream mem_limit("/sys/fs/cgroup/memory/memory.limit_in_bytes"); mem_limit.is_open()) {
+    long long limit = 0;
+    mem_limit >> limit;
+    // 9223372036854771712 = kernel "unlimited" sentinel
+    if (limit > 0 && limit < 9223372036854771712LL) {
+      return static_cast<size_t>(limit);
+    }
+  }
+
+  // 3. /proc/meminfo fallback
+  if (std::ifstream meminfo("/proc/meminfo"); meminfo.is_open()) {
+    std::string line;
+    while (std::getline(meminfo, line)) {
+      if (line.rfind("MemTotal:", 0) == 0) {
+        // Format: "MemTotal:     16384000 kB"
+        long long kb = 0;
+        std::sscanf(line.c_str(), "MemTotal: %lld kB", &kb);
+        if (kb > 0) return static_cast<size_t>(kb) * 1024;
+      }
+    }
+  }
+#endif
+
+#ifdef __APPLE__
+  // macOS: sysctl hw.memsize
+  int64_t memsize = 0;
+  size_t len = sizeof(memsize);
+  if (sysctlbyname("hw.memsize", &memsize, &len, nullptr, 0) == 0 && memsize > 0) {
+    return static_cast<size_t>(memsize);
+  }
+#endif
+
+  return 0;
 }
 
 /*!
@@ -716,6 +775,20 @@ int main(int argc, char *argv[])
       optRateLimitPixelThreshold,
       "Requests below this pixel count are free (default 2000000).")
     ->envname("SIPI_RATE_LIMIT_PIXEL_THRESHOLD");
+
+  std::string optMaxDecodeMemory = "0";
+  sipiopt
+    .add_option("--max-decode-memory",
+      optMaxDecodeMemory,
+      "Max concurrent decode memory budget (e.g., 2G, 500M). 0 = auto (75% of detected memory).")
+    ->envname("SIPI_MAX_DECODE_MEMORY");
+
+  std::string optDecodeMemoryMode = "off";
+  sipiopt
+    .add_option("--decode-memory-mode",
+      optDecodeMemoryMode,
+      "Decode memory mode: off, monitor, enforce (default off).")
+    ->envname("SIPI_DECODE_MEMORY_MODE");
 
   unsigned optDrainTimeout = 30;
   sipiopt
@@ -1504,6 +1577,38 @@ int main(int argc, char *argv[])
             rl_mode_str.c_str(), rl_max, rl_window, rl_threshold);
         } else {
           log_info("Rate limiting disabled");
+        }
+      }
+
+      // Memory budget — CLI/env overrides config file
+      {
+        size_t budget_bytes = sipiConf.getMaxDecodeMemory();
+        if (!sipiopt.get_option("--max-decode-memory")->empty()) {
+          long long parsed = Sipi::parseSizeString(optMaxDecodeMemory);
+          budget_bytes = (parsed > 0) ? static_cast<size_t>(parsed) : 0;
+        }
+
+        std::string mb_mode_str = sipiConf.getDecodeMemoryMode();
+        if (!sipiopt.get_option("--decode-memory-mode")->empty()) mb_mode_str = optDecodeMemoryMode;
+
+        auto mb_mode = Sipi::parse_memory_budget_mode(mb_mode_str);
+        if (mb_mode != Sipi::MemoryBudgetMode::OFF) {
+          // Auto-detect budget: 75% of available memory
+          if (budget_bytes == 0) {
+            size_t detected = detect_available_memory();
+            if (detected > 0) {
+              budget_bytes = detected * 3 / 4;
+              log_info("Auto-detected memory: %zu bytes, budget set to 75%%: %zu bytes", detected, budget_bytes);
+            } else {
+              log_warn("Could not detect available memory, using 1 GB default budget");
+              budget_bytes = 1ULL * 1024 * 1024 * 1024;
+            }
+          }
+          server.memory_budget(std::make_unique<Sipi::SipiMemoryBudget>(budget_bytes, mb_mode));
+          SipiMetrics::instance().decode_memory_budget_bytes.Set(static_cast<double>(budget_bytes));
+          log_info("Memory budget enabled: mode=%s, budget=%zu bytes", mb_mode_str.c_str(), budget_bytes);
+        } else {
+          log_info("Memory budget disabled");
         }
       }
 

@@ -18,6 +18,7 @@
 #include <string>
 
 #include "SipiCache.h"
+#include "SipiMemoryBudget.h"
 #include "SipiRateLimiter.h"
 #include "iiifparser/SipiQualityFormat.h"
 #include "iiifparser/SipiRegion.h"
@@ -53,6 +54,7 @@ protected:
   size_t _max_pixel_limit{ 0 };//!< max output pixels (w*h) per request, 0 = unlimited
   std::string _resolved_imgroot;  //!< realpath()-resolved image root, set at startup
   std::unique_ptr<SipiRateLimiter> _rate_limiter; //!< Per-client rate limiter (nullptr = disabled)
+  std::unique_ptr<SipiMemoryBudget> _memory_budget; //!< Concurrent decode memory budget (nullptr = disabled)
   std::chrono::steady_clock::time_point _start_time; //!< Server start time for health endpoint
 
 public:
@@ -166,6 +168,9 @@ public:
 
   void rate_limiter(std::unique_ptr<SipiRateLimiter> rl) { _rate_limiter = std::move(rl); }
   SipiRateLimiter *rate_limiter() { return _rate_limiter.get(); }
+
+  void memory_budget(std::unique_ptr<SipiMemoryBudget> mb) { _memory_budget = std::move(mb); }
+  SipiMemoryBudget *memory_budget() { return _memory_budget.get(); }
 
   std::chrono::steady_clock::time_point start_time() const { return _start_time; }
 
