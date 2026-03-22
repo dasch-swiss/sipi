@@ -323,20 +323,19 @@ bool SipiIOPng::read(SipiImage *img,
 
 SipiImgInfo SipiIOPng::getDim(const std::string &filepath)
 {
-  FILE *infile;
   SipiImgInfo info;
   unsigned char header[8];
 
   //
   // open the input file
   //
-  if ((infile = fopen(filepath.c_str(), "rb")) == nullptr) {
+  auto infile = std::unique_ptr<FILE, decltype(&fclose)>(fopen(filepath.c_str(), "rb"), fclose);
+  if (!infile) {
     info.success = SipiImgInfo::FAILURE;
     return info;
   }
-  fread(header, 1, 8, infile);
+  fread(header, 1, 8, infile.get());
   if (png_sig_cmp(header, 0, 8) != 0) {
-    fclose(infile);
     info.success = SipiImgInfo::FAILURE;
     return info;
   }
@@ -347,19 +346,21 @@ SipiImgInfo SipiIOPng::getDim(const std::string &filepath)
   if ((png_ptr = png_create_read_struct(
          PNG_LIBPNG_VER_STRING, (png_voidp) nullptr, (png_error_ptr)sipi_error_fn, (png_error_ptr)sipi_warning_fn))
       == nullptr) {
-    fclose(infile);
     throw SipiImageError("Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_structp !");
   }
   if ((info_ptr = png_create_info_struct(png_ptr)) == nullptr) {
-    fclose(infile);
+    png_destroy_read_struct(&png_ptr, nullptr, nullptr);
     throw SipiImageError("Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_infop !");
   }
 
-  png_init_io(png_ptr, infile);
+  png_init_io(png_ptr, infile.get());
   png_set_sig_bytes(png_ptr, 8);
+  png_read_info(png_ptr, info_ptr);
 
   info.width = png_get_image_width(png_ptr, info_ptr);
   info.height = png_get_image_height(png_ptr, info_ptr);
+  info.nc = png_get_channels(png_ptr, info_ptr);
+  info.bps = png_get_bit_depth(png_ptr, info_ptr);
   info.orientation = TOPLEFT;
   info.success = SipiImgInfo::DIMS;
 
