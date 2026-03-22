@@ -199,6 +199,8 @@ flags.
 | `SIPI_SENTRY_DSN` | `--sentry-dsn` | | Sentry DSN |
 | `SIPI_SENTRY_RELEASE` | `--sentry-release` | | Sentry release |
 | `SIPI_SENTRY_ENVIRONMENT` | `--sentry-environment` | | Sentry environment |
+| `SIPI_MAX_DECODE_MEMORY` | `--max-decode-memory` | `0` (auto) | Max concurrent decode memory (`0`=auto 75%, `2G`, `500M`) |
+| `SIPI_DECODE_MEMORY_MODE` | `--decode-memory-mode` | `off` | Memory budget mode: `off`, `monitor`, `enforce` |
 
 **Configuration precedence** (highest to lowest):
 

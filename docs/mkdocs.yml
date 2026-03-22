@@ -23,6 +23,9 @@ nav:
   - Downstream Dependencies: development/downstream-dependencies.md
   - Commit and PR Conventions: development/commit-conventions.md
   - Reviewer Guidelines: development/reviewer-guidelines.md
+  - Rate Limiter: operation/rate-limiter.md
+  - Memory Budget: operation/memory-budget.md
+  - Health Endpoint: operation/health-endpoint.md
   - Release Notes: release-notes/index.md
 
 theme:
