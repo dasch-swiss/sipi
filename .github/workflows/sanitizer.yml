@@ -77,10 +77,13 @@ jobs:
       - name: Check for sanitizer findings
         if: always()
         run: |
+          # Check for actual findings (SUMMARY lines), not just file existence.
+          # ASan always writes a log file when log_path is set, even with zero
+          # findings (it contains only the suppressions report).
           HAS_FINDINGS=false
-          for f in /tmp/asan-unit.* /tmp/asan-e2e.*; do
-            [ -f "$f" ] && HAS_FINDINGS=true && break || true
-          done
+          if grep -q "SUMMARY:" /tmp/asan-unit.* /tmp/asan-e2e.* 2>/dev/null; then
+            HAS_FINDINGS=true
+          fi
           if [ "$HAS_FINDINGS" = "true" ]; then
             echo "::error::Sanitizer findings detected — PR cannot merge with memory safety issues"
             echo ""
