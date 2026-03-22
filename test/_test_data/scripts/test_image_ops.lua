@@ -17,6 +17,12 @@ if not op or not param or not file then
     return
 end
 
+-- Reject path traversal attempts (dot-dot-slash, encoded variants)
+if file:find("%.%.") or file:find("%%2e", 1, true) or file:find("\0") then
+    send_error(400, "Invalid file path")
+    return
+end
+
 local filepath = config.imgroot .. '/' .. file
 
 local success, img = SipiImage.new(filepath)

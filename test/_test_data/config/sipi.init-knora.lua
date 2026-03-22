@@ -64,6 +64,11 @@ function pre_flight(prefix, identifier, cookie)
     end
 
 
+    -- Reject path traversal in identifier (dot-dot-slash, encoded variants)
+    if identifier and (identifier:find("%.%.") or identifier:find("%%2e", 1, true) or identifier:find("\0")) then
+        return 'deny'
+    end
+
     -- Test-only prefixes for restrict/watermark testing
     if prefix == "test_restrict" then
         local actual_filepath = config.imgroot .. '/unit/' .. identifier
