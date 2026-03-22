@@ -460,6 +460,7 @@ add_executable(sipi
         ${PROJECT_SOURCE_DIR}/src/sipi.cpp
         ${PROJECT_SOURCE_DIR}/src/SipiConf.cpp include/SipiConf.h
         ${PROJECT_SOURCE_DIR}/src/SipiRateLimiter.cpp ${PROJECT_SOURCE_DIR}/include/SipiRateLimiter.h
+        ${PROJECT_SOURCE_DIR}/src/SipiMemoryBudget.cpp ${PROJECT_SOURCE_DIR}/include/SipiMemoryBudget.h
         ${PROJECT_SOURCE_DIR}/src/SipiError.cpp
         ${PROJECT_SOURCE_DIR}/src/SipiError.hpp
         ${PROJECT_SOURCE_DIR}/include/CLI11.hpp
@@ -486,6 +487,7 @@ add_executable(sipi
         ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiQualityFormat.cpp ${PROJECT_SOURCE_DIR}/include/iiifparser/SipiQualityFormat.h
         ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiRegion.cpp ${PROJECT_SOURCE_DIR}/include/iiifparser/SipiRegion.h
         ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiSize.cpp include/iiifparser/SipiSize.h
+        ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiDecodeDims.cpp include/iiifparser/SipiDecodeDims.h
         ${PROJECT_SOURCE_DIR}/src/SipiCommon.cpp ${PROJECT_SOURCE_DIR}/include/SipiCommon.h
         ${PROJECT_SOURCE_DIR}/src/Logger.cpp ${PROJECT_SOURCE_DIR}/include/Logger.h
         ${PROJECT_SOURCE_DIR}/shttps/Global.h

@@ -176,7 +176,7 @@ fuzz-corpus-update: ## download CI fuzz corpus and merge into seed corpus
 
 .PHONY: hurl-test
 hurl-test: ## run Hurl HTTP contract tests (requires built sipi in build/)
-	cd test/_test_data && $(CURDIR)/build/sipi --config config/sipi.fake-knora-test-config.lua & \
+	cd test/_test_data && $(CURDIR)/build/sipi --config config/sipi.e2e-test-config.lua & \
 	  SIPI_PID=$$!; \
 	  READY=0; for i in $$(seq 1 30); do curl -sf http://127.0.0.1:1024/unit/lena512.jp2/info.json > /dev/null 2>&1 && READY=1 && break; sleep 0.5; done; \
 	  if [ "$$READY" -ne 1 ]; then echo "ERROR: sipi failed to start within 15s"; kill $$SIPI_PID 2>/dev/null; exit 1; fi; \

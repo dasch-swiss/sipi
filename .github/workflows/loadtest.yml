@@ -53,7 +53,7 @@ jobs:
             --extra-experimental-features "nix-command flakes" \
             --option filter-syscalls false \
             develop --command bash -c \
-              "cd test/_test_data && ../../build/sipi --config config/sipi.fake-knora-test-config.lua &"
+              "cd test/_test_data && ../../build/sipi --config config/sipi.e2e-test-config.lua &"
           # Wait for server readiness
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:1024/unit/lena512.jp2/info.json > /dev/null 2>&1 && break
@@ -91,7 +91,7 @@ jobs:
 
       - name: Stop sipi server
         if: always()
-        run: pkill -f "sipi.*fake-knora" || true
+        run: pkill -f "sipi.*e2e-test-config" || true
 
       - name: Upload load test results
         if: always()
