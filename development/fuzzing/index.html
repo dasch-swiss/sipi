@@ -1,0 +1,1038 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://sipi.io/development/fuzzing/">
+      
+      
+        <link rel="prev" href="../developing/">
+      
+      
+        <link rel="next" href="../testing-strategy/">
+      
+      
+      <link rel="icon" href="../../assets/images/dasch-favicon.ico">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>Fuzz Testing - SIPI Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.bcfcd587.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/style/theme.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-blue" data-md-color-accent="deep-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#fuzz-testing" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="SIPI Documentation" class="md-header__button md-logo" aria-label="SIPI Documentation" data-md-component="logo">
+      
+  <img src="../../assets/images/dasch-icon-white.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            SIPI Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Fuzz Testing
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dasch-swiss/sipi" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dasch-swiss/sipi
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="SIPI Documentation" class="md-nav__button md-logo" aria-label="SIPI Documentation" data-md-component="logo">
+      
+  <img src="../../assets/images/dasch-icon-white.svg" alt="logo">
+
+    </a>
+    SIPI Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dasch-swiss/sipi" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dasch-swiss/sipi
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/introduction/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Introduction
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/sipi/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/running/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Running
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lua/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Lua Integration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lua/lua-image/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Lua Image Functions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lua/sqlite/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SQLite Integration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../building/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Building
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ci/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    CI and Release
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../developing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Developing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Fuzz Testing
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Fuzz Testing
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      Architecture
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      Requirements
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-locally" class="md-nav__link">
+    <span class="md-ellipsis">
+      Running Locally
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Running Locally">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#build-the-fuzz-target" class="md-nav__link">
+    <span class="md-ellipsis">
+      Build the fuzz target
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run-with-seed-corpus" class="md-nav__link">
+    <span class="md-ellipsis">
+      Run with seed corpus
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#understanding-the-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      Understanding the output
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#useful-flags" class="md-nav__link">
+    <span class="md-ellipsis">
+      Useful flags
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ci-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      CI Integration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CI Integration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-it-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      What it does
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#corpus-accumulation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Corpus accumulation
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#updating-the-seed-corpus" class="md-nav__link">
+    <span class="md-ellipsis">
+      Updating the Seed Corpus
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Updating the Seed Corpus">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#download-and-merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      Download and merge
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-to-update" class="md-nav__link">
+    <span class="md-ellipsis">
+      When to update
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-new-fuzz-targets" class="md-nav__link">
+    <span class="md-ellipsis">
+      Adding New Fuzz Targets
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing-strategy/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Testing Strategy
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../downstream-dependencies/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Downstream Dependencies
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../commit-conventions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Commit and PR Conventions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reviewer-guidelines/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Reviewer Guidelines
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operation/rate-limiter/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Rate Limiter
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operation/memory-budget/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Memory Budget
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operation/health-endpoint/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Health Endpoint
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release-notes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Release Notes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="fuzz-testing">Fuzz Testing<a class="headerlink" href="#fuzz-testing" title="Permanent link">&para;</a></h1>
+<p>Sipi uses <a href="https://llvm.org/docs/LibFuzzer.html">libFuzzer</a> to fuzz-test the IIIF URI parser (<code>parse_iiif_uri</code>). The fuzzer feeds random and mutated inputs to the parser, looking for crashes, memory safety issues, and undefined behavior via AddressSanitizer.</p>
+<h2 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>fuzz/
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>├── CMakeLists.txt              # Top-level fuzz build (adds subdirectories)
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>└── handlers/
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    ├── CMakeLists.txt           # Fuzz target build config (requires Clang)
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    ├── iiif_handler_uri_parser_target.cpp  # Fuzz harness
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    └── corpus/                  # Seed corpus (checked into git)
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        ├── iiif_basic           # /prefix/image.jp2/full/max/0/default.jpg
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>        ├── info_json            # /unit/lena512.jp2/info.json
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>        ├── knora_json           # /unit/lena512.jp2/knora.json
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>        └── ...                  # 52 seed inputs total
+</code></pre></div>
+<p>The fuzz harness is minimal — it converts the fuzzer's byte input to a <code>std::string</code> and calls <code>parse_iiif_uri()</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">extern</span><span class="w"> </span><span class="s">&quot;C&quot;</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">LLVMFuzzerTestOneInput</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="kt">uint8_t</span><span class="w"> </span><span class="o">*</span><span class="n">Data</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">Size</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="nf">input</span><span class="p">(</span><span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="k">const</span><span class="w"> </span><span class="kt">char</span><span class="w"> </span><span class="o">*&gt;</span><span class="p">(</span><span class="n">Data</span><span class="p">),</span><span class="w"> </span><span class="n">Size</span><span class="p">);</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="k">auto</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">handlers</span><span class="o">::</span><span class="n">iiif_handler</span><span class="o">::</span><span class="n">parse_iiif_uri</span><span class="p">(</span><span class="n">input</span><span class="p">);</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">result</span><span class="p">.</span><span class="n">has_value</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="k">volatile</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">result</span><span class="o">-&gt;</span><span class="n">request_type</span><span class="p">;</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="n">type</span><span class="p">;</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="p">}</span>
+</code></pre></div>
+<h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
+<p>libFuzzer is built into Clang, so you need a Clang compiler. On Nix, use the clang dev shell:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>nix<span class="w"> </span>develop<span class="w"> </span>.#clang
+</code></pre></div>
+<p>The CMake config (<code>fuzz/handlers/CMakeLists.txt</code>) guards the target behind a Clang check — it won't build with GCC or zig-cc.</p>
+<h2 id="running-locally">Running Locally<a class="headerlink" href="#running-locally" title="Permanent link">&para;</a></h2>
+<h3 id="build-the-fuzz-target">Build the fuzz target<a class="headerlink" href="#build-the-fuzz-target" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>nix<span class="w"> </span>develop<span class="w"> </span>.#clang
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build-fuzz<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Debug
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build-fuzz<span class="w"> </span>--target<span class="w"> </span>iiif_handler_uri_parser_fuzz<span class="w"> </span>-j<span class="k">$(</span>nproc<span class="k">)</span>
+</code></pre></div>
+<h3 id="run-with-seed-corpus">Run with seed corpus<a class="headerlink" href="#run-with-seed-corpus" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nb">cd</span><span class="w"> </span>build-fuzz/fuzz/handlers
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>mkdir<span class="w"> </span>-p<span class="w"> </span>corpus
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>./iiif_handler_uri_parser_fuzz<span class="w"> </span>corpus/<span class="w"> </span>../../../fuzz/handlers/corpus/<span class="w"> </span>-max_total_time<span class="o">=</span><span class="m">60</span>
+</code></pre></div>
+<ul>
+<li>First argument (<code>corpus/</code>) — live corpus directory. New interesting inputs are written here.</li>
+<li>Second argument (<code>../../../fuzz/handlers/corpus/</code>) — seed corpus (read-only). These 52 inputs give the fuzzer a head start with known-good IIIF URIs.</li>
+<li><code>-max_total_time=60</code> — run for 60 seconds. Without this, the fuzzer runs indefinitely (Ctrl+C to stop).</li>
+</ul>
+<h3 id="understanding-the-output">Understanding the output<a class="headerlink" href="#understanding-the-output" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>INFO: Loaded 52 files from ../../../fuzz/handlers/corpus/
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>#52    INITED cov: 623 ft: 1439 corp: 35/1066b
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>#55    NEW    cov: 625 ft: 1441 corp: 36/1104b
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>#96    REDUCE cov: 670 ft: 1589 corp: 46/1461b
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cov</code></td>
+<td>Code coverage edges discovered — should grow initially, then plateau</td>
+</tr>
+<tr>
+<td><code>ft</code></td>
+<td>Feature targets — finer-grained coverage metric</td>
+</tr>
+<tr>
+<td><code>corp</code></td>
+<td>Corpus size / total bytes — grows as new interesting inputs are found</td>
+</tr>
+<tr>
+<td><code>NEW</code></td>
+<td>Found an input that triggers new coverage</td>
+</tr>
+<tr>
+<td><code>REDUCE</code></td>
+<td>Found a smaller input that triggers the same coverage</td>
+</tr>
+<tr>
+<td><code>pulse</code></td>
+<td>Periodic heartbeat — the fuzzer is still running</td>
+</tr>
+</tbody>
+</table>
+<h3 id="useful-flags">Useful flags<a class="headerlink" href="#useful-flags" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Limit input size (parser inputs are short URIs, not megabytes)</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>./iiif_handler_uri_parser_fuzz<span class="w"> </span>corpus/<span class="w"> </span>-max_len<span class="o">=</span><span class="m">256</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># Run a fixed number of iterations</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>./iiif_handler_uri_parser_fuzz<span class="w"> </span>corpus/<span class="w"> </span>-runs<span class="o">=</span><span class="m">100000</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="c1"># Print coverage stats at the end</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>./iiif_handler_uri_parser_fuzz<span class="w"> </span>corpus/<span class="w"> </span>-print_final_stats<span class="o">=</span><span class="m">1</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="c1"># Reproduce a crash (run a single input)</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>./iiif_handler_uri_parser_fuzz<span class="w"> </span>/path/to/crash-abc123
+</code></pre></div>
+<h2 id="ci-integration">CI Integration<a class="headerlink" href="#ci-integration" title="Permanent link">&para;</a></h2>
+<p>The fuzz workflow (<code>.github/workflows/fuzz.yml</code>) runs:</p>
+<ul>
+<li><strong>Nightly</strong> at 02:00 UTC</li>
+<li><strong>On demand</strong> via the Actions tab → "fuzz" → "Run workflow" (with configurable duration)</li>
+</ul>
+<h3 id="what-it-does">What it does<a class="headerlink" href="#what-it-does" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Builds the fuzz target using <code>nix develop .#clang</code></li>
+<li>Downloads the corpus from the previous night's run (if available)</li>
+<li>Runs the fuzzer for 10 minutes (default), merging new findings into the live corpus</li>
+<li>Uploads the updated corpus as an artifact (<code>fuzz-corpus</code>, retained 30 days)</li>
+<li>On crash:<ul>
+<li>Uploads crash reproducers as artifacts (<code>fuzz-crashes</code>, retained 90 days)</li>
+<li>Opens a GitHub issue with crash details, hex dump, and reproduction instructions</li>
+</ul>
+</li>
+</ol>
+<h3 id="corpus-accumulation">Corpus accumulation<a class="headerlink" href="#corpus-accumulation" title="Permanent link">&para;</a></h3>
+<p>Each nightly run picks up where the last one left off. The corpus grows over time, so the fuzzer spends its time exploring new territory rather than rediscovering known paths.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>Night 1: 52 seeds → 10 min → ~200 inputs (uploaded)
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>Night 2: ~200 inputs → 10 min → ~300 inputs (uploaded)
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>Night N: corpus keeps growing, coverage accumulates
+</code></pre></div>
+<h2 id="updating-the-seed-corpus">Updating the Seed Corpus<a class="headerlink" href="#updating-the-seed-corpus" title="Permanent link">&para;</a></h2>
+<p>Periodically, you should pull the CI corpus back into the repo so that:</p>
+<ul>
+<li>Local fuzzing starts with the best available coverage</li>
+<li>The CI corpus survives artifact expiration (30-day retention)</li>
+<li>New contributors get a rich starting corpus</li>
+</ul>
+<h3 id="download-and-merge">Download and merge<a class="headerlink" href="#download-and-merge" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>make<span class="w"> </span>fuzz-corpus-update
+</code></pre></div>
+<p>This downloads the latest <code>fuzz-corpus</code> artifact from CI, deduplicates by content hash, and merges into <code>fuzz/handlers/corpus/</code>. It reports how many new inputs were added.</p>
+<p>Then commit the result:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>git<span class="w"> </span>add<span class="w"> </span>fuzz/handlers/corpus/
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;test: update fuzz seed corpus from CI&quot;</span>
+</code></pre></div>
+<h3 id="when-to-update">When to update<a class="headerlink" href="#when-to-update" title="Permanent link">&para;</a></h3>
+<ul>
+<li>After the fuzzer has been running for a few weeks and coverage has grown significantly</li>
+<li>Before a release, to lock in the best available corpus</li>
+<li>After fixing a bug found by the fuzzer (the crash input is automatically in the CI corpus)</li>
+</ul>
+<h2 id="adding-new-fuzz-targets">Adding New Fuzz Targets<a class="headerlink" href="#adding-new-fuzz-targets" title="Permanent link">&para;</a></h2>
+<p>To fuzz a different component:</p>
+<ol>
+<li>Create a new directory under <code>fuzz/</code> (e.g., <code>fuzz/image_processing/</code>)</li>
+<li>Write a harness implementing <code>LLVMFuzzerTestOneInput</code></li>
+<li>Add a <code>CMakeLists.txt</code> with <code>-fsanitize=fuzzer,address</code> flags (copy from <code>fuzz/handlers/CMakeLists.txt</code>)</li>
+<li>Register the subdirectory in <code>fuzz/CMakeLists.txt</code></li>
+<li>Create a <code>corpus/</code> directory with seed inputs</li>
+<li>Add a step to <code>.github/workflows/fuzz.yml</code> for the new target</li>
+</ol>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      &copy; 2017 - 2026 <a href='https://dasch.swiss' target='_blank'>Data and Service Center for the Humanities (DaSCH)</a>
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["search.suggest", "search.highlight", "navigation.sections", "toc.integrate", "content.code.copy"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+    
+  </body>
+</html>
