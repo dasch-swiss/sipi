@@ -277,7 +277,7 @@ fn empty_file_upload() {
     // Upload a zero-byte file, verify graceful error.
     // Uses isolated server because empty uploads can destabilize connection handlers.
     let test_data = test_data_dir();
-    let srv = SipiServer::start("config/sipi.fake-knora-test-config.lua", &test_data);
+    let srv = SipiServer::start("config/sipi.e2e-test-config.lua", &test_data);
     let c = http_client();
 
     let form = multipart::Form::new().part(
@@ -319,7 +319,7 @@ fn concurrent_file_uploads() {
     // or fail gracefully (no crashes).
     // Uses isolated server because 10 parallel uploads can destabilize the shared server.
     let test_data = test_data_dir();
-    let srv = SipiServer::start("config/sipi.fake-knora-test-config.lua", &test_data);
+    let srv = SipiServer::start("config/sipi.e2e-test-config.lua", &test_data);
     let file = test_image_path("unit/lena512.tif");
     let file_bytes = std::fs::read(&file).expect("read lena512.tif");
 

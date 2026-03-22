@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 /// Start a fresh server for each shutdown test (not shared).
 fn fresh_server() -> SipiServer {
     let test_data = test_data_dir();
-    SipiServer::start("config/sipi.fake-knora-test-config.lua", &test_data)
+    SipiServer::start("config/sipi.e2e-test-config.lua", &test_data)
 }
 
 #[test]

@@ -1362,7 +1362,7 @@ fn corrupt_image_handling() {
     std::fs::write(&corrupt_path, &real_jp2[..100]).expect("write truncated JP2");
 
     let isolated_srv =
-        sipi_e2e::SipiServer::start("config/sipi.fake-knora-test-config.lua", &test_data);
+        sipi_e2e::SipiServer::start("config/sipi.e2e-test-config.lua", &test_data);
     let isolated_client = sipi_e2e::http_client();
 
     let result = isolated_client
