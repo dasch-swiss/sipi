@@ -1,5 +1,33 @@
 # Changelog
 
+## [4.0.0](https://github.com/dasch-swiss/sipi/compare/v3.18.0...v4.0.0) (2026-03-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* SipiImgInfo gains nc/bps fields (struct size change).
+
+### Features
+
+* Memory budget semaphore for concurrent image decode throttling ([afa682e](https://github.com/dasch-swiss/sipi/commit/afa682eff297ca6b7c41434f2eecc94b7be07f79))
+* **metrics:** Add sipi_request_duration_seconds Prometheus histogram ([050f922](https://github.com/dasch-swiss/sipi/commit/050f922eb6260ec44a1a2c7b3a637821b5757925))
+* OOM prevention, rate limiter, health endpoint, graceful shutdown ([45f3192](https://github.com/dasch-swiss/sipi/commit/45f31929b2894ed7c0c5c94b03e2f03d090770f8))
+* **shttps:** Auto-detect thread count from CPU cores with container awareness ([85f05c1](https://github.com/dasch-swiss/sipi/commit/85f05c123131bfc38a5c28f24c06b9e37e1f9e95))
+
+
+### Bug Fixes
+
+* Input validation security hardening (R1-R10) ([76b0790](https://github.com/dasch-swiss/sipi/commit/76b07909d426769c0097c54e9d6d69202a353b5e))
+* JPEG getDim memory leaks on error paths ([e963c89](https://github.com/dasch-swiss/sipi/commit/e963c89b1798463daeffbd4bb561a2ce8601895e))
+* Memory safety for SipiImage and SipiFilenameHash (R11-R19) ([6f0da6c](https://github.com/dasch-swiss/sipi/commit/6f0da6ccb6186185f2a6554ec4ebc7543d7474db))
+* PNG getDim returns 0x0 dimensions due to missing png_read_info ([955230e](https://github.com/dasch-swiss/sipi/commit/955230e7e3ab6036672ecbcd66a1f33aec031093))
+* Queue liveness check, timeout validation, and unlimited queue default ([f4bba6a](https://github.com/dasch-swiss/sipi/commit/f4bba6a2f544a5366d96d3f1319c3b51ead2a7f4))
+* Resolve all memory leaks detected by LeakSanitizer ([c092928](https://github.com/dasch-swiss/sipi/commit/c092928328fc91026b5e5d191169de5d81a9a17e))
+* Resolve ASan/UBSan sanitizer findings (DEV-6038, DEV-6039, DEV-6040) ([90e076c](https://github.com/dasch-swiss/sipi/commit/90e076cdf8479fed16d9d867546d4470c89ed69e))
+* Resolve heap-buffer-overflow, stack-use-after-scope, and UBSan findings ([a915198](https://github.com/dasch-swiss/sipi/commit/a9151984c2f3862692bab80987a1028b5516631e))
+* **shttps:** Fix connection drops under concurrent load (DEV-6024) ([7a4459c](https://github.com/dasch-swiss/sipi/commit/7a4459ca28d8145f4344176ae2586e5031258829))
+* **shttps:** Reverse poll loop iteration to prevent index-shifting bug (DEV-6024) ([5cf873f](https://github.com/dasch-swiss/sipi/commit/5cf873f04245ef5c5091a2e36985a1177978b78b))
+
 ## [3.18.0](https://github.com/dasch-swiss/sipi/compare/v3.17.2...v3.18.0) (2026-03-08)
 
 
