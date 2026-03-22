@@ -688,6 +688,8 @@ SipiImgInfo SipiIOJ2k::getDim(const std::string &filepath)
   info.tile_width = __tnx;
   info.tile_height = __tny;
   info.clevels = codestream.get_min_dwt_levels();
+  info.nc = codestream.get_num_components();
+  info.bps = codestream.get_bit_depth(0);
 
   kdu_codestream_comment comment = codestream.get_comment();
   while (comment.exists()) {

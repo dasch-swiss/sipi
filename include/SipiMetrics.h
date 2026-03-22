@@ -51,6 +51,19 @@ public:
   prometheus::Gauge &cache_files_limit;
   prometheus::Gauge &rate_limit_clients_tracked;
 
+  // Memory budget metrics
+  prometheus::Gauge &decode_memory_budget_bytes;
+  prometheus::Gauge &decode_memory_used_bytes;
+  prometheus::Family<prometheus::Counter> &decode_memory_decisions_total;
+  prometheus::Counter &decode_memory_acquired;        ///< cached: decisions_total{action="acquired"}
+  prometheus::Counter &decode_memory_rejected;        ///< cached: decisions_total{action="rejected"}
+  prometheus::Counter &decode_memory_shadow_rejected; ///< cached: decisions_total{action="shadow_rejected"}
+  prometheus::Counter &decode_memory_near_limit_total;
+  prometheus::Histogram &decode_memory_estimate_bytes;
+
+  // Build info (version correlation)
+  prometheus::Gauge &build_info;
+
   // Histograms
   prometheus::Histogram &request_duration_seconds;
 

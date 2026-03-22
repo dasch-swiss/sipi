@@ -209,7 +209,25 @@ sipi = {
     -- Requests producing images larger than this are rejected with HTTP 400.
     -- 0 = unlimited (default). Example: 100000000 = 100 megapixels.
     --
-    max_pixel_limit = 0
+    max_pixel_limit = 0,
+
+    --
+    -- Memory budget: global decode memory limit.
+    -- Prevents OOM from concurrent large image decodes by tracking aggregate
+    -- memory across all in-flight decode operations.
+    -- 0 = auto-detect from container memory limit (75% of cgroup memory.max)
+    -- Examples: "2G", "500M", "0" (auto), "1073741824" (1GB in bytes)
+    --
+    max_decode_memory = "0",
+
+    --
+    -- Memory budget mode:
+    --   "off"     = disabled (default)
+    --   "monitor" = track and log but don't reject requests
+    --   "enforce" = reject requests with 503 when budget exhausted
+    -- Recommended: start with "monitor", tune with metrics, then switch to "enforce"
+    --
+    decode_memory_mode = "off"
 }
 
 admin = {

@@ -73,6 +73,8 @@ public:
   int tile_width{ 0 };
   int tile_height{ 0 };
   int clevels{ 0 };
+  int nc{ 0 };      ///< number of channels (samples per pixel)
+  int bps{ 0 };     ///< bits per sample (8 or 16 typically)
   int numpages{ 0 };
   std::string internalmimetype;
   std::string origname;
@@ -160,7 +162,7 @@ public:
    *
    * \param filepath Pathname of the image file
    */
-  virtual SipiImgInfo getDim(const std::string &filepath) = 0;
+  [[nodiscard]] virtual SipiImgInfo getDim(const std::string &filepath) = 0;
 
 
   /*!

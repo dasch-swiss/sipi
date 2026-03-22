@@ -69,6 +69,8 @@ private:
   unsigned rate_limit_window{ 600 };       //!< sliding window in seconds (default 10 min)
   std::string rate_limit_mode_str{ "off" };//!< "off", "monitor", "enforce"
   size_t rate_limit_pixel_threshold{ 2000000 }; //!< requests below this are free (default 2MP)
+  size_t max_decode_memory{ 0 };              //!< max concurrent decode memory, 0 = auto (75% of detected)
+  std::string decode_memory_mode_str{ "off" }; //!< "off", "monitor", "enforce"
   unsigned drain_timeout{ 30 }; //!< seconds to wait for in-flight requests during shutdown
   size_t max_waiting_connections{ 0 }; //!< max queue size before 503 (0 = unlimited, timeout-only)
   unsigned queue_timeout{ 10 }; //!< max seconds in waiting queue before 503 (minimum 1)
@@ -191,6 +193,12 @@ public:
 
   size_t getRateLimitPixelThreshold() const { return rate_limit_pixel_threshold; }
   void setRateLimitPixelThreshold(size_t v) { rate_limit_pixel_threshold = v; }
+
+  size_t getMaxDecodeMemory() const { return max_decode_memory; }
+  void setMaxDecodeMemory(size_t v) { max_decode_memory = v; }
+
+  std::string getDecodeMemoryMode() const { return decode_memory_mode_str; }
+  void setDecodeMemoryMode(const std::string &s) { decode_memory_mode_str = s; }
 
   unsigned getDrainTimeout() const { return drain_timeout; }
   void setDrainTimeout(unsigned v) { drain_timeout = v; }
