@@ -133,14 +133,13 @@ jobs:
           fi
           [ "$failed" -eq 0 ] || exit 1
 
-      - name: Install test dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y nginx imagemagick apache2-utils
-          pip3 install --break-system-packages pytest requests psutil iiif-validator
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Run e2e tests
-        run: cd test/e2e && pytest -s --sipi-exec=$GITHUB_WORKSPACE/build/sipi
+      - name: Run Rust e2e tests
+        env:
+          SIPI_BIN: ${{ github.workspace }}/build/sipi
+        run: cd test/e2e-rust && cargo test -- --test-threads=1
 
       # --- Host: package release ---
       - name: Package release archive
