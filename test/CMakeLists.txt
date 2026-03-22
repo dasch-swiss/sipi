@@ -70,6 +70,7 @@ endif()
 set(SIPI_TESTABLE_SRCS
     ${CMAKE_SOURCE_DIR}/src/SipiConf.cpp
     ${CMAKE_SOURCE_DIR}/src/SipiRateLimiter.cpp
+    ${CMAKE_SOURCE_DIR}/src/SipiMemoryBudget.cpp
     ${CMAKE_SOURCE_DIR}/src/SipiError.cpp
     ${CMAKE_SOURCE_DIR}/src/metadata/SipiIcc.cpp
     ${CMAKE_SOURCE_DIR}/src/metadata/SipiXmp.cpp
@@ -91,6 +92,7 @@ set(SIPI_TESTABLE_SRCS
     ${CMAKE_SOURCE_DIR}/src/iiifparser/SipiQualityFormat.cpp
     ${CMAKE_SOURCE_DIR}/src/iiifparser/SipiRegion.cpp
     ${CMAKE_SOURCE_DIR}/src/iiifparser/SipiSize.cpp
+    ${CMAKE_SOURCE_DIR}/src/iiifparser/SipiDecodeDims.cpp
     ${CMAKE_SOURCE_DIR}/src/SipiCommon.cpp
     ${CMAKE_SOURCE_DIR}/src/Logger.cpp
     ${CMAKE_SOURCE_DIR}/src/SipiFilenameHash.cpp
@@ -181,6 +183,12 @@ add_subdirectory(unit/handlers)
 
 # Filename hash tests
 add_subdirectory(unit/filenamehash)
+
+# Memory budget tests
+add_subdirectory(unit/memory_budget)
+
+# Decode dimensions tests
+add_subdirectory(unit/decode_dims)
 
 # SHTTPS utility tests (Hash, Parsing)
 add_subdirectory(unit/shttps)

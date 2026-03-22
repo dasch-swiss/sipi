@@ -30,11 +30,13 @@ pub struct SipiServer {
 }
 
 impl SipiServer {
-    /// Start a sipi server with the given config file.
+    /// Start a sipi server with the given config file and extra CLI arguments.
     ///
     /// `config` — path to the Lua config file, relative to `working_dir`.
     /// `working_dir` — the directory sipi should run in (where config/, scripts/, images/ are).
-    pub fn start(config: &str, working_dir: &Path) -> Self {
+    /// `extra_args` — additional CLI arguments appended after standard ones.
+    ///                 CLI args override Lua config values (CLI11 precedence).
+    pub fn start_with_args(config: &str, working_dir: &Path, extra_args: &[&str]) -> Self {
         let sipi_bin = std::env::var("SIPI_BIN")
             .unwrap_or_else(|_| find_sipi_bin().to_string_lossy().to_string());
 
@@ -46,12 +48,13 @@ impl SipiServer {
         kill_process_on_port(ssl_port);
 
         eprintln!(
-            "[test-harness] Starting sipi: bin={} config={} ports={}/{} cwd={}",
+            "[test-harness] Starting sipi: bin={} config={} ports={}/{} cwd={} extra_args={:?}",
             sipi_bin,
             config,
             http_port,
             ssl_port,
-            working_dir.display()
+            working_dir.display(),
+            extra_args
         );
 
         let mut cmd = Command::new(&sipi_bin);
@@ -61,6 +64,7 @@ impl SipiServer {
             .arg(http_port.to_string())
             .arg("--sslport")
             .arg(ssl_port.to_string())
+            .args(extra_args)
             .current_dir(working_dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -261,11 +265,16 @@ impl SipiServer {
         }
     }
 
+    /// Start a sipi server with the given config file (no extra args).
+    pub fn start(config: &str, working_dir: &Path) -> Self {
+        Self::start_with_args(config, working_dir, &[])
+    }
+
     /// Start with the default test config.
     /// Sipi auto-creates the cache directory if missing.
     pub fn start_default() -> Self {
         let test_data = test_data_dir();
-        Self::start("config/sipi.fake-knora-test-config.lua", &test_data)
+        Self::start("config/sipi.e2e-test-config.lua", &test_data)
     }
 
     /// Get the OS PID of the server process.
