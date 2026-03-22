@@ -52,7 +52,7 @@ Available in `Connection::StatusCodes` enum (`shttps/Connection.h`):
 | 404 | `NOT_FOUND` | Image file not found |
 | 429 | `TOO_MANY_REQUESTS` | Rate limiter triggered |
 | 500 | `INTERNAL_SERVER_ERROR` | Unexpected failures, OOM recovery |
-| 503 | `SERVICE_UNAVAILABLE` | Server overloaded / shutting down |
+| 503 | `SERVICE_UNAVAILABLE` | Server overloaded / shutting down / memory budget exhausted |
 
 ## Configuration Pattern
 

@@ -31,6 +31,7 @@
 ### Resource exhaustion
 - Large allocations (`new byte[bufsiz]`) wrapped in `try`/`catch` for `std::bad_alloc`
 - Per-request pixel limit checked before expensive image processing
+- Memory budget acquired before decode, released via RAII guard (`MemoryBudgetGuard`)
 - Connection liveness verified before long operations (client may have disconnected)
 - Rate limiter budget deducted before processing, not after
 
@@ -53,6 +54,7 @@
 
 ### Thread safety
 - Shared mutable state protected by `std::mutex` + `std::scoped_lock` or `std::atomic`
+- `SipiMemoryBudget` uses `std::atomic<size_t>` — lock-free acquire/release from worker threads
 - No `volatile` used for synchronization
 - Thread-safety guarantees documented on classes accessed from multiple threads
 

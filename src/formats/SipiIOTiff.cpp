@@ -1390,47 +1390,47 @@ bool SipiIOTiff::read(SipiImage *img,
 
 SipiImgInfo SipiIOTiff::getDim(const std::string &filepath)
 {
-  TIFF *tif;
   SipiImgInfo info;
-  if (nullptr != (tif = TIFFOpen(filepath.c_str(), "r"))) {
+  auto tif = std::unique_ptr<TIFF, decltype(&TIFFClose)>(TIFFOpen(filepath.c_str(), "r"), TIFFClose);
+  if (tif) {
     //
     // OK, it's a TIFF file
     //
     (void)TIFFSetWarningHandler(nullptr);
     unsigned int tmp_width;
 
-    if (TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &tmp_width) == 0) {
-      TIFFClose(tif);
-      std::string msg = "TIFFGetField of TIFFTAG_IMAGEWIDTH failed: " + filepath;
-      throw Sipi::SipiImageError(msg);
+    if (TIFFGetField(tif.get(), TIFFTAG_IMAGEWIDTH, &tmp_width) == 0) {
+      throw Sipi::SipiImageError("TIFFGetField of TIFFTAG_IMAGEWIDTH failed: " + filepath);
     }
 
-    info.width = (size_t)tmp_width;
+    info.width = static_cast<size_t>(tmp_width);
     unsigned int tmp_height;
 
-    if (TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &tmp_height) == 0) {
-      TIFFClose(tif);
-      std::string msg = "TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + filepath;
-      throw Sipi::SipiImageError(msg);
+    if (TIFFGetField(tif.get(), TIFFTAG_IMAGELENGTH, &tmp_height) == 0) {
+      throw Sipi::SipiImageError("TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + filepath);
     }
     info.height = tmp_height;
     info.success = SipiImgInfo::DIMS;
 
+    unsigned short spp = 1, bps_val = 8;
+    TIFFGetField(tif.get(), TIFFTAG_SAMPLESPERPIXEL, &spp);
+    TIFFGetField(tif.get(), TIFFTAG_BITSPERSAMPLE, &bps_val);
+    info.nc = spp;
+    info.bps = bps_val;
+
     unsigned short ori;
-    TIFF_GET_FIELD(tif, TIFFTAG_ORIENTATION, &ori, ORIENTATION_TOPLEFT);
+    TIFF_GET_FIELD(tif.get(), TIFFTAG_ORIENTATION, &ori, ORIENTATION_TOPLEFT);
     info.orientation = static_cast<Orientation>(ori);
 
     char *emdatastr;
-    if (1 == TIFFGetField(tif, TIFFTAG_SIPIMETA, &emdatastr)) {
+    if (1 == TIFFGetField(tif.get(), TIFFTAG_SIPIMETA, &emdatastr)) {
       SipiEssentials se(emdatastr);
       info.origmimetype = se.mimetype();
       info.origname = se.origname();
       info.success = SipiImgInfo::ALL;
     }
 
-    info.resolutions = read_resolutions(tmp_width, tif);
-
-    TIFFClose(tif);
+    info.resolutions = read_resolutions(tmp_width, tif.get());
   }
   return info;
 }
