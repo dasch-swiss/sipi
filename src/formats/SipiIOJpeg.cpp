@@ -35,7 +35,16 @@
 
 
 namespace Sipi {
-// static std::mutex inlock;
+
+/// RAII guard for POSIX file descriptors (int fd).
+struct FdGuard {
+  int fd{-1};
+  explicit FdGuard(int fd) : fd(fd) {}
+  ~FdGuard() { if (fd >= 0) ::close(fd); }
+  FdGuard(const FdGuard &) = delete;
+  FdGuard &operator=(const FdGuard &) = delete;
+  void release() { fd = -1; }
+};
 
 inline bool getbyte(int &c, FILE *f)
 {
@@ -834,31 +843,31 @@ bool SipiIOJpeg::read(SipiImage *img,
 
 SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
 {
-  int infile;
   SipiImgInfo info;
   //
   // open the input file
   //
-  if ((infile = ::open(filepath.c_str(), O_RDONLY)) == -1) {
+  int raw_fd = ::open(filepath.c_str(), O_RDONLY);
+  if (raw_fd == -1) {
     info.success = SipiImgInfo::FAILURE;
     return info;
   }
+  FdGuard fd_guard(raw_fd);
+
   // workaround for bug #0011: jpeglib crashes the app when the file is not a jpeg file
   // we check the magic number before calling any jpeglib routines
   unsigned char magic[2];
-  if (::read(infile, magic, 2) != 2) {
-    ::close(infile);
+  if (::read(raw_fd, magic, 2) != 2) {
     info.success = SipiImgInfo::FAILURE;
     return info;
   }
   if ((magic[0] != 0xff) || (magic[1] != 0xd8)) {
-    ::close(infile);
     info.success = SipiImgInfo::FAILURE;
     return info;
   }
 
   // move infile position back to the beginning of the file
-  ::lseek(infile, 0, SEEK_SET);
+  ::lseek(raw_fd, 0, SEEK_SET);
 
   struct jpeg_decompress_struct cinfo
   {
@@ -876,13 +885,22 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
   cinfo.err = jpeg_std_error(&jerr);
   jerr.error_exit = jpegErrorExit;
 
+  // Helper to clean up jpeg resources (source manager + decompress struct).
+  // jpeg_destroy_decompress alone doesn't invoke term_source when
+  // jpeg_finish_decompress wasn't called, leaking the source manager.
+  auto cleanup_jpeg = [&cinfo]() {
+    if (cinfo.src && cinfo.src->term_source) {
+      cinfo.src->term_source(&cinfo);
+    }
+    jpeg_destroy_decompress(&cinfo);
+  };
+
   try {
-    jpeg_file_src(&cinfo, infile);
+    jpeg_file_src(&cinfo, raw_fd);
     jpeg_save_markers(&cinfo, JPEG_COM, 0xffff);
     for (int i = 0; i < 16; i++) { jpeg_save_markers(&cinfo, JPEG_APP0 + i, 0xffff); }
   } catch (JpegError &jpgerr) {
-    jpeg_destroy_decompress(&cinfo);
-    close(infile);
+    cleanup_jpeg();
     info.success = SipiImgInfo::FAILURE;
     return info;
   }
@@ -894,14 +912,12 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
   try {
     res = jpeg_read_header(&cinfo, static_cast<boolean>(true));
   } catch (JpegError &jpgerr) {
-    jpeg_destroy_decompress(&cinfo);
-    close(infile);
+    cleanup_jpeg();
     info.success = SipiImgInfo::FAILURE;
     return info;
   }
   if (res != JPEG_HEADER_OK) {
-    jpeg_destroy_decompress(&cinfo);
-    close(infile);
+    cleanup_jpeg();
     info.success = SipiImgInfo::FAILURE;
     return info;
   }
@@ -986,6 +1002,7 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
 
           img.xmp = std::make_shared<SipiXmp>(xmpstr);
         } catch (SipiImageError &err) {
+          cleanup_jpeg();
           info.success = SipiImgInfo::FAILURE;
           return info;
         }
@@ -1002,22 +1019,23 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
   try {
     jpeg_start_decompress(&cinfo);
   } catch (JpegError &jpgerr) {
-    jpeg_destroy_decompress(&cinfo);
-    close(infile);
+    cleanup_jpeg();
     info.success = SipiImgInfo::FAILURE;
     return info;
   }
 
   info.width = cinfo.output_width;
   info.height = cinfo.output_height;
+  info.nc = cinfo.num_components;
+  info.bps = cinfo.data_precision;
   info.orientation = TOPLEFT;
   if (img.exif != nullptr) {
     uint16_t ori;
     if (img.exif->getValByKey("Exif.Image.Orientation", ori)) { info.orientation = Orientation(ori); }
   }
   info.success = SipiImgInfo::DIMS;
-  jpeg_destroy_decompress(&cinfo);
-  close(infile);
+  cleanup_jpeg();
+  // fd_guard closes the file descriptor automatically
   return info;// portions derived from IJG code */
 }
 
