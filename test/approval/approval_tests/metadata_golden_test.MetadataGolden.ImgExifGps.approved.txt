@@ -1,0 +1,77 @@
+=== ../../../test/_test_data/images/unit/img_exif_gps.jpg ===
+
+Dimensions: 4032x3024
+Channels: 3
+BPS: 8
+Orientation: 1
+
+--- EXIF ---
+Exif.Image.Make                              0x010f Ascii       6  Apple
+Exif.Image.Model                             0x0110 Ascii      14  iPhone 12 Pro
+Exif.Image.Orientation                       0x0112 Short       1  1
+Exif.Image.XResolution                       0x011a Rational    1  72/1
+Exif.Image.YResolution                       0x011b Rational    1  72/1
+Exif.Image.ResolutionUnit                    0x0128 Short       1  2
+Exif.Image.Software                          0x0131 Ascii       7  16.1.2
+Exif.Image.DateTime                          0x0132 Ascii      20  2022:12:11 13:02:51
+Exif.Image.HostComputer                      0x013c Ascii      14  iPhone 12 Pro
+Exif.Image.TileWidth                         0x0142 Long        1  512
+Exif.Image.TileLength                        0x0143 Long        1  512
+Exif.Image.YCbCrPositioning                  0x0213 Short       1  1
+Exif.Image.ExifTag                           0x8769 Long        1  260
+Exif.Photo.ExposureTime                      0x829a Rational    1  1/3984
+Exif.Photo.FNumber                           0x829d Rational    1  12/5
+Exif.Photo.ExposureProgram                   0x8822 Short       1  2
+Exif.Photo.ISOSpeedRatings                   0x8827 Short       1  32
+Exif.Photo.ExifVersion                       0x9000 Undefined   4  48 50 51 50
+Exif.Photo.DateTimeOriginal                  0x9003 Ascii      20  2022:12:11 13:02:51
+Exif.Photo.DateTimeDigitized                 0x9004 Ascii      20  2022:12:11 13:02:51
+Exif.Photo.OffsetTime                        0x9010 Ascii       7  +01:00
+Exif.Photo.OffsetTimeOriginal                0x9011 Ascii       7  +01:00
+Exif.Photo.OffsetTimeDigitized               0x9012 Ascii       7  +01:00
+Exif.Photo.ComponentsConfiguration           0x9101 Undefined   4  1 2 3 0
+Exif.Photo.ShutterSpeedValue                 0x9201 SRational   1  229477/19187
+Exif.Photo.ApertureValue                     0x9202 Rational    1  126503/50079
+Exif.Photo.BrightnessValue                   0x9203 SRational   1  117307/10524
+Exif.Photo.ExposureBiasValue                 0x9204 SRational   1  0/1
+Exif.Photo.MeteringMode                      0x9207 Short       1  5
+Exif.Photo.Flash                             0x9209 Short       1  16
+Exif.Photo.FocalLength                       0x920a Rational    1  77/50
+Exif.Photo.SubjectArea                       0x9214 Short       4  2013 1511 2322 1392
+Exif.Photo.MakerNote                         0x927c Undefined 1256  65 112 112 108 101 32 105 79 83 0 0 1 77 77 0 36 0 1 0 9 0 0 0 1 0 0 0 14 0 2 0 7 0 0 2 0 0 0 1 196 0 3 0 7 0 0 0 104 0 0 3 196 0 4 0 9 0 0 0 1 0 0 0 1 0 5 0 9 0 0 0 1 0 0 0 171 0 6 0 9 0 0 0 1 0 0 0 159 0 7 0 9 0 0 0 1 0 0 0 1 0 8 0 10 0 0 0 3 0 0 4 44 0 14 0 9 0 0 0 1 0 0 0 0 0 20 0 9 0 0 0 1 0 0 0 12 0 23 0 16 0 0 0 1 0 0 4 68 0 25 0 9 0 0 0 1 0 0 32 2 0 26 0 2 0 0 0 6 0 0 4 76 0 31 0 9 0 0 0 1 0 0 0 0 0 32 0 2 0 0 0 37 0 0 4 82 0 33 0 10 0 0 0 1 0 0 4 119 0 37 0 16 0 0 0 1 0 0 4 127 0 38 0 9 0 0 0 1 0 0 0 2 0 39 0 10 0 0 0 1 0 0 4 135 0 43 0 2 0 0 0 37 0 0 4 143 0 45 0 9 0 0 0 1 0 0 20 238 0 46 0 9 0 0 0 1 0 0 0 0 0 47 0 9 0 0 0 1 0 0 0 0 0 48 0 10 0 0 0 1 0 0 4 180 0 49 0 7 0 0 0 44 0 0 4 188 0 50 0 9 0 0 0 1 2 193 40 0 0 51 0 9 0 0 0 1 0 0 48 0 0 52 0 9 0 0 0 1 0 0 0 4 0 53 0 9 0 0 0 1 0 0 0 3 0 54 0 9 0 0 0 1 0 0 255 255 0 55 0 9 0 0 0 1 0 0 0 0 0 58 0 9 0 0 0 1 0 0 0 4 0 59 0 9 0 0 0 1 0 0 0 0 0 60 0 9 0 0 0 1 0 0 0 4 0 65 0 9 0 0 0 1 0 0 0 0 0 74 0 9 0 0 0 1 0 0 0 4 0 0 0 0 47 0 49 0 51 0 54 0 58 0 63 0 71 0 83 0 100 0 122 0 130 0 110 0 80 0 98 0 105 0 105 0 53 0 54 0 57 0 60 0 64 0 70 0 80 0 94 0 114 0 136 0 101 0 78 0 69 0 77 0 92 0 142 0 59 0 61 0 63 0 67 0 71 0 78 0 89 0 106 0 130 0 153 0 128 0 100 0 88 0 84 0 97 0 113 0 69 0 69 0 73 0 77 0 81 0 88 0 101 0 120 0 150 0 194 0 172 0 176 0 219 0 191 0 26 1 115 1 80 0 79 0 87 0 89 0 94 0 102 0 115 0 138 0 174 0 236 0 36 1 239 0 176 0 183 0 154 1 122 1 88 0 91 0 98 0 105 0 111 0 120 0 136 0 163 0 209 0 25 1 129 1 169 1 135 1 12 2 143 2 23 1 99 0 104 0 110 0 119 0 131 0 145 0 164 0 200 0 2 1 87 1 208 1 142 2 11 3 72 3 76 3 22 2 70 0 73 0 82 0 95 0 77 0 68 0 72 0 84 0 157 0 0 1 249 1 12 3 100 2 236 2 102 3 31 2 67 0 67 0 96 0 94 0 83 0 50 0 81 0 75 0 71 0 94 0 132 0 14 1 183 0 164 0 32 1 192 0 63 0 76 0 90 0 102 0 102 0 94 0 104 0 123 0 136 0 175 0 157 0 197 0 191 0 245 0 7 1 183 0 94 0 107 0 130 0 151 0 162 0 156 0 169 0 194 0 201 0 195 0 171 0 177 0 178 0 175 0 179 0 131 0 159 0 172 0 185 0 188 0 178 0 187 0 188 0 189 0 187 0 172 0 155 0 152 0 161 0 157 0 157 0 151 0 168 0 156 0 151 0 170 0 187 0 191 0 182 0 179 0 174 0 176 0 162 0 146 0 152 0 146 0 132 0 131 0 159 0 173 0 181 0 192 0 180 0 172 0 175 0 175 0 166 0 180 0 158 0 163 0 150 0 133 0 118 0 118 0 146 0 137 0 180 0 163 0 148 0 162 0 166 0 154 0 147 0 174 0 166 0 158 0 157 0 135 0 160 0 129 0 127 0 156 0 155 0 145 0 163 0 158 0 143 0 150 0 161 0 169 0 170 0 150 0 149 0 150 0 141 0 141 0 98 112 108 105 115 116 48 48 212 1 2 3 4 5 6 7 8 85 102 108 97 103 115 85 118 97 108 117 101 89 116 105 109 101 115 99 97 108 101 85 101 112 111 99 104 16 1 19 0 1 7 136 117 27 111 246 18 59 154 202 0 16 0 8 17 23 29 39 45 47 56 61 0 0 0 0 0 0 1 1 0 0 0 0 0 0 0 9 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 63 255 255 114 130 0 0 143 131 0 0 12 6 0 5 19 235 0 0 15 13 0 0 251 37 0 0 0 0 66 80 160 0 113 57 48 48 110 0 55 54 51 66 48 67 50 48 45 55 48 56 50 45 52 49 48 51 45 56 67 48 49 45 54 57 49 70 55 51 52 51 57 70 54 54 0 0 0 180 139 0 0 115 20 0 0 0 0 0 0 16 134 0 1 157 170 0 0 12 107 55 49 55 54 51 56 54 67 45 51 52 65 53 45 52 69 51 50 45 56 69 67 53 45 68 49 66 70 69 49 53 65 50 57 67 56 0 0 0 0 0 0 0 0 1 1 0 0 0 8 0 0 0 0 0 128 63 0 0 0 0 0 0 0 0 0 0 0 0 0 0 128 63 0 0 0 0 0 0 0 0 0 0 0 0 0 0 128 63
+Exif.Photo.SubSecTime                        0x9290 Ascii       4  839
+Exif.Photo.SubSecTimeOriginal                0x9291 Ascii       4  839
+Exif.Photo.SubSecTimeDigitized               0x9292 Ascii       4  839
+Exif.Photo.FlashpixVersion                   0xa000 Undefined   4  48 49 48 48
+Exif.Photo.ColorSpace                        0xa001 Short       1  65535
+Exif.Photo.PixelXDimension                   0xa002 Long        1  4032
+Exif.Photo.PixelYDimension                   0xa003 Long        1  3024
+Exif.Photo.SensingMethod                     0xa217 Short       1  2
+Exif.Photo.SceneType                         0xa301 Undefined   1  1
+Exif.Photo.ExposureMode                      0xa402 Short       1  0
+Exif.Photo.WhiteBalance                      0xa403 Short       1  0
+Exif.Photo.DigitalZoomRatio                  0xa404 Rational    1  189/184
+Exif.Photo.FocalLengthIn35mmFilm             0xa405 Short       1  14
+Exif.Photo.SceneCaptureType                  0xa406 Short       1  0
+Exif.Photo.LensSpecification                 0xa432 Rational    4  807365/524263 6/1 8/5 12/5
+Exif.Photo.LensMake                          0xa433 Ascii       6  Apple
+Exif.Photo.LensModel                         0xa434 Ascii      46  iPhone 12 Pro back triple camera 1.54mm f/2.4
+Exif.Photo.CompositeImage                    0xa460 Short       1  2
+Exif.Image.GPSTag                            0x8825 Long        1  2198
+Exif.GPSInfo.GPSLatitudeRef                  0x0001 Ascii       2  N
+Exif.GPSInfo.GPSLatitude                     0x0002 Rational    3  47/1 32/1 1188/100
+Exif.GPSInfo.GPSLongitudeRef                 0x0003 Ascii       2  E
+Exif.GPSInfo.GPSLongitude                    0x0004 Rational    3  7/1 30/1 4345/100
+Exif.GPSInfo.GPSAltitudeRef                  0x0005 Byte        1  0
+Exif.GPSInfo.GPSAltitude                     0x0006 Rational    1  173164/451
+Exif.GPSInfo.GPSSpeedRef                     0x000c Ascii       2  K
+Exif.GPSInfo.GPSSpeed                        0x000d Rational    1  1494178/524273
+Exif.GPSInfo.GPSImgDirectionRef              0x0010 Ascii       2  T
+Exif.GPSInfo.GPSImgDirection                 0x0011 Rational    1  384647/2668
+Exif.GPSInfo.GPSDestBearingRef               0x0017 Ascii       2  T
+Exif.GPSInfo.GPSDestBearing                  0x0018 Rational    1  384647/2668
+Exif.GPSInfo.GPSHPositioningError            0x001f Rational    1  81815/15052
+
+--- ICC: none ---
+
+
