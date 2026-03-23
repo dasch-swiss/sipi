@@ -1186,10 +1186,12 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
     jpeg_simple_progression(&cinfo);
     jpeg_start_compress(&cinfo, TRUE);
   } catch (JpegError &jpgerr) {
-    jpeg_finish_compress(&cinfo);
+    // Bug 1 fix: do NOT call jpeg_finish_compress here — the compressor is in
+    // CSTATE_START after jpeg_start_compress failure, and jpeg_finish_compress
+    // expects CSTATE_WRCOEFS, triggering a second error_exit → std::terminate.
+    // jpeg_destroy_compress safely cleans up regardless of compressor state.
     jpeg_destroy_compress(&cinfo);
     if (outfile != -1) close(outfile);
-    // outlock.unlock();
     throw SipiImageError(jpgerr.what());
   }
 
@@ -1214,7 +1216,6 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
       try {
         jpeg_write_marker(&cinfo, JPEG_APP0 + 1, (JOCTET *)exifchunk.get(), start_l + buf.size());
       } catch (JpegError &jpgerr) {
-        jpeg_finish_compress(&cinfo);
         jpeg_destroy_compress(&cinfo);
         if (outfile != -1) close(outfile);
         throw SipiImageError(jpgerr.what());
@@ -1236,7 +1237,6 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
       try {
         jpeg_write_marker(&cinfo, JPEG_APP0 + 1, (JOCTET *)xmpchunk.get(), start_l + buf.size());
       } catch (JpegError &jpgerr) {
-        jpeg_finish_compress(&cinfo);
         jpeg_destroy_compress(&cinfo);
         if (outfile != -1) close(outfile);
         throw SipiImageError(jpgerr.what());
@@ -1279,7 +1279,6 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
       try {
         jpeg_write_marker(&cinfo, ICC_MARKER, iccchunk.get(), n_nextwrite + start_l);
       } catch (JpegError &jpgerr) {
-        jpeg_finish_compress(&cinfo);
         jpeg_destroy_compress(&cinfo);
         if (outfile != -1) close(outfile);
         throw SipiImageError(jpgerr.what());
