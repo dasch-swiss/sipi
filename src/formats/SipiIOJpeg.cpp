@@ -485,16 +485,11 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
 //=============================================================================
 
 
-/// Read-path error exit: throws JpegError for the read/getDim paths.
-/// NOTE: This still throws through libjpeg's C frames (UB), but the read path
-/// has comprehensive try/catch(JpegError) blocks around libjpeg calls.
-/// Phase H5 will convert this to longjmp as well, completing the fix.
-static void jpegReadErrorExit(j_common_ptr cinfo)
-{
-  char jpegLastErrorMsg[JMSG_LENGTH_MAX];
-  (*(cinfo->err->format_message))(cinfo, jpegLastErrorMsg);
-  throw JpegError(jpegLastErrorMsg);
-}
+/// Unified error exit for all JPEG paths (read, getDim, write): longjmp back
+/// to the setjmp point. This is safe through libjpeg's C stack frames.
+/// Note: jpegWriteErrorExit (defined above near JpegErrorMgr) is identical —
+/// kept as a separate symbol for clarity in stack traces, but they share the
+/// same JpegErrorMgr struct and longjmp pattern.
 
 //=============================================================================
 
@@ -527,48 +522,43 @@ bool SipiIOJpeg::read(SipiImage *img,
   //
   // std::lock_guard<std::mutex> inlock_mutex_guard(inlock);
 
-  struct jpeg_decompress_struct cinfo
-  {
-  };
-  struct jpeg_error_mgr jerr
-  {
-  };
+  struct jpeg_decompress_struct cinfo {};
+  JpegErrorMgr jerr;
 
   JSAMPARRAY linbuf = nullptr;
   jpeg_saved_marker_ptr marker = nullptr;
+  unsigned char *icc_buffer_guard = nullptr;  // for cleanup on longjmp
 
   //
   // let's create the decompressor
   //
-  jpeg_create_decompress(&cinfo);
+  cinfo.err = jpeg_std_error(&jerr.pub);
+  jerr.pub.error_exit = jpegWriteErrorExit;
 
+  jpeg_create_decompress(&cinfo);
   cinfo.dct_method = JDCT_FLOAT;
 
-  cinfo.err = jpeg_std_error(&jerr);
-  jerr.error_exit = jpegReadErrorExit;
-
-  try {
-    // jpeg_stdio_src(&cinfo, infile);
-    jpeg_file_src(&cinfo, infile);
-    jpeg_save_markers(&cinfo, JPEG_COM, 0xffff);
-    for (int i = 0; i < 16; i++) { jpeg_save_markers(&cinfo, JPEG_APP0 + i, 0xffff); }
-  } catch (JpegError &jpgerr) {
+  //
+  // setjmp error handler — ALL libjpeg errors from this point longjmp here.
+  // This replaces the scattered try/catch(JpegError) blocks in the read path,
+  // eliminating C++ throw-through-C undefined behavior.
+  //
+  if (setjmp(jerr.error_jmp)) {
+    // longjmp landed here — clean up and throw in C++ context
+    free(icc_buffer_guard);  // may have been allocated during marker parsing
     jpeg_destroy_decompress(&cinfo);
     close(infile);
-    throw SipiError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
+    throw SipiImageError("JPEG read failed for \"" + filepath + "\": " + std::string(jerr.error_message));
   }
+
+  jpeg_file_src(&cinfo, infile);
+  jpeg_save_markers(&cinfo, JPEG_COM, 0xffff);
+  for (int i = 0; i < 16; i++) { jpeg_save_markers(&cinfo, JPEG_APP0 + i, 0xffff); }
 
   //
   // now we read the header
   //
-  int res;
-  try {
-    res = jpeg_read_header(&cinfo, static_cast<boolean>(true));
-  } catch (JpegError &jpgerr) {
-    jpeg_destroy_decompress(&cinfo);
-    close(infile);
-    throw SipiImageError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
-  }
+  int res = jpeg_read_header(&cinfo, static_cast<boolean>(true));
   if (res != JPEG_HEADER_OK) {
     jpeg_destroy_decompress(&cinfo);
     close(infile);
@@ -611,7 +601,8 @@ bool SipiIOJpeg::read(SipiImage *img,
   // getting Metadata
   //
   marker = cinfo.marker_list;
-  unsigned char *icc_buffer = nullptr;
+  // Use icc_buffer_guard (declared before setjmp) so longjmp cleanup can free it
+  unsigned char *&icc_buffer = icc_buffer_guard;
   int icc_buffer_len = 0;
   while (marker != nullptr) {
     if (marker->marker == JPEG_COM) {
@@ -727,14 +718,8 @@ bool SipiIOJpeg::read(SipiImage *img,
     free(icc_buffer);// SipiIcc constructor copies the data
   }
 
-  try {
-    jpeg_start_decompress(&cinfo);
-  } catch (JpegError &jpgerr) {
-    free(icc_buffer);  // may have been allocated during marker parsing
-    jpeg_destroy_decompress(&cinfo);
-    close(infile);
-    throw SipiImageError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
-  }
+  // icc_buffer already freed above (line ~718); errors → longjmp → setjmp handler
+  jpeg_start_decompress(&cinfo);
 
   img->bps = 8;
   img->nx = cinfo.output_width;
@@ -780,31 +765,15 @@ bool SipiIOJpeg::read(SipiImage *img,
   delete[] img->pixels;// free previous buffer if re-reading into same SipiImage
   img->pixels = new byte[img->ny * sll];
 
-  try {
-    linbuf = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, sll, 1);
-    for (size_t i = 0; i < img->ny; i++) {
-      jpeg_read_scanlines(&cinfo, linbuf, 1);
-      memcpy(&(img->pixels[i * sll]), linbuf[0], (size_t)sll);
-    }
-  } catch (JpegError &jpgerr) {
-    jpeg_destroy_decompress(&cinfo);
-    close(infile);
-    throw SipiImageError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
-  }
-  try {
-    jpeg_finish_decompress(&cinfo);
-  } catch (JpegError &jpgerr) {
-    close(infile);
-    throw SipiImageError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
+  // All libjpeg calls below — errors → longjmp → setjmp handler above
+  linbuf = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, sll, 1);
+  for (size_t i = 0; i < img->ny; i++) {
+    jpeg_read_scanlines(&cinfo, linbuf, 1);
+    memcpy(&(img->pixels[i * sll]), linbuf[0], (size_t)sll);
   }
 
-  try {
-    jpeg_destroy_decompress(&cinfo);
-  } catch (JpegError &jpgerr) {
-    close(infile);
-    // inlock.unlock();
-    throw SipiImageError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
-  }
+  jpeg_finish_decompress(&cinfo);
+  jpeg_destroy_decompress(&cinfo);
   close(infile);
 
   //
@@ -888,25 +857,18 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
   // move infile position back to the beginning of the file
   ::lseek(raw_fd, 0, SEEK_SET);
 
-  struct jpeg_decompress_struct cinfo
-  {
-  };
-  struct jpeg_error_mgr jerr
-  {
-  };
+  struct jpeg_decompress_struct cinfo {};
+  JpegErrorMgr jerr;
 
   jpeg_saved_marker_ptr marker;
 
-  jpeg_create_decompress(&cinfo);
+  cinfo.err = jpeg_std_error(&jerr.pub);
+  jerr.pub.error_exit = jpegWriteErrorExit;
 
+  jpeg_create_decompress(&cinfo);
   cinfo.dct_method = JDCT_FLOAT;
 
-  cinfo.err = jpeg_std_error(&jerr);
-  jerr.error_exit = jpegReadErrorExit;
-
   // Helper to clean up jpeg resources (source manager + decompress struct).
-  // jpeg_destroy_decompress alone doesn't invoke term_source when
-  // jpeg_finish_decompress wasn't called, leaking the source manager.
   auto cleanup_jpeg = [&cinfo]() {
     if (cinfo.src && cinfo.src->term_source) {
       cinfo.src->term_source(&cinfo);
@@ -914,27 +876,21 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
     jpeg_destroy_decompress(&cinfo);
   };
 
-  try {
-    jpeg_file_src(&cinfo, raw_fd);
-    jpeg_save_markers(&cinfo, JPEG_COM, 0xffff);
-    for (int i = 0; i < 16; i++) { jpeg_save_markers(&cinfo, JPEG_APP0 + i, 0xffff); }
-  } catch (JpegError &jpgerr) {
+  // setjmp error handler for getDim — libjpeg errors longjmp here
+  if (setjmp(jerr.error_jmp)) {
     cleanup_jpeg();
     info.success = SipiImgInfo::FAILURE;
     return info;
   }
 
+  jpeg_file_src(&cinfo, raw_fd);
+  jpeg_save_markers(&cinfo, JPEG_COM, 0xffff);
+  for (int i = 0; i < 16; i++) { jpeg_save_markers(&cinfo, JPEG_APP0 + i, 0xffff); }
+
   //
   // now we read the header
   //
-  int res;
-  try {
-    res = jpeg_read_header(&cinfo, static_cast<boolean>(true));
-  } catch (JpegError &jpgerr) {
-    cleanup_jpeg();
-    info.success = SipiImgInfo::FAILURE;
-    return info;
-  }
+  int res = jpeg_read_header(&cinfo, static_cast<boolean>(true));
   if (res != JPEG_HEADER_OK) {
     cleanup_jpeg();
     info.success = SipiImgInfo::FAILURE;
@@ -1040,13 +996,8 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
     marker = marker->next;
   }
 
-  try {
-    jpeg_start_decompress(&cinfo);
-  } catch (JpegError &jpgerr) {
-    cleanup_jpeg();
-    info.success = SipiImgInfo::FAILURE;
-    return info;
-  }
+  // errors → longjmp → setjmp handler above
+  jpeg_start_decompress(&cinfo);
 
   info.width = cinfo.output_width;
   info.height = cinfo.output_height;
