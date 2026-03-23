@@ -48,7 +48,7 @@ jobs:
           github_access_token: ${{ secrets.GH_TOKEN }}
 
       - name: Restore corpus from previous run
-        uses: dawidd6/action-download-artifact@v18
+        uses: dawidd6/action-download-artifact@v19
         with:
           workflow: fuzz.yml
           name: fuzz-corpus
