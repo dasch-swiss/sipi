@@ -733,12 +733,21 @@ static void *socket_request_processor(void *arg)
         int keep_alive = 1;
         std::string tmpstr(msg.peer_ip);
 
-        if (msg.ssl_sid != nullptr) {
-          // we have a secure connection and initiate processing of the request
-          tstatus = tdata->serv->process_request(&ins, &os, tmpstr, msg.peer_port, true, keep_alive);
-        } else {
-          // we have a normal connection and initiate processing of the request
-          tstatus = tdata->serv->process_request(&ins, &os, tmpstr, msg.peer_port, false, keep_alive);
+        // Last-resort safety net: if process_request itself throws (should not
+        // happen after adding catch-all there, but defense in depth), prevent
+        // the exception from reaching std::terminate and crashing all threads.
+        try {
+          if (msg.ssl_sid != nullptr) {
+            tstatus = tdata->serv->process_request(&ins, &os, tmpstr, msg.peer_port, true, keep_alive);
+          } else {
+            tstatus = tdata->serv->process_request(&ins, &os, tmpstr, msg.peer_port, false, keep_alive);
+          }
+        } catch (std::exception &ex) {
+          log_err("Exception escaped process_request: %s", ex.what());
+          tstatus = CLOSE;
+        } catch (...) {
+          log_err("Unknown exception escaped process_request");
+          tstatus = CLOSE;
         }
 
         tdata->serv->_active_connections.fetch_sub(1, std::memory_order_relaxed);
@@ -1356,6 +1365,30 @@ shttps::ThreadStatus Server::process_request(std::istream *ins,
     } catch (InputFailure iofail) {
       log_debug("Possibly socket closed by peer");
     }
+    return CLOSE;
+  } catch (std::exception &ex) {
+    // Catch-all for any C++ exception that escaped the handler chain
+    // (e.g., SipiImageError, JpegError). Without this, the exception
+    // reaches std::terminate and crashes the entire server process.
+    log_err("Unhandled std::exception in request processing: %s", ex.what());
+    try {
+      *os << "HTTP/1.1 500 INTERNAL_SERVER_ERROR\r\n";
+      *os << "Content-Type: text/plain\r\n";
+      *os << "Content-Length: 21\r\n\r\n";
+      *os << "Internal Server Error";
+    } catch (...) {
+      // Headers may already be sent (partial chunked response).
+      // Nothing to do — just close the connection.
+    }
+    return CLOSE;
+  } catch (...) {
+    log_err("Unknown exception in request processing");
+    try {
+      *os << "HTTP/1.1 500 INTERNAL_SERVER_ERROR\r\n";
+      *os << "Content-Type: text/plain\r\n";
+      *os << "Content-Length: 21\r\n\r\n";
+      *os << "Internal Server Error";
+    } catch (...) {}
     return CLOSE;
   }
 }
