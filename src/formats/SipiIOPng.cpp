@@ -5,6 +5,7 @@
 
 #include <arpa/inet.h>
 #include <cassert>
+#include <csetjmp>
 #include <cstdlib>
 
 #include <cmath>
@@ -113,7 +114,9 @@ void PngTextPtr::add_iTXt(char *key, char *data, unsigned int len)
 void sipi_error_fn(png_structp png_ptr, png_const_charp error_msg)
 {
   log_err("PNG error: %s", error_msg);
-  throw Sipi::SipiError(error_msg);
+  // Use longjmp via png_jmpbuf — the canonical libpng error handling pattern.
+  // Throwing C++ exceptions through libpng's C stack frames is undefined behavior.
+  longjmp(png_jmpbuf(png_ptr), 1);
 }
 
 void sipi_warning_fn(png_structp png_ptr, png_const_charp warning_msg)
@@ -153,8 +156,16 @@ bool SipiIOPng::read(SipiImage *img,
     throw SipiImageError("Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_structp !");
   }
   if ((info_ptr = png_create_info_struct(png_ptr)) == nullptr) {
+    png_destroy_read_struct(&png_ptr, nullptr, nullptr);
     fclose(infile);
     throw SipiImageError("Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_infop !");
+  }
+
+  // setjmp error recovery — sipi_error_fn calls longjmp(png_jmpbuf(png_ptr), 1)
+  if (setjmp(png_jmpbuf(png_ptr))) {
+    png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+    fclose(infile);
+    throw SipiImageError("PNG read failed for \"" + filepath + "\"");
   }
 
   png_init_io(png_ptr, infile);
@@ -353,6 +364,13 @@ SipiImgInfo SipiIOPng::getDim(const std::string &filepath)
     throw SipiImageError("Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_infop !");
   }
 
+  // setjmp error recovery for getDim
+  if (setjmp(png_jmpbuf(png_ptr))) {
+    png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+    info.success = SipiImgInfo::FAILURE;
+    return info;
+  }
+
   png_init_io(png_ptr, infile.get());
   png_set_sig_bytes(png_ptr, 8);
   png_read_info(png_ptr, info_ptr);
@@ -391,8 +409,9 @@ static void conn_write_data(png_structp png_ptr, png_bytep data, png_size_t leng
 
   try {
     conn->sendAndFlush(data, length);
-  } catch (int i) {
-    // TODO: do nothing ??
+  } catch (...) {
+    // Signal error via libpng's error mechanism → sipi_error_fn → longjmp
+    png_error(png_ptr, "HTTP write failed");
   }
 }
 
@@ -404,8 +423,8 @@ static void conn_flush_data(png_structp png_ptr)
 
   try {
     conn->flush();
-  } catch (int i) {
-    // TODO: do nothing ??
+  } catch (...) {
+    png_error(png_ptr, "HTTP flush failed");
   }
 }
 
@@ -434,7 +453,15 @@ void SipiIOPng::write(SipiImage *img, const std::string &filepath, const SipiCom
   png_infop info_ptr;
   if (!(info_ptr = png_create_info_struct(png_ptr))) {
     png_free_data(png_ptr, nullptr, PNG_FREE_ALL, -1);
+    if (outfile != nullptr && outfile != stdout) fclose(outfile);
     throw SipiImageError("Error writing PNG file \"" + filepath + "\": png_create_info_struct !");
+  }
+
+  // setjmp error recovery for write — sipi_error_fn calls longjmp
+  if (setjmp(png_jmpbuf(png_ptr))) {
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+    if (outfile != nullptr && outfile != stdout) fclose(outfile);
+    throw SipiImageError("PNG write failed for \"" + filepath + "\"");
   }
 
   if (outfile != nullptr) png_init_io(png_ptr, outfile);
