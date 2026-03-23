@@ -416,77 +416,63 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
   int slen;
   unsigned int datalen = 0;
   char *ptr = data;
+  char *end = data + length;
   unsigned short id;
-  char sig[5];
   char name[256];
-  int i;
-
-  // cerr << "Parse photoshop: TOTAL LENGTH = " << length << endl;
 
   while ((ptr - data) < length) {
-    sig[0] = *ptr;
-    sig[1] = *(ptr + 1);
-    sig[2] = *(ptr + 2);
-    sig[3] = *(ptr + 3);
-    sig[4] = '\0';
-    if (strcmp(sig, "8BIM") != 0) break;
+    // Bounds check: need at least 4 bytes for signature
+    if (ptr + 4 > end) break;
+
+    if (memcmp(ptr, "8BIM", 4) != 0) break;
     ptr += 4;
 
-    //
-    // tag-ID processing
-    id = ((unsigned char)*(ptr + 0) << 8) | (unsigned char)*(ptr + 1);// ID
-    ptr += 2;// ID
+    // Bounds check: need at least 2 bytes for tag ID
+    if (ptr + 2 > end) break;
+    id = ((unsigned char)*(ptr + 0) << 8) | (unsigned char)*(ptr + 1);
+    ptr += 2;
 
-    //
-    // name processing (Pascal string)
-    slen = *ptr;
-    for (i = 0; (i < slen) && (i < 256); i++) name[i] = *(ptr + i + 1);
-    name[i] = '\0';
+    // Name processing (Pascal string) — bounds check
+    if (ptr >= end) break;
+    slen = (unsigned char)*ptr;
+    if (ptr + 1 + slen > end) break;
+    int name_len = (slen < 255) ? slen : 255;
+    for (int i = 0; i < name_len; i++) name[i] = *(ptr + i + 1);
+    name[name_len] = '\0';
     slen++;// add length byte
     if ((slen % 2) == 1) slen++;
     ptr += slen;
 
-    //
-    // data processing
+    // Bounds check: need 4 bytes for data length
+    if (ptr + 4 > end) break;
     datalen = ((unsigned char)*ptr << 24) | ((unsigned char)*(ptr + 1) << 16) | ((unsigned char)*(ptr + 2) << 8)
               | (unsigned char)*(ptr + 3);
-
     ptr += 4;
+
+    // Bounds check: validate datalen against remaining buffer
+    if (ptr + datalen > end) break;
 
     switch (id) {
     case 0x0404: {
-      // IPTC data
-      // cerr << ">>> Photoshop: IPTC" << endl;
       if (img->iptc == nullptr) img->iptc = std::make_shared<SipiIptc>((unsigned char *)ptr, datalen);
-      // IPTC – handled separately!
       break;
     }
     case 0x040f: {
-      // ICC data
-      // cerr << ">>> Photoshop: ICC" << endl;
-      // ICC profile
       if (img->icc == nullptr) img->icc = std::make_shared<SipiIcc>((unsigned char *)ptr, datalen);
       break;
     }
     case 0x0422: {
-      // EXIF data
       if (img->exif == nullptr) img->exif = std::make_shared<SipiExif>((unsigned char *)ptr, datalen);
       uint16_t ori;
       if (img->exif->getValByKey("Exif.Image.Orientation", ori)) { img->orientation = Orientation(ori); }
       break;
     }
     case 0x0424: {
-      // XMP data
-      // cerr << ">>> Photoshop: XMP" << endl;
-      // XMP data
       if (img->xmp == nullptr) img->xmp = std::make_shared<SipiXmp>(ptr, datalen);
+      break;  // Fix: was missing, causing fall-through to default
     }
     default: {
-      // URL
-      char *str = (char *)calloc(1, (datalen + 1) * sizeof(char));
-      memcpy(str, ptr, datalen);
-      str[datalen] = '\0';
-      // fprintf(stderr, "XXX=%s\n", str);
+      // Unknown resource — skip (removed leaking calloc/memcpy)
       break;
     }
     }
@@ -528,7 +514,7 @@ bool SipiIOJpeg::read(SipiImage *img,
   // workaround for bug #0011: jpeglib crashes the app when the file is not a jpeg file
   // we check the magic number before calling any jpeglib routines
   unsigned char magic[2];
-  if (::read(infile, magic, 2) != 2) { return false; }
+  if (::read(infile, magic, 2) != 2) { ::close(infile); return false; }
   if ((magic[0] != 0xff) || (magic[1] != 0xd8)) {
     close(infile);
     return false;// it's not a JPEG file!
@@ -684,18 +670,23 @@ bool SipiIOJpeg::read(SipiImage *img,
           pos++;// finally we have the start of XMP string
           unsigned char *start_xmp = pos;
 
+          unsigned char *data_end = (unsigned char *)marker->data + marker->data_length;
           unsigned char *end_xmp;
           do {
             s = end;
-            while (*pos != *s) pos++;
+            while (pos < data_end && *pos != *s) pos++;
+            if (pos >= data_end) break;
             end_xmp = pos;// a candidate
-            while ((*s != '\0') && (*pos == *s)) {
+            while (pos < data_end && (*s != '\0') && (*pos == *s)) {
               pos++;
               s++;
             }
-          } while (*s != '\0');
-          while (*pos != '>') { pos++; }
-          pos++;
+          } while (pos < data_end && *s != '\0');
+          if (pos >= data_end || *s != '\0') {
+            throw SipiImageError("Failed to parse XMP metadata: end marker not found");
+          }
+          while (pos < data_end && *pos != '>') { pos++; }
+          if (pos < data_end) pos++;
 
           size_t xmp_len = end_xmp - start_xmp;
 
@@ -739,6 +730,7 @@ bool SipiIOJpeg::read(SipiImage *img,
   try {
     jpeg_start_decompress(&cinfo);
   } catch (JpegError &jpgerr) {
+    free(icc_buffer);  // may have been allocated during marker parsing
     jpeg_destroy_decompress(&cinfo);
     close(infile);
     throw SipiImageError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
@@ -1008,18 +1000,23 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
           pos++;// finally we have the start of XMP string
           unsigned char *start_xmp = pos;
 
+          unsigned char *data_end = (unsigned char *)marker->data + marker->data_length;
           unsigned char *end_xmp;
           do {
             s = end;
-            while (*pos != *s) pos++;
+            while (pos < data_end && *pos != *s) pos++;
+            if (pos >= data_end) break;
             end_xmp = pos;// a candidate
-            while ((*s != '\0') && (*pos == *s)) {
+            while (pos < data_end && (*s != '\0') && (*pos == *s)) {
               pos++;
               s++;
             }
-          } while (*s != '\0');
-          while (*pos != '>') { pos++; }
-          pos++;
+          } while (pos < data_end && *s != '\0');
+          if (pos >= data_end || *s != '\0') {
+            throw SipiImageError("Failed to parse XMP in getDim: end marker not found");
+          }
+          while (pos < data_end && *pos != '>') { pos++; }
+          if (pos < data_end) pos++;
 
           size_t xmp_len = end_xmp - start_xmp;
 
