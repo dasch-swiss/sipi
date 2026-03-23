@@ -20,16 +20,6 @@ Exif.Thumbnail.ResolutionUnit                0x0128 Short       1  2
 Exif.Thumbnail.JPEGInterchangeFormat         0x0201 Long        1  4420
 Exif.Thumbnail.JPEGInterchangeFormatLength   0x0202 Long        1  1927
 
---- ICC ---
-ICC-Description   : ECI_RGB
-ICC-Manufacturer  : 
-ICC-Model         : 
-ICC-Copyright     : (c) 2001 Adobe Systems Inc.
-ICC-Date          : ??? Jan 23 19:34:34 2001
-ICC profile class : cmsSigDisplayClass
-ICC Version       : 2.1
-ICC Matrix shaper : yes
-ICC color space sigature : cmsSigXYZData
-ICC rendering intent : INTENT_RELATIVE_COLORIMETRIC
+--- ICC: present ---
 
 

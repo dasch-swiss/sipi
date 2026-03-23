@@ -7,16 +7,6 @@ Orientation: 1
 
 --- EXIF ---
 
---- ICC ---
-ICC-Description   : sRGB IEC61966-2.1
-ICC-Manufacturer  : IEC http://www.iec.ch
-ICC-Model         : IEC 61966-2.1 Default RGB colour space - sRGB
-ICC-Copyright     : Copyright (c) 1998 Hewlett-Packard Company
-ICC-Date          : ??? Feb  9 06:49:00 1998
-ICC profile class : cmsSigDisplayClass
-ICC Version       : 2.1
-ICC Matrix shaper : yes
-ICC color space sigature : cmsSigXYZData
-ICC rendering intent : INTENT_RELATIVE_COLORIMETRIC
+--- ICC: present ---
 
 

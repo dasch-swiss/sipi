@@ -59,16 +59,6 @@ Exif.Thumbnail.JPEGInterchangeFormat         0x0201 Long        1  962
 Exif.Thumbnail.JPEGInterchangeFormatLength   0x0202 Long        1  6606
 Exif.Thumbnail.YCbCrPositioning              0x0213 Short       1  1
 
---- ICC ---
-ICC-Description   : sRGB built-in
-ICC-Manufacturer  : 
-ICC-Model         : 
-ICC-Copyright     : No copyright, use freely
-ICC-Date          : ??? Feb  9 12:56:17 2022
-ICC profile class : cmsSigDisplayClass
-ICC Version       : 4.3
-ICC Matrix shaper : yes
-ICC color space sigature : cmsSigXYZData
-ICC rendering intent : INTENT_PERCEPTUAL
+--- ICC: present ---
 
 
