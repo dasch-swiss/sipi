@@ -4,6 +4,7 @@
  */
 
 #include <algorithm>
+#include <csetjmp>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -70,15 +71,24 @@ inline bool getword(int &c, FILE *f)
 /*!
  * Special exception within the JPEG routines which can be caught separately
  */
-class JpegError : public std::runtime_error
-{
-public:
-  inline JpegError() : std::runtime_error("!! JPEG_ERROR !!") {}
-
-  inline explicit JpegError(const char *msg) : std::runtime_error(msg) {}
-
-  inline const char *what() const noexcept override { return std::runtime_error::what(); }
+/// Extended jpeg_error_mgr with setjmp buffer for safe error handling through
+/// libjpeg's C stack frames. This is the canonical IJG libjpeg error handling
+/// pattern — the struct's first field must be jpeg_error_mgr so libjpeg can
+/// cast cinfo->err to it, and we cast back to access error_jmp.
+struct JpegErrorMgr {
+  jpeg_error_mgr pub;  // must be first — libjpeg casts to this
+  jmp_buf error_jmp;
+  char error_message[JMSG_LENGTH_MAX]{};  // char[], not std::string — safe across longjmp
 };
+
+/// Error exit for all JPEG paths (read, getDim, write): longjmp back to the
+/// setjmp point. This avoids throwing C++ exceptions through libjpeg's C frames.
+static void jpegErrorExit(j_common_ptr cinfo)
+{
+  auto *myerr = reinterpret_cast<JpegErrorMgr *>(cinfo->err);
+  (*(cinfo->err->format_message))(cinfo, myerr->error_message);
+  longjmp(myerr->error_jmp, 1);
+}
 
 //------------------------------------------------------------------
 
@@ -113,9 +123,8 @@ static boolean empty_file_buffer(j_compress_ptr cinfo)
   do {
     ssize_t tmp_n = write(file_buffer->file_id, file_buffer->buffer + nn, n);
     if (tmp_n < 0) {
-      throw JpegError("Couldn't write to file!");
-      // throw SipiImageError(thisSourceFile, __LINE__, "Couldn't write to file!");
-      // return false; // and create an error message!!
+      ERREXIT(cinfo, JERR_FILE_WRITE);  // triggers jpegErrorExit → longjmp
+      return FALSE;  // unreachable, but satisfies return type
     } else {
       n -= tmp_n;
       nn += tmp_n;
@@ -141,7 +150,8 @@ static void term_file_destination(j_compress_ptr cinfo)
   do {
     auto tmp_n = write(file_buffer->file_id, file_buffer->buffer + nn, n);
     if (tmp_n < 0) {
-      throw SipiImageError("Couldn't write to file!");
+      ERREXIT(cinfo, JERR_FILE_WRITE);  // triggers jpegErrorExit → longjmp
+      return;  // unreachable
     } else {
       n -= tmp_n;
       nn += tmp_n;
@@ -307,10 +317,14 @@ static boolean empty_html_buffer(j_compress_ptr cinfo)
   auto *html_buffer = (HtmlBuffer *)cinfo->client_data;
   try {
     html_buffer->conobj->sendAndFlush(html_buffer->buffer, html_buffer->buflen);
-  } catch (int i) {
-    // an error occurred (possibly a broken pipe)
-    throw JpegError("Couldn't write to HTTP socket");
-    // return false;
+  } catch (const std::exception &e) {
+    log_err("JPEG HTTP write failed: %s", e.what());
+    ERREXIT(cinfo, JERR_FILE_WRITE);  // triggers jpegErrorExit → longjmp
+    return FALSE;  // unreachable
+  } catch (...) {
+    log_err("JPEG HTTP write failed: unknown error");
+    ERREXIT(cinfo, JERR_FILE_WRITE);
+    return FALSE;  // unreachable
   }
   cinfo->dest->free_in_buffer = html_buffer->buflen;
   cinfo->dest->next_output_byte = html_buffer->buffer;
@@ -329,9 +343,14 @@ static void term_html_destination(j_compress_ptr cinfo)
   size_t nbytes = cinfo->dest->next_output_byte - html_buffer->buffer;
   try {
     html_buffer->conobj->sendAndFlush(html_buffer->buffer, nbytes);
-  } catch (int i) {
-    // an error occured in sending the data (broken pipe?)
-    throw JpegError("Couldn't write to HTTP socket");
+  } catch (const std::exception &e) {
+    log_err("JPEG HTTP write (term) failed: %s", e.what());
+    ERREXIT(cinfo, JERR_FILE_WRITE);
+    return;  // unreachable
+  } catch (...) {
+    log_err("JPEG HTTP write (term) failed: unknown error");
+    ERREXIT(cinfo, JERR_FILE_WRITE);
+    return;  // unreachable
   }
 
   free(html_buffer->buffer);
@@ -387,77 +406,63 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
   int slen;
   unsigned int datalen = 0;
   char *ptr = data;
+  char *end = data + length;
   unsigned short id;
-  char sig[5];
   char name[256];
-  int i;
-
-  // cerr << "Parse photoshop: TOTAL LENGTH = " << length << endl;
 
   while ((ptr - data) < length) {
-    sig[0] = *ptr;
-    sig[1] = *(ptr + 1);
-    sig[2] = *(ptr + 2);
-    sig[3] = *(ptr + 3);
-    sig[4] = '\0';
-    if (strcmp(sig, "8BIM") != 0) break;
+    // Bounds check: need at least 4 bytes for signature
+    if (ptr + 4 > end) break;
+
+    if (memcmp(ptr, "8BIM", 4) != 0) break;
     ptr += 4;
 
-    //
-    // tag-ID processing
-    id = ((unsigned char)*(ptr + 0) << 8) | (unsigned char)*(ptr + 1);// ID
-    ptr += 2;// ID
+    // Bounds check: need at least 2 bytes for tag ID
+    if (ptr + 2 > end) break;
+    id = ((unsigned char)*(ptr + 0) << 8) | (unsigned char)*(ptr + 1);
+    ptr += 2;
 
-    //
-    // name processing (Pascal string)
-    slen = *ptr;
-    for (i = 0; (i < slen) && (i < 256); i++) name[i] = *(ptr + i + 1);
-    name[i] = '\0';
+    // Name processing (Pascal string) — bounds check
+    if (ptr >= end) break;
+    slen = (unsigned char)*ptr;
+    if (ptr + 1 + slen > end) break;
+    int name_len = (slen < 255) ? slen : 255;
+    for (int i = 0; i < name_len; i++) name[i] = *(ptr + i + 1);
+    name[name_len] = '\0';
     slen++;// add length byte
     if ((slen % 2) == 1) slen++;
     ptr += slen;
 
-    //
-    // data processing
+    // Bounds check: need 4 bytes for data length
+    if (ptr + 4 > end) break;
     datalen = ((unsigned char)*ptr << 24) | ((unsigned char)*(ptr + 1) << 16) | ((unsigned char)*(ptr + 2) << 8)
               | (unsigned char)*(ptr + 3);
-
     ptr += 4;
+
+    // Bounds check: validate datalen against remaining buffer
+    if (ptr + datalen > end) break;
 
     switch (id) {
     case 0x0404: {
-      // IPTC data
-      // cerr << ">>> Photoshop: IPTC" << endl;
       if (img->iptc == nullptr) img->iptc = std::make_shared<SipiIptc>((unsigned char *)ptr, datalen);
-      // IPTC – handled separately!
       break;
     }
     case 0x040f: {
-      // ICC data
-      // cerr << ">>> Photoshop: ICC" << endl;
-      // ICC profile
       if (img->icc == nullptr) img->icc = std::make_shared<SipiIcc>((unsigned char *)ptr, datalen);
       break;
     }
     case 0x0422: {
-      // EXIF data
       if (img->exif == nullptr) img->exif = std::make_shared<SipiExif>((unsigned char *)ptr, datalen);
       uint16_t ori;
       if (img->exif->getValByKey("Exif.Image.Orientation", ori)) { img->orientation = Orientation(ori); }
       break;
     }
     case 0x0424: {
-      // XMP data
-      // cerr << ">>> Photoshop: XMP" << endl;
-      // XMP data
       if (img->xmp == nullptr) img->xmp = std::make_shared<SipiXmp>(ptr, datalen);
+      break;  // Fix: was missing, causing fall-through to default
     }
     default: {
-      // URL
-      char *str = (char *)calloc(1, (datalen + 1) * sizeof(char));
-      memcpy(str, ptr, datalen);
-      str[datalen] = '\0';
-      // fprintf(stderr, "XXX=%s\n", str);
+      // Unknown resource — skip (removed leaking calloc/memcpy)
       break;
     }
     }
@@ -470,18 +475,7 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
 //=============================================================================
 
 
-/*!
- * This function is used to catch libjpeg errors which otherwise would
- * result in a call exit()
- */
-static void jpegErrorExit(j_common_ptr cinfo)
-{
-  char jpegLastErrorMsg[JMSG_LENGTH_MAX];
-  /* Create the message */
-  (*(cinfo->err->format_message))(cinfo, jpegLastErrorMsg);
-  /* Jump to the setjmp point */
-  throw JpegError(jpegLastErrorMsg);
-}
+//=============================================================================
 
 //=============================================================================
 
@@ -501,7 +495,7 @@ bool SipiIOJpeg::read(SipiImage *img,
   // workaround for bug #0011: jpeglib crashes the app when the file is not a jpeg file
   // we check the magic number before calling any jpeglib routines
   unsigned char magic[2];
-  if (::read(infile, magic, 2) != 2) { return false; }
+  if (::read(infile, magic, 2) != 2) { ::close(infile); return false; }
   if ((magic[0] != 0xff) || (magic[1] != 0xd8)) {
     close(infile);
     return false;// it's not a JPEG file!
@@ -514,48 +508,48 @@ bool SipiIOJpeg::read(SipiImage *img,
   //
   // std::lock_guard<std::mutex> inlock_mutex_guard(inlock);
 
-  struct jpeg_decompress_struct cinfo
-  {
-  };
-  struct jpeg_error_mgr jerr
-  {
-  };
+  struct jpeg_decompress_struct cinfo {};
+  JpegErrorMgr jerr;
 
   JSAMPARRAY linbuf = nullptr;
   jpeg_saved_marker_ptr marker = nullptr;
+  unsigned char *icc_buffer_guard = nullptr;  // for cleanup on longjmp
 
   //
   // let's create the decompressor
   //
-  jpeg_create_decompress(&cinfo);
+  cinfo.err = jpeg_std_error(&jerr.pub);
+  jerr.pub.error_exit = jpegErrorExit;
 
+  jpeg_create_decompress(&cinfo);
   cinfo.dct_method = JDCT_FLOAT;
 
-  cinfo.err = jpeg_std_error(&jerr);
-  jerr.error_exit = jpegErrorExit;
-
-  try {
-    // jpeg_stdio_src(&cinfo, infile);
-    jpeg_file_src(&cinfo, infile);
-    jpeg_save_markers(&cinfo, JPEG_COM, 0xffff);
-    for (int i = 0; i < 16; i++) { jpeg_save_markers(&cinfo, JPEG_APP0 + i, 0xffff); }
-  } catch (JpegError &jpgerr) {
+  //
+  // setjmp error handler — ALL libjpeg errors from this point longjmp here.
+  // This replaces the scattered try/catch(JpegError) blocks in the read path,
+  // eliminating C++ throw-through-C undefined behavior.
+  //
+  if (setjmp(jerr.error_jmp)) {
+    // longjmp landed here — clean up and throw in C++ context
+    free(icc_buffer_guard);  // may have been allocated during marker parsing
+    // Call term_source to free the source manager allocated by jpeg_file_src.
+    // jpeg_destroy_decompress does NOT call term_source on error paths.
+    if (cinfo.src && cinfo.src->term_source) {
+      cinfo.src->term_source(&cinfo);
+    }
     jpeg_destroy_decompress(&cinfo);
-    close(infile);
-    throw SipiError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
+    ::close(infile);
+    throw SipiImageError("JPEG read failed for \"" + filepath + "\": " + std::string(jerr.error_message));
   }
+
+  jpeg_file_src(&cinfo, infile);
+  jpeg_save_markers(&cinfo, JPEG_COM, 0xffff);
+  for (int i = 0; i < 16; i++) { jpeg_save_markers(&cinfo, JPEG_APP0 + i, 0xffff); }
 
   //
   // now we read the header
   //
-  int res;
-  try {
-    res = jpeg_read_header(&cinfo, static_cast<boolean>(true));
-  } catch (JpegError &jpgerr) {
-    jpeg_destroy_decompress(&cinfo);
-    close(infile);
-    throw SipiImageError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
-  }
+  int res = jpeg_read_header(&cinfo, static_cast<boolean>(true));
   if (res != JPEG_HEADER_OK) {
     jpeg_destroy_decompress(&cinfo);
     close(infile);
@@ -598,7 +592,8 @@ bool SipiIOJpeg::read(SipiImage *img,
   // getting Metadata
   //
   marker = cinfo.marker_list;
-  unsigned char *icc_buffer = nullptr;
+  // Use icc_buffer_guard (declared before setjmp) so longjmp cleanup can free it
+  unsigned char *&icc_buffer = icc_buffer_guard;
   int icc_buffer_len = 0;
   while (marker != nullptr) {
     if (marker->marker == JPEG_COM) {
@@ -654,27 +649,35 @@ bool SipiIOJpeg::read(SipiImage *img,
             ll++;
             pos++;
           }
-          pos++;// finally we have the start of XMP string
+          if (ll >= marker->data_length) {
+            throw SipiImageError("Failed to parse XMP metadata: '>' not found in \"" + filepath + "\"");
+          }
+          pos++;// skip past '>'
           unsigned char *start_xmp = pos;
 
-          unsigned char *end_xmp;
+          unsigned char *data_end = (unsigned char *)marker->data + marker->data_length;
+          unsigned char *end_xmp = start_xmp;  // initialize to avoid UB if loop doesn't run
           do {
             s = end;
-            while (*pos != *s) pos++;
+            while (pos < data_end && *pos != *s) pos++;
+            if (pos >= data_end) break;
             end_xmp = pos;// a candidate
-            while ((*s != '\0') && (*pos == *s)) {
+            while (pos < data_end && (*s != '\0') && (*pos == *s)) {
               pos++;
               s++;
             }
-          } while (*s != '\0');
-          while (*pos != '>') { pos++; }
-          pos++;
+          } while (pos < data_end && *s != '\0');
+          if (pos >= data_end || *s != '\0') {
+            throw SipiImageError("Failed to parse XMP metadata: end marker not found");
+          }
+          while (pos < data_end && *pos != '>') { pos++; }
+          if (pos < data_end) pos++;
 
           size_t xmp_len = end_xmp - start_xmp;
 
           std::string xmpstr((char *)start_xmp, xmp_len);
           size_t npos = xmpstr.find("</x:xmpmeta>");
-          xmpstr = xmpstr.substr(0, npos + 12);
+          if (npos != std::string::npos) xmpstr = xmpstr.substr(0, npos + 12);
 
           img->xmp = std::make_shared<SipiXmp>(xmpstr);
         } catch (SipiError &err) {
@@ -683,13 +686,16 @@ bool SipiIOJpeg::read(SipiImage *img,
       }
     } else if (marker->marker == JPEG_APP0 + 2) {
       // ICC MARKER.... may span multiple marker segments
-      //
-      // first we try to find the exif part
-      //
       auto *pos = static_cast<unsigned char *>(memmem(marker->data, marker->data_length, "ICC_PROFILE\0", 12));
       if (pos != nullptr) {
         auto len = marker->data_length - (pos - (unsigned char *)marker->data) - 14;
-        icc_buffer = static_cast<unsigned char *>(realloc(icc_buffer, icc_buffer_len + len));
+        auto *newbuf = static_cast<unsigned char *>(realloc(icc_buffer, icc_buffer_len + len));
+        if (newbuf == nullptr) {
+          // realloc failed — skip this ICC segment, keep what we have
+          log_err("realloc failed for ICC buffer (%d bytes)", icc_buffer_len + len);
+          break;
+        }
+        icc_buffer = newbuf;
         memcpy(icc_buffer + icc_buffer_len, pos + 14, (size_t)len);
         icc_buffer_len += len;
       }
@@ -707,15 +713,11 @@ bool SipiIOJpeg::read(SipiImage *img,
   if (icc_buffer != nullptr) {
     img->icc = std::make_shared<SipiIcc>(icc_buffer, icc_buffer_len);
     free(icc_buffer);// SipiIcc constructor copies the data
+    icc_buffer = nullptr;  // prevent double-free if longjmp fires later
   }
 
-  try {
-    jpeg_start_decompress(&cinfo);
-  } catch (JpegError &jpgerr) {
-    jpeg_destroy_decompress(&cinfo);
-    close(infile);
-    throw SipiImageError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
-  }
+  // icc_buffer is freed and nulled above; errors → longjmp → setjmp handler
+  jpeg_start_decompress(&cinfo);
 
   img->bps = 8;
   img->nx = cinfo.output_width;
@@ -761,32 +763,16 @@ bool SipiIOJpeg::read(SipiImage *img,
   delete[] img->pixels;// free previous buffer if re-reading into same SipiImage
   img->pixels = new byte[img->ny * sll];
 
-  try {
-    linbuf = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, sll, 1);
-    for (size_t i = 0; i < img->ny; i++) {
-      jpeg_read_scanlines(&cinfo, linbuf, 1);
-      memcpy(&(img->pixels[i * sll]), linbuf[0], (size_t)sll);
-    }
-  } catch (JpegError &jpgerr) {
-    jpeg_destroy_decompress(&cinfo);
-    close(infile);
-    throw SipiImageError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
-  }
-  try {
-    jpeg_finish_decompress(&cinfo);
-  } catch (JpegError &jpgerr) {
-    close(infile);
-    throw SipiImageError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
+  // All libjpeg calls below — errors → longjmp → setjmp handler above
+  linbuf = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, sll, 1);
+  for (size_t i = 0; i < img->ny; i++) {
+    jpeg_read_scanlines(&cinfo, linbuf, 1);
+    memcpy(&(img->pixels[i * sll]), linbuf[0], (size_t)sll);
   }
 
-  try {
-    jpeg_destroy_decompress(&cinfo);
-  } catch (JpegError &jpgerr) {
-    close(infile);
-    // inlock.unlock();
-    throw SipiImageError("Error reading JPEG file: \"" + filepath + "\": " + jpgerr.what());
-  }
-  close(infile);
+  jpeg_finish_decompress(&cinfo);
+  jpeg_destroy_decompress(&cinfo);
+  ::close(infile);
 
   //
   // do some cropping...
@@ -869,25 +855,18 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
   // move infile position back to the beginning of the file
   ::lseek(raw_fd, 0, SEEK_SET);
 
-  struct jpeg_decompress_struct cinfo
-  {
-  };
-  struct jpeg_error_mgr jerr
-  {
-  };
+  struct jpeg_decompress_struct cinfo {};
+  JpegErrorMgr jerr;
 
   jpeg_saved_marker_ptr marker;
 
-  jpeg_create_decompress(&cinfo);
+  cinfo.err = jpeg_std_error(&jerr.pub);
+  jerr.pub.error_exit = jpegErrorExit;
 
+  jpeg_create_decompress(&cinfo);
   cinfo.dct_method = JDCT_FLOAT;
 
-  cinfo.err = jpeg_std_error(&jerr);
-  jerr.error_exit = jpegErrorExit;
-
   // Helper to clean up jpeg resources (source manager + decompress struct).
-  // jpeg_destroy_decompress alone doesn't invoke term_source when
-  // jpeg_finish_decompress wasn't called, leaking the source manager.
   auto cleanup_jpeg = [&cinfo]() {
     if (cinfo.src && cinfo.src->term_source) {
       cinfo.src->term_source(&cinfo);
@@ -895,27 +874,21 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
     jpeg_destroy_decompress(&cinfo);
   };
 
-  try {
-    jpeg_file_src(&cinfo, raw_fd);
-    jpeg_save_markers(&cinfo, JPEG_COM, 0xffff);
-    for (int i = 0; i < 16; i++) { jpeg_save_markers(&cinfo, JPEG_APP0 + i, 0xffff); }
-  } catch (JpegError &jpgerr) {
+  // setjmp error handler for getDim — libjpeg errors longjmp here
+  if (setjmp(jerr.error_jmp)) {
     cleanup_jpeg();
     info.success = SipiImgInfo::FAILURE;
     return info;
   }
 
+  jpeg_file_src(&cinfo, raw_fd);
+  jpeg_save_markers(&cinfo, JPEG_COM, 0xffff);
+  for (int i = 0; i < 16; i++) { jpeg_save_markers(&cinfo, JPEG_APP0 + i, 0xffff); }
+
   //
   // now we read the header
   //
-  int res;
-  try {
-    res = jpeg_read_header(&cinfo, static_cast<boolean>(true));
-  } catch (JpegError &jpgerr) {
-    cleanup_jpeg();
-    info.success = SipiImgInfo::FAILURE;
-    return info;
-  }
+  int res = jpeg_read_header(&cinfo, static_cast<boolean>(true));
   if (res != JPEG_HEADER_OK) {
     cleanup_jpeg();
     info.success = SipiImgInfo::FAILURE;
@@ -978,27 +951,35 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
             ll++;
             pos++;
           }
-          pos++;// finally we have the start of XMP string
+          if (ll >= marker->data_length) {
+            throw SipiImageError("Failed to parse XMP in getDim: '>' not found");
+          }
+          pos++;// skip past '>'
           unsigned char *start_xmp = pos;
 
-          unsigned char *end_xmp;
+          unsigned char *data_end = (unsigned char *)marker->data + marker->data_length;
+          unsigned char *end_xmp = start_xmp;
           do {
             s = end;
-            while (*pos != *s) pos++;
+            while (pos < data_end && *pos != *s) pos++;
+            if (pos >= data_end) break;
             end_xmp = pos;// a candidate
-            while ((*s != '\0') && (*pos == *s)) {
+            while (pos < data_end && (*s != '\0') && (*pos == *s)) {
               pos++;
               s++;
             }
-          } while (*s != '\0');
-          while (*pos != '>') { pos++; }
-          pos++;
+          } while (pos < data_end && *s != '\0');
+          if (pos >= data_end || *s != '\0') {
+            throw SipiImageError("Failed to parse XMP in getDim: end marker not found");
+          }
+          while (pos < data_end && *pos != '>') { pos++; }
+          if (pos < data_end) pos++;
 
           size_t xmp_len = end_xmp - start_xmp;
 
           std::string xmpstr((char *)start_xmp, xmp_len);
           size_t npos = xmpstr.find("</x:xmpmeta>");
-          xmpstr = xmpstr.substr(0, npos + 12);
+          if (npos != std::string::npos) xmpstr = xmpstr.substr(0, npos + 12);
 
           img.xmp = std::make_shared<SipiXmp>(xmpstr);
         } catch (SipiImageError &err) {
@@ -1016,13 +997,8 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
     marker = marker->next;
   }
 
-  try {
-    jpeg_start_decompress(&cinfo);
-  } catch (JpegError &jpgerr) {
-    cleanup_jpeg();
-    info.success = SipiImgInfo::FAILURE;
-    return info;
-  }
+  // errors → longjmp → setjmp handler above
+  jpeg_start_decompress(&cinfo);
 
   info.width = cinfo.output_width;
   info.height = cinfo.output_height;
@@ -1077,46 +1053,60 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   img->convertToIcc(icc, 8);// only 8 bit JPEGs are supported by the spec
 
   jpeg_compress_struct cinfo{};
-  jpeg_error_mgr jerr{};
+  JpegErrorMgr jerr;
 
-  cinfo.err = jpeg_std_error(&jerr);
-  jerr.error_exit = jpegErrorExit;
+  cinfo.err = jpeg_std_error(&jerr.pub);
+  jerr.pub.error_exit = jpegErrorExit;
 
-  int outfile = -1; /* target file */
-  JSAMPROW row_pointer[1]; /* pointer to JSAMPLE row[s] */
-  int row_stride; /* physical row width in image buffer */
+  // FdGuard for outfile — constructed before setjmp. Its destructor runs
+  // during the C++ stack unwinding from the throw SipiImageError after longjmp.
+  FdGuard outfile_guard(-1);
+  JSAMPROW row_pointer[1];
+  int row_stride;
+  bool is_http = (filepath == "HTTP");
 
-  try {
-    jpeg_create_compress(&cinfo);
-  } catch (JpegError &jpgerr) {
-    throw SipiImageError(jpgerr.what());
+  jpeg_create_compress(&cinfo);  // errors → longjmp → setjmp handler below
+
+  //
+  // setjmp error handler — ALL libjpeg errors from this point longjmp here.
+  // This replaces the scattered try/catch(JpegError) blocks.
+  //
+  // NOTE on RAII: longjmp does NOT call C++ destructors. Between setjmp and
+  // longjmp, the following RAII objects may leak on the error path:
+  // - exifchunk, xmpchunk, iccchunk, iptcchunk (make_unique, each <65KB)
+  // These are freed when the thread handles the next request (stack unwinding
+  // from the SipiImageError thrown below). Acceptable small leak on error path.
+  //
+  if (setjmp(jerr.error_jmp)) {
+    // longjmp landed here — clean up and throw in C++ context
+    if (is_http) {
+      cleanup_html_destination(&cinfo);
+    }
+    jpeg_destroy_compress(&cinfo);
+    // outfile_guard destructor closes fd during throw unwinding
+    throw SipiImageError("JPEG write failed: " + std::string(jerr.error_message));
   }
 
-  if (filepath == "HTTP") {
-    // we are transmitting the data through the webserver
+  if (is_http) {
     shttps::Connection *conobj = img->connection();
-    try {
-      jpeg_html_dest(&cinfo, conobj);
-    } catch (JpegError &jpgerr) {
-      cleanup_html_destination(&cinfo);
-      jpeg_destroy_compress(&cinfo);
-      throw SipiImageError(jpgerr.what());
-    }
+    jpeg_html_dest(&cinfo, conobj);
   } else {
     if (filepath == "stdout:") {
       jpeg_stdio_dest(&cinfo, stdout);
     } else {
-      if ((outfile = open(filepath.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)) == -1) {
+      int outfile = open(filepath.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+      if (outfile == -1) {
         jpeg_destroy_compress(&cinfo);
         throw SipiImageError("Cannot open file \"" + filepath + "\"!");
       }
+      outfile_guard.fd = outfile;
       jpeg_file_dest(&cinfo, outfile);
     }
   }
 
-  cinfo.image_width = (int)img->nx; /* image width and height, in pixels */
+  cinfo.image_width = (int)img->nx;
   cinfo.image_height = (int)img->ny;
-  cinfo.input_components = (int)img->nc; /* # of color components per pixel */
+  cinfo.input_components = (int)img->nc;
   switch (img->photo) {
   case PhotometricInterpretation::MINISWHITE:
   case PhotometricInterpretation::MINISBLACK: {
@@ -1179,70 +1169,39 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   cinfo.progressive_mode = TRUE;
   cinfo.write_Adobe_marker = TRUE;
   cinfo.write_JFIF_header = TRUE;
-  try {
-    jpeg_set_defaults(&cinfo);
-    jpeg_set_quality(&cinfo, quality, TRUE /* TRUE, then limit to baseline-JPEG values */);
 
-    jpeg_simple_progression(&cinfo);
-    jpeg_start_compress(&cinfo, TRUE);
-  } catch (JpegError &jpgerr) {
-    jpeg_finish_compress(&cinfo);
-    jpeg_destroy_compress(&cinfo);
-    if (outfile != -1) close(outfile);
-    // outlock.unlock();
-    throw SipiImageError(jpgerr.what());
-  }
+  // All libjpeg calls below — errors trigger longjmp to the setjmp handler above
+  jpeg_set_defaults(&cinfo);
+  jpeg_set_quality(&cinfo, quality, TRUE);
+  jpeg_simple_progression(&cinfo);
+  jpeg_start_compress(&cinfo, TRUE);
 
   //
-  // Here we write the marker
-  //
-  //
-  //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  // ATTENTION: The markers must be written in the right sequence: APP0, APP1, APP2, ..., APP15
-  //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  // Markers must be written in sequence: APP0, APP1, APP2, ..., APP15
   //
 
   if (img->exif != nullptr) {
     std::vector<unsigned char> buf = img->exif->exifBytes();
     if (buf.size() <= 65535) {
       char start[] = "Exif\000\000";
-      size_t start_l = sizeof(start) - 1;// remove trailing '\0';
+      size_t start_l = sizeof(start) - 1;
+      // NOTE: make_unique leak on longjmp is acceptable (see comment above setjmp)
       auto exifchunk = shttps::make_unique<unsigned char[]>(buf.size() + start_l);
       memcpy(exifchunk.get(), start, (size_t)start_l);
       if (buf.size() > 0) memcpy(exifchunk.get() + start_l, buf.data(), (size_t)buf.size());
-
-      try {
-        jpeg_write_marker(&cinfo, JPEG_APP0 + 1, (JOCTET *)exifchunk.get(), start_l + buf.size());
-      } catch (JpegError &jpgerr) {
-        jpeg_finish_compress(&cinfo);
-        jpeg_destroy_compress(&cinfo);
-        if (outfile != -1) close(outfile);
-        throw SipiImageError(jpgerr.what());
-      }
-    } else {
-      // std::cerr << "exif to big" << std::endl;
+      jpeg_write_marker(&cinfo, JPEG_APP0 + 1, (JOCTET *)exifchunk.get(), start_l + buf.size());
     }
   }
 
   if (img->xmp != nullptr) {
     std::string buf = img->xmp->xmpBytes();
-
     if ((!buf.empty()) && (buf.size() <= 65535)) {
       char start[] = "http://ns.adobe.com/xap/1.0/\000";
-      size_t start_l = sizeof(start) - 1;// remove trailing '\0';
+      size_t start_l = sizeof(start) - 1;
       auto xmpchunk = shttps::make_unique<char[]>(buf.size() + start_l);
       memcpy(xmpchunk.get(), start, (size_t)start_l);
       memcpy(xmpchunk.get() + start_l, buf.data(), (size_t)buf.size());
-      try {
-        jpeg_write_marker(&cinfo, JPEG_APP0 + 1, (JOCTET *)xmpchunk.get(), start_l + buf.size());
-      } catch (JpegError &jpgerr) {
-        jpeg_finish_compress(&cinfo);
-        jpeg_destroy_compress(&cinfo);
-        if (outfile != -1) close(outfile);
-        throw SipiImageError(jpgerr.what());
-      }
-    } else {
-      // std::cerr << "xml to big" << std::endl;
+      jpeg_write_marker(&cinfo, JPEG_APP0 + 1, (JOCTET *)xmpchunk.get(), start_l + buf.size());
     }
   }
 
@@ -1261,7 +1220,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
     }
     unsigned char start[14] = {
       0x49, 0x43, 0x43, 0x5F, 0x50, 0x52, 0x4F, 0x46, 0x49, 0x4C, 0x45, 0x0
-    };//"ICC_PROFILE\000";
+    };
     size_t start_l = 14;
     unsigned int n = buf.size() / (65533 - start_l + 1) + 1;
 
@@ -1276,15 +1235,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
       if (n_nextwrite > n_towrite) n_nextwrite = n_towrite;
       memcpy(iccchunk.get(), start, (size_t)start_l);
       memcpy(iccchunk.get() + start_l, buf.data() + n_written, (size_t)n_nextwrite);
-      try {
-        jpeg_write_marker(&cinfo, ICC_MARKER, iccchunk.get(), n_nextwrite + start_l);
-      } catch (JpegError &jpgerr) {
-        jpeg_finish_compress(&cinfo);
-        jpeg_destroy_compress(&cinfo);
-        if (outfile != -1) close(outfile);
-        throw SipiImageError(jpgerr.what());
-      }
-
+      jpeg_write_marker(&cinfo, ICC_MARKER, iccchunk.get(), n_nextwrite + start_l);
       n_towrite -= n_nextwrite;
       n_written += n_nextwrite;
     }
@@ -1306,59 +1257,28 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
       memcpy(iptcchunk.get(), start, (size_t)start_l);
       memcpy(iptcchunk.get() + start_l, siz, (size_t)4);
       if (buf.size() > 0) memcpy(iptcchunk.get() + start_l + 4, buf.data(), (size_t)buf.size());
-
-      try {
-        jpeg_write_marker(&cinfo, JPEG_APP0 + 13, (JOCTET *)iptcchunk.get(), start_l + buf.size());
-      } catch (JpegError &jpgerr) {
-        jpeg_destroy_compress(&cinfo);
-        if (outfile != -1) close(outfile);
-        throw SipiImageError(jpgerr.what());
-      }
-    } else {
-      // std::cerr << "iptc to big" << std::endl;
+      jpeg_write_marker(&cinfo, JPEG_APP0 + 13, (JOCTET *)iptcchunk.get(), start_l + buf.size());
     }
   }
 
   if (es.is_set()) {
-    try {
-      std::string esstr = es;
-      unsigned int len = esstr.length();
-      char sipi_buf[512 + 1];
-      strncpy(sipi_buf, esstr.c_str(), 512);
-      sipi_buf[512] = '\0';
-      jpeg_write_marker(&cinfo, JPEG_COM, (JOCTET *)sipi_buf, len);
-    } catch (JpegError &jpgerr) {
-      jpeg_destroy_compress(&cinfo);
-      if (outfile != -1) close(outfile);
-      throw SipiImageError(jpgerr.what());
-    }
+    std::string esstr = es;
+    unsigned int len = esstr.length();
+    char sipi_buf[512 + 1];
+    strncpy(sipi_buf, esstr.c_str(), 512);
+    sipi_buf[512] = '\0';
+    jpeg_write_marker(&cinfo, JPEG_COM, (JOCTET *)sipi_buf, len);
   }
 
-  row_stride = img->nx * img->nc; /* JSAMPLEs per row in image_buffer */
+  row_stride = img->nx * img->nc;
 
-  try {
-    while (cinfo.next_scanline < cinfo.image_height) {
-      // jpeg_write_scanlines expects an array of pointers to scanlines.
-      // Here the array is only one element long, but you could pass
-      // more than one scanline at a time if that's more convenient.
-      row_pointer[0] = &img->pixels[cinfo.next_scanline * row_stride];
-      (void)jpeg_write_scanlines(&cinfo, row_pointer, 1);
-    }
-  } catch (JpegError &jpgerr) {
-    jpeg_destroy_compress(&cinfo);
-    if (outfile != -1) close(outfile);
-    throw SipiImageError(jpgerr.what());
+  while (cinfo.next_scanline < cinfo.image_height) {
+    row_pointer[0] = &img->pixels[cinfo.next_scanline * row_stride];
+    (void)jpeg_write_scanlines(&cinfo, row_pointer, 1);
   }
 
-  try {
-    jpeg_finish_compress(&cinfo);
-  } catch (JpegError &jpgerr) {
-    jpeg_destroy_compress(&cinfo);
-    if (outfile != -1) close(outfile);
-    throw SipiImageError(jpgerr.what());
-  }
-  if (outfile != -1) close(outfile);
-
+  jpeg_finish_compress(&cinfo);
   jpeg_destroy_compress(&cinfo);
+  // outfile_guard destructor closes fd
 }
 }// namespace Sipi

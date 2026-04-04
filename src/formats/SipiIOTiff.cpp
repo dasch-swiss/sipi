@@ -89,10 +89,14 @@ static tsize_t memTiffWriteProc(thandle_t handle, tdata_t buf, tsize_t size)
   auto *memtif = (MEMTIFF *)handle;
 
   if (((tsize_t)memtif->fptr + size) > memtif->size) {
-    if ((memtif->data = (unsigned char *)realloc(memtif->data, memtif->fptr + memtif->incsiz + size)) == nullptr) {
-      throw Sipi::SipiImageError("realloc failed", errno);
+    // Use temp variable to avoid losing original pointer on realloc failure
+    auto *newdata = (unsigned char *)realloc(memtif->data, memtif->fptr + memtif->incsiz + size);
+    if (newdata == nullptr) {
+      // Return 0 to signal write failure — libtiff treats short writes as errors.
+      // Cannot throw: this is called from libtiff's C code.
+      return 0;
     }
-
+    memtif->data = newdata;
     memtif->size = memtif->fptr + memtif->incsiz + size;
   }
 
@@ -112,10 +116,11 @@ static toff_t memTiffSeekProc(thandle_t handle, toff_t off, int whence)
   switch (whence) {
   case SEEK_SET: {
     if ((tsize_t)off > memtif->size) {
-      if ((memtif->data = (unsigned char *)realloc(memtif->data, memtif->size + memtif->incsiz + off)) == nullptr) {
-        throw Sipi::SipiImageError("realloc failed", errno);
+      auto *newdata = (unsigned char *)realloc(memtif->data, memtif->size + memtif->incsiz + off);
+      if (newdata == nullptr) {
+        return (toff_t)-1;  // signal seek failure to libtiff
       }
-
+      memtif->data = newdata;
       memtif->size = memtif->size + memtif->incsiz + off;
     }
 
@@ -124,10 +129,11 @@ static toff_t memTiffSeekProc(thandle_t handle, toff_t off, int whence)
   }
   case SEEK_CUR: {
     if ((tsize_t)(memtif->fptr + off) > memtif->size) {
-      if ((memtif->data = (unsigned char *)realloc(memtif->data, memtif->fptr + memtif->incsiz + off)) == nullptr) {
-        throw Sipi::SipiImageError("realloc failed", errno);
+      auto *newdata = (unsigned char *)realloc(memtif->data, memtif->fptr + memtif->incsiz + off);
+      if (newdata == nullptr) {
+        return (toff_t)-1;
       }
-
+      memtif->data = newdata;
       memtif->size = memtif->fptr + memtif->incsiz + off;
     }
 
@@ -136,10 +142,11 @@ static toff_t memTiffSeekProc(thandle_t handle, toff_t off, int whence)
   }
   case SEEK_END: {
     if ((tsize_t)(memtif->size + off) > memtif->size) {
-      if ((memtif->data = (unsigned char *)realloc(memtif->data, memtif->size + memtif->incsiz + off)) == nullptr) {
-        throw Sipi::SipiImageError("realloc failed", errno);
+      auto *newdata = (unsigned char *)realloc(memtif->data, memtif->size + memtif->incsiz + off);
+      if (newdata == nullptr) {
+        return (toff_t)-1;
       }
-
+      memtif->data = newdata;
       memtif->size = memtif->size + memtif->incsiz + off;
     }
 
