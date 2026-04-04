@@ -1,0 +1,64 @@
+=== ../../../test/_test_data/images/unit/MaoriFigure.jpg ===
+
+Dimensions: 1014x1933
+Channels: 3
+BPS: 8
+Orientation: 6
+
+--- EXIF ---
+Exif.Image.ImageWidth                        0x0100 Long        1  4000
+Exif.Image.ImageLength                       0x0101 Long        1  3000
+Exif.Image.Make                              0x010f Ascii       8  samsung
+Exif.Image.Model                             0x0110 Ascii       9  SM-A326U
+Exif.Image.Orientation                       0x0112 Short       1  6
+Exif.Image.XResolution                       0x011a Rational    1  72/1
+Exif.Image.YResolution                       0x011b Rational    1  72/1
+Exif.Image.ResolutionUnit                    0x0128 Short       1  2
+Exif.Image.Software                          0x0131 Ascii      14  A326USQS8BVJ1
+Exif.Image.DateTime                          0x0132 Ascii      20  2022:12:01 09:25:52
+Exif.Image.YCbCrPositioning                  0x0213 Short       1  1
+Exif.Image.ExifTag                           0x8769 Long        1  238
+Exif.Photo.ExposureTime                      0x829a Rational    1  1/197
+Exif.Photo.FNumber                           0x829d Rational    1  180/100
+Exif.Photo.ExposureProgram                   0x8822 Short       1  2
+Exif.Photo.ISOSpeedRatings                   0x8827 Short       1  32
+Exif.Photo.ExifVersion                       0x9000 Undefined   4  48 50 50 48
+Exif.Photo.DateTimeOriginal                  0x9003 Ascii      20  2022:12:01 09:25:52
+Exif.Photo.DateTimeDigitized                 0x9004 Ascii      20  2022:12:01 09:25:52
+Exif.Photo.OffsetTime                        0x9010 Ascii       7  +13:00
+Exif.Photo.OffsetTimeOriginal                0x9011 Ascii       7  +13:00
+Exif.Photo.ShutterSpeedValue                 0x9201 Rational    1  1/197
+Exif.Photo.ApertureValue                     0x9202 Rational    1  169/100
+Exif.Photo.BrightnessValue                   0x9203 SRational   1  739/100
+Exif.Photo.ExposureBiasValue                 0x9204 SRational   1  0/100
+Exif.Photo.MaxApertureValue                  0x9205 Rational    1  169/100
+Exif.Photo.MeteringMode                      0x9207 Short       1  2
+Exif.Photo.Flash                             0x9209 Short       1  0
+Exif.Photo.FocalLength                       0x920a Rational    1  460/100
+Exif.Photo.ColorSpace                        0xa001 Short       1  1
+Exif.Photo.PixelXDimension                   0xa002 Long        1  4000
+Exif.Photo.PixelYDimension                   0xa003 Long        1  3000
+Exif.Photo.ExposureMode                      0xa402 Short       1  0
+Exif.Photo.WhiteBalance                      0xa403 Short       1  0
+Exif.Photo.DigitalZoomRatio                  0xa404 Rational    1  100/100
+Exif.Photo.FocalLengthIn35mmFilm             0xa405 Short       1  25
+Exif.Photo.SceneCaptureType                  0xa406 Short       1  0
+Exif.Image.GPSTag                            0x8825 Long        1  672
+Exif.GPSInfo.GPSLatitudeRef                  0x0001 Ascii       2  S
+Exif.GPSInfo.GPSLatitude                     0x0002 Rational    3  36/1 50/1 39341760/1000000
+Exif.GPSInfo.GPSLongitudeRef                 0x0003 Ascii       2  E
+Exif.GPSInfo.GPSLongitude                    0x0004 Rational    3  174/1 46/1 5579759/1000000
+Exif.GPSInfo.GPSAltitudeRef                  0x0005 Short       1  0
+Exif.GPSInfo.GPSAltitude                     0x0006 Rational    1  47/1
+Exif.Thumbnail.ImageWidth                    0x0100 Long        1  512
+Exif.Thumbnail.ImageLength                   0x0101 Long        1  384
+Exif.Thumbnail.Compression                   0x0103 Short       1  6
+Exif.Thumbnail.XResolution                   0x011a Rational    1  72/1
+Exif.Thumbnail.YResolution                   0x011b Rational    1  72/1
+Exif.Thumbnail.ResolutionUnit                0x0128 Short       1  2
+Exif.Thumbnail.JPEGInterchangeFormat         0x0201 Long        1  924
+Exif.Thumbnail.JPEGInterchangeFormatLength   0x0202 Long        1  52168
+
+--- ICC: none ---
+
+
