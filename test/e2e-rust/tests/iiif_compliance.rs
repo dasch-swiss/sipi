@@ -1347,50 +1347,102 @@ fn metadata_iiif_pipeline() {
     assert_eq!(h, 128, "expected height 128, got {}", h);
 }
 
-#[test]
-#[ignore = "corrupt JP2 crashes server handler thread — needs C++ fix for graceful error handling"]
-fn corrupt_image_handling() {
-    // Serve a truncated/corrupt JP2 file. Currently the Kakadu decoder crashes
-    // the handler thread instead of returning a clean 500.
-    // KNOWN ISSUE: This test must use its own server because the corrupt file
-    // destabilizes the shared server's cache and thread pool.
+/// Helper: create a truncated copy of a file, request it via IIIF, verify the
+/// server returns an error status (not crash), and stays healthy afterward.
+fn assert_corrupt_image_handled(filename: &str, source: &str, truncate_bytes: usize, iiif_format: &str) {
     let test_data = sipi_e2e::test_data_dir();
-    let corrupt_path = test_data.join("images/unit/corrupt_test.jp2");
+    let corrupt_path = test_data.join(format!("images/unit/{}", filename));
 
-    let real_jp2 =
-        std::fs::read(test_data.join("images/unit/lena512.jp2")).expect("read lena512.jp2");
-    std::fs::write(&corrupt_path, &real_jp2[..100]).expect("write truncated JP2");
+    let real_data = std::fs::read(test_data.join(source)).expect(&format!("read {}", source));
+    assert!(
+        real_data.len() > truncate_bytes,
+        "{} is smaller than {} bytes",
+        source,
+        truncate_bytes
+    );
+    std::fs::write(&corrupt_path, &real_data[..truncate_bytes]).expect("write truncated file");
 
     let isolated_srv =
         sipi_e2e::SipiServer::start("config/sipi.e2e-test-config.lua", &test_data);
     let isolated_client = sipi_e2e::http_client();
 
+    // Request the corrupt image — server should return error, not crash
     let result = isolated_client
         .get(format!(
-            "{}/unit/corrupt_test.jp2/full/max/0/default.jpg",
-            isolated_srv.base_url
+            "{}/unit/{}/full/max/0/default.{}",
+            isolated_srv.base_url, filename, iiif_format
         ))
         .send();
-
-    let _ = std::fs::remove_file(&corrupt_path);
 
     match result {
         Ok(resp) => {
             let status = resp.status().as_u16();
             assert!(
                 status >= 400,
-                "corrupt image should return error status, got {}",
-                status
+                "corrupt {} should return error status, got {}",
+                filename, status
             );
         }
-        Err(_) => {
-            // Server crashed or closed connection — this IS the bug we're documenting.
-            eprintln!(
-                "KNOWN ISSUE: corrupt JP2 causes server error (IncompleteMessage or crash). \
-                 Server should return 500 instead."
+        Err(e) => {
+            panic!(
+                "Server crashed or closed connection for corrupt {}: {}. \
+                 The catch-all should have returned HTTP 500.",
+                filename, e
             );
         }
     }
+
+    // Verify server is still healthy after handling the corrupt request
+    let health_resp = isolated_client
+        .get(format!(
+            "{}/unit/lena512.jp2/info.json",
+            isolated_srv.base_url
+        ))
+        .send()
+        .expect("health check after corrupt image failed — server may have crashed");
+    assert_eq!(
+        health_resp.status().as_u16(),
+        200,
+        "server should still be healthy after handling corrupt {}",
+        filename
+    );
+
+    let _ = std::fs::remove_file(&corrupt_path);
+}
+
+#[test]
+#[ignore = "Kakadu calls exit() on corrupt JP2 — not catchable by C++ exception handler"]
+fn corrupt_image_handling() {
+    // Truncated JP2 — Kakadu's kdu_error handler calls exit(), bypassing
+    // both C++ exceptions and our catch-all. Separate Kakadu-specific fix needed.
+    assert_corrupt_image_handled(
+        "corrupt_test.jp2",
+        "images/unit/lena512.jp2",
+        100,
+        "jpg",
+    );
+}
+
+#[test]
+fn corrupt_jpeg_handling() {
+    // Truncated JPEG — exercises setjmp/longjmp in JPEG read path + server catch-all.
+    assert_corrupt_image_handled(
+        "corrupt_test.jpg",
+        "images/unit/MaoriFigure.jpg",
+        100,
+        "jpg",
+    );
+}
+
+#[test]
+fn corrupt_png_handling() {
+    // Truncated PNG — exercises setjmp(png_jmpbuf) in PNG read path + server catch-all.
+    assert_corrupt_image_handled(
+        "corrupt_test.png",
+        "images/unit/mario.png",
+        100,
+        "jpg",
+    );
 }
 
 #[test]
