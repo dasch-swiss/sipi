@@ -47,14 +47,23 @@ jobs:
         with:
           github_access_token: ${{ secrets.GH_TOKEN }}
 
+      - name: Find last successful fuzz run
+        id: last-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh api "repos/${{ github.repository }}/actions/workflows/fuzz.yml/runs?status=success&per_page=1" \
+            --jq '.workflow_runs[0].id // empty')
+          echo "run_id=${run_id}" >> "$GITHUB_OUTPUT"
+
       - name: Restore corpus from previous run
-        uses: dawidd6/action-download-artifact@v18
+        if: steps.last-run.outputs.run_id != ''
+        uses: actions/download-artifact@v4
         with:
-          workflow: fuzz.yml
           name: fuzz-corpus
           path: fuzz-corpus-prev
-          if_no_artifact_found: warn
-          search_artifacts: true
+          run-id: ${{ steps.last-run.outputs.run_id }}
+          github-token: ${{ github.token }}
         continue-on-error: true
 
       - name: Build fuzz target (Clang + libFuzzer)
