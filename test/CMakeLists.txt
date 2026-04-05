@@ -151,7 +151,12 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 endif()
 
 if (CODE_COVERAGE)
-    target_link_libraries(libsipi_testable PUBLIC coverage_config)
+    # PRIVATE: compile-time instrumentation applies only to libsipi_testable's own
+    # production sources, NOT to test .cpp files that link this library.
+    # PUBLIC: link-time gcov runtime propagates to test executables so profiling
+    # data from instrumented production objects is flushed correctly.
+    target_link_libraries(libsipi_testable PRIVATE coverage_compile)
+    target_link_libraries(libsipi_testable PUBLIC coverage_link)
 endif()
 if (ENABLE_SANITIZERS)
     target_link_libraries(libsipi_testable PUBLIC sanitizer_config)

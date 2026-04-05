@@ -211,17 +211,24 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 #
 
 # Code Coverage Configuration
-add_library(coverage_config INTERFACE)
+#
+# Split into two interface libraries so that compile-time instrumentation
+# (which generates .gcno/.gcda profiling files) can be kept PRIVATE to
+# production sources, while the link-time gcov runtime flag propagates
+# PUBLIC to test executables that need it.
+add_library(coverage_compile INTERFACE)
+add_library(coverage_link INTERFACE)
 
 option(CODE_COVERAGE "Enable coverage reporting" OFF)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
-    # Add required flags (GCC & LLVM/Clang)
-    target_compile_options(coverage_config INTERFACE
+    # Compile flags: instrument source files (generates .gcno, inserts profiling calls)
+    target_compile_options(coverage_compile INTERFACE
             -O0        # no optimization
             -g         # generate debug info
             --coverage # sets all required flags
     )
-    target_link_options(coverage_config INTERFACE --coverage)
+    # Link flags: link the gcov runtime library (libgcov)
+    target_link_options(coverage_link INTERFACE --coverage)
 endif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
 
 #
@@ -552,7 +559,7 @@ target_link_libraries(${PROJECT_NAME} ${LIBS}
 #
 target_link_libraries(sipi build_config)
 if (CODE_COVERAGE)
-    target_link_libraries(sipi coverage_config)
+    target_link_libraries(sipi coverage_compile coverage_link)
 endif ()
 if (ENABLE_SANITIZERS)
     target_link_libraries(sipi sanitizer_config)
