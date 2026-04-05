@@ -71,7 +71,7 @@ jobs:
           nix \
             --extra-experimental-features "nix-command flakes" \
             --option filter-syscalls false \
-            develop .#clang --command bash -c "
+            develop .#fuzz --command bash -c "
               cmake -S . -B build-fuzz \
                 -DCMAKE_BUILD_TYPE=Debug \
                 -DSIPI_ENABLE_FUZZ=ON
@@ -87,7 +87,7 @@ jobs:
           nix \
             --extra-experimental-features "nix-command flakes" \
             --option filter-syscalls false \
-            develop .#clang --command bash -c "
+            develop .#fuzz --command bash -c "
               cd build-fuzz/fuzz/handlers
               mkdir -p corpus
 
