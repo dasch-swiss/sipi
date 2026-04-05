@@ -185,7 +185,14 @@ hurl-test: ## run Hurl HTTP contract tests (requires built sipi in build/)
 
 .PHONY: nix-coverage
 nix-coverage: ## generate coverage XML report via gcovr (inside Nix shell)
-	cd build && gcovr -j $(NPROC) --delete --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable "llvm-cov gcov" --gcov-ignore-parse-errors=negative_hits.warn_once_per_file --gcov-ignore-errors=no_working_dir_found
+	cd build && gcovr -j $(NPROC) --delete --root ../ --print-summary --xml-pretty --xml coverage.xml . \
+		--gcov-executable "llvm-cov gcov" \
+		--gcov-ignore-parse-errors=negative_hits.warn_once_per_file \
+		--gcov-ignore-errors=no_working_dir_found \
+		--exclude '../test/' \
+		--exclude '../fuzz/' \
+		--exclude '../ext/' \
+		--exclude '../include/'
 
 .PHONY: nix-coverage-html
 nix-coverage-html: ## generate coverage HTML report via lcov (inside Nix shell)
