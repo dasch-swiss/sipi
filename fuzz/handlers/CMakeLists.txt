@@ -52,6 +52,9 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
 
     # Clang on Linux (including Nix) does not implicitly link the C++ stdlib
     # when sanitizer flags override the default link command.
+    # macOS: always libc++ (system default).
+    # Linux: fuzz targets use the 'fuzz' Nix devshell (Clang + libstdc++)
+    # because Nix's libFuzzer (compiler-rt) is built against libstdc++.
     if (APPLE)
         set(FUZZ_CXX_STDLIB c++)
     else()

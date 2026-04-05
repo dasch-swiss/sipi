@@ -95,6 +95,22 @@
             packages = devShellPackages;
           };
 
+          # Clang with libstdc++ (the default LLVM stdenv).  Nix's libFuzzer
+          # (compiler-rt) is built against libstdc++, so fuzz targets must use
+          # the same stdlib to avoid ABI mismatch.  The fuzz CI workflow uses
+          # this shell instead of the libc++ 'clang' shell.
+          fuzz = pkgs.mkShell.override {stdenv = pkgs.llvmPackages_19.stdenv;} {
+            name = "sipi-fuzz";
+            hardeningDisable = ["all"];
+
+            shellHook = ''
+              export PS1="\\u@\\h | nix-develop-fuzz> "
+              export MKSHELL=fuzz
+            '';
+
+            packages = devShellPackages;
+          };
+
           # devShells.default describes the default shell with C++, cmake,
           # and other dependencies
           gcc = pkgs.mkShell.override {stdenv = pkgs.gcc14Stdenv;} {
