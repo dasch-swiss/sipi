@@ -1,10 +1,42 @@
+# ref: https://docs.codecov.com/docs/codecovyml-reference
 coverage:
+  range: 70..100
+  round: down
+  precision: 1
   status:
+    # ref: https://docs.codecov.com/docs/commit-status
     project:
       default:
-        target: auto  # maintain current coverage level
-        threshold: 5% # allow 5% drop — coverage baseline is volatile during migration
+        target: auto
+        threshold: 1%
     patch:
       default:
-        target: 40%
-        informational: true  # report but don't block PRs
+        target: 80%
+        threshold: 5%
+
+ignore:
+  - "fuzz/**"
+  - "test/**"
+  - "build/**"
+  - "ext/**"
+  - "vendor/**"
+  - "scripts/**"
+  - "config/**"
+  - "docs/**"
+  - "include/**"
+  - "src/SipiLua.cpp"
+  - "src/Salsah.cpp"
+  - "src/PhpSession.cpp"
+
+parsers:
+  gcov:
+    branch_detection:
+      conditional: yes
+      loop: yes
+      method: no
+      macro: no
+
+# Make comments less noisy
+comment:
+  layout: "files"
+  require_changes: true
