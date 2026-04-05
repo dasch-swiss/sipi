@@ -58,7 +58,7 @@ jobs:
 
       - name: Restore corpus from previous run
         if: steps.last-run.outputs.run_id != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: fuzz-corpus
           path: fuzz-corpus-prev
