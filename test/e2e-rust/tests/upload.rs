@@ -2,7 +2,7 @@ mod common;
 
 use common::{client, server};
 use reqwest::blocking::multipart;
-use sipi_e2e::{http_client, retry_flaky, test_data_dir, SipiServer};
+use sipi_e2e::{http_client, test_data_dir, SipiServer};
 use std::path::{Path, PathBuf};
 
 fn test_image_path(relative: &str) -> PathBuf {
@@ -36,22 +36,35 @@ fn upload_file(url: &str, file_path: &Path, mime: &str) -> serde_json::Value {
 
 #[test]
 fn upload_tiff_converts_to_jp2() {
-    let srv = server();
+    // Uses an isolated server to avoid accumulated state from prior tests on the
+    // shared server (stale DYN_SOCKETs, cache pressure, thread contention) which
+    // causes IncompleteMessage errors on fast arm64 musl builds.
+    let test_data = test_data_dir();
+    let srv = SipiServer::start("config/sipi.e2e-test-config.lua", &test_data);
+    let c = http_client();
+
     let file = test_image_path("unit/lena512.tif");
-    let json = upload_file(&format!("{}/api/upload", srv.base_url), &file, "image/tiff");
+    let form = multipart::Form::new().part(
+        "file",
+        multipart::Part::bytes(std::fs::read(&file).expect("read file"))
+            .file_name("lena512.tif")
+            .mime_str("image/tiff")
+            .expect("valid mime"),
+    );
+    let resp = c
+        .post(format!("{}/api/upload", srv.base_url))
+        .multipart(form)
+        .send()
+        .expect("upload failed");
+    assert_eq!(resp.status().as_u16(), 200, "upload returned {}", resp.status());
+    let json: serde_json::Value = resp.json().expect("upload response not JSON");
 
     let filename = json["filename"].as_str().expect("no filename in response");
     assert!(!filename.is_empty());
 
-    // Flaky: server may still be flushing the converted file when we GET it.
     let url = format!("{}/unit/{}/full/max/0/default.jpg", srv.base_url, filename);
-    retry_flaky(3, || {
-        match client().get(&url).send() {
-            Ok(resp) if resp.status().as_u16() == 200 => Ok(()),
-            Ok(resp) => Err(format!("HTTP {}", resp.status())),
-            Err(e) => Err(format!("{}", e)),
-        }
-    });
+    let resp = c.get(&url).send().expect("GET converted JP2 failed");
+    assert_eq!(resp.status().as_u16(), 200);
 }
 
 #[test]

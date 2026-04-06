@@ -25,8 +25,9 @@ fn sustained_load_memory_growth() {
     let initial_cache_files = extract_metric(&initial_metrics, "sipi_cache_files");
 
     // Send 100 sequential requests alternating between info.json and image delivery.
-    // Under heavy load (especially on resource-constrained CI runners), individual
-    // requests may fail transiently — track failures instead of panicking immediately.
+    // The musl static binary can drop individual connections under sustained load
+    // (independent of connection pooling). This test is about memory growth, not
+    // 100% request success, so track failures instead of panicking.
     let total_requests = 100;
     let mut failures = 0u32;
     for i in 0..total_requests {
@@ -36,34 +37,23 @@ fn sustained_load_memory_growth() {
             format!("{}/unit/lena512.jp2/full/max/0/default.jpg", srv.base_url)
         };
 
-        let resp = c.get(&url).send();
-        match resp {
+        match c.get(&url).send() {
             Ok(r) => {
                 if r.status().as_u16() != 200 {
                     failures += 1;
-                    eprintln!(
-                        "[sustained_load] request {} returned status {}",
-                        i,
-                        r.status()
-                    );
                 }
                 let _ = r.bytes(); // consume body
             }
-            Err(e) => {
+            Err(_) => {
                 failures += 1;
-                eprintln!("[sustained_load] request {} failed: {}", i, e);
-                // Brief pause to let the server recover
-                std::thread::sleep(std::time::Duration::from_millis(100));
             }
         }
     }
 
-    // The test is about memory growth, not 100% request success.
-    // Allow up to 5% failure rate under load.
-    let max_failures = total_requests / 20;
+    let max_failures = total_requests / 20; // 5%
     assert!(
         failures <= max_failures,
-        "{} of {} requests failed (max allowed: {}) — server may be unstable under load",
+        "{} of {} requests failed (max allowed: {})",
         failures,
         total_requests,
         max_failures
@@ -184,8 +174,10 @@ fn transform_pipeline_memory() {
         srv.base_url
     );
 
-    let resp = send_with_retry(&c, &url, 3)
-        .expect("transform pipeline request failed after retries");
+    let resp = c
+        .get(&url)
+        .send()
+        .expect("transform pipeline request failed");
 
     assert_eq!(
         resp.status().as_u16(),
@@ -212,33 +204,40 @@ fn transform_pipeline_memory() {
 
     for transform in &transforms {
         let url = format!("{}/unit/lena512.jp2/{}", srv.base_url, transform);
-        let resp = send_with_retry(&c, &url, 3);
-
-        match resp {
-            Ok(r) => {
-                let status = r.status().as_u16();
-                let _ = r.bytes(); // consume body
-                assert!(
-                    status == 200 || status == 400,
-                    "transform '{}' returned unexpected status {}",
-                    transform,
-                    status
-                );
-            }
-            Err(e) => {
-                panic!("transform '{}' failed after retries: {}", transform, e);
-            }
-        }
+        let resp = c
+            .get(&url)
+            .send()
+            .unwrap_or_else(|e| panic!("transform '{}' failed: {}", transform, e));
+        let status = resp.status().as_u16();
+        let _ = resp.bytes(); // consume body
+        assert!(
+            status == 200 || status == 400,
+            "transform '{}' returned unexpected status {}",
+            transform,
+            status
+        );
     }
 
-    // Verify server still responsive after all transforms
-    let health = send_with_retry(
-        &c,
-        &format!("{}/unit/lena512.jp2/full/max/0/default.jpg", srv.base_url),
-        3,
-    )
-    .expect("server should respond after transform pipeline");
-    assert_eq!(health.status().as_u16(), 200);
+    // Verify server still responsive after all transforms.
+    // The musl static binary may need a moment to recover after heavy
+    // transform work, so allow a few retries for the health check.
+    let health_url = format!(
+        "{}/unit/lena512.jp2/full/max/0/default.jpg",
+        srv.base_url
+    );
+    let mut health_ok = false;
+    for attempt in 1..=3 {
+        match c.get(&health_url).send() {
+            Ok(r) if r.status().as_u16() == 200 => {
+                health_ok = true;
+                break;
+            }
+            Ok(r) => eprintln!("[health] attempt {} returned {}", attempt, r.status()),
+            Err(e) => eprintln!("[health] attempt {} failed: {}", attempt, e),
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    assert!(health_ok, "server not responsive after transform pipeline");
 }
 
 #[test]
@@ -328,32 +327,6 @@ routes = {}
     );
 
     let _ = std::fs::remove_file(&config_path);
-}
-
-/// Send an HTTP GET with retries on connection errors.
-/// Returns the first successful response or the last error.
-fn send_with_retry(
-    client: &reqwest::blocking::Client,
-    url: &str,
-    max_attempts: u32,
-) -> Result<reqwest::blocking::Response, reqwest::Error> {
-    let mut last_err = None;
-    for attempt in 1..=max_attempts {
-        match client.get(url).send() {
-            Ok(resp) => return Ok(resp),
-            Err(e) => {
-                eprintln!(
-                    "[send_with_retry] attempt {}/{} for {} failed: {}",
-                    attempt, max_attempts, url, e
-                );
-                last_err = Some(e);
-                if attempt < max_attempts {
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                }
-            }
-        }
-    }
-    Err(last_err.unwrap())
 }
 
 /// Extract a gauge metric value from Prometheus text format.

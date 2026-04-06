@@ -358,21 +358,31 @@ fn kill_process_on_port(port: u16) {
 }
 
 /// Build a reqwest blocking client that accepts self-signed certs.
+///
+/// Connection pooling is disabled (`pool_max_idle_per_host(0)`) so that each
+/// request opens a fresh TCP connection. This prevents stale keep-alive
+/// connections from accumulating in both the client pool and the server's
+/// poll set — the root cause of transient "error sending request" failures
+/// on fast arm64 musl builds where the server's idle-connection sweep never
+/// triggers because tests run back-to-back without a 5-second idle gap.
 pub fn http_client() -> reqwest::blocking::Client {
     reqwest::blocking::Client::builder()
         .danger_accept_invalid_certs(true)
         .timeout(Duration::from_secs(30))
+        .pool_max_idle_per_host(0)
         .build()
         .expect("Failed to build HTTP client")
 }
 
-/// Retry a flaky test up to `max_attempts` times.
+/// Retry a test assertion up to `max_attempts` times.
 ///
 /// The closure should return `Ok(())` on success or `Err(message)` on failure.
 /// Between attempts, sleeps for 2 seconds. Panics if all attempts fail.
 ///
-/// Use this for tests that are inherently racy (e.g., depend on the server
-/// flushing a file to disk before the GET arrives).
+/// Use this for assertions that depend on server-side timing (e.g., an RAII
+/// guard releasing after the response is sent, so metrics don't update
+/// instantly). Do NOT use this for connection-level retries — those are
+/// solved by disabling connection pooling in `http_client()`.
 pub fn retry_flaky<F>(max_attempts: u32, f: F)
 where
     F: Fn() -> Result<(), String>,
