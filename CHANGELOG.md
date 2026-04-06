@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.0.1](https://github.com/dasch-swiss/sipi/compare/v4.0.0...v4.0.1) (2026-04-06)
+
+
+### Bug Fixes
+
+* Eliminate C++ exception-through-C UB in image format handlers ([94f45a2](https://github.com/dasch-swiss/sipi/commit/94f45a28c29618ce9477e7cf2ca16de4d9340890))
+
 ## [4.0.0](https://github.com/dasch-swiss/sipi/compare/v3.18.0...v4.0.0) (2026-03-22)
 
 
