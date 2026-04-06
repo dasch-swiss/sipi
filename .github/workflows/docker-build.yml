@@ -30,7 +30,7 @@ jobs:
           git lfs install
           git lfs fetch --all
           git lfs checkout
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKER_USER }}
@@ -89,7 +89,7 @@ jobs:
           git lfs install
           git lfs fetch --all
           git lfs checkout
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKER_USER }}
