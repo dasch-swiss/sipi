@@ -38,7 +38,7 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       - name: Expose GitHub Actions cache variables
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env['ACTIONS_CACHE_URL'] || '');
@@ -219,7 +219,7 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       - name: Expose GitHub Actions cache variables
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env['ACTIONS_CACHE_URL'] || '');
