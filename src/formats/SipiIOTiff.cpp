@@ -557,31 +557,34 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
   if (compression == COMPRESSION_NONE) {
     if (planar == PLANARCONFIG_CONTIG) {// RGBRGBRGBRGB...
       line = std::make_unique<T[]>(nx * nc);
-      for (uint32_t i = roi_y; i < roi_h; ++i) {
+      for (uint32_t i = roi_y; i < roi_y + roi_h; ++i) {
         if (TIFFReadScanline(tif, scanline.get(), i, 0) != 1) {
           TIFFClose(tif);
           throw Sipi::SipiImageError("TIFFReadScanline failed on scanline " + std::to_string(i)
             + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
             + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps));
         }
+        // All memcpy destination offsets use `(i - roi_y)` so the first
+        // destination row is always row 0 of `inbuf`. Previously cases 1
+        // and 4 used `i * roi_w` and overflowed for any roi_y > 0.
         switch (bps) {
         case 1:
           one2eight<T>(scanline.get(), line.get(), nc * nx, black, white);
-          std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x, nc * roi_w);
+          std::memcpy(inbuf.data() + nc * (i - roi_y) * roi_w, line.get() + nc * roi_x, nc * roi_w);
           break;
         case 4:
           four2eight<T>(scanline.get(), line.get(), nc * nx, photo == PhotometricInterpretation::PALETTE);
-          std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x, nc * roi_w);
+          std::memcpy(inbuf.data() + nc * (i - roi_y) * roi_w, line.get() + nc * roi_x, nc * roi_w);
           break;
         case 8:
-          std::memcpy(inbuf.data() + nc * i * roi_w, scanline.get() + nc * roi_x, nc * roi_w);
+          std::memcpy(inbuf.data() + nc * (i - roi_y) * roi_w, scanline.get() + nc * roi_x, nc * roi_w);
           break;
         case 12:
           twelve2sixteen<T>(scanline.get(), line.get(), nc * nx, photo == PhotometricInterpretation::PALETTE);
-          std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x, nc * roi_w * psiz);
+          std::memcpy(inbuf.data() + nc * (i - roi_y) * roi_w, line.get() + nc * roi_x, nc * roi_w * psiz);
           break;
         case 16:
-          std::memcpy(inbuf.data() + nc * i * roi_w, scanline.get() + nc * roi_x * psiz, nc * roi_w * psiz);
+          std::memcpy(inbuf.data() + nc * (i - roi_y) * roi_w, scanline.get() + nc * roi_x * psiz, nc * roi_w * psiz);
           break;
         default:;
         }
@@ -632,24 +635,29 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
             + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps));
         }
         if ((i >= roi_y) && (i < (roi_y + roi_h))) {
+          // All memcpy destination offsets use `(i - roi_y)` so that the
+          // first destination row written is always row 0 of `inbuf`,
+          // regardless of where in the image the ROI starts. Previously
+          // cases 1, 4, 12, 16 used `i * roi_w` and overflowed `inbuf` for
+          // any roi_y > 0.
           switch (bps) {
           case 1:
             one2eight<T>(scanline.get(), line.get(), nc * nx, black, white);
-            std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x, nc * roi_w);
+            std::memcpy(inbuf.data() + nc * (i - roi_y) * roi_w, line.get() + nc * roi_x, nc * roi_w);
             break;
           case 4:
             four2eight<T>(scanline.get(), line.get(), nc * nx, photo == PhotometricInterpretation::PALETTE);
-            std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x, nc * roi_w);
+            std::memcpy(inbuf.data() + nc * (i - roi_y) * roi_w, line.get() + nc * roi_x, nc * roi_w);
             break;
           case 8:
             std::memcpy(inbuf.data() + nc * (i - roi_y) * roi_w, scanline.get() + nc * roi_x, nc * roi_w);
             break;
           case 12:
             twelve2sixteen<T>(scanline.get(), line.get(), nc * nx, photo == PhotometricInterpretation::PALETTE);
-            std::memcpy(inbuf.data() + nc * i * roi_w, line.get() + nc * roi_x * psiz, nc * roi_w * psiz);
+            std::memcpy(inbuf.data() + nc * (i - roi_y) * roi_w, line.get() + nc * roi_x * psiz, nc * roi_w * psiz);
             break;
           case 16:
-            std::memcpy(inbuf.data() + nc * i * roi_w, scanline.get() + nc * roi_x * psiz, nc * roi_w * psiz);
+            std::memcpy(inbuf.data() + nc * (i - roi_y) * roi_w, scanline.get() + nc * roi_x * psiz, nc * roi_w * psiz);
             break;
           default:;
           }
@@ -1107,27 +1115,41 @@ bool SipiIOTiff::read(SipiImage *img,
         primaries[5] = 0.0600;
       }
 
-      unsigned short *tfunc = new unsigned short[3 * (1 << img->bps)], *tfunc_ti;
-      unsigned int tfunc_len, tfunc_len_ti;
+      // Transfer functions are only meaningful for 8-bit and 16-bit images.
+      // For 1-bit / 4-bit images the buffer `3 * (1 << img->bps)` is only
+      // 6 / 48 shorts respectively; a malformed TRANSFERFUNCTION tag with
+      // a larger payload would overflow the heap allocation below. We
+      // deliberately allowlist 8 and 16 (rather than using `bps >= 8`) so
+      // the intent is documented in the code.
+      if (img->bps == 8 || img->bps == 16) {
+        // RAII-wrap the transfer-function buffer so that an exception from
+        // the SipiIcc constructor cannot leak it. `tfunc_ti` is owned by
+        // libtiff and must not be freed; only our copy (`tfunc`) is owned here.
+        auto tfunc = std::make_unique<unsigned short[]>(3 * (1 << img->bps));
+        unsigned short *tfunc_ti;
+        unsigned int tfunc_len = 0;
+        unsigned int tfunc_len_ti;
+        bool has_tfunc = false;
 
-      if (1 == TIFFGetField(tif, TIFFTAG_TRANSFERFUNCTION, &tfunc_len_ti, &tfunc_ti)) {
-        if ((tfunc_len_ti / (1 << img->bps)) == 1) {
-          memcpy(tfunc, tfunc_ti, tfunc_len_ti);
-          memcpy(tfunc + tfunc_len_ti, tfunc_ti, tfunc_len_ti);
-          memcpy(tfunc + 2 * tfunc_len_ti, tfunc_ti, tfunc_len_ti);
-          tfunc_len = tfunc_len_ti;
-        } else {
-          memcpy(tfunc, tfunc_ti, tfunc_len_ti);
-          tfunc_len = tfunc_len_ti / 3;
+        if (1 == TIFFGetField(tif, TIFFTAG_TRANSFERFUNCTION, &tfunc_len_ti, &tfunc_ti)) {
+          has_tfunc = true;
+          if ((tfunc_len_ti / (1 << img->bps)) == 1) {
+            memcpy(tfunc.get(), tfunc_ti, tfunc_len_ti);
+            memcpy(tfunc.get() + tfunc_len_ti, tfunc_ti, tfunc_len_ti);
+            memcpy(tfunc.get() + 2 * tfunc_len_ti, tfunc_ti, tfunc_len_ti);
+            tfunc_len = tfunc_len_ti;
+          } else {
+            memcpy(tfunc.get(), tfunc_ti, tfunc_len_ti);
+            tfunc_len = tfunc_len_ti / 3;
+          }
         }
-      } else {
-        delete[] tfunc;
-        tfunc = nullptr;
-        tfunc_len = 0;
-      }
 
-      img->icc = std::make_shared<SipiIcc>(whitepoint, primaries, tfunc, tfunc_len);
-      delete[] tfunc;
+        img->icc = std::make_shared<SipiIcc>(
+          whitepoint, primaries, has_tfunc ? tfunc.get() : nullptr, has_tfunc ? tfunc_len : 0);
+      } else {
+        // bilevel / 4-bit / non-standard — no transfer function
+        img->icc = std::make_shared<SipiIcc>(whitepoint, primaries, nullptr, 0);
+      }
     }
 
     //
@@ -1171,8 +1193,6 @@ bool SipiIOTiff::read(SipiImage *img,
     }
     is_tiled = (resolutions[level].tile_width != 0) && (resolutions[level].tile_height != 0);
 
-    auto sll = static_cast<uint32_t>(TIFFScanlineSize(tif));
-
     int32_t roi_x;
     int32_t roi_y;
     size_t roi_w;
@@ -1188,15 +1208,16 @@ bool SipiIOTiff::read(SipiImage *img,
 
     int ps;// pixel size in bytes
     switch (img->bps) {
-    case 1: {
-      std::string msg = "Images with 1 bit/sample not supported in file " + filepath;
-      throw Sipi::SipiImageError(msg);
-    }
-
+    case 1:// 1-bit is converted to 8-bit on-the-fly by read_standard_data (one2eight<T>())
     case 8:
       ps = 1;
+      break;
     case 16:
       ps = 2;
+      break;
+    default:
+      throw Sipi::SipiImageError(
+        "Unsupported bits/sample (" + std::to_string(img->bps) + ") in file " + filepath);
     }
 
     delete[] img->pixels;// free previous buffer if re-reading into same SipiImage
@@ -1261,13 +1282,15 @@ bool SipiIOTiff::read(SipiImage *img,
     if (img->icc == nullptr) {
       switch (img->photo) {
       case PhotometricInterpretation::MINISBLACK: {
-        if (img->bps == 1) { cvrt1BitTo8Bit(img, sll, 0, 255); }
+        // read_standard_data<uint8_t>() already converts 1-bit to 8-bit via
+        // one2eight<T>(); by the time we reach this block `img->bps == 8`.
+        // The previous `cvrt1BitTo8Bit` call was dead code.
         img->icc = std::make_shared<SipiIcc>(icc_GRAY_D50);
         break;
       }
 
       case PhotometricInterpretation::MINISWHITE: {
-        if (img->bps == 1) { cvrt1BitTo8Bit(img, sll, 255, 0); }
+        // Same as MINISBLACK above — 1-bit → 8-bit conversion already happened.
         img->icc = std::make_shared<SipiIcc>(icc_GRAY_D50);
         break;
       }
@@ -2168,56 +2191,9 @@ void SipiIOTiff::separateToContig(SipiImage *img, unsigned int sll)
 //============================================================================
 
 
-void SipiIOTiff::cvrt1BitTo8Bit(SipiImage *img, unsigned int sll, unsigned int black, unsigned int white)
-{
-  byte *inbuf = img->pixels;
-  byte *outbuf;
-  byte *in_byte, *out_byte, *in_off, *out_off, *inbuf_high;
-
-  static unsigned char mask[8] = { 128, 64, 32, 16, 8, 4, 2, 1 };
-  unsigned int x, y, k;
-
-  if ((img->photo != PhotometricInterpretation::MINISWHITE) && (img->photo != PhotometricInterpretation::MINISBLACK)) {
-    throw Sipi::SipiImageError("Photometric interpretation is not MINISWHITE or  MINISBLACK");
-  }
-
-  if (img->bps != 1) {
-    std::string msg = "Bits per sample is not 1 but: " + std::to_string(img->bps);
-    throw Sipi::SipiImageError(msg);
-  }
-
-  outbuf = new byte[img->nx * img->ny];
-  inbuf_high = inbuf + img->ny * sll;
-
-  if ((8 * sll) == img->nx) {
-    in_byte = inbuf;
-    out_byte = outbuf;
-
-    for (; in_byte < inbuf_high; in_byte++, out_byte += 8) {
-      for (k = 0; k < 8; k++) { *(out_byte + k) = (*(mask + k) & *in_byte) ? white : black; }
-    }
-  } else {
-    out_off = outbuf;
-    in_off = inbuf;
-
-    for (y = 0; y < img->ny; y++, out_off += img->nx, in_off += sll) {
-      x = 0;
-      for (in_byte = in_off; in_byte < in_off + sll; in_byte++, x += 8) {
-        out_byte = out_off + x;
-
-        if ((x + 8) <= img->nx) {
-          for (k = 0; k < 8; k++) { *(out_byte + k) = (*(mask + k) & *in_byte) ? white : black; }
-        } else {
-          for (k = 0; (x + k) < img->nx; k++) { *(out_byte + k) = (*(mask + k) & *in_byte) ? white : black; }
-        }
-      }
-    }
-  }
-
-  img->pixels = outbuf;
-  delete[] inbuf;
-  img->bps = 8;
-}
+// cvrt1BitTo8Bit removed — read_standard_data<uint8_t>() converts bilevel to
+// 8-bit on-the-fly via one2eight<T>(). The post-read conversion path was dead
+// code (img->bps was already 8 by the time those call sites executed).
 //============================================================================
 
 unsigned char *SipiIOTiff::cvrt8BitTo1bit(const SipiImage &img, unsigned int &sll)

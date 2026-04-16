@@ -632,7 +632,12 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | 16-bit depth through IIIF pipeline | :x: GAP | — | Unit-tested, not HTTP-level |
 | Progressive JPEG handling | :x: GAP | — | Common in web content, untested |
 | TIFF with JPEG compression | :x: GAP | — | Known bug (YCrCb autoconvert) |
-| 1-bit TIFF (bi-level) | :x: GAP | — | May fail on color conversion |
+| 1-bit TIFF (bi-level) | :white_check_mark: | unit + rust-e2e | MINISWHITE and MINISBLACK, LZW and uncompressed (DEV-6249) |
+| JPEG YCCK colorspace | :white_check_mark: | unit | Was throw; now decoded via CMYK path (DEV-6250) |
+| JPEG CMYK with APP14 (Photoshop) — inverted before ICC | :white_check_mark: | unit | DEV-6257 |
+| JPEG CMYK without APP14 (raw) — not inverted | :white_check_mark: | unit | DEV-6257 negative case |
+| JPEG with APP13 before APP1 + non-ASCII IPTC | :white_check_mark: | unit | Heritage collection regression (DEV-6250) |
+| CLI `--json` output contract | :white_check_mark: | unit + rust-e2e | success + error payloads, single-document stdout |
 | Watermark application via HTTP | :x: GAP | — | Unit-tested, not e2e |
 | Restrict + watermark combined | :x: GAP | — | Untested combination |
 | Watermark cache key separation | :x: GAP | — | Separate entries untested |
@@ -675,7 +680,7 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 - **Configuration** (6 gaps): parseSizeString, deprecated keys, CLI overrides, jwt_secret, invalid Lua, nonexistent paths
 - **Lua API** (5 gaps): SImage methods, JWT round-trip, UUID round-trip, HTTP client, error propagation
 - **Connection handling** (5 gaps): keep-alive, chunked, Connection: close, thread pool, graceful shutdown
-- **Format edge cases** (6 gaps): CMYK/CIELab/16-bit through IIIF, progressive JPEG, TIFF-JPEG, 1-bit TIFF
+- **Format edge cases** (5 gaps): CMYK/CIELab/16-bit through IIIF, progressive JPEG, TIFF-JPEG. *Previously listed 1-bit TIFF and YCCK-JPEG; both resolved by DEV-6249 / DEV-6250 / DEV-6257.*
 - **Concurrency** (4 gaps): cache writes, eviction during read, parallel uploads, Lua state isolation
 - **Resource limits** (4 gaps): cache disabled, LRU purge, nfiles limit, keep-alive timeout
 - **Memory/OOM** (5 gaps): sustained load, concurrent decode, accounting, buffers, cache relief — **active production issue**
