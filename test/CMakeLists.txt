@@ -78,6 +78,7 @@ set(SIPI_TESTABLE_SRCS
     ${CMAKE_SOURCE_DIR}/src/metadata/SipiExif.cpp
     ${CMAKE_SOURCE_DIR}/src/metadata/SipiEssentials.cpp
     ${CMAKE_SOURCE_DIR}/src/SipiImage.cpp
+    ${CMAKE_SOURCE_DIR}/src/SipiReport.cpp
     ${CMAKE_SOURCE_DIR}/src/formats/SipiIOTiff.cpp
     ${CMAKE_SOURCE_DIR}/src/formats/SipiIOJ2k.cpp
     ${CMAKE_SOURCE_DIR}/src/formats/SipiIOJpeg.cpp

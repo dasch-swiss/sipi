@@ -105,6 +105,16 @@ In command line mode, SIPI supports the following options:
 - `-w <filepath>`, `--watermark <filepath>`: Overlays a watermark to the output image. <filepath> must be a single
   channel, gray valued TIFF. That is, the TIFF file must have the following tag values: SAMPLESPERPIXEL = 1,
   BITSPERSAMPLE = 8, PHOTOMETRIC = PHOTOMETRIC_MINISBLACK.
+- `--json`: Emit a single structured JSON document to stdout instead of human-readable output. The document mirrors
+  the internal `ImageContext` that is otherwise sent to Sentry and includes the input/output paths, the decoded image
+  properties, and — on failure — a `phase` (`cli_args` | `read` | `convert` | `write`) with the `error_message`.
+  Useful for programmatic consumers and for debugging when no Sentry DSN is configured. Stderr carries any log output
+  so stdout stays reserved for the single JSON document. CLI-only: has no effect with `--config` (server mode).
+  Mutually exclusive with `--salsah` and `--query`. See [`json-output.md`](json-output.md) for the full schema and
+  worked examples. Example:
+  ```bash
+  sipi --json --file input.jpg out.jp2 | jq '.image.bps'
+  ```
   
 #### JPEG2000 Specific Options
 Usually, the SIPI command line tool is used to create JPEG2000 images suitable for a IIIF repository. SIPI supports

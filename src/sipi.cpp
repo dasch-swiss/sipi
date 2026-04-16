@@ -43,6 +43,7 @@
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
 #include "SipiLua.h"
+#include "SipiReport.h"
 #include "SipiSentry.h"
 #include "formats/SipiIOTiff.h"
 
@@ -632,10 +633,18 @@ int main(int argc, char *argv[])
   sipiopt.add_option("-w,--watermark", optWatermark, "Add a watermark to the image.");
 
   bool optQuery = false;
-  sipiopt.add_flag("-x,--query", optQuery, "Dump all information about the given file.");
+  auto *queryOpt = sipiopt.add_flag("-x,--query", optQuery, "Dump all information about the given file.");
 
   bool optSalsah = false;
-  sipiopt.add_flag("-a,--salsah", optSalsah, "Special optioons for conversions in old salsah.");
+  auto *salsahOpt = sipiopt.add_flag("-a,--salsah", optSalsah, "Special optioons for conversions in old salsah.");
+
+  bool optJsonOutput = false;
+  auto *jsonOpt = sipiopt.add_flag("--json",
+    optJsonOutput,
+    "Emit a structured JSON report (success or error) to stdout instead of human-readable messages. "
+    "Useful for programmatic consumers and for debugging when no Sentry DSN is configured. "
+    "CLI mode only (ignored with --config). Mutually exclusive with --salsah and --query.");
+  jsonOpt->excludes(salsahOpt)->excludes(queryOpt);
 
   //
   // below are server options
@@ -927,6 +936,10 @@ int main(int argc, char *argv[])
     // Commandline conversion with input and output file given
     //
     set_cli_mode(true);
+    // Under --json, route all log output (info, warn, err) to stderr so stdout
+    // stays reserved for the single JSON document emitted at the end of the
+    // CLI run.
+    if (optJsonOutput) { set_json_mode(true); }
 
     //
     // get the output format
@@ -964,7 +977,9 @@ int main(int argc, char *argv[])
         } else if (ext == "png") {
           format = "png";
         } else {
-          log_err("Not a supported filename extension: '%s'", ext.c_str());
+          const std::string msg = "Not a supported filename extension: '" + ext + "'";
+          log_err("%s", msg.c_str());
+          if (optJsonOutput) { Sipi::emit_json_cli_arg_error(std::cout, msg); }
           return EXIT_FAILURE;
         }
       }
@@ -991,14 +1006,18 @@ int main(int argc, char *argv[])
       try {
         size = std::make_shared<Sipi::SipiSize>(optSize);
       } catch (std::exception &e) {
-        log_err("Error in size parameter: %s", e.what());
+        const std::string msg = std::string{ "Error in size parameter: " } + e.what();
+        log_err("%s", msg.c_str());
+        if (optJsonOutput) { Sipi::emit_json_cli_arg_error(std::cout, msg); }
         return EXIT_FAILURE;
       }
     } else if (!sipiopt.get_option("--scale")->empty()) {
       try {
         size = std::make_shared<Sipi::SipiSize>(optScale);
       } catch (std::exception &e) {
-        log_err("Error in scale parameter: %s", e.what());
+        const std::string msg = std::string{ "Error in scale parameter: " } + e.what();
+        log_err("%s", msg.c_str());
+        if (optJsonOutput) { Sipi::emit_json_cli_arg_error(std::cout, msg); }
         return EXIT_FAILURE;
       }
     }
@@ -1026,12 +1045,14 @@ int main(int argc, char *argv[])
       Sipi::populate_from_image(sentry_ctx, img);
       Sipi::capture_image_error(err.what(), "read", sentry_ctx);
       log_err("Error reading image: %s", err.what());
+      if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "read" }); }
       sentry_close();
       return EXIT_FAILURE;
     } catch (const std::exception &err) {
       Sipi::populate_from_image(sentry_ctx, img);
       Sipi::capture_image_error(err.what(), "read", sentry_ctx);
       log_err("Error reading image: %s", err.what());
+      if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "read" }); }
       sentry_close();
       return EXIT_FAILURE;
     }
@@ -1138,12 +1159,14 @@ int main(int argc, char *argv[])
       Sipi::populate_from_image(sentry_ctx, img);
       Sipi::capture_image_error(err.what(), "convert", sentry_ctx);
       log_err("Error processing image: %s", err.what());
+      if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "convert" }); }
       sentry_close();
       return EXIT_FAILURE;
     } catch (const std::exception &err) {
       Sipi::populate_from_image(sentry_ctx, img);
       Sipi::capture_image_error(err.what(), "convert", sentry_ctx);
       log_err("Error processing image: %s", err.what());
+      if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "convert" }); }
       sentry_close();
       return EXIT_FAILURE;
     }
@@ -1181,17 +1204,28 @@ int main(int argc, char *argv[])
       Sipi::populate_from_image(sentry_ctx, img);
       Sipi::capture_image_error(err.what(), "write", sentry_ctx);
       log_err("Error writing image: %s", err.what());
+      if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "write" }); }
       sentry_close();
       return EXIT_FAILURE;
     } catch (const std::exception &err) {
       Sipi::populate_from_image(sentry_ctx, img);
       Sipi::capture_image_error(err.what(), "write", sentry_ctx);
       log_err("Error writing image: %s", err.what());
+      if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "write" }); }
       sentry_close();
       return EXIT_FAILURE;
     }
 
     if (!sipiopt.get_option("--salsah")->empty()) { std::cout << img.getNx() << " " << img.getNy() << std::endl; }
+
+    // Successful CLI completion — emit the structured JSON report if --json was set.
+    // populate_from_image() fills in the final width/height/bps/colorspace from the
+    // (fully processed) output image. Today this is only called in catch blocks;
+    // the success call below is the missing piece for the --json contract.
+    if (optJsonOutput) {
+      Sipi::populate_from_image(sentry_ctx, img);
+      Sipi::emit_json_report(std::cout, sentry_ctx);
+    }
   } else if (!(sipiopt.get_option("--config")->empty() && sipiopt.get_option("--serverport")->empty())) {
     //
     // there is a configuration file given on the command line. Thus we try to start SIPI in

@@ -40,7 +40,10 @@ SIPI uses two logging modes depending on how it is running:
 
 - **CLI mode** (`--file`, `--compare`, `--query`): Plain text output.
   Errors go to **stderr**, informational messages go to **stdout**.
-  This is the standard Unix convention for command-line tools.
+  This is the standard Unix convention for command-line tools. When
+  `--json` is also set (see [Structured JSON output](#structured-json-output-cli)),
+  every level is routed to **stderr** so `stdout` stays reserved for the
+  single JSON document.
 
 - **Server mode** (`--config`): JSON-formatted log lines go to **stdout**.
   This follows container best practices — Docker, Kubernetes, and log
@@ -102,6 +105,24 @@ If none is specified, the default level is `INFO`.
 |------|-------|-------------|
 | `--query` | `-x` | Dump all information about the given file |
 | `--compare <f1> <f2>` | `-C` | Compare two files pixel-wise |
+
+### Structured JSON output (CLI)
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Emit a single JSON document to `stdout` instead of human-readable output. Useful for programmatic consumers and for local debugging when no Sentry DSN is configured. Mutually exclusive with `--salsah` and `--query`; silently ignored with `--config` (server mode). |
+
+Use cases:
+
+- **Local debugging with no Sentry DSN** — the primary RDU case. Every
+  `ImageContext` field normally sent to Sentry appears in the JSON
+  document instead.
+- **CI pipelines** that need to assert on image properties
+  (`jq '.image.bps'`) or on a specific failure mode (`jq '.phase'`).
+- **Scripts** that consume sipi output pipeline-style.
+
+See [`json-output.md`](json-output.md) for the full schema, worked
+examples, and the `stdout` / `stderr` contract.
 
 ### JPEG2000 Options
 
@@ -234,7 +255,7 @@ Error <phase> image: <details>
 Where `<phase>` is one of `reading`, `converting`, or `writing`. Example:
 
 ```
-Error reading image: Unsupported JPEG colorspace YCCK (file=input.jpg, dimensions=2048x1536, components=4)
+Error reading image: Unsupported JPEG colorspace JCS_UNKNOWN (file=input.jpg, dimensions=2048x1536, components=4)
 ```
 
 ### Sentry Integration (CLI Mode)
@@ -266,7 +287,7 @@ Each Sentry event includes:
 
 | Error | Meaning |
 | ----- | ------- |
-| Unsupported colorspace (YCCK, unknown) | The JPEG uses a colorspace SIPI cannot convert. Re-encode the source image in sRGB. |
+| Unsupported colorspace (JCS_UNKNOWN) | The JPEG uses a colorspace SIPI cannot convert. Re-encode the source image in sRGB. |
 | Unsupported bits/sample | Only 8 and 16 bits/sample are supported. Images with other bit depths must be converted first. |
 | Channel/colorspace mismatch | The number of channels does not match the declared colorspace (e.g., 4 channels but RGB). The file metadata may be corrupt. |
 | ICC profile incompatible | The ICC profile does not match the channel count (e.g., CMYK profile on a 3-channel image). |

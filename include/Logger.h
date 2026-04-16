@@ -18,4 +18,15 @@ bool is_cli_mode();
 void set_log_level(LogLevel level);
 LogLevel get_log_level();
 
+/*!
+ * Enable JSON-output mode. When true, every log level (info, warn, err) is
+ * routed to stderr so that stdout stays reserved for the single JSON document
+ * produced by `--json`. Backed by `std::atomic<bool>`: writers use
+ * `memory_order_relaxed` since the flag is set once at CLI startup
+ * (immediately after CLI11 parses `--json`) and never re-set, and readers
+ * only need to observe the value published by that single store.
+ */
+void set_json_mode(bool enabled);
+bool is_json_mode();
+
 #endif
