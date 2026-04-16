@@ -96,6 +96,7 @@ SipiImage::SipiImage(const SipiImage &img_p)
   emdata = img_p.emdata;
   skip_metadata = img_p.skip_metadata;
   conobj = img_p.conobj;
+  app14_transform = img_p.app14_transform;
 }
 
 //============================================================================
@@ -106,12 +107,13 @@ SipiImage::SipiImage(SipiImage &&other) noexcept
     pixels(other.pixels), xmp(std::move(other.xmp)), icc(std::move(other.icc)),
     iptc(std::move(other.iptc)), exif(std::move(other.exif)),
     emdata(std::move(other.emdata)), conobj(other.conobj),
-    skip_metadata(other.skip_metadata)
+    skip_metadata(other.skip_metadata), app14_transform(other.app14_transform)
 {
   other.pixels = nullptr;
   other.nx = 0;
   other.ny = 0;
   other.conobj = nullptr;
+  other.app14_transform = 255;
 }
 
 //============================================================================
@@ -186,6 +188,7 @@ SipiImage &SipiImage::operator=(const SipiImage &img_p)
     emdata = img_p.emdata;    // BUG FIX: missing in original operator=
     skip_metadata = img_p.skip_metadata;
     conobj = img_p.conobj;
+    app14_transform = img_p.app14_transform;
 
     size_t bufsiz;
 
@@ -242,11 +245,13 @@ SipiImage &SipiImage::operator=(SipiImage &&other) noexcept
     emdata = std::move(other.emdata);
     skip_metadata = other.skip_metadata;
     conobj = other.conobj;
+    app14_transform = other.app14_transform;
 
     other.pixels = nullptr;
     other.nx = 0;
     other.ny = 0;
     other.conobj = nullptr;
+    other.app14_transform = 255;
   }
   return *this;
 }

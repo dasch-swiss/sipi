@@ -609,79 +609,45 @@ bool SipiIOJpeg::read(SipiImage *img,
       //
       auto *pos = static_cast<unsigned char *>(memmem(marker->data, marker->data_length, "Exif\000\000", 6));
       if (pos != nullptr) {
-        img->exif = std::make_shared<SipiExif>(pos + 6, marker->data_length - (pos - marker->data) - 6);
-        uint16_t ori;
-        if (img->exif->getValByKey("Exif.Image.Orientation", ori)) { img->orientation = static_cast<Orientation>(ori); }
+        // Wrap in try/catch so malformed EXIF from legacy Photoshop files
+        // (e.g. APP13-before-APP1 with non-ASCII IPTC) does not abort the
+        // whole read. See Phase 5.3 of the image-format-support plan.
+        try {
+          img->exif = std::make_shared<SipiExif>(pos + 6, marker->data_length - (pos - marker->data) - 6);
+          uint16_t ori;
+          if (img->exif->getValByKey("Exif.Image.Orientation", ori)) { img->orientation = static_cast<Orientation>(ori); }
+        } catch (const std::exception &err) {
+          log_warn("Failed to parse EXIF metadata from JPEG: %s", err.what());
+        }
       }
 
       //
-      // first we try to find the xmp part: TODO: reading XMP which spans multiple segments. See ExtendedXMP !!!
+      // XMP packet: per Adobe XMP Specification Part 3 §1.1.3, the APP1 XMP
+      // segment payload starts with the 29-byte namespace header
+      // "http://ns.adobe.com/xap/1.0/\0" followed by the raw XMP packet
+      // bytes (typically beginning with `<?xpacket begin` or directly with
+      // `<x:xmpmeta`). Older Photoshop versions (e.g., CS 2008) omit the
+      // optional `<?xpacket>` wrappers entirely, which the previous
+      // hand-rolled boundary scanner did not tolerate. Since SipiXmp stores
+      // the raw string and does not currently parse it (see SipiXmp.cpp),
+      // the simplest correct extraction is "everything after the namespace
+      // header is the XMP packet".
       //
-      pos = (unsigned char *)memmem(marker->data, marker->data_length, "http://ns.adobe.com/xap/1.0/\000", 29);
+      // TODO(DEV-6261): handle ExtendedXMP (multi-APP1-segment XMP packets
+      // larger than 64 KB). The "http://ns.adobe.com/xmp/extension/\0"
+      // namespace is currently ignored.
+      constexpr size_t kXmpNsLen = 29;// "http://ns.adobe.com/xap/1.0/" + NUL
+      pos = (unsigned char *)memmem(marker->data, marker->data_length, "http://ns.adobe.com/xap/1.0/\000", kXmpNsLen);
       if (pos != nullptr) {
         try {
-          char start[] = { '<', '?', 'x', 'p', 'a', 'c', 'k', 'e', 't', ' ', 'b', 'e', 'g', 'i', 'n', '\0' };
-          char end[] = { '<', '?', 'x', 'p', 'a', 'c', 'k', 'e', 't', ' ', 'e', 'n', 'd', '\0' };
-
-          char *s;
-          unsigned int ll = 0;
-          do {
-            s = start;
-            // skip to the start marker
-            while ((ll < marker->data_length) && (*pos != *s)) {
-              pos++;
-              //// ISSUE: code failes here if there are many concurrent access; data overrrun??
-              ll++;
-            }
-            // read the start marker
-            while ((ll < marker->data_length) && (*s != '\0') && (*pos == *s)) {
-              pos++;
-              s++;
-              ll++;
-            }
-          } while ((ll < marker->data_length) && (*s != '\0'));
-          if (ll == marker->data_length) {
-            // we didn't find anything....
-            throw SipiImageError("Failed to parse XMP metadata: no valid XMP data found in JPEG file \"" + filepath + "\"");
+          const auto *data_end = (const unsigned char *)marker->data + marker->data_length;
+          const unsigned char *xmp_start = pos + kXmpNsLen;
+          if (xmp_start < data_end) {
+            const size_t xmp_len = data_end - xmp_start;
+            img->xmp = std::make_shared<SipiXmp>(std::string((const char *)xmp_start, xmp_len));
           }
-          // now we start reading the data
-          while ((ll < marker->data_length) && (*pos != '>')) {
-            ll++;
-            pos++;
-          }
-          if (ll >= marker->data_length) {
-            throw SipiImageError("Failed to parse XMP metadata: '>' not found in \"" + filepath + "\"");
-          }
-          pos++;// skip past '>'
-          unsigned char *start_xmp = pos;
-
-          unsigned char *data_end = (unsigned char *)marker->data + marker->data_length;
-          unsigned char *end_xmp = start_xmp;  // initialize to avoid UB if loop doesn't run
-          do {
-            s = end;
-            while (pos < data_end && *pos != *s) pos++;
-            if (pos >= data_end) break;
-            end_xmp = pos;// a candidate
-            while (pos < data_end && (*s != '\0') && (*pos == *s)) {
-              pos++;
-              s++;
-            }
-          } while (pos < data_end && *s != '\0');
-          if (pos >= data_end || *s != '\0') {
-            throw SipiImageError("Failed to parse XMP metadata: end marker not found");
-          }
-          while (pos < data_end && *pos != '>') { pos++; }
-          if (pos < data_end) pos++;
-
-          size_t xmp_len = end_xmp - start_xmp;
-
-          std::string xmpstr((char *)start_xmp, xmp_len);
-          size_t npos = xmpstr.find("</x:xmpmeta>");
-          if (npos != std::string::npos) xmpstr = xmpstr.substr(0, npos + 12);
-
-          img->xmp = std::make_shared<SipiXmp>(xmpstr);
-        } catch (SipiError &err) {
-          log_warn("Failed to parse XMP metadata from JPEG");
+        } catch (const std::exception &err) {
+          log_warn("Failed to parse XMP metadata from JPEG: %s", err.what());
         }
       }
     } else if (marker->marker == JPEG_APP0 + 2) {
@@ -701,8 +667,32 @@ bool SipiIOJpeg::read(SipiImage *img,
       }
     } else if (marker->marker == JPEG_APP0 + 13) {
       // PHOTOSHOP MARKER....
+      // Wrapped in try/catch so a malformed IPTC / EXIF / XMP inside the
+      // Photoshop resource block does not prevent the image from being read.
+      // See Phase 5.3 of the image-format-support plan.
+      // TODO(SipiReport-style-guide): refactor SipiIptc / SipiExif / SipiXmp
+      // constructors to return std::expected<T, E> and delete this try/catch.
       if (strncmp("Photoshop 3.0", (char *)marker->data, 14) == 0) {
-        parse_photoshop(img, (char *)marker->data + 14, (int)marker->data_length - 14);
+        try {
+          parse_photoshop(img, (char *)marker->data + 14, (int)marker->data_length - 14);
+        } catch (const std::exception &err) {
+          // SipiImageError and SipiError both derive from std::exception, so
+          // a single handler covers every fallible parse path below
+          // parse_photoshop. Downgrading to log_warn keeps the image read
+          // alive when one resource block is malformed.
+          log_warn("Failed to parse Photoshop APP13 resource block: %s", err.what());
+        }
+      }
+    } else if (marker->marker == JPEG_APP0 + 14) {
+      // Adobe APP14 marker — 12-byte segment payload (data_length excludes
+      // the 2-byte marker and 2-byte length field that precede it):
+      //   bytes 0-4  : "Adobe" identifier (NO trailing NUL)
+      //   bytes 5-6  : version
+      //   bytes 7-8  : flags0
+      //   bytes 9-10 : flags1
+      //   byte  11   : transform flag (0=Unknown/CMYK, 1=YCbCr, 2=YCCK)
+      if (marker->data_length >= 12 && memcmp(marker->data, "Adobe", 5) == 0) {
+        img->app14_transform = static_cast<uint8_t>(marker->data[11]);
       }
     } else {
       // fprintf(stderr, "4) MARKER= %d, %d Bytes, ==> %s\n\n", marker->marker - JPEG_APP0, marker->data_length,
@@ -743,9 +733,10 @@ bool SipiIOJpeg::read(SipiImage *img,
     break;
   }
   case JCS_YCCK: {
-    throw SipiImageError("Unsupported JPEG colorspace JCS_YCCK in file \"" + filepath
-      + "\" (dimensions: " + std::to_string(img->nx) + "x" + std::to_string(img->ny)
-      + ", components: " + std::to_string(cinfo.output_components) + ")");
+    // libjpeg-turbo decodes YCCK internally to CMYK; the post-read
+    // inversion handling in Phase 5.2 is shared with the CMYK path.
+    img->photo = PhotometricInterpretation::SEPARATED;
+    break;
   }
   case JCS_UNKNOWN: {
     throw SipiImageError("Unsupported JPEG colorspace JCS_UNKNOWN in file \"" + filepath
@@ -773,6 +764,29 @@ bool SipiIOJpeg::read(SipiImage *img,
   jpeg_finish_decompress(&cinfo);
   jpeg_destroy_decompress(&cinfo);
   ::close(infile);
+
+  //
+  // CMYK / YCCK polarity handling (DEV-6257, Phase 5.2).
+  //
+  // libjpeg-turbo's CMYK output is inverted when the source declares an
+  // Adobe APP14 marker with transform=0 (Photoshop-style "Unknown / CMYK")
+  // or transform=2 (YCCK, which libjpeg-turbo converts to inverted CMYK
+  // internally). In those cases we re-invert (`v = 255 - v`) so the
+  // subsequent ICC conversion sees CMYK in the expected polarity.
+  //
+  // We deliberately do NOT invert when:
+  //   - app14_transform == 1 (YCbCr → RGB, already correct polarity)
+  //   - app14_transform == 255 (no APP14 marker — raw CMYK as on disk;
+  //     inverting here would corrupt files that do not need it; the R10
+  //     `JpegCmykRawNoApp14NotInverted` test pins this branch).
+  //
+  const bool is_cmyk_path = img->photo == PhotometricInterpretation::SEPARATED && img->nc == 4;
+  const bool needs_inversion =
+    is_cmyk_path && (img->app14_transform == 0 || img->app14_transform == 2);
+  if (needs_inversion) {
+    const size_t total_bytes = static_cast<size_t>(img->ny) * static_cast<size_t>(sll);
+    for (size_t b = 0; b < total_bytes; ++b) { img->pixels[b] = static_cast<byte>(255 - img->pixels[b]); }
+  }
 
   //
   // do some cropping...
