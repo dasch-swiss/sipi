@@ -1,5 +1,18 @@
 # Changelog
 
+## [4.1.0](https://github.com/dasch-swiss/sipi/compare/v4.0.1...v4.1.0) (2026-04-16)
+
+
+### Features
+
+* Add --json CLI flag for structured output ([0238b5a](https://github.com/dasch-swiss/sipi/commit/0238b5aaa5a62ec6dcd21937962796fa1721981f))
+
+
+### Bug Fixes
+
+* Resilient JPEG metadata + YCCK + CMYK APP14 + XMP scanner (DEV-6250, DEV-6257, DEV-6259) ([2360df8](https://github.com/dasch-swiss/sipi/commit/2360df864a78769a9fd9c7c5e2f6bf2e9e524b3f))
+* Support 1-bit bilevel TIFF (DEV-6249) ([c45145c](https://github.com/dasch-swiss/sipi/commit/c45145cf4b373ad84852e1a47adea459ad9cf5f1))
+
 ## [4.0.1](https://github.com/dasch-swiss/sipi/compare/v4.0.0...v4.0.1) (2026-04-06)
 
 
