@@ -148,6 +148,19 @@ protected:
   shttps::Connection *conobj;//!< Pointer to HTTP connection
   SkipMetadata skip_metadata;//!< If true, all metadata is stripped off
 
+  /*!
+   * Adobe APP14 JPEG marker transform flag. Encodes the Photoshop "Unknown"
+   * convention for CMYK/YCCK polarity:
+   *   255 = no APP14 marker present (default; raw CMYK or non-JPEG formats)
+   *     0 = Adobe "Unknown / CMYK" — when nc==4, libjpeg-turbo produces
+   *         inverted CMYK that SipiIOJpeg re-inverts before ICC conversion
+   *     1 = YCbCr (converted to RGB by libjpeg-turbo — no inversion)
+   *     2 = YCCK (libjpeg-turbo produces inverted CMYK that must be re-inverted)
+   * Only read/written by the JPEG handler; default-initialized to 255 so all
+   * non-JPEG paths treat images as "no APP14" and skip the inversion branch.
+   */
+  uint8_t app14_transform = 255;
+
 public:
   //
   /*!
@@ -220,6 +233,12 @@ public:
    * \return ICC profile, or nullptr if not set
    */
   [[nodiscard]] std::shared_ptr<SipiIcc> getIcc() const { return icc; }
+
+  /**
+   * Get the XMP metadata of the image.
+   * \return XMP metadata, or nullptr if not set
+   */
+  [[nodiscard]] std::shared_ptr<SipiXmp> getXmp() const { return xmp; }
 
   /*!
    * Get orientation
