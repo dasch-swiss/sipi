@@ -479,6 +479,7 @@ add_executable(sipi
         ${PROJECT_SOURCE_DIR}/src/SipiImage.cpp
         ${PROJECT_SOURCE_DIR}/src/SipiImage.hpp
         ${PROJECT_SOURCE_DIR}/src/SipiImageError.hpp
+        ${PROJECT_SOURCE_DIR}/src/SipiReport.cpp ${PROJECT_SOURCE_DIR}/include/SipiReport.h
         ${PROJECT_SOURCE_DIR}/src/formats/SipiIOTiff.cpp ${PROJECT_SOURCE_DIR}/include/formats/SipiIOTiff.h
         ${PROJECT_SOURCE_DIR}/src/formats/SipiIOJ2k.cpp ${PROJECT_SOURCE_DIR}/include/formats/SipiIOJ2k.h
         ${PROJECT_SOURCE_DIR}/src/formats/SipiIOJpeg.cpp ${PROJECT_SOURCE_DIR}/include/formats/SipiIOJpeg.h

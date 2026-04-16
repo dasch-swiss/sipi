@@ -1,3 +1,4 @@
+#include <atomic>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -10,12 +11,20 @@
 #include "Logger.h"
 
 static bool g_cli_mode = false;
+// `g_json_mode` is read from every request worker thread in server mode and
+// from the main thread in CLI mode. It is set once at startup (before any
+// threads exist) and never re-set, so `memory_order_relaxed` is sufficient
+// — but using `std::atomic` rather than a plain bool makes the code
+// formally data-race-free per the C++ memory model.
+static std::atomic<bool> g_json_mode{ false };
 static LogLevel g_log_level = LL_INFO;
 
 void set_cli_mode(bool cli) { g_cli_mode = cli; }
 bool is_cli_mode() { return g_cli_mode; }
 void set_log_level(LogLevel level) { g_log_level = level; }
 LogLevel get_log_level() { return g_log_level; }
+void set_json_mode(bool enabled) { g_json_mode.store(enabled, std::memory_order_relaxed); }
+bool is_json_mode() { return g_json_mode.load(std::memory_order_relaxed); }
 
 std::string escape_json_str(const std::string &s)
 {
@@ -128,9 +137,11 @@ void log_vformat(LogLevel ll, const char *message, va_list args)
   if (ll < g_log_level) return;
 
   if (g_cli_mode) {
-    // CLI mode: plain text, errors→stderr, others→stdout
+    // CLI mode: plain text. Under --json every level goes to stderr so stdout
+    // stays reserved for the single JSON document. Outside --json,
+    // errors→stderr, others→stdout (legacy behaviour).
     std::string msg = vformat(message, args);
-    if (ll >= LL_ERR) {
+    if (g_json_mode.load(std::memory_order_relaxed) || ll >= LL_ERR) {
       fprintf(stderr, "%s\n", msg.c_str());
     } else {
       fprintf(stdout, "%s\n", msg.c_str());
