@@ -34,6 +34,7 @@ project(sipi
 
 # enables cmake's support for testing
 enable_testing()
+option(BUILD_TESTING "Build test suite (googletest, approvaltests)" ON)
 
 include(ExternalProject)
 include(CheckStructHasMember)
@@ -585,7 +586,9 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/config/sipi.config.lua
 #-------------------
 
 # adds google tests defined in the test/unit and test/approval subdirectories
-add_subdirectory(test)
+if(BUILD_TESTING)
+    add_subdirectory(test)
+endif()
 
 #-------------------
 # Fuzz testing

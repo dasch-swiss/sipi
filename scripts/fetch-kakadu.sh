@@ -5,7 +5,7 @@
 # Local: requires `gh auth login` and dasch-swiss org membership.
 # CI: set GH_TOKEN to a PAT with read access to dsp-ci-assets (DASCHBOT_PAT).
 #
-# Re-run after bumping the asset name / sha256 in flake.nix.
+# Re-run after bumping kakaduAssetName / kakaduSha256 in flake.nix.
 set -euo pipefail
 
 ASSET="v8_5-01382N.zip"

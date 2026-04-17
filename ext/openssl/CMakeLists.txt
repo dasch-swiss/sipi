@@ -42,7 +42,10 @@ ExternalProject_Add(project_openssl
     DOWNLOAD_DIR ""
     ${timestamp_policy}
     SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/openssl
-    CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/openssl/Configure
+    # Invoke via `perl` explicitly instead of relying on the Configure
+    # script's `#!/usr/bin/env perl` shebang — Nix's build sandbox does
+    # not provide /usr/bin/env, so exec() fails with ENOENT otherwise.
+    CONFIGURE_COMMAND perl ${CMAKE_BINARY_DIR}/local/extsrcs/openssl/Configure
         ${OPENSSL_TARGET}
         no-shared
         no-module
