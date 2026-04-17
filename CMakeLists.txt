@@ -82,8 +82,8 @@ option(CMAKE_BUILD_TYPE "The default build type is RelWithDebInfo" Debug)
 
 # Ensure RelWithDebInfo keeps full optimization with debug symbols.
 # This is used in Docker production builds for Sentry symbolication.
-set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g -DNDEBUG" CACHE STRING "C flags for RelWithDebInfo" FORCE)
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -DNDEBUG" CACHE STRING "C++ flags for RelWithDebInfo" FORCE)
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g -DNDEBUG -fno-omit-frame-pointer" CACHE STRING "C flags for RelWithDebInfo" FORCE)
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -DNDEBUG -fno-omit-frame-pointer" CACHE STRING "C++ flags for RelWithDebInfo" FORCE)
 
 
 #
