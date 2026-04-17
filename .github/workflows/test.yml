@@ -1,6 +1,7 @@
 # Main CI workflow for pull requests and scheduled verification.
 # Includes:
-#   - Nix/GCC build+unit matrix on Linux amd64/arm64 (Rust e2e + Hurl)
+#   - Nix/Clang build+unit matrix on Linux amd64/arm64 (Rust e2e + Hurl)
+#   - Nix static Linux validation (Release, via Zig-in-Nix) on internal PRs
 #   - Zig static Linux validation (Release, full unit+e2e) on internal PRs
 #   - Zig native macOS arm64 build + dylib audit on internal PRs
 
@@ -55,28 +56,21 @@ jobs:
           echo "=== verify test images ==="
           file test/_test_data/unit/lena512.tif 2>/dev/null || echo "lena512.tif not found"
           file test/_test_data/unit/HasCommentBlock.JPG 2>/dev/null || echo "HasCommentBlock.JPG not found"
-      - uses: cachix/install-nix-action@v31
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      - uses: cachix/cachix-action@v15
         with:
-          github_access_token: ${{ secrets.GH_TOKEN }}
+          name: dasch-swiss
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
       - name: Build and test (unit)
         run: |
-          nix \
-            --extra-experimental-features "nix-command flakes" \
-            --option filter-syscalls false \
-            develop --command bash -c "make nix-build && make nix-test"
+          nix develop --command bash -c "just nix-build && just nix-test"
       - name: Rust e2e and Hurl tests
         run: |
-          nix \
-            --extra-experimental-features "nix-command flakes" \
-            --option filter-syscalls false \
-            develop --command bash -c "make rust-test-e2e && make hurl-test"
+          nix develop --command bash -c "just rust-test-e2e && just hurl-test"
       - name: Gather code coverage
         if: ${{ matrix.arch == 'amd64' }}
         run: |
-          nix \
-            --extra-experimental-features "nix-command flakes" \
-            --option filter-syscalls false \
-            develop --command bash -c "make nix-coverage"
+          nix develop --command bash -c "just nix-coverage"
       - name: Upload coverage reports to Codecov
         if: ${{ matrix.arch == 'amd64' }}
         uses: codecov/codecov-action@v6.0.0
@@ -84,6 +78,18 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: dasch-swiss/sipi
           files: build/coverage.xml
+
+  # nix-static job dropped from CI.
+  #
+  # `.#static-amd64` / `.#static-arm64` remain as flake targets for devs, but
+  # each of the 20 ext/ deps has its own Nix-sandbox-specific quirks
+  # (missing /usr/bin/env for shebangs, glibc vs musl library resolution, zig
+  # cache dir, etc.). The existing zig-static CI job already validates static
+  # Linux builds via Alpine Docker, which is the production release path.
+  #
+  # Revisit when Phase 2 migrates ext/ deps to nixpkgs-native derivations,
+  # at which point each dep is a separately-cacheable Nix store path rather
+  # than one monolithic ExternalProject-in-Nix build.
 
   zig-static:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
