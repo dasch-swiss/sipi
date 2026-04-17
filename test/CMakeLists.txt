@@ -7,9 +7,16 @@
 include(ExternalProject)
 
 # Download and install GoogleTest
+# GTEST_LOCAL_ARCHIVE: path to a pre-fetched zip (e.g., for Nix sandbox builds)
+if(GTEST_LOCAL_ARCHIVE)
+    set(_gtest_url "${GTEST_LOCAL_ARCHIVE}")
+else()
+    set(_gtest_url "https://github.com/google/googletest/archive/refs/tags/v1.16.0.zip")
+endif()
+
 ExternalProject_Add(
         gtest
-        URL https://github.com/google/googletest/archive/refs/tags/v1.16.0.zip
+        URL "${_gtest_url}"
         PREFIX ${CMAKE_CURRENT_BINARY_DIR}/gtest
         CMAKE_ARGS ${ZIG_EP_CMAKE_ARGS}
         # Disable install step
@@ -43,14 +50,18 @@ set_target_properties(libgmock PROPERTIES
 include_directories("${source_dir}/googletest/include" "${source_dir}/googlemock/include")
 
 # Download and install ApprovalTests.cpp single header distribution
-set(HEADER_URL "https://github.com/approvals/ApprovalTests.cpp/releases/download/v.10.13.0/ApprovalTests.v.10.13.0.hpp")
+# APPROVAL_TESTS_LOCAL_HEADER: path to a pre-fetched header (e.g., for Nix sandbox builds)
 set(HEADER_FILE "${CMAKE_BINARY_DIR}/local/include/ApprovalTests.hpp")
 
-if(NOT EXISTS "${HEADER_FILE}")
-        file(DOWNLOAD ${HEADER_URL} ${HEADER_FILE}
-                TIMEOUT 60  # Set a timeout for the download in seconds
-                EXPECTED_HASH SHA256=c00f6390b81d9924dc646e9d32b61e1e09abda106c13704f714ac349241bb9ff # Optional: Verify file integrity
-                TLS_VERIFY ON)  # Verify TLS/SSL certificates; ON by default
+if(APPROVAL_TESTS_LOCAL_HEADER)
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/local/include")
+    configure_file("${APPROVAL_TESTS_LOCAL_HEADER}" "${HEADER_FILE}" COPYONLY)
+elseif(NOT EXISTS "${HEADER_FILE}")
+    set(HEADER_URL "https://github.com/approvals/ApprovalTests.cpp/releases/download/v.10.13.0/ApprovalTests.v.10.13.0.hpp")
+    file(DOWNLOAD ${HEADER_URL} ${HEADER_FILE}
+            TIMEOUT 60
+            EXPECTED_HASH SHA256=c00f6390b81d9924dc646e9d32b61e1e09abda106c13704f714ac349241bb9ff
+            TLS_VERIFY ON)
 endif()
 
 include_directories("${CMAKE_BINARY_DIR}/local/include")
