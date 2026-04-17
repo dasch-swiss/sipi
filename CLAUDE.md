@@ -8,34 +8,43 @@ SIPI (Simple Image Presentation Interface) is a multithreaded, high-performance,
 
 ## Build System and Common Commands
 
-All targets are in a single `Makefile`. Run `make help` for a complete list.
+All targets are in a single `justfile`. Run `just` for a complete list.
 For full build instructions (Docker, Zig, Nix, macOS), see [`docs/src/development/building.md`](docs/src/development/building.md).
+
+**First-time Nix setup:** run `just kakadu-fetch` once to download the proprietary Kakadu archive from `dsp-ci-assets` into `vendor/`. Requires `gh auth login` and `dasch-swiss` org membership. See [`docs/src/development/kakadu.md`](docs/src/development/kakadu.md).
 
 ### Quick Reference
 
 ```bash
 # Docker (recommended for CI-like builds)
-make docker-build              # build image (compiles + unit tests)
-make test-smoke                # smoke tests against Docker image
+just docker-build              # build image (compiles + unit tests)
+just test-smoke                # smoke tests against Docker image
 
 # Zig (local dev, no Nix required)
-make zig-build-local           # build with Zig toolchain
-make zig-test                  # unit tests
-make zig-test-e2e              # end-to-end tests
+just zig-build-local           # build with Zig toolchain
+just zig-test                  # unit tests
+just zig-test-e2e              # end-to-end tests
 
 # Nix (reproducible native dev — run inside `nix develop`)
-make nix-build                 # build (debug + coverage)
-make nix-test                  # unit tests
-make rust-test-e2e             # Rust e2e tests (requires built sipi)
-make hurl-test                 # Hurl HTTP contract tests
+just nix-build                 # build (debug + coverage)
+just nix-test                  # unit tests
+just rust-test-e2e             # Rust e2e tests (requires built sipi)
+just hurl-test                 # Hurl HTTP contract tests
+
+# Nix full builds (no shell required; run `just kakadu-fetch` once first)
+just nix-build-release         # build release binary via nix
+just nix-build-static-amd64    # build static amd64 binary
+just nix-build-static-arm64    # build static arm64 binary
+just nix-docker-build          # build Docker image via Nix
 
 # Vendor dependencies
-make vendor-download           # download all dep archives to vendor/
-make vendor-verify             # verify SHA-256 checksums
-make vendor-checksums          # print checksums for manifest updates
+just vendor-download           # download all dep archives to vendor/
+just vendor-verify             # verify SHA-256 checksums
+just vendor-checksums          # print checksums for manifest updates
+just kakadu-fetch              # download Kakadu archive (one-time per version)
 
 # Documentation
-make docs-serve                # serve docs locally
+just docs-serve                # serve docs locally
 ```
 
 ## High-Level Architecture
@@ -81,10 +90,10 @@ Image formats (libtiff, libpng, libjpeg, libwebp), compression (zlib, bzip2, xz,
 ### Important Files
 
 - `CMakeLists.txt` — main build configuration
-- `Makefile` — all build targets (run `make help`)
+- `justfile` — all build targets (run `just` to list)
 - `version.txt` — version information
-- `vars.mk` — Docker repo/tag variables
-- `flake.nix` — Nix development environment
+- `flake.nix` — Nix build system (overlay, package variants, dev shells)
+- `package.nix` — Nix derivation for Sipi
 
 ## Testing
 
@@ -92,10 +101,10 @@ For the authoritative testing strategy (pyramid, layer definitions, decision tre
 
 For test framework details (how to run tests, directory layout, adding tests), see [`docs/src/development/developing.md`](docs/src/development/developing.md).
 
-- **Unit tests** (`test/unit/`): GoogleTest + ApprovalTests — `make nix-test` or `make zig-test`
-- **E2E tests** (`test/e2e-rust/`): Rust (reqwest + cargo test) — `make rust-test-e2e` or `make zig-test-e2e`
-- **Hurl tests** (`test/hurl/`): HTTP contract tests — `make hurl-test`
-- **Smoke tests** (`test/smoke/`): against Docker image — `make test-smoke`
+- **Unit tests** (`test/unit/`): GoogleTest + ApprovalTests — `just nix-test` or `just zig-test`
+- **E2E tests** (`test/e2e-rust/`): Rust (reqwest + cargo test) — `just rust-test-e2e` or `just zig-test-e2e`
+- **Hurl tests** (`test/hurl/`): HTTP contract tests — `just hurl-test`
+- **Smoke tests** (`test/smoke/`): against Docker image — `just test-smoke`
 - **Approval tests** (`test/approval/`): snapshot-based regression — included in unit tests
 
 Run a specific test binary: `cd build && test/unit/<component>/<component>`
