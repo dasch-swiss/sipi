@@ -33,19 +33,18 @@ jobs:
           git lfs install
           git lfs fetch --all
           git lfs checkout
-      - uses: cachix/install-nix-action@v31
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      - uses: cachix/cachix-action@v15
         with:
-          github_access_token: ${{ secrets.GH_TOKEN }}
+          name: dasch-swiss
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
       - name: Install wrk
         run: sudo apt-get update && sudo apt-get install -y wrk
 
       - name: Build sipi
         run: |
-          nix \
-            --extra-experimental-features "nix-command flakes" \
-            --option filter-syscalls false \
-            develop --command bash -c "make nix-build"
+          nix develop --command bash -c "just nix-build"
 
       - name: Start sipi server
         run: |

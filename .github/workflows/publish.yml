@@ -43,8 +43,9 @@ jobs:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env['ACTIONS_CACHE_URL'] || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env['ACTIONS_RUNTIME_TOKEN'] || '');
-      - run: make ${{ matrix.build_target }}
-      - run: make test-smoke-ci
+      - uses: extractions/setup-just@v2
+      - run: just ${{ matrix.build_target }}
+      - run: just test-smoke-ci
 
   validate-static:
     runs-on: ${{ matrix.runner }}
@@ -225,10 +226,11 @@ jobs:
             core.exportVariable('ACTIONS_CACHE_URL', process.env['ACTIONS_CACHE_URL'] || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env['ACTIONS_RUNTIME_TOKEN'] || '');
 
-      - run: make ${{ matrix.build_target }}
-      - run: make test-smoke-ci
+      - uses: extractions/setup-just@v2
+      - run: just ${{ matrix.build_target }}
+      - run: just test-smoke-ci
       - name: Push image to Docker Hub
-        run: make ${{ matrix.push_target }}
+        run: just ${{ matrix.push_target }}
 
       - name: Docker Scout — record production
         uses: docker/scout-action@v1
@@ -282,7 +284,8 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: make docker-publish-manifest
+      - uses: extractions/setup-just@v2
+      - run: just docker-publish-manifest
 
   publish-static-release:
     runs-on: ubuntu-latest

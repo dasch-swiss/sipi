@@ -41,10 +41,11 @@ jobs:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env['ACTIONS_CACHE_URL'] || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env['ACTIONS_RUNTIME_TOKEN'] || '');
-      - run: make docker-test-build-amd64 # two stage build, where test is run in the first stage
+      - uses: extractions/setup-just@v2
+      - run: just docker-test-build-amd64 # two stage build, where test is run in the first stage
       - uses: dasch-swiss/sipi/.github/actions/setup-python@main
       - run: pip3 install pytest requests testcontainers
-      - run: make test-smoke-ci
+      - run: just test-smoke-ci
       - name: Docker Scout — compare to production
         if: github.event_name == 'pull_request'
         uses: docker/scout-action@v1
@@ -100,10 +101,11 @@ jobs:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env['ACTIONS_CACHE_URL'] || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env['ACTIONS_RUNTIME_TOKEN'] || '');
-      - run: make docker-test-build-arm64 # two stage build, where test is run in the first stage
+      - uses: extractions/setup-just@v2
+      - run: just docker-test-build-arm64 # two stage build, where test is run in the first stage
       - uses: dasch-swiss/sipi/.github/actions/setup-python@main
       - run: pip3 install pytest requests testcontainers
-      - run: make test-smoke-ci
+      - run: just test-smoke-ci
       - name: Docker Scout — compare to production
         if: github.event_name == 'pull_request'
         uses: docker/scout-action@v1
@@ -131,5 +133,6 @@ jobs:
           git lfs fetch --all
           git lfs checkout
       - uses: dasch-swiss/sipi/.github/actions/setup-python@main
-      - run: make docs-install-requirements
-      - run: make docs-build
+      - uses: extractions/setup-just@v2
+      - run: just docs-install-requirements
+      - run: just docs-build
