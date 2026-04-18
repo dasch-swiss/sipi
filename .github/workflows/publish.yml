@@ -201,6 +201,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Create the release if it doesn't exist yet (e.g. after a
+          # manual retag, or if release-please didn't create one).
+          # Race-safe: the parallel matrix arch that loses the race
+          # falls through to `gh release upload --clobber`.
+          if ! gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release create "${GITHUB_REF_NAME}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${GITHUB_REF_NAME}" \
+              --generate-notes || true
+          fi
           gh release upload "${GITHUB_REF_NAME}" \
             result/*.tar.gz \
             result/*.sha256 \
