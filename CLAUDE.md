@@ -20,11 +20,6 @@ For full build instructions (Docker, Zig, Nix, macOS), see [`docs/src/developmen
 just docker-build              # build image (compiles + unit tests)
 just test-smoke                # smoke tests against Docker image
 
-# Zig (local dev, no Nix required)
-just zig-build-local           # build with Zig toolchain
-just zig-test                  # unit tests
-just zig-test-e2e              # end-to-end tests
-
 # Nix (reproducible native dev — run inside `nix develop`)
 just nix-build                 # build (debug + coverage)
 just nix-test                  # unit tests
@@ -101,8 +96,8 @@ For the authoritative testing strategy (pyramid, layer definitions, decision tre
 
 For test framework details (how to run tests, directory layout, adding tests), see [`docs/src/development/developing.md`](docs/src/development/developing.md).
 
-- **Unit tests** (`test/unit/`): GoogleTest + ApprovalTests — `just nix-test` or `just zig-test`
-- **E2E tests** (`test/e2e-rust/`): Rust (reqwest + cargo test) — `just rust-test-e2e` or `just zig-test-e2e`
+- **Unit tests** (`test/unit/`): GoogleTest + ApprovalTests — `just nix-test`
+- **E2E tests** (`test/e2e-rust/`): Rust (reqwest + cargo test) — `just rust-test-e2e`
 - **Hurl tests** (`test/hurl/`): HTTP contract tests — `just hurl-test`
 - **Smoke tests** (`test/smoke/`): against Docker image — `just test-smoke`
 - **Approval tests** (`test/approval/`): snapshot-based regression — included in unit tests

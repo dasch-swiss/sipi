@@ -64,7 +64,7 @@ All dependency metadata (version, URL, SHA-256 hash) is centralized in
 2. Run `just vendor-download` to fetch the new archive
 3. Run `just vendor-checksums` and update `DEP_<NAME>_SHA256` in the manifest
 4. Run `just vendor-verify` to confirm
-5. Clean build and test: `rm -rf build && just zig-build-local && just zig-test`
+5. Clean build and test: `rm -rf build && nix develop --command bash -c "just nix-build && just nix-test"`
 
 ### Adding a new dependency
 
@@ -161,72 +161,25 @@ just docker-test-build-amd64
 just docker-test-build-arm64
 ```
 
-## Building with Zig
+## Static Linux binaries
 
-Zig produces statically linked Linux binaries via `cmake/zig-toolchain.cmake`.
-This is the path used today for static release artifacts and the macOS
-dylib audit; the Nix-based static builds (`.#static-{amd64,arm64}`) are
-validated alongside Zig and will replace it in a future phase.
-
-### Prerequisites
-
-1. Run `just kakadu-fetch` to populate `vendor/v8_5-01382N.zip` (see
-   [Kakadu setup](kakadu.md))
-2. Install Zig `0.15.2`
-3. Install build tools (`cmake`, `autoconf`, `automake`, `libtool`)
-
-OpenSSL, libcurl, and libmagic are built from source by SIPI's CMake
-build; they do not need to be preinstalled as system libraries.
-
-### Local Zig build
+Static musl binaries are produced by the Nix flake via a Zig-based
+toolchain (`cmake/zig-toolchain.cmake`). No Zig install is needed on
+the host — Zig ships inside the Nix dev shell and is invoked by
+`mkStaticBuild` in `flake.nix`.
 
 ```bash
-just zig-build-local
-just zig-test
-just zig-test-e2e
-just zig-run
+nix build .#static-amd64        # x86_64-linux-musl
+nix build .#static-arm64        # aarch64-linux-musl
+nix build .#release-archive-amd64
+nix build .#release-archive-arm64
 ```
 
-### Static Linux Zig builds
+Validation:
 
 ```bash
-just zig-build-amd64           # x86_64-linux-musl
-just zig-build-arm64           # aarch64-linux-musl
-```
-
-### Static Zig builds in Docker (local CI mirror)
-
-For testing the zig-static build in a Docker container that mirrors the
-CI build environment (Alpine 3.21 + Zig). Alpine is used because its
-`/usr/include` contains musl headers natively, avoiding the glibc header
-contamination that occurs on Ubuntu (where zig cc unconditionally adds
-`/usr/include`).
-
-```bash
-just zig-static-docker-arm64   # build + unit test aarch64-linux-musl in Docker
-just zig-static-docker-amd64   # build + unit test x86_64-linux-musl in Docker
-```
-
-These use `Dockerfile.zig-static` which installs Zig, configures the
-toolchain, builds SIPI, and runs `ctest` — all inside the container.
-The local targets use `build-static/` as the build directory (CI uses
-`build/`). E2e tests are not included because the resulting Linux ELF
-binary cannot run on a macOS host. CI handles the portability proof by
-running e2e on a bare Ubuntu runner against the Alpine-built binary —
-see [CI and Release](ci.md) for details.
-
-### Validation commands
-
-```bash
-# Linux static binary must not have dynamic NEEDED entries
-# (local justfile targets use build-static/; CI uses build/)
-readelf -d build-static/sipi | grep NEEDED
-
-# Should report static
-ldd build-static/sipi
-
-# macOS policy: only libSystem is allowed
-otool -L build-zig-macos/sipi
+file result/bin/sipi
+! readelf -d result/bin/sipi | grep '(NEEDED)'
 ```
 
 ## Building on macOS without Nix or Zig (Not Recommended)
@@ -261,11 +214,6 @@ Run `just` (no arguments) to see the full list. Key target groups:
 | `nix-build-release` | Run `nix build .#default` |
 | `nix-build-static-{amd64,arm64}` | Run `nix build .#static-{amd64,arm64}` |
 | `nix-docker-build` | Stream `nix build .#docker-stream` into local Docker daemon |
-| `zig-build-local` | Build SIPI natively with Zig |
-| `zig-test` | Run unit tests for Zig local build |
-| `zig-test-e2e` | Run end-to-end tests for Zig local build |
-| `zig-build-{amd64,arm64}` | Build static Linux binaries with Zig |
-| `zig-static-docker-{arm64,amd64}` | Build + test static binaries in Docker (local CI mirror) |
 | `vendor-download` | Download all dependency archives to `vendor/` |
 | `vendor-verify` | Verify SHA-256 checksums of vendored archives |
 | `vendor-checksums` | Print SHA-256 checksums for all archives |

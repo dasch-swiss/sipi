@@ -152,8 +152,14 @@ nix-build:
 nix-test:
     cd build && ctest --output-on-failure
 
-# Run Rust e2e tests (requires built sipi in build/)
+# Run Rust e2e tests (requires built sipi in build/ — run `just nix-build` first)
 rust-test-e2e:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -x "{{justfile_directory()}}/build/sipi" ]; then
+        echo "Missing build/sipi. Run 'just nix-build' (inside 'nix develop') first." >&2
+        exit 1
+    fi
     cd test/e2e-rust && SIPI_BIN={{justfile_directory()}}/build/sipi cargo test -- --test-threads=1
 
 # Download CI fuzz corpus and merge into seed corpus
@@ -255,74 +261,6 @@ nix-build-static-arm64:
 # Build Docker image via Nix
 nix-docker-build:
     $(nix build .#docker-stream --print-out-paths) | docker load
-
-#####################################
-# Zig toolchain
-#####################################
-
-# Build SIPI for local dev using Zig (no Nix required)
-zig-build-local:
-    cmake -B build -S . \
-        -G "Unix Makefiles" \
-        -DCMAKE_TOOLCHAIN_FILE=cmake/zig-toolchain.cmake \
-        -DCMAKE_BUILD_TYPE=Debug
-    cmake --build build --parallel {{nproc}}
-
-# Run unit tests (after zig-build-local)
-zig-test:
-    cd build && ctest --output-on-failure
-
-# Run Rust e2e tests against Zig build (after zig-build-local)
-zig-test-e2e:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ ! -x "{{justfile_directory()}}/build/sipi" ]; then
-        echo "Missing build/sipi. Run 'just zig-build-local' first."
-        exit 1
-    fi
-    cd test/e2e-rust && SIPI_BIN={{justfile_directory()}}/build/sipi cargo test -- --test-threads=1
-
-# Run SIPI server (after zig-build-local)
-zig-run:
-    {{justfile_directory()}}/build/sipi --config={{justfile_directory()}}/config/sipi.config.lua
-
-# Build fully static Linux binary for a given target
-zig-build-static target:
-    cmake -B build-static -S . \
-        -G "Unix Makefiles" \
-        -DCMAKE_TOOLCHAIN_FILE=cmake/zig-toolchain.cmake \
-        -DZIG_TARGET={{target}} \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
-    cmake --build build-static --parallel {{nproc}}
-
-# Build static SIPI binary for Linux amd64
-zig-build-amd64: (zig-build-static "x86_64-linux-musl")
-
-# Build static SIPI binary for Linux arm64
-zig-build-arm64: (zig-build-static "aarch64-linux-musl")
-
-# Clean all Zig build artifacts (local + static)
-zig-clean:
-    rm -rf build/ build-static/
-
-# Build + test zig-static arm64 in Docker (mirrors CI)
-zig-static-docker-arm64:
-    docker buildx build -f Dockerfile.zig-static \
-        --progress auto \
-        --platform linux/arm64 \
-        --build-arg ZIG_TARGET=aarch64-linux-musl \
-        -t sipi-zig-static-arm64 \
-        .
-
-# Build + test zig-static amd64 in Docker (mirrors CI)
-zig-static-docker-amd64:
-    docker buildx build -f Dockerfile.zig-static \
-        --progress auto \
-        --platform linux/amd64 \
-        --build-arg ZIG_TARGET=x86_64-linux-musl \
-        -t sipi-zig-static-amd64 \
-        .
 
 #####################################
 # Vendor dependencies

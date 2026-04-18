@@ -47,141 +47,12 @@ jobs:
       - run: just ${{ matrix.build_target }}
       - run: just test-smoke-ci
 
-  validate-static:
-    runs-on: ${{ matrix.runner }}
-    name: validate-static / ${{ matrix.arch }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-            zig_target: x86_64-linux-musl
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            zig_target: aarch64-linux-musl
-    steps:
-      # --- Host: checkout + zig install (JS actions) ---
-      - uses: dasch-swiss/sipi/.github/actions/checkout@main
-        with:
-          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
-      - name: pull LFS objects
-        run: |
-          git lfs install
-          git lfs fetch --all
-          git lfs checkout
-
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
-
-      - name: Determine version
-        run: |
-          echo "VERSION=$(git describe --tag --dirty --abbrev=7)" >> "$GITHUB_ENV"
-
-      # --- Alpine Docker: build ---
-      - name: Build in Alpine container
-        env:
-          ZIG_TARGET: ${{ matrix.zig_target }}
-          VERSION: ${{ env.VERSION }}
-        run: |
-          docker run --rm \
-            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$(dirname $(which zig)):/zig-bin" \
-            -e ZIG_TARGET \
-            -e VERSION \
-            -w "$GITHUB_WORKSPACE" \
-            alpine:3.21 sh -c '
-              apk add --no-cache bash git cmake make autoconf automake libtool \
-                binutils ca-certificates curl tar xz readline-dev xxd unzip \
-                file pkgconf linux-headers lua5.3
-              ln -sf /usr/bin/lua5.3 /usr/local/bin/lua
-              export PATH="/zig-bin:$PATH"
-              cmake -S . -B build \
-                -G "Unix Makefiles" \
-                -DCMAKE_TOOLCHAIN_FILE=cmake/zig-toolchain.cmake \
-                -DZIG_TARGET=$ZIG_TARGET \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
-                -DEXT_PROVIDED_VERSION=$VERSION
-              cmake --build build --parallel $(nproc)
-            '
-
-      # --- Host: verify + test ---
-      - name: Fix build output permissions
-        run: sudo chown -R $(id -u):$(id -g) build
-
-      - name: Verify static linkage
-        run: |
-          file build/sipi
-          ldd build/sipi 2>&1 | grep -qi "not a dynamic\|statically linked\|not a valid dynamic"
-          ! readelf -d build/sipi | grep -q '(NEEDED)'
-
-      - name: Run unit tests
-        run: |
-          failed=0
-          for test_dir in build/test/unit/*/; do
-            for bin in "$test_dir"/*; do
-              if [ -x "$bin" ] && [ -f "$bin" ]; then
-                echo "--- ${bin} ---"
-                (cd "$test_dir" && "./${bin##*/}") || failed=1
-              fi
-            done
-          done
-          if [ -x "build/test/approval/sipi.approvaltests" ]; then
-            echo "--- approval tests ---"
-            (cd build/test/approval && ./sipi.approvaltests) || failed=1
-          fi
-          [ "$failed" -eq 0 ] || exit 1
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Run Rust e2e tests
-        env:
-          SIPI_BIN: ${{ github.workspace }}/build/sipi
-        run: cd test/e2e-rust && cargo test -- --test-threads=1
-
-      # --- Host: package release ---
-      - name: Package release archive
-        run: |
-          mkdir -p release/sipi-$VERSION-${{ matrix.arch }}
-          mkdir -p release/debug
-
-          cp build/sipi release/sipi-$VERSION-${{ matrix.arch }}/sipi
-
-          objcopy --only-keep-debug \
-            release/sipi-$VERSION-${{ matrix.arch }}/sipi \
-            release/debug/sipi-linux-${{ matrix.arch }}.debug
-
-          strip release/sipi-$VERSION-${{ matrix.arch }}/sipi
-
-          objcopy --add-gnu-debuglink=release/debug/sipi-linux-${{ matrix.arch }}.debug \
-            release/sipi-$VERSION-${{ matrix.arch }}/sipi
-
-          cp config/sipi.config.lua release/sipi-$VERSION-${{ matrix.arch }}/
-          cp config/sipi.init.lua release/sipi-$VERSION-${{ matrix.arch }}/
-          cp -r scripts/ release/sipi-$VERSION-${{ matrix.arch }}/scripts/
-          cp -r server/ release/sipi-$VERSION-${{ matrix.arch }}/server/
-
-          tar czf release/sipi-$VERSION-linux-${{ matrix.arch }}.tar.gz -C release sipi-$VERSION-${{ matrix.arch }}/
-          sha256sum release/sipi-$VERSION-linux-${{ matrix.arch }}.tar.gz > release/sipi-$VERSION-linux-${{ matrix.arch }}.tar.gz.sha256
-
-      - name: Upload release artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: static-linux-release-${{ matrix.arch }}
-          path: |
-            release/*.tar.gz
-            release/*.sha256
-            release/debug/*.debug
-
   release-gate:
     runs-on: ubuntu-latest
-    needs: [validate-docker, validate-static]
+    needs: [validate-docker]
     steps:
       - name: Validation gate
-        run: echo "Docker and static validation passed; publish side effects may proceed."
+        run: echo "Docker validation passed; publish side effects may proceed."
 
   publish-docker:
     runs-on: ${{ matrix.runner }}
@@ -287,25 +158,54 @@ jobs:
       - uses: extractions/setup-just@v2
       - run: just docker-publish-manifest
 
+  # Build the static release archive (sipi + config/scripts/server +
+  # .sha256 + .debug) via Nix on both arches, then upload to GitHub
+  # Release and push debug symbols to Sentry.
   publish-static-release:
-    runs-on: ubuntu-latest
     needs: [release-gate]
+    runs-on: ${{ matrix.runner }}
+    name: publish-static-release / ${{ matrix.arch }}
     permissions:
       contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v6
+      - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
-          fetch-depth: 0
-
-      - name: Download static artifacts
-        uses: actions/download-artifact@v8
+          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - uses: DeterminateSystems/determinate-nix-action@v3
         with:
-          pattern: static-linux-release-*
-          path: artifacts/
-          merge-multiple: true
+          extra-conf: |
+            extra-experimental-features = configurable-impure-env
+      - uses: cachix/cachix-action@v15
+        with:
+          name: dasch-swiss
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
-      - name: Show collected artifacts
-        run: find artifacts -maxdepth 3 -type f | sort
+      - name: Build release archive
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+        run: |
+          nix build -L \
+            --option impure-env "GH_TOKEN=$GH_TOKEN" \
+            .#release-archive-${{ matrix.arch }}
+          ls -la result/
+
+      - name: Attach static assets to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" \
+            result/*.tar.gz \
+            result/*.sha256 \
+            "result/sipi-linux-${{ matrix.arch }}.debug" \
+            --clobber
 
       - name: Install sentry-cli
         run: npm install -g @sentry/cli
@@ -316,30 +216,10 @@ jobs:
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         run: |
-          shopt -s nullglob globstar
-          debug_files=(artifacts/**/*.debug)
-          if [ ${#debug_files[@]} -eq 0 ]; then
-            echo "No static debug symbol files found"
-            exit 1
-          fi
-
-          for debug_file in "${debug_files[@]}"; do
-            echo "Uploading $debug_file"
-            sentry-cli debug-files upload \
-              --org "$SENTRY_ORG" \
-              --project "$SENTRY_PROJECT" \
-              "$debug_file"
-          done
-
-      - name: Attach static assets to GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          files: |
-            artifacts/**/*.tar.gz
-            artifacts/**/*.sha256
-          generate_release_notes: true
-          draft: false
-          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
+          sentry-cli debug-files upload \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT" \
+            "result/sipi-linux-${{ matrix.arch }}.debug"
 
   sentry:
     runs-on: ubuntu-latest
