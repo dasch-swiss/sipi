@@ -66,6 +66,9 @@ ExternalProject_Add(project_curl
         --disable-gopher
         --disable-mqtt
         --disable-manual
+        # Skip all man-page generation. The doc scripts use `#!/usr/bin/env bash`
+        # shebangs which fail in the Nix build sandbox (no /usr/bin/env).
+        --disable-docs
         ${CURL_EXTRA_CONFIGURE_FLAGS}
         ${ZIG_AUTOTOOLS_HOST}
         CC=${CMAKE_C_COMPILER}
