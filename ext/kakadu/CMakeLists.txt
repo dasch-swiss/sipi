@@ -57,7 +57,11 @@ if(DEFINED ZIG_STATIC_BUILD AND ZIG_STATIC_BUILD)
     # Kakadu's top-level Makefile calls sub-makes with 'make' (not $(MAKE)),
     # so command-line variable overrides don't propagate — but MAKEFLAGS
     # and environment variables DO propagate through the entire hierarchy.
-    set(_KDU_BUILD_PREFIX ${CMAKE_COMMAND} -E env "CC=${CMAKE_CXX_COMPILER}" "AR=${CMAKE_AR}" "MAKEFLAGS=-e")
+    # ZIG_TARGET is propagated explicitly so the zig-cc/zig-c++ wrappers
+    # inject `-target`; relying on the .zig-target marker file has proved
+    # unreliable for hand-rolled Makefile builds (symbols like fopen64
+    # leak in via glibc headers when the wrapper falls back to native).
+    set(_KDU_BUILD_PREFIX ${CMAKE_COMMAND} -E env "CC=${CMAKE_CXX_COMPILER}" "AR=${CMAKE_AR}" "ZIG_TARGET=${ZIG_TARGET}" "MAKEFLAGS=-e")
     set(_KDU_CC_OVERRIDE "")
 elseif (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")

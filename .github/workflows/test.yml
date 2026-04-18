@@ -85,17 +85,53 @@ jobs:
           slug: dasch-swiss/sipi
           files: build/coverage.xml
 
-  # nix-static job dropped from CI.
-  #
-  # `.#static-amd64` / `.#static-arm64` remain as flake targets for devs, but
-  # each of the 20 ext/ deps has its own Nix-sandbox-specific quirks
-  # (missing /usr/bin/env for shebangs, glibc vs musl library resolution, zig
-  # cache dir, etc.). The existing zig-static CI job already validates static
-  # Linux builds via Alpine Docker, which is the production release path.
-  #
-  # Revisit when Phase 2 migrates ext/ deps to nixpkgs-native derivations,
-  # at which point each dep is a separately-cacheable Nix store path rather
-  # than one monolithic ExternalProject-in-Nix build.
+  # Zig-in-Nix musl-static validation. Exists in parallel to zig-static
+  # until Part B.5 retires the latter (see plan glowing-rolling-fern).
+  # Expect failures during Part B.1 ext/* patching.
+  nix-static:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ${{ matrix.runner }}
+    name: nix-static / ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+        with:
+          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - uses: DeterminateSystems/determinate-nix-action@v3
+        with:
+          # Kakadu FOD in flake.nix uses gh release download via
+          # impureEnvVars; daemon needs configurable-impure-env to accept
+          # GH_TOKEN from the client.
+          extra-conf: |
+            extra-experimental-features = configurable-impure-env
+      - uses: cachix/cachix-action@v15
+        with:
+          name: dasch-swiss
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+      - name: Build static binary
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+        run: |
+          nix build -L \
+            --option impure-env "GH_TOKEN=$GH_TOKEN" \
+            .#static-${{ matrix.arch }}
+      - name: Verify static linkage
+        run: |
+          file result/bin/sipi
+          ! readelf -d result/bin/sipi | grep -q '(NEEDED)'
+      - name: Rust e2e tests against static binary
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+        run: |
+          nix develop --command bash -c \
+            "cd test/e2e-rust && SIPI_BIN=$GITHUB_WORKSPACE/result/bin/sipi cargo test -- --test-threads=1"
 
   zig-static:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
