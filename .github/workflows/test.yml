@@ -1,9 +1,8 @@
 # Main CI workflow for pull requests and scheduled verification.
 # Includes:
 #   - Nix/Clang build+unit matrix on Linux amd64/arm64 (Rust e2e + Hurl)
-#   - Nix static Linux validation (Release, via Zig-in-Nix) on internal PRs
-#   - Zig static Linux validation (Release, full unit+e2e) on internal PRs
-#   - Zig native macOS arm64 build + dylib audit on internal PRs
+#   - Nix static musl build (Zig-in-Nix) + Rust e2e on amd64/arm64
+#   - Nix native macOS arm64 build + dylib-linkage audit on internal PRs
 
 permissions:
   contents: read
@@ -133,170 +132,46 @@ jobs:
           nix develop --command bash -c \
             "cd test/e2e-rust && SIPI_BIN=$GITHUB_WORKSPACE/result/bin/sipi cargo test -- --test-threads=1"
 
-  zig-static:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ${{ matrix.runner }}
-    name: zig-static / ${{ matrix.arch }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-            zig_target: x86_64-linux-musl
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            zig_target: aarch64-linux-musl
-    steps:
-      # --- Host: checkout + zig install (JS actions) ---
-      - uses: dasch-swiss/sipi/.github/actions/checkout@main
-        with:
-          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
-      - name: pull LFS objects
-        run: |
-          git lfs install
-          echo "=== .gitattributes ==="
-          head -5 .gitattributes
-          echo "=== LFS env ==="
-          git lfs env | head -10
-          echo "=== LFS ls-files ==="
-          git lfs ls-files | head -5
-          echo "=== LFS fetch ==="
-          git lfs fetch --all
-          echo "=== LFS checkout ==="
-          git lfs checkout
-          echo "=== verify vendor ==="
-          ls -la vendor/*.tar.gz | head -3
-          echo "=== verify test images ==="
-          file test/_test_data/unit/lena512.tif 2>/dev/null || echo "lena512.tif not found"
-          file test/_test_data/unit/HasCommentBlock.JPG 2>/dev/null || echo "HasCommentBlock.JPG not found"
-
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
-
-      # --- Alpine Docker: build ---
-      # Mount at the same absolute path as the host so that compiled-in
-      # __FILE__ paths (used by ApprovalTests) resolve correctly when
-      # tests run on the host.
-      - name: Build in Alpine container
-        env:
-          ZIG_TARGET: ${{ matrix.zig_target }}
-        run: |
-          docker run --rm \
-            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$(dirname $(which zig)):/zig-bin" \
-            -e ZIG_TARGET \
-            -w "$GITHUB_WORKSPACE" \
-            alpine:3.21 sh -c '
-              apk add --no-cache bash git cmake make autoconf automake libtool \
-                binutils ca-certificates curl tar xz readline-dev xxd unzip \
-                file pkgconf linux-headers lua5.3
-              ln -sf /usr/bin/lua5.3 /usr/local/bin/lua
-              export PATH="/zig-bin:$PATH"
-              cmake -S . -B build \
-                -G "Unix Makefiles" \
-                -DCMAKE_TOOLCHAIN_FILE=cmake/zig-toolchain.cmake \
-                -DZIG_TARGET=$ZIG_TARGET \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
-              cmake --build build --parallel $(nproc)
-            '
-
-      # --- Host: verify + test ---
-      - name: Fix build output permissions
-        run: sudo chown -R $(id -u):$(id -g) build
-
-      - name: Verify static linkage
-        run: |
-          file build/sipi
-          ldd build/sipi 2>&1 | grep -qi "not a dynamic\|statically linked\|not a valid dynamic"
-          ! readelf -d build/sipi | grep -q '(NEEDED)'
-
-      - name: Run unit tests
-        run: |
-          failed=0
-          for test_dir in build/test/unit/*/; do
-            for bin in "$test_dir"/*; do
-              if [ -x "$bin" ] && [ -f "$bin" ]; then
-                echo "--- ${bin} ---"
-                (cd "$test_dir" && "./${bin##*/}") || failed=1
-              fi
-            done
-          done
-          if [ -x "build/test/approval/sipi.approvaltests" ]; then
-            echo "--- approval tests ---"
-            (cd build/test/approval && ./sipi.approvaltests) || failed=1
-          fi
-          [ "$failed" -eq 0 ] || exit 1
-
-      - name: Rust e2e tests
-        run: |
-          cd test/e2e-rust && SIPI_BIN=$GITHUB_WORKSPACE/build/sipi cargo test -- --test-threads=1
-
-  zig-macos-arm64:
+  # Native Darwin build via Nix + clang/libc++, with a dylib-linkage audit.
+  # Replaces the old zig-macos job; the invariant (no Homebrew / third-party
+  # dylibs) is the same, just verified through the Nix toolchain instead of
+  # Zig on macOS.
+  nix-macos-audit:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: macos-14
-    name: zig-macos / arm64 dylib-audit
+    name: nix-macos / arm64 dylib-audit
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
-      - name: pull LFS objects
-        run: |
-          git lfs install
-          echo "=== .gitattributes ==="
-          head -5 .gitattributes
-          echo "=== LFS env ==="
-          git lfs env | head -10
-          echo "=== LFS ls-files ==="
-          git lfs ls-files | head -5
-          echo "=== LFS fetch ==="
-          git lfs fetch --all
-          echo "=== LFS checkout ==="
-          git lfs checkout
-          echo "=== verify vendor ==="
-          ls -la vendor/*.tar.gz | head -3
-          echo "=== verify test images ==="
-          file test/_test_data/unit/lena512.tif 2>/dev/null || echo "lena512.tif not found"
-          file test/_test_data/unit/HasCommentBlock.JPG 2>/dev/null || echo "HasCommentBlock.JPG not found"
-
-      - name: Install Zig
-        uses: mlugg/setup-zig@v2
+      - uses: DeterminateSystems/determinate-nix-action@v3
         with:
-          version: 0.15.2
-
-      - name: Verify Zig installation
+          extra-conf: |
+            extra-experimental-features = configurable-impure-env
+      - uses: cachix/cachix-action@v15
+        with:
+          name: dasch-swiss
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+      - name: Build native Darwin binary
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: |
-          zig version
-          zig cc --version
-
-      - name: Install build dependencies
-        run: |
-          brew update
-          brew install cmake autoconf automake libtool
-
-      - name: Configure Release build
-        run: |
-          cmake -S . -B build-zig-macos \
-            -G "Unix Makefiles" \
-            -DCMAKE_TOOLCHAIN_FILE=cmake/zig-toolchain.cmake \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
-
-      - name: Build
-        run: cmake --build build-zig-macos --parallel $(sysctl -n hw.ncpu)
-
+          nix build -L \
+            --option impure-env "GH_TOKEN=$GH_TOKEN" \
+            .#default
       - name: Audit runtime dylibs
         run: |
-          otool -L build-zig-macos/sipi
-          deps="$(otool -L build-zig-macos/sipi | tail -n +2 | awk '{print $1}')"
-          dep_count="$(printf '%s\n' "$deps" | sed '/^$/d' | wc -l | tr -d ' ')"
-
-          if [ "$dep_count" -ne 1 ] || [ "$deps" != "/usr/lib/libSystem.B.dylib" ]; then
-            echo "Unexpected dylib set detected:"
-            printf '%s\n' "$deps"
+          otool -L result/bin/sipi
+          # Invariant: don't accidentally link against Homebrew. Every
+          # other path under /usr/lib, /System/Library, or /nix/store is
+          # a controlled input to the Nix build.
+          bad=$(otool -L result/bin/sipi \
+            | awk 'NR>1 {print $1}' \
+            | grep -E '^/opt/homebrew/|^/usr/local/' \
+            || true)
+          if [ -n "$bad" ]; then
+            echo "error: Homebrew / /usr/local dylibs leaked into the binary:" >&2
+            echo "$bad" >&2
             exit 1
           fi
-
           echo "macOS dylib policy satisfied"

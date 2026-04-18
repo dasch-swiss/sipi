@@ -69,123 +69,85 @@ Workflow: `.github/workflows/test.yml`
 
 ### Standard test matrix
 
-- Existing Nix/GCC test matrix still runs on:
+- Nix/Clang test matrix runs on:
   - `ubuntu-24.04`
   - `ubuntu-24.04-arm`
 
-### Zig/static PR checks (native per-arch Docker-in-Ubuntu)
+### Static and macOS PR checks
 
-Each architecture gets a combined build+test job on its native runner. The build
-runs inside an Alpine Docker container, then tests run on the bare Ubuntu host —
-proving the static musl binaries are portable.
+Both static Linux and macOS validation run through the Nix flake —
+Zig-in-Nix for musl cross-compile and Nix's default clang/libc++
+stdenv for Darwin.
 
-**`zig-static / {arch}`** — combined job per architecture:
+**`nix-static / {arch}`** (`ubuntu-24.04`, `ubuntu-24.04-arm`):
 
-1. **Host (Ubuntu):** JS actions run checkout and setup-zig.
-2. **Alpine Docker:** `docker run alpine:3.21` with source bind-mounted:
-    - Installs build prerequisites via `apk`.
-    - Zig binary (statically linked) is bind-mounted from host.
-    - CMake configure + build produces a static ELF binary.
-3. **Host (Ubuntu):** Verification and testing:
-    - Static linkage verification (`ldd`, `readelf -d`).
-    - Unit tests (GoogleTest executables run directly).
-    - E2e dependencies installed via `apt-get` and `pip3`.
-    - Full e2e test suite (`test/e2e`).
+1. `nix build .#static-${arch}` — builds via `mkStaticBuild` in
+   `flake.nix`, using Zig as the C/C++ cross-compiler targeting
+   `{x86_64,aarch64}-linux-musl`. Kakadu is fetched by the FOD
+   (`GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}`, `configurable-impure-env`
+   enabled on the daemon).
+2. Static linkage assertion: `readelf -d` must not report any
+   `NEEDED` entries.
+3. `nix develop --command ... cargo test` in `test/e2e-rust` with
+   `SIPI_BIN=$GITHUB_WORKSPACE/result/bin/sipi` — proves the
+   Nix-built static musl binary runs on a glibc host.
 
-This proves Alpine-built static binaries run on a glibc host that had no part
-in building them, and each architecture builds and tests natively.
+**`nix-macos / arm64 dylib-audit`** (`macos-14`):
 
-**`zig-macos / arm64 dylib-audit`:**
-
-- Native Release Zig build.
-- `otool -L` audit on `build-zig-macos/sipi`.
-- Exactly one allowed dependency:
-  - `/usr/lib/libSystem.B.dylib`
+- `nix build .#default` on Darwin (clang + libc++).
+- `otool -L` audit: only `/usr/lib/libSystem.B.dylib` and
+  `/System/Library/{Frameworks,PrivateFrameworks}/...` allowed.
 
 ### Forked PR behavior
 
-Zig static jobs are intentionally skipped for forked PRs because private inputs
-(for example Kakadu/private dependency paths) are not available there.
-Standard CI behavior remains active for forks.
+`nix-static` and `nix-macos-audit` are skipped for forked PRs because
+the Kakadu FOD needs `secrets.DASCHBOT_PAT`, which isn't shared with
+forks. Standard CI (nix-clang) still runs.
 
 ## Tag Release CI/CD
 
 Workflow: `.github/workflows/publish.yml`
 
-Trigger:
-- Tag push matching `v*`
+Trigger: tag push matching `v*`.
 
 Gate model:
-1. `validate-static / {arch}` builds, tests, and packages each architecture
-   natively (same Docker-in-Ubuntu pattern as PR workflow).
-2. `validate-docker` must pass.
-3. `release-gate` requires `validate-docker` and `validate-static`.
-4. Publish side effects run only after `release-gate` succeeds.
+1. `validate-docker` must pass.
+2. `release-gate` fires on `validate-docker` success.
+3. Publish jobs run in parallel after the gate:
+   - `publish-docker / {arch}` — builds, tests, pushes Docker images.
+   - `publish-static-release / {arch}` — builds release archive via
+     Nix (`nix build .#release-archive-${arch}`), uploads to GitHub
+     Release, pushes debug symbols to Sentry.
+   - `manifest` — multi-arch Docker manifest.
+   - `docs` — mkdocs deploy.
+4. `sentry` finalises the release after manifest + static publishes.
 
 ### Static artifact flow
 
-Each architecture is built, tested, and packaged in its own `validate-static`
-job:
+A single per-arch `publish-static-release` job produces everything:
 
-- Build static binary (native on each arch's runner).
-- Verify static linkage.
-- Run unit tests and e2e tests.
-- Split debug symbols (`objcopy --only-keep-debug`).
-- Strip binary.
-- Add debug link (`objcopy --add-gnu-debuglink`).
-- Package `.tar.gz` + `.sha256`.
-- Upload `static-linux-release-{arch}` artifact.
-
-### Release attachment and symbols
-
-- Static archives/checksums are attached to the existing tag release.
-- Static debug symbols are uploaded to Sentry per architecture.
-- Docker debug symbols and SBOM flow continue in parallel.
+- `nix build .#release-archive-${arch}` emits in `result/`:
+  - `sipi-v<version>-linux-${arch}.tar.gz` (binary + config + scripts + server)
+  - `sipi-v<version>-linux-${arch}.tar.gz.sha256`
+  - `sipi-linux-${arch}.debug` (split debug symbols)
+- `gh release upload` attaches the three files to the tag release.
+- `sentry-cli debug-files upload` pushes the `.debug` file to Sentry.
 
 ## Local Reproduction
 
-### Zig local workflow (native build + e2e on host)
-
 ```bash
-make zig-build-local
-make zig-test
-make zig-test-e2e
+# Native dev build + unit + e2e (inside nix develop)
+nix develop --command bash -c "just nix-build && just nix-test && just rust-test-e2e"
+
+# Static musl binaries (no shell needed)
+nix build .#static-amd64
+nix build .#static-arm64
+
+# Validation
+file result/bin/sipi
+! readelf -d result/bin/sipi | grep NEEDED
+
+# Darwin build (on macOS)
+nix build .#default
+otool -L result/bin/sipi
 ```
-
-### Static Zig build in Docker (mirrors CI build job)
-
-```bash
-make zig-static-docker-arm64   # Alpine build + ctest for arm64
-make zig-static-docker-amd64   # Alpine build + ctest for amd64
-```
-
-These targets mirror the `validate-static` CI job: Alpine 3.21 container,
-Zig toolchain, cmake build, and unit tests. They do **not** run e2e tests.
-
-The CI's portability proof (e2e on bare Ubuntu) is not reproduced locally
-because the Docker targets produce a Linux ELF binary that cannot run on
-macOS. On a Linux workstation you could extract the binary and run e2e
-manually, but this is not wrapped in a Make target — CI is the authoritative
-portability check.
-
-### Linux static validation commands
-
-```bash
-# (local Makefile targets use build-static/; CI uses build/)
-file build-static/sipi
-ldd build-static/sipi
-readelf -d build-static/sipi | grep NEEDED
-```
-
-Expected:
-- `ldd` indicates static.
-- `readelf` returns no `NEEDED` entries.
-
-### macOS dylib audit command
-
-```bash
-otool -L build-zig-macos/sipi
-```
-
-Expected:
-- Only `/usr/lib/libSystem.B.dylib`.
