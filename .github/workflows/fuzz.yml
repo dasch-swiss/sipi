@@ -67,6 +67,8 @@ jobs:
         continue-on-error: true
 
       - name: Build fuzz target (Clang + libFuzzer)
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: |
           nix \
             --extra-experimental-features "nix-command flakes" \
@@ -81,6 +83,7 @@ jobs:
       - name: Run fuzzer
         id: fuzz
         env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           FUZZ_DURATION: ${{ inputs.duration || '600' }}
         run: |
           if [[ ! "$FUZZ_DURATION" =~ ^[0-9]+$ ]]; then echo "Invalid duration: $FUZZ_DURATION"; exit 1; fi

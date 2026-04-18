@@ -14,10 +14,10 @@
 , iconv
 , perl
 , fetchurl
-, kakaduArchive  # Store path to Kakadu zip. Provided by flake.nix via
-                 # builtins.path against vendor/, populated by `just kakadu-fetch`.
-                 # Required — missing archive is an evaluation-time error, not a
-                 # silent Kakadu-less build.
+, kakaduArchive  # Store path to the Kakadu zip. Provided by flake.nix via
+                 # a fixed-output derivation that calls `gh release download`
+                 # against dsp-ci-assets. Requires GH_TOKEN (or a Cachix hit)
+                 # at build time.
 , cmakeBuildType ? "RelWithDebInfo"
 , enableCoverage ? false
 , enableSanitizers ? false
@@ -99,9 +99,9 @@ stdenv.mkDerivation {
   ];
 
   # Kakadu JPEG2000 SDK (proprietary). The flake passes the archive as a
-  # builtins.path (sha256-pinned), populated locally by `just kakadu-fetch`
-  # which downloads it from dsp-ci-assets via the gh CLI.
-  # ext/kakadu expects the archive at this exact path and filename.
+  # sha256-pinned fixed-output derivation that fetches the asset from the
+  # dsp-ci-assets GitHub release. ext/kakadu expects the archive at this
+  # exact path and filename.
   preConfigure = ''
     cp ${kakaduArchive} vendor/v8_5-01382N.zip
   '';

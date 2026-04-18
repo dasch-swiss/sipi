@@ -341,7 +341,8 @@ vendor-checksums:
     @scripts/vendor.sh checksums
 
 # Fetch the proprietary Kakadu archive from dsp-ci-assets release into vendor/.
-# One-time per Kakadu version. Re-run after bumping kakaduAssetName in flake.nix.
+# Only required for the production Dockerfile and local Docker dev builds.
+# Nix builds fetch Kakadu directly via flake.nix's FOD (no vendor/ step).
 # Requires: gh CLI authenticated (org membership = access).
 # In CI: set GH_TOKEN to a PAT with read access to dsp-ci-assets (DASCHBOT_PAT).
 kakadu-fetch:

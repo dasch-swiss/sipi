@@ -3,77 +3,102 @@
 Sipi's JPEG2000 support uses the proprietary **Kakadu SDK**. The SDK is
 not redistributable, so it lives in the private
 [`dasch-swiss/dsp-ci-assets`](https://github.com/dasch-swiss/dsp-ci-assets)
-repo as a release asset and is fetched into `vendor/` on demand. The
-SHA-256 is pinned in `flake.nix`, so Nix builds are fully reproducible
-and verifiable.
+repo as a release asset. The SHA-256 is pinned in `flake.nix`, so
+builds are fully reproducible and verifiable.
 
-## One-time setup (local development)
+Two independent fetch paths exist — one per build system:
 
-A single command using the GitHub CLI:
+| Build system | Fetches Kakadu via | Trigger |
+|---|---|---|
+| Nix (`nix build`, `nix develop`) | Fixed-output derivation in `flake.nix` | Automatic on build |
+| Docker (`Dockerfile`) / local Docker dev | `scripts/fetch-kakadu.sh` into `vendor/` | `just kakadu-fetch` (one-time) |
+
+## Nix builds
+
+Export a GitHub token once per shell, then build normally:
 
 ```bash
-just kakadu-fetch
+export GH_TOKEN=$(gh auth token)
+nix build .#default
 ```
 
-Requirements:
+The flake's fixed-output derivation calls `gh release download` inside
+the Nix sandbox to fetch `v8_5-01382N.zip` from the `kakadu-v8.5` release
+on `dsp-ci-assets`. The derivation is content-addressed by its pinned
+SHA-256, so:
+
+- A hash mismatch fails the build instead of producing a Kakadu-less
+  binary.
+- After the first successful build lands on Cachix, machines with
+  `cachix use dasch-swiss` substitute the output path and never need
+  `GH_TOKEN` again.
+
+Requirements for the first fetch on any given machine:
 
 - Membership in the `dasch-swiss` GitHub organisation
-- `gh auth login` completed
+- `gh auth login` completed (so `gh auth token` returns a usable PAT)
 
-This downloads `vendor/v8_5-01382N.zip` from the `kakadu-v8.5` release
-on `dsp-ci-assets`. After it succeeds, `nix build .#default` (and every
-other Nix build target) just works — no env vars, no flags, no `--impure`.
-
-The recipe is idempotent: re-running it when the file is already present
-is a no-op.
-
-`vendor/v8_5-*.zip` is gitignored (Kakadu is proprietary). Nix's flake
-source filter would ordinarily exclude gitignored files, so the script
-also runs `git add --intent-to-add --force` to make Nix see the file
-without staging it for commit. After running the script the file
-appears as `A` in `git status` — that's expected; the gitignore entry
-still protects against accidental `git add`.
-
-Verify:
+Optional: put the export in a direnv `.envrc` to avoid re-running it:
 
 ```bash
-nix build .#default            # should succeed without --impure
+# .envrc
+use flake
+if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+  export GH_TOKEN=$(gh auth token)
+fi
 ```
+
+## Docker builds
+
+Docker builds need the archive under `vendor/` before the `COPY` step:
+
+```bash
+just kakadu-fetch    # downloads vendor/v8_5-01382N.zip if absent
+just docker-build
+```
+
+The recipe is idempotent; re-running it when the archive is already
+present is a no-op. `vendor/v8_5-*.zip` is gitignored, so the archive
+never enters the commit history.
 
 ## Updating the Kakadu version
 
 1. Publish a new archive on `dsp-ci-assets` (see
    [its `kakadu/README.md`](https://github.com/dasch-swiss/dsp-ci-assets/blob/main/kakadu/README.md))
-2. In `flake.nix`, update `kakaduAssetName` and `kakaduSha256`
-3. Update the `ASSET` and `TAG` constants in `scripts/fetch-kakadu.sh`
-4. Remove the old archive: `rm vendor/v8_5-*.zip`
-5. Re-fetch: `just kakadu-fetch`
-6. Build: `nix build .#default` — a sha256 mismatch means step 2 is wrong
+2. In `flake.nix`, update `kakaduVersion`, `kakaduAssetName`, and `kakaduSha256`
+3. Update `ASSET` and `TAG` in `scripts/fetch-kakadu.sh`
+4. Remove the local archive: `rm vendor/v8_5-*.zip`
+5. Re-build: `nix build .#default` — a SHA-256 mismatch means step 2 is wrong
+6. Docker path: `just kakadu-fetch` to refresh `vendor/`
 7. Commit and open a PR
 
 ## Troubleshooting
 
-| Symptom                                     | Cause                                    | Fix                                              |
-|---------------------------------------------|------------------------------------------|--------------------------------------------------|
-| `gh: command not found`                     | `gh` CLI not installed                   | Install GitHub CLI                               |
-| `release not found` from `gh`               | not authenticated, or no org membership  | `gh auth login`; ask to be added to `dasch-swiss` |
-| `gh: HTTP 404` for the asset                | asset filename or tag wrong              | Check the release on dsp-ci-assets               |
-| Nix: `path … is not a file`                 | `vendor/v8_5-01382N.zip` missing         | `just kakadu-fetch`                              |
-| Nix: `path … has hash X but expected Y`     | local archive content differs from pin   | Verify against `dsp-ci-assets/kakadu/README.md`; if release was replaced (shouldn't happen), update `kakaduSha256` in `flake.nix` |
+| Symptom | Cause | Fix |
+|---|---|---|
+| `gh: command not found` | `gh` CLI not installed | Install GitHub CLI |
+| `release not found` from `gh` | not authenticated, or no org membership | `gh auth login`; ask to be added to `dasch-swiss` |
+| Nix FOD fails with `GH_TOKEN or GITHUB_TOKEN must be set` | Token not exported into the Nix build sandbox | `export GH_TOKEN=$(gh auth token)` and retry |
+| Nix FOD: `hash mismatch` | Release asset replaced or pin out of date | Recompute SHA-256 from the release asset; update `kakaduSha256` in `flake.nix` |
+| Docker build cannot find `vendor/v8_5-01382N.zip` | `just kakadu-fetch` not run | Run it once |
 
 ## CI
 
-Every Nix CI job runs `./scripts/fetch-kakadu.sh` after installing Nix
-and before `nix build`/`nix develop`. The job exports `GH_TOKEN` from
-the org-level `DASCHBOT_PAT` secret so `gh release download` can
-authenticate against the private repo. See `.github/workflows/test.yml`,
-`loadtest.yml`, `sanitizer.yml`, and `fuzz.yml`.
+Every Nix CI step sets `GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}` in its
+`env:` so the FOD can authenticate against the private release. The PAT
+is scoped to read `dsp-ci-assets`. After each successful run, the
+content-addressed FOD output is pushed to Cachix and later runs
+substitute it without hitting `gh`.
+
+Docker publish jobs still run `./scripts/fetch-kakadu.sh` before `docker
+build` to populate `vendor/` for the `COPY` step in the production
+`Dockerfile`.
 
 ## Why not vendor it directly?
 
 - Sipi is a public repo; Kakadu is proprietary — committing it would be a
   licence breach
-- Keeping it in `dsp-ci-assets` keeps the licence-compliance boundary
-  aligned with repo membership
-- Hash-pinning via `builtins.path { sha256 = …; }` gives reproducible,
-  cacheable, pure builds without the 12 MB re-commit churn per version bump
+- Keeping it in `dsp-ci-assets` aligns the licence-compliance boundary
+  with repo membership
+- Hash-pinning in `flake.nix` gives reproducible, cacheable, pure builds
+  without the ~15 MB re-commit churn per version bump

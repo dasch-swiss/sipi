@@ -8,27 +8,73 @@
 
   outputs = { self, nixpkgs, flake-utils, ... }:
     let
-      # Kakadu archive (proprietary). Fetched from dsp-ci-assets release by
-      # `just kakadu-fetch` into vendor/ before the first build. The sha256
-      # pin makes the build deterministic; a content mismatch fails fast at
-      # eval time instead of producing a silently-different binary.
+      # Kakadu archive (proprietary). Fetched by a fixed-output derivation
+      # (FOD) from the dsp-ci-assets GitHub release via `gh release
+      # download`. The sha256 pin makes the build deterministic; a content
+      # mismatch fails the FOD instead of producing a silently-different
+      # binary.
+      #
+      # Local dev: export GH_TOKEN=$(gh auth token) once per shell.
+      # CI:        env: { GH_TOKEN: ${secrets.DASCHBOT_PAT} } per Nix step.
+      # After the first successful build lands in Cachix, downstream
+      # consumers substitute the content-addressed output and never need
+      # a token.
+      #
       # Bump procedure:
-      #   1. Update kakaduAssetName + kakaduSha256 here
-      #   2. rm vendor/v8_5-*.zip && just kakadu-fetch
-      #   3. nix build .#default
+      #   1. Update kakaduVersion, kakaduAssetName, kakaduSha256 here.
+      #   2. nix build .#default   (FOD re-fetches on hash change)
+      kakaduVersion   = "v8.5";
       kakaduAssetName = "v8_5-01382N.zip";
       kakaduSha256    = "c19c7579d1dee023316e7de090d9de3eb24764e349b4069e5af3a540fb644e75";
 
-      mkKakaduArchive = builtins.path {
-        path = ./vendor/${kakaduAssetName};
+      mkKakaduArchive = pkgs: pkgs.stdenv.mkDerivation {
         name = kakaduAssetName;
-        recursive = false;  # flat file hash, not NAR hash
-        sha256 = kakaduSha256;
+
+        outputHashMode = "flat";
+        outputHashAlgo = "sha256";
+        outputHash     = kakaduSha256;
+
+        nativeBuildInputs = [ pkgs.gh pkgs.cacert ];
+
+        impureEnvVars = [ "GH_TOKEN" "GITHUB_TOKEN" ]
+          ++ pkgs.lib.fetchers.proxyImpureEnvVars;
+
+        dontUnpack = true;
+        dontInstall = true;
+
+        buildPhase = ''
+          runHook preBuild
+
+          # gh writes transient state to $XDG_CONFIG_HOME/gh even with
+          # GH_TOKEN set; /homeless-shelter is read-only in the Nix
+          # sandbox, so redirect.
+          export HOME=$TMPDIR
+          export XDG_CONFIG_HOME=$TMPDIR/.config
+          mkdir -p "$XDG_CONFIG_HOME/gh"
+
+          # Go's TLS needs a cert bundle; /etc/ssl is not in the sandbox.
+          export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+
+          if [ -z "''${GH_TOKEN:-}" ] && [ -z "''${GITHUB_TOKEN:-}" ]; then
+            echo "error: GH_TOKEN or GITHUB_TOKEN must be set to fetch Kakadu" >&2
+            echo "  local dev: export GH_TOKEN=\$(gh auth token)" >&2
+            echo "  CI:        env: { GH_TOKEN: \''${{ secrets.DASCHBOT_PAT }} }" >&2
+            exit 1
+          fi
+
+          gh release download "kakadu-${kakaduVersion}" \
+            --repo dasch-swiss/dsp-ci-assets \
+            --pattern '${kakaduAssetName}' \
+            --output $out
+
+          runHook postBuild
+        '';
       };
 
       overlay = final: prev: {
+        kakaduArchive = mkKakaduArchive final;
         sipi = prev.callPackage ./package.nix {
-          kakaduArchive = mkKakaduArchive;
+          inherit (final) kakaduArchive;
         };
       };
     in
@@ -73,8 +119,9 @@
 
         isLinux = pkgs.stdenv.isLinux;
 
-        # Kakadu archive for static/Docker builds that bypass the overlay.
-        kakaduArchive = mkKakaduArchive;
+        # Kakadu archive (FOD from dsp-ci-assets release). Provided by the
+        # overlay; reused directly here for mkStaticBuild.
+        kakaduArchive = pkgs.kakaduArchive;
 
         # ── Static builds (Linux only, Zig-in-Nix) ──────────────────────
         mkStaticBuild = { arch, zigTarget }: pkgs.stdenv.mkDerivation {
@@ -175,6 +222,11 @@
           # Default: RelWithDebInfo, Clang/libc++, separateDebugInfo
           #   Debug symbols via: nix build .#default.debug
           default = pkgs.sipi;
+
+          # Kakadu archive FOD (cached by content hash after first fetch).
+          # Exposed so `nix build .#kakaduArchive` can pre-populate the
+          # store in isolation, and so `nix flake check` covers it.
+          kakaduArchive = pkgs.kakaduArchive;
 
           # Debug build with coverage instrumentation
           dev = pkgs.sipi.override {
