@@ -49,11 +49,14 @@ jobs:
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
       - name: Build with sanitizers (ASan + UBSan)
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: |
           nix develop --command bash -c "just nix-build-sanitized"
 
       - name: Run unit tests under sanitizers
         env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=0:log_path=/tmp/asan-unit
           LSAN_OPTIONS: suppressions=${{ github.workspace }}/.lsan_suppressions.txt
         run: |
@@ -61,6 +64,7 @@ jobs:
 
       - name: Run e2e tests under sanitizers
         env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=0:log_path=/tmp/asan-e2e
           LSAN_OPTIONS: suppressions=${{ github.workspace }}/.lsan_suppressions.txt
         run: |

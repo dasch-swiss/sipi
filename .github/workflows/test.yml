@@ -62,13 +62,19 @@ jobs:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
       - name: Build and test (unit)
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: |
           nix develop --command bash -c "just nix-build && just nix-test"
       - name: Rust e2e and Hurl tests
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: |
           nix develop --command bash -c "just rust-test-e2e && just hurl-test"
       - name: Gather code coverage
         if: ${{ matrix.arch == 'amd64' }}
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: |
           nix develop --command bash -c "just nix-coverage"
       - name: Upload coverage reports to Codecov

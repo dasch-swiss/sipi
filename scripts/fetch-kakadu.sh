@@ -2,6 +2,9 @@
 # Fetch the proprietary Kakadu archive from dsp-ci-assets release into vendor/.
 # Idempotent: skips download if the file is already present.
 #
+# Only used by the production Dockerfile and local Docker dev builds.
+# Nix builds fetch Kakadu directly via flake.nix's FOD — no vendor/ step.
+#
 # Local: requires `gh auth login` and dasch-swiss org membership.
 # CI: set GH_TOKEN to a PAT with read access to dsp-ci-assets (DASCHBOT_PAT).
 #
@@ -28,12 +31,4 @@ if [ ! -f "$DEST" ]; then
     echo "$DEST downloaded ($(wc -c < "$DEST") bytes)"
 else
     echo "$DEST already present — skipping download"
-fi
-
-# Nix flake source filtering excludes gitignored files (see .gitignore:
-# "vendor/v8_5-*.zip"). Use git's intent-to-add to make the file visible to
-# Nix's flake source without staging it for commit. The file is still
-# protected by the gitignore entry against accidental `git add`.
-if [ -d .git ] || git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    git add --intent-to-add --force "$DEST"
 fi

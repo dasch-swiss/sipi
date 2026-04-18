@@ -43,10 +43,14 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y wrk
 
       - name: Build sipi
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: |
           nix develop --command bash -c "just nix-build"
 
       - name: Start sipi server
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: |
           nix \
             --extra-experimental-features "nix-command flakes" \
