@@ -54,6 +54,11 @@ private:
   shttps::Connection *conobj;
 
 public:
+  //! Set when write()/close() fails because the peer closed the socket.
+  //! Read from the top-level SipiIOJ2k::write error handler to distinguish
+  //! client aborts from genuine Kakadu failures.
+  bool client_aborted{ false };
+
   J2kHttpStream(shttps::Connection *conobj_p);
 
   ~J2kHttpStream();
@@ -96,7 +101,8 @@ bool J2kHttpStream::write(const kdu_byte *buf, int num_bytes)
 {
   try {
     conobj->sendAndFlush(buf, num_bytes);
-  } catch (int i) {
+  } catch (int) {
+    if (!conobj->peerConnected()) client_aborted = true;
     return false;
   }
   return true;
@@ -107,7 +113,8 @@ bool J2kHttpStream::close()
 {
   try {
     conobj->flush();
-  } catch (int i) {
+  } catch (int) {
+    if (!conobj->peerConnected()) client_aborted = true;
     return false;
   }
   return true;
@@ -770,6 +777,10 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
 
   if ((num_threads = kdu_get_num_processors()) < 2) num_threads = 0;
 
+  // Declared outside the try so the catch below can read `http->client_aborted`
+  // to distinguish client aborts from genuine Kakadu failures.
+  std::unique_ptr<J2kHttpStream> http;
+
   try {
     // Construct code-stream object
     siz_params siz;
@@ -818,11 +829,10 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
 
     jp2_family_tgt jp2_ultimate_tgt;
 
-    J2kHttpStream *http = nullptr;
     if (filepath == "HTTP") {
       shttps::Connection *conobj = img->connection();
-      http = new J2kHttpStream(conobj);
-      jp2_ultimate_tgt.open(http, &membroker);
+      http = std::make_unique<J2kHttpStream>(conobj);
+      jp2_ultimate_tgt.open(http.get(), &membroker);
     } else {
       jp2_ultimate_tgt.open(filepath.c_str(), &membroker);
     }
@@ -1264,8 +1274,10 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
       delete[] precisions;
       delete[] is_signed;
     }
-    if (http != nullptr) { delete http; }
   } catch (kdu_exception e) {
+    if (http && http->client_aborted) {
+      throw SipiImageClientAbortError("Client aborted HTTP response during JPEG2000 write");
+    }
     throw SipiImageError("Failed writing JPEG2000 image (Kakadu exception " + std::to_string(e) + ")"
       + ", file=" + filepath
       + ", dimensions=" + std::to_string(img->nx) + "x" + std::to_string(img->ny)

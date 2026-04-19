@@ -2089,6 +2089,16 @@ static void serve_iiif(Connection &conn_obj,
     capture_image_error(err.to_string(), "write", sentry_ctx, SipiMode::Server);
     send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
     return;
+  } catch (Sipi::SipiImageClientAbortError &) {
+    // Client closed the socket mid-response (matches Traefik HTTP 499).
+    // Not a server error: no Sentry capture, no response (the peer is gone).
+    if (cache != nullptr) {
+      conn_obj.closeCacheFile();
+      unlink(cachefile.c_str());
+    }
+    log_info("Client aborted HTTP response for %s", uri.c_str());
+    SipiMetrics::instance().client_disconnected_total.Increment();
+    return;
   } catch (Sipi::SipiImageError &err) {
     if (cache != nullptr) {
       conn_obj.closeCacheFile();
