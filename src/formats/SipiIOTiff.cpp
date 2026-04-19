@@ -1739,7 +1739,11 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
       try {
         img->connection()->sendAndFlush(memtif->data, memtif->flen);
       } catch (int i) {
+        const bool client_aborted = !img->connection()->peerConnected();
         memTiffFree(memtif);
+        if (client_aborted) {
+          throw Sipi::SipiImageClientAbortError("Client aborted HTTP response during TIFF write");
+        }
         throw Sipi::SipiImageError("Sending data failed! Broken pipe?: " + filepath + " !");
       }
     } else {

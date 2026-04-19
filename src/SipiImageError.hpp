@@ -13,9 +13,23 @@
 namespace Sipi {
 
 /*!
- * This class implements the error handling for the different image formats.
+ * Base class for image-format errors. Subclass this (not `final` — intentional)
+ * to model distinct failure modes as types. The HTTP handler and other catch
+ * sites dispatch by type, so a dedicated subclass is the cheapest way to give
+ * an error a different policy (Sentry capture, HTTP status, client message).
+ *
+ * Pattern for new subclasses:
+ *   - Inherit publicly from `SipiImageError`
+ *   - `using SipiImageError::SipiImageError;` to forward constructors (leaf types
+ *     with no extra state); define explicit constructors if carrying a payload
+ *   - Mark the subclass `final` unless it is itself a further base
+ *   - Place the new `catch (MyError &)` BEFORE `catch (SipiImageError &)` at
+ *     every call site (derived-most first)
+ *
+ * See `docs/src/development/error-model.md` for the full catalog and policy
+ * mapping (HTTP status, Sentry capture, client-facing message).
  */
-class SipiImageError final : public std::exception
+class SipiImageError : public std::exception
 {
 
 public:
@@ -93,6 +107,18 @@ private:
   int errnum_;//!< error number if a system call is the reason for the error
   std::source_location location_;//!< Source location where the error occurs
   std::string fullerrmsg_;
+};
+
+/*!
+ * Signals that a write to an HTTP response failed because the client closed
+ * the connection before we finished sending. Detected at the write site via
+ * shttps::Connection::peerConnected(). The HTTP handler uses the distinct
+ * type to skip Sentry capture — these are not server-side errors.
+ */
+class SipiImageClientAbortError final : public SipiImageError
+{
+public:
+  using SipiImageError::SipiImageError;
 };
 }// namespace Sipi
 

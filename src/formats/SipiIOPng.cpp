@@ -412,13 +412,26 @@ void create_text_chunk(PngTextPtr *png_textptr, char *key, char *str, unsigned i
 
 /*==========================================================================*/
 
+/*!
+ * Context passed as the libpng I/O pointer for HTTP writes.
+ * The `client_aborted` flag is set when a send/flush fails because the
+ * peer closed the socket; the top-level setjmp handler reads it to
+ * distinguish client aborts from genuine write errors.
+ */
+struct PngHttpCtx
+{
+  shttps::Connection *conn;
+  bool client_aborted;
+};
+
 static void conn_write_data(png_structp png_ptr, png_bytep data, png_size_t length)
 {
-  shttps::Connection *conn = (shttps::Connection *)png_get_io_ptr(png_ptr);
+  auto *ctx = static_cast<PngHttpCtx *>(png_get_io_ptr(png_ptr));
 
   try {
-    conn->sendAndFlush(data, length);
+    ctx->conn->sendAndFlush(data, length);
   } catch (...) {
+    if (!ctx->conn->peerConnected()) ctx->client_aborted = true;
     // Signal error via libpng's error mechanism → sipi_error_fn → longjmp
     png_error(png_ptr, "HTTP write failed");
   }
@@ -428,11 +441,12 @@ static void conn_write_data(png_structp png_ptr, png_bytep data, png_size_t leng
 
 static void conn_flush_data(png_structp png_ptr)
 {
-  shttps::Connection *conn = (shttps::Connection *)png_get_io_ptr(png_ptr);
+  auto *ctx = static_cast<PngHttpCtx *>(png_get_io_ptr(png_ptr));
 
   try {
-    conn->flush();
+    ctx->conn->flush();
   } catch (...) {
+    if (!ctx->conn->peerConnected()) ctx->client_aborted = true;
     png_error(png_ptr, "HTTP flush failed");
   }
 }
@@ -448,10 +462,14 @@ void SipiIOPng::write(SipiImage *img, const std::string &filepath, const SipiCom
     throw SipiImageError("Error writing PNG file \"" + filepath + "\": png_create_write_struct failed !");
   }
 
+  // HTTP write context: kept on the stack so its address is valid for the
+  // lifetime of SipiIOPng::write. The address is stable across longjmp.
+  PngHttpCtx http_ctx{ img->connection(), false };
+
   if (filepath == "stdout:") {
     outfile = stdout;
   } else if (filepath == "HTTP") {
-    png_set_write_fn(png_ptr, img->connection(), conn_write_data, conn_flush_data);
+    png_set_write_fn(png_ptr, &http_ctx, conn_write_data, conn_flush_data);
   } else {
     if (!(outfile = fopen(filepath.c_str(), "wb"))) {
       png_free_data(png_ptr, nullptr, PNG_FREE_ALL, -1);
@@ -470,6 +488,9 @@ void SipiIOPng::write(SipiImage *img, const std::string &filepath, const SipiCom
   if (setjmp(png_jmpbuf(png_ptr))) {
     png_destroy_write_struct(&png_ptr, &info_ptr);
     if (outfile != nullptr && outfile != stdout) fclose(outfile);
+    if (http_ctx.client_aborted) {
+      throw SipiImageClientAbortError("Client aborted HTTP response during PNG write");
+    }
     throw SipiImageError("PNG write failed for \"" + filepath + "\"");
   }
 

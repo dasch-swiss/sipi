@@ -290,21 +290,33 @@ static void jpeg_file_src(struct jpeg_decompress_struct *cinfo, int file_id)
  * Struct that is used to hold the variables for defining the
  * private I/O routines which are used to write the the HTTP socket
  */
-typedef struct HtmlBuffer
+/*!
+ * Context for libjpeg's HTTP destination manager. Owned by the caller of
+ * SipiIOJpeg::write via std::unique_ptr declared *before* the setjmp(); that
+ * placement keeps the destructor on the normal C++ unwind path when we throw
+ * from the setjmp handler, avoiding the longjmp-skips-destructors UB that
+ * forced the previous malloc-based design.
+ */
+struct HtmlBuffer
 {
-  JOCTET *buffer;//!< Buffer for holding data to be written out
-  size_t buflen;//!< length of the buffer
-  shttps::Connection *conobj;//!< Pointer to the connection objects
-} HtmlBuffer;
+  explicit HtmlBuffer(shttps::Connection *conn, size_t buflen_p = 65536)
+    : buffer(std::make_unique<JOCTET[]>(buflen_p)), buflen(buflen_p), conobj(conn)
+  {}
+
+  std::unique_ptr<JOCTET[]> buffer;
+  size_t buflen;
+  shttps::Connection *conobj;
+  bool client_aborted{ false };
+};
 
 /*!
  * Function which initializes the structures for managing the IO
  */
 static void init_html_destination(j_compress_ptr cinfo)
 {
-  auto *html_buffer = (HtmlBuffer *)cinfo->client_data;
+  auto *html_buffer = static_cast<HtmlBuffer *>(cinfo->client_data);
   cinfo->dest->free_in_buffer = html_buffer->buflen;
-  cinfo->dest->next_output_byte = html_buffer->buffer;
+  cinfo->dest->next_output_byte = html_buffer->buffer.get();
 }
 
 //=============================================================================
@@ -314,22 +326,24 @@ static void init_html_destination(j_compress_ptr cinfo)
  */
 static boolean empty_html_buffer(j_compress_ptr cinfo)
 {
-  auto *html_buffer = (HtmlBuffer *)cinfo->client_data;
+  auto *html_buffer = static_cast<HtmlBuffer *>(cinfo->client_data);
+  std::string err_msg;
   try {
-    html_buffer->conobj->sendAndFlush(html_buffer->buffer, html_buffer->buflen);
+    html_buffer->conobj->sendAndFlush(html_buffer->buffer.get(), html_buffer->buflen);
+    cinfo->dest->free_in_buffer = html_buffer->buflen;
+    cinfo->dest->next_output_byte = html_buffer->buffer.get();
+    return static_cast<boolean>(true);
   } catch (const std::exception &e) {
-    log_err("JPEG HTTP write failed: %s", e.what());
-    ERREXIT(cinfo, JERR_FILE_WRITE);  // triggers jpegErrorExit → longjmp
-    return FALSE;  // unreachable
+    err_msg = e.what();
   } catch (...) {
-    log_err("JPEG HTTP write failed: unknown error");
-    ERREXIT(cinfo, JERR_FILE_WRITE);
-    return FALSE;  // unreachable
+    // sendAndFlush throws the bare shttps::OUTPUT_WRITE_FAIL enum — not derived
+    // from std::exception, so it reaches this branch.
+    err_msg = "unknown error";
   }
-  cinfo->dest->free_in_buffer = html_buffer->buflen;
-  cinfo->dest->next_output_byte = html_buffer->buffer;
-
-  return static_cast<boolean>(true);
+  if (!html_buffer->conobj->peerConnected()) html_buffer->client_aborted = true;
+  log_err("JPEG HTTP write failed: %s", err_msg.c_str());
+  ERREXIT(cinfo, JERR_FILE_WRITE);  // triggers jpegErrorExit → longjmp
+  return FALSE;  // unreachable
 }
 
 //=============================================================================
@@ -339,63 +353,38 @@ static boolean empty_html_buffer(j_compress_ptr cinfo)
  */
 static void term_html_destination(j_compress_ptr cinfo)
 {
-  auto *html_buffer = (HtmlBuffer *)cinfo->client_data;
-  size_t nbytes = cinfo->dest->next_output_byte - html_buffer->buffer;
+  auto *html_buffer = static_cast<HtmlBuffer *>(cinfo->client_data);
+  const size_t nbytes = cinfo->dest->next_output_byte - html_buffer->buffer.get();
+  std::string err_msg;
   try {
-    html_buffer->conobj->sendAndFlush(html_buffer->buffer, nbytes);
+    html_buffer->conobj->sendAndFlush(html_buffer->buffer.get(), nbytes);
+    return;
   } catch (const std::exception &e) {
-    log_err("JPEG HTTP write (term) failed: %s", e.what());
-    ERREXIT(cinfo, JERR_FILE_WRITE);
-    return;  // unreachable
+    err_msg = e.what();
   } catch (...) {
-    log_err("JPEG HTTP write (term) failed: unknown error");
-    ERREXIT(cinfo, JERR_FILE_WRITE);
-    return;  // unreachable
+    err_msg = "unknown error";
   }
-
-  free(html_buffer->buffer);
-  free(html_buffer);
-  cinfo->client_data = nullptr;
-
-  free(cinfo->dest);
-  cinfo->dest = nullptr;
-}
-
-//=============================================================================
-
-static void cleanup_html_destination(j_compress_ptr cinfo)
-{
-  auto *html_buffer = (HtmlBuffer *)cinfo->client_data;
-  free(html_buffer->buffer);
-  free(html_buffer);
-  cinfo->client_data = nullptr;
-
-  free(cinfo->dest);
-  cinfo->dest = nullptr;
+  if (!html_buffer->conobj->peerConnected()) html_buffer->client_aborted = true;
+  log_err("JPEG HTTP write (term) failed: %s", err_msg.c_str());
+  ERREXIT(cinfo, JERR_FILE_WRITE);
+  // unreachable
 }
 
 //=============================================================================
 
 /*!
- * This function is used to setup the I/O destination to the HTTP socket
+ * Wire libjpeg's destination callbacks to the caller-owned HtmlBuffer and
+ * destination-manager objects. Ownership of both stays with the caller's
+ * std::unique_ptrs — this function only installs pointers into `cinfo`.
  */
-static void jpeg_html_dest(struct jpeg_compress_struct *cinfo, shttps::Connection *conobj)
+static void jpeg_html_dest(struct jpeg_compress_struct *cinfo,
+                           HtmlBuffer *html_buffer,
+                           jpeg_destination_mgr *destmgr)
 {
-  struct jpeg_destination_mgr *destmgr;
-  HtmlBuffer *html_buffer;
-  cinfo->client_data = malloc(sizeof(HtmlBuffer));
-  html_buffer = (HtmlBuffer *)cinfo->client_data;
-
-  html_buffer->buffer = (JOCTET *)malloc(65536 * sizeof(JOCTET));
-  html_buffer->buflen = 65536;
-  html_buffer->conobj = conobj;
-
-  destmgr = (struct jpeg_destination_mgr *)malloc(sizeof(struct jpeg_destination_mgr));
-
+  cinfo->client_data = html_buffer;
   destmgr->init_destination = init_html_destination;
   destmgr->empty_output_buffer = empty_html_buffer;
   destmgr->term_destination = term_html_destination;
-
   cinfo->dest = destmgr;
 }
 
@@ -1075,6 +1064,12 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   // FdGuard for outfile — constructed before setjmp. Its destructor runs
   // during the C++ stack unwinding from the throw SipiImageError after longjmp.
   FdGuard outfile_guard(-1);
+  // HTTP destination owned by the caller via unique_ptr. Declared before
+  // setjmp so destructors are on the normal C++ unwind path when we throw
+  // from the setjmp handler (longjmp would skip destructors of objects
+  // constructed *between* setjmp and longjmp — these live outside that window).
+  std::unique_ptr<HtmlBuffer> html_buffer;
+  std::unique_ptr<jpeg_destination_mgr> destmgr;
   JSAMPROW row_pointer[1];
   int row_stride;
   bool is_http = (filepath == "HTTP");
@@ -1093,17 +1088,19 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   //
   if (setjmp(jerr.error_jmp)) {
     // longjmp landed here — clean up and throw in C++ context
-    if (is_http) {
-      cleanup_html_destination(&cinfo);
-    }
+    const bool client_aborted = html_buffer && html_buffer->client_aborted;
     jpeg_destroy_compress(&cinfo);
-    // outfile_guard destructor closes fd during throw unwinding
+    // html_buffer / destmgr / outfile_guard destructors run during throw unwinding
+    if (client_aborted) {
+      throw SipiImageClientAbortError("Client aborted HTTP response during JPEG write");
+    }
     throw SipiImageError("JPEG write failed: " + std::string(jerr.error_message));
   }
 
   if (is_http) {
-    shttps::Connection *conobj = img->connection();
-    jpeg_html_dest(&cinfo, conobj);
+    html_buffer = std::make_unique<HtmlBuffer>(img->connection());
+    destmgr = std::make_unique<jpeg_destination_mgr>();
+    jpeg_html_dest(&cinfo, html_buffer.get(), destmgr.get());
   } else {
     if (filepath == "stdout:") {
       jpeg_stdio_dest(&cinfo, stdout);
