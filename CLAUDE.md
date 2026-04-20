@@ -127,6 +127,17 @@ Follow [`docs/src/development/cpp-style-guide.md`](docs/src/development/cpp-styl
 - **const correctness:** Apply `const` everywhere it is valid
 - **Legacy code:** When modifying existing code, apply modernization opportunistically (see style guide Section 4)
 
+## Scope discipline
+
+Rules for what to build (not how). Follow unless the user explicitly asks to override.
+
+- **No backwards-compatibility shims.** Update every caller in the same change. Do not leave deprecated aliases, renamed-variable pointers, re-exports, or "keep the old name for now" comments. This repo uses rebase-merge, not squash; history preserves the reasoning.
+- **No defense-in-depth.** Validate at system boundaries only — HTTP request handlers, FFI boundaries (C library calls), user-facing CLI parsers. See `REVIEW.md` §"Security (input validation)" for what qualifies. No redundant null checks, double validation, or `try`/`catch` around code that can't fail under the current contract.
+- **No enterprise abstractions — KISS.** Prefer three similar lines over one parameterized helper. Prefer a concrete type over a trait/interface with a single implementation. Introduce an abstraction only for a second *real* caller, not a hypothetical one.
+- **Ask when in doubt.** If a task is ambiguous, if two reasonable approaches exist, or if a new pattern/file/dep feels load-bearing, surface the decision to the user before acting. "Suggest, don't decide" is the default; autonomy is granted explicitly per-task.
+
+These are not style preferences — they are contract with the maintainer. Code that violates them is code the maintainer did not ask for.
+
 ## Development Notes
 
 **Compiler Requirements:** C++23, Clang >= 15.0 or GCC >= 13.0, CMake >= 3.28
