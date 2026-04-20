@@ -52,16 +52,36 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: |
+          # exec replaces the inner bash with sipi so the tracked PID is sipi's
+          # wrapper (nix develop's direct child), not a throwaway shell.
           nix \
             --extra-experimental-features "nix-command flakes" \
             --option filter-syscalls false \
             develop --command bash -c \
-              "cd test/_test_data && ../../build/sipi --config config/sipi.e2e-test-config.lua &"
-          # Wait for server readiness
+              "cd test/_test_data && exec ../../build/sipi --config config/sipi.e2e-test-config.lua" \
+            > sipi.log 2>&1 &
+          SIPI_PID=$!
+          echo "$SIPI_PID" > sipi.pid
+          echo "Started sipi (wrapper PID $SIPI_PID)"
+
+          # Fail fast: if the wrapper exits before readiness, dump the log and abort.
           for i in $(seq 1 30); do
-            curl -sf http://127.0.0.1:1024/unit/lena512.jp2/info.json > /dev/null 2>&1 && break
+            if ! kill -0 "$SIPI_PID" 2>/dev/null; then
+              echo "::error::sipi exited before becoming ready (after ${i}s)"
+              cat sipi.log
+              exit 1
+            fi
+            if curl -sf http://127.0.0.1:1024/unit/lena512.jp2/info.json > /dev/null 2>&1; then
+              echo "sipi ready after ${i}s"
+              exit 0
+            fi
             sleep 1
           done
+
+          echo "::error::sipi did not become ready within 30s"
+          cat sipi.log
+          kill "$SIPI_PID" 2>/dev/null || true
+          exit 1
 
       - name: Run load tests
         run: |
@@ -94,7 +114,19 @@ jobs:
 
       - name: Stop sipi server
         if: always()
-        run: pkill -f "sipi.*e2e-test-config" || true
+        run: |
+          if [ -f sipi.pid ]; then
+            SIPI_PID=$(cat sipi.pid)
+            pkill -TERM -P "$SIPI_PID" 2>/dev/null || true
+            kill  -TERM    "$SIPI_PID" 2>/dev/null || true
+            for i in $(seq 1 5); do
+              kill -0 "$SIPI_PID" 2>/dev/null || break
+              sleep 1
+            done
+            kill -KILL "$SIPI_PID" 2>/dev/null || true
+          fi
+          # Fallback: name-match in case the PID chain was broken by nix develop.
+          pkill -f "sipi.*e2e-test-config" 2>/dev/null || true
 
       - name: Upload load test results
         if: always()
@@ -103,3 +135,11 @@ jobs:
           name: loadtest-results
           retention-days: 90
           path: loadtest-results/
+
+      - name: Upload sipi startup log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sipi-server-log
+          retention-days: 30
+          path: sipi.log
