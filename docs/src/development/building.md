@@ -64,7 +64,7 @@ All dependency metadata (version, URL, SHA-256 hash) is centralized in
 2. Run `just vendor-download` to fetch the new archive
 3. Run `just vendor-checksums` and update `DEP_<NAME>_SHA256` in the manifest
 4. Run `just vendor-verify` to confirm
-5. Clean build and test: `rm -rf build && nix develop --command bash -c "just nix-build && just nix-test"`
+5. Clean build and test: `just clean && just nix-build` (unit tests run inside the Nix sandbox via `doCheck = enableTests`)
 
 ### Adding a new dependency
 
@@ -76,70 +76,20 @@ All dependency metadata (version, URL, SHA-256 hash) is centralized in
 
 ## Building with Nix (Recommended)
 
-`nix` is the single entry point for every Sipi build artifact (dev binary,
-static binary, Docker image, debug symbols). It is reproducible, hermetic,
-and shares its dependency cache with CI via Cachix.
+Nix is the single entry point for every Sipi build artifact — dev
+binary, static binary, Docker image, debug symbols. It's reproducible,
+hermetic, and shares its dependency cache with CI via Cachix.
 
-### One-time setup
+Full setup and usage: **[Building with Nix](nix.md)** (primer,
+one-time setup, all variants, dev-shell inner loop, cross-platform
+builds).
 
-1. [Install Nix](https://nixos.org/download.html) (or use
-   [Determinate Nix](https://docs.determinate.systems/))
-2. Fetch the Kakadu archive: `just kakadu-fetch` (see
-   [Kakadu setup](kakadu.md))
-3. (Optional) Add the shared binary cache:
-
-   ```bash
-   cachix use dasch-swiss
-   ```
-
-   This pulls pre-built `ext/` dependencies from CI, reducing first-build
-   time from ~15 min to ~2 min.
-
-### Build artifacts
+Most common commands:
 
 ```bash
-# Default: RelWithDebInfo binary with separate debug symbols.
-nix build .#default
-nix build .#default.debug      # extracted symbols at result/lib/debug/...
-
-# Debug build with coverage instrumentation.
-nix build .#dev
-
-# Release build, unstripped (for manual distribution).
-nix build .#release
-
-# Static Linux binaries (Linux runners only).
-nix build .#static-amd64
-nix build .#static-arm64
-
-# Release archives (.tar.gz + .sha256 + .debug).
-nix build .#release-archive-amd64
-nix build .#release-archive-arm64
-
-# Docker images (Linux runners only).
-nix build .#docker             # writes to /nix/store
-just nix-docker-build          # streams into the local Docker daemon
-```
-
-### Dev shell + iterative build
-
-For day-to-day work, `nix develop` provides the full toolchain (clang19
-+ libc++, cmake, autoconf, just, gcovr, lcov, hurl, …):
-
-```bash
-nix develop                    # default = clang
-nix develop .#fuzz             # libstdc++ for libFuzzer ABI
-nix develop .#gcc              # gcc14Stdenv
-
-# Inside the shell:
-just nix-build                 # debug + coverage build into ./build/
-just nix-test                  # GoogleTest unit + ApprovalTests
-just rust-test-e2e             # Rust e2e harness
-just hurl-test                 # Hurl HTTP contract tests
-just nix-coverage              # XML coverage report (Codecov format)
-just nix-coverage-html         # HTML coverage report (lcov)
-just nix-run                   # start sipi against the default config
-just nix-valgrind              # run sipi under valgrind
+just nix-build                 # .#dev: Debug + coverage, tests in sandbox
+just nix-build-default         # .#default: RelWithDebInfo + tests
+just nix-build-sanitized       # .#sanitized: ASan + UBSan
 ```
 
 ## Building with Docker
@@ -161,38 +111,10 @@ just docker-test-build-amd64
 just docker-test-build-arm64
 ```
 
-## Static Linux binaries
+## Building on macOS without Nix (Not Recommended)
 
-Static musl binaries are produced by the Nix flake via a Zig-based
-toolchain (`cmake/zig-toolchain.cmake`). No Zig install is needed on
-the host — Zig ships inside the Nix dev shell and is invoked by
-`mkStaticBuild` in `flake.nix`.
-
-```bash
-nix build .#static-amd64        # x86_64-linux-musl
-nix build .#static-arm64        # aarch64-linux-musl
-nix build .#release-archive-amd64
-nix build .#release-archive-arm64
-```
-
-Validation:
-
-```bash
-file result/bin/sipi
-! readelf -d result/bin/sipi | grep '(NEEDED)'
-```
-
-## Building on macOS without Nix or Zig (Not Recommended)
-
-Building directly on macOS without Nix is unsupported but possible:
-
-```bash
-mkdir -p ./build-mac && cd build-mac && cmake .. && make && ctest --verbose
-```
-
-You will need CMake and a C++23-compatible compiler. All library
-dependencies (including OpenSSL, libcurl, libmagic) are built from
-source automatically by the build system.
+Building directly on macOS without Nix is unsupported. Use `just nix-build`
+or the dev-shell inner loop (see above) instead.
 
 ## All `just` targets
 
@@ -203,21 +125,26 @@ Run `just` (no arguments) to see the full list. Key target groups:
 | `docker-build` | Build Docker image locally |
 | `docker-test-build-{amd64,arm64}` | Build + test for specific architecture |
 | `test-smoke` | Run smoke tests against the Docker image |
-| `nix-build` | Build SIPI natively (debug + coverage) — inside `nix develop` |
-| `nix-test` | Run unit tests |
-| `rust-test-e2e` | Run Rust end-to-end tests |
-| `hurl-test` | Run Hurl HTTP contract tests |
-| `nix-coverage` | Generate XML coverage report |
-| `nix-coverage-html` | Generate HTML coverage report |
-| `nix-run` | Run SIPI server |
-| `nix-valgrind` | Run with Valgrind |
-| `nix-build-release` | Run `nix build .#default` |
-| `nix-build-static-{amd64,arm64}` | Run `nix build .#static-{amd64,arm64}` |
-| `nix-docker-build` | Stream `nix build .#docker-stream` into local Docker daemon |
+| `nix-build` | `.#dev` — Debug + coverage; unit tests run in the Nix sandbox |
+| `nix-build-default` | `.#default` — RelWithDebInfo + tests |
+| `nix-build-release` | `.#release` — stripped, no tests |
+| `nix-build-sanitized` | `.#sanitized` — Debug + ASan + UBSan |
+| `nix-build-fuzz` | `.#fuzz` — libFuzzer harness binary only |
+| `nix-build-static-{amd64,arm64}` | `.#static-{amd64,arm64}` — Zig-in-Nix musl |
+| `nix-build-release-archive-{amd64,arm64}` | `.#release-archive-{amd64,arm64}` — tarball + sha256 + debug |
+| `nix-coverage` | `.#dev^coverage` — writes `result-coverage/coverage.xml` |
+| `nix-docker-build` | Stream `.#docker-stream` into local Docker daemon |
+| `nix-static-linkage-verify path` | Verify a Linux static binary has no NEEDED entries |
+| `nix-macos-dylib-audit path` | Audit macOS sipi runtime dylibs |
+| `rust-test-e2e` | Rust end-to-end tests (reads `$SIPI_BIN`) |
+| `hurl-test` | Hurl HTTP contract tests (reads `$SIPI_BIN`) |
+| `nix-run` | Run sipi with the dev config |
+| `nix-valgrind` | Run sipi under Valgrind |
+| `nix-run-fuzz corpus duration [seed]` | Run libFuzzer harness against a corpus |
 | `vendor-download` | Download all dependency archives to `vendor/` |
 | `vendor-verify` | Verify SHA-256 checksums of vendored archives |
 | `vendor-checksums` | Print SHA-256 checksums for all archives |
-| `kakadu-fetch` | Download Kakadu archive from `dsp-ci-assets` (one-time per version) |
+| `kakadu-fetch` | Download Kakadu archive from `dsp-ci-assets` (one-time per version; for Dockerfile only) |
 | `docs-build` | Build documentation |
 | `docs-serve` | Serve documentation locally |
 

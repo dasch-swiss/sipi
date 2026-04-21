@@ -17,6 +17,7 @@ nav:
   - Lua Image Functions: lua/lua-image.md
   - SQLite Integration: lua/sqlite.md
   - Building: development/building.md
+  - Building with Nix: development/nix.md
   - CI and Release: development/ci.md
   - Developing: development/developing.md
   - Fuzz Testing: development/fuzzing.md
@@ -80,7 +81,8 @@ plugins:
           - lua/lua-image.md: "Lua image manipulation functions"
           - lua/sqlite.md: "SQLite integration from Lua"
         "Development":
-          - development/building.md: "Build instructions"
+          - development/building.md: "Build instructions overview"
+          - development/nix.md: "Nix build system: primer, setup, variants, cross-platform builds"
           - development/ci.md: "CI and release pipeline guide"
           - development/developing.md: "Development guide"
           - development/downstream-dependencies.md: "Runtime packages and downstream consumers"

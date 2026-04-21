@@ -19,7 +19,7 @@ Export a GitHub token once per shell, then build normally:
 
 ```bash
 export GH_TOKEN=$(gh auth token)
-nix build .#default
+just nix-build-default
 ```
 
 The flake's fixed-output derivation calls `gh release download` inside
@@ -68,7 +68,7 @@ never enters the commit history.
 2. In `flake.nix`, update `kakaduVersion`, `kakaduAssetName`, and `kakaduSha256`
 3. Update `ASSET` and `TAG` in `scripts/fetch-kakadu.sh`
 4. Remove the local archive: `rm vendor/v8_5-*.zip`
-5. Re-build: `nix build .#default` — a SHA-256 mismatch means step 2 is wrong
+5. Re-build: `just nix-build-default` — a SHA-256 mismatch means step 2 is wrong
 6. Docker path: `just kakadu-fetch` to refresh `vendor/`
 7. Commit and open a PR
 

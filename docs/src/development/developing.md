@@ -27,6 +27,18 @@ out of the box and cache eviction is easy to observe.
 ### Start the server
 
 ```bash
+# Reproducible (what CI runs) — build through Nix, then run the built binary
+just nix-build
+just nix-run
+```
+
+Or, for the inner-loop dev workflow (non-reproducible — does not match CI
+outputs byte-for-byte):
+
+```bash
+nix develop
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DCODE_COVERAGE=ON
+cmake --build build --parallel
 ./build/sipi --config config/sipi.localdev-config.lua
 ```
 
@@ -90,29 +102,20 @@ Tests are organized by component:
 - `test/unit/logger/` - Logger tests
 - `test/unit/handlers/` - HTTP handler tests
 
-Run all unit tests:
+Run all unit tests (inside the Nix sandbox via `doCheck = enableTests` in
+`package.nix` — `just nix-build` fails if any unit test fails):
 
 ```bash
-make nix-test
+just nix-build
 ```
 
-Run a specific test binary directly:
+Run a specific test binary directly, from the dev-shell inner loop:
 
 ```bash
+nix develop
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DCODE_COVERAGE=ON
+cmake --build build --parallel
 cd build && test/unit/iiifparser/iiifparser
-```
-
-### End-to-End Tests
-
-End-to-end tests live in `test/e2e/` and use pytest. To add tests,
-create a Python file whose name begins with `test_` in the `test/e2e/`
-directory. The test fixtures in `test/e2e/conftest.py` handle starting
-and stopping a SIPI server and provide other testing utilities.
-
-Run e2e tests:
-
-```bash
-make nix-test-e2e
 ```
 
 ### Rust End-to-End Tests
@@ -125,13 +128,16 @@ functionality.
 Run Rust e2e tests:
 
 ```bash
-make rust-test-e2e
+just rust-test-e2e
 ```
+
+The recipe resolves the sipi binary via `$SIPI_BIN` with a canonical default
+of `./result/bin/sipi` (the Nix artifact path). Override `SIPI_BIN` to point
+at a dev-shell-built binary if you are iterating on cmake locally.
 
 !!! note "Sequential execution required"
     Tests must run with `--test-threads=1` because each test starts its own
-    SIPI server instance on a unique port. The Makefile target handles this
-    automatically.
+    SIPI server instance on a unique port. The recipe handles this automatically.
 
 ### Hurl HTTP Contract Tests
 
@@ -142,7 +148,7 @@ requests and expected responses.
 Run Hurl tests:
 
 ```bash
-make hurl-test
+just hurl-test
 ```
 
 Current test files:

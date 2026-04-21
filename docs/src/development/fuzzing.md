@@ -33,35 +33,32 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
 
 ## Requirements
 
-libFuzzer is built into Clang, so you need a Clang compiler. On Nix, use the clang dev shell:
+libFuzzer is built into Clang, so the fuzz variant uses `llvmPackages_19.stdenv` under the hood. Nix handles the toolchain — no dev-shell dance required.
 
-```bash
-nix develop .#clang
-```
-
-The CMake config (`fuzz/handlers/CMakeLists.txt`) guards the target behind a Clang check — it won't build with GCC or zig-cc.
+The CMake config (`fuzz/handlers/CMakeLists.txt`) guards the target behind a Clang check; it won't build with GCC or zig-cc, but `.#fuzz` pins Clang so that path never matters in practice.
 
 ## Running Locally
 
 ### Build the fuzz target
 
 ```bash
-nix develop .#clang
-cmake -S . -B build-fuzz -DCMAKE_BUILD_TYPE=Debug
-cmake --build build-fuzz --target iiif_handler_uri_parser_fuzz -j$(nproc)
+just nix-build-fuzz
 ```
+
+This wraps `nix build .#fuzz` and emits `result/bin/iiif_handler_uri_parser_fuzz`.
 
 ### Run with seed corpus
 
 ```bash
-cd build-fuzz/fuzz/handlers
-mkdir -p corpus
-./iiif_handler_uri_parser_fuzz corpus/ ../../../fuzz/handlers/corpus/ -max_total_time=60
+mkdir -p corpus-live
+just nix-run-fuzz corpus-live 60 fuzz/handlers/corpus
 ```
 
-- First argument (`corpus/`) — live corpus directory. New interesting inputs are written here.
-- Second argument (`../../../fuzz/handlers/corpus/`) — seed corpus (read-only). These 52 inputs give the fuzzer a head start with known-good IIIF URIs.
-- `-max_total_time=60` — run for 60 seconds. Without this, the fuzzer runs indefinitely (Ctrl+C to stop).
+- First positional arg (`corpus-live`) — live corpus directory. New interesting inputs are written here.
+- Second positional arg (`60`) — duration in seconds. Without a bound the fuzzer runs indefinitely (Ctrl+C to stop).
+- Third positional arg (`fuzz/handlers/corpus`) — optional read-only seed corpus. These 52 inputs give the fuzzer a head start with known-good IIIF URIs.
+
+The recipe forwards libFuzzer's exit code so a crash propagates through `just`. It also appends `-print_final_stats=1` automatically.
 
 ### Understanding the output
 
@@ -83,18 +80,17 @@ INFO: Loaded 52 files from ../../../fuzz/handlers/corpus/
 
 ### Useful flags
 
+For anything beyond duration + seed corpus, invoke the fuzzer binary directly (the `just` recipe is a thin convenience wrapper, not a full passthrough):
+
 ```bash
 # Limit input size (parser inputs are short URIs, not megabytes)
-./iiif_handler_uri_parser_fuzz corpus/ -max_len=256
+./result/bin/iiif_handler_uri_parser_fuzz corpus-live/ -max_len=256
 
 # Run a fixed number of iterations
-./iiif_handler_uri_parser_fuzz corpus/ -runs=100000
-
-# Print coverage stats at the end
-./iiif_handler_uri_parser_fuzz corpus/ -print_final_stats=1
+./result/bin/iiif_handler_uri_parser_fuzz corpus-live/ -runs=100000
 
 # Reproduce a crash (run a single input)
-./iiif_handler_uri_parser_fuzz /path/to/crash-abc123
+./result/bin/iiif_handler_uri_parser_fuzz /path/to/crash-abc123
 ```
 
 ## CI Integration
@@ -106,11 +102,11 @@ The fuzz workflow (`.github/workflows/fuzz.yml`) runs:
 
 ### What it does
 
-1. Builds the fuzz target using `nix develop .#clang`
+1. Builds the fuzz target via `just nix-build-fuzz` (→ `nix build .#fuzz`)
 2. Downloads the corpus from the previous night's run (if available)
-3. Runs the fuzzer for 10 minutes (default), merging new findings into the live corpus
+3. Runs `just nix-run-fuzz fuzz-corpus-live $FUZZ_DURATION fuzz/handlers/corpus` (default 10 minutes), merging new findings into the live corpus
 4. Uploads the updated corpus as an artifact (`fuzz-corpus`, retained 30 days)
-5. On crash:
+5. On crash (libFuzzer exits non-zero; `set -o pipefail` propagates it):
     - Uploads crash reproducers as artifacts (`fuzz-crashes`, retained 90 days)
     - Opens a GitHub issue with crash details, hex dump, and reproduction instructions
 
@@ -135,7 +131,7 @@ Periodically, you should pull the CI corpus back into the repo so that:
 ### Download and merge
 
 ```bash
-make fuzz-corpus-update
+just fuzz-corpus-update
 ```
 
 This downloads the latest `fuzz-corpus` artifact from CI, deduplicates by content hash, and merges into `fuzz/handlers/corpus/`. It reports how many new inputs were added.
