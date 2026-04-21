@@ -14,7 +14,7 @@ updates:
     schedule:
       interval: "weekly"
   - package-ecosystem: "cargo"
-    directory: "/"
+    directory: "/test/e2e-rust"
     schedule:
       interval: "weekly"
     commit-message:
