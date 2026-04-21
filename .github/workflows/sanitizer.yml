@@ -6,6 +6,10 @@
 # sanitizer findings fail the PR check.
 #
 # Also available on-demand via workflow_dispatch.
+#
+# Unit tests run inside the Nix sandbox via `just nix-build-sanitized`
+# (doCheck = enableTests in package.nix). Any ASan/UBSan finding in the
+# unit suite fails the build before the e2e step even starts.
 
 permissions:
   contents: read
@@ -20,6 +24,8 @@ on:
       - 'CMakeLists.txt'
       - 'flake.nix'
       - 'flake.lock'
+      - 'package.nix'
+      - 'justfile'
   workflow_dispatch:
 
 name: sanitizer
@@ -43,55 +49,52 @@ jobs:
           git lfs fetch --all
           git lfs checkout
       - uses: DeterminateSystems/determinate-nix-action@v3
+        with:
+          extra-conf: |
+            extra-experimental-features = configurable-impure-env
       - uses: cachix/cachix-action@v15
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+      - uses: extractions/setup-just@v2
 
-      - name: Build with sanitizers (ASan + UBSan)
+      - name: Build with sanitizers (ASan + UBSan) — unit tests run in sandbox
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: |
-          nix develop --command bash -c "just nix-build-sanitized"
-
-      - name: Run unit tests under sanitizers
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-          ASAN_OPTIONS: detect_leaks=1:halt_on_error=0:log_path=/tmp/asan-unit
-          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.lsan_suppressions.txt
-        run: |
-          nix develop --command bash -c "cd build-sanitized && ctest --output-on-failure"
+        run: just nix-build-sanitized
 
       - name: Run e2e tests under sanitizers
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+          SIPI_BIN: ${{ github.workspace }}/result/bin/sipi
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=0:log_path=/tmp/asan-e2e
           LSAN_OPTIONS: suppressions=${{ github.workspace }}/.lsan_suppressions.txt
+        # cargo comes from the dev shell — keep the wrap.
         run: |
           nix \
-            --extra-experimental-features "nix-command flakes" \
             --option filter-syscalls false \
-            develop --command bash -c \
-              "cd test/e2e-rust && SIPI_BIN=\$PWD/../../build-sanitized/sipi cargo test -- --test-threads=1"
+            develop --command bash -c "just rust-test-e2e"
 
-      - name: Check for sanitizer findings
+      - name: Check for sanitizer findings in e2e
         if: always()
         run: |
           # Check for actual findings (SUMMARY lines), not just file existence.
           # ASan always writes a log file when log_path is set, even with zero
-          # findings (it contains only the suppressions report).
+          # findings. Unit-test findings fail the nix-build-sanitized step
+          # directly (sandbox halts on first error), so this step only covers
+          # the e2e suite.
           HAS_FINDINGS=false
-          if grep -q "SUMMARY:" /tmp/asan-unit.* /tmp/asan-e2e.* 2>/dev/null; then
+          if grep -q "SUMMARY:" /tmp/asan-e2e.* 2>/dev/null; then
             HAS_FINDINGS=true
           fi
           if [ "$HAS_FINDINGS" = "true" ]; then
-            echo "::error::Sanitizer findings detected — PR cannot merge with memory safety issues"
+            echo "::error::Sanitizer findings detected in e2e — PR cannot merge with memory safety issues"
             echo ""
             echo "=== Unique findings ==="
-            grep -h "SUMMARY:" /tmp/asan-unit.* /tmp/asan-e2e.* 2>/dev/null | sort -u || true
+            grep -h "SUMMARY:" /tmp/asan-e2e.* 2>/dev/null | sort -u || true
             echo ""
             echo "=== Full reports ==="
-            for f in /tmp/asan-unit.* /tmp/asan-e2e.*; do
+            for f in /tmp/asan-e2e.*; do
               [ -f "$f" ] || continue
               echo "--- $(basename "$f") ---"
               cat "$f"
@@ -99,7 +102,7 @@ jobs:
             done
             exit 1
           fi
-          echo "No sanitizer findings. All tests passed cleanly under ASan + UBSan."
+          echo "No sanitizer findings in e2e. All tests passed cleanly under ASan + UBSan."
 
       - name: Upload sanitizer reports
         if: failure()

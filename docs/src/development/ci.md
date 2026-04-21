@@ -81,21 +81,22 @@ stdenv for Darwin.
 
 **`nix-static / {arch}`** (`ubuntu-24.04`, `ubuntu-24.04-arm`):
 
-1. `nix build .#static-${arch}` — builds via `mkStaticBuild` in
-   `flake.nix`, using Zig as the C/C++ cross-compiler targeting
-   `{x86_64,aarch64}-linux-musl`. Kakadu is fetched by the FOD
-   (`GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}`, `configurable-impure-env`
-   enabled on the daemon).
-2. Static linkage assertion: `readelf -d` must not report any
-   `NEEDED` entries.
-3. `nix develop --command ... cargo test` in `test/e2e-rust` with
-   `SIPI_BIN=$GITHUB_WORKSPACE/result/bin/sipi` — proves the
-   Nix-built static musl binary runs on a glibc host.
+1. `just nix-build-static-${arch}` — wraps `nix build .#static-${arch}`,
+   which runs `mkStaticBuild` in `flake.nix` using Zig as the C/C++
+   cross-compiler targeting `{x86_64,aarch64}-linux-musl`. Kakadu is
+   fetched by the FOD (`GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}`,
+   `configurable-impure-env` enabled on the daemon).
+2. `just nix-static-linkage-verify result/bin/sipi` — static linkage
+   assertion via `readelf -d`; must not report any `NEEDED` entries.
+3. `just rust-test-e2e` with `SIPI_BIN=$GITHUB_WORKSPACE/result/bin/sipi`
+   — proves the Nix-built static musl binary runs on a glibc host.
 
 **`nix-macos / arm64 dylib-audit`** (`macos-14`):
 
-- `nix build .#default` on Darwin (clang + libc++).
-- `otool -L` audit: only `/usr/lib/libSystem.B.dylib` and
+- `just nix-build-default` on Darwin (wraps `nix build .#default` —
+  clang + libc++).
+- `just nix-macos-dylib-audit result/bin/sipi` — `otool -L` audit;
+  only `/usr/lib/libSystem.B.dylib` and
   `/System/Library/{Frameworks,PrivateFrameworks}/...` allowed.
 
 ### Forked PR behavior
@@ -116,7 +117,8 @@ Gate model:
 3. Publish jobs run in parallel after the gate:
    - `publish-docker / {arch}` — builds, tests, pushes Docker images.
    - `publish-static-release / {arch}` — builds release archive via
-     Nix (`nix build .#release-archive-${arch}`), uploads to GitHub
+     `just nix-build-release-archive-${arch}` (wraps
+     `nix build .#release-archive-${arch}`), uploads to GitHub
      Release, pushes debug symbols to Sentry.
    - `manifest` — multi-arch Docker manifest.
    - `docs` — mkdocs deploy.
@@ -126,7 +128,7 @@ Gate model:
 
 A single per-arch `publish-static-release` job produces everything:
 
-- `nix build .#release-archive-${arch}` emits in `result/`:
+- `just nix-build-release-archive-${arch}` (wraps `nix build .#release-archive-${arch}`) emits in `result/`:
   - `sipi-v<version>-linux-${arch}.tar.gz` (binary + config + scripts + server)
   - `sipi-v<version>-linux-${arch}.tar.gz.sha256`
   - `sipi-linux-${arch}.debug` (split debug symbols)
@@ -135,19 +137,47 @@ A single per-arch `publish-static-release` job produces everything:
 
 ## Local Reproduction
 
+Every CI step invokes `just <recipe>` — no inline cmake or `nix build`
+calls. To reproduce any CI job locally, run the same recipe. With the
+Determinate Systems native-linux-builder available to macOS authors,
+Linux-target recipes (`nix-build-static-*`, `nix-build-sanitized`,
+`nix-build-fuzz`, `nix-build-release-archive-*`) run locally without
+a CI round-trip.
+
+`just nix-build*` recipes wrap `nix build`, so CI invokes them directly
+without a surrounding `nix develop`. Recipes that consume dev-shell
+tools — `rust-test-e2e` (needs `cargo`) and `hurl-test` (needs `hurl`) —
+are the exception and run inside `nix develop --command …`.
+
 ```bash
-# Native dev build + unit + e2e (inside nix develop)
-nix develop --command bash -c "just nix-build && just nix-test && just rust-test-e2e"
+# Native dev build + e2e + Hurl (what test.yml nix-clang runs)
+just nix-build
+nix develop --command bash -c "just rust-test-e2e && just hurl-test"
+just nix-coverage
 
-# Static musl binaries (no shell needed)
-nix build .#static-amd64
-nix build .#static-arm64
+# Static musl binaries (what test.yml nix-static runs)
+just nix-build-static-amd64
+just nix-build-static-arm64
+just nix-static-linkage-verify result/bin/sipi
 
-# Validation
-file result/bin/sipi
-! readelf -d result/bin/sipi | grep NEEDED
+# Sanitizer build + tests (what sanitizer.yml runs)
+just nix-build-sanitized                  # tests run in sandbox
+SIPI_BIN=$PWD/result/bin/sipi nix --option filter-syscalls false develop --command bash -c "just rust-test-e2e"
 
-# Darwin build (on macOS)
-nix build .#default
-otool -L result/bin/sipi
+# Fuzz build + run (what fuzz.yml runs)
+just nix-build-fuzz
+mkdir fuzz-corpus-live
+just nix-run-fuzz fuzz-corpus-live 60 fuzz/handlers/corpus
+
+# Release archive (what publish.yml publish-static-release runs)
+just nix-build-release-archive-amd64
+
+# Darwin build + audit (what test.yml nix-macos-audit runs)
+just nix-build-default
+just nix-macos-dylib-audit result/bin/sipi
 ```
+
+**CI invokes justfile only:** if a CI step is not a `just <recipe>`
+invocation, that's a drift signal — either the step is non-build glue
+(e.g. artifact upload, Codecov upload, Sentry push) or the justfile is
+missing a recipe and should grow one.
