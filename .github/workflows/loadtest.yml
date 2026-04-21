@@ -34,10 +34,14 @@ jobs:
           git lfs fetch --all
           git lfs checkout
       - uses: DeterminateSystems/determinate-nix-action@v3
+        with:
+          extra-conf: |
+            extra-experimental-features = configurable-impure-env
       - uses: cachix/cachix-action@v15
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+      - uses: extractions/setup-just@v2
 
       - name: Install wrk
         run: sudo apt-get update && sudo apt-get install -y wrk
@@ -45,20 +49,19 @@ jobs:
       - name: Build sipi
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: |
-          nix develop --command bash -c "just nix-build"
+        run: just nix-build
 
       - name: Start sipi server
         env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+          SIPI_BIN: ${{ github.workspace }}/result/bin/sipi
         run: |
           # exec replaces the inner bash with sipi so the tracked PID is sipi's
-          # wrapper (nix develop's direct child), not a throwaway shell.
-          nix \
-            --extra-experimental-features "nix-command flakes" \
-            --option filter-syscalls false \
-            develop --command bash -c \
-              "cd test/_test_data && exec ../../build/sipi --config config/sipi.e2e-test-config.lua" \
+          # wrapper (the direct child), not a throwaway shell. The Nix-built
+          # sipi binary has absolute RPATHs into /nix/store, so it runs
+          # without activating the dev shell (dev shell only provides build
+          # tools like cargo/hurl, not runtime libs).
+          bash -c \
+            "cd test/_test_data && exec \"$SIPI_BIN\" --config config/sipi.e2e-test-config.lua" \
             > sipi.log 2>&1 &
           SIPI_PID=$!
           echo "$SIPI_PID" > sipi.pid
@@ -125,7 +128,7 @@ jobs:
             done
             kill -KILL "$SIPI_PID" 2>/dev/null || true
           fi
-          # Fallback: name-match in case the PID chain was broken by nix develop.
+          # Fallback: name-match in case the tracked PID is gone.
           pkill -f "sipi.*e2e-test-config" 2>/dev/null || true
 
       - name: Upload load test results

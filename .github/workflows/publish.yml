@@ -188,13 +188,12 @@ jobs:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
+      - uses: extractions/setup-just@v2
       - name: Build release archive
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: |
-          nix build -L \
-            --option impure-env "GH_TOKEN=$GH_TOKEN" \
-            .#release-archive-${{ matrix.arch }}
+          just nix-build-release-archive-${{ matrix.arch }}
           ls -la result/
 
       - name: Attach static assets to GitHub Release

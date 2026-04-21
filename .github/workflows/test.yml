@@ -3,6 +3,9 @@
 #   - Nix/Clang build+unit matrix on Linux amd64/arm64 (Rust e2e + Hurl)
 #   - Nix static musl build (Zig-in-Nix) + Rust e2e on amd64/arm64
 #   - Nix native macOS arm64 build + dylib-linkage audit on internal PRs
+#
+# Every build step invokes `just <recipe>`. No inline cmake or nix build
+# calls. Recipes live in the justfile; see the "Nix builds" section there.
 
 permissions:
   contents: read
@@ -56,33 +59,39 @@ jobs:
           file test/_test_data/unit/lena512.tif 2>/dev/null || echo "lena512.tif not found"
           file test/_test_data/unit/HasCommentBlock.JPG 2>/dev/null || echo "HasCommentBlock.JPG not found"
       - uses: DeterminateSystems/determinate-nix-action@v3
+        with:
+          # Kakadu FOD in flake.nix uses gh release download via
+          # impureEnvVars; daemon needs configurable-impure-env to accept
+          # GH_TOKEN from the client (every `just nix-build*` recipe passes
+          # the matching client flag).
+          extra-conf: |
+            extra-experimental-features = configurable-impure-env
       - uses: cachix/cachix-action@v15
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-      - name: Build and test (unit)
+      - uses: extractions/setup-just@v2
+      - name: Build and test (unit tests run in the Nix sandbox)
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: |
-          nix develop --command bash -c "just nix-build && just nix-test"
+        run: just nix-build
       - name: Rust e2e and Hurl tests
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: |
-          nix develop --command bash -c "just rust-test-e2e && just hurl-test"
+        # cargo + hurl come from the dev shell — keep the wrap.
+        run: nix develop --command bash -c "just rust-test-e2e && just hurl-test"
       - name: Gather code coverage
         if: ${{ matrix.arch == 'amd64' }}
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: |
-          nix develop --command bash -c "just nix-coverage"
+        run: just nix-coverage
       - name: Upload coverage reports to Codecov
         if: ${{ matrix.arch == 'amd64' }}
         uses: codecov/codecov-action@v6.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: dasch-swiss/sipi
-          files: build/coverage.xml
+          files: result-coverage/coverage.xml
 
   # Zig-in-Nix musl-static validation. Exists in parallel to zig-static
   # until Part B.5 retires the latter (see plan glowing-rolling-fern).
@@ -114,23 +123,20 @@ jobs:
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+      - uses: extractions/setup-just@v2
       - name: Build static binary
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: |
-          nix build -L \
-            --option impure-env "GH_TOKEN=$GH_TOKEN" \
-            .#static-${{ matrix.arch }}
+        run: just nix-build-static-${{ matrix.arch }}
       - name: Verify static linkage
-        run: |
-          file result/bin/sipi
-          ! readelf -d result/bin/sipi | grep -q '(NEEDED)'
+        # file / readelf are standard ubuntu runner tools.
+        run: just nix-static-linkage-verify result/bin/sipi
       - name: Rust e2e tests against static binary
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: |
-          nix develop --command bash -c \
-            "cd test/e2e-rust && SIPI_BIN=$GITHUB_WORKSPACE/result/bin/sipi cargo test -- --test-threads=1"
+          SIPI_BIN: ${{ github.workspace }}/result/bin/sipi
+        # cargo comes from the dev shell — keep the wrap.
+        run: nix develop --command bash -c "just rust-test-e2e"
 
   # Native Darwin build via Nix + clang/libc++, with a dylib-linkage audit.
   # Replaces the old zig-macos job; the invariant (no Homebrew / third-party
@@ -152,26 +158,11 @@ jobs:
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+      - uses: extractions/setup-just@v2
       - name: Build native Darwin binary
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: |
-          nix build -L \
-            --option impure-env "GH_TOKEN=$GH_TOKEN" \
-            .#default
+        run: just nix-build-default
       - name: Audit runtime dylibs
-        run: |
-          otool -L result/bin/sipi
-          # Invariant: don't accidentally link against Homebrew. Every
-          # other path under /usr/lib, /System/Library, or /nix/store is
-          # a controlled input to the Nix build.
-          bad=$(otool -L result/bin/sipi \
-            | awk 'NR>1 {print $1}' \
-            | grep -E '^/opt/homebrew/|^/usr/local/' \
-            || true)
-          if [ -n "$bad" ]; then
-            echo "error: Homebrew / /usr/local dylibs leaked into the binary:" >&2
-            echo "$bad" >&2
-            exit 1
-          fi
-          echo "macOS dylib policy satisfied"
+        # otool is part of macOS system toolchain.
+        run: just nix-macos-dylib-audit result/bin/sipi
