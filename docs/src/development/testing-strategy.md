@@ -379,7 +379,7 @@ Four layers, from fastest/narrowest to slowest/broadest:
 - Image format header parsing
 - Any function that processes untrusted input
 
-**Corpus management:** CI uploads corpus artifacts; `make fuzz-corpus-update` merges CI corpus into seed corpus. See [Fuzz Testing](fuzzing.md) for full details.
+**Corpus management:** CI uploads corpus artifacts; `just fuzz-corpus-update` merges CI corpus into seed corpus. See [Fuzz Testing](fuzzing.md) for full details.
 
 ## Test Decision Tree
 
@@ -690,7 +690,7 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 
 Memory leaks and undefined behavior are not a separate pyramid layer but a **build variant** that runs existing tests with compiler instrumentation. This is critical for sipi as a long-running C++ server where leaks accumulate.
 
-**Current state:** ASan+UBSan infrastructure is in place — `ENABLE_SANITIZERS` CMake option, `make nix-test-sanitized` target, and nightly `sanitizer.yml` CI workflow. Known findings to triage on first run:
+**Current state:** ASan+UBSan infrastructure is in place — `ENABLE_SANITIZERS` CMake option, `just nix-build-sanitized` (builds `.#sanitized` with tests running in the Nix sandbox), and nightly `sanitizer.yml` CI workflow. Known findings to triage on first run:
 
 - **DEV-6002: `SipiFilenameHash::operator=` memory leak** — `operator=` allocates `new vector<char>` without deleting the old `hash` pointer. Confirmed by code inspection. Fix: add `delete hash;` before the new allocation, or switch to `std::unique_ptr`.
 - **Potential: `SipiFilenameHash` copy constructor** — also `new`s without freeing, but only leaks if the destination object was previously constructed with a different hash (doesn't happen via typical usage).
@@ -709,9 +709,8 @@ Memory leaks and undefined behavior are not a separate pyramid layer but a **bui
 | Component | Status | Details |
 |-----------|--------|---------|
 | `ENABLE_SANITIZERS` CMake option | Done | `-fsanitize=address,undefined` on all targets |
-| `make nix-build-sanitized` | Done | Builds into `build-sanitized/` with ASan+UBSan |
-| `make nix-test-sanitized` | Done | Runs unit tests with leak detection |
-| Nightly CI (`sanitizer.yml`) | Done | 03:00 UTC, unit + e2e, artifacts uploaded |
+| `just nix-build-sanitized` | Done | Builds `.#sanitized` derivation (Debug + ASan + UBSan); unit tests run inside the Nix sandbox and fail the build on any finding |
+| Nightly CI (`sanitizer.yml`) | Done | PR + scheduled; unit tests in-sandbox, e2e out-of-sandbox with ASan log capture |
 | TSan variant | Future | Optional nightly, separate from ASan (can't combine) |
 
 **Strategy:** Nightly CI job runs unit tests + e2e suite with ASan+UBSan. TSan as optional nightly variant. Not in PR CI (too slow).
@@ -761,15 +760,15 @@ insta::assert_json_snapshot!(info_json, {
 
 ## CI Integration
 
-| Target | Make Command | When | Notes |
+| Target | Just Recipe | When | Notes |
 |---|---|---|---|
-| C++ unit tests | `make nix-test` | PR CI | GoogleTest via ctest |
-| Rust e2e tests | `make rust-test-e2e` | PR CI | Includes insta snapshots |
-| Hurl contract tests | `make hurl-test` | PR CI | Declarative HTTP tests |
+| C++ unit tests | `just nix-build` (`.#dev` checkPhase) | PR CI | GoogleTest via ctest, runs in the Nix sandbox |
+| Rust e2e tests | `just rust-test-e2e` | PR CI | Includes insta snapshots |
+| Hurl contract tests | `just hurl-test` | PR CI | Declarative HTTP tests |
 | Python e2e tests | *(retired)* | — | Replaced by Rust e2e tests |
 | Fuzz testing | `.github/workflows/fuzz.yml` | Nightly | libFuzzer corpus growth |
-| Sanitizer builds (future) | `make nix-test-sanitized` | Nightly | ASan+UBSan |
-| Load testing (future) | — | Nightly | `wrk` throughput baseline |
+| Sanitizer builds | `just nix-build-sanitized` (`.#sanitized`) | PR + Nightly | ASan+UBSan; unit tests in-sandbox, e2e out-of-sandbox |
+| Load testing | `.github/workflows/loadtest.yml` | Nightly | `wrk` throughput baseline |
 
 ## Python Test Deprecation — Parity Checklist
 

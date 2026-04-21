@@ -71,26 +71,28 @@ You will then find the manual under `site/index.html`.
 
 ## Building from source
 
-All commands are run from the repository root via `make`. Run `make help` for a full list of targets.
+All commands are run from the repository root via `just`. Run `just` for a full list of targets.
 
-### Build and test with Docker (recommended)
+### Build and test with Docker (recommended for CI-like builds)
 ```bash
-make docker-build    # build Docker image (compiles + runs unit tests)
-make test-smoke      # run smoke tests against Docker image
+just docker-build    # build Docker image (compiles + runs unit tests)
+just test-smoke      # run smoke tests against Docker image
 ```
 
-### Build and test with Nix (native development)
+### Build and test with Nix (reproducible — what CI runs)
 ```bash
-nix develop          # enter Nix development shell (GCC)
-make nix-build       # build SIPI (debug + coverage)
-make nix-test        # run unit tests
-make nix-test-e2e    # run end-to-end tests
-make nix-run         # start SIPI server
+just nix-build         # .#dev: Debug + coverage, unit tests run in the Nix sandbox
+just rust-test-e2e     # run Rust end-to-end tests against ./result/bin/sipi
+just hurl-test         # run Hurl HTTP contract tests
+just nix-run           # start SIPI server
 ```
 
-### Build on macOS (not recommended)
+### Inner-loop development (incremental rebuilds, non-reproducible)
 ```bash
-mkdir -p ./build-mac && cd build-mac && cmake .. && make && ctest --verbose
+nix develop                                              # dev shell with build deps
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DCODE_COVERAGE=ON
+cmake --build build --parallel
+./build/sipi --config config/sipi.localdev-config.lua
 ```
 
 See [Building SIPI from Source Code](https://sipi.io/development/building/) for full details.

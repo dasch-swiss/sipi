@@ -10,10 +10,32 @@ For reviewer guidelines, see `docs/src/development/reviewer-guidelines.md`.
 ## Stack
 
 - C++23, Clang 15+ / GCC 13+, CMake 3.28+
-- Build toolchains: Zig (local dev), Nix (reproducible), Docker (CI)
+- Build toolchains: Nix (reproducible, single source of truth for CI), Docker (production image)
 - HTTP framework: custom `shttps/` library (threading, SSL, connection pooling)
 - Image formats: libtiff, libpng, libjpeg, libwebp, Kakadu (JPEG 2000)
 - Scripting: Lua (routes, preflight checks, image manipulation)
+
+## Build Reproducibility Invariant
+
+Every justfile recipe that builds sipi goes through `nix build .#<variant>`.
+CI invokes only `just <recipe>` — no inline cmake or `nix build` calls in
+workflow YAML. The consequences:
+
+- Recipes are contracts: every `nix-*` recipe is a promise that CI runs the
+  same command. Adding an imperative cmake recipe would violate that contract
+  and create a drift surface.
+- Unit tests run inside the Nix sandbox via `doCheck = enableTests` in
+  `package.nix`. A `nix build .#dev` that succeeds is, by construction, a
+  tested build — the derivation graph enforces "tested before cached."
+- Incremental inner-loop development (edit one `.cpp` file, see a
+  seconds-fast rebuild) is a documented dev-shell pattern — `nix develop`
+  followed by `cmake --build build` by hand. It is intentionally NOT a
+  recipe. See `CLAUDE.md` "Inner-loop development" and
+  `docs/src/development/developing.md`.
+
+If a new build configuration is genuinely needed across the team (non-trivial
+CMake flags, specialized toolchain), that configuration deserves a Nix
+variant in `flake.nix`, not a recipe wrapping imperative cmake.
 
 ## Naming Conventions
 
@@ -76,7 +98,9 @@ New config options need:
 
 ## Docker
 
-- Base image: Alpine (musl, minimal attack surface)
+- Base image: `ubuntu:24.04` (the current `Dockerfile`; migration to
+  `nix build .#docker` is tracked separately and out of scope for the
+  Nix unified-build plan)
 - Init: `pid1-rs` (PID 1 zombie reaping, signal forwarding)
 - Port: 1024 (non-privileged)
 - Config mount: `/sipi/config/`

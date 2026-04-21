@@ -2,6 +2,9 @@
 -- Local development configuration for SIPI
 --
 -- Usage:
+--   just nix-run                                   -- reproducible (consumes ./result/bin/sipi)
+--   ./result/bin/sipi --config config/sipi.localdev-config.lua
+--   -- or, from the dev-shell inner loop:
 --   ./build/sipi --config config/sipi.localdev-config.lua
 --
 -- Points imgroot at test data so IIIF requests work out of the box.

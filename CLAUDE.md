@@ -9,38 +9,79 @@ SIPI (Simple Image Presentation Interface) is a multithreaded, high-performance,
 ## Build System and Common Commands
 
 All targets are in a single `justfile`. Run `just` for a complete list.
-For full build instructions (Docker, Zig, Nix, macOS), see [`docs/src/development/building.md`](docs/src/development/building.md).
+For full build instructions (Docker, Nix, macOS), see [`docs/src/development/building.md`](docs/src/development/building.md).
 
-**First-time Nix setup:** run `just kakadu-fetch` once to download the proprietary Kakadu archive from `dsp-ci-assets` into `vendor/`. Requires `gh auth login` and `dasch-swiss` org membership. See [`docs/src/development/kakadu.md`](docs/src/development/kakadu.md).
+**Build reproducibility invariant:** every `nix-*` recipe wraps `nix build .#<variant>`. CI invokes only `just <recipe>` — no inline cmake or `nix build` calls. Incremental inner-loop development is a documented dev-shell pattern (see below), not a recipe.
+
+**Build completeness invariant:** every build target must succeed on every supported platform — macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. This applies to `.#dev`, `.#default`, `.#release`, `.#sanitized`, `.#fuzz`, `.#docker-stream`, `.#static-*`, and `.#release-archive-*`. A target that builds on only some platforms is a shipping bug, not a known limitation — CI is Linux-only, so **a green CI run does not verify macOS**. Before shipping any change to `flake.nix`, `package.nix`, or a `justfile` build recipe:
+
+1. Run every affected variant on macOS locally (`just nix-build-<variant>`).
+2. Run every affected Linux variant locally via Determinate's native-linux-builder (`nix build .#packages.x86_64-linux.<variant>` and `.#packages.aarch64-linux.<variant>`). See [`docs/src/development/nix.md`](docs/src/development/nix.md) for setup.
+3. Pay special attention to `overrideAttrs` blocks that replace `buildPhase` / `installPhase` — those encode assumptions about nixpkgs hook behavior (e.g. whether the cmake hook leaves CWD at `$sourceRoot` or `$sourceRoot/build`) that are platform- and version-sensitive. Prefer CWD-robust patterns (`[ -f CMakeCache.txt ] || cd "${cmakeBuildDir:-build}"`) over hard-coded paths.
+
+If a change can't be verified on a platform locally, say so explicitly and gate the merge on a corresponding CI check being added.
+
+**First-time setup for Docker builds:** run `just kakadu-fetch` once to download the proprietary Kakadu archive from `dsp-ci-assets` into `vendor/`. Nix builds fetch Kakadu directly via the flake (no `vendor/` step). Requires `gh auth login` and `dasch-swiss` org membership. See [`docs/src/development/kakadu.md`](docs/src/development/kakadu.md).
 
 ### Quick Reference
 
 ```bash
-# Docker (recommended for CI-like builds)
-just docker-build              # build image (compiles + unit tests)
-just test-smoke                # smoke tests against Docker image
+# Nix build (reproducible — this is what CI runs)
+just nix-build                   # .#dev: Debug + coverage, tests run in sandbox
+just nix-build-default           # .#default: RelWithDebInfo + tests (matches distributed binary shape)
+just nix-build-release           # .#release: stripped, no tests
+just nix-build-sanitized         # .#sanitized: Debug + ASan + UBSan, tests run in sandbox
+just nix-build-fuzz              # .#fuzz: libFuzzer harness binary only
+just nix-build-static-amd64      # .#static-amd64: Zig-in-Nix musl static binary
+just nix-build-static-arm64      # .#static-arm64: Zig-in-Nix musl static binary
+just nix-build-release-archive-amd64  # .#release-archive-amd64: tarball + sha256 + debug
+just nix-build-release-archive-arm64  # .#release-archive-arm64: tarball + sha256 + debug
+just nix-coverage                # .#dev^coverage: produces result-coverage/coverage.xml
+just nix-docker-build            # Docker image via nixpkgs.dockerTools
 
-# Nix (reproducible native dev — run inside `nix develop`)
-just nix-build                 # build (debug + coverage)
-just nix-test                  # unit tests
-just rust-test-e2e             # Rust e2e tests (requires built sipi)
-just hurl-test                 # Hurl HTTP contract tests
+# Tests (consume $SIPI_BIN, default ./result/bin/sipi)
+just rust-test-e2e               # Rust e2e tests (needs cargo — from dev shell)
+just hurl-test                   # Hurl HTTP contract tests (needs hurl — from dev shell)
+just nix-run                     # run sipi with the dev config
+just nix-valgrind                # run sipi under Valgrind
 
-# Nix full builds (no shell required; run `just kakadu-fetch` once first)
-just nix-build-release         # build release binary via nix
-just nix-build-static-amd64    # build static amd64 binary
-just nix-build-static-arm64    # build static arm64 binary
-just nix-docker-build          # build Docker image via Nix
+# Dev-shell inner loop (non-recipe — see "Inner-loop development" below)
+
+# Docker (unchanged)
+just docker-build                # build image (compiles + unit tests)
+just test-smoke                  # smoke tests against Docker image
 
 # Vendor dependencies
-just vendor-download           # download all dep archives to vendor/
-just vendor-verify             # verify SHA-256 checksums
-just vendor-checksums          # print checksums for manifest updates
-just kakadu-fetch              # download Kakadu archive (one-time per version)
+just vendor-download             # download all dep archives to vendor/
+just vendor-verify               # verify SHA-256 checksums
+just vendor-checksums            # print checksums for manifest updates
+just kakadu-fetch                # download Kakadu archive (one-time per version; for Dockerfile only)
 
 # Documentation
-just docs-serve                # serve docs locally
+just docs-serve                  # serve docs locally
 ```
+
+### Inner-loop development (incremental rebuilds)
+
+The justfile does not expose an imperative build recipe — by design. A recipe
+is a contract that CI runs the same command, and CI always goes through a Nix
+derivation. For the fast edit/rebuild/run cycle on a single `.cpp` file, drop
+into the dev shell and call cmake by hand:
+
+```bash
+nix develop                                   # dev shell with all build deps
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DCODE_COVERAGE=ON
+cmake --build build --parallel
+./build/sipi --config config/sipi.localdev-config.lua
+# subsequent edits:
+cmake --build build                           # incremental
+```
+
+**Caveats:** this path is non-reproducible and does not match CI outputs
+byte-for-byte. To run the reproducible CI build, use `just nix-build` instead.
+
+**Prerequisite:** run `just kakadu-fetch` once per Kakadu version — the
+dev-shell cmake invocation consumes `vendor/v8_5-01382N.zip` from that.
 
 ## High-Level Architecture
 
@@ -96,13 +137,13 @@ For the authoritative testing strategy (pyramid, layer definitions, decision tre
 
 For test framework details (how to run tests, directory layout, adding tests), see [`docs/src/development/developing.md`](docs/src/development/developing.md).
 
-- **Unit tests** (`test/unit/`): GoogleTest + ApprovalTests — `just nix-test`
+- **Unit tests** (`test/unit/`): GoogleTest + ApprovalTests — run inside the `.#dev` / `.#default` derivation's `checkPhase` (`just nix-build` fails if any unit test fails)
 - **E2E tests** (`test/e2e-rust/`): Rust (reqwest + cargo test) — `just rust-test-e2e`
 - **Hurl tests** (`test/hurl/`): HTTP contract tests — `just hurl-test`
 - **Smoke tests** (`test/smoke/`): against Docker image — `just test-smoke`
 - **Approval tests** (`test/approval/`): snapshot-based regression — included in unit tests
 
-Run a specific test binary: `cd build && test/unit/<component>/<component>`
+Run a specific unit test binary in the dev-shell inner loop: `cd build && test/unit/<component>/<component>`
 
 ## CI, Release, and Commit Messages
 
