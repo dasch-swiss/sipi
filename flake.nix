@@ -73,8 +73,15 @@
 
       overlay = final: prev: {
         kakaduArchive = mkKakaduArchive final;
+        # `pkgs.sipi` uses clang + libc++ to match the Docker build and the
+        # historic dev-shell toolchain. Without the explicit override, the
+        # derivation picks up nixpkgs' default stdenv (GCC on Linux), which
+        # rejects the `-stdlib=libc++` flags set in `package.nix`. The
+        # `.#fuzz` variant overrides stdenv again to llvmPackages_19.stdenv
+        # (libstdc++) for libFuzzer ABI compatibility.
         sipi = prev.callPackage ./package.nix {
           inherit (final) kakaduArchive;
+          stdenv = final.llvmPackages_19.libcxxStdenv;
         };
       };
     in
@@ -240,6 +247,62 @@
             cmakeBuildType = "Release";
             enableTests = false;
           }).overrideAttrs { dontStrip = true; };
+
+          # Debug build with AddressSanitizer + UndefinedBehaviorSanitizer.
+          # Mirrors sanitizer.yml's pre-Nix imperative invocation, now as a
+          # derivation so `just nix-build-sanitized` routes through Cachix
+          # and runs the sanitizer-instrumented gtest suite in-sandbox.
+          sanitized = pkgs.sipi.override {
+            cmakeBuildType = "Debug";
+            enableSanitizers = true;
+            enableTests = true;
+          };
+
+          # Fuzz harness build. Uses llvmPackages_19.stdenv (libstdc++)
+          # because libFuzzer's ABI is tied to libstdc++. The override
+          # replaces buildPhase/installPhase to produce just the fuzzer
+          # binary — sipi's runtime files (config, scripts, server) are
+          # intentionally omitted since libFuzzer invocations don't use
+          # them. Running the fuzzer happens outside the derivation via
+          # `just nix-run-fuzz`, which forwards libFuzzer's exit code.
+          fuzz = (pkgs.sipi.override {
+            stdenv = pkgs.llvmPackages_19.stdenv;
+            enableFuzzing = true;
+            enableTests = false;
+          }).overrideAttrs (old: {
+            # The base sipi package sets `-stdlib=libc++` in env.CXXFLAGS /
+            # LDFLAGS to match its clang+libc++ stdenv. For `.#fuzz` we
+            # override the stdenv to `llvmPackages_19.stdenv` (clang +
+            # libstdc++) so that libFuzzer's ABI lines up; the libc++
+            # flag then asks the linker for libc++ which the libstdc++
+            # stdenv doesn't carry (fails with `ld: cannot find -lc++`).
+            # macOS happens to work because libc++ ships system-wide;
+            # Linux has no such fallback. Drop the flag for this variant.
+            env = (old.env or { }) // {
+              CXXFLAGS = "";
+              LDFLAGS = "-Wno-unused-command-line-argument";
+            };
+            # nixpkgs' cmake hook leaves CWD at `$sourceRoot/build` after
+            # configurePhase on macOS, but the hook's exact CWD behavior
+            # has been platform-sensitive historically. Normalize by
+            # entering the cmake build tree if we aren't already there,
+            # so the override works on both macOS and Linux regardless
+            # of hook version.
+            buildPhase = ''
+              runHook preBuild
+              [ -f CMakeCache.txt ] || cd "''${cmakeBuildDir:-build}"
+              cmake --build . --parallel $NIX_BUILD_CORES \
+                --target iiif_handler_uri_parser_fuzz
+              runHook postBuild
+            '';
+            installPhase = ''
+              runHook preInstall
+              [ -f CMakeCache.txt ] || cd "''${cmakeBuildDir:-build}"
+              mkdir -p $out/bin
+              cp fuzz/handlers/iiif_handler_uri_parser_fuzz $out/bin/
+              runHook postInstall
+            '';
+          });
 
         } // pkgs.lib.optionalAttrs isLinux {
           # Static Linux binaries (Zig toolchain, musl)

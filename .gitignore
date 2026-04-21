@@ -68,6 +68,10 @@ icc.zip
 /coverage.info
 *.gcov
 
+# Nix build output symlinks (emitted by `just nix-*` / `nix build`)
+/result
+/result-*
+
 # Zig toolchain build artifact (written by cmake/zig-toolchain.cmake)
 scripts/toolchains/.zig-target
 
