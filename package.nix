@@ -14,6 +14,8 @@
 , iconv
 , perl
 , fetchurl
+, gcovr
+, llvmPackages_19
 , kakaduArchive  # Store path to the Kakadu zip. Provided by flake.nix via
                  # a fixed-output derivation that calls `gh release download`
                  # against dsp-ci-assets. Requires GH_TOKEN (or a Cachix hit)
@@ -21,6 +23,7 @@
 , cmakeBuildType ? "RelWithDebInfo"
 , enableCoverage ? false
 , enableSanitizers ? false
+, enableFuzzing ? false
 , enableTests ? true
 , providedVersion ? null
 }:
@@ -65,6 +68,15 @@ stdenv.mkDerivation {
     ];
   };
 
+  # `coverage` is an extra output populated by the postCheck hook when
+  # both `enableCoverage` and `enableTests` are true. The `debug` output
+  # is added automatically by nixpkgs when `separateDebugInfo = true`
+  # (below) on Linux — including it explicitly here would cause a
+  # `duplicate derivation output 'debug'` error. Gating `coverage` on
+  # `enableCoverage` lets `.#fuzz` (which replaces installPhase via
+  # overrideAttrs) skip the marker-directory dance.
+  outputs = [ "out" ] ++ lib.optional enableCoverage "coverage";
+
   nativeBuildInputs = [
     cmake
     pkg-config
@@ -76,6 +88,9 @@ stdenv.mkDerivation {
     unzip
     xxd
     file  # autoreconf deps for libmagic build
+  ] ++ lib.optionals enableCoverage [
+    gcovr                  # gcovr binary used by postCheck to produce coverage.xml
+    llvmPackages_19.llvm   # provides `llvm-cov` on PATH for gcovr's --gcov-executable
   ];
 
   buildInputs = [
@@ -90,6 +105,8 @@ stdenv.mkDerivation {
     "-DCODE_COVERAGE=ON"
   ] ++ lib.optionals enableSanitizers [
     "-DENABLE_SANITIZERS=ON"
+  ] ++ lib.optionals enableFuzzing [
+    "-DSIPI_ENABLE_FUZZ=ON"
   ] ++ lib.optionals enableTests [
     "-DBUILD_TESTING=ON"
     "-DGTEST_LOCAL_ARCHIVE=${gtestArchive}"
@@ -102,8 +119,14 @@ stdenv.mkDerivation {
   # sha256-pinned fixed-output derivation that fetches the asset from the
   # dsp-ci-assets GitHub release. ext/kakadu expects the archive at this
   # exact path and filename.
+  #
+  # `patchShebangs` rewrites `generate_icc_header.sh`'s `#!/bin/bash`
+  # shebang to a nix-store path; the script is invoked from CMakeLists.txt
+  # at build time, so nixpkgs' automatic shebang patching doesn't cover it
+  # (same pattern as `mkStaticBuild` in flake.nix).
   preConfigure = ''
     cp ${kakaduArchive} vendor/v8_5-01382N.zip
+    patchShebangs generate_icc_header.sh
   '';
 
   env = {
@@ -111,9 +134,49 @@ stdenv.mkDerivation {
     LDFLAGS = "-stdlib=libc++ -Wno-unused-command-line-argument";
   };
 
-  # Tests are built when enableTests=true but not run during `nix build`.
-  # Run tests in the dev shell: `just nix-build && just nix-test`
-  doCheck = false;
+  # Match the dev-shell toolchain (`flake.nix` clang devShell sets
+  # `hardeningDisable = [ "all" ]`). Older autotools ext/* deps like xz
+  # fail to compile under nixpkgs' default hardening set on Linux
+  # (format, stackprotector, fortify, pic, bindnow, …). Disabling all
+  # hardening mirrors the pre-migration imperative-cmake build that ran
+  # inside the dev shell and passed CI.
+  hardeningDisable = [ "all" ];
+
+  # `doCheck = enableTests` keeps the test invariant honest: any variant
+  # that builds tests also runs them inside the sandbox (`.#default`,
+  # `.#dev`, `.#sanitized`). `.#release` sets `enableTests = false` and
+  # skips the check phase. `mkStaticBuild` in flake.nix is independent
+  # of this derivation, so static builds are unaffected.
+  doCheck = enableTests;
+
+  # cmake setup-hook cd's into `build/` in configurePhase; checkPhase and
+  # postCheck run from there.
+  checkPhase = ''
+    runHook preCheck
+    ctest --output-on-failure
+    runHook postCheck
+  '';
+
+  # Coverage report (multi-output). When `enableCoverage` is true the
+  # `$coverage` output is declared (see `outputs` above) and gcovr
+  # aggregates `.gcda` counters emitted by the test run into
+  # `$coverage/coverage.xml`. Codecov reads this path from
+  # `result-coverage/coverage.xml`.
+  #
+  # ApprovalTests note: if the sandbox rejects writes outside `build/`,
+  # `checkPhase` can be scoped via `ctest --output-on-failure -LE approval`
+  # and the approval layer kept as a dev-shell invocation.
+  postCheck = lib.optionalString enableCoverage ''
+    mkdir -p "$coverage"
+    gcovr -j $NIX_BUILD_CORES \
+      --xml "$coverage/coverage.xml" \
+      --root .. \
+      --gcov-executable "llvm-cov gcov" \
+      --exclude '../test/' \
+      --exclude '../fuzz/' \
+      --exclude '../ext/' \
+      --exclude '../include/'
+  '';
 
   separateDebugInfo = true;
 
