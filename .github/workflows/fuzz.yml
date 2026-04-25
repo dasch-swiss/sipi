@@ -1,21 +1,19 @@
 # Nightly / on-demand fuzz testing using libFuzzer (requires Clang).
 # Runs the IIIF URI parser fuzzer for a configurable duration.
 #
-# Corpus persistence: each run downloads the previous night's corpus,
-# merges new findings, and uploads the result. This means coverage
-# accumulates across runs instead of starting fresh each time.
+# Corpus persistence: each run downloads the previous run's corpus, merges
+# new findings, and uploads the result. The seed corpus committed at
+# fuzz/handlers/corpus/ is the fallback when no prior run is reachable.
 #
-# On crash: uploads reproducer artifacts (retained 90 days) and opens
-# a GitHub issue with the crash details so the team gets notified.
+# On finding: workflow fails. The `fuzz-crashes` artifact (90-day retention)
+# contains the reproducer files plus `crash-summary.md` with annotated bytes.
 #
 # Build flow: `just nix-build-fuzz` produces
-# `result/bin/iiif_handler_uri_parser_fuzz`. `just nix-run-fuzz` then
-# runs it against a live corpus + read-only seed corpus. libFuzzer's
-# exit code propagates through the recipe so this job can detect crashes.
+# `result/bin/iiif_handler_uri_parser_fuzz`. `just nix-run-fuzz` runs it
+# against a live corpus + read-only seed corpus.
 
 permissions:
   contents: read
-  issues: write
 
 on:
   schedule:
@@ -115,7 +113,6 @@ jobs:
 
       - name: Collect crash details
         if: failure() && steps.fuzz.outcome == 'failure'
-        id: crashes
         run: |
           echo "## Crash files found:" > crash-summary.md
           for f in crash-* oom-* timeout-*; do
@@ -134,7 +131,6 @@ jobs:
             tail -50 fuzz-output.log >> crash-summary.md
             echo '```' >> crash-summary.md
           fi
-          echo "has_crashes=true" >> "$GITHUB_OUTPUT"
 
       - name: Upload crash artifacts
         if: failure() && steps.fuzz.outcome == 'failure'
@@ -147,29 +143,4 @@ jobs:
             oom-*
             timeout-*
             fuzz-output.log
-
-      - name: Open GitHub issue for crash
-        if: failure() && steps.crashes.outputs.has_crashes == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          cat > /tmp/fuzz-issue-body.md <<ISSUE_EOF
-          **Fuzzer found a crash in the IIIF URI parser.**
-
-          **Workflow run:** $RUN_URL
-          **Download crash reproducers:** Go to the workflow run → Artifacts → \`fuzz-crashes\`
-
-          ### How to reproduce locally
-
-          \`\`\`bash
-          # Download the crash file from the artifact, then:
-          just nix-build-fuzz
-          ./result/bin/iiif_handler_uri_parser_fuzz /path/to/crash-file
-          \`\`\`
-          ISSUE_EOF
-          cat crash-summary.md >> /tmp/fuzz-issue-body.md
-          gh issue create \
-            --title "Fuzz: crash in parse_iiif_uri ($(date +%Y-%m-%d))" \
-            --label "bug,fuzz" \
-            --body-file /tmp/fuzz-issue-body.md
+            crash-summary.md
