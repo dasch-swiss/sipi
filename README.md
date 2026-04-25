@@ -11,8 +11,10 @@ be used by archives, libraries, and other institutions that need to
 preserve high-quality images while making them available online.
 
 SIPI implements the Image API 3.0 of the International Image Interoperability Framework
-([IIIF](https://iiif.io/)), and efficiently converts between image
-formats, preserving metadata contained in image files. In particular, if
+([IIIF](https://iiif.io/)) at Level 2 — see the conformance matrix in
+[`docs/src/guide/introduction.md`](docs/src/guide/introduction.md) for the supported
+region, size, rotation, quality, and format forms — and efficiently converts between
+image formats, preserving metadata contained in image files. In particular, if
 images are stored in [JPEG 2000](https://jpeg.org/jpeg2000/) format,
 Sipi can convert them on the fly to formats that are commonly used on
 the Internet. SIPI offers a flexible framework for specifying

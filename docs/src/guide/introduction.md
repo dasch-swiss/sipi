@@ -5,6 +5,30 @@
   JPEG2000 implementation, it relies on the commercial [kakadu-library](https://kakadusoftware.com), but otherwise it is
   completely open source on [GitHub](https://github.com/dasch-swiss/sipi). It offers special support for multipage PDFs
   (through a SIPI-specific extensions to the IIIF Image API).
+
+#### IIIF Image API 3.0 conformance matrix
+
+The following URL forms are accepted by the IIIF endpoint and have a working
+implementation behind them. The list mirrors what `info.json` advertises in
+its `extraFeatures` and `extraFormats` arrays:
+
+| Component | Supported forms |
+|---|---|
+| Region | `full`, `square`, `x,y,w,h` (pixel), `pct:x,y,w,h` (percent) |
+| Size (no upscale) | `max`, `pct:n`, `w,`, `,h`, `w,h`, `!w,h` |
+| Size (upscale, `^`-prefixed) | `^max`, `^pct:n`, `^w,`, `^,h`, `^w,h`, `^!w,h` |
+| Rotation | non-negative decimal `n`; `!n` (mirror then rotate). Leading `+` / `-` rejected. |
+| Quality | `default`, `color`, `gray`, `bitonal` |
+| Format | `jpg`, `tif`, `png`, `jp2` (also reachable as `jpx`) |
+
+SIPI-specific extensions on the same URL surface:
+
+| URL form | Behaviour |
+|---|---|
+| `{prefix}/{id}/info.json` | IIIF Image Information document |
+| `{prefix}/{id}/knora.json` | DSP-specific information document (legacy) |
+| `{prefix}/{id}/file` | Bypass IIIF processing and stream the file as-is |
+| `{prefix}/{id}` | 303 redirect to `info.json` (`baseUriRedirect`) |
 - SIPI has been designed for the long term preservation of images, intended for the needs of the cultural heritage field. Thus it offers
   some unique features for this purpose:
   - all file format conversions try to preserve all metadata (EXIF, XMP, IPTC etc.). These functionality is based

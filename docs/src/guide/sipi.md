@@ -22,8 +22,9 @@ The parts do have the following meaning:
 - `{size}`: The size of the displayed image (part). `max` indicates the the "natural" maximal resolution should be used.
   For more details see [IIIF size](https://iiif.io/api/image/3.0/#42-size)
 - `{rotations}`: The image can be rotated and mirrored before being transmitted to the client. SIPI allows for
-  arbitrary rotations. The Value `0` indicates no rotation. For more details see
-  [IIIF rotation](https://iiif.io/api/image/3.0/#43-rotation)
+  arbitrary rotations. The rotation is a non-negative decimal — digits and `.` only — per
+  [IIIF Image API 3.0 §5.1.1](https://iiif.io/api/image/3.0/#511-rotation). The value `0` indicates no rotation.
+  Prefix with `!` to mirror first, then rotate. See [IIIF rotation](https://iiif.io/api/image/3.0/#43-rotation).
 - `{quality}`: The quality parameter determines whether the image is delivered in color, grayscale or black and white.
   Valid values are:
   - `default`: the "natural" quality of the original image
@@ -32,18 +33,15 @@ The parts do have the following meaning:
   - `bitonal`: A bitonal representation
   
   All quality values are supported by SIPI
-- `{format}`: The file format that should be delivered. SIPI supports the following formats, irrelevant on the format
-  the image as in the repository of SIPI:
-  - `jpg`: The image is delivered as JPEG image. Unfortunately the IIIF standard does not allow the dynamic selection
-     of the compression ratio used in creating the JPEG. However, a server wide rate may be set in the configuration
-     file.
-  - `tif`: The image is delivered as TIFF image.
-  - `png`: The image is delivered as PNG image.
-  - `jpx`: The image is delivered as JPEG2000 image.
-  - `webp`: The image is delivered as WebP image.
-  - `gif`: The image is delivered as GIF image.
+- `{format}`: The file format that should be delivered. The IIIF endpoint supports the following formats,
+  independent of the image's storage format:
+  - `jpg`: JPEG. The IIIF spec does not allow per-request selection of the JPEG compression ratio; a server-wide
+    rate is set in the configuration file.
+  - `tif`: TIFF.
+  - `png`: PNG.
+  - `jp2` (also `jpx`): JPEG 2000.
 
-  *NOTE*: PDF's are not supported as an output format. PDF is considered a __document format__ and *not* an image format.
+  `info.json` advertises `extraFormats: ["tif", "jp2"]`; JPEG and PNG are the IIIF default set.
 
 
 ## The SIPI Executable
