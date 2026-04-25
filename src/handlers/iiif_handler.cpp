@@ -5,11 +5,113 @@
 
 #include "iiif_handler.hpp"
 
-#include <regex>
+#include <algorithm>
+#include <string_view>
 
 #include "shttps/Connection.h"
 
 namespace handlers::iiif_handler {
+
+namespace {
+
+// Validators for IIIF Image API 3.0 URL components. Single pass, no
+// allocation, linear time.
+
+[[nodiscard]] bool consume_posint(std::string_view &s) noexcept
+{
+  size_t i = 0;
+  while (i < s.size() && s[i] >= '0' && s[i] <= '9') { ++i; }
+  if (i == 0) { return false; }
+  s.remove_prefix(i);
+  return true;
+}
+
+// IIIF posfloat: `digit+ ('.' digit+)?`. See spec §5.1.1.
+[[nodiscard]] bool consume_posfloat(std::string_view &s) noexcept
+{
+  if (!consume_posint(s)) { return false; }
+  if (!s.empty() && s.front() == '.') {
+    std::string_view tail = s;
+    tail.remove_prefix(1);
+    if (!consume_posint(tail)) { return false; }
+    s = tail;
+  }
+  return true;
+}
+
+[[nodiscard]] bool starts_with_consume(std::string_view &s, std::string_view prefix) noexcept
+{
+  if (s.size() < prefix.size() || s.substr(0, prefix.size()) != prefix) { return false; }
+  s.remove_prefix(prefix.size());
+  return true;
+}
+
+// `quality "." format` — quality ∈ {color, gray, bitonal, default},
+// format ∈ {jpg, tif, png, jp2}. The format set is what `SipiImage::io` writes.
+[[nodiscard]] bool is_valid_qualform(std::string_view s) noexcept
+{
+  constexpr std::string_view qualities[] = { "color", "gray", "bitonal", "default" };
+  constexpr std::string_view formats[] = { "jpg", "tif", "png", "jp2" };
+  for (auto q : qualities) {
+    if (starts_with_consume(s, q)) {
+      if (!starts_with_consume(s, ".")) { return false; }
+      return std::any_of(std::begin(formats), std::end(formats), [&](std::string_view f) { return s == f; });
+    }
+  }
+  return false;
+}
+
+// `'!'? posfloat` — IIIF 3.0 §4.3 + §5.1.1.
+[[nodiscard]] bool is_valid_rotation(std::string_view s) noexcept
+{
+  if (!s.empty() && s.front() == '!') { s.remove_prefix(1); }
+  if (!consume_posfloat(s)) { return false; }
+  return s.empty();
+}
+
+// `'^'? size-form` where size-form ∈ {
+//   "max", "pct:" posfloat, posint ",", "," posint, posint "," posint, "!" posint "," posint
+// }. The `!` prefix only combines with the full `posint "," posint` confined form.
+[[nodiscard]] bool is_valid_size(std::string_view s) noexcept
+{
+  if (!s.empty() && s.front() == '^') { s.remove_prefix(1); }
+  if (s == "max") { return true; }
+  if (starts_with_consume(s, "pct:")) { return consume_posfloat(s) && s.empty(); }
+  bool has_bang = false;
+  if (!s.empty() && s.front() == '!') {
+    has_bang = true;
+    s.remove_prefix(1);
+  }
+  if (!s.empty() && s.front() == ',') {
+    if (has_bang) { return false; }
+    s.remove_prefix(1);
+    return consume_posint(s) && s.empty();
+  }
+  if (!consume_posint(s)) { return false; }
+  if (!starts_with_consume(s, ",")) { return false; }
+  if (s.empty()) { return !has_bang; }
+  return consume_posint(s) && s.empty();
+}
+
+// `"full" | "square" | posint,posint,posint,posint | "pct:" posfloat,posfloat,posfloat,posfloat`
+[[nodiscard]] bool is_valid_region(std::string_view s) noexcept
+{
+  if (s == "full" || s == "square") { return true; }
+  if (starts_with_consume(s, "pct:")) {
+    for (int i = 0; i < 4; ++i) {
+      if (i > 0 && !starts_with_consume(s, ",")) { return false; }
+      if (!consume_posfloat(s)) { return false; }
+    }
+    return s.empty();
+  }
+  for (int i = 0; i < 4; ++i) {
+    if (i > 0 && !starts_with_consume(s, ",")) { return false; }
+    if (!consume_posint(s)) { return false; }
+  }
+  return s.empty();
+}
+
+}// namespace
 
 template<typename T> std::string vector_to_string(const std::vector<T> &vec)
 {
@@ -78,41 +180,10 @@ static auto make_parse_error(std::string msg) -> std::expected<IIIFUriParseResul
 
   std::vector<std::string> params;
 
-  //
-  // below are regex expressions for the different parts of the IIIF URL
-  //
-  std::string qualform_ex = R"(^(color|gray|bitonal|default)\.(jpg|tif|png|jp2)$)";
-
-  // rotation can be a number or a number with a "!" in front.
-  // There is an '|' in the middle of the regex!
-  std::string rotation_ex = R"(^[-+]?[0-9]*\.?[0-9]+$|^![-+]?[0-9]*\.?[0-9]+$)";
-  std::string size_ex = R"(^(\^?max)|(\^?pct:[0-9]*\.?[0-9]*)|(\^?[0-9]*,)|(\^?,[0-9]*)|(\^?!?[0-9]*,[0-9]*)$)";
-  std::string region_ex =
-    R"(^(full)|(square)|([0-9]+,[0-9]+,[0-9]+,[0-9]+)|(pct:[0-9]*\.?[0-9]*,[0-9]*\.?[0-9]*,[0-9]*\.?[0-9]*,[0-9]*\.?[0-9]*)$)";
-
-  bool qualform_ok = false;
-  if (!parts.empty()) {
-    // check if last part is a valid quality format
-    qualform_ok = std::regex_match(parts[parts.size() - 1], std::regex(qualform_ex));
-  }
-
-  bool rotation_ok = false;
-  if (parts.size() > 1) {
-    // check if second last part is a valid rotation
-    rotation_ok = std::regex_match(parts[parts.size() - 2], std::regex(rotation_ex));
-  }
-
-  bool size_ok = false;
-  if (parts.size() > 2) {
-    // check if third last part is a valid size
-    size_ok = std::regex_match(parts[parts.size() - 3], std::regex(size_ex));
-  }
-
-  bool region_ok = false;
-  if (parts.size() > 3) {
-    // check if fourth last part is a valid region
-    region_ok = std::regex_match(parts[parts.size() - 4], std::regex(region_ex));
-  }
+  const bool qualform_ok = !parts.empty() && is_valid_qualform(parts[parts.size() - 1]);
+  const bool rotation_ok = parts.size() > 1 && is_valid_rotation(parts[parts.size() - 2]);
+  const bool size_ok = parts.size() > 2 && is_valid_size(parts[parts.size() - 3]);
+  const bool region_ok = parts.size() > 3 && is_valid_region(parts[parts.size() - 4]);
 
   // analyze the last part of the URL and look for a dot
   if ((pos = parts[parts.size() - 1].find('.', 0)) != std::string::npos) {
