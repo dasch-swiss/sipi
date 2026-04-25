@@ -288,8 +288,13 @@ nix-valgrind: nix-build
 
 # Run the libFuzzer harness against a live corpus (read+write) for a bounded
 # time budget. Optional read-only seed corpus can be passed as the third arg.
-# Exit 0 = time budget reached with no new crash; non-zero = new crash
-# (fuzz.yml inspects the exit code and opens a GitHub issue).
+# Exit 0 = time budget reached with no findings; non-zero = finding (crash,
+# timeout, or oom).
+#
+# `-timeout=1`: any single input that takes >1 s to parse is reported as a
+# `timeout-*` finding instead of being absorbed into the run budget.
+# `-rss_limit_mb=1024`: any allocation past 1 GiB is reported as an `oom-*`
+# finding instead of OOM-killing the runner.
 nix-run-fuzz corpus duration seed="":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -299,9 +304,11 @@ nix-run-fuzz corpus duration seed="":
         exit 1
     fi
     if [ -n "{{seed}}" ]; then
-        exec "$FUZZ_BIN" "{{corpus}}" "{{seed}}" -max_total_time={{duration}} -print_final_stats=1
+        exec "$FUZZ_BIN" "{{corpus}}" "{{seed}}" \
+            -max_total_time={{duration}} -timeout=1 -rss_limit_mb=1024 -print_final_stats=1
     else
-        exec "$FUZZ_BIN" "{{corpus}}" -max_total_time={{duration}} -print_final_stats=1
+        exec "$FUZZ_BIN" "{{corpus}}" \
+            -max_total_time={{duration}} -timeout=1 -rss_limit_mb=1024 -print_final_stats=1
     fi
 
 # Download CI fuzz corpus and merge into seed corpus
