@@ -98,19 +98,19 @@ public:
 
   void docroot(const std::string &docroot_p) { _docroot = docroot_p; }
 
-  std::string docroot() { return _docroot; }
+  std::string docroot() const { return _docroot; }
 
   void imgroot(const std::string &imgroot_p) { _imgroot = imgroot_p; }
 
-  std::string imgroot() { return _imgroot; }
+  std::string imgroot() const { return _imgroot; }
 
-  std::string salsah_prefix() { return _salsah_prefix; }
+  std::string salsah_prefix() const { return _salsah_prefix; }
 
   void salsah_prefix(const std::string &salsah_prefix) { _salsah_prefix = salsah_prefix; }
 
   void wwwroute(const std::string &wwwroute_p) { _wwwroute = wwwroute_p; }
 
-  std::string wwwroute() { return _wwwroute; }
+  std::string wwwroute() const { return _wwwroute; }
 
   bool prefix_as_path() const { return _prefix_as_path; }
 

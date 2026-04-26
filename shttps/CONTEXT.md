@@ -33,7 +33,7 @@ A built-in `RequestHandler` shipped by shttps that serves files from the *docume
 _Avoid_: confusing this with SIPI's IIIF `/file` endpoint (which serves a Bitstream by IIIF identifier, not a docroot path).
 
 **Document root**:
-The filesystem directory tree that `shttps::file_handler` resolves URL paths into. Owned by shttps, configured by the consumer via `Server::docroot(...)`.
+The filesystem directory tree that `shttps::file_handler` resolves URL paths into. Owned by the consumer; supplied as the second element of the `(wwwroute, docroot)` pair passed via the `handler_data` argument of `Server::add_route(...)`.
 _Avoid_: web root.
 
 **Init script**:
