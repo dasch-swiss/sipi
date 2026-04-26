@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Local fast-feedback parity for the shttps → sipi boundary check.
+# No-op unless the commit touches shttps/. The mandatory gate is CI; see
+# scripts/shttps-context-check.sh and sipi/shttps/CONTEXT.md.
+set -euo pipefail
+
+if ! git diff --cached --name-only --diff-filter=ACMR | grep -q '^shttps/'; then
+    exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel)"
+exec "$repo_root/scripts/shttps-context-check.sh"

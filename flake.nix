@@ -430,6 +430,7 @@
             shellHook = ''
               export PS1="\\u@\\h | nix-develop> "
               export MKSHELL=clang
+              git config core.hooksPath .githooks 2>/dev/null || true
             '';
           };
 
@@ -459,6 +460,7 @@
             shellHook = ''
               export PS1="\\u@\\h | nix-develop-fuzz> "
               export MKSHELL=fuzz
+              git config core.hooksPath .githooks 2>/dev/null || true
             '';
           };
 
@@ -488,6 +490,7 @@
             shellHook = ''
               export PS1="\\u@\\h | nix-develop> "
               export MKSHELL=default
+              git config core.hooksPath .githooks 2>/dev/null || true
             '';
           };
         };

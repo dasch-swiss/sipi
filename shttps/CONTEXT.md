@@ -57,6 +57,10 @@ These four types are the *contract* SIPI consumes. The strangler-fig replacement
 - **RequestHandler** — for the C++/native dispatch shape.
 - **LuaServer** — for embedded Lua scripting (preflight, init, route scripts).
 
+## Enforcement
+
+The one-way direction is enforced by `just shttps-context-check`, which fails CI on any new `#include "Sipi*.h"` or `Sipi*::` symbol use inside `shttps/`. Allowlist entries live in `scripts/shttps-context-check.sh`.
+
 ## Secondary surface (scheduled for re-homing into SIPI before the Rust migration)
 
 These currently live in shttps but are not seam types. They are utilities or domain-flavoured types that ended up in shttps for historical reasons. The migration plan re-homes them into SIPI so the Rust replacement does not need to reproduce them:

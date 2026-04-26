@@ -83,6 +83,15 @@ curl http://localhost:1024/metrics | grep sipi_cache
 | `config/sipi.localdev-config.lua` | Local development (test images, tiny cache, DEBUG logging) |
 | `config/sipi.test-config.lua` | Automated test suite |
 
+### Pre-commit hook
+
+`nix develop` (and direnv-driven shell loads) automatically point Git at the
+repo-tracked hook directory `.githooks/` via `git config core.hooksPath
+.githooks`. The pre-commit hook runs `scripts/shttps-context-check.sh` on
+commits that touch `shttps/` and refuses commits that introduce a SIPI→shttps
+leak. Working outside the dev shell? Run the same `git config` line by hand.
+The mandatory gate is CI; the local hook is fast-feedback parity.
+
 ## Writing Tests
 
 We use two test frameworks:
