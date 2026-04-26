@@ -68,7 +68,7 @@ jobs:
           # the matching client flag).
           extra-conf: |
             extra-experimental-features = configurable-impure-env
-      - uses: cachix/cachix-action@v15
+      - uses: cachix/cachix-action@v17
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
@@ -121,7 +121,7 @@ jobs:
           # GH_TOKEN from the client.
           extra-conf: |
             extra-experimental-features = configurable-impure-env
-      - uses: cachix/cachix-action@v15
+      - uses: cachix/cachix-action@v17
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
@@ -156,7 +156,7 @@ jobs:
         with:
           extra-conf: |
             extra-experimental-features = configurable-impure-env
-      - uses: cachix/cachix-action@v15
+      - uses: cachix/cachix-action@v17
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
