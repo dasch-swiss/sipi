@@ -41,8 +41,14 @@ class SipiHttpServer : public shttps::Server
 private:
 protected:
   pid_t _pid{};
+  // Document root + URL prefix for shttps::file_handler. Empty = route disabled.
+  std::string _docroot;
   std::string _imgroot;
   std::string _salsah_prefix;
+  std::string _wwwroute;
+  // Stable storage for the (wwwroute, docroot) pair passed to shttps::file_handler
+  // as its handler_data argument (4th arg of add_route). Must outlive the run loop.
+  std::pair<std::string, std::string> _filehandler_info;
   bool _prefix_as_path{};
   std::vector<std::string> _dirs_to_exclude;
   //!< Directories which should have no subdirs even if subdirs are enabled
@@ -90,6 +96,10 @@ public:
 
   pid_t pid() const { return _pid; }
 
+  void docroot(const std::string &docroot_p) { _docroot = docroot_p; }
+
+  std::string docroot() { return _docroot; }
+
   void imgroot(const std::string &imgroot_p) { _imgroot = imgroot_p; }
 
   std::string imgroot() { return _imgroot; }
@@ -97,6 +107,10 @@ public:
   std::string salsah_prefix() { return _salsah_prefix; }
 
   void salsah_prefix(const std::string &salsah_prefix) { _salsah_prefix = salsah_prefix; }
+
+  void wwwroute(const std::string &wwwroute_p) { _wwwroute = wwwroute_p; }
+
+  std::string wwwroute() { return _wwwroute; }
 
   bool prefix_as_path() const { return _prefix_as_path; }
 
