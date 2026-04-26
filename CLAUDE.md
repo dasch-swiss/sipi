@@ -6,6 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 SIPI (Simple Image Presentation Interface) is a multithreaded, high-performance, IIIF-compatible media server written in C++23. It implements IIIF Image API 3.0 and provides efficient image format conversions while preserving metadata. The server can be used both as a command-line tool and as a web server with Lua scripting support.
 
+## Domain Model
+
+Read these before reasoning about names, boundaries, or architectural decisions:
+
+- [`UBIQUITOUS_LANGUAGE.md`](UBIQUITOUS_LANGUAGE.md) — canonical SIPI glossary. Defines Image vs Bitstream, the IIIF pipeline terms (Region / Size / Rotation / Quality / Format / Decode level / Canonical URL / Cache key), Preservation metadata, the three Lua entry points, the seven Permission types, and more. Use these terms in code comments, commit messages, and PR descriptions; aliases listed there are *avoid*.
+- [`CONTEXT-MAP.md`](CONTEXT-MAP.md) — declares two bounded contexts ([SIPI image server](CONTEXT.md) + [shttps embedded HTTP framework](shttps/CONTEXT.md)) with strict one-way SIPI → shttps dependency direction. Lists the four primary seam types and the secondary surface scheduled for re-homing.
+- [`docs/adr/`](docs/adr/) — architectural decision records. Start with [`0001-shttps-as-strangler-fig-target.md`](docs/adr/0001-shttps-as-strangler-fig-target.md).
+
 ## Build System and Common Commands
 
 All targets are in a single `justfile`. Run `just` for a complete list.
