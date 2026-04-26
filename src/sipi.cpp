@@ -1675,22 +1675,8 @@ int main(int argc, char *argv[])
       server.keep_alive_timeout(sipiConf.getKeepAlive());
       server.max_waiting_connections(sipiConf.getMaxWaitingConnections());
       server.queue_timeout(sipiConf.getQueueTimeout());
-
-      //
-      // now we set the routes for the normal HTTP server file handling
-      //
-      std::string docroot = sipiConf.getDocRoot();
-      std::string wwwroute = sipiConf.getWWWRoute();
-      std::pair<std::string, std::string> filehandler_info;
-
-      // here we add two additional routes for handling files.
-      // (tip: click into add_route to see all the places where routes are added. there are a few places.)
-      if (!(wwwroute.empty() || docroot.empty())) {
-        filehandler_info.first = wwwroute;
-        filehandler_info.second = docroot;
-        server.add_route(shttps::Connection::GET, wwwroute, shttps::file_handler, &filehandler_info);
-        server.add_route(shttps::Connection::POST, wwwroute, shttps::file_handler, &filehandler_info);
-      }
+      server.docroot(sipiConf.getDocRoot());
+      server.wwwroute(sipiConf.getWWWRoute());
 
       // start the server
       log_info("SIPI server starting on port %d...", sipiConf.getPort());

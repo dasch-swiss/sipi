@@ -2261,6 +2261,12 @@ void SipiHttpServer::run()
   add_route(Connection::GET, "/", iiif_handler);
   add_route(Connection::HEAD, "/", iiif_handler);
 
+  if (!_wwwroute.empty() && !_docroot.empty()) {
+    _filehandler_info = { _wwwroute, _docroot };
+    add_route(Connection::GET, _wwwroute, shttps::file_handler, &_filehandler_info);
+    add_route(Connection::POST, _wwwroute, shttps::file_handler, &_filehandler_info);
+  }
+
   user_data(this);
 
   // in shttps::Server::run(), add additional routes are added, namely the ones for the LUA scripts
