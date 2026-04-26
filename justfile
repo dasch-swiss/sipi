@@ -344,6 +344,11 @@ vendor-verify:
 vendor-checksums:
     @scripts/vendor.sh checksums
 
+# Enforce shttps → sipi one-way dependency boundary.
+# See sipi/shttps/CONTEXT.md and docs/adr/0001-shttps-as-strangler-fig-target.md.
+shttps-context-check:
+    @scripts/shttps-context-check.sh
+
 # Fetch the proprietary Kakadu archive from dsp-ci-assets release into vendor/.
 # Only required for the production Dockerfile and local Docker dev builds.
 # Nix builds fetch Kakadu directly via flake.nix's FOD (no vendor/ step).

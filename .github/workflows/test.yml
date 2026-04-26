@@ -40,6 +40,8 @@ jobs:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+      - name: Enforce shttps→sipi boundary
+        run: bash scripts/shttps-context-check.sh
       - name: pull LFS objects
         run: |
           git lfs install
