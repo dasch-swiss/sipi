@@ -1,0 +1,4097 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://sipi.io/development/testing-strategy/">
+      
+      
+        <link rel="prev" href="../fuzzing/">
+      
+      
+        <link rel="next" href="../downstream-dependencies/">
+      
+      
+      <link rel="icon" href="../../assets/images/dasch-favicon.ico">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>Testing Strategy - SIPI Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.bcfcd587.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/style/theme.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-blue" data-md-color-accent="deep-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#testing-strategy" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="SIPI Documentation" class="md-header__button md-logo" aria-label="SIPI Documentation" data-md-component="logo">
+      
+  <img src="../../assets/images/dasch-icon-white.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            SIPI Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Testing Strategy
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dasch-swiss/sipi" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dasch-swiss/sipi
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="SIPI Documentation" class="md-nav__button md-logo" aria-label="SIPI Documentation" data-md-component="logo">
+      
+  <img src="../../assets/images/dasch-icon-white.svg" alt="logo">
+
+    </a>
+    SIPI Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dasch-swiss/sipi" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dasch-swiss/sipi
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/introduction/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Introduction
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/sipi/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/json-output/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    JSON Output
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/running/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Running
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lua/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Lua Integration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lua/lua-image/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Lua Image Functions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lua/sqlite/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SQLite Integration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../building/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Building
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../nix/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Building with Nix
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ci/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    CI and Release
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../developing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Developing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../fuzzing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Fuzz Testing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Testing Strategy
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Testing Strategy
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#sipi-feature-inventory" class="md-nav__link">
+    <span class="md-ellipsis">
+      Sipi Feature Inventory
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sipi Feature Inventory">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#iiif-image-api-30" class="md-nav__link">
+    <span class="md-ellipsis">
+      IIIF Image API 3.0
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-format-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image Format Support
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-processing-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image Processing Pipeline
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#http-server-shttps" class="md-nav__link">
+    <span class="md-ellipsis">
+      HTTP Server (shttps/)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#caching-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      Caching System
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lua-scripting-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      Lua Scripting System
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cli-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      CLI Mode
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configuration-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration System
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#prometheus-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prometheus Metrics
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#upload-ingest" class="md-nav__link">
+    <span class="md-ellipsis">
+      Upload &amp; Ingest
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#security-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      Security Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#integration-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      Integration Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build-deployment" class="md-nav__link">
+    <span class="md-ellipsis">
+      Build &amp; Deployment
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing-pyramid" class="md-nav__link">
+    <span class="md-ellipsis">
+      Testing Pyramid
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-definitions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer Definitions
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layer Definitions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#layer-1-unit-tests-fastest-most-numerous" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 1: Unit Tests (fastest, most numerous)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layer-2-snapshot-golden-baseline-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 2: Snapshot / Golden Baseline Tests
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layer-3-e2e-contract-tests-http-level" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 3: E2E Contract Tests (HTTP-level)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layer-4-fuzz-testing-continuous-nightly" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 4: Fuzz Testing (continuous, nightly)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-decision-tree" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test Decision Tree
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#iiif-image-api-30-coverage-matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      IIIF Image API 3.0 Coverage Matrix
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="IIIF Image API 3.0 Coverage Matrix">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#infojson-section-5" class="md-nav__link">
+    <span class="md-ellipsis">
+      Info.json (Section 5)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#region-section-41" class="md-nav__link">
+    <span class="md-ellipsis">
+      Region (Section 4.1)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#size-section-42" class="md-nav__link">
+    <span class="md-ellipsis">
+      Size (Section 4.2)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rotation-section-43" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rotation (Section 4.3)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#quality-section-44" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quality (Section 4.4)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#format-section-45" class="md-nav__link">
+    <span class="md-ellipsis">
+      Format (Section 4.5)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cors-section-71" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORS (Section 7.1)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#http-behavior-section-7" class="md-nav__link">
+    <span class="md-ellipsis">
+      HTTP Behavior (Section 7)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#identifier-section-3" class="md-nav__link">
+    <span class="md-ellipsis">
+      Identifier (Section 3)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sipi-extension-coverage-matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      Sipi Extension Coverage Matrix
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gap-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Gap Summary
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-cutting-memory-safety-sanitizer-builds" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cross-Cutting: Memory Safety (Sanitizer Builds)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-cutting-performance-regression-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cross-Cutting: Performance Regression Detection
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#snapshot-review-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      Snapshot Review Workflow
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ci-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      CI Integration
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#python-test-deprecation-parity-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      Python Test Deprecation — Parity Checklist
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Python Test Deprecation — Parity Checklist">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#test_01_conversionspy-2-tests-retired" class="md-nav__link">
+    <span class="md-ellipsis">
+      test_01_conversions.py (2 tests) — RETIRED
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test_02_serverpy-32-tests-retired" class="md-nav__link">
+    <span class="md-ellipsis">
+      test_02_server.py (32 tests) — RETIRED
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test_03_iiifpy-1-test-retired" class="md-nav__link">
+    <span class="md-ellipsis">
+      test_03_iiif.py (1 test) — RETIRED
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test_04_range_requestspy-12-active-tests-retired" class="md-nav__link">
+    <span class="md-ellipsis">
+      test_04_range_requests.py (12 active tests) — RETIRED
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#infrastructure-files-retired" class="md-nav__link">
+    <span class="md-ellipsis">
+      Infrastructure files — RETIRED
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rust-migration-testing-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rust Migration Testing Path
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#flaky-test-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      Flaky Test Handling
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#future-additions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Future Additions
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../downstream-dependencies/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Downstream Dependencies
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../commit-conventions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Commit and PR Conventions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reviewer-guidelines/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Reviewer Guidelines
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operation/rate-limiter/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Rate Limiter
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operation/memory-budget/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Memory Budget
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operation/health-endpoint/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Health Endpoint
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release-notes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Release Notes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="testing-strategy">Testing Strategy<a class="headerlink" href="#testing-strategy" title="Permanent link">&para;</a></h1>
+<!-- last_reviewed: 2026-03-11 -->
+
+<p>This document defines the authoritative testing strategy for sipi. It maps the IIIF Image API 3.0 specification, sipi's extensions (Lua scripting, cache, CLI, knora integration), and Rust migration readiness onto a concrete testing pyramid. Use this document to determine <strong>where</strong> a new test should live, <strong>what</strong> layer it belongs to, and <strong>how</strong> to assess coverage.</p>
+<h2 id="sipi-feature-inventory">Sipi Feature Inventory<a class="headerlink" href="#sipi-feature-inventory" title="Permanent link">&para;</a></h2>
+<p>Sipi is a multithreaded, high-performance, IIIF-compatible media server written in C++23. The following is an exhaustive inventory of every feature area. Each feature needs test coverage — the <a href="#iiif-image-api-30-coverage-matrix">coverage matrices</a> later in this document track the current state.</p>
+<h3 id="iiif-image-api-30">IIIF Image API 3.0<a class="headerlink" href="#iiif-image-api-30" title="Permanent link">&para;</a></h3>
+<p>Sipi implements the full <a href="https://iiif.io/api/image/3.0/">IIIF Image API 3.0</a> at Level 2 compliance:</p>
+<table>
+<thead>
+<tr>
+<th>Feature Area</th>
+<th>Parameters</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Region</strong> (Section 4.1)</td>
+<td><code>full</code>, <code>square</code>, <code>x,y,w,h</code>, <code>pct:x,y,w,h</code></td>
+<td><code>src/iiifparser/SipiRegion.cpp</code></td>
+</tr>
+<tr>
+<td><strong>Size</strong> (Section 4.2)</td>
+<td><code>max</code>, <code>w,</code>, <code>,h</code>, <code>w,h</code>, <code>!w,h</code>, <code>pct:n</code>, <code>^</code> upscale variants</td>
+<td><code>src/iiifparser/SipiSize.cpp</code></td>
+</tr>
+<tr>
+<td><strong>Rotation</strong> (Section 4.3)</td>
+<td>Arbitrary angles (float), <code>!</code> mirror prefix</td>
+<td><code>src/iiifparser/SipiRotation.cpp</code></td>
+</tr>
+<tr>
+<td><strong>Quality</strong> (Section 4.4)</td>
+<td><code>default</code>, <code>color</code>, <code>gray</code>, <code>bitonal</code></td>
+<td><code>src/iiifparser/SipiQualityFormat.cpp</code></td>
+</tr>
+<tr>
+<td><strong>Format</strong> (Section 4.5)</td>
+<td><code>jpg</code>, <code>png</code>, <code>tif</code>, <code>jp2</code>, <code>webp</code></td>
+<td><code>src/iiifparser/SipiQualityFormat.cpp</code></td>
+</tr>
+<tr>
+<td><strong>Identifiers</strong> (Section 3)</td>
+<td>URL-encoded, <code>%2F</code> slash, prefix-based resolution</td>
+<td><code>src/iiifparser/SipiIdentifier.cpp</code></td>
+</tr>
+<tr>
+<td><strong>Info.json</strong> (Section 5)</td>
+<td>Full response: <code>@context</code>, <code>id</code>, <code>type</code>, <code>protocol</code>, <code>profile</code>, <code>width</code>, <code>height</code>, <code>sizes</code>, <code>tiles</code>, <code>extraFormats</code>, <code>extraFeatures</code>, <code>preferredFormats</code></td>
+<td><code>src/SipiHttpServer.cpp</code></td>
+</tr>
+<tr>
+<td><strong>Content negotiation</strong></td>
+<td><code>Accept: application/ld+json</code> → JSON-LD with <code>@context</code>; default → <code>application/json</code></td>
+<td><code>src/SipiHttpServer.cpp</code></td>
+</tr>
+<tr>
+<td><strong>HTTP behavior</strong> (Section 7)</td>
+<td>Base URI redirect, HEAD, CORS, Link headers, canonical URI, 400/401/403/404/500/501 errors</td>
+<td><code>src/SipiHttpServer.cpp</code></td>
+</tr>
+<tr>
+<td><strong>IIIF Extension: <code>red:n</code></strong></td>
+<td>Reduce factor for JP2 (faster subsampling on read) — sipi-specific, not in IIIF spec</td>
+<td><code>src/iiifparser/SipiSize.cpp</code></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">IIIF Auth exclusion</p>
+<p>Sipi does <strong>not</strong> implement the IIIF Authentication API. Access control is handled via custom Lua preflight scripts (<code>pre_flight</code>, <code>file_pre_flight</code>) that return allow/deny/restrict permissions. This is intentional — the Knora/DSP integration requires custom auth flows (cookie-based sessions) that don't map to the IIIF Auth spec.</p>
+</div>
+<h3 id="image-format-support">Image Format Support<a class="headerlink" href="#image-format-support" title="Permanent link">&para;</a></h3>
+<p><strong>Input/Output Formats:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Format</th>
+<th>Handler</th>
+<th>Read</th>
+<th>Write</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TIFF</td>
+<td><code>SipiIOTiff</code></td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Multi-page, tiled, pyramid; LZW/ZIP/CCITT compression; 1/8/16-bit; RGB/YCbCr/CMYK</td>
+</tr>
+<tr>
+<td>JPEG</td>
+<td><code>SipiIOJpeg</code></td>
+<td>Yes</td>
+<td>Yes</td>
+<td>8-bit, progressive and baseline; configurable quality</td>
+</tr>
+<tr>
+<td>PNG</td>
+<td><code>SipiIOPng</code></td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Palette/gray/RGB/RGBA; 1/2/4/8/16-bit</td>
+</tr>
+<tr>
+<td>JPEG2000</td>
+<td><code>SipiIOJ2k</code></td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Via Kakadu (commercial license); reduce factor; quality layers; progression orders</td>
+</tr>
+<tr>
+<td>WebP</td>
+<td><code>SipiIOWebp</code></td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Via libwebp</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Metadata Systems:</strong></p>
+<table>
+<thead>
+<tr>
+<th>System</th>
+<th>Library</th>
+<th>Read</th>
+<th>Write</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EXIF</td>
+<td>Exiv2</td>
+<td>Yes</td>
+<td>Yes</td>
+<td><code>src/metadata/SipiExif.cpp</code></td>
+</tr>
+<tr>
+<td>XMP</td>
+<td>Exiv2</td>
+<td>Yes</td>
+<td>Yes</td>
+<td><code>src/metadata/SipiXmp.cpp</code></td>
+</tr>
+<tr>
+<td>IPTC</td>
+<td>Exiv2</td>
+<td>Yes</td>
+<td>Yes</td>
+<td><code>src/metadata/SipiIptc.cpp</code></td>
+</tr>
+<tr>
+<td>ICC Profiles</td>
+<td>littleCMS2</td>
+<td>Yes</td>
+<td>Yes</td>
+<td><code>src/metadata/SipiIcc.cpp</code></td>
+</tr>
+<tr>
+<td>SipiEssentials</td>
+<td>Custom</td>
+<td>Yes</td>
+<td>Yes</td>
+<td><code>src/metadata/SipiEssentials.cpp</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Predefined ICC Profiles:</strong> sRGB, AdobeRGB, GRAY_D50, LUM_D65, CMYK_standard, LAB, ROMM_GRAY.</p>
+<p><strong>SipiEssentials</strong> is a custom metadata packet embedded in image headers. It stores: original filename, MIME type, pixel data checksum (MD5/SHA1/SHA256/SHA384/SHA512), and a backup of the ICC profile. This survives format conversions and enables provenance tracking.</p>
+<p><strong>Color Space Support:</strong> RGB, Grayscale, Bitonal, YCbCr, CMYK (with conversion to sRGB), CIELab (with conversion). 8 TIFF orientations handled; <code>topleft()</code> normalization for tiling compatibility. 16-bit big-endian internal representation with automatic 8-bit conversion where needed.</p>
+<h3 id="image-processing-pipeline">Image Processing Pipeline<a class="headerlink" href="#image-processing-pipeline" title="Permanent link">&para;</a></h3>
+<p>The IIIF processing pipeline applies transformations in spec-mandated order:</p>
+<ol>
+<li><strong>Region</strong> — crop the source image</li>
+<li><strong>Size</strong> — scale to requested dimensions</li>
+<li><strong>Rotation</strong> — rotate and/or mirror</li>
+<li><strong>Quality</strong> — color space conversion (color, gray, bitonal)</li>
+<li><strong>Format</strong> — encode to output format</li>
+</ol>
+<p>Each step allocates an intermediate buffer. Peak memory is ~2x image size per transform step.</p>
+<p><strong>Watermarking</strong> is applied as an additional step when the preflight script returns a <code>restrict</code> permission with a watermark path. Watermark files must be single-channel 8-bit gray TIFF (SAMPLESPERPIXEL=1, BITSPERSAMPLE=8, PHOTOMETRIC=MINISBLACK).</p>
+<h3 id="http-server-shttps">HTTP Server (<code>shttps/</code>)<a class="headerlink" href="#http-server-shttps" title="Permanent link">&para;</a></h3>
+<p>The <code>shttps</code> library is a custom lightweight HTTP server:</p>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Details</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SSL/TLS</td>
+<td>Configurable port, certificate, and key paths</td>
+<td><code>shttps/Server.h</code></td>
+</tr>
+<tr>
+<td>Threading</td>
+<td>Configurable thread pool (<code>nthreads</code>, default 8)</td>
+<td><code>shttps/Server.h</code></td>
+</tr>
+<tr>
+<td>Keep-alive</td>
+<td>Configurable timeout (seconds)</td>
+<td><code>shttps/Connection.h</code></td>
+</tr>
+<tr>
+<td>Chunked transfer</td>
+<td><code>Transfer-Encoding: chunked</code> support</td>
+<td><code>shttps/Connection.h</code></td>
+</tr>
+<tr>
+<td>Range requests</td>
+<td>HTTP 206 Partial Content</td>
+<td>Handler-level</td>
+</tr>
+<tr>
+<td>CORS</td>
+<td>Via Lua preflight scripts</td>
+<td><code>scripts/</code></td>
+</tr>
+<tr>
+<td>Methods</td>
+<td>GET, POST, PUT, DELETE</td>
+<td><code>shttps/Connection.h</code></td>
+</tr>
+<tr>
+<td>Authentication</td>
+<td>JWT (HS256), HTTP Basic Auth, cookie support</td>
+<td><code>shttps/jwt.h</code></td>
+</tr>
+<tr>
+<td>Max POST size</td>
+<td>Configurable (<code>max_post_size</code>, default 300M)</td>
+<td><code>shttps/Connection.cpp</code></td>
+</tr>
+<tr>
+<td>Multipart upload</td>
+<td>Form-data file upload with metadata</td>
+<td><code>shttps/Connection.h</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="caching-system">Caching System<a class="headerlink" href="#caching-system" title="Permanent link">&para;</a></h3>
+<p>File-based LRU cache with dual-limit eviction (<code>SipiCache.h</code>, <code>src/SipiCache.cpp</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Eviction policy</strong></td>
+<td>LRU by access time; evicts down to 80% low-water mark</td>
+</tr>
+<tr>
+<td><strong>Size limit</strong></td>
+<td><code>cache_size</code>: <code>'-1'</code>=unlimited, <code>'0'</code>=disabled, or <code>'200M'</code>, <code>'1G'</code></td>
+</tr>
+<tr>
+<td><strong>File count limit</strong></td>
+<td><code>cache_nfiles</code>: 0=no limit</td>
+</tr>
+<tr>
+<td><strong>Crash recovery</strong></td>
+<td>Serialized index on disk; rebuild from directory scan if index missing</td>
+</tr>
+<tr>
+<td><strong>Concurrent access</strong></td>
+<td>Mutex-protected; <code>blocked_files</code> map prevents reads during writes</td>
+</tr>
+<tr>
+<td><strong>Canonical key</strong></td>
+<td>Full IIIF URL (with watermark flag) as cache key</td>
+</tr>
+<tr>
+<td><strong>Metrics</strong></td>
+<td>hits, misses, evictions, skips, size, file count (Prometheus)</td>
+</tr>
+<tr>
+<td><strong>API endpoints</strong></td>
+<td><code>GET /api/cache</code> (list files), <code>DELETE /api/cache</code> (purge/delete specific)</td>
+</tr>
+<tr>
+<td><strong>Cache metadata</strong></td>
+<td>Image dimensions, tile info, pyramid levels, MIME type, checksum per entry</td>
+</tr>
+</tbody>
+</table>
+<h3 id="lua-scripting-system">Lua Scripting System<a class="headerlink" href="#lua-scripting-system" title="Permanent link">&para;</a></h3>
+<p>Per-request isolated Lua 5.3.5 interpreter with full server access:</p>
+<p><strong>SipiImage Lua Class:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SipiImage.new(filepath)</code></td>
+<td>Load image from file</td>
+</tr>
+<tr>
+<td><code>SipiImage.new(upload_index)</code></td>
+<td>Load from uploaded file</td>
+</tr>
+<tr>
+<td><code>SipiImage.new(filepath, {region=, size=, reduce=, ...})</code></td>
+<td>Load with IIIF options</td>
+</tr>
+<tr>
+<td><code>img:dims()</code></td>
+<td>Get dimensions (nx, ny, orientation)</td>
+</tr>
+<tr>
+<td><code>img:exif(tag)</code></td>
+<td>Read EXIF data</td>
+</tr>
+<tr>
+<td><code>img:crop(region)</code></td>
+<td>Crop to IIIF region</td>
+</tr>
+<tr>
+<td><code>img:scale(size)</code></td>
+<td>Resize to IIIF size</td>
+</tr>
+<tr>
+<td><code>img:rotate(rotation)</code></td>
+<td>Rotate/mirror</td>
+</tr>
+<tr>
+<td><code>img:topleft()</code></td>
+<td>Normalize orientation</td>
+</tr>
+<tr>
+<td><code>img:watermark(path)</code></td>
+<td>Apply watermark</td>
+</tr>
+<tr>
+<td><code>img:write(target)</code></td>
+<td>Write to file or <code>'HTTP.jpg'</code> for HTTP response</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Server Object:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Method/Property</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server.method</code>, <code>.path</code>, <code>.get</code>, <code>.post</code>, <code>.content</code></td>
+<td>Request data</td>
+</tr>
+<tr>
+<td><code>server.sendStatus(code)</code></td>
+<td>Set HTTP status</td>
+</tr>
+<tr>
+<td><code>server.sendHeader(name, value)</code></td>
+<td>Set response header</td>
+</tr>
+<tr>
+<td><code>server.print(...)</code></td>
+<td>Write response body</td>
+</tr>
+<tr>
+<td><code>server.setBuffer()</code></td>
+<td>Enable buffered output</td>
+</tr>
+<tr>
+<td><code>server.requireAuth()</code></td>
+<td>Require HTTP basic auth</td>
+</tr>
+<tr>
+<td><code>server.generate_jwt(table)</code></td>
+<td>Create HS256 JWT</td>
+</tr>
+<tr>
+<td><code>server.decode_jwt(token)</code></td>
+<td>Decode/verify JWT</td>
+</tr>
+<tr>
+<td><code>server.http(method, url, headers, timeout)</code></td>
+<td>Outbound HTTP request</td>
+</tr>
+<tr>
+<td><code>server.json_to_table(json)</code> / <code>server.table_to_json(t)</code></td>
+<td>JSON conversion</td>
+</tr>
+<tr>
+<td><code>server.getMimeType(filename)</code></td>
+<td>MIME detection</td>
+</tr>
+<tr>
+<td><code>server.log(msg, level)</code></td>
+<td>Structured logging</td>
+</tr>
+<tr>
+<td><code>server.uuid_to_base62(uuid)</code> / <code>server.base62_to_uuid(b62)</code></td>
+<td>UUID encoding</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cache Object:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cache.filelist(sort)</code></td>
+<td>List entries (sort: AT_ASC, AT_DESC, FS_ASC, FS_DESC)</td>
+</tr>
+<tr>
+<td><code>cache.delete(canonical)</code></td>
+<td>Remove entry by canonical URL</td>
+</tr>
+<tr>
+<td><code>cache.purge()</code></td>
+<td>Trigger LRU eviction</td>
+</tr>
+<tr>
+<td><code>cache.nfiles()</code> / <code>cache.size()</code></td>
+<td>Current counts</td>
+</tr>
+</tbody>
+</table>
+<p><strong>SQLite Integration:</strong> <code>server.db</code> provides Lua access to SQLite databases for custom data storage.</p>
+<p><strong>Preflight Scripts:</strong></p>
+<ul>
+<li><code>pre_flight(prefix, identifier, cookie)</code> → returns permission (<code>allow</code>, <code>deny</code>, <code>restrict</code>) + filepath for IIIF requests</li>
+<li><code>file_pre_flight(prefix, identifier, cookie)</code> → same for raw file downloads</li>
+<li>Restriction types: <code>watermark</code> (overlay image), <code>size</code> (reduce dimensions)</li>
+</ul>
+<p><strong>Custom Routes:</strong> Lua scripts mapped to HTTP method + URL pattern via config <code>routes</code> table.</p>
+<h3 id="cli-mode">CLI Mode<a class="headerlink" href="#cli-mode" title="Permanent link">&para;</a></h3>
+<p>Sipi operates in three CLI modes (<code>src/sipi.cpp</code>):</p>
+<p><strong>File Conversion:</strong> <code>sipi infile outfile [options]</code></p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-F, --format</code></td>
+<td>Output format (jpg, tif, png, jpx, j2k, webp)</td>
+</tr>
+<tr>
+<td><code>-I, --icc</code></td>
+<td>ICC profile conversion (sRGB, AdobeRGB, GRAY)</td>
+</tr>
+<tr>
+<td><code>-q, --quality</code></td>
+<td>JPEG quality (1-100)</td>
+</tr>
+<tr>
+<td><code>-n, --pagenum</code></td>
+<td>Multi-page file page selection</td>
+</tr>
+<tr>
+<td><code>-r, --region</code></td>
+<td>Crop region (pixels)</td>
+</tr>
+<tr>
+<td><code>-s, --size</code></td>
+<td>IIIF-format size</td>
+</tr>
+<tr>
+<td><code>--scale</code></td>
+<td>Percentage scaling</td>
+</tr>
+<tr>
+<td><code>-R, --reduce</code></td>
+<td>JP2 reduce factor</td>
+</tr>
+<tr>
+<td><code>-m, --mirror</code></td>
+<td>Mirror: horizontal, vertical</td>
+</tr>
+<tr>
+<td><code>-o, --rotate</code></td>
+<td>Rotation angle (0-360)</td>
+</tr>
+<tr>
+<td><code>-k, --skipmeta</code></td>
+<td>Strip all metadata</td>
+</tr>
+<tr>
+<td><code>-w, --watermark</code></td>
+<td>Apply watermark (TIFF)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>JP2-specific options:</strong> <code>--Sprofile</code>, <code>--Clayers</code>, <code>--Clevels</code>, <code>--Corder</code>, <code>--Cprecincts</code>, <code>--Cblk</code>, <code>--Stiles</code>, <code>--Cuse_sop</code>, <code>--rates</code>, <code>--Ctiff_pyramid</code></p>
+<p><strong>Query Mode:</strong> <code>sipi -x infile</code> / <code>sipi --query infile</code> — print image metadata.</p>
+<p><strong>Compare Mode:</strong> <code>sipi -C file1 file2</code> / <code>sipi --compare file1 file2</code> — compare two images.</p>
+<p><strong>Server Mode:</strong> <code>sipi --config config.lua</code> with CLI overrides for port, hostname, imgroot, cache settings, SSL, JWT, admin credentials, logging, etc.</p>
+<h3 id="configuration-system">Configuration System<a class="headerlink" href="#configuration-system" title="Permanent link">&para;</a></h3>
+<p>Lua-based configuration (<code>SipiConf.h</code>, <code>src/SipiConf.cpp</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Keys</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Server</strong></td>
+<td><code>hostname</code>, <code>port</code>, <code>ssl_port</code>, <code>ssl_certificate</code>, <code>ssl_key</code>, <code>nthreads</code>, <code>keep_alive</code></td>
+</tr>
+<tr>
+<td><strong>Image repository</strong></td>
+<td><code>imgroot</code>, <code>prefix_as_path</code>, <code>subdir_levels</code>, <code>subdir_excludes</code></td>
+</tr>
+<tr>
+<td><strong>Image processing</strong></td>
+<td><code>jpeg_quality</code>, <code>scaling_quality.{jpeg,tiff,png,j2k}</code> (high/medium/low)</td>
+</tr>
+<tr>
+<td><strong>Cache</strong></td>
+<td><code>cache_dir</code>, <code>cache_size</code>, <code>cache_nfiles</code></td>
+</tr>
+<tr>
+<td><strong>Request handling</strong></td>
+<td><code>max_post_size</code>, <code>tmpdir</code>, <code>max_temp_file_age</code></td>
+</tr>
+<tr>
+<td><strong>Lua</strong></td>
+<td><code>initscript</code>, <code>scriptdir</code>, <code>thumb_size</code></td>
+</tr>
+<tr>
+<td><strong>Authentication</strong></td>
+<td><code>jwt_secret</code> (42 chars), <code>admin.user</code>, <code>admin.password</code></td>
+</tr>
+<tr>
+<td><strong>Static files</strong></td>
+<td><code>fileserver.docroot</code>, <code>fileserver.wwwroute</code></td>
+</tr>
+<tr>
+<td><strong>Knora/DSP</strong></td>
+<td><code>knora_path</code>, <code>knora_port</code></td>
+</tr>
+<tr>
+<td><strong>Logging</strong></td>
+<td><code>loglevel</code>, <code>logfile</code></td>
+</tr>
+<tr>
+<td><strong>Routes</strong></td>
+<td><code>routes</code> table: <code>{method, route, script}</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Deprecated keys:</strong> <code>cachedir</code> → <code>cache_dir</code>, <code>cachesize</code> → <code>cache_size</code>, <code>cache_hysteresis</code> → removed (80% low-water mark is now hardcoded).</p>
+<h3 id="prometheus-metrics">Prometheus Metrics<a class="headerlink" href="#prometheus-metrics" title="Permanent link">&para;</a></h3>
+<p>Metrics endpoint at <code>GET /metrics</code> (<code>SipiMetrics.h</code>, <code>src/SipiMetrics.cpp</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cache_hits_total</code></td>
+<td>Counter</td>
+<td>Total cache hits</td>
+</tr>
+<tr>
+<td><code>cache_misses_total</code></td>
+<td>Counter</td>
+<td>Total cache misses</td>
+</tr>
+<tr>
+<td><code>cache_evictions_total</code></td>
+<td>Counter</td>
+<td>Total files evicted</td>
+</tr>
+<tr>
+<td><code>cache_skips_total</code></td>
+<td>Counter</td>
+<td>Cache checks skipped (cache disabled)</td>
+</tr>
+<tr>
+<td><code>cache_size_bytes</code></td>
+<td>Gauge</td>
+<td>Current cache size</td>
+</tr>
+<tr>
+<td><code>cache_files</code></td>
+<td>Gauge</td>
+<td>Current cached file count</td>
+</tr>
+<tr>
+<td><code>cache_size_limit_bytes</code></td>
+<td>Gauge</td>
+<td>Configured size limit</td>
+</tr>
+<tr>
+<td><code>cache_files_limit</code></td>
+<td>Gauge</td>
+<td>Configured file count limit</td>
+</tr>
+</tbody>
+</table>
+<h3 id="upload-ingest">Upload &amp; Ingest<a class="headerlink" href="#upload-ingest" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Multipart form-data file upload via POST</li>
+<li>Format conversion on upload (e.g., TIFF → JP2) via Lua routes</li>
+<li>knora.json sidecar generation with checksums, MIME type, original filename, dimensions</li>
+<li>Admin-protected upload route (<code>/admin/upload</code> via <code>admin_upload.lua</code>)</li>
+<li>SipiEssentials metadata embedded during ingest</li>
+</ul>
+<h3 id="security-features">Security Features<a class="headerlink" href="#security-features" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>JWT validation</td>
+<td>HS256 with configurable secret; decode + verify in Lua</td>
+</tr>
+<tr>
+<td>HTTP Basic Auth</td>
+<td>Via <code>server.requireAuth()</code> in Lua routes</td>
+</tr>
+<tr>
+<td>Preflight access control</td>
+<td><code>pre_flight</code> / <code>file_pre_flight</code> scripts return allow/deny/restrict</td>
+</tr>
+<tr>
+<td>Path traversal prevention</td>
+<td>URL-decoded identifier validation</td>
+</tr>
+<tr>
+<td>Max POST size</td>
+<td>Configurable (<code>max_post_size</code>, default 300M)</td>
+</tr>
+<tr>
+<td>Admin auth</td>
+<td>Separate admin user/password for management endpoints</td>
+</tr>
+</tbody>
+</table>
+<h3 id="integration-features">Integration Features<a class="headerlink" href="#integration-features" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Knora/DSP</strong></td>
+<td>Session cookie validation, knora.json sidecar, configurable API path/port</td>
+</tr>
+<tr>
+<td><strong>API endpoints</strong></td>
+<td><code>/api/cache</code> (manage cache), <code>/api/exit</code> (shutdown), <code>/metrics</code> (Prometheus)</td>
+</tr>
+<tr>
+<td><strong>File access</strong></td>
+<td>Raw file download via <code>/prefix/identifier/file</code> with <code>file_pre_flight</code> auth</td>
+</tr>
+<tr>
+<td><strong>Sentry</strong></td>
+<td>Error reporting via <code>SIPI_SENTRY_DSN</code>, <code>SIPI_SENTRY_ENVIRONMENT</code>, <code>SIPI_SENTRY_RELEASE</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="build-deployment">Build &amp; Deployment<a class="headerlink" href="#build-deployment" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Build systems</strong></td>
+<td>CMake, Docker (multi-stage), Zig toolchain, Nix</td>
+</tr>
+<tr>
+<td><strong>CI</strong></td>
+<td>GitHub Actions: unit tests, e2e tests, Hurl tests, fuzz (nightly), Docker builds</td>
+</tr>
+<tr>
+<td><strong>Documentation</strong></td>
+<td>MkDocs Material site, LLM-optimized <code>llms.txt</code> output</td>
+</tr>
+<tr>
+<td><strong>Dependency management</strong></td>
+<td>Vendored archives in <code>vendor/</code> with SHA-256 checksums</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="testing-pyramid">Testing Pyramid<a class="headerlink" href="#testing-pyramid" title="Permanent link">&para;</a></h2>
+<p>Four layers, from fastest/narrowest to slowest/broadest:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>                    ┌─────────┐
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>                    │  Fuzz   │  Continuous (nightly CI)
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>                    │ Testing │  Finds crashes &amp; edge cases
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>                ┌───┴─────────┴───┐
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>                │   E2E Contract   │  Rust harness + Hurl
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>                │   Tests (HTTP)   │  Tests the API contract
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>            ┌───┴─────────────────┴───┐
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>            │   Integration / Snapshot │  insta golden baselines
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>            │   Tests                  │  Regression detection
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>        ┌───┴─────────────────────────┴───┐
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>        │         Unit Tests               │  GoogleTest (C++, frozen)
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        │         + Rust unit tests        │  New: Rust #[test] + proptest
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        └──────────────────────────────────┘
+</code></pre></div>
+<p><strong>Distribution target (post-Rust-migration steady state):</strong> ~50% unit, ~30% e2e contract, ~15% snapshot/integration, ~5% fuzz. Current distribution (~47% unit, ~52% e2e) is inverted because the C++ codebase lacks Rust unit tests; as migration progresses and Rust <code>#[test]</code> modules grow, the ratio will shift toward the target.</p>
+<h2 id="layer-definitions">Layer Definitions<a class="headerlink" href="#layer-definitions" title="Permanent link">&para;</a></h2>
+<h3 id="layer-1-unit-tests-fastest-most-numerous">Layer 1: Unit Tests (fastest, most numerous)<a class="headerlink" href="#layer-1-unit-tests-fastest-most-numerous" title="Permanent link">&para;</a></h3>
+<p><strong>Purpose:</strong> Test individual functions and parsers in isolation.</p>
+<table>
+<thead>
+<tr>
+<th>Sublayer</th>
+<th>Framework</th>
+<th>Location</th>
+<th>When to use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C++ unit (frozen)</td>
+<td>GoogleTest</td>
+<td><code>test/unit/</code></td>
+<td>Maintain existing. Do NOT add new suites.</td>
+</tr>
+<tr>
+<td>Rust unit (new)</td>
+<td><code>#[test]</code> + <code>proptest</code></td>
+<td>Future <code>src/</code> modules</td>
+<td>During Rust migration: inline <code>#[cfg(test)]</code> modules</td>
+</tr>
+<tr>
+<td>Rust property-based (new)</td>
+<td><code>proptest</code></td>
+<td>Future <code>src/</code> modules</td>
+<td>Parsers, serializers, roundtrip invariants</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What belongs here:</strong></p>
+<ul>
+<li>IIIF URL parsing (region, size, rotation, quality, format)</li>
+<li>Filename hashing</li>
+<li>Configuration parsing</li>
+<li>HTTP header parsing, URL encoding/decoding</li>
+<li>Image metadata extraction</li>
+<li>Any pure function with well-defined inputs/outputs</li>
+</ul>
+<p><strong>C++ freeze policy:</strong> Existing GoogleTest suites are maintained but generally not expanded. Bug fixes in existing tests are allowed. No new <code>test/unit/</code> directories.</p>
+<p><strong>Exception — replacement-target testing:</strong> Components targeted for Rust replacement (e.g., shttps, Lua scripting, cache management) are covered with C++ unit tests that travel with the C++ code. When a component gets replaced by a Rust crate, its C++ tests go away cleanly. This is preferred over Rust e2e tests for testing C++ internals because: (1) C++ tests can test internal state directly without spinning up a server, (2) they don't create false test failures when the Rust replacement changes internal behavior while preserving the HTTP contract, (3) they document the existing behavior for the rewrite team.</p>
+<h3 id="layer-2-snapshot-golden-baseline-tests">Layer 2: Snapshot / Golden Baseline Tests<a class="headerlink" href="#layer-2-snapshot-golden-baseline-tests" title="Permanent link">&para;</a></h3>
+<p><strong>Purpose:</strong> Detect unintended output changes via approved golden baselines.</p>
+<table>
+<thead>
+<tr>
+<th>Framework</th>
+<th>Location</th>
+<th>When to use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>insta</code> (Rust)</td>
+<td><code>test/e2e-rust/tests/snapshots/</code></td>
+<td>info.json structure, HTTP headers, response metadata</td>
+</tr>
+<tr>
+<td>ApprovalTests (C++, frozen)</td>
+<td><code>test/approval/</code></td>
+<td>Image conversion metadata (existing only)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What belongs here:</strong></p>
+<ul>
+<li>Full info.json structure (field names, types, values)</li>
+<li>HTTP response header sets (content-type, CORS, Link)</li>
+<li>knora.json response structure</li>
+<li>Image metadata fingerprints (EXIF tags, XMP fields, ICC profile name) — golden baselines prevent silent metadata drift during code changes or format handler updates</li>
+<li>Any complex output where field-by-field assertion is fragile</li>
+</ul>
+<p><strong>Pattern:</strong> Use <code>insta::assert_json_snapshot!</code> with redactions for dynamic fields (<code>id</code>, timestamps).</p>
+<h3 id="layer-3-e2e-contract-tests-http-level">Layer 3: E2E Contract Tests (HTTP-level)<a class="headerlink" href="#layer-3-e2e-contract-tests-http-level" title="Permanent link">&para;</a></h3>
+<p><strong>Purpose:</strong> Test sipi's HTTP API contract — the behavior visible to clients. These tests survive the Rust migration because they test the contract, not the implementation.</p>
+<table>
+<thead>
+<tr>
+<th>Sublayer</th>
+<th>Framework</th>
+<th>Location</th>
+<th>When to use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Complex flows</td>
+<td>Rust (<code>reqwest</code>)</td>
+<td><code>test/e2e-rust/tests/</code></td>
+<td>Multi-step workflows, response body inspection, uploads</td>
+</tr>
+<tr>
+<td>Simple contracts</td>
+<td>Hurl</td>
+<td><code>test/hurl/</code></td>
+<td>Status codes, headers, redirects — no response body logic</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What belongs here:</strong></p>
+<ul>
+<li>IIIF Image API 3.0 compliance (ALL testable requirements)</li>
+<li>Content negotiation (Accept header → Content-Type)</li>
+<li>CORS (preflight, origin echo, wildcard)</li>
+<li>Authentication/authorization (401, 403)</li>
+<li>Error handling (400, 404, 500, 501)</li>
+<li>File upload and retrieval</li>
+<li>Lua endpoint contracts</li>
+<li>Cache behavior (hit/miss via headers or metrics)</li>
+<li>Video/non-image file handling</li>
+<li>CLI mode testing (via process spawn + file output verification)</li>
+<li>Range requests</li>
+<li>Concurrent request handling</li>
+</ul>
+<p><strong>Division of labor — Rust vs Hurl:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Use Rust when...</th>
+<th>Use Hurl when...</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Need to inspect response body (JSON, image bytes)</td>
+<td>Only checking status code + headers</td>
+</tr>
+<tr>
+<td>Multi-step flow (upload then fetch)</td>
+<td>Single request/response</td>
+</tr>
+<tr>
+<td>Need golden baseline (insta snapshot)</td>
+<td>Simple assertion (status, header value)</td>
+</tr>
+<tr>
+<td>Need to compute something (checksum, dimension)</td>
+<td>Declarative assertion suffices</td>
+</tr>
+<tr>
+<td>Need test setup/teardown (create files, etc.)</td>
+<td>No setup needed</td>
+</tr>
+</tbody>
+</table>
+<h3 id="layer-4-fuzz-testing-continuous-nightly">Layer 4: Fuzz Testing (continuous, nightly)<a class="headerlink" href="#layer-4-fuzz-testing-continuous-nightly" title="Permanent link">&para;</a></h3>
+<p><strong>Purpose:</strong> Find crashes, memory safety issues, and edge cases in parsers and input handlers.</p>
+<table>
+<thead>
+<tr>
+<th>Framework</th>
+<th>Location</th>
+<th>When to use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>libFuzzer (C++)</td>
+<td><code>fuzz/</code></td>
+<td>IIIF URI parser, HTTP request parser</td>
+</tr>
+<tr>
+<td><code>cargo-fuzz</code> / <code>proptest</code> (Rust, future)</td>
+<td>Future crate <code>fuzz/</code></td>
+<td>After Rust migration of parsers</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What belongs here:</strong></p>
+<ul>
+<li>IIIF URI parser (<code>parse_iiif_uri</code>)</li>
+<li>HTTP request parsing</li>
+<li>Image format header parsing</li>
+<li>Any function that processes untrusted input</li>
+</ul>
+<p><strong>Corpus management:</strong> CI uploads corpus artifacts; <code>just fuzz-corpus-update</code> merges CI corpus into seed corpus. See <a href="../fuzzing/">Fuzz Testing</a> for full details.</p>
+<h2 id="test-decision-tree">Test Decision Tree<a class="headerlink" href="#test-decision-tree" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>New test needed?
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>├── Is it testing a pure function/parser?
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>│   ├── C++ component not yet migrated → maintain existing GoogleTest (no new suites)
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>│   └── Rust component → #[test] + proptest for property-based
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>├── Is it testing HTTP API behavior?
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>│   ├── Simple status/header check (no body logic, no setup) → Hurl
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>│   └── Any of: body inspection, multi-step flow, snapshot, file setup → Rust e2e
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>├── Is it regression detection for complex output?
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>│   └── insta snapshot (JSON structure, headers) — this is a Rust e2e test with insta
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>├── Is it testing untrusted input handling?
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>│   └── Fuzz test (libFuzzer or cargo-fuzz)
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>├── Is it testing image output correctness?
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>│   └── Rust e2e with `image` crate decode + dimension/checksum verification
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>└── Does it need filesystem setup or custom server config?
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>    └── Rust e2e with tempfile + custom SipiServer::start config
+</code></pre></div>
+<p><strong>Clarifications:</strong></p>
+<ul>
+<li>"Image output correctness" tests are a specialization of e2e contract tests, not a separate layer</li>
+<li>Snapshot tests (<code>insta</code>) live inside Rust e2e test files — they are e2e tests that use snapshot assertions</li>
+<li>Tests needing cache verification require a cache-enabled server config (use <code>sipi.cache-test-config.lua</code> which has cache configured)</li>
+<li>Python e2e tests have been retired and replaced by Rust e2e tests. See <a href="#python-test-deprecation--parity-checklist">Python Test Deprecation</a> for the parity checklist</li>
+<li>Flaky tests (e.g., races against file flush) should use the <code>retry_flaky()</code> helper — see <a href="#flaky-test-handling">Flaky Test Handling</a></li>
+</ul>
+<h2 id="iiif-image-api-30-coverage-matrix">IIIF Image API 3.0 Coverage Matrix<a class="headerlink" href="#iiif-image-api-30-coverage-matrix" title="Permanent link">&para;</a></h2>
+<p>The following matrix maps every testable IIIF spec requirement to its test status. This is the authoritative coverage reference.</p>
+<h3 id="infojson-section-5">Info.json (Section 5)<a class="headerlink" href="#infojson-section-5" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Status</th>
+<th>Test</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>@context</code> field present and correct</td>
+<td>:white_check_mark:</td>
+<td><code>info_json_context</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>id</code> matches base URI</td>
+<td>:white_check_mark:</td>
+<td><code>info_json_id_contains_base_uri</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>type</code> = <code>ImageService3</code></td>
+<td>:white_check_mark:</td>
+<td><code>info_json_type_imageservice3</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>protocol</code> = <code>http://iiif.io/api/image</code></td>
+<td>:white_check_mark:</td>
+<td><code>info_json_protocol</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>profile</code> = <code>level2</code></td>
+<td>:white_check_mark:</td>
+<td><code>info_json_profile_level2</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>width</code> and <code>height</code> integers</td>
+<td>:white_check_mark:</td>
+<td><code>info_json_dimensions_match_lena512</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>sizes</code> array with valid dimensions</td>
+<td>:white_check_mark:</td>
+<td><code>info_json_sizes_have_valid_dimensions</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>tiles</code> with scaleFactors</td>
+<td>:white_check_mark:</td>
+<td><code>info_json_tiles_have_scale_factors</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>extraFormats</code></td>
+<td>:white_check_mark:</td>
+<td><code>info_json_extra_formats</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>preferredFormats</code></td>
+<td>:white_check_mark:</td>
+<td><code>info_json_preferred_formats</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>extraFeatures</code> (17 features)</td>
+<td>:white_check_mark:</td>
+<td><code>info_json_all_17_extra_features</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Golden baseline snapshot</td>
+<td>:white_check_mark:</td>
+<td><code>info_json_golden_snapshot</code></td>
+<td>insta</td>
+</tr>
+<tr>
+<td>Header snapshot (CT, CORS, Link)</td>
+<td>:white_check_mark:</td>
+<td><code>info_json_headers_snapshot</code></td>
+<td>insta</td>
+</tr>
+<tr>
+<td>Content-Type without Accept</td>
+<td>:white_check_mark:</td>
+<td><code>info_json_content_type_default</code></td>
+<td><code>application/json</code></td>
+</tr>
+<tr>
+<td>Content-Type with Accept: ld+json</td>
+<td>:white_check_mark:</td>
+<td><code>jsonld_media_type_with_accept</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Link header on default request</td>
+<td>:white_check_mark:</td>
+<td><code>jsonld_default_has_link_header</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Canonical Link header</td>
+<td>:white_check_mark:</td>
+<td><code>canonical_link_header</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Profile Link header</td>
+<td>:x: IGNORED</td>
+<td><code>profile_link_header</code></td>
+<td>DEV-6003: sipi bug</td>
+</tr>
+<tr>
+<td>X-Forwarded-Proto HTTPS rewrite</td>
+<td>:white_check_mark:</td>
+<td><code>info_json_x_forwarded_proto_https</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Required fields structural check</td>
+<td>:white_check_mark:</td>
+<td><code>info_json_has_required_fields</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Structural: sizes array exists</td>
+<td>:white_check_mark:</td>
+<td><code>info_json_has_sizes_array</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Structural: tiles array exists</td>
+<td>:white_check_mark:</td>
+<td><code>info_json_has_tiles_array</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Structural: extraFeatures exists</td>
+<td>:white_check_mark:</td>
+<td><code>info_json_has_extra_features</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="region-section-41">Region (Section 4.1)<a class="headerlink" href="#region-section-41" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Status</th>
+<th>Test</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>full</code></td>
+<td>:white_check_mark:</td>
+<td><code>full_iiif_url_returns_image</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>square</code></td>
+<td>:white_check_mark:</td>
+<td><code>region_square</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>pct:x,y,w,h</code></td>
+<td>:white_check_mark:</td>
+<td><code>region_percent</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>x,y,w,h</code> (pixel)</td>
+<td>:white_check_mark:</td>
+<td><code>region_pixel</code>, <code>region_pixel_offset</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Overflow → crop at edge</td>
+<td>:white_check_mark:</td>
+<td><code>region_beyond_bounds_is_cropped</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Start beyond image → error</td>
+<td>:white_check_mark:</td>
+<td><code>region_start_beyond_image</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Zero width → 400</td>
+<td>:white_check_mark:</td>
+<td><code>region_zero_width</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Invalid syntax → error</td>
+<td>:white_check_mark:</td>
+<td><code>region_invalid_syntax</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Region + size combination</td>
+<td>:white_check_mark:</td>
+<td><code>size_after_region</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Region + rotation combination</td>
+<td>:white_check_mark:</td>
+<td><code>rotation_after_region</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Region crop (specific)</td>
+<td>:white_check_mark:</td>
+<td><code>iiif_region_crop</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Region dimension verification</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Need to verify output dimensions match requested region</td>
+</tr>
+</tbody>
+</table>
+<h3 id="size-section-42">Size (Section 4.2)<a class="headerlink" href="#size-section-42" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Status</th>
+<th>Test</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>max</code></td>
+<td>:white_check_mark:</td>
+<td><code>full_iiif_url_returns_image</code></td>
+<td>implicit</td>
+</tr>
+<tr>
+<td><code>w,</code> (width)</td>
+<td>:white_check_mark:</td>
+<td><code>size_by_width</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>,h</code> (height)</td>
+<td>:white_check_mark:</td>
+<td><code>size_by_height</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>w,h</code> (exact)</td>
+<td>:white_check_mark:</td>
+<td><code>size_exact</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>!w,h</code> (best fit)</td>
+<td>:white_check_mark:</td>
+<td><code>size_best_fit</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>pct:n</code></td>
+<td>:white_check_mark:</td>
+<td><code>size_percent</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>^</code> upscaling</td>
+<td>:white_check_mark:</td>
+<td><code>size_upscaling</code></td>
+<td></td>
+</tr>
+<tr>
+<td>No upscale beyond original</td>
+<td>:white_check_mark:</td>
+<td><code>size_no_upscale_beyond_original</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Invalid syntax → error</td>
+<td>:white_check_mark:</td>
+<td><code>size_invalid_syntax</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Output dimension verification</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Need to decode image and verify actual pixel dimensions</td>
+</tr>
+<tr>
+<td><code>^max</code> upscale to limits</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Not tested</td>
+</tr>
+<tr>
+<td><code>^,h</code> (height-only upscale)</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Not tested</td>
+</tr>
+<tr>
+<td><code>^w,h</code> (exact with upscale)</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Not tested</td>
+</tr>
+<tr>
+<td><code>^!w,h</code> (confined upscale)</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Not tested</td>
+</tr>
+<tr>
+<td><code>^pct:n</code> (upscale percent)</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Not tested</td>
+</tr>
+</tbody>
+</table>
+<h3 id="rotation-section-43">Rotation (Section 4.3)<a class="headerlink" href="#rotation-section-43" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Status</th>
+<th>Test</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0</code> (no rotation)</td>
+<td>:white_check_mark:</td>
+<td><code>full_iiif_url_returns_image</code></td>
+<td>implicit</td>
+</tr>
+<tr>
+<td><code>90</code></td>
+<td>:white_check_mark:</td>
+<td><code>iiif_rotation_90</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>180</code></td>
+<td>:white_check_mark:</td>
+<td><code>rotation_180</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>270</code></td>
+<td>:white_check_mark:</td>
+<td><code>rotation_270</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Arbitrary (e.g. 22.5)</td>
+<td>:white_check_mark:</td>
+<td><code>rotation_arbitrary</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>!0</code> (mirror only)</td>
+<td>:white_check_mark:</td>
+<td><code>mirror_rotation</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>!180</code> (mirror + rotate)</td>
+<td>:white_check_mark:</td>
+<td><code>mirror_plus_180</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Invalid → error</td>
+<td>:white_check_mark:</td>
+<td><code>rotation_invalid</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Rotation output verification</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Need to verify actual rotation applied (image dimensions swap for 90/270)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="quality-section-44">Quality (Section 4.4)<a class="headerlink" href="#quality-section-44" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Status</th>
+<th>Test</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>default</code></td>
+<td>:white_check_mark:</td>
+<td><code>full_iiif_url_returns_image</code></td>
+<td>implicit</td>
+</tr>
+<tr>
+<td><code>color</code></td>
+<td>:white_check_mark:</td>
+<td><code>quality_color</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>gray</code></td>
+<td>:white_check_mark:</td>
+<td><code>quality_gray</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>bitonal</code></td>
+<td>:white_check_mark:</td>
+<td><code>quality_bitonal</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Invalid → error</td>
+<td>:white_check_mark:</td>
+<td><code>quality_invalid</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>extraQualities</code> in info.json</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Sipi supports color/gray/bitonal but may not emit extraQualities</td>
+</tr>
+</tbody>
+</table>
+<h3 id="format-section-45">Format (Section 4.5)<a class="headerlink" href="#format-section-45" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Status</th>
+<th>Test</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>jpg</code> + Content-Type</td>
+<td>:white_check_mark:</td>
+<td><code>format_jpg_content_type</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>png</code> + Content-Type</td>
+<td>:white_check_mark:</td>
+<td><code>format_png_content_type</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>tif</code> + Content-Type</td>
+<td>:white_check_mark:</td>
+<td><code>format_tiff_content_type</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>jp2</code> + Content-Type</td>
+<td>:white_check_mark:</td>
+<td><code>format_jp2_content_type</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Unsupported (gif, pdf, webp, bmp)</td>
+<td>:white_check_mark:</td>
+<td><code>unsupported_formats_rejected</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="cors-section-71">CORS (Section 7.1)<a class="headerlink" href="#cors-section-71" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Status</th>
+<th>Test</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Info.json ACAO without Origin</td>
+<td>:white_check_mark:</td>
+<td><code>cors_info_json_without_origin</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Info.json ACAO with Origin</td>
+<td>:white_check_mark:</td>
+<td><code>cors_info_json_with_origin</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Image ACAO with Origin</td>
+<td>:white_check_mark:</td>
+<td><code>cors_image_with_origin</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Image ACAO without Origin</td>
+<td>:white_check_mark:</td>
+<td><code>cors_image_without_origin</code></td>
+<td></td>
+</tr>
+<tr>
+<td>OPTIONS preflight</td>
+<td>:white_check_mark:</td>
+<td><code>cors_preflight</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="http-behavior-section-7">HTTP Behavior (Section 7)<a class="headerlink" href="#http-behavior-section-7" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Status</th>
+<th>Test</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Base URI → redirect to info.json</td>
+<td>:white_check_mark:</td>
+<td><code>base_uri_redirect</code></td>
+<td></td>
+</tr>
+<tr>
+<td>HEAD request</td>
+<td>:white_check_mark:</td>
+<td><code>head_iiif_image_empty_body</code></td>
+<td></td>
+</tr>
+<tr>
+<td>401 unauthorized</td>
+<td>:white_check_mark:</td>
+<td><code>deny_unauthorized_image</code></td>
+<td></td>
+</tr>
+<tr>
+<td>404 not found</td>
+<td>:white_check_mark:</td>
+<td><code>id_random_gives_404</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Path traversal rejected</td>
+<td>:white_check_mark:</td>
+<td><code>path_traversal_rejected</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Incomplete URL → error</td>
+<td>:white_check_mark:</td>
+<td><code>id_incomplete_iiif_url</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Malformed URL → error</td>
+<td>:white_check_mark:</td>
+<td><code>id_malformed_iiif_url</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Empty identifier → error</td>
+<td>:white_check_mark:</td>
+<td><code>invalid_iiif_url_empty_identifier</code></td>
+<td></td>
+</tr>
+<tr>
+<td>HEAD returns headers</td>
+<td>:white_check_mark:</td>
+<td><code>head_request_returns_headers</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Missing file → 404</td>
+<td>:white_check_mark:</td>
+<td><code>returns_404_for_missing_file</code></td>
+<td></td>
+</tr>
+<tr>
+<td>HTTP 304 conditional requests</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Sipi sends Last-Modified/Cache-Control but If-Modified-Since not tested</td>
+</tr>
+<tr>
+<td>Operation ordering (Region→Size→Rot→Qual→Fmt)</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>No test verifies transformation order is correct</td>
+</tr>
+<tr>
+<td>Fractional percent regions (e.g. pct:0.5,...)</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Only integer percent tested</td>
+</tr>
+</tbody>
+</table>
+<h3 id="identifier-section-3">Identifier (Section 3)<a class="headerlink" href="#identifier-section-3" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Status</th>
+<th>Test</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Encoded slash <code>%2F</code></td>
+<td>:white_check_mark:</td>
+<td><code>id_escaped_slash_decoded</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Encoded <code>#</code> (<code>%23</code>)</td>
+<td>:x: IGNORED</td>
+<td><code>id_escaped</code></td>
+<td>DEV-6004: sipi bug</td>
+</tr>
+<tr>
+<td>Subdirectory identifier</td>
+<td>:white_check_mark:</td>
+<td>via server tests</td>
+<td></td>
+</tr>
+<tr>
+<td>Non-ASCII identifiers</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Not tested</td>
+</tr>
+<tr>
+<td>ARK/URN identifiers</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Not tested (may not apply)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="sipi-extension-coverage-matrix">Sipi Extension Coverage Matrix<a class="headerlink" href="#sipi-extension-coverage-matrix" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Status</th>
+<th>Test Location</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>File upload (TIFF→JP2)</td>
+<td>:white_check_mark:</td>
+<td><code>upload.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Upload knora.json</td>
+<td>:white_check_mark:</td>
+<td><code>upload.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Upload JPEG with comment block</td>
+<td>:white_check_mark:</td>
+<td><code>upload.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Video knora.json metadata</td>
+<td>:white_check_mark:</td>
+<td><code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Lua test_functions endpoint</td>
+<td>:white_check_mark:</td>
+<td><code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Lua mediatype endpoint</td>
+<td>:white_check_mark:</td>
+<td><code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Lua mimetype_func endpoint</td>
+<td>:white_check_mark:</td>
+<td><code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Lua knora_session_cookie</td>
+<td>:white_check_mark:</td>
+<td><code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Lua orientation endpoint</td>
+<td>:white_check_mark:</td>
+<td><code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Lua exif_gps endpoint</td>
+<td>:white_check_mark:</td>
+<td><code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Lua read_write endpoint</td>
+<td>:white_check_mark:</td>
+<td><code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td>SQLite API</td>
+<td>:white_check_mark:</td>
+<td><code>server.rs</code> + Hurl</td>
+<td></td>
+</tr>
+<tr>
+<td>Missing sidecar handling</td>
+<td>:white_check_mark:</td>
+<td><code>server.rs</code> + Hurl</td>
+<td></td>
+</tr>
+<tr>
+<td>Concurrent request handling</td>
+<td>:white_check_mark:</td>
+<td><code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td>File access allowed/denied</td>
+<td>:white_check_mark:</td>
+<td><code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Knora.json validation</td>
+<td>:white_check_mark:</td>
+<td><code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Upload edge cases</td>
+<td>:white_check_mark:</td>
+<td><code>upload.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Video metadata extensions</td>
+<td>:white_check_mark:</td>
+<td><code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Small-file range requests</td>
+<td>:white_check_mark:</td>
+<td><code>range_requests.rs</code></td>
+<td>7 tests</td>
+</tr>
+<tr>
+<td>Cache hit/miss verification</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>No tests verify cache metrics or behavior</td>
+</tr>
+<tr>
+<td>CLI mode (file conversion)</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>No tests for <code>sipi --file</code> mode</td>
+</tr>
+<tr>
+<td>Prometheus metrics endpoint</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>No tests for <code>/metrics</code></td>
+</tr>
+<tr>
+<td>SSL/TLS endpoints</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>No Rust tests for HTTPS</td>
+</tr>
+<tr>
+<td>Large-file range requests (10MB+)</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Python-only</td>
+</tr>
+<tr>
+<td>Image dimension verification</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Tests check status codes but not actual output dimensions</td>
+</tr>
+<tr>
+<td>EXIF preservation through IIIF pipeline</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>No test verifies EXIF survives transforms</td>
+</tr>
+<tr>
+<td>XMP preservation through IIIF pipeline</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>No test verifies XMP survives transforms</td>
+</tr>
+<tr>
+<td>ICC profile preservation/conversion</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>C++ unit tests exist but no HTTP-level test</td>
+</tr>
+<tr>
+<td>IPTC metadata preservation</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>No e2e test</td>
+</tr>
+<tr>
+<td>SipiEssentials round-trip</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Custom metadata not tested via HTTP</td>
+</tr>
+<tr>
+<td>CLI conversion metadata fidelity</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Untested</td>
+</tr>
+<tr>
+<td>MIME consistency check (<code>/api/mimetest</code>)</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Python-only</td>
+</tr>
+<tr>
+<td>Thumbnail generation (<code>/make_thumbnail</code>)</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Python-only</td>
+</tr>
+<tr>
+<td>Convert from binaries (<code>/convert_from_binaries</code>)</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Python-only</td>
+</tr>
+<tr>
+<td>Temp directory cleanup</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Python-only</td>
+</tr>
+<tr>
+<td>Restricted image size reduction</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Python tests only</td>
+</tr>
+<tr>
+<td>4-bit palette PNG upload</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Python-only</td>
+</tr>
+<tr>
+<td>Cache API routes (<code>/api/cache</code>)</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>No tests</td>
+</tr>
+<tr>
+<td>Favicon endpoint</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Handler exists, no tests</td>
+</tr>
+<tr>
+<td>Memory safety (ASan/LSan)</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Only fuzz harness uses sanitizers</td>
+</tr>
+<tr>
+<td>Thread safety (TSan)</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Untested for data races</td>
+</tr>
+<tr>
+<td>Performance regression detection</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>No latency thresholds or load testing</td>
+</tr>
+<tr>
+<td>Corrupt/truncated image handling</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Should return 500, not crash</td>
+</tr>
+<tr>
+<td>Lua route handler errors</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Should return 500 gracefully</td>
+</tr>
+<tr>
+<td>Zero-byte / empty file upload</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Should fail gracefully</td>
+</tr>
+<tr>
+<td>Invalid server config startup</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>No test for invalid config</td>
+</tr>
+<tr>
+<td>Double-encoded URL handling</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td><code>%252F</code> behavior untested</td>
+</tr>
+<tr>
+<td>Extremely long URL / header</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Partially covered by fuzz</td>
+</tr>
+<tr>
+<td>JWT validation edge cases</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Expired, <code>alg:none</code>, tampered tokens</td>
+</tr>
+<tr>
+<td>Image decompression bomb</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>No pixel limit on decode</td>
+</tr>
+<tr>
+<td>Upload size enforcement</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td><code>max_post_size</code> enforced but untested</td>
+</tr>
+<tr>
+<td>CRLF header injection</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>No sanitization test</td>
+</tr>
+<tr>
+<td>Cache key collision</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>No isolation test</td>
+</tr>
+<tr>
+<td>Error message information disclosure</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>May leak filesystem paths</td>
+</tr>
+<tr>
+<td>Slowloris / connection exhaustion</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>No resilience test</td>
+</tr>
+<tr>
+<td><code>parseSizeString</code> edge cases</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Zero tests for this function</td>
+</tr>
+<tr>
+<td>Deprecated config key migration</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Migration logic untested</td>
+</tr>
+<tr>
+<td>CLI argument overrides</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Never tested</td>
+</tr>
+<tr>
+<td>Empty jwt_secret behavior</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>May silently disable auth</td>
+</tr>
+<tr>
+<td>Invalid Lua config syntax</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Should fail cleanly</td>
+</tr>
+<tr>
+<td>Config with nonexistent paths</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Untested startup behavior</td>
+</tr>
+<tr>
+<td>SImage Lua API coverage</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>12 methods tested only via black-box HTTP</td>
+</tr>
+<tr>
+<td>Lua JWT round-trip</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Generate + decode correctness</td>
+</tr>
+<tr>
+<td>Lua UUID round-trip</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>base62 conversion correctness</td>
+</tr>
+<tr>
+<td>Lua <code>server.http</code> outbound</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Error handling for unreachable hosts</td>
+</tr>
+<tr>
+<td>Lua error propagation to HTTP</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>C++ exception → 500 propagation</td>
+</tr>
+<tr>
+<td>HTTP keep-alive</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>No multi-request connection test</td>
+</tr>
+<tr>
+<td>Chunked transfer encoding</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td><code>ChunkReader</code> never tested</td>
+</tr>
+<tr>
+<td>Connection: close header</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Server behavior untested</td>
+</tr>
+<tr>
+<td>Thread pool exhaustion</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Queuing/rejection behavior unknown</td>
+</tr>
+<tr>
+<td>Graceful shutdown</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>SIGTERM handler untested</td>
+</tr>
+<tr>
+<td>Multi-page TIFF <code>@page</code> e2e</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Parser works, e2e untested</td>
+</tr>
+<tr>
+<td>CMYK→sRGB through IIIF pipeline</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Unit-tested, not HTTP-level</td>
+</tr>
+<tr>
+<td>CIELab through IIIF pipeline</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Unit-tested, not HTTP-level</td>
+</tr>
+<tr>
+<td>16-bit depth through IIIF pipeline</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Unit-tested, not HTTP-level</td>
+</tr>
+<tr>
+<td>Progressive JPEG handling</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Common in web content, untested</td>
+</tr>
+<tr>
+<td>TIFF with JPEG compression</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Known bug (YCrCb autoconvert)</td>
+</tr>
+<tr>
+<td>1-bit TIFF (bi-level)</td>
+<td>:white_check_mark:</td>
+<td>unit + rust-e2e</td>
+<td>MINISWHITE and MINISBLACK, LZW and uncompressed (DEV-6249)</td>
+</tr>
+<tr>
+<td>JPEG YCCK colorspace</td>
+<td>:white_check_mark:</td>
+<td>unit</td>
+<td>Was throw; now decoded via CMYK path (DEV-6250)</td>
+</tr>
+<tr>
+<td>JPEG CMYK with APP14 (Photoshop) — inverted before ICC</td>
+<td>:white_check_mark:</td>
+<td>unit</td>
+<td>DEV-6257</td>
+</tr>
+<tr>
+<td>JPEG CMYK without APP14 (raw) — not inverted</td>
+<td>:white_check_mark:</td>
+<td>unit</td>
+<td>DEV-6257 negative case</td>
+</tr>
+<tr>
+<td>JPEG with APP13 before APP1 + non-ASCII IPTC</td>
+<td>:white_check_mark:</td>
+<td>unit</td>
+<td>Heritage collection regression (DEV-6250)</td>
+</tr>
+<tr>
+<td>CLI <code>--json</code> output contract</td>
+<td>:white_check_mark:</td>
+<td>unit + rust-e2e</td>
+<td>success + error payloads, single-document stdout</td>
+</tr>
+<tr>
+<td>Watermark application via HTTP</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Unit-tested, not e2e</td>
+</tr>
+<tr>
+<td>Restrict + watermark combined</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Untested combination</td>
+</tr>
+<tr>
+<td>Watermark cache key separation</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Separate entries untested</td>
+</tr>
+<tr>
+<td>CLI watermark mode</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Untested</td>
+</tr>
+<tr>
+<td>Concurrent cache writes (same key)</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td><code>blocked_files</code> mutex untested</td>
+</tr>
+<tr>
+<td>Cache eviction during active reads</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Potential read error</td>
+</tr>
+<tr>
+<td>Concurrent file uploads</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Potential race conditions</td>
+</tr>
+<tr>
+<td>Lua state thread isolation</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Shared global table untested</td>
+</tr>
+<tr>
+<td>Cache disabled mode (<code>cache_size=0</code>)</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Untested</td>
+</tr>
+<tr>
+<td>Cache LRU purge under size limit</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Completely untested</td>
+</tr>
+<tr>
+<td>Cache nfiles limit enforcement</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Count-based eviction untested</td>
+</tr>
+<tr>
+<td>Keep-alive timeout enforcement</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Idle connection termination untested</td>
+</tr>
+<tr>
+<td>Sustained load memory growth</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td><strong>Production issue:</strong> no pixel limit</td>
+</tr>
+<tr>
+<td>Concurrent large image decode memory</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Peak RSS untested</td>
+</tr>
+<tr>
+<td>Image decode memory accounting</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>No aggregate limit</td>
+</tr>
+<tr>
+<td>Intermediate buffer accumulation</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>~2x per transform step</td>
+</tr>
+<tr>
+<td>Cache as memory pressure relief</td>
+<td>:x: GAP</td>
+<td>—</td>
+<td>Hit path avoids decode — untested</td>
+</tr>
+</tbody>
+</table>
+<h2 id="gap-summary">Gap Summary<a class="headerlink" href="#gap-summary" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Covered</th>
+<th>Gaps</th>
+<th>Coverage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Info.json fields</td>
+<td>22</td>
+<td>1 (profile Link — sipi bug)</td>
+<td>96%</td>
+</tr>
+<tr>
+<td>Region parameters</td>
+<td>11</td>
+<td>1 (dimension verify)</td>
+<td>92%</td>
+</tr>
+<tr>
+<td>Size parameters</td>
+<td>9</td>
+<td>6 (dimension verify, ^max, ^,h, ^w,h, ^!w,h, ^pct)</td>
+<td>60%</td>
+</tr>
+<tr>
+<td>Rotation parameters</td>
+<td>8</td>
+<td>1 (dimension verify)</td>
+<td>89%</td>
+</tr>
+<tr>
+<td>Quality parameters</td>
+<td>5</td>
+<td>1 (extraQualities field)</td>
+<td>83%</td>
+</tr>
+<tr>
+<td>Format parameters</td>
+<td>5</td>
+<td>0</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>CORS</td>
+<td>5</td>
+<td>0</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>HTTP behavior</td>
+<td>10</td>
+<td>3 (304, operation order, fractional pct)</td>
+<td>77%</td>
+</tr>
+<tr>
+<td>Identifiers</td>
+<td>2</td>
+<td>3 (non-ASCII, ARK/URN, bug)</td>
+<td>40%</td>
+</tr>
+<tr>
+<td>Sipi extensions</td>
+<td>19</td>
+<td>76</td>
+<td>20%</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>96</strong></td>
+<td><strong>92</strong></td>
+<td><strong>51%</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Key gap categories:</strong></p>
+<ul>
+<li><strong>Metadata</strong> (6 gaps): EXIF, XMP, ICC, IPTC, SipiEssentials, CLI metadata — silent drift risk</li>
+<li><strong>Error handling</strong> (6 gaps): corrupt images, Lua errors, empty uploads, config, double-encoding, long URLs — crash/hang risk</li>
+<li><strong>Security</strong> (7 gaps): JWT, decompression bombs, upload limits, CRLF injection, cache poisoning, info disclosure, slowloris</li>
+<li><strong>Configuration</strong> (6 gaps): parseSizeString, deprecated keys, CLI overrides, jwt_secret, invalid Lua, nonexistent paths</li>
+<li><strong>Lua API</strong> (5 gaps): SImage methods, JWT round-trip, UUID round-trip, HTTP client, error propagation</li>
+<li><strong>Connection handling</strong> (5 gaps): keep-alive, chunked, Connection: close, thread pool, graceful shutdown</li>
+<li><strong>Format edge cases</strong> (5 gaps): CMYK/CIELab/16-bit through IIIF, progressive JPEG, TIFF-JPEG. <em>Previously listed 1-bit TIFF and YCCK-JPEG; both resolved by DEV-6249 / DEV-6250 / DEV-6257.</em></li>
+<li><strong>Concurrency</strong> (4 gaps): cache writes, eviction during read, parallel uploads, Lua state isolation</li>
+<li><strong>Resource limits</strong> (4 gaps): cache disabled, LRU purge, nfiles limit, keep-alive timeout</li>
+<li><strong>Memory/OOM</strong> (5 gaps): sustained load, concurrent decode, accounting, buffers, cache relief — <strong>active production issue</strong></li>
+<li><strong>Watermark</strong> (4 gaps): HTTP-level, restrict+watermark, cache separation, CLI</li>
+</ul>
+<h2 id="cross-cutting-memory-safety-sanitizer-builds">Cross-Cutting: Memory Safety (Sanitizer Builds)<a class="headerlink" href="#cross-cutting-memory-safety-sanitizer-builds" title="Permanent link">&para;</a></h2>
+<p>Memory leaks and undefined behavior are not a separate pyramid layer but a <strong>build variant</strong> that runs existing tests with compiler instrumentation. This is critical for sipi as a long-running C++ server where leaks accumulate.</p>
+<p><strong>Current state:</strong> ASan+UBSan infrastructure is in place — <code>ENABLE_SANITIZERS</code> CMake option, <code>just nix-build-sanitized</code> (builds <code>.#sanitized</code> with tests running in the Nix sandbox), and nightly <code>sanitizer.yml</code> CI workflow. Known findings to triage on first run:</p>
+<ul>
+<li><strong>DEV-6002: <code>SipiFilenameHash::operator=</code> memory leak</strong> — <code>operator=</code> allocates <code>new vector&lt;char&gt;</code> without deleting the old <code>hash</code> pointer. Confirmed by code inspection. Fix: add <code>delete hash;</code> before the new allocation, or switch to <code>std::unique_ptr</code>.</li>
+<li><strong>Potential: <code>SipiFilenameHash</code> copy constructor</strong> — also <code>new</code>s without freeing, but only leaks if the destination object was previously constructed with a different hash (doesn't happen via typical usage).</li>
+<li><strong>Expected: false positives from external libraries</strong> — exiv2, lcms2, and other vendored libraries may trigger ASan warnings that aren't sipi bugs. These should be suppressed via an ASan suppression file if needed.</li>
+</ul>
+<p><strong>Sanitizer stack:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Sanitizer</th>
+<th>Catches</th>
+<th>Flag</th>
+<th>Overhead</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ASan (AddressSanitizer)</td>
+<td>Buffer overflow, use-after-free, double-free, leaks</td>
+<td><code>-fsanitize=address</code></td>
+<td>~2x</td>
+</tr>
+<tr>
+<td>UBSan (UndefinedBehaviorSanitizer)</td>
+<td>Integer overflow, null deref, misaligned access</td>
+<td><code>-fsanitize=undefined</code></td>
+<td>~1.2x</td>
+</tr>
+<tr>
+<td>TSan (ThreadSanitizer)</td>
+<td>Data races, deadlocks</td>
+<td><code>-fsanitize=thread</code></td>
+<td>~5-15x</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Infrastructure:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Status</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ENABLE_SANITIZERS</code> CMake option</td>
+<td>Done</td>
+<td><code>-fsanitize=address,undefined</code> on all targets</td>
+</tr>
+<tr>
+<td><code>just nix-build-sanitized</code></td>
+<td>Done</td>
+<td>Builds <code>.#sanitized</code> derivation (Debug + ASan + UBSan); unit tests run inside the Nix sandbox and fail the build on any finding</td>
+</tr>
+<tr>
+<td>Nightly CI (<code>sanitizer.yml</code>)</td>
+<td>Done</td>
+<td>PR + scheduled; unit tests in-sandbox, e2e out-of-sandbox with ASan log capture</td>
+</tr>
+<tr>
+<td>TSan variant</td>
+<td>Future</td>
+<td>Optional nightly, separate from ASan (can't combine)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Strategy:</strong> Nightly CI job runs unit tests + e2e suite with ASan+UBSan. TSan as optional nightly variant. Not in PR CI (too slow).</p>
+<h2 id="cross-cutting-performance-regression-detection">Cross-Cutting: Performance Regression Detection<a class="headerlink" href="#cross-cutting-performance-regression-detection" title="Permanent link">&para;</a></h2>
+<p><strong>Current state:</strong> Prometheus metrics include cache counters/gauges and <code>sipi_request_duration_seconds</code> histogram (5ms–10s buckets). CI infrastructure includes smoke latency assertions in PR CI and nightly <code>wrk</code> load tests.</p>
+<p><strong>Strategy (three tiers):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>What</th>
+<th>Tool</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Smoke latency</td>
+<td>Assert response time &lt; threshold in e2e tests</td>
+<td>Rust <code>Instant::now()</code></td>
+<td>PR CI</td>
+</tr>
+<tr>
+<td>Load baseline</td>
+<td>Throughput against standard workload</td>
+<td><code>wrk</code> or <code>hey</code></td>
+<td>Nightly CI</td>
+</tr>
+<tr>
+<td>Component benchmarks</td>
+<td>Micro-benchmarks for parsers, decode</td>
+<td><code>criterion</code> (Rust, future)</td>
+<td>Post-migration</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Smoke latency thresholds (proposed):</strong></p>
+<ul>
+<li>Info.json request: &lt; 50ms</li>
+<li>512x512 JPEG delivery (cache miss): &lt; 500ms</li>
+<li>512x512 JPEG delivery (cache hit): &lt; 100ms</li>
+<li>These catch gross regressions (10x slowdown), not subtle changes</li>
+</ul>
+<h2 id="snapshot-review-workflow">Snapshot Review Workflow<a class="headerlink" href="#snapshot-review-workflow" title="Permanent link">&para;</a></h2>
+<p>Sipi uses <a href="https://insta.rs/">insta</a> for golden baseline snapshots. When a snapshot changes:</p>
+<ol>
+<li>Run tests: <code>cargo test</code> (in <code>test/e2e-rust/</code>)</li>
+<li>Review pending snapshots: <code>cargo insta review</code></li>
+<li>Accept intentional changes, reject regressions</li>
+<li>Commit updated <code>.snap</code> files</li>
+</ol>
+<p><strong>When to use insta:</strong></p>
+<ul>
+<li>info.json response structure</li>
+<li>HTTP response header sets</li>
+<li>knora.json response structure</li>
+<li>Image metadata fingerprints</li>
+</ul>
+<p><strong>Pattern:</strong> Use <code>insta::assert_json_snapshot!</code> with <code>redact</code> for dynamic values:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">insta</span>::<span class="n">assert_json_snapshot</span><span class="o">!</span><span class="p">(</span><span class="n">info_json</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="s">&quot;.id&quot;</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="s">&quot;[base_uri]&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="p">});</span>
+</code></pre></div>
+<h2 id="ci-integration">CI Integration<a class="headerlink" href="#ci-integration" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Target</th>
+<th>Just Recipe</th>
+<th>When</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C++ unit tests</td>
+<td><code>just nix-build</code> (<code>.#dev</code> checkPhase)</td>
+<td>PR CI</td>
+<td>GoogleTest via ctest, runs in the Nix sandbox</td>
+</tr>
+<tr>
+<td>Rust e2e tests</td>
+<td><code>just rust-test-e2e</code></td>
+<td>PR CI</td>
+<td>Includes insta snapshots</td>
+</tr>
+<tr>
+<td>Hurl contract tests</td>
+<td><code>just hurl-test</code></td>
+<td>PR CI</td>
+<td>Declarative HTTP tests</td>
+</tr>
+<tr>
+<td>Python e2e tests</td>
+<td><em>(retired)</em></td>
+<td>—</td>
+<td>Replaced by Rust e2e tests</td>
+</tr>
+<tr>
+<td>Fuzz testing</td>
+<td><code>.github/workflows/fuzz.yml</code></td>
+<td>Nightly</td>
+<td>libFuzzer corpus growth</td>
+</tr>
+<tr>
+<td>Sanitizer builds</td>
+<td><code>just nix-build-sanitized</code> (<code>.#sanitized</code>)</td>
+<td>PR + Nightly</td>
+<td>ASan+UBSan; unit tests in-sandbox, e2e out-of-sandbox</td>
+</tr>
+<tr>
+<td>Load testing</td>
+<td><code>.github/workflows/loadtest.yml</code></td>
+<td>Nightly</td>
+<td><code>wrk</code> throughput baseline</td>
+</tr>
+</tbody>
+</table>
+<h2 id="python-test-deprecation-parity-checklist">Python Test Deprecation — Parity Checklist<a class="headerlink" href="#python-test-deprecation-parity-checklist" title="Permanent link">&para;</a></h2>
+<p>Python e2e tests (<code>test/e2e/</code>) have been retired. The following per-function parity checklist confirmed Rust coverage before removal.</p>
+<h3 id="test_01_conversionspy-2-tests-retired">test_01_conversions.py (2 tests) — RETIRED<a class="headerlink" href="#test_01_conversionspy-2-tests-retired" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Python Test</th>
+<th>Rust Equivalent</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_iso_15444_4_decode_jp2</code></td>
+<td><code>cli_file_conversion</code> in <code>cli.rs</code></td>
+<td>JP2→TIFF decode with PAE comparison</td>
+</tr>
+<tr>
+<td><code>test_iso_15444_4_round_trip</code></td>
+<td><code>cli_file_conversion</code> in <code>cli.rs</code></td>
+<td>TIFF→JP2→TIFF round-trip</td>
+</tr>
+</tbody>
+</table>
+<h3 id="test_02_serverpy-32-tests-retired">test_02_server.py (32 tests) — RETIRED<a class="headerlink" href="#test_02_serverpy-32-tests-retired" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Python Test</th>
+<th>Rust Equivalent</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_sipi_starts</code></td>
+<td><code>server_starts_and_responds</code> in <code>smoke.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_sipi_log_output</code></td>
+<td>—</td>
+<td>Dropped: infrastructure check ("Added route" in stdout), not behavioral</td>
+</tr>
+<tr>
+<td><code>test_lua_functions</code></td>
+<td><code>lua_test_functions</code> in <code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_clean_temp_dir</code></td>
+<td><code>temp_directory_cleanup</code> in <code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_lua_scripts</code></td>
+<td><code>lua_mediatype</code> in <code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_lua_mimetype</code></td>
+<td><code>lua_mimetype_func</code> in <code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_knora_session_parsing</code></td>
+<td><code>lua_knora_session_cookie</code> in <code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_file_bytes</code></td>
+<td><code>full_iiif_url_returns_image</code> in <code>iiif_compliance.rs</code></td>
+<td>Status+content-type check; byte-exact comparison covered by dimension verification and snapshot tests</td>
+</tr>
+<tr>
+<td><code>test_restrict</code></td>
+<td><code>restricted_image_reduction</code> in <code>server.rs</code></td>
+<td>Verifies 128x128 via image decode</td>
+</tr>
+<tr>
+<td><code>test_deny</code></td>
+<td><code>deny_unauthorized_image</code> in <code>iiif_compliance.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_not_found</code></td>
+<td><code>returns_404_for_missing_file</code> in <code>smoke.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_iiif_url_parsing</code></td>
+<td><code>invalid_iiif_url_empty_identifier</code>, <code>id_incomplete_iiif_url</code>, <code>id_malformed_iiif_url</code> in <code>iiif_compliance.rs</code></td>
+<td>Multiple tests cover all 5 invalid URL patterns</td>
+</tr>
+<tr>
+<td><code>test_read_write</code></td>
+<td><code>lua_read_write</code> in <code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_jpg_with_comment</code></td>
+<td><code>upload_jpeg_with_comment_block</code> in <code>upload.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_odd_file</code></td>
+<td><code>upload_odd_file</code> in <code>upload.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_head_response_should_be_empty</code></td>
+<td><code>head_iiif_image_empty_body</code> in <code>iiif_compliance.rs</code> + <code>head_request_returns_headers</code> in <code>smoke.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_mimeconsistency</code></td>
+<td><code>mime_consistency</code> in <code>server.rs</code></td>
+<td>All 6 test cases ported</td>
+</tr>
+<tr>
+<td><code>test_thumbnail</code></td>
+<td><code>thumbnail_generation</code> + <code>thumbnail_convert_from_file</code> in <code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_image_conversion</code></td>
+<td><code>image_conversion_from_binaries</code> in <code>server.rs</code></td>
+<td><code>/convert_from_binaries</code> endpoint</td>
+</tr>
+<tr>
+<td><code>test_knora_info_validation</code></td>
+<td><code>knora_json_image_required_fields</code> + <code>upload_tiff_knora_json</code> in <code>upload.rs</code></td>
+<td>Image and CSV sidecar flows</td>
+</tr>
+<tr>
+<td><code>test_json_info_validation</code></td>
+<td>Info.json tests in <code>iiif_compliance.rs</code> + <code>info_json_x_forwarded_proto_https</code></td>
+<td>Full structure + X-Forwarded-Proto</td>
+</tr>
+<tr>
+<td><code>test_knora_json_for_video</code></td>
+<td><code>video_knora_json</code> in <code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_handling_of_missing_sidecar_file_for_video</code></td>
+<td><code>missing_sidecar_handled_gracefully</code> in <code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_sqlite_api</code></td>
+<td><code>sqlite_api</code> in <code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_iiif_auth_api</code></td>
+<td><code>iiif_auth_api</code> in <code>server.rs</code></td>
+<td>401 + IIIF Auth service block in info.json</td>
+</tr>
+<tr>
+<td><code>test_orientation_topleft</code></td>
+<td><code>lua_orientation</code> in <code>server.rs</code></td>
+<td>Lua endpoint tests same code path</td>
+</tr>
+<tr>
+<td><code>test_4bit_palette_png</code></td>
+<td><code>upload_4bit_palette_png</code> in <code>upload.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_upscaling_server</code></td>
+<td><code>size_upscaling</code> + <code>size_upscale_*</code> in <code>iiif_compliance.rs</code></td>
+<td>Status + dimension verification</td>
+</tr>
+<tr>
+<td><code>test_file_access</code></td>
+<td><code>file_access_allowed</code> + <code>file_access_denied</code> in <code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_concurrency</code></td>
+<td><code>concurrent_requests</code> in <code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_orientation</code></td>
+<td><code>lua_orientation</code> in <code>server.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_exif_gps</code></td>
+<td><code>lua_exif_gps</code> in <code>server.rs</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="test_03_iiifpy-1-test-retired">test_03_iiif.py (1 test) — RETIRED<a class="headerlink" href="#test_03_iiifpy-1-test-retired" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Python Test</th>
+<th>Rust Equivalent</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_iiif_validation</code></td>
+<td>—</td>
+<td>Explicitly excluded: calls external <code>iiif-validate.py</code> binary, effectively a no-op when validator unavailable. IIIF compliance covered by 80+ tests in <code>iiif_compliance.rs</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="test_04_range_requestspy-12-active-tests-retired">test_04_range_requests.py (12 active tests) — RETIRED<a class="headerlink" href="#test_04_range_requestspy-12-active-tests-retired" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Python Test</th>
+<th>Rust Equivalent</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_small_file_no_range</code></td>
+<td><code>small_file_no_range</code> in <code>range_requests.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_small_file_range_first_100_bytes</code></td>
+<td><code>small_file_range_first_100_bytes</code> in <code>range_requests.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_small_file_range_middle_bytes</code></td>
+<td><code>small_file_range_middle_bytes</code> in <code>range_requests.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_small_file_range_last_byte</code></td>
+<td><code>small_file_range_last_byte</code> in <code>range_requests.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_small_file_open_ended_from_start</code></td>
+<td><code>small_file_open_ended_from_start</code> in <code>range_requests.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_small_file_open_ended_from_middle</code></td>
+<td><code>small_file_open_ended_from_middle</code> in <code>range_requests.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_large_file_no_range</code></td>
+<td><code>large_file_full_download</code> in <code>range_requests.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_large_file_range_first_megabyte</code></td>
+<td><code>large_file_range_first_1mb</code> in <code>range_requests.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_large_file_range_middle_chunk</code></td>
+<td><code>large_file_range_middle_chunk</code> in <code>range_requests.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_large_file_range_last_chunk</code></td>
+<td><code>large_file_range_last_bytes</code> in <code>range_requests.rs</code></td>
+<td>Last 1000 bytes</td>
+</tr>
+<tr>
+<td><code>test_large_file_range_single_last_byte</code></td>
+<td><code>large_file_range_single_last_byte</code> in <code>range_requests.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_large_file_open_ended_from_start</code></td>
+<td><code>large_file_open_ended_from_start</code> in <code>range_requests.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_large_file_open_ended_from_middle</code></td>
+<td><code>large_file_open_ended_from_middle</code> in <code>range_requests.rs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test_large_file_multiple_ranges_simulation</code></td>
+<td><code>large_file_sequential_range_reassembly</code> in <code>range_requests.rs</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="infrastructure-files-retired">Infrastructure files — RETIRED<a class="headerlink" href="#infrastructure-files-retired" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>conftest.py</code></td>
+<td>Test manager, fixtures, nginx control — replaced by <code>test/e2e-rust/tests/common/</code></td>
+</tr>
+<tr>
+<td><code>config.ini</code></td>
+<td>Python test config — replaced by Rust test harness</td>
+</tr>
+<tr>
+<td><code>nginx/</code></td>
+<td>Nginx reverse proxy for SSL testing — Rust tests use direct HTTPS</td>
+</tr>
+<tr>
+<td><code>requirements.txt</code></td>
+<td>Not present (deps managed by Nix/pip)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="rust-migration-testing-path">Rust Migration Testing Path<a class="headerlink" href="#rust-migration-testing-path" title="Permanent link">&para;</a></h2>
+<p>When a C++ component is migrated to Rust:</p>
+<ol>
+<li><strong>Before migration:</strong> Ensure e2e contract tests cover the component's behavior</li>
+<li><strong>During migration:</strong> Write Rust unit tests (<code>#[test]</code>, <code>proptest</code>) for the new implementation</li>
+<li><strong>After migration:</strong> Existing e2e tests validate the Rust implementation matches C++ behavior</li>
+<li><strong>Cleanup:</strong> Remove corresponding C++ unit tests (they tested the old implementation)</li>
+</ol>
+<p>The <code>insta</code> golden baselines are critical — they capture exact C++ server behavior and detect any Rust implementation drift.</p>
+<h2 id="flaky-test-handling">Flaky Test Handling<a class="headerlink" href="#flaky-test-handling" title="Permanent link">&para;</a></h2>
+<p>Some e2e tests are inherently racy — for example, a test that uploads a file and immediately GETs the converted result may fail if the server hasn't flushed to disk yet. Rather than retrying at the CI job level, handle flakiness at the <strong>test level</strong> using the <code>retry_flaky()</code> helper from the test harness (<code>test/e2e-rust/src/lib.rs</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">use</span><span class="w"> </span><span class="n">sipi_e2e</span>::<span class="n">retry_flaky</span><span class="p">;</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="cp">#[test]</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="k">fn</span> <span class="nf">my_flaky_test</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">srv</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">server</span><span class="p">();</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="c1">// ... setup ...</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">    </span><span class="n">retry_flaky</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">        </span><span class="k">match</span><span class="w"> </span><span class="n">client</span><span class="p">().</span><span class="n">get</span><span class="p">(</span><span class="o">&amp;</span><span class="n">url</span><span class="p">).</span><span class="n">send</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">            </span><span class="nb">Ok</span><span class="p">(</span><span class="n">resp</span><span class="p">)</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">resp</span><span class="p">.</span><span class="n">status</span><span class="p">().</span><span class="n">as_u16</span><span class="p">()</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">200</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(()),</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">            </span><span class="nb">Ok</span><span class="p">(</span><span class="n">resp</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="fm">format!</span><span class="p">(</span><span class="s">&quot;HTTP {}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">resp</span><span class="p">.</span><span class="n">status</span><span class="p">())),</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">            </span><span class="nb">Err</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="fm">format!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">e</span><span class="p">)),</span>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="p">}</span>
+</code></pre></div>
+<p><strong>Guidelines:</strong></p>
+<ul>
+<li><code>retry_flaky(max_attempts, closure)</code> retries the closure up to <code>max_attempts</code> times with a 2-second sleep between attempts</li>
+<li>The closure returns <code>Ok(())</code> on success or <code>Err(message)</code> on failure</li>
+<li>Failed attempts emit <code>[retry_flaky]</code> log lines for CI visibility</li>
+<li>Only use for tests with a known race condition — do not mask real bugs with retries</li>
+<li>If a test needs more than 3 retries, the underlying issue should be fixed instead</li>
+</ul>
+<h2 id="future-additions">Future Additions<a class="headerlink" href="#future-additions" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Doc tests:</strong> Once sipi has Rust library code (post-migration), <code>///</code> example doc tests become valuable</li>
+<li><strong><code>criterion</code> benchmarks:</strong> Fine-grained micro-benchmarks for parsers, image decode, ICC conversion — after Rust migration</li>
+<li><strong><code>sipi_request_duration_seconds</code>:</strong> Prometheus histogram for production latency monitoring</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      &copy; 2017 - 2026 <a href='https://dasch.swiss' target='_blank'>Data and Service Center for the Humanities (DaSCH)</a>
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["search.suggest", "search.highlight", "navigation.sections", "toc.integrate", "content.code.copy"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+    
+  </body>
+</html>

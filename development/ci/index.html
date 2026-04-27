@@ -1,0 +1,1079 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://sipi.io/development/ci/">
+      
+      
+        <link rel="prev" href="../nix/">
+      
+      
+        <link rel="next" href="../developing/">
+      
+      
+      <link rel="icon" href="../../assets/images/dasch-favicon.ico">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>CI and Release - SIPI Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.bcfcd587.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/style/theme.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-blue" data-md-color-accent="deep-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#ci-and-release" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="SIPI Documentation" class="md-header__button md-logo" aria-label="SIPI Documentation" data-md-component="logo">
+      
+  <img src="../../assets/images/dasch-icon-white.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            SIPI Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              CI and Release
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dasch-swiss/sipi" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dasch-swiss/sipi
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="SIPI Documentation" class="md-nav__button md-logo" aria-label="SIPI Documentation" data-md-component="logo">
+      
+  <img src="../../assets/images/dasch-icon-white.svg" alt="logo">
+
+    </a>
+    SIPI Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dasch-swiss/sipi" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dasch-swiss/sipi
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/introduction/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Introduction
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/sipi/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/json-output/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    JSON Output
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/running/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Running
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lua/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Lua Integration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lua/lua-image/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Lua Image Functions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lua/sqlite/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SQLite Integration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../building/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Building
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../nix/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Building with Nix
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    CI and Release
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    CI and Release
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#release-automation-release-please" class="md-nav__link">
+    <span class="md-ellipsis">
+      Release Automation (release-please)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#nightly-fuzz-testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Nightly Fuzz Testing
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      Scope
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#zig-version-and-build-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Zig Version and Build Policy
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pull-request-ci" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pull Request CI
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pull Request CI">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#standard-test-matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      Standard test matrix
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#static-and-macos-pr-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Static and macOS PR checks
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#forked-pr-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      Forked PR behavior
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tag-release-cicd" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tag Release CI/CD
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tag Release CI/CD">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#static-artifact-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      Static artifact flow
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#local-reproduction" class="md-nav__link">
+    <span class="md-ellipsis">
+      Local Reproduction
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../developing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Developing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../fuzzing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Fuzz Testing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing-strategy/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Testing Strategy
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../downstream-dependencies/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Downstream Dependencies
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../commit-conventions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Commit and PR Conventions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reviewer-guidelines/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Reviewer Guidelines
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operation/rate-limiter/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Rate Limiter
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operation/memory-budget/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Memory Budget
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operation/health-endpoint/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Health Endpoint
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release-notes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Release Notes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="ci-and-release">CI and Release<a class="headerlink" href="#ci-and-release" title="Permanent link">&para;</a></h1>
+<p>This page documents SIPI's CI pipeline, release automation, and the Zig/static
+build hardening that runs in parallel with Docker during rollout.</p>
+<h2 id="release-automation-release-please">Release Automation (release-please)<a class="headerlink" href="#release-automation-release-please" title="Permanent link">&para;</a></h2>
+<p>Releases are fully automated via <a href="https://github.com/googleapis/release-please">release-please</a>.
+When commits are merged to <code>main</code>, release-please reads their
+<a href="https://www.conventionalcommits.org/">Conventional Commit</a> prefixes to
+determine the SemVer bump and generate the changelog.</p>
+<p><strong>Configuration files:</strong></p>
+<ul>
+<li><code>.github/release-please/config.json</code> — changelog sections, release type</li>
+<li><code>.github/release-please/manifest.json</code> — current version</li>
+<li><code>.github/workflows/release-please.yml</code> — GitHub Actions workflow</li>
+</ul>
+<p><strong>How commit types map to releases:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Prefix</th>
+<th>SemVer Effect</th>
+<th>Changelog Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>feat:</code></td>
+<td>minor bump</td>
+<td>Features</td>
+</tr>
+<tr>
+<td><code>fix:</code></td>
+<td>patch bump</td>
+<td>Bug Fixes</td>
+</tr>
+<tr>
+<td><code>feat!:</code> / <code>fix!:</code></td>
+<td>major bump</td>
+<td>Breaking Changes</td>
+</tr>
+<tr>
+<td><code>perf:</code></td>
+<td>patch bump</td>
+<td>Performance Improvements</td>
+</tr>
+<tr>
+<td><code>docs:</code>, <code>style:</code>, <code>refactor:</code>, <code>test:</code>, <code>build:</code>, <code>ci:</code>, <code>chore:</code></td>
+<td>no bump</td>
+<td>hidden</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">Correct commit prefixes are critical</p>
+<p>A commit without a valid Conventional Commit prefix will be invisible to
+release-please — it won't trigger a release or appear in the changelog.
+See <a href="../developing/#commit-message-schema">Commit Message Schema</a> for the
+full format specification.</p>
+</div>
+<h2 id="nightly-fuzz-testing">Nightly Fuzz Testing<a class="headerlink" href="#nightly-fuzz-testing" title="Permanent link">&para;</a></h2>
+<p>A nightly fuzz workflow (<code>.github/workflows/fuzz.yml</code>) runs libFuzzer against
+the IIIF URL parser to find crashes and edge cases. Fuzz corpora are persisted
+as artifacts across runs so coverage accumulates over time.</p>
+<p>See <a href="../fuzzing/">Fuzzing</a> for details on the fuzz harness, corpus management,
+and how to reproduce crashes locally.</p>
+<h2 id="scope">Scope<a class="headerlink" href="#scope" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Keep Docker publishing and Zig/static artifacts in parallel.</li>
+<li>Enforce Zig/static validation as required gates before release side effects.</li>
+<li>Produce fully static Linux binaries (<code>x86_64-linux-musl</code>, <code>aarch64-linux-musl</code>).</li>
+<li>Enforce strict macOS Zig dylib policy (<code>/usr/lib/libSystem.B.dylib</code> only).</li>
+</ul>
+<h2 id="zig-version-and-build-policy">Zig Version and Build Policy<a class="headerlink" href="#zig-version-and-build-policy" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Zig is pinned to <code>0.15.2</code> in CI workflows.</li>
+<li>Linux static targets:</li>
+<li><code>x86_64-linux-musl</code> (amd64)</li>
+<li><code>aarch64-linux-musl</code> (arm64)</li>
+<li>CI uses <strong>native per-arch builds via Docker-in-Ubuntu</strong>: each architecture
+  gets its own runner (<code>ubuntu-24.04</code> for amd64, <code>ubuntu-24.04-arm</code> for arm64).
+  JS actions (checkout, setup-zig, upload-artifact) run on the bare Ubuntu host.
+  The build itself runs inside <code>docker run alpine:3.21</code> with the source
+  bind-mounted — Alpine is required because Zig has a bug where it doesn't
+  ignore <code>/usr/include</code> even with <code>-target</code>, and Ubuntu's glibc headers would
+  contaminate musl builds.</li>
+<li>LTO is disabled for musl static builds (<code>-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF</code>).</li>
+</ul>
+<h2 id="pull-request-ci">Pull Request CI<a class="headerlink" href="#pull-request-ci" title="Permanent link">&para;</a></h2>
+<p>Workflow: <code>.github/workflows/test.yml</code></p>
+<h3 id="standard-test-matrix">Standard test matrix<a class="headerlink" href="#standard-test-matrix" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Nix/Clang test matrix runs on:</li>
+<li><code>ubuntu-24.04</code></li>
+<li><code>ubuntu-24.04-arm</code></li>
+</ul>
+<h3 id="static-and-macos-pr-checks">Static and macOS PR checks<a class="headerlink" href="#static-and-macos-pr-checks" title="Permanent link">&para;</a></h3>
+<p>Both static Linux and macOS validation run through the Nix flake —
+Zig-in-Nix for musl cross-compile and Nix's default clang/libc++
+stdenv for Darwin.</p>
+<p><strong><code>nix-static / {arch}</code></strong> (<code>ubuntu-24.04</code>, <code>ubuntu-24.04-arm</code>):</p>
+<ol>
+<li><code>just nix-build-static-${arch}</code> — wraps <code>nix build .#static-${arch}</code>,
+   which runs <code>mkStaticBuild</code> in <code>flake.nix</code> using Zig as the C/C++
+   cross-compiler targeting <code>{x86_64,aarch64}-linux-musl</code>. Kakadu is
+   fetched by the FOD (<code>GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}</code>,
+   <code>configurable-impure-env</code> enabled on the daemon).</li>
+<li><code>just nix-static-linkage-verify result/bin/sipi</code> — static linkage
+   assertion via <code>readelf -d</code>; must not report any <code>NEEDED</code> entries.</li>
+<li><code>just rust-test-e2e</code> with <code>SIPI_BIN=$GITHUB_WORKSPACE/result/bin/sipi</code>
+   — proves the Nix-built static musl binary runs on a glibc host.</li>
+</ol>
+<p><strong><code>nix-macos / arm64 dylib-audit</code></strong> (<code>macos-14</code>):</p>
+<ul>
+<li><code>just nix-build-default</code> on Darwin (wraps <code>nix build .#default</code> —
+  clang + libc++).</li>
+<li><code>just nix-macos-dylib-audit result/bin/sipi</code> — <code>otool -L</code> audit;
+  only <code>/usr/lib/libSystem.B.dylib</code> and
+  <code>/System/Library/{Frameworks,PrivateFrameworks}/...</code> allowed.</li>
+</ul>
+<h3 id="forked-pr-behavior">Forked PR behavior<a class="headerlink" href="#forked-pr-behavior" title="Permanent link">&para;</a></h3>
+<p><code>nix-static</code> and <code>nix-macos-audit</code> are skipped for forked PRs because
+the Kakadu FOD needs <code>secrets.DASCHBOT_PAT</code>, which isn't shared with
+forks. Standard CI (nix-clang) still runs.</p>
+<h2 id="tag-release-cicd">Tag Release CI/CD<a class="headerlink" href="#tag-release-cicd" title="Permanent link">&para;</a></h2>
+<p>Workflow: <code>.github/workflows/publish.yml</code></p>
+<p>Trigger: tag push matching <code>v*</code>.</p>
+<p>Gate model:
+1. <code>validate-docker</code> must pass.
+2. <code>release-gate</code> fires on <code>validate-docker</code> success.
+3. Publish jobs run in parallel after the gate:
+   - <code>publish-docker / {arch}</code> — builds, tests, pushes Docker images.
+   - <code>publish-static-release / {arch}</code> — builds release archive via
+     <code>just nix-build-release-archive-${arch}</code> (wraps
+     <code>nix build .#release-archive-${arch}</code>), uploads to GitHub
+     Release, pushes debug symbols to Sentry.
+   - <code>manifest</code> — multi-arch Docker manifest.
+   - <code>docs</code> — mkdocs deploy.
+4. <code>sentry</code> finalises the release after manifest + static publishes.</p>
+<h3 id="static-artifact-flow">Static artifact flow<a class="headerlink" href="#static-artifact-flow" title="Permanent link">&para;</a></h3>
+<p>A single per-arch <code>publish-static-release</code> job produces everything:</p>
+<ul>
+<li><code>just nix-build-release-archive-${arch}</code> (wraps <code>nix build .#release-archive-${arch}</code>) emits in <code>result/</code>:</li>
+<li><code>sipi-v&lt;version&gt;-linux-${arch}.tar.gz</code> (binary + config + scripts + server)</li>
+<li><code>sipi-v&lt;version&gt;-linux-${arch}.tar.gz.sha256</code></li>
+<li><code>sipi-linux-${arch}.debug</code> (split debug symbols)</li>
+<li><code>gh release upload</code> attaches the three files to the tag release.</li>
+<li><code>sentry-cli debug-files upload</code> pushes the <code>.debug</code> file to Sentry.</li>
+</ul>
+<h2 id="local-reproduction">Local Reproduction<a class="headerlink" href="#local-reproduction" title="Permanent link">&para;</a></h2>
+<p>Every CI step invokes <code>just &lt;recipe&gt;</code> — no inline cmake or <code>nix build</code>
+calls. To reproduce any CI job locally, run the same recipe. With the
+Determinate Systems native-linux-builder available to macOS authors,
+Linux-target recipes (<code>nix-build-static-*</code>, <code>nix-build-sanitized</code>,
+<code>nix-build-fuzz</code>, <code>nix-build-release-archive-*</code>) run locally without
+a CI round-trip.</p>
+<p><code>just nix-build*</code> recipes wrap <code>nix build</code>, so CI invokes them directly
+without a surrounding <code>nix develop</code>. Recipes that consume dev-shell
+tools — <code>rust-test-e2e</code> (needs <code>cargo</code>) and <code>hurl-test</code> (needs <code>hurl</code>) —
+are the exception and run inside <code>nix develop --command …</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Native dev build + e2e + Hurl (what test.yml nix-clang runs)</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>just<span class="w"> </span>nix-build
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>nix<span class="w"> </span>develop<span class="w"> </span>--command<span class="w"> </span>bash<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;just rust-test-e2e &amp;&amp; just hurl-test&quot;</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>just<span class="w"> </span>nix-coverage
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1"># Static musl binaries (what test.yml nix-static runs)</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>just<span class="w"> </span>nix-build-static-amd64
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>just<span class="w"> </span>nix-build-static-arm64
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>just<span class="w"> </span>nix-static-linkage-verify<span class="w"> </span>result/bin/sipi
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="c1"># Sanitizer build + tests (what sanitizer.yml runs)</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>just<span class="w"> </span>nix-build-sanitized<span class="w">                  </span><span class="c1"># tests run in sandbox</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="nv">SIPI_BIN</span><span class="o">=</span><span class="nv">$PWD</span>/result/bin/sipi<span class="w"> </span>nix<span class="w"> </span>--option<span class="w"> </span>filter-syscalls<span class="w"> </span><span class="nb">false</span><span class="w"> </span>develop<span class="w"> </span>--command<span class="w"> </span>bash<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;just rust-test-e2e&quot;</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="c1"># Fuzz build + run (what fuzz.yml runs)</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>just<span class="w"> </span>nix-build-fuzz
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>mkdir<span class="w"> </span>fuzz-corpus-live
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>just<span class="w"> </span>nix-run-fuzz<span class="w"> </span>fuzz-corpus-live<span class="w"> </span><span class="m">60</span><span class="w"> </span>fuzz/handlers/corpus
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="c1"># Release archive (what publish.yml publish-static-release runs)</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>just<span class="w"> </span>nix-build-release-archive-amd64
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="c1"># Darwin build + audit (what test.yml nix-macos-audit runs)</span>
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>just<span class="w"> </span>nix-build-default
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>just<span class="w"> </span>nix-macos-dylib-audit<span class="w"> </span>result/bin/sipi
+</code></pre></div>
+<p><strong>CI invokes justfile only:</strong> if a CI step is not a <code>just &lt;recipe&gt;</code>
+invocation, that's a drift signal — either the step is non-build glue
+(e.g. artifact upload, Codecov upload, Sentry push) or the justfile is
+missing a recipe and should grow one.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      &copy; 2017 - 2026 <a href='https://dasch.swiss' target='_blank'>Data and Service Center for the Humanities (DaSCH)</a>
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["search.suggest", "search.highlight", "navigation.sections", "toc.integrate", "content.code.copy"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+    
+  </body>
+</html>
