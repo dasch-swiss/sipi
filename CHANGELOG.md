@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.1.1](https://github.com/dasch-swiss/sipi/compare/v4.1.0...v4.1.1) (2026-04-27)
+
+
+### Bug Fixes
+
+* Create GitHub Release if missing in publish-static-release ([3a58fa8](https://github.com/dasch-swiss/sipi/commit/3a58fa83a91df41da3d18928e65a3dcd044ae20f))
+* **http:** Distinguish client-aborted HTTP writes from real write errors ([53c9d72](https://github.com/dasch-swiss/sipi/commit/53c9d72d9bd58ef8a86e47590e92ef1a3d9eee13))
+* **iiif:** Replace std::regex with hand-rolled validators ([526890e](https://github.com/dasch-swiss/sipi/commit/526890e562ca2a7f49697aef330b243b48126f3d))
+* **shttps:** Urldecode no longer infinite-loops on trailing % ([1659539](https://github.com/dasch-swiss/sipi/commit/16595399a1c09e91290f5e4d3d854cd267ba84cf))
+
 ## [4.1.0](https://github.com/dasch-swiss/sipi/compare/v4.0.1...v4.1.0) (2026-04-16)
 
 
