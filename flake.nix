@@ -421,7 +421,6 @@
               # Additional test dependencies
               nginx
               graphicsmagick
-              apacheHttpd
               imagemagick
               libxml2
               libxslt
@@ -451,7 +450,6 @@
               hurl
               nginx
               graphicsmagick
-              apacheHttpd
               imagemagick
               libxml2
               libxslt
@@ -481,7 +479,6 @@
               hurl
               nginx
               graphicsmagick
-              apacheHttpd
               imagemagick
               libxml2
               libxslt
