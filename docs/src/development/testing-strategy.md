@@ -256,7 +256,7 @@ Metrics endpoint at `GET /metrics` (`SipiMetrics.h`, `src/SipiMetrics.cpp`):
 
 | Feature | Details |
 |---|---|
-| **Build systems** | CMake, Docker (multi-stage), Zig toolchain, Nix |
+| **Build systems** | CMake, Nix |
 | **CI** | GitHub Actions: unit tests, e2e tests, Hurl tests, fuzz (nightly), Docker builds |
 | **Documentation** | MkDocs Material site, LLM-optimized `llms.txt` output |
 | **Dependency management** | Vendored archives in `vendor/` with SHA-256 checksums |

@@ -1,7 +1,6 @@
 # CI and Release
 
-This page documents SIPI's CI pipeline, release automation, and the Zig/static
-build hardening that runs in parallel with Docker during rollout.
+This page documents SIPI's CI pipeline and release automation.
 
 ## Release Automation (release-please)
 
@@ -41,28 +40,6 @@ as artifacts across runs so coverage accumulates over time.
 See [Fuzzing](fuzzing.md) for details on the fuzz harness, corpus management,
 and how to reproduce crashes locally.
 
-## Scope
-
-- Keep Docker publishing and Zig/static artifacts in parallel.
-- Enforce Zig/static validation as required gates before release side effects.
-- Produce fully static Linux binaries (`x86_64-linux-musl`, `aarch64-linux-musl`).
-- Enforce strict macOS Zig dylib policy (`/usr/lib/libSystem.B.dylib` only).
-
-## Zig Version and Build Policy
-
-- Zig is pinned to `0.15.2` in CI workflows.
-- Linux static targets:
-  - `x86_64-linux-musl` (amd64)
-  - `aarch64-linux-musl` (arm64)
-- CI uses **native per-arch builds via Docker-in-Ubuntu**: each architecture
-  gets its own runner (`ubuntu-24.04` for amd64, `ubuntu-24.04-arm` for arm64).
-  JS actions (checkout, setup-zig, upload-artifact) run on the bare Ubuntu host.
-  The build itself runs inside `docker run alpine:3.21` with the source
-  bind-mounted — Alpine is required because Zig has a bug where it doesn't
-  ignore `/usr/include` even with `-target`, and Ubuntu's glibc headers would
-  contaminate musl builds.
-- LTO is disabled for musl static builds (`-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF`).
-
 ## Pull Request CI
 
 Workflow: `.github/workflows/ci.yml`
@@ -94,24 +71,7 @@ The `test` job is matrixed on `ubuntu-24.04` (amd64) and `ubuntu-24.04-arm`
 The Docker steps reuse the Nix store populated by `just nix-build`, so
 `ext/*` derivations (exiv2, libtiff, kakadu, …) are warm-cache hits.
 
-### Static and macOS PR checks
-
-Both static Linux and macOS validation run through the Nix flake —
-Zig-in-Nix for musl cross-compile and Nix's default clang/libc++
-stdenv for Darwin.
-
-**`nix-static / {arch}`** (`ubuntu-24.04`, `ubuntu-24.04-arm`):
-
-1. `just nix-build-static-${arch}` — wraps `nix build .#static-${arch}`,
-   which runs `mkStaticBuild` in `flake.nix` using Zig as the C/C++
-   cross-compiler targeting `{x86_64,aarch64}-linux-musl`. Kakadu is
-   fetched by the FOD (`GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}`,
-   `configurable-impure-env` enabled on the daemon).
-2. `just nix-static-linkage-verify result/bin/sipi` — static linkage
-   assertion via `readelf -d`; must not report any `NEEDED` entries.
-3. `just nix-test-e2e` with `SIPI_BIN=$GITHUB_WORKSPACE/result/bin/sipi`
-   — proves the Nix-built static musl binary runs on a glibc host. Uses
-   the `.#e2e-tests` derivation, so cargo is not required on the runner.
+### macOS PR check
 
 **`nix-macos / arm64 dylib-audit`** (`macos-14`):
 
@@ -123,9 +83,9 @@ stdenv for Darwin.
 
 ### Forked PR behavior
 
-`nix-static` and `nix-macos-audit` are skipped for forked PRs because
-the Kakadu FOD needs `secrets.DASCHBOT_PAT`, which isn't shared with
-forks. The `test` job still runs on forked PRs, but its
+`nix-macos-audit` is skipped for forked PRs because the Kakadu FOD
+needs `secrets.DASCHBOT_PAT`, which isn't shared with forks. The
+standard CI (`nix-clang`) job still runs on forked PRs, but its
 `docker/login-action` step is gated to skip on forks (Docker Hub
 credentials are unavailable to fork runners).
 
@@ -146,14 +106,10 @@ Gate model:
      extracts the `.debug` file via `just nix-docker-extract-debug`,
      runs smoke tests, pushes the image, uploads SBOM, pushes debug
      symbols to Sentry.
-   - `publish-static-release / {arch}` — builds release archive via
-     `just nix-build-release-archive-${arch}` (wraps
-     `nix build .#release-archive-${arch}`), uploads to GitHub
-     Release, pushes debug symbols to Sentry.
    - `manifest` — multi-arch Docker manifest combining the two
      pushed per-arch images.
    - `docs` — mkdocs deploy.
-4. `sentry` finalises the release after manifest + static publishes.
+4. `sentry` finalises the release after the manifest job completes.
 
 ### Docker image build (PRs and tag releases)
 
@@ -173,25 +129,13 @@ categories beyond `LC_CTYPE` (which `C.UTF-8` covers), and operators
 do not override `LC_ALL` at runtime. See
 [`nix.md`](nix.md#docker-image) for the derivation details.
 
-### Static artifact flow
-
-A single per-arch `publish-static-release` job produces everything:
-
-- `just nix-build-release-archive-${arch}` (wraps `nix build .#release-archive-${arch}`) emits in `result/`:
-  - `sipi-v<version>-linux-${arch}.tar.gz` (binary + config + scripts + server)
-  - `sipi-v<version>-linux-${arch}.tar.gz.sha256`
-  - `sipi-linux-${arch}.debug` (split debug symbols)
-- `gh release upload` attaches the three files to the tag release.
-- `sentry-cli debug-files upload` pushes the `.debug` file to Sentry.
-
 ## Local Reproduction
 
 Every CI step invokes `just <recipe>` — no inline cmake or `nix build`
 calls. To reproduce any CI job locally, run the same recipe. With the
 Determinate Systems native-linux-builder available to macOS authors,
-Linux-target recipes (`nix-build-static-*`, `nix-build-sanitized`,
-`nix-build-fuzz`, `nix-build-release-archive-*`) run locally without
-a CI round-trip.
+Linux-target recipes (`nix-build-sanitized`, `nix-build-fuzz`) run
+locally without a CI round-trip.
 
 `just nix-build*` recipes wrap `nix build`, so CI invokes them directly
 without a surrounding `nix develop`. The Rust e2e and Docker smoke test
@@ -211,11 +155,6 @@ just nix-coverage
 just nix-docker-build-amd64               # or -arm64 on aarch64 host
 just nix-test-smoke                       # binary from .#smoke-test
 
-# Static musl binaries (what ci.yml nix-static runs)
-just nix-build-static-amd64
-just nix-build-static-arm64
-just nix-static-linkage-verify result/bin/sipi
-
 # Sanitizer build + tests (what sanitizer.yml runs)
 just nix-build-sanitized                  # tests run in sandbox
 SIPI_BIN=$PWD/result/bin/sipi just nix-test-e2e
@@ -231,9 +170,6 @@ just nix-run-fuzz fuzz-corpus-live 60 fuzz/handlers/corpus
 just nix-docker-build-amd64               # arch-pinned image + sipi-debug
 just nix-test-smoke                       # smoke test against loaded image
 just nix-docker-extract-debug amd64       # produces sipi-amd64.debug for Sentry
-
-# Release archive (what publish.yml publish-static-release runs)
-just nix-build-release-archive-amd64
 
 # Darwin build + audit (what ci.yml nix-macos-audit runs)
 just nix-build-default
