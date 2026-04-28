@@ -16,6 +16,8 @@
 , fetchurl
 , gcovr
 , llvmPackages_19
+, removeReferencesTo  # provides `remove-references-to` for the postFixup
+                      # toolchain-leak scrub (see comment near `postFixup`).
 , kakaduArchive  # Store path to the Kakadu zip. Provided by flake.nix via
                  # a fixed-output derivation that calls `gh release download`
                  # against dsp-ci-assets. Requires GH_TOKEN (or a Cachix hit)
@@ -88,6 +90,7 @@ stdenv.mkDerivation {
     unzip
     xxd
     file  # autoreconf deps for libmagic build
+    removeReferencesTo  # postFixup uses `remove-references-to`
   ] ++ lib.optionals enableCoverage [
     gcovr                  # gcovr binary used by postCheck to produce coverage.xml
     llvmPackages_19.llvm   # provides `llvm-cov` on PATH for gcovr's --gcov-executable
@@ -195,6 +198,45 @@ stdenv.mkDerivation {
     cp $src/scripts/send_response.lua   $out/share/sipi/scripts/
 
     runHook postInstall
+  '';
+
+  # Strip build-toolchain references from the final binary.
+  #
+  # Sipi statically embeds OpenSSL (built via cmake's ExternalProject in
+  # `ext/openssl`). OpenSSL bakes its build-time compiler invocation into
+  # the binary as a diagnostic string, surfaced by `openssl version -a`:
+  #
+  #   compiler: /nix/store/<hash>-clang-wrapper-19.1.7/bin/clang -fPIC ...
+  #
+  # That literal `/nix/store/...-clang-wrapper-19.1.7` substring trips
+  # Nix's runtime-dependency scanner, which then pulls clang-wrapper
+  # into the runtime closure. Transitively that drags in clang itself,
+  # llvm-19.1.7-lib, gcc-15.2.0, binutils, and every `-dev` output of
+  # the libc++ stdenv — ~3 GiB of build-time toolchain that the
+  # stripped binary doesn't actually load at runtime.
+  #
+  # On the historical Ubuntu/apt build the same OpenSSL string read
+  # `/usr/bin/clang` — short path, no closure bloat. Under Nix the
+  # absolute store path is the only realistic CC value, so we scrub
+  # the toolchain references post-fixup. Behaviour change is limited
+  # to `openssl version -a` no longer reporting the build compiler
+  # path; nothing in the runtime path or the `sipi` CLI consumes that
+  # field.
+  #
+  # The closure regression is observable via `nix path-info -Sh`; if the
+  # diagnostic string format ever shifts (e.g. a future `ext/*` dep
+  # embeds a similar absolute toolchain path) we'd see image growth in
+  # CI before it ships. A `disallowedReferences` assertion would be a
+  # nice belt-and-braces here, but nixpkgs requires `__structuredAttrs`
+  # when combining it with `separateDebugInfo` — out of scope for this
+  # change.
+  postFixup = ''
+    remove-references-to \
+      -t ${stdenv.cc} \
+      -t ${stdenv.cc.cc} \
+      -t ${stdenv.cc.bintools} \
+      -t ${stdenv.cc.bintools.bintools} \
+      $out/bin/sipi
   '';
 
   meta = with lib; {
