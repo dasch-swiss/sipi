@@ -41,7 +41,12 @@ jobs:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env['ACTIONS_CACHE_URL'] || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env['ACTIONS_RUNTIME_TOKEN'] || '');
-      - uses: extractions/setup-just@v4
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      - uses: cachix/cachix-action@v17
+        with:
+          name: dasch-swiss
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+      - run: nix profile install nixpkgs#just
       - run: just docker-test-build-amd64 # two stage build, where test is run in the first stage
       - uses: dasch-swiss/sipi/.github/actions/setup-python@main
       - run: pip3 install pytest requests testcontainers
@@ -101,7 +106,12 @@ jobs:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env['ACTIONS_CACHE_URL'] || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env['ACTIONS_RUNTIME_TOKEN'] || '');
-      - uses: extractions/setup-just@v4
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      - uses: cachix/cachix-action@v17
+        with:
+          name: dasch-swiss
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+      - run: nix profile install nixpkgs#just
       - run: just docker-test-build-arm64 # two stage build, where test is run in the first stage
       - uses: dasch-swiss/sipi/.github/actions/setup-python@main
       - run: pip3 install pytest requests testcontainers
@@ -133,6 +143,11 @@ jobs:
           git lfs fetch --all
           git lfs checkout
       - uses: dasch-swiss/sipi/.github/actions/setup-python@main
-      - uses: extractions/setup-just@v4
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      - uses: cachix/cachix-action@v17
+        with:
+          name: dasch-swiss
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+      - run: nix profile install nixpkgs#just
       - run: just docs-install-requirements
       - run: just docs-build
