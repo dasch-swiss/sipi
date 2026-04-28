@@ -6,21 +6,7 @@ include(ExternalProject)
 #
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
-# When building static binaries with Zig, the cross-compiled (or musl-targeted)
-# lua interpreter may not be executable on the build host. Use a host-native
-# lua for luarocks bootstrapping while still linking against the built liblua.a.
-if(ZIG_STATIC_BUILD)
-    find_program(HOST_LUA_EXECUTABLE NAMES lua lua5.3 lua-5.3)
-    if(HOST_LUA_EXECUTABLE)
-        get_filename_component(_luarocks_lua_bin_dir "${HOST_LUA_EXECUTABLE}" DIRECTORY)
-        message(STATUS "Luarocks: using host lua for bootstrap: ${HOST_LUA_EXECUTABLE}")
-    else()
-        set(_luarocks_lua_bin_dir "${CMAKE_BINARY_DIR}/local/bin")
-        message(WARNING "Luarocks: no host lua found, using built lua (may fail for cross-builds)")
-    endif()
-else()
-    set(_luarocks_lua_bin_dir "${CMAKE_BINARY_DIR}/local/bin")
-endif()
+set(_luarocks_lua_bin_dir "${CMAKE_BINARY_DIR}/local/bin")
 
 # Local vendor fallback — offline builds when archive present
 set(_local "${COMMON_VENDOR}/${DEP_LUAROCKS_FILENAME}")

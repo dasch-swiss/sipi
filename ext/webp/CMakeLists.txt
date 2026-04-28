@@ -22,7 +22,7 @@ ExternalProject_Add(project_webp
         DOWNLOAD_DIR ""
         ${timestamp_policy}
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/libwebp
-        CMAKE_ARGS  ${ZIG_EP_CMAKE_ARGS} -DBUILD_SHARED_LIBS=OFF
+        CMAKE_ARGS  -DBUILD_SHARED_LIBS=OFF
                     -DWEBP_BUILD_ANIM_UTILS=OFF
                     -DWEBP_BUILD_VWEBP=OFF
                     -DWEBP_BUILD_WEBPINFO=OFF

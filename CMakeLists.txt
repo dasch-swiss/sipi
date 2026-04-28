@@ -124,16 +124,16 @@ endif ()
 
 #
 # All Clang builds use libc++ for a consistent C++ standard library across
-# Docker, Nix, macOS, and Zig. The Dockerfile installs libc++-dev and
-# libc++abi-dev; the Nix flake uses llvmPackages_19.libcxxStdenv; Zig
-# bundles its own libc++; macOS/AppleClang uses libc++ by default.
+# Docker, Nix, and macOS. The Dockerfile installs libc++-dev and
+# libc++abi-dev; the Nix flake uses llvmPackages_19.libcxxStdenv;
+# macOS/AppleClang uses libc++ by default.
 if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     message(STATUS "Compiling with Clang (-stdlib=libc++).")
     target_compile_options(build_config INTERFACE -stdlib=libc++)
     target_link_options(build_config INTERFACE -stdlib=libc++)
     # On Linux, statically link libc++ so the runtime container doesn't need it.
     # macOS uses libc++ from the system and doesn't support static linking of it.
-    if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT DEFINED ZIG_STATIC_BUILD)
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
         message(STATUS "  Statically linking libc++ (-static-libstdc++).")
         target_link_options(build_config INTERFACE -static-libstdc++)
     endif ()
@@ -169,12 +169,7 @@ elseif (CMAKE_SYSTEM_NAME STREQUAL LINUX)
         SET(KDU_ARCH "Linux-arm-${BITS}-gcc")
         SET(KDU_EXEC_PLATFORM "Linux-arm-64-gcc")
     endif ()
-    if(ZIG_STATIC_BUILD)
-        # musl sysroot has no readline — use the posix target which skips readline
-        SET(LUA_ARCH "posix")
-    else()
-        SET(LUA_ARCH "linux")
-    endif()
+    SET(LUA_ARCH "linux")
     message(STATUS "System detected as: ${CMAKE_SYSTEM_NAME}")
 endif ()
 message(STATUS "Compiling Kakadu for: ${KDU_ARCH}")
@@ -265,17 +260,16 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
 #
-# Keep explicit Unix system libs for non-Zig-static builds only.
-# For musl static Zig builds, pthread/dl/rt are provided by libc.
+# Explicit Unix system libs (pthread, dl, rt on Linux).
 #
 set(SIPI_RUNTIME_SYSTEM_LIBS Threads::Threads ${CMAKE_DL_LIBS})
-if (NOT ZIG_STATIC_BUILD AND NOT CMAKE_SYSTEM_NAME MATCHES "Darwin")
+if (NOT CMAKE_SYSTEM_NAME MATCHES "Darwin")
     list(APPEND SIPI_RUNTIME_SYSTEM_LIBS rt)
 endif ()
-# macOS: native nix/clang builds need system frameworks that Zig builds handle differently.
-# - iconv: exiv2 uses it for character set conversion (Zig disables via CMAKE_DISABLE_FIND_PACKAGE_Iconv)
+# macOS: native nix/clang builds need system frameworks.
+# - iconv: exiv2 uses it for character set conversion
 # - CoreFoundation + SystemConfiguration: curl uses them for proxy detection on macOS
-if (CMAKE_SYSTEM_NAME MATCHES "Darwin" AND NOT ZIG_TOOLCHAIN)
+if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
     list(APPEND SIPI_RUNTIME_SYSTEM_LIBS iconv "-framework CoreFoundation" "-framework SystemConfiguration")
 endif ()
 
@@ -598,6 +592,6 @@ endif()
 # mismatch when the rest of the project uses libc++, fuzzing is opt-in.
 option(SIPI_ENABLE_FUZZ "Build fuzz targets (requires Clang + compatible libFuzzer)" OFF)
 
-if (SIPI_ENABLE_FUZZ AND NOT ZIG_TOOLCHAIN)
+if (SIPI_ENABLE_FUZZ)
     add_subdirectory(fuzz)
 endif ()

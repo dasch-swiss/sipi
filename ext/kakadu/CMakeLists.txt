@@ -11,59 +11,7 @@ message(STATUS "KDU_MAKE=${KDU_MAKE}")
 
 set(KakaduVersion "v8_5-01382N")
 
-## patching the makefiles for zig cross-compilation
-if(DEFINED ZIG_STATIC_BUILD AND ZIG_STATIC_BUILD)
-    # Zig cross-compilation: patch GCC-specific flags that zig doesn't support,
-    # remove -z noexecstack (unsupported by zig's linker), and override CC/AR
-    # so Kakadu targets musl.
-    set(_kdu_src "${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}")
-
-    if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-        # ARM64: remove GCC-style -march= flags entirely — zig's -target already
-        # implies the correct ISA and doesn't support -march or -mcpu for aarch64.
-        # Also disable HAVE_ARM81 to avoid v8.1-a-specific codegen that zig can't handle.
-        set(_kdu_makefiles
-            ${_kdu_src}/coresys/make/Makefile-Linux-arm-64-gcc
-            ${_kdu_src}/apps/make/Makefile-Linux-arm-64-gcc
-            ${_kdu_src}/managed/make/Makefile-Linux-arm-64-gcc
-        )
-        set(PATCH_COMMAND_OVERRIDE
-            sed -i "s/-march=armv8\\.1-a//g" ${_kdu_makefiles}
-            COMMAND sed -i "s/-march=armv8-a//g" ${_kdu_makefiles}
-            COMMAND sed -i "s/^HAVE_ARM81 = 1/# HAVE_ARM81 = 1/" ${_kdu_makefiles}
-            COMMAND sed -i "s|-z noexecstack||" ${_kdu_makefiles}
-            COMMAND sed -i "s|CC = g++|CC = ${CMAKE_CXX_COMPILER}|" ${_kdu_makefiles}
-            COMMAND sed -i "s|AR = ar|AR = ${CMAKE_AR}|" ${_kdu_makefiles}
-        )
-    elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-        # x86_64: remove GCC-specific flags that zig/clang doesn't support
-        set(_kdu_makefiles
-            ${_kdu_src}/coresys/make/Makefile-Linux-x86-64-gcc
-            ${_kdu_src}/apps/make/Makefile-Linux-x86-64-gcc
-            ${_kdu_src}/managed/make/Makefile-Linux-x86-64-gcc
-        )
-        set(PATCH_COMMAND_OVERRIDE
-            sed -i "s/-mno-avx256-split-unaligned-load//g" ${_kdu_makefiles}
-            COMMAND sed -i "s/-mno-avx256-split-unaligned-store//g" ${_kdu_makefiles}
-            COMMAND sed -i "s|-z noexecstack||" ${_kdu_makefiles}
-            COMMAND sed -i "s|CC = g++|CC = ${CMAKE_CXX_COMPILER}|" ${_kdu_makefiles}
-            COMMAND sed -i "s|AR = ar|AR = ${CMAKE_AR}|" ${_kdu_makefiles}
-        )
-    endif()
-
-    # Use cmake -E env to set CC/AR as environment variables.
-    # MAKEFLAGS=-e tells make (and ALL sub-makes) to let environment
-    # variables override Makefile-defined variables. This is critical because
-    # Kakadu's top-level Makefile calls sub-makes with 'make' (not $(MAKE)),
-    # so command-line variable overrides don't propagate — but MAKEFLAGS
-    # and environment variables DO propagate through the entire hierarchy.
-    # ZIG_TARGET is propagated explicitly so the zig-cc/zig-c++ wrappers
-    # inject `-target`; relying on the .zig-target marker file has proved
-    # unreliable for hand-rolled Makefile builds (symbols like fopen64
-    # leak in via glibc headers when the wrapper falls back to native).
-    set(_KDU_BUILD_PREFIX ${CMAKE_COMMAND} -E env "CC=${CMAKE_CXX_COMPILER}" "AR=${CMAKE_AR}" "ZIG_TARGET=${ZIG_TARGET}" "MAKEFLAGS=-e")
-    set(_KDU_CC_OVERRIDE "")
-elseif (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
+if (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
         # macOS: Kakadu ships macOS-specific Makefiles that use Clang natively,
         # so no patching needed. Only fix the libtool PATH issue:
@@ -74,8 +22,8 @@ elseif (CMAKE_CXX_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
         set(_KDU_BUILD_PREFIX ${CMAKE_COMMAND} -E env "PATH=/usr/bin:$ENV{PATH}")
     else()
         # Linux + Clang: Kakadu's Linux Makefiles hardcode CC = g++ and use
-        # GCC-specific flags. Patch them out, same approach as the Zig static
-        # build path (but without AR override — Clang uses the system ar).
+        # GCC-specific flags. Patch them out (without AR override — Clang
+        # uses the system ar).
         set(_kdu_src "${CMAKE_BINARY_DIR}/local/extsrcs/${KakaduVersion}")
 
         if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
