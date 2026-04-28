@@ -98,10 +98,11 @@ New config options need:
 
 ## Docker
 
-- Base image: `ubuntu:24.04` (the current `Dockerfile`; migration to
-  `nix build .#docker` is tracked separately and out of scope for the
-  Nix unified-build plan)
-- Init: `pid1-rs` (PID 1 zombie reaping, signal forwarding)
+- Build: `nix build .#docker-stream` via `dockerTools.streamLayeredImage`
+- Base image: nixpkgs userland (glibc, not musl/Alpine)
+- Init: `tini` from nixpkgs (PID 1 zombie reaping, signal forwarding)
+- Runtime user: `root` (NFS uid/gid coordination deferred to DEV-5920;
+  `flake.nix` documents the constraint near the unset `config.User`)
 - Port: 1024 (non-privileged)
 - Config mount: `/sipi/config/`
 - Image root: `/sipi/images/`

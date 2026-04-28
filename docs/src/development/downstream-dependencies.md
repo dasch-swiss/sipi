@@ -15,22 +15,17 @@ The `daschswiss/sipi` Docker image (final stage) includes these packages:
 | `curl` | `knora-sipi` healthcheck | `healthcheck.sh`: `curl -sS --fail 'http://localhost:1024/...'` |
 | `openssl` | sipi binary | TLS for outbound HTTPS connections |
 | `ca-certificates` | sipi binary | TLS certificate trust store for HTTPS |
-| `locales` | sipi binary | UTF-8 locale (`en_US.UTF-8`, `sr_RS.UTF-8`) for string handling |
+| `LC_ALL=C.UTF-8` (env) | sipi binary | UTF-8 byte handling for exiv2 metadata, Lua string functions, `std::locale()`. Built into glibc — no separate `locales` package required. |
 | `ffmpeg` | dsp-ingest (`MovingImageService`) | `ffprobe` for video metadata (dimensions, duration, FPS). dsp-ingest runs `docker run --entrypoint ffprobe daschswiss/knora-sipi:...` in local dev, or calls `ffprobe` directly in production. |
 | `libmagic1` + `file` | sipi binary | MIME type detection (linked at compile time; runtime `.mgc` database needed) |
 | `tzdata` | system | Timezone support (`TZ=Europe/Zurich`) |
 | `sha256sum` (coreutils) | `knora-sipi` Lua scripts | `util.lua:file_checksum()` calls `/usr/bin/sha256sum` |
 
-### Packages Removed
-
-The following packages were previously included but had no downstream consumer:
-`imagemagick`, `at`, `bc`, `uuid`, `byobu`, `htop`, `man`, `vim`, `git`, `unzip`, `wget`, `gnupg2`, `software-properties-common`.
-
 ## Downstream Consumers
 
 | Consumer | Image | What it uses from sipi container |
 |----------|-------|----------------------------------|
-| `knora-sipi` (dsp-api `sipi/` subproject) | `daschswiss/knora-sipi` (base: `daschswiss/sipi`) | Lua scripts + sipi HTTP server. Needs `curl`, `sha256sum`, `libmagic1`, `locales`, `openssl`, `ca-certificates`. |
+| `knora-sipi` (dsp-api `sipi/` subproject) | `daschswiss/knora-sipi` (base: `daschswiss/sipi`) | Lua scripts + sipi HTTP server. Needs `curl`, `sha256sum`, `libmagic1`, `LC_ALL=C.UTF-8`, `openssl`, `ca-certificates`. |
 | dsp-ingest (`SipiClientLive`) | `daschswiss/knora-sipi` (via `docker run` in local dev) | sipi CLI (`--query`, `--format`, `--topleft`). Needs the sipi binary. |
 | dsp-ingest (`MovingImageService`) | `daschswiss/knora-sipi` (via `docker run --entrypoint ffprobe` in local dev) | `ffprobe` for video metadata extraction. Needs `ffmpeg` package. |
 | dsp-tools | `daschswiss/knora-sipi` (via Docker Compose) | HTTP API only (port 1024). No direct tool dependencies on container internals. |

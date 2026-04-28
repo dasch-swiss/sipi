@@ -6,12 +6,12 @@ not redistributable, so it lives in the private
 repo as a release asset. The SHA-256 is pinned in `flake.nix`, so
 builds are fully reproducible and verifiable.
 
-Two independent fetch paths exist — one per build system:
+Two independent fetch paths exist:
 
 | Build system | Fetches Kakadu via | Trigger |
 |---|---|---|
-| Nix (`nix build`, `nix develop`) | Fixed-output derivation in `flake.nix` | Automatic on build |
-| Docker (`Dockerfile`) / local Docker dev | `scripts/fetch-kakadu.sh` into `vendor/` | `just kakadu-fetch` (one-time) |
+| Nix (`nix build`, `nix develop`, `just nix-docker-build*`) | Fixed-output derivation in `flake.nix` | Automatic on build |
+| Dev-shell inner loop (cmake by hand inside `nix develop`) | `scripts/fetch-kakadu.sh` into `vendor/` | `just kakadu-fetch` (one-time) |
 
 ## Nix builds
 
@@ -48,18 +48,23 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
 fi
 ```
 
-## Docker builds
+## Dev-shell inner loop
 
-Docker builds need the archive under `vendor/` before the `COPY` step:
+The fast edit/rebuild cycle inside `nix develop` invokes `cmake` by
+hand and reads the archive from `vendor/`:
 
 ```bash
 just kakadu-fetch    # downloads vendor/v8_5-01382N.zip if absent
-just docker-build
+nix develop
+cmake -B build -S . && cmake --build build
 ```
 
 The recipe is idempotent; re-running it when the archive is already
 present is a no-op. `vendor/v8_5-*.zip` is gitignored, so the archive
 never enters the commit history.
+
+**Note:** `just nix-docker-build` does *not* need `vendor/` populated
+— the flake's FOD fetches Kakadu directly into the Nix store.
 
 ## Updating the Kakadu version
 
@@ -69,7 +74,7 @@ never enters the commit history.
 3. Update `ASSET` and `TAG` in `scripts/fetch-kakadu.sh`
 4. Remove the local archive: `rm vendor/v8_5-*.zip`
 5. Re-build: `just nix-build-default` — a SHA-256 mismatch means step 2 is wrong
-6. Docker path: `just kakadu-fetch` to refresh `vendor/`
+6. Dev-shell path: `just kakadu-fetch` to refresh `vendor/`
 7. Commit and open a PR
 
 ## Troubleshooting
@@ -80,7 +85,7 @@ never enters the commit history.
 | `release not found` from `gh` | not authenticated, or no org membership | `gh auth login`; ask to be added to `dasch-swiss` |
 | Nix FOD fails with `GH_TOKEN or GITHUB_TOKEN must be set` | Token not exported into the Nix build sandbox | `export GH_TOKEN=$(gh auth token)` and retry |
 | Nix FOD: `hash mismatch` | Release asset replaced or pin out of date | Recompute SHA-256 from the release asset; update `kakaduSha256` in `flake.nix` |
-| Docker build cannot find `vendor/v8_5-01382N.zip` | `just kakadu-fetch` not run | Run it once |
+| Dev-shell cmake cannot find `vendor/v8_5-01382N.zip` | `just kakadu-fetch` not run | Run it once |
 
 ## CI
 
@@ -89,10 +94,6 @@ Every Nix CI step sets `GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}` in its
 is scoped to read `dsp-ci-assets`. After each successful run, the
 content-addressed FOD output is pushed to Cachix and later runs
 substitute it without hitting `gh`.
-
-Docker publish jobs still run `./scripts/fetch-kakadu.sh` before `docker
-build` to populate `vendor/` for the `COPY` step in the production
-`Dockerfile`.
 
 ## Why not vendor it directly?
 

@@ -14,11 +14,16 @@ Returns JSON with server status, version, and uptime:
 
 ## Docker Swarm HEALTHCHECK
 
-The Dockerfile includes:
-```dockerfile
+The image (built from `flake.nix` via `pkgs.dockerTools.streamLayeredImage`)
+declares the equivalent of:
+
+```
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -sf http://localhost:1024/health || exit 1
 ```
+
+The actual encoding is in `flake.nix` under `config.Healthcheck`
+(durations in nanoseconds).
 
 **Swarm behavior**: Docker Swarm has a single HEALTHCHECK — no separate liveness/readiness probes. When HEALTHCHECK fails after `retries`, Swarm kills and replaces the container. The `start_period` gives 10s for initialization (failures don't count, but container *receives traffic* during this period).
 
@@ -36,10 +41,8 @@ The `/health` endpoint is exposed externally via Traefik for UptimeRobot monitor
 - traefik.http.routers.{{ STACK }}-iiif-health.tls.certresolver=leresolver
 ```
 
-## UptimeRobot Migration
+## UptimeRobot Configuration
 
-Previously monitored via `/server/test.html` (static file). To switch:
-
-1. Add the Traefik health label (done in ops-deploy)
-2. Update UptimeRobot monitor URL from `https://iiif.example.com/server/test.html` to `https://iiif.example.com/health`
-3. Set expected status: 200, expected body contains: `"status":"ok"`
+Monitor `https://iiif.example.com/health`. Expected status: 200,
+expected body contains: `"status":"ok"`. The Traefik label is
+provisioned in ops-deploy.

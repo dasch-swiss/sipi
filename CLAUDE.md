@@ -21,7 +21,7 @@ For full build instructions (Docker, Nix, macOS), see [`docs/src/development/bui
 
 **Build reproducibility invariant:** every `nix-*` recipe wraps `nix build .#<variant>`. CI invokes only `just <recipe>` — no inline cmake or `nix build` calls. Incremental inner-loop development is a documented dev-shell pattern (see below), not a recipe.
 
-**Build completeness invariant:** every build target must succeed on every supported platform — macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. This applies to `.#dev`, `.#default`, `.#release`, `.#sanitized`, `.#fuzz`, `.#docker-stream`, `.#static-*`, and `.#release-archive-*`. A target that builds on only some platforms is a shipping bug, not a known limitation — CI is Linux-only, so **a green CI run does not verify macOS**. Before shipping any change to `flake.nix`, `package.nix`, or a `justfile` build recipe:
+**Build completeness invariant:** every build target must succeed on every supported platform — macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. This applies to `.#dev`, `.#default`, `.#release`, `.#sanitized`, and `.#fuzz` on all platforms; and to `.#docker`, `.#docker-stream`, `.#sipi-debug`, `.#static-*`, and `.#release-archive-*` on Linux only (Linux-only outputs are gated by `pkgs.lib.optionalAttrs isLinux` in `flake.nix`). A target that builds on only some of its supported platforms is a shipping bug, not a known limitation — CI is Linux-only, so **a green CI run does not verify macOS**. Before shipping any change to `flake.nix`, `package.nix`, or a `justfile` build recipe:
 
 1. Run every affected variant on macOS locally (`just nix-build-<variant>`).
 2. Run every affected Linux variant locally via Determinate's native-linux-builder (`nix build .#packages.x86_64-linux.<variant>` and `.#packages.aarch64-linux.<variant>`). See [`docs/src/development/nix.md`](docs/src/development/nix.md) for setup.
@@ -29,7 +29,7 @@ For full build instructions (Docker, Nix, macOS), see [`docs/src/development/bui
 
 If a change can't be verified on a platform locally, say so explicitly and gate the merge on a corresponding CI check being added.
 
-**First-time setup for Docker builds:** run `just kakadu-fetch` once to download the proprietary Kakadu archive from `dsp-ci-assets` into `vendor/`. Nix builds fetch Kakadu directly via the flake (no `vendor/` step). Requires `gh auth login` and `dasch-swiss` org membership. See [`docs/src/development/kakadu.md`](docs/src/development/kakadu.md).
+**First-time setup for the dev-shell inner loop:** run `just kakadu-fetch` once to download the proprietary Kakadu archive from `dsp-ci-assets` into `vendor/`. Nix builds (including `just nix-docker-build`) fetch Kakadu directly via the flake's FOD (no `vendor/` step). Requires `gh auth login` and `dasch-swiss` org membership. See [`docs/src/development/kakadu.md`](docs/src/development/kakadu.md).
 
 ### Quick Reference
 
@@ -45,7 +45,10 @@ just nix-build-static-arm64      # .#static-arm64: Zig-in-Nix musl static binary
 just nix-build-release-archive-amd64  # .#release-archive-amd64: tarball + sha256 + debug
 just nix-build-release-archive-arm64  # .#release-archive-arm64: tarball + sha256 + debug
 just nix-coverage                # .#dev^coverage: produces result-coverage/coverage.xml
-just nix-docker-build            # Docker image via nixpkgs.dockerTools
+just nix-docker-build            # .#docker-stream: host-arch image, load into local daemon
+just nix-docker-build-amd64      # .#packages.x86_64-linux.docker-stream + sipi-debug (CI)
+just nix-docker-build-arm64      # .#packages.aarch64-linux.docker-stream + sipi-debug (CI)
+just nix-docker-extract-debug arch  # rename result-debug/.../*.debug → sipi-<arch>.debug
 
 # Tests (consume $SIPI_BIN, default ./result/bin/sipi)
 just rust-test-e2e               # Rust e2e tests (needs cargo — from dev shell)
@@ -55,15 +58,17 @@ just nix-valgrind                # run sipi under Valgrind
 
 # Dev-shell inner loop (non-recipe — see "Inner-loop development" below)
 
-# Docker (unchanged)
-just docker-build                # build image (compiles + unit tests)
-just test-smoke                  # smoke tests against Docker image
+# Docker push / manifest (build is via Nix — see nix-docker-build* above)
+just test-smoke                  # build image via Nix, then run smoke tests
+just docker-push-amd64           # push already-loaded amd64 image
+just docker-push-arm64           # push already-loaded arm64 image
+just docker-publish-manifest     # publish multi-arch manifest
 
 # Vendor dependencies
 just vendor-download             # download all dep archives to vendor/
 just vendor-verify               # verify SHA-256 checksums
 just vendor-checksums            # print checksums for manifest updates
-just kakadu-fetch                # download Kakadu archive (one-time per version; for Dockerfile only)
+just kakadu-fetch                # download Kakadu archive (dev-shell inner loop only; Nix builds fetch via FOD)
 
 # Documentation
 just docs-serve                  # serve docs locally

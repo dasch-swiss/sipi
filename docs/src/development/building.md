@@ -1,8 +1,7 @@
 # Building SIPI from Source Code
 
 All build commands are defined in the root `justfile`. Run `just` to see
-the full list. Earlier docs may reference `make` — the Makefile was
-removed; every former `make X` is now `just X`.
+the full list.
 
 ## Prerequisites
 
@@ -92,24 +91,31 @@ just nix-build-default         # .#default: RelWithDebInfo + tests
 just nix-build-sanitized       # .#sanitized: ASan + UBSan
 ```
 
-## Building with Docker
+## Building a Docker image
 
-The Dockerfile produces the production Docker image. It uses
-`ubuntu:24.04` as the base image and handles cmake configuration,
-compilation, unit testing, and debug symbol extraction in a multi-stage
-build.
+The Docker image is built by `nixpkgs.dockerTools` from the same Nix
+derivation that produces every other build artifact. There is no
+`Dockerfile` — `flake.nix` is the single source of truth. A running
+Docker daemon is still required for `docker load` / `docker push`,
+but `docker buildx` is not used.
 
 ```bash
-just docker-build              # build image (compiles + unit tests)
-just test-smoke                # smoke tests against the Docker image
+just nix-docker-build          # build .#docker-stream, load into local daemon
+just test-smoke                # build (if needed) + run Rust testcontainer smoke tests
 ```
 
 ### Platform-specific builds (used by CI)
 
 ```bash
-just docker-test-build-amd64
-just docker-test-build-arm64
+just nix-docker-build-amd64    # builds .#packages.x86_64-linux.docker-stream + sipi-debug
+just nix-docker-build-arm64    # builds .#packages.aarch64-linux.docker-stream + sipi-debug
+just nix-docker-extract-debug amd64    # rename result-debug to sipi-amd64.debug for Sentry
 ```
+
+The per-arch recipes pin the flake attribute so a wrong-arch runner
+fails fast instead of silently producing a mismatched image. They
+also realize the matching `sipi-debug` symlink in the same `nix build`
+call as a near-free side effect of the layered-image build.
 
 ## Building on macOS without Nix (Not Recommended)
 
@@ -122,9 +128,6 @@ Run `just` (no arguments) to see the full list. Key target groups:
 
 | Target | Description |
 |--------|-------------|
-| `docker-build` | Build Docker image locally |
-| `docker-test-build-{amd64,arm64}` | Build + test for specific architecture |
-| `test-smoke` | Run smoke tests against the Docker image |
 | `nix-build` | `.#dev` — Debug + coverage; unit tests run in the Nix sandbox |
 | `nix-build-default` | `.#default` — RelWithDebInfo + tests |
 | `nix-build-release` | `.#release` — stripped, no tests |
@@ -133,7 +136,13 @@ Run `just` (no arguments) to see the full list. Key target groups:
 | `nix-build-static-{amd64,arm64}` | `.#static-{amd64,arm64}` — Zig-in-Nix musl |
 | `nix-build-release-archive-{amd64,arm64}` | `.#release-archive-{amd64,arm64}` — tarball + sha256 + debug |
 | `nix-coverage` | `.#dev^coverage` — writes `result-coverage/coverage.xml` |
-| `nix-docker-build` | Stream `.#docker-stream` into local Docker daemon |
+| `nix-docker-build` | Build `.#docker-stream` (host arch), load into local Docker daemon |
+| `nix-docker-build-{amd64,arm64}` | Build `.#packages.<arch>-linux.docker-stream` + `.#packages.<arch>-linux.sipi-debug` (single `nix build`) |
+| `nix-docker-extract-debug arch` | Rename `result-debug/.../*.debug` to `sipi-<arch>.debug` for Sentry upload |
+| `docker-push-{amd64,arm64}` | Push the already-loaded per-arch image to Docker Hub |
+| `docker-publish-manifest` | Publish multi-arch manifest combining the two pushed images |
+| `test-smoke` | Build Docker image (via Nix) and run Rust testcontainer smoke tests against it |
+| `test-smoke-ci` | Run smoke tests against an already-loaded Docker image |
 | `nix-static-linkage-verify path` | Verify a Linux static binary has no NEEDED entries |
 | `nix-macos-dylib-audit path` | Audit macOS sipi runtime dylibs |
 | `rust-test-e2e` | Rust end-to-end tests (reads `$SIPI_BIN`) |
@@ -144,7 +153,7 @@ Run `just` (no arguments) to see the full list. Key target groups:
 | `vendor-download` | Download all dependency archives to `vendor/` |
 | `vendor-verify` | Verify SHA-256 checksums of vendored archives |
 | `vendor-checksums` | Print SHA-256 checksums for all archives |
-| `kakadu-fetch` | Download Kakadu archive from `dsp-ci-assets` (one-time per version; for Dockerfile only) |
+| `kakadu-fetch` | Download Kakadu archive from `dsp-ci-assets` (dev-shell inner loop only; Nix builds fetch via FOD) |
 | `docs-build` | Build documentation |
 | `docs-serve` | Serve documentation locally |
 

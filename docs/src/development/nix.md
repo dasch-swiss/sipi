@@ -105,14 +105,83 @@ just nix-build-static-arm64            # .#static-arm64: Zig-in-Nix musl
 just nix-build-release-archive-amd64   # .#release-archive-amd64: tarball + sha256 + debug
 just nix-build-release-archive-arm64   # .#release-archive-arm64: tarball + sha256 + debug
 just nix-coverage                      # .#dev^coverage: writes result-coverage/coverage.xml
-just nix-docker-build                  # streams .#docker-stream into the local Docker daemon
+just nix-docker-build                  # .#docker-stream: host-arch image into local Docker daemon
+just nix-docker-build-amd64            # .#packages.x86_64-linux.{docker-stream,sipi-debug} (CI)
+just nix-docker-build-arm64            # .#packages.aarch64-linux.{docker-stream,sipi-debug} (CI)
+just nix-docker-extract-debug arch     # rename result-debug/.../*.debug → sipi-<arch>.debug
 ```
 
 Debug symbols for any variant are available on the `.debug` output:
 
 ```bash
 nix build .#dev.debug                  # extracted symbols at result/lib/debug/...
+nix build .#sipi-debug                 # passthrough to .#default.debug, used by CI
 ```
+
+## Docker image
+
+The Docker image is built by `pkgs.dockerTools.streamLayeredImage`
+in `flake.nix`. There is no `Dockerfile` — `flake.nix` is the single
+source of truth for the production image, the same way it is for
+every other build artifact.
+
+### Runtime shape
+
+| Concern | Value |
+|---|---|
+| Base | nixpkgs userland (glibc) — *not* musl/Alpine |
+| User | **`root`** (deferred to DEV-5920; sipi reads artefacts under the SIPI Image root from an NFS mount whose ownership is controlled by another service — switching to a non-root uid requires uid/gid coordination on the export side; `flake.nix` documents the constraint near the unset `config.User`) |
+| PID 1 | `tini` (zombie reaping + signal forwarding) |
+| Healthcheck | `curl -sf http://localhost:1024/health` — 30 s interval, 5 s timeout, 10 s start period, 3 retries |
+| Locale | `C.UTF-8` via `LC_ALL`/`LANG` (built into glibc — no `glibcLocales` derivation needed; covers `LC_CTYPE` for UTF-8 byte handling in exiv2 metadata, Lua string functions, and `std::locale()`) |
+| Timezone | `Europe/Zurich` (`tzdata` + `TZ` env) |
+| `created` | `self.lastModifiedDate` in ISO 8601 basic form (deterministic per `flake.lock`) |
+| OCI labels | `org.opencontainers.image.{source,revision,version,licenses,title,description}` |
+| Image tag | `sipiForImage.version` (from `version.txt` — release-please updates this before tagging) |
+| Layering | `dockerTools.buildLayeredImage` with `maxLayers = 125` |
+
+### Build commands
+
+```bash
+# Local-dev (host-arch image)
+just nix-docker-build
+
+# CI (per-arch, with matching .debug symlink)
+just nix-docker-build-amd64
+just nix-docker-build-arm64
+just nix-docker-extract-debug amd64        # → sipi-amd64.debug for Sentry
+```
+
+The per-arch recipes pin the flake attribute (`.#packages.<arch>-linux.docker-stream`)
+so a wrong-arch runner fails fast instead of silently producing a
+mismatched image. They also realize the `sipi-debug` output as a
+near-free byproduct of the layered-image build — the debug symbols
+are already in the store closure, the second `-o result-debug` flag
+just adds a symlink for `nix-docker-extract-debug` to consume.
+
+### Custom version override
+
+For ad-hoc builds where the binary should report a different version
+than `version.txt` (e.g. a hotfix branch), override at the package
+layer:
+
+```nix
+let
+  flake = builtins.getFlake "github:dasch-swiss/sipi/<rev>";
+  pkgs = flake.legacyPackages.${builtins.currentSystem};
+  customSipi = pkgs.sipi.override { providedVersion = "4.1.1-hotfix.1"; };
+  customImage = pkgs.dockerTools.streamLayeredImage {
+    name = "daschswiss/sipi";
+    tag  = customSipi.version;
+    contents = [ customSipi /* + others */ ];
+    # ...
+  };
+in customImage
+```
+
+The `providedVersion` parameter on `package.nix` propagates through
+`pkgs.sipi.version` and into both the binary's `--version` output
+and the OCI image tag.
 
 ## Dev shell inner loop (non-recipe — local iteration only)
 
