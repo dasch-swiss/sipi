@@ -2,7 +2,6 @@
 # Includes:
 #   - Nix/Clang build + unit + e2e + Hurl + coverage + Docker image
 #     build + smoke test + Docker Scout, on Linux amd64/arm64
-#   - Nix static musl build (Zig-in-Nix) + Rust e2e on amd64/arm64
 #   - Nix native macOS arm64 build + dylib-linkage audit on internal PRs
 #   - mkdocs documentation build
 #
@@ -146,59 +145,9 @@ jobs:
         with:
           sarif_file: scout-results.sarif
 
-  # Zig-in-Nix musl-static validation. Exists in parallel to zig-static
-  # until Part B.5 retires the latter (see plan glowing-rolling-fern).
-  # Expect failures during Part B.1 ext/* patching.
-  nix-static:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ${{ matrix.runner }}
-    name: nix-static / ${{ matrix.arch }}
-    concurrency:
-      group: ${{ github.workflow }}-nix-static-${{ matrix.arch }}-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-    steps:
-      - uses: dasch-swiss/sipi/.github/actions/checkout@main
-        with:
-          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
-      - uses: DeterminateSystems/determinate-nix-action@v3
-        with:
-          # Kakadu FOD in flake.nix uses gh release download via
-          # impureEnvVars; daemon needs configurable-impure-env to accept
-          # GH_TOKEN from the client.
-          extra-conf: |
-            extra-experimental-features = configurable-impure-env
-      - uses: cachix/cachix-action@v17
-        with:
-          name: dasch-swiss
-          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-      - run: nix profile install --inputs-from . nixpkgs#just
-      - name: Build static binary
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: just nix-build-static-${{ matrix.arch }}
-      - name: Verify static linkage
-        # file / readelf are standard ubuntu runner tools.
-        run: just nix-static-linkage-verify result/bin/sipi
-      - name: Rust e2e tests against static binary
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-          SIPI_BIN: ${{ github.workspace }}/result/bin/sipi
-        # `nix-test-e2e` consumes the .#e2e-tests Nix derivation —
-        # no cargo on PATH needed.
-        run: just nix-test-e2e
-
   # Native Darwin build via Nix + clang/libc++, with a dylib-linkage audit.
-  # Replaces the old zig-macos job; the invariant (no Homebrew / third-party
-  # dylibs) is the same, just verified through the Nix toolchain instead of
-  # Zig on macOS.
+  # The invariant: no Homebrew / third-party dylibs in the binary's
+  # transitive closure.
   nix-macos-audit:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: macos-14
