@@ -108,22 +108,6 @@ nix-build-fuzz:
     {{_nix_build}} .#fuzz
     @echo "Fuzzer at: $(readlink result)/bin/iiif_handler_uri_parser_fuzz"
 
-# Static amd64 binary via Zig-in-Nix (Linux only).
-nix-build-static-amd64:
-    {{_nix_build}} .#static-amd64
-
-# Static arm64 binary via Zig-in-Nix (Linux only).
-nix-build-static-arm64:
-    {{_nix_build}} .#static-arm64
-
-# Release archive amd64 (tarball + sha256 + debug symbols).
-nix-build-release-archive-amd64:
-    {{_nix_build}} .#release-archive-amd64
-
-# Release archive arm64 (tarball + sha256 + debug symbols).
-nix-build-release-archive-arm64:
-    {{_nix_build}} .#release-archive-arm64
-
 # Uses `.#docker` (buildLayeredImage → static tarball) rather than
 # `.#docker-stream` (streamLayeredImage → Linux Python wrapper script).
 # The CI per-arch recipes use the streaming variant for speed (no temp
@@ -192,18 +176,6 @@ nix-docker-extract-debug arch:
 nix-coverage:
     {{_nix_build}} .#dev^coverage
     @echo "Coverage at: result-coverage/coverage.xml"
-
-# Verify a Linux static sipi binary has no NEEDED dynamic library entries.
-nix-static-linkage-verify path:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    file "{{path}}"
-    if readelf -d "{{path}}" | grep -q '(NEEDED)'; then
-        echo "ERROR: {{path}} has unexpected dynamic dependencies:" >&2
-        readelf -d "{{path}}" | grep 'NEEDED' >&2
-        exit 1
-    fi
-    echo "OK: {{path}} is statically linked (no NEEDED entries)."
 
 # Audit macOS sipi runtime dylibs — fail if any point at /opt/homebrew/ or /usr/local/.
 nix-macos-dylib-audit path:
