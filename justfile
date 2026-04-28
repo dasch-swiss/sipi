@@ -15,135 +15,54 @@ docker_repo := "daschswiss/sipi"
 build_tag := `git describe --tag --dirty --abbrev=7 2>/dev/null || git rev-parse --verify HEAD 2>/dev/null || cat version.txt`
 docker_image := docker_repo + ":" + build_tag
 
-# GHA cache flags (auto-detected from environment)
-_gha_cache_from := if env("ACTIONS_CACHE_URL", "") != "" { "--cache-from type=gha,url=$ACTIONS_CACHE_URL,token=$ACTIONS_RUNTIME_TOKEN" } else { "" }
-_gha_cache_to := if env("ACTIONS_CACHE_URL", "") != "" { "--cache-to type=gha,mode=max,url=$ACTIONS_CACHE_URL,token=$ACTIONS_RUNTIME_TOKEN" } else { "" }
+# Map host arch (any OS) to the matching Linux arch for `nix-docker-build`.
+# `dockerTools.streamLayeredImage` is exposed only under
+# `packages.{x86_64,aarch64}-linux.*` (gated by `pkgs.lib.optionalAttrs
+# isLinux` in flake.nix). On macOS, native-linux-builder dispatches the
+# build to a Linux builder transparently. arch() returns "aarch64" /
+# "x86_64" regardless of OS, so the same mapping works on darwin and
+# Linux hosts.
+_linux_arch := if arch() == "aarch64" { "aarch64-linux" } else { "x86_64-linux" }
 
 # List all recipes
 default:
     @just --list
 
 #####################################
-# Docker
+# Smoke tests (run against Docker image)
 #####################################
 
-# Build and load Sipi Docker image locally
-docker-build:
-    docker buildx build \
-        --progress auto \
-        --build-arg VERSION={{build_tag}} \
-        {{_gha_cache_from}} \
-        {{_gha_cache_to}} \
-        -t {{docker_image}} -t {{docker_repo}}:latest \
-        --load \
-        . \
-    || ( echo "Build failed, retrying without GHA cache..." && \
-    docker buildx build \
-        --progress auto \
-        --build-arg VERSION={{build_tag}} \
-        -t {{docker_image}} -t {{docker_repo}}:latest \
-        --load \
-        . )
+# Build Docker image (via Nix) and run smoke tests against it.
+test-smoke: nix-docker-build
+    cd test/e2e-rust && cargo test --features docker --test docker_smoke -- --test-threads=1
 
-# Build + test arm64 Docker image, extract debug symbols
-docker-test-build-arm64:
-    docker buildx build \
-        --progress auto \
-        --platform linux/arm64 \
-        --build-arg VERSION={{build_tag}} \
-        {{_gha_cache_from}} \
-        {{_gha_cache_to}} \
-        -t {{docker_image}}-arm64 -t {{docker_repo}}:latest \
-        --load \
-        . \
-    || ( echo "Build failed, retrying without GHA cache..." && \
-    docker buildx build \
-        --progress auto \
-        --platform linux/arm64 \
-        --build-arg VERSION={{build_tag}} \
-        -t {{docker_image}}-arm64 -t {{docker_repo}}:latest \
-        --load \
-        . )
-    docker buildx build \
-        --platform linux/arm64 \
-        --build-arg VERSION={{build_tag}} \
-        {{_gha_cache_from}} \
-        {{_gha_cache_to}} \
-        --target debug-symbols \
-        --output type=local,dest=./debug-out \
-        . \
-    || ( echo "Debug symbols build failed, retrying without GHA cache..." && \
-    docker buildx build \
-        --platform linux/arm64 \
-        --build-arg VERSION={{build_tag}} \
-        --target debug-symbols \
-        --output type=local,dest=./debug-out \
-        . )
-    mv ./debug-out/sipi.debug ./sipi-arm64.debug && rm -rf ./debug-out
+# Run smoke tests against an already-loaded Docker image.
+test-smoke-ci:
+    cd test/e2e-rust && cargo test --features docker --test docker_smoke -- --test-threads=1
 
-# Push previously built arm64 image to Docker Hub
-docker-push-arm64:
-    docker push {{docker_image}}-arm64
+#####################################
+# Docker (push / manifest only — image *building* is in the Nix section)
+#
+# Build invariant: every image-build path goes through `nix build`.
+# The recipes below do NOT build images; they only consume images that
+# `nix-docker-build*` already loaded into the local Docker daemon.
+#####################################
 
-# Build + test amd64 Docker image, extract debug symbols
-docker-test-build-amd64:
-    docker buildx build \
-        --progress auto \
-        --platform linux/amd64 \
-        --build-arg VERSION={{build_tag}} \
-        {{_gha_cache_from}} \
-        {{_gha_cache_to}} \
-        -t {{docker_image}}-amd64 -t {{docker_repo}}:latest \
-        --load \
-        . \
-    || ( echo "Build failed, retrying without GHA cache..." && \
-    docker buildx build \
-        --progress auto \
-        --platform linux/amd64 \
-        --build-arg VERSION={{build_tag}} \
-        -t {{docker_image}}-amd64 -t {{docker_repo}}:latest \
-        --load \
-        . )
-    docker buildx build \
-        --platform linux/amd64 \
-        --build-arg VERSION={{build_tag}} \
-        {{_gha_cache_from}} \
-        {{_gha_cache_to}} \
-        --target debug-symbols \
-        --output type=local,dest=./debug-out \
-        . \
-    || ( echo "Debug symbols build failed, retrying without GHA cache..." && \
-    docker buildx build \
-        --platform linux/amd64 \
-        --build-arg VERSION={{build_tag}} \
-        --target debug-symbols \
-        --output type=local,dest=./debug-out \
-        . )
-    mv ./debug-out/sipi.debug ./sipi-amd64.debug && rm -rf ./debug-out
-
-# Push previously built amd64 image to Docker Hub
+# Push the already-loaded amd64 Docker image to Docker Hub.
 docker-push-amd64:
     docker push {{docker_image}}-amd64
 
-# Publish Docker manifest combining arm64 and amd64 images
+# Push the already-loaded arm64 Docker image to Docker Hub.
+docker-push-arm64:
+    docker push {{docker_image}}-arm64
+
+# Publish multi-arch Docker manifest combining amd64 and arm64 images.
 docker-publish-manifest:
     docker manifest create {{docker_image}} --amend {{docker_image}}-amd64 --amend {{docker_image}}-arm64
     docker manifest annotate --arch amd64 --os linux {{docker_image}} {{docker_image}}-amd64
     docker manifest annotate --arch arm64 --os linux {{docker_image}} {{docker_image}}-arm64
     docker manifest inspect {{docker_image}}
     docker manifest push {{docker_image}}
-
-#####################################
-# Smoke tests (run against Docker image)
-#####################################
-
-# Build Docker image and run smoke tests
-test-smoke: docker-build
-    cd test/e2e-rust && cargo test --features docker --test docker_smoke -- --test-threads=1
-
-# Run smoke tests against already-built Docker image
-test-smoke-ci:
-    cd test/e2e-rust && cargo test --features docker --test docker_smoke -- --test-threads=1
 
 #####################################
 # Nix builds (reproducible — what CI runs)
@@ -159,6 +78,7 @@ test-smoke-ci:
 #####################################
 
 _nix_build := "nix build --extra-experimental-features configurable-impure-env --option impure-env GH_TOKEN=${GH_TOKEN:-}"
+_nix_eval  := "nix eval --extra-experimental-features configurable-impure-env --option impure-env GH_TOKEN=${GH_TOKEN:-} --raw"
 
 # Dev build: Debug + coverage instrumentation, tests run in the Nix sandbox.
 # Canonical CI build — what `test.yml` invokes on every PR.
@@ -204,9 +124,69 @@ nix-build-release-archive-amd64:
 nix-build-release-archive-arm64:
     {{_nix_build}} .#release-archive-arm64
 
-# Docker image via Nix dockerTools (streamed into Docker daemon).
+# Uses `.#docker` (buildLayeredImage → static tarball) rather than
+# `.#docker-stream` (streamLayeredImage → Linux Python wrapper script).
+# The CI per-arch recipes use the streaming variant for speed (no temp
+# tarball on disk on the Linux runner), but a streaming script can only
+# execute on the OS / arch it was built for: a Linux Python interpreter
+# embedded in the shebang won't run on a macOS host. The static tarball
+# is portable — Docker Desktop on macOS loads it transparently into its
+# Linux VM.
+# Build host-arch Docker image via Nix dockerTools and load into the local Docker daemon.
 nix-docker-build:
-    $({{_nix_build}} .#docker-stream --print-out-paths) | docker load
+    docker load < $({{_nix_build}} .#packages.{{_linux_arch}}.docker --print-out-paths)
+    # Re-tag with :latest and the build_tag for downstream consumers
+    # (smoke tests, publish flows). The image's own tag (from
+    # `dockerTools`) reflects version.txt; the tags below mirror the
+    # Dockerfile-era contract.
+    docker tag $({{_nix_eval}} .#packages.{{_linux_arch}}.docker.imageName):$({{_nix_eval}} .#packages.{{_linux_arch}}.docker.imageTag) {{docker_image}}
+    docker tag $({{_nix_eval}} .#packages.{{_linux_arch}}.docker.imageName):$({{_nix_eval}} .#packages.{{_linux_arch}}.docker.imageTag) {{docker_repo}}:latest
+
+# Pins the x86_64-linux flake attribute so this recipe fails fast on an
+# arm64 host instead of silently producing an arm64 image — the CI matrix
+# and publish.yml rely on the image arch matching the `-amd64` tag suffix.
+#
+# Two separate `nix build` calls — `nix build`'s `-o` flag is single-
+# value (last wins), so a single invocation can't produce two named
+# symlinks. The second call is essentially free: it shares the entire
+# sipi closure (already realized by the docker-stream build) and only
+# needs to materialize the `debug` output's symlink.
+# Build amd64 Docker image + sipi .debug symlink, load into local daemon.
+nix-docker-build-amd64:
+    {{_nix_build}} -o result       .#packages.x86_64-linux.docker-stream
+    {{_nix_build}} -o result-debug .#packages.x86_64-linux.sipi-debug
+    ./result | docker load
+    docker tag $({{_nix_eval}} .#packages.x86_64-linux.docker-stream.imageName):$({{_nix_eval}} .#packages.x86_64-linux.docker-stream.imageTag) {{docker_image}}-amd64
+    docker tag $({{_nix_eval}} .#packages.x86_64-linux.docker-stream.imageName):$({{_nix_eval}} .#packages.x86_64-linux.docker-stream.imageTag) {{docker_repo}}:latest
+
+# Pins the aarch64-linux flake attribute — same reasoning as `nix-docker-build-amd64`.
+# Build arm64 Docker image + sipi .debug symlink, load into local daemon.
+nix-docker-build-arm64:
+    {{_nix_build}} -o result       .#packages.aarch64-linux.docker-stream
+    {{_nix_build}} -o result-debug .#packages.aarch64-linux.sipi-debug
+    ./result | docker load
+    docker tag $({{_nix_eval}} .#packages.aarch64-linux.docker-stream.imageName):$({{_nix_eval}} .#packages.aarch64-linux.docker-stream.imageTag) {{docker_image}}-arm64
+    docker tag $({{_nix_eval}} .#packages.aarch64-linux.docker-stream.imageName):$({{_nix_eval}} .#packages.aarch64-linux.docker-stream.imageTag) {{docker_repo}}:latest
+
+# Does NO `nix build` — consumes the symlink produced by `nix-docker-build-<arch>`.
+# `arch` is `amd64` or `arm64` and is purely a filename suffix here (the
+# arch-specific derivation was already selected at build time, preventing
+# a cross-arch mix-up). Used by publish.yml after `nix-docker-build-<arch>`.
+# Rename result-debug/.../*.debug to sipi-<arch>.debug for Sentry upload.
+nix-docker-extract-debug arch:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -L result-debug ] && [ ! -d result-debug ]; then
+        echo "ERROR: result-debug/ not found. Run 'just nix-docker-build-{{arch}}' first." >&2
+        exit 1
+    fi
+    debug_file=$(find result-debug/lib/debug/.build-id -name '*.debug' | head -1)
+    if [ -z "$debug_file" ]; then
+        echo "ERROR: no .debug file found under result-debug/lib/debug/.build-id" >&2
+        exit 1
+    fi
+    cp "$debug_file" "sipi-{{arch}}.debug"
+    echo "Debug symbols copied to: sipi-{{arch}}.debug"
 
 # Coverage XML for Codecov (at result-coverage/coverage.xml).
 nix-coverage:
