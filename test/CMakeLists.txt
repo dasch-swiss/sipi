@@ -18,7 +18,6 @@ ExternalProject_Add(
         gtest
         URL "${_gtest_url}"
         PREFIX ${CMAKE_CURRENT_BINARY_DIR}/gtest
-        CMAKE_ARGS ${ZIG_EP_CMAKE_ARGS}
         # Disable install step
         INSTALL_COMMAND ""
 )
