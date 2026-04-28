@@ -125,8 +125,7 @@ stdenv.mkDerivation {
   #
   # `patchShebangs` rewrites `generate_icc_header.sh`'s `#!/bin/bash`
   # shebang to a nix-store path; the script is invoked from CMakeLists.txt
-  # at build time, so nixpkgs' automatic shebang patching doesn't cover it
-  # (same pattern as `mkStaticBuild` in flake.nix).
+  # at build time, so nixpkgs' automatic shebang patching doesn't cover it.
   preConfigure = ''
     cp ${kakaduArchive} vendor/v8_5-01382N.zip
     patchShebangs generate_icc_header.sh
@@ -148,8 +147,7 @@ stdenv.mkDerivation {
   # `doCheck = enableTests` keeps the test invariant honest: any variant
   # that builds tests also runs them inside the sandbox (`.#default`,
   # `.#dev`, `.#sanitized`). `.#release` sets `enableTests = false` and
-  # skips the check phase. `mkStaticBuild` in flake.nix is independent
-  # of this derivation, so static builds are unaffected.
+  # skips the check phase.
   doCheck = enableTests;
 
   # cmake setup-hook cd's into `build/` in configurePhase; checkPhase and

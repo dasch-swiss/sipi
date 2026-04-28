@@ -136,103 +136,6 @@
 
         isLinux = pkgs.stdenv.isLinux;
 
-        # Kakadu archive (FOD from dsp-ci-assets release). Provided by the
-        # overlay; reused directly here for mkStaticBuild.
-        kakaduArchive = pkgs.kakaduArchive;
-
-        # ── Static builds (Linux only, Zig-in-Nix) ──────────────────────
-        mkStaticBuild = { arch, zigTarget }: pkgs.stdenv.mkDerivation {
-          pname = "sipi-static-${arch}";
-          inherit version;
-          src = filteredSrc;
-
-          nativeBuildInputs = with pkgs; [
-            cmake zig autoconf automake libtool
-            unzip file xxd pkg-config
-            perl  # OpenSSL's ExternalProject Configure script uses `#!/usr/bin/env perl`
-          ];
-
-          # Zig writes to a global cache dir; in the Nix sandbox HOME points
-          # at /homeless-shelter (read-only), so we redirect it into the
-          # build directory.
-          env = {
-            ZIG_GLOBAL_CACHE_DIR = "/build/.zig-cache";
-            ZIG_LOCAL_CACHE_DIR = "/build/.zig-local-cache";
-          };
-
-          configurePhase = ''
-            runHook preConfigure
-
-            mkdir -p "$ZIG_GLOBAL_CACHE_DIR" "$ZIG_LOCAL_CACHE_DIR"
-
-            # generate_icc_header.sh has a `#!/bin/bash` shebang; /bin/bash
-            # doesn't exist in the Nix sandbox, so the kernel's exec fails
-            # with ENOENT. patchShebangs rewrites the shebang to a store path.
-            patchShebangs generate_icc_header.sh
-
-            # Inject the pinned Kakadu archive into vendor/ (ext/kakadu expects
-            # it under the exact upstream filename).
-            cp ${kakaduArchive} vendor/v8_5-01382N.zip
-
-            cmake -S . -B build \
-              -G "Unix Makefiles" \
-              -DCMAKE_TOOLCHAIN_FILE=cmake/zig-toolchain.cmake \
-              -DZIG_TARGET=${zigTarget} \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
-              -DBUILD_TESTING=OFF \
-              -DEXT_PROVIDED_VERSION=${version}
-
-            runHook postConfigure
-          '';
-
-          buildPhase = ''
-            cmake --build build --parallel $NIX_BUILD_CORES
-          '';
-
-          installPhase = ''
-            mkdir -p $out/bin
-            cp build/sipi $out/bin/
-
-            mkdir -p $out/share/sipi/config $out/share/sipi/scripts $out/share/sipi/server
-            cp config/sipi.config.lua      $out/share/sipi/config/
-            cp config/sipi.init.lua        $out/share/sipi/config/
-            cp server/test.html            $out/share/sipi/server/
-            cp scripts/test_functions.lua  $out/share/sipi/scripts/
-            cp scripts/send_response.lua   $out/share/sipi/scripts/
-          '';
-
-          outputs = [ "out" "debug" ];
-          postFixup = ''
-            mkdir -p $debug/lib/debug
-            ${pkgs.binutils-unwrapped}/bin/objcopy --only-keep-debug $out/bin/sipi $debug/lib/debug/sipi.debug
-            ${pkgs.binutils-unwrapped}/bin/strip $out/bin/sipi
-            ${pkgs.binutils-unwrapped}/bin/objcopy --add-gnu-debuglink=$debug/lib/debug/sipi.debug $out/bin/sipi
-          '';
-        };
-
-        # ── Release archives (tarball + checksum + debug symbols) ────────
-        mkReleaseArchive = arch: let
-          static = self.packages.${system}."static-${arch}";
-        in pkgs.runCommand "sipi-release-${arch}" { } ''
-          mkdir -p $out
-          DIR="sipi-v${version}-linux-${arch}"
-          mkdir -p work/$DIR/config work/$DIR/scripts work/$DIR/server
-
-          cp ${static}/bin/sipi work/$DIR/sipi
-
-          cp ${static}/share/sipi/config/sipi.config.lua  work/$DIR/config/
-          cp ${static}/share/sipi/config/sipi.init.lua     work/$DIR/config/
-          cp ${static}/share/sipi/server/test.html         work/$DIR/server/
-          cp ${static}/share/sipi/scripts/test_functions.lua work/$DIR/scripts/
-          cp ${static}/share/sipi/scripts/send_response.lua  work/$DIR/scripts/
-
-          tar czf $out/$DIR.tar.gz -C work $DIR
-          sha256sum $out/$DIR.tar.gz > $out/$DIR.tar.gz.sha256
-
-          cp ${static.debug}/lib/debug/sipi.debug $out/sipi-linux-${arch}.debug
-        '';
-
         # ── Docker image (Nix dockerTools) ───────────────────────────────
         # Bake version.txt's content into the binary and use a `v`-
         # prefixed form as the OCI image tag. release-please updates
@@ -468,20 +371,6 @@
           });
 
         } // pkgs.lib.optionalAttrs isLinux {
-          # Static Linux binaries (Zig toolchain, musl)
-          static-amd64 = mkStaticBuild {
-            arch = "amd64";
-            zigTarget = "x86_64-linux-musl";
-          };
-          static-arm64 = mkStaticBuild {
-            arch = "arm64";
-            zigTarget = "aarch64-linux-musl";
-          };
-
-          # Release archives (tarball + checksum + debug symbols)
-          release-archive-amd64 = mkReleaseArchive "amd64";
-          release-archive-arm64 = mkReleaseArchive "arm64";
-
           # Production Docker image via Nix dockerTools.
           # Runtime: root user (NFS uid/gid coordination deferred to
           # DEV-5920); tini as PID 1; HEALTHCHECK against /health on
@@ -507,7 +396,7 @@
         devShells = rec {
           default = clang;
 
-          # Clang + libc++: matches Docker, Zig, and macOS builds
+          # Clang + libc++: matches Docker and macOS builds
           clang = pkgs.mkShell.override {
             stdenv = pkgs.llvmPackages_19.libcxxStdenv;
           } {
