@@ -18,7 +18,7 @@ just kakadu-fetch
 ```
 
 This requires `gh auth login` and `dasch-swiss` org membership. After
-it succeeds, every build path (Nix, Docker, Zig) finds the archive in
+it succeeds, every build path (Nix, Docker) finds the archive in
 `vendor/v8_5-01382N.zip`. See [Kakadu setup](kakadu.md) for details
 and version bump procedure.
 
@@ -133,8 +133,6 @@ Run `just` (no arguments) to see the full list. Key target groups:
 | `nix-build-release` | `.#release` — stripped, no tests |
 | `nix-build-sanitized` | `.#sanitized` — Debug + ASan + UBSan |
 | `nix-build-fuzz` | `.#fuzz` — libFuzzer harness binary only |
-| `nix-build-static-{amd64,arm64}` | `.#static-{amd64,arm64}` — Zig-in-Nix musl |
-| `nix-build-release-archive-{amd64,arm64}` | `.#release-archive-{amd64,arm64}` — tarball + sha256 + debug |
 | `nix-coverage` | `.#dev^coverage` — writes `result-coverage/coverage.xml` |
 | `nix-docker-build` | Build `.#docker-stream` (host arch), load into local Docker daemon |
 | `nix-docker-build-{amd64,arm64}` | Build `.#packages.<arch>-linux.docker-stream` + `.#packages.<arch>-linux.sipi-debug` (single `nix build`) |
@@ -144,7 +142,6 @@ Run `just` (no arguments) to see the full list. Key target groups:
 | `test-smoke` | Inner-loop: build Docker image (via Nix), then `cargo test` the smoke suite |
 | `nix-test-smoke` | CI canonical: run pre-built `.#smoke-test` binary against an already-loaded image |
 | `test-smoke-ci` | Inner-loop: run cargo smoke tests against an already-loaded Docker image |
-| `nix-static-linkage-verify path` | Verify a Linux static binary has no NEEDED entries |
 | `nix-macos-dylib-audit path` | Audit macOS sipi runtime dylibs |
 | `rust-test-e2e` | Inner-loop: cargo-driven Rust end-to-end tests (reads `$SIPI_BIN`) |
 | `nix-test-e2e` | CI canonical: run pre-built `.#e2e-tests` binaries via `run-e2e.sh` |

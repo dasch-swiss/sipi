@@ -9,10 +9,10 @@ and shares its dependency cache with CI via Cachix.
 A few concepts that make the rest of this page click:
 
 **Derivation.** Each package in the flake — `dev`, `default`, `release`,
-`sanitized`, `fuzz`, `docker`, `static-amd64`, etc. — is a separate
-*derivation*: a build recipe with fully declared inputs (source, compiler,
-flags, deps). Nix hashes the recipe, builds once, caches the result in
-`/nix/store`, and serves future requests instantly.
+`sanitized`, `fuzz`, `docker`, etc. — is a separate *derivation*: a
+build recipe with fully declared inputs (source, compiler, flags, deps).
+Nix hashes the recipe, builds once, caches the result in `/nix/store`,
+and serves future requests instantly.
 
 **Outputs.** A single derivation can produce multiple outputs. For
 example `.#dev` emits:
@@ -100,10 +100,6 @@ just nix-build-default                 # .#default: RelWithDebInfo + tests
 just nix-build-release                 # .#release: stripped, no tests
 just nix-build-sanitized               # .#sanitized: Debug + ASan + UBSan
 just nix-build-fuzz                    # .#fuzz: libFuzzer binary only
-just nix-build-static-amd64            # .#static-amd64: Zig-in-Nix musl
-just nix-build-static-arm64            # .#static-arm64: Zig-in-Nix musl
-just nix-build-release-archive-amd64   # .#release-archive-amd64: tarball + sha256 + debug
-just nix-build-release-archive-arm64   # .#release-archive-arm64: tarball + sha256 + debug
 just nix-coverage                      # .#dev^coverage: writes result-coverage/coverage.xml
 just nix-docker-build                  # .#docker-stream: host-arch image into local Docker daemon
 just nix-docker-build-amd64            # .#packages.x86_64-linux.{docker-stream,sipi-debug} (CI)
@@ -266,29 +262,9 @@ nix build .#packages.aarch64-linux.dev -L
 
 Swap `aarch64-linux` for `x86_64-linux` to reproduce the amd64 CI
 variant. Works for every package: `dev`, `default`, `release`,
-`sanitized`, `fuzz`, `static-amd64`, `static-arm64`.
+`sanitized`, `fuzz`.
 
 `native-linux-builder` dispatches the build automatically; you don't
 pass a `--system` flag. Warm Cachix → seconds. Cold Cachix → ~15 min
 (and the Kakadu FOD will need `GH_TOKEN` in your env — see step 3 of
 One-time setup).
-
-## Static Linux binaries
-
-Static musl binaries are produced by the Nix flake via a Zig-based
-toolchain (`cmake/zig-toolchain.cmake`). No Zig install is needed on
-the host — Zig ships inside the Nix dev shell and is invoked by
-`mkStaticBuild` in `flake.nix`.
-
-```bash
-just nix-build-static-amd64            # x86_64-linux-musl
-just nix-build-static-arm64            # aarch64-linux-musl
-just nix-build-release-archive-amd64
-just nix-build-release-archive-arm64
-```
-
-Validation:
-
-```bash
-just nix-static-linkage-verify result/bin/sipi
-```

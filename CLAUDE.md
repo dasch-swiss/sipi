@@ -21,7 +21,7 @@ For full build instructions (Docker, Nix, macOS), see [`docs/src/development/bui
 
 **Build reproducibility invariant:** every `nix-*` recipe wraps `nix build .#<variant>`. CI invokes only `just <recipe>` — no inline cmake or `nix build` calls. Incremental inner-loop development is a documented dev-shell pattern (see below), not a recipe.
 
-**Build completeness invariant:** every build target must succeed on every supported platform — macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. This applies to `.#dev`, `.#default`, `.#release`, `.#sanitized`, and `.#fuzz` on all platforms; and to `.#docker`, `.#docker-stream`, `.#sipi-debug`, `.#static-*`, and `.#release-archive-*` on Linux only (Linux-only outputs are gated by `pkgs.lib.optionalAttrs isLinux` in `flake.nix`). A target that builds on only some of its supported platforms is a shipping bug, not a known limitation — CI is Linux-only, so **a green CI run does not verify macOS**. Before shipping any change to `flake.nix`, `package.nix`, or a `justfile` build recipe:
+**Build completeness invariant:** every build target must succeed on every supported platform — macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. This applies to `.#dev`, `.#default`, `.#release`, `.#sanitized`, and `.#fuzz` on all platforms; and to `.#docker`, `.#docker-stream`, and `.#sipi-debug` on Linux only (Linux-only outputs are gated by `pkgs.lib.optionalAttrs isLinux` in `flake.nix`). A target that builds on only some of its supported platforms is a shipping bug, not a known limitation — CI is Linux-only, so **a green CI run does not verify macOS**. Before shipping any change to `flake.nix`, `package.nix`, or a `justfile` build recipe:
 
 1. Run every affected variant on macOS locally (`just nix-build-<variant>`).
 2. Run every affected Linux variant locally via Determinate's native-linux-builder (`nix build .#packages.x86_64-linux.<variant>` and `.#packages.aarch64-linux.<variant>`). See [`docs/src/development/nix.md`](docs/src/development/nix.md) for setup.
@@ -40,10 +40,6 @@ just nix-build-default           # .#default: RelWithDebInfo + tests (matches di
 just nix-build-release           # .#release: stripped, no tests
 just nix-build-sanitized         # .#sanitized: Debug + ASan + UBSan, tests run in sandbox
 just nix-build-fuzz              # .#fuzz: libFuzzer harness binary only
-just nix-build-static-amd64      # .#static-amd64: Zig-in-Nix musl static binary
-just nix-build-static-arm64      # .#static-arm64: Zig-in-Nix musl static binary
-just nix-build-release-archive-amd64  # .#release-archive-amd64: tarball + sha256 + debug
-just nix-build-release-archive-arm64  # .#release-archive-arm64: tarball + sha256 + debug
 just nix-coverage                # .#dev^coverage: produces result-coverage/coverage.xml
 just nix-docker-build            # .#docker-stream: host-arch image, load into local daemon
 just nix-docker-build-amd64      # .#packages.x86_64-linux.docker-stream + sipi-debug (CI)
@@ -163,7 +159,7 @@ Run a specific unit test binary in the dev-shell inner loop: `cd build && test/u
 
 ## CI, Release, and Commit Messages
 
-For CI pipeline details (Zig validation gates, static artifact flow, Docker publishing), see [`docs/src/development/ci.md`](docs/src/development/ci.md).
+For CI pipeline details (Docker publishing, release automation), see [`docs/src/development/ci.md`](docs/src/development/ci.md).
 
 **Releases are automated via release-please.** Correct [Conventional Commit](https://www.conventionalcommits.org/) prefixes are required — they drive SemVer bumps and changelog generation. See [`docs/src/development/ci.md`](docs/src/development/ci.md) for the full prefix-to-release mapping and [`docs/src/development/developing.md`](docs/src/development/developing.md) for the commit message schema.
 

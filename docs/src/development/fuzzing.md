@@ -35,7 +35,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
 
 libFuzzer is built into Clang, so the fuzz variant uses `llvmPackages_19.stdenv` under the hood. Nix handles the toolchain — no dev-shell dance required.
 
-The CMake config (`fuzz/handlers/CMakeLists.txt`) guards the target behind a Clang check; it won't build with GCC or zig-cc, but `.#fuzz` pins Clang so that path never matters in practice.
+The CMake config (`fuzz/handlers/CMakeLists.txt`) guards the target behind a Clang check; it won't build with GCC, but `.#fuzz` pins Clang so that path never matters in practice.
 
 ## Running Locally
 
