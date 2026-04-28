@@ -22,7 +22,7 @@ ExternalProject_Add(project_prometheus_cpp
         DOWNLOAD_DIR ""
         ${timestamp_policy}
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/prometheus-cpp
-        CMAKE_ARGS ${ZIG_EP_CMAKE_ARGS}
+        CMAKE_ARGS
             -DENABLE_PULL=OFF
             -DENABLE_PUSH=OFF
             -DENABLE_COMPRESSION=OFF

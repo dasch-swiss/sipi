@@ -23,7 +23,7 @@ ExternalProject_Add(project_png
         ${timestamp_policy}
         DOWNLOAD_DIR ""
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/libpng-${DEP_PNG_VERSION}
-        CMAKE_ARGS  ${ZIG_EP_CMAKE_ARGS} ${SHARED_OPTION}
+        CMAKE_ARGS  ${SHARED_OPTION}
         -DPNG_SHARED=OFF
         -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/local
         -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local

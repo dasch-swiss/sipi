@@ -24,8 +24,7 @@ ExternalProject_Add(project_jansson
         ${timestamp_policy}
         DOWNLOAD_DIR ""
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/jansson
-        CMAKE_ARGS ${ZIG_EP_CMAKE_ARGS}
-        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        CMAKE_ARGS -DCMAKE_POLICY_VERSION_MINIMUM=3.5
         -DJANSSON_BUILD_DOCS=OFF
         -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/local
         -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/local

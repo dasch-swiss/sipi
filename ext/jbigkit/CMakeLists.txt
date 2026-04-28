@@ -23,7 +23,7 @@ ExternalProject_Add(project_jbigkit
         DOWNLOAD_DIR ""
         SOURCE_DIR ${CMAKE_BINARY_DIR}/extsrcs/jbigkit-${DEP_JBIGKIT_VERSION}
         CONFIGURE_COMMAND ""
-        BUILD_COMMAND make CC=${CMAKE_C_COMPILER} ${ZIG_EP_CFLAGS}
+        BUILD_COMMAND make CC=${CMAKE_C_COMPILER}
         INSTALL_COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/extsrcs/jbigkit-${DEP_JBIGKIT_VERSION}/libjbig/libjbig${CMAKE_STATIC_LIBRARY_SUFFIX} ${CMAKE_BINARY_DIR}/local/lib
         BUILD_IN_SOURCE 1
 )

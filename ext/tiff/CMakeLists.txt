@@ -15,26 +15,8 @@ else()
     set(_tiff_url "${DEP_TIFF_URL}")
 endif()
 
-# On musl, pthread is part of libc — zig's musl sysroot has no libpthread.a
-# and resolves -lpthread to a shared stub, which breaks -static linking.
-if(DEFINED ZIG_STATIC_BUILD AND ZIG_STATIC_BUILD)
-    set(_TIFF_STANDARD_LIBS "")
-    # libtiff builds `tiff_mkg3states` (a Huffman-table codegen helper)
-    # inside `if(NOT CMAKE_CROSSCOMPILING)`. In "native-targeted" zig
-    # mode CMake sees the same arch (aarch64/x86_64) for host and
-    # target, so CMAKE_CROSSCOMPILING is FALSE and the executable is
-    # built. Zig's musl sysroot then fails to static-link it (musl
-    # libpthread is a shared stub; static needs it in libc.a).
-    #
-    # CMAKE_CROSSCOMPILING is computed from CMAKE_SYSTEM_NAME vs
-    # CMAKE_HOST_SYSTEM_NAME and can't be forced via -D. Instead,
-    # patch the guard out — the generated file (tif_fax3sm.c) is
-    # already pre-generated in the 4.7.0 release tarball.
-    set(_TIFF_PATCH_CMD sed -i "s/if(NOT CMAKE_CROSSCOMPILING)/if(FALSE)/" libtiff/CMakeLists.txt)
-else()
-    set(_TIFF_STANDARD_LIBS "-lpthread")
-    set(_TIFF_PATCH_CMD "")
-endif()
+set(_TIFF_STANDARD_LIBS "-lpthread")
+set(_TIFF_PATCH_CMD "")
 
 ExternalProject_Add(project_tiff
         DEPENDS project_jpeg
@@ -50,7 +32,7 @@ ExternalProject_Add(project_tiff
         ${timestamp_policy}
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/libtiff-${DEP_TIFF_VERSION}
         PATCH_COMMAND ${_TIFF_PATCH_CMD}
-        CMAKE_ARGS  ${ZIG_EP_CMAKE_ARGS} -DBUILD_SHARED_LIBS=OFF
+        CMAKE_ARGS  -DBUILD_SHARED_LIBS=OFF
                     -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                     -DCMAKE_FIND_FRAMEWORK=NEVER
                     -DCMAKE_FIND_LIBRARY_SUFFIXES=${CMAKE_STATIC_LIBRARY_SUFFIX}

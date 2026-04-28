@@ -6,11 +6,7 @@ include(ExternalProject)
 #
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
-if(ZIG_STATIC_BUILD)
-    set(_sqlite3_shared_flags --disable-shared --enable-static)
-else()
-    set(_sqlite3_shared_flags --enable-shared --enable-static)
-endif()
+set(_sqlite3_shared_flags --enable-shared --enable-static)
 
 # Local vendor fallback — offline builds when archive present
 set(_local "${COMMON_VENDOR}/${DEP_SQLITE3_FILENAME}")
@@ -28,10 +24,7 @@ ExternalProject_Add(project_sqlite3
         DOWNLOAD_DIR ""
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/sqlite
         CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/sqlite/configure --enable-fts5 --prefix=${CMAKE_BINARY_DIR}/local ${_sqlite3_shared_flags} --libdir=${CMAKE_BINARY_DIR}/local/lib
-        ${ZIG_AUTOTOOLS_HOST}
         CC=${CMAKE_C_COMPILER}
-        ${ZIG_EP_CPP}
-        ${ZIG_EP_CFLAGS}
         "CPPFLAGS=-DSQLITE_ENABLE_RTREE=1"
         BUILD_COMMAND make
         BUILD_IN_SOURCE 1

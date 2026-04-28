@@ -7,11 +7,7 @@ include(ExternalProject)
 set(timestamp_policy DOWNLOAD_EXTRACT_TIMESTAMP OLD)
 
 
-if(ZIG_STATIC_BUILD)
-    set(_jpeg_shared_flags --disable-shared --enable-static)
-else()
-    set(_jpeg_shared_flags --enable-shared --enable-static)
-endif()
+set(_jpeg_shared_flags --enable-shared --enable-static)
 
 # Local vendor fallback — offline builds when archive present
 set(_local "${COMMON_VENDOR}/${DEP_JPEG_FILENAME}")
@@ -29,10 +25,7 @@ ExternalProject_Add(project_jpeg
         DOWNLOAD_DIR ""
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/libjpeg-v${DEP_JPEG_VERSION}
         CONFIGURE_COMMAND ${CMAKE_BINARY_DIR}/local/extsrcs/libjpeg-v${DEP_JPEG_VERSION}/configure --prefix=${CMAKE_BINARY_DIR}/local ${_jpeg_shared_flags} --libdir=${CMAKE_BINARY_DIR}/local/lib
-        ${ZIG_AUTOTOOLS_HOST}
         CC=${CMAKE_C_COMPILER}
-        ${ZIG_EP_CPP}
-        ${ZIG_EP_CFLAGS}
         BUILD_COMMAND make
         BUILD_IN_SOURCE 1
 )

@@ -53,12 +53,8 @@ ExternalProject_Add(project_libmagic
         --libdir=${CMAKE_BINARY_DIR}/local/lib
         --enable-static
         --disable-shared
-        ${ZIG_AUTOTOOLS_HOST}
         CC=${CMAKE_C_COMPILER}
         CXX=${CMAKE_CXX_COMPILER}
-        ${ZIG_EP_CPP}
-        ${ZIG_EP_CFLAGS}
-        ${ZIG_EP_CXXFLAGS}
     BUILD_COMMAND make -j4
     BUILD_IN_SOURCE 1
 )

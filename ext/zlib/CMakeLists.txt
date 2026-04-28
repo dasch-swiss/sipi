@@ -23,7 +23,6 @@ ExternalProject_Add(project_zlib
         SOURCE_DIR ${CMAKE_BINARY_DIR}/local/extsrcs/zlib
         CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env
         CC=${CMAKE_C_COMPILER}
-        ${ZIG_EP_CFLAGS}
         ${CMAKE_BINARY_DIR}/local/extsrcs/zlib/configure
         --prefix=${CMAKE_BINARY_DIR}/local
         --static

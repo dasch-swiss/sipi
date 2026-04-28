@@ -55,8 +55,6 @@ ExternalProject_Add(project_openssl
         --libdir=lib
         CC=${CMAKE_C_COMPILER}
         CXX=${CMAKE_CXX_COMPILER}
-        ${ZIG_EP_CFLAGS}
-        ${ZIG_EP_CXXFLAGS}
     BUILD_COMMAND make -j4
     INSTALL_COMMAND make install_sw
     BUILD_IN_SOURCE 1
