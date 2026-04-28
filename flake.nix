@@ -222,6 +222,155 @@
 
           cp ${static.debug}/lib/debug/sipi.debug $out/sipi-linux-${arch}.debug
         '';
+
+        # ── Docker image (Nix dockerTools) ───────────────────────────────
+        # Bake version.txt's content into the binary and use a `v`-
+        # prefixed form as the OCI image tag. release-please updates
+        # `version.txt` *before* cutting a release tag and tags the
+        # commit `v<version>` (e.g. `v4.1.1`). The historical Dockerfile
+        # flow set its tag via `git describe --tag` which inherits the
+        # `v` prefix from git, producing `daschswiss/sipi:v4.1.1`; we
+        # match that 1:1 by prepending `v` here. Without the prefix
+        # the published image tag would silently regress from
+        # `v4.1.1` to `4.1.1`, breaking deploy automation that pulls
+        # tags by literal name.
+        #
+        # For ad-hoc/custom-version builds, callers can override at the
+        # package layer:
+        #   pkgs.sipi.override { providedVersion = "..."; }
+        # via a custom Nix expression. The `providedVersion` parameter
+        # on `package.nix` enables that, and `pkgs.sipi.version` then
+        # propagates into both the binary and the OCI tag below.
+        sipiForImage = pkgs.sipi;
+        imageTag = if sipiForImage.version != ""
+                   then "v" + sipiForImage.version
+                   else "dev";
+
+        # `created` timestamp in RFC 3339 / extended ISO 8601 form
+        # (YYYY-MM-DDTHH:MM:SSZ). `self.lastModifiedDate` is an
+        # unseparated YYYYMMDDHHMMSS string; we splice in the separators
+        # so `dockerTools`'s post-build `date -d` validation accepts the
+        # value (the basic form without separators is rejected by GNU
+        # `date`). Avoids the "epoch image" warnings Scout / Docker Hub
+        # emit when `created` is left at 1970-01-01. Still deterministic
+        # for a given flake.lock.
+        imageCreated = let d = self.lastModifiedDate or "19700101000000"; in
+          builtins.substring  0 4 d + "-"
+          + builtins.substring 4 2 d + "-"
+          + builtins.substring 6 2 d
+          + "T"
+          + builtins.substring  8 2 d + ":"
+          + builtins.substring 10 2 d + ":"
+          + builtins.substring 12 2 d
+          + "Z";
+
+        # Common image config shared by buildLayeredImage + streamLayeredImage.
+        # Runtime user is intentionally root — see the comment near
+        # `Cmd` in the config block below.
+        mkDockerImage = builder: builder {
+          name = "daschswiss/sipi";
+          tag = imageTag;
+          created = imageCreated;
+          maxLayers = 125;
+          contents = with pkgs; [
+            sipiForImage
+            cacert
+            dockerTools.fakeNss
+            bashInteractive
+            coreutils
+            # ffmpeg-headless is the same upstream ffmpeg compiled with
+            # --disable-{ffplay,sdl2,xlib,libxcb,…}. The `ffmpeg` and
+            # `ffprobe` binaries are byte-identical between the two
+            # variants — same codec set, same demuxer set, same upstream
+            # version. Only `ffplay` (a desktop GUI player nobody in the
+            # DSP stack invokes) is dropped, along with its X11/SDL/font/
+            # audio-output runtime closure (~800 MiB). dsp-ingest's only
+            # use is `docker run --entrypoint ffprobe …` for video
+            # metadata, which is unchanged.
+            ffmpeg-headless
+            curl
+            tini
+            tzdata
+          ];
+          config = {
+            # config.User is intentionally unset — sipi runs as root.
+            # Sipi reads artefacts under the SIPI "Image root" (see
+            # UBIQUITOUS_LANGUAGE.md — Image and Bitstream files resolved
+            # from `{prefix}/{identifier}` requests) from an NFS mount whose
+            # ownership is controlled by another service. Switching to a
+            # non-root uid requires uid/gid coordination with NFS exports
+            # (or `no_root_squash` / `nfs4 idmap` reconfiguration on the
+            # exporter side). Tracked in DEV-5920, not done here.
+            # Match the historical Dockerfile's Entrypoint/Cmd split:
+            # sipi binary lives in Entrypoint (after tini), only the
+            # config flag is in Cmd. This is what makes `docker run
+            # daschswiss/sipi --help` (or any other CLI invocation) work
+            # — Docker overrides Cmd when extra args are given, and we
+            # want sipi to receive those args, not tini.
+            Entrypoint = [ "${pkgs.tini}/bin/tini" "--" "${sipiForImage}/bin/sipi" ];
+            Cmd = [ "--config=/sipi/config/sipi.config.lua" ];
+            ExposedPorts = { "1024/tcp" = { }; };
+            WorkingDir = "/sipi";
+            Env = [
+              "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+              "TZ=Europe/Zurich"
+              # nixpkgs' tzdata installs zoneinfo under `/share/zoneinfo`,
+              # but glibc's default search path is `/usr/share/zoneinfo`.
+              # Set TZDIR explicitly so `TZ=Europe/Zurich` resolves
+              # correctly without depending on `/etc/localtime` being
+              # bind-mounted from the host. ops-deploy does mount
+              # `/etc/localtime:/etc/localtime:ro` from the host, which
+              # takes precedence — but for stand-alone runs (smoke
+              # tests, dev) this keeps the timezone correct.
+              "TZDIR=${pkgs.tzdata}/share/zoneinfo"
+              # `C.UTF-8` is built into glibc itself — no `glibcLocales`
+              # derivation needed. It covers the only locale category
+              # sipi depends on (LC_CTYPE for UTF-8 byte classification,
+              # used by exiv2 metadata handling, Lua string functions on
+              # UTF-8 input, and std::locale() in CLI11/shttps).
+              "LC_ALL=C.UTF-8"
+              "LANG=C.UTF-8"
+            ];
+            Labels = {
+              "org.opencontainers.image.source"      = "https://github.com/dasch-swiss/sipi";
+              "org.opencontainers.image.revision"    = self.rev or "dirty";
+              "org.opencontainers.image.version"     = imageTag;
+              "org.opencontainers.image.licenses"    = "AGPL-3.0-only";
+              "org.opencontainers.image.title"       = "Sipi";
+              "org.opencontainers.image.description" = "IIIF-compatible media server.";
+            };
+            Healthcheck = {
+              Test = [ "CMD" "curl" "-sf" "http://localhost:1024/health" ];
+              # All durations in nanoseconds. /health is served by
+              # shttps (see sipi/CONTEXT-MAP.md — one-way SIPI → shttps
+              # dependency).
+              Interval    = 30 * 1000 * 1000 * 1000;
+              Timeout     =  5 * 1000 * 1000 * 1000;
+              StartPeriod = 10 * 1000 * 1000 * 1000;
+              Retries     = 3;
+            };
+          };
+          fakeRootCommands = ''
+            mkdir -p ./sipi/images/knora
+            mkdir -p ./sipi/cache
+            mkdir -p ./sipi/config
+            mkdir -p ./sipi/scripts
+            mkdir -p ./sipi/server
+            cp ${sipiForImage}/share/sipi/config/sipi.config.lua  ./sipi/config/
+            cp ${sipiForImage}/share/sipi/config/sipi.init.lua    ./sipi/config/
+            cp ${sipiForImage}/share/sipi/server/test.html         ./sipi/server/
+            cp ${sipiForImage}/share/sipi/scripts/test_functions.lua ./sipi/scripts/
+            cp ${sipiForImage}/share/sipi/scripts/send_response.lua  ./sipi/scripts/
+
+            # Default /etc/localtime → Europe/Zurich, matching the
+            # historical Ubuntu image (where dpkg-reconfigure tzdata
+            # set the symlink). ops-deploy bind-mounts the host's
+            # /etc/localtime over this in production; for stand-alone
+            # runs (dev, smoke tests) this keeps tz correct.
+            mkdir -p ./etc
+            ln -sf ${pkgs.tzdata}/share/zoneinfo/Europe/Zurich ./etc/localtime
+          '';
+        };
       in
       {
         # ── Packages ───────────────────────────────────────────────────
@@ -283,11 +432,10 @@
               LDFLAGS = "-Wno-unused-command-line-argument";
             };
             # nixpkgs' cmake hook leaves CWD at `$sourceRoot/build` after
-            # configurePhase on macOS, but the hook's exact CWD behavior
-            # has been platform-sensitive historically. Normalize by
-            # entering the cmake build tree if we aren't already there,
-            # so the override works on both macOS and Linux regardless
-            # of hook version.
+            # configurePhase on macOS, but exact CWD behavior is
+            # platform-sensitive. Normalize by entering the cmake build
+            # tree if we aren't already there, so the override works on
+            # both macOS and Linux regardless of hook version.
             buildPhase = ''
               runHook preBuild
               [ -f CMakeCache.txt ] || cd "''${cmakeBuildDir:-build}"
@@ -319,80 +467,25 @@
           release-archive-amd64 = mkReleaseArchive "amd64";
           release-archive-arm64 = mkReleaseArchive "arm64";
 
-          # Docker images via Nix dockerTools
-          docker = pkgs.dockerTools.buildLayeredImage {
-            name = "daschswiss/sipi";
-            tag = self.rev or "dev";
-            maxLayers = 125;
-            contents = with pkgs; [
-              sipi
-              cacert
-              dockerTools.fakeNss
-              bashInteractive
-              coreutils
-              ffmpeg
-              curl
-            ];
-            config = {
-              Cmd = [ "${pkgs.sipi}/bin/sipi" "--config=/sipi/config/sipi.config.lua" ];
-              ExposedPorts = { "1024/tcp" = { }; };
-              WorkingDir = "/sipi";
-              Env = [
-                "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-                "LC_ALL=en_US.UTF-8"
-                "LANG=en_US.UTF-8"
-              ];
-            };
-            fakeRootCommands = ''
-              mkdir -p ./sipi/images/knora
-              mkdir -p ./sipi/cache
-              mkdir -p ./sipi/config
-              mkdir -p ./sipi/scripts
-              mkdir -p ./sipi/server
-              cp ${pkgs.sipi}/share/sipi/config/sipi.config.lua  ./sipi/config/
-              cp ${pkgs.sipi}/share/sipi/config/sipi.init.lua    ./sipi/config/
-              cp ${pkgs.sipi}/share/sipi/server/test.html         ./sipi/server/
-              cp ${pkgs.sipi}/share/sipi/scripts/test_functions.lua ./sipi/scripts/
-              cp ${pkgs.sipi}/share/sipi/scripts/send_response.lua  ./sipi/scripts/
-            '';
-          };
+          # Production Docker image via Nix dockerTools.
+          # Runtime: root user (NFS uid/gid coordination deferred to
+          # DEV-5920); tini as PID 1; HEALTHCHECK against /health on
+          # port 1024; en_US.UTF-8 + sr_RS.UTF-8 locales; tzdata with
+          # TZ=Europe/Zurich; OCI labels; non-epoch `created` derived
+          # from flake.lock's lastModifiedDate.
+          docker        = mkDockerImage pkgs.dockerTools.buildLayeredImage;
+          docker-stream = mkDockerImage pkgs.dockerTools.streamLayeredImage;
 
-          docker-stream = pkgs.dockerTools.streamLayeredImage {
-            name = "daschswiss/sipi";
-            tag = self.rev or "dev";
-            maxLayers = 125;
-            contents = with pkgs; [
-              sipi
-              cacert
-              dockerTools.fakeNss
-              bashInteractive
-              coreutils
-              ffmpeg
-              curl
-            ];
-            config = {
-              Cmd = [ "${pkgs.sipi}/bin/sipi" "--config=/sipi/config/sipi.config.lua" ];
-              ExposedPorts = { "1024/tcp" = { }; };
-              WorkingDir = "/sipi";
-              Env = [
-                "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-                "LC_ALL=en_US.UTF-8"
-                "LANG=en_US.UTF-8"
-              ];
-            };
-            fakeRootCommands = ''
-              mkdir -p ./sipi/images/knora
-              mkdir -p ./sipi/cache
-              mkdir -p ./sipi/config
-              mkdir -p ./sipi/scripts
-              mkdir -p ./sipi/server
-              cp ${pkgs.sipi}/share/sipi/config/sipi.config.lua  ./sipi/config/
-              cp ${pkgs.sipi}/share/sipi/config/sipi.init.lua    ./sipi/config/
-              cp ${pkgs.sipi}/share/sipi/server/test.html         ./sipi/server/
-              cp ${pkgs.sipi}/share/sipi/scripts/test_functions.lua ./sipi/scripts/
-              cp ${pkgs.sipi}/share/sipi/scripts/send_response.lua  ./sipi/scripts/
-            '';
-          };
+          # Standalone passthrough for the sipi `debug` output. Used by
+          # publish.yml to extract the `.debug` file under the GNU
+          # build-id layout (lib/debug/.build-id/<xx>/<yy>.debug) and
+          # upload to Sentry. `pkgs.sipi.debug` exists because
+          # `package.nix` sets `separateDebugInfo = true` (which adds
+          # "debug" to outputs automatically on Linux). The justfile's
+          # `nix-docker-build-<arch>` recipe builds this in the same
+          # `nix build` invocation as `docker-stream`, so the symlink
+          # is realized as a side-effect of the image build.
+          sipi-debug = pkgs.sipi.debug;
         };
 
         # ── Dev Shells ─────────────────────────────────────────────────
