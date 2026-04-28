@@ -115,14 +115,39 @@ Gate model:
 1. `validate-docker` must pass.
 2. `release-gate` fires on `validate-docker` success.
 3. Publish jobs run in parallel after the gate:
-   - `publish-docker / {arch}` — builds, tests, pushes Docker images.
+   - `publish-docker / {arch}` — builds the Docker image via
+     `just nix-docker-build-${arch}` (wraps
+     `nix build .#packages.<arch>-linux.docker-stream
+            .#packages.<arch>-linux.sipi-debug` in a single call),
+     extracts the `.debug` file via `just nix-docker-extract-debug`,
+     runs smoke tests, pushes the image, uploads SBOM, pushes debug
+     symbols to Sentry.
    - `publish-static-release / {arch}` — builds release archive via
      `just nix-build-release-archive-${arch}` (wraps
      `nix build .#release-archive-${arch}`), uploads to GitHub
      Release, pushes debug symbols to Sentry.
-   - `manifest` — multi-arch Docker manifest.
+   - `manifest` — multi-arch Docker manifest combining the two
+     pushed per-arch images.
    - `docs` — mkdocs deploy.
 4. `sentry` finalises the release after manifest + static publishes.
+
+### Docker image build (PRs and tag releases)
+
+Both `docker-build.yml` (PRs) and `publish.yml` (tags) build the
+Docker image entirely through Nix. The image is produced by
+`pkgs.dockerTools.streamLayeredImage` from the same derivation graph
+as every other build artifact, so `Cachix` substitutes `ext/*`
+(exiv2, libtiff, kakadu, …) instead of recompiling them on every
+run. There is no GHA Docker-layer cache (`type=gha,mode=max`); there
+is no `Dockerfile` — `flake.nix` is the single source of truth.
+
+The image's runtime contract: runs as `root`, `tini` as PID 1,
+HEALTHCHECK against `/health` on port 1024, `TZ=Europe/Zurich`,
+`LC_ALL=C.UTF-8`, OCI labels populated from `flake.lock`. `C.UTF-8`
+is sufficient because sipi has no code path that depends on locale
+categories beyond `LC_CTYPE` (which `C.UTF-8` covers), and operators
+do not override `LC_ALL` at runtime. See
+[`nix.md`](nix.md#docker-image) for the derivation details.
 
 ### Static artifact flow
 
@@ -168,6 +193,11 @@ SIPI_BIN=$PWD/result/bin/sipi nix --option filter-syscalls false develop --comma
 just nix-build-fuzz
 mkdir fuzz-corpus-live
 just nix-run-fuzz fuzz-corpus-live 60 fuzz/handlers/corpus
+
+# Docker image (what docker-build.yml + publish.yml publish-docker run)
+just nix-docker-build-amd64               # arch-pinned image + sipi-debug
+just test-smoke-ci                        # Rust testcontainer smoke tests
+just nix-docker-extract-debug amd64       # produces sipi-amd64.debug for Sentry
 
 # Release archive (what publish.yml publish-static-release runs)
 just nix-build-release-archive-amd64

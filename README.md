@@ -75,18 +75,18 @@ You will then find the manual under `site/index.html`.
 
 All commands are run from the repository root via `just`. Run `just` for a full list of targets.
 
-### Build and test with Docker (recommended for CI-like builds)
-```bash
-just docker-build    # build Docker image (compiles + runs unit tests)
-just test-smoke      # run smoke tests against Docker image
-```
-
 ### Build and test with Nix (reproducible — what CI runs)
 ```bash
 just nix-build         # .#dev: Debug + coverage, unit tests run in the Nix sandbox
 just rust-test-e2e     # run Rust end-to-end tests against ./result/bin/sipi
 just hurl-test         # run Hurl HTTP contract tests
 just nix-run           # start SIPI server
+```
+
+### Build a Docker image (via Nix dockerTools)
+```bash
+just nix-docker-build  # build .#docker-stream and load into the local Docker daemon
+just test-smoke        # build image (if needed), then run smoke tests
 ```
 
 ### Inner-loop development (incremental rebuilds, non-reproducible)
