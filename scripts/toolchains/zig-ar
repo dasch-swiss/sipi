@@ -1,6 +1,0 @@
-#!/bin/sh
-# Wrapper script for using "zig ar" as CMAKE_AR.
-#
-# Zig provides its own ar implementation that works with all targets.
-
-exec zig ar "$@"
