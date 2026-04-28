@@ -19,10 +19,8 @@ jobs:
         include:
           - arch: amd64
             runner: ubuntu-24.04
-            build_target: docker-test-build-amd64
           - arch: arm64
             runner: ubuntu-24.04-arm
-            build_target: docker-test-build-arm64
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
@@ -32,24 +30,23 @@ jobs:
           git lfs install
           git lfs fetch --all
           git lfs checkout
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
-        with:
-          username: ${{ secrets.DOCKER_USER }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - name: Expose GitHub Actions cache variables
-        uses: actions/github-script@v9
-        with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env['ACTIONS_CACHE_URL'] || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env['ACTIONS_RUNTIME_TOKEN'] || '');
       - uses: DeterminateSystems/determinate-nix-action@v3
+        with:
+          extra-conf: |
+            extra-experimental-features = configurable-impure-env
       - uses: cachix/cachix-action@v17
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
       - run: nix profile install nixpkgs#just
-      - run: just ${{ matrix.build_target }}
+      - name: Build Docker image (Nix dockerTools)
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+        run: just nix-docker-build-${{ matrix.arch }}
       - run: just test-smoke-ci
 
   release-gate:
@@ -69,14 +66,12 @@ jobs:
         include:
           - arch: amd64
             runner: ubuntu-24.04
-            build_target: docker-test-build-amd64
             push_target: docker-push-amd64
             debug_file: sipi-amd64.debug
             sbom_file: sbom-amd64.spdx.json
             sbom_name: sbom-amd64
           - arch: arm64
             runner: ubuntu-24.04-arm
-            build_target: docker-test-build-arm64
             push_target: docker-push-arm64
             debug_file: sipi-arm64.debug
             sbom_file: sbom-arm64.spdx.json
@@ -90,25 +85,29 @@ jobs:
           git lfs install
           git lfs fetch --all
           git lfs checkout
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
-        with:
-          username: ${{ secrets.DOCKER_USER }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - name: Expose GitHub Actions cache variables
-        uses: actions/github-script@v9
-        with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env['ACTIONS_CACHE_URL'] || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env['ACTIONS_RUNTIME_TOKEN'] || '');
-
       - uses: DeterminateSystems/determinate-nix-action@v3
+        with:
+          extra-conf: |
+            extra-experimental-features = configurable-impure-env
       - uses: cachix/cachix-action@v17
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
       - run: nix profile install nixpkgs#just
-      - run: just ${{ matrix.build_target }}
+      - name: Build Docker image + sipi-debug (Nix dockerTools)
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+        # Binary version + OCI image tag come from version.txt, which
+        # release-please updates before cutting the tag — no extra
+        # plumbing required to keep them in sync with `${github.ref_name}`.
+        run: just nix-docker-build-${{ matrix.arch }}
+      - name: Extract debug symbols for Sentry upload
+        run: just nix-docker-extract-debug ${{ matrix.arch }}
       - run: just test-smoke-ci
       - name: Push image to Docker Hub
         run: just ${{ matrix.push_target }}
