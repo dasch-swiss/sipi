@@ -209,7 +209,7 @@ TEST(ImageEncodeBaseline, JpegRotatedDownscaledTiff)
 // path on the libjpeg writer.
 TEST(ImageEncodeBaseline, JpegFullToJpegDownscaled)
 {
-  std::string in = test_images + "unit/gray_with_icc_another.jpg";
+  std::string in = test_images + "unit/MaoriFigureWatermark.jpg";
   if (!file_exists(in)) GTEST_SKIP() << "Test image not found: " << in;
   std::string out = "/tmp/sipi_baseline_jpeg_full_to_jpeg_downscaled.jpg";
   encode(in, out, "jpg", nullptr, std::make_shared<Sipi::SipiSize>("256,"));
@@ -220,7 +220,7 @@ TEST(ImageEncodeBaseline, JpegFullToJpegDownscaled)
 // path on the libpng writer.
 TEST(ImageEncodeBaseline, JpegFullToPng)
 {
-  std::string in = test_images + "unit/gray_with_icc_another.jpg";
+  std::string in = test_images + "unit/MaoriFigureWatermark.jpg";
   if (!file_exists(in)) GTEST_SKIP() << "Test image not found: " << in;
   std::string out = "/tmp/sipi_baseline_jpeg_full_to_png.png";
   encode(in, out, "png", nullptr, std::make_shared<Sipi::SipiSize>("256,"));
@@ -290,7 +290,7 @@ TEST(ImageEncodeBaseline, CielabTiffToJpeg)
 // lossy encoder.
 TEST(ImageEncodeBaseline, JpegRotatedToJpeg)
 {
-  std::string in = test_images + "unit/gray_with_icc_another.jpg";
+  std::string in = test_images + "unit/MaoriFigureWatermark.jpg";
   if (!file_exists(in)) GTEST_SKIP() << "Test image not found: " << in;
   std::string out = "/tmp/sipi_baseline_jpeg_rotated_to_jpeg.jpg";
   encode(in, out, "jpg", nullptr, std::make_shared<Sipi::SipiSize>("256,"), 90.0f);
@@ -302,7 +302,7 @@ TEST(ImageEncodeBaseline, JpegRotatedToJpeg)
 // alongside the goldens.
 TEST(ImageEncodeBaseline, PngRoundTrip)
 {
-  std::string in = test_images + "unit/gray_with_icc.png";
+  std::string in = test_images + "unit/sample_with_icc.png";
   if (!file_exists(in)) GTEST_SKIP() << "Test image not found: " << in;
   std::string out = "/tmp/sipi_baseline_png_round_trip.png";
   encode(in, out, "png", nullptr, std::make_shared<Sipi::SipiSize>("256,"));
