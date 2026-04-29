@@ -118,6 +118,46 @@ nix build .#dev.debug                  # extracted symbols at result/lib/debug/.
 nix build .#sipi-debug                 # passthrough to .#default.debug, used by CI
 ```
 
+## Rust test binaries (via crane)
+
+The Rust e2e harness (`test/e2e-rust/`) and the Docker smoke test build
+through dedicated Nix derivations rather than `cargo test` from the dev
+shell. CI runs the resulting binaries directly — no cargo on PATH is
+required, and crate sources are vendored from `Cargo.lock` so a clean
+runner re-substitutes from Cachix instead of re-fetching from
+crates.io.
+
+```bash
+just nix-test-e2e                      # .#e2e-tests: every tests/<name>.rs
+just nix-test-smoke                    # .#smoke-test: docker_smoke (--features docker)
+```
+
+Source of truth: [`nix/rust-tests.nix`](https://github.com/dasch-swiss/sipi/blob/main/nix/rust-tests.nix).
+The module exposes `e2e-tests` and `smoke-test` derivations, both
+sharing a single `cargoArtifacts` deps build via [crane](https://crane.dev/)
+(pinned to `v0.23.3` in `flake.nix`).
+
+`flake.nix` stays an orchestrator — topical Nix expressions live in
+`nix/<topic>.nix` as functions over `{ pkgs, … }` returning attrsets
+that the flake merges into its outputs. `nix/rust-tests.nix` is the
+first module under this pattern; existing in-flake builders (Kakadu
+FOD, static builds, Docker image, dev shells) follow in later PRs.
+
+Two crane-specific notes:
+
+- The default `installFromCargoBuildLogHook` filters cargo's JSON
+  build log with `.profile.test == false`, which is the inverse of
+  what's needed for test binaries. The module sets
+  `doNotPostBuildInstallCargoBinaries = true` and parses the log
+  directly with `jq` to install each `.profile.test == true`
+  artifact under its `target.name`.
+- Test binaries cannot rely on `env!("CARGO_MANIFEST_DIR")` at
+  runtime — that resolves to a Nix sandbox path that no longer
+  exists. The `sipi_e2e::repo_root()` helper reads `$SIPI_REPO_ROOT`
+  first, falling back to `CARGO_MANIFEST_DIR` for the inner-loop
+  `cargo test` path. The `nix-test-e2e` and `nix-test-smoke` recipes
+  set `SIPI_REPO_ROOT={{justfile_directory()}}`.
+
 ## Docker image
 
 The Docker image is built by `pkgs.dockerTools.streamLayeredImage`
