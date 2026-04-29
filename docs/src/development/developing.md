@@ -204,7 +204,32 @@ just nix-test-smoke
 ### Approval Tests
 
 Approval tests live in `test/approval/` and use snapshot-based
-testing for regression detection.
+testing for regression detection. Run them via ctest:
+
+```bash
+cd build
+ctest -L approval --output-on-failure
+```
+
+CMake injects `SOURCE_DATE_EPOCH=946684800` into the `sipi.approvaltests`
+invocation so the wall-clock-stamped ICC creation date that lcms2 stamps
+into JPEG / PNG / JP2 (and ICC-carrying TIFF) outputs is overwritten
+with a fixed value. Without the env var the seconds field drifts by one
+byte across consecutive runs.
+
+When running the binary directly outside of ctest, export the same
+value first:
+
+```bash
+cd build/test/approval
+SOURCE_DATE_EPOCH=946684800 ./sipi.approvaltests \
+  --gtest_filter='ImageEncodeBaseline.*'
+```
+
+Without it, expect `.received.*` files for every ICC-touching test —
+that's a deliberate test-infrastructure side-effect, not a regression.
+See [`test/approval/CHANGELOG.approval.md`](../../../test/approval/CHANGELOG.approval.md)
+for the full list and the re-approval procedure.
 
 ## Managing Dependencies
 

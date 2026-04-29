@@ -31,6 +31,8 @@ If a change can't be verified on a platform locally, say so explicitly and gate 
 
 **First-time setup for the dev-shell inner loop:** run `just kakadu-fetch` once to download the proprietary Kakadu archive from `dsp-ci-assets` into `vendor/`. Nix builds (including `just nix-docker-build`) fetch Kakadu directly via the flake's FOD (no `vendor/` step). Requires `gh auth login` and `dasch-swiss` org membership. See [`docs/src/development/kakadu.md`](docs/src/development/kakadu.md).
 
+**ICC determinism invariant:** [`SipiIcc::iccBytes()`](src/metadata/SipiIcc.cpp) is the single chokepoint that converts an `cmsHPROFILE` into raw bytes for codec consumption — every TIFF, JPEG, PNG, and JP2 emission funnels through it. Any new format handler must route through `iccBytes()`; bypassing it (calling `cmsSaveProfileToMem` directly) breaks the approval-test gate. Approval tests run with `SOURCE_DATE_EPOCH` injected by CMake (see [`test/approval/CMakeLists.txt`](test/approval/CMakeLists.txt)) so the wall-clock-stamped ICC creation date is overwritten with a fixed value and goldens stay byte-deterministic. Production never sets the env var; deployed binaries continue to embed wall-clock-stamped ICC headers. See [`docs/adr/0002-icc-profile-determinism-test-only.md`](docs/adr/0002-icc-profile-determinism-test-only.md).
+
 ### Quick Reference
 
 ```bash
