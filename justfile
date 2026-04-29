@@ -221,6 +221,9 @@ nix-macos-dylib-audit path:
 #####################################
 
 # Run Rust e2e tests against the built sipi.
+# Inner-loop dev path — uses cargo from the dev shell. CI uses
+# `nix-test-e2e` (below), which consumes pre-built test binaries from
+# the .#e2e-tests derivation and needs no cargo on PATH.
 rust-test-e2e:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -230,6 +233,40 @@ rust-test-e2e:
         exit 1
     fi
     cd test/e2e-rust && SIPI_BIN="$SIPI_BIN" cargo test -- --test-threads=1
+
+# Run nix-built Rust e2e test binaries against the built sipi.
+# Equivalent coverage to `rust-test-e2e`, but the test binaries come
+# from the .#e2e-tests Nix derivation (Cachix-cacheable, no cargo needed).
+# `INSTA_WORKSPACE_ROOT` overrides insta's default `cargo metadata`-based
+# snapshot lookup, which fails when the binary was compiled in a Nix
+# sandbox whose source path no longer exists at runtime.
+nix-test-e2e:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/result/bin/sipi}"
+    if [ ! -x "$SIPI_BIN" ]; then
+        echo "sipi binary not found at $SIPI_BIN. Run 'just nix-build' first." >&2
+        exit 1
+    fi
+    {{_nix_build}} -o result-e2e .#e2e-tests
+    SIPI_BIN="$SIPI_BIN" \
+    SIPI_REPO_ROOT="{{justfile_directory()}}" \
+    INSTA_WORKSPACE_ROOT="{{justfile_directory()}}/test/e2e-rust" \
+        {{justfile_directory()}}/result-e2e/bin/run-e2e.sh
+
+# Run nix-built Docker smoke test against the loaded daschswiss/sipi:latest image.
+# Replaces `test-smoke-ci` for CI use; that recipe stays for the inner-loop dev path.
+nix-test-smoke:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! docker image inspect daschswiss/sipi:latest >/dev/null 2>&1; then
+        echo "ERROR: daschswiss/sipi:latest not loaded. Run 'just nix-docker-build-<arch>' first." >&2
+        exit 1
+    fi
+    {{_nix_build}} -o result-smoke .#smoke-test
+    SIPI_REPO_ROOT="{{justfile_directory()}}" \
+    INSTA_WORKSPACE_ROOT="{{justfile_directory()}}/test/e2e-rust" \
+        {{justfile_directory()}}/result-smoke/bin/docker_smoke --test-threads=1
 
 # Run Hurl HTTP contract tests against the built sipi.
 hurl-test:
