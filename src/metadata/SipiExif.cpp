@@ -5,6 +5,8 @@
 
 #include <climits>
 #include <cmath>
+#include <cstring>
+#include <memory>
 
 #include "SipiError.hpp"
 #include "metadata/SipiExif.h"
@@ -25,18 +27,22 @@ SipiExif::SipiExif(const unsigned char *exif, unsigned int len)
   //
   // first we save the binary exif... we use it later for constructing a binary exif again!
   //
-  binaryExif = new unsigned char[len];
-  memcpy(binaryExif, exif, len);
-  binary_size = len;
+  // Hold the buffer in a unique_ptr until decode succeeds. If
+  // Exiv2::ExifParser::decode throws (e.g. on malformed EXIF embedded in
+  // PNG text comments — see DEV-6333 PngRoundTrip approval test), the
+  // unique_ptr cleans up on stack unwind. Releasing into the raw member
+  // only after decode succeeds keeps the destructor's `delete[]` honest.
+  auto buf = std::make_unique<unsigned char[]>(len);
+  std::memcpy(buf.get(), exif, len);
 
-  //
-  // now we decode the binary exif
-  //
   try {
     byteorder = Exiv2::ExifParser::decode(exifData, exif, (uint32_t)len);
   } catch (Exiv2::Error &exiverr) {
     throw SipiError(exiverr.what());
   }
+
+  binaryExif = buf.release();
+  binary_size = len;
 }
 //============================================================================
 
