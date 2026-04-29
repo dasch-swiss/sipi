@@ -65,13 +65,30 @@ and how to reproduce crashes locally.
 
 ## Pull Request CI
 
-Workflow: `.github/workflows/test.yml`
+Workflow: `.github/workflows/ci.yml`
 
 ### Standard test matrix
 
-- Nix/Clang test matrix runs on:
-  - `ubuntu-24.04`
-  - `ubuntu-24.04-arm`
+The `test` job is matrixed on `ubuntu-24.04` (amd64) and `ubuntu-24.04-arm`
+(arm64). Each leg runs, in order:
+
+1. `just nix-build` — Nix/Clang dev derivation; unit tests run in the Nix
+   sandbox.
+2. `just rust-test-e2e` and `just hurl-test` — Rust e2e + Hurl HTTP contract
+   tests against the built binary.
+3. `just nix-coverage` and Codecov upload — amd64 only.
+4. `just nix-docker-build-${arch}` — produces the per-arch Docker image via
+   `pkgs.dockerTools.streamLayeredImage` and loads it into the local Docker
+   daemon.
+5. `just test-smoke-ci` — Rust testcontainers smoke tests against the loaded
+   image.
+6. `Docker Scout — compare to production` — both arches, on PR events only.
+7. `Docker Scout — CVE report (SARIF)` and `Upload SARIF to GitHub Security`
+   — amd64 only, on PR events only (CVE findings are arch-independent; one
+   report per build is enough).
+
+The Docker steps reuse the Nix store populated by `just nix-build`, so
+`ext/*` derivations (exiv2, libtiff, kakadu, …) are warm-cache hits.
 
 ### Static and macOS PR checks
 
@@ -103,7 +120,9 @@ stdenv for Darwin.
 
 `nix-static` and `nix-macos-audit` are skipped for forked PRs because
 the Kakadu FOD needs `secrets.DASCHBOT_PAT`, which isn't shared with
-forks. Standard CI (nix-clang) still runs.
+forks. The `test` job still runs on forked PRs, but its
+`docker/login-action` step is gated to skip on forks (Docker Hub
+credentials are unavailable to fork runners).
 
 ## Tag Release CI/CD
 
@@ -133,7 +152,7 @@ Gate model:
 
 ### Docker image build (PRs and tag releases)
 
-Both `docker-build.yml` (PRs) and `publish.yml` (tags) build the
+Both `ci.yml` (PRs) and `publish.yml` (tags) build the
 Docker image entirely through Nix. The image is produced by
 `pkgs.dockerTools.streamLayeredImage` from the same derivation graph
 as every other build artifact, so `Cachix` substitutes `ext/*`
@@ -175,12 +194,15 @@ tools — `rust-test-e2e` (needs `cargo`) and `hurl-test` (needs `hurl`) —
 are the exception and run inside `nix develop --command …`.
 
 ```bash
-# Native dev build + e2e + Hurl (what test.yml nix-clang runs)
+# Native dev build + e2e + Hurl + coverage + Docker image + smoke
+# (the full `ci.yml test` job for one arch)
 just nix-build
 nix develop --command bash -c "just rust-test-e2e && just hurl-test"
 just nix-coverage
+just nix-docker-build-amd64               # or -arm64 on aarch64 host
+just test-smoke-ci
 
-# Static musl binaries (what test.yml nix-static runs)
+# Static musl binaries (what ci.yml nix-static runs)
 just nix-build-static-amd64
 just nix-build-static-arm64
 just nix-static-linkage-verify result/bin/sipi
@@ -194,7 +216,9 @@ just nix-build-fuzz
 mkdir fuzz-corpus-live
 just nix-run-fuzz fuzz-corpus-live 60 fuzz/handlers/corpus
 
-# Docker image (what docker-build.yml + publish.yml publish-docker run)
+# Docker image with split debug symbols (what publish.yml publish-docker
+# runs). The PR-time `ci.yml test` job builds the same image inline; this
+# block only adds the Sentry-bound `nix-docker-extract-debug` step.
 just nix-docker-build-amd64               # arch-pinned image + sipi-debug
 just test-smoke-ci                        # Rust testcontainer smoke tests
 just nix-docker-extract-debug amd64       # produces sipi-amd64.debug for Sentry
@@ -202,7 +226,7 @@ just nix-docker-extract-debug amd64       # produces sipi-amd64.debug for Sentry
 # Release archive (what publish.yml publish-static-release runs)
 just nix-build-release-archive-amd64
 
-# Darwin build + audit (what test.yml nix-macos-audit runs)
+# Darwin build + audit (what ci.yml nix-macos-audit runs)
 just nix-build-default
 just nix-macos-dylib-audit result/bin/sipi
 ```
