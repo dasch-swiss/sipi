@@ -334,13 +334,17 @@ static boolean empty_html_buffer(j_compress_ptr cinfo)
     cinfo->dest->next_output_byte = html_buffer->buffer.get();
     return static_cast<boolean>(true);
   } catch (const std::exception &e) {
+    // shttps::Error and other std::exception subclasses → genuine error path.
     err_msg = e.what();
   } catch (...) {
     // sendAndFlush throws the bare shttps::OUTPUT_WRITE_FAIL enum — not derived
-    // from std::exception, so it reaches this branch.
-    err_msg = "unknown error";
+    // from std::exception, so it reaches this branch. The throw itself is the
+    // abort signal: every OUTPUT_WRITE_FAIL means the underlying socket write
+    // failed (peer FIN, RST, write timeout). peerConnected() polls POLLRDHUP
+    // and misses RST/timeout, so we don't consult it.
+    err_msg = "shttps::OUTPUT_WRITE_FAIL";
+    html_buffer->client_aborted = true;
   }
-  if (!html_buffer->conobj->peerConnected()) html_buffer->client_aborted = true;
   log_err("JPEG HTTP write failed: %s", err_msg.c_str());
   ERREXIT(cinfo, JERR_FILE_WRITE);  // triggers jpegErrorExit → longjmp
   return FALSE;  // unreachable
@@ -362,9 +366,11 @@ static void term_html_destination(j_compress_ptr cinfo)
   } catch (const std::exception &e) {
     err_msg = e.what();
   } catch (...) {
-    err_msg = "unknown error";
+    // See empty_html_buffer for the rationale: OUTPUT_WRITE_FAIL is itself
+    // the abort signal; no peerConnected() check needed.
+    err_msg = "shttps::OUTPUT_WRITE_FAIL";
+    html_buffer->client_aborted = true;
   }
-  if (!html_buffer->conobj->peerConnected()) html_buffer->client_aborted = true;
   log_err("JPEG HTTP write (term) failed: %s", err_msg.c_str());
   ERREXIT(cinfo, JERR_FILE_WRITE);
   // unreachable

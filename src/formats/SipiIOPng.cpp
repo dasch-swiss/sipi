@@ -431,7 +431,12 @@ static void conn_write_data(png_structp png_ptr, png_bytep data, png_size_t leng
   try {
     ctx->conn->sendAndFlush(data, length);
   } catch (...) {
-    if (!ctx->conn->peerConnected()) ctx->client_aborted = true;
+    // Any throw out of sendAndFlush — bare shttps::OUTPUT_WRITE_FAIL or
+    // shttps::Error — means the response stream is no longer usable. We mark
+    // the abort here unconditionally because peerConnected()'s POLLRDHUP poll
+    // misses RST/timeout aborts. We can't narrow the catch (e.g. to `int`)
+    // without re-introducing C++-exception-through-libpng-C-frame UB.
+    ctx->client_aborted = true;
     // Signal error via libpng's error mechanism → sipi_error_fn → longjmp
     png_error(png_ptr, "HTTP write failed");
   }
@@ -446,7 +451,7 @@ static void conn_flush_data(png_structp png_ptr)
   try {
     ctx->conn->flush();
   } catch (...) {
-    if (!ctx->conn->peerConnected()) ctx->client_aborted = true;
+    ctx->client_aborted = true;
     png_error(png_ptr, "HTTP flush failed");
   }
 }

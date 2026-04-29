@@ -81,6 +81,7 @@ The seven valid permission-type strings a preflight script may return:
 | **Decode memory budget** | A process-wide, lock-free accounting of memory currently committed to in-flight image decodes, with an RAII guard. Rejects requests that would push concurrent decode memory over a configured ceiling. | memory budget, decode budget |
 | **Rate limiter** | The per-client request-rate ceiling enforced before decode admission. | throttle |
 | **Cache** | A file-based LRU of generated representations, keyed by *cache key*, with dual-limit eviction (total size **and** file count) and crash recovery. | response cache, output cache |
+| **Client abort** | An HTTP response write that fails because the peer is gone (FIN, RST, or write timeout). Surfaces in code as `Sipi::SipiImageClientAbortError`, raised when `shttps::OUTPUT_WRITE_FAIL` is thrown from a socket write. Logged at info, **not** captured to Sentry — these are peer-side events, not server faults. | broken pipe error, peer disconnect error |
 
 ## Platform context
 
