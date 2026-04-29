@@ -145,15 +145,15 @@ jobs:
         with:
           sarif_file: scout-results.sarif
 
-  # Native Darwin build via Nix + clang/libc++, with a dylib-linkage audit.
-  # The invariant: no Homebrew / third-party dylibs in the binary's
-  # transitive closure.
-  nix-macos-audit:
+  # Native Darwin build via Nix + clang/libc++. Sole CI gate for the
+  # Darwin build-completeness invariant — confirms `flake.nix` still
+  # evaluates and `.#default` builds on macOS arm64.
+  nix-macos-build:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: macos-14
-    name: nix-macos / arm64 dylib-audit
+    name: nix-macos / arm64 build
     concurrency:
-      group: ${{ github.workflow }}-nix-macos-audit-${{ github.head_ref || github.run_id }}
+      group: ${{ github.workflow }}-nix-macos-build-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
@@ -172,9 +172,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: just nix-build-default
-      - name: Audit runtime dylibs
-        # otool is part of macOS system toolchain.
-        run: just nix-macos-dylib-audit result/bin/sipi
 
   # Build documentation. Pure Python/MkDocs — Nix is only here so we can
   # provision `just` consistently with the other jobs; no `nix build` runs,

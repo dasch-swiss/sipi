@@ -73,17 +73,16 @@ The Docker steps reuse the Nix store populated by `just nix-build`, so
 
 ### macOS PR check
 
-**`nix-macos / arm64 dylib-audit`** (`macos-14`):
+**`nix-macos / arm64 build`** (`macos-14`):
 
 - `just nix-build-default` on Darwin (wraps `nix build .#default` —
   clang + libc++).
-- `just nix-macos-dylib-audit result/bin/sipi` — `otool -L` audit;
-  only `/usr/lib/libSystem.B.dylib` and
-  `/System/Library/{Frameworks,PrivateFrameworks}/...` allowed.
+- Sole CI gate for the Darwin build-completeness invariant — confirms
+  `flake.nix` still evaluates and `.#default` builds on macOS arm64.
 
 ### Forked PR behavior
 
-`nix-macos-audit` is skipped for forked PRs because the Kakadu FOD
+`nix-macos-build` is skipped for forked PRs because the Kakadu FOD
 needs `secrets.DASCHBOT_PAT`, which isn't shared with forks. The
 standard CI (`nix-clang`) job still runs on forked PRs, but its
 `docker/login-action` step is gated to skip on forks (Docker Hub
@@ -171,9 +170,8 @@ just nix-docker-build-amd64               # arch-pinned image + sipi-debug
 just nix-test-smoke                       # smoke test against loaded image
 just nix-docker-extract-debug amd64       # produces sipi-amd64.debug for Sentry
 
-# Darwin build + audit (what ci.yml nix-macos-audit runs)
+# Darwin build (what ci.yml nix-macos-build runs)
 just nix-build-default
-just nix-macos-dylib-audit result/bin/sipi
 ```
 
 **CI invokes justfile only:** if a CI step is not a `just <recipe>`

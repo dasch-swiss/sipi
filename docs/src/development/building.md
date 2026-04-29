@@ -142,7 +142,6 @@ Run `just` (no arguments) to see the full list. Key target groups:
 | `test-smoke` | Inner-loop: build Docker image (via Nix), then `cargo test` the smoke suite |
 | `nix-test-smoke` | CI canonical: run pre-built `.#smoke-test` binary against an already-loaded image |
 | `test-smoke-ci` | Inner-loop: run cargo smoke tests against an already-loaded Docker image |
-| `nix-macos-dylib-audit path` | Audit macOS sipi runtime dylibs |
 | `rust-test-e2e` | Inner-loop: cargo-driven Rust end-to-end tests (reads `$SIPI_BIN`) |
 | `nix-test-e2e` | CI canonical: run pre-built `.#e2e-tests` binaries via `run-e2e.sh` |
 | `hurl-test` | Hurl HTTP contract tests (reads `$SIPI_BIN`) |
