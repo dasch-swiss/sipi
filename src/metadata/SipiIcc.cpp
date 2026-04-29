@@ -64,10 +64,18 @@ void apply_icc_header_normalization(unsigned char *buf, std::size_t len, std::op
   if (!epoch.has_value()) return;
   if (len < kIccProfileIdOffset + kIccProfileIdLength) return;
 
+  // POSIX gmtime_r returns NULL when the year doesn't fit `int tm_year`
+  // (e.g., 32-bit time_t platforms with a post-2038 epoch). A bogus
+  // SOURCE_DATE_EPOCH must not silently emit a 1900-stamped profile, so
+  // we no-op rather than write garbage. Bail also if the year is outside
+  // the ICC dateTimeNumber range (uInt16, [0, 65535]).
   std::tm tm{};
-  gmtime_r(&*epoch, &tm);// SOURCE_DATE_EPOCH is UTC by spec
+  if (gmtime_r(&*epoch, &tm) == nullptr) return;
+  const long year = static_cast<long>(tm.tm_year) + 1900;
+  if (year < 0 || year > 65535) return;
+
   unsigned char *p = buf + kIccDateTimeOffset;
-  put_be16(p + 0, static_cast<std::uint16_t>(tm.tm_year + 1900));
+  put_be16(p + 0, static_cast<std::uint16_t>(year));
   put_be16(p + 2, static_cast<std::uint16_t>(tm.tm_mon + 1));
   put_be16(p + 4, static_cast<std::uint16_t>(tm.tm_mday));
   put_be16(p + 6, static_cast<std::uint16_t>(tm.tm_hour));

@@ -142,6 +142,26 @@ TEST(SipiIccNormalize, NulloptEpochMatchesMalformedEnvBehaviour)
   EXPECT_EQ(buf, original);
 }
 
+// AC: gmtime_r returning nullptr (e.g., 32-bit time_t + post-2038 epoch) ->
+// no-op. We can't easily induce a real gmtime_r failure on a 64-bit time_t
+// platform, but year-out-of-range is the same code path and is exposed as
+// a public-ish contract via the bounds check. Use a far-future epoch; on
+// 64-bit time_t platforms gmtime_r succeeds and returns a year > 65535,
+// which the bounds check rejects -> buffer unchanged.
+TEST(SipiIccNormalize, EpochProducingOutOfRangeYearIsNoOp)
+{
+  auto buf = make_synthetic_icc(256);
+  auto original = buf;
+
+  // ~year 1 million in seconds-since-epoch. Well above ICC dateTimeNumber's
+  // uint16 ceiling. On 32-bit time_t this overflows and gmtime_r returns
+  // nullptr; on 64-bit time_t we land at a year > 65535. Both paths bail.
+  constexpr std::time_t kHugeEpoch = static_cast<std::time_t>(31556926000000LL);
+  Sipi::detail::apply_icc_header_normalization(buf.data(), buf.size(), kHugeEpoch);
+
+  EXPECT_EQ(buf, original);
+}
+
 // Sanity: only the documented byte ranges are touched.
 TEST(SipiIccNormalize, OnlyDateAndProfileIdRangesAreMutated)
 {
