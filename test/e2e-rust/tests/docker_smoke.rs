@@ -93,12 +93,7 @@ impl Drop for DockerContainer {
 }
 
 fn project_root() -> std::path::PathBuf {
-    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest_dir
-        .parent()
-        .and_then(|p| p.parent())
-        .expect("e2e-rust should be two levels below repo root")
-        .to_path_buf()
+    sipi_e2e::repo_root()
 }
 
 fn smoke_client() -> Client {

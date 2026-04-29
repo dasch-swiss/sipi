@@ -1362,8 +1362,17 @@ fn assert_corrupt_image_handled(filename: &str, source: &str, truncate_bytes: us
     );
     std::fs::write(&corrupt_path, &real_data[..truncate_bytes]).expect("write truncated file");
 
-    let isolated_srv =
-        sipi_e2e::SipiServer::start("config/sipi.e2e-test-config.lua", &test_data);
+    // Give the isolated server its own cache dir so its startup orphan
+    // scan doesn't wipe out the main shared server's cache entries —
+    // shared `cache_dir = './cache'` from the Lua config means concurrent
+    // sipi processes race on `.sipicache` index updates and on disk files.
+    let cache_tmp = tempfile::tempdir().expect("create isolated cache dir");
+    let cache_arg = cache_tmp.path().to_string_lossy().to_string();
+    let isolated_srv = sipi_e2e::SipiServer::start_with_args(
+        "config/sipi.e2e-test-config.lua",
+        &test_data,
+        &["--cache-dir", &cache_arg],
+    );
     let isolated_client = sipi_e2e::http_client();
 
     // Request the corrupt image — server should return error, not crash
@@ -1408,6 +1417,15 @@ fn assert_corrupt_image_handled(filename: &str, source: &str, truncate_bytes: us
     );
 
     let _ = std::fs::remove_file(&corrupt_path);
+
+    // Drop the server before the temp dir: SipiServer::Drop sends SIGTERM
+    // and waits up to 5s for graceful shutdown; if `cache_tmp` were dropped
+    // first, the cache_dir would be deleted under sipi's feet during its
+    // shutdown flush. Today this is enforced implicitly by reverse-
+    // declaration drop order — make it explicit so a future refactor can't
+    // silently break it.
+    drop(isolated_srv);
+    drop(cache_tmp);
 }
 
 #[test]

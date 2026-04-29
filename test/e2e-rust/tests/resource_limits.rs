@@ -290,10 +290,30 @@ fileserver = {
 routes = {}
 "#;
 
-    let config_path = test_data.join("config/sipi.pixel-limit-test.lua");
-    std::fs::write(&config_path, config_content).expect("write pixel limit config");
+    // Give the isolated server its own cache dir so its startup orphan
+    // scan doesn't wipe out the main shared server's cache entries —
+    // shared `cache_dir = './cache'` from the Lua config means concurrent
+    // sipi processes race on `.sipicache` index updates and on disk files.
+    let cache_tmp = tempfile::tempdir().expect("create isolated cache dir");
+    let cache_arg = cache_tmp.path().to_string_lossy().to_string();
 
-    let srv = SipiServer::start("config/sipi.pixel-limit-test.lua", &test_data);
+    // Write the pixel-limit-test config inside the per-test tempdir so two
+    // parallel runs (different `cargo test` invocations or two CI workspaces
+    // sharing this checkout) can't race on a single shared
+    // `test_data/config/sipi.pixel-limit-test.lua` path. sipi's `--config`
+    // accepts an absolute path, so this works the same as the old in-tree
+    // config write.
+    let config_path = cache_tmp.path().join("sipi.pixel-limit-test.lua");
+    std::fs::write(&config_path, config_content).expect("write pixel limit config");
+    let config_arg = config_path
+        .to_str()
+        .expect("config path is valid utf-8");
+
+    let srv = SipiServer::start_with_args(
+        config_arg,
+        &test_data,
+        &["--cache-dir", &cache_arg],
+    );
     let c = http_client();
 
     // Request full-size image (512x512 = 262144 pixels, exceeds 10000 limit)
@@ -326,7 +346,15 @@ routes = {}
         "request within max_pixel_limit should return 200"
     );
 
-    let _ = std::fs::remove_file(&config_path);
+    // Drop the server before the temp dir: SipiServer::Drop sends SIGTERM
+    // and waits up to 5s for graceful shutdown; if `cache_tmp` were dropped
+    // first, the cache_dir + the config file inside it would be deleted
+    // under sipi's feet during its shutdown flush. Today this is enforced
+    // implicitly by reverse-declaration drop order — make it explicit so a
+    // future refactor can't silently break it. (cache_tmp's Drop also
+    // cleans up the config file, so no manual remove is needed.)
+    drop(srv);
+    drop(cache_tmp);
 }
 
 /// Extract a gauge metric value from Prometheus text format.
