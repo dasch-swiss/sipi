@@ -17,7 +17,7 @@ Format: one row per re-approval, newest at the top.
 
 | Date | PR | Golden(s) | Cause | Visual diff verified by |
 |------|-----|-----------|-------|-------------------------|
-| _empty_ | | | | |
+| 2026-04-29 | sipi#587 (DEV-6333) | `ImageEncodeBaseline.TiffRegionRoundTrip.approved.tif`, `ImageEncodeBaseline.CmykTiffDownscaled.approved.tif` | First introduction of `SOURCE_DATE_EPOCH` rewrite in `SipiIcc::iccBytes()`. Both inputs (`lena512.tif` Generic-Gray-Gamma-2.2 ICC, `cmyk.tif` SWOP CMYK ICC) carry an embedded ICC profile that round-trips through `cmsSaveProfileToMem`, so under env-var injection their date bytes (24-35) shift to 2000-01-01T00:00:00Z. `cmp -l` confirmed the diff is exactly the 12-byte `dateTimeNumber` field per profile — no pixel-level drift. | n/a — byte-level diff confirmed surgical via `cmp -l`; pixel content unchanged |
 
 ## ICC creation-date determinism (`SOURCE_DATE_EPOCH`)
 

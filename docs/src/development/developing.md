@@ -103,13 +103,18 @@ We use two test frameworks:
 Unit tests live in `test/unit/` and use GoogleTest with ApprovalTests.
 Tests are organized by component:
 
+- `test/unit/cache/` - LRU cache tests
 - `test/unit/configuration/` - Configuration parsing tests
+- `test/unit/decode_dims/` - Decode-time dimension tests
 - `test/unit/filenamehash/` - Filename hashing tests
-- `test/unit/iiifparser/` - IIIF URL parser tests
-- `test/unit/sipiimage/` - Image processing tests
-- `test/unit/shttps/` - HTTP server utility tests
-- `test/unit/logger/` - Logger tests
 - `test/unit/handlers/` - HTTP handler tests
+- `test/unit/iiifparser/` - IIIF URL parser tests
+- `test/unit/logger/` - Logger tests
+- `test/unit/memory_budget/` - Decode memory budget tests
+- `test/unit/ratelimiter/` - Rate-limiter tests
+- `test/unit/shttps/` - HTTP server utility tests
+- `test/unit/sipiicc/` - ICC profile normalization tests (`SOURCE_DATE_EPOCH` helper)
+- `test/unit/sipiimage/` - Image processing tests
 
 Run all unit tests (inside the Nix sandbox via `doCheck = enableTests` in
 `package.nix` — `just nix-build` fails if any unit test fails):

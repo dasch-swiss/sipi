@@ -123,9 +123,9 @@ public:
    * profile-determinism-test-only.md for the rationale.
    *
    * @param[out] len Length of the buffer returned
-   * @returns Buffer containing the binary ICC profile
+   * @returns Buffer containing the binary ICC profile (caller owns; `delete[]` it)
    */
-  unsigned char *iccBytes(unsigned int &len);
+  [[nodiscard]] unsigned char *iccBytes(unsigned int &len);
 
   /*!
    * Get the blob containing the ICC profile as std::vector. Calls the
@@ -134,7 +134,7 @@ public:
    *
    * @return std::vector containing the binary ICC profile
    */
-  std::vector<unsigned char> iccBytes();
+  [[nodiscard]] std::vector<unsigned char> iccBytes();
 
   /*!
    * Retireve the littleCMS profile
