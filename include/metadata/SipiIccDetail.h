@@ -29,13 +29,10 @@ inline constexpr std::size_t kIccProfileIdLength = 16;
 // Pure byte-mutation function. When `epoch` has a value, overwrites bytes
 // 24-35 (creation date, big-endian Y/M/D/h/m/s) with the gmtime breakdown of
 // `*epoch` and zeros bytes 84-99 (Profile ID). When `epoch` is nullopt, the
-// buffer is untouched. Buffers shorter than 100 bytes are treated as
-// malformed and left alone. Never throws.
+// buffer is untouched. Buffers shorter than 100 bytes, gmtime_r failures,
+// and years outside the ICC dateTimeNumber range (uint16) all bail without
+// mutating the buffer. Never throws.
 void apply_icc_header_normalization(unsigned char *buf, std::size_t len, std::optional<std::time_t> epoch) noexcept;
-
-// Read SOURCE_DATE_EPOCH from the environment, cached via thread-safe
-// magic-static initialisation. Returns nullopt when unset or malformed.
-std::optional<std::time_t> read_source_date_epoch() noexcept;
 
 }// namespace Sipi::detail
 

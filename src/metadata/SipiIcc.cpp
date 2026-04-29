@@ -23,15 +23,9 @@
 #include "SipiImage.hpp"
 #include "shttps/makeunique.h"
 
-namespace Sipi::detail {
+namespace Sipi {
 
 namespace {
-void put_be16(unsigned char *p, std::uint16_t v) noexcept
-{
-  p[0] = static_cast<unsigned char>(v >> 8);
-  p[1] = static_cast<unsigned char>(v & 0xff);
-}
-}// namespace
 
 // Cache SOURCE_DATE_EPOCH on first call via thread-safe magic-static
 // initialisation. Re-checking the env var on every emit would be wasteful and
@@ -41,6 +35,10 @@ void put_be16(unsigned char *p, std::uint16_t v) noexcept
 // SIPI deliberately silently falls back (returns nullopt). This fix is
 // test-only — a SIPI binary aborting because someone in the shell exported a
 // bogus SOURCE_DATE_EPOCH would be a regression.
+//
+// Not exposed via SipiIccDetail.h because unit tests inject epochs directly
+// into apply_icc_header_normalization(); the env-var parser is implicitly
+// covered by the nullopt-equivalent branch.
 std::optional<std::time_t> read_source_date_epoch() noexcept
 {
   static const std::optional<std::time_t> cached = []() -> std::optional<std::time_t> {
@@ -54,6 +52,16 @@ std::optional<std::time_t> read_source_date_epoch() noexcept
   }();
   return cached;
 }
+
+void put_be16(unsigned char *p, std::uint16_t v) noexcept
+{
+  p[0] = static_cast<unsigned char>(v >> 8);
+  p[1] = static_cast<unsigned char>(v & 0xff);
+}
+
+}// namespace
+
+namespace detail {
 
 // Why zero the Profile ID: lcms2 may round-trip a non-zero ID from an
 // externally-authored input profile (Little-CMS issue #181); a non-zero ID
@@ -85,9 +93,7 @@ void apply_icc_header_normalization(unsigned char *buf, std::size_t len, std::op
   std::memset(buf + kIccProfileIdOffset, 0, kIccProfileIdLength);
 }
 
-}// namespace Sipi::detail
-
-namespace Sipi {
+}// namespace detail
 
 void icc_error_logger(cmsContext ContextID, cmsUInt32Number ErrorCode, const char *Text)
 {
@@ -284,7 +290,7 @@ unsigned char *SipiIcc::iccBytes(unsigned int &len)
     }
     // ICC normalization for reproducibility — no-op unless SOURCE_DATE_EPOCH
     // is set in the environment. Production never sets it.
-    detail::apply_icc_header_normalization(buf, len, detail::read_source_date_epoch());
+    detail::apply_icc_header_normalization(buf, len, read_source_date_epoch());
   }
   return buf;
 }

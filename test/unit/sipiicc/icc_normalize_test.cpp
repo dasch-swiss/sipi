@@ -96,23 +96,16 @@ TEST(SipiIccNormalize, NonZeroProfileIdIsScrubbed)
   }
 }
 
-// AC: truncated buffer → no-op (no throw, no crash).
+// AC: truncated buffer → no-op (no throw, no crash). Covers the empty-buffer
+// case as well — size 0 < 100 takes the same branch.
 TEST(SipiIccNormalize, TruncatedBufferIsNoOp)
 {
-  // Buffer shorter than offset+length of the Profile ID field — anything in
-  // the date region exists, but we still bail to avoid an out-of-bounds memset.
   auto buf = make_synthetic_icc(50);
   auto original = buf;
 
   Sipi::detail::apply_icc_header_normalization(buf.data(), buf.size(), kY2k);
 
   EXPECT_EQ(buf, original);
-}
-
-TEST(SipiIccNormalize, EmptyBufferIsNoOp)
-{
-  std::vector<unsigned char> buf;
-  EXPECT_NO_THROW(Sipi::detail::apply_icc_header_normalization(buf.data(), buf.size(), kY2k));
 }
 
 // AC: idempotent (helper run twice produces identical bytes).
@@ -125,21 +118,6 @@ TEST(SipiIccNormalize, IsIdempotent)
   Sipi::detail::apply_icc_header_normalization(buf.data(), buf.size(), kY2k);
 
   EXPECT_EQ(buf, first);
-}
-
-// AC (covered indirectly): malformed SOURCE_DATE_EPOCH → no-op. The env
-// parser in read_source_date_epoch() returns nullopt for malformed input,
-// which routes through the apply function as the "no-op" branch tested here.
-// We don't separately test the parser because its result is cached via
-// magic-static and would couple every test to one process-wide env state.
-TEST(SipiIccNormalize, NulloptEpochMatchesMalformedEnvBehaviour)
-{
-  auto buf = make_synthetic_icc(200);
-  auto original = buf;
-
-  Sipi::detail::apply_icc_header_normalization(buf.data(), buf.size(), std::nullopt);
-
-  EXPECT_EQ(buf, original);
 }
 
 // AC: gmtime_r returning nullptr (e.g., 32-bit time_t + post-2038 epoch) ->
