@@ -86,7 +86,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: nix profile install nixpkgs#just
+      - run: nix profile install --inputs-from . nixpkgs#just
       - name: Build and test (unit tests run in the Nix sandbox)
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
@@ -94,8 +94,13 @@ jobs:
       - name: Rust e2e and Hurl tests
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        # cargo + hurl come from the dev shell — keep the wrap.
-        run: nix develop --command bash -c "just rust-test-e2e && just hurl-test"
+        # `nix-test-e2e` consumes the .#e2e-tests Nix derivation — no
+        # cargo on PATH needed. `hurl-test` still shells out to `hurl`,
+        # which we install onto PATH alongside `just`.
+        run: |
+          nix profile install --inputs-from . nixpkgs#hurl
+          just nix-test-e2e
+          just hurl-test
       - name: Gather code coverage
         if: ${{ matrix.arch == 'amd64' }}
         env:
@@ -112,7 +117,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: just nix-docker-build-${{ matrix.arch }}
-      - run: just test-smoke-ci
+      - run: just nix-test-smoke
       - name: Docker Scout — compare to production
         if: github.event_name == 'pull_request'
         uses: docker/scout-action@v1
@@ -174,7 +179,7 @@ jobs:
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-      - run: nix profile install nixpkgs#just
+      - run: nix profile install --inputs-from . nixpkgs#just
       - name: Build static binary
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
@@ -186,8 +191,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           SIPI_BIN: ${{ github.workspace }}/result/bin/sipi
-        # cargo comes from the dev shell — keep the wrap.
-        run: nix develop --command bash -c "just rust-test-e2e"
+        # `nix-test-e2e` consumes the .#e2e-tests Nix derivation —
+        # no cargo on PATH needed.
+        run: just nix-test-e2e
 
   # Native Darwin build via Nix + clang/libc++, with a dylib-linkage audit.
   # Replaces the old zig-macos job; the invariant (no Homebrew / third-party
@@ -212,7 +218,7 @@ jobs:
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-      - run: nix profile install nixpkgs#just
+      - run: nix profile install --inputs-from . nixpkgs#just
       - name: Build native Darwin binary
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
@@ -241,6 +247,6 @@ jobs:
           git lfs checkout
       - uses: dasch-swiss/sipi/.github/actions/setup-python@main
       - uses: DeterminateSystems/determinate-nix-action@v3
-      - run: nix profile install nixpkgs#just
+      - run: nix profile install --inputs-from . nixpkgs#just
       - run: just docs-install-requirements
       - run: just docs-build
