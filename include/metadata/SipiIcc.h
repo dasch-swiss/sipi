@@ -107,15 +107,32 @@ public:
   SipiIcc &operator=(const SipiIcc &rhs);
 
   /*!
-   * Get the blob containing the ICC profile
+   * Get the blob containing the ICC profile.
+   *
+   * This is the single chokepoint through which every codec-bound ICC
+   * profile (TIFF / JPEG / PNG / JP2) is materialized for emission.
+   * New format handlers must route through here.
+   *
+   * Reproducibility: when the SOURCE_DATE_EPOCH environment variable is
+   * set (parsed once on first call, cached thread-safely), bytes 24-35
+   * of the returned buffer (ICC creation date) are overwritten with the
+   * supplied epoch and bytes 84-99 (Profile ID) are zeroed. When unset
+   * (the production default), the buffer is returned exactly as lcms2
+   * serialized it, including lcms2's wall-clock-stamped creation date.
+   * See test/approval/CHANGELOG.approval.md and docs/adr/0002-icc-
+   * profile-determinism-test-only.md for the rationale.
+   *
    * @param[out] len Length of the buffer returned
    * @returns Buffer containing the binary ICC profile
    */
   unsigned char *iccBytes(unsigned int &len);
 
   /*!
-   * Get the blob containing the ICC profile as std::vector
-   * @return std:vector containing the binary ICC profile
+   * Get the blob containing the ICC profile as std::vector. Calls the
+   * raw-buffer overload, so the same SOURCE_DATE_EPOCH normalization
+   * applies.
+   *
+   * @return std::vector containing the binary ICC profile
    */
   std::vector<unsigned char> iccBytes();
 
