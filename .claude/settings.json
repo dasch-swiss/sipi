@@ -16,5 +16,9 @@
       "mcp__linear__get_issue"
     ],
     "deny": []
+  },
+  "enabledPlugins": {
+    "eng@dasch-claude-plugins": true,
+    "linear@claude-plugins-official": true
   }
 }
