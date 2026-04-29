@@ -79,6 +79,14 @@ scripts/toolchains/.zig-target
 vendor/v8_4_1-*.zip
 vendor/v8_5-*.zip
 
+# Git LFS hooks (auto-installed by `git lfs install`; configured via
+# `core.hooksPath = .githooks` in the dev shell). Per-developer state,
+# not project source. The project's own pre-commit hook is tracked.
+.githooks/post-checkout
+.githooks/post-commit
+.githooks/post-merge
+.githooks/pre-push
+
 # Claude Code
 .claude/worktrees/
 .claude/settings.local.json
