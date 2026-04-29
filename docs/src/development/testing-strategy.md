@@ -338,6 +338,8 @@ Behavior that *is* HTTP-observable belongs in Hurl (status/header contracts) or 
 
 **Pattern:** Use `insta::assert_json_snapshot!` with redactions for dynamic fields (`id`, timestamps).
 
+**ICC determinism gate.** Approval tests under `test/approval/image_encode_baseline_test.cpp` are byte-stable only when `SOURCE_DATE_EPOCH` is set. lcms2 stamps wall-clock UTC into bytes 24-35 of every freshly-created ICC profile (and several emit paths in SipiImage round-trip through that), so without the env var the seconds field drifts across consecutive runs of the same binary. `SipiIcc::iccBytes()` overwrites those bytes (and zeros the Profile ID at bytes 84-99) when the env var is set; CMake injects `SOURCE_DATE_EPOCH=946684800` (2000-01-01T00:00:00Z UTC) into the `sipi.approvaltests` invocation via `set_tests_properties(... ENVIRONMENT ...)`. Production never sets the var and retains lcms2's wall-clock behaviour. See [`docs/adr/0002-icc-profile-determinism-test-only.md`](../../adr/0002-icc-profile-determinism-test-only.md) for the architectural rationale and [`test/approval/CHANGELOG.approval.md`](../../../test/approval/CHANGELOG.approval.md) for the maintainer's how-to.
+
 ### Layer 3: E2E Contract Tests (HTTP-level)
 
 **Purpose:** Test sipi's HTTP API contract — the behavior visible to clients. These tests survive the Rust migration because they test the contract, not the implementation.

@@ -32,6 +32,8 @@ Canonical terminology for the SIPI repository. SIPI is a IIIF Image API 3.0 serv
 | --- | --- | --- |
 | **Format handler** | A SipiIO subclass that adapts a codec to SIPI's read/write contract (SipiIOJ2k, SipiIOTiff, SipiIOPng, SipiIOJpeg). | IO backend, format driver |
 | **Codec** | A third-party library that performs the actual encode/decode (kakadu, libtiff, libpng, libjpeg, libwebp). A format handler *uses* a codec. | library, backend |
+| **ICC normalization** | The byte-level rewrite of bytes 24-35 (creation date) and 84-99 (Profile ID) inside `SipiIcc::iccBytes()`, gated by the *Reproducibility flag*. Test-only — production iccBytes() is the identity. | ICC scrubbing, ICC stripping (those imply removing profiles, not normalizing them) |
+| **Reproducibility flag** | The `SOURCE_DATE_EPOCH` environment variable. When set, every ICC profile emitted by SipiIcc::iccBytes() has its creation date overwritten with the supplied epoch and its Profile ID zeroed; codec-bound emissions become byte-deterministic. CMake injects it for `sipi.approvaltests` only. | deterministic mode, test-only mode (the env var is the contract; "modes" obscure that) |
 
 ## Metadata and preservation
 
