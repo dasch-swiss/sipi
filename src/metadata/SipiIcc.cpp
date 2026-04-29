@@ -4,8 +4,14 @@
  */
 
 #include "metadata/SipiIcc.h"
+#include "metadata/SipiIccDetail.h"
 
+#include <cerrno>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <ctime>
+#include <optional>
 
 #include "Logger.h"
 
@@ -16,6 +22,62 @@
 
 #include "SipiImage.hpp"
 #include "shttps/makeunique.h"
+
+namespace Sipi::detail {
+
+namespace {
+void put_be16(unsigned char *p, std::uint16_t v) noexcept
+{
+  p[0] = static_cast<unsigned char>(v >> 8);
+  p[1] = static_cast<unsigned char>(v & 0xff);
+}
+}// namespace
+
+// Cache SOURCE_DATE_EPOCH on first call via thread-safe magic-static
+// initialisation. Re-checking the env var on every emit would be wasteful and
+// could yield inconsistent goldens if the value changes mid-run.
+//
+// The reproducible-builds.org spec recommends erroring on malformed values;
+// SIPI deliberately silently falls back (returns nullopt). This fix is
+// test-only — a SIPI binary aborting because someone in the shell exported a
+// bogus SOURCE_DATE_EPOCH would be a regression.
+std::optional<std::time_t> read_source_date_epoch() noexcept
+{
+  static const std::optional<std::time_t> cached = []() -> std::optional<std::time_t> {
+    const char *e = std::getenv("SOURCE_DATE_EPOCH");
+    if (e == nullptr || *e == '\0') return std::nullopt;
+    char *end = nullptr;
+    errno = 0;
+    long long v = std::strtoll(e, &end, 10);
+    if (errno != 0 || end == e || *end != '\0' || v < 0) return std::nullopt;
+    return static_cast<std::time_t>(v);
+  }();
+  return cached;
+}
+
+// Why zero the Profile ID: lcms2 may round-trip a non-zero ID from an
+// externally-authored input profile (Little-CMS issue #181); a non-zero ID
+// baked over a scrubbed date is meaningless. Production is unaffected because
+// production never sets SOURCE_DATE_EPOCH.
+void apply_icc_header_normalization(unsigned char *buf, std::size_t len, std::optional<std::time_t> epoch) noexcept
+{
+  if (!epoch.has_value()) return;
+  if (len < kIccProfileIdOffset + kIccProfileIdLength) return;
+
+  std::tm tm{};
+  gmtime_r(&*epoch, &tm);// SOURCE_DATE_EPOCH is UTC by spec
+  unsigned char *p = buf + kIccDateTimeOffset;
+  put_be16(p + 0, static_cast<std::uint16_t>(tm.tm_year + 1900));
+  put_be16(p + 2, static_cast<std::uint16_t>(tm.tm_mon + 1));
+  put_be16(p + 4, static_cast<std::uint16_t>(tm.tm_mday));
+  put_be16(p + 6, static_cast<std::uint16_t>(tm.tm_hour));
+  put_be16(p + 8, static_cast<std::uint16_t>(tm.tm_min));
+  put_be16(p + 10, static_cast<std::uint16_t>(tm.tm_sec));
+
+  std::memset(buf + kIccProfileIdOffset, 0, kIccProfileIdLength);
+}
+
+}// namespace Sipi::detail
 
 namespace Sipi {
 
@@ -208,7 +270,13 @@ unsigned char *SipiIcc::iccBytes(unsigned int &len)
     if (!cmsSaveProfileToMem(icc_profile, nullptr, &len))
       throw SipiError("cmsSaveProfileToMem failed");
     buf = new unsigned char[len];
-    if (!cmsSaveProfileToMem(icc_profile, buf, &len)) throw SipiError("cmsSaveProfileToMem failed");
+    if (!cmsSaveProfileToMem(icc_profile, buf, &len)) {
+      delete[] buf;
+      throw SipiError("cmsSaveProfileToMem failed");
+    }
+    // ICC normalization for reproducibility — no-op unless SOURCE_DATE_EPOCH
+    // is set in the environment. Production never sets it.
+    detail::apply_icc_header_normalization(buf, len, detail::read_source_date_epoch());
   }
   return buf;
 }
