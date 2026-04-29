@@ -4,32 +4,35 @@
  * AGPL-3.0-or-later
  */
 
-// Image-encode bit-exactness baseline (plan §6.1).
+// Image-encode bit-exactness baseline.
 //
-// Captures byte-for-byte TIFF output for representative inputs exercised
-// through the SipiImage IIIF pipeline (region/size/rotation + format
-// conversion). Approved goldens become the regression gate for every dep
-// migration in PRs 1-4 of the Nix-native build series — a libtiff /
-// libjpeg / Kakadu / lcms2 version bump that changes even one output byte
+// Captures byte-for-byte output across TIFF / JPEG / PNG / JP2 for
+// representative inputs exercised through the SipiImage IIIF pipeline
+// (region / size / rotation + format conversion). Approved goldens are
+// the regression gate for every dep migration — a libtiff / libjpeg /
+// libpng / Kakadu / lcms2 version bump that changes even one output byte
 // trips the test, gating the migration.
 //
-// Why TIFF-only: JPEG and PNG outputs from SipiImage embed the wall-clock
-// time into ICC profile creation-date headers (seconds field varies per
-// run), so byte-for-byte comparison of those formats is unstable across
-// invocations. TIFF outputs are deterministic. Decode-side coverage of
-// libjpeg/libpng/Kakadu is preserved by reading those formats as inputs.
+// Determinism gate. JPEG / PNG / JP2-decode outputs go through lcms2's
+// profile generator, which stamps wall-clock UTC into ICC bytes 24-35.
+// SipiIcc::iccBytes() rewrites those bytes (and zeros the Profile ID at
+// bytes 84-99) when SOURCE_DATE_EPOCH is set. CMake injects the env var
+// for sipi.approvaltests via set_tests_properties, so byte-for-byte
+// comparison is stable under ctest. Production never sets the var and
+// retains lcms2's wall-clock behaviour. See docs/adr/0002-icc-profile-
+// determinism-test-only.md and test/approval/CHANGELOG.approval.md.
 //
-// Capturing goldens (one-time, before this test becomes a gate):
-//   1. Build + run locally:
+// Capturing goldens (one-time, before a test becomes a gate):
+//   1. Build + run locally with the env var injected:
 //        nix develop --command bash -c \
 //          "cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug && \
 //           cmake --build build --target sipi.approvaltests --parallel && \
-//           cd build/test/approval && ./sipi.approvaltests \
-//             --gtest_filter='ImageEncodeBaseline.*'"
-//   2. Tests SKIP with paths of `.received.tif` files captured under
+//           cd build/test/approval && SOURCE_DATE_EPOCH=946684800 \
+//             ./sipi.approvaltests --gtest_filter='ImageEncodeBaseline.*'"
+//   2. Tests SKIP with paths of `.received.<ext>` files captured under
 //      test/approval/approval_tests/. Inspect the outputs.
-//   3. For each `<name>.received.tif`, rename to `<name>.approved.tif` and
-//      commit alongside this source file.
+//   3. For each `<name>.received.<ext>`, rename to `<name>.approved.<ext>`,
+//      track in Git LFS, and commit alongside this source file.
 //
 // Re-approval procedure for intentional drift after goldens land — see
 // test/approval/CHANGELOG.approval.md.
@@ -165,12 +168,6 @@ TEST(ImageEncodeBaseline, TiffRegionRoundTrip)
   verify_or_capture(out, "ImageEncodeBaseline.TiffRegionRoundTrip");
 }
 
-// JP2 → TIFF is intentionally NOT covered as a bit-exact gate: the JP2
-// reader path passes through lcms2's ICC profile generator, which embeds
-// a fresh wall-clock timestamp into the ICC profile header on every
-// run. Kakadu decode is exercised by the e2e Rust tests and existing
-// unit tests; bit-exactness on JP2 inputs awaits an upstream fix.
-
 // CMYK TIFF -> downscaled TIFF — exercises the CMYK colour-space path.
 TEST(ImageEncodeBaseline, CmykTiffDownscaled)
 {
@@ -199,4 +196,126 @@ TEST(ImageEncodeBaseline, JpegRotatedDownscaledTiff)
   std::string out = "/tmp/sipi_baseline_jpeg_rotated_downscaled.tif";
   encode(in, out, "tif", nullptr, std::make_shared<Sipi::SipiSize>("256,"), 90.0f);
   verify_or_capture(out, "ImageEncodeBaseline.JpegRotatedDownscaledTiff");
+}
+
+// ---------------------------------------------------------------------------
+// JPEG / PNG / JP2 outputs — gated on SOURCE_DATE_EPOCH being set so lcms2's
+// wall-clock-stamped ICC creation date is overwritten with a fixed value.
+// CMake injects the env var for the ctest-driven invocation; running this
+// binary directly requires `SOURCE_DATE_EPOCH=946684800 ./sipi.approvaltests`.
+// ---------------------------------------------------------------------------
+
+// JPEG decode + downscale + JPEG encode — exercises the lcms2 ICC emit
+// path on the libjpeg writer.
+TEST(ImageEncodeBaseline, JpegFullToJpegDownscaled)
+{
+  std::string in = test_images + "unit/gray_with_icc_another.jpg";
+  if (!file_exists(in)) GTEST_SKIP() << "Test image not found: " << in;
+  std::string out = "/tmp/sipi_baseline_jpeg_full_to_jpeg_downscaled.jpg";
+  encode(in, out, "jpg", nullptr, std::make_shared<Sipi::SipiSize>("256,"));
+  verify_or_capture(out, "ImageEncodeBaseline.JpegFullToJpegDownscaled");
+}
+
+// JPEG decode + downscale + PNG encode — exercises the lcms2 ICC emit
+// path on the libpng writer.
+TEST(ImageEncodeBaseline, JpegFullToPng)
+{
+  std::string in = test_images + "unit/gray_with_icc_another.jpg";
+  if (!file_exists(in)) GTEST_SKIP() << "Test image not found: " << in;
+  std::string out = "/tmp/sipi_baseline_jpeg_full_to_png.png";
+  encode(in, out, "png", nullptr, std::make_shared<Sipi::SipiSize>("256,"));
+  verify_or_capture(out, "ImageEncodeBaseline.JpegFullToPng");
+}
+
+// JP2 decode + region crop + TIFF encode — Kakadu decode + libtiff encode.
+// JP2 decode synthesizes an ICC profile via lcms2 (the path that needs
+// SOURCE_DATE_EPOCH for byte-exactness).
+TEST(ImageEncodeBaseline, J2kRegionToTiff)
+{
+  std::string in = test_images + "unit/gray_with_icc.jp2";
+  if (!file_exists(in)) GTEST_SKIP() << "Test image not found: " << in;
+  std::string out = "/tmp/sipi_baseline_j2k_region_to_tiff.tif";
+  auto region = std::make_shared<Sipi::SipiRegion>(0, 0, 256, 256);
+  encode(in, out, "tif", region, nullptr);
+  verify_or_capture(out, "ImageEncodeBaseline.J2kRegionToTiff");
+}
+
+// JP2 decode + region crop + JPEG encode — Kakadu decode + libjpeg encode.
+TEST(ImageEncodeBaseline, J2kRegionToJpeg)
+{
+  std::string in = test_images + "unit/gray_with_icc.jp2";
+  if (!file_exists(in)) GTEST_SKIP() << "Test image not found: " << in;
+  std::string out = "/tmp/sipi_baseline_j2k_region_to_jpeg.jpg";
+  auto region = std::make_shared<Sipi::SipiRegion>(0, 0, 256, 256);
+  encode(in, out, "jpg", region, nullptr);
+  verify_or_capture(out, "ImageEncodeBaseline.J2kRegionToJpeg");
+}
+
+// JP2 decode + region crop + JP2 encode — the Goal-3 determinism check.
+// Kakadu's jp2_colour::init() embeds the (already-normalized) ICC bytes;
+// this golden verifies the encoder doesn't reframe them.
+TEST(ImageEncodeBaseline, J2kRegionToJp2)
+{
+  std::string in = test_images + "unit/gray_with_icc.jp2";
+  if (!file_exists(in)) GTEST_SKIP() << "Test image not found: " << in;
+  std::string out = "/tmp/sipi_baseline_j2k_region_to_jp2.jp2";
+  auto region = std::make_shared<Sipi::SipiRegion>(0, 0, 256, 256);
+  encode(in, out, "jpx", region, nullptr);
+  verify_or_capture(out, "ImageEncodeBaseline.J2kRegionToJp2");
+}
+
+// CMYK TIFF -> downscaled JPEG — exercises CMYK -> sRGB lcms2 colour
+// conversion + libjpeg encode.
+TEST(ImageEncodeBaseline, CmykTiffToJpeg)
+{
+  std::string in = test_images + "unit/cmyk.tif";
+  if (!file_exists(in)) GTEST_SKIP() << "Test image not found: " << in;
+  std::string out = "/tmp/sipi_baseline_cmyk_tiff_to_jpeg.jpg";
+  encode(in, out, "jpg", nullptr, std::make_shared<Sipi::SipiSize>("256,"));
+  verify_or_capture(out, "ImageEncodeBaseline.CmykTiffToJpeg");
+}
+
+// CIELab TIFF -> downscaled JPEG — exercises CIELab -> sRGB lcms2 colour
+// conversion + libjpeg encode.
+TEST(ImageEncodeBaseline, CielabTiffToJpeg)
+{
+  std::string in = test_images + "unit/cielab.tif";
+  if (!file_exists(in)) GTEST_SKIP() << "Test image not found: " << in;
+  std::string out = "/tmp/sipi_baseline_cielab_tiff_to_jpeg.jpg";
+  encode(in, out, "jpg", nullptr, std::make_shared<Sipi::SipiSize>("256,"));
+  verify_or_capture(out, "ImageEncodeBaseline.CielabTiffToJpeg");
+}
+
+// JPEG decode + 90-degree rotation + JPEG encode — rotation path on the
+// lossy encoder.
+TEST(ImageEncodeBaseline, JpegRotatedToJpeg)
+{
+  std::string in = test_images + "unit/gray_with_icc_another.jpg";
+  if (!file_exists(in)) GTEST_SKIP() << "Test image not found: " << in;
+  std::string out = "/tmp/sipi_baseline_jpeg_rotated_to_jpeg.jpg";
+  encode(in, out, "jpg", nullptr, std::make_shared<Sipi::SipiSize>("256,"), 90.0f);
+  verify_or_capture(out, "ImageEncodeBaseline.JpegRotatedToJpeg");
+}
+
+// PNG decode + downscale + PNG encode — libpng round-trip through the
+// lcms2 ICC emit path. Fixture is a PNG-with-embedded-ICC committed
+// alongside the goldens.
+TEST(ImageEncodeBaseline, PngRoundTrip)
+{
+  std::string in = test_images + "unit/gray_with_icc.png";
+  if (!file_exists(in)) GTEST_SKIP() << "Test image not found: " << in;
+  std::string out = "/tmp/sipi_baseline_png_round_trip.png";
+  encode(in, out, "png", nullptr, std::make_shared<Sipi::SipiSize>("256,"));
+  verify_or_capture(out, "ImageEncodeBaseline.PngRoundTrip");
+}
+
+// CIELab TIFF -> downscaled PNG — libtiff decode + libpng encode +
+// lcms2 ICC emit.
+TEST(ImageEncodeBaseline, TiffToPng)
+{
+  std::string in = test_images + "unit/cielab.tif";
+  if (!file_exists(in)) GTEST_SKIP() << "Test image not found: " << in;
+  std::string out = "/tmp/sipi_baseline_tiff_to_png.png";
+  encode(in, out, "png", nullptr, std::make_shared<Sipi::SipiSize>("256,"));
+  verify_or_capture(out, "ImageEncodeBaseline.TiffToPng");
 }
