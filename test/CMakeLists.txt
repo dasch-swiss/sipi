@@ -189,6 +189,9 @@ add_subdirectory(unit/cache)
 # To only run this single test, run from inside the build directory '(cd test/unit && ./sipiimage/sipiimage)'
 add_subdirectory(unit/sipiimage)
 
+# SipiIcc helper tests (SOURCE_DATE_EPOCH normalization)
+add_subdirectory(unit/sipiicc)
+
 # Logger tests
 # To only run this single test, run from inside the build directory '(cd test/unit && ./sipiimage/logger)'
 add_subdirectory(unit/logger)
