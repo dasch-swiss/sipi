@@ -177,17 +177,6 @@ nix-coverage:
     {{_nix_build}} .#dev^coverage
     @echo "Coverage at: result-coverage/coverage.xml"
 
-# Audit macOS sipi runtime dylibs — fail if any point at /opt/homebrew/ or /usr/local/.
-nix-macos-dylib-audit path:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    otool -L "{{path}}"
-    if otool -L "{{path}}" | awk 'NR>1 {print $1}' | grep -E '^(/opt/homebrew/|/usr/local/)'; then
-        echo "ERROR: {{path}} references non-system dylibs (must be portable)." >&2
-        exit 1
-    fi
-    echo "OK: {{path}} uses only system dylibs."
-
 #####################################
 # Tests (consume $SIPI_BIN, default ./result/bin/sipi)
 #####################################
