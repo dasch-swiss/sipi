@@ -278,8 +278,8 @@ Four layers, from fastest/narrowest to slowest/broadest:
             │   Integration / Snapshot │  insta golden baselines
             │   Tests                  │  Regression detection
         ┌───┴─────────────────────────┴───┐
-        │         Unit Tests               │  GoogleTest (C++, frozen)
-        │         + Rust unit tests        │  New: Rust #[test] + proptest
+        │         Unit Tests               │  GoogleTest (C++) where it's the only reach
+        │         + Rust unit tests        │  New: Rust #[test] + proptest (preferred)
         └──────────────────────────────────┘
 ```
 
@@ -293,9 +293,9 @@ Four layers, from fastest/narrowest to slowest/broadest:
 
 | Sublayer | Framework | Location | When to use |
 |---|---|---|---|
-| C++ unit (frozen) | GoogleTest | `test/unit/` | Maintain existing. Do NOT add new suites. |
-| Rust unit (new) | `#[test]` + `proptest` | Future `src/` modules | During Rust migration: inline `#[cfg(test)]` modules |
-| Rust property-based (new) | `proptest` | Future `src/` modules | Parsers, serializers, roundtrip invariants |
+| C++ unit | GoogleTest | `test/unit/` | When the behavior cannot be reached from Rust/e2e/Hurl — internal C++ state, FFI boundaries, RAII / exception paths, concurrency primitives |
+| Rust unit (preferred) | `#[test]` + `proptest` | Future `src/` modules | During Rust migration: inline `#[cfg(test)]` modules |
+| Rust property-based | `proptest` | Future `src/` modules | Parsers, serializers, roundtrip invariants |
 
 **What belongs here:**
 
@@ -306,9 +306,15 @@ Four layers, from fastest/narrowest to slowest/broadest:
 - Image metadata extraction
 - Any pure function with well-defined inputs/outputs
 
-**C++ freeze policy:** Existing GoogleTest suites are maintained but generally not expanded. Bug fixes in existing tests are allowed. No new `test/unit/` directories.
+**C++ unit-test policy:** Default to Rust unit tests, Hurl, or Rust e2e for new coverage — they survive the migration and exercise the contract clients see. Add C++ unit tests where they are the only practical reach, and only there. In practice this means:
 
-**Exception — replacement-target testing:** Components targeted for Rust replacement (e.g., shttps, Lua scripting, cache management) are covered with C++ unit tests that travel with the C++ code. When a component gets replaced by a Rust crate, its C++ tests go away cleanly. This is preferred over Rust e2e tests for testing C++ internals because: (1) C++ tests can test internal state directly without spinning up a server, (2) they don't create false test failures when the Rust replacement changes internal behavior while preserving the HTTP contract, (3) they document the existing behavior for the rewrite team.
+- **Internal C++ state** that has no HTTP-observable surface (cache eviction order, memory-budget acquire/release, parser intermediate AST).
+- **FFI / C-library boundaries** where the bug class lives in the C++↔C interop (libtiff variadic-arg type widths, kakadu callback lifetimes, lcms2 profile ownership) and Rust e2e would observe only the downstream symptom.
+- **Move/copy/RAII semantics** that pure-function tests can pin but server-level tests cannot (assignment-operator buffer lifecycle, exception-safety guarantees, `noexcept` move correctness).
+- **Concurrency primitives** with lock-free or atomic semantics (`SipiMemoryBudget`) where deterministic e2e reproduction is impractical.
+- **Replacement-target coverage:** components scheduled for Rust replacement (shttps, Lua scripting, cache management) are covered with C++ unit tests that travel with the C++ code and disappear cleanly when the component is replaced. This documents existing behavior for the rewrite team and avoids false failures when the Rust replacement changes internal behavior while preserving the HTTP contract.
+
+Behavior that *is* HTTP-observable belongs in Hurl (status/header contracts) or Rust e2e (multi-step flows, response-body inspection, golden snapshots) — not in C++ unit tests.
 
 ### Layer 2: Snapshot / Golden Baseline Tests
 
@@ -317,7 +323,9 @@ Four layers, from fastest/narrowest to slowest/broadest:
 | Framework | Location | When to use |
 |---|---|---|
 | `insta` (Rust) | `test/e2e-rust/tests/snapshots/` | info.json structure, HTTP headers, response metadata |
-| ApprovalTests (C++, frozen) | `test/approval/` | Image conversion metadata (existing only) |
+| ApprovalTests (C++) | `test/approval/` | Image-conversion metadata fingerprints; byte-exact encoder output baselines |
+
+**ApprovalTests scope:** New C++ approval suites are admissible only for byte-exact encoder-output gating against dependency migrations (e.g. libtiff, libjpeg, kakadu, lcms2 version bumps) and for metadata fingerprints that have no Rust-side equivalent. Functional behaviour belongs in Layer 3 (Hurl/Rust e2e), not here.
 
 **What belongs here:**
 
@@ -325,6 +333,7 @@ Four layers, from fastest/narrowest to slowest/broadest:
 - HTTP response header sets (content-type, CORS, Link)
 - knora.json response structure
 - Image metadata fingerprints (EXIF tags, XMP fields, ICC profile name) — golden baselines prevent silent metadata drift during code changes or format handler updates
+- Byte-exact encoder output baselines for dep-migration regression gating (TIFF/JP2/PNG goldens captured under deterministic encoder settings)
 - Any complex output where field-by-field assertion is fragile
 
 **Pattern:** Use `insta::assert_json_snapshot!` with redactions for dynamic fields (`id`, timestamps).

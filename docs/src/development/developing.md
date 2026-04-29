@@ -172,7 +172,11 @@ just hurl-test
 Current test files:
 
 - `file_access.hurl` — File access and permission checks
+- `health.hurl` — `/health` liveness/version/uptime contract
+- `iiif_transform.hurl` — IIIF Image API 3.0 transform + canonical-redirect contract
+- `info_json.hurl` — IIIF info.json structure and conformance fields
 - `lua_endpoints.hurl` — Lua script endpoint responses
+- `metrics.hurl` — Prometheus `/metrics` exposition contract
 - `missing_sidecar.hurl` — Behaviour when sidecar files are absent
 - `sqlite_api.hurl` — SQLite API endpoint tests
 - `video_knora_json.hurl` — Video metadata JSON responses
