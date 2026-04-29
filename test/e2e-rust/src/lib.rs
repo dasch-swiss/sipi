@@ -5,16 +5,27 @@ use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU16, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 /// Atomic port counter to avoid conflicts when tests run in parallel.
 /// Start well above privileged ports (macOS restricts ports below 1024).
-static NEXT_PORT: AtomicU16 = AtomicU16::new(11024);
+/// The base offset is derived from the PID so back-to-back test
+/// binaries don't restart at the same port and collide on TIME_WAIT
+/// state from each other's recently-closed sockets.
+static NEXT_PORT: OnceLock<AtomicU16> = OnceLock::new();
+
+fn next_port() -> &'static AtomicU16 {
+    NEXT_PORT.get_or_init(|| {
+        // 11024 + (PID mod 16k), keeping ports under 32k so the +2 SSL port never overflows u16.
+        let offset = (std::process::id() % 16384) as u16;
+        AtomicU16::new(11024 + offset)
+    })
+}
 
 /// Allocate a pair of (http_port, ssl_port) for a test server instance.
 pub fn allocate_ports() -> (u16, u16) {
-    let http = NEXT_PORT.fetch_add(2, Ordering::SeqCst);
+    let http = next_port().fetch_add(2, Ordering::SeqCst);
     assert!(http < 65534, "port counter overflow");
     let ssl = http + 1;
     (http, ssl)
@@ -79,7 +90,12 @@ impl SipiServer {
         // Local (zig): paths are relative (CMakeFiles/...). When the test harness
         // changes cwd to test/_test_data/, gcda files would land there instead of
         // in build/. GCOV_PREFIX redirects them to the build dir.
-        let build_dir = find_sipi_bin()
+        //
+        // Derive `build_dir` from the *actually-resolved* sipi binary, not from
+        // `find_sipi_bin()` (the cmake-inner-loop default). When `$SIPI_BIN`
+        // points outside `repo_root/build` (static-musl CI, sanitizer CI, or
+        // any custom binary), `find_sipi_bin()` would compute the wrong dir.
+        let build_dir = PathBuf::from(&sipi_bin)
             .parent()
             .expect("sipi binary should be in a build directory")
             .to_path_buf();
@@ -316,25 +332,37 @@ impl Drop for SipiServer {
     }
 }
 
-/// Find the sipi binary relative to the project root.
-pub fn find_sipi_bin() -> PathBuf {
-    // test/e2e-rust/ is two levels below the repo root
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let repo_root = manifest_dir
+/// Path to the sipi repository root.
+///
+/// Resolution order:
+///   1. `$SIPI_REPO_ROOT` if set — required when this crate is built in a
+///      Nix sandbox, because `CARGO_MANIFEST_DIR` is baked at compile time
+///      and points at the (now-deleted) sandbox source path.
+///   2. `CARGO_MANIFEST_DIR/../..` — the inner-loop `cargo test` path.
+pub fn repo_root() -> PathBuf {
+    if let Ok(p) = std::env::var("SIPI_REPO_ROOT") {
+        return PathBuf::from(p);
+    }
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(|p| p.parent())
-        .expect("e2e-rust should be two levels below repo root");
-    repo_root.join("build").join("sipi")
+        .expect("e2e-rust should be two levels below repo root")
+        .to_path_buf()
+}
+
+/// Default sipi binary path for the cmake inner-loop dev shell
+/// (`<repo>/build/sipi`).
+///
+/// Test harness resolution prefers `$SIPI_BIN` (set by
+/// `just nix-test-e2e` to `<repo>/result/bin/sipi`); this fallback
+/// only fires when `SIPI_BIN` is unset.
+pub fn find_sipi_bin() -> PathBuf {
+    repo_root().join("build").join("sipi")
 }
 
 /// Path to the test data directory.
 pub fn test_data_dir() -> PathBuf {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let repo_root = manifest_dir
-        .parent()
-        .and_then(|p| p.parent())
-        .expect("e2e-rust should be two levels below repo root");
-    repo_root.join("test").join("_test_data")
+    repo_root().join("test").join("_test_data")
 }
 
 /// Kill any process listening on the given port (cleanup from previous test runs).
