@@ -42,12 +42,12 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: nix profile install nixpkgs#just
+      - run: nix profile install --inputs-from . nixpkgs#just
       - name: Build Docker image (Nix dockerTools)
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: just nix-docker-build-${{ matrix.arch }}
-      - run: just test-smoke-ci
+      - run: just nix-test-smoke
 
   release-gate:
     runs-on: ubuntu-latest
@@ -98,7 +98,7 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      - run: nix profile install nixpkgs#just
+      - run: nix profile install --inputs-from . nixpkgs#just
       - name: Build Docker image + sipi-debug (Nix dockerTools)
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
@@ -108,7 +108,7 @@ jobs:
         run: just nix-docker-build-${{ matrix.arch }}
       - name: Extract debug symbols for Sentry upload
         run: just nix-docker-extract-debug ${{ matrix.arch }}
-      - run: just test-smoke-ci
+      - run: just nix-test-smoke
       - name: Push image to Docker Hub
         run: just ${{ matrix.push_target }}
 
@@ -169,7 +169,7 @@ jobs:
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-      - run: nix profile install nixpkgs#just
+      - run: nix profile install --inputs-from . nixpkgs#just
       - run: just docker-publish-manifest
 
   # Build the static release archive (sipi + config/scripts/server +
@@ -202,7 +202,7 @@ jobs:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
-      - run: nix profile install nixpkgs#just
+      - run: nix profile install --inputs-from . nixpkgs#just
       - name: Build release archive
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}

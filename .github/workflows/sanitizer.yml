@@ -56,7 +56,7 @@ jobs:
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-      - run: nix profile install nixpkgs#just
+      - run: nix profile install --inputs-from . nixpkgs#just
 
       - name: Build with sanitizers (ASan + UBSan) — unit tests run in sandbox
         env:
@@ -69,11 +69,13 @@ jobs:
           SIPI_BIN: ${{ github.workspace }}/result/bin/sipi
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=0:log_path=/tmp/asan-e2e
           LSAN_OPTIONS: suppressions=${{ github.workspace }}/.lsan_suppressions.txt
-        # cargo comes from the dev shell — keep the wrap.
-        run: |
-          nix \
-            --option filter-syscalls false \
-            develop --command bash -c "just rust-test-e2e"
+        # `nix-test-e2e` consumes the `.#e2e-tests` Nix derivation —
+        # no cargo on PATH needed, so the `nix develop` wrap is gone.
+        # ASan / LSan run in the sipi binary (already built sanitized
+        # by the previous step); the test client doesn't need to be
+        # sanitized, so building it via crane in a regular sandbox is
+        # fine (filter-syscalls only matters for the sanitizer build).
+        run: just nix-test-e2e
 
       - name: Check for sanitizer findings in e2e
         if: always()
