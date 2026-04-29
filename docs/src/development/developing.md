@@ -134,19 +134,28 @@ requests, `serde_json` for JSON validation, and `insta` for golden baseline
 snapshots. They cover IIIF compliance, server behaviour, and upload
 functionality.
 
-Run Rust e2e tests:
+Two recipes run the same test code via two different build paths:
 
 ```bash
+# CI-canonical path: consume pre-built test binaries from the
+# `.#e2e-tests` Nix derivation (Cachix-cacheable, no cargo on PATH
+# required). This is what every CI job runs.
+just nix-test-e2e
+
+# Inner-loop dev path: build and run via `cargo test` in the dev
+# shell. Faster for iterating on the test code itself; not used by CI.
 just rust-test-e2e
 ```
 
-The recipe resolves the sipi binary via `$SIPI_BIN` with a canonical default
-of `./result/bin/sipi` (the Nix artifact path). Override `SIPI_BIN` to point
-at a dev-shell-built binary if you are iterating on cmake locally.
+Both recipes resolve the sipi binary via `$SIPI_BIN` with a canonical
+default of `./result/bin/sipi` (the Nix artifact path). Override
+`SIPI_BIN` to point at a dev-shell-built binary if you are iterating on
+cmake locally.
 
 !!! note "Sequential execution required"
     Tests must run with `--test-threads=1` because each test starts its own
-    SIPI server instance on a unique port. The recipe handles this automatically.
+    SIPI server instance on a unique port. Both recipes handle this
+    automatically.
 
 ### Hurl HTTP Contract Tests
 
@@ -174,11 +183,18 @@ Current test files:
 
 ### Smoke Tests
 
-Smoke tests live in `test/smoke/` and run against a Docker image.
-They verify basic server functionality after a Docker build:
+Smoke tests live in `test/e2e-rust/tests/docker_smoke.rs` and run
+against a built Docker image. They verify basic server functionality
+after a Docker build:
 
 ```bash
-make test-smoke
+# Inner-loop dev path: builds the image via Nix, then runs cargo test.
+just test-smoke
+
+# CI canonical path: builds the image via Nix, then runs the
+# pre-built smoke binary from the .#smoke-test derivation
+# (no cargo on PATH required).
+just nix-test-smoke
 ```
 
 ### Approval Tests

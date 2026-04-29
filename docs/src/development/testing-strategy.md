@@ -763,7 +763,9 @@ insta::assert_json_snapshot!(info_json, {
 | Target | Just Recipe | When | Notes |
 |---|---|---|---|
 | C++ unit tests | `just nix-build` (`.#dev` checkPhase) | PR CI | GoogleTest via ctest, runs in the Nix sandbox |
-| Rust e2e tests | `just rust-test-e2e` | PR CI | Includes insta snapshots |
+| Rust e2e tests (CI) | `just nix-test-e2e` | PR CI | Pre-built binaries from `.#e2e-tests` (crane); reads `$SIPI_BIN` |
+| Rust e2e tests (inner-loop) | `just rust-test-e2e` | local | cargo-driven; reads `$SIPI_BIN`; same test code as `nix-test-e2e` |
+| Docker smoke (CI) | `just nix-test-smoke` | PR + tag CI | Pre-built binary from `.#smoke-test`; runs against loaded image |
 | Hurl contract tests | `just hurl-test` | PR CI | Declarative HTTP tests |
 | Python e2e tests | *(retired)* | — | Replaced by Rust e2e tests |
 | Fuzz testing | `.github/workflows/fuzz.yml` | Nightly | libFuzzer corpus growth |

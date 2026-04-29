@@ -51,7 +51,9 @@ just nix-docker-build-arm64      # .#packages.aarch64-linux.docker-stream + sipi
 just nix-docker-extract-debug arch  # rename result-debug/.../*.debug → sipi-<arch>.debug
 
 # Tests (consume $SIPI_BIN, default ./result/bin/sipi)
-just rust-test-e2e               # Rust e2e tests (needs cargo — from dev shell)
+just nix-test-e2e                # Rust e2e tests via .#e2e-tests (CI canonical, no cargo)
+just nix-test-smoke              # Docker smoke test via .#smoke-test (CI canonical)
+just rust-test-e2e               # inner-loop Rust e2e via cargo (needs dev shell)
 just hurl-test                   # Hurl HTTP contract tests (needs hurl — from dev shell)
 just nix-run                     # run sipi with the dev config
 just nix-valgrind                # run sipi under Valgrind
@@ -59,7 +61,7 @@ just nix-valgrind                # run sipi under Valgrind
 # Dev-shell inner loop (non-recipe — see "Inner-loop development" below)
 
 # Docker push / manifest (build is via Nix — see nix-docker-build* above)
-just test-smoke                  # build image via Nix, then run smoke tests
+just test-smoke                  # build image via Nix, then run smoke tests (inner-loop)
 just docker-push-amd64           # push already-loaded amd64 image
 just docker-push-arm64           # push already-loaded arm64 image
 just docker-publish-manifest     # publish multi-arch manifest
@@ -143,6 +145,7 @@ Image formats (libtiff, libpng, libjpeg, libwebp), compression (zlib, bzip2, xz,
 - `version.txt` — version information
 - `flake.nix` — Nix build system (overlay, package variants, dev shells)
 - `package.nix` — Nix derivation for Sipi
+- `nix/` — Nix expressions imported by `flake.nix`. Each file is a function over `{ pkgs, … }` returning attribute set(s) that `flake.nix` merges into the right output. New derivations go here, not into `flake.nix` — keeping the flake an orchestrator is an explicit goal. Existing in-flake builders (Kakadu FOD, static builds, Docker image, dev shells) are slated for migration into `nix/<topic>.nix` files using this pattern.
 
 ## Testing
 
@@ -151,9 +154,9 @@ For the authoritative testing strategy (pyramid, layer definitions, decision tre
 For test framework details (how to run tests, directory layout, adding tests), see [`docs/src/development/developing.md`](docs/src/development/developing.md).
 
 - **Unit tests** (`test/unit/`): GoogleTest + ApprovalTests — run inside the `.#dev` / `.#default` derivation's `checkPhase` (`just nix-build` fails if any unit test fails)
-- **E2E tests** (`test/e2e-rust/`): Rust (reqwest + cargo test) — `just rust-test-e2e`
+- **E2E tests** (`test/e2e-rust/`): Rust (reqwest + cargo test). CI: `just nix-test-e2e` (binaries from `.#e2e-tests`). Inner-loop: `just rust-test-e2e` (cargo from dev shell).
 - **Hurl tests** (`test/hurl/`): HTTP contract tests — `just hurl-test`
-- **Smoke tests** (`test/smoke/`): against Docker image — `just test-smoke`
+- **Smoke tests** (`test/e2e-rust/tests/docker_smoke.rs`): against Docker image. CI: `just nix-test-smoke` (binary from `.#smoke-test`). Inner-loop: `just test-smoke`.
 - **Approval tests** (`test/approval/`): snapshot-based regression — included in unit tests
 
 Run a specific unit test binary in the dev-shell inner loop: `cd build && test/unit/<component>/<component>`

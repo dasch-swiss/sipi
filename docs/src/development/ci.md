@@ -74,14 +74,18 @@ The `test` job is matrixed on `ubuntu-24.04` (amd64) and `ubuntu-24.04-arm`
 
 1. `just nix-build` — Nix/Clang dev derivation; unit tests run in the Nix
    sandbox.
-2. `just rust-test-e2e` and `just hurl-test` — Rust e2e + Hurl HTTP contract
-   tests against the built binary.
+2. `just nix-test-e2e` and `just hurl-test` — Rust e2e + Hurl HTTP contract
+   tests against the built binary. `nix-test-e2e` consumes the Nix-built
+   `.#e2e-tests` derivation (test binaries vendored from `Cargo.lock` via
+   crane), so cargo is not on the runner's PATH. `hurl-test` is the
+   short-term holdout that still needs a tool on PATH (installed via
+   `nix profile install nixpkgs#hurl`).
 3. `just nix-coverage` and Codecov upload — amd64 only.
 4. `just nix-docker-build-${arch}` — produces the per-arch Docker image via
    `pkgs.dockerTools.streamLayeredImage` and loads it into the local Docker
    daemon.
-5. `just test-smoke-ci` — Rust testcontainers smoke tests against the loaded
-   image.
+5. `just nix-test-smoke` — Rust smoke test from `.#smoke-test` against the
+   loaded image.
 6. `Docker Scout — compare to production` — both arches, on PR events only.
 7. `Docker Scout — CVE report (SARIF)` and `Upload SARIF to GitHub Security`
    — amd64 only, on PR events only (CVE findings are arch-independent; one
@@ -105,8 +109,9 @@ stdenv for Darwin.
    `configurable-impure-env` enabled on the daemon).
 2. `just nix-static-linkage-verify result/bin/sipi` — static linkage
    assertion via `readelf -d`; must not report any `NEEDED` entries.
-3. `just rust-test-e2e` with `SIPI_BIN=$GITHUB_WORKSPACE/result/bin/sipi`
-   — proves the Nix-built static musl binary runs on a glibc host.
+3. `just nix-test-e2e` with `SIPI_BIN=$GITHUB_WORKSPACE/result/bin/sipi`
+   — proves the Nix-built static musl binary runs on a glibc host. Uses
+   the `.#e2e-tests` derivation, so cargo is not required on the runner.
 
 **`nix-macos / arm64 dylib-audit`** (`macos-14`):
 
@@ -189,18 +194,22 @@ Linux-target recipes (`nix-build-static-*`, `nix-build-sanitized`,
 a CI round-trip.
 
 `just nix-build*` recipes wrap `nix build`, so CI invokes them directly
-without a surrounding `nix develop`. Recipes that consume dev-shell
-tools — `rust-test-e2e` (needs `cargo`) and `hurl-test` (needs `hurl`) —
-are the exception and run inside `nix develop --command …`.
+without a surrounding `nix develop`. The Rust e2e and Docker smoke test
+binaries are also Nix-built (via `.#e2e-tests` and `.#smoke-test` —
+defined in `nix/rust-tests.nix`), so `just nix-test-e2e` and
+`just nix-test-smoke` need only `just` on PATH. The remaining holdout
+is `hurl-test`, which still shells out to `hurl` (installed at CI step
+time via `nix profile install nixpkgs#hurl`).
 
 ```bash
 # Native dev build + e2e + Hurl + coverage + Docker image + smoke
 # (the full `ci.yml test` job for one arch)
 just nix-build
-nix develop --command bash -c "just rust-test-e2e && just hurl-test"
+just nix-test-e2e                         # binaries from .#e2e-tests
+just hurl-test                            # still needs `hurl` on PATH
 just nix-coverage
 just nix-docker-build-amd64               # or -arm64 on aarch64 host
-just test-smoke-ci
+just nix-test-smoke                       # binary from .#smoke-test
 
 # Static musl binaries (what ci.yml nix-static runs)
 just nix-build-static-amd64
@@ -209,7 +218,7 @@ just nix-static-linkage-verify result/bin/sipi
 
 # Sanitizer build + tests (what sanitizer.yml runs)
 just nix-build-sanitized                  # tests run in sandbox
-SIPI_BIN=$PWD/result/bin/sipi nix --option filter-syscalls false develop --command bash -c "just rust-test-e2e"
+SIPI_BIN=$PWD/result/bin/sipi just nix-test-e2e
 
 # Fuzz build + run (what fuzz.yml runs)
 just nix-build-fuzz
@@ -220,7 +229,7 @@ just nix-run-fuzz fuzz-corpus-live 60 fuzz/handlers/corpus
 # runs). The PR-time `ci.yml test` job builds the same image inline; this
 # block only adds the Sentry-bound `nix-docker-extract-debug` step.
 just nix-docker-build-amd64               # arch-pinned image + sipi-debug
-just test-smoke-ci                        # Rust testcontainer smoke tests
+just nix-test-smoke                       # smoke test against loaded image
 just nix-docker-extract-debug amd64       # produces sipi-amd64.debug for Sentry
 
 # Release archive (what publish.yml publish-static-release runs)
