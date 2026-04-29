@@ -102,7 +102,10 @@ bool J2kHttpStream::write(const kdu_byte *buf, int num_bytes)
   try {
     conobj->sendAndFlush(buf, num_bytes);
   } catch (int) {
-    if (!conobj->peerConnected()) client_aborted = true;
+    // Catches shttps::OUTPUT_WRITE_FAIL — by definition a socket-write
+    // failure (peer FIN, RST, or write timeout). peerConnected()'s POLLRDHUP
+    // poll misses RST/timeout, so the throw itself is the abort signal.
+    client_aborted = true;
     return false;
   }
   return true;
@@ -114,7 +117,7 @@ bool J2kHttpStream::close()
   try {
     conobj->flush();
   } catch (int) {
-    if (!conobj->peerConnected()) client_aborted = true;
+    client_aborted = true;
     return false;
   }
   return true;
