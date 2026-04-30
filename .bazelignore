@@ -1,0 +1,32 @@
+# Bazel ignores any path listed here when walking the workspace for BUILD
+# files (see https://bazel.build/run/build-control#bazelignore). Listed paths
+# are CMake / Nix / IDE artifacts, not Sipi source.
+
+# CMake build trees (cmake/CMakeLists.txt is the existing build's heart;
+# `build/` and friends are emitted under it during inner-loop dev).
+build
+build-linux
+build-mac
+build-fuzz
+cmake-build-debug
+cmake-build-debug-remote
+cmake-build-debug-inside-docker
+cmake-build-dockerdebug
+cmake-build-relwithdebinfo-inside-docker
+cmake-build-relwithdebinfo-nix-develop
+
+# Nix output symlinks.
+result
+result-coverage
+result-debug
+result-fuzz
+
+# Vendored third-party archives (consumed by `cmake/dependencies.cmake`'s
+# fallback path; Bazel fetches via `http_archive` and never reads vendor/).
+vendor
+
+# Per-developer / IDE state.
+.idea
+.vscode
+.direnv
+.claude

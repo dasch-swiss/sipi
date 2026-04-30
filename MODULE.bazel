@@ -23,17 +23,17 @@ module(
 # `rules_cc` is required at the top of every BUILD.bazel using cc_* in
 # Bazel 9 (built-in cc_* rules removed from the global namespace).
 bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "rules_cc", version = "0.1.7")
+bazel_dep(name = "rules_cc", version = "0.2.18")
 
 # `aspect_bazel_lib` provides `expand_template` with `stamp_substitutions=`,
 # which Y consumes to bake `STABLE_SIPI_VERSION` etc. into SipiVersion.h.
 # Y+4 will reuse it for OCI image stamping (`image_created`, `image_labels`).
-bazel_dep(name = "aspect_bazel_lib", version = "2.21.0")
+bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
 
 # `rules_foreign_cc` wraps the 22 third-party libs (cmake/, configure_make/,
 # make/) — see ext/<lib>/BUILD.bazel files. Pinned versions of each library
 # are declared via http_archive() calls in this file (added per task 4).
-bazel_dep(name = "rules_foreign_cc", version = "0.15.0")
+bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
 
 # `toolchains_llvm` registers a hermetic LLVM 19.1.x toolchain. Sysroot wiring
 # (Chromium debian sysroots for linux-x86_64 / linux-aarch64) lives below.

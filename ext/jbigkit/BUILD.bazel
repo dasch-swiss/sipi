@@ -1,7 +1,9 @@
-"""jbigkit — plain make build (no configure script).
+"""jbigkit — plain make build (no configure script, no `install` target).
 
 Mirrors `ext/jbigkit/CMakeLists.txt`'s `make CC=$CMAKE_C_COMPILER` invocation
 and the manual install copying `libjbig/libjbig.a` to install lib dir.
+foreign_cc's `make()` rule has no `install` target by default; the
+post-make staging is driven by `postfix_script`.
 """
 
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "make")
@@ -12,13 +14,13 @@ make(
     name = "jbigkit",
     lib_source = "@jbigkit//:all_srcs",
     out_static_libs = ["libjbig.a"],
-    # jbigkit has no `install` target — produce `libjbig/libjbig.a` then
-    # copy by hand. `make_commands` overrides the default invocation.
-    make_commands = [
-        "make",
-        "mkdir -p $$INSTALLDIR$$/lib $$INSTALLDIR$$/include",
-        "cp libjbig/libjbig.a $$INSTALLDIR$$/lib/",
-        "cp libjbig/jbig.h libjbig/jbig_ar.h libjbig/jbig85.h $$INSTALLDIR$$/include/",
-    ],
+    # `targets = []` runs the default `make` target (which produces
+    # `libjbig/libjbig.a`). No `make install` because upstream has none.
+    targets = [],
+    postfix_script = (
+        "mkdir -p $$INSTALLDIR$$/lib $$INSTALLDIR$$/include && " +
+        "cp libjbig/libjbig.a $$INSTALLDIR$$/lib/ && " +
+        "cp libjbig/jbig.h libjbig/jbig_ar.h libjbig/jbig85.h $$INSTALLDIR$$/include/"
+    ),
     set_file_prefix_map = True,
 )
