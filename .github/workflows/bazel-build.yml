@@ -70,6 +70,27 @@ jobs:
             runs-on: macos-14
 
     steps:
+      # GitHub-hosted ubuntu-24.04 runners ship ~14 GB of free disk
+      # space, ~6 GB of which is consumed by pre-installed SDKs the
+      # Bazel build doesn't touch (Android, .NET, Haskell, Boost…).
+      # The LLVM 19.1.7 toolchain alone extracts to ~3 GB; piling the
+      # 22 ext libs + sysroot + cache directory on top blows past the
+      # quota and kills the build with `No space left on device`.
+      # The "free disk space" action removes the unused SDKs before
+      # Bazel runs. macOS runners have plenty of headroom and skip
+      # this step.
+      - name: free disk space (linux only)
+        if: runner.os == 'Linux'
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
+
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
@@ -96,7 +117,16 @@ jobs:
       - uses: bazel-contrib/setup-bazel@0.15.0
         with:
           bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}-${{ matrix.arch }}
+          # Cache key includes a hash of every file that influences a
+          # Bazel build action — MODULE.bazel.lock pins all third-party
+          # versions, the per-package BUILD.bazel files describe rule
+          # shapes, the helpers in `bazel/` shape AR/sysroot env, and
+          # flake.nix gates the dev-shell tools that feed action_env.
+          # Any change to those busts the cache, which avoids
+          # disk-cache-restored-but-output-missing failure modes (a
+          # previous run's failed kakadu action left a cached entry
+          # pointing at a libkdu.a that was never actually emitted).
+          disk-cache: bazel-build-${{ matrix.arch }}-${{ hashFiles('MODULE.bazel.lock', '**/BUILD.bazel', 'bazel/**', 'flake.nix') }}
           repository-cache: true
 
       - name: bazel build ${{ inputs.bazel_target || '//src:sipi' }}
