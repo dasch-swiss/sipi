@@ -421,6 +421,16 @@
               imagemagick
               libxml2
               libxslt
+
+              # Documentation tooling (mkdocs + plugins) for `just docs-build` /
+              # `just docs-serve`. Versions track nixpkgs, not docs/requirements.txt;
+              # CI uses pip from the pinned requirements.txt — this is for local
+              # inner-loop preview only.
+              (python3.withPackages (ps: with ps; [
+                mkdocs
+                mkdocs-material
+                mkdocs-llmstxt
+              ]))
             ];
 
             shellHook = ''
@@ -450,6 +460,13 @@
               imagemagick
               libxml2
               libxslt
+
+              # Documentation tooling — see `clang` shell for rationale.
+              (python3.withPackages (ps: with ps; [
+                mkdocs
+                mkdocs-material
+                mkdocs-llmstxt
+              ]))
             ];
 
             shellHook = ''
@@ -479,6 +496,13 @@
               imagemagick
               libxml2
               libxslt
+
+              # Documentation tooling — see `clang` shell for rationale.
+              (python3.withPackages (ps: with ps; [
+                mkdocs
+                mkdocs-material
+                mkdocs-llmstxt
+              ]))
             ];
 
             shellHook = ''
