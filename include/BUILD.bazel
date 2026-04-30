@@ -1,9 +1,42 @@
-# Most of `include/` belongs to `//src:sipi_lib` (declared in `src/BUILD.bazel`).
-# This file exists only to make individual headers selectable as labels — used
-# today by `//shttps:shttps` to grab `Logger.h` while the cross-context
-# include is still in place. Once Logger.h is rehomed under `shttps/`, this
-# file collapses back to nothing.
+"""Sipi public + private headers as a header-only `cc_library`.
 
+The `include/` directory holds Sipi's headers in a flat-ish layout:
+
+  include/<Module>.h               — top-level public API headers
+  include/<subsystem>/<Module>.h   — per-subsystem (formats, iiifparser, …)
+
+Consumers reference both forms via sibling `#include "Logger.h"` (resolved
+through `includes = ["."]` propagation) and prefixed
+`#include "metadata/SipiIcc.h"`. Internal headers like
+`include/metadata/SipiIccDetail.h` are still exposed in `hdrs` so unit
+tests can link against private symbols (Y+1 / DEV-6343).
+
+Cross-package consumers:
+  //src:sipi_lib       — primary consumer
+  //shttps:shttps      — temporary cross-context include of `Logger.h`
+                         (TODO rehome; see shttps/BUILD.bazel comment)
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "headers",
+    hdrs = glob([
+        "*.h",
+        "*.hpp",
+        "formats/*.h",
+        "handlers/*.h",
+        "iiifparser/*.h",
+        "metadata/*.h",
+    ]),
+    includes = ["."],
+)
+
+# Individual file labels — used where a target needs one specific header
+# rather than the whole bundle (e.g. expand_template's `template` argument
+# accepts a single Label, not a `cc_library`).
 exports_files([
     "Logger.h",
     "SipiVersion.h.in",

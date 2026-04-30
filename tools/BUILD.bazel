@@ -1,0 +1,8 @@
+# Holds the workspace-status script consumed by `--workspace_status_command`
+# in `.bazelrc`. The script itself is not a Bazel target — Bazel invokes
+# the path directly — but exposing it via `exports_files` lets a future
+# `genrule` test it under Bazel sandbox if needed.
+
+exports_files([
+    "workspace_status.sh",
+])
