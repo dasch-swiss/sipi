@@ -1,0 +1,23 @@
+"""SQLite3 — autoconf, static. CPPFLAGS pin SQLITE_ENABLE_RTREE=1.
+
+Mirrors `ext/sqlite3/CMakeLists.txt`'s `--enable-fts5` + `CPPFLAGS=-DSQLITE_ENABLE_RTREE=1`.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+
+package(default_visibility = ["//visibility:public"])
+
+configure_make(
+    name = "sqlite3",
+    lib_source = "@sqlite3//:all_srcs",
+    configure_in_place = True,
+    configure_options = [
+        "--enable-static",
+        "--disable-shared",
+        "--enable-fts5",
+    ],
+    env = {"CPPFLAGS": "-DSQLITE_ENABLE_RTREE=1"},
+    out_static_libs = ["libsqlite3.a"],
+    out_binaries = ["sqlite3"],
+    set_file_prefix_map = True,
+)

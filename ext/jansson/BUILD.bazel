@@ -1,0 +1,23 @@
+"""jansson — cmake.
+
+Mirrors `ext/jansson/CMakeLists.txt`. Static lib.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+
+package(default_visibility = ["//visibility:public"])
+
+cmake(
+    name = "jansson",
+    lib_source = "@jansson//:all_srcs",
+    cache_entries = {
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.5",
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "JANSSON_BUILD_DOCS": "OFF",
+        "JANSSON_BUILD_SHARED_LIBS": "OFF",
+        "JANSSON_EXAMPLES": "OFF",
+        "JANSSON_TEST": "OFF",
+    },
+    out_static_libs = ["libjansson.a"],
+    set_file_prefix_map = True,
+)

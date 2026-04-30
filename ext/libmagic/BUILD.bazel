@@ -1,0 +1,34 @@
+"""libmagic (file) — autotools. Needs autoreconf -fi before configure.
+
+Mirrors `ext/libmagic/CMakeLists.txt`. Depends on bzip2 + xz + zlib + zstd.
+The autoreconf preflight is captured via `make_commands` since
+`configure_make` doesn't expose a pre-configure hook directly.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+
+package(default_visibility = ["//visibility:public"])
+
+configure_make(
+    name = "libmagic",
+    lib_source = "@libmagic//:all_srcs",
+    configure_command = "configure",
+    configure_in_place = True,
+    configure_options = [
+        "--enable-static",
+        "--disable-shared",
+    ],
+    # Run autoreconf before configure (the `--enable-static` build needs the
+    # libtool macros regenerated).
+    autoreconf = True,
+    autoreconf_options = ["-fi"],
+    out_static_libs = ["libmagic.a"],
+    out_data_dirs = ["share"],  # libmagic ships magic.mgc database
+    set_file_prefix_map = True,
+    deps = [
+        "//ext/bzip2:bzip2",
+        "//ext/xz:xz",
+        "//ext/zlib:zlib",
+        "//ext/zstd:zstd",
+    ],
+)

@@ -103,3 +103,194 @@ register_toolchains("@llvm_toolchain//:all")
 # latter requires `~/.netrc`, which `gh` does not populate).
 kakadu_extension = use_extension("//bazel:kakadu_extension.bzl", "kakadu_extension")
 use_repo(kakadu_extension, "kakadu")
+
+# ── Third-party C/C++ libs (rules_foreign_cc) ──────────────────────────────
+# URLs and SHA256s are the single source of truth, no longer split between
+# `cmake/dependencies.cmake` and per-lib `ext/<lib>/CMakeLists.txt`.
+# `cmake/dependencies.cmake` itself is preserved until DEV-6349 (Y+7); its
+# values are mirrored here verbatim during the migration window.
+#
+# Each archive's `build_file = "//bazel:all_content.BUILD.bazel"` exposes
+# the raw source tree as `@<lib>//:all_srcs`; the foreign_cc rule lives
+# under `//ext/<lib>:<lib>` and consumes that filegroup.
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+# bzip2 — gitlab archive
+http_archive(
+    name = "bzip2",
+    url = "https://gitlab.com/bzip2/bzip2/-/archive/bzip2-1.0.8/bzip2-bzip2-1.0.8.tar.bz2",
+    sha256 = "1afcfe4d3eb95bac3b7f43588c9457ccf772360f7e657ba7279fac776f2469d4",
+    strip_prefix = "bzip2-bzip2-1.0.8",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "curl",
+    url = "https://curl.se/download/curl-8.12.1.tar.gz",
+    sha256 = "7b40ea64947e0b440716a4d7f0b7aa56230a5341c8377d7b609649d4aea8dbcf",
+    strip_prefix = "curl-8.12.1",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "exiv2",
+    url = "https://github.com/Exiv2/exiv2/archive/refs/tags/v0.28.5.tar.gz",
+    sha256 = "e1671f744e379a87ba0c984617406fdf8c0ad0c594e5122f525b2fb7c28d394d",
+    strip_prefix = "exiv2-0.28.5",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "expat",
+    url = "https://github.com/libexpat/libexpat/releases/download/R_2_5_0/expat-2.5.0.tar.bz2",
+    sha256 = "6f0e6e01f7b30025fa05c85fdad1e5d0ec7fd35d9f61b22f34998de11969ff67",
+    strip_prefix = "expat-2.5.0",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+# fmt 6.2.1 — version pinned in `ext/fmt/CMakeLists.txt:13` (not in
+# `cmake/dependencies.cmake`). TODO(DEV-6342): when bumping fmt past 6.2.1,
+# move the pin into `cmake/dependencies.cmake` for consistency.
+http_archive(
+    name = "fmt",
+    url = "https://github.com/fmtlib/fmt/releases/download/6.2.1/fmt-6.2.1.zip",
+    sha256 = "FMT_621_SHA256_TODO",  # bazel will print expected SHA on first fetch
+    strip_prefix = "fmt-6.2.1",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "jansson",
+    url = "https://www.digip.org/jansson/releases/jansson-2.13.1.tar.gz",
+    sha256 = "f4f377da17b10201a60c1108613e78ee15df6b12016b116b6de42209f47a474f",
+    strip_prefix = "jansson-2.13.1",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "jbigkit",
+    url = "https://www.cl.cam.ac.uk/~mgk25/jbigkit/download/jbigkit-2.1.tar.gz",
+    sha256 = "de7106b6bfaf495d6865c7dd7ac6ca1381bd12e0d81405ea81e7f2167263d932",
+    strip_prefix = "jbigkit-2.1",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "jpeg",
+    url = "https://ijg.org/files/jpegsrc.v9f.tar.gz",
+    sha256 = "04705c110cb2469caa79fb71fba3d7bf834914706e9641a4589485c1f832565b",
+    strip_prefix = "jpeg-9f",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "lcms2",
+    url = "https://github.com/mm2/Little-CMS/releases/download/lcms2.16/lcms2-2.16.tar.gz",
+    sha256 = "d873d34ad8b9b4cea010631f1a6228d2087475e4dc5e763eb81acc23d9d45a51",
+    strip_prefix = "lcms2-2.16",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "libmagic",
+    url = "https://github.com/file/file/archive/refs/tags/FILE5_46.tar.gz",
+    sha256 = "73c5f11a8edf0fded2fe3471b23a7fccb3f3369a13ea612529b869c8dc96aa2b",
+    strip_prefix = "file-FILE5_46",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "lua",
+    url = "https://www.lua.org/ftp/lua-5.3.5.tar.gz",
+    sha256 = "0c2eed3f960446e1a3e4b9a1ca2f3ff893b6ce41942cf54d5dd59ab4b3b058ac",
+    strip_prefix = "lua-5.3.5",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "luarocks",
+    url = "https://luarocks.github.io/luarocks/releases/luarocks-3.3.1.tar.gz",
+    sha256 = "eb20cd9814df05535d9aae98da532217c590fc07d48d90ca237e2a7cdcf284fe",
+    strip_prefix = "luarocks-3.3.1",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "openssl",
+    url = "https://github.com/openssl/openssl/releases/download/openssl-3.4.1/openssl-3.4.1.tar.gz",
+    sha256 = "002a2d6b30b58bf4bea46c43bdd96365aaf8daa6c428782aa4feee06da197df3",
+    strip_prefix = "openssl-3.4.1",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "png",
+    url = "https://sourceforge.net/projects/libpng/files/libpng16/1.6.41/libpng-1.6.41.tar.gz/download",
+    sha256 = "f00a11840f60616bdced9056d0f4cf2e4897697db039f15ce911704f957d3c5d",
+    strip_prefix = "libpng-1.6.41",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "prometheus-cpp",
+    url = "https://github.com/jupp0r/prometheus-cpp/archive/refs/tags/v1.3.0.tar.gz",
+    sha256 = "ac6e958405a29fbbea9db70b00fa3c420e16ad32e1baf941ab233ba031dd72ee",
+    strip_prefix = "prometheus-cpp-1.3.0",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "sentry",
+    url = "https://github.com/getsentry/sentry-native/archive/refs/tags/0.9.0.tar.gz",
+    sha256 = "657391465eb6236d6e3f3eec1d25434178783328f1f0a744c99c9b049c6225e1",
+    strip_prefix = "sentry-native-0.9.0",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "sqlite3",
+    url = "https://www.sqlite.org/2024/sqlite-autoconf-3450200.tar.gz",
+    sha256 = "bc9067442eedf3dd39989b5c5cfbfff37ae66cc9c99274e0c3052dc4d4a8f6ae",
+    strip_prefix = "sqlite-autoconf-3450200",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "tiff",
+    url = "https://download.osgeo.org/libtiff/tiff-4.7.0.tar.gz",
+    sha256 = "67160e3457365ab96c5b3286a0903aa6e78bdc44c4bc737d2e486bcecb6ba976",
+    strip_prefix = "tiff-4.7.0",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "webp",
+    url = "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.2.0.tar.gz",
+    sha256 = "2fc8bbde9f97f2ab403c0224fb9ca62b2e6852cbc519e91ceaa7c153ffd88a0c",
+    strip_prefix = "libwebp-1.2.0",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "xz",
+    url = "https://tukaani.org/xz/xz-5.2.5.tar.gz",
+    sha256 = "f6f4910fd033078738bd82bfba4f49219d03b17eb0794eb91efbae419f4aba10",
+    strip_prefix = "xz-5.2.5",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "zlib",
+    url = "https://zlib.net/zlib-1.3.2.tar.gz",
+    sha256 = "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
+    strip_prefix = "zlib-1.3.2",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)
+
+http_archive(
+    name = "zstd",
+    url = "https://github.com/facebook/zstd/archive/refs/tags/v1.5.7.tar.gz",
+    sha256 = "37d7284556b20954e56e1ca85b80226768902e2edabd3b649e9e72c0c9012ee3",
+    strip_prefix = "zstd-1.5.7",
+    build_file = "//bazel:all_content.BUILD.bazel",
+)

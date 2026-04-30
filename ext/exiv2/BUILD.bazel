@@ -1,0 +1,32 @@
+"""Exiv2 — cmake. Depends on expat + png + zlib.
+
+Mirrors `ext/exiv2/CMakeLists.txt`. Static-only; samples / cli / nls off.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+
+package(default_visibility = ["//visibility:public"])
+
+cmake(
+    name = "exiv2",
+    lib_source = "@exiv2//:all_srcs",
+    cache_entries = {
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "BUILD_SHARED_LIBS": "OFF",
+        "EXIV2_ENABLE_INIH": "OFF",
+        "EXIV2_ENABLE_BROTLI": "OFF",
+        "EXIV2_BUILD_SAMPLES": "OFF",
+        "EXIV2_BUILD_EXIV2_COMMAND": "OFF",
+        "EXIV2_ENABLE_NLS": "OFF",
+    },
+    out_static_libs = [
+        "libexiv2.a",
+        "libexiv2-xmp.a",
+    ],
+    set_file_prefix_map = True,
+    deps = [
+        "//ext/expat:expat",
+        "//ext/png:png",
+        "//ext/zlib:zlib",
+    ],
+)

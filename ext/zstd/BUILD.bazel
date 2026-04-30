@@ -1,0 +1,23 @@
+"""zstd — cmake from `build/cmake` subdir.
+
+Mirrors `ext/zstd/CMakeLists.txt`'s `SOURCE_SUBDIR build/cmake`.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+
+package(default_visibility = ["//visibility:public"])
+
+cmake(
+    name = "zstd",
+    lib_source = "@zstd//:all_srcs",
+    working_directory = "build/cmake",
+    cache_entries = {
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "ZSTD_BUILD_PROGRAMS": "OFF",
+        "ZSTD_BUILD_TESTS": "OFF",
+        "ZSTD_BUILD_SHARED": "OFF",
+        "ZSTD_BUILD_STATIC": "ON",
+    },
+    out_static_libs = ["libzstd.a"],
+    set_file_prefix_map = True,
+)
