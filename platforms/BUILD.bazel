@@ -1,0 +1,42 @@
+# Platform definitions for Sipi.
+#
+# Bazel resolves toolchains and `select()` branches against constraints; these
+# platforms compose the standard `@platforms//os:*` and `@platforms//cpu:*`
+# constraints into the four (os, cpu) pairs Sipi supports per CLAUDE.md's
+# build-completeness invariant: macOS-aarch64, linux-x86_64, linux-aarch64.
+# darwin_x86_64 is included for Intel-Mac developer machines but is not a
+# CI-tested target.
+
+package(default_visibility = ["//visibility:public"])
+
+platform(
+    name = "linux_x86_64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+platform(
+    name = "linux_aarch64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
+    ],
+)
+
+platform(
+    name = "darwin_aarch64",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:aarch64",
+    ],
+)
+
+platform(
+    name = "darwin_x86_64",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:x86_64",
+    ],
+)
