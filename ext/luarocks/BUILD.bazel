@@ -1,0 +1,24 @@
+"""LuaRocks — autotools-style configure pointing at our local lua build.
+
+Mirrors `ext/luarocks/CMakeLists.txt`. Depends on `@lua` (we build the lua
+binary too, in `out_binaries`).
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+
+package(default_visibility = ["//visibility:public"])
+
+configure_make(
+    name = "luarocks",
+    lib_source = "@luarocks//:all_srcs",
+    configure_in_place = True,
+    configure_options = [
+        "--with-lua-bin=$$INSTALLDIR$$/bin",
+        "--with-lua-include=$$INSTALLDIR$$/include",
+        "--with-lua-lib=$$INSTALLDIR$$/lib",
+    ],
+    targets = ["build", "install"],
+    out_data_dirs = ["share", "bin"],
+    set_file_prefix_map = True,
+    deps = ["//ext/lua:lua"],
+)

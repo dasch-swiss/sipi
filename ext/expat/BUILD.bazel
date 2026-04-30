@@ -1,0 +1,24 @@
+"""expat — cmake.
+
+Mirrors `ext/expat/CMakeLists.txt`. Static-only.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+
+package(default_visibility = ["//visibility:public"])
+
+cmake(
+    name = "expat",
+    lib_source = "@expat//:all_srcs",
+    cache_entries = {
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.5",
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "EXPAT_BUILD_TOOLS": "OFF",
+        "EXPAT_BUILD_EXAMPLES": "OFF",
+        "EXPAT_BUILD_DOCS": "OFF",
+        "EXPAT_BUILD_TESTS": "OFF",
+        "BUILD_SHARED_LIBS": "OFF",
+    },
+    out_static_libs = ["libexpat.a"],
+    set_file_prefix_map = True,
+)

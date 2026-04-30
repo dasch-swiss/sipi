@@ -1,0 +1,30 @@
+"""libwebp — cmake.
+
+Mirrors `ext/webp/CMakeLists.txt`. Static-only; tools and extras off.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+
+package(default_visibility = ["//visibility:public"])
+
+cmake(
+    name = "webp",
+    lib_source = "@webp//:all_srcs",
+    cache_entries = {
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "BUILD_SHARED_LIBS": "OFF",
+        "WEBP_BUILD_ANIM_UTILS": "OFF",
+        "WEBP_BUILD_VWEBP": "OFF",
+        "WEBP_BUILD_WEBPINFO": "OFF",
+        "WEBP_BUILD_WEBPMUX": "OFF",
+        "WEBP_BUILD_EXTRAS": "OFF",
+        "WEBP_BUILD_CWEBP": "OFF",
+        "WEBP_BUILD_DWEBP": "OFF",
+        "WEBP_BUILD_IMG2WEBP": "OFF",
+        "WEBP_BUILD_GIF2WEBP": "OFF",
+        "CMAKE_DISABLE_FIND_PACKAGE_TIFF": "TRUE",
+        "CMAKE_DISABLE_FIND_PACKAGE_GIF": "TRUE",
+    },
+    out_static_libs = ["libwebp.a"],
+    set_file_prefix_map = True,
+)

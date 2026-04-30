@@ -1,0 +1,48 @@
+"""libcurl — autotools. Depends on openssl + zlib.
+
+Mirrors `ext/curl/CMakeLists.txt`'s long `--without-*` / `--disable-*` list
+pruning protocols Sipi doesn't use (LDAP, RTSP, dict, telnet, tftp, …).
+`--with-openssl` / `--with-zlib` point at foreign_cc deps via
+`$EXT_BUILD_DEPS`.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+
+package(default_visibility = ["//visibility:public"])
+
+configure_make(
+    name = "curl",
+    lib_source = "@curl//:all_srcs",
+    configure_in_place = True,
+    configure_options = [
+        "--disable-shared",
+        "--enable-static",
+        "--with-openssl=$$EXT_BUILD_DEPS$$/openssl",
+        "--with-zlib=$$EXT_BUILD_DEPS$$/zlib",
+        "--without-libpsl",
+        "--without-brotli",
+        "--without-zstd",
+        "--without-libidn2",
+        "--without-nghttp2",
+        "--disable-ldap",
+        "--disable-ldaps",
+        "--disable-rtsp",
+        "--disable-dict",
+        "--disable-telnet",
+        "--disable-tftp",
+        "--disable-pop3",
+        "--disable-imap",
+        "--disable-smb",
+        "--disable-smtp",
+        "--disable-gopher",
+        "--disable-mqtt",
+        "--disable-manual",
+        "--disable-docs",
+    ],
+    out_static_libs = ["libcurl.a"],
+    set_file_prefix_map = True,
+    deps = [
+        "//ext/openssl:openssl",
+        "//ext/zlib:zlib",
+    ],
+)

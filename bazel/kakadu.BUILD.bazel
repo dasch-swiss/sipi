@@ -30,40 +30,28 @@ filegroup(
     ),
 )
 
-# Per-arch make config selectors. Values track CMakeLists.txt:145-174:
-# the aarch64 macOS Makefile name uses upper-case "MAC" (Kakadu inconsistency
+# Per-arch make config selectors — values track CMakeLists.txt:145-174.
+# The aarch64 macOS Makefile name uses upper-case "MAC" (Kakadu inconsistency
 # preserved from upstream).
 _KDU_MAKE = select({
-    "@platforms//os:linux": select({
-        "@platforms//cpu:x86_64": "Makefile-Linux-x86-64-gcc",
-        "@platforms//cpu:aarch64": "Makefile-Linux-arm-64-gcc",
-    }),
-    "@platforms//os:macos": select({
-        "@platforms//cpu:x86_64": "Makefile-Mac-x86-64-gcc",
-        "@platforms//cpu:aarch64": "Makefile-MAC-arm-64-gcc",
-    }),
+    "@@//platforms:is_linux_x86_64": "Makefile-Linux-x86-64-gcc",
+    "@@//platforms:is_linux_aarch64": "Makefile-Linux-arm-64-gcc",
+    "@@//platforms:is_darwin_x86_64": "Makefile-Mac-x86-64-gcc",
+    "@@//platforms:is_darwin_aarch64": "Makefile-MAC-arm-64-gcc",
 })
 
 _KDU_EXEC_PLATFORM = select({
-    "@platforms//os:linux": select({
-        "@platforms//cpu:x86_64": "Linux-x86-64-gcc",
-        "@platforms//cpu:aarch64": "Linux-arm-64-gcc",
-    }),
-    "@platforms//os:macos": select({
-        "@platforms//cpu:x86_64": "Mac-x86-64-gcc",
-        "@platforms//cpu:aarch64": "Mac-arm-64-gcc",
-    }),
+    "@@//platforms:is_linux_x86_64": "Linux-x86-64-gcc",
+    "@@//platforms:is_linux_aarch64": "Linux-arm-64-gcc",
+    "@@//platforms:is_darwin_x86_64": "Mac-x86-64-gcc",
+    "@@//platforms:is_darwin_aarch64": "Mac-arm-64-gcc",
 })
 
-_KDU_LIB_DIR = select({
-    "@platforms//os:linux": select({
-        "@platforms//cpu:x86_64": "lib/Linux-x86-64-gcc",
-        "@platforms//cpu:aarch64": "lib/Linux-arm-64-gcc",
-    }),
-    "@platforms//os:macos": select({
-        "@platforms//cpu:x86_64": "lib/Mac-x86-64-gcc",
-        "@platforms//cpu:aarch64": "lib/Mac-arm-64-gcc",
-    }),
+_KDU_ARCH = select({
+    "@@//platforms:is_linux_x86_64": "Linux-x86-64-gcc",
+    "@@//platforms:is_linux_aarch64": "Linux-arm-64-gcc",
+    "@@//platforms:is_darwin_x86_64": "Mac-x86-64-gcc",
+    "@@//platforms:is_darwin_aarch64": "Mac-arm-64-gcc",
 })
 
 # The `make()` rule defaults to running `make && make install` from the
@@ -89,16 +77,16 @@ make(
         "//conditions:default": {},
     }),
     make_commands = [
-        # `$$EXT_BUILD_ROOT` is rules_foreign_cc's pointer to the workspace
-        # source; `$$INSTALLDIR` is the output prefix the rule then captures.
-        # We `cd` into the source's `make/` dir, kick off `make all_but_jni`
-        # with the per-arch Makefile, then stage outputs into $INSTALLDIR.
-        "cd $$EXT_BUILD_ROOT/external/kakadu/make && " +
+        # `$$EXT_BUILD_ROOT$$` is rules_foreign_cc's pointer to the workspace
+        # source; `$$INSTALLDIR$$` is the output prefix the rule then captures.
+        # cd into the source's `make/` dir, kick off `make all_but_jni` with
+        # the per-arch Makefile, then stage outputs into $INSTALLDIR.
+        "cd $$EXT_BUILD_ROOT$$/external/+kakadu_extension+kakadu/make && " +
         "make -j1 -f " + _KDU_MAKE + " EXEC_PLATFORM=" + _KDU_EXEC_PLATFORM + " all_but_jni",
-        "mkdir -p $$INSTALLDIR/lib $$INSTALLDIR/include",
-        "cp $$EXT_BUILD_ROOT/external/kakadu/" + _KDU_LIB_DIR + "/libkdu.a $$INSTALLDIR/lib/",
-        "cp $$EXT_BUILD_ROOT/external/kakadu/" + _KDU_LIB_DIR + "/libkdu_aux.a $$INSTALLDIR/lib/",
-        "cp -R $$EXT_BUILD_ROOT/external/kakadu/managed/all_includes/. $$INSTALLDIR/include/",
+        "mkdir -p $$INSTALLDIR$$/lib $$INSTALLDIR$$/include",
+        "cp $$EXT_BUILD_ROOT$$/external/+kakadu_extension+kakadu/lib/" + _KDU_ARCH + "/libkdu.a $$INSTALLDIR$$/lib/",
+        "cp $$EXT_BUILD_ROOT$$/external/+kakadu_extension+kakadu/lib/" + _KDU_ARCH + "/libkdu_aux.a $$INSTALLDIR$$/lib/",
+        "cp -R $$EXT_BUILD_ROOT$$/external/+kakadu_extension+kakadu/managed/all_includes/. $$INSTALLDIR$$/include/",
     ],
     # Cache portability: rules_foreign_cc emits debug-info paths under
     # `$EXT_BUILD_ROOT` by default, which embeds machine-local sandbox paths

@@ -1,0 +1,26 @@
+"""sentry-native — cmake, inproc backend. Depends on curl.
+
+Mirrors `ext/sentry/CMakeLists.txt`. The inproc backend's curl transport
+links against our foreign_cc-built curl.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+
+package(default_visibility = ["//visibility:public"])
+
+cmake(
+    name = "sentry",
+    lib_source = "@sentry//:all_srcs",
+    cache_entries = {
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "SENTRY_BACKEND": "inproc",
+        "SENTRY_BUILD_SHARED_LIBS": "OFF",
+        "SENTRY_BUILD_EXAMPLES": "OFF",
+        "SENTRY_BUILD_TESTS": "OFF",
+    },
+    out_static_libs = ["libsentry.a"],
+    set_file_prefix_map = True,
+    deps = [
+        "//ext/curl:curl",
+    ],
+)

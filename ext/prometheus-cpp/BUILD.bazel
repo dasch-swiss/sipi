@@ -1,0 +1,27 @@
+"""prometheus-cpp — cmake, core only.
+
+Mirrors `ext/prometheus-cpp/CMakeLists.txt`. Pull / push / compression
+backends off — Sipi only uses the core counters/gauges/histograms exposed
+on `GET /metrics`.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+
+package(default_visibility = ["//visibility:public"])
+
+cmake(
+    name = "prometheus-cpp",
+    lib_source = "@prometheus-cpp//:all_srcs",
+    cache_entries = {
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "ENABLE_PULL": "OFF",
+        "ENABLE_PUSH": "OFF",
+        "ENABLE_COMPRESSION": "OFF",
+        "ENABLE_TESTING": "OFF",
+        "OVERRIDE_CXX_STANDARD_FLAGS": "OFF",
+        "USE_THIRDPARTY_LIBRARIES": "OFF",
+        "BUILD_SHARED_LIBS": "OFF",
+    },
+    out_static_libs = ["libprometheus-cpp-core.a"],
+    set_file_prefix_map = True,
+)

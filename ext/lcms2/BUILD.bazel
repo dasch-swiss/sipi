@@ -1,0 +1,27 @@
+"""Little CMS 2 — autotools. Depends on jpeg + tiff.
+
+Mirrors `ext/lcms2/CMakeLists.txt`. `--with-jpeg` / `--with-tiff` point at
+our foreign_cc-installed deps via `$EXT_BUILD_DEPS`.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+
+package(default_visibility = ["//visibility:public"])
+
+configure_make(
+    name = "lcms2",
+    lib_source = "@lcms2//:all_srcs",
+    configure_in_place = True,
+    configure_options = [
+        "--with-jpeg=$$EXT_BUILD_DEPS$$/jpeg",
+        "--with-tiff=$$EXT_BUILD_DEPS$$/tiff",
+        "--enable-static",
+        "--disable-shared",
+    ],
+    out_static_libs = ["liblcms2.a"],
+    set_file_prefix_map = True,
+    deps = [
+        "//ext/jpeg:jpeg",
+        "//ext/tiff:tiff",
+    ],
+)

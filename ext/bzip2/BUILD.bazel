@@ -1,0 +1,19 @@
+"""bzip2 — plain make build (no configure script).
+
+Mirrors `ext/bzip2/CMakeLists.txt`'s `make CC=... PREFIX=... && make install`
+flow. Upstream's Makefile honors `PREFIX=` for `make install`, so we route
+that through `out_static_libs` indirectly via foreign_cc's automatic install.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "make")
+
+package(default_visibility = ["//visibility:public"])
+
+make(
+    name = "bzip2",
+    lib_source = "@bzip2//:all_srcs",
+    targets = ["", "install"],  # default target then install
+    args = ["PREFIX=$$INSTALLDIR$$"],
+    out_static_libs = ["libbz2.a"],
+    set_file_prefix_map = True,
+)

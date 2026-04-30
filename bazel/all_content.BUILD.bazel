@@ -1,0 +1,26 @@
+# Shared BUILD.bazel symlinked into every `http_archive`-fetched ext/ dep's
+# extracted source root. Exposes the source tree as a `:all_srcs` filegroup
+# consumed by foreign_cc rules.
+#
+# The exclude pattern follows the plan's "tight `lib_source` glob" guidance —
+# upstream tests / docs / readmes never affect build outputs but their bytes
+# get hashed into the rule's cache key. Excluding them stabilises cache hits
+# across upstream tarball revisions that touch only those paths.
+
+filegroup(
+    name = "all_srcs",
+    srcs = glob(
+        ["**"],
+        exclude = [
+            "**/test/**",
+            "**/tests/**",
+            "**/Test/**",
+            "**/Tests/**",
+            "docs/**",
+            "doc/**",
+            "**/*.md",
+            "**/*.rst",
+        ],
+    ),
+    visibility = ["//visibility:public"],
+)

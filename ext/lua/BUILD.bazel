@@ -1,0 +1,26 @@
+"""Lua 5.3.5 — plain make build with per-os arch suffix.
+
+Mirrors `ext/lua/CMakeLists.txt`. Lua's Makefile takes the platform suffix
+as a make target (`linux`, `macosx`); CMakeLists.txt sets `LUA_ARCH` based
+on `CMAKE_SYSTEM_NAME`. Replicate via `select()` on `@platforms//os:*`.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "make")
+
+package(default_visibility = ["//visibility:public"])
+
+make(
+    name = "lua",
+    lib_source = "@lua//:all_srcs",
+    args = [
+        "INSTALL_LIB=$$INSTALLDIR$$/lib",
+        "INSTALL_TOP=$$INSTALLDIR$$",
+    ],
+    out_static_libs = ["liblua.a"],
+    out_binaries = ["lua", "luac"],
+    targets = select({
+        "@platforms//os:linux": ["linux", "install"],
+        "@platforms//os:macos": ["macosx", "install"],
+    }),
+    set_file_prefix_map = True,
+)

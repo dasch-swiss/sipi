@@ -1,0 +1,21 @@
+"""IJG libjpeg 9f — autotools, static.
+
+Mirrors `ext/jpeg/CMakeLists.txt`'s `--enable-shared --enable-static`
+configure options.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+
+package(default_visibility = ["//visibility:public"])
+
+configure_make(
+    name = "jpeg",
+    lib_source = "@jpeg//:all_srcs",
+    configure_in_place = True,
+    configure_options = [
+        "--enable-static",
+        "--disable-shared",
+    ],
+    out_static_libs = ["libjpeg.a"],
+    set_file_prefix_map = True,
+)

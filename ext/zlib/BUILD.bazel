@@ -1,0 +1,21 @@
+"""zlib — built from `@zlib` http_archive via `configure_make`.
+
+Mirrors `ext/zlib/CMakeLists.txt`'s `--static --libdir=lib` invocation. The
+upstream `configure` script is its own bespoke shell flavor (not autoconf),
+but `configure_make` drives it correctly because it executes whatever
+`configure` is in source root. `configure_make` defaults to passing
+`--prefix=$INSTALLDIR`, so we omit that here.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+
+package(default_visibility = ["//visibility:public"])
+
+configure_make(
+    name = "zlib",
+    lib_source = "@zlib//:all_srcs",
+    configure_in_place = True,
+    configure_options = ["--static"],
+    out_static_libs = ["libz.a"],
+    set_file_prefix_map = True,
+)

@@ -3,4 +3,5 @@
 
 exports_files([
     "kakadu.BUILD.bazel",
+    "all_content.BUILD.bazel",
 ])

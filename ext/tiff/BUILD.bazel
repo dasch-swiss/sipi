@@ -1,0 +1,42 @@
+"""libtiff — cmake. Depends on jpeg, xz, webp, zstd, png.
+
+Mirrors `ext/tiff/CMakeLists.txt`. The `WEBP_LIBRARY` / `LIBLZMA_LIBRARY_*`
+entries point foreign_cc at our locally-built deps under `$EXT_BUILD_DEPS`.
+The `tif_dir.h` install-side copy in CMakeLists.txt:55-56 is preserved by
+including it via a postfix copy step.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+
+package(default_visibility = ["//visibility:public"])
+
+cmake(
+    name = "tiff",
+    lib_source = "@tiff//:all_srcs",
+    cache_entries = {
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "BUILD_SHARED_LIBS": "OFF",
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.5",
+        "CMAKE_FIND_FRAMEWORK": "NEVER",
+        "CMAKE_FIND_LIBRARY_SUFFIXES": ".a",
+        "WEBP_LIBRARY": "$$EXT_BUILD_DEPS$$/webp/lib/libwebp.a",
+        "WEBP_INCLUDE_DIR": "$$EXT_BUILD_DEPS$$/webp/include",
+        "LIBLZMA_LIBRARY_RELEASE": "$$EXT_BUILD_DEPS$$/xz/lib/liblzma.a",
+        "LIBLZMA_LIBRARY_DEBUG": "$$EXT_BUILD_DEPS$$/xz/lib/liblzma.a",
+        "libdeflate": "FALSE",
+        "tiff-tools": "OFF",
+        "tiff-tests": "OFF",
+        "tiff-contrib": "OFF",
+        "tiff-docs": "OFF",
+    },
+    postfix_script = "cp $$BUILD_TMPDIR$$/libtiff/tif_dir.h $$INSTALLDIR$$/include/",
+    out_static_libs = ["libtiff.a"],
+    set_file_prefix_map = True,
+    deps = [
+        "//ext/jpeg:jpeg",
+        "//ext/png:png",
+        "//ext/webp:webp",
+        "//ext/xz:xz",
+        "//ext/zstd:zstd",
+    ],
+)

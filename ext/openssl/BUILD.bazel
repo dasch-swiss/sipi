@@ -1,0 +1,45 @@
+"""OpenSSL 3.4.x — uses `Configure` (capital C, perl-driven).
+
+Mirrors `ext/openssl/CMakeLists.txt`'s `perl Configure $TARGET no-shared
+no-module no-pinshared no-tests --libdir=lib`. The per-platform target
+token comes from a `select()` matching CMakeLists.txt:9-30.
+
+`perl` must be on PATH (added to `flake.nix` `devShells` in a later commit).
+`configure_command = "Configure"` (capital C) is the canonical
+foreign_cc pattern; the rule's own configure detection looks for
+lowercase `configure` only.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+
+package(default_visibility = ["//visibility:public"])
+
+# OpenSSL `Configure` takes the platform token as a positional arg before
+# the option flags; thread it through `configure_options` since that's how
+# foreign_cc passes positionals.
+_OPENSSL_TARGET = select({
+    "//platforms:is_linux_x86_64": ["linux-x86_64"],
+    "//platforms:is_linux_aarch64": ["linux-aarch64"],
+    "//platforms:is_darwin_aarch64": ["darwin64-arm64-cc"],
+    "//platforms:is_darwin_x86_64": ["darwin64-x86_64-cc"],
+})
+
+configure_make(
+    name = "openssl",
+    lib_source = "@openssl//:all_srcs",
+    configure_command = "Configure",
+    configure_in_place = True,
+    configure_options = _OPENSSL_TARGET + [
+        "no-shared",
+        "no-module",
+        "no-pinshared",
+        "no-tests",
+        "--libdir=lib",
+    ],
+    targets = ["", "install_sw"],
+    out_static_libs = [
+        "libssl.a",
+        "libcrypto.a",
+    ],
+    set_file_prefix_map = True,
+)
