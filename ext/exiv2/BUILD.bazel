@@ -20,8 +20,9 @@ cmake(
         "EXIV2_ENABLE_NLS": "OFF",
     },
     out_static_libs = [
+        # exiv2 0.28.x consolidated the XMP support into `libexiv2.a`;
+        # the standalone `libexiv2-xmp.a` from earlier releases is gone.
         "libexiv2.a",
-        "libexiv2-xmp.a",
     ],
     set_file_prefix_map = True,
     deps = [

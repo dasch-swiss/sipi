@@ -5,3 +5,14 @@ exports_files([
     "kakadu.BUILD.bazel",
     "all_content.BUILD.bazel",
 ])
+
+# `ar` wrapper that strips Apple-libtool's `-static` flag before delegating
+# to `/usr/bin/ar`. Consumed via `darwin_autotools_env()` (see
+# `foreign_cc_helpers.bzl`) by every autotools `ext/<lib>/BUILD.bazel` on
+# darwin. Exposed as a shipped script (rather than a `sh_binary`) so the
+# `env = {"AR": ...}` reference in foreign_cc rules resolves to a
+# concrete path inside the sandbox.
+exports_files(
+    ["ar_wrapper.sh"],
+    visibility = ["//visibility:public"],
+)

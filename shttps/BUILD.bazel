@@ -18,11 +18,24 @@ a third-party-style support lib.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//bazel:magic_database.bzl", "magic_mgc_header")
 
 package(default_visibility = [
     "//src:__subpackages__",
     "//shttps:__subpackages__",
 ])
+
+# Embeds libmagic's `share/misc/magic.mgc` database as a C array consumed
+# by `shttps/Parsing.cpp` (`magic_load_buffers(magic_mgc, magic_mgc_len, …)`).
+# Mirrors the CMake build's `magic_database` chain (CMakeLists.txt). The
+# custom rule lives in `//bazel:magic_database.bzl` because foreign_cc's
+# `$(execpath)` form only resolves to the primary CcInfo output (libmagic.a),
+# not data files under the rule's install tree.
+magic_mgc_header(
+    name = "magic_mgc_h",
+    libmagic = "//ext/libmagic:libmagic",
+    out = "generated/magic_mgc.h",
+)
 
 cc_library(
     name = "shttps",
@@ -38,9 +51,20 @@ cc_library(
     hdrs = glob([
         "*.h",
         "*.hpp",
-    ]),
-    # Source files use `#include "..."` (sibling-relative).
+    ]) + [":magic_mgc_h"],
+    # `include_prefix = "shttps"` registers each header under the
+    # `shttps/` prefix in Bazel's virtual-include namespace, so consumers
+    # in src/ can write `#include "shttps/X.h"`. `includes = ["."]` adds
+    # both the source dir (`shttps/`) and the generated-output dir
+    # (`bazel-bin/shttps/`) to the compiler's include search path so:
+    #   * sibling-relative includes inside shttps/ (`#include "Connection.h"`)
+    #     keep working
+    #   * `#include "generated/magic_mgc.h"` (the genrule output above)
+    #     resolves via `bazel-bin/shttps/generated/magic_mgc.h`
+    # Bazel rejects `includes = [".."]` (workspace-root exposure) so
+    # include_prefix is the right idiom for the prefix form.
     includes = ["."],
+    include_prefix = "shttps",
     deps = [
         # TODO(DEV-6342): the cross-context include of `//include:Logger.h`
         # is the last residual SIPI → shttps reverse-direction reference.

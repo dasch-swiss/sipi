@@ -233,7 +233,7 @@
   "moduleExtensions": {
     "//bazel:kakadu_extension.bzl%kakadu_extension": {
       "general": {
-        "bzlTransitiveDigest": "48TS97fRiQ/llnaT5XX2aIG8JVvLx/CtCydWdnyDwSI=",
+        "bzlTransitiveDigest": "B9ddEGsuAUdtH6IGvxr9B9cgSEk+zTTH2OUXnZpkOe4=",
         "usagesDigest": "qQJAPNB0P4wpi2VGK88Ly/QPw3k4aStJZGi3BDzVzjc=",
         "recordedInputs": [],
         "generatedRepoSpecs": {

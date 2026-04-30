@@ -28,15 +28,21 @@ load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
-# ── SipiVersion.h ──────────────────────────────────────────────────────────
+# ── generated/SipiVersion.h ────────────────────────────────────────────────
 # Bazel re-evaluates `STABLE_*` keys on every build, but downstream actions
 # invalidate only when a value *changes* — editing an unrelated .cpp leaves
 # this rule's output stable, so unrelated TUs do not recompile. release-please
 # bumping `version.txt` flips `STABLE_SIPI_VERSION`, the header regenerates,
 # and the few TUs that include it recompile.
+#
+# Output path is `generated/SipiVersion.h` because `src/sipi.cpp`,
+# `src/SipiHttpServer.cpp`, and `src/SipiMetrics.cpp` consume it as
+# `#include "generated/SipiVersion.h"` — the prefix is mandatory and
+# matches the existing CMake build's `${CMAKE_BINARY_DIR}/generated/`
+# layout.
 expand_template(
     name = "sipi_version_h",
-    out = "SipiVersion.h",
+    out = "generated/SipiVersion.h",
     template = "//include:SipiVersion.h.in",
     stamp_substitutions = {
         "@SIPI_VERSION_STRING@": "{{STABLE_SIPI_VERSION}}",
@@ -55,6 +61,70 @@ expand_template(
     },
 )
 
+# ── generated/SipiConfig.h ─────────────────────────────────────────────────
+# Mirrors CMake's `configure_file(SipiConfig.h.in …)` step. The two cmakedefine
+# entries (`HAVE_MALLOC_H`, `HAVE_ST_ATIMESPEC`) are platform probes; we set
+# them with conservative platform-specific values rather than running real
+# autoconf-style probes since the existing CMake values come from CMake's
+# `check_include_files` / `check_struct_has_member` macros.
+expand_template(
+    name = "sipi_config_h",
+    out = "generated/SipiConfig.h",
+    template = "//include:SipiConfig.h.in",
+    substitutions = select({
+        "@platforms//os:linux": {
+            "#cmakedefine HAVE_MALLOC_H 1": "#define HAVE_MALLOC_H 1",
+            "#cmakedefine HAVE_ST_ATIMESPEC": "/* HAVE_ST_ATIMESPEC: linux uses st_atim */",
+        },
+        "@platforms//os:macos": {
+            "#cmakedefine HAVE_MALLOC_H 1": "/* HAVE_MALLOC_H: macOS uses <malloc/malloc.h>, not <malloc.h> */",
+            "#cmakedefine HAVE_ST_ATIMESPEC": "#define HAVE_ST_ATIMESPEC 1",
+        },
+        "//conditions:default": {
+            "#cmakedefine HAVE_MALLOC_H 1": "/* HAVE_MALLOC_H undefined */",
+            "#cmakedefine HAVE_ST_ATIMESPEC": "/* HAVE_ST_ATIMESPEC undefined */",
+        },
+    }),
+)
+
+# ── generated/<profile>_icc.h ──────────────────────────────────────────────
+# `xxd -i`-style C arrays embedding the binary ICC profiles. Mirrors
+# `CMakeLists.txt`'s ICC `add_custom_command` chain. Each genrule copies the
+# binary to a working file with the right name (so `xxd -i`'s array-name
+# inference matches what `src/metadata/SipiIcc.cpp` references), runs the
+# converter, then drops the temp.
+[
+    genrule(
+        name = profile + "_icc_h",
+        srcs = [
+            "//include:ICC-Profiles/" + src,
+            "//:generate_icc_header.sh",
+        ],
+        outs = ["generated/" + profile + "_icc.h"],
+        cmd = """
+            set -euo pipefail
+            tmpdir=$$(mktemp -d)
+            script=$$(realpath $(execpath //:generate_icc_header.sh))
+            cp $(execpath //include:ICC-Profiles/{src}) $$tmpdir/{src}
+            (cd $$tmpdir && "$$script" {src} {profile}_icc.h {array})
+            mv $$tmpdir/{profile}_icc.h $(OUTS)
+            rm -rf $$tmpdir
+        """.format(
+            src = src,
+            profile = profile,
+            array = array,
+        ),
+    )
+    for (profile, src, array) in [
+        ("AdobeRGB1998", "AdobeRGB1998.icc", "AdobeRGB1998_icc"),
+        ("USWebCoatedSWOP", "USWebCoatedSWOP.icc", "USWebCoatedSWOP_icc"),
+        ("YCC709", "YCC709.icm", "YCC709_icc"),
+        # `Rec709-Rec1886` array name uses underscores because C identifiers
+        # can't contain `-`; mirrors CMakeLists.txt:
+        ("Rec709-Rec1886", "Rec709-Rec1886.icc", "Rec709_Rec1886_icc"),
+    ]
+]
+
 # ── //src:sipi_lib ─────────────────────────────────────────────────────────
 # Every translation unit except the executable's `main`.
 cc_library(
@@ -66,9 +136,27 @@ cc_library(
         ],
         exclude = [
             "sipi.cpp",  # executable entry point — lives in :sipi binary
+            # The CMake build (CMakeLists.txt:461 add_executable(sipi …))
+            # explicitly enumerates the TUs it wants and silently skips
+            # these two — both still reference symbols that have moved
+            # (`shttps/cJSON.h` was removed when shttps switched to
+            # jansson; the Salsah session helper is unwired). Treating
+            # them as dead code matches the CMake behaviour. TODO Y+1
+            # (DEV-6343): delete the source files outright once unit
+            # tests confirm nothing else references them.
+            "PhpSession.cpp",
+            "Salsah.cpp",
+            "Template.cpp",
         ],
     ),
-    hdrs = [":SipiVersion.h"],
+    hdrs = [
+        ":generated/SipiVersion.h",
+        ":generated/SipiConfig.h",
+        ":generated/AdobeRGB1998_icc.h",
+        ":generated/Rec709-Rec1886_icc.h",
+        ":generated/USWebCoatedSWOP_icc.h",
+        ":generated/YCC709_icc.h",
+    ],
     includes = ["."],
     copts = ["-fexceptions"],
     deps = [
@@ -94,7 +182,6 @@ cc_library(
         "//ext/bzip2:bzip2",
         "//ext/zstd:zstd",
         "//ext/zlib:zlib",
-        "//ext/fmt:fmt",
         "@kakadu//:kdu",
     ],
 )
@@ -103,11 +190,29 @@ cc_library(
 cc_binary(
     name = "sipi",
     srcs = ["sipi.cpp"],
-    # Content-addressed build-id for reproducible debug-info splitting in Y+4.
-    # `--build-id=sha1` derives the build-id from the binary's content hash
-    # rather than a wall-clock random; identical inputs ↔ identical build-id.
     linkopts = select({
+        # Content-addressed build-id for reproducible debug-info splitting
+        # in Y+4. `--build-id=sha1` derives the build-id from the binary's
+        # content hash rather than a wall-clock random; identical inputs
+        # ↔ identical build-id.
         "@platforms//os:linux": ["-Wl,--build-id=sha1"],
+        # System frameworks/libs required by transitive deps:
+        #   * `-liconv` — exiv2's convert.cpp uses iconv() on macOS for
+        #     metadata charset conversion. Apple ships libiconv in
+        #     /usr/lib/libiconv.dylib but the link must be explicit.
+        #   * `-framework SystemConfiguration` — curl's macos.c calls
+        #     `SCDynamicStoreCopyProxies` for proxy auto-detection.
+        #   * `-framework CoreFoundation` — implicit dep of
+        #     SystemConfiguration; safer to spell out.
+        # Mirrors what nixpkgs' wrapped clang adds to LDFLAGS for the
+        # CMake build of SIPI today.
+        "@platforms//os:macos": [
+            "-liconv",
+            "-framework",
+            "SystemConfiguration",
+            "-framework",
+            "CoreFoundation",
+        ],
         "//conditions:default": [],
     }),
     deps = [":sipi_lib"],

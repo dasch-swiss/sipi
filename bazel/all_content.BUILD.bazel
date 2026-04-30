@@ -2,25 +2,22 @@
 # extracted source root. Exposes the source tree as a `:all_srcs` filegroup
 # consumed by foreign_cc rules.
 #
-# The exclude pattern follows the plan's "tight `lib_source` glob" guidance —
-# upstream tests / docs / readmes never affect build outputs but their bytes
-# get hashed into the rule's cache key. Excluding them stabilises cache hits
-# across upstream tarball revisions that touch only those paths.
-
+# Why this glob is intentionally permissive:
+#
+# An earlier draft excluded `**/test/**`, `**/tests/**`, etc. for "cache key
+# stability across upstream tarball revisions". That benefit doesn't apply:
+# every dep is pinned by exact SHA256 in MODULE.bazel, so any upstream change
+# bumps the input hash and busts the cache regardless of what we glob.
+# Worse, the excludes broke real builds — autotools projects (xz, libtiff,
+# expat, …) have `configure` references like `AC_CONFIG_FILES([tests/Makefile])`
+# that fail at `config.status` time when the test dir is missing, and zlib's
+# top-level `make all` recipe pulls in `test/example.c`. Per-lib workarounds
+# (`targets = [...]`, `configure_options = ["--disable-tests"]`) handle the
+# build-time concerns; the glob just needs to expose the upstream tarball
+# unchanged.
+#
 filegroup(
     name = "all_srcs",
-    srcs = glob(
-        ["**"],
-        exclude = [
-            "**/test/**",
-            "**/tests/**",
-            "**/Test/**",
-            "**/Tests/**",
-            "docs/**",
-            "doc/**",
-            "**/*.md",
-            "**/*.rst",
-        ],
-    ),
+    srcs = glob(["**"]),
     visibility = ["//visibility:public"],
 )

@@ -1,0 +1,8 @@
+# Workspace-root BUILD file. Hosts only labels needed at the root namespace
+# (currently the ICC-header generator script consumed by per-package
+# genrules); package-level rules live in their respective directories.
+
+exports_files(
+    ["generate_icc_header.sh"],
+    visibility = ["//visibility:public"],
+)

@@ -14,13 +14,23 @@ make(
     name = "jbigkit",
     lib_source = "@jbigkit//:all_srcs",
     out_static_libs = ["libjbig.a"],
-    # `targets = []` runs the default `make` target (which produces
-    # `libjbig/libjbig.a`). No `make install` because upstream has none.
-    targets = [],
+    # `lib` builds just the static library subdirectory; the default
+    # `all` target also builds the `pbmtools/` CLI utilities which we
+    # don't need and which fail to compile against the wrapped clang.
+    # No `make install` because upstream has no install target; the
+    # postfix_script copies the artifacts.
+    targets = ["lib"],
     postfix_script = (
-        "mkdir -p $$INSTALLDIR$$/lib $$INSTALLDIR$$/include && " +
-        "cp libjbig/libjbig.a $$INSTALLDIR$$/lib/ && " +
-        "cp libjbig/jbig.h libjbig/jbig_ar.h libjbig/jbig85.h $$INSTALLDIR$$/include/"
+        # postfix_script is processed by Bazel's Make-variable expander
+        # before the shell sees it: `$X` is interpreted as a Make-variable
+        # lookup (rejected at analysis if no match), `$$X` escapes to a
+        # literal `$X` (which the shell then expands as a bash env var),
+        # and the symmetric `$$X$$` form expands to a literal `$X$` and
+        # therefore doesn't work for shell. The `$$VAR` form is what
+        # rules_foreign_cc-emitted scripts use and is what we need here.
+        "mkdir -p $$INSTALLDIR/lib $$INSTALLDIR/include && " +
+        "cp libjbig/libjbig.a $$INSTALLDIR/lib/ && " +
+        "cp libjbig/jbig.h libjbig/jbig_ar.h libjbig/jbig85.h $$INSTALLDIR/include/"
     ),
     set_file_prefix_map = True,
 )

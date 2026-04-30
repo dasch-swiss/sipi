@@ -6,6 +6,11 @@ The autoreconf preflight is captured via `make_commands` since
 """
 
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+load(
+    "//bazel:foreign_cc_helpers.bzl",
+    "darwin_autotools_build_data",
+    "darwin_autotools_env",
+)
 
 package(default_visibility = ["//visibility:public"])
 
@@ -22,6 +27,8 @@ configure_make(
     # libtool macros regenerated).
     autoreconf = True,
     autoreconf_options = ["-fi"],
+    build_data = darwin_autotools_build_data(),
+    env = darwin_autotools_env(),
     out_static_libs = ["libmagic.a"],
     out_data_dirs = ["share"],  # libmagic ships magic.mgc database
     set_file_prefix_map = True,

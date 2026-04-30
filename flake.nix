@@ -425,10 +425,26 @@
               # Bazel build orchestration (DEV-6342). bazelisk reads
               # `.bazelversion` and downloads the matching Bazel.
               bazelisk
+              # `bazel` shim — nixpkgs' bazelisk package ships only a
+              # `bazelisk` binary, but the broader Bazel ecosystem and
+              # most users' muscle memory expect to type plain `bazel`.
+              # Surface a one-line shell wrapper that `exec`s through to
+              # bazelisk so both `bazel build //src:sipi` and
+              # `bazelisk build //src:sipi` work interactively. The CI
+              # workflow (`bazel-build-dispatch.yml`) keeps using
+              # `bazelisk` directly to make the version source explicit.
+              (writeShellScriptBin "bazel" ''
+                exec ${bazelisk}/bin/bazelisk "$@"
+              '')
               # Host-tool deps used by the Bazel graph:
               #  - perl       — openssl `Configure` (research §9)
               #  - cmake      — `rules_foreign_cc` `cmake()` invocations
               #  - pkg-config — `configure_make()` autotools probes (curl ↔ openssl)
+              #  - autoconf / automake / libtool / m4
+              #               — `autoreconf -fi` preflight for libmagic (the
+              #                 upstream `file` tarball ships configure.ac
+              #                 only); also smooths libpng / lcms2 / openssl
+              #                 builds whose Makefiles call libtoolize
               #  - gh         — `kakadu_archive` repository_rule shells out
               #                 here (was previously in the Kakadu FOD's
               #                 `nativeBuildInputs`; the FOD goes away in Y+6)
@@ -439,6 +455,10 @@
               perl
               cmake
               pkg-config
+              autoconf
+              automake
+              libtool
+              m4
               gh
               cacert
             ];
@@ -451,6 +471,22 @@
               # Match the Kakadu FOD's TLS setup (flake.nix:62) for the
               # Bazel-side `gh release download` flow inside the dev shell.
               export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+
+              # Prepend system paths so toolchains_llvm's `xcrun --show-sdk-path`
+              # probe (run inside Bazel repo rules with `--repo_env=PATH`)
+              # finds Apple's `/usr/bin/xcrun` ahead of Nix's xcbuild
+              # reimplementation. Nix's xcrun unconditionally returns the
+              # nixpkgs apple-sdk-14.4 stub (which ships only private
+              # frameworks — no `libc++.tbd`/`libc++abi.tbd`), and it
+              # ignores `SDKROOT`/`DEVELOPER_DIR` overrides, so the only
+              # way to get the system Xcode CLT SDK is to make sure the
+              # system xcrun runs instead. Nix tools used by the Bazel
+              # graph (`gh` for kakadu_archive, `perl`/`autoconf`/etc. for
+              # foreign_cc rules) live in subsequent PATH entries and
+              # remain reachable.
+              if [ "$(uname)" = "Darwin" ]; then
+                export PATH="/usr/bin:/bin:/usr/local/bin:$PATH"
+              fi
             '';
           };
 
@@ -477,9 +513,17 @@
 
               # Bazel host tools (see `clang` shell for rationale).
               bazelisk
+              # `bazel` shim — see clang shell for rationale.
+              (writeShellScriptBin "bazel" ''
+                exec ${bazelisk}/bin/bazelisk "$@"
+              '')
               perl
               cmake
               pkg-config
+              autoconf
+              automake
+              libtool
+              m4
               gh
               cacert
             ];
@@ -489,6 +533,10 @@
               export MKSHELL=fuzz
               git config core.hooksPath .githooks 2>/dev/null || true
               export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+              # See the `clang` shell for the rationale.
+              if [ "$(uname)" = "Darwin" ]; then
+                export PATH="/usr/bin:/bin:/usr/local/bin:$PATH"
+              fi
             '';
           };
 
@@ -515,9 +563,17 @@
 
               # Bazel host tools (see `clang` shell for rationale).
               bazelisk
+              # `bazel` shim — see clang shell for rationale.
+              (writeShellScriptBin "bazel" ''
+                exec ${bazelisk}/bin/bazelisk "$@"
+              '')
               perl
               cmake
               pkg-config
+              autoconf
+              automake
+              libtool
+              m4
               gh
               cacert
             ];

@@ -19,17 +19,25 @@ cmake(
         "CMAKE_POLICY_VERSION_MINIMUM": "3.5",
         "CMAKE_FIND_FRAMEWORK": "NEVER",
         "CMAKE_FIND_LIBRARY_SUFFIXES": ".a",
-        "WEBP_LIBRARY": "$$EXT_BUILD_DEPS$$/webp/lib/libwebp.a",
-        "WEBP_INCLUDE_DIR": "$$EXT_BUILD_DEPS$$/webp/include",
-        "LIBLZMA_LIBRARY_RELEASE": "$$EXT_BUILD_DEPS$$/xz/lib/liblzma.a",
-        "LIBLZMA_LIBRARY_DEBUG": "$$EXT_BUILD_DEPS$$/xz/lib/liblzma.a",
+        # `$$VAR$$` collapses to `$VAR$` and leaves a stray trailing `$` in
+        # cmake-cache values; `$$VAR` is the right form. See ext/png/BUILD.bazel.
+        "WEBP_LIBRARY": "$$EXT_BUILD_DEPS/webp/lib/libwebp.a",
+        "WEBP_INCLUDE_DIR": "$$EXT_BUILD_DEPS/webp/include",
+        "LIBLZMA_LIBRARY_RELEASE": "$$EXT_BUILD_DEPS/xz/lib/liblzma.a",
+        "LIBLZMA_LIBRARY_DEBUG": "$$EXT_BUILD_DEPS/xz/lib/liblzma.a",
         "libdeflate": "FALSE",
         "tiff-tools": "OFF",
         "tiff-tests": "OFF",
         "tiff-contrib": "OFF",
         "tiff-docs": "OFF",
     },
-    postfix_script = "cp $$BUILD_TMPDIR$$/libtiff/tif_dir.h $$INSTALLDIR$$/include/",
+    # `tif_dir.h` is a libtiff internal header that upstream deliberately
+    # does NOT install (`include/` ships only the public surface). SIPI's
+    # `src/formats/SipiIOTiff.cpp` consumes it for `_TIFFFieldArray`, so
+    # we copy it post-install. cmake() doesn't symlink the source tree
+    # into BUILD_TMPDIR (that's a configure_make-only behaviour), so the
+    # canonical source path is `$EXT_BUILD_ROOT/external/+http_archive+tiff`.
+    postfix_script = "cp $$EXT_BUILD_ROOT/external/+http_archive+tiff/libtiff/tif_dir.h $$INSTALLDIR/include/",
     out_static_libs = ["libtiff.a"],
     set_file_prefix_map = True,
     deps = [

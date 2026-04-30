@@ -16,6 +16,12 @@ configure_make(
     lib_source = "@zlib//:all_srcs",
     configure_in_place = True,
     configure_options = ["--static"],
+    # `make all` (the rules_foreign_cc default) pulls in `example` and
+    # `minigzip`, which compile from `test/example.c` and `test/minigzip.c`.
+    # We don't need either binary; restricting to `libz.a` + `install`
+    # avoids the extra compile work and the link step that would pull in
+    # the test sources.
+    targets = ["libz.a", "install"],
     out_static_libs = ["libz.a"],
     set_file_prefix_map = True,
 )

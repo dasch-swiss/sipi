@@ -48,10 +48,17 @@ bazel_dep(name = "toolchains_llvm", version = "1.7.0")
 # sysroot the build silently links against the host's glibc — non-hermetic.
 # Chromium's debian sysroot tarballs are the canonical fix (research-doc §4).
 #
-# The `stdlib` map is explicit per platform because cc_toolchain_config.bzl
-# silently demotes "builtin-libc++" to "stdc++" under cross-compile (research
+# The `stdlib` map pins libc++ on Linux to avoid cc_toolchain_config.bzl
+# silently demoting "builtin-libc++" to "stdc++" under cross-compile (research
 # §4 footnote). Y+8's eventual cross-compile work expects libc++; pin
 # explicitly now to prevent the silent swap.
+#
+# darwin entries deliberately omitted: setting stdlib="libc++" appends
+# `-l:libc++.a -l:libc++abi.a` to LDFLAGS (Linux-style static archive
+# linkage), which ld64.lld rejects ("library not found for -l:libc++.a")
+# because macOS only ships dynamic libc++ in the SDK. On darwin the
+# toolchain default already uses libc++ via the Xcode CLT SDK; pinning is
+# unnecessary and breaks the build.
 sysroot = use_repo_rule("@toolchains_llvm//toolchain:sysroot.bzl", "sysroot")
 
 # TODO(DEV-6342): pin sysroot SHA + sha256 from
@@ -79,8 +86,6 @@ llvm.toolchain(
     stdlib = {
         "linux-x86_64": "libc++",
         "linux-aarch64": "libc++",
-        "darwin-aarch64": "libc++",
-        "darwin-x86_64": "libc++",
     },
 )
 llvm.sysroot(
@@ -148,16 +153,16 @@ http_archive(
     build_file = "//bazel:all_content.BUILD.bazel",
 )
 
-# fmt 6.2.1 — version pinned in `ext/fmt/CMakeLists.txt:13` (not in
-# `cmake/dependencies.cmake`). TODO(DEV-6342): when bumping fmt past 6.2.1,
-# move the pin into `cmake/dependencies.cmake` for consistency.
-http_archive(
-    name = "fmt",
-    url = "https://github.com/fmtlib/fmt/releases/download/6.2.1/fmt-6.2.1.zip",
-    sha256 = "FMT_621_SHA256_TODO",  # bazel will print expected SHA on first fetch
-    strip_prefix = "fmt-6.2.1",
-    build_file = "//bazel:all_content.BUILD.bazel",
-)
+# fmt deliberately omitted from the Bazel graph: the existing CMake build
+# wires fmt 6.2.1 in via `ext/fmt/CMakeLists.txt`, but no SIPI translation
+# unit (`src/`, `shttps/`, `include/`) actually `#include`s it — `grep`
+# confirms zero references. fmt 6.2.1 also fails to compile with C++23 +
+# Apple libc++ from the Xcode CLT SDK (`std::char_traits<fmt::internal::char8_type>`
+# is no longer specialised post-C++20), so building it for parity would
+# require either bumping the version (parity break) or pinning the dep
+# alone to C++17 (extra complexity). The dead dep is dropped here and
+# from `src/BUILD.bazel`; if anything ever does want fmt, it can come
+# back as a fresh pin against a C++23-clean version.
 
 http_archive(
     name = "jansson",
@@ -225,8 +230,12 @@ http_archive(
 
 http_archive(
     name = "png",
-    url = "https://sourceforge.net/projects/libpng/files/libpng16/1.6.41/libpng-1.6.41.tar.gz/download",
-    sha256 = "f00a11840f60616bdced9056d0f4cf2e4897697db039f15ce911704f957d3c5d",
+    # SourceForge serves the tarball via a `…/download` redirect URL with no
+    # `.tar.gz` suffix, which Bazel's `download_and_extract` rejects when
+    # auto-sniffing the archive type. The GitHub mirror of libpng publishes
+    # the same release artefact at a clean URL.
+    url = "https://github.com/glennrp/libpng/archive/refs/tags/v1.6.41.tar.gz",
+    sha256 = "d236ef40d8733b5a1f5dfd3f8386a7741a0bdd896b6677be0a9cec9747296f4c",
     strip_prefix = "libpng-1.6.41",
     build_file = "//bazel:all_content.BUILD.bazel",
 )
@@ -237,6 +246,18 @@ http_archive(
     sha256 = "ac6e958405a29fbbea9db70b00fa3c420e16ad32e1baf941ab233ba031dd72ee",
     strip_prefix = "prometheus-cpp-1.3.0",
     build_file = "//bazel:all_content.BUILD.bazel",
+    # Upstream ships nested `BUILD.bazel` files (under `core/`, `util/`,
+    # `pull/`, `push/`, `3rdparty/civetweb/`) for projects that consume
+    # prometheus-cpp via Bazel directly. Those files mark sub-package
+    # boundaries, so `glob(["**"])` in `bazel/all_content.BUILD.bazel`
+    # silently skips everything under them — leaving `core/` and `util/`
+    # invisible to the foreign_cc cmake() invocation. CMake then aborts at
+    # `add_subdirectory(core)` with "not an existing directory". Stripping
+    # the nested BUILD files restores the full source tree.
+    # `-mindepth 2` skips the top-level BUILD.bazel that http_archive's
+    # `build_file` overlays (Bazel writes it before patch_cmds run); we
+    # only want to drop the nested ones that shadow the source tree.
+    patch_cmds = ["find . -mindepth 2 -name BUILD.bazel -delete"],
 )
 
 http_archive(

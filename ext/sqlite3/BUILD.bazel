@@ -4,6 +4,11 @@ Mirrors `ext/sqlite3/CMakeLists.txt`'s `--enable-fts5` + `CPPFLAGS=-DSQLITE_ENAB
 """
 
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+load(
+    "//bazel:foreign_cc_helpers.bzl",
+    "darwin_autotools_build_data",
+    "darwin_autotools_env",
+)
 
 package(default_visibility = ["//visibility:public"])
 
@@ -16,8 +21,22 @@ configure_make(
         "--disable-shared",
         "--enable-fts5",
     ],
-    env = {"CPPFLAGS": "-DSQLITE_ENABLE_RTREE=1"},
+    build_data = darwin_autotools_build_data(),
+    env = darwin_autotools_env({"CPPFLAGS": "-DSQLITE_ENABLE_RTREE=1"}),
+    # Explicit install-* targets skip building the `sqlite3` shell binary
+    # (autotools' `bin_PROGRAMS = sqlite3` target). The shell binary's
+    # Makefile recipe runs `rm -f sqlite3` before linking — but foreign_cc
+    # creates `$BUILD_TMPDIR/$INSTALL_PREFIX/` (a directory named "sqlite3"
+    # because `INSTALL_PREFIX` is hardcoded to the rule name) as its
+    # install staging directory. `rm -f` refuses directories without `-r`,
+    # so the make target fails with `rm: sqlite3: is a directory`. Sipi
+    # only consumes libsqlite3.a; the CLI shell isn't part of the public
+    # API surface, so dropping it is fine.
+    targets = [
+        "install-libLTLIBRARIES",
+        "install-includeHEADERS",
+        "install-pkgconfigDATA",
+    ],
     out_static_libs = ["libsqlite3.a"],
-    out_binaries = ["sqlite3"],
     set_file_prefix_map = True,
 )

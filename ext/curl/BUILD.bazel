@@ -1,44 +1,53 @@
-"""libcurl — autotools. Depends on openssl + zlib.
+"""libcurl — cmake. Depends on openssl + zlib.
 
-Mirrors `ext/curl/CMakeLists.txt`'s long `--without-*` / `--disable-*` list
-pruning protocols Sipi doesn't use (LDAP, RTSP, dict, telnet, tftp, …).
-`--with-openssl` / `--with-zlib` point at foreign_cc deps via
-`$EXT_BUILD_DEPS`.
+Originally configured as `configure_make`, but curl 8.12.1's autotools probes
+behave erratically inside the foreign_cc + toolchains_llvm sandbox on darwin
+(`fcntl is prototyped` test fails to find `<sys/types.h>` despite the same
+header working for the immediately preceding `fcntl can be linked` probe;
+the failure cascades into `nonblock.c: "no non-blocking method was found"`).
+The CMake build path skips that whole class of probes and is the upstream-
+recommended path on macOS, so we switch.
+
+Configure flags map 1:1 to the CMake equivalents (`HTTP_ONLY=ON` covers
+the bulk of the protocol disables; the ones it doesn't are spelled out).
 """
 
-load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
 
 package(default_visibility = ["//visibility:public"])
 
-configure_make(
+cmake(
     name = "curl",
     lib_source = "@curl//:all_srcs",
-    configure_in_place = True,
-    configure_options = [
-        "--disable-shared",
-        "--enable-static",
-        "--with-openssl=$$EXT_BUILD_DEPS$$/openssl",
-        "--with-zlib=$$EXT_BUILD_DEPS$$/zlib",
-        "--without-libpsl",
-        "--without-brotli",
-        "--without-zstd",
-        "--without-libidn2",
-        "--without-nghttp2",
-        "--disable-ldap",
-        "--disable-ldaps",
-        "--disable-rtsp",
-        "--disable-dict",
-        "--disable-telnet",
-        "--disable-tftp",
-        "--disable-pop3",
-        "--disable-imap",
-        "--disable-smb",
-        "--disable-smtp",
-        "--disable-gopher",
-        "--disable-mqtt",
-        "--disable-manual",
-        "--disable-docs",
-    ],
+    cache_entries = {
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "BUILD_SHARED_LIBS": "OFF",
+        "BUILD_STATIC_LIBS": "ON",
+        "BUILD_CURL_EXE": "OFF",
+        "BUILD_TESTING": "OFF",
+        "ENABLE_DOCS": "OFF",
+        "ENABLE_MANUAL": "OFF",
+        # Drop everything except HTTP / HTTPS — matches the original
+        # `--disable-{ldap,ldaps,rtsp,dict,telnet,tftp,pop3,imap,smb,smtp,gopher,mqtt}` set.
+        "HTTP_ONLY": "ON",
+        "CURL_DISABLE_LDAP": "ON",
+        "CURL_DISABLE_LDAPS": "ON",
+        # SSL backend: foreign_cc-built OpenSSL.
+        "CURL_USE_OPENSSL": "ON",
+        "OPENSSL_ROOT_DIR": "$$EXT_BUILD_DEPS/openssl",
+        "ZLIB_ROOT": "$$EXT_BUILD_DEPS/zlib",
+        "ZLIB_INCLUDE_DIR": "$$EXT_BUILD_DEPS/zlib/include",
+        "ZLIB_LIBRARY": "$$EXT_BUILD_DEPS/zlib/lib/libz.a",
+        # Drop transports we don't need so we don't hunt for system libs.
+        "CURL_USE_LIBPSL": "OFF",
+        "CURL_BROTLI": "OFF",
+        "CURL_ZSTD": "OFF",
+        # `USE_LIBIDN2` (no `CURL_` prefix) is the canonical curl 8.x
+        # option. With it set OFF the resulting libcurl.a doesn't pull in
+        # `idn2_lookup_ul` / `idn2_check_version` from system libidn2.
+        "USE_LIBIDN2": "OFF",
+        "USE_NGHTTP2": "OFF",
+    },
     out_static_libs = ["libcurl.a"],
     set_file_prefix_map = True,
     deps = [
