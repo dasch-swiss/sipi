@@ -1,0 +1,7 @@
+# Patches consumed by repository rules (kakadu_extension passes labels here
+# to `kakadu_archive`'s `patches` attribute).
+
+exports_files([
+    "kakadu-Makefile-Linux-x86-64-clang.patch",
+    "kakadu-Makefile-Linux-arm-64-clang.patch",
+])

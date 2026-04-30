@@ -1,0 +1,93 @@
+--- a/coresys/make/Makefile-Linux-arm-64-gcc
++++ b/coresys/make/Makefile-Linux-arm-64-gcc
+@@ -1,4 +1,4 @@
+-CC = g++
++CC = clang
+ 
+ PLATFORM = Linux-arm-64-gcc
+ 
+@@ -7,7 +7,7 @@
+ INCLUDE_X64 = 1   # Disabled in the 32-bit Makefiles
+ 
+ # Specify architecture variant
+-HAVE_ARM81 = 1 # Comment out if you only have ARMv8-A
++# HAVE_ARM81 = 1 # Comment out if you only have ARMv8-A
+ 
+ # You should not normally need to modify anything below
+ INCLUDES = -I../common -I../shared
+@@ -15,11 +15,11 @@
+ C_OPT += -fPIC
+ C_OPT += -flax-vector-conversions # Can remove if your gcc version doesn't care
+ ifdef HAVE_ARM81
+-  C_OPT += -march=armv8.1-a
++  C_OPT += 
+ else
+-  C_OPT += -march=armv8-a -DKDU_NO_NEON81
++  C_OPT +=  -DKDU_NO_NEON81
+ endif
+-C_OPT += -z noexecstack
++C_OPT += 
+ ifdef KDU_STATIC_BUILD      # Final executables might be enirely static, in
+   C_OPT += -DKDU_NO_LIBNUMA # which case dlopen cannot load libnuma.so
+ endif
+--- a/apps/make/Makefile-Linux-arm-64-gcc
++++ b/apps/make/Makefile-Linux-arm-64-gcc
+@@ -1,4 +1,4 @@
+-CC = g++
++CC = clang
+ 
+ PLATFORM = Linux-arm-64-gcc
+ 
+@@ -14,7 +14,7 @@
+ INCLUDE_NEON = 1 # Comment out to avoid NEON; value is not important
+ 
+ # Specify architecture variant
+-HAVE_ARM81 = 1 # Comment out if you only have ARMv8-A
++# HAVE_ARM81 = 1 # Comment out if you only have ARMv8-A
+ 
+ # You should not normally need to modify anything below, except	
+ # perhaps for the "-march" flags, to match your target architecture.
+@@ -22,9 +22,9 @@
+ C_OPT = -O2 -DNDEBUG -Wall $(CXXFLAGS)
+ C_OPT += -flax-vector-conversions
+ ifdef HAVE_ARM81
+-  C_OPT += -march=armv8.1-a
++  C_OPT += 
+ else
+-  C_OPT += -march=armv8-a -DKDU_NO_NEON81
++  C_OPT +=  -DKDU_NO_NEON81
+ endif
+ 
+ ifdef KDU_STATIC_BUILD
+--- a/managed/make/Makefile-Linux-arm-64-gcc
++++ b/managed/make/Makefile-Linux-arm-64-gcc
+@@ -1,4 +1,4 @@
+-CC = g++
++CC = clang
+ 
+ PLATFORM = Linux-arm-64-gcc
+ # The following definition is used to build executables that may need
+@@ -13,7 +13,7 @@
+ INCLUDE_NEON = 1 # Comment out to avoid NEON; value is not important
+ 
+ # Specify architecture variant
+-HAVE_ARM81 = 1 # Comment out if you only have ARMv8-A
++# HAVE_ARM81 = 1 # Comment out if you only have ARMv8-A
+ 
+ # You should not normally need to modify anything below, except
+ # perhaps for the "-march" flags, to match your target architecture.
+@@ -24,11 +24,11 @@
+ C_OPT = -O2 -DNDEBUG -Wall $(CXXFLAGS)
+ C_OPT += -fPIC -flax-vector-conversions
+ ifdef HAVE_ARM81
+-  C_OPT += -march=armv8.1-a
++  C_OPT += 
+ else
+-  C_OPT += -march=armv8-a -DKDU_NO_NEON81
++  C_OPT +=  -DKDU_NO_NEON81
+ endif
+-C_OPT += -z noexecstack
++C_OPT += 
+ C_OPT += -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 # Remove for 32-bit I/O
+ #C_OPT += -DKDU_CUSTOM_TEXT   # See "Internationalization" in "Compilation_Instructions.txt"
+ 

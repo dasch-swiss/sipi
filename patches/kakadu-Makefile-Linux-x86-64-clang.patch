@@ -1,0 +1,75 @@
+--- a/coresys/make/Makefile-Linux-x86-64-gcc
++++ b/coresys/make/Makefile-Linux-x86-64-gcc
+@@ -1,4 +1,4 @@
+-CC = g++
++CC = clang
+ 
+ PLATFORM = Linux-x86-64-gcc
+ 
+@@ -13,7 +13,7 @@
+ INCLUDES = -I../common -I../shared
+ C_OPT =  -O2 -DNDEBUG -Wall -Wno-unused-function $(CXXFLAGS)
+ C_OPT += -fPIC -m64
+-C_OPT += -z noexecstack
++C_OPT += 
+ ifdef KDU_STATIC_BUILD      # Final executables might be enirely static, in
+   C_OPT += -DKDU_NO_LIBNUMA # which case dlopen cannot load libnuma.so
+ endif
+@@ -50,8 +50,8 @@
+ 
+ ifdef INCLUDE_AVX2
+   AVX2FLAGS = -mavx2 -mfma -mbmi -mbmi2 -mlzcnt
+-  AVX2FLAGS += -mno-avx256-split-unaligned-load
+-  AVX2FLAGS += -mno-avx256-split-unaligned-store
++  AVX2FLAGS += 
++  AVX2FLAGS += 
+ else
+   C_OPT += -DKDU_NO_AVX2
+ endif
+--- a/apps/make/Makefile-Linux-x86-64-gcc
++++ b/apps/make/Makefile-Linux-x86-64-gcc
+@@ -1,4 +1,4 @@
+-CC = g++
++CC = clang
+ 
+ PLATFORM = Linux-x86-64-gcc
+ 
+@@ -57,8 +57,8 @@
+ 
+ ifdef INCLUDE_AVX2
+   AVX2FLAGS = -mavx2 -mfma
+-  AVX2FLAGS += -mno-avx256-split-unaligned-load
+-  AVX2FLAGS += -mno-avx256-split-unaligned-store
++  AVX2FLAGS += 
++  AVX2FLAGS += 
+ else
+   C_OPT += -DKDU_NO_AVX2
+ endif
+--- a/managed/make/Makefile-Linux-x86-64-gcc
++++ b/managed/make/Makefile-Linux-x86-64-gcc
+@@ -1,4 +1,4 @@
+-CC = g++
++CC = clang
+ 
+ PLATFORM = Linux-x86-64-gcc
+ # The following definition is used to build executables that may need
+@@ -22,7 +22,7 @@
+ INCLUDES += -I$(JAVA_HOME)/include/linux # includes are on your system
+ C_OPT = -O2 -DNDEBUG -Wall $(CXXFLAGS)
+ C_OPT += -fPIC -m64
+-C_OPT += -z noexecstack
++C_OPT += 
+ C_OPT += -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 # Remove for 32-bit I/O
+ #C_OPT += -DKDU_CUSTOM_TEXT   # See "Internationalization" in "Compilation_Instructions.txt"
+ 
+@@ -55,8 +55,8 @@
+ 
+ ifdef INCLUDE_AVX2
+   AVX2FLAGS = -mavx2 -mfma
+-  AVX2FLAGS += -mno-avx256-split-unaligned-load
+-  AVX2FLAGS += -mno-avx256-split-unaligned-store
++  AVX2FLAGS += 
++  AVX2FLAGS += 
+ else
+   C_OPT += -DKDU_NO_AVX2
+ endif
