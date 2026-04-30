@@ -1,18 +1,42 @@
-name: bazel-build-dispatch
+name: bazel-build
 
-# Dispatch-only Bazel build validation. PR Y (DEV-6342) deliberately keeps
-# CI's normal merge-gating green path on Nix; this workflow exists so that
-# the build-completeness invariant ("every variant builds on macOS-aarch64,
-# linux-x86_64, linux-aarch64") can be exercised manually before merging Y.
+# Bazel build validation. PR Y (DEV-6342) deliberately keeps CI's normal
+# merge-gating green path on Nix; this workflow exercises the
+# build-completeness invariant ("every variant builds on macOS-aarch64,
+# linux-x86_64, linux-aarch64") for any PR that touches Bazel files.
 #
-# A maintainer triggers this from the Actions tab against the Y feature
-# branch; failures block the merge but do not block any other PR.
+# Two trigger paths:
+#  * `pull_request` — runs automatically on PRs that modify Bazel
+#    inputs. Same-repo PRs (the only flavour we expect for this branch)
+#    use the workflow definition from the PR's HEAD commit, so this
+#    works before the workflow file lands on `main`. The `paths` filter
+#    keeps unrelated PRs (Lua / Python / docs / Nix-only changes) out of
+#    the dispatch matrix.
+#  * `workflow_dispatch` — manual trigger via the Actions tab once the
+#    workflow file is on `main`. Useful for re-running against a PR
+#    branch that hasn't moved.
 #
 # Subsequent PRs in the migration (DEV-6343 onwards) gradually move
-# merge-gating to Bazel; this dispatch workflow is deleted in DEV-6348
-# (Y+6) once `ci.yml` invokes Bazel directly.
+# merge-gating to Bazel; this workflow is replaced in DEV-6348 (Y+6) once
+# `ci.yml` invokes Bazel directly.
 
 on:
+  pull_request:
+    paths:
+      - "MODULE.bazel"
+      - "MODULE.bazel.lock"
+      - ".bazelrc"
+      - ".bazelversion"
+      - ".bazelignore"
+      - "BUILD.bazel"
+      - "**/BUILD.bazel"
+      - "bazel/**"
+      - "platforms/**"
+      - "patches/**"
+      - "tools/workspace_status.sh"
+      - ".github/workflows/bazel-build.yml"
+      - "flake.nix"
+      - "flake.lock"
   workflow_dispatch:
     inputs:
       bazel_target:
@@ -31,7 +55,7 @@ jobs:
     permissions:
       contents: read
     concurrency:
-      group: bazel-build-dispatch-${{ matrix.arch }}-${{ github.head_ref || github.run_id }}
+      group: bazel-build-${{ matrix.arch }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
 
     strategy:
@@ -75,23 +99,27 @@ jobs:
           disk-cache: ${{ github.workflow }}-${{ matrix.arch }}
           repository-cache: true
 
-      - name: bazel build ${{ inputs.bazel_target }}
+      - name: bazel build ${{ inputs.bazel_target || '//src:sipi' }}
         env:
           # Same secret the Nix FOD consumes (`flake.nix:24`) — feeds the
           # `kakadu_archive` repository_rule via `gh release download`.
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+          # `pull_request` events don't carry `inputs.bazel_target`;
+          # default to `//src:sipi` to match the workflow_dispatch default.
+          BAZEL_TARGET: ${{ inputs.bazel_target || '//src:sipi' }}
         run: |
           # Bazelisk reads `.bazelversion` and downloads the matching Bazel.
           # Run inside the dev shell so `gh`, `perl`, `cmake`, `pkg-config`,
-          # `cacert` are on PATH — the `kakadu_archive` repository_rule needs
-          # `gh`, foreign_cc rules need cmake / perl / pkg-config.
-          nix develop --command bash -c '
-            bazelisk build ${{ inputs.bazel_target }}
-          '
+          # `cacert`, autoconf/automake/libtool/m4 are on PATH — the
+          # `kakadu_archive` repository_rule needs `gh`, foreign_cc rules
+          # need cmake / perl / pkg-config / autotools.
+          nix develop --command bash -c "
+            bazelisk build $BAZEL_TARGET
+          "
 
       - name: bazel-bin/src/sipi --version
-        if: ${{ inputs.bazel_target == '//src:sipi' }}
+        if: ${{ (inputs.bazel_target || '//src:sipi') == '//src:sipi' }}
         run: |
           nix develop --command bash -c '
-            ./bazel-bin/src/sipi --version
+            ./bazel-bin/src/sipi --help | head -5
           '
