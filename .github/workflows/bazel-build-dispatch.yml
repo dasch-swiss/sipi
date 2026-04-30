@@ -1,0 +1,97 @@
+name: bazel-build-dispatch
+
+# Dispatch-only Bazel build validation. PR Y (DEV-6342) deliberately keeps
+# CI's normal merge-gating green path on Nix; this workflow exists so that
+# the build-completeness invariant ("every variant builds on macOS-aarch64,
+# linux-x86_64, linux-aarch64") can be exercised manually before merging Y.
+#
+# A maintainer triggers this from the Actions tab against the Y feature
+# branch; failures block the merge but do not block any other PR.
+#
+# Subsequent PRs in the migration (DEV-6343 onwards) gradually move
+# merge-gating to Bazel; this dispatch workflow is deleted in DEV-6348
+# (Y+6) once `ci.yml` invokes Bazel directly.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bazel_target:
+        description: "Bazel target to build (default //src:sipi)"
+        required: false
+        default: "//src:sipi"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  bazel-build:
+    runs-on: ${{ matrix.runs-on }}
+    name: bazel build / ${{ matrix.arch }}
+    permissions:
+      contents: read
+    concurrency:
+      group: bazel-build-dispatch-${{ matrix.arch }}-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: linux-x86_64
+            runs-on: ubuntu-24.04
+          - arch: linux-aarch64
+            runs-on: ubuntu-24.04-arm
+          - arch: darwin-aarch64
+            runs-on: macos-14
+
+    steps:
+      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+        with:
+          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+
+      - name: pull LFS objects
+        run: |
+          git lfs install
+          git lfs fetch --all
+          git lfs checkout
+
+      - uses: DeterminateSystems/determinate-nix-action@v3
+        with:
+          # Kakadu FOD's `gh release download` flow needs configurable-impure-env
+          # to accept GH_TOKEN from the client. The Bazel-side
+          # `kakadu_archive` repository_rule reads GH_TOKEN/GITHUB_TOKEN
+          # from the env directly and does not depend on this knob.
+          extra-conf: |
+            extra-experimental-features = configurable-impure-env
+
+      # Bazel-contrib's setup-bazel handles repository-cache + action-cache +
+      # output-base separation under GHA's 10 GB cache limit. `--incompatible_strict_action_env`
+      # is set in `.bazelrc` so it applies to every invocation; no need to
+      # pass it on the command line here.
+      - uses: bazel-contrib/setup-bazel@0.15.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}-${{ matrix.arch }}
+          repository-cache: true
+
+      - name: bazel build ${{ inputs.bazel_target }}
+        env:
+          # Same secret the Nix FOD consumes (`flake.nix:24`) — feeds the
+          # `kakadu_archive` repository_rule via `gh release download`.
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+        run: |
+          # Bazelisk reads `.bazelversion` and downloads the matching Bazel.
+          # Run inside the dev shell so `gh`, `perl`, `cmake`, `pkg-config`,
+          # `cacert` are on PATH — the `kakadu_archive` repository_rule needs
+          # `gh`, foreign_cc rules need cmake / perl / pkg-config.
+          nix develop --command bash -c '
+            bazelisk build ${{ inputs.bazel_target }}
+          '
+
+      - name: bazel-bin/src/sipi --version
+        if: ${{ inputs.bazel_target == '//src:sipi' }}
+        run: |
+          nix develop --command bash -c '
+            ./bazel-bin/src/sipi --version
+          '
