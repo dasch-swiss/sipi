@@ -1,0 +1,70 @@
+# Sipi Bazel configuration — pinned to Bazel 9.0.2 LTS (.bazelversion).
+#
+# Defaults in Bazel 9 (do NOT re-declare):
+#   --enable_bzlmod                          (default in 9)
+#   --incompatible_enable_cc_toolchain_resolution  (default in 9)
+#
+# Kept here as a documented cache-hygiene anchor — strict action env stops
+# unrelated host env vars (e.g. GitHub-injected GITHUB_RUN_ID) from poisoning
+# Bazel's cache keys across CI runs.
+build --incompatible_strict_action_env
+
+# Force the resolved toolchain (toolchains_llvm in MODULE.bazel) instead of
+# Bazel's autodetected host C++ toolchain. Without this, Bazel can fall back
+# to the host clang/gcc when toolchain resolution misfires, which silently
+# breaks hermeticity.
+build --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+
+# Stamp inputs for reproducible binaries and OCI images. The script writes
+# STABLE_GIT_COMMIT, STABLE_GIT_VERSION, STABLE_IMAGE_CREATED, and
+# STABLE_SIPI_VERSION (sourced from version.txt) — consumed by
+# expand_template(..., stamp_substitutions = {...}) in src/BUILD.bazel.
+build --workspace_status_command=tools/workspace_status.sh
+
+# Auto-apply :macos / :linux config blocks below by detected host platform.
+build --enable_platform_specific_config
+
+# C++23 — same target as the existing CMake build (see CLAUDE.md
+# "Compiler Requirements: C++23").
+build --cxxopt=-std=c++23
+build --host_cxxopt=-std=c++23
+
+# ── Hardening neutralization ───────────────────────────────────────────────
+# Mirrors flake.nix `hardeningDisable = [ "all" ]`. Bazel's foreign_cc deps
+# (libtiff, exiv2, openssl, …) and Sipi's own code build today against a
+# stack stripped of nixpkgs' default hardening; keep parity here so Bazel
+# binaries match the Nix-built ones byte-for-byte where possible. PIE
+# specifically is required-on for macOS, so the -fno-pie/-no-pie pair is
+# scoped to Linux only.
+build --copt=-U_FORTIFY_SOURCE
+build --copt=-fno-stack-protector
+build --host_copt=-U_FORTIFY_SOURCE
+build --host_copt=-fno-stack-protector
+
+build:linux --copt=-fno-stack-clash-protection
+build:linux --copt=-fno-pie
+build:linux --linkopt=-no-pie
+build:linux --host_copt=-fno-stack-clash-protection
+build:linux --host_copt=-fno-pie
+build:linux --host_linkopt=-no-pie
+
+# ── macOS ──────────────────────────────────────────────────────────────────
+# Pin the deployment target so Bazel-built binaries are portable across
+# macOS releases. Required because toolchains_llvm does not bundle a macOS
+# sysroot — the Xcode CLT SDK is consulted at build time and its default
+# version is whatever shipped with the host OS.
+build:macos --copt=-mmacosx-version-min=12.0
+build:macos --linkopt=-mmacosx-version-min=12.0
+build:macos --host_copt=-mmacosx-version-min=12.0
+build:macos --host_linkopt=-mmacosx-version-min=12.0
+build:macos --action_env=MACOSX_DEPLOYMENT_TARGET=12.0
+
+# ── Test ───────────────────────────────────────────────────────────────────
+# Surface test stderr immediately on failure rather than collecting it into
+# bazel-testlogs — useful for inner-loop iteration. CI flips this off.
+test --test_output=errors
+
+# ── User overrides ─────────────────────────────────────────────────────────
+# Local-machine-only flags (e.g. --disk_cache=...) belong in user.bazelrc;
+# the file is gitignored.
+try-import %workspace%/user.bazelrc

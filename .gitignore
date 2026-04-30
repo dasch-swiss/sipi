@@ -72,6 +72,12 @@ icc.zip
 /result
 /result-*
 
+# Bazel output-base symlinks at the workspace root (bazel-bin, bazel-out,
+# bazel-testlogs, bazel-<workspace>). MODULE.bazel.lock is committed.
+/bazel-*
+# Per-developer Bazel overrides — not project source.
+/user.bazelrc
+
 # Kakadu is proprietary — injected by CI from dsp-ci-assets
 vendor/v8_4_1-*.zip
 vendor/v8_5-*.zip
