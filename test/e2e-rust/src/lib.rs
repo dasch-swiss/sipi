@@ -53,8 +53,10 @@ impl SipiServer {
 
         let (http_port, ssl_port) = allocate_ports();
 
-        // If a stale sipi from a previous test run is still holding these ports,
-        // kill it. Otherwise the new server can't bind and tests get IncompleteMessage.
+        // If a stale sipi from a previous test run is still holding these
+        // ports, terminate it gracefully (SIGTERM, then SIGKILL on timeout).
+        // Forced SIGKILL bypasses C++ destructors and orphans static-singleton
+        // heap, which ASan reports as a leak — see the asan-flake fix.
         kill_process_on_port(http_port);
         kill_process_on_port(ssl_port);
 
@@ -68,6 +70,11 @@ impl SipiServer {
             extra_args
         );
 
+        // `--drain-timeout 2` keeps every test's sipi shutdown bounded to ~2s
+        // (default is 30s). With `stop()`'s 5s deadline, this leaves a 2.5×
+        // margin even under ASan's runtime overhead, so SIGKILL never fires
+        // on a still-draining server. Placed before `extra_args` so an
+        // individual test can still override it (CLI11 last-wins).
         let mut cmd = Command::new(&sipi_bin);
         cmd.arg("--config")
             .arg(config)
@@ -75,6 +82,8 @@ impl SipiServer {
             .arg(http_port.to_string())
             .arg("--sslport")
             .arg(ssl_port.to_string())
+            .arg("--drain-timeout")
+            .arg("2")
             .args(extra_args)
             .current_dir(working_dir)
             .stdout(Stdio::piped())
@@ -365,23 +374,53 @@ pub fn test_data_dir() -> PathBuf {
     repo_root().join("test").join("_test_data")
 }
 
-/// Kill any process listening on the given port (cleanup from previous test runs).
+/// Terminate any process listening on the given port (cleanup from previous
+/// test runs). Sends SIGTERM first and polls for exit; falls back to SIGKILL
+/// only if the process is still alive after the deadline. Forced SIGKILL
+/// bypasses destructors and leaks singleton-owned heap that ASan flags.
 fn kill_process_on_port(port: u16) {
-    // Use lsof to find the PID, then SIGKILL it
-    if let Ok(output) = Command::new("lsof")
+    let Ok(output) = Command::new("lsof")
         .args(["-ti", &format!(":{}", port)])
         .output()
-    {
-        let pids = String::from_utf8_lossy(&output.stdout);
-        for pid_str in pids.split_whitespace() {
-            if let Ok(pid) = pid_str.parse::<i32>() {
-                signal::kill(Pid::from_raw(pid), Signal::SIGKILL).ok();
+    else {
+        return;
+    };
+    let pids: Vec<Pid> = String::from_utf8_lossy(&output.stdout)
+        .split_whitespace()
+        .filter_map(|s| s.parse::<i32>().ok())
+        .map(Pid::from_raw)
+        .collect();
+    if pids.is_empty() {
+        return;
+    }
+
+    // SIGTERM all candidates at once, then poll each.
+    for pid in &pids {
+        signal::kill(*pid, Signal::SIGTERM).ok();
+    }
+
+    let deadline = Instant::now() + Duration::from_millis(1500);
+    let mut had_to_escalate = false;
+    for pid in &pids {
+        // Poll for exit via `kill -0` (signal None). Returns Err(ESRCH)
+        // once the process is gone; Err(EPERM) means the PID is still
+        // alive but owned by another user — treat as still-alive.
+        loop {
+            match signal::kill(*pid, None) {
+                Err(nix::errno::Errno::ESRCH) => break, // gone
+                _ if Instant::now() >= deadline => {
+                    signal::kill(*pid, Signal::SIGKILL).ok();
+                    had_to_escalate = true;
+                    break;
+                }
+                _ => std::thread::sleep(Duration::from_millis(50)),
             }
         }
-        if !pids.trim().is_empty() {
-            // Give the OS time to release the port
-            std::thread::sleep(Duration::from_millis(500));
-        }
+    }
+
+    if had_to_escalate {
+        // SIGKILL'd a process — give the OS a beat to release the port.
+        std::thread::sleep(Duration::from_millis(200));
     }
 }
 
