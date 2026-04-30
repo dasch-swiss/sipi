@@ -421,12 +421,36 @@
               imagemagick
               libxml2
               libxslt
+
+              # Bazel build orchestration (DEV-6342). bazelisk reads
+              # `.bazelversion` and downloads the matching Bazel.
+              bazelisk
+              # Host-tool deps used by the Bazel graph:
+              #  - perl       — openssl `Configure` (research §9)
+              #  - cmake      — `rules_foreign_cc` `cmake()` invocations
+              #  - pkg-config — `configure_make()` autotools probes (curl ↔ openssl)
+              #  - gh         — `kakadu_archive` repository_rule shells out
+              #                 here (was previously in the Kakadu FOD's
+              #                 `nativeBuildInputs`; the FOD goes away in Y+6)
+              #  - cacert     — gh's Go-based TLS needs an explicit cert
+              #                 bundle on Linux dev shells without
+              #                 /etc/ssl/certs (defensive parity with the
+              #                 deleted FOD's behaviour)
+              perl
+              cmake
+              pkg-config
+              gh
+              cacert
             ];
 
             shellHook = ''
               export PS1="\\u@\\h | nix-develop> "
               export MKSHELL=clang
               git config core.hooksPath .githooks 2>/dev/null || true
+
+              # Match the Kakadu FOD's TLS setup (flake.nix:62) for the
+              # Bazel-side `gh release download` flow inside the dev shell.
+              export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
             '';
           };
 
@@ -450,12 +474,21 @@
               imagemagick
               libxml2
               libxslt
+
+              # Bazel host tools (see `clang` shell for rationale).
+              bazelisk
+              perl
+              cmake
+              pkg-config
+              gh
+              cacert
             ];
 
             shellHook = ''
               export PS1="\\u@\\h | nix-develop-fuzz> "
               export MKSHELL=fuzz
               git config core.hooksPath .githooks 2>/dev/null || true
+              export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
             '';
           };
 
@@ -479,12 +512,21 @@
               imagemagick
               libxml2
               libxslt
+
+              # Bazel host tools (see `clang` shell for rationale).
+              bazelisk
+              perl
+              cmake
+              pkg-config
+              gh
+              cacert
             ];
 
             shellHook = ''
               export PS1="\\u@\\h | nix-develop> "
               export MKSHELL=default
               git config core.hooksPath .githooks 2>/dev/null || true
+              export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
             '';
           };
         };
