@@ -1,0 +1,6 @@
+# Files exposed to Bazel-loaded extensions (kakadu_extension consumes
+# `kakadu.BUILD.bazel` as the `build_file` argument to `kakadu_archive`).
+
+exports_files([
+    "kakadu.BUILD.bazel",
+])

@@ -96,3 +96,10 @@ llvm.sysroot(
 use_repo(llvm, "llvm_toolchain", "llvm_toolchain_llvm")
 
 register_toolchains("@llvm_toolchain//:all")
+
+# ── Kakadu (proprietary, GitHub-release-gated) ─────────────────────────────
+# Custom repository_rule mirroring today's Nix FOD auth UX 1:1 — shells out
+# to `gh release download` instead of `http_archive` + `auth_patterns` (the
+# latter requires `~/.netrc`, which `gh` does not populate).
+kakadu_extension = use_extension("//bazel:kakadu_extension.bzl", "kakadu_extension")
+use_repo(kakadu_extension, "kakadu")
