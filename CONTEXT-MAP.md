@@ -11,7 +11,7 @@ This repository has two bounded contexts. The boundary is real (separate namespa
 
 **SIPI → shttps. Strictly one-way.**
 
-SIPI is a *consumer* of shttps: it subclasses `shttps::Server`, registers route handlers (`iiif_handler`, `file_handler`), and uses shttps types (`Connection`, `LuaServer`, `Parsing`, `Hash`) inside its own code. shttps must not name any `Sipi::` symbol or include any `Sipi*.h` header. Today there is one known violation (`shttps/Server.cpp` reaches into `SipiMetrics`); it is a bug, tracked as a layering leak. The boundary is enforced by `just shttps-context-check`. See `scripts/shttps-context-check.sh` for the allowlist.
+SIPI is a *consumer* of shttps: it subclasses `shttps::Server`, registers route handlers (`iiif_handler`, `file_handler`), and uses shttps types (`Connection`, `LuaServer`, `Parsing`, `Hash`) inside its own code. shttps must not name any `Sipi::` symbol or include any `Sipi*.h` header. Telemetry crosses the boundary in the *correct* direction: shttps owns the `shttps::ConnectionMetrics` strategy interface; SIPI installs a `Sipi::SipiConnectionMetricsAdapter` on the server at startup that bridges those events to the `SipiMetrics` singleton. shttps holds no reverse dependency on any `Sipi::` symbol. The boundary is enforced by `just shttps-context-check` (see `scripts/shttps-context-check.sh`); the allowlist is empty.
 
 ## Long-term direction
 

@@ -15,6 +15,7 @@
 #include <chrono>
 #include <csignal>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <queue>
 #include <vector>
@@ -36,6 +37,7 @@
 #include "openssl/ssl.h"
 
 #include "Connection.h"
+#include "ConnectionMetrics.h"
 #include "Error.h"
 #include "Global.h"
 #include "Logger.h"
@@ -203,6 +205,7 @@ private:
   std::vector<shttps::LuaRoute> _lua_routes;//!< This vector holds the routes that are served by lua scripts
   std::vector<GlobalFunc> lua_globals;
   size_t _max_post_size;
+  std::shared_ptr<ConnectionMetrics> metrics_;//!< Optional telemetry strategy; null = no-op
 
   RequestHandler get_handler(Connection &conn, void **handler_data_p);
 
@@ -471,6 +474,16 @@ public:
    * \param[in] User data
    */
   inline void user_data(void *user_data_p) { _user_data = user_data_p; }
+
+  /*!
+   * Install a telemetry strategy. Server delegates HTTP-layer events
+   * (connections rejected, queue-depth changes, request completion) to the
+   * installed strategy. Pass an empty shared_ptr to disable. Strategy must be
+   * thread-safe — events fire from worker threads and from the main poll loop.
+   *
+   * \param[in] metrics Concrete ConnectionMetrics implementation, or null
+   */
+  void setMetrics(std::shared_ptr<ConnectionMetrics> metrics) { metrics_ = std::move(metrics); }
 
   void drain_timeout(unsigned seconds) { _drain_timeout = seconds; }
   unsigned drain_timeout() const { return _drain_timeout; }

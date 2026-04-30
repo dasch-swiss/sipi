@@ -34,6 +34,7 @@
 #include "CLI11.hpp"
 #include "Logger.h"
 #include "SipiConf.h"
+#include "SipiConnectionMetricsAdapter.h"
 #include "SipiFilenameHash.h"
 #include "SipiHttpServer.hpp"
 #include "SipiMemoryBudget.h"
@@ -1554,6 +1555,14 @@ int main(int argc, char *argv[])
       }
       Sipi::SipiHttpServer server(
         sipiConf.getPort(), nthreads, sipiConf.getUseridStr(), sipiConf.getLogfile(), sipiConf.getLoglevel());
+
+      // Install the SIPI-side telemetry adapter on the shttps server before
+      // any other configuration runs, so early-startup events (queue depth,
+      // rejections during warm-up) reach SipiMetrics. shttps owns the
+      // ConnectionMetrics strategy interface; SIPI plugs in the adapter that
+      // bridges to its singleton — this is the seam that keeps shttps free
+      // of any reverse dependency on Sipi:: types (see CONTEXT-MAP.md).
+      server.setMetrics(std::make_shared<Sipi::SipiConnectionMetricsAdapter>());
 
       log_info("BUILD_TIMESTAMP: %s", BUILD_TIMESTAMP);
       log_info("BUILD_SCM_TAG: %s", BUILD_SCM_TAG);
