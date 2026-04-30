@@ -61,21 +61,23 @@ bazel_dep(name = "toolchains_llvm", version = "1.7.0")
 # unnecessary and breaks the build.
 sysroot = use_repo_rule("@toolchains_llvm//toolchain:sysroot.bzl", "sysroot")
 
-# TODO(DEV-6342): pin sysroot SHA + sha256 from
-# https://chromium.googlesource.com/chromium/src/+/refs/heads/main/build/linux/sysroot_scripts/sysroots.json
-# (or pull from a known-good Bazel project — Envoy / gRPC carry current pins).
-# Until pinned, `bazel build` on Linux will fail at the sysroot fetch stage;
-# the macOS-aarch64 inner loop is unaffected because the sysroots are not
-# consulted there.
+# Chromium's debian-bullseye sysroots — pulled from the canonical
+# `sysroots.json` at:
+#   https://chromium.googlesource.com/chromium/src/+/refs/heads/main/build/linux/sysroot_scripts/sysroots.json
+# The URL is `{base}/{Sha256Sum}` per Chromium's `install-sysroot.py`
+# (the sha doubles as the path component AND the integrity check). Bumping
+# bullseye → bookworm later means re-running:
+#   curl -s https://chromium.googlesource.com/chromium/src/+/refs/heads/main/build/linux/sysroot_scripts/sysroots.json?format=TEXT | base64 -d | jq '.bookworm_amd64'
+# and copying the `Sha256Sum` field into both `urls` and `sha256` below.
 sysroot(
     name = "sysroot_linux_x86_64",
-    urls = ["https://commondatastorage.googleapis.com/chrome-linux-sysroot/toolchain/SYSROOT_SHA_TODO/debian_bullseye_amd64_sysroot.tar.xz"],
-    sha256 = "SYSROOT_SHA256_TODO",
+    urls = ["https://commondatastorage.googleapis.com/chrome-linux-sysroot/52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d"],
+    sha256 = "52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d",
 )
 sysroot(
     name = "sysroot_linux_aarch64",
-    urls = ["https://commondatastorage.googleapis.com/chrome-linux-sysroot/toolchain/SYSROOT_SHA_TODO/debian_bullseye_arm64_sysroot.tar.xz"],
-    sha256 = "SYSROOT_SHA256_TODO",
+    urls = ["https://commondatastorage.googleapis.com/chrome-linux-sysroot/c7176a4c7aacbf46bda58a029f39f79a68008d3dee6518f154dcf5161a5486d8"],
+    sha256 = "c7176a4c7aacbf46bda58a029f39f79a68008d3dee6518f154dcf5161a5486d8",
 )
 
 llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm")
