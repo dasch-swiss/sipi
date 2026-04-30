@@ -111,6 +111,7 @@ add_library(
         SockStream.cpp SockStream.h
         ChunkReader.cpp ChunkReader.h
         Connection.cpp Connection.h
+        ConnectionMetrics.h
         LuaServer.cpp LuaServer.h
         Parsing.cpp Parsing.h
         Server.cpp Server.h

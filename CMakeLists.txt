@@ -485,6 +485,7 @@ add_executable(sipi
         ${PROJECT_SOURCE_DIR}/src/handlers/iiif_handler.hpp
         ${PROJECT_SOURCE_DIR}/src/SipiCache.cpp include/SipiCache.h
         ${PROJECT_SOURCE_DIR}/src/SipiMetrics.cpp ${PROJECT_SOURCE_DIR}/include/SipiMetrics.h
+        ${PROJECT_SOURCE_DIR}/src/SipiConnectionMetricsAdapter.cpp ${PROJECT_SOURCE_DIR}/include/SipiConnectionMetricsAdapter.h
         ${PROJECT_SOURCE_DIR}/src/SipiLua.cpp include/SipiLua.h
         ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiRotation.cpp include/iiifparser/SipiRotation.h
         ${PROJECT_SOURCE_DIR}/src/iiifparser/SipiQualityFormat.cpp ${PROJECT_SOURCE_DIR}/include/iiifparser/SipiQualityFormat.h
@@ -504,6 +505,7 @@ add_executable(sipi
         ${PROJECT_SOURCE_DIR}/shttps/Parsing.cpp ${PROJECT_SOURCE_DIR}/shttps/Parsing.h
         ${PROJECT_SOURCE_DIR}/shttps/ThreadControl.cpp ${PROJECT_SOURCE_DIR}/shttps/ThreadControl.h
         ${PROJECT_SOURCE_DIR}/shttps/SocketControl.cpp ${PROJECT_SOURCE_DIR}/shttps/SocketControl.h
+        ${PROJECT_SOURCE_DIR}/shttps/ConnectionMetrics.h
         ${PROJECT_SOURCE_DIR}/shttps/Server.cpp ${PROJECT_SOURCE_DIR}/shttps/Server.h
         ${PROJECT_SOURCE_DIR}/shttps/jwt.c ${PROJECT_SOURCE_DIR}/shttps/jwt.h
         ${PROJECT_SOURCE_DIR}/shttps/makeunique.h

@@ -85,7 +85,7 @@ These currently live in shttps but are not seam types. They are utilities or dom
 
 > **Dev:** "And if I want to expose request count to Prometheus?"
 
-> **Maintainer:** "Same answer at the boundary. shttps must not call `SipiMetrics`. The clean shape is: shttps exposes a metrics-callback hook on **Server**; SIPI installs a callback that drives `SipiMetrics`. Today shttps reaches into `SipiMetrics` directly — that is a tracked layering leak."
+> **Maintainer:** "Same answer at the boundary. shttps must not call `SipiMetrics`. The clean shape — and the one we have today — is: shttps owns a `ConnectionMetrics` strategy interface on **Server**; SIPI installs `SipiConnectionMetricsAdapter` at startup, which bridges those events to `SipiMetrics`. shttps holds no reverse dependency on any `Sipi::` type."
 
 > **Dev:** "Why is `LuaServer` called a server if it isn't one?"
 
@@ -96,4 +96,4 @@ These currently live in shttps but are not seam types. They are utilities or dom
 - **`LuaServer` is not a server.** It is a per-request Lua interpreter (a VM wrapper). The name predates the current model and cannot be renamed without breaking consumers; in conversation, prefer "Lua interpreter" or "Lua VM" and reserve "server" for `shttps::Server`.
 - **"Handler" is overloaded across the boundary.** In shttps, **RequestHandler** is a C++ function pointer. In SIPI's user-facing language ("Route handler" in `UBIQUITOUS_LANGUAGE.md`), it is a *Lua script* bound to a URL. They are distinct concepts: a SIPI Lua route handler is *invoked by* a shttps `RequestHandler` that loads and runs the script.
 - **"file_handler" is overloaded.** `shttps::file_handler` serves arbitrary files from the **document root** (generic static-file + Lua-in-HTML). SIPI's IIIF `/file` endpoint (`handlers::iiif_handler::FILE_DOWNLOAD`, sipi-side) serves a **Bitstream** keyed by an IIIF identifier under the **image root**. Same word, two unrelated handlers; never use "file_handler" without qualifying which side.
-- **`SipiMetrics` is referenced from `shttps/Server.cpp`.** This violates the one-way dependency direction and is a tracked layering leak, not a sanctioned pattern.
+- **Telemetry crosses the boundary via the `ConnectionMetrics` strategy.** shttps owns the `ConnectionMetrics` interface (`shttps/ConnectionMetrics.h`) and `Server::setMetrics`; SIPI installs `Sipi::SipiConnectionMetricsAdapter` at startup. shttps does not name any `Sipi::` type, and `SipiMetrics::instance()` is never called from `shttps/`.

@@ -35,7 +35,6 @@
 #include "LuaServer.h"
 #include "Parsing.h"
 #include "Server.h"
-#include "SipiMetrics.h"
 #include "SockStream.h"
 #include "makeunique.h"
 
@@ -1017,9 +1016,7 @@ void Server::run()
         // Collect expired sockets (lock released before I/O)
         auto expired = socket_control.collect_expired_waiting();
         for (const auto &si : expired) { reject_with_503(si); }
-        if (!expired.empty()) {
-          SipiMetrics::instance().rejected_connections_total.Increment(static_cast<double>(expired.size()));
-        }
+        if (!expired.empty() && metrics_) { metrics_->onConnectionsRejected(expired.size()); }
 
         // Collect idle keep-alive sockets (lock released before I/O)
         if (_keep_alive_timeout > 0) {
@@ -1027,8 +1024,7 @@ void Server::run()
           for (const auto &si : idle) { close_socket(si); }
         }
 
-        SipiMetrics::instance().waiting_connections.Set(
-          static_cast<double>(socket_control.waiting_queue_size()));
+        if (metrics_) { metrics_->onWaitingConnectionsChanged(socket_control.waiting_queue_size()); }
       }
       continue;// No events — restart poll
     }
@@ -1204,7 +1200,7 @@ void Server::run()
                 SocketControl::SocketInfo sockid;
                 socket_control.remove(i, sockid);
                 reject_with_503(sockid);
-                SipiMetrics::instance().rejected_connections_total.Increment();
+                if (metrics_) { metrics_->onConnectionsRejected(1); }
                 log_warn("Queue full — rejected connection from %s with 503", sockid.peer_ip);
               }
             }
@@ -1337,7 +1333,7 @@ shttps::ThreadStatus Server::process_request(std::istream *ins,
       handler(conn, luaserver, _user_data, hd);
       auto request_end = std::chrono::steady_clock::now();
       double duration_seconds = std::chrono::duration<double>(request_end - request_start).count();
-      SipiMetrics::instance().request_duration_seconds.Observe(duration_seconds);
+      if (metrics_) { metrics_->onRequestComplete(duration_seconds); }
     } catch (InputFailure iofail) {
       log_debug("Possibly socket closed by peer");
       return CLOSE;// or CLOSE ??

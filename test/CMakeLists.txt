@@ -97,6 +97,7 @@ set(SIPI_TESTABLE_SRCS
     ${CMAKE_SOURCE_DIR}/src/handlers/iiif_handler.cpp
     ${CMAKE_SOURCE_DIR}/src/SipiCache.cpp
     ${CMAKE_SOURCE_DIR}/src/SipiMetrics.cpp
+    ${CMAKE_SOURCE_DIR}/src/SipiConnectionMetricsAdapter.cpp
     ${CMAKE_SOURCE_DIR}/src/SipiLua.cpp
     ${CMAKE_SOURCE_DIR}/src/iiifparser/SipiIdentifier.cpp
     ${CMAKE_SOURCE_DIR}/src/iiifparser/SipiRotation.cpp
@@ -191,6 +192,9 @@ add_subdirectory(unit/sipiimage)
 
 # SipiIcc helper tests (SOURCE_DATE_EPOCH normalization)
 add_subdirectory(unit/sipiicc)
+
+# SipiConnectionMetricsAdapter tests (Adapter forwarding to SipiMetrics)
+add_subdirectory(unit/sipiconnectionmetrics)
 
 # Logger tests
 # To only run this single test, run from inside the build directory '(cd test/unit && ./sipiimage/logger)'

@@ -8,11 +8,9 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
 # Allowlist: each entry is "file|symbol" and must carry an inline TODO comment
-# naming the follow-up that retires it.
-ALLOWLIST=(
-    # TODO: remove once metrics-hook lands
-    "shttps/Server.cpp|SipiMetrics"
-)
+# naming the follow-up that retires it. Currently empty — the boundary is
+# clean. Add new entries only with a tracked Linear issue for retirement.
+ALLOWLIST=()
 
 # grep flags shared by both passes. Vendored third-party sources are excluded.
 GREP_FLAGS=(
