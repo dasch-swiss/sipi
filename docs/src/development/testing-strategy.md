@@ -728,14 +728,14 @@ Memory leaks and undefined behavior are not a separate pyramid layer but a **bui
 
 ## Cross-Cutting: Performance Regression Detection
 
-**Current state:** Prometheus metrics include cache counters/gauges and `sipi_request_duration_seconds` histogram (5ms–10s buckets). CI infrastructure includes smoke latency assertions in PR CI and nightly `wrk` load tests.
+**Current state:** Prometheus metrics include cache counters/gauges and `sipi_request_duration_seconds` histogram (5ms–10s buckets). CI infrastructure includes smoke latency assertions in PR CI. Throughput-style load testing is intentionally **not** run in CI — synthetic `wrk` against three IIIF endpoints on a shared GitHub runner does not mirror dasch-prod-01's actual workload (cold-cache reads of medium-sized JP2s under spiky concurrency) and the prior nightly `loadtest.yml` artifacts were not consulted. Meaningful load testing belongs in a staging environment with realistic fixtures and traffic shape.
 
 **Strategy (three tiers):**
 
 | Tier | What | Tool | When |
 |---|---|---|---|
 | Smoke latency | Assert response time < threshold in e2e tests | Rust `Instant::now()` | PR CI |
-| Load baseline | Throughput against standard workload | `wrk` or `hey` | Nightly CI |
+| Load baseline | Throughput against realistic workload | `wrk` / `k6` | **Future** — staging environment, not CI |
 | Component benchmarks | Micro-benchmarks for parsers, decode | `criterion` (Rust, future) | Post-migration |
 
 **Smoke latency thresholds (proposed):**
@@ -781,7 +781,6 @@ insta::assert_json_snapshot!(info_json, {
 | Python e2e tests | *(retired)* | — | Replaced by Rust e2e tests |
 | Fuzz testing | `.github/workflows/fuzz.yml` | Nightly | libFuzzer corpus growth |
 | Sanitizer builds | `just nix-build-sanitized` (`.#sanitized`) | PR + Nightly | ASan+UBSan; unit tests in-sandbox, e2e out-of-sandbox |
-| Load testing | `.github/workflows/loadtest.yml` | Nightly | `wrk` throughput baseline |
 
 ## Python Test Deprecation — Parity Checklist
 
