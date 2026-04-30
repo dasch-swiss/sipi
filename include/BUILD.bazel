@@ -35,7 +35,15 @@ cc_library(
         # tripping the empty-glob lint when a subdir is empty or absent.
         allow_empty = True,
     ),
-    includes = ["."],
+    # Each per-subsystem header dir is on the include path so SIPI's mix of
+    # sibling-relative (`#include "SipiDecodeDims.h"`) and prefixed
+    # (`#include "metadata/SipiIcc.h"`) include forms both resolve.
+    includes = [
+        ".",
+        "formats",
+        "iiifparser",
+        "metadata",
+    ],
 )
 
 # Individual file labels — used where a target needs one specific header
@@ -44,4 +52,13 @@ cc_library(
 exports_files([
     "Logger.h",
     "SipiVersion.h.in",
+    "SipiConfig.h.in",
+    # ICC profile binaries embedded as C arrays at build time by
+    # `//src:<profile>_icc_h` genrules. `xxd -i`'s array-name inference
+    # uses the file basename, so the genrule passes them with the
+    # CMake build's exact filenames (.icc / .icm extensions preserved).
+    "ICC-Profiles/AdobeRGB1998.icc",
+    "ICC-Profiles/Rec709-Rec1886.icc",
+    "ICC-Profiles/USWebCoatedSWOP.icc",
+    "ICC-Profiles/YCC709.icm",
 ])

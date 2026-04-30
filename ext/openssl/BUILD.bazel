@@ -11,6 +11,11 @@ lowercase `configure` only.
 """
 
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+load(
+    "//bazel:foreign_cc_helpers.bzl",
+    "darwin_autotools_build_data",
+    "darwin_autotools_env",
+)
 
 package(default_visibility = ["//visibility:public"])
 
@@ -36,6 +41,8 @@ configure_make(
         "no-tests",
         "--libdir=lib",
     ],
+    build_data = darwin_autotools_build_data(),
+    env = darwin_autotools_env(),
     targets = ["", "install_sw"],
     out_static_libs = [
         "libssl.a",

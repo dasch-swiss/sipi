@@ -5,6 +5,11 @@ our foreign_cc-installed deps via `$EXT_BUILD_DEPS`.
 """
 
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+load(
+    "//bazel:foreign_cc_helpers.bzl",
+    "darwin_autotools_build_data",
+    "darwin_autotools_env",
+)
 
 package(default_visibility = ["//visibility:public"])
 
@@ -13,11 +18,18 @@ configure_make(
     lib_source = "@lcms2//:all_srcs",
     configure_in_place = True,
     configure_options = [
-        "--with-jpeg=$$EXT_BUILD_DEPS$$/jpeg",
-        "--with-tiff=$$EXT_BUILD_DEPS$$/tiff",
+        # `$$VAR` (single trailing) leaves a `$VAR` literal in the
+        # generated build_script, which the shell then expands; the
+        # symmetric `$$VAR$$` collapses to `$VAR$` and produces a path
+        # with a stray trailing `$`. See ext/png/BUILD.bazel for the full
+        # write-up.
+        "--with-jpeg=$$EXT_BUILD_DEPS/jpeg",
+        "--with-tiff=$$EXT_BUILD_DEPS/tiff",
         "--enable-static",
         "--disable-shared",
     ],
+    build_data = darwin_autotools_build_data(),
+    env = darwin_autotools_env(),
     out_static_libs = ["liblcms2.a"],
     set_file_prefix_map = True,
     deps = [

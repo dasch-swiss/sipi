@@ -15,6 +15,24 @@ build --incompatible_strict_action_env
 # breaks hermeticity.
 build --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
 
+# Inherit PATH from the invocation environment. `--incompatible_strict_action_env`
+# above otherwise rebuilds PATH from a small allow-list (`/bin:/usr/bin:/usr/local/bin`),
+# which omits the Nix dev-shell's `/nix/store/…/bin` entries. Several
+# foreign_cc rules (libmagic's `autoreconf -fi`, openssl's `perl Configure`)
+# need `autoconf` / `automake` / `libtoolize` / `perl` from the dev shell —
+# all of which Nix installs into store paths only. Inheriting PATH lets
+# those tools through without scattering toolchain paths across the action's
+# env. flake.nix ensures the relevant host tools are in the dev-shell PATH.
+build --action_env=PATH
+
+# Inherit ACLOCAL_PATH alongside PATH. Nix's `autoconf` / `automake` /
+# `libtool` packages each install their m4 macros (`libtool.m4`, `ltversion.m4`,
+# automake's own helper macros) under per-package prefixes; the dev shell
+# composes them into `ACLOCAL_PATH`. Without that env var, libmagic's
+# `autoreconf -fi` preflight fails with `Libtool library used but
+# 'LIBTOOL' is undefined` because aclocal can't locate libtool's macros.
+build --action_env=ACLOCAL_PATH
+
 # Stamp inputs for reproducible binaries and OCI images. The script writes
 # STABLE_GIT_COMMIT, STABLE_GIT_VERSION, STABLE_IMAGE_CREATED, and
 # STABLE_SIPI_VERSION (sourced from version.txt) — consumed by
@@ -58,6 +76,31 @@ build:macos --linkopt=-mmacosx-version-min=12.0
 build:macos --host_copt=-mmacosx-version-min=12.0
 build:macos --host_linkopt=-mmacosx-version-min=12.0
 build:macos --action_env=MACOSX_DEPLOYMENT_TARGET=12.0
+
+# Force toolchains_llvm to resolve the macOS SDK against the system Xcode
+# Command Line Tools rather than nixpkgs' stripped-down `apple-sdk-14.4`
+# (`/nix/store/…-apple-sdk-14.4`), which only ships private Apple framework
+# stubs — no `libc++.tbd`/`libc++abi.tbd` under `usr/lib/`. nix-develop
+# inherits `SDKROOT`/`DEVELOPER_DIR` from the host env and prepends
+# `xcbuild`'s reimplemented `xcrun` (always pinned to the Nix SDK) to PATH;
+# `toolchains_llvm`'s repository rule shells out to `xcrun --show-sdk-path`
+# at module-evaluation time and bakes whatever it gets into `cc_wrapper.sh`,
+# producing link errors like `ld64.lld: error: library not found for -lc++`.
+#
+# Overriding via `--repo_env` confines the change to repo rule evaluation —
+# build actions still see the user's full env (cmake's nix-wrapped clang
+# hardcodes `--sysroot` and ignores SDKROOT, so the inner-loop CMake build
+# is unaffected).
+#
+# `--repo_env=PATH` (no value) inherits PATH from the invocation env. The
+# `clang` dev shell in flake.nix prepends `/usr/bin:/bin:/usr/local/bin`
+# to PATH on darwin, so toolchains_llvm's `xcrun` probe still finds
+# Apple's `/usr/bin/xcrun` first while Nix-only tools (`gh` for
+# `kakadu_archive`, `perl`/`autoconf`/`automake`/`libtoolize` for the
+# autotools libs) remain reachable for repo-rule script execution.
+build:macos --repo_env=PATH
+build:macos --repo_env=DEVELOPER_DIR=/Library/Developer/CommandLineTools
+build:macos --repo_env=SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
 
 # ── Test ───────────────────────────────────────────────────────────────────
 # Surface test stderr immediately on failure rather than collecting it into

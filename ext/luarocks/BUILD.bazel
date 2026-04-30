@@ -5,6 +5,11 @@ binary too, in `out_binaries`).
 """
 
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+load(
+    "//bazel:foreign_cc_helpers.bzl",
+    "darwin_autotools_build_data",
+    "darwin_autotools_env",
+)
 
 package(default_visibility = ["//visibility:public"])
 
@@ -13,10 +18,15 @@ configure_make(
     lib_source = "@luarocks//:all_srcs",
     configure_in_place = True,
     configure_options = [
-        "--with-lua-bin=$$INSTALLDIR$$/bin",
-        "--with-lua-include=$$INSTALLDIR$$/include",
-        "--with-lua-lib=$$INSTALLDIR$$/lib",
+        # Point at the lua build's foreign_cc install dir, not luarocks's
+        # own. `$$VAR` (single trailing `$`) is the right form for
+        # configure_options — see ext/png/BUILD.bazel for the full rules.
+        "--with-lua-bin=$$EXT_BUILD_DEPS/lua/bin",
+        "--with-lua-include=$$EXT_BUILD_DEPS/lua/include",
+        "--with-lua-lib=$$EXT_BUILD_DEPS/lua/lib",
     ],
+    build_data = darwin_autotools_build_data(),
+    env = darwin_autotools_env(),
     targets = ["build", "install"],
     out_data_dirs = ["share", "bin"],
     set_file_prefix_map = True,

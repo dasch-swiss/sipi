@@ -32,7 +32,7 @@ def _kakadu_archive_impl(ctx):
             )
         token = result.stdout.strip()
 
-    archive = "kakadu.zip"
+    raw_archive = "kakadu.raw.zip"
     download_result = ctx.execute(
         [
             gh,
@@ -44,7 +44,7 @@ def _kakadu_archive_impl(ctx):
             "--pattern",
             ctx.attr.asset,
             "--output",
-            archive,
+            raw_archive,
         ],
         environment = {"GH_TOKEN": token},
     )
@@ -54,17 +54,39 @@ def _kakadu_archive_impl(ctx):
     # `ctx.extract` does not enforce sha256, but `ctx.download` does — fetch via
     # gh first, then verify the downloaded blob's hash matches before extracting.
     # `ctx.download` with a `file://` URL is the canonical way to invoke the
-    # checksum machinery on a local file.
-    archive_path = ctx.path(archive)
+    # checksum machinery on a local file. The output filename has to keep the
+    # `.zip` suffix because `ctx.extract` infers archive type from the extension
+    # (`.verified` and similar synthetic suffixes get rejected outright).
+    raw_archive_path = ctx.path(raw_archive)
+    archive = "kakadu.zip"
     ctx.download(
-        url = "file://" + str(archive_path),
-        output = archive + ".verified",
+        url = "file://" + str(raw_archive_path),
+        output = archive,
         sha256 = ctx.attr.sha256,
     )
-    ctx.extract(archive + ".verified", stripPrefix = ctx.attr.strip_prefix)
+    ctx.extract(archive, stripPrefix = ctx.attr.strip_prefix)
 
-    for patch in ctx.attr.patches:
-        ctx.patch(patch, strip = ctx.attr.patch_strip)
+    # Bazel's `ctx.patch` requires hunks to match line numbers exactly — it
+    # does not implement GNU patch's fuzz tolerance. The Linux Makefile
+    # patches were generated with a couple of lines of drift relative to
+    # the v8_5-01382N tarball, so `ctx.patch` rejects them at hunk #2 with
+    # `CONTENT_DOES_NOT_MATCH_TARGET`. Shelling out to system `patch` (which
+    # the dev shell exposes via its standard build-tool set) restores the
+    # fuzz behaviour and matches what the existing Nix FOD does.
+    if ctx.attr.patches:
+        patch = ctx.which("patch")
+        if not patch:
+            fail("kakadu_archive: `patch` not found on PATH (needed for Linux Makefile patches).")
+        for patch_label in ctx.attr.patches:
+            patch_path = ctx.path(patch_label)
+            patch_result = ctx.execute(
+                [patch, "-p" + str(ctx.attr.patch_strip), "-i", str(patch_path)],
+            )
+            if patch_result.return_code != 0:
+                fail(
+                    "kakadu_archive: `patch -p%d -i %s` failed: %s" %
+                    (ctx.attr.patch_strip, str(patch_path), patch_result.stderr),
+                )
 
     ctx.symlink(ctx.attr.build_file, "BUILD.bazel")
 

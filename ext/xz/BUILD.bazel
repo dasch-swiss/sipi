@@ -5,6 +5,11 @@ target is liblzma; xz the project name, lzma the lib name.
 """
 
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+load(
+    "//bazel:foreign_cc_helpers.bzl",
+    "darwin_autotools_build_data",
+    "darwin_autotools_env",
+)
 
 package(default_visibility = ["//visibility:public"])
 
@@ -16,6 +21,8 @@ configure_make(
         "--enable-static",
         "--disable-shared",
     ],
+    build_data = darwin_autotools_build_data(),
+    env = darwin_autotools_env(),
     out_static_libs = ["liblzma.a"],
     set_file_prefix_map = True,
 )

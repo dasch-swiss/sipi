@@ -18,9 +18,16 @@ cmake(
         "PNG_TESTS": "OFF",
         "PNG_BUILD_ZLIB": "OFF",
         "PNG_ARM_NEON": "on",
-        "ZLIB_ROOT": "$$EXT_BUILD_DEPS$$/zlib",
-        "ZLIB_INCLUDE_DIR": "$$EXT_BUILD_DEPS$$/zlib/include",
-        "ZLIB_LIBRARY": "$$EXT_BUILD_DEPS$$/zlib/lib/libz.a",
+        # cache_entries values go through Bazel's Make-variable expander
+        # before reaching the shell: `$X` is rejected as an unknown Make
+        # var, `$$X` escapes to literal `$X` (which the shell expands as a
+        # bash env var), and `$$X$$` collapses to a literal `$X$` that
+        # leaves a stray `$` in the resulting path. `EXT_BUILD_DEPS` is
+        # exported by the foreign_cc build_script, so the `$$VAR` form
+        # produces the right shell-expanded path.
+        "ZLIB_ROOT": "$$EXT_BUILD_DEPS/zlib",
+        "ZLIB_INCLUDE_DIR": "$$EXT_BUILD_DEPS/zlib/include",
+        "ZLIB_LIBRARY": "$$EXT_BUILD_DEPS/zlib/lib/libz.a",
     },
     out_static_libs = ["libpng16.a"],
     set_file_prefix_map = True,
