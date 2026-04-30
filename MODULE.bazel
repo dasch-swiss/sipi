@@ -40,3 +40,59 @@ bazel_dep(name = "rules_foreign_cc", version = "0.15.0")
 # macOS uses the system Xcode CLT SDK (no bundled macOS sysroot in
 # toolchains_llvm); MACOSX_DEPLOYMENT_TARGET=12.0 is pinned in .bazelrc.
 bazel_dep(name = "toolchains_llvm", version = "1.7.0")
+
+# ── LLVM toolchain — hermetic, LLVM 19.1.7, libc++ ─────────────────────────
+#
+# Linux libc++ ships in the LLVM tarball built against glibc, so it still
+# needs sysroot headers and runtime libs at build time. Without an explicit
+# sysroot the build silently links against the host's glibc — non-hermetic.
+# Chromium's debian sysroot tarballs are the canonical fix (research-doc §4).
+#
+# The `stdlib` map is explicit per platform because cc_toolchain_config.bzl
+# silently demotes "builtin-libc++" to "stdc++" under cross-compile (research
+# §4 footnote). Y+8's eventual cross-compile work expects libc++; pin
+# explicitly now to prevent the silent swap.
+sysroot = use_repo_rule("@toolchains_llvm//toolchain:sysroot.bzl", "sysroot")
+
+# TODO(DEV-6342): pin sysroot SHA + sha256 from
+# https://chromium.googlesource.com/chromium/src/+/refs/heads/main/build/linux/sysroot_scripts/sysroots.json
+# (or pull from a known-good Bazel project — Envoy / gRPC carry current pins).
+# Until pinned, `bazel build` on Linux will fail at the sysroot fetch stage;
+# the macOS-aarch64 inner loop is unaffected because the sysroots are not
+# consulted there.
+sysroot(
+    name = "sysroot_linux_x86_64",
+    urls = ["https://commondatastorage.googleapis.com/chrome-linux-sysroot/toolchain/SYSROOT_SHA_TODO/debian_bullseye_amd64_sysroot.tar.xz"],
+    sha256 = "SYSROOT_SHA256_TODO",
+)
+sysroot(
+    name = "sysroot_linux_aarch64",
+    urls = ["https://commondatastorage.googleapis.com/chrome-linux-sysroot/toolchain/SYSROOT_SHA_TODO/debian_bullseye_arm64_sysroot.tar.xz"],
+    sha256 = "SYSROOT_SHA256_TODO",
+)
+
+llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm")
+llvm.toolchain(
+    name = "llvm_toolchain",
+    llvm_version = "19.1.7",
+    cxx_standard = {"": "c++23"},
+    stdlib = {
+        "linux-x86_64": "libc++",
+        "linux-aarch64": "libc++",
+        "darwin-aarch64": "libc++",
+        "darwin-x86_64": "libc++",
+    },
+)
+llvm.sysroot(
+    name = "llvm_toolchain",
+    label = "@sysroot_linux_x86_64//sysroot",
+    targets = ["linux-x86_64"],
+)
+llvm.sysroot(
+    name = "llvm_toolchain",
+    label = "@sysroot_linux_aarch64//sysroot",
+    targets = ["linux-aarch64"],
+)
+use_repo(llvm, "llvm_toolchain", "llvm_toolchain_llvm")
+
+register_toolchains("@llvm_toolchain//:all")
