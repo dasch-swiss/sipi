@@ -1,0 +1,10 @@
+# Most of `include/` belongs to `//src:sipi_lib` (declared in `src/BUILD.bazel`).
+# This file exists only to make individual headers selectable as labels — used
+# today by `//shttps:shttps` to grab `Logger.h` while the cross-context
+# include is still in place. Once Logger.h is rehomed under `shttps/`, this
+# file collapses back to nothing.
+
+exports_files([
+    "Logger.h",
+    "SipiVersion.h.in",
+])

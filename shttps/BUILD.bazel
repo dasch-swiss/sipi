@@ -1,0 +1,63 @@
+"""shttps — embedded HTTP framework, native first-party `cc_library`.
+
+The fake `ExternalProject_Add` in `ext/shttp/CMakeLists.txt:11` (which `cp -r`s
+this directory) is bypassed entirely by the Bazel graph. `ext/shttp/` itself
+is left in place — Y deletes nothing — but Bazel never visits it.
+
+Bounded-context boundary (`CONTEXT-MAP.md`): SIPI → shttps is one-way at the
+target level. `visibility` enforces this — only `//src/...` may depend on
+`//shttps:shttps`, and `//shttps:shttps` declares no `//src/...` deps.
+
+`layering_check` (originally specified in the plan as a verification gate
+confirming the DEV-6339 rehome stuck) is **not** enabled yet because
+`shttps/*.cpp` still includes `Logger.h` from `//include`, which is the
+last residual SIPI → shttps reverse-direction reference. Enabling
+layering_check is a TODO immediately after the Logger.h rehome lands —
+either move it under `shttps/`, or split it out of the SIPI namespace as
+a third-party-style support lib.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = [
+    "//src:__subpackages__",
+    "//shttps:__subpackages__",
+])
+
+cc_library(
+    name = "shttps",
+    srcs = glob(
+        [
+            "*.cpp",
+            "*.c",
+        ],
+        exclude = [
+            "Shttp.cpp",  # standalone test driver, not part of the library
+        ],
+    ),
+    hdrs = glob([
+        "*.h",
+        "*.hpp",
+    ]) + [
+        # TODO(DEV-6342): rehome Logger.h into shttps/ (or a shared support
+        # lib) so this temporary cross-context include can drop, then enable
+        # `features = ["layering_check"]` here.
+        "//include:Logger.h",
+    ],
+    # Source files use `#include "..."` (sibling-relative). Re-export both
+    # this directory and `include/` so consumers get the headers at their
+    # historical paths.
+    includes = [
+        ".",
+        "../include",
+    ],
+    deps = [
+        "//ext/curl:curl",
+        "//ext/jansson:jansson",
+        "//ext/libmagic:libmagic",
+        "//ext/lua:lua",
+        "//ext/openssl:openssl",
+        "//ext/sqlite3:sqlite3",
+        "//ext/zlib:zlib",
+    ],
+)
