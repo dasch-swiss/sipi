@@ -38,20 +38,16 @@ cc_library(
     hdrs = glob([
         "*.h",
         "*.hpp",
-    ]) + [
-        # TODO(DEV-6342): rehome Logger.h into shttps/ (or a shared support
-        # lib) so this temporary cross-context include can drop, then enable
-        # `features = ["layering_check"]` here.
-        "//include:Logger.h",
-    ],
-    # Source files use `#include "..."` (sibling-relative). Re-export both
-    # this directory and `include/` so consumers get the headers at their
-    # historical paths.
-    includes = [
-        ".",
-        "../include",
-    ],
+    ]),
+    # Source files use `#include "..."` (sibling-relative).
+    includes = ["."],
     deps = [
+        # TODO(DEV-6342): the cross-context include of `//include:Logger.h`
+        # is the last residual SIPI → shttps reverse-direction reference.
+        # Once Logger.h is rehomed under shttps/ (or a shared support lib),
+        # this dep drops and `features = ["layering_check"]` flips on as
+        # the verification gate the plan calls for.
+        "//include:headers",
         "//ext/curl:curl",
         "//ext/jansson:jansson",
         "//ext/libmagic:libmagic",

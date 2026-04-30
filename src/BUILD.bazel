@@ -1,0 +1,114 @@
+"""Sipi first-party C++ build graph.
+
+Two targets:
+
+  //src:sipi_lib  — `cc_library` containing every Sipi translation unit
+                    *except* the executable's `main`. Headers come via
+                    `//include:headers` (which exposes private internal
+                    headers like `metadata/SipiIccDetail.h` so per-component
+                    unit tests in Y+1 can link against private symbols).
+  //src:sipi      — thin `cc_binary` (`srcs = ["sipi.cpp"]`) deps-only on
+                    `:sipi_lib`. `linkopts = ["-Wl,--build-id=sha1"]`
+                    content-addresses the build-id for Y+4 debug-info
+                    reproducibility.
+
+The split is mandatory infrastructure for Y+1 (per-component unit tests)
+and scaffolds the post-Y+6 layout flip — the eventual Y+8 series breaks
+`:sipi_lib` apart into per-module `cc_library` targets without re-touching
+this BUILD's public shape.
+
+Versioning: `expand_template` regenerates `SipiVersion.h` from
+`include/SipiVersion.h.in` whenever any `STABLE_*` value emitted by
+`tools/workspace_status.sh` changes — replaces today's CMake
+`configure_file()` flow.
+"""
+
+load("@aspect_bazel_lib//lib:expand_template.bzl", "expand_template")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# ── SipiVersion.h ──────────────────────────────────────────────────────────
+# Bazel re-evaluates `STABLE_*` keys on every build, but downstream actions
+# invalidate only when a value *changes* — editing an unrelated .cpp leaves
+# this rule's output stable, so unrelated TUs do not recompile. release-please
+# bumping `version.txt` flips `STABLE_SIPI_VERSION`, the header regenerates,
+# and the few TUs that include it recompile.
+expand_template(
+    name = "sipi_version_h",
+    out = "SipiVersion.h",
+    template = "//include:SipiVersion.h.in",
+    stamp_substitutions = {
+        "@SIPI_VERSION_STRING@": "{{STABLE_SIPI_VERSION}}",
+        "@BUILD_SCM_TAG@": "{{STABLE_GIT_VERSION}}",
+        "@BUILD_SCM_REVISION@": "{{STABLE_GIT_COMMIT}}",
+        "@BUILD_TIMESTAMP@": "{{STABLE_IMAGE_CREATED}}",
+    },
+    # Non-stamp fallback for `bazel build` without `--stamp`. Keys identical
+    # to stamp_substitutions so the generated header has the same shape
+    # regardless of stamp mode.
+    substitutions = {
+        "@SIPI_VERSION_STRING@": "0.0.0-unstamped",
+        "@BUILD_SCM_TAG@": "unstamped",
+        "@BUILD_SCM_REVISION@": "unknown",
+        "@BUILD_TIMESTAMP@": "1970-01-01T00:00:00Z",
+    },
+)
+
+# ── //src:sipi_lib ─────────────────────────────────────────────────────────
+# Every translation unit except the executable's `main`.
+cc_library(
+    name = "sipi_lib",
+    srcs = glob(
+        [
+            "**/*.cpp",
+            "**/*.hpp",
+        ],
+        exclude = [
+            "sipi.cpp",  # executable entry point — lives in :sipi binary
+        ],
+    ),
+    hdrs = [":SipiVersion.h"],
+    includes = ["."],
+    copts = ["-fexceptions"],
+    deps = [
+        "//include:headers",
+        "//shttps:shttps",
+        "//ext/lcms2:lcms2",
+        "//ext/exiv2:exiv2",
+        "//ext/expat:expat",
+        "//ext/tiff:tiff",
+        "//ext/webp:webp",
+        "//ext/jbigkit:jbigkit",
+        "//ext/png:png",
+        "//ext/xz:xz",
+        "//ext/libmagic:libmagic",
+        "//ext/lua:lua",
+        "//ext/jansson:jansson",
+        "//ext/sqlite3:sqlite3",
+        "//ext/sentry:sentry",
+        "//ext/prometheus-cpp:prometheus-cpp",
+        "//ext/curl:curl",
+        "//ext/openssl:openssl",
+        "//ext/jpeg:jpeg",
+        "//ext/bzip2:bzip2",
+        "//ext/zstd:zstd",
+        "//ext/zlib:zlib",
+        "//ext/fmt:fmt",
+        "@kakadu//:kdu",
+    ],
+)
+
+# ── //src:sipi ─────────────────────────────────────────────────────────────
+cc_binary(
+    name = "sipi",
+    srcs = ["sipi.cpp"],
+    # Content-addressed build-id for reproducible debug-info splitting in Y+4.
+    # `--build-id=sha1` derives the build-id from the binary's content hash
+    # rather than a wall-clock random; identical inputs ↔ identical build-id.
+    linkopts = select({
+        "@platforms//os:linux": ["-Wl,--build-id=sha1"],
+        "//conditions:default": [],
+    }),
+    deps = [":sipi_lib"],
+)
