@@ -2,7 +2,7 @@
 
 Wraps Kakadu's hand-written, per-arch Makefile build (`make/` subdirectory)
 in a `rules_foreign_cc` `make()` rule that produces `libkdu.a` + `libkdu_aux.a`,
-then re-exposes them as a single `:kdu` `cc_library` consumable by Sipi.
+then re-exposes them as a single `:kdu` target consumable by Sipi.
 
 Mirrors the existing `ext/kakadu/CMakeLists.txt:67-77` invocation:
 
@@ -11,6 +11,11 @@ Mirrors the existing `ext/kakadu/CMakeLists.txt:67-77` invocation:
 with $KDU_MAKE / $KDU_EXEC_PLATFORM / $KDU_ARCH selected per (os, cpu) per
 `CMakeLists.txt:145-174`. Per-arch sed mutations from the same file are
 already applied at extract time by `kakadu_archive` via `patches/`.
+
+`make()`'s standard `targets`/`args` shape can't drive a working-directory-
+sensitive build, so the entire build + stage is funnelled through
+`postfix_script` which runs after foreign_cc's setup (working tree
+materialised under `$BUILD_TMPDIR`, install prefix at `$INSTALLDIR`).
 """
 
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "make")
@@ -54,12 +59,11 @@ _KDU_ARCH = select({
     "@@//platforms:is_darwin_aarch64": "Mac-arm-64-gcc",
 })
 
-# The `make()` rule defaults to running `make && make install` from the
-# source root. Kakadu has no `install` target, so we drive everything through
-# `make_commands`: cd into `make/`, build `all_but_jni`, then copy the
-# produced static libs into `$INSTALLDIR/lib/` and the headers into
-# `$INSTALLDIR/include/` — the layout `out_static_libs` and `out_include_dir`
-# expect.
+# The default `make()` rule runs `make && make install` from `$BUILD_TMPDIR`.
+# Kakadu has no `install` target, so we run an empty default `make` (no-op-ish
+# from the working dir) and do everything real in `postfix_script`: cd into
+# the source's `make/` directory, run `make all_but_jni` with the per-arch
+# Makefile, then stage outputs under `$INSTALLDIR`.
 make(
     name = "kakadu",
     lib_source = ":all_srcs",
@@ -68,6 +72,7 @@ make(
         "libkdu_aux.a",
     ],
     out_include_dir = "include",
+    targets = [],
     # macOS libtool-PATH workaround from `ext/kakadu/CMakeLists.txt:21-22`:
     # if Nix puts GNU libtool on PATH first, it shadows Apple's libtool and
     # fails with "unrecognised option: -static". Prepend /usr/bin so the
@@ -76,25 +81,18 @@ make(
         "@platforms//os:macos": {"PATH": "/usr/bin:$$PATH"},
         "//conditions:default": {},
     }),
-    make_commands = [
-        # `$$EXT_BUILD_ROOT$$` is rules_foreign_cc's pointer to the workspace
-        # source; `$$INSTALLDIR$$` is the output prefix the rule then captures.
-        # cd into the source's `make/` dir, kick off `make all_but_jni` with
-        # the per-arch Makefile, then stage outputs into $INSTALLDIR.
-        "cd $$EXT_BUILD_ROOT$$/external/+kakadu_extension+kakadu/make && " +
-        "make -j1 -f " + _KDU_MAKE + " EXEC_PLATFORM=" + _KDU_EXEC_PLATFORM + " all_but_jni",
-        "mkdir -p $$INSTALLDIR$$/lib $$INSTALLDIR$$/include",
-        "cp $$EXT_BUILD_ROOT$$/external/+kakadu_extension+kakadu/lib/" + _KDU_ARCH + "/libkdu.a $$INSTALLDIR$$/lib/",
-        "cp $$EXT_BUILD_ROOT$$/external/+kakadu_extension+kakadu/lib/" + _KDU_ARCH + "/libkdu_aux.a $$INSTALLDIR$$/lib/",
-        "cp -R $$EXT_BUILD_ROOT$$/external/+kakadu_extension+kakadu/managed/all_includes/. $$INSTALLDIR$$/include/",
-    ],
+    postfix_script = (
+        "cd $$BUILD_TMPDIR$$/make && " +
+        "make -j1 -f " + _KDU_MAKE + " EXEC_PLATFORM=" + _KDU_EXEC_PLATFORM + " all_but_jni && " +
+        "mkdir -p $$INSTALLDIR$$/lib $$INSTALLDIR$$/include && " +
+        "cp $$BUILD_TMPDIR$$/lib/" + _KDU_ARCH + "/libkdu.a $$INSTALLDIR$$/lib/ && " +
+        "cp $$BUILD_TMPDIR$$/lib/" + _KDU_ARCH + "/libkdu_aux.a $$INSTALLDIR$$/lib/ && " +
+        "cp -R $$BUILD_TMPDIR$$/managed/all_includes/. $$INSTALLDIR$$/include/"
+    ),
     # Cache portability: rules_foreign_cc emits debug-info paths under
     # `$EXT_BUILD_ROOT` by default, which embeds machine-local sandbox paths
     # into objects and breaks remote-cache hits.
     set_file_prefix_map = True,
-    # Kakadu under Linux has no parallel-safety guarantees from upstream; the
-    # existing CMake build calls `-j1`. Mirror here.
-    targets = [],  # all driven via make_commands
 )
 
 # Convenience alias. Sipi consumes `@kakadu//:kdu`.

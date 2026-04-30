@@ -23,14 +23,18 @@ package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "headers",
-    hdrs = glob([
-        "*.h",
-        "*.hpp",
-        "formats/*.h",
-        "handlers/*.h",
-        "iiifparser/*.h",
-        "metadata/*.h",
-    ]),
+    hdrs = glob(
+        [
+            "*.h",
+            "*.hpp",
+            "formats/*.h",
+            "iiifparser/*.h",
+            "metadata/*.h",
+        ],
+        # Future-proof against new subdirs (e.g. include/handlers/) without
+        # tripping the empty-glob lint when a subdir is empty or absent.
+        allow_empty = True,
+    ),
     includes = ["."],
 )
 
