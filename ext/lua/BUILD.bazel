@@ -16,28 +16,9 @@ make(
         "INSTALL_LIB=$$INSTALLDIR$$/lib",
         "INSTALL_TOP=$$INSTALLDIR$$",
     ],
-    # Lua 5.3.5's `linux` make target hard-codes
-    # `SYSCFLAGS="-DLUA_USE_LINUX" SYSLIBS="-Wl,-E -ldl -lreadline"`,
-    # but `LUA_USE_LINUX` in `src/luaconf.h` is a macro alias that
-    # activates `LUA_USE_POSIX`, `LUA_USE_DLOPEN`, AND
-    # `LUA_USE_READLINE` together — `lua.c` then `#include
-    # <readline/readline.h>` and the build dies on Linux runners that
-    # don't ship the readline headers (GitHub-hosted ubuntu-24.04
-    # doesn't). Override SYSCFLAGS / SYSLIBS via `env` so the values
-    # reach the recursive make through the environment intact;
-    # `args = ["SYSCFLAGS=-DA -DB"]` would be space-split into
-    # `SYSCFLAGS=-DA` plus a stray `-DB` and break make's option
-    # parsing. SIPI embeds Lua as a script host, never as an
-    # interactive REPL, so readline-backed line editing is unused.
-    # The defines below preserve the POSIX file API and dlopen
-    # support that LUA_USE_LINUX would otherwise pull in.
-    env = select({
-        "@platforms//os:linux": {
-            "SYSCFLAGS": "-DLUA_USE_POSIX -DLUA_USE_DLOPEN",
-            "SYSLIBS": "-Wl,-E -ldl",
-        },
-        "//conditions:default": {},
-    }),
+    # Readline is patched out of `src/Makefile` at fetch time — see the
+    # `patch_cmds` block on `@lua` in MODULE.bazel for the rationale
+    # and substitution rule.
     out_static_libs = ["liblua.a"],
     out_binaries = ["lua", "luac"],
     targets = select({

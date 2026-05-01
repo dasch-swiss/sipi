@@ -212,6 +212,25 @@ http_archive(
     sha256 = "0c2eed3f960446e1a3e4b9a1ca2f3ff893b6ce41942cf54d5dd59ab4b3b058ac",
     strip_prefix = "lua-5.3.5",
     build_file = "//bazel:all_content.BUILD.bazel",
+    # Drop Lua's optional readline integration. The `linux` and `macosx`
+    # make targets in `src/Makefile` recursively self-invoke with
+    # `SYSCFLAGS="-DLUA_USE_LINUX|MACOSX"` and `SYSLIBS="… -lreadline"`
+    # baked into their recipes, so passing overrides via foreign_cc
+    # `args`/`env` doesn't reach the inner compile (make's command-line
+    # vars on the recursive invocation win). `LUA_USE_LINUX`/MACOSX
+    # macro-aliases activate `LUA_USE_POSIX + LUA_USE_DLOPEN +
+    # LUA_USE_READLINE`; substituting at the Makefile level keeps the
+    # POSIX file API and dlopen support but skips readline. SIPI embeds
+    # Lua as a script host — never as an interactive REPL — so the
+    # readline dependency is dead weight, and Linux runners that don't
+    # ship `<readline/readline.h>` (e.g. GitHub-hosted ubuntu-24.04)
+    # then build cleanly.
+    #
+    # `perl -i -pe` is portable across BSD (macOS) and GNU (Linux) sed
+    # behaviours that the bare `-i` flag differs on.
+    patch_cmds = [
+        "perl -i -pe 's/-DLUA_USE_(LINUX|MACOSX)/-DLUA_USE_POSIX -DLUA_USE_DLOPEN/g; s/-lreadline//g' src/Makefile",
+    ],
 )
 
 http_archive(
