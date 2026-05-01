@@ -143,9 +143,41 @@ jobs:
           # `cacert`, autoconf/automake/libtool/m4 are on PATH — the
           # `kakadu_archive` repository_rule needs `gh`, foreign_cc rules
           # need cmake / perl / pkg-config / autotools.
+          #
+          # `--verbose_failures` prints failed action command lines.
+          # `--sandbox_debug` keeps the sandbox tree on failure and prints
+          # its location — needed because rules_foreign_cc captures the
+          # underlying Make stderr into a per-action `Make.log` file inside
+          # the sandbox; without `--sandbox_debug` the sandbox is wiped on
+          # action failure and the Make.log is lost. Removable once kakadu
+          # builds reliably across all three platforms.
           nix develop --command bash -c "
-            bazelisk build $BAZEL_TARGET
+            bazelisk build --verbose_failures --sandbox_debug $BAZEL_TARGET
           "
+
+      # On any bazel failure, locate and dump every foreign_cc Make.log
+      # under the bazel output base. rules_foreign_cc writes the captured
+      # stderr/stdout of each `make()` action into a `Make.log` file
+      # alongside the action's output tree; with `--sandbox_debug` above,
+      # those survive the action failure. This converts "output X was not
+      # created" diagnostics (which omit the actual error) into the real
+      # underlying Make stderr.
+      - name: dump foreign_cc Make.log files on failure
+        if: failure()
+        run: |
+          set +e
+          echo "=== searching for foreign_cc *.log files ==="
+          # bazel output base lives under ~/.bazel on these runners; also
+          # search the workspace as a fallback for non-default layouts.
+          find "$HOME/.bazel" /home/runner/work /Users/runner/work -type f \
+            \( -name "Make.log" -o -name "configure.log" -o -name "build.log" -o -name "CMake.log" \) \
+            -print 2>/dev/null | while read -r f; do
+            echo
+            echo "===== $f ====="
+            cat "$f"
+          done
+          echo
+          echo "=== end of foreign_cc log dump ==="
 
       - name: bazel-bin/src/sipi --version
         if: ${{ (inputs.bazel_target || '//src:sipi') == '//src:sipi' }}
