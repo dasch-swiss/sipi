@@ -132,6 +132,10 @@ target_include_directories(libsipi_testable PUBLIC
     ${CMAKE_SOURCE_DIR}/include/formats
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/shttps
+    # Test-helper headers (sipi::test::data_dir() etc., DEV-6343 / Y+1).
+    # Bazel exposes the same header via //test:test_paths; here it is
+    # propagated to every per-component test that links libsipi_testable.
+    ${CMAKE_SOURCE_DIR}/test
     ${CMAKE_BINARY_DIR}
     ${CMAKE_BINARY_DIR}/local/include
     ${CMAKE_BINARY_DIR}/generated
