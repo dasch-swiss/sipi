@@ -21,6 +21,7 @@
 
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
+#include <openssl/core_names.h>// OSSL_PKEY_PARAM_BITS (OpenSSL 3.0+)
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/pem.h>
@@ -480,17 +481,20 @@ static int jwt_sign_sha_pem(jwt_t *jwt, BIO *out, const EVP_MD *alg, const char 
   } else {
     unsigned int degree, bn_len, r_len, s_len, buf_len;
     unsigned char *raw_buf;
-    EC_KEY *ec_key;
 
     /* For EC we need to convert to a raw format of R/S. */
 
-    /* Get the actual ec_key */
-    ec_key = EVP_PKEY_get1_EC_KEY(pkey);
-    if (ec_key == NULL) SIGN_ERROR(ENOMEM);
-
-    degree = EC_GROUP_get_degree(EC_KEY_get0_group(ec_key));
-
-    EC_KEY_free(ec_key);
+    /* Get the curve's bit length directly off the EVP_PKEY (OpenSSL 3.0+
+     * EVP-only API). The legacy `EVP_PKEY_get1_EC_KEY` + `EC_KEY_get0_group`
+     * + `EC_GROUP_get_degree` chain is deprecated in 3.0 and slated for
+     * removal in 4.x. `OSSL_PKEY_PARAM_BITS` returns the curve's order
+     * bit-length, which equals the field degree for the NIST P-* curves
+     * the JWT spec uses (P-256 → 256, P-384 → 384, P-521 → 521). */
+    {
+      int bits = 0;
+      if (EVP_PKEY_get_int_param(pkey, OSSL_PKEY_PARAM_BITS, &bits) != 1) SIGN_ERROR(EINVAL);
+      degree = (unsigned int)bits;
+    }
 
     /* Get the sig from the DER encoded version. */
     ec_sig = d2i_ECDSA_SIG(NULL, (const unsigned char **)&sig, slen);
@@ -562,18 +566,17 @@ static int jwt_verify_sha_pem(jwt_t *jwt, const EVP_MD *alg, int type, const cha
   if (pkey_type == EVP_PKEY_EC) {
     unsigned int degree, bn_len;
     unsigned char *p;
-    EC_KEY *ec_key;
 
     ec_sig = ECDSA_SIG_new();
     if (ec_sig == NULL) VERIFY_ERROR(ENOMEM);
 
-    /* Get the actual ec_key */
-    ec_key = EVP_PKEY_get1_EC_KEY(pkey);
-    if (ec_key == NULL) VERIFY_ERROR(ENOMEM);
-
-    degree = EC_GROUP_get_degree(EC_KEY_get0_group(ec_key));
-
-    EC_KEY_free(ec_key);
+    /* OpenSSL 3.0+ EVP-only path — see the matching block in
+     * `jwt_sign_sha_pem` for rationale. */
+    {
+      int bits = 0;
+      if (EVP_PKEY_get_int_param(pkey, OSSL_PKEY_PARAM_BITS, &bits) != 1) VERIFY_ERROR(EINVAL);
+      degree = (unsigned int)bits;
+    }
 
     bn_len = (degree + 7) / 8;
     if ((bn_len * 2) != slen) VERIFY_ERROR(EINVAL);
