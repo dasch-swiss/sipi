@@ -863,7 +863,15 @@ int main(int argc, char *argv[])
   std::string optSipiSentryEnvironment;
   sipiopt.add_option("--sentry-environment", optSipiSentryEnvironment)->envname("SIPI_SENTRY_ENVIRONMENT");
 
+  bool optVersion = false;
+  sipiopt.add_flag("--version", optVersion, "Print the SIPI version and exit.");
+
   CLI11_PARSE(sipiopt, argc, argv);
+
+  if (optVersion) {
+    std::cout << "sipi " << VERSION << std::endl;
+    return 0;
+  }
 
   /*
   argc -= (argc > 0);
