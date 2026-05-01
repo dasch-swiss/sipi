@@ -10,12 +10,17 @@
 #include "SipiImageError.hpp"
 #include "metadata/SipiExif.h"
 #include "metadata/SipiIcc.h"
+#include "test_paths.hpp"
 
+#include <filesystem>
 #include <sstream>
 #include <sys/stat.h>
 
-// Approval tests run from build/test/approval/
-static const std::string test_images = "../../../test/_test_data/images/";
+// `workspace_path_for_approval` honours Bazel's SIPI_WORKSPACE_ROOT env
+// (cc_test cwd = workspace root in runfiles) and falls back to the
+// historical CMake build-tree relative path (3 levels up from
+// build/test/approval/) when unset. See test/test_paths.hpp.
+static const std::string test_images = sipi::test::workspace_path_for_approval("test/_test_data/images") + "/";
 
 static bool file_exists(const std::string &path)
 {
@@ -27,7 +32,11 @@ static bool file_exists(const std::string &path)
 static std::string dump_metadata(const std::string &path)
 {
   std::ostringstream out;
-  out << "=== " << path << " ===\n\n";
+  // Use the basename only — the full path differs between build systems
+  // (CMake's `../../../test/_test_data/...` vs Bazel's runfiles-relative
+  // `test/_test_data/...`), and embedding the differing prefix in the
+  // golden text would make goldens build-system-specific.
+  out << "=== " << std::filesystem::path(path).filename().string() << " ===\n\n";
 
   Sipi::SipiImage img;
   try {
