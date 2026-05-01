@@ -86,19 +86,71 @@ make(
     # ext/png/BUILD.bazel for the substitution-form write-up.
     #
     # Kakadu's hand-written Makefiles write build artefacts to relative
-    # paths (`lib/<arch>/`, `bin/<arch>/`, …). foreign_cc's `make()` rule
-    # populates BUILD_TMPDIR with symlinks to the @kakadu source repo, so
-    # newly-emitted .a files actually land alongside the source under
-    # `$EXT_BUILD_ROOT/external/+kakadu_extension+kakadu/lib/<arch>/` —
-    # NOT inside BUILD_TMPDIR. The cp commands below reach into the
-    # source dir to grab those outputs and stage them in INSTALLDIR.
+    # paths (`lib/<arch>/`, `bin/<arch>/`, `documentation/html_pages/`, …)
+    # which resolve via foreign_cc's symlink farm back to the @kakadu
+    # source under `$EXT_BUILD_ROOT/external/+kakadu_extension+kakadu/`.
+    # Some writes succeed (lib/, bin/ — those dirs already get populated
+    # by foreign_cc's setup so they sit on writable storage) but others
+    # fail: `kdu_hyperdoc` runs from `documentation/`, mkdirs
+    # `html_pages/`, then fails to fopen() `html_pages/blank.html` with
+    # the generic "Unable to create the HTML file" error — the freshly
+    # created dir falls outside the sandbox's writable areas.
+    #
+    # Canonical foreign_cc fix for in-tree builds that write next to
+    # source: dereference the symlink farm into a real copy under
+    # BUILD_TMPDIR (which IS fully writable) and run make there. The
+    # CMake build (`ext/kakadu/CMakeLists.txt`) sidesteps this by
+    # extracting the archive directly into a fresh dir; staging here
+    # achieves the same shape inside Bazel's sandbox.
     postfix_script = (
-        "cd $$BUILD_TMPDIR/make && " +
-        "make -j1 -f " + _KDU_MAKE + " EXEC_PLATFORM=" + _KDU_EXEC_PLATFORM + " all_but_jni && " +
+        "STAGE=$$BUILD_TMPDIR/.kakadu-stage && " +
+        "mkdir -p $$STAGE && " +
+        "cp -RL $$EXT_BUILD_ROOT/external/+kakadu_extension+kakadu/. $$STAGE/ && " +
+        "cd $$STAGE/make && " +
+        # On Linux, Nix's clang++ on PATH sees the host runner's glibc
+        # 2.39 headers, which contain C23 transparent renames like
+        # `#define strtol __isoc23_strtol` (gated by __GLIBC_USE(ISOC2X)
+        # which is true under _GNU_SOURCE / C++23). The kakadu .o files
+        # then reference `__isoc23_strtol` (a glibc 2.38+ symbol). The
+        # final sipi link uses toolchains_llvm's Chromium debian-bullseye
+        # sysroot which only has glibc 2.31 — symbol mismatch.
+        #
+        # Force Nix's clang++ to use the Chromium sysroot for headers
+        # via `--sysroot=…`. The sysroot ships glibc 2.31, which has no
+        # __isoc23_strtol redirect, so the .o files contain the canonical
+        # glibc 2.31 symbols that the final link can resolve.
+        # No-op on darwin (no Linux sysroot to find; clang already uses
+        # CLT SDK by default).
+        #
+        # Two LIBRARY_PATH entries injected via env:
+        #   1. libcxx: extracted from NIX_LDFLAGS so ld.bfd can resolve
+        #      `-lc++` (Nix's clang adds `-lc++` to link automatically;
+        #      ld needs to find libc++.so somewhere). The grep is a no-op
+        #      on macOS where /usr/lib satisfies the linker.
+        #   2. sysroot's lib path so the final link finds glibc 2.31 libs
+        #      that match the headers. Belt-and-braces; --sysroot already
+        #      adds the lib search path, but explicit LIBRARY_PATH ensures
+        #      it survives any wrapper post-processing.
+        "LIBCXX_DIR=$$(printf '%s\\n' \"$${NIX_LDFLAGS:-}\" | tr ' ' '\\n' | grep -E '^-L.*libcxx[^/]*/lib$$' | head -1 | sed 's/^-L//' || true) && " +
+        "case \"$$(uname -s)\" in " +
+        "  Linux) SYSROOT_DIR=$$(find $$EXT_BUILD_ROOT/external -maxdepth 1 -type d -name '+sysroot+sysroot_linux_*' 2>/dev/null | head -1); " +
+        "          [ -n \"$$SYSROOT_DIR\" ] && SYSROOT_FLAG=\"--sysroot=$$SYSROOT_DIR/sysroot\" || SYSROOT_FLAG=\"\" ;; " +
+        "  *)     SYSROOT_FLAG=\"\" ;; " +
+        "esac && " +
+        "echo \"kakadu: LIBCXX_DIR=$$LIBCXX_DIR SYSROOT_FLAG=$$SYSROOT_FLAG\" && " +
+        "export LIBRARY_PATH=\"$$LIBCXX_DIR$${LIBRARY_PATH:+:$$LIBRARY_PATH}\" && " +
+        # Synthesize a wrapper that prepends the sysroot flag so kakadu's
+        # `$(CC) -c file.cpp` lines pick it up. Make CLI vars must be a
+        # single token, so `make CC=\"clang++ --sysroot=…\"` won't work —
+        # make would split on whitespace.
+        "WRAPPER=$$BUILD_TMPDIR/bazel_cxx_wrapper.sh && " +
+        "printf '%s\\n' '#!/bin/bash' \"exec clang++ $$SYSROOT_FLAG \\\"\\$$@\\\"\" > \"$$WRAPPER\" && " +
+        "chmod +x \"$$WRAPPER\" && " +
+        "make -j1 -f " + _KDU_MAKE + " EXEC_PLATFORM=" + _KDU_EXEC_PLATFORM + " CC=\"$$WRAPPER\" CXX=\"$$WRAPPER\" all_but_jni && " +
         "mkdir -p $$INSTALLDIR/lib $$INSTALLDIR/include && " +
-        "cp $$EXT_BUILD_ROOT/external/+kakadu_extension+kakadu/lib/" + _KDU_ARCH + "/libkdu.a $$INSTALLDIR/lib/ && " +
-        "cp $$EXT_BUILD_ROOT/external/+kakadu_extension+kakadu/lib/" + _KDU_ARCH + "/libkdu_aux.a $$INSTALLDIR/lib/ && " +
-        "cp -R $$EXT_BUILD_ROOT/external/+kakadu_extension+kakadu/managed/all_includes/. $$INSTALLDIR/include/"
+        "cp $$STAGE/lib/" + _KDU_ARCH + "/libkdu.a $$INSTALLDIR/lib/ && " +
+        "cp $$STAGE/lib/" + _KDU_ARCH + "/libkdu_aux.a $$INSTALLDIR/lib/ && " +
+        "cp -R $$STAGE/managed/all_includes/. $$INSTALLDIR/include/"
     ),
     # Cache portability: rules_foreign_cc emits debug-info paths under
     # `$EXT_BUILD_ROOT` by default, which embeds machine-local sandbox paths

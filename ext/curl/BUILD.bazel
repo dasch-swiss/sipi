@@ -47,6 +47,16 @@ cmake(
         # `idn2_lookup_ul` / `idn2_check_version` from system libidn2.
         "USE_LIBIDN2": "OFF",
         "USE_NGHTTP2": "OFF",
+        # Disable SSH backends explicitly. CMake's curl auto-detects
+        # libssh2 / libssh from the host environment (the Nix dev shell
+        # has libssh2 on its lib search path), enabling them by default.
+        # When the resulting libcurl.a is then linked into sipi, the
+        # final link fails with hundreds of `undefined symbol:
+        # libssh2_*` errors because libssh2 isn't a declared dep
+        # anywhere in the Bazel graph. Sipi only uses HTTP/HTTPS — SSH
+        # is unused, so disable it at the curl level.
+        "CURL_USE_LIBSSH2": "OFF",
+        "CURL_USE_LIBSSH": "OFF",
     },
     out_static_libs = ["libcurl.a"],
     set_file_prefix_map = True,

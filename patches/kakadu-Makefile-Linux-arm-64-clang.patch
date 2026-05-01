@@ -2,7 +2,7 @@
 +++ b/coresys/make/Makefile-Linux-arm-64-gcc
 @@ -1,4 +1,4 @@
 -CC = g++
-+CC = clang
++CC = clang++
  
  PLATFORM = Linux-arm-64-gcc
  
@@ -34,7 +34,7 @@
 +++ b/apps/make/Makefile-Linux-arm-64-gcc
 @@ -1,4 +1,4 @@
 -CC = g++
-+CC = clang
++CC = clang++
  
  PLATFORM = Linux-arm-64-gcc
  
@@ -63,7 +63,7 @@
 +++ b/managed/make/Makefile-Linux-arm-64-gcc
 @@ -1,4 +1,4 @@
 -CC = g++
-+CC = clang
++CC = clang++
  
  PLATFORM = Linux-arm-64-gcc
  # The following definition is used to build executables that may need
