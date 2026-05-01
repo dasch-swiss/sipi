@@ -1,0 +1,15 @@
+"""Shared test helpers for Bazel-driven unit + approval tests."""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Header-only helper for resolving test-data and tmp directories from the
+# environment. Honoured by every per-component test that reads files under
+# `test/_test_data/` or writes to a scratch dir.
+cc_library(
+    name = "test_paths",
+    hdrs = ["test_paths.hpp"],
+    includes = ["."],
+    testonly = True,
+)

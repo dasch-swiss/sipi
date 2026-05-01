@@ -13,10 +13,13 @@
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
 #include "SipiIO.h"
+#include "test_paths.hpp"
 
-// Unit tests run from build/test/unit/sipiimage/
-static const std::string test_images = "../../../../test/_test_data/images/";
-static const std::string tmp_dir = "../../../../test/_test_data/images/thumbs/";
+// `sipi::test::{data_dir,tmp_dir}` honour Bazel's SIPI_TEST_DATA_DIR /
+// TEST_TMPDIR envs and fall back to the historical CMake build-tree
+// relative paths when unset. See test/test_paths.hpp.
+static const std::string test_images = sipi::test::data_dir() + "/images/";
+static const std::string tmp_dir = sipi::test::tmp_dir() + "/";
 
 static bool file_exists(const std::string &path)
 {

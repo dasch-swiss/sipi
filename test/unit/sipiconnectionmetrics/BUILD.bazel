@@ -1,0 +1,14 @@
+"""SipiConnectionMetricsAdapter unit tests (DEV-6339 dependency
+inversion — verifies the adapter forwards to SipiMetrics).
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "sipi_connection_metrics_adapter_test",
+    srcs = glob(["*.cpp"]),
+    deps = [
+        "//src:sipi_lib",
+        "@googletest//:gtest_main",
+    ],
+)

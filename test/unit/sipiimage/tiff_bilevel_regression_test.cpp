@@ -15,18 +15,25 @@
 #include "SipiIOTiff.h"
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiSize.h"
+#include "test_paths.hpp"
 
 #include <memory>
 #include <string>
 
 namespace {
 
-constexpr const char *kBilevelLzwMinisWhite = "../../../../test/_test_data/images/bilevel/bilevel_lzw_miniswhite.tif";
-constexpr const char *kBilevelNoneMinisWhite = "../../../../test/_test_data/images/bilevel/bilevel_none_miniswhite.tif";
-constexpr const char *kBilevelLzwMinisBlack = "../../../../test/_test_data/images/bilevel/bilevel_lzw_minisblack.tif";
-constexpr const char *kBilevelRoiTest = "../../../../test/_test_data/images/bilevel/bilevel_roi_test.tif";
+// `sipi::test::data_dir()` honours Bazel's SIPI_TEST_DATA_DIR env and
+// falls back to the historical CMake build-tree relative path when
+// unset. See test/test_paths.hpp. `static const std::string` (rather
+// than `constexpr const char *`) is required because the path is built
+// at static-init time from `std::getenv`.
+static const std::string kBilevelDir = sipi::test::data_dir() + "/images/bilevel";
+static const std::string kBilevelLzwMinisWhite = kBilevelDir + "/bilevel_lzw_miniswhite.tif";
+static const std::string kBilevelNoneMinisWhite = kBilevelDir + "/bilevel_none_miniswhite.tif";
+static const std::string kBilevelLzwMinisBlack = kBilevelDir + "/bilevel_lzw_minisblack.tif";
+static const std::string kBilevelRoiTest = kBilevelDir + "/bilevel_roi_test.tif";
 
-constexpr const char *kLeaves8Tif = "../../../../test/_test_data/images/knora/Leaves8.tif";
+static const std::string kLeaves8Tif = sipi::test::data_dir() + "/images/knora/Leaves8.tif";
 
 Sipi::SipiImage readFixture(const std::string &path,
   std::shared_ptr<Sipi::SipiRegion> region = nullptr,

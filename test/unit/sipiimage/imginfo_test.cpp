@@ -11,9 +11,13 @@
 #include "SipiIOJpeg.h"
 #include "SipiIOPng.h"
 #include "SipiIOTiff.h"
+#include "test_paths.hpp"
 
-// Unit tests run from build/test/unit/sipiimage/
-static const std::string test_images = "../../../../test/_test_data/images/unit/";
+// CMake/ctest runs this binary from build/test/unit/sipiimage/, where the
+// historical relative path resolves to the test fixtures. Bazel cc_test
+// runs from the workspace root in runfiles and sets SIPI_TEST_DATA_DIR.
+// `sipi::test::data_dir()` honours both — see test/test_paths.hpp.
+static const std::string test_images = sipi::test::data_dir() + "/images/unit/";
 
 static bool file_exists(const std::string &path) {
   struct stat buf{};
