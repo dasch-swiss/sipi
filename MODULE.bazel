@@ -41,6 +41,18 @@ bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
 # toolchains_llvm); MACOSX_DEPLOYMENT_TARGET=12.0 is pinned in .bazelrc.
 bazel_dep(name = "toolchains_llvm", version = "1.7.0")
 
+# ── Test-only deps (DEV-6343, PR Y+1) ──────────────────────────────────────
+# Pinned to 1.17.0.bcr.2 because transitive deps (`aspect_bazel_lib` and the
+# rules under it) already pull in `googletest@1.17.0`; declaring an older
+# version here triggers a `--check_direct_dependencies` warning under
+# Bazel 9's MVS resolver. 1.17.0 is API-compatible with 1.16.0 (the
+# version pinned in `test/CMakeLists.txt`) — gtest's API has been stable
+# across the 1.1x line, and no SIPI test calls a 1.17-specific symbol.
+# The `dev_dependency = True` flag keeps it out of the runtime build graph
+# so production targets in `//src` and `//shttps` cannot accidentally take
+# a transitive dep on test infrastructure.
+bazel_dep(name = "googletest", version = "1.17.0.bcr.2", dev_dependency = True)
+
 # ── LLVM toolchain — hermetic, LLVM 19.1.7, libc++ ─────────────────────────
 #
 # Linux libc++ ships in the LLVM tarball built against glibc, so it still
@@ -110,6 +122,19 @@ register_toolchains("@llvm_toolchain//:all")
 # latter requires `~/.netrc`, which `gh` does not populate).
 kakadu_extension = use_extension("//bazel:kakadu_extension.bzl", "kakadu_extension")
 use_repo(kakadu_extension, "kakadu")
+
+# ── ApprovalTests.cpp (single-header release, no BCR module) ───────────────
+# `bazel/approvaltests_cpp.bzl` downloads the .hpp file released by the
+# upstream project and exposes it as `cc_library(name = "approval_tests")`.
+# Version + checksum mirror `test/CMakeLists.txt:60` verbatim so the
+# Bazel-built and Nix-built test paths consume the same header bytes
+# (DEV-6343, plan §"PR Y+1").
+approvaltests_cpp = use_repo_rule("//bazel:approvaltests_cpp.bzl", "approvaltests_cpp")
+approvaltests_cpp(
+    name = "approvaltests_cpp",
+    url = "https://github.com/approvals/ApprovalTests.cpp/releases/download/v.10.13.0/ApprovalTests.v.10.13.0.hpp",
+    sha256 = "c00f6390b81d9924dc646e9d32b61e1e09abda106c13704f714ac349241bb9ff",
+)
 
 # ── Third-party C/C++ libs (rules_foreign_cc) ──────────────────────────────
 # URLs and SHA256s are the single source of truth, no longer split between
