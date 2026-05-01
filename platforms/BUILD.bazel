@@ -2,10 +2,8 @@
 #
 # Bazel resolves toolchains and `select()` branches against constraints; these
 # platforms compose the standard `@platforms//os:*` and `@platforms//cpu:*`
-# constraints into the four (os, cpu) pairs Sipi supports per CLAUDE.md's
-# build-completeness invariant: macOS-aarch64, linux-x86_64, linux-aarch64.
-# darwin_x86_64 is included for Intel-Mac developer machines but is not a
-# CI-tested target.
+# constraints into the three (os, cpu) pairs Sipi supports per CLAUDE.md's
+# build-completeness invariant: darwin-aarch64, linux-x86_64, linux-aarch64.
 
 package(default_visibility = ["//visibility:public"])
 
@@ -33,14 +31,6 @@ platform(
     ],
 )
 
-platform(
-    name = "darwin_x86_64",
-    constraint_values = [
-        "@platforms//os:macos",
-        "@platforms//cpu:x86_64",
-    ],
-)
-
 # Config settings for per-platform `select()` branches in BUILD files
 # (foreign_cc rules with per-arch configure options, etc.).
 # `platform()` cannot be used in `select()`; `config_setting` can.
@@ -65,13 +55,5 @@ config_setting(
     constraint_values = [
         "@platforms//os:macos",
         "@platforms//cpu:aarch64",
-    ],
-)
-
-config_setting(
-    name = "is_darwin_x86_64",
-    constraint_values = [
-        "@platforms//os:macos",
-        "@platforms//cpu:x86_64",
     ],
 )

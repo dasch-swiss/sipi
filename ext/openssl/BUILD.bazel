@@ -26,7 +26,6 @@ _OPENSSL_TARGET = select({
     "//platforms:is_linux_x86_64": ["linux-x86_64"],
     "//platforms:is_linux_aarch64": ["linux-aarch64"],
     "//platforms:is_darwin_aarch64": ["darwin64-arm64-cc"],
-    "//platforms:is_darwin_x86_64": ["darwin64-x86_64-cc"],
 })
 
 configure_make(
