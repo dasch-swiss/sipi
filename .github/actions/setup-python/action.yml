@@ -10,17 +10,7 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Install Python
-      shell: bash
-      run: |
-        sudo add-apt-repository -y ppa:deadsnakes/ppa
-        sudo apt install -qyyy --no-install-recommends python${{inputs.version}} python${{inputs.version}}-dev python${{inputs.version}}-distutils 
-        sudo ln -nsf /usr/bin/python${{inputs.version}} /usr/bin/python3
-    - name: Install PIP
-      shell: bash
-      run: |
-        which pip || curl -sS https://bootstrap.pypa.io/get-pip.py | sudo python3
-    - name: Upgrade pip and setuptools
-      shell: bash
-      run: |
-        pip3 install --upgrade pip setuptools wheel
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.version }}
+        cache: pip
