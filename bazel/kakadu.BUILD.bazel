@@ -38,7 +38,6 @@ filegroup(
 _KDU_MAKE = select({
     "@@//platforms:is_linux_x86_64": "Makefile-Linux-x86-64-gcc",
     "@@//platforms:is_linux_aarch64": "Makefile-Linux-arm-64-gcc",
-    "@@//platforms:is_darwin_x86_64": "Makefile-Mac-x86-64-gcc",
     # Upstream actually ships `Makefile-Mac-arm-64-gcc` (mixed case).
     # The earlier "MAC" upper-case spelling worked locally on macOS's
     # default case-insensitive APFS but fails on GitHub-hosted runners
@@ -49,14 +48,12 @@ _KDU_MAKE = select({
 _KDU_EXEC_PLATFORM = select({
     "@@//platforms:is_linux_x86_64": "Linux-x86-64-gcc",
     "@@//platforms:is_linux_aarch64": "Linux-arm-64-gcc",
-    "@@//platforms:is_darwin_x86_64": "Mac-x86-64-gcc",
     "@@//platforms:is_darwin_aarch64": "Mac-arm-64-gcc",
 })
 
 _KDU_ARCH = select({
     "@@//platforms:is_linux_x86_64": "Linux-x86-64-gcc",
     "@@//platforms:is_linux_aarch64": "Linux-arm-64-gcc",
-    "@@//platforms:is_darwin_x86_64": "Mac-x86-64-gcc",
     "@@//platforms:is_darwin_aarch64": "Mac-arm-64-gcc",
 })
 
