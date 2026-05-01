@@ -53,13 +53,13 @@ Sipi::SipiImage readFixture(const std::string &path)
  *  diagnosis using `--json`; regardless of that cause, the contract is
  *  "sipi reads these images without throwing". We use a parameterized
  *  test so both siblings (-o and -r) share the same contract. */
-class Jpeg_35_2421d_Reads : public ::testing::TestWithParam<const char *>
+class Jpeg_35_2421d_Reads : public ::testing::TestWithParam<std::string>
 {
 };
 
 TEST_P(Jpeg_35_2421d_Reads, ReadsSuccessfully)
 {
-  const char *path = GetParam();
+  const std::string &path = GetParam();
   Sipi::SipiImage img;
   ASSERT_NO_THROW(img = readFixture(path)) << "Failed to read " << path;
   EXPECT_EQ(img.getNx(), 404u);
@@ -76,7 +76,7 @@ TEST_P(Jpeg_35_2421d_Reads, ReadsSuccessfully)
  *  `SipiIOJ2k::write`'s UUID-box emitter). */
 TEST_P(Jpeg_35_2421d_Reads, XmpSurvivesRead)
 {
-  const char *path = GetParam();
+  const std::string &path = GetParam();
   Sipi::SipiImage img;
   ASSERT_NO_THROW(img = readFixture(path));
   ASSERT_NE(img.getXmp(), nullptr) << "XMP must be populated for " << path;
@@ -87,13 +87,9 @@ TEST_P(Jpeg_35_2421d_Reads, XmpSurvivesRead)
     << "XMP body should contain the German Photoshop caption";
 }
 
-// `kJpegHeritage_*` are `std::string` (constructed at static init from
-// `data_dir()`), but the parametrized fixture expects `const char *` —
-// pass `.c_str()` to match. The strings outlive the test suite (file-scope
-// statics), so the pointers stay valid for the duration of the run.
 INSTANTIATE_TEST_SUITE_P(Heritage,
   Jpeg_35_2421d_Reads,
-  ::testing::Values(kJpegHeritage_o.c_str(), kJpegHeritage_r.c_str()));
+  ::testing::Values(kJpegHeritage_o, kJpegHeritage_r));
 
 /*! R8 — a JPEG whose metadata fails to parse must still return a usable
  *  image. Today, an exception during IPTC / EXIF / XMP parsing aborts the

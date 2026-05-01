@@ -53,12 +53,12 @@
 #include <string>
 #include <sys/stat.h>
 
-// `workspace_path_for_approval` honours Bazel's SIPI_WORKSPACE_ROOT env
-// (cc_test cwd = workspace root in runfiles) and falls back to the
-// historical CMake build-tree relative path (3 levels up from
-// build/test/approval/) when unset. See test/test_paths.hpp.
-static const std::string test_images = sipi::test::workspace_path_for_approval("test/_test_data/images") + "/";
-static const std::string approved_dir = sipi::test::workspace_path_for_approval("test/approval/approval_tests");
+// `sipi::test::workspace_path()` honours Bazel's SIPI_WORKSPACE_ROOT env
+// (cc_test cwd = workspace root in runfiles). The CMake fallback
+// `"../../.."` is the 3-level traversal from build/test/approval/ to
+// the workspace root. See test/test_paths.hpp.
+static const std::string test_images = sipi::test::workspace_path("test/_test_data/images", "../../..") + "/";
+static const std::string approved_dir = sipi::test::workspace_path("test/approval/approval_tests", "../../..");
 
 namespace {
 

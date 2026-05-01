@@ -10,28 +10,9 @@ for the env-var-driven path resolution).
 
 package(default_visibility = ["//visibility:public"])
 
-# Everything under test/_test_data/ — used by the approval test target,
-# which exercises a wide cross-section of the fixture tree.
-filegroup(
-    name = "all",
-    srcs = glob(
-        ["**/*"],
-        # Excluded: the dotfile prefix on `_test_data` already prevents it
-        # from being picked up by recursive globs in source code, but be
-        # explicit here so Bazel's strict glob mode does not warn on
-        # the (currently empty) git-ignored subtrees.
-        exclude = [
-            "images/thumbs/**",
-            "scripts/**",
-        ],
-        allow_empty = True,
-    ),
-)
-
-# Subset consumed by `//test/unit/sipiimage` — the image fixtures and the
-# (subdirectory-only) thumbs dir. Thumbs is referenced as a write target
-# in CMake but Bazel routes writes to TEST_TMPDIR; we keep the entry as a
-# parity hint.
+# Image fixtures consumed by Bazel-driven tests. `images/thumbs/**` is
+# excluded because it's a write-only target dir under CMake; under Bazel
+# every test routes writes to TEST_TMPDIR via `sipi::test::tmp_dir()`.
 filegroup(
     name = "images",
     srcs = glob(
