@@ -42,7 +42,10 @@ static std::mutex debugio;// mutex to protect debugging messages from threads
 
 namespace shttps {
 
-const char loggername[] = "Sipi";// see Global.h !!
+// `const char loggername[] = "Sipi"` was historically declared here with
+// a "see Global.h !!" comment, but Global.h never read it and nothing
+// else in the tree references the symbol — it has been dead since the
+// switch to spdlog. Remove.
 
 /*!
  * Starts a thread just to catch all signals sent to the server process.

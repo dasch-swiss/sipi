@@ -744,7 +744,7 @@ bool SipiIOJpeg::read(SipiImage *img,
       + ", components: " + std::to_string(cinfo.output_components) + ")");
   }
   }
-  int sll = cinfo.output_components * cinfo.output_width * sizeof(uint8);
+  int sll = cinfo.output_components * cinfo.output_width * sizeof(uint8_t);
 
   delete[] img->pixels;// free previous buffer if re-reading into same SipiImage
   img->pixels = new byte[img->ny * sll];
