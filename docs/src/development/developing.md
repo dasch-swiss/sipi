@@ -94,9 +94,21 @@ The mandatory gate is CI; the local hook is fast-feedback parity.
 
 ## Writing Tests
 
-We use two test frameworks:
-[GoogleTest](https://github.com/google/googletest) for unit tests and
-[pytest](http://doc.pytest.org/en/latest/) for end-to-end tests.
+Unit + approval tests use [GoogleTest](https://github.com/google/googletest)
+(approval tests additionally use [ApprovalTests.cpp](https://github.com/approvals/ApprovalTests.cpp)).
+End-to-end tests are written in Rust and live under `test/e2e-rust/`;
+HTTP contract tests use [Hurl](https://hurl.dev/).
+
+C++ tests build under both CMake/ctest (the Nix-driven canonical CI
+path) and Bazel `cc_test` (DEV-6343, PR Y+1 of the Nix → Bazel migration —
+local-only inner loop until DEV-6348/Y+6 cuts CI over). The `just`
+recipes that wrap each:
+
+```bash
+just nix-build                   # Builds + runs ctest unit + approval (CI)
+just bazel-test-unit             # bazel test //test/unit/...        (local)
+just bazel-test-approval         # bazel test //test/approval:approvaltests  (local)
+```
 
 ### Unit Tests
 
@@ -209,18 +221,24 @@ just nix-test-smoke
 ### Approval Tests
 
 Approval tests live in `test/approval/` and use snapshot-based
-testing for regression detection. Run them via ctest:
+testing for regression detection. Two equivalent runners:
 
 ```bash
+# CMake/ctest (the canonical CI path, runs as part of just nix-build)
 cd build
 ctest -L approval --output-on-failure
+
+# Bazel cc_test (DEV-6343, local-only)
+just bazel-test-approval
 ```
 
-CMake injects `SOURCE_DATE_EPOCH=946684800` into the `sipi.approvaltests`
-invocation so the wall-clock-stamped ICC creation date that lcms2 stamps
-into JPEG / PNG / JP2 (and ICC-carrying TIFF) outputs is overwritten
-with a fixed value. Without the env var the seconds field drifts by one
-byte across consecutive runs.
+Both runners inject `SOURCE_DATE_EPOCH=946684800` into the test process
+(CMake via `set_tests_properties(... ENVIRONMENT ...)`, Bazel via
+`test/approval/BUILD.bazel`'s `env = {}` block) so the wall-clock-stamped
+ICC creation date that lcms2 stamps into JPEG / PNG / JP2 (and
+ICC-carrying TIFF) outputs is overwritten with a fixed value. Without
+the env var the seconds field drifts by one byte across consecutive
+runs.
 
 When running the binary directly outside of ctest, export the same
 value first:
