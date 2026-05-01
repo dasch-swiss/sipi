@@ -773,7 +773,10 @@ insta::assert_json_snapshot!(info_json, {
 
 | Target | Just Recipe | When | Notes |
 |---|---|---|---|
-| C++ unit tests | `just nix-build` (`.#dev` checkPhase) | PR CI | GoogleTest via ctest, runs in the Nix sandbox |
+| C++ unit tests (CI) | `just nix-build` (`.#dev` checkPhase) | PR CI | GoogleTest via ctest, runs in the Nix sandbox |
+| C++ unit tests (Bazel inner-loop) | `just bazel-test-unit` | local | `bazel test //test/unit/...`; 11 of 12 components (sipiimage tagged manual, [DEV-6354](https://linear.app/dasch/issue/DEV-6354)). Local-only until [DEV-6348](https://linear.app/dasch/issue/DEV-6348) (Y+6) cuts CI over. |
+| C++ approval tests (CI) | `just nix-build` (`.#dev` checkPhase) | PR CI | ApprovalTests via ctest; `SOURCE_DATE_EPOCH=946684800` injected by CMake |
+| C++ approval tests (Bazel inner-loop) | `just bazel-test-approval` | local | `bazel test //test/approval:approvaltests`; same env injection via `BUILD.bazel`. Local-only until [DEV-6348](https://linear.app/dasch/issue/DEV-6348) (Y+6). |
 | Rust e2e tests (CI) | `just nix-test-e2e` | PR CI | Pre-built binaries from `.#e2e-tests` (crane); reads `$SIPI_BIN` |
 | Rust e2e tests (inner-loop) | `just rust-test-e2e` | local | cargo-driven; reads `$SIPI_BIN`; same test code as `nix-test-e2e` |
 | Docker smoke (CI) | `just nix-test-smoke` | PR + tag CI | Pre-built binary from `.#smoke-test`; runs against loaded image |
