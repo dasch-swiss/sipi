@@ -1,0 +1,21 @@
+"""Sipi runtime config files — exposed as Bazel filegroups so unit + e2e
+tests can declare them as `data` deps.
+
+Today the only consumer is `//test/unit/configuration:configuration_tests`
+(DEV-6343, Y+1), which parses `sipi.config.lua` to verify the Lua-driven
+config loader. Y+5 (DEV-6347) will add `sipi.e2e-test-config.lua` and
+`sipi.test-config.lua` to support the Rust e2e suite via Bazel.
+"""
+
+package(default_visibility = ["//visibility:public"])
+
+# Every Lua config file at the top level of `config/`. Sub-trees like
+# `config/scripts/` are not included by default; add a separate filegroup
+# if a future test needs them.
+filegroup(
+    name = "configs",
+    srcs = glob(
+        ["*.lua"],
+        allow_empty = False,
+    ),
+)

@@ -15,17 +15,24 @@
 #include "SipiIOTiff.h"
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiSize.h"
+#include "test_paths.hpp"
 
 #include <memory>
 #include <string>
 
 namespace {
 
-constexpr const char *kJpegHeritage_o = "../../../../test/_test_data/images/jpeg/35-2421d-o.jpg";
-constexpr const char *kJpegHeritage_r = "../../../../test/_test_data/images/jpeg/35-2421d-r.jpg";
-constexpr const char *kJpegCmykApp14 = "../../../../test/_test_data/images/jpeg/cmyk/cmyk_photoshop_app14.jpg";
-constexpr const char *kJpegCmykRaw = "../../../../test/_test_data/images/jpeg/cmyk/cmyk_raw_no_app14.jpg";
-constexpr const char *kJpegMalformedXmp = "../../../../test/_test_data/images/jpeg/malformed_xmp.jpg";
+// `sipi::test::data_dir()` honours Bazel's SIPI_TEST_DATA_DIR env and
+// falls back to the historical CMake build-tree relative path when
+// unset. See test/test_paths.hpp. `static const std::string` (rather
+// than `constexpr const char *`) is required because the path is built
+// at static-init time from `std::getenv`.
+static const std::string kJpegFixtureRoot = sipi::test::data_dir() + "/images/jpeg";
+static const std::string kJpegHeritage_o = kJpegFixtureRoot + "/35-2421d-o.jpg";
+static const std::string kJpegHeritage_r = kJpegFixtureRoot + "/35-2421d-r.jpg";
+static const std::string kJpegCmykApp14 = kJpegFixtureRoot + "/cmyk/cmyk_photoshop_app14.jpg";
+static const std::string kJpegCmykRaw = kJpegFixtureRoot + "/cmyk/cmyk_raw_no_app14.jpg";
+static const std::string kJpegMalformedXmp = kJpegFixtureRoot + "/malformed_xmp.jpg";
 
 Sipi::SipiImage readFixture(const std::string &path)
 {
@@ -80,7 +87,13 @@ TEST_P(Jpeg_35_2421d_Reads, XmpSurvivesRead)
     << "XMP body should contain the German Photoshop caption";
 }
 
-INSTANTIATE_TEST_SUITE_P(Heritage, Jpeg_35_2421d_Reads, ::testing::Values(kJpegHeritage_o, kJpegHeritage_r));
+// `kJpegHeritage_*` are `std::string` (constructed at static init from
+// `data_dir()`), but the parametrized fixture expects `const char *` —
+// pass `.c_str()` to match. The strings outlive the test suite (file-scope
+// statics), so the pointers stay valid for the duration of the run.
+INSTANTIATE_TEST_SUITE_P(Heritage,
+  Jpeg_35_2421d_Reads,
+  ::testing::Values(kJpegHeritage_o.c_str(), kJpegHeritage_r.c_str()));
 
 /*! R8 — a JPEG whose metadata fails to parse must still return a usable
  *  image. Today, an exception during IPTC / EXIF / XMP parsing aborts the

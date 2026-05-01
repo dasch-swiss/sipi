@@ -1,0 +1,22 @@
+"""Configuration parsing unit tests.
+
+The Lua-driven config loader reads `config/sipi.config.lua`. We declare
+the config tree as a `data` dep and pass `SIPI_WORKSPACE_ROOT="."` so
+`sipi::test::config_dir()` (`test/test_paths.hpp`) resolves to the
+runfiles `<workspace>/config/` path. The env-unset fallback preserves
+CMake/ctest behaviour.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "configuration_tests",
+    srcs = glob(["*.cpp"]),
+    data = ["//config:configs"],
+    env = {"SIPI_WORKSPACE_ROOT": "."},
+    deps = [
+        "//src:sipi_lib",
+        "//test:test_paths",
+        "@googletest//:gtest_main",
+    ],
+)

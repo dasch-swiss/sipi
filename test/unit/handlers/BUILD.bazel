@@ -1,0 +1,23 @@
+"""IIIF handlers unit tests (iiif_handler + the corpus-driven URI
+parser regression suite).
+
+The corpus-driven test (`parse_iiif_uri_corpus_test.cpp`) reads
+SIPI_FUZZ_CORPUS_DIR as a compile-time string literal pointing at the
+fuzz seed corpus. Bazel passes the workspace-relative path
+`fuzz/handlers/corpus`; cc_test cwd is the workspace root in
+runfiles, so `std::filesystem::exists("fuzz/handlers/corpus")`
+resolves through the runfiles tree.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "sipi_handlers_tests",
+    srcs = glob(["*.cpp"]),
+    data = ["//fuzz/handlers/corpus:seed_corpus"],
+    local_defines = ['SIPI_FUZZ_CORPUS_DIR=\\"fuzz/handlers/corpus\\"'],
+    deps = [
+        "//src:sipi_lib",
+        "@googletest//:gtest_main",
+    ],
+)

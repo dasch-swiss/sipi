@@ -1,0 +1,20 @@
+"""SipiIcc byte-mutation helper unit tests (the function backing
+SipiIcc::iccBytes()'s SOURCE_DATE_EPOCH reproducibility hook — see
+sipi PR #587).
+
+The 8 tests in this suite cover apply_icc_header_normalization
+directly with explicit epochs (no env var reads), so unlike
+//test/approval:approvaltests this target does NOT need to set
+SOURCE_DATE_EPOCH.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "sipi_icc_normalize_test",
+    srcs = glob(["*.cpp"]),
+    deps = [
+        "//src:sipi_lib",
+        "@googletest//:gtest_main",
+    ],
+)

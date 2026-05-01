@@ -159,6 +159,43 @@ cc_library(
     ],
     includes = ["."],
     copts = ["-fexceptions"],
+    # System libs / frameworks required by transitive deps of any sipi_lib
+    # consumer — i.e. //src:sipi (the binary) AND every cc_test under
+    # //test/unit/... (Y+1, DEV-6343). Declaring them here (not on
+    # //src:sipi) lets cc_library's `linkopts` propagation surface them on
+    # every downstream link line, so unit tests don't have to redeclare
+    # them. The CMake build does the equivalent on `libsipi_testable`
+    # (test/CMakeLists.txt: `target_link_libraries(libsipi_testable PUBLIC
+    # ... iconv -framework CoreFoundation -framework SystemConfiguration)`).
+    linkopts = select({
+        # `-ldl` — Lua's package loader uses dlopen/dlclose/dlsym/dladdr
+        # for runtime .so loading. On macOS those live in libSystem; on
+        # Linux they're in libdl, which the toolchain doesn't auto-link.
+        # `-lpthread` — exiv2 + sentry call pthread_* directly. Modern
+        # glibc folds pthread into libc, but ld.lld doesn't follow the
+        # -pthread driver flag through to the underlying linker line, so
+        # we spell the lib out.
+        "@platforms//os:linux": [
+            "-ldl",
+            "-lpthread",
+        ],
+        # System frameworks/libs required by transitive deps:
+        #   * `-liconv` — exiv2's convert.cpp uses iconv() on macOS for
+        #     metadata charset conversion. Apple ships libiconv in
+        #     /usr/lib/libiconv.dylib but the link must be explicit.
+        #   * `-framework SystemConfiguration` — curl's macos.c calls
+        #     `SCDynamicStoreCopyProxies` for proxy auto-detection.
+        #   * `-framework CoreFoundation` — implicit dep of
+        #     SystemConfiguration; safer to spell out.
+        "@platforms//os:macos": [
+            "-liconv",
+            "-framework",
+            "SystemConfiguration",
+            "-framework",
+            "CoreFoundation",
+        ],
+        "//conditions:default": [],
+    }),
     deps = [
         "//include:headers",
         "//shttps:shttps",
@@ -187,6 +224,11 @@ cc_library(
 )
 
 # ── //src:sipi ─────────────────────────────────────────────────────────────
+# System-lib + framework linkopts (`-ldl`, `-lpthread`, `-liconv`,
+# `-framework SystemConfiguration`, `-framework CoreFoundation`) are
+# declared on `:sipi_lib` so they also propagate to every cc_test under
+# //test/unit/... — see the linkopts block on `:sipi_lib` above. This
+# binary keeps only its own binary-specific flag (`--build-id=sha1`).
 cc_binary(
     name = "sipi",
     srcs = ["sipi.cpp"],
@@ -195,35 +237,7 @@ cc_binary(
         # in Y+4. `--build-id=sha1` derives the build-id from the binary's
         # content hash rather than a wall-clock random; identical inputs
         # ↔ identical build-id.
-        # `-ldl` — Lua's package loader uses dlopen/dlclose/dlsym/dladdr
-        # for runtime .so loading. On macOS those live in libSystem; on
-        # Linux they're in libdl, which the toolchain doesn't auto-link.
-        # `-lpthread` — exiv2 + sentry call pthread_* directly. Modern
-        # glibc folds pthread into libc, but ld.lld doesn't follow the
-        # -pthread driver flag through to the underlying linker line, so
-        # we spell the lib out.
-        "@platforms//os:linux": [
-            "-Wl,--build-id=sha1",
-            "-ldl",
-            "-lpthread",
-        ],
-        # System frameworks/libs required by transitive deps:
-        #   * `-liconv` — exiv2's convert.cpp uses iconv() on macOS for
-        #     metadata charset conversion. Apple ships libiconv in
-        #     /usr/lib/libiconv.dylib but the link must be explicit.
-        #   * `-framework SystemConfiguration` — curl's macos.c calls
-        #     `SCDynamicStoreCopyProxies` for proxy auto-detection.
-        #   * `-framework CoreFoundation` — implicit dep of
-        #     SystemConfiguration; safer to spell out.
-        # Mirrors what nixpkgs' wrapped clang adds to LDFLAGS for the
-        # CMake build of SIPI today.
-        "@platforms//os:macos": [
-            "-liconv",
-            "-framework",
-            "SystemConfiguration",
-            "-framework",
-            "CoreFoundation",
-        ],
+        "@platforms//os:linux": ["-Wl,--build-id=sha1"],
         "//conditions:default": [],
     }),
     deps = [":sipi_lib"] + select({

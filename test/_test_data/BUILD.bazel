@@ -1,0 +1,42 @@
+"""Test fixture data consumed by Bazel-driven unit + approval tests.
+
+Filegroups expose subtrees under `test/_test_data/` so individual `cc_test`
+targets can declare just the data they need rather than the whole tree.
+The Bazel-set `TEST_SRCDIR/TEST_WORKSPACE` cwd is the workspace root in
+runfiles; a test reading these files looks at workspace-relative paths
+like `test/_test_data/images/unit/lena512.jp2` (see `test/test_paths.hpp`
+for the env-var-driven path resolution).
+"""
+
+package(default_visibility = ["//visibility:public"])
+
+# Everything under test/_test_data/ — used by the approval test target,
+# which exercises a wide cross-section of the fixture tree.
+filegroup(
+    name = "all",
+    srcs = glob(
+        ["**/*"],
+        # Excluded: the dotfile prefix on `_test_data` already prevents it
+        # from being picked up by recursive globs in source code, but be
+        # explicit here so Bazel's strict glob mode does not warn on
+        # the (currently empty) git-ignored subtrees.
+        exclude = [
+            "images/thumbs/**",
+            "scripts/**",
+        ],
+        allow_empty = True,
+    ),
+)
+
+# Subset consumed by `//test/unit/sipiimage` — the image fixtures and the
+# (subdirectory-only) thumbs dir. Thumbs is referenced as a write target
+# in CMake but Bazel routes writes to TEST_TMPDIR; we keep the entry as a
+# parity hint.
+filegroup(
+    name = "images",
+    srcs = glob(
+        ["images/**/*"],
+        exclude = ["images/thumbs/**"],
+        allow_empty = True,
+    ),
+)
