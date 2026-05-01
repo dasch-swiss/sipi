@@ -1,4 +1,4 @@
-use sipi_e2e::{find_sipi_bin, test_data_dir};
+use sipi_e2e::{find_sipi_bin, repo_root, test_data_dir};
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -210,4 +210,34 @@ fn cli_metadata_fidelity() {
     for path in [&jp2_output, &tif_output, &jpg_output, &png_output] {
         let _ = std::fs::remove_file(path);
     }
+}
+
+#[test]
+fn cli_version_flag() {
+    let sipi_bin =
+        std::env::var("SIPI_BIN").unwrap_or_else(|_| find_sipi_bin().to_string_lossy().to_string());
+
+    let result = Command::new(&sipi_bin)
+        .arg("--version")
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to run sipi --version: {}", e));
+
+    assert!(
+        result.status.success(),
+        "sipi --version exited non-zero: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+
+    let expected_version = std::fs::read_to_string(repo_root().join("version.txt"))
+        .expect("read version.txt")
+        .trim()
+        .to_string();
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    let expected = format!("sipi {}", expected_version);
+    assert!(
+        stdout.trim() == expected,
+        "expected stdout to be {:?}, got {:?}",
+        expected,
+        stdout
+    );
 }
