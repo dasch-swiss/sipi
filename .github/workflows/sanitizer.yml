@@ -56,7 +56,12 @@ jobs:
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-      - run: nix profile install --inputs-from . nixpkgs#just
+      # `just` drives the build; `llvmPackages_19.llvm` ships
+      # `llvm-symbolizer`, which ASan/LSan need to resolve the
+      # `(/nix/store/.../sipi+0xOFFSET)` frames into function names.
+      # Without it the name-based suppressions in
+      # `.lsan_suppressions.txt` (`leak:lua*`) can never match.
+      - run: nix profile install --inputs-from . nixpkgs#just nixpkgs#llvmPackages_19.llvm
 
       - name: Build with sanitizers (ASan + UBSan) — unit tests run in sandbox
         env:
@@ -75,7 +80,14 @@ jobs:
         # by the previous step); the test client doesn't need to be
         # sanitized, so building it via crane in a regular sandbox is
         # fine (filter-syscalls only matters for the sanitizer build).
-        run: just nix-test-e2e
+        # Pass `ASAN_SYMBOLIZER_PATH` explicitly so the symbolizer
+        # is found regardless of what's on PATH at exec time
+        # (sanitizers honour this env before doing PATH lookup); the
+        # `.#sanitized` variant in flake.nix keeps DWARF inline so
+        # the symbolizer has something to read.
+        run: |
+          export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer)"
+          just nix-test-e2e
 
       - name: Check for sanitizer findings in e2e
         if: always()
