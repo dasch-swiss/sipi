@@ -1,4 +1,4 @@
-=== ../../../test/_test_data/images/unit/HasCommentBlock.JPG ===
+=== HasCommentBlock.JPG ===
 
 Dimensions: 373x496
 Channels: 3

@@ -1,0 +1,56 @@
+"""Approval tests — byte-exact image-encode baselines + metadata
+goldens (DEV-6343, plan §"PR Y+1").
+
+The `env = {"SOURCE_DATE_EPOCH": "946684800"}` injection mirrors
+`test/approval/CMakeLists.txt`'s `set_tests_properties(... ENVIRONMENT
+SOURCE_DATE_EPOCH=946684800 ...)`. Without it the JPEG/PNG/JP2 goldens
+drift on every run because `SipiIcc::iccBytes()` falls back to lcms2's
+wall-clock-stamped header (see ADR-0002,
+docs/adr/0002-icc-profile-determinism-test-only.md).
+
+`SIPI_WORKSPACE_ROOT="."` lets `sipi::test::workspace_path_for_approval()`
+resolve fixture and golden paths from the runfiles workspace root.
+TEST_TMPDIR is set by Bazel automatically and consumed by
+image_encode_baseline_test.cpp's `received_dir()` so any `.received.<ext>`
+file from a maintainer-driven re-approval lands under
+`bazel-testlogs/` (per the plan's verification gate).
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+# Filegroup of approved golden files. Mirrors the on-disk layout under
+# `test/approval/approval_tests/` 1:1 — Git LFS is the source of truth.
+filegroup(
+    name = "approved_goldens",
+    srcs = glob(
+        ["approval_tests/**"],
+        allow_empty = False,
+    ),
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "approvaltests",
+    srcs = glob(["*.cpp"]),
+    # ApprovalTests' default namer reads the source .cpp file at its
+    # workspace-relative path to derive the golden filename. Bazel's
+    # cc_test compiles `srcs` into the binary but does not put them
+    # into the runfiles tree, so the namer's `test/approval/<name>.cpp`
+    # lookup fails with "build configuration" errors. Add the same
+    # glob as `data` so the sources also live under runfiles.
+    data = glob(["*.cpp"]) + [
+        ":approved_goldens",
+        "//test/_test_data:images",
+    ],
+    env = {
+        "SIPI_WORKSPACE_ROOT": ".",
+        "SOURCE_DATE_EPOCH": "946684800",
+    },
+    local_defines = ["APPROVAL_TESTS_HIDE_DEPRECATED_CODE=1"],
+    deps = [
+        "//src:sipi_lib",
+        "//test:test_paths",
+        "@approvaltests_cpp//:approval_tests",
+        "@googletest//:gtest_main",
+    ],
+)

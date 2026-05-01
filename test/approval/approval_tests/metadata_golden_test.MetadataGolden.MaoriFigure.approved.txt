@@ -1,4 +1,4 @@
-=== ../../../test/_test_data/images/unit/MaoriFigure.jpg ===
+=== MaoriFigure.jpg ===
 
 Dimensions: 1014x1933
 Channels: 3

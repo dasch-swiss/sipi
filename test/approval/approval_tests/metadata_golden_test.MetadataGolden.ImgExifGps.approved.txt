@@ -1,4 +1,4 @@
-=== ../../../test/_test_data/images/unit/img_exif_gps.jpg ===
+=== img_exif_gps.jpg ===
 
 Dimensions: 4032x3024
 Channels: 3

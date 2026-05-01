@@ -1,4 +1,4 @@
-=== ../../../test/_test_data/images/unit/gray_with_icc_another.jpg ===
+=== gray_with_icc_another.jpg ===
 
 Dimensions: 1607x1200
 Channels: 1

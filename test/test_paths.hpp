@@ -1,16 +1,20 @@
-// Test-data path helpers shared by SIPI's GoogleTest unit tests.
+// Test-data path helpers shared by SIPI's GoogleTest unit + approval tests.
 //
 // The two build systems run the test binary from different working
 // directories:
-//   * CMake / ctest:  cwd = build/test/unit/<comp>/, so the historical
-//                     `../../../..` traversal resolves to the workspace.
-//   * Bazel cc_test:  cwd = workspace root in runfiles. `../../../..`
-//                     escapes the runfiles tree.
+//   * CMake / ctest:  cwd = build/test/<unit|approval>/<...>/. The depth
+//                     to the workspace root differs:
+//                       unit tests       (test/unit/<comp>/)  → 4 levels up
+//                       approval tests   (test/approval/)     → 3 levels up
+//                     Each helper takes the appropriate fallback string.
+//   * Bazel cc_test:  cwd = workspace root in runfiles. `../../*` escapes
+//                     the runfiles tree, so we use `SIPI_WORKSPACE_ROOT`
+//                     (set to "." by the cc_test rules) instead.
 //
-// `SIPI_WORKSPACE_ROOT` (set by Bazel cc_test rules to ".") and
-// `TEST_TMPDIR` (set by Bazel for any test run) are honoured when set,
-// with the historical CMake-relative paths as fallbacks. Helpers return
-// paths *without* a trailing slash; callers append `"/sub/dir/file"`.
+// `SIPI_WORKSPACE_ROOT` and `TEST_TMPDIR` are honoured when set (Bazel
+// sets both), with the historical CMake-relative paths as fallbacks.
+// Helpers return paths *without* a trailing slash; callers append
+// `"/sub/dir/file"`.
 
 #pragma once
 
@@ -20,26 +24,45 @@
 
 namespace sipi::test {
 
-// Resolve a workspace-relative path. Prefers `SIPI_WORKSPACE_ROOT` (Bazel
-// sets this to "." — a runfiles-relative path that resolves correctly
-// from the cc_test cwd), falls back to `../../../..` for CMake/ctest.
-inline std::string workspace_path(std::string_view subpath = {})
+namespace detail {
+
+// Internal: returns SIPI_WORKSPACE_ROOT if set, else the supplied
+// fallback. Callers usually go through one of the named helpers below.
+inline std::string workspace_root(std::string_view fallback)
 {
-  const std::string base = (std::getenv("SIPI_WORKSPACE_ROOT") != nullptr)
-                             ? std::string{std::getenv("SIPI_WORKSPACE_ROOT")}
-                             : std::string{"../../../.."};
+  if (const char *env = std::getenv("SIPI_WORKSPACE_ROOT")) { return std::string{env}; }
+  return std::string{fallback};
+}
+
+}// namespace detail
+
+// Workspace path for **unit tests** (cwd = build/test/unit/<comp>/, so
+// `../../../..` reaches the workspace root). Pass a `subpath` like
+// `"test/_test_data"` to walk into a subtree.
+inline std::string workspace_path_for_unit(std::string_view subpath = {})
+{
+  const std::string base = detail::workspace_root("../../../..");
   return subpath.empty() ? base : base + "/" + std::string{subpath};
 }
 
-// Path to `test/_test_data`.
-inline std::string data_dir() { return workspace_path("test/_test_data"); }
+// Workspace path for **approval tests** (cwd = build/test/approval/,
+// so `../../..` reaches the workspace root).
+inline std::string workspace_path_for_approval(std::string_view subpath = {})
+{
+  const std::string base = detail::workspace_root("../../..");
+  return subpath.empty() ? base : base + "/" + std::string{subpath};
+}
 
-// Path to `config/`.
-inline std::string config_dir() { return workspace_path("config"); }
+// Path to `test/_test_data`. Default is the unit-test cwd-relative form;
+// approval tests override via `workspace_path_for_approval("test/_test_data")`.
+inline std::string data_dir() { return workspace_path_for_unit("test/_test_data"); }
+
+// Path to `config/`. Same comment as `data_dir()`.
+inline std::string config_dir() { return workspace_path_for_unit("config"); }
 
 // Writable scratch directory. Prefers `TEST_TMPDIR` (Bazel sets this per
-// test run). Falls back to `<data_dir>/images/thumbs` for ctest, which is
-// where the existing tests already write their intermediates.
+// test run). Falls back to `<unit data_dir>/images/thumbs` for ctest,
+// which is where the existing tests already write their intermediates.
 inline std::string tmp_dir()
 {
   if (const char *env = std::getenv("TEST_TMPDIR")) { return std::string{env}; }

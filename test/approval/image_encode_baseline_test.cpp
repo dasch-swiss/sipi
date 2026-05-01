@@ -43,6 +43,7 @@
 #include "SipiImageError.hpp"
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiSize.h"
+#include "test_paths.hpp"
 
 #include <cstdio>
 #include <filesystem>
@@ -52,9 +53,12 @@
 #include <string>
 #include <sys/stat.h>
 
-// Approval tests run from build/test/approval/.
-static const std::string test_images = "../../../test/_test_data/images/";
-static const std::string approved_dir = "../../../test/approval/approval_tests";
+// `workspace_path_for_approval` honours Bazel's SIPI_WORKSPACE_ROOT env
+// (cc_test cwd = workspace root in runfiles) and falls back to the
+// historical CMake build-tree relative path (3 levels up from
+// build/test/approval/) when unset. See test/test_paths.hpp.
+static const std::string test_images = sipi::test::workspace_path_for_approval("test/_test_data/images") + "/";
+static const std::string approved_dir = sipi::test::workspace_path_for_approval("test/approval/approval_tests");
 
 namespace {
 
@@ -96,10 +100,12 @@ void encode(const std::string &in_path,
 }
 
 // Where to drop `.received.<ext>` files when the maintainer needs to
-// inspect them — under approved_dir if writable (dev-shell inner loop),
-// otherwise under $TMPDIR (Nix sandbox checkPhase).
+// inspect them — TEST_TMPDIR (Bazel cc_test, written under
+// `bazel-testlogs/`), under approved_dir if writable (CMake dev-shell
+// inner loop), otherwise under $TMPDIR (Nix sandbox checkPhase).
 std::string received_dir()
 {
+  if (const char *bazel_tmp = std::getenv("TEST_TMPDIR")) { return std::string(bazel_tmp); }
   std::error_code ec;
   std::filesystem::create_directories(approved_dir, ec);
   if (!ec) return approved_dir;
