@@ -10,6 +10,7 @@
 #include <dirent.h>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <sys/stat.h>
 #ifdef __APPLE__
 #include <sys/sysctl.h>
@@ -424,6 +425,15 @@ void my_terminate_handler()
  */
 int main(int argc, char *argv[])
 {
+  // Fast path: print version and exit before any library initialisation.
+  // Doing this after curl/exiv2/TIFF init leaks their static registries
+  // at exit and trips the LSan gate in the sanitizer e2e suite.
+  for (int i = 1; i < argc; ++i) {
+    if (std::string_view(argv[i]) == "--version") {
+      std::cout << "sipi " << VERSION << std::endl;
+      return 0;
+    }
+  }
 
   // Set top-level exception handler. Unhandled C++ exceptions are sent to Sentry
   // as message events, then std::abort() is called. The resulting SIGABRT is caught
@@ -863,15 +873,7 @@ int main(int argc, char *argv[])
   std::string optSipiSentryEnvironment;
   sipiopt.add_option("--sentry-environment", optSipiSentryEnvironment)->envname("SIPI_SENTRY_ENVIRONMENT");
 
-  bool optVersion = false;
-  sipiopt.add_flag("--version", optVersion, "Print the SIPI version and exit.");
-
   CLI11_PARSE(sipiopt, argc, argv);
-
-  if (optVersion) {
-    std::cout << "sipi " << VERSION << std::endl;
-    return 0;
-  }
 
   /*
   argc -= (argc > 0);
