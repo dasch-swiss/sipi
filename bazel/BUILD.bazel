@@ -16,3 +16,19 @@ exports_files(
     ["ar_wrapper.sh"],
     visibility = ["//visibility:public"],
 )
+
+# glibc 2.42 → 2.31 ABI compatibility shims. See glibc23_compat.c for
+# the full rationale. Linked into //src:sipi on Linux only (see
+# `linkopts` selector there).
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "glibc23_compat",
+    srcs = ["glibc23_compat.c"],
+    visibility = ["//visibility:public"],
+    target_compatible_with = ["@platforms//os:linux"],
+    # `_GNU_SOURCE` is also #defined inside the .c file, but spelling it
+    # out here ensures the macro is visible to any tooling that
+    # introspects the cc_library's `defines`.
+    defines = ["_GNU_SOURCE"],
+)

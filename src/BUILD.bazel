@@ -195,7 +195,18 @@ cc_binary(
         # in Y+4. `--build-id=sha1` derives the build-id from the binary's
         # content hash rather than a wall-clock random; identical inputs
         # ↔ identical build-id.
-        "@platforms//os:linux": ["-Wl,--build-id=sha1"],
+        # `-ldl` — Lua's package loader uses dlopen/dlclose/dlsym/dladdr
+        # for runtime .so loading. On macOS those live in libSystem; on
+        # Linux they're in libdl, which the toolchain doesn't auto-link.
+        # `-lpthread` — exiv2 + sentry call pthread_* directly. Modern
+        # glibc folds pthread into libc, but ld.lld doesn't follow the
+        # -pthread driver flag through to the underlying linker line, so
+        # we spell the lib out.
+        "@platforms//os:linux": [
+            "-Wl,--build-id=sha1",
+            "-ldl",
+            "-lpthread",
+        ],
         # System frameworks/libs required by transitive deps:
         #   * `-liconv` — exiv2's convert.cpp uses iconv() on macOS for
         #     metadata charset conversion. Apple ships libiconv in
@@ -215,5 +226,11 @@ cc_binary(
         ],
         "//conditions:default": [],
     }),
-    deps = [":sipi_lib"],
+    deps = [":sipi_lib"] + select({
+        # glibc 2.42 → 2.31 ABI compatibility shims for kakadu's
+        # cross-toolchain compile. See //bazel:glibc23_compat for the
+        # full rationale.
+        "@platforms//os:linux": ["//bazel:glibc23_compat"],
+        "//conditions:default": [],
+    }),
 )

@@ -17,10 +17,18 @@ cmake(
         "SENTRY_BUILD_SHARED_LIBS": "OFF",
         "SENTRY_BUILD_EXAMPLES": "OFF",
         "SENTRY_BUILD_TESTS": "OFF",
+        # Sentry's CMake transitively resolves curl → CURLConfig.cmake →
+        # find_dependency(OpenSSL). On Linux the Chromium debian-bullseye
+        # sysroot ships OpenSSL 1.1.1w, but recent curl's CURLConfig
+        # requires OpenSSL >= 3, so the find_package fails outright.
+        # Point sentry at our foreign_cc-built OpenSSL 3.x explicitly so
+        # the version check resolves against the right copy.
+        "OPENSSL_ROOT_DIR": "$$EXT_BUILD_DEPS/openssl",
     },
     out_static_libs = ["libsentry.a"],
     set_file_prefix_map = True,
     deps = [
         "//ext/curl:curl",
+        "//ext/openssl:openssl",
     ],
 )

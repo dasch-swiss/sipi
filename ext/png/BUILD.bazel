@@ -18,6 +18,16 @@ cmake(
         "PNG_TESTS": "OFF",
         "PNG_BUILD_ZLIB": "OFF",
         "PNG_ARM_NEON": "on",
+        # Sipi consumes libpng16.a only. libpng's CMakeLists builds a
+        # `png_framework` target by default on Apple platforms, which
+        # links against libc++ and trips a dyld-loader bug under Bazel's
+        # darwin-sandbox: the LLVM toolchain's wrapper exports
+        # `DYLD_LIBRARY_PATH` to expose its bundled `libc++.1.0.dylib`,
+        # but that dylib lacks `__ZdaPv` (operator delete[]). When clang
+        # spawns Apple's `ld`, dyld finds the LLVM-toolchain libc++ first
+        # and crashes with "Abort trap: 6". We don't ship the framework
+        # bundle, so disabling it sidesteps the issue entirely.
+        "PNG_FRAMEWORK": "OFF",
         # cache_entries values go through Bazel's Make-variable expander
         # before reaching the shell: `$X` is rejected as an unknown Make
         # var, `$$X` escapes to literal `$X` (which the shell expands as a

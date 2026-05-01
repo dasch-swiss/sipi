@@ -33,6 +33,18 @@ build --action_env=PATH
 # 'LIBTOOL' is undefined` because aclocal can't locate libtool's macros.
 build --action_env=ACLOCAL_PATH
 
+# Inherit NIX_LDFLAGS so the Nix-wrapped `clang++` on PATH can find the
+# C++ standard library at link time. The wrapper reads NIX_LDFLAGS and
+# prepends its -L paths to the linker invocation; without it, kakadu's
+# foreign_cc sub-make links libkdu_v85R.so via clang++ which auto-adds
+# `-lc++`, but ld.bfd can't find libc++.so anywhere (it lives at
+# `/nix/store/…-libcxx-19.1.7/lib/libc++.so` — not on any default search
+# path). Toolchains_llvm's own clang doesn't read NIX_LDFLAGS, so this
+# is a no-op for Bazel-driven cc actions; it only affects Nix-wrapped
+# tools spawned by foreign_cc rules. Required on Linux; harmless on
+# macOS (system libc++ at /usr/lib/ resolves without env help).
+build --action_env=NIX_LDFLAGS
+
 # Stamp inputs for reproducible binaries and OCI images. The script writes
 # STABLE_GIT_COMMIT, STABLE_GIT_VERSION, STABLE_IMAGE_CREATED, and
 # STABLE_SIPI_VERSION (sourced from version.txt) — consumed by
@@ -71,11 +83,42 @@ build:linux --host_linkopt=-no-pie
 # macOS releases. Required because toolchains_llvm does not bundle a macOS
 # sysroot — the Xcode CLT SDK is consulted at build time and its default
 # version is whatever shipped with the host OS.
-build:macos --copt=-mmacosx-version-min=12.0
-build:macos --linkopt=-mmacosx-version-min=12.0
-build:macos --host_copt=-mmacosx-version-min=12.0
-build:macos --host_linkopt=-mmacosx-version-min=12.0
-build:macos --action_env=MACOSX_DEPLOYMENT_TARGET=12.0
+#
+# 13.3 is the floor: Apple's libc++ marks `std::bad_expected_access`
+# (and the rest of the C++23 `<expected>` machinery's vtables/typeinfo)
+# as available from macOS 13.3 onwards. With the previous 12.0 pin,
+# linking sipi failed with `ld64.lld: error: undefined symbol: vtable
+# for std::__1::bad_expected_access<void>` because SipiHttpServer.cpp
+# uses `std::expected` per the C++23 style guide. The CMake build path
+# escapes this because it inherits the SDK default (whatever shipped
+# with the host's Xcode CLT) instead of explicitly pinning low.
+build:macos --copt=-mmacosx-version-min=13.3
+build:macos --linkopt=-mmacosx-version-min=13.3
+build:macos --host_copt=-mmacosx-version-min=13.3
+build:macos --host_linkopt=-mmacosx-version-min=13.3
+build:macos --action_env=MACOSX_DEPLOYMENT_TARGET=13.3
+
+# Use Apple SDK's libc++ for compile AND link, instead of LLVM 19.1.7's
+# bundled libc++ headers + Apple SDK libc++.dylib. Without this, clang
+# emits ABI-tagged symbols against its bundled headers (e.g.
+# `std::__1::bad_expected_access<void>::bad_expected_access[abi:ne190107]`)
+# but ld64.lld links against `/usr/lib/libc++.dylib` which has Apple's
+# different ABI tags — final sipi link fails with `undefined symbol:
+# vtable for std::__1::bad_expected_access<void>`.
+#
+# `-nostdinc++` strips clang's bundled C++ stdlib include path; the
+# explicit `-isystem` pointing at the Xcode CLT SDK's `c++/v1` directory
+# adds Apple's libc++ headers back. The link automatically picks Apple's
+# libc++.dylib via `-isysroot` (which toolchains_llvm sets from
+# DEVELOPER_DIR/SDKROOT), so compile + link agree on ABI.
+#
+# Mirrors the existing CMake build's behavior — Apple's clang from
+# `/Library/Developer/CommandLineTools` uses Apple's libc++ throughout,
+# so the macOS dev path is consistent across both toolchains.
+build:macos --copt=-nostdinc++
+build:macos --copt=-isystem/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1
+build:macos --host_copt=-nostdinc++
+build:macos --host_copt=-isystem/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1
 
 # Force toolchains_llvm to resolve the macOS SDK against the system Xcode
 # Command Line Tools rather than nixpkgs' stripped-down `apple-sdk-14.4`
