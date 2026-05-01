@@ -178,6 +178,34 @@ nix-coverage:
     @echo "Coverage at: result-coverage/coverage.xml"
 
 #####################################
+# Bazel
+#
+# Inner-loop test recipes for the Nix → Bazel build orchestration
+# migration (DEV-6341). PR Y (DEV-6342) landed the build graph itself;
+# Y+1 (DEV-6343) ports unit + approval tests to `cc_test` targets and
+# wires them up here. CI continues to run unit + approval tests via
+# `just nix-build`'s `checkPhase` until Y+6 (DEV-6348) cuts CI fully
+# over to Bazel — these recipes are local-only.
+#
+# Requires `bazelisk` from the Nix dev shell (added to flake.nix in Y).
+#####################################
+
+# Run every GoogleTest unit-test target under //test/unit/.
+# Excludes //test/unit/sipiimage:sipi_image_tests, which is tagged
+# `manual` because its test bodies write to the source `_test_data/`
+# tree — Bazel runfiles is read-only. Tracked for follow-up in
+# DEV-6354. CMake/ctest still exercises sipiimage on `main`.
+bazel-test-unit:
+    bazel test //test/unit/...
+
+# Run the approval-test target. SOURCE_DATE_EPOCH=946684800 and
+# SIPI_WORKSPACE_ROOT="." are injected by `test/approval/BUILD.bazel`;
+# any `.received.<ext>` file from a maintainer-driven re-approval
+# lands under `bazel-testlogs/test/approval/approvaltests/`.
+bazel-test-approval:
+    bazel test //test/approval:approvaltests
+
+#####################################
 # Tests (consume $SIPI_BIN, default ./result/bin/sipi)
 #####################################
 
