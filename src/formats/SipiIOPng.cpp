@@ -163,7 +163,7 @@ bool SipiIOPng::read(SipiImage *img,
 
   // Guards for allocations that happen after setjmp — longjmp skips destructors,
   // so we track raw pointers here for cleanup in the error handler.
-  uint8 *pixel_buffer_guard = nullptr;
+  uint8_t *pixel_buffer_guard = nullptr;
   png_bytep *row_pointers_guard = nullptr;
 
   // setjmp error recovery — sipi_error_fn calls longjmp(png_jmpbuf(png_ptr), 1)
@@ -281,7 +281,7 @@ bool SipiIOPng::read(SipiImage *img,
   }
 
   size_t sll = png_get_rowbytes(png_ptr, info_ptr);
-  auto *buffer = new uint8[height * sll];
+  auto *buffer = new uint8_t[height * sll];
   pixel_buffer_guard = buffer;  // track for longjmp cleanup
 
   auto *row_pointers = new png_bytep[height];

@@ -57,12 +57,11 @@ SipiMetrics::SipiMetrics()
                                   .Register(*registry_)
                                   .Add({})),
 
-    rejected_connections_total(prometheus::BuildCounter()
-                                 .Name("sipi_rejected_connections_total")
-                                 .Help("Total requests rejected with 503 due to queue full or timeout")
-                                 .Register(*registry_)
-                                 .Add({})),
-
+    // Init-list order matches the declaration order in `SipiMetrics.h`
+    // (decisions → near_limit → rejected). C++ initialises members in
+    // declaration order regardless of the list order; mismatching the
+    // two triggers -Wreorder-ctor and is a footgun for any future
+    // member that depends on another at construction time.
     rate_limit_decisions_total(prometheus::BuildCounter()
                                  .Name("sipi_rate_limit_decisions_total")
                                  .Help("Rate limit decisions by action (allowed, rejected, shadow_rejected)")
@@ -73,6 +72,12 @@ SipiMetrics::SipiMetrics()
                                   .Help("Clients at >80% of pixel budget")
                                   .Register(*registry_)
                                   .Add({})),
+
+    rejected_connections_total(prometheus::BuildCounter()
+                                 .Name("sipi_rejected_connections_total")
+                                 .Help("Total requests rejected with 503 due to queue full or timeout")
+                                 .Register(*registry_)
+                                 .Add({})),
 
     waiting_connections(prometheus::BuildGauge()
                           .Name("sipi_waiting_connections")

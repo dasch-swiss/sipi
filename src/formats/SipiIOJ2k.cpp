@@ -73,7 +73,13 @@ public:
 
   bool close();
 
-  inline bool prefer_large_writes() { return false; }
+  // `prefer_large_writes()` was historically declared here as a non-const
+  // member returning `false`. That signature didn't match Kakadu's
+  // virtual (`bool prefer_large_writes() const`), so it hid the base
+  // method instead of overriding it — Kakadu's virtual dispatch always
+  // returned its own default `true`, and this method was dead code
+  // (DEV-6359). Removed: behaviour is unchanged because the production
+  // path was already running with Kakadu's default.
 
   inline void set_target_size(kdu_long num_bytes){};// we just ignore it
 };
@@ -756,18 +762,9 @@ static void write_exif_box(kdu_supp::jp2_family_tgt *tgt, kdu_core::kdu_byte *ex
 }
 //=============================================================================
 
-static long get_bpp_dims(kdu_codestream &codestream)
-{
-  int comps = codestream.get_num_components();
-  int n, max_width = 0, max_height = 0;
-  for (n = 0; n < comps; n++) {
-    kdu_dims dims;
-    codestream.get_dims(n, dims);
-    if (dims.size.x > max_width) { max_width = dims.size.x; }
-    if (dims.size.y > max_height) { max_height = dims.size.y; }
-  }
-  return ((long)max_height) * ((long)max_width);
-}
+// `static long get_bpp_dims(kdu_codestream &)` removed — never called
+// anywhere in SIPI. Restoring it (or any equivalent) belongs with the
+// caller that needs it, not as orphaned utility code.
 
 void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params)
 {
@@ -870,7 +867,10 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
     codestream.create(&siz, output, nullptr, 0, 0, env_ref, &membroker);
 
     // Set up any specific coding parameters and finalize them.
-    int num_clayers;
+    // `num_clayers` was assigned in 5 places below; its only reader sits
+    // inside the commented-out `/* ... */` block at the call to
+    // `kdu_stripe_compressor::start(...)`. Until that block is revived
+    // or deleted outright, the assignments are dead — drop them.
     std::vector<double> rates;
 
     //
@@ -890,13 +890,11 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
       }
 
       if (params->find(J2K_Clayers) != params->end()) {
-        num_clayers = std::stoi(params->at(J2K_Clayers));
         std::stringstream ss;
         ss << "Clayers=" << params->at(J2K_Clayers);
         codestream.access_siz()->parse_string(ss.str().c_str());
       } else {
         codestream.access_siz()->parse_string("Clayers=8");
-        num_clayers = 8;
       }
 
       if (params->find(J2K_Clevels) != params->end()) {
@@ -949,15 +947,12 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
       codestream.access_siz()->parse_string("Sprofile=PART2");
       if (mindim > 4096) {
         codestream.access_siz()->parse_string("Clayers=8");
-        num_clayers = 8;
         codestream.access_siz()->parse_string("Clevels=8");// resolution levels ***
       } else if (mindim > 2048) {
         codestream.access_siz()->parse_string("Clayers=5");
-        num_clayers = 5;
         codestream.access_siz()->parse_string("Clevels=5");// resolution levels ***
       } else if (mindim > 1024) {
         codestream.access_siz()->parse_string("Clayers=3");
-        num_clayers = 3;
         codestream.access_siz()->parse_string("Clevels=3");// resolution levels ***
       }
       codestream.access_siz()->parse_string("Corder=RPCL");
@@ -1175,7 +1170,12 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
     }
 
     jpx_out.write_headers();
-    jp2_output_box *out_box = jpx_stream.open_stream();
+    // `jpx_stream.open_stream()` returns a `jp2_output_box*` that the
+    // dead/commented `kdu_stripe_compressor::start(...)` block below
+    // would have consumed. Drop the unused pointer; Kakadu still
+    // performs the side-effects (initialising the codestream box for
+    // subsequent `kdu_stripe_compressor` use) regardless.
+    jpx_stream.open_stream();
 
     codestream.access_siz()->finalize_all();
 
