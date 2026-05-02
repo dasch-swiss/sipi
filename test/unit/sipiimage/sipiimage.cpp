@@ -8,8 +8,14 @@
 #include "../../../src/SipiImage.hpp"
 #include "../../../src/SipiImageError.hpp"
 #include "SipiIOTiff.h"
+#include "test_paths.hpp"
 #include <cmath>
 #include <ranges>
+#include <sys/stat.h>
+
+// See test/test_paths.hpp for the data_dir/tmp_dir env-var contract.
+static const std::string test_images = sipi::test::data_dir() + "/images/";
+static const std::string tmp_dir = sipi::test::tmp_dir() + "/";
 
 // small function to check if file exist
 inline bool exists_file(const std::string &name)
@@ -30,20 +36,20 @@ inline bool image_identical(const std::string &name1, const std::string &name2)
   return (img1 == img2);
 }
 
-const std::string leavesSmallWithAlpha = "../../../../test/_test_data/images/knora/Leaves-small-alpha.tif";
-const std::string leavesSmallNoAlpha = "../../../../test/_test_data/images/knora/Leaves-small-no-alpha.tif";
-const std::string png16bit = "../../../../test/_test_data/images/knora/png_16bit.png";
-const std::string pngPaletteAlpha = "../../../../test/_test_data/images/unit/mario.png";
-const std::string leaves8tif = "../../../../test/_test_data/images/knora/Leaves8.tif";
-const std::string cielab = "../../../../test/_test_data/images/unit/cielab.tif";
-const std::string cielab16 = "../../../../test/_test_data/images/unit/CIELab16.tif";
-const std::string palette = "../../../../test/_test_data/images/unit/palette.tif";
-const std::string wrongrotation = "../../../../test/_test_data/images/unit/image_orientation.jpg";
-const std::string watermark_correct = "../../../../test/_test_data/images/unit/watermark_correct.tif";
-const std::string watermark_incorrect = "../../../../test/_test_data/images/unit/watermark_incorrect.tif";
-const std::string tiffJpegScanlineBug = "../../../../test/_test_data/images/knora/tiffJpegScanlineBug.tif";
-const std::string imgExifGps = "../../../../test/_test_data/images/unit/img_exif_gps.jpg";
-const std::string imgExifGpsTifOut = "../../../../test/_test_data/images/unit/img_exif_gps_out.tif";
+const std::string leavesSmallWithAlpha = test_images + "knora/Leaves-small-alpha.tif";
+const std::string leavesSmallNoAlpha = test_images + "knora/Leaves-small-no-alpha.tif";
+const std::string png16bit = test_images + "knora/png_16bit.png";
+const std::string pngPaletteAlpha = test_images + "unit/mario.png";
+const std::string leaves8tif = test_images + "knora/Leaves8.tif";
+const std::string cielab = test_images + "unit/cielab.tif";
+const std::string cielab16 = test_images + "unit/CIELab16.tif";
+const std::string palette = test_images + "unit/palette.tif";
+const std::string wrongrotation = test_images + "unit/image_orientation.jpg";
+const std::string watermark_correct = test_images + "unit/watermark_correct.tif";
+const std::string watermark_incorrect = test_images + "unit/watermark_incorrect.tif";
+const std::string tiffJpegScanlineBug = test_images + "knora/tiffJpegScanlineBug.tif";
+const std::string imgExifGps = test_images + "unit/img_exif_gps.jpg";
+const std::string imgExifGpsTifOut = tmp_dir + "img_exif_gps_out.tif";
 
 // Check if configuration file can be found
 TEST(SipiImage, CheckIfTestImagesCanBeFound)
@@ -79,7 +85,7 @@ TEST(SipiImage, ConvertTiffWithAlphaToJPG)
 
   EXPECT_NO_THROW(img.read(leavesSmallWithAlpha, region, size));
 
-  EXPECT_NO_THROW(img.write("jpg", "../../../../test/_test_data/images/thumbs/Leaves-small-with-alpha.jpg"));
+  EXPECT_NO_THROW(img.write("jpg", tmp_dir + "Leaves-small-with-alpha.jpg"));
 }
 
 // Convert Tiff with no alpha channel to JPG
@@ -93,7 +99,7 @@ TEST(SipiImage, ConvertTiffWithNoAlphaToJPG)
 
   EXPECT_NO_THROW(img.read(leavesSmallNoAlpha, region, size));
 
-  EXPECT_NO_THROW(img.write("jpg", "../../../../test/_test_data/images/thumbs/Leaves-small-no-alpha.jpg"));
+  EXPECT_NO_THROW(img.write("jpg", tmp_dir + "Leaves-small-no-alpha.jpg"));
 }
 
 // Convert PNG 16 bit with alpha channel and ICC profile to TIFF and back
@@ -102,12 +108,12 @@ TEST(SipiImage, ConvertPng16BitToJpxToPng)
   Sipi::SipiIOTiff::initLibrary();
   Sipi::SipiImage img1;
   ASSERT_NO_THROW(img1.read(png16bit));
-  ASSERT_NO_THROW(img1.write("tif", "../../../../test/_test_data/images/knora/png_16bit.tif"));
+  ASSERT_NO_THROW(img1.write("tif", tmp_dir + "png_16bit.tif"));
 
   Sipi::SipiImage img2;
-  ASSERT_NO_THROW(img2.read("../../../../test/_test_data/images/knora/png_16bit.tif"));
-  ASSERT_NO_THROW(img2.write("png", "../../../../test/_test_data/images/knora/png_16bit_X.png"));
-  // EXPECT_TRUE(image_identical(png16bit, "../../../../test/_test_data/images/knora/png_16bit_X.png"));
+  ASSERT_NO_THROW(img2.read(tmp_dir + "png_16bit.tif"));
+  ASSERT_NO_THROW(img2.write("png", tmp_dir + "png_16bit_X.png"));
+  // EXPECT_TRUE(image_identical(png16bit, tmp_dir + "png_16bit_X.png"));
 }
 
 // Convert PNG 16 bit with alpha channel and ICC profile to JPX
@@ -118,9 +124,9 @@ TEST(SipiImage, ConvertPng16BitToJpx)
 
   ASSERT_NO_THROW(img1.read(png16bit));
 
-  ASSERT_NO_THROW(img1.write("jpx", "../../../../test/_test_data/images/knora/png_16bit.jpx"));
+  ASSERT_NO_THROW(img1.write("jpx", tmp_dir + "png_16bit.jpx"));
 
-  EXPECT_TRUE(image_identical(png16bit, "../../../../test/_test_data/images/knora/png_16bit.jpx"));
+  EXPECT_TRUE(image_identical(png16bit, tmp_dir + "png_16bit.jpx"));
 }
 
 
@@ -132,9 +138,9 @@ TEST(SipiImage, ConvertPng16BitToTiff)
 
   ASSERT_NO_THROW(img1.read(png16bit));
 
-  ASSERT_NO_THROW(img1.write("tif", "../../../../test/_test_data/images/knora/png_16bit.tif"));
+  ASSERT_NO_THROW(img1.write("tif", tmp_dir + "png_16bit.tif"));
 
-  EXPECT_TRUE(image_identical(png16bit, "../../../../test/_test_data/images/knora/png_16bit.tif"));
+  EXPECT_TRUE(image_identical(png16bit, tmp_dir + "png_16bit.tif"));
 }
 
 // Convert PNG 16 bit with alpha channel and ICC profile to JPEG
@@ -145,7 +151,7 @@ TEST(SipiImage, ConvertPng16BitToJpg)
 
   ASSERT_NO_THROW(img1.read(png16bit));
 
-  ASSERT_NO_THROW(img1.write("jpg", "../../../../test/_test_data/images/knora/png_16bit.jpg"));
+  ASSERT_NO_THROW(img1.write("jpg", tmp_dir + "png_16bit.jpg"));
 }
 
 TEST(SipiImage, ConvertPNGPaletteAlphaToTiff)
@@ -154,9 +160,8 @@ TEST(SipiImage, ConvertPNGPaletteAlphaToTiff)
   Sipi::SipiImage img1;
 
   ASSERT_NO_THROW(img1.read(pngPaletteAlpha));
-  ASSERT_NO_THROW(img1.write("tif", "../../../../test/_test_data/images/unit/_mario.tif"));
-  EXPECT_TRUE(image_identical(
-    "../../../../test/_test_data/images/unit/mario.tif", "../../../../test/_test_data/images/unit/_mario.tif"));
+  ASSERT_NO_THROW(img1.write("tif", tmp_dir + "_mario.tif"));
+  EXPECT_TRUE(image_identical(test_images + "unit/mario.tif", tmp_dir + "_mario.tif"));
 }
 
 TEST(SipiImage, CIELab_Conversion)
@@ -167,14 +172,14 @@ TEST(SipiImage, CIELab_Conversion)
   Sipi::SipiImage img3;
 
   ASSERT_NO_THROW(img1.read(cielab));
-  ASSERT_NO_THROW(img1.write("jpx", "../../../../test/_test_data/images/unit/_cielab.jpx"));
-  ASSERT_NO_THROW(img2.read("../../../../test/_test_data/images/unit/_cielab.jpx"));
-  ASSERT_NO_THROW(img2.write("tif", "../../../../test/_test_data/images/unit/_cielab.tif"));
+  ASSERT_NO_THROW(img1.write("jpx", tmp_dir + "_cielab.jpx"));
+  ASSERT_NO_THROW(img2.read(tmp_dir + "_cielab.jpx"));
+  ASSERT_NO_THROW(img2.write("tif", tmp_dir + "_cielab.tif"));
 
   // now test if conversion back to TIFF gives an identical image
-  EXPECT_TRUE(image_identical(cielab, "../../../../test/_test_data/images/unit/_cielab.tif"));
-  ASSERT_NO_THROW(img3.read("../../../../test/_test_data/images/unit/_cielab.jpx"));
-  ASSERT_NO_THROW(img3.write("png", "../../../../test/_test_data/images/unit/_cielab.png"));
+  EXPECT_TRUE(image_identical(cielab, tmp_dir + "_cielab.tif"));
+  ASSERT_NO_THROW(img3.read(tmp_dir + "_cielab.jpx"));
+  ASSERT_NO_THROW(img3.write("png", tmp_dir + "_cielab.png"));
 }
 
 TEST(SipiImage, CIELab16_Conversion)
@@ -186,16 +191,16 @@ TEST(SipiImage, CIELab16_Conversion)
   Sipi::SipiImage img4;
 
   ASSERT_NO_THROW(img1.read(cielab16));
-  ASSERT_NO_THROW(img1.write("jpx", "../../../../test/_test_data/images/unit/_CIELab16.jpx"));
-  ASSERT_NO_THROW(img2.read("../../../../test/_test_data/images/unit/_CIELab16.jpx"));
-  ASSERT_NO_THROW(img2.write("tif", "../../../../test/_test_data/images/unit/_CIELab.tif"));
+  ASSERT_NO_THROW(img1.write("jpx", tmp_dir + "_CIELab16.jpx"));
+  ASSERT_NO_THROW(img2.read(tmp_dir + "_CIELab16.jpx"));
+  ASSERT_NO_THROW(img2.write("tif", tmp_dir + "_CIELab.tif"));
 
   // now test if conversion back to TIFF gives an identical image
-  EXPECT_TRUE(image_identical(cielab16, "../../../../test/_test_data/images/unit/_CIELab.tif"));
-  ASSERT_NO_THROW(img3.read("../../../../test/_test_data/images/unit/_CIELab16.jpx"));
-  ASSERT_NO_THROW(img3.write("png", "../../../../test/_test_data/images/unit/_CIELab16.png"));
-  ASSERT_NO_THROW(img4.read("../../../../test/_test_data/images/unit/_CIELab16.jpx"));
-  ASSERT_NO_THROW(img4.write("jpg", "../../../../test/_test_data/images/unit/_CIELab16.jpg"));
+  EXPECT_TRUE(image_identical(cielab16, tmp_dir + "_CIELab.tif"));
+  ASSERT_NO_THROW(img3.read(tmp_dir + "_CIELab16.jpx"));
+  ASSERT_NO_THROW(img3.write("png", tmp_dir + "_CIELab16.png"));
+  ASSERT_NO_THROW(img4.read(tmp_dir + "_CIELab16.jpx"));
+  ASSERT_NO_THROW(img4.write("jpg", tmp_dir + "_CIELab16.jpg"));
 }
 
 TEST(SipiImage, CMYK_Conversion)
@@ -206,20 +211,20 @@ TEST(SipiImage, CMYK_Conversion)
   Sipi::SipiImage img3;
   Sipi::SipiImage img4;
 
-  const std::string cmyk = "../../../../test/_test_data/images/unit/cmyk.tif";
+  const std::string cmyk = test_images + "unit/cmyk.tif";
   EXPECT_TRUE(exists_file(cmyk));
 
   ASSERT_NO_THROW(img1.read(cmyk));
-  ASSERT_NO_THROW(img1.write("jpx", "../../../../test/_test_data/images/unit/_cmyk.jpx"));
-  ASSERT_NO_THROW(img2.read("../../../../test/_test_data/images/unit/_cmyk.jpx"));
-  ASSERT_NO_THROW(img2.write("tif", "../../../../test/_test_data/images/unit/_cmyk_2.tif"));
+  ASSERT_NO_THROW(img1.write("jpx", tmp_dir + "_cmyk.jpx"));
+  ASSERT_NO_THROW(img2.read(tmp_dir + "_cmyk.jpx"));
+  ASSERT_NO_THROW(img2.write("tif", tmp_dir + "_cmyk_2.tif"));
 
   // now test if conversion back to TIFF gives an identical image
-  EXPECT_TRUE(image_identical(cmyk, "../../../../test/_test_data/images/unit/_cmyk_2.tif"));
-  ASSERT_NO_THROW(img3.read("../../../../test/_test_data/images/unit/_cmyk.jpx"));
-  ASSERT_NO_THROW(img3.write("png", "../../../../test/_test_data/images/unit/_cmyk.png"));
-  ASSERT_NO_THROW(img4.read("../../../../test/_test_data/images/unit/_cmyk.jpx"));
-  ASSERT_NO_THROW(img4.write("jpg", "../../../../test/_test_data/images/unit/_cmyk.jpg"));
+  EXPECT_TRUE(image_identical(cmyk, tmp_dir + "_cmyk_2.tif"));
+  ASSERT_NO_THROW(img3.read(tmp_dir + "_cmyk.jpx"));
+  ASSERT_NO_THROW(img3.write("png", tmp_dir + "_cmyk.png"));
+  ASSERT_NO_THROW(img4.read(tmp_dir + "_cmyk.jpx"));
+  ASSERT_NO_THROW(img4.write("jpg", tmp_dir + "_cmyk.jpg"));
 }
 
 TEST(SipiImage, PALETTE_Conversion)
@@ -227,7 +232,7 @@ TEST(SipiImage, PALETTE_Conversion)
   Sipi::SipiIOTiff::initLibrary();
   Sipi::SipiImage img1;
   ASSERT_NO_THROW(img1.read(palette));
-  ASSERT_NO_THROW(img1.write("jpx", "../../../../test/_test_data/images/unit/_palette.jpx"));
+  ASSERT_NO_THROW(img1.write("jpx", tmp_dir + "_palette.jpx"));
 }
 
 TEST(SipiImage, GRAYICC_Conversion_01)
@@ -237,8 +242,8 @@ TEST(SipiImage, GRAYICC_Conversion_01)
   Sipi::SipiImage img2;
   Sipi::SipiImage img3;
 
-  const std::string grayicc_jp2 = "../../../../test/_test_data/images/unit/gray_with_icc.jp2";
-  const std::string grayicc_jp2_to_jpeg = "../../../../test/_test_data/images/unit/_gray_with_icc.jpg";
+  const std::string grayicc_jp2 = test_images + "unit/gray_with_icc.jp2";
+  const std::string grayicc_jp2_to_jpeg = tmp_dir + "_gray_with_icc.jpg";
 
   EXPECT_TRUE(exists_file(grayicc_jp2));
 
@@ -255,8 +260,8 @@ TEST(SipiImage, GRAYICC_Conversion_02)
   Sipi::SipiImage img2;
   Sipi::SipiImage img3;
 
-  const std::string gray_icc_another_jpeg = "../../../../test/_test_data/images/unit/gray_with_icc_another.jpg";
-  const std::string gray_icc_another_jpeg_to_jp2 = "../../../../test/_test_data/images/unit/_gray_with_icc_another.jpx";
+  const std::string gray_icc_another_jpeg = test_images + "unit/gray_with_icc_another.jpg";
+  const std::string gray_icc_another_jpeg_to_jp2 = tmp_dir + "_gray_with_icc_another.jpx";
 
   EXPECT_TRUE(exists_file(gray_icc_another_jpeg));
 
@@ -273,16 +278,15 @@ TEST(SipiImage, CMYK_lossy_compression)
   const std::shared_ptr<Sipi::SipiRegion> region = nullptr;
   const std::shared_ptr<Sipi::SipiSize> size = nullptr;
 
-  const std::string cmyk = "../../../../test/_test_data/images/unit/cmyk.tif";
+  const std::string cmyk = test_images + "unit/cmyk.tif";
   EXPECT_TRUE(exists_file(cmyk));
 
   ASSERT_NO_THROW(img.readOriginal(cmyk, region, size, shttps::HashType::sha256));
   Sipi::SipiCompressionParams params = {
     { Sipi::J2K_rates, "0.5 0.2 0.1 0.025" }, { Sipi::J2K_Clayers, "4" }, { Sipi::J2K_Clevels, "3" }
   };
-  ASSERT_NO_THROW(img.write("jpx", "../../../../test/_test_data/images/unit/_cmyk_lossy.jp2", &params));
-  EXPECT_TRUE(image_identical("../../../../test/_test_data/images/unit/cmyk_lossy.jp2",
-    "../../../../test/_test_data/images/unit/_cmyk_lossy.jp2"));
+  ASSERT_NO_THROW(img.write("jpx", tmp_dir + "_cmyk_lossy.jp2", &params));
+  EXPECT_TRUE(image_identical(test_images + "unit/cmyk_lossy.jp2", tmp_dir + "_cmyk_lossy.jp2"));
 }
 
 TEST(SipiImage, WrongRotation)
@@ -301,9 +305,8 @@ TEST(SipiImage, WrongRotation)
   // EXPECT_EQ(img.getNy(), 3264);
   // EXPECT_EQ(img.getNc(), 3);
   // EXPECT_EQ(img.getOrientation(), Sipi::TOPLEFT);
-  ASSERT_NO_THROW(img.write("tif", "../../../../test/_test_data/images/unit/_image_orientation.tif"));
-  EXPECT_TRUE(image_identical("../../../../test/_test_data/images/unit/image_orientation.tif",
-    "../../../../test/_test_data/images/unit/_image_orientation.tif"));
+  ASSERT_NO_THROW(img.write("tif", tmp_dir + "_image_orientation.tif"));
+  EXPECT_TRUE(image_identical(test_images + "unit/image_orientation.tif", tmp_dir + "_image_orientation.tif"));
 }
 
 // Apply watermark to image
@@ -315,9 +318,9 @@ TEST(SipiImage, Watermark)
   Sipi::SipiImage img3;
   Sipi::SipiImage img4;
 
-  std::string maori = "../../../../test/_test_data/images/unit/MaoriFigure.jpg";
-  std::string gradstars = "../../../../test/_test_data/images/unit/gradient-stars.tif";
-  std::string maoriWater = "../../../../test/_test_data/images/unit/MaoriFigureWatermark.jpg";
+  std::string maori = test_images + "unit/MaoriFigure.jpg";
+  std::string gradstars = test_images + "unit/gradient-stars.tif";
+  std::string maoriWater = test_images + "unit/MaoriFigureWatermark.jpg";
 
   EXPECT_TRUE(exists_file(maori));
   EXPECT_TRUE(exists_file(gradstars));
@@ -348,15 +351,11 @@ TEST(SipiImage, CMYK_With_Alpha_Conversion)
   Sipi::SipiImage img1;
   Sipi::SipiImage img2;
 
-  const std::string tif_cmyk_with_alpha = "../../../../test/_test_data/images/unit/cmyk_with_alpha.tif";
-  const std::string tif_cmyk_with_alpha_converted_to_jpx =
-    "../../../../test/_test_data/images/unit/cmyk_with_alpha.jpx";
-  const std::string tif_cmyk_with_alpha_converted_from_jpx_to_tif =
-    "../../../../test/_test_data/images/unit/cmyk_with_alpha_.tif";
-  const std::string tif_cmyk_with_alpha_converted_to_jpg =
-    "../../../../test/_test_data/images/unit/cmyk_with_alpha_.jpg";
-  const std::string tif_cmyk_with_alpha_converted_to_png =
-    "../../../../test/_test_data/images/unit/cmyk_with_alpha_.png";
+  const std::string tif_cmyk_with_alpha = test_images + "unit/cmyk_with_alpha.tif";
+  const std::string tif_cmyk_with_alpha_converted_to_jpx = tmp_dir + "cmyk_with_alpha.jpx";
+  const std::string tif_cmyk_with_alpha_converted_from_jpx_to_tif = tmp_dir + "cmyk_with_alpha_.tif";
+  const std::string tif_cmyk_with_alpha_converted_to_jpg = tmp_dir + "cmyk_with_alpha_.jpg";
+  const std::string tif_cmyk_with_alpha_converted_to_png = tmp_dir + "cmyk_with_alpha_.png";
 
   ASSERT_NO_THROW(img1.read(tif_cmyk_with_alpha));
   ASSERT_NO_THROW(img1.write("jpx", tif_cmyk_with_alpha_converted_to_jpx));
@@ -382,7 +381,7 @@ TEST(SipiImage, CMYK_With_Alpha_Conversion)
 /*   Sipi::SipiImage img; */
 
 /*   EXPECT_NO_THROW(img.read(tiffJpegScanlineBug)); */
-/*   EXPECT_NO_THROW(img.write("jpx", "../../../../test/_test_data/images/thumbs/tiffJpegScanlineBug.jp2")); */
+/*   EXPECT_NO_THROW(img.write("jpx", tmp_dir + "tiffJpegScanlineBug.jp2")); */
 /* } */
 
 double errorPercent(double actual, double expected) { return abs((actual - expected) / expected); }

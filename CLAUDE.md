@@ -58,7 +58,7 @@ just nix-valgrind                # run sipi under Valgrind
 
 # Bazel inner loop (DEV-6343, PR Y+1 — local-only; CI runs unit + approval
 # tests via just nix-build's checkPhase until DEV-6348 (Y+6))
-just bazel-test-unit             # bazel test //test/unit/...  (11 of 12 components; sipiimage tagged manual, DEV-6354)
+just bazel-test-unit             # bazel test //test/unit/...  (12 of 12 components)
 just bazel-test-approval         # bazel test //test/approval:approvaltests  (24 cases, env-injected SOURCE_DATE_EPOCH)
 
 # Dev-shell inner loop (non-recipe — see "Inner-loop development" below)
