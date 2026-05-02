@@ -10,8 +10,12 @@ name: bazel-build
 #    inputs. Same-repo PRs (the only flavour we expect for this branch)
 #    use the workflow definition from the PR's HEAD commit, so this
 #    works before the workflow file lands on `main`. The `paths` filter
-#    keeps unrelated PRs (Lua / Python / docs / Nix-only changes) out of
-#    the dispatch matrix.
+#    keeps unrelated PRs (docs / Python / runtime-Lua / Nix-only changes)
+#    out of the dispatch matrix while covering every tree Bazel actually
+#    reads: Bazel meta files, the C++ source / header / test trees that
+#    feed `//src:sipi_lib`, `//include:headers`, `//shttps:shttps`, and
+#    `//test/...` via globs, plus `config/*.lua` (consumed as runfiles
+#    by `//test/unit/configuration`).
 #  * `workflow_dispatch` — manual trigger via the Actions tab once the
 #    workflow file is on `main`. Useful for re-running against a PR
 #    branch that hasn't moved.
@@ -23,6 +27,7 @@ name: bazel-build
 on:
   pull_request:
     paths:
+      # Bazel meta + first-party rule code
       - "MODULE.bazel"
       - "MODULE.bazel.lock"
       - ".bazelrc"
@@ -35,8 +40,24 @@ on:
       - "patches/**"
       - "tools/workspace_status.sh"
       - ".github/workflows/bazel-build.yml"
+      # Nix dev-shell that the build runs inside
       - "flake.nix"
       - "flake.lock"
+      # C++ trees that Bazel pulls in via globs. `ext/**` is intentionally
+      # NOT here: each `ext/<lib>/BUILD.bazel` references upstream sources
+      # via `http_archive` (sources live in Bazel's repository cache, not
+      # the working tree) so only the BUILD files matter, and those are
+      # already covered by `**/BUILD.bazel`.
+      - "src/**"
+      - "include/**"
+      - "shttps/**"
+      - "test/**"
+      - "fuzz/**"
+      # Lua configs consumed as test runfiles (e.g.
+      # //test/unit/configuration parses sipi.config.lua). Scoped to top-
+      # level *.lua to leave config/scripts/** — the runtime Lua handler
+      # tree, not a Bazel input — out of the dispatch matrix.
+      - "config/*.lua"
   workflow_dispatch:
     inputs:
       bazel_target:
