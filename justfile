@@ -190,11 +190,8 @@ nix-coverage:
 # Requires `bazelisk` from the Nix dev shell (added to flake.nix in Y).
 #####################################
 
-# Run every GoogleTest unit-test target under //test/unit/.
-# Excludes //test/unit/sipiimage:sipi_image_tests, which is tagged
-# `manual` because its test bodies write to the source `_test_data/`
-# tree — Bazel runfiles is read-only. Tracked for follow-up in
-# DEV-6354. CMake/ctest still exercises sipiimage on `main`.
+# Run every GoogleTest unit-test target under //test/unit/. Covers all
+# 12 components (sipiimage joined the Bazel run in DEV-6354).
 bazel-test-unit:
     bazel test //test/unit/...
 

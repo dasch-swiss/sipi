@@ -1,35 +1,23 @@
-"""SipiImage unit tests — DEFERRED from Bazel runs in Y+1.
-
-The test bodies write to the source `test/_test_data/` tree mid-flight
-(both `images/thumbs/<X>` and `_<temp>` filenames in `images/{knora,unit}/`).
-CMake/ctest gets away with this because the workspace is read-write, but
-Bazel's runfiles tree is read-only on macOS-darwin sandbox.
-
-Properly porting requires per-line audit of every hardcoded path in
-`*.cpp` to split source-reads from write-targets — tracked in DEV-6354
-(`Bazel migration follow-up — port test/unit/sipiimage to Bazel cc_test`).
-The infrastructure to support the port is already in place:
-  * `//test:test_paths` provides `sipi::test::data_dir()` and `tmp_dir()`.
-  * `//test/_test_data:images` is the data filegroup.
-  * 5 of the 6 sources in this dir already use `sipi::test::data_dir()`
-    via the env-var pattern (the env-unset fallback preserves CMake
-    behaviour).
-
-`tags = ["manual"]` keeps this target out of `bazel test //test/unit/...`.
-The CMake/ctest path (`just nix-build`'s `checkPhase`) continues to
-exercise these tests on `main`, so coverage is preserved.
-
-Drop `manual` and finalise paths in DEV-6354.
+"""SipiImage unit tests. Fixture paths resolve via //test:test_paths,
+which honours SIPI_WORKSPACE_ROOT and TEST_TMPDIR.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_test")
+
+# Mirrors the CMake guard in CMakeLists.txt: Kakadu's JPEG2000 encoder
+# SIGILLs on palette images when compiled with Clang on Linux in Debug.
+# Bazel's `fastbuild` (the default for `bazel test`) is Debug-like
+# (-O0 -g, no NDEBUG), so apply the filter on Linux unconditionally.
+_LINUX_GTEST_FILTER = {"GTEST_FILTER": "-SipiImage.PALETTE_Conversion"}
 
 cc_test(
     name = "sipi_image_tests",
     srcs = glob(["*.cpp"]),
     data = ["//test/_test_data:images"],
-    env = {"SIPI_WORKSPACE_ROOT": "."},
-    tags = ["manual"],
+    env = select({
+        "@platforms//os:linux": {"SIPI_WORKSPACE_ROOT": "."} | _LINUX_GTEST_FILTER,
+        "//conditions:default": {"SIPI_WORKSPACE_ROOT": "."},
+    }),
     deps = [
         "//src:sipi_lib",
         "//test:test_paths",
