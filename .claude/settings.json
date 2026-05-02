@@ -20,6 +20,7 @@
   "enabledPlugins": {
     "eng@dasch-claude-plugins": true,
     "linear@claude-plugins-official": true,
-    "sentry@claude-plugins-official": true
+    "sentry@claude-plugins-official": true,
+    "my-eng@subotic-claude-plugins": true
   }
 }
