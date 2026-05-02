@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <memory>
 #include <string>
 
 #include <cerrno>
@@ -304,6 +305,21 @@ static ExifTag_type exiftag_list[] = {
   { EXIFTAG_DEVICESETTINGDESCRIPTION, EXIF_DT_PTR, 0L, { 0L } },
   { EXIFTAG_SUBJECTDISTANCERANGE, EXIF_DT_UINT16, 0L, { 0L } },
   { EXIFTAG_IMAGEUNIQUEID, EXIF_DT_STRING, 0L, { 0L } },
+  // EXIF 2.3 / 2.31 lens, timezone, sensitivity, and gamma tags.
+  // LensSpecification is RATIONAL[4] (min/max focal length, min F at min FL,
+  // min F at max FL) and is the only entry in this list with EXIF_DT_RATIONAL_PTR
+  // — it exercises the rational-array read path at SipiIOTiff.cpp readExif().
+  // The `4` is the fixed count: libtiff calls this `TIFF_SETGET_C0_FLOAT`
+  // (fixed array, no variadic count argument).
+  { EXIFTAG_LENSSPECIFICATION, EXIF_DT_RATIONAL_PTR, 4, { 0L } },
+  { EXIFTAG_LENSMAKE, EXIF_DT_STRING, 0L, { 0L } },
+  { EXIFTAG_LENSMODEL, EXIF_DT_STRING, 0L, { 0L } },
+  { EXIFTAG_LENSSERIALNUMBER, EXIF_DT_STRING, 0L, { 0L } },
+  { EXIFTAG_GAMMA, EXIF_DT_RATIONAL, 0L, { 0L } },
+  { EXIFTAG_OFFSETTIME, EXIF_DT_STRING, 0L, { 0L } },
+  { EXIFTAG_OFFSETTIMEORIGINAL, EXIF_DT_STRING, 0L, { 0L } },
+  { EXIFTAG_OFFSETTIMEDIGITIZED, EXIF_DT_STRING, 0L, { 0L } },
+  { EXIFTAG_SENSITIVITYTYPE, EXIF_DT_UINT16, 0L, { 0L } },
 };
 
 static int exiftag_list_len = sizeof(exiftag_list) / sizeof(ExifTag_type);
@@ -1914,17 +1930,28 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
       }
 
       case EXIF_DT_RATIONAL_PTR: {
+        // libtiff exposes RATIONAL[] EXIF tags two different ways: variable-count
+        // tags use TIFFGetField(tif, tag, &count, &buf) and fixed-count tags use
+        // TIFFGetField(tif, tag, &buf). The variadic API performs no type checking,
+        // so passing the wrong arg shape causes UB. `exiftag_list[i].len == 0`
+        // means variable-count; non-zero means a fixed count specified by EXIF.
         float *tmpbuf;
         uint16_t len;
-        if (TIFFGetField(tif, exiftag_list[i].tag_id, &len, &tmpbuf)) {
-          auto *r = new Exiv2::Rational[len];
-          for (int i; i < len; i++) { r[i] = SipiExif::toRational(tmpbuf[i]); }
+        bool got = false;
+        if (exiftag_list[i].len == 0) {
+          got = TIFFGetField(tif, exiftag_list[i].tag_id, &len, &tmpbuf) != 0;
+        } else {
+          len = static_cast<uint16_t>(exiftag_list[i].len);
+          got = TIFFGetField(tif, exiftag_list[i].tag_id, &tmpbuf) != 0;
+        }
+        if (got) {
+          auto r = std::make_unique<Exiv2::Rational[]>(len);
+          for (int j = 0; j < len; j++) { r[j] = SipiExif::toRational(tmpbuf[j]); }
           try {
-            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", r, len);
+            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", r.get(), len);
           } catch (const SipiError &err) {
             log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
-          delete[] r;
         }
         break;
       }
@@ -2074,18 +2101,30 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
     }
 
     case EXIF_DT_RATIONAL_PTR: {
+      // Symmetric with the read side. Fixed-count tags (LensSpecification etc.)
+      // call TIFFSetField(tif, tag, buf) with no count argument; libtiff then
+      // memcpys exactly `entry.len` floats from `buf` regardless of how many
+      // we actually allocated. Skip with a warning when the source EXIF data
+      // doesn't match the fixed count, otherwise libtiff reads past `f.get()`.
       std::vector<Exiv2::Rational> vr;
-
       if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", vr)) {
-        int len = vr.size();
-        float *f = new float[len];
-
-        for (int i = 0; i < len; i++) {
-          f[i] = (float)vr[i].first / (float)vr[i].second;//!!!!!!!!!!!!!!!!!!!!!!!!!
+        const auto len = vr.size();
+        if (exiftag_list[i].len != 0 && len != static_cast<size_t>(exiftag_list[i].len)) {
+          log_warn("EXIF tag 0x%04x: source has %zu rationals, spec requires %d — skipping write",
+            exiftag_list[i].tag_id,
+            len,
+            exiftag_list[i].len);
+          break;
         }
-
-        TIFFSetField(tif, exiftag_list[i].tag_id, len, f);
-        delete[] f;
+        auto f = std::make_unique<float[]>(len);
+        for (size_t j = 0; j < len; j++) {
+          f[j] = static_cast<float>(vr[j].first) / static_cast<float>(vr[j].second);
+        }
+        if (exiftag_list[i].len == 0) {
+          TIFFSetField(tif, exiftag_list[i].tag_id, static_cast<uint16_t>(len), f.get());
+        } else {
+          TIFFSetField(tif, exiftag_list[i].tag_id, f.get());
+        }
         count++;
       }
       break;
