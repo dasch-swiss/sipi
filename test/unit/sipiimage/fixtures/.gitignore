@@ -1,0 +1,5 @@
+# One-shot fixture generators are built ad-hoc by developers and are not
+# checked in. Keep the .cpp/.py sources, drop the compiled artefacts.
+generate_bilevel_tiffs
+generate_exif_rational_tiff
+*.dSYM/
