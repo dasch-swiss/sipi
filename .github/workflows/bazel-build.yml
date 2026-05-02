@@ -131,24 +131,77 @@ jobs:
           extra-conf: |
             extra-experimental-features = configurable-impure-env
 
-      # Bazel-contrib's setup-bazel handles repository-cache + action-cache +
-      # output-base separation under GHA's 10 GB cache limit. `--incompatible_strict_action_env`
-      # is set in `.bazelrc` so it applies to every invocation; no need to
-      # pass it on the command line here.
-      - uses: bazel-contrib/setup-bazel@0.15.0
+      # CACHE STRATEGY (DEV-6371):
+      #
+      # The disk-cache is managed by `actions/cache@v4` directly rather than
+      # through `setup-bazel`'s built-in disk-cache wiring. Two failure modes
+      # in the previous setup made this necessary:
+      #
+      #   1. 0-byte poisoning. setup-bazel <=0.17 saves the disk-cache from
+      #      its post-step unconditionally — a bazel build that failed during
+      #      analysis (e.g. a transient `http_archive` 415 from zlib.net)
+      #      would write an empty `~/.cache/bazel-disk` to GHA under the
+      #      input-content-derived cache key. GHA cache keys are immutable,
+      #      so every subsequent run hashing to the same inputs restored
+      #      0 bytes and re-built kakadu/openssl from source (~12 min on
+      #      linux-x86_64). setup-bazel 0.18+ added a `cache-save` input,
+      #      but it accepts only static `true|false` — `${{ success() }}`
+      #      is captured at step-init when the build hasn't run yet.
+      #      `actions/cache@v4` saves only on job success by default.
+      #
+      #   2. Cache-key churn from incidental edits. The previous key hashed
+      #      `flake.nix` (carries comments and docs) and `**/BUILD.bazel`
+      #      (sweeps in app-level test/ + src/ BUILD files that don't affect
+      #      ext/ action keys). Replaced with the targeted minimum below.
+      #      `flake.lock` is what actually pins the dev-shell store paths
+      #      consumed via `--action_env=PATH/NIX_LDFLAGS/ACLOCAL_PATH`.
+      #
+      # Note: foreign_cc actions for kakadu/openssl still rebuild on every
+      # `flake.lock` advance because `--action_env=PATH` embeds /nix/store
+      # hashes that vary across nixpkgs versions (`.bazelrc:30,42,54`). That
+      # is tracked as DEV-6371 tier 2 (action-env hygiene); tier 1 here only
+      # fixes the GHA-cache-side poisoning + key churn.
+      - uses: actions/cache@v4
+        id: bazel-disk-cache
+        with:
+          path: ~/.cache/bazel-disk
+          # Inputs that genuinely affect a foreign_cc action's cache key:
+          # MODULE.bazel{,.lock} pin all third-party deps; root + ext/ + bazel/
+          # + patches/ + platforms/ shape the rule graph + kakadu Makefile
+          # patches; .bazelrc / .bazelversion shape the build engine and
+          # action env; flake.lock pins the dev-shell store paths.
+          # NOT in the key: src/**, include/**, shttps/**, test/**, fuzz/**,
+          # tools/**, config/** — app/test code does not change ext/ action
+          # outputs, so changes there should not evict the foreign_cc cache.
+          key: bazel-disk-${{ matrix.arch }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'BUILD.bazel', 'ext/**/BUILD.bazel', 'bazel/**', 'patches/**', 'platforms/**', '.bazelrc', '.bazelversion', 'flake.lock') }}
+          # Fallback: when the primary key bumps, restore the most recent
+          # prior cache for this arch. Bazel's --disk_cache only consumes
+          # action entries whose action key still matches, so a few extra
+          # MB of stale entries is harmless and amortises the cost of
+          # genuine input changes (e.g. a kakadu version bump).
+          restore-keys: |
+            bazel-disk-${{ matrix.arch }}-
+
+      # `setup-bazel` continues to manage bazelisk + repository-cache (the
+      # `--repository_cache` for http_archive downloads, e.g. the openssl
+      # tarball or the Chromium debian sysroot — these are content-addressed
+      # by sha256 and have no poisoning risk). disk-cache is disabled here
+      # so the action above is the single owner. `--incompatible_strict_action_env`
+      # is set in `.bazelrc` so it applies to every invocation.
+      #
+      # 0.19.0 (was 0.15.0) carries `post-if: !cancelled()` which together
+      # with the explicit `actions/cache@v4` above eliminates the
+      # cancellation-and-failure save paths that produced 0-byte entries.
+      - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
-          # Cache key includes a hash of every file that influences a
-          # Bazel build action — MODULE.bazel.lock pins all third-party
-          # versions, the per-package BUILD.bazel files describe rule
-          # shapes, the helpers in `bazel/` shape AR/sysroot env, and
-          # flake.nix gates the dev-shell tools that feed action_env.
-          # Any change to those busts the cache, which avoids
-          # disk-cache-restored-but-output-missing failure modes (a
-          # previous run's failed kakadu action left a cached entry
-          # pointing at a libkdu.a that was never actually emitted).
-          disk-cache: bazel-build-${{ matrix.arch }}-${{ hashFiles('MODULE.bazel.lock', '**/BUILD.bazel', 'bazel/**', 'flake.nix') }}
+          disk-cache: false
           repository-cache: true
+          # Inject the --disk_cache flag pointing at the path managed by
+          # actions/cache@v4 above. setup-bazel writes `bazelrc` content
+          # to a user .bazelrc; Bazel expands $HOME at flag-parse time.
+          bazelrc: |
+            common --disk_cache=$HOME/.cache/bazel-disk
 
       - name: bazel build ${{ inputs.bazel_target || '//src:sipi' }}
         env:
