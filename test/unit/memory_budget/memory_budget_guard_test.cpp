@@ -46,7 +46,7 @@ TEST(MemoryBudgetGuardTest, GuardNotAcquiredDoesNotRelease)
 {
   SipiMemoryBudget budget(100, MemoryBudgetMode::ENFORCE);
 
-  // Pre-fill to make acquire fail — setup must succeed
+  // Pre-fill to make acquire fail
   ASSERT_TRUE(budget.try_acquire(100).allowed);
   EXPECT_EQ(budget.used(), 100);
 

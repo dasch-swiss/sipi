@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <cassert>
 #include <csetjmp>
+#include <cstdint>
 #include <cstdlib>
 
 #include <cmath>

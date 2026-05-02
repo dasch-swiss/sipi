@@ -54,8 +54,6 @@ namespace Sipi {
   // Saturating buffer size computation — clamp to SIZE_MAX on overflow.
   // Prevents a wrapped-to-small estimate from bypassing the budget.
   constexpr size_t kMaxBuf = std::numeric_limits<size_t>::max();
-  // `kMaxBuf` is constexpr and usable inside the lambda without an
-  // explicit capture; spelling it out triggers -Wunused-lambda-capture.
   auto safe_buf = [](size_t w, size_t h, size_t bpp) -> size_t {
     if (w == 0 || h == 0) return 0;
     if (w > kMaxBuf / h) return kMaxBuf;

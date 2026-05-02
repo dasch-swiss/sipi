@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <csetjmp>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>

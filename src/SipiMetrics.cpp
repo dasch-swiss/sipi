@@ -57,11 +57,6 @@ SipiMetrics::SipiMetrics()
                                   .Register(*registry_)
                                   .Add({})),
 
-    // Init-list order matches the declaration order in `SipiMetrics.h`
-    // (decisions → near_limit → rejected). C++ initialises members in
-    // declaration order regardless of the list order; mismatching the
-    // two triggers -Wreorder-ctor and is a footgun for any future
-    // member that depends on another at construction time.
     rate_limit_decisions_total(prometheus::BuildCounter()
                                  .Name("sipi_rate_limit_decisions_total")
                                  .Help("Rate limit decisions by action (allowed, rejected, shadow_rejected)")

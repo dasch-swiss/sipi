@@ -61,27 +61,19 @@ public:
 
   J2kHttpStream(shttps::Connection *conobj_p);
 
-  ~J2kHttpStream();
+  ~J2kHttpStream() override;
 
-  inline int get_capabilities() { return KDU_TARGET_CAP_SEQUENTIAL; };
+  inline int get_capabilities() override { return KDU_TARGET_CAP_SEQUENTIAL; };
 
-  inline bool start_rewrite(kdu_long backtrack) { return false; };
+  inline bool start_rewrite(kdu_long backtrack) override { return false; };
 
-  inline bool end_rewrite() { return false; };
+  inline bool end_rewrite() override { return false; };
 
-  bool write(const kdu_byte *buf, int num_bytes);
+  bool write(const kdu_byte *buf, int num_bytes) override;
 
-  bool close();
+  bool close() override;
 
-  // `prefer_large_writes()` was historically declared here as a non-const
-  // member returning `false`. That signature didn't match Kakadu's
-  // virtual (`bool prefer_large_writes() const`), so it hid the base
-  // method instead of overriding it — Kakadu's virtual dispatch always
-  // returned its own default `true`, and this method was dead code
-  // (DEV-6359). Removed: behaviour is unchanged because the production
-  // path was already running with Kakadu's default.
-
-  inline void set_target_size(kdu_long num_bytes){};// we just ignore it
+  inline void set_target_size(kdu_long num_bytes) override {};// we just ignore it
 };
 //-------------------------------------------------------------------------
 
@@ -153,9 +145,9 @@ public:
 
   KduSipiWarning(const char *lead_in) : kdu_message(), msg(lead_in) {}
 
-  void put_text(const char *str) { msg += str; }
+  void put_text(const char *str) override { msg += str; }
 
-  void flush(bool end_of_message = false)
+  void flush(bool end_of_message = false) override
   {
     if (end_of_message) { log_warn("%s", msg.c_str()); }
   }
@@ -176,9 +168,9 @@ public:
 
   KduSipiError(const char *lead_in) : kdu_message(), msg(lead_in) {}
 
-  void put_text(const char *str) { msg += str; }
+  void put_text(const char *str) override { msg += str; }
 
-  void flush(bool end_of_message = false)
+  void flush(bool end_of_message = false) override
   {
     if (end_of_message) {
       log_err("%s", msg.c_str());
@@ -762,10 +754,6 @@ static void write_exif_box(kdu_supp::jp2_family_tgt *tgt, kdu_core::kdu_byte *ex
 }
 //=============================================================================
 
-// `static long get_bpp_dims(kdu_codestream &)` removed — never called
-// anywhere in SIPI. Restoring it (or any equivalent) belongs with the
-// caller that needs it, not as orphaned utility code.
-
 void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params)
 {
   kdu_customize_warnings(&kdu_sipi_warn);
@@ -867,10 +855,6 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
     codestream.create(&siz, output, nullptr, 0, 0, env_ref, &membroker);
 
     // Set up any specific coding parameters and finalize them.
-    // `num_clayers` was assigned in 5 places below; its only reader sits
-    // inside the commented-out `/* ... */` block at the call to
-    // `kdu_stripe_compressor::start(...)`. Until that block is revived
-    // or deleted outright, the assignments are dead — drop them.
     std::vector<double> rates;
 
     //
@@ -1170,56 +1154,16 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
     }
 
     jpx_out.write_headers();
-    // `jpx_stream.open_stream()` returns a `jp2_output_box*` that the
-    // dead/commented `kdu_stripe_compressor::start(...)` block below
-    // would have consumed. Drop the unused pointer; Kakadu still
-    // performs the side-effects (initialising the codestream box for
-    // subsequent `kdu_stripe_compressor` use) regardless.
-    jpx_stream.open_stream();
+    jpx_stream.open_stream();// return value unused; called for codestream-box init side-effect
 
     codestream.access_siz()->finalize_all();
 
-
-    //
-    // here we calculate the JPEG2000/kakadu parameters for num_layer...
-    // see kdu_compress, derived fromn code there
-    //
-    /*
-    int num_layers = 0;
-    std::vector<kdu_long> layer_sizes;
-    kdu_long *layer_sizes_ptr = nullptr;
-    if (rates.size() > 0) {
-        if ((rates.size() == num_clayers) || ((rates.size() <= 2) && ((num_clayers >= 2)))) {
-            kdu_long total_pels = get_bpp_dims(codestream);
-            for (const auto &rate: rates) {
-                if (rate == -1.0) {
-                    layer_sizes.push_back(KDU_LONG_MAX);
-                } else {
-                    layer_sizes.push_back((kdu_long) std::floor(rate * 0.125 * total_pels));
-                }
-            }
-            std::sort(layer_sizes.begin(), layer_sizes.end());
-            if (layer_sizes.back() == KDU_LONG_MAX) layer_sizes.back() = 0;
-            layer_sizes_ptr = layer_sizes.data();
-            num_layers = layer_sizes.size();
-        }
-    } else if (num_clayers > 0) {
-        for (int i = 0; i < num_clayers; i++) {
-            layer_sizes.push_back(0);
-        }
-        layer_sizes_ptr = layer_sizes.data();
-        num_layers = layer_sizes.size();
-    } else {
-        layer_sizes_ptr = nullptr;
-        num_layers = 0;
-    }
-    */
     // Now compress the image in one hit, using `kdu_stripe_compressor'
     kdu_stripe_compressor compressor;
     compressor.mem_configure(&membroker);
     compressor.start(codestream,
-      0,// num_layers,       // num_layer_specs
-      nullptr,// layer_sizes_ptr, // layer_sizes
+      0,// num_layer_specs
+      nullptr,// layer_sizes
       nullptr,// layer_slopes
       0,// min_slope_threshold
       true,// no_prediction

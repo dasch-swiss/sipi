@@ -1481,14 +1481,11 @@ void Connection::sendFile(const string &path, const size_t bufsize, const size_t
   read_size = std::min(read_size, orig_fsize - from);
 
   if (outbuf != nullptr) {
-    // `char buf[bufsize]` was a VLA — Clang extension, not standard C++.
-    // `std::vector<char>` heap-allocates; the cost is negligible vs. the
-    // I/O syscalls dominating sendFile.
-    std::vector<char> buf(bufsize);
+    auto buf = std::make_unique_for_overwrite<char[]>(bufsize);
     size_t n = 0;
     size_t nn = 0;
-    while ((nn < read_size) && ((n = fread(buf.data(), sizeof(char), read_size - nn > bufsize ? bufsize : read_size - nn, infile)) > 0)) {
-      add_to_outbuf(buf.data(), n);
+    while ((nn < read_size) && ((n = fread(buf.get(), sizeof(char), read_size - nn > bufsize ? bufsize : read_size - nn, infile)) > 0)) {
+      add_to_outbuf(buf.get(), n);
       nn += n;
     }
   } else {
@@ -1500,24 +1497,21 @@ void Connection::sendFile(const string &path, const size_t bufsize, const size_t
       }
     }
 
-    // `char buf[bufsize]` was a VLA — Clang extension, not standard C++.
-    // `std::vector<char>` heap-allocates; the cost is negligible vs. the
-    // I/O syscalls dominating sendFile.
-    std::vector<char> buf(bufsize);
+    auto buf = std::make_unique_for_overwrite<char[]>(bufsize);
     size_t n;
     size_t nn = 0;
 
-    while ((nn < read_size) && ((n = fread(buf.data(), sizeof(char), read_size - nn > bufsize ? bufsize : read_size - nn, infile)) > 0)) {
+    while ((nn < read_size) && ((n = fread(buf.get(), sizeof(char), read_size - nn > bufsize ? bufsize : read_size - nn, infile)) > 0)) {
       // send data here...
       if (_chunked_transfer_out) {
         *os << std::hex << n << "\r\n";
         if (os->eof() || os->fail()) throw OUTPUT_WRITE_FAIL;
-        os->write(buf.data(), n);
+        os->write(buf.get(), n);
         if (os->eof() || os->fail()) throw OUTPUT_WRITE_FAIL;
         *os << "\r\n";
         if (os->eof() || os->fail()) throw OUTPUT_WRITE_FAIL;
       } else {
-        os->write(buf.data(), n);
+        os->write(buf.get(), n);
         if (os->eof() || os->fail()) throw OUTPUT_WRITE_FAIL;
       }
 
