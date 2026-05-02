@@ -197,11 +197,13 @@ jobs:
           bazelisk-cache: true
           disk-cache: false
           repository-cache: true
-          # Inject the --disk_cache flag pointing at the path managed by
-          # actions/cache@v4 above. setup-bazel writes `bazelrc` content
-          # to a user .bazelrc; Bazel expands $HOME at flag-parse time.
-          bazelrc: |
-            common --disk_cache=$HOME/.cache/bazel-disk
+          # `--disk_cache` is set on the bazelisk command line below so bash
+          # can expand `$HOME`. We deliberately do NOT inject it here via
+          # setup-bazel's `bazelrc:` input: setup-bazel writes that content
+          # verbatim to ~/.bazelrc, and Bazel does not expand environment
+          # variables in .bazelrc flag values (bazelbuild/bazel#15856), so
+          # a literal `$HOME` would land in --disk_cache and Bazel would
+          # create a directory called `$HOME` instead of honouring the path.
 
       - name: bazel build ${{ inputs.bazel_target || '//src:sipi' }}
         env:
@@ -225,8 +227,14 @@ jobs:
           # the sandbox; without `--sandbox_debug` the sandbox is wiped on
           # action failure and the Make.log is lost. Removable once kakadu
           # builds reliably across all three platforms.
+          #
+          # `--disk_cache` is set on the command line (not in .bazelrc) so
+          # bash expands `$HOME` here — Bazel does not expand env vars in
+          # .bazelrc paths (bazelbuild/bazel#15856). Path matches the
+          # `actions/cache@v4` step above so the cache is restored and
+          # saved to/from this directory across CI runs.
           nix develop --command bash -c "
-            bazelisk build --verbose_failures --sandbox_debug $BAZEL_TARGET
+            bazelisk build --disk_cache=\$HOME/.cache/bazel-disk --verbose_failures --sandbox_debug $BAZEL_TARGET
           "
 
       # On any bazel failure, locate and dump every foreign_cc Make.log
