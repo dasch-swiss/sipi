@@ -83,7 +83,7 @@ TEST(MemoryBudgetTest, AcquireExceedingBudgetIgnoredWhenOff)
 TEST(MemoryBudgetTest, ReleaseRestoresBudget)
 {
   SipiMemoryBudget budget(1000, MemoryBudgetMode::ENFORCE);
-  ASSERT_TRUE(budget.try_acquire(500).allowed);// setup must succeed
+  ASSERT_TRUE(budget.try_acquire(500).allowed);
   EXPECT_EQ(budget.used(), 500);
   budget.release(500);
   EXPECT_EQ(budget.used(), 0);
@@ -92,9 +92,9 @@ TEST(MemoryBudgetTest, ReleaseRestoresBudget)
 TEST(MemoryBudgetTest, MultipleAcquiresAccumulate)
 {
   SipiMemoryBudget budget(1000, MemoryBudgetMode::ENFORCE);
-  EXPECT_TRUE(budget.try_acquire(300).allowed);
-  EXPECT_TRUE(budget.try_acquire(300).allowed);
-  EXPECT_TRUE(budget.try_acquire(300).allowed);
+  ASSERT_TRUE(budget.try_acquire(300).allowed);
+  ASSERT_TRUE(budget.try_acquire(300).allowed);
+  ASSERT_TRUE(budget.try_acquire(300).allowed);
   EXPECT_EQ(budget.used(), 900);
 
   // Next 200 would exceed 1000
@@ -106,7 +106,7 @@ TEST(MemoryBudgetTest, MultipleAcquiresAccumulate)
 TEST(MemoryBudgetTest, ReleaseMoreThanAcquiredClampsToZero)
 {
   SipiMemoryBudget budget(1000, MemoryBudgetMode::ENFORCE);
-  ASSERT_TRUE(budget.try_acquire(100).allowed);// setup must succeed
+  ASSERT_TRUE(budget.try_acquire(100).allowed);
   budget.release(2000);// more than acquired
   EXPECT_EQ(budget.used(), 0);// clamped, no underflow
 }
@@ -114,7 +114,6 @@ TEST(MemoryBudgetTest, ReleaseMoreThanAcquiredClampsToZero)
 TEST(MemoryBudgetTest, ZeroBytesAcquireAlwaysSucceeds)
 {
   SipiMemoryBudget budget(1000, MemoryBudgetMode::ENFORCE);
-  // Fill budget completely — setup must succeed
   ASSERT_TRUE(budget.try_acquire(1000).allowed);
   // Zero-byte acquire should still succeed
   auto result = budget.try_acquire(0);

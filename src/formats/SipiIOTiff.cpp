@@ -380,9 +380,6 @@ unsigned char *read_watermark(const std::string &wmfile, int &nx, int &ny, int &
     throw Sipi::SipiImageError("ERROR in read_watermark: Could not allocate memory: ");// + ba.what());
   }
 
-  // `int cnt` was incremented for every non-zero byte of the watermark
-  // but never read. The inner counting loop is dropped along with it —
-  // restoring the count belongs with whoever needs the value.
   for (int i = 0; i < ny; i++) {
     if (TIFFReadScanline(tif, wmbuf + i * sll, i) == -1) {
       delete[] wmbuf;
