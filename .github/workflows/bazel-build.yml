@@ -196,7 +196,18 @@ jobs:
         with:
           bazelisk-cache: true
           disk-cache: false
-          repository-cache: true
+          # repository-cache is intentionally OFF (DEV-6373). It would persist
+          # the LLVM 19.1.x toolchain (~2 GB), Chromium debian sysroots
+          # (~500 MB each), and 22 ext lib http_archive source tarballs across
+          # runs — ~4 GB per arch, ~12 GB across linux-x86_64 + linux-aarch64
+          # + darwin-aarch64 — which blows GHA's 10 GB per-repo cache cap and
+          # LRU-evicts the small (~33 MB) bazel-disk-cache that actually
+          # delivers the speedup (3.3× on cache hit; see DEV-6371). Bazel
+          # still uses an in-job repository cache for de-dup within a single
+          # build; the cost is a one-time http_archive re-download per arch
+          # per run (~30-60s on a bandwidth-rich runner). Trade is heavily
+          # in favour of reliable disk-cache hits across PRs.
+          repository-cache: false
           # `--disk_cache` is set on the bazelisk command line below so bash
           # can expand `$HOME`. We deliberately do NOT inject it here via
           # setup-bazel's `bazelrc:` input: setup-bazel writes that content
