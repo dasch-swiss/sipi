@@ -161,7 +161,7 @@ jobs:
       # hashes that vary across nixpkgs versions (`.bazelrc:30,42,54`). That
       # is tracked as DEV-6371 tier 2 (action-env hygiene); tier 1 here only
       # fixes the GHA-cache-side poisoning + key churn.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         id: bazel-disk-cache
         with:
           path: ~/.cache/bazel-disk
