@@ -205,6 +205,84 @@ f. **Defer**: `SipiImage`-`SipiIcc` friend-class coupling (Probe 3); `SipiSentry
 - Lua admin surface (`SipiLua`) — does it directly manipulate metadata, or only consume it through `SipiImage`? Probe 6.
 - ADR-0005 implementation choice between `tinycbor` / `jsoncons` / a small in-tree CBOR encoder — defer to implementation time; not an architectural decision.
 
+## Probe 3 — `format_handlers/` (renamed from `formats/`)
+
+**1. Module name.** `src/format_handlers/` (renamed from `src/formats/` per Probe 1 follow-up). Future Bazel package `//src/format_handlers:format_handlers`. Co-located source / headers / `*_test.cpp` per ADR-0003. The `SipiIO` base-class header migrates from top-level `include/SipiIO.h` into the same package.
+
+**2. Glossary terms.** Implements **Format handler** (defined). Uses **Codec** (defined; sharpened — see register). The earlier "Master format" term splits into **Service master format** (this module's read-and-write target) and **Archival master format** (out of SIPI server's read path; CLI mode produces in the future workflow). Surfaces the `getDim` → `read_shape` rename plus four new glossary entries — see register.
+
+**3. Public interface (proposed `hdrs`).**
+
+| Header | Concern |
+| --- | --- |
+| `format_handlers/sipi_io.h` | base class `SipiIO` + public types (`SipiImgInfo`, `ScalingMethod` / `ScalingQuality`, `Orientation`, `SubImageInfo`, `SipiCompressionParamName` / `SipiCompressionParams`) |
+| `format_handlers/sipi_io_j2k.h` | `SipiIOJ2k` — service-master-format handler (JP2) |
+| `format_handlers/sipi_io_tiff.h` | `SipiIOTiff` — bidirectional (pyramidal = service master, plain = output) |
+| `format_handlers/sipi_io_jpeg.h` | `SipiIOJpeg` — output-only |
+| `format_handlers/sipi_io_png.h` | `SipiIOPng` — output-only |
+
+**4. Private surface.** Five `.cpp` files totalling 5,461 lines: J2k (1292), Jpeg (1301), Png (629), Tiff (2239). Per-handler `*_test.cpp` files added during package promotion (today: zero unit tests, only approval coverage — explicit ADR-0003 consequence). Per-handler private statics (`write_basic_tags`, `write_subfile`, `parse_photoshop`, etc.) move to anonymous namespaces in their `.cpp`.
+
+**5. Depth signal.** Per-class header:cpp ratios are textbook deep:
+
+| Class | hdr / cpp | Verdict |
+| --- | --- | --- |
+| `SipiIOJ2k` | 64 / 1292 (1:20) | **deep** |
+| `SipiIOJpeg` | 66 / 1301 (1:20) | **deep** |
+| `SipiIOPng` | 66 / 629 (1:10) | **deep** |
+| `SipiIOTiff` | 119 / 2239 (1:19) | **deep** |
+| `SipiIO` (base) | 183 / — | bloated public-type header in front of a small virtual contract |
+
+**Layering oddities** (will fail Bazel `--strict_deps` until ADR-0003 colocation lands):
+
+- `include/SipiIO.h` is at top-level, not in `include/formats/`. Colocation moves it into the package.
+- Format-handler headers do `#include "../../src/SipiImage.hpp"` — cross-tree relative include from `include/formats/` to `src/`, *and* pull the full `SipiImage` definition when only `SipiImage*` is used in signatures.
+- Inconsistency: `SipiIOJpeg.h` uses `#include "SipiImage.hpp"` (no `../../`) where the other three use the relative path.
+
+**API modernization opportunities** (tracked in ADR-0006):
+
+1. Five `read()` overloads for default arguments → C++ default args.
+2. `bool read()` returns → `std::expected<void, IoError>`.
+3. `SipiImgInfo::success` tri-state enum → `std::expected<SipiImgInfo, ImgInfoError>`.
+4. `SipiCompressionParams = unordered_map<int, std::string>` (stringly-typed) → `std::variant<JpegParams, J2kParams, ...>`.
+5. Magic-string filepaths (`"-"` for stdout, `"HTTP"` for HTTP-server output) → `std::variant<FilePath, StdoutSink, HttpSink>`.
+
+**The big ADR-0004 correction.** `SipiIO::getDim(filepath) → SipiImgInfo` *already exists* and returns full image shape (`width, height, tile_w, tile_h, clevels, nc, bps, numpages, orientation, mimetype, resolutions`). ADR-0004's `read_shape` IS `getDim`, renamed. The actual change ADR-0004 makes is *"give the existing `getDim` an Essentials-packet fast path in service-master-format handlers"* — not *"add a new method."* The "nc/bps remain 0" overestimate at `SipiHttpServer.cpp:1563-1566` was a `SipiCache::SizeRecord` limitation, not a `getDim` limitation; ADR-0004 fixes it as a happy side effect. ADR-0004 amended in this same commit.
+
+**Master/output asymmetry is operational, not class-level.** `SipiIOTiff` handles both pyramidal (service master) and non-pyramidal (output) TIFF. The Essentials-packet fast path is keyed by *packet presence* at runtime, not by class. `SipiIOJ2k` is service-master-only by current operational policy. `SipiIOJpeg` + `SipiIOPng` are output-only by current operational policy (server mode never reads them as source files).
+
+**Misplaced symbol.** `SipiIOTiff.h:22` declares free function `read_watermark(wmfile, nx, ny, nc) → unsigned char*`. Loads a watermark image. Not TIFF-specific; belongs in a watermark module (pending `Watermark` glossary entry from Probe 1) or absorbed into the request handler that uses it. Defer to Probe 5.
+
+**Doc-string bugs (code-quality, not architectural).** `SipiIOJ2k.h` says *"JPEG 2000 files using libtiff"* (wrong: Kakadu). `SipiIOJpeg.h` says *"JPEG 2000 files using libtiff"* (wrong on both counts). `SipiIOPng.h` says *"libtiff makes extensive use of `lseek`"* (wrong library). Fix in a one-PR cleanup; tracked as a Linear child issue.
+
+**6. Verdict.** Module-level **`deep`** — 5,461 lines of codec implementation behind ~315 lines of public headers, codec-specific knowledge cleanly hidden, one-way dependency on `metadata/` + `iiif_parser/`. The base class header is wide but bounded; doesn't undermine the verdict.
+
+**7. Action.**
+
+a. **Promote to Bazel package** `//src/format_handlers:format_handlers` per ADR-0003 + Probe 1 follow-up rename. Add per-handler unit tests during promotion (ADR-0003 consequence list).
+
+b. **Move headers**: `include/SipiIO.h` → `src/format_handlers/sipi_io.h`. `include/formats/SipiIO*.h` + `src/formats/SipiIO*.cpp` → co-located in `src/format_handlers/sipi_io_*.{h,cpp}`.
+
+c. **Forward-declare `SipiImage`** in headers; full include only in `.cpp`s. Eliminates `../../src/` cross-tree includes.
+
+d. **Implement ADR-0004** inside the existing `getDim()` virtual, then rename `getDim` → `read_shape` for self-documentation.
+
+e. **Modernize the API per ADR-0006** — five changes, staged one PR per format handler after package promotion.
+
+f. **Relocate `read_watermark`** — defer to Probe 5 / `Watermark` glossary entry.
+
+g. **Defer**: `SipiImage` heavy-include + friend-class coupling (Probe 4); magic `"HTTP"` sentinel resolution (Probe 5).
+
+**8. Glossary delta.** Five adds + four sharpenings + one rename — see [Glossary delta register](#glossary-delta-register). The most consequential change is splitting the earlier `Master file` / `Master format` rows into `Service master` / `Service master format` (in-server-path) plus new `Archival master` / `Archival master format` (out-of-server-path; SIPI CLI produces, OAIS archive stores).
+
+**9. Open questions for later probes.**
+
+- `read_watermark` final placement — Probe 5 + `Watermark` glossary entry.
+- `ScalingQuality` placement: it's in the format-handler API but conceptually a rendering concern — Probe 4 (`SipiImage`) may relocate.
+- Magic `"HTTP"` filename sentinel: how should "write to HTTP response stream" be modelled once `SipiHttpServer` is decomposed? Probe 5.
+- Archival-master workflow: which actor performs the archival → service-master conversion, and where does that code live? Surfaces only when Probe N hits it.
+- The `SipiImage` ↔ `SipiIcc` friend coupling (Probe 2 finding) — does it survive the format-handler refactor? Probe 4.
+
 <!-- END PROBE ROWS -->
 
 ## Glossary delta register
@@ -214,12 +292,14 @@ Pending edits to [`UBIQUITOUS_LANGUAGE.md`](../UBIQUITOUS_LANGUAGE.md), accumula
 | Term | Action | Source probe | Note |
 | --- | --- | --- | --- |
 | **Image shape** | add | Probe 1 | Intrinsic shape of a source image: `(img_w, img_h, tile_w, tile_h, clevels, numpages, nc, bps)`. Read by a format handler from the master file. Replaces the parasitic `SipiCache::SizeRecord`. Per ADR-0004. |
-| **Operating mode** | add (umbrella) | Probe 1 | Two sub-terms — `Server mode` and `CLI mode`. The asymmetry between which format handler dominates read vs. write is architecturally load-bearing for the master-format fast path. |
-| **Server mode** | add | Probe 1 | Long-running HTTP server. Reads master files in master format from `image root`; writes IIIF representations to the cache. The hot path for master-format shape reads. |
-| **CLI mode** | add | Probe 1 | One-shot invocation. Reads arbitrary source format; writes a master file in master format with full Essentials packet. The path that populates Essentials-packet shape fields. |
-| **Master file** | add | Probe 1 | The on-disk source artefact under `image root` that an `identifier` resolves to. The authoritative copy SIPI's IIIF pipeline reads from. Codebase variables `infile` / `origpath`. |
-| **Master format** | add | Probe 1 | The format of master files. SIPI prefers this format for its own preservation guarantees. Currently JP2; pyramidal TIFF planned to supersede. CLI mode converts ingested files to the master format; server mode reads master files in this format. |
-| **Pyramidal TIFF** | add | Probe 1 | Multi-resolution TIFF variant storing the same image at multiple decode levels in a single file. Supports efficient decode-level selection without full-resolution decoding. Currently a supported master format alongside JP2; planned to supersede JP2 as the sole master format. |
+| **Operating mode** | add (umbrella) | Probe 1 | Two sub-terms — `Server mode` and `CLI mode`. The asymmetry between which format handler dominates read vs. write is architecturally load-bearing for the service-master-format fast path. |
+| **Server mode** | add | Probe 1, refined Probe 3 | Long-running HTTP server. Reads service masters in service master format from `image root`; writes IIIF representations to the cache. The hot path for service-master-format shape reads. |
+| **CLI mode** | add | Probe 1, refined Probe 3 | One-shot invocation. **Today**: reads arbitrary source format; writes a service master in service master format with full Essentials packet. **Future direction**: writes archival masters for OAIS-compliant external archive storage; the archival → service-master conversion is a separate workflow step (actor TBD; surfaces only when a later probe hits it). |
+| **Service master** | add | Probe 1 (renamed from `Master file`, Probe 3) | The on-disk file under `image root` that SIPI's server reads to fulfill IIIF requests. Codebase variables `infile` / `origpath`. Currently produced by SIPI CLI mode; future workflow has it derived from an `archival master` by a separate conversion step. |
+| **Service master format** | add | Probe 1 (renamed from `Master format`, Probe 3) | The format of service masters. Optimized for fast random-access IIIF serving. Currently JP2; pyramidal TIFF is the planned successor. |
+| **Archival master** | add | Probe 3 | The format-stable, lossless preservation copy of an image, stored in the OAIS-compliant external archive. Distinct from a `service master` by *purpose*: archival masters prioritize preservation properties (format stability, lossless or near-lossless compression, no service-side optimizations); service masters prioritize fast random access. SIPI CLI mode produces archival masters in the future workflow; SIPI server mode does not read them. |
+| **Archival master format** | add | Probe 3 | The format of archival masters. Per user direction, plain (non-pyramidal) TIFF for format-stability reasons — pyramids are a service-side optimization, not a preservation property, and archival policy explicitly rejects them. |
+| **Pyramidal TIFF** | add (Probe 1), refined Probe 3 | Probe 1, refined Probe 3 | Multi-resolution TIFF variant storing the same image at multiple decode levels in a single file. Supports efficient decode-level selection without full-resolution decoding. **A service-master-format only** — pyramids are a service-side optimization rejected by the archival master format. Planned successor to JP2 as the sole service master format. |
 | **Cache pin** | add (provisional) | Probe 1 | Per-file in-use refcount that prevents eviction while a representation is being served. Currently `SipiCache::blocked_files` + `check(block_file=true)` + `deblock`; refactor to RAII `BlockedScope`. Confirm name during `SipiHttpServer` probe. |
 | **Essentials packet** | sharpen | Probe 1 | Existing definition lists original filename, mimetype, hash type, pixel checksum, optional ICC. Extend schema with **image-shape fields** so server-mode shape lookup can read them at known offset rather than parsing the codestream / TIFF tags. Per ADR-0004. The schema is format-agnostic; the embedding mechanism (JP2 box vs TIFF tag) is handler-specific. |
 | **Route handler** | sharpen → umbrella | naming discussion (Probe 1 follow-up) | Promote to umbrella term: URL-pattern-bound request logic. Two sub-types depending on implementation language (`C++ route handler`, `Lua route handler`). Resolves the term overload between the existing Lua-only definition and the planned `route_handlers/` C++ directory. |
@@ -228,6 +308,11 @@ Pending edits to [`UBIQUITOUS_LANGUAGE.md`](../UBIQUITOUS_LANGUAGE.md), accumula
 | **Format handler** | sharpen | Probe 1 follow-up | Existing definition is correct; note the directory rename `formats/` → `format_handlers/` for self-documentation, matching the glossary term directly. |
 | **Essentials packet** | sharpen further | Probe 2 | Current wire format is pipe-delimited text without escaping or schema versioning — brittle (any `\|` in `origname` corrupts parse) and not forward-evolvable. Per ADR-0005 the wire format migrates to versioned CBOR; the in-memory schema is the same. ADR-0004's image-shape additions land in the new wire format. |
 | **Test seam** | add | Probe 2 | A header deliberately kept in a module's `internal/` subdirectory with `visibility` restricted to that module + that module's tests. Used to expose pure helpers for explicit testing without broadening production coupling. Canonical example: `metadata/internal/icc_normalization.h` (formerly `SipiIccDetail.h`). The pattern replaces comment-as-policy ("No production code outside X should include this header") with a build-graph invariant. |
+| **Codec** | sharpen | Probe 3 | Existing definition is correct. Sharpen with the canonical four-codec list: Kakadu (JP2), libtiff (TIFF), libpng (PNG), libjpeg (JPEG). Note `webp` is in the project's external-deps set but no `SipiIOWebp` class exists today. |
+| **`read_shape`** (Format handler API) | rename | Probe 3 | The existing `SipiIO::getDim(filepath) → SipiImgInfo` virtual is renamed to `read_shape` for self-documentation: `getDim` implies just dimensions, but the return type carries full image shape (dimensions + tile + clevels + numpages + nc + bps + orientation + mimetype + sub-image resolutions). Per ADR-0004 (amended). |
+| **Object storage** | add | Probe 3 follow-up | The production access model for service masters in the 3-6 month direction: SIPI server reads service masters via S3 range GETs over HTTP. Today's transitional state is NFS-mounted ZFS spinning disk (still network-accessed; round-trip costs already exist). Local-filesystem `image root` becomes the dev/test scenario only. The `cache/` module stays local in both states (performance optimization; cached representations on the hot path can't pay remote-access cost). |
+| **Range GET** | add | Probe 3 follow-up | An HTTP `GET` on an S3 object with a `Range:` header bounding the byte range to fetch. The unit of S3 access. Each range GET is a network round-trip (~1-10ms typical); minimizing them is the load-bearing perf goal once SIPI moves to S3. Per ADR-0004: pre-decode reads aim for *one* range GET to fetch the Essentials packet (with shape + file-structure offsets), then *one* targeted range GET for the data SIPI actually needs. |
+| **Essentials packet** | sharpen further | Probe 3 | Per ADR-0004 (expanded scope): the packet's role broadens from "shape cache" to "shape + S3-access file-structure index." The load-bearing rationale shifts to remote storage (S3 in 3-6 months, NFS today). Contents: image shape (8 fields), per-format file-structure offsets (TIFF: per-IFD offset/size; JP2: codestream + per-resolution offsets), ICC profile, original filename / mimetype / hash / pixel checksum. Wire format CBOR (ADR-0005). Position: a known fixed prefix offset in the file (TIFF tag in the first IFD; JP2 UUID box near the start) so SIPI can fetch with one range GET of the prefix. |
 
 ## Candidate gaps already spotted (pre-probe)
 
@@ -275,3 +360,5 @@ To continue this exercise in a later session:
 - **Bound by [ADR-0001](./adr/0001-shttps-as-strangler-fig-target.md).** Reshaping SIPI ↔ shttps seams is bounded by the strangler-fig direction. SIPI-side modules can absorb work re-homed *from* shttps (see `CONTEXT.md` "Re-homing schedule"), but new SIPI → shttps coupling is out of scope.
 - **Module directory naming.** `snake_case` for compound words (`iiif_parser/`, `format_handlers/`, `route_handlers/`, `image_shape/`); single word otherwise (`cache/`, `metadata/`, `backpressure/`). Plural for collections of sibling types (`format_handlers/` — four format-handler classes; `route_handlers/` — multiple route-callback functions); singular for topics, mass nouns, or single concepts (`cache/`, `metadata/`, `backpressure/`, `iiif_parser/`). The `name` answers *what kind of thing this directory is about*, not *how many things are inside*. Aligns with Rust target, Google C++ Style Guide, Abseil / Chromium / BDE conventions. The `.cpp` / `.h` *file*-naming convention (PascalCase `SipiCache.cpp` vs snake_case `cache.cpp` vs BDE-style `sipi_cache.cpp`) is a separate, deferred decision — out of scope for the deep-modules exercise; will get its own ADR if and when it lands.
 - **Disambiguate overloaded terms with umbrella + sub-types.** When a glossary term naturally covers multiple variants (different implementation language, different layer, different lifecycle), promote it to an umbrella in `UBIQUITOUS_LANGUAGE.md` and define each variant as a sub-type. Example: `Route handler` umbrella with `C++ route handler` + `Lua route handler` sub-types. This is preferred over silent overload (the source of `CONTEXT.md`'s mid-paragraph clarifications about `RequestHandler` vs `Route handler` and the two `file_handler`s).
+- **Rust-aligned, transitional C++.** SIPI's C++ codebase is transitional ahead of the strangler-fig migration to Rust ([ADR-0001](./adr/0001-shttps-as-strangler-fig-target.md)). When choosing between a more-ergonomic C++ pattern that won't survive the Rust port and a less-ergonomic one that will, prefer the latter. Examples: `std::expected<T, E>` over `absl::StatusOr<T>` (the former maps directly to Rust's `Result<T, E>`; the latter implies adopting Abseil, a C++-only commitment); `std::variant<A, B>` over inheritance hierarchies (maps to Rust enums / sum types); RAII + `unique_ptr` over exception-based ownership (maps to Rust's move semantics). Cosmetic ergonomic gaps (e.g. `std::expected`'s lack of a `?` operator) are addressed by small SIPI-local helpers (e.g. a `SIPI_TRY` macro), not by adopting upstream libraries that don't outlive the C++ codebase.
+- **Remote-access discipline.** Service masters are accessed remotely — NFS-mounted ZFS today, S3 in 3-6 months. Format-handler implementations and pre-decode logic minimize I/O operations: ideally one fixed-offset prefix read to fetch the Essentials packet (shape + file-structure offsets), then one targeted read for the data needed. Walking IFD chains, parsing box hierarchies one box at a time, or doing repeated small reads to discover offsets are anti-patterns — each is a network round trip. Local cache stays local (performance layer); only service-master-source reads pay remote-access cost. Per ADR-0004's expanded scope.
