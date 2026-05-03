@@ -1,5 +1,28 @@
 # Changelog
 
+## [4.2.0](https://github.com/dasch-swiss/sipi/compare/v4.1.1...v4.2.0) (2026-05-03)
+
+
+### Features
+
+* Add --version flag to CLI ([0c5da66](https://github.com/dasch-swiss/sipi/commit/0c5da66130e7cecf3769aab57d789cc3371a8d7f))
+* **format:** Expand EXIF metadata coverage and harden rational-array path ([2f6970f](https://github.com/dasch-swiss/sipi/commit/2f6970f35cec9016e5c957346b8e3c88bbfa4685))
+* **icc:** Normalize ICC profile creation date when SOURCE_DATE_EPOCH is set ([45f1caf](https://github.com/dasch-swiss/sipi/commit/45f1caf21d47cc29f45d0065695575f449a300e5))
+
+
+### Bug Fixes
+
+* **exif:** Plug leak when EXIF parser throws on malformed bytes ([79ddfe3](https://github.com/dasch-swiss/sipi/commit/79ddfe33443e9295182b88b898da937bbef8cf11))
+* Handle --version before library init to avoid LSan exit-time leaks ([269e8fe](https://github.com/dasch-swiss/sipi/commit/269e8fe86d6d7f694dacd3ba96fa0ab97d71d197))
+* **http:** Treat any OUTPUT_WRITE_FAIL as client abort ([311578f](https://github.com/dasch-swiss/sipi/commit/311578f780b5bfde39b4cd11f3219395ea78ea0a))
+* **icc:** Bail on gmtime_r failure / out-of-range year ([408a018](https://github.com/dasch-swiss/sipi/commit/408a0181d1b2d7b2bb2bcb6ececcdbe34ca2b999))
+* **sanitizer:** Symbolize stack frames so Lua leak suppressions match ([fc96101](https://github.com/dasch-swiss/sipi/commit/fc961012b79f37a9be6a669aa629715a21c4149e))
+
+
+### Reverts
+
+* Remove mkdocs from nix devShells ([99e72be](https://github.com/dasch-swiss/sipi/commit/99e72be2bce7c9a19b92a68e19675677002b604c))
+
 ## [4.1.1](https://github.com/dasch-swiss/sipi/compare/v4.1.0...v4.1.1) (2026-04-27)
 
 
