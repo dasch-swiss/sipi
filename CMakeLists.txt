@@ -560,15 +560,3 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/config/sipi.config.lua
 if(BUILD_TESTING)
     add_subdirectory(test)
 endif()
-
-#-------------------
-# Fuzz testing
-#-------------------
-# Fuzz targets link LLVM's libFuzzer runtime, which may be built against a
-# different C++ standard library (e.g. libstdc++ in Nix).  To avoid ABI
-# mismatch when the rest of the project uses libc++, fuzzing is opt-in.
-option(SIPI_ENABLE_FUZZ "Build fuzz targets (requires Clang + compatible libFuzzer)" OFF)
-
-if (SIPI_ENABLE_FUZZ)
-    add_subdirectory(fuzz)
-endif ()
