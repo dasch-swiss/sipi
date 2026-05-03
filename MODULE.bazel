@@ -61,8 +61,8 @@ bazel_dep(name = "prometheus-cpp", version = "1.3.0.bcr.2", repo_name = "prometh
 # file shape changes — desired feedback).
 single_version_override(
     module_name = "prometheus-cpp",
-    patches = ["//bazel/patches:prometheus_cpp_load_cc.patch"],
     patch_strip = 1,
+    patches = ["//bazel/patches:prometheus_cpp_load_cc.patch"],
 )
 
 # `toolchains_llvm` registers a hermetic LLVM 19.1.x toolchain. Sysroot wiring
@@ -113,20 +113,21 @@ sysroot = use_repo_rule("@toolchains_llvm//toolchain:sysroot.bzl", "sysroot")
 # and copying the `Sha256Sum` field into both `urls` and `sha256` below.
 sysroot(
     name = "sysroot_linux_x86_64",
-    urls = ["https://commondatastorage.googleapis.com/chrome-linux-sysroot/52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d"],
     sha256 = "52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d",
+    urls = ["https://commondatastorage.googleapis.com/chrome-linux-sysroot/52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d"],
 )
+
 sysroot(
     name = "sysroot_linux_aarch64",
-    urls = ["https://commondatastorage.googleapis.com/chrome-linux-sysroot/c7176a4c7aacbf46bda58a029f39f79a68008d3dee6518f154dcf5161a5486d8"],
     sha256 = "c7176a4c7aacbf46bda58a029f39f79a68008d3dee6518f154dcf5161a5486d8",
+    urls = ["https://commondatastorage.googleapis.com/chrome-linux-sysroot/c7176a4c7aacbf46bda58a029f39f79a68008d3dee6518f154dcf5161a5486d8"],
 )
 
 llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm")
 llvm.toolchain(
     name = "llvm_toolchain",
-    llvm_version = "19.1.7",
     cxx_standard = {"": "c++23"},
+    llvm_version = "19.1.7",
     stdlib = {
         "linux-x86_64": "libc++",
         "linux-aarch64": "libc++",
@@ -142,8 +143,70 @@ llvm.sysroot(
     label = "@sysroot_linux_aarch64//sysroot",
     targets = ["linux-aarch64"],
 )
+# ── Fuzz toolchain — libstdc++ for libFuzzer ABI parity (Linux) ────────────
+#
+# `--config=fuzz` is platform-pinned by the `bazel-build-fuzz` /
+# `bazel-run-fuzz` justfile recipes:
+#   * linux-x86_64 → `//tools/fuzz:linux_x86_64_fuzz` (this toolchain wins:
+#     libstdc++, mirroring today's `pkgs.llvmPackages_19.stdenv` override
+#     in `flake.nix:325-329`).
+#   * darwin-aarch64 → `//tools/fuzz:darwin_aarch64_fuzz` (the default
+#     `llvm_toolchain` wins for darwin entries here because this toolchain
+#     does not register a darwin sysroot — toolchain resolution falls
+#     through. macOS Apple SDK + libc++ is the libFuzzer ABI on darwin
+#     anyway; no stdenv swap needed).
+#
+# `stdlib` is baked into `cc_toolchain_config`, not exposed as a per-build
+# flag — `.bazelrc --config=fuzz` alone cannot swap stdlib. Registering
+# this second toolchain is the canonical workaround (research findings §5,
+# plan §"Toolchain — hermetic LLVM 19.1.x").
+#
+# `llvm.toolchain_root` shares `@llvm_toolchain_llvm` — Bazel does not
+# re-fetch the LLVM tarball for the fuzz toolchain. Verified post-build
+# by inspecting `bazel-out/external/` (only one `llvm_toolchain_llvm` dir).
+#
+# `extra_target_compatible_with(constraints = [fuzz_enabled])` (no
+# `targets =` filter, so it applies to ALL platform entries this toolchain
+# auto-registers for) makes this toolchain match ONLY platforms that
+# carry `fuzz_enabled`. Without the broad scoping, the auto-created darwin
+# entries would silently match plain darwin builds too.
+#
+# Modern libFuzzer (LLVM ≥ 16) ships its own private libc++; the libstdc++
+# swap is belt-and-suspenders parity with today's behaviour and is
+# eligible for removal in a later refactor.
+llvm.toolchain(
+    name = "llvm_toolchain_fuzz",
+    cxx_standard = {"": "c++23"},
+    llvm_version = "19.1.7",
+    stdlib = {"linux-x86_64": "stdc++"},
+)
+llvm.toolchain_root(
+    name = "llvm_toolchain_fuzz",
+    # Must be a fully-qualified label — the rule's impl splits on `:` and
+    # only the package portion is consumed. A bare `@llvm_toolchain_llvm`
+    # (no `//:target`) fails validation.
+    label = "@llvm_toolchain_llvm//:BUILD",
+)
+llvm.sysroot(
+    name = "llvm_toolchain_fuzz",
+    label = "@sysroot_linux_x86_64//sysroot",
+    targets = ["linux-x86_64"],
+)
+llvm.extra_target_compatible_with(
+    name = "llvm_toolchain_fuzz",
+    constraints = ["//tools/fuzz:fuzz_enabled"],
+)
 use_repo(llvm, "llvm_toolchain", "llvm_toolchain_llvm")
+use_repo(llvm, "llvm_toolchain_fuzz")
 
+# Registration order matters: when both `llvm_toolchain_fuzz` and
+# `llvm_toolchain` match a target platform (e.g. linux_x86_64_fuzz, where
+# the default toolchain's [os:linux, cpu:x86_64] is a subset of the
+# platform's [os:linux, cpu:x86_64, fuzz_enabled]), Bazel picks the
+# first-registered. Register `llvm_toolchain_fuzz` first so it wins on
+# fuzz_enabled platforms; non-fuzz builds skip past it (their platform
+# lacks fuzz_enabled) and fall through to `llvm_toolchain`.
+register_toolchains("@llvm_toolchain_fuzz//:all")
 register_toolchains("@llvm_toolchain//:all")
 
 # ── Kakadu (proprietary, GitHub-release-gated) ─────────────────────────────
@@ -160,10 +223,11 @@ use_repo(kakadu_extension, "kakadu")
 # Bazel-built and Nix-built test paths consume the same header bytes
 # (DEV-6343, plan §"PR Y+1").
 approvaltests_cpp = use_repo_rule("//bazel:approvaltests_cpp.bzl", "approvaltests_cpp")
+
 approvaltests_cpp(
     name = "approvaltests_cpp",
-    url = "https://github.com/approvals/ApprovalTests.cpp/releases/download/v.10.13.0/ApprovalTests.v.10.13.0.hpp",
     sha256 = "c00f6390b81d9924dc646e9d32b61e1e09abda106c13704f714ac349241bb9ff",
+    url = "https://github.com/approvals/ApprovalTests.cpp/releases/download/v.10.13.0/ApprovalTests.v.10.13.0.hpp",
 )
 
 # ── Third-party C/C++ libs (rules_foreign_cc) ──────────────────────────────
@@ -180,34 +244,34 @@ http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "ht
 # bzip2 — gitlab archive
 http_archive(
     name = "bzip2",
-    url = "https://gitlab.com/bzip2/bzip2/-/archive/bzip2-1.0.8/bzip2-bzip2-1.0.8.tar.bz2",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "1afcfe4d3eb95bac3b7f43588c9457ccf772360f7e657ba7279fac776f2469d4",
     strip_prefix = "bzip2-bzip2-1.0.8",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://gitlab.com/bzip2/bzip2/-/archive/bzip2-1.0.8/bzip2-bzip2-1.0.8.tar.bz2",
 )
 
 http_archive(
     name = "curl",
-    url = "https://curl.se/download/curl-8.12.1.tar.gz",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "7b40ea64947e0b440716a4d7f0b7aa56230a5341c8377d7b609649d4aea8dbcf",
     strip_prefix = "curl-8.12.1",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://curl.se/download/curl-8.12.1.tar.gz",
 )
 
 http_archive(
     name = "exiv2",
-    url = "https://github.com/Exiv2/exiv2/archive/refs/tags/v0.28.5.tar.gz",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "e1671f744e379a87ba0c984617406fdf8c0ad0c594e5122f525b2fb7c28d394d",
     strip_prefix = "exiv2-0.28.5",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://github.com/Exiv2/exiv2/archive/refs/tags/v0.28.5.tar.gz",
 )
 
 http_archive(
     name = "expat",
-    url = "https://github.com/libexpat/libexpat/releases/download/R_2_5_0/expat-2.5.0.tar.bz2",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "6f0e6e01f7b30025fa05c85fdad1e5d0ec7fd35d9f61b22f34998de11969ff67",
     strip_prefix = "expat-2.5.0",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://github.com/libexpat/libexpat/releases/download/R_2_5_0/expat-2.5.0.tar.bz2",
 )
 
 # fmt deliberately omitted from the Bazel graph: the existing CMake build
@@ -223,49 +287,46 @@ http_archive(
 
 http_archive(
     name = "jansson",
-    url = "https://www.digip.org/jansson/releases/jansson-2.13.1.tar.gz",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "f4f377da17b10201a60c1108613e78ee15df6b12016b116b6de42209f47a474f",
     strip_prefix = "jansson-2.13.1",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://www.digip.org/jansson/releases/jansson-2.13.1.tar.gz",
 )
 
 http_archive(
     name = "jbigkit",
-    url = "https://www.cl.cam.ac.uk/~mgk25/jbigkit/download/jbigkit-2.1.tar.gz",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "de7106b6bfaf495d6865c7dd7ac6ca1381bd12e0d81405ea81e7f2167263d932",
     strip_prefix = "jbigkit-2.1",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://www.cl.cam.ac.uk/~mgk25/jbigkit/download/jbigkit-2.1.tar.gz",
 )
 
 http_archive(
     name = "jpeg",
-    url = "https://ijg.org/files/jpegsrc.v9f.tar.gz",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "04705c110cb2469caa79fb71fba3d7bf834914706e9641a4589485c1f832565b",
     strip_prefix = "jpeg-9f",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://ijg.org/files/jpegsrc.v9f.tar.gz",
 )
 
 http_archive(
     name = "lcms2",
-    url = "https://github.com/mm2/Little-CMS/releases/download/lcms2.16/lcms2-2.16.tar.gz",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "d873d34ad8b9b4cea010631f1a6228d2087475e4dc5e763eb81acc23d9d45a51",
     strip_prefix = "lcms2-2.16",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://github.com/mm2/Little-CMS/releases/download/lcms2.16/lcms2-2.16.tar.gz",
 )
 
 http_archive(
     name = "libmagic",
-    url = "https://github.com/file/file/archive/refs/tags/FILE5_46.tar.gz",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "73c5f11a8edf0fded2fe3471b23a7fccb3f3369a13ea612529b869c8dc96aa2b",
     strip_prefix = "file-FILE5_46",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://github.com/file/file/archive/refs/tags/FILE5_46.tar.gz",
 )
 
 http_archive(
     name = "lua",
-    url = "https://www.lua.org/ftp/lua-5.3.5.tar.gz",
-    sha256 = "0c2eed3f960446e1a3e4b9a1ca2f3ff893b6ce41942cf54d5dd59ab4b3b058ac",
-    strip_prefix = "lua-5.3.5",
     build_file = "//bazel:all_content.BUILD.bazel",
     # Drop Lua's optional readline integration. The `linux` and `macosx`
     # make targets in `src/Makefile` recursively self-invoke with
@@ -286,88 +347,91 @@ http_archive(
     patch_cmds = [
         "perl -i -pe 's/-DLUA_USE_(LINUX|MACOSX)/-DLUA_USE_POSIX -DLUA_USE_DLOPEN/g; s/-lreadline//g' src/Makefile",
     ],
+    sha256 = "0c2eed3f960446e1a3e4b9a1ca2f3ff893b6ce41942cf54d5dd59ab4b3b058ac",
+    strip_prefix = "lua-5.3.5",
+    url = "https://www.lua.org/ftp/lua-5.3.5.tar.gz",
 )
 
 http_archive(
     name = "luarocks",
-    url = "https://luarocks.github.io/luarocks/releases/luarocks-3.3.1.tar.gz",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "eb20cd9814df05535d9aae98da532217c590fc07d48d90ca237e2a7cdcf284fe",
     strip_prefix = "luarocks-3.3.1",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://luarocks.github.io/luarocks/releases/luarocks-3.3.1.tar.gz",
 )
 
 http_archive(
     name = "openssl",
-    url = "https://github.com/openssl/openssl/releases/download/openssl-3.4.1/openssl-3.4.1.tar.gz",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "002a2d6b30b58bf4bea46c43bdd96365aaf8daa6c428782aa4feee06da197df3",
     strip_prefix = "openssl-3.4.1",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://github.com/openssl/openssl/releases/download/openssl-3.4.1/openssl-3.4.1.tar.gz",
 )
 
 http_archive(
     name = "png",
+    build_file = "//bazel:all_content.BUILD.bazel",
+    sha256 = "d236ef40d8733b5a1f5dfd3f8386a7741a0bdd896b6677be0a9cec9747296f4c",
+    strip_prefix = "libpng-1.6.41",
     # SourceForge serves the tarball via a `…/download` redirect URL with no
     # `.tar.gz` suffix, which Bazel's `download_and_extract` rejects when
     # auto-sniffing the archive type. The GitHub mirror of libpng publishes
     # the same release artefact at a clean URL.
     url = "https://github.com/glennrp/libpng/archive/refs/tags/v1.6.41.tar.gz",
-    sha256 = "d236ef40d8733b5a1f5dfd3f8386a7741a0bdd896b6677be0a9cec9747296f4c",
-    strip_prefix = "libpng-1.6.41",
-    build_file = "//bazel:all_content.BUILD.bazel",
 )
 
 http_archive(
     name = "sentry",
-    url = "https://github.com/getsentry/sentry-native/archive/refs/tags/0.9.0.tar.gz",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "657391465eb6236d6e3f3eec1d25434178783328f1f0a744c99c9b049c6225e1",
     strip_prefix = "sentry-native-0.9.0",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://github.com/getsentry/sentry-native/archive/refs/tags/0.9.0.tar.gz",
 )
 
 http_archive(
     name = "sqlite3",
-    url = "https://www.sqlite.org/2024/sqlite-autoconf-3450200.tar.gz",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "bc9067442eedf3dd39989b5c5cfbfff37ae66cc9c99274e0c3052dc4d4a8f6ae",
     strip_prefix = "sqlite-autoconf-3450200",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://www.sqlite.org/2024/sqlite-autoconf-3450200.tar.gz",
 )
 
 http_archive(
     name = "tiff",
-    url = "https://download.osgeo.org/libtiff/tiff-4.7.0.tar.gz",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "67160e3457365ab96c5b3286a0903aa6e78bdc44c4bc737d2e486bcecb6ba976",
     strip_prefix = "tiff-4.7.0",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://download.osgeo.org/libtiff/tiff-4.7.0.tar.gz",
 )
 
 http_archive(
     name = "webp",
-    url = "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.2.0.tar.gz",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "2fc8bbde9f97f2ab403c0224fb9ca62b2e6852cbc519e91ceaa7c153ffd88a0c",
     strip_prefix = "libwebp-1.2.0",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.2.0.tar.gz",
 )
 
 http_archive(
     name = "xz",
-    url = "https://tukaani.org/xz/xz-5.2.5.tar.gz",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "f6f4910fd033078738bd82bfba4f49219d03b17eb0794eb91efbae419f4aba10",
     strip_prefix = "xz-5.2.5",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://tukaani.org/xz/xz-5.2.5.tar.gz",
 )
 
 http_archive(
     name = "zlib",
-    url = "https://zlib.net/zlib-1.3.2.tar.gz",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
     strip_prefix = "zlib-1.3.2",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://zlib.net/zlib-1.3.2.tar.gz",
 )
 
 http_archive(
     name = "zstd",
-    url = "https://github.com/facebook/zstd/archive/refs/tags/v1.5.7.tar.gz",
+    build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "37d7284556b20954e56e1ca85b80226768902e2edabd3b649e9e72c0c9012ee3",
     strip_prefix = "zstd-1.5.7",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    url = "https://github.com/facebook/zstd/archive/refs/tags/v1.5.7.tar.gz",
 )

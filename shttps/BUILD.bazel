@@ -37,32 +37,24 @@ magic_mgc_header(
     out = "generated/magic_mgc.h",
 )
 
+# ── //shttps:shttps_headers ────────────────────────────────────────────────
+# Header-only surface of shttps. Split out so `//fuzz/handlers:fuzz_subset`
+# can compile its 5-cpp slice with the full shttps include graph available
+# (sibling-relative `#include "Server.h"` chains pull Logger.h, LuaServer.h,
+# Global.h, etc.) without linking shttps's compiled archive — only the four
+# explicitly-listed cpps end up in the fuzz binary.
+#
+# `includes = ["."]` + `include_prefix = "shttps"` produce the same virtual-
+# include layout the original `shttps` cc_library exposed: consumers reach
+# the headers as `#include "shttps/X.h"` (prefix form) AND sibling-relative
+# `#include "X.h"` keeps working from inside shttps/*.cpp because Clang
+# searches the source file's directory by default for quoted-form includes.
 cc_library(
-    name = "shttps",
-    srcs = glob(
-        [
-            "*.cpp",
-            "*.c",
-        ],
-        exclude = [
-            "Shttp.cpp",  # standalone test driver, not part of the library
-        ],
-    ),
+    name = "shttps_headers",
     hdrs = glob([
         "*.h",
         "*.hpp",
     ]) + [":magic_mgc_h"],
-    # `include_prefix = "shttps"` registers each header under the
-    # `shttps/` prefix in Bazel's virtual-include namespace, so consumers
-    # in src/ can write `#include "shttps/X.h"`. `includes = ["."]` adds
-    # both the source dir (`shttps/`) and the generated-output dir
-    # (`bazel-bin/shttps/`) to the compiler's include search path so:
-    #   * sibling-relative includes inside shttps/ (`#include "Connection.h"`)
-    #     keep working
-    #   * `#include "generated/magic_mgc.h"` (the genrule output above)
-    #     resolves via `bazel-bin/shttps/generated/magic_mgc.h`
-    # Bazel rejects `includes = [".."]` (workspace-root exposure) so
-    # include_prefix is the right idiom for the prefix form.
     includes = ["."],
     include_prefix = "shttps",
     deps = [
@@ -79,5 +71,58 @@ cc_library(
         "//ext/openssl:openssl",
         "//ext/sqlite3:sqlite3",
         "//ext/zlib:zlib",
+    ],
+)
+
+cc_library(
+    name = "shttps",
+    srcs = glob(
+        [
+            "*.cpp",
+            "*.c",
+        ],
+        exclude = [
+            "Shttp.cpp",  # standalone test driver, not part of the library
+        ],
+    ),
+    deps = [":shttps_headers"],
+)
+
+# ── //shttps:fuzz_subset — minimal slice for libFuzzer (DEV-6345) ──────────
+# Deliberate subset of shttps (4 cpps) plus `iiif_handler.cpp` from //src,
+# recompiled under the libFuzzer instrumentation flags from `--config=fuzz`
+# (.bazelrc `build:fuzz` block). Mirrors today's
+# `lib_iiif_handler_uri_parser_fuzz` static library in
+# `fuzz/handlers/CMakeLists.txt:18-30`.
+#
+# Lives in `shttps/BUILD.bazel` (not `fuzz/handlers/BUILD.bazel`) because
+# four of its five sources are native to this package — keeping the
+# cc_library here avoids a four-way `exports_files` cross-package reach.
+# Same precedent as `bazel/magic_database.bzl`: build-graph machinery lives
+# where the inputs live. The single cross-package source — //src's
+# `iiif_handler.cpp` — is reached via `exports_files` in `src/BUILD.bazel`,
+# with its companion header surfaced via `//src:iiif_handler_hdrs` to make
+# the include resolution explicit.
+#
+# Linking the full `:shttps` archive under fuzz flags would pull Lua VM /
+# prometheus / sentry symbols the harness never exercises and inflate the
+# libFuzzer corpus search-space cost — `fuzz_subset` keeps the link line
+# tight while `:shttps_headers` (header-only) gives the cpps the full
+# include graph they need to compile.
+cc_library(
+    name = "fuzz_subset",
+    srcs = [
+        "ChunkReader.cpp",
+        "Connection.cpp",
+        "Error.cpp",
+        "SockStream.cpp",
+        "//src:handlers/iiif_handler.cpp",
+    ],
+    target_compatible_with = ["//tools/fuzz:fuzz_enabled"],
+    visibility = ["//fuzz/handlers:__pkg__"],
+    deps = [
+        ":shttps_headers",
+        "//ext/openssl:openssl",
+        "//src:iiif_handler_hdrs",
     ],
 )
