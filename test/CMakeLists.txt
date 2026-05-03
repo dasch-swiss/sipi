@@ -174,9 +174,6 @@ if (CODE_COVERAGE)
     target_link_libraries(libsipi_testable PRIVATE coverage_compile)
     target_link_libraries(libsipi_testable PUBLIC coverage_link)
 endif()
-if (ENABLE_SANITIZERS)
-    target_link_libraries(libsipi_testable PUBLIC sanitizer_config)
-endif()
 
 # Approval tests
 add_subdirectory(approval)

@@ -227,28 +227,6 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES ".*Cla
     target_link_options(coverage_link INTERFACE --coverage)
 endif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
 
-#
-# Sanitizers (ASan + UBSan)
-#
-
-add_library(sanitizer_config INTERFACE)
-
-option(ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer (Clang only)" OFF)
-if (ENABLE_SANITIZERS)
-    if (NOT CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
-        message(WARNING "ENABLE_SANITIZERS is designed for Clang. GCC sanitizer support may differ.")
-    endif ()
-    target_compile_options(sanitizer_config INTERFACE
-            -fsanitize=address,undefined
-            -fno-omit-frame-pointer
-            -fno-optimize-sibling-calls
-    )
-    target_link_options(sanitizer_config INTERFACE
-            -fsanitize=address,undefined
-    )
-    message(STATUS "Sanitizers enabled: ASan + UBSan")
-endif ()
-
 # on macOS, ignore frameworks
 # the complete environment should be provided through NIX
 if (CMAKE_SYSTEM_NAME STREQUAL DARWIN)
@@ -558,9 +536,6 @@ target_link_libraries(${PROJECT_NAME} ${LIBS}
 target_link_libraries(sipi build_config)
 if (CODE_COVERAGE)
     target_link_libraries(sipi coverage_compile coverage_link)
-endif ()
-if (ENABLE_SANITIZERS)
-    target_link_libraries(sipi sanitizer_config)
 endif ()
 
 install(TARGETS sipi
