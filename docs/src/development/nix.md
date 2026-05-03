@@ -9,7 +9,7 @@ and shares its dependency cache with CI via Cachix.
 A few concepts that make the rest of this page click:
 
 **Derivation.** Each package in the flake — `dev`, `default`, `release`,
-`fuzz`, `docker`, etc. — is a separate *derivation*: a build recipe
+`docker`, etc. — is a separate *derivation*: a build recipe
 with fully declared inputs (source, compiler, flags, deps).
 Nix hashes the recipe, builds once, caches the result in `/nix/store`,
 and serves future requests instantly.
@@ -98,7 +98,6 @@ invocations in recipes — CI invokes only `just <recipe>`.
 just nix-build                         # .#dev: Debug + coverage; unit tests run in the sandbox
 just nix-build-default                 # .#default: RelWithDebInfo + tests
 just nix-build-release                 # .#release: stripped, no tests
-just nix-build-fuzz                    # .#fuzz: libFuzzer binary only
 just nix-coverage                      # .#dev^coverage: writes result-coverage/coverage.xml
 just nix-docker-build                  # .#docker-stream: host-arch image into local Docker daemon
 just nix-docker-build-amd64            # .#packages.x86_64-linux.{docker-stream,sipi-debug} (CI)
@@ -260,9 +259,9 @@ nix build .#packages.aarch64-linux.dev -L
 ```
 
 Swap `aarch64-linux` for `x86_64-linux` to reproduce the amd64 CI
-variant. Works for every package: `dev`, `default`, `release`, `fuzz`.
-The sanitized variant is now Bazel-native (`just bazel-build-sanitized`)
-— see [Building from source](./building.md).
+variant. Works for every package: `dev`, `default`, `release`. The
+sanitized and fuzz variants are Bazel-native (`just bazel-build-sanitized`
+and `just bazel-build-fuzz` respectively) — see [Building from source](./building.md).
 
 `native-linux-builder` dispatches the build automatically; you don't
 pass a `--system` flag. Warm Cachix → seconds. Cold Cachix → ~15 min

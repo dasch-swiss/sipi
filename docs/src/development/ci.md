@@ -133,7 +133,7 @@ do not override `LC_ALL` at runtime. See
 Every CI step invokes `just <recipe>` — no inline cmake or `nix build`
 calls. To reproduce any CI job locally, run the same recipe. With the
 Determinate Systems native-linux-builder available to macOS authors,
-Linux-target recipes (`nix-build-fuzz`, `bazel-build-sanitized`) run
+Linux-target recipes (`bazel-build-fuzz`, `bazel-build-sanitized`) run
 locally without a CI round-trip.
 
 `just nix-build*` recipes wrap `nix build`, so CI invokes them directly
@@ -161,10 +161,10 @@ SIPI_BIN=$PWD/bazel-bin/src/sipi \
   LSAN_OPTIONS=suppressions=$PWD/.lsan_suppressions.txt \
   just nix-test-e2e
 
-# Fuzz build + run (what fuzz.yml runs)
-just nix-build-fuzz
+# Fuzz build + run (what fuzz.yml runs; linux-x86_64 only)
+just bazel-build-fuzz
 mkdir fuzz-corpus-live
-just nix-run-fuzz fuzz-corpus-live 60 fuzz/handlers/corpus
+just bazel-run-fuzz fuzz-corpus-live 60 fuzz/handlers/corpus
 
 # Docker image with split debug symbols (what publish.yml publish-docker
 # runs). The PR-time `ci.yml test` job builds the same image inline; this
