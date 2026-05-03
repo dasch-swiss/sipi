@@ -96,13 +96,6 @@ nix-build-release:
     {{_nix_build}} .#release
     @echo "Binary at: $(readlink result)/bin/sipi"
 
-# Sanitized build: Debug + ASan + UBSan, tests run in the Nix sandbox.
-# `filter-syscalls false` is required because LSan uses ptrace, which
-# the default Nix sandbox blocks via seccomp. No-op on macOS.
-nix-build-sanitized:
-    {{_nix_build}} .#sanitized --option filter-syscalls false
-    @echo "Binary at: $(readlink result)/bin/sipi"
-
 # Fuzz harness build: produces the libFuzzer binary only (no sipi runtime files).
 nix-build-fuzz:
     {{_nix_build}} .#fuzz
@@ -201,6 +194,24 @@ bazel-test-unit:
 # lands under `bazel-testlogs/test/approval/approvaltests/`.
 bazel-test-approval:
     bazel test //test/approval:approvaltests
+
+# Sanitized build: Debug + ASan + UBSan via Bazel `--config=asan --config=ubsan`.
+# Replaces the deleted `.#sanitized` Nix variant (DEV-6344, PR Y+2). The
+# resulting binary at `bazel-bin/src/sipi` is what `sanitizer.yml`'s e2e
+# step consumes via `SIPI_BIN`. DWARF stays inline (`--strip=never` in
+# `.bazelrc`) so the symbol-name suppressions in `.lsan_suppressions.txt`
+# match. `--verbose_failures` surfaces the underlying cmake/make output
+# from any failing `rules_foreign_cc` ext/* dep — without it, Bazel only
+# reports the higher-level "output X was not created" line, which makes
+# triage of CFLAGS-propagation interactions impossible. `--stamp` runs
+# `tools/workspace_status.sh` so `STABLE_SIPI_VERSION` (from `version.txt`)
+# is baked into `SipiVersion.h` via `src/BUILD.bazel`'s
+# `expand_template(stamp_substitutions = {…})`. Without it, the binary
+# reports `sipi 0.0.0-unstamped` and the `cli_version_flag` e2e test
+# fails.
+bazel-build-sanitized *FLAGS='':
+    bazel build --config=asan --config=ubsan --verbose_failures --stamp {{FLAGS}} //src:sipi
+    @echo "Binary at: $(pwd)/bazel-bin/src/sipi"
 
 #####################################
 # Tests (consume $SIPI_BIN, default ./result/bin/sipi)
@@ -387,7 +398,6 @@ docs-install-requirements:
 # Clean build artifacts (cmake trees from the dev-shell inner loop + Nix result symlinks)
 clean:
     rm -rf build/
-    rm -rf build-sanitized/
     rm -rf build-fuzz/
     rm -rf cmake-build-relwithdebinfo-inside-docker/
     rm -rf site/

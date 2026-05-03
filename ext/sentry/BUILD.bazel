@@ -12,6 +12,9 @@ cmake(
     name = "sentry",
     lib_source = "@sentry//:all_srcs",
     cache_entries = {
+        # Suppress Bazel's auto-injected CMAKE_BUILD_TYPE=Debug — see
+        # ext/png/BUILD.bazel for the rationale (Debug-postfix hazard).
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_INSTALL_LIBDIR": "lib",
         "SENTRY_BACKEND": "inproc",
         "SENTRY_BUILD_SHARED_LIBS": "OFF",
@@ -25,6 +28,9 @@ cmake(
         # the version check resolves against the right copy.
         "OPENSSL_ROOT_DIR": "$$EXT_BUILD_DEPS/openssl",
     },
+    # Pin --config used by `cmake --build` and `cmake --install` —
+    # see ext/png/BUILD.bazel for the rationale.
+    configuration = "RelWithDebInfo",
     out_static_libs = ["libsentry.a"],
     set_file_prefix_map = True,
     deps = [

@@ -12,12 +12,18 @@ cmake(
     lib_source = "@zstd//:all_srcs",
     working_directory = "build/cmake",
     cache_entries = {
+        # Suppress Bazel's auto-injected CMAKE_BUILD_TYPE=Debug — see
+        # ext/png/BUILD.bazel for the rationale (Debug-postfix hazard).
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_INSTALL_LIBDIR": "lib",
         "ZSTD_BUILD_PROGRAMS": "OFF",
         "ZSTD_BUILD_TESTS": "OFF",
         "ZSTD_BUILD_SHARED": "OFF",
         "ZSTD_BUILD_STATIC": "ON",
     },
+    # Pin --config used by `cmake --build` and `cmake --install` —
+    # see ext/png/BUILD.bazel for the rationale.
+    configuration = "RelWithDebInfo",
     out_static_libs = ["libzstd.a"],
     set_file_prefix_map = True,
 )

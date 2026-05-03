@@ -11,6 +11,9 @@ cmake(
     name = "exiv2",
     lib_source = "@exiv2//:all_srcs",
     cache_entries = {
+        # Suppress Bazel's auto-injected CMAKE_BUILD_TYPE=Debug — see
+        # ext/png/BUILD.bazel for the rationale (Debug-postfix hazard).
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_INSTALL_LIBDIR": "lib",
         "BUILD_SHARED_LIBS": "OFF",
         "EXIV2_ENABLE_INIH": "OFF",
@@ -19,6 +22,9 @@ cmake(
         "EXIV2_BUILD_EXIV2_COMMAND": "OFF",
         "EXIV2_ENABLE_NLS": "OFF",
     },
+    # Pin --config used by `cmake --build` and `cmake --install` —
+    # see ext/png/BUILD.bazel for the rationale.
+    configuration = "RelWithDebInfo",
     out_static_libs = [
         # exiv2 0.28.x consolidated the XMP support into `libexiv2.a`;
         # the standalone `libexiv2-xmp.a` from earlier releases is gone.

@@ -24,7 +24,6 @@
                  # at build time.
 , cmakeBuildType ? "RelWithDebInfo"
 , enableCoverage ? false
-, enableSanitizers ? false
 , enableFuzzing ? false
 , enableTests ? true
 , providedVersion ? null
@@ -106,8 +105,6 @@ stdenv.mkDerivation {
     "-DCMAKE_BUILD_TYPE=${cmakeBuildType}"
   ] ++ lib.optionals enableCoverage [
     "-DCODE_COVERAGE=ON"
-  ] ++ lib.optionals enableSanitizers [
-    "-DENABLE_SANITIZERS=ON"
   ] ++ lib.optionals enableFuzzing [
     "-DSIPI_ENABLE_FUZZ=ON"
   ] ++ lib.optionals enableTests [
@@ -146,8 +143,8 @@ stdenv.mkDerivation {
 
   # `doCheck = enableTests` keeps the test invariant honest: any variant
   # that builds tests also runs them inside the sandbox (`.#default`,
-  # `.#dev`, `.#sanitized`). `.#release` sets `enableTests = false` and
-  # skips the check phase.
+  # `.#dev`). `.#release` sets `enableTests = false` and skips the
+  # check phase.
   doCheck = enableTests;
 
   # cmake setup-hook cd's into `build/` in configurePhase; checkPhase and
