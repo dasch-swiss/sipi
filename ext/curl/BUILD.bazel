@@ -21,6 +21,11 @@ cmake(
     lib_source = "@curl//:all_srcs",
     cache_entries = {
         "CMAKE_INSTALL_LIBDIR": "lib",
+        # Suppress Bazel's auto-injected `CMAKE_BUILD_TYPE=Debug` so curl's
+        # `set_target_properties(libcurl_static PROPERTIES DEBUG_POSTFIX "-d")`
+        # doesn't kick in and rename the static library to `libcurl-d.a`.
+        # See ext/png/BUILD.bazel for the full rationale.
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "BUILD_SHARED_LIBS": "OFF",
         "BUILD_STATIC_LIBS": "ON",
         "BUILD_CURL_EXE": "OFF",
@@ -58,6 +63,9 @@ cmake(
         "CURL_USE_LIBSSH2": "OFF",
         "CURL_USE_LIBSSH": "OFF",
     },
+    # Pin --config used by `cmake --build` and `cmake --install` —
+    # see ext/png/BUILD.bazel for the rationale.
+    configuration = "RelWithDebInfo",
     out_static_libs = ["libcurl.a"],
     set_file_prefix_map = True,
     deps = [

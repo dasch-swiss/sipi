@@ -11,6 +11,9 @@ cmake(
     name = "expat",
     lib_source = "@expat//:all_srcs",
     cache_entries = {
+        # Suppress Bazel's auto-injected CMAKE_BUILD_TYPE=Debug — see
+        # ext/png/BUILD.bazel for the rationale (Debug-postfix hazard).
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_POLICY_VERSION_MINIMUM": "3.5",
         "CMAKE_INSTALL_LIBDIR": "lib",
         "EXPAT_BUILD_TOOLS": "OFF",
@@ -19,6 +22,9 @@ cmake(
         "EXPAT_BUILD_TESTS": "OFF",
         "BUILD_SHARED_LIBS": "OFF",
     },
+    # Pin --config used by `cmake --build` and `cmake --install` —
+    # see ext/png/BUILD.bazel for the rationale.
+    configuration = "RelWithDebInfo",
     out_static_libs = ["libexpat.a"],
     set_file_prefix_map = True,
 )

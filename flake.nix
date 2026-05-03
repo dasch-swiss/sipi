@@ -315,28 +315,6 @@
             enableTests = false;
           }).overrideAttrs { dontStrip = true; };
 
-          # Debug build with AddressSanitizer + UndefinedBehaviorSanitizer.
-          # Mirrors sanitizer.yml's pre-Nix imperative invocation, now as a
-          # derivation so `just nix-build-sanitized` routes through Cachix
-          # and runs the sanitizer-instrumented gtest suite in-sandbox.
-          #
-          # Override `separateDebugInfo` / `dontStrip`: the default `pkgs.sipi`
-          # derivation strips the binary into a separate `debug` output, but
-          # the sanitizer e2e step only fetches `result/bin/sipi`. Without
-          # DWARF inline, ASan's symbolizer can't resolve frames, so the
-          # `leak:lua*` patterns in `.lsan_suppressions.txt` never match —
-          # known Lua exit-time leaks then surface as gate failures. Keep
-          # DWARF in the binary for this variant only; production variants
-          # (`.#default`, `.#release`) keep the small stripped layout.
-          sanitized = (pkgs.sipi.override {
-            cmakeBuildType = "Debug";
-            enableSanitizers = true;
-            enableTests = true;
-          }).overrideAttrs {
-            separateDebugInfo = false;
-            dontStrip = true;
-          };
-
           # Fuzz harness build. Uses llvmPackages_19.stdenv (libstdc++)
           # because libFuzzer's ABI is tied to libstdc++. The override
           # replaces buildPhase/installPhase to produce just the fuzzer

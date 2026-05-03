@@ -11,6 +11,9 @@ cmake(
     name = "webp",
     lib_source = "@webp//:all_srcs",
     cache_entries = {
+        # Suppress Bazel's auto-injected CMAKE_BUILD_TYPE=Debug — see
+        # ext/png/BUILD.bazel for the rationale (Debug-postfix hazard).
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_INSTALL_LIBDIR": "lib",
         "BUILD_SHARED_LIBS": "OFF",
         "WEBP_BUILD_ANIM_UTILS": "OFF",
@@ -25,6 +28,9 @@ cmake(
         "CMAKE_DISABLE_FIND_PACKAGE_TIFF": "TRUE",
         "CMAKE_DISABLE_FIND_PACKAGE_GIF": "TRUE",
     },
+    # Pin --config used by `cmake --build` and `cmake --install` —
+    # see ext/png/BUILD.bazel for the rationale.
+    configuration = "RelWithDebInfo",
     out_static_libs = ["libwebp.a"],
     set_file_prefix_map = True,
 )

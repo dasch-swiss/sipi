@@ -145,6 +145,102 @@ build:macos --repo_env=PATH
 build:macos --repo_env=DEVELOPER_DIR=/Library/Developer/CommandLineTools
 build:macos --repo_env=SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
 
+# ── Sanitizers — opt-in via --config=asan and/or --config=ubsan ─────────────
+# Replaces the deleted `.#sanitized` Nix variant. CI's sanitizer.yml uses
+# both together via `just bazel-build-sanitized`
+# (`bazel build --config=asan --config=ubsan //src:sipi`); the e2e step then
+# runs the suite against `bazel-bin/src/sipi` with `.lsan_suppressions.txt`
+# and `ASAN_OPTIONS=log_path=/tmp/asan-e2e`. The two configs are kept
+# separate so a developer can isolate a finding to ASan vs UBSan.
+#
+# `--compilation_mode=dbg` matches the prior Nix variant's `Debug` cmake
+# build and gives us `-g -O0` (clearer ASan stack traces and no compiler
+# elision of UBSan checks); `--strip=never` keeps DWARF inline so LSan's
+# symbol-name suppressions (`leak:lua*` in `.lsan_suppressions.txt`)
+# actually match — the same invariant the old override enforced via
+# `dontStrip = true` + `separateDebugInfo = false`.
+#
+# **Why `--per_file_copt` instead of `--copt` for `-fsanitize=…`.**
+# `rules_foreign_cc`'s `make()` / `cmake()` / `configure_make()` rules
+# collect `--copt` flags from the cc toolchain and forward them to the
+# upstream build via CFLAGS / CXXFLAGS. Adding `--copt=-fsanitize=address`
+# poisons kakadu's hand-written Makefile (which builds `libkdu.a` /
+# `libkdu_aux.a` in `@kakadu`) and the autotools/cmake wrappers around
+# openssl, exiv2, tiff, etc. Many of those Makefiles either ignore
+# foreign-injected CFLAGS or fail to mirror the matching `-fsanitize=…`
+# linkopt, leaving the foreign_cc rule with no `.a` to package.
+#
+# `--per_file_copt=<regex>@<flag>` is action-scoped — it applies only
+# when Bazel itself runs a compile action whose source file path matches
+# the regex, and is NOT consulted when foreign_cc collects toolchain
+# flags for its env-var forwarding. Scoping by `^(src|shttps|fuzz|test)/`
+# instruments every first-party translation unit while leaving the
+# foreign_cc deps unsanitised. Mixing instrumented sipi code with
+# uninstrumented kakadu/openssl/png/etc. is supported by ASan and UBSan;
+# the previous CMake build had the exact same property — the
+# `sanitizer_config` INTERFACE library only attached to `sipi` and
+# `libsipi_testable`, never to the `ext/*` foreign_cc targets.
+#
+# `--linkopt=-fsanitize=…` stays global because foreign_cc's `make()` /
+# `cmake()` rules don't read Bazel linkopts; only the final first-party
+# `cc_binary` link picks them up, which is what we want (the runtime
+# library and its initializers must reach the sipi binary's link line).
+#
+# `-fno-omit-frame-pointer` and `-fno-optimize-sibling-calls` stay as
+# global `--copt`. Both are advisory hints harmless to the foreign_cc
+# deps; keeping them across the whole stack means stack traces from any
+# layer (kakadu / libtiff / openssl / sipi) carry frame pointers and
+# don't get mangled by tail-call optimisation when ASan unwinds.
+#
+# **Note for cmake() deps.** `--compilation_mode=dbg` also propagates
+# into `rules_foreign_cc`'s `cmake()` rules as `-DCMAKE_BUILD_TYPE=Debug`.
+# Two separate hazards follow from that:
+#   1. Some upstream `CMakeLists.txt` files apply
+#      `set_target_properties(... DEBUG_POSTFIX "d")` (libpng, sentry, …)
+#      or `"-d"` (curl) in Debug mode and produce e.g. `libpng16d.a` /
+#      `libcurl-d.a` instead of the unsuffixed name, breaking the
+#      foreign_cc `out_static_libs` invariant.
+#   2. Per-config IMPORTED-target files (`XConfig-debug.cmake`,
+#      `XConfig-relwithdebinfo.cmake`) only exist for the matching
+#      build type; downstream cmake() consumers that resolve a
+#      different config fail with
+#      `IMPORTED_LOCATION not set for … configuration "<X>"`.
+# Each cmake() ext/* dep pins `cache_entries["CMAKE_BUILD_TYPE"] =
+# "RelWithDebInfo"`; that value beats the auto-injected `=Debug` in
+# `rules_foreign_cc`'s `cmake_script.bzl`, so the deps build uniformly
+# at -O2 -g and ship `XConfig-relwithdebinfo.cmake` files that match
+# downstream resolution. Sipi's own first-party translation units are
+# unaffected — they don't go through cmake; their `-fsanitize=…`
+# reaches them via the `--per_file_copt` block above.
+
+build:asan --compilation_mode=dbg
+build:asan --strip=never
+build:asan --copt=-fno-omit-frame-pointer
+build:asan --copt=-fno-optimize-sibling-calls
+build:asan --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsanitize=address
+build:asan --linkopt=-fsanitize=address
+
+build:ubsan --compilation_mode=dbg
+build:ubsan --strip=never
+build:ubsan --copt=-fno-omit-frame-pointer
+build:ubsan --copt=-fno-optimize-sibling-calls
+build:ubsan --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsanitize=undefined
+# Disable the vptr check. `-fsanitize=undefined` activates it by default,
+# but verifying RTTI at run time requires a UBSan symbol set
+# (`__ubsan_vptr_type_cache`, `__ubsan_handle_dynamic_type_cache_miss`)
+# that toolchains_llvm's compiler-rt only ships in the dynamic
+# `libclang_rt.ubsan_standalone_cxx-…so` form; the toolchain's link
+# line forces static `-l:libc++.a -l:libc++abi.a`, so the dynamic
+# runtime is never pulled in and lld fails the link with `undefined
+# symbol: __ubsan_vptr_type_cache`. The other UBSan checks (integer
+# overflow, null deref, signed-integer wraparound, alignment, etc.)
+# don't need the C++-specific runtime and link cleanly. Sipi's prior
+# CMake build worked with full UBSan because the Nix toolchain linked
+# C++ dynamically and the runtime resolved against the system libc++.
+build:ubsan --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fno-sanitize=vptr
+build:ubsan --linkopt=-fsanitize=undefined
+build:ubsan --linkopt=-fno-sanitize=vptr
+
 # ── Test ───────────────────────────────────────────────────────────────────
 # Surface test stderr immediately on failure rather than collecting it into
 # bazel-testlogs — useful for inner-loop iteration. CI flips this off.

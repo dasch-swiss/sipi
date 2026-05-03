@@ -1,4 +1,4 @@
-# Sanitizer build: ASan + UBSan on unit tests and e2e suite.
+# Sanitizer build: ASan + UBSan on the e2e suite.
 # Catches memory errors (buffer overflow, use-after-free, leaks) and
 # undefined behavior that functional tests miss.
 #
@@ -7,9 +7,12 @@
 #
 # Also available on-demand via workflow_dispatch.
 #
-# Unit tests run inside the Nix sandbox via `just nix-build-sanitized`
-# (doCheck = enableTests in package.nix). Any ASan/UBSan finding in the
-# unit suite fails the build before the e2e step even starts.
+# The build step uses Bazel (`just bazel-build-sanitized` ⇒
+# `bazel build --config=asan --config=ubsan //src:sipi`); the e2e step
+# then exercises the resulting `bazel-bin/src/sipi` binary under
+# `just nix-test-e2e` with `LSAN_OPTIONS` and `ASAN_OPTIONS` set as
+# below. Unit-test sanitizer coverage moves to Bazel `cc_test`
+# execution in DEV-6348 (PR Y+6) — until then this workflow is e2e-only.
 
 permissions:
   contents: read
@@ -21,11 +24,21 @@ on:
       - 'shttps/**'
       - 'include/**'
       - 'test/**'
+      - 'tools/**'
+      - 'ext/**'
       - 'CMakeLists.txt'
       - 'flake.nix'
       - 'flake.lock'
       - 'package.nix'
       - 'justfile'
+      - '.bazelrc'
+      - '.bazelversion'
+      - 'MODULE.bazel'
+      - 'MODULE.bazel.lock'
+      - 'BUILD.bazel'
+      - '**/BUILD.bazel'
+      - 'bazel/**'
+      - '.github/workflows/sanitizer.yml'
   workflow_dispatch:
 
 name: sanitizer
@@ -40,6 +53,23 @@ jobs:
     timeout-minutes: 30
     name: asan-ubsan / amd64
     steps:
+      # Sanitizer builds compile every foreign_cc ext lib under
+      # `--compilation_mode=dbg` (`-O0 -g`) — larger object files than the
+      # CI default. Without freeing pre-installed SDKs first, the LLVM 19
+      # toolchain (~3 GB) plus 22 ext libs plus the Bazel disk cache blow
+      # past ubuntu-24.04's ~14 GB free quota and the build dies with
+      # `No space left on device`. Mirrors `.github/workflows/bazel-build.yml`.
+      - name: free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
+
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
@@ -56,6 +86,23 @@ jobs:
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
+      # Bazel disk cache. Without this, every sanitizer-gate run rebuilds
+      # all foreign_cc ext libs (kakadu, openssl, exiv2, libtiff, …) under
+      # `--compilation_mode=dbg` from cold — easily 10+ minutes per run
+      # and at risk of hitting the 30-minute job timeout on bandwidth-poor
+      # runners. Cache strategy mirrors `.github/workflows/bazel-build.yml`
+      # (DEV-6371): `actions/cache` directly (not setup-bazel's built-in)
+      # to avoid 0-byte poisoning on analysis-phase failures, and a
+      # targeted key formula that excludes app/test sources whose changes
+      # don't affect ext/ action keys.
+      - uses: actions/cache@v5
+        id: bazel-disk-cache
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-disk-sanitizer-linux-x86_64-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'BUILD.bazel', 'ext/**/BUILD.bazel', 'bazel/**', 'patches/**', 'platforms/**', '.bazelrc', '.bazelversion', 'flake.lock') }}
+          restore-keys: |
+            bazel-disk-sanitizer-linux-x86_64-
       # `just` drives the build; `llvmPackages_19.llvm` ships
       # `llvm-symbolizer`, which ASan/LSan need to resolve the
       # `(/nix/store/.../sipi+0xOFFSET)` frames into function names.
@@ -63,28 +110,67 @@ jobs:
       # `.lsan_suppressions.txt` (`leak:lua*`) can never match.
       - run: nix profile install --inputs-from . nixpkgs#just nixpkgs#llvmPackages_19.llvm
 
-      - name: Build with sanitizers (ASan + UBSan) — unit tests run in sandbox
+      - name: Build with sanitizers (ASan + UBSan)
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: just nix-build-sanitized
+        # Wrap with `nix develop --command` so bazelisk runs inside the
+        # dev shell. This mirrors `.github/workflows/bazel-build.yml`'s
+        # invocation and is the only way `gh` (used by the kakadu
+        # repository_rule), `cmake`/`perl`/`pkg-config`/`autoconf`/
+        # `automake`/`libtoolize` (used by foreign_cc rules), and the
+        # Nix-injected `NIX_LDFLAGS`/`ACLOCAL_PATH` (forwarded into
+        # foreign_cc actions via `.bazelrc:--action_env=*`) reach the
+        # build. Running bare `just bazel-build-sanitized` falls back
+        # to the runner's pre-installed bazelisk + system tooling,
+        # which produces an inconsistent foreign_cc compile env and
+        # surfaces as kakadu output-extraction failures on linux-x86_64
+        # specifically.
+        # `--disk_cache` is set on the recipe's `*FLAGS` positional so bash
+        # expands `$HOME` here — Bazel does not expand env vars in
+        # .bazelrc paths (bazelbuild/bazel#15856). Path matches the
+        # `actions/cache` step above so the cache is restored and saved
+        # across CI runs.
+        run: nix develop --command bash -c "just bazel-build-sanitized --disk_cache=\$HOME/.cache/bazel-disk"
+
+      - name: dump foreign_cc Make.log files on failure
+        if: failure()
+        # Same pattern as `bazel-build.yml`. When a `make()` /
+        # `cmake()` foreign_cc rule fails, rules_foreign_cc captures
+        # the underlying make/cmake stderr into a per-action `*.log`
+        # file. With the build invoked above using
+        # `--verbose_failures` (set in the recipe) the action's
+        # command line is shown but the log file is not auto-cat'd —
+        # do it here so the actual failure cause reaches the CI log.
+        run: |
+          OUTPUT_BASE=$(nix develop --command bash -c 'bazelisk info output_base' 2>/dev/null)
+          if [ -n "$OUTPUT_BASE" ]; then
+            find "$OUTPUT_BASE" -path '*foreign_cc*' -name '*.log' -print 2>/dev/null | while read -r log; do
+              echo ""
+              echo "═══════════════════════════════════════════════════"
+              echo "Foreign_cc log: $log"
+              echo "═══════════════════════════════════════════════════"
+              cat "$log" || true
+            done
+          fi
 
       - name: Run e2e tests under sanitizers
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-          SIPI_BIN: ${{ github.workspace }}/result/bin/sipi
+          SIPI_BIN: ${{ github.workspace }}/bazel-bin/src/sipi
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=0:log_path=/tmp/asan-e2e
           LSAN_OPTIONS: suppressions=${{ github.workspace }}/.lsan_suppressions.txt
         # `nix-test-e2e` consumes the `.#e2e-tests` Nix derivation —
         # no cargo on PATH needed, so the `nix develop` wrap is gone.
         # ASan / LSan run in the sipi binary (already built sanitized
-        # by the previous step); the test client doesn't need to be
-        # sanitized, so building it via crane in a regular sandbox is
-        # fine (filter-syscalls only matters for the sanitizer build).
+        # by the previous step via `bazel build --config=asan --config=ubsan`);
+        # the test client itself doesn't need to be sanitized, so the
+        # crane-built e2e binaries from `.#e2e-tests` are fine as-is.
         # Pass `ASAN_SYMBOLIZER_PATH` explicitly so the symbolizer
         # is found regardless of what's on PATH at exec time
         # (sanitizers honour this env before doing PATH lookup); the
-        # `.#sanitized` variant in flake.nix keeps DWARF inline so
-        # the symbolizer has something to read.
+        # Bazel sanitized config keeps DWARF inline (`--strip=never`
+        # + `--compilation_mode=dbg` in `.bazelrc`) so the symbolizer
+        # has something to read.
         run: |
           export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer)"
           just nix-test-e2e
@@ -94,9 +180,10 @@ jobs:
         run: |
           # Check for actual findings (SUMMARY lines), not just file existence.
           # ASan always writes a log file when log_path is set, even with zero
-          # findings. Unit-test findings fail the nix-build-sanitized step
-          # directly (sandbox halts on first error), so this step only covers
-          # the e2e suite.
+          # findings. The Bazel build step doesn't run unit tests (Bazel
+          # `bazel build` is build-only), so this step covers the e2e suite
+          # only — unit-test sanitizer coverage returns when Y+6 cuts the
+          # unit-test execution path to Bazel `cc_test`.
           HAS_FINDINGS=false
           if grep -q "SUMMARY:" /tmp/asan-e2e.* 2>/dev/null; then
             HAS_FINDINGS=true

@@ -13,6 +13,31 @@ cmake(
     lib_source = "@png//:all_srcs",
     cache_entries = {
         "CMAKE_INSTALL_LIBDIR": "lib",
+        # Override Bazel's auto-injected `CMAKE_BUILD_TYPE=Debug` (which
+        # foreign_cc sets from `--compilation_mode=dbg` under
+        # `--config=asan` / `--config=ubsan`). `RelWithDebInfo` (-O2 -g)
+        # is what we actually want for unsanitised foreign_cc deps:
+        #   - No `DEBUG_POSTFIX`. Several upstream `CMakeLists.txt` —
+        #     libpng (`d`), curl (`-d`), and others — apply
+        #     `set_target_properties(... DEBUG_POSTFIX …)` only when
+        #     `CMAKE_BUILD_TYPE=Debug`, which renames the static lib and
+        #     breaks the foreign_cc `out_static_libs` invariant check.
+        #   - Consistent IMPORTED-target config across deps. `cmake_install`
+        #     emits per-config `XConfig-<lower>.cmake` files; downstream
+        #     consumers (sentry's CMakeLists imports `CURL::libcurl_static`)
+        #     pick the config matching their own build type. If curl
+        #     installed as Debug (`CURLTargets-debug.cmake`) but sentry
+        #     resolves at RelWithDebInfo, the import fails with
+        #     `IMPORTED_LOCATION not set for … configuration "RelWithDebInfo"`.
+        #     Pinning every cmake() ext/* dep to RelWithDebInfo keeps
+        #     them in lock-step.
+        # The `cache_entries[CMAKE_BUILD_TYPE]` value takes precedence
+        # over the auto-injected one in `rules_foreign_cc`'s
+        # `foreign_cc/private/cmake_script.bzl`.
+        # Sipi's own (sanitised) translation units are unaffected — they
+        # don't go through cmake; their `-fsanitize=…` reaches them via
+        # `--per_file_copt` in `.bazelrc`.
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "PNG_SHARED": "OFF",
         "PNG_STATIC": "ON",
         "PNG_TESTS": "OFF",
@@ -39,6 +64,16 @@ cmake(
         "ZLIB_INCLUDE_DIR": "$$EXT_BUILD_DEPS/zlib/include",
         "ZLIB_LIBRARY": "$$EXT_BUILD_DEPS/zlib/lib/libz.a",
     },
+    # `cache_entries[CMAKE_BUILD_TYPE]` only affects the cmake CONFIGURE
+    # step. The subsequent `cmake --build … --config <X>` and
+    # `cmake --install … --config <X>` commands read the `configuration`
+    # rule attribute (see `rules_foreign_cc/foreign_cc/cmake.bzl`), which
+    # otherwise defaults to "Debug" under `--compilation_mode=dbg`.
+    # Without this, cmake would build/install at "Debug" against a tree
+    # configured for "RelWithDebInfo", and `install(EXPORT …)` would emit
+    # no per-config target file — downstream cmake consumers then fail
+    # at `IMPORTED_LOCATION not set for … configuration "RelWithDebInfo"`.
+    configuration = "RelWithDebInfo",
     out_static_libs = ["libpng16.a"],
     set_file_prefix_map = True,
     deps = ["//ext/zlib:zlib"],
