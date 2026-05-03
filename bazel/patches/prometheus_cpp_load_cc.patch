@@ -1,0 +1,19 @@
+Add explicit `load()` for `cc_library` to upstream `core/BUILD.bazel`.
+
+The BCR module `prometheus-cpp@1.3.0.bcr.2` is unmodified upstream
+(only `MODULE.bazel` is patched by the BCR repack) and still uses bare
+`cc_library(...)` without a `load("@rules_cc//cc:defs.bzl", "cc_library")`.
+Bazel 9 removed the legacy global `cc_library` symbol, so analysis fails
+with "rule has been removed". The one-line `load()` here un-breaks the
+upstream BUILD without touching project-wide rule discipline. Drop this
+patch when prometheus-cpp publishes a Bazel-9-clean BCR rev (track at
+https://github.com/jupp0r/prometheus-cpp).
+
+--- a/core/BUILD.bazel
++++ b/core/BUILD.bazel
+@@ -1,4 +1,5 @@
+ load("//bazel:export_header.bzl", "generate_dummy_export_header")
++load("@rules_cc//cc:defs.bzl", "cc_library")
+
+ generate_dummy_export_header(
+     name = "export_header",

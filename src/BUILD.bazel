@@ -212,7 +212,7 @@ cc_library(
         "//ext/jansson:jansson",
         "//ext/sqlite3:sqlite3",
         "//ext/sentry:sentry",
-        "//ext/prometheus-cpp:prometheus-cpp",
+        "@prometheus_cpp//core",
         "//ext/curl:curl",
         "//ext/openssl:openssl",
         "//ext/jpeg:jpeg",
