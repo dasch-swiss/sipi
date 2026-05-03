@@ -8,9 +8,14 @@
 # On finding: workflow fails. The `fuzz-crashes` artifact (90-day retention)
 # contains the reproducer files plus `crash-summary.md` with annotated bytes.
 #
-# Build flow: `just nix-build-fuzz` produces
-# `result/bin/iiif_handler_uri_parser_fuzz`. `just nix-run-fuzz` runs it
-# against a live corpus + read-only seed corpus.
+# Build flow: `just bazel-build-fuzz` produces
+# `bazel-bin/fuzz/handlers/iiif_handler_uri_parser_fuzz` via
+# `bazel build --config=fuzz` (DEV-6345, PR Y+3 — replaces the prior
+# `just nix-build-fuzz` / `.#fuzz` derivation flow). `just bazel-run-fuzz`
+# runs the harness against a live corpus + read-only seed corpus; `bazel
+# run` resolves cwd to `$BUILD_WORKSPACE_DIRECTORY`, so corpus paths and
+# crash-file globs (`crash-*` / `oom-*` / `timeout-*`) keep matching the
+# workspace-relative paths the artifact-collection steps below expect.
 
 permissions:
   contents: read
@@ -38,6 +43,23 @@ jobs:
     timeout-minutes: 60
     name: fuzz / iiif-uri-parser
     steps:
+      # Bazel-driven fuzz builds compile every foreign_cc ext lib that
+      # transitively reaches `:fuzz_subset` (curl, jansson, libmagic, lua,
+      # openssl, sqlite3, zlib via shttps_headers). Without freeing
+      # pre-installed SDKs first, the LLVM 19 toolchain (~3 GB) plus the
+      # Bazel disk cache blow past ubuntu-24.04's ~14 GB free quota.
+      # Mirrors `.github/workflows/sanitizer.yml` and `bazel-build.yml`.
+      - name: free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
+
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
@@ -54,7 +76,21 @@ jobs:
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-      - run: nix profile install nixpkgs#just
+
+      # Bazel disk cache. Without this, every fuzz run rebuilds the LLVM
+      # toolchain + foreign_cc ext libs reachable from `:fuzz_subset` from
+      # cold — easily 10+ minutes per run. Cache strategy mirrors
+      # `bazel-build.yml` / `sanitizer.yml`: `actions/cache` directly (not
+      # `setup-bazel`'s built-in disk cache, which 0-byte-poisons on
+      # analysis-phase failures) and a targeted key formula that excludes
+      # app/test sources whose changes don't affect ext/ action keys.
+      - uses: actions/cache@v5
+        id: bazel-disk-cache
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-disk-fuzz-linux-x86_64-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'BUILD.bazel', 'ext/**/BUILD.bazel', 'bazel/**', 'patches/**', 'tools/fuzz/BUILD.bazel', '.bazelrc', '.bazelversion', 'flake.lock') }}
+          restore-keys: |
+            bazel-disk-fuzz-linux-x86_64-
 
       - name: Find last successful fuzz run
         id: last-run
@@ -78,7 +114,15 @@ jobs:
       - name: Build fuzz target
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: just nix-build-fuzz
+        # `nix develop --command` mirrors `sanitizer.yml`'s wrapper — it
+        # activates the dev shell so bazelisk + `gh` (used by the kakadu
+        # repository_rule) + the foreign_cc host tools (`cmake`, `perl`,
+        # `pkg-config`, `autoconf`, `automake`, `libtoolize`) are on PATH,
+        # and `NIX_LDFLAGS` / `ACLOCAL_PATH` are set. Bare `just
+        # bazel-build-fuzz` falls back to the runner's preinstalled
+        # tooling and produces inconsistent foreign_cc compile env.
+        # `--disk_cache` matches `actions/cache@v5` step above.
+        run: nix develop --command bash -c "just bazel-build-fuzz --disk_cache=\$HOME/.cache/bazel-disk"
 
       - name: Prepare live corpus (merge previous-run findings)
         run: |
@@ -97,8 +141,14 @@ jobs:
         run: |
           set -o pipefail
           if [[ ! "$FUZZ_DURATION" =~ ^[0-9]+$ ]]; then echo "Invalid duration: $FUZZ_DURATION"; exit 1; fi
-          # Fuzzer binary from the Nix build is self-contained — no dev shell needed.
-          just nix-run-fuzz fuzz-corpus-live "$FUZZ_DURATION" fuzz/handlers/corpus \
+          # `bazel run` re-uses the disk cache populated by the build step
+          # so this invocation only forwards args; no rebuild expected.
+          # `nix develop --command` activates the dev shell — same reason
+          # the build step needs it. cwd inside the dev shell is the repo
+          # root, which `bazel run` resolves to `$BUILD_WORKSPACE_DIRECTORY`,
+          # so `fuzz-corpus-live` and `fuzz/handlers/corpus` are still
+          # workspace-relative (matches the prior `nix-run-fuzz` flow).
+          nix develop --command bash -c "just bazel-run-fuzz fuzz-corpus-live $FUZZ_DURATION fuzz/handlers/corpus" \
             2>&1 | tee fuzz-output.log
           echo "Corpus now has $(ls fuzz-corpus-live | wc -l) inputs"
 

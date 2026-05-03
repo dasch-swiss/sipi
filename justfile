@@ -96,11 +96,6 @@ nix-build-release:
     {{_nix_build}} .#release
     @echo "Binary at: $(readlink result)/bin/sipi"
 
-# Fuzz harness build: produces the libFuzzer binary only (no sipi runtime files).
-nix-build-fuzz:
-    {{_nix_build}} .#fuzz
-    @echo "Fuzzer at: $(readlink result)/bin/iiif_handler_uri_parser_fuzz"
-
 # Uses `.#docker` (buildLayeredImage → static tarball) rather than
 # `.#docker-stream` (streamLayeredImage → Linux Python wrapper script).
 # The CI per-arch recipes use the streaming variant for speed (no temp
@@ -213,6 +208,89 @@ bazel-build-sanitized *FLAGS='':
     bazel build --config=asan --config=ubsan --verbose_failures --stamp {{FLAGS}} //src:sipi
     @echo "Binary at: $(pwd)/bazel-bin/src/sipi"
 
+# Resolve the per-host fuzz `--platforms=` label. linux-x86_64 → libstdc++
+# toolchain (`@llvm_toolchain_fuzz`) for libFuzzer ABI parity with the
+# prior CMake build. darwin-aarch64 → default `@llvm_toolchain` (Apple SDK
+# + libc++; libFuzzer's ABI on darwin). Other host tuples are rejected
+# loudly — the libFuzzer harness is supported on linux-x86_64 (CI) and
+# darwin-aarch64 (local dev) only. Used as a `recipe: dep` so both
+# `bazel-build-fuzz` and `bazel-run-fuzz` share the same host detection.
+_fuzz-platform:
+    #!/usr/bin/env bash
+    case "$(uname -s)-$(uname -m)" in
+        Linux-x86_64)   echo "//tools/fuzz:linux_x86_64_fuzz" ;;
+        Darwin-arm64)   echo "//tools/fuzz:darwin_aarch64_fuzz" ;;
+        *)
+            echo "fuzz harness: unsupported host $(uname -s)-$(uname -m)." >&2
+            echo "  Supported: linux-x86_64 (CI) and darwin-aarch64 (local dev)." >&2
+            echo "  linux-aarch64 is out of scope; use OrbStack/colima or workflow_dispatch." >&2
+            exit 1
+            ;;
+    esac
+
+# Fuzz harness build: produces the libFuzzer binary only. Replaces the
+# deleted `.#fuzz` Nix variant (DEV-6345, PR Y+3). The `--platforms=` is
+# resolved by `_fuzz-platform` from the host (`uname`) — linux-x86_64
+# routes to the libstdc++ toolchain, darwin-aarch64 to the default
+# libc++ toolchain. The `target_compatible_with = ["//tools/fuzz:fuzz_enabled"]`
+# gate on the binary activates under both. CI's `fuzz.yml` workflow's
+# `Build fuzz target` step invokes this recipe.
+bazel-build-fuzz *FLAGS='':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    PLATFORM=$(just _fuzz-platform)
+    bazel build --config=fuzz --platforms="$PLATFORM" --verbose_failures {{FLAGS}} //fuzz/handlers:iiif_handler_uri_parser_fuzz
+    echo "Fuzzer at: $(pwd)/bazel-bin/fuzz/handlers/iiif_handler_uri_parser_fuzz"
+
+# Run the libFuzzer harness against a live corpus (read+write) for a bounded
+# time budget. Optional read-only seed corpus can be passed as the third arg.
+# Argument triple matches today's deleted `nix-run-fuzz` recipe verbatim so
+# `fuzz.yml`'s `Run fuzzer` step needs only the recipe-name swap.
+#
+# Exit 0 = time budget reached with no findings; non-zero = finding (crash,
+# timeout, or oom).
+#
+# `-timeout=1`: any single input that takes >1 s to parse is reported as a
+# `timeout-*` finding instead of being absorbed into the run budget.
+# `-rss_limit_mb=1024`: any allocation past 1 GiB is reported as an `oom-*`
+# finding instead of OOM-killing the runner. Both libFuzzer flags are
+# emitted by the harness binary, not by Bazel — the `bazel run -- <args>`
+# form forwards everything past `--` to the binary's argv directly.
+#
+# `bazel run` resolves the binary's `cwd` to `$BUILD_WORKSPACE_DIRECTORY`
+# (the workspace root), so `{{corpus}}` and `{{seed}}` are interpreted
+# relative to the same in-tree paths today's Nix-based recipe used.
+# Crash/timeout/oom artifacts (`crash-*`, `timeout-*`, `oom-*`) land in
+# the workspace root; `fuzz.yml`'s `Collect crash details` glob keeps
+# working unchanged.
+bazel-run-fuzz corpus duration seed="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    PLATFORM=$(just _fuzz-platform)
+
+    # Build first (cached after the first invocation).
+    bazel build --config=fuzz --platforms="$PLATFORM" --verbose_failures //fuzz/handlers:iiif_handler_uri_parser_fuzz
+
+    args=("{{corpus}}")
+    [ -n "{{seed}}" ] && args+=("{{seed}}")
+
+    # Apple's ASan runtime (`libclang_rt.asan_osx_dynamic.dylib`) is always
+    # dynamically linked, and toolchains_llvm's binary references it via
+    # `@rpath`. Under `bazel run`, cwd is the workspace root, so the
+    # binary's `external/toolchains_llvm…` relative rpath does not
+    # resolve. Setting DYLD_LIBRARY_PATH and exec'ing the binary directly
+    # avoids that and also dodges macOS SIP, which strips DYLD_* across
+    # `bazel run`'s subprocess chain. cwd is the workspace root either
+    # way so corpus paths and crash-file globs keep working unchanged.
+    if [ "$(uname -s)" = "Darwin" ]; then
+        EXECROOT=$(bazel info execution_root)
+        export DYLD_LIBRARY_PATH="$EXECROOT/external/toolchains_llvm++llvm+llvm_toolchain_llvm/lib/clang/19/lib/darwin${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+    fi
+
+    exec ./bazel-bin/fuzz/handlers/iiif_handler_uri_parser_fuzz \
+        "${args[@]}" \
+        -max_total_time={{duration}} -timeout=1 -rss_limit_mb=1024 -print_final_stats=1
+
 #####################################
 # Tests (consume $SIPI_BIN, default ./result/bin/sipi)
 #####################################
@@ -300,31 +378,6 @@ nix-valgrind: nix-build
     SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/result/bin/sipi}"
     valgrind --leak-check=yes --track-origins=yes "$SIPI_BIN" --config={{justfile_directory()}}/config/sipi.config.lua
 
-# Run the libFuzzer harness against a live corpus (read+write) for a bounded
-# time budget. Optional read-only seed corpus can be passed as the third arg.
-# Exit 0 = time budget reached with no findings; non-zero = finding (crash,
-# timeout, or oom).
-#
-# `-timeout=1`: any single input that takes >1 s to parse is reported as a
-# `timeout-*` finding instead of being absorbed into the run budget.
-# `-rss_limit_mb=1024`: any allocation past 1 GiB is reported as an `oom-*`
-# finding instead of OOM-killing the runner.
-nix-run-fuzz corpus duration seed="":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    FUZZ_BIN="${FUZZ_BIN:-{{justfile_directory()}}/result/bin/iiif_handler_uri_parser_fuzz}"
-    if [ ! -x "$FUZZ_BIN" ]; then
-        echo "fuzzer binary not found at $FUZZ_BIN. Run 'just nix-build-fuzz' first." >&2
-        exit 1
-    fi
-    if [ -n "{{seed}}" ]; then
-        exec "$FUZZ_BIN" "{{corpus}}" "{{seed}}" \
-            -max_total_time={{duration}} -timeout=1 -rss_limit_mb=1024 -print_final_stats=1
-    else
-        exec "$FUZZ_BIN" "{{corpus}}" \
-            -max_total_time={{duration}} -timeout=1 -rss_limit_mb=1024 -print_final_stats=1
-    fi
-
 # Download CI fuzz corpus and merge into seed corpus
 fuzz-corpus-update:
     #!/usr/bin/env bash
@@ -398,7 +451,6 @@ docs-install-requirements:
 # Clean build artifacts (cmake trees from the dev-shell inner loop + Nix result symlinks)
 clean:
     rm -rf build/
-    rm -rf build-fuzz/
     rm -rf cmake-build-relwithdebinfo-inside-docker/
     rm -rf site/
     rm -f result result-* || true

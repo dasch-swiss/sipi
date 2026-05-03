@@ -28,6 +28,37 @@ load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
+# ── Cross-package surface for the fuzz subset (DEV-6345) ───────────────────
+# The IIIF URI parser fuzz harness recompiles `iiif_handler.cpp` under the
+# libFuzzer instrumentation flags as part of `//shttps:fuzz_subset` (where
+# the four shttps cpps it joins also live). Linking the full `:sipi_lib`
+# archive into the fuzz binary would inflate the libFuzzer corpus
+# search-space cost (the explicit subset in `fuzz/handlers/CMakeLists.txt:28-29`
+# is what we mirror), so the only `//src` surface the fuzz graph reaches
+# is the single TU `iiif_handler.cpp` plus its companion header.
+#
+# `:iiif_handler_hdrs` makes `#include "handlers/iiif_handler.hpp"` resolve
+# explicitly — both for `iiif_handler.cpp` itself when compiled inside
+# `//shttps:fuzz_subset` and for the fuzz harness target.cpp at
+# `//fuzz/handlers:iiif_handler_uri_parser_fuzz` (which uses the same
+# `handlers/`-prefixed include form). Without the header cc_library, that
+# include resolution would rely on Bazel's workspace-root quote_includes
+# default — fragile under future sandbox-strip changes.
+exports_files(
+    ["handlers/iiif_handler.cpp"],
+    visibility = ["//shttps:__pkg__"],
+)
+
+cc_library(
+    name = "iiif_handler_hdrs",
+    hdrs = ["handlers/iiif_handler.hpp"],
+    includes = ["."],
+    visibility = [
+        "//shttps:__pkg__",
+        "//fuzz/handlers:__pkg__",
+    ],
+)
+
 # ── generated/SipiVersion.h ────────────────────────────────────────────────
 # Bazel re-evaluates `STABLE_*` keys on every build, but downstream actions
 # invalidate only when a value *changes* — editing an unrelated .cpp leaves

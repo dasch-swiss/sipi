@@ -241,6 +241,66 @@ build:ubsan --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fno-
 build:ubsan --linkopt=-fsanitize=undefined
 build:ubsan --linkopt=-fno-sanitize=vptr
 
+# ── Fuzz harness — opt-in via --config=fuzz ────────────────────────────────
+# Replaces the deleted `.#fuzz` Nix variant. CI's `fuzz.yml` workflow
+# (`Build fuzz target` and `Run fuzzer` steps) consumes it via
+# `just bazel-build-fuzz` and `just bazel-run-fuzz <corpus> <duration>
+# <seed>`.
+#
+# `--platforms=//tools/fuzz:<host>_fuzz` is set by the justfile recipes
+# based on `uname` (linux-x86_64 → `linux_x86_64_fuzz`, darwin-aarch64 →
+# `darwin_aarch64_fuzz`) — both platforms carry the
+# `//tools/fuzz:fuzz_enabled` constraint, which:
+#
+#   1. Routes toolchain resolution. On linux-x86_64, `@llvm_toolchain_fuzz`
+#      wins (libstdc++ for libFuzzer ABI; mirrors today's
+#      `pkgs.llvmPackages_19.stdenv` override in `flake.nix:325-329`). On
+#      darwin-aarch64, the default `@llvm_toolchain` wins (Apple SDK +
+#      libc++, which is libFuzzer's ABI on darwin). See MODULE.bazel for
+#      the registration-order rationale that makes this work.
+#
+#   2. Activates the `target_compatible_with = ["//tools/fuzz:fuzz_enabled"]`
+#      gate on `//fuzz/handlers:iiif_handler_uri_parser_fuzz`, so it
+#      builds under `--config=fuzz` and skips analysis otherwise —
+#      equivalent to today's `if (CMAKE_CXX_COMPILER_ID MATCHES Clang)`
+#      gate in `fuzz/handlers/CMakeLists.txt`.
+#
+# Sanitizer flags mirror today's CMake build:
+#   * `-fsanitize=fuzzer-no-link` (compile) + `-fsanitize=fuzzer` (link) —
+#     libFuzzer harness instrumentation. Compile-side uses the
+#     `-no-link` variant so the runtime is added only at the binary's
+#     final link line, not pulled into every transitive `cc_library`.
+#   * `-fsanitize-coverage=trace-cmp` — `__sanitizer_cov_trace_*` callbacks
+#     for libFuzzer's value-profile heuristic (matches
+#     `fuzz/handlers/CMakeLists.txt:34`).
+#   * `-fsanitize=address` (compile + link) — today's fuzz target builds
+#     with ASan as well (`fuzz/handlers/CMakeLists.txt:35,40-41`).
+#
+# Compile flags are scoped to first-party translation units via
+# `--per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@<flag>`,
+# matching the asan/ubsan blocks above and for the same reason: a global
+# `--copt` poisons foreign_cc deps' CFLAGS / CXXFLAGS forwarding (see the
+# §"Why `--per_file_copt` instead of `--copt` for `-fsanitize=…`" rationale
+# in the asan block). Foreign_cc deps reachable from `//shttps:fuzz_subset`
+# (curl / jansson / libmagic / lua / openssl / sqlite3 / zlib via
+# `:shttps_headers`) build under default toolchain flags; only sipi's own
+# four shttps cpps + `iiif_handler.cpp` carry libFuzzer instrumentation,
+# matching the corpus-search-space minimisation goal of the explicit
+# subset.
+#
+# `--linkopt=-fsanitize=…` stays global because foreign_cc rules don't read
+# Bazel linkopts; only the final first-party `cc_binary` link picks them
+# up, which is what we want (the libFuzzer + ASan runtimes must reach the
+# fuzz binary's link line).
+# `--platforms` is set by the justfile recipe (per-host; see above), not
+# here — `.bazelrc` cannot pick a platform based on `uname`, but the
+# recipe can.
+build:fuzz --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsanitize=fuzzer-no-link
+build:fuzz --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsanitize-coverage=trace-cmp
+build:fuzz --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsanitize=address
+build:fuzz --linkopt=-fsanitize=fuzzer
+build:fuzz --linkopt=-fsanitize=address
+
 # ── Test ───────────────────────────────────────────────────────────────────
 # Surface test stderr immediately on failure rather than collecting it into
 # bazel-testlogs — useful for inner-loop iteration. CI flips this off.

@@ -24,7 +24,6 @@
                  # at build time.
 , cmakeBuildType ? "RelWithDebInfo"
 , enableCoverage ? false
-, enableFuzzing ? false
 , enableTests ? true
 , providedVersion ? null
 }:
@@ -73,9 +72,7 @@ stdenv.mkDerivation {
   # both `enableCoverage` and `enableTests` are true. The `debug` output
   # is added automatically by nixpkgs when `separateDebugInfo = true`
   # (below) on Linux — including it explicitly here would cause a
-  # `duplicate derivation output 'debug'` error. Gating `coverage` on
-  # `enableCoverage` lets `.#fuzz` (which replaces installPhase via
-  # overrideAttrs) skip the marker-directory dance.
+  # `duplicate derivation output 'debug'` error.
   outputs = [ "out" ] ++ lib.optional enableCoverage "coverage";
 
   nativeBuildInputs = [
@@ -105,8 +102,6 @@ stdenv.mkDerivation {
     "-DCMAKE_BUILD_TYPE=${cmakeBuildType}"
   ] ++ lib.optionals enableCoverage [
     "-DCODE_COVERAGE=ON"
-  ] ++ lib.optionals enableFuzzing [
-    "-DSIPI_ENABLE_FUZZ=ON"
   ] ++ lib.optionals enableTests [
     "-DBUILD_TESTING=ON"
     "-DGTEST_LOCAL_ARCHIVE=${gtestArchive}"

@@ -1,0 +1,43 @@
+"""IIIF URI parser libFuzzer harness — DEV-6345 / plan §"PR Y+3".
+
+Replaces today's CMake fuzz target (`fuzz/handlers/CMakeLists.txt`,
+deleted in DEV-6345). Build via `just bazel-build-fuzz`; run via
+`just bazel-run-fuzz <corpus> <duration> <seed>`. Both recipes wrap
+`bazel build|run --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz`,
+which:
+
+  1. Selects platform `//tools/fuzz:linux_x86_64_fuzz`, routing toolchain
+     resolution to `@llvm_toolchain_fuzz` (libstdc++ for libFuzzer ABI).
+  2. Activates the `target_compatible_with = ["//tools/fuzz:fuzz_enabled"]`
+     gate on the binary — without `--config=fuzz` the target is skipped.
+  3. Injects `-fsanitize=fuzzer-no-link` + `-fsanitize-coverage=trace-cmp`
+     + `-fsanitize=address` (compile, scoped to first-party via
+     `--per_file_copt`) and `-fsanitize=fuzzer` + `-fsanitize=address`
+     (link) — see `.bazelrc` `build:fuzz` block.
+
+The four shttps cpps + `iiif_handler.cpp` that make up the harness's
+explicit subset live under `//shttps:fuzz_subset` (kept in shttps's
+package because four of its five sources are native there). The seed
+corpus stays committed under `fuzz/handlers/corpus/` and is exposed as
+`//fuzz/handlers/corpus:seed_corpus`. `data = [...]` makes it available
+in runfiles for `bazel test`; `bazel run` resolves seed paths via
+`$BUILD_WORKSPACE_DIRECTORY`, so today's `fuzz/handlers/corpus`
+workflow path keeps working unchanged.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+package(default_visibility = ["//visibility:private"])
+
+cc_binary(
+    name = "iiif_handler_uri_parser_fuzz",
+    srcs = ["iiif_handler_uri_parser_target.cpp"],
+    # Seed corpus reachable via runfiles for `bazel test` discovery; for
+    # `bazel run` the harness consumes the in-tree path under
+    # `$BUILD_WORKSPACE_DIRECTORY/fuzz/handlers/corpus` (today's
+    # `just nix-run-fuzz <corpus> <duration> fuzz/handlers/corpus`
+    # interface, preserved verbatim by the new bazel-run-fuzz recipe).
+    data = ["//fuzz/handlers/corpus:seed_corpus"],
+    target_compatible_with = ["//tools/fuzz:fuzz_enabled"],
+    deps = ["//shttps:fuzz_subset"],
+)

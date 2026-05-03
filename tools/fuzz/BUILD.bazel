@@ -1,0 +1,53 @@
+"""Fuzz toolchain selector — `--config=fuzz` platforms + constraint.
+
+`constraint_setting`/`constraint_value` defines the `fuzz_enabled` knob;
+the per-host platforms below carry it. The `bazel-build-fuzz` and
+`bazel-run-fuzz` justfile recipes detect the host and pin
+`--platforms=//tools/fuzz:<host>_fuzz`, which:
+
+  1. Routes toolchain resolution. On linux-x86_64 the platform's
+     `fuzz_enabled` constraint matches `@llvm_toolchain_fuzz` (registered
+     with the same constraint via `llvm.extra_target_compatible_with` —
+     see MODULE.bazel), which uses libstdc++ to match libFuzzer's ABI on
+     Linux. On darwin-aarch64 `@llvm_toolchain_fuzz` has no darwin sysroot
+     wired and toolchain resolution falls through to the default
+     `@llvm_toolchain` — Apple SDK + libc++, which is the libFuzzer ABI on
+     darwin anyway.
+  2. Toggles the `target_compatible_with = ["//tools/fuzz:fuzz_enabled"]`
+     gate on `//fuzz/handlers:iiif_handler_uri_parser_fuzz` from
+     incompatible-skip to compatible-build.
+
+Mirrors the design captured in plan §"Toolchain — hermetic LLVM 19.1.x"
+(libc++ vs libstdc++ split for fuzz needs a second registered toolchain),
+extended to darwin-aarch64 to preserve the local-fuzz UX the prior
+`.#fuzz` Nix variant supported. linux-aarch64 is intentionally omitted —
+the deployment target is amd64 only and fuzz CI never runs there.
+"""
+
+constraint_setting(name = "fuzz")
+
+constraint_value(
+    name = "fuzz_enabled",
+    constraint_setting = ":fuzz",
+    visibility = ["//visibility:public"],
+)
+
+platform(
+    name = "linux_x86_64_fuzz",
+    constraint_values = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+        ":fuzz_enabled",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+platform(
+    name = "darwin_aarch64_fuzz",
+    constraint_values = [
+        "@platforms//cpu:aarch64",
+        "@platforms//os:macos",
+        ":fuzz_enabled",
+    ],
+    visibility = ["//visibility:public"],
+)
