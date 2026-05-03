@@ -54,16 +54,23 @@ target_compile_options(mylib PRIVATE
 
 ### Sanitizer Flags (Debug/Test Builds)
 
-Enable address and undefined behavior sanitizers in debug builds:
+Enable address and undefined behavior sanitizers in Bazel via the
+`--config=asan` and `--config=ubsan` blocks in `.bazelrc`:
 
-```cmake
-if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR ENABLE_SANITIZERS)
-  target_compile_options(mylib PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
-  target_link_options(mylib PRIVATE -fsanitize=address,undefined)
-endif()
+```bash
+bazel build --config=asan --config=ubsan //src:sipi
+# or via the wrapper:
+just bazel-build-sanitized
 ```
 
-Run tests under sanitizers regularly to catch memory bugs and undefined behavior early. Thread sanitizer (`-fsanitize=thread`) is incompatible with ASan — run it separately.
+The configs apply `-fsanitize=address` / `-fsanitize=undefined` together
+with `-fno-omit-frame-pointer`, `-fno-optimize-sibling-calls`,
+`--compilation_mode=dbg`, and `--strip=never` — DWARF must stay inline
+so LSan's symbol-name suppressions in `.lsan_suppressions.txt` resolve.
+
+Run tests under sanitizers regularly to catch memory bugs and undefined
+behavior early. Thread sanitizer (`-fsanitize=thread`) is incompatible
+with ASan — run it separately.
 
 ---
 

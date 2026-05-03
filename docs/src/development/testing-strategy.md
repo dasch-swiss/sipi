@@ -701,7 +701,7 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 
 Memory leaks and undefined behavior are not a separate pyramid layer but a **build variant** that runs existing tests with compiler instrumentation. This is critical for sipi as a long-running C++ server where leaks accumulate.
 
-**Current state:** ASan+UBSan infrastructure is in place — `ENABLE_SANITIZERS` CMake option, `just nix-build-sanitized` (builds `.#sanitized` with tests running in the Nix sandbox), and nightly `sanitizer.yml` CI workflow. Known findings to triage on first run:
+**Current state:** ASan+UBSan infrastructure is in place — Bazel `--config=asan` and `--config=ubsan` blocks in `.bazelrc`, `just bazel-build-sanitized` (`bazel build --config=asan --config=ubsan //src:sipi`), and a `sanitizer.yml` CI workflow that exercises the e2e suite against the resulting binary. Known findings to triage on first run:
 
 - **DEV-6002: `SipiFilenameHash::operator=` memory leak** — `operator=` allocates `new vector<char>` without deleting the old `hash` pointer. Confirmed by code inspection. Fix: add `delete hash;` before the new allocation, or switch to `std::unique_ptr`.
 - **Potential: `SipiFilenameHash` copy constructor** — also `new`s without freeing, but only leaks if the destination object was previously constructed with a different hash (doesn't happen via typical usage).
@@ -719,12 +719,13 @@ Memory leaks and undefined behavior are not a separate pyramid layer but a **bui
 
 | Component | Status | Details |
 |-----------|--------|---------|
-| `ENABLE_SANITIZERS` CMake option | Done | `-fsanitize=address,undefined` on all targets |
-| `just nix-build-sanitized` | Done | Builds `.#sanitized` derivation (Debug + ASan + UBSan); unit tests run inside the Nix sandbox and fail the build on any finding |
-| Nightly CI (`sanitizer.yml`) | Done | PR + scheduled; unit tests in-sandbox, e2e out-of-sandbox with ASan log capture |
+| `--config=asan` / `--config=ubsan` in `.bazelrc` | Done | `-fsanitize=address` / `-fsanitize=undefined` plus `-fno-omit-frame-pointer`, `-fno-optimize-sibling-calls`, `--strip=never`, `--compilation_mode=dbg` (DWARF inline so `.lsan_suppressions.txt` symbol-name suppressions match) |
+| `just bazel-build-sanitized` | Done | Wraps `bazel build --config=asan --config=ubsan //src:sipi` |
+| PR CI (`sanitizer.yml`) | Done | Bazel-built binary at `bazel-bin/src/sipi`, e2e suite under `just nix-test-e2e` with ASan log capture; `.lsan_suppressions.txt` consumed by LSan via `LSAN_OPTIONS` |
+| Unit-test sanitizer coverage in CI | Returns at Y+6 | DEV-6348 cuts unit-test execution to Bazel `cc_test`; until then the Bazel-built binary covers e2e only |
 | TSan variant | Future | Optional nightly, separate from ASan (can't combine) |
 
-**Strategy:** Nightly CI job runs unit tests + e2e suite with ASan+UBSan. TSan as optional nightly variant. Not in PR CI (too slow).
+**Strategy:** PR CI runs the e2e suite against an ASan+UBSan-instrumented binary. Unit-test coverage under sanitizers will return when DEV-6348 (Y+6) cuts CI's unit-test execution to Bazel `cc_test`. TSan remains a future option.
 
 ## Cross-Cutting: Performance Regression Detection
 
@@ -783,7 +784,7 @@ insta::assert_json_snapshot!(info_json, {
 | Hurl contract tests | `just hurl-test` | PR CI | Declarative HTTP tests |
 | Python e2e tests | *(retired)* | — | Replaced by Rust e2e tests |
 | Fuzz testing | `.github/workflows/fuzz.yml` | Nightly | libFuzzer corpus growth |
-| Sanitizer builds | `just nix-build-sanitized` (`.#sanitized`) | PR + Nightly | ASan+UBSan; unit tests in-sandbox, e2e out-of-sandbox |
+| Sanitizer builds | `just bazel-build-sanitized` (`bazel build --config=asan --config=ubsan //src:sipi`) | PR | ASan+UBSan; e2e suite against `bazel-bin/src/sipi` with `.lsan_suppressions.txt` |
 
 ## Python Test Deprecation — Parity Checklist
 
