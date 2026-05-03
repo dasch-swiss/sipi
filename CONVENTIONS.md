@@ -37,6 +37,43 @@ If a new build configuration is genuinely needed across the team (non-trivial
 CMake flags, specialized toolchain), that configuration deserves a Nix
 variant in `flake.nix`, not a recipe wrapping imperative cmake.
 
+The Bazel migration (DEV-6343..DEV-6348) adds a parallel `cc_test` inner
+loop that is currently local-only. CMake/ctest via `just nix-build`
+remains the CI canonical path. Until DEV-6348 cuts CI over, treat
+`just bazel-test-unit` and `just bazel-test-approval` as a local
+fast-feedback path — not a substitute for `nix-build`.
+
+## Build Completeness Invariant
+
+Every build target must succeed on every supported platform:
+macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. Linux-only
+outputs (`docker`, `docker-stream`, `sipi-debug`) are gated by
+`pkgs.lib.optionalAttrs isLinux` in `flake.nix`; everything else must
+build on every platform. CI is Linux-only — **a green CI run does not
+verify macOS**. Before shipping changes to `flake.nix`, `package.nix`,
+or a justfile build recipe, run every affected variant locally on
+macOS (`just nix-build-<variant>`) and dispatch Linux variants via
+Determinate's native-linux-builder
+(`nix build .#packages.{x86_64,aarch64}-linux.<variant>`). See CLAUDE.md
+"Build completeness invariant" for the full checklist.
+
+## Scope Discipline
+
+These rules govern *what* to build (mirrored from CLAUDE.md so
+contributors and Claude share the same contract):
+
+- **No backwards-compatibility shims.** Update every caller in the same
+  change. Rebase-merge preserves history; deprecated aliases,
+  re-exports, and "kept for now" pointers are not needed.
+- **No defense-in-depth.** Validate at system boundaries only — HTTP
+  request handlers, FFI boundaries, CLI parsers. See
+  `REVIEW.md` § "Security (input validation)" for what qualifies.
+- **No enterprise abstractions — KISS.** Three similar lines beat one
+  parameterised helper. Introduce an abstraction only for a *second
+  real* caller, not a hypothetical one.
+- **Ask when in doubt.** Surface ambiguous decisions to the maintainer
+  before acting. "Suggest, don't decide" is the default.
+
 ## Naming Conventions
 
 The codebase has mixed naming styles. For new code, prefer the C++23 style guide (`camelCase` functions, `trailing_underscore_` members). When modifying existing code, match the surrounding style.
@@ -47,6 +84,25 @@ The codebase has mixed naming styles. For new code, prefer the C++23 style guide
 | Functions / Methods | Mixed `camelCase` / `snake_case` | `imgroot()`, `send_error()`, `get_canonical_url()` |
 | Private members | `_leading_underscore` | `_imgroot`, `_nthreads` |
 | Namespaces | `PascalCase` | `Sipi::`, `shttps::` |
+
+## Module Layout
+
+The codebase has two coexisting layouts:
+
+- **Historical (current default):** `src/<mod>/Foo.cpp` paired with
+  `include/<mod>/Foo.h`, unit tests under `test/unit/<mod>/`.
+- **Module-co-located ([ADR-0003](docs/adr/0003-module-co-located-source-and-tests.md), proposed):**
+  `src/<mod>/{Foo.cpp, Foo.h, foo_test.cpp}` with flat-style includes
+  (`#include "metadata/Foo.h"` cross-module, `#include "Foo.h"`
+  intra-module). `shttps/` and `src/handlers/` already follow this.
+  Migration is staged behind the Bazel build-tool migration
+  (DEV-6343..DEV-6348) and lands as five mechanical per-module PRs
+  (Y+8a..Y+8e).
+
+Until ADR-0003 is accepted and a module is migrated, follow the
+historical layout for that module. After migration, follow the new
+layout. ADR-0003 is the source of truth for migration order and
+per-module diff shape.
 
 ## Route Registration
 
@@ -110,7 +166,8 @@ New config options need:
 
 ## Prometheus Metrics
 
-Singleton at `SipiMetrics::instance()` (`include/SipiMetrics.h`). Exposed at `GET /metrics`.
+SIPI-side singleton at `Sipi::SipiMetrics::instance()`
+(`include/SipiMetrics.h`); exposed at `GET /metrics`.
 
 ```cpp
 prometheus::Counter &my_counter_total =
@@ -120,3 +177,15 @@ prometheus::Counter &my_counter_total =
     .Register(*SipiMetrics::instance().registry)
     .Add({});
 ```
+
+shttps-side instrumentation goes through the
+`shttps::ConnectionMetrics` Strategy interface (see
+`shttps/ConnectionMetrics.h`). At startup, `src/sipi.cpp` installs a
+`SipiConnectionMetricsAdapter` (Adapter pattern) that bridges shttps
+events into the `SipiMetrics` singleton. **Do not call
+`SipiMetrics::instance()` from `shttps/` code** — that direction is
+the SIPI ← shttps leak that
+[ADR-0001](docs/adr/0001-shttps-as-strangler-fig-target.md)'s
+strangler-fig is closing (commit `f2ee8cfd`, Apr 30 2026). New
+shttps-emitted events go on the `ConnectionMetrics` interface and
+are implemented in the adapter.

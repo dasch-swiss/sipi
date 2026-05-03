@@ -38,6 +38,7 @@
 ### Configuration consistency
 - New config options added to all four surfaces: `SipiConf.h`/`.cpp` (Lua), `sipi.cpp` (CLI11), `SipiHttpServer.hpp` (accessor), and `config/sipi.config.lua` (documentation)
 - Defaults identical across all entry points
+- `docs/src/development/reviewer-guidelines.md` summarises this as "Lua / CLI / env" for review-checklist brevity; the four-surface list above is the authoritative one
 - Invalid values produce clear startup errors with guidance on valid values
 
 ### Testing
@@ -46,11 +47,13 @@
 - New HTTP behavior tested in Rust e2e or Hurl (not Python — Python tests are frozen)
 - Tests verify behavior (dimensions, content, structure), not just HTTP status codes
 - **Sanitizer gate:** PRs touching `src/`, `shttps/`, `include/`, or `test/` automatically run the sanitizer CI workflow (`sanitizer.yml`). Zero findings required to merge
+- **Bazel `cc_test` parity:** PRs that add a new unit test should also add the matching `cc_test` target in `test/unit/<mod>/BUILD.bazel`. CMake/ctest via `just nix-build` remains the CI canonical path until DEV-6348 cuts CI over; `just bazel-test-unit` and `just bazel-test-approval` are the local fast-feedback path until then
 
 ### Metrics
 - New metrics use correct Prometheus types (counter for monotonic, gauge for current state, histogram for distributions)
 - Metric names follow `sipi_` prefix convention with `_total` suffix for counters
 - Instrumentation in the correct layer (not duplicated across call chain)
+- shttps-side instrumentation (request lifecycle, queue events) emits through the `shttps::ConnectionMetrics` Strategy interface (`shttps/ConnectionMetrics.h`) — never call `Sipi::SipiMetrics::instance()` directly from `shttps/`. The SIPI → shttps direction is enforced by `package_group()` visibility under Bazel and by `scripts/shttps-context-check.sh` under CMake
 
 ### Thread safety
 - Shared mutable state protected by `std::mutex` + `std::scoped_lock` or `std::atomic`
