@@ -205,6 +205,92 @@ f. **Defer**: `SipiImage`-`SipiIcc` friend-class coupling (Probe 3); `SipiSentry
 - Lua admin surface (`SipiLua`) — does it directly manipulate metadata, or only consume it through `SipiImage`? Probe 6.
 - ADR-0005 implementation choice between `tinycbor` / `jsoncons` / a small in-tree CBOR encoder — defer to implementation time; not an architectural decision.
 
+## Probe 4 — `SipiImage` (god-object decomposition)
+
+**1. Module name.** Two new Bazel packages, splitting the current `src/SipiImage.{cpp,hpp}` (~2,526 lines combined):
+
+| New package | Concern |
+| --- | --- |
+| `src/image/` | Pure value type: geometry, photometric, RAII pixel buffer, metadata composite. ~15 public methods. |
+| `src/image_processing/` | Free functions over `const Image&`: crop, scale, rotate, colour convert, channel ops, bit-depth reduction, dithering, watermark application, comparison, arithmetic. |
+
+Plus three concerns leave the class entirely:
+- Static `io` registry → `format_handlers/` (registry of self).
+- `shttps::Connection*` field → disappears (subsumed by `OutputSink::HttpSink` per ADR-0006).
+- `app14_transform` JPEG marker field → moves into the JPEG decode pipeline (consumed at decode, inverted before `Image` is "complete").
+
+**2. Glossary terms.** Implements **Image** (the code-level class; domain-level term unchanged). Surfaces **Image processing** as a new umbrella term. Touches `metadata/`, `format_handlers/`, and the shttps boundary.
+
+**3. Public interface (proposed `hdrs`).**
+
+```
+src/image/image.h              — class Image (geometry, pixel access, metadata accessors, RAII pixel buffer)
+src/image/image_metadata.h     — ImageMetadata composite (5 standards bundle; possibly inlined into Image)
+
+src/image_processing/crop.h
+src/image_processing/scale.h            — one scale() taking ScalingQuality; replaces 3 named methods
+src/image_processing/rotate.h
+src/image_processing/color_convert.h    — convertYCC2RGB, convert_to_icc
+src/image_processing/channel_ops.h      — remove_channel, remove_extra_samples
+src/image_processing/bit_depth.h        — to_8bps, to_bitonal
+src/image_processing/watermark.h        — DEFERRED to Probe 5 / Watermark glossary entry
+src/image_processing/arithmetic.h       — operator-, operator+, operator==, compare (or test-only)
+```
+
+**4. Private surface.** `.cpp` files implementing the above. The IO map / format dispatch moves to `format_handlers/`. The 5 friend classes (4 format handlers + `SipiIcc`) all go away — replaced by public `pixels_writable()` API + metadata setters + 1-2 new accessors for `iccFormatter`. The raw `byte *pixels` becomes `std::vector<byte>` (or `unique_ptr<byte[]>` if benchmarking shows any regression — the audit PR decides).
+
+**5. Depth signal.** Six distinct responsibility groups in one class — textbook god-object:
+
+| Group | Surface |
+| --- | --- |
+| Image data container | `nx, ny, nc, bps, pixels (raw!), es, orientation, photo` |
+| Metadata holder | 4 `shared_ptr<Sipi{Exif,Icc,Iptc,Xmp}>` + `SipiEssentials` value |
+| Format I/O facade | static `io` map + `read()` / `readOriginal()` / `write()` / `getDim(filepath)` |
+| Image processing | `crop`, `scale`/`scaleFast`/`scaleMedium`, `rotate`, `convertYCC2RGB`, `convertToIcc`, `removeChannel`, `removeExtraSamples`, `to8bps`, `toBitonal`, `add_watermark`, `set_topleft` (12 methods) |
+| HTTP integration | `conobj` raw `shttps::Connection*` + `connection()` accessors |
+| Algebra / comparison | `operator-=`, `operator-`, `operator+=`, `operator+`, `operator==`, `compare`, `operator<<` |
+
+Plus **specific code smells**:
+- Raw `byte *pixels` (manual `new[]`/`delete[]`; reason for explicit deep-copy + move semantics; violates `cpp-style-guide.md`'s "no raw owning new/delete").
+- 5 `friend class` declarations (encapsulation deliberately broken).
+- `app14_transform` field — JPEG-specific Adobe APP14 marker on the universal type.
+- Static `io` registry — misplaced concern (registry of format handlers belongs in `format_handlers/`).
+- Three scale methods (`scale`, `scaleMedium`, `scaleFast`) — separate names for the same operation at different qualities; unstable API.
+- Two `getDim` methods with different semantics (filepath query vs. instance state out-params).
+- Inconsistent metadata accessors (`getExif`, `getIcc`, `getXmp` exist; **no `getIptc`** despite `iptc` member).
+- Heavy header includes — every consumer transitively pulls shttps + format-handler types + 5 metadata + exiv2 + lcms2.
+
+**6. Verdict.** **`god-object`** — unambiguous. Highest-leverage decomposition target in the codebase.
+
+**7. Action.** Per [ADR-0007](./adr/0007-sipiimage-decomposition.md). Eight staged sub-PRs (each independently reversible), tracked under a new Linear parent issue:
+
+a. **Audit** every internal use of `pixels` (catalog read / write / pointer-pass / arithmetic / `new[]`/`delete[]` cases). Output is a doc + benchmark; no code change. Gates the rest.
+
+b. **Replace `byte *pixels` with `std::vector<byte>`**. RAII; eliminates the explicit copy/move/dtor dance. Performance verified at parity in (a)'s benchmark.
+
+c. **Remove `app14_transform` field**. JPEG handler inverts CMYK/YCCK at decode time; downstream sees standard CMYK.
+
+d. **Move static `io` map** to `format_handlers/`. SipiImage stops being a registry of format handlers.
+
+e. **Remove `conobj` field + `connection()` accessors**. Coupled with [DEV-6382](https://linear.app/dasch/issue/DEV-6382) (OutputSink with TeeSink for dual-write — see ADR-0006 / ADR-0007).
+
+f. **Add public `pixels_writable()` API + metadata setters**; remove the 4 format-handler friend declarations.
+
+g. **Extract image-processing methods** to `src/image_processing/` free functions over `const Image&`. ~12 method-to-free-function rewrites at every call site.
+
+h. **Remove `SipiIcc` friend** (probably needs 1-2 new public Image accessors so `iccFormatter` works without internal access). Move arithmetic operators (`operator-`, `operator+`, `operator==`, `compare`) to free functions in `image_processing/arithmetic.{h,cpp}` or test-only.
+
+Bazel package promotion (steps d, f, g specifically) gated on [DEV-6341](https://linear.app/dasch/issue/DEV-6341) reaching Y+6. Steps a, b, c can land in CMake era.
+
+**8. Glossary delta.** Add **Image processing** (umbrella for the free-function module). Sharpen **Image** (the code-level class becomes a narrow value type post-refactor; domain term stays correct).
+
+**9. Open questions for later probes.**
+
+- **Lua-binding surface** ([SipiLua.cpp](../src/SipiLua.cpp), Probe 6): the Lua API likely exposes `image:crop(...)` style method-call syntax; if so, the Lua binding layer absorbs the C++-method-to-free-function translation transparently. May require keeping thin facade methods on `Image` purely for binding ergonomics. Probe 6 resolves.
+- **Watermark module** (Probe 5): the watermark loading + applying logic might live entirely in route handlers (close to where `Permission` decides to apply it) rather than in `image_processing/`. Defer placement.
+- **`ImageMetadata` composite** — own type or just members of `Image`? Decide during implementation; tightly bundled either way.
+- **TeeSink composition** preserves the dual-write optimization (encoder writes to HTTP socket *and* cache file simultaneously). Documented in ADR-0006 + ADR-0007; implemented in DEV-6382.
+
 ## Probe 3 — `format_handlers/` (renamed from `formats/`)
 
 **1. Module name.** `src/format_handlers/` (renamed from `src/formats/` per Probe 1 follow-up). Future Bazel package `//src/format_handlers:format_handlers`. Co-located source / headers / `*_test.cpp` per ADR-0003. The `SipiIO` base-class header migrates from top-level `include/SipiIO.h` into the same package.
@@ -313,6 +399,9 @@ Pending edits to [`UBIQUITOUS_LANGUAGE.md`](../UBIQUITOUS_LANGUAGE.md), accumula
 | **Object storage** | add | Probe 3 follow-up | The production access model for service masters in the 3-6 month direction: SIPI server reads service masters via S3 range GETs over HTTP. Today's transitional state is NFS-mounted ZFS spinning disk (still network-accessed; round-trip costs already exist). Local-filesystem `image root` becomes the dev/test scenario only. The `cache/` module stays local in both states (performance optimization; cached representations on the hot path can't pay remote-access cost). |
 | **Range GET** | add | Probe 3 follow-up | An HTTP `GET` on an S3 object with a `Range:` header bounding the byte range to fetch. The unit of S3 access. Each range GET is a network round-trip (~1-10ms typical); minimizing them is the load-bearing perf goal once SIPI moves to S3. Per ADR-0004: pre-decode reads aim for *one* range GET to fetch the Essentials packet (with shape + file-structure offsets), then *one* targeted range GET for the data SIPI actually needs. |
 | **Essentials packet** | sharpen further | Probe 3 | Per ADR-0004 (expanded scope): the packet's role broadens from "shape cache" to "shape + S3-access file-structure index." The load-bearing rationale shifts to remote storage (S3 in 3-6 months, NFS today). Contents: image shape (8 fields), per-format file-structure offsets (TIFF: per-IFD offset/size; JP2: codestream + per-resolution offsets), ICC profile, original filename / mimetype / hash / pixel checksum. Wire format CBOR (ADR-0005). Position: a known fixed prefix offset in the file (TIFF tag in the first IFD; JP2 UUID box near the start) so SIPI can fetch with one range GET of the prefix. |
+| **Image processing** | add | Probe 4 | Umbrella term for the free-function module (`src/image_processing/`) over `const Image&`: crop, scale, rotate, colour conversion, channel ops, bit-depth reduction, dithering, watermark application, comparison, arithmetic. Replaces the ~12 image-processing methods on the `SipiImage` god-object per ADR-0007. Free-function-over-value-type maps cleanly to Rust traits in the eventual port. |
+| **Image** | sharpen | Probe 4 | The domain-level term ("a pixel-bearing artefact processed through the IIIF pipeline") stays correct conceptually. The *code-level* `Image` class becomes a narrow value type post-refactor (geometry + photometric + RAII pixel buffer + metadata composite; ~15 public methods) per ADR-0007. Image-processing behaviour moves to free functions in `image_processing/`. |
+| **Tee sink** | add (provisional) | Probe 4 | Composition primitive in the `OutputSink` variant per ADR-0006: `TeeSink { std::vector<OutputSink> outputs; }` broadcasts each output chunk to multiple sub-sinks. Preserves SIPI's existing dual-write optimization (encoder writes simultaneously to HTTP socket + cache file). Generalises to write-through to S3 / other sinks. Provisional naming — confirm during DEV-6382 implementation. |
 
 ## Candidate gaps already spotted (pre-probe)
 
