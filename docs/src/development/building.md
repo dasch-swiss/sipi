@@ -88,7 +88,7 @@ Most common commands:
 ```bash
 just nix-build                 # .#dev: Debug + coverage, tests in sandbox
 just nix-build-default         # .#default: RelWithDebInfo + tests
-just nix-build-sanitized       # .#sanitized: ASan + UBSan
+just bazel-build-sanitized     # bazel build --config=asan --config=ubsan //src:sipi
 ```
 
 ## Building a Docker image
@@ -131,8 +131,8 @@ Run `just` (no arguments) to see the full list. Key target groups:
 | `nix-build` | `.#dev` — Debug + coverage; unit tests run in the Nix sandbox |
 | `nix-build-default` | `.#default` — RelWithDebInfo + tests |
 | `nix-build-release` | `.#release` — stripped, no tests |
-| `nix-build-sanitized` | `.#sanitized` — Debug + ASan + UBSan |
 | `nix-build-fuzz` | `.#fuzz` — libFuzzer harness binary only |
+| `bazel-build-sanitized` | `bazel build --config=asan --config=ubsan //src:sipi` — Debug + ASan + UBSan (DWARF inline; `.lsan_suppressions.txt` consulted by the e2e step) |
 | `nix-coverage` | `.#dev^coverage` — writes `result-coverage/coverage.xml` |
 | `nix-docker-build` | Build `.#docker-stream` (host arch), load into local Docker daemon |
 | `nix-docker-build-{amd64,arm64}` | Build `.#packages.<arch>-linux.docker-stream` + `.#packages.<arch>-linux.sipi-debug` (single `nix build`) |

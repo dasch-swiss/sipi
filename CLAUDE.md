@@ -21,7 +21,7 @@ For full build instructions (Docker, Nix, macOS), see [`docs/src/development/bui
 
 **Build reproducibility invariant:** every `nix-*` recipe wraps `nix build .#<variant>`. CI invokes only `just <recipe>` — no inline cmake or `nix build` calls. Incremental inner-loop development is a documented dev-shell pattern (see below), not a recipe.
 
-**Build completeness invariant:** every build target must succeed on every supported platform — macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. This applies to `.#dev`, `.#default`, `.#release`, `.#sanitized`, and `.#fuzz` on all platforms; and to `.#docker`, `.#docker-stream`, and `.#sipi-debug` on Linux only (Linux-only outputs are gated by `pkgs.lib.optionalAttrs isLinux` in `flake.nix`). A target that builds on only some of its supported platforms is a shipping bug, not a known limitation — CI is Linux-only, so **a green CI run does not verify macOS**. Before shipping any change to `flake.nix`, `package.nix`, or a `justfile` build recipe:
+**Build completeness invariant:** every build target must succeed on every supported platform — macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. This applies to `.#dev`, `.#default`, `.#release`, and `.#fuzz` on all platforms; and to `.#docker`, `.#docker-stream`, and `.#sipi-debug` on Linux only (Linux-only outputs are gated by `pkgs.lib.optionalAttrs isLinux` in `flake.nix`). The sanitized variant is now Bazel-native (`bazel build --config=asan --config=ubsan //src:sipi`) — see the Quick Reference below. A target that builds on only some of its supported platforms is a shipping bug, not a known limitation — CI is Linux-only, so **a green CI run does not verify macOS**. Before shipping any change to `flake.nix`, `package.nix`, or a `justfile` build recipe:
 
 1. Run every affected variant on macOS locally (`just nix-build-<variant>`).
 2. Run every affected Linux variant locally via Determinate's native-linux-builder (`nix build .#packages.x86_64-linux.<variant>` and `.#packages.aarch64-linux.<variant>`). See [`docs/src/development/nix.md`](docs/src/development/nix.md) for setup.
@@ -40,7 +40,6 @@ If a change can't be verified on a platform locally, say so explicitly and gate 
 just nix-build                   # .#dev: Debug + coverage, tests run in sandbox
 just nix-build-default           # .#default: RelWithDebInfo + tests (matches distributed binary shape)
 just nix-build-release           # .#release: stripped, no tests
-just nix-build-sanitized         # .#sanitized: Debug + ASan + UBSan, tests run in sandbox
 just nix-build-fuzz              # .#fuzz: libFuzzer harness binary only
 just nix-coverage                # .#dev^coverage: produces result-coverage/coverage.xml
 just nix-docker-build            # .#docker-stream: host-arch image, load into local daemon
@@ -60,6 +59,7 @@ just nix-valgrind                # run sipi under Valgrind
 # tests via just nix-build's checkPhase until DEV-6348 (Y+6))
 just bazel-test-unit             # bazel test //test/unit/...  (12 of 12 components)
 just bazel-test-approval         # bazel test //test/approval:approvaltests  (24 cases, env-injected SOURCE_DATE_EPOCH)
+just bazel-build-sanitized       # bazel build --config=asan --config=ubsan //src:sipi  (PR Y+2 — sanitizer.yml CI)
 
 # Dev-shell inner loop (non-recipe — see "Inner-loop development" below)
 

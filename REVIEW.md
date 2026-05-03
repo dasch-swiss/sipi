@@ -46,7 +46,7 @@
 - Memory fixes verified under ASan (no leaks, no UB)
 - New HTTP behavior tested in Rust e2e or Hurl (not Python — Python tests are frozen)
 - Tests verify behavior (dimensions, content, structure), not just HTTP status codes
-- **Sanitizer gate:** PRs touching `src/`, `shttps/`, `include/`, or `test/` automatically run the sanitizer CI workflow (`sanitizer.yml`). Zero findings required to merge
+- **Sanitizer gate:** PRs touching `src/`, `shttps/`, `include/`, or `test/` automatically run the sanitizer CI workflow (`sanitizer.yml`). Zero findings required to merge. Coverage is **e2e-only** until DEV-6348 (PR Y+6) cuts unit-test execution to Bazel `cc_test` — first-party translation units are still ASan/UBSan-instrumented at compile time, but only the e2e suite exercises them at runtime in this window
 - **Bazel `cc_test` parity:** PRs that add a new unit test should also add the matching `cc_test` target in `test/unit/<mod>/BUILD.bazel`. CMake/ctest via `just nix-build` remains the CI canonical path until DEV-6348 cuts CI over; `just bazel-test-unit` and `just bazel-test-approval` are the local fast-feedback path until then
 
 ### Metrics

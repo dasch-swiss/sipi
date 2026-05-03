@@ -133,7 +133,7 @@ do not override `LC_ALL` at runtime. See
 Every CI step invokes `just <recipe>` — no inline cmake or `nix build`
 calls. To reproduce any CI job locally, run the same recipe. With the
 Determinate Systems native-linux-builder available to macOS authors,
-Linux-target recipes (`nix-build-sanitized`, `nix-build-fuzz`) run
+Linux-target recipes (`nix-build-fuzz`, `bazel-build-sanitized`) run
 locally without a CI round-trip.
 
 `just nix-build*` recipes wrap `nix build`, so CI invokes them directly
@@ -154,9 +154,12 @@ just nix-coverage
 just nix-docker-build-amd64               # or -arm64 on aarch64 host
 just nix-test-smoke                       # binary from .#smoke-test
 
-# Sanitizer build + tests (what sanitizer.yml runs)
-just nix-build-sanitized                  # tests run in sandbox
-SIPI_BIN=$PWD/result/bin/sipi just nix-test-e2e
+# Sanitizer build + e2e (what sanitizer.yml runs)
+just bazel-build-sanitized                # bazel build --config=asan --config=ubsan //src:sipi
+SIPI_BIN=$PWD/bazel-bin/src/sipi \
+  ASAN_OPTIONS=detect_leaks=1:halt_on_error=0:log_path=/tmp/asan-e2e \
+  LSAN_OPTIONS=suppressions=$PWD/.lsan_suppressions.txt \
+  just nix-test-e2e
 
 # Fuzz build + run (what fuzz.yml runs)
 just nix-build-fuzz
