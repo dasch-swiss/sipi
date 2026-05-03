@@ -6,16 +6,22 @@ Sipi uses [libFuzzer](https://llvm.org/docs/LibFuzzer.html) to fuzz-test the III
 
 ```
 fuzz/
-├── CMakeLists.txt              # Top-level fuzz build (adds subdirectories)
 └── handlers/
-    ├── CMakeLists.txt           # Fuzz target build config (requires Clang)
+    ├── BUILD.bazel              # cc_library(fuzz_subset) + cc_binary
     ├── iiif_handler_uri_parser_target.cpp  # Fuzz harness
     └── corpus/                  # Seed corpus (checked into git)
+        ├── BUILD.bazel          # filegroup(seed_corpus) — runfile of cc_binary
         ├── iiif_basic           # /prefix/image.jp2/full/max/0/default.jpg
         ├── info_json            # /unit/lena512.jp2/info.json
         ├── knora_json           # /unit/lena512.jp2/knora.json
         └── ...                  # 52 seed inputs total
 ```
+
+The Bazel build also wires:
+
+- `tools/fuzz/BUILD.bazel` — `constraint_setting`/`constraint_value` plus the `linux_x86_64_fuzz` platform that `--config=fuzz` targets.
+- `MODULE.bazel` — registers a second `llvm_toolchain_fuzz` (libstdc++) sharing `@llvm_toolchain_llvm` via `llvm.toolchain_root` and gated by `extra_target_compatible_with = ["//tools/fuzz:fuzz_enabled"]`.
+- `.bazelrc` `build:fuzz` — pins `--platforms=//tools/fuzz:linux_x86_64_fuzz`, injects `-fsanitize=fuzzer-no-link` + `-fsanitize-coverage=trace-cmp` + ASan, and adds `-fsanitize=fuzzer` at link.
 
 The fuzz harness is minimal — it converts the fuzzer's byte input to a `std::string` and calls `parse_iiif_uri()`:
 
@@ -33,25 +39,46 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
 
 ## Requirements
 
-libFuzzer is built into Clang, so the fuzz variant uses `llvmPackages_19.stdenv` under the hood. Nix handles the toolchain — no dev-shell dance required.
+libFuzzer ships in Clang's compiler-rt. The build uses two registered
+LLVM toolchains, both sharing the same LLVM 19.1.7 download:
 
-The CMake config (`fuzz/handlers/CMakeLists.txt`) guards the target behind a Clang check; it won't build with GCC, but `.#fuzz` pins Clang so that path never matters in practice.
+* On linux-x86_64, `@llvm_toolchain_fuzz` wins (libstdc++, mirroring
+  today's `pkgs.llvmPackages_19.stdenv` override). The platform
+  `//tools/fuzz:linux_x86_64_fuzz` carries the `fuzz_enabled` constraint
+  the toolchain is gated on.
+* On darwin-aarch64, the default `@llvm_toolchain` wins (Apple SDK +
+  libc++, which is libFuzzer's ABI on darwin anyway). The platform
+  `//tools/fuzz:darwin_aarch64_fuzz` activates the harness's
+  `target_compatible_with = ["//tools/fuzz:fuzz_enabled"]` gate.
+
+The `bazel-build-fuzz` and `bazel-run-fuzz` justfile recipes detect the
+host via `uname` and select the matching platform automatically. linux-
+aarch64 is out of scope — the deployment target is amd64 only and fuzz
+CI never runs there. Other hosts get a clear error message.
+
+`bazel-run-fuzz` execs the binary directly (after a build step) rather
+than going through `bazel run`, because Apple's ASan runtime
+(`libclang_rt.asan_osx_dynamic.dylib`) is dynamically linked via
+`@rpath` and macOS SIP strips `DYLD_LIBRARY_PATH` across the
+`bazel run` subprocess chain. The recipe sets `DYLD_LIBRARY_PATH` in
+its own shell on darwin and then `exec`s the binary.
 
 ## Running Locally
 
 ### Build the fuzz target
 
 ```bash
-just nix-build-fuzz
+just bazel-build-fuzz
 ```
 
-This wraps `nix build .#fuzz` and emits `result/bin/iiif_handler_uri_parser_fuzz`.
+This wraps `bazel build --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz`
+and emits `bazel-bin/fuzz/handlers/iiif_handler_uri_parser_fuzz`.
 
 ### Run with seed corpus
 
 ```bash
 mkdir -p corpus-live
-just nix-run-fuzz corpus-live 60 fuzz/handlers/corpus
+just bazel-run-fuzz corpus-live 60 fuzz/handlers/corpus
 ```
 
 - First positional arg (`corpus-live`) — live corpus directory. New interesting inputs are written here.
@@ -84,13 +111,13 @@ For anything beyond duration + seed corpus, invoke the fuzzer binary directly (t
 
 ```bash
 # Limit input size (parser inputs are short URIs, not megabytes)
-./result/bin/iiif_handler_uri_parser_fuzz corpus-live/ -max_len=256
+./bazel-bin/fuzz/handlers/iiif_handler_uri_parser_fuzz corpus-live/ -max_len=256
 
 # Run a fixed number of iterations
-./result/bin/iiif_handler_uri_parser_fuzz corpus-live/ -runs=100000
+./bazel-bin/fuzz/handlers/iiif_handler_uri_parser_fuzz corpus-live/ -runs=100000
 
 # Reproduce a crash (run a single input)
-./result/bin/iiif_handler_uri_parser_fuzz /path/to/crash-abc123
+./bazel-bin/fuzz/handlers/iiif_handler_uri_parser_fuzz /path/to/crash-abc123
 ```
 
 ## CI Integration
@@ -102,9 +129,9 @@ The fuzz workflow (`.github/workflows/fuzz.yml`) runs:
 
 ### What it does
 
-1. Builds the fuzz target via `just nix-build-fuzz` (→ `nix build .#fuzz`)
+1. Builds the fuzz target via `just bazel-build-fuzz` (→ `bazel build --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz`)
 2. Downloads the corpus from the previous night's run (if available)
-3. Runs `just nix-run-fuzz fuzz-corpus-live $FUZZ_DURATION fuzz/handlers/corpus` (default 10 minutes), merging new findings into the live corpus
+3. Runs `just bazel-run-fuzz fuzz-corpus-live $FUZZ_DURATION fuzz/handlers/corpus` (default 10 minutes), merging new findings into the live corpus
 4. Uploads the updated corpus as an artifact (`fuzz-corpus`, retained 30 days)
 5. On crash (libFuzzer exits non-zero; `set -o pipefail` propagates it):
     - Uploads crash reproducers as artifacts (`fuzz-crashes`, retained 90 days)
@@ -155,7 +182,6 @@ To fuzz a different component:
 
 1. Create a new directory under `fuzz/` (e.g., `fuzz/image_processing/`)
 2. Write a harness implementing `LLVMFuzzerTestOneInput`
-3. Add a `CMakeLists.txt` with `-fsanitize=fuzzer,address` flags (copy from `fuzz/handlers/CMakeLists.txt`)
-4. Register the subdirectory in `fuzz/CMakeLists.txt`
-5. Create a `corpus/` directory with seed inputs
-6. Add a step to `.github/workflows/fuzz.yml` for the new target
+3. Add a `BUILD.bazel` with a `cc_library` (the explicit subset of first-party + ext deps the harness exercises) plus a `cc_binary` carrying `target_compatible_with = ["//tools/fuzz:fuzz_enabled"]` (copy from `fuzz/handlers/BUILD.bazel`)
+4. Create a `corpus/` directory with seed inputs and a `BUILD.bazel` exposing them as `filegroup(seed_corpus)`
+5. Add a step to `.github/workflows/fuzz.yml` for the new target

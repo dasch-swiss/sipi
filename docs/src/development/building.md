@@ -131,8 +131,8 @@ Run `just` (no arguments) to see the full list. Key target groups:
 | `nix-build` | `.#dev` — Debug + coverage; unit tests run in the Nix sandbox |
 | `nix-build-default` | `.#default` — RelWithDebInfo + tests |
 | `nix-build-release` | `.#release` — stripped, no tests |
-| `nix-build-fuzz` | `.#fuzz` — libFuzzer harness binary only |
 | `bazel-build-sanitized` | `bazel build --config=asan --config=ubsan //src:sipi` — Debug + ASan + UBSan (DWARF inline; `.lsan_suppressions.txt` consulted by the e2e step) |
+| `bazel-build-fuzz` | `bazel build --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz` — libFuzzer harness binary (linux-x86_64 in CI, darwin-aarch64 for local dev; the recipe selects `//tools/fuzz:<host>_fuzz` from `uname`) |
 | `nix-coverage` | `.#dev^coverage` — writes `result-coverage/coverage.xml` |
 | `nix-docker-build` | Build `.#docker-stream` (host arch), load into local Docker daemon |
 | `nix-docker-build-{amd64,arm64}` | Build `.#packages.<arch>-linux.docker-stream` + `.#packages.<arch>-linux.sipi-debug` (single `nix build`) |
@@ -147,7 +147,7 @@ Run `just` (no arguments) to see the full list. Key target groups:
 | `hurl-test` | Hurl HTTP contract tests (reads `$SIPI_BIN`) |
 | `nix-run` | Run sipi with the dev config |
 | `nix-valgrind` | Run sipi under Valgrind |
-| `nix-run-fuzz corpus duration [seed]` | Run libFuzzer harness against a corpus |
+| `bazel-run-fuzz corpus duration [seed]` | Run libFuzzer harness against a corpus (linux-x86_64 in CI, darwin-aarch64 locally; recipe builds + execs the binary, setting `DYLD_LIBRARY_PATH` on darwin so the toolchain's ASan dylib resolves) |
 | `vendor-download` | Download all dependency archives to `vendor/` |
 | `vendor-verify` | Verify SHA-256 checksums of vendored archives |
 | `vendor-checksums` | Print SHA-256 checksums for all archives |
