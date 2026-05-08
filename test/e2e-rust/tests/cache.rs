@@ -132,16 +132,6 @@ fileserver = {{
 
 routes = {{
     {{
-        method = 'DELETE',
-        route = '/api/cache',
-        script = 'cache.lua'
-    }},
-    {{
-        method = 'GET',
-        route = '/api/cache',
-        script = 'cache.lua'
-    }},
-    {{
         method = 'POST',
         route = '/api/upload',
         script = 'upload.lua'
@@ -213,55 +203,6 @@ fn cache_metrics() {
         after.contains_key("sipi_cache_files"),
         "sipi_cache_files metric should exist"
     );
-}
-
-#[test]
-fn cache_api_routes() {
-    let srv = server();
-
-    // First make a request to populate the cache
-    let resp = client()
-        .get(format!(
-            "{}/unit/lena512.jp2/full/pct:50/0/default.jpg",
-            srv.base_url
-        ))
-        .send()
-        .expect("GET image failed");
-    assert_eq!(resp.status().as_u16(), 200);
-    let _ = resp.bytes();
-
-    // GET /api/cache — requires basic auth
-    let resp = client()
-        .get(format!("{}/api/cache", srv.base_url))
-        .basic_auth("admin", Some("Sipi-Admin"))
-        .send()
-        .expect("GET /api/cache failed");
-    assert_eq!(resp.status().as_u16(), 200);
-
-    let json: serde_json::Value = resp.json().expect("invalid JSON");
-    assert!(json.is_array(), "/api/cache should return an array");
-
-    // GET without auth should return 401
-    let resp = client()
-        .get(format!("{}/api/cache", srv.base_url))
-        .send()
-        .expect("GET /api/cache no-auth failed");
-    assert_eq!(
-        resp.status().as_u16(),
-        401,
-        "/api/cache without auth should return 401"
-    );
-
-    // DELETE /api/cache (purge) — with auth
-    let resp = client()
-        .delete(format!("{}/api/cache", srv.base_url))
-        .basic_auth("admin", Some("Sipi-Admin"))
-        .send()
-        .expect("DELETE /api/cache failed");
-    assert_eq!(resp.status().as_u16(), 200);
-
-    let json: serde_json::Value = resp.json().expect("invalid JSON");
-    assert_eq!(json["status"], "OK");
 }
 
 #[test]

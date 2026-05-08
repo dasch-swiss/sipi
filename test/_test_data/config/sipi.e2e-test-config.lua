@@ -221,16 +221,6 @@ fileserver = {
 --
 routes = {
     {
-        method = 'DELETE',
-        route = '/api/cache',
-        script = 'cache.lua'
-    },
-    {
-        method = 'GET',
-        route = '/api/cache',
-        script = 'cache.lua'
-    },
-    {
         method = 'GET',
         route = '/read_write_lua',
         script = 'read_write_lua.lua'

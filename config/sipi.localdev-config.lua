@@ -13,7 +13,6 @@
 -- Example requests:
 --   curl http://localhost:1024/unit/Leaves8.tif/full/max/0/default.jpg -o /tmp/test.jpg
 --   curl http://localhost:1024/metrics
---   curl http://localhost:1024/api/cache
 --
 sipi = {
     hostname = 'localhost',
