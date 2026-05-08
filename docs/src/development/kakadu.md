@@ -10,7 +10,8 @@ Two independent fetch paths exist:
 
 | Build system | Fetches Kakadu via | Trigger |
 |---|---|---|
-| Nix (`nix build`, `nix develop`, `just nix-docker-build*`) | Fixed-output derivation in `flake.nix` | Automatic on build |
+| Nix (`nix build`, `nix develop`) | Fixed-output derivation in `flake.nix` | Automatic on build |
+| Bazel (`bazel build`, `bazel test`, `just bazel-docker-*`) | `kakadu_archive` repository_rule (`bazel/kakadu.bzl`) shells out to `gh release download` | Automatic on build |
 | Dev-shell inner loop (cmake by hand inside `nix develop`) | `scripts/fetch-kakadu.sh` into `vendor/` | `just kakadu-fetch` (one-time) |
 
 ## Nix builds
@@ -63,19 +64,25 @@ The recipe is idempotent; re-running it when the archive is already
 present is a no-op. `vendor/v8_5-*.zip` is gitignored, so the archive
 never enters the commit history.
 
-**Note:** `just nix-docker-build` does *not* need `vendor/` populated
-— the flake's FOD fetches Kakadu directly into the Nix store.
+**Note:** `just bazel-docker-build-${arch}` does *not* need `vendor/`
+populated — the `kakadu_archive` repository_rule fetches Kakadu
+directly into Bazel's repository_cache. Likewise for `just nix-build*`,
+which uses the flake's FOD.
 
 ## Updating the Kakadu version
 
 1. Publish a new archive on `dsp-ci-assets` (see
    [its `kakadu/README.md`](https://github.com/dasch-swiss/dsp-ci-assets/blob/main/kakadu/README.md))
 2. In `flake.nix`, update `kakaduVersion`, `kakaduAssetName`, and `kakaduSha256`
-3. Update `ASSET` and `TAG` in `scripts/fetch-kakadu.sh`
-4. Remove the local archive: `rm vendor/v8_5-*.zip`
-5. Re-build: `just nix-build-default` — a SHA-256 mismatch means step 2 is wrong
-6. Dev-shell path: `just kakadu-fetch` to refresh `vendor/`
-7. Commit and open a PR
+3. In `MODULE.bazel`, update the `kakadu_archive` extension's `tag`,
+   `asset`, and `sha256` (in `bazel/kakadu_extension.bzl`'s default
+   attributes) to match
+4. Update `ASSET` and `TAG` in `scripts/fetch-kakadu.sh`
+5. Remove the local archive: `rm vendor/v8_5-*.zip`
+6. Re-build: `just nix-build-default` AND `bazel build //src:sipi` —
+   a SHA-256 mismatch on either side means a step above is wrong
+7. Dev-shell path: `just kakadu-fetch` to refresh `vendor/`
+8. Commit and open a PR
 
 ## Troubleshooting
 

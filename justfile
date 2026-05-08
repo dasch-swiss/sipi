@@ -10,19 +10,10 @@
 # Auto-detect CPU cores
 nproc := `nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4`
 
-# Docker repo/tag (from vars.mk)
-docker_repo := "daschswiss/sipi"
-build_tag := `git describe --tag --dirty --abbrev=7 2>/dev/null || git rev-parse --verify HEAD 2>/dev/null || cat version.txt`
-docker_image := docker_repo + ":" + build_tag
-
-# Map host arch (any OS) to the matching Linux arch for `nix-docker-build`.
-# `dockerTools.streamLayeredImage` is exposed only under
-# `packages.{x86_64,aarch64}-linux.*` (gated by `pkgs.lib.optionalAttrs
-# isLinux` in flake.nix). On macOS, native-linux-builder dispatches the
-# build to a Linux builder transparently. arch() returns "aarch64" /
-# "x86_64" regardless of OS, so the same mapping works on darwin and
-# Linux hosts.
-_linux_arch := if arch() == "aarch64" { "aarch64-linux" } else { "x86_64-linux" }
+# Map host arch to the matching `bazel-docker-*` recipe suffix. Used by
+# `test-smoke` to build the host-arch image without exposing arch logic
+# to the caller. arch() returns "aarch64" / "x86_64" regardless of OS.
+_host_docker_arch := if arch() == "aarch64" { "arm64" } else { "amd64" }
 
 # List all recipes
 default:
@@ -32,37 +23,14 @@ default:
 # Smoke tests (run against Docker image)
 #####################################
 
-# Build Docker image (via Nix) and run smoke tests against it.
-test-smoke: nix-docker-build
+# Build host-arch Docker image (via Bazel) and run smoke tests against it.
+test-smoke:
+    just bazel-docker-build-{{_host_docker_arch}}
     cd test/e2e-rust && cargo test --features docker --test docker_smoke -- --test-threads=1
 
 # Run smoke tests against an already-loaded Docker image.
 test-smoke-ci:
     cd test/e2e-rust && cargo test --features docker --test docker_smoke -- --test-threads=1
-
-#####################################
-# Docker (push / manifest only — image *building* is in the Nix section)
-#
-# Build invariant: every image-build path goes through `nix build`.
-# The recipes below do NOT build images; they only consume images that
-# `nix-docker-build*` already loaded into the local Docker daemon.
-#####################################
-
-# Push the already-loaded amd64 Docker image to Docker Hub.
-docker-push-amd64:
-    docker push {{docker_image}}-amd64
-
-# Push the already-loaded arm64 Docker image to Docker Hub.
-docker-push-arm64:
-    docker push {{docker_image}}-arm64
-
-# Publish multi-arch Docker manifest combining amd64 and arm64 images.
-docker-publish-manifest:
-    docker manifest create {{docker_image}} --amend {{docker_image}}-amd64 --amend {{docker_image}}-arm64
-    docker manifest annotate --arch amd64 --os linux {{docker_image}} {{docker_image}}-amd64
-    docker manifest annotate --arch arm64 --os linux {{docker_image}} {{docker_image}}-arm64
-    docker manifest inspect {{docker_image}}
-    docker manifest push {{docker_image}}
 
 #####################################
 # Nix builds (reproducible — what CI runs)
@@ -95,70 +63,6 @@ nix-build-default:
 nix-build-release:
     {{_nix_build}} .#release
     @echo "Binary at: $(readlink result)/bin/sipi"
-
-# Uses `.#docker` (buildLayeredImage → static tarball) rather than
-# `.#docker-stream` (streamLayeredImage → Linux Python wrapper script).
-# The CI per-arch recipes use the streaming variant for speed (no temp
-# tarball on disk on the Linux runner), but a streaming script can only
-# execute on the OS / arch it was built for: a Linux Python interpreter
-# embedded in the shebang won't run on a macOS host. The static tarball
-# is portable — Docker Desktop on macOS loads it transparently into its
-# Linux VM.
-# Build host-arch Docker image via Nix dockerTools and load into the local Docker daemon.
-nix-docker-build:
-    docker load < $({{_nix_build}} .#packages.{{_linux_arch}}.docker --print-out-paths)
-    # Re-tag with :latest and the build_tag for downstream consumers
-    # (smoke tests, publish flows). The image's own tag (from
-    # `dockerTools`) reflects version.txt; the tags below mirror the
-    # Dockerfile-era contract.
-    docker tag $({{_nix_eval}} .#packages.{{_linux_arch}}.docker.imageName):$({{_nix_eval}} .#packages.{{_linux_arch}}.docker.imageTag) {{docker_image}}
-    docker tag $({{_nix_eval}} .#packages.{{_linux_arch}}.docker.imageName):$({{_nix_eval}} .#packages.{{_linux_arch}}.docker.imageTag) {{docker_repo}}:latest
-
-# Pins the x86_64-linux flake attribute so this recipe fails fast on an
-# arm64 host instead of silently producing an arm64 image — the CI matrix
-# and publish.yml rely on the image arch matching the `-amd64` tag suffix.
-#
-# Two separate `nix build` calls — `nix build`'s `-o` flag is single-
-# value (last wins), so a single invocation can't produce two named
-# symlinks. The second call is essentially free: it shares the entire
-# sipi closure (already realized by the docker-stream build) and only
-# needs to materialize the `debug` output's symlink.
-# Build amd64 Docker image + sipi .debug symlink, load into local daemon.
-nix-docker-build-amd64:
-    {{_nix_build}} -o result       .#packages.x86_64-linux.docker-stream
-    {{_nix_build}} -o result-debug .#packages.x86_64-linux.sipi-debug
-    ./result | docker load
-    docker tag $({{_nix_eval}} .#packages.x86_64-linux.docker-stream.imageName):$({{_nix_eval}} .#packages.x86_64-linux.docker-stream.imageTag) {{docker_image}}-amd64
-    docker tag $({{_nix_eval}} .#packages.x86_64-linux.docker-stream.imageName):$({{_nix_eval}} .#packages.x86_64-linux.docker-stream.imageTag) {{docker_repo}}:latest
-
-# Pins the aarch64-linux flake attribute — same reasoning as `nix-docker-build-amd64`.
-# Build arm64 Docker image + sipi .debug symlink, load into local daemon.
-nix-docker-build-arm64:
-    {{_nix_build}} -o result       .#packages.aarch64-linux.docker-stream
-    {{_nix_build}} -o result-debug .#packages.aarch64-linux.sipi-debug
-    ./result | docker load
-    docker tag $({{_nix_eval}} .#packages.aarch64-linux.docker-stream.imageName):$({{_nix_eval}} .#packages.aarch64-linux.docker-stream.imageTag) {{docker_image}}-arm64
-    docker tag $({{_nix_eval}} .#packages.aarch64-linux.docker-stream.imageName):$({{_nix_eval}} .#packages.aarch64-linux.docker-stream.imageTag) {{docker_repo}}:latest
-
-# Does NO `nix build` — consumes the symlink produced by `nix-docker-build-<arch>`.
-# `arch` is `amd64` or `arm64` and is purely a filename suffix here (the
-# arch-specific derivation was already selected at build time, preventing
-# a cross-arch mix-up). Used by publish.yml after `nix-docker-build-<arch>`.
-# Rename result-debug/.../*.debug to sipi-<arch>.debug for Sentry upload.
-nix-docker-extract-debug arch:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ ! -L result-debug ] && [ ! -d result-debug ]; then
-        echo "ERROR: result-debug/ not found. Run 'just nix-docker-build-{{arch}}' first." >&2
-        exit 1
-    fi
-    debug_file=$(find result-debug/lib/debug/.build-id -name '*.debug' | head -1)
-    if [ -z "$debug_file" ]; then
-        echo "ERROR: no .debug file found under result-debug/lib/debug/.build-id" >&2
-        exit 1
-    fi
-    cp "$debug_file" "sipi-{{arch}}.debug"
-    echo "Debug symbols copied to: sipi-{{arch}}.debug"
 
 # Coverage XML for Codecov (at result-coverage/coverage.xml).
 nix-coverage:
@@ -290,6 +194,113 @@ bazel-run-fuzz corpus duration seed="":
     exec ./bazel-bin/fuzz/handlers/iiif_handler_uri_parser_fuzz \
         "${args[@]}" \
         -max_total_time={{duration}} -timeout=1 -rss_limit_mb=1024 -print_final_stats=1
+
+#####################################
+# Bazel Docker (DEV-6346, PR Y+4)
+#
+# Each per-arch CI runner builds + loads the matching architecture's
+# image into its local Docker daemon (`bazel-docker-build-${arch}`) and
+# pushes per-arch digests to the registry (`bazel-docker-push-${arch}`).
+# A coordinator job runs `bazel-docker-publish-manifest` to stitch the
+# two pushed digests into a multi-arch manifest at
+# `daschswiss/sipi:v<version>` via `crane index append`.
+#
+# `oci_image_index` is intentionally not used — its `images=[…]` attr
+# accepts only same-build-graph labels, not external digests pushed by
+# other runners (see dasch-specs research-findings §1).
+#####################################
+
+# Build the per-arch image and load it into the local Docker daemon as
+# `daschswiss/sipi:latest`. Smoke-test consumes `latest`; CI re-tags
+# with `:v<version>-${arch}` via `bazel-docker-push-${arch}` below.
+# `--stamp` runs `tools/workspace_status.sh` so STABLE_SIPI_VERSION
+# (from version.txt) is baked into image labels and tag suffixes;
+# without it, tags resolve to `0.0.0-unstamped-${arch}` and `publish.yml`'s
+# version-based downstream steps (Sentry release naming, Scout
+# environment recording) silently break.
+bazel-docker-build-amd64 *FLAGS='':
+    bazel run --stamp --platforms=//bazel/platforms:linux_amd64 --verbose_failures {{FLAGS}} //src:image_load
+
+bazel-docker-build-arm64 *FLAGS='':
+    bazel run --stamp --platforms=//bazel/platforms:linux_arm64 --verbose_failures {{FLAGS}} //src:image_load
+
+# Push the per-arch image to docker.io/daschswiss/sipi with two tags:
+# `latest-${arch}` and `v<version>-${arch}`. Driven by `oci_push`'s
+# `remote_tags` attribute consuming `:remote_tags_${arch}`. The
+# coordinator job (`bazel-docker-publish-manifest` below) reads these
+# digests off the registry to assemble the multi-arch manifest.
+bazel-docker-push-amd64 *FLAGS='':
+    bazel run --stamp --platforms=//bazel/platforms:linux_amd64 --verbose_failures {{FLAGS}} //src:image_push_amd64
+
+bazel-docker-push-arm64 *FLAGS='':
+    bazel run --stamp --platforms=//bazel/platforms:linux_arm64 --verbose_failures {{FLAGS}} //src:image_push_arm64
+
+# Assemble the multi-arch manifest at `daschswiss/sipi:v<version>` from
+# the two per-arch digests already pushed by `bazel-docker-push-*`.
+# Also applies the `latest` tag to the manifest so downstream consumers
+# can pull `daschswiss/sipi:latest` and get the right arch automatically.
+#
+# Pre-conditions (held by publish.yml's job graph):
+#   - `daschswiss/sipi:v<version>-amd64` and `-arm64` exist in the
+#     registry (pushed by the per-arch publish-docker matrix jobs)
+#   - `crane` on PATH (declared in flake.nix devShells)
+#   - Docker Hub credentials available (handled by docker/login-action
+#     in publish.yml; `crane` reads ~/.docker/config.json)
+bazel-docker-publish-manifest:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    VERSION="$(tr -d '[:space:]' < version.txt)"
+    BASE="docker.io/daschswiss/sipi"
+    echo "==> Assembling ${BASE}:v${VERSION} from per-arch digests"
+    crane index append \
+        -m "${BASE}:v${VERSION}-amd64" \
+        -m "${BASE}:v${VERSION}-arm64" \
+        -t "${BASE}:v${VERSION}"
+    echo "==> Tagging manifest as :latest"
+    crane tag "${BASE}:v${VERSION}" latest
+    crane manifest "${BASE}:v${VERSION}" >/dev/null
+    echo "Multi-arch manifest published: ${BASE}:v${VERSION}"
+
+# Build `:sipi_debug_layout` and surface the .debug file at
+# `sipi-${arch}.debug` for `sentry-cli debug-files upload` consumption.
+# Filename matches today's `nix-docker-extract-debug` recipe so
+# publish.yml's existing Sentry-upload step is untouched (only the
+# upstream changes from Nix to Bazel; the contract — `sipi-${arch}.debug`
+# at the workspace root — is preserved verbatim).
+#
+# `arch` is `amd64` or `arm64`; the recipe selects the Bazel platform
+# accordingly. CI's per-arch runners pass their matching value.
+bazel-docker-extract-debug arch *FLAGS='':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{arch}}" in
+        amd64) PLATFORM=//bazel/platforms:linux_amd64 ;;
+        arm64) PLATFORM=//bazel/platforms:linux_arm64 ;;
+        *)
+            echo "ERROR: unknown arch '{{arch}}' (expected: amd64, arm64)" >&2
+            exit 1
+            ;;
+    esac
+
+    # Build the laid-out debug-tree tarball and extract its single
+    # `.debug` file. The tarball layout is `lib/debug/.build-id/<xx>/<yy>.debug`;
+    # the filename is the build-id with the leading two hex chars removed
+    # and `.debug` appended.
+    bazel build --stamp --platforms="$PLATFORM" --verbose_failures {{FLAGS}} //src:sipi_debug_layout
+
+    # Find the single `.debug` file inside the tar. The tarball is
+    # deterministic by construction, so this glob always resolves
+    # to exactly one entry.
+    workdir=$(mktemp -d)
+    trap 'rm -rf "$workdir"' EXIT
+    tar -xf bazel-bin/src/sipi_debug_layout.tar -C "$workdir"
+    debug_file=$(find "$workdir/lib/debug/.build-id" -name '*.debug' | head -1)
+    if [ -z "$debug_file" ]; then
+        echo "ERROR: no .debug file found inside sipi_debug_layout.tar" >&2
+        exit 1
+    fi
+    cp "$debug_file" "sipi-{{arch}}.debug"
+    echo "Debug symbols copied to: sipi-{{arch}}.debug"
 
 #####################################
 # Tests (consume $SIPI_BIN, default ./result/bin/sipi)

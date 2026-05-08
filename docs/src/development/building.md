@@ -93,29 +93,33 @@ just bazel-build-sanitized     # bazel build --config=asan --config=ubsan //src:
 
 ## Building a Docker image
 
-The Docker image is built by `nixpkgs.dockerTools` from the same Nix
-derivation that produces every other build artifact. There is no
-`Dockerfile` — `flake.nix` is the single source of truth. A running
-Docker daemon is still required for `docker load` / `docker push`,
-but `docker buildx` is not used.
+The Docker image is built by Bazel `rules_oci` (`//src:image`,
+DEV-6346). There is no `Dockerfile` — the BUILD file in
+[`src/BUILD.bazel`](https://github.com/dasch-swiss/sipi/blob/main/src/BUILD.bazel)
+is the single source of truth. A running Docker daemon is still
+required for `docker load` / `docker push`, but `docker buildx` is
+not used (multi-arch manifest assembly happens via `crane index
+append` on a coordinator job).
 
 ```bash
-just nix-docker-build          # build .#docker-stream, load into local daemon
-just test-smoke                # build (if needed) + run Rust testcontainer smoke tests
+just test-smoke                # build host-arch image (via Bazel) + run smoke tests
 ```
 
 ### Platform-specific builds (used by CI)
 
 ```bash
-just nix-docker-build-amd64    # builds .#packages.x86_64-linux.docker-stream + sipi-debug
-just nix-docker-build-arm64    # builds .#packages.aarch64-linux.docker-stream + sipi-debug
-just nix-docker-extract-debug amd64    # rename result-debug to sipi-amd64.debug for Sentry
+just bazel-docker-build-amd64           # build + load amd64 image as daschswiss/sipi:latest
+just bazel-docker-build-arm64           # build + load arm64 image
+just bazel-docker-extract-debug amd64   # surface sipi-amd64.debug for Sentry upload
+just bazel-docker-push-amd64            # push amd64 image as :v<version>-amd64 + :latest-amd64
+just bazel-docker-push-arm64            # push arm64 image as :v<version>-arm64 + :latest-arm64
+just bazel-docker-publish-manifest      # crane index append → daschswiss/sipi:v<version>
 ```
 
-The per-arch recipes pin the flake attribute so a wrong-arch runner
-fails fast instead of silently producing a mismatched image. They
-also realize the matching `sipi-debug` symlink in the same `nix build`
-call as a near-free side effect of the layered-image build.
+Each per-arch CI runner builds + pushes only the matching architecture
+(`target_compatible_with` rejects cross-arch invocations). A coordinator
+job runs `crane index append` to stitch the two pushed digests into a
+multi-arch manifest at `daschswiss/sipi:v<version>`.
 
 ## Building on macOS without Nix (Not Recommended)
 
@@ -134,12 +138,11 @@ Run `just` (no arguments) to see the full list. Key target groups:
 | `bazel-build-sanitized` | `bazel build --config=asan --config=ubsan //src:sipi` — Debug + ASan + UBSan (DWARF inline; `.lsan_suppressions.txt` consulted by the e2e step) |
 | `bazel-build-fuzz` | `bazel build --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz` — libFuzzer harness binary (linux-x86_64 in CI, darwin-aarch64 for local dev; the recipe selects `//tools/fuzz:<host>_fuzz` from `uname`) |
 | `nix-coverage` | `.#dev^coverage` — writes `result-coverage/coverage.xml` |
-| `nix-docker-build` | Build `.#docker-stream` (host arch), load into local Docker daemon |
-| `nix-docker-build-{amd64,arm64}` | Build `.#packages.<arch>-linux.docker-stream` + `.#packages.<arch>-linux.sipi-debug` (single `nix build`) |
-| `nix-docker-extract-debug arch` | Rename `result-debug/.../*.debug` to `sipi-<arch>.debug` for Sentry upload |
-| `docker-push-{amd64,arm64}` | Push the already-loaded per-arch image to Docker Hub |
-| `docker-publish-manifest` | Publish multi-arch manifest combining the two pushed images |
-| `test-smoke` | Inner-loop: build Docker image (via Nix), then `cargo test` the smoke suite |
+| `bazel-docker-build-{amd64,arm64}` | `bazel run :image_load --stamp` — build + load per-arch image as `daschswiss/sipi:latest` |
+| `bazel-docker-push-{amd64,arm64}` | `bazel run :image_push_${arch}` — push to `daschswiss/sipi:{latest,v<version>}-${arch}` |
+| `bazel-docker-publish-manifest` | `crane index append` — assemble multi-arch manifest at `daschswiss/sipi:v<version>` |
+| `bazel-docker-extract-debug arch` | Build `:sipi_debug_layout`, surface `sipi-<arch>.debug` for `sentry-cli` upload |
+| `test-smoke` | Inner-loop: build host-arch Docker image (via Bazel), then `cargo test` the smoke suite |
 | `nix-test-smoke` | CI canonical: run pre-built `.#smoke-test` binary against an already-loaded image |
 | `test-smoke-ci` | Inner-loop: run cargo smoke tests against an already-loaded Docker image |
 | `rust-test-e2e` | Inner-loop: cargo-driven Rust end-to-end tests (reads `$SIPI_BIN`) |

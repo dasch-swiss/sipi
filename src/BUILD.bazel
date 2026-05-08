@@ -25,6 +25,9 @@ Versioning: `expand_template` regenerates `SipiVersion.h` from
 
 load("@aspect_bazel_lib//lib:expand_template.bzl", "expand_template")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_distroless//distroless:defs.bzl", "group", "passwd")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load", "oci_push")
+load("@tar.bzl", "tar")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -264,11 +267,30 @@ cc_binary(
     name = "sipi",
     srcs = ["sipi.cpp"],
     linkopts = select({
-        # Content-addressed build-id for reproducible debug-info splitting
-        # in Y+4. `--build-id=sha1` derives the build-id from the binary's
-        # content hash rather than a wall-clock random; identical inputs
-        # ↔ identical build-id.
-        "@platforms//os:linux": ["-Wl,--build-id=sha1"],
+        "@platforms//os:linux": [
+            # Content-addressed build-id for reproducible debug-info
+            # splitting in Y+4. `--build-id=sha1` derives the build-id
+            # from the binary's content hash rather than a wall-clock
+            # random; identical inputs ↔ identical build-id.
+            "-Wl,--build-id=sha1",
+            # Static-link libc++ runtime so the binary runs in
+            # distroless/base-debian12 (DEV-6346 production image),
+            # which ships only glibc + cacert + tzdata + openssl —
+            # there is no libc++.so.1 there for the dynamic loader to
+            # find. Without these flags sipi exits silently on first
+            # syscall under distroless. clang's libc++ ABI is stable
+            # across LLVM 19.x patch releases, so static-linking does
+            # not freeze us at toolchains_llvm 1.7.0.
+            #
+            # `-Wl,-Bstatic … -Wl,-Bdynamic` brackets these three
+            # archives only — system libs (`-lpthread`, `-lm`, `-ldl`)
+            # added by the toolchain after our linkopts stay dynamic.
+            "-Wl,-Bstatic",
+            "-lc++",
+            "-lc++abi",
+            "-lunwind",
+            "-Wl,-Bdynamic",
+        ],
         "//conditions:default": [],
     }),
     deps = [":sipi_lib"] + select({
@@ -278,4 +300,500 @@ cc_binary(
         "@platforms//os:linux": ["//bazel:glibc23_compat"],
         "//conditions:default": [],
     }),
+)
+
+# ── NSS layer (DEV-6346, PR Y+4) ────────────────────────────────────────────
+# fakeNss-equivalent /etc/passwd + /etc/group + /etc/nsswitch.conf, replacing
+# `dockerTools.fakeNss` from today's Nix flake. The `:nss_layer_passwd` and
+# `:nss_layer_group` targets each produce a one-file tarball laying down
+# /etc/{passwd,group}; `:nss_layer_nsswitch` lays down /etc/nsswitch.conf.
+# All three are consumed as separate layers by `oci_image(tars = [...])`.
+#
+# `entries`-driven serialisation matches today's fakeNss behaviour 1:1 for
+# the two principals SIPI cares about:
+#   - root / uid=0 / gid=0  — the runtime user (see src/BUILD.bazel sipi
+#     binary entrypoint; SIPI runs as root because the NFS Image-root
+#     mount is owned by uids the orchestrator controls; tracked in DEV-5920
+#     for an eventual non-root pass)
+#   - nobody / uid=65534 / gid=65534 — POSIX-required entry that some
+#     glibc tooling probes (`getpwuid_r(65534, …)`) before falling through
+#     to NSS error paths
+passwd(
+    name = "nss_layer_passwd",
+    entries = [
+        {
+            "gecos": ["root"],
+            "gid": 0,
+            "home": "/root",
+            "shell": "/sbin/nologin",
+            "uid": 0,
+            "username": "root",
+        },
+        {
+            "gecos": ["nobody"],
+            "gid": 65534,
+            "home": "/",
+            "shell": "/sbin/nologin",
+            "uid": 65534,
+            "username": "nobody",
+        },
+    ],
+)
+
+group(
+    name = "nss_layer_group",
+    entries = [
+        {
+            "gid": 0,
+            "name": "root",
+            "users": ["root"],
+        },
+        {
+            "gid": 65534,
+            "name": "nobody",
+            "users": [],
+        },
+    ],
+)
+
+# nsswitch.conf content matches today's `dockerTools.fakeNss` — `files`
+# resolution for every database, plus `dns` fallback for `hosts:`. SIPI's
+# image is closed-network by default; outbound DNS only matters if a
+# Lua script does network I/O at request handling time (rare).
+tar(
+    name = "nss_layer_nsswitch",
+    srcs = ["nsswitch.conf"],
+    mtree = [
+        "./etc type=dir mode=0755 time=0",
+        "./etc/nsswitch.conf type=file mode=0644 time=0 content=$(execpath nsswitch.conf)",
+    ],
+)
+
+# ── Image stamping (DEV-6346, PR Y+4) ───────────────────────────────────────
+# OCI image `created` timestamp + image labels are stamped from the
+# `STABLE_*` keys emitted by `tools/workspace_status.sh` (already wired
+# by Y for SipiVersion.h). The `STABLE_*` prefix is critical: variables
+# in `volatile-status.txt` (the bucket non-stamp keys land in) cause
+# Bazel to invalidate the action on every build (rules_oci#269), which
+# would defeat reproducible-tarball-SHA goals.
+#
+# `stamp_substitutions` only fires under `--stamp` (set by `:release`
+# config in .bazelrc); plain `bazel build` keeps the `substitutions`
+# fallback values, producing a deterministic local image with
+# 1970-01-01 timestamp and "0.0.0-unstamped" labels — useful for diffoci
+# reproducibility checks where two consecutive non-stamp builds should
+# produce byte-identical tarballs.
+
+# `created` is consumed by oci_image's `created` attribute, which expects
+# a label producing a single-line text file containing an RFC 3339
+# timestamp (matching today's `dockerTools.image.created` value spliced
+# from `self.lastModifiedDate`).
+expand_template(
+    name = "image_created",
+    out = "image_created.txt",
+    stamp_substitutions = {
+        "1970-01-01T00:00:00Z": "{{STABLE_IMAGE_CREATED}}",
+    },
+    template = ["1970-01-01T00:00:00Z"],
+)
+
+# Image tag is consumed by `oci_push.remote_tags`; stamping makes
+# `daschswiss/sipi:v<version>` resolve at push time. The `v` prefix
+# matches today's Dockerfile-era tag (release-please tags `v<version>`
+# directly, but the binary's --version output and the OCI label both
+# read `<version>` without the prefix — so we add it here in the tag-
+# emitting template only).
+expand_template(
+    name = "image_tag",
+    out = "image_tag.txt",
+    stamp_substitutions = {
+        "0.0.0-unstamped": "v{{STABLE_SIPI_VERSION}}",
+    },
+    template = ["0.0.0-unstamped"],
+)
+
+# Labels file in `KEY=VALUE` form — oci_image's `labels` attribute
+# accepts a label producing a file with one entry per line (matching
+# today's `dockerTools.image.config.Labels` map).
+#
+# `org.opencontainers.image.source/revision/version/licenses/title/
+# description` carry over verbatim from the Nix flake's image config
+# (flake.nix:245-252). Extra labels can be added here later without
+# touching the oci_image declaration.
+expand_template(
+    name = "image_labels",
+    out = "image_labels.txt",
+    stamp_substitutions = {
+        "0000000000000000000000000000000000000000": "{{STABLE_GIT_COMMIT}}",
+        "v0.0.0-unstamped": "v{{STABLE_SIPI_VERSION}}",
+    },
+    template = [
+        "org.opencontainers.image.source=https://github.com/dasch-swiss/sipi",
+        "org.opencontainers.image.revision=0000000000000000000000000000000000000000",
+        "org.opencontainers.image.version=v0.0.0-unstamped",
+        "org.opencontainers.image.licenses=AGPL-3.0-only",
+        "org.opencontainers.image.title=Sipi",
+        "org.opencontainers.image.description=IIIF-compatible media server.",
+    ],
+)
+
+# ── Debug-info split (DEV-6346, PR Y+4) ─────────────────────────────────────
+# Two-genrule pipeline replacing today's `separateDebugInfo = true` Nix
+# attribute (deleted in this PR's flake.nix thinning):
+#
+#   1. `:sipi_debug_split` reads the build-id from the ELF .note.gnu.build-id
+#      section via llvm-readelf, splits the binary into stripped + .debug,
+#      and embeds a debuglink so gdb / Sentry / lldb can follow the
+#      reference back. `--build-id=sha1` on `:sipi`'s linkopts makes the
+#      build-id content-addressed (identical inputs ↔ identical build-id),
+#      which is the gate for byte-reproducible OCI tarballs.
+#
+#   2. `:sipi_debug_layout` lays the .debug file out under the GNU
+#      `lib/debug/.build-id/<xx>/<yy>.debug` path that today's
+#      `publish.yml`'s Sentry upload step (`sentry-cli debug-files upload`)
+#      expects. The `just bazel-docker-extract-debug` recipe (planted
+#      later in this PR) renames the file to `sipi-${arch}.debug`
+#      before `sentry-cli` consumes it — that filename contract carries
+#      over verbatim from today's `nix-docker-extract-debug` recipe.
+#
+# Linux-only: the underlying llvm-objcopy / llvm-readelf can in principle
+# operate on Mach-O too, but the GNU debuglink + build-id-path layout is
+# ELF-specific. macOS uses dSYM bundles separately (not in this PR's
+# scope). `target_compatible_with = ["@platforms//os:linux"]` makes
+# `bazel build //src:sipi_debug_layout` on darwin produce a clean
+# "incompatible target" message rather than a confusing failure.
+genrule(
+    name = "sipi_debug_split",
+    srcs = ["//src:sipi"],
+    outs = [
+        "_dbg/sipi.stripped",
+        "_dbg/sipi.debug",
+        "_dbg/sipi_build_id.txt",
+    ],
+    cmd = """
+set -euo pipefail
+OBJCOPY=$(execpath @llvm_toolchain_llvm//:objcopy)
+READELF=$(execpath @llvm_toolchain_llvm//:readelf)
+BIN=$(execpath //src:sipi)
+
+# Build-id is encoded in `.note.gnu.build-id`; llvm-readelf -n prints
+# something like:
+#   Build ID: e7b3b4f4d8c9...  (40 hex chars for SHA-1)
+BUILD_ID=$$("$$READELF" -n "$$BIN" | awk '/Build ID:/ {print $$3; exit}')
+if [ -z "$$BUILD_ID" ]; then
+    echo "ERROR: no Build ID in $$BIN — was --build-id=sha1 propagated?" >&2
+    exit 1
+fi
+echo "$$BUILD_ID" > $(execpath _dbg/sipi_build_id.txt)
+
+# Order matters: --only-keep-debug first reads the original ELF, then
+# we strip in-place into a copy and add the debuglink last (the link
+# embeds the .debug filename + CRC32, both finalised once stripping
+# is done).
+#
+# The output is in a `_dbg/` subdir so the stripped artifact's basename
+# stays `sipi.stripped` (matching the implicit `<binary>.stripped` output
+# Bazel generates for cc_binary, just at a different path) without
+# colliding with the cc_binary's own implicit-output declaration.
+"$$OBJCOPY" --only-keep-debug "$$BIN" $(execpath _dbg/sipi.debug)
+cp "$$BIN" $(execpath _dbg/sipi.stripped)
+"$$OBJCOPY" --strip-debug --strip-unneeded $(execpath _dbg/sipi.stripped)
+"$$OBJCOPY" --add-gnu-debuglink=$(execpath _dbg/sipi.debug) $(execpath _dbg/sipi.stripped)
+""",
+    target_compatible_with = ["@platforms//os:linux"],
+    tools = [
+        "@llvm_toolchain_llvm//:objcopy",
+        "@llvm_toolchain_llvm//:readelf",
+    ],
+)
+
+# Lay the .debug file out under `lib/debug/.build-id/<xx>/<yy>.debug` —
+# the GNU debuglink convention that lldb/gdb/Sentry's symbolicator
+# follows. The two-character directory is the leading byte of the
+# build-id (hex); the filename is the remaining 38 hex chars + ".debug".
+genrule(
+    name = "sipi_debug_layout",
+    srcs = [
+        ":_dbg/sipi.debug",
+        ":_dbg/sipi_build_id.txt",
+    ],
+    outs = ["sipi_debug_layout.tar"],
+    cmd = """
+set -euo pipefail
+ID=$$(cat $(execpath :_dbg/sipi_build_id.txt))
+PREFIX=$${ID:0:2}
+SUFFIX=$${ID:2}
+mkdir -p out/lib/debug/.build-id/$$PREFIX
+cp $(execpath :_dbg/sipi.debug) out/lib/debug/.build-id/$$PREFIX/$$SUFFIX.debug
+# Deterministic tar — same flags as @tar.bzl uses internally so two
+# builds with identical inputs produce identical bytes.
+tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \\
+    -cf $(OUTS) -C out lib
+""",
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+# ── OCI image (DEV-6346, PR Y+4) ────────────────────────────────────────────
+# Layers, in the order the image graph reads them (leaf → root):
+#
+#   1. distroless/base-debian12 base layer          (oci_pull, MODULE.bazel)
+#      provides glibc, ld-linux, libssl3, libcrypto, ca-certificates,
+#      tzdata. Pinned by digest, never tag.
+#   2. :nss_layer_passwd / :nss_layer_group / :nss_layer_nsswitch
+#      replaces today's `dockerTools.fakeNss`.
+#   3. :sipi_bin_layer
+#      lays the sipi binary at /sbin/sipi.
+#   4. :sipi_runtime_layer
+#      mirrors today's `fakeRootCommands` block — creates the empty
+#      runtime dirs (cache, images/knora) and lays the 5 Lua / HTML
+#      files at /sipi/{config,scripts,server}.
+#
+# Runtime extras live in `@bookworm//:flat` (tini, curl, plus their
+# transitive deps — libc6, libcurl4, libssl3, libnghttp2-14, …) which
+# `rules_distroless`'s `apt` extension resolves from `MODULE.bazel`'s
+# `apt.install(name = "bookworm", …)` against the snapshot.debian.org
+# pin in `bazel/distroless/bookworm.yaml`. The `flat` target is the
+# transitive package tree merged into a single deduplicated tar.
+#
+# `ffmpeg` + `ffprobe` come from BtbN's LGPL static builds via
+# `@ffmpeg_static_linux_{amd64,arm64}` http_archives (see MODULE.bazel
+# for the source + pin). Static-linked, ~70 MiB combined for both
+# binaries — vs. ~500 MiB for Debian's `ffmpeg` package which would
+# pull libsdl2 / libxv1 / libxext6 via libavfilter9's GUI sinks. The
+# only DSP consumer of in-image ffmpeg is dsp-ingest's
+# `docker run --entrypoint ffprobe daschswiss/sipi …` (video metadata).
+# Per-arch layer selection is via `select()` on the host CPU below.
+
+# Sipi binary at /sbin/sipi. Linux-only because the binary itself is
+# Linux ELF (cc_binary //src:sipi target_compatible_with linux for the
+# image-build path; on darwin :sipi is Mach-O and not consumed here).
+tar(
+    name = "sipi_bin_layer",
+    srcs = ["//src:sipi"],
+    mtree = [
+        "./sbin type=dir mode=0755 time=0",
+        "./sbin/sipi type=file mode=0755 time=0 content=$(execpath //src:sipi)",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+# Per-arch ffmpeg/ffprobe layer (DEV-6346, runtime extra). Sourced from
+# BtbN's LGPL static builds — see `MODULE.bazel`'s
+# `@ffmpeg_static_linux_*` http_archives for the rationale + pin. Only
+# the two binaries are laid out (no man pages, no LICENSE.txt sidecar
+# — those would inflate the layer for no operational value; LICENSE
+# requirement is met by the source archive being available at the
+# pinned upstream URL).
+tar(
+    name = "ffmpeg_layer_amd64",
+    srcs = [
+        "@ffmpeg_static_linux_amd64//:bin/ffmpeg",
+        "@ffmpeg_static_linux_amd64//:bin/ffprobe",
+    ],
+    mtree = [
+        "./usr type=dir mode=0755 time=0",
+        "./usr/bin type=dir mode=0755 time=0",
+        "./usr/bin/ffmpeg type=file mode=0755 time=0 content=$(execpath @ffmpeg_static_linux_amd64//:bin/ffmpeg)",
+        "./usr/bin/ffprobe type=file mode=0755 time=0 content=$(execpath @ffmpeg_static_linux_amd64//:bin/ffprobe)",
+    ],
+    target_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+)
+
+tar(
+    name = "ffmpeg_layer_arm64",
+    srcs = [
+        "@ffmpeg_static_linux_arm64//:bin/ffmpeg",
+        "@ffmpeg_static_linux_arm64//:bin/ffprobe",
+    ],
+    mtree = [
+        "./usr type=dir mode=0755 time=0",
+        "./usr/bin type=dir mode=0755 time=0",
+        "./usr/bin/ffmpeg type=file mode=0755 time=0 content=$(execpath @ffmpeg_static_linux_arm64//:bin/ffmpeg)",
+        "./usr/bin/ffprobe type=file mode=0755 time=0 content=$(execpath @ffmpeg_static_linux_arm64//:bin/ffprobe)",
+    ],
+    target_compatible_with = [
+        "@platforms//cpu:arm64",
+        "@platforms//os:linux",
+    ],
+)
+
+# Sipi runtime tree — mirrors today's `fakeRootCommands` in flake.nix:
+# five Lua / HTML files copied into /sipi/{config,scripts,server},
+# plus empty /sipi/{images,images/knora,cache} dirs sipi creates on
+# first request anyway but pre-baking them avoids race-y `mkdir`s
+# during cold-start.
+#
+# `/etc/localtime` is NOT symlinked here (today's flake.nix does it
+# inside fakeRootCommands). distroless_base ships its own /etc/localtime
+# pointing at /usr/share/zoneinfo/Etc/UTC; the `TZ=Europe/Zurich` env
+# var below is what sipi reads. ops-deploy bind-mounts the host's
+# /etc/localtime over the container's at runtime in production, so the
+# in-image symlink is functionally redundant.
+tar(
+    name = "sipi_runtime_layer",
+    srcs = [
+        "//config:sipi.config.lua",
+        "//config:sipi.init.lua",
+        "//scripts:send_response.lua",
+        "//scripts:test_functions.lua",
+        "//server:test.html",
+    ],
+    mtree = [
+        "./sipi type=dir mode=0755 time=0",
+        "./sipi/cache type=dir mode=0755 time=0",
+        "./sipi/config type=dir mode=0755 time=0",
+        "./sipi/images type=dir mode=0755 time=0",
+        "./sipi/images/knora type=dir mode=0755 time=0",
+        "./sipi/scripts type=dir mode=0755 time=0",
+        "./sipi/server type=dir mode=0755 time=0",
+        "./sipi/config/sipi.config.lua type=file mode=0644 time=0 content=$(execpath //config:sipi.config.lua)",
+        "./sipi/config/sipi.init.lua type=file mode=0644 time=0 content=$(execpath //config:sipi.init.lua)",
+        "./sipi/scripts/send_response.lua type=file mode=0644 time=0 content=$(execpath //scripts:send_response.lua)",
+        "./sipi/scripts/test_functions.lua type=file mode=0644 time=0 content=$(execpath //scripts:test_functions.lua)",
+        "./sipi/server/test.html type=file mode=0644 time=0 content=$(execpath //server:test.html)",
+    ],
+)
+
+# `oci_image`'s `os`/`architecture`/`variant` are inherited from the
+# `base` image — rules_oci forbids overriding them when `base` is set.
+# Multi-arch resolution flows through `oci.pull(platforms = [...])` in
+# MODULE.bazel: per-arch CI runners build with their host's platform,
+# `@distroless_base` resolves to the matching arch's manifest, and the
+# resulting image is self-describing. The coordinator job then runs
+# `crane index append` to stitch the per-arch digests into a multi-arch
+# manifest (see research-findings §1).
+oci_image(
+    name = "image",
+    base = "@distroless_base",
+    cmd = ["--config=/sipi/config/sipi.config.lua"],
+    created = ":image_created",
+    # Match today's flake.nix entrypoint chain: tini reaps zombies and
+    # forwards SIGTERM to sipi for graceful shutdown on `docker stop`.
+    # Without tini, sipi as PID 1 doesn't get SIGTERM (the kernel
+    # filters signals to PID 1 unless they have a registered handler)
+    # and the container falls through to the 10 s SIGKILL grace.
+    entrypoint = [
+        "/usr/bin/tini",
+        "--",
+        "/sbin/sipi",
+    ],
+    env = {
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        # distroless_base ships ca-certificates at this canonical Debian
+        # path; sipi's curl-built libcurl reads SSL_CERT_FILE for outbound
+        # HTTPS (e.g. JWT issuer keys, Sentry).
+        "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
+        "TZ": "Europe/Zurich",
+        # distroless_base's tzdata installs zoneinfo under /usr/share/
+        # zoneinfo (Debian convention) — match today's flake.nix env
+        # which sets TZDIR explicitly so `TZ=Europe/Zurich` resolves
+        # without depending on /etc/localtime being bind-mounted.
+        "TZDIR": "/usr/share/zoneinfo",
+    },
+    exposed_ports = ["1024/tcp"],
+    labels = ":image_labels",
+    target_compatible_with = ["@platforms//os:linux"],
+    tars = [
+        # Order: NSS layers + sipi binary + sipi runtime tree first, then
+        # the bookworm apt-resolved layer last. Layer ordering on
+        # `oci_image.tars` is overlay-style (later layers win); apt-
+        # resolved package files don't conflict with the sipi-side
+        # layers (different paths) so the order is purely a cache-
+        # locality choice — sipi-side layers churn more frequently on
+        # PRs, so put them earlier so the larger bookworm layer hits
+        # cache more often.
+        ":nss_layer_passwd",
+        ":nss_layer_group",
+        ":nss_layer_nsswitch",
+        ":sipi_bin_layer",
+        ":sipi_runtime_layer",
+        "@bookworm//:flat",
+    ] + select({
+        "@platforms//cpu:x86_64": [":ffmpeg_layer_amd64"],
+        "@platforms//cpu:arm64": [":ffmpeg_layer_arm64"],
+    }),
+    workdir = "/sipi",
+)
+
+# ── Image push + load (DEV-6346, PR Y+4) ────────────────────────────────────
+# Two ways to consume `:image`:
+#
+#   - `bazel run //src:image_load` materialises the image as a tarball
+#     and loads it into the local Docker daemon as
+#     `daschswiss/sipi:latest`. Consumed by the smoke-test workflow
+#     (`just bazel-docker-build-${arch}` plants this in C7) and by ad-
+#     hoc local `docker run daschswiss/sipi …` invocations.
+#
+#   - `bazel run //src:image_push_${arch}` pushes the per-arch image
+#     to `docker.io/daschswiss/sipi` with two tags: `latest-${arch}` and
+#     `v<version>-${arch}`. The coordinator job in `publish.yml` then
+#     runs `crane index append` to assemble the multi-arch manifest at
+#     `daschswiss/sipi:v<version>` from the two pushed digests.
+#
+# Per-arch `target_compatible_with` gates each push target to the
+# matching host CPU — `bazel run //src:image_push_amd64` from an
+# arm64 runner produces a clean "incompatible target" message rather
+# than silently pushing an arm64 image under an amd64 tag.
+
+# Per-arch tag lists. Stamped under `--stamp` (set by `:release` config
+# in .bazelrc); plain non-stamp builds use the unstamped fallback so
+# the push target is still buildable in a local diffoci scenario.
+expand_template(
+    name = "remote_tags_amd64",
+    out = "remote_tags_amd64.txt",
+    stamp_substitutions = {
+        "v0.0.0-unstamped-amd64": "v{{STABLE_SIPI_VERSION}}-amd64",
+    },
+    template = [
+        "v0.0.0-unstamped-amd64",
+        "latest-amd64",
+    ],
+)
+
+expand_template(
+    name = "remote_tags_arm64",
+    out = "remote_tags_arm64.txt",
+    stamp_substitutions = {
+        "v0.0.0-unstamped-arm64": "v{{STABLE_SIPI_VERSION}}-arm64",
+    },
+    template = [
+        "v0.0.0-unstamped-arm64",
+        "latest-arm64",
+    ],
+)
+
+oci_push(
+    name = "image_push_amd64",
+    image = ":image",
+    remote_tags = ":remote_tags_amd64",
+    repository = "docker.io/daschswiss/sipi",
+    target_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+)
+
+oci_push(
+    name = "image_push_arm64",
+    image = ":image",
+    remote_tags = ":remote_tags_arm64",
+    repository = "docker.io/daschswiss/sipi",
+    target_compatible_with = [
+        "@platforms//cpu:arm64",
+        "@platforms//os:linux",
+    ],
+)
+
+# `oci_load` produces a Docker tarball + a `bazel run` target that
+# `docker load`s it into the local daemon. The repo_tag matches the
+# smoke test's `IMAGE` constant (`daschswiss/sipi:latest`) verbatim.
+oci_load(
+    name = "image_load",
+    image = ":image",
+    repo_tags = ["daschswiss/sipi:latest"],
+    target_compatible_with = ["@platforms//os:linux"],
 )

@@ -1,0 +1,44 @@
+# Debian bookworm packages installed into the production OCI image
+# (`//src:image`) on top of `gcr.io/distroless/base-debian12`.
+#
+# Anytime this file is changed, the lockfile needs to be regenerated:
+#
+#     bazel run @bookworm//:lock
+#
+# The lockfile is the source of truth at build time; `bookworm.yaml`
+# only matters at lock-regeneration time.
+#
+# Snapshot pin: snapshot.debian.org freezes Debian's apt index at the
+# timestamp below so the resolved package versions + sha256 digests
+# are reproducible. Bumping the snapshot means picking a newer
+# `YYYYMMDDTHHMMSSZ` timestamp from snapshot.debian.org's archive
+# listing and re-running the lock command.
+version: 1
+
+sources:
+  - channel: bookworm main
+    urls:
+      - https://snapshot-cloudflare.debian.org/archive/debian/20260101T000000Z
+      - https://snapshot.debian.org/archive/debian/20260101T000000Z
+  - channel: bookworm-security main
+    url: https://snapshot-cloudflare.debian.org/archive/debian-security/20260101T000000Z
+  - channel: bookworm-updates main
+    url: https://snapshot-cloudflare.debian.org/archive/debian/20260101T000000Z
+
+archs:
+  - "amd64"
+  - "arm64"
+
+packages:
+  # PID 1 — minimal init. Forwards SIGTERM to sipi for graceful shutdown
+  # and reaps zombies. Without it, sipi as PID 1 doesn't get SIGTERM on
+  # `docker stop` (the kernel filters signals to PID 1 unless they have
+  # a registered handler) and the container falls through to the 10 s
+  # SIGKILL grace timeout.
+  - "tini"
+
+  # Runtime healthcheck probe — invoked by ops-deploy's compose-level
+  # `healthcheck.test: ["CMD", "curl", "-sf", "http://localhost:1024/health"]`
+  # (INFRA-1226). The healthcheck runs *inside* the container, so curl
+  # must be in the image regardless of where the directive lives.
+  - "curl"

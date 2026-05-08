@@ -99,17 +99,20 @@ just nix-build                         # .#dev: Debug + coverage; unit tests run
 just nix-build-default                 # .#default: RelWithDebInfo + tests
 just nix-build-release                 # .#release: stripped, no tests
 just nix-coverage                      # .#dev^coverage: writes result-coverage/coverage.xml
-just nix-docker-build                  # .#docker-stream: host-arch image into local Docker daemon
-just nix-docker-build-amd64            # .#packages.x86_64-linux.{docker-stream,sipi-debug} (CI)
-just nix-docker-build-arm64            # .#packages.aarch64-linux.{docker-stream,sipi-debug} (CI)
-just nix-docker-extract-debug arch     # rename result-debug/.../*.debug → sipi-<arch>.debug
 ```
 
-Debug symbols for any variant are available on the `.debug` output:
+The Docker image is owned by Bazel `rules_oci` (`//src:image`,
+DEV-6346) and its split-debug `.debug` artifact by
+`//src:sipi_debug_layout`. See
+[`building.md`](building.md#docker-build) for the `bazel-docker-*`
+recipes; Nix builds no longer expose `.#docker`, `.#docker-stream`, or
+`.#sipi-debug` outputs.
+
+Debug symbols for the Nix-built sipi binary remain available on the
+`.debug` output of the dev variant for inner-loop debugger work:
 
 ```bash
 nix build .#dev.debug                  # extracted symbols at result/lib/debug/...
-nix build .#sipi-debug                 # passthrough to .#default.debug, used by CI
 ```
 
 ## Rust test binaries (via crane)
@@ -154,68 +157,18 @@ Two crane-specific notes:
 
 ## Docker image
 
-The Docker image is built by `pkgs.dockerTools.streamLayeredImage`
-in `flake.nix`. There is no `Dockerfile` — `flake.nix` is the single
-source of truth for the production image, the same way it is for
-every other build artifact.
+The Docker image is owned by Bazel `rules_oci` (`//src:image`,
+DEV-6346 / PR Y+4) — Nix no longer builds it. See
+[`building.md`](building.md#docker-build) for the `bazel-docker-*`
+recipes, base-image pin, and stamping. `STABLE_*` keys (consumed by
+`oci_image`'s `created` and the `oci_push` `remote_tags`) come from
+`tools/workspace_status.sh`, the same source that already drives
+`SipiVersion.h`.
 
-### Runtime shape
-
-| Concern | Value |
-|---|---|
-| Base | nixpkgs userland (glibc) — *not* musl/Alpine |
-| User | **`root`** (deferred to DEV-5920; sipi reads artefacts under the SIPI Image root from an NFS mount whose ownership is controlled by another service — switching to a non-root uid requires uid/gid coordination on the export side; `flake.nix` documents the constraint near the unset `config.User`) |
-| PID 1 | `tini` (zombie reaping + signal forwarding) |
-| Healthcheck | `curl -sf http://localhost:1024/health` — 30 s interval, 5 s timeout, 10 s start period, 3 retries |
-| Locale | `C.UTF-8` via `LC_ALL`/`LANG` (built into glibc — no `glibcLocales` derivation needed; covers `LC_CTYPE` for UTF-8 byte handling in exiv2 metadata, Lua string functions, and `std::locale()`) |
-| Timezone | `Europe/Zurich` (`tzdata` + `TZ` env) |
-| `created` | `self.lastModifiedDate` in ISO 8601 basic form (deterministic per `flake.lock`) |
-| OCI labels | `org.opencontainers.image.{source,revision,version,licenses,title,description}` |
-| Image tag | `sipiForImage.version` (from `version.txt` — release-please updates this before tagging) |
-| Layering | `dockerTools.buildLayeredImage` with `maxLayers = 125` |
-
-### Build commands
-
-```bash
-# Local-dev (host-arch image)
-just nix-docker-build
-
-# CI (per-arch, with matching .debug symlink)
-just nix-docker-build-amd64
-just nix-docker-build-arm64
-just nix-docker-extract-debug amd64        # → sipi-amd64.debug for Sentry
-```
-
-The per-arch recipes pin the flake attribute (`.#packages.<arch>-linux.docker-stream`)
-so a wrong-arch runner fails fast instead of silently producing a
-mismatched image. They also realize the `sipi-debug` output as a
-near-free byproduct of the layered-image build — the debug symbols
-are already in the store closure, the second `-o result-debug` flag
-just adds a symlink for `nix-docker-extract-debug` to consume.
-
-### Custom version override
-
-For ad-hoc builds where the binary should report a different version
-than `version.txt` (e.g. a hotfix branch), override at the package
-layer:
-
-```nix
-let
-  flake = builtins.getFlake "github:dasch-swiss/sipi/<rev>";
-  pkgs = flake.legacyPackages.${builtins.currentSystem};
-  customSipi = pkgs.sipi.override { providedVersion = "4.1.1-hotfix.1"; };
-  customImage = pkgs.dockerTools.streamLayeredImage {
-    name = "daschswiss/sipi";
-    tag  = customSipi.version;
-    contents = [ customSipi /* + others */ ];
-    # ...
-  };
-in customImage
-```
-
-The `providedVersion` parameter on `package.nix` propagates through
-`pkgs.sipi.version` and into both the binary's `--version` output
-and the OCI image tag.
+For ad-hoc Nix-built sipi binaries with a custom `--version` string
+(hotfix branches, internal pre-releases), `pkgs.sipi.override
+{ providedVersion = "..."; }` still works — only the image-build path
+is gone.
 
 ## Dev shell inner loop (non-recipe — local iteration only)
 

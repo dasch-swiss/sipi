@@ -58,11 +58,13 @@ The `test` job is matrixed on `ubuntu-24.04` (amd64) and `ubuntu-24.04-arm`
    short-term holdout that still needs a tool on PATH (installed via
    `nix profile install nixpkgs#hurl`).
 3. `just nix-coverage` and Codecov upload — amd64 only.
-4. `just nix-docker-build-${arch}` — produces the per-arch Docker image via
-   `pkgs.dockerTools.streamLayeredImage` and loads it into the local Docker
-   daemon.
-5. `just nix-test-smoke` — Rust smoke test from `.#smoke-test` against the
-   loaded image.
+4. `just bazel-docker-build-${arch}` — produces the per-arch Docker
+   image via Bazel `rules_oci` (`//src:image_load`) and loads it into
+   the local Docker daemon as `daschswiss/sipi:latest`. Image owner:
+   DEV-6346 (PR Y+4).
+5. `just nix-test-smoke` — Rust smoke test from `.#smoke-test` against
+   the Bazel-built image. Smoke runner stays Nix-built until DEV-6347
+   (Y+5) ports it to `rules_rust`.
 6. `Docker Scout — compare to production` — both arches, on PR events only.
 7. `Docker Scout — CVE report (SARIF)` and `Upload SARIF to GitHub Security`
    — amd64 only, on PR events only (CVE findings are arch-independent; one
@@ -99,34 +101,34 @@ Gate model:
 2. `release-gate` fires on `validate-docker` success.
 3. Publish jobs run in parallel after the gate:
    - `publish-docker / {arch}` — builds the Docker image via
-     `just nix-docker-build-${arch}` (wraps
-     `nix build .#packages.<arch>-linux.docker-stream
-            .#packages.<arch>-linux.sipi-debug` in a single call),
-     extracts the `.debug` file via `just nix-docker-extract-debug`,
-     runs smoke tests, pushes the image, uploads SBOM, pushes debug
-     symbols to Sentry.
-   - `manifest` — multi-arch Docker manifest combining the two
-     pushed per-arch images.
+     `just bazel-docker-build-${arch}` (`bazel run :image_load --stamp`),
+     extracts the `.debug` file via
+     `just bazel-docker-extract-debug ${arch}` (builds
+     `:sipi_debug_layout`), runs smoke tests, pushes the image via
+     `just bazel-docker-push-${arch}` (`bazel run :image_push_${arch}`),
+     uploads SBOM, pushes debug symbols to Sentry.
+   - `manifest` — `just bazel-docker-publish-manifest` runs
+     `crane index append` to assemble the multi-arch manifest at
+     `daschswiss/sipi:v<version>` from the two pushed per-arch digests.
    - `docs` — mkdocs deploy.
 4. `sentry` finalises the release after the manifest job completes.
 
 ### Docker image build (PRs and tag releases)
 
-Both `ci.yml` (PRs) and `publish.yml` (tags) build the
-Docker image entirely through Nix. The image is produced by
-`pkgs.dockerTools.streamLayeredImage` from the same derivation graph
-as every other build artifact, so `Cachix` substitutes `ext/*`
-(exiv2, libtiff, kakadu, …) instead of recompiling them on every
-run. There is no GHA Docker-layer cache (`type=gha,mode=max`); there
-is no `Dockerfile` — `flake.nix` is the single source of truth.
+Both `ci.yml` (PRs) and `publish.yml` (tags) build the Docker image
+entirely through Bazel `rules_oci` (`//src:image`, DEV-6346). There is
+no GHA Docker-layer cache (`type=gha,mode=max`); there is no
+`Dockerfile` — `src/BUILD.bazel` is the single source of truth.
+Multi-arch manifest assembly happens via `crane index append` on a
+coordinator job (per-arch CI runners produce per-arch images, then a
+single coordinator stitches the digests into a multi-arch manifest).
 
-The image's runtime contract: runs as `root`, `tini` as PID 1,
-HEALTHCHECK against `/health` on port 1024, `TZ=Europe/Zurich`,
-`LC_ALL=C.UTF-8`, OCI labels populated from `flake.lock`. `C.UTF-8`
-is sufficient because sipi has no code path that depends on locale
-categories beyond `LC_CTYPE` (which `C.UTF-8` covers), and operators
-do not override `LC_ALL` at runtime. See
-[`nix.md`](nix.md#docker-image) for the derivation details.
+The image's runtime contract: built on `gcr.io/distroless/base-debian12`
+(pinned by digest), runs sipi as root (NFS uid coordination tracked in
+DEV-5920), `TZ=Europe/Zurich`, `LC_ALL=C.UTF-8`, OCI labels stamped
+from `STABLE_GIT_COMMIT` + `STABLE_SIPI_VERSION`. The image ships
+HEALTHCHECK-agnostic (HEALTHCHECK is a Docker schema-2 extension, not
+part of OCI); compose-level healthcheck is in INFRA-1226.
 
 ## Local Reproduction
 
@@ -151,7 +153,7 @@ just nix-build
 just nix-test-e2e                         # binaries from .#e2e-tests
 just hurl-test                            # still needs `hurl` on PATH
 just nix-coverage
-just nix-docker-build-amd64               # or -arm64 on aarch64 host
+just bazel-docker-build-amd64             # or bazel-docker-build-arm64 on aarch64 host
 just nix-test-smoke                       # binary from .#smoke-test
 
 # Sanitizer build + e2e (what sanitizer.yml runs)
@@ -168,10 +170,14 @@ just bazel-run-fuzz fuzz-corpus-live 60 fuzz/handlers/corpus
 
 # Docker image with split debug symbols (what publish.yml publish-docker
 # runs). The PR-time `ci.yml test` job builds the same image inline; this
-# block only adds the Sentry-bound `nix-docker-extract-debug` step.
-just nix-docker-build-amd64               # arch-pinned image + sipi-debug
+# block only adds the Sentry-bound `bazel-docker-extract-debug` step plus
+# the per-arch push.
+just bazel-docker-build-amd64             # build + load amd64 image
 just nix-test-smoke                       # smoke test against loaded image
-just nix-docker-extract-debug amd64       # produces sipi-amd64.debug for Sentry
+just bazel-docker-extract-debug amd64     # produces sipi-amd64.debug for Sentry
+just bazel-docker-push-amd64              # push image to Docker Hub
+# After both per-arch pushes, on the coordinator runner:
+just bazel-docker-publish-manifest        # crane index append → multi-arch manifest
 
 # Darwin build (what ci.yml nix-macos-build runs)
 just nix-build-default

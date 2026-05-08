@@ -21,7 +21,7 @@ For full build instructions (Docker, Nix, macOS), see [`docs/src/development/bui
 
 **Build reproducibility invariant:** every `nix-*` recipe wraps `nix build .#<variant>`. CI invokes only `just <recipe>` — no inline cmake or `nix build` calls. Incremental inner-loop development is a documented dev-shell pattern (see below), not a recipe.
 
-**Build completeness invariant:** every build target must succeed on every supported platform — macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. This applies to `.#dev`, `.#default`, and `.#release` on all platforms; and to `.#docker`, `.#docker-stream`, and `.#sipi-debug` on Linux only (Linux-only outputs are gated by `pkgs.lib.optionalAttrs isLinux` in `flake.nix`). The sanitized variant is Bazel-native (`bazel build --config=asan --config=ubsan //src:sipi`); the libFuzzer harness is Bazel-native on linux-x86_64 (CI) and darwin-aarch64 (local dev) — the `bazel-build-fuzz` / `bazel-run-fuzz` justfile recipes detect the host and select the matching `//tools/fuzz:<host>_fuzz` platform. linux-aarch64 is out of scope for the fuzz harness. See the Quick Reference below. A target that builds on only some of its supported platforms is a shipping bug, not a known limitation — CI is Linux-only, so **a green CI run does not verify macOS**. Before shipping any change to `flake.nix`, `package.nix`, or a `justfile` build recipe:
+**Build completeness invariant:** every build target must succeed on every supported platform — macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. This applies to `.#dev`, `.#default`, and `.#release` on all platforms. The Docker image is Bazel-native (`//src:image` via `rules_oci`, DEV-6346) and Linux-only — `bazel-docker-build-{amd64,arm64}` is gated by host-CPU `target_compatible_with`. The sanitized variant is Bazel-native (`bazel build --config=asan --config=ubsan //src:sipi`); the libFuzzer harness is Bazel-native on linux-x86_64 (CI) and darwin-aarch64 (local dev) — the `bazel-build-fuzz` / `bazel-run-fuzz` justfile recipes detect the host and select the matching `//tools/fuzz:<host>_fuzz` platform. linux-aarch64 is out of scope for the fuzz harness. See the Quick Reference below. A target that builds on only some of its supported platforms is a shipping bug, not a known limitation — CI is Linux-only, so **a green CI run does not verify macOS**. Before shipping any change to `flake.nix`, `package.nix`, or a `justfile` build recipe:
 
 1. Run every affected variant on macOS locally (`just nix-build-<variant>`).
 2. Run every affected Linux variant locally via Determinate's native-linux-builder (`nix build .#packages.x86_64-linux.<variant>` and `.#packages.aarch64-linux.<variant>`). See [`docs/src/development/nix.md`](docs/src/development/nix.md) for setup.
@@ -29,26 +29,22 @@ For full build instructions (Docker, Nix, macOS), see [`docs/src/development/bui
 
 If a change can't be verified on a platform locally, say so explicitly and gate the merge on a corresponding CI check being added.
 
-**First-time setup for the dev-shell inner loop:** run `just kakadu-fetch` once to download the proprietary Kakadu archive from `dsp-ci-assets` into `vendor/`. Nix builds (including `just nix-docker-build`) fetch Kakadu directly via the flake's FOD (no `vendor/` step). Requires `gh auth login` and `dasch-swiss` org membership. See [`docs/src/development/kakadu.md`](docs/src/development/kakadu.md).
+**First-time setup for the dev-shell inner loop:** run `just kakadu-fetch` once to download the proprietary Kakadu archive from `dsp-ci-assets` into `vendor/`. Nix builds and Bazel builds (including `just bazel-docker-build-${arch}`) fetch Kakadu directly via Bazel's `kakadu_archive` repository_rule (no `vendor/` step). Requires `gh auth login` and `dasch-swiss` org membership. See [`docs/src/development/kakadu.md`](docs/src/development/kakadu.md).
 
 **ICC determinism invariant:** [`SipiIcc::iccBytes()`](src/metadata/SipiIcc.cpp) is the single chokepoint that converts an `cmsHPROFILE` into raw bytes for codec consumption — every TIFF, JPEG, PNG, and JP2 emission funnels through it. Any new format handler must route through `iccBytes()`; bypassing it (calling `cmsSaveProfileToMem` directly) breaks the approval-test gate. Approval tests run with `SOURCE_DATE_EPOCH` injected by CMake (see [`test/approval/CMakeLists.txt`](test/approval/CMakeLists.txt)) so the wall-clock-stamped ICC creation date is overwritten with a fixed value and goldens stay byte-deterministic. Production never sets the env var; deployed binaries continue to embed wall-clock-stamped ICC headers. See [`docs/adr/0002-icc-profile-determinism-test-only.md`](docs/adr/0002-icc-profile-determinism-test-only.md).
 
 ### Quick Reference
 
 ```bash
-# Nix build (reproducible — this is what CI runs)
+# Nix build (reproducible — this is what CI runs for sipi binary + checkPhase)
 just nix-build                   # .#dev: Debug + coverage, tests run in sandbox
 just nix-build-default           # .#default: RelWithDebInfo + tests (matches distributed binary shape)
 just nix-build-release           # .#release: stripped, no tests
 just nix-coverage                # .#dev^coverage: produces result-coverage/coverage.xml
-just nix-docker-build            # .#docker-stream: host-arch image, load into local daemon
-just nix-docker-build-amd64      # .#packages.x86_64-linux.docker-stream + sipi-debug (CI)
-just nix-docker-build-arm64      # .#packages.aarch64-linux.docker-stream + sipi-debug (CI)
-just nix-docker-extract-debug arch  # rename result-debug/.../*.debug → sipi-<arch>.debug
 
 # Tests (consume $SIPI_BIN, default ./result/bin/sipi)
 just nix-test-e2e                # Rust e2e tests via .#e2e-tests (CI canonical, no cargo)
-just nix-test-smoke              # Docker smoke test via .#smoke-test (CI canonical)
+just nix-test-smoke              # Docker smoke test via .#smoke-test (CI canonical, against the Bazel-built image)
 just rust-test-e2e               # inner-loop Rust e2e via cargo (needs dev shell)
 just hurl-test                   # Hurl HTTP contract tests (needs hurl — from dev shell)
 just nix-run                     # run sipi with the dev config
@@ -64,11 +60,14 @@ just bazel-run-fuzz <corpus> <duration> [seed]  # libFuzzer args; recipe builds 
 
 # Dev-shell inner loop (non-recipe — see "Inner-loop development" below)
 
-# Docker push / manifest (build is via Nix — see nix-docker-build* above)
-just test-smoke                  # build image via Nix, then run smoke tests (inner-loop)
-just docker-push-amd64           # push already-loaded amd64 image
-just docker-push-arm64           # push already-loaded arm64 image
-just docker-publish-manifest     # publish multi-arch manifest
+# Docker (Bazel rules_oci — DEV-6346, PR Y+4)
+just test-smoke                          # build host-arch image via Bazel, then run smoke tests (inner-loop)
+just bazel-docker-build-amd64            # build + load amd64 image as daschswiss/sipi:latest (CI on amd64 runner)
+just bazel-docker-build-arm64            # build + load arm64 image (CI on arm64 runner)
+just bazel-docker-push-amd64             # push amd64 image as :v<version>-amd64 + :latest-amd64
+just bazel-docker-push-arm64             # push arm64 image as :v<version>-arm64 + :latest-arm64
+just bazel-docker-publish-manifest       # crane index append → daschswiss/sipi:v<version> multi-arch
+just bazel-docker-extract-debug <arch>   # surface sipi-<arch>.debug for sentry-cli upload
 
 # Vendor dependencies
 just vendor-download             # download all dep archives to vendor/
