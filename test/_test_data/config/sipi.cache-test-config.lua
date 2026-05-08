@@ -39,16 +39,6 @@ fileserver = {
 
 routes = {
     {
-        method = 'DELETE',
-        route = '/api/cache',
-        script = 'cache.lua'
-    },
-    {
-        method = 'GET',
-        route = '/api/cache',
-        script = 'cache.lua'
-    },
-    {
         method = 'POST',
         route = '/api/upload',
         script = 'upload.lua'
