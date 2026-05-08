@@ -1,0 +1,13 @@
+"""Sipi static-server assets — exposed for the Bazel-built image (DEV-6346).
+
+The OCI image consumes only `test.html` (the smoke test's
+`/server/test.html` probe target) at /sipi/server/. Other server-side
+assets (jquery, openseadragon, .elua) are NOT copied into the image
+today — they're served from a volume-mounted host path in production.
+"""
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "test.html",
+])

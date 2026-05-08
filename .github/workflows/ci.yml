@@ -41,6 +41,23 @@ jobs:
           - arch: arm64
             runs-on: ubuntu-24.04-arm
     steps:
+      # `just bazel-docker-build-${arch}` (run later in this job) builds
+      # Kakadu from source via `rules_foreign_cc`. After `just nix-build`
+      # has populated the Nix store with sipi's full closure, the runner
+      # is tight on disk and Kakadu's foreign_cc make exits silently
+      # mid-build with "output X was not created". The Bazel-build
+      # workflow uses the same step for the same reason.
+      - name: free disk space (linux only)
+        if: runner.os == 'Linux'
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
       - uses: dasch-swiss/sipi/.github/actions/checkout@main
         with:
           DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
@@ -112,10 +129,34 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: dasch-swiss/sipi
           files: result-coverage/coverage.xml
-      - name: Build Docker image (Nix dockerTools)
+      # Disk-cache survives across CI runs and shaves ~5 min off Kakadu's
+      # foreign_cc cold build (DEV-6371). Same key shape as sanitizer.yml /
+      # bazel-build.yml but namespaced `ci-test-${arch}` so this job's
+      # entries don't collide with the bazel-build / sanitizer caches.
+      - uses: actions/cache@v5
+        id: bazel-disk-cache
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-disk-ci-test-${{ matrix.arch }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'BUILD.bazel', 'ext/**/BUILD.bazel', 'bazel/**', 'patches/**', 'platforms/**', '.bazelrc', '.bazelversion', 'flake.lock') }}
+          restore-keys: |
+            bazel-disk-ci-test-${{ matrix.arch }}-
+      - name: Build Docker image (Bazel rules_oci)
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: just nix-docker-build-${{ matrix.arch }}
+        # `nix develop --command` activates the dev shell so bazelisk +
+        # `gh` (kakadu_archive repository_rule) + foreign_cc host tools
+        # (`cmake`, `perl`, `pkg-config`, `autoconf`, `automake`,
+        # `libtoolize`) reach the build. Running bare
+        # `just bazel-docker-build-${arch}` falls back to the runner's
+        # pre-installed bazelisk + system tooling, which produces an
+        # inconsistent foreign_cc compile env and surfaces as kakadu
+        # output-extraction failures (sanitizer.yml carries the same
+        # comment for `bazel-build-sanitized`).
+        # `--disk_cache` matches `actions/cache@v5` step above.
+        run: nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} --disk_cache=\$HOME/.cache/bazel-disk"
+      # Smoke tests still consume the Nix-built `.#smoke-test` runner
+      # until Y+5 (DEV-6347) ports them to `rules_rust`. The image
+      # under test is the Bazel-built one loaded by the step above.
       - run: just nix-test-smoke
       - name: Docker Scout — compare to production
         if: github.event_name == 'pull_request'

@@ -1,0 +1,14 @@
+"""Sipi runtime Lua scripts — exposed for the Bazel-built image (DEV-6346).
+
+The OCI image consumes a tiny subset of `scripts/*.lua` at /sipi/scripts/;
+mirrors today's `fakeRootCommands` block in `flake.nix` 1:1. Other Lua
+scripts in this directory are admin/dev tooling and are NOT copied into
+the production image.
+"""
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "send_response.lua",
+    "test_functions.lua",
+])

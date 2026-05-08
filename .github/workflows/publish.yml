@@ -43,10 +43,23 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       - run: nix profile install --inputs-from . nixpkgs#just
-      - name: Build Docker image (Nix dockerTools)
+      - uses: actions/cache@v5
+        id: bazel-disk-cache
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-disk-publish-validate-${{ matrix.arch }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'BUILD.bazel', 'ext/**/BUILD.bazel', 'bazel/**', 'patches/**', 'platforms/**', '.bazelrc', '.bazelversion', 'flake.lock') }}
+          restore-keys: |
+            bazel-disk-publish-validate-${{ matrix.arch }}-
+            bazel-disk-ci-test-${{ matrix.arch }}-
+      - name: Build Docker image (Bazel rules_oci)
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: just nix-docker-build-${{ matrix.arch }}
+        # See ci.yml for the `nix develop --command` rationale (foreign_cc
+        # host-tool PATH).
+        run: nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} --disk_cache=\$HOME/.cache/bazel-disk"
+      # Smoke tests still consume the Nix-built `.#smoke-test` runner
+      # until Y+5 (DEV-6347) ports them to `rules_rust`. The image under
+      # test is the Bazel-built one loaded by the step above.
       - run: just nix-test-smoke
 
   release-gate:
@@ -66,13 +79,11 @@ jobs:
         include:
           - arch: amd64
             runner: ubuntu-24.04
-            push_target: docker-push-amd64
             debug_file: sipi-amd64.debug
             sbom_file: sbom-amd64.spdx.json
             sbom_name: sbom-amd64
           - arch: arm64
             runner: ubuntu-24.04-arm
-            push_target: docker-push-arm64
             debug_file: sipi-arm64.debug
             sbom_file: sbom-arm64.spdx.json
             sbom_name: sbom-arm64
@@ -99,18 +110,31 @@ jobs:
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       - run: nix profile install --inputs-from . nixpkgs#just
-      - name: Build Docker image + sipi-debug (Nix dockerTools)
+      - uses: actions/cache@v5
+        id: bazel-disk-cache
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-disk-publish-${{ matrix.arch }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'BUILD.bazel', 'ext/**/BUILD.bazel', 'bazel/**', 'patches/**', 'platforms/**', '.bazelrc', '.bazelversion', 'flake.lock') }}
+          restore-keys: |
+            bazel-disk-publish-${{ matrix.arch }}-
+            bazel-disk-publish-validate-${{ matrix.arch }}-
+            bazel-disk-ci-test-${{ matrix.arch }}-
+      - name: Build Docker image (Bazel rules_oci) + sipi-debug
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         # Binary version + OCI image tag come from version.txt, which
         # release-please updates before cutting the tag — no extra
         # plumbing required to keep them in sync with `${github.ref_name}`.
-        run: just nix-docker-build-${{ matrix.arch }}
+        # See ci.yml for the `nix develop --command` rationale.
+        run: nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} --disk_cache=\$HOME/.cache/bazel-disk"
       - name: Extract debug symbols for Sentry upload
-        run: just nix-docker-extract-debug ${{ matrix.arch }}
+        # `--disk_cache` lets the genrule reuse the build artifacts the
+        # build step just produced (the genrule depends on `:sipi`, which
+        # is already built and in the disk cache).
+        run: nix develop --command bash -c "just bazel-docker-extract-debug ${{ matrix.arch }} --disk_cache=\$HOME/.cache/bazel-disk"
       - run: just nix-test-smoke
       - name: Push image to Docker Hub
-        run: just ${{ matrix.push_target }}
+        run: nix develop --command bash -c "just bazel-docker-push-${{ matrix.arch }} --disk_cache=\$HOME/.cache/bazel-disk"
 
       - name: Docker Scout — record production
         uses: docker/scout-action@v1
@@ -170,7 +194,9 @@ jobs:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
       - run: nix profile install --inputs-from . nixpkgs#just
-      - run: just docker-publish-manifest
+      # `bazel-docker-publish-manifest` shells out to `crane index append`,
+      # which only exists inside the dev shell (go-containerregistry).
+      - run: nix develop --command bash -c "just bazel-docker-publish-manifest"
 
   sentry:
     runs-on: ubuntu-latest
