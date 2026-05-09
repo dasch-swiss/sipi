@@ -19,48 +19,44 @@ Read these before reasoning about names, boundaries, or architectural decisions:
 All targets are in a single `justfile`. Run `just` for a complete list.
 For full build instructions (Docker, Nix, macOS), see [`docs/src/development/building.md`](docs/src/development/building.md).
 
-**Build reproducibility invariant:** every `nix-*` recipe wraps `nix build .#<variant>`. CI invokes only `just <recipe>` — no inline cmake or `nix build` calls. Incremental inner-loop development is a documented dev-shell pattern (see below), not a recipe.
+**Build reproducibility invariant:** every build/test/coverage step in CI invokes one of the `just bazel-*` recipes — no inline `bazel` calls, no `nix build` calls. Bazel's own incremental rebuild IS the inner-loop edit/rebuild cycle (`just bazel-build` after a single-file edit completes in seconds via the action cache).
 
-**Build completeness invariant:** every build target must succeed on every supported platform — macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. This applies to `.#dev`, `.#default`, and `.#release` on all platforms. The Docker image is Bazel-native (`//src:image` via `rules_oci`, DEV-6346) and Linux-only — `bazel-docker-build-{amd64,arm64}` is gated by host-CPU `target_compatible_with`. The sanitized variant is Bazel-native (`bazel build --config=asan --config=ubsan //src:sipi`); the libFuzzer harness is Bazel-native on linux-x86_64 (CI) and darwin-aarch64 (local dev) — the `bazel-build-fuzz` / `bazel-run-fuzz` justfile recipes detect the host and select the matching `//tools/fuzz:<host>_fuzz` platform. linux-aarch64 is out of scope for the fuzz harness. See the Quick Reference below. A target that builds on only some of its supported platforms is a shipping bug, not a known limitation — CI is Linux-only, so **a green CI run does not verify macOS**. Before shipping any change to `flake.nix`, `package.nix`, or a `justfile` build recipe:
+**Build completeness invariant:** every build target must succeed on every supported platform — macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. The Docker image (`//src:image` via `rules_oci`) is Linux-only — `bazel-docker-build-{amd64,arm64}` is gated by host-CPU `target_compatible_with`. The sanitized variant is `bazel build --config=asan --config=ubsan //src:sipi`; the libFuzzer harness is Bazel-native on linux-x86_64 (CI) and darwin-aarch64 (local dev) — the `bazel-build-fuzz` / `bazel-run-fuzz` recipes detect the host and select the matching `//tools/fuzz:<host>_fuzz` platform. linux-aarch64 is out of scope for the fuzz harness. CI runs the test matrix on all three platforms, so a green CI run verifies macOS as well as Linux. Before shipping any change to `flake.nix`, `MODULE.bazel`, `BUILD.bazel`, or a `justfile` build recipe, run `just bazel-build` and `just bazel-coverage` locally on macOS at minimum.
 
-1. Run every affected variant on macOS locally (`just nix-build-<variant>`).
-2. Run every affected Linux variant locally via Determinate's native-linux-builder (`nix build .#packages.x86_64-linux.<variant>` and `.#packages.aarch64-linux.<variant>`). See [`docs/src/development/nix.md`](docs/src/development/nix.md) for setup.
-3. Pay special attention to `overrideAttrs` blocks that replace `buildPhase` / `installPhase` — those encode assumptions about nixpkgs hook behavior (e.g. whether the cmake hook leaves CWD at `$sourceRoot` or `$sourceRoot/build`) that are platform- and version-sensitive. Prefer CWD-robust patterns (`[ -f CMakeCache.txt ] || cd "${cmakeBuildDir:-build}"`) over hard-coded paths.
+**First-time setup:** Bazel builds (including `just bazel-docker-build-${arch}`) fetch Kakadu directly via Bazel's `kakadu_archive` repository_rule (no `vendor/` step). Requires `gh auth login` and `dasch-swiss` org membership. See [`docs/src/development/kakadu.md`](docs/src/development/kakadu.md).
 
-If a change can't be verified on a platform locally, say so explicitly and gate the merge on a corresponding CI check being added.
-
-**First-time setup for the dev-shell inner loop:** run `just kakadu-fetch` once to download the proprietary Kakadu archive from `dsp-ci-assets` into `vendor/`. Nix builds and Bazel builds (including `just bazel-docker-build-${arch}`) fetch Kakadu directly via Bazel's `kakadu_archive` repository_rule (no `vendor/` step). Requires `gh auth login` and `dasch-swiss` org membership. See [`docs/src/development/kakadu.md`](docs/src/development/kakadu.md).
-
-**ICC determinism invariant:** [`SipiIcc::iccBytes()`](src/metadata/SipiIcc.cpp) is the single chokepoint that converts an `cmsHPROFILE` into raw bytes for codec consumption — every TIFF, JPEG, PNG, and JP2 emission funnels through it. Any new format handler must route through `iccBytes()`; bypassing it (calling `cmsSaveProfileToMem` directly) breaks the approval-test gate. Approval tests run with `SOURCE_DATE_EPOCH` injected by CMake (see [`test/approval/CMakeLists.txt`](test/approval/CMakeLists.txt)) so the wall-clock-stamped ICC creation date is overwritten with a fixed value and goldens stay byte-deterministic. Production never sets the env var; deployed binaries continue to embed wall-clock-stamped ICC headers. See [`docs/adr/0002-icc-profile-determinism-test-only.md`](docs/adr/0002-icc-profile-determinism-test-only.md).
+**ICC determinism invariant:** [`SipiIcc::iccBytes()`](src/metadata/SipiIcc.cpp) is the single chokepoint that converts an `cmsHPROFILE` into raw bytes for codec consumption — every TIFF, JPEG, PNG, and JP2 emission funnels through it. Any new format handler must route through `iccBytes()`; bypassing it (calling `cmsSaveProfileToMem` directly) breaks the approval-test gate. Approval tests run with `SOURCE_DATE_EPOCH=946684800` and `SIPI_WORKSPACE_ROOT="."` injected by `test/approval/BUILD.bazel` so the wall-clock-stamped ICC creation date is overwritten with a fixed value and goldens stay byte-deterministic. Production never sets the env var; deployed binaries continue to embed wall-clock-stamped ICC headers. See [`docs/adr/0002-icc-profile-determinism-test-only.md`](docs/adr/0002-icc-profile-determinism-test-only.md).
 
 ### Quick Reference
 
 ```bash
-# Nix build (reproducible — this is what CI runs for sipi binary + checkPhase)
-just nix-build                   # .#dev: Debug + coverage, tests run in sandbox
-just nix-build-default           # .#default: RelWithDebInfo + tests (matches distributed binary shape)
-just nix-build-release           # .#release: stripped, no tests
-just nix-coverage                # .#dev^coverage: produces result-coverage/coverage.xml
+# Build sipi (fastbuild — fast incremental for inner-loop edits)
+just bazel-build                 # bazel build --stamp //src:sipi
+just bazel-build -c opt          # production-shape build (matches Docker image)
+just bazel-build --config=asan   # ASan+UBSan; same flag form for ad-hoc variants
 
-# Tests (consume $SIPI_BIN, default ./result/bin/sipi)
-just bazel-test-e2e              # Rust e2e tests via Bazel rules_rust (CI canonical, no cargo)
-just bazel-test-smoke            # Docker smoke test via Bazel rules_rust (CI canonical, OCI tarball loaded by the test)
+# Tests
+just bazel-test-unit             # bazel test //test/unit/...  (12 components)
+just bazel-test-approval         # bazel test //test/approval:approvaltests
+just bazel-test-e2e              # Rust e2e tests via rules_rust
+just bazel-test-smoke            # Docker smoke test (OCI tarball loaded by the test)
 just rust-test-e2e               # inner-loop Rust e2e via cargo (needs dev shell)
 just hurl-test                   # Hurl HTTP contract tests (needs hurl — from dev shell)
-just nix-run                     # run sipi with the dev config
-just nix-valgrind                # run sipi under Valgrind
 
-# Bazel inner loop (DEV-6343, PR Y+1 — local-only; CI runs unit + approval
-# tests via just nix-build's checkPhase until DEV-6348 (Y+6))
-just bazel-test-unit             # bazel test //test/unit/...  (12 of 12 components)
-just bazel-test-approval         # bazel test //test/approval:approvaltests  (24 cases, env-injected SOURCE_DATE_EPOCH)
-just bazel-build-sanitized       # bazel build --config=asan --config=ubsan //src:sipi  (PR Y+2 — sanitizer.yml CI)
-just bazel-build-fuzz            # bazel build --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz  (PR Y+3 — fuzz.yml CI on linux-x86_64; darwin-aarch64 supported for local dev)
+# Coverage (canonical CI build — what ci.yml invokes on every PR)
+just bazel-coverage              # unit + approval + e2e under instrumentation; lcov
+                                 # at bazel-out/_coverage/_coverage_report.dat
+
+# Run / debug
+just run                         # run sipi with the localdev config
+just valgrind                    # run sipi under Valgrind
+
+# Sanitizer + fuzz
+just bazel-build-sanitized       # bazel build --config=asan --config=ubsan //src:sipi  (sanitizer.yml CI)
+just bazel-build-fuzz            # bazel build --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz  (fuzz.yml CI on linux-x86_64; darwin-aarch64 supported for local dev)
 just bazel-run-fuzz <corpus> <duration> [seed]  # libFuzzer args; recipe builds + execs the binary directly
 
-# Dev-shell inner loop (non-recipe — see "Inner-loop development" below)
-
-# Docker (Bazel rules_oci — DEV-6346, PR Y+4)
+# Docker (Bazel rules_oci)
 just test-smoke                          # build host-arch image via Bazel, then run smoke tests (inner-loop)
 just bazel-docker-build-amd64            # build + load amd64 image as daschswiss/sipi:latest (CI on amd64 runner)
 just bazel-docker-build-arm64            # build + load arm64 image (CI on arm64 runner)
@@ -69,11 +65,12 @@ just bazel-docker-push-arm64             # push arm64 image as :v<version>-arm64
 just bazel-docker-publish-manifest       # crane index append → daschswiss/sipi:v<version> multi-arch
 just bazel-docker-extract-debug <arch>   # surface sipi-<arch>.debug for sentry-cli upload
 
-# Vendor dependencies
+# Vendor dependencies (used by sanitizer/fuzz dev-shell flows; Bazel builds
+# fetch via repository_rule and do not consume vendor/)
 just vendor-download             # download all dep archives to vendor/
 just vendor-verify               # verify SHA-256 checksums
 just vendor-checksums            # print checksums for manifest updates
-just kakadu-fetch                # download Kakadu archive (dev-shell inner loop only; Nix builds fetch via FOD)
+just kakadu-fetch                # download Kakadu archive (dev-shell inner loop only)
 
 # Documentation
 just docs-serve                  # serve docs locally
@@ -81,25 +78,21 @@ just docs-serve                  # serve docs locally
 
 ### Inner-loop development (incremental rebuilds)
 
-The justfile does not expose an imperative build recipe — by design. A recipe
-is a contract that CI runs the same command, and CI always goes through a Nix
-derivation. For the fast edit/rebuild/run cycle on a single `.cpp` file, drop
-into the dev shell and call cmake by hand:
+`bazel build` IS the inner loop. The first build is slow (cold action cache,
+foreign_cc compiles for openssl/kakadu/libtiff/etc), but subsequent edits to
+a single `.cpp` file rebuild in seconds — Bazel's per-action cache only
+re-runs the affected compile + link.
 
 ```bash
-nix develop                                   # dev shell with all build deps
-cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DCODE_COVERAGE=ON
-cmake --build build --parallel
-./build/sipi --config config/sipi.localdev-config.lua
+nix develop                                   # dev shell with build deps + bazelisk
+just bazel-build                              # first build: cold action cache
+./bazel-bin/src/sipi --config config/sipi.localdev-config.lua
 # subsequent edits:
-cmake --build build                           # incremental
+just bazel-build                              # incremental, sub-second through link
 ```
 
-**Caveats:** this path is non-reproducible and does not match CI outputs
-byte-for-byte. To run the reproducible CI build, use `just nix-build` instead.
-
-**Prerequisite:** run `just kakadu-fetch` once per Kakadu version — the
-dev-shell cmake invocation consumes `vendor/v8_5-01382N.zip` from that.
+`just run` wraps this: it depends on `bazel-build` and starts sipi with the
+localdev config in one step.
 
 ## High-Level Architecture
 
@@ -156,13 +149,13 @@ For the authoritative testing strategy (pyramid, layer definitions, decision tre
 
 For test framework details (how to run tests, directory layout, adding tests), see [`docs/src/development/developing.md`](docs/src/development/developing.md).
 
-- **Unit tests** (`test/unit/`): GoogleTest + ApprovalTests — run inside the `.#dev` / `.#default` derivation's `checkPhase` (`just nix-build` fails if any unit test fails)
+- **Unit tests** (`test/unit/`): GoogleTest — `just bazel-test-unit` (or via `bazel-coverage` in CI)
+- **Approval tests** (`test/approval/`): snapshot-based regression — `just bazel-test-approval` (or via `bazel-coverage` in CI). `SOURCE_DATE_EPOCH=946684800` and `SIPI_WORKSPACE_ROOT="."` are injected by `test/approval/BUILD.bazel`.
 - **E2E tests** (`test/e2e-rust/`): Rust (reqwest + cargo test). CI: `just bazel-test-e2e` (`rust_test` targets via `rules_rust`). Inner-loop: `just rust-test-e2e` (cargo from dev shell).
 - **Hurl tests** (`test/hurl/`): HTTP contract tests — `just hurl-test`
 - **Smoke tests** (`test/e2e-rust/tests/docker_smoke.rs`): against Docker image. CI: `just bazel-test-smoke` (`:docker_smoke` rust_test consumes the OCI tarball from `//src:image_load`). Inner-loop: `just test-smoke` (cargo + locally-built `daschswiss/sipi:latest`).
-- **Approval tests** (`test/approval/`): snapshot-based regression — included in unit tests
 
-Run a specific unit test binary in the dev-shell inner loop: `cd build && test/unit/<component>/<component>`
+Run a single unit-test target with `bazel test //test/unit/<component>:<component>_test --test_output=streamed`.
 
 ## CI, Release, and Commit Messages
 
