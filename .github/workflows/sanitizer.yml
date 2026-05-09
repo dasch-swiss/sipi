@@ -149,9 +149,26 @@ jobs:
         # in .bazelrc paths (bazelbuild/bazel#15856). Path matches the
         # `actions/cache` step above so the cache is restored and
         # saved across CI runs.
+        #
+        # `--flaky_test_attempts=<target>@3` retries the latency-budget
+        # tests up to 3 times under sanitizer instrumentation. Their
+        # thresholds are calibrated for fastbuild; ASan/UBSan add 2-5x
+        # runtime overhead which can push connection/cache assertions
+        # over the budget on a single attempt. Scoped to the three
+        # known timing-sensitive targets only — non-flaky tests keep
+        # the default single-attempt run. The flag is `accumulate_value`,
+        # so repeating it adds rather than overwrites; an alternation
+        # regex (e.g. `:(latency|…)`) would traverse the outer `bash -c
+        # "…"` quoting and get mis-parsed as a shell subshell, so
+        # explicit per-target flags are safer.
         run: |
           export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer)"
-          nix develop --command bash -c "just bazel-test-e2e --config=asan --config=ubsan --disk_cache=\$HOME/.cache/bazel-disk"
+          nix develop --command bash -c "just bazel-test-e2e \
+            --config=asan --config=ubsan \
+            --flaky_test_attempts=//test/e2e-rust:latency@3 \
+            --flaky_test_attempts=//test/e2e-rust:iiif_compliance@3 \
+            --flaky_test_attempts=//test/e2e-rust:resource_limits@3 \
+            --disk_cache=\$HOME/.cache/bazel-disk"
 
       - name: dump foreign_cc Make.log files on failure
         if: failure()

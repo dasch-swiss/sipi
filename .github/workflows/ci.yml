@@ -1,12 +1,16 @@
 # Main CI workflow for pull requests and scheduled verification.
-# Includes:
-#   - Nix/Clang build + unit + e2e + Hurl + coverage + Docker image
-#     build + smoke test + Docker Scout, on Linux amd64/arm64
-#   - Nix native macOS arm64 build + dylib-linkage audit on internal PRs
-#   - mkdocs documentation build
 #
-# Every build step invokes `just <recipe>`. No inline cmake or nix build
-# calls. Recipes live in the justfile; see the "Nix builds" section there.
+# Test matrix runs on all three supported platforms (linux-x86_64,
+# linux-aarch64, darwin-aarch64). Every platform runs the full test suite
+# under coverage instrumentation via `just bazel-coverage` (unit + approval
+# + e2e). Linux entries additionally build the Docker image, run the
+# Bazel-built smoke test against it, and feed Docker Scout. amd64 uploads
+# the Codecov lcov report and the SARIF CVE scan.
+#
+# Every step invokes `just <recipe>`. No inline bazel calls — recipes are
+# the contract surface. See the justfile "Bazel — what CI runs" section.
+#
+# Documentation builds run in a separate `docs` job (Python / mkdocs).
 
 name: ci
 
@@ -23,30 +27,36 @@ permissions:
 jobs:
   test:
     runs-on: ${{ matrix.runs-on }}
-    name: test / ${{ matrix.arch }}
+    name: test / ${{ matrix.platform }}
     permissions:
       contents: read
       pull-requests: write   # Docker Scout PR comment
-      security-events: write # SARIF upload (amd64 only)
+      security-events: write # SARIF upload (linux-amd64 only)
     concurrency:
-      group: ${{ github.workflow }}-test-${{ matrix.arch }}-${{ github.head_ref || github.run_id }}
+      group: ${{ github.workflow }}-test-${{ matrix.platform }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
 
     strategy:
       fail-fast: false
       matrix:
         include:
-          - arch: amd64
+          - platform: linux-amd64
+            arch: amd64
             runs-on: ubuntu-24.04
-          - arch: arm64
+          - platform: linux-arm64
+            arch: arm64
             runs-on: ubuntu-24.04-arm
+          - platform: darwin-arm64
+            arch: arm64
+            runs-on: macos-14
     steps:
-      # `just bazel-docker-build-${arch}` (run later in this job) builds
-      # Kakadu from source via `rules_foreign_cc`. After `just nix-build`
-      # has populated the Nix store with sipi's full closure, the runner
-      # is tight on disk and Kakadu's foreign_cc make exits silently
-      # mid-build with "output X was not created". The Bazel-build
-      # workflow uses the same step for the same reason.
+      # GitHub-hosted ubuntu-24.04 runners ship ~14 GB of free disk space,
+      # ~6 GB of which is consumed by pre-installed SDKs the Bazel build
+      # doesn't touch (Android, .NET, Haskell, Boost…). The LLVM 19.1.7
+      # toolchain alone extracts to ~3 GB; piling the 22 ext libs +
+      # sysroot + cache directory on top blows past the quota and kills
+      # the build with `No space left on device`. macOS runners have
+      # plenty of headroom and skip this step.
       - name: free disk space (linux only)
         if: runner.os == 'Linux'
         uses: jlumbroso/free-disk-space@main
@@ -76,102 +86,181 @@ jobs:
           git lfs fetch --all
           echo "=== LFS checkout ==="
           git lfs checkout
-          echo "=== verify vendor ==="
-          ls -la vendor/*.tar.gz | head -3
           echo "=== verify test images ==="
           file test/_test_data/unit/lena512.tif 2>/dev/null || echo "lena512.tif not found"
           file test/_test_data/unit/HasCommentBlock.JPG 2>/dev/null || echo "HasCommentBlock.JPG not found"
       - uses: DeterminateSystems/determinate-nix-action@v3
         with:
-          # Kakadu FOD in flake.nix uses gh release download via
-          # impureEnvVars; daemon needs configurable-impure-env to accept
-          # GH_TOKEN from the client (every `just nix-build*` recipe passes
-          # the matching client flag).
+          # The `kakadu_archive` repository_rule reads GH_TOKEN from the
+          # environment via `gh release download`; configurable-impure-env
+          # keeps Nix's daemon from sanitising it out of `nix develop`.
           extra-conf: |
             extra-experimental-features = configurable-impure-env
       - uses: cachix/cachix-action@v17
         with:
           name: dasch-swiss
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-      # Skip on forked PRs — DOCKER_HUB_TOKEN is unavailable to forks and the
-      # login would fail loudly. The smoke test consumes a locally loaded
-      # image, so login is only useful for authenticated Docker Hub pulls
-      # (rate-limit avoidance) on internal PRs and the nightly schedule.
+      # Skip on forked PRs and on macOS runners — DOCKER_HUB_TOKEN is
+      # unavailable to forks (and macOS doesn't run Docker steps anyway).
+      # The smoke test consumes a locally loaded image, so login is only
+      # useful for authenticated Docker Hub pulls (rate-limit avoidance)
+      # on internal Linux PRs and the nightly schedule.
       - uses: docker/login-action@v4
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: runner.os == 'Linux' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: nix profile install --inputs-from . nixpkgs#just
-      - name: Build and test (unit tests run in the Nix sandbox)
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: just nix-build
-      - name: Rust e2e and Hurl tests
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        # `bazel-test-e2e` runs the e2e `rust_test` targets. Wrapped in
-        # `nix develop` for the foreign_cc host tooling (`cmake`, `perl`,
-        # `pkg-config`, `autoconf`, …); bazelisk re-enters a clean Bazel
-        # sandbox per action. `--disk_cache` matches the `actions/cache@v5`
-        # step below. `hurl-test` shells out to `hurl`, which we install
-        # onto PATH alongside `just`.
-        run: |
-          nix profile install --inputs-from . nixpkgs#hurl
-          nix develop --command bash -c "just bazel-test-e2e --disk_cache=\$HOME/.cache/bazel-disk"
-          just hurl-test
-      - name: Gather code coverage
-        if: ${{ matrix.arch == 'amd64' }}
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: just nix-coverage
-      - name: Upload coverage reports to Codecov
-        if: ${{ matrix.arch == 'amd64' }}
-        uses: codecov/codecov-action@v6.0.0
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          slug: dasch-swiss/sipi
-          files: result-coverage/coverage.xml
-      # Disk-cache survives across CI runs and shaves ~5 min off Kakadu's
-      # foreign_cc cold build (DEV-6371). Same key shape as sanitizer.yml /
-      # bazel-build.yml but namespaced `ci-test-${arch}` so this job's
-      # entries don't collide with the bazel-build / sanitizer caches.
+      - run: nix profile install --inputs-from . nixpkgs#just nixpkgs#hurl
+
+      # CACHE STRATEGY (DEV-6371, DEV-6373):
+      #
+      # The disk-cache is managed by `actions/cache@v5` directly rather
+      # than through `setup-bazel`'s built-in disk-cache wiring. Two
+      # failure modes in the previous setup made this necessary:
+      #
+      #   1. 0-byte poisoning. setup-bazel <=0.17 saved the disk-cache
+      #      from its post-step unconditionally — a build that failed
+      #      during analysis (e.g. a transient `http_archive` 415 from
+      #      zlib.net) would write an empty `~/.cache/bazel-disk` to GHA
+      #      under the input-content-derived cache key. GHA cache keys
+      #      are immutable, so every subsequent run hashing to the same
+      #      inputs restored 0 bytes and re-built kakadu/openssl from
+      #      source (~12 min on linux-x86_64). actions/cache@v5 saves
+      #      only on job success by default.
+      #
+      #   2. Cache-key churn from incidental edits. The targeted key
+      #      below covers only inputs that actually affect a foreign_cc
+      #      action's cache key: MODULE.bazel{,.lock} pin all third-
+      #      party deps; root + ext/ + bazel/ + patches/ + platforms/
+      #      shape the rule graph + kakadu Makefile patches; .bazelrc /
+      #      .bazelversion shape the build engine and action env;
+      #      flake.lock pins the dev-shell store paths consumed via
+      #      --action_env=PATH/NIX_LDFLAGS/ACLOCAL_PATH.
+      #
+      # NOT in the key: src/**, include/**, shttps/**, test/**, fuzz/**,
+      # tools/**, config/** — app/test code does not change ext/ action
+      # outputs, so changes there should not evict the foreign_cc cache.
       - uses: actions/cache@v5
         id: bazel-disk-cache
         with:
           path: ~/.cache/bazel-disk
-          key: bazel-disk-ci-test-${{ matrix.arch }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'BUILD.bazel', 'ext/**/BUILD.bazel', 'bazel/**', 'patches/**', 'platforms/**', '.bazelrc', '.bazelversion', 'flake.lock') }}
+          key: bazel-disk-ci-test-${{ matrix.platform }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'BUILD.bazel', 'ext/**/BUILD.bazel', 'bazel/**', 'patches/**', 'platforms/**', '.bazelrc', '.bazelversion', 'flake.lock') }}
           restore-keys: |
-            bazel-disk-ci-test-${{ matrix.arch }}-
-      - name: Build Docker image (Bazel rules_oci)
+            bazel-disk-ci-test-${{ matrix.platform }}-
+
+      # `setup-bazel` continues to manage bazelisk + repository-cache
+      # (the `--repository_cache` for http_archive downloads — these are
+      # content-addressed by sha256 and have no poisoning risk).
+      # disk-cache is disabled here so the actions/cache@v5 step above
+      # is the single owner. `--incompatible_strict_action_env` is set
+      # in `.bazelrc` so it applies to every invocation.
+      #
+      # repository-cache is intentionally OFF (DEV-6373). It would
+      # persist the LLVM 19.1.x toolchain (~2 GB), Chromium debian
+      # sysroots (~500 MB each), and 22 ext lib http_archive source
+      # tarballs across runs — ~4 GB per arch, ~12 GB across all three
+      # platforms — which blows GHA's 10 GB per-repo cache cap and
+      # LRU-evicts the small (~33 MB) bazel-disk-cache that actually
+      # delivers the speedup. Bazel still uses an in-job repository
+      # cache for de-dup within a single build; the cost is a one-time
+      # http_archive re-download per platform per run.
+      - uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          disk-cache: false
+          repository-cache: false
+
+      # Build sipi + run the full test suite (unit + approval + e2e).
+      # linux-amd64 runs `bazel-coverage` (instrumented build, emits
+      # lcov at bazel-out/_coverage/_coverage_report.dat for the
+      # Codecov upload below). linux-arm64 and darwin-arm64 run
+      # `bazel-test` (fastbuild, no instrumentation) — same test
+      # signal without paying the 1.5-2x compile + runtime cost of
+      # coverage instrumentation on arches that don't upload.
+      #
+      # `nix develop --command` activates the dev shell so `gh`
+      # (kakadu_archive repository_rule) + foreign_cc host tools
+      # (cmake, perl, pkg-config, autoconf, automake, libtoolize) are
+      # on PATH. `--disk_cache` matches the actions/cache@v5 step
+      # above. `--sandbox_debug` keeps the sandbox tree on failure so
+      # foreign_cc Make.log files (dumped by the failure step below)
+      # survive.
+      - name: Build + run all tests under coverage
+        if: ${{ matrix.platform == 'linux-amd64' }}
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        # `nix develop --command` activates the dev shell so bazelisk +
-        # `gh` (kakadu_archive repository_rule) + foreign_cc host tools
-        # (`cmake`, `perl`, `pkg-config`, `autoconf`, `automake`,
-        # `libtoolize`) reach the build. Running bare
-        # `just bazel-docker-build-${arch}` falls back to the runner's
-        # pre-installed bazelisk + system tooling, which produces an
-        # inconsistent foreign_cc compile env and surfaces as kakadu
-        # output-extraction failures (sanitizer.yml carries the same
-        # comment for `bazel-build-sanitized`).
-        # `--disk_cache` matches `actions/cache@v5` step above.
-        run: nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} --disk_cache=\$HOME/.cache/bazel-disk"
-      # `:docker_smoke`'s `:sipi_image_tar` data dep extracts the OCI
-      # tarball from `//src:image_load` and the test loads it via
-      # `docker load -i $SIPI_IMAGE_TAR` at startup — independent of
-      # the image already loaded by the build step above (which stays
-      # for Docker Scout's `local://` image probes below).
-      # `GH_TOKEN` propagates to the kakadu `repository_rule` which
-      # re-evaluates per fresh bazel server (the rule is non-hermetic
-      # by design — see `bazel/kakadu.bzl`). Without it, analysis
-      # aborts before the smoke target builds.
-      - name: Run Docker smoke tests
+        run: |
+          nix develop --command bash -c "just bazel-coverage --disk_cache=\$HOME/.cache/bazel-disk --sandbox_debug"
+
+      - name: Build + run all tests (no coverage)
+        if: ${{ matrix.platform != 'linux-amd64' }}
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+        run: |
+          nix develop --command bash -c "just bazel-test --disk_cache=\$HOME/.cache/bazel-disk --sandbox_debug"
+
+      # Hurl is an HTTP-contract test that shells out to the built sipi
+      # binary directly (not via Bazel). Both `bazel-coverage` and
+      # `bazel-test` produce `bazel-bin/src/sipi` (with or without
+      # coverage instrumentation; HTTP behaviour is identical).
+      - name: Run Hurl contract tests
+        run: just hurl-test
+
+      # Codecov consumes the combined lcov directly — no cobertura
+      # conversion. Linux-amd64 only: a single platform's report is
+      # sufficient signal; Codecov merges if we ever enable more.
+      - name: Upload coverage to Codecov
+        if: ${{ matrix.platform == 'linux-amd64' }}
+        uses: codecov/codecov-action@v6.0.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: dasch-swiss/sipi
+          files: bazel-out/_coverage/_coverage_report.dat
+
+      # On any bazel failure above, locate and dump every foreign_cc
+      # Make.log under the bazel output base. rules_foreign_cc writes
+      # the captured stderr/stdout of each `make()` action into a
+      # Make.log alongside the action's output tree; with
+      # `--sandbox_debug` those survive action failure. Converts
+      # "output X was not created" diagnostics into the actual Make
+      # stderr.
+      - name: Dump foreign_cc Make.log files on failure
+        if: failure()
+        run: |
+          set +e
+          echo "=== searching for foreign_cc *.log files ==="
+          find "$HOME/.bazel" /home/runner/work /Users/runner/work -type f \
+            \( -name "Make.log" -o -name "configure.log" -o -name "build.log" -o -name "CMake.log" \) \
+            -print 2>/dev/null | while read -r f; do
+            echo
+            echo "===== $f ====="
+            cat "$f"
+          done
+          echo
+          echo "=== end of foreign_cc log dump ==="
+
+      # Docker steps run on Linux only: //src:image is gated by host-CPU
+      # `target_compatible_with` and would error out on macOS-aarch64.
+      #
+      # `bazel-test-smoke` is one Bazel invocation that:
+      #   1. Builds //src:image as a transitive `data` dep of
+      #      //test/e2e-rust:docker_smoke.
+      #   2. Runs the smoke test, whose startup code does
+      #      `docker load -i $SIPI_IMAGE_TAR` — the image lands in the
+      #      local Docker daemon as `daschswiss/sipi:latest` (matching
+      #      `oci_load.repo_tags`).
+      #   3. Probes HTTP endpoints against the loaded container.
+      #
+      # Docker Scout reads `local://daschswiss/sipi:latest` left in the
+      # daemon by step 2 — no separate build/load step needed.
+      - name: Run Docker smoke tests (builds + loads image as side effect)
+        if: runner.os == 'Linux'
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: nix develop --command bash -c "just bazel-test-smoke --disk_cache=\$HOME/.cache/bazel-disk"
+
       - name: Docker Scout — compare to production
-        if: github.event_name == 'pull_request'
+        if: runner.os == 'Linux' && github.event_name == 'pull_request'
         uses: docker/scout-action@v1
         with:
           command: compare
@@ -182,8 +271,9 @@ jobs:
           write-comment: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
           organization: daschswiss
+
       - name: Docker Scout — CVE report (SARIF)
-        if: github.event_name == 'pull_request' && matrix.arch == 'amd64'
+        if: runner.os == 'Linux' && github.event_name == 'pull_request' && matrix.platform == 'linux-amd64'
         uses: docker/scout-action@v1
         with:
           command: cves
@@ -192,43 +282,15 @@ jobs:
           only-severities: critical,high
           write-comment: false
           organization: daschswiss
+
       - name: Upload SARIF to GitHub Security
-        if: github.event_name == 'pull_request' && matrix.arch == 'amd64'
+        if: runner.os == 'Linux' && github.event_name == 'pull_request' && matrix.platform == 'linux-amd64'
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: scout-results.sarif
 
-  # Native Darwin build via Nix + clang/libc++. Sole CI gate for the
-  # Darwin build-completeness invariant — confirms `flake.nix` still
-  # evaluates and `.#default` builds on macOS arm64.
-  nix-macos-build:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: macos-14
-    name: nix-macos / arm64 build
-    concurrency:
-      group: ${{ github.workflow }}-nix-macos-build-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: dasch-swiss/sipi/.github/actions/checkout@main
-        with:
-          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
-      - uses: DeterminateSystems/determinate-nix-action@v3
-        with:
-          extra-conf: |
-            extra-experimental-features = configurable-impure-env
-      - uses: cachix/cachix-action@v17
-        with:
-          name: dasch-swiss
-          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-      - run: nix profile install --inputs-from . nixpkgs#just
-      - name: Build native Darwin binary
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: just nix-build-default
-
   # Build documentation. Pure Python/MkDocs — Nix is only here so we can
-  # provision `just` consistently with the other jobs; no `nix build` runs,
-  # so Cachix would have nothing to substitute.
+  # provision `just` consistently with the other jobs.
   docs:
     name: docs
     runs-on: ubuntu-latest
