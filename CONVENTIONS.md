@@ -9,53 +9,46 @@ For reviewer guidelines, see `docs/src/development/reviewer-guidelines.md`.
 
 ## Stack
 
-- C++23, Clang 15+ / GCC 13+, CMake 3.28+
-- Build toolchains: Nix (reproducible, single source of truth for CI), Docker (production image)
+- C++23, Clang 15+ / GCC 13+
+- Build orchestrator: Bazel (single source of truth for CI; reproducible action graph)
+- Reproducible dev environment: Nix dev shells (`flake.nix` `devShells` only — no Nix-side build derivations)
 - HTTP framework: custom `shttps/` library (threading, SSL, connection pooling)
 - Image formats: libtiff, libpng, libjpeg, libwebp, Kakadu (JPEG 2000)
 - Scripting: Lua (routes, preflight checks, image manipulation)
 
 ## Build Reproducibility Invariant
 
-Every justfile recipe that builds sipi goes through `nix build .#<variant>`.
-CI invokes only `just <recipe>` — no inline cmake or `nix build` calls in
-workflow YAML. The consequences:
+Every build/test/coverage step in CI invokes one of the `just bazel-*`
+recipes — no inline `bazel` calls in workflow YAML, no `nix build` calls.
+The consequences:
 
-- Recipes are contracts: every `nix-*` recipe is a promise that CI runs the
-  same command. Adding an imperative cmake recipe would violate that contract
-  and create a drift surface.
-- Unit tests run inside the Nix sandbox via `doCheck = enableTests` in
-  `package.nix`. A `nix build .#dev` that succeeds is, by construction, a
-  tested build — the derivation graph enforces "tested before cached."
-- Incremental inner-loop development (edit one `.cpp` file, see a
-  seconds-fast rebuild) is a documented dev-shell pattern — `nix develop`
-  followed by `cmake --build build` by hand. It is intentionally NOT a
-  recipe. See `CLAUDE.md` "Inner-loop development" and
-  `docs/src/development/developing.md`.
+- Recipes are contracts: every `bazel-*` recipe is a promise that CI runs
+  the same command. Adding ad-hoc bazel invocations in a workflow would
+  violate that contract and create a drift surface.
+- Tests are part of the action graph. `just bazel-coverage` builds sipi
+  with coverage instrumentation and runs unit + approval + e2e in one
+  pass; the lcov report at `bazel-out/_coverage/_coverage_report.dat` is
+  what Codecov consumes.
+- The inner-loop edit/rebuild cycle IS `just bazel-build`. Bazel's per-
+  action cache rebuilds only the affected compile + link, not the full
+  closure. No separate dev-shell-only path is needed.
 
-If a new build configuration is genuinely needed across the team (non-trivial
-CMake flags, specialized toolchain), that configuration deserves a Nix
-variant in `flake.nix`, not a recipe wrapping imperative cmake.
-
-The Bazel migration (DEV-6343..DEV-6348) adds a parallel `cc_test` inner
-loop that is currently local-only. CMake/ctest via `just nix-build`
-remains the CI canonical path. Until DEV-6348 cuts CI over, treat
-`just bazel-test-unit` and `just bazel-test-approval` as a local
-fast-feedback path — not a substitute for `nix-build`.
+If a new build configuration is genuinely needed across the team (non-
+trivial compiler flags, specialized toolchain), that configuration
+belongs in `.bazelrc` (a `--config=<name>` block) or a new Bazel target
+in `MODULE.bazel` / `BUILD.bazel`, not an imperative shell recipe.
 
 ## Build Completeness Invariant
 
 Every build target must succeed on every supported platform:
 macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. Linux-only
-outputs (`docker`, `docker-stream`, `sipi-debug`) are gated by
-`pkgs.lib.optionalAttrs isLinux` in `flake.nix`; everything else must
-build on every platform. CI is Linux-only — **a green CI run does not
-verify macOS**. Before shipping changes to `flake.nix`, `package.nix`,
-or a justfile build recipe, run every affected variant locally on
-macOS (`just nix-build-<variant>`) and dispatch Linux variants via
-Determinate's native-linux-builder
-(`nix build .#packages.{x86_64,aarch64}-linux.<variant>`). See CLAUDE.md
-"Build completeness invariant" for the full checklist.
+outputs (`//src:image` and the `bazel-docker-*` recipes built on top of
+it) are gated by host-CPU `target_compatible_with`; everything else
+must build on every platform. CI runs the test matrix on all three
+platforms, so a green CI run verifies macOS as well as Linux. Before
+shipping changes to `flake.nix`, `MODULE.bazel`, `BUILD.bazel`, or a
+justfile build recipe, run `just bazel-build` and `just bazel-coverage`
+locally on macOS at minimum.
 
 ## Scope Discipline
 

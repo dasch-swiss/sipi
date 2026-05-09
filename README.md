@@ -75,26 +75,28 @@ You will then find the manual under `site/index.html`.
 
 All commands are run from the repository root via `just`. Run `just` for a full list of targets.
 
-### Build and test with Nix (reproducible — what CI runs)
+### Build and test with Bazel (what CI runs)
 ```bash
-just nix-build         # .#dev: Debug + coverage, unit tests run in the Nix sandbox
-just rust-test-e2e     # run Rust end-to-end tests against ./result/bin/sipi
-just hurl-test         # run Hurl HTTP contract tests
-just nix-run           # start SIPI server
+just bazel-build       # bazel build --stamp //src:sipi (fastbuild — fast incremental rebuilds)
+just bazel-coverage    # build + run all tests (unit + approval + e2e) under coverage instrumentation
+just hurl-test         # run Hurl HTTP contract tests against ./bazel-bin/src/sipi
+just run               # start SIPI server with the localdev config
 ```
 
-### Build a Docker image (via Nix dockerTools)
+### Build a Docker image (Bazel rules_oci)
 ```bash
-just nix-docker-build  # build .#docker-stream and load into the local Docker daemon
-just test-smoke        # build image (if needed), then run smoke tests
+just bazel-docker-build-amd64   # or bazel-docker-build-arm64 — build + load image as daschswiss/sipi:latest
+just test-smoke                 # build host-arch image, then run smoke tests against it
 ```
 
-### Inner-loop development (incremental rebuilds, non-reproducible)
+### Inner-loop development
+
+`just bazel-build` IS the inner loop. The first build is slow (cold action cache); subsequent edits to a single `.cpp` file rebuild in seconds.
+
 ```bash
-nix develop                                              # dev shell with build deps
-cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DCODE_COVERAGE=ON
-cmake --build build --parallel
-./build/sipi --config config/sipi.localdev-config.lua
+nix develop            # dev shell with build deps + bazelisk
+just bazel-build       # cold action cache: slow; warm: seconds
+./bazel-bin/src/sipi --config config/sipi.localdev-config.lua
 ```
 
 See [Building SIPI from Source Code](https://sipi.io/development/building/) for full details.
