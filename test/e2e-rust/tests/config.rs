@@ -23,8 +23,7 @@ fn invalid_config_startup() {
     let config_path = test_data.join("config/sipi.invalid-syntax.lua");
     std::fs::write(&config_path, config_content).expect("write invalid config");
 
-    let sipi_bin = std::env::var("SIPI_BIN")
-        .unwrap_or_else(|_| sipi_e2e::find_sipi_bin().to_string_lossy().to_string());
+    let sipi_bin = sipi_e2e::sipi_bin_path();
 
     let output = Command::new(&sipi_bin)
         .arg("--config")

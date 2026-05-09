@@ -220,6 +220,17 @@ build:asan --copt=-fno-optimize-sibling-calls
 build:asan --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsanitize=address
 build:asan --linkopt=-fsanitize=address
 
+# ASan runtime env for `bazel test --config=asan`.
+# `log_path=$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e` lands findings under
+# `bazel-testlogs/<pkg>/<target>/test.outputs/asan-e2e.<pid>` — the
+# directory is Bazel-guaranteed inside test actions and is automatically
+# uploaded as a test-output artefact. `sanitizer.yml` greps for
+# `SUMMARY:` lines under that glob.
+#
+# `detect_leaks=1` keeps LSan on; `halt_on_error=0` lets a test surface
+# every leak in one report rather than needing N reruns.
+test:asan --test_env=ASAN_OPTIONS=detect_leaks=1:halt_on_error=0:log_path=$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e
+
 build:ubsan --compilation_mode=dbg
 build:ubsan --strip=never
 build:ubsan --copt=-fno-omit-frame-pointer

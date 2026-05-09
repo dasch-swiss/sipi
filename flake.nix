@@ -4,15 +4,9 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    # Used by `nix/rust-tests.nix` to build the Rust e2e + Docker smoke
-    # test binaries reproducibly with vendored crate sources from
-    # `test/e2e-rust/Cargo.lock`. Pinned to a release tag so that
-    # `nix flake update` does not silently follow upstream's default
-    # branch into a major-version bump.
-    crane.url = "github:ipetkov/crane?ref=v0.23.3";
   };
 
-  outputs = { self, nixpkgs, flake-utils, crane, ... }:
+  outputs = { self, nixpkgs, flake-utils, ... }:
     let
       # Kakadu archive (proprietary). Fetched by a fixed-output derivation
       # (FOD) from the dsp-ci-assets GitHub release via `gh release
@@ -107,10 +101,6 @@
 
         version = pkgs.lib.strings.trim (builtins.readFile ./version.txt);
 
-        # New Nix expressions live in ./nix/<topic>.nix and are imported here.
-        craneLib  = crane.mkLib pkgs;
-        rustTests = import ./nix/rust-tests.nix { inherit pkgs craneLib; };
-
         filteredSrc = pkgs.lib.fileset.toSource {
           root = ./.;
           fileset = pkgs.lib.fileset.unions [
@@ -144,11 +134,6 @@
           # Exposed so `nix build .#kakaduArchive` can pre-populate the
           # store in isolation, and so `nix flake check` covers it.
           kakaduArchive = pkgs.kakaduArchive;
-
-          # Rust e2e + Docker smoke test binaries (see nix/rust-tests.nix).
-          # Built with vendored crate sources via crane; consumed by
-          # `just nix-test-e2e` and `just nix-test-smoke`.
-          inherit (rustTests) e2e-tests smoke-test;
 
           # Debug build with coverage instrumentation
           dev = pkgs.sipi.override {
@@ -252,12 +237,9 @@
               cacert
               # `crane` CLI from go-containerregistry — the package in
               # nixpkgs is `go-containerregistry`, which installs the
-              # `crane` binary (and `gcrane`, `krane`) on PATH. Note: we
-              # must NOT name this `crane` here because `crane` is
-              # already a flake input (Rust build helper at
-              # github:ipetkov/crane), and the dev-shell package list
-              # would shadow that with a derivation that fails to
-              # evaluate.
+              # `crane` binary (and `gcrane`, `krane`) on PATH. Used by
+              # `just bazel-docker-publish-manifest` to assemble the
+              # multi-arch manifest from the two pushed per-arch digests.
               go-containerregistry
             ];
 

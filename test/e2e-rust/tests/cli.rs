@@ -1,4 +1,4 @@
-use sipi_e2e::{find_sipi_bin, repo_root, test_data_dir};
+use sipi_e2e::{repo_root, sipi_bin_path, test_data_dir};
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -7,8 +7,7 @@ use std::process::Command;
 // =============================================================================
 
 fn sipi_convert(input: &str, output: &str, format: &str) -> std::process::Output {
-    let sipi_bin =
-        std::env::var("SIPI_BIN").unwrap_or_else(|_| find_sipi_bin().to_string_lossy().to_string());
+    let sipi_bin = sipi_bin_path();
 
     Command::new(&sipi_bin)
         .arg("--file")
@@ -214,8 +213,7 @@ fn cli_metadata_fidelity() {
 
 #[test]
 fn cli_version_flag() {
-    let sipi_bin =
-        std::env::var("SIPI_BIN").unwrap_or_else(|_| find_sipi_bin().to_string_lossy().to_string());
+    let sipi_bin = sipi_bin_path();
 
     let result = Command::new(&sipi_bin)
         .arg("--version")

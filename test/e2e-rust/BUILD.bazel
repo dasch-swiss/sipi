@@ -1,0 +1,239 @@
+"""Rust e2e + Docker smoke test suite.
+
+`rules_rust` + Crate Universe (`crate.from_cargo` in `MODULE.bazel`)
+build one `rust_test` target per `tests/<name>.rs`, mirroring Cargo's
+"one binary per `[[test]]`" semantics.
+
+Layout:
+
+  * `:sipi_e2e`        `rust_library` exposing the shared helpers
+                       (`SipiServer`, `repo_root`, `http_client`, …)
+                       consumed by every test binary.
+  * 21 × `rust_test`   one target per non-docker `tests/<name>.rs`,
+                       defined via `sipi_e2e_test()` (see
+                       `sipi_e2e_test.bzl`). The macro injects the
+                       shared `data`/`env`/`args`/`tags` so the
+                       contracts can't drift across targets.
+  * `:docker_smoke`    inline `rust_test` — its data shape (OCI image
+                       tarball) and tags (`requires-docker`) diverge
+                       from the macro's defaults.
+  * `:all_e2e`         `test_suite` aggregating the 21 non-docker
+                       targets. `just bazel-test-e2e` wraps `bazel
+                       test //test/e2e-rust:all_e2e`.
+  * `:sipi_image_tar`  `filegroup` extracting the OCI tarball produced
+                       by `//src:image_load` (rules_oci 2.x's
+                       `tarball` output group). Consumed by
+                       `:docker_smoke` to `docker load -i
+                       $SIPI_IMAGE_TAR` at runtime.
+
+Runtime contracts (set per-target by `sipi_e2e_test()` or below):
+
+  * `SIPI_BIN`         `$(rootpath //src:sipi)`; `SipiServer`
+                       canonicalises to absolute before spawning.
+  * `SIPI_REPO_ROOT`   `$(rootpath //:test_fixtures)`. The materialised
+                       tree is the host of the in-source layout under
+                       which `repo_root()` resolves fixture paths.
+  * `--test-threads=1` Sipi can't tolerate parallel test load on the
+                       JP2 → JPEG decode path. Enforced by `args` in
+                       the macro AND by `tags = ["exclusive"]` so
+                       siblings can't collide on the shared port pool.
+  * `CARGO_PROFILE`    Bazel's default `--compilation_mode=fastbuild`
+                       (dbg-equivalent) matches Cargo's `test` default.
+                       Don't switch to `--compilation_mode=opt`.
+  * `LSAN_OPTIONS`     `suppressions=$(rootpath //:lsan_suppressions)`.
+                       Active only under `--config=asan`.
+"""
+
+load("@crates//:defs.bzl", "all_crate_deps")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load(":sipi_e2e_test.bzl", "sipi_e2e_test")
+
+package(default_visibility = ["//visibility:private"])
+
+# Insta snapshot files. Attached unconditionally so a new
+# `assert_*_snapshot!()` call doesn't have to re-thread snapshots
+# through its data deps.
+filegroup(
+    name = "snapshots",
+    srcs = glob(
+        ["tests/snapshots/*.snap"],
+        allow_empty = True,
+    ),
+    visibility = ["//visibility:public"],
+)
+
+# Shared library — `src/lib.rs` exposes `SipiServer`, `repo_root`,
+# `http_client`, port allocation helpers, etc. The integration tests
+# all `use sipi_e2e::…`. `[dev-dependencies]` are not visible to a
+# library, only `[dependencies]`, so we ask `all_crate_deps()` for the
+# `normal` set only.
+rust_library(
+    name = "sipi_e2e",
+    srcs = ["src/lib.rs"],
+    edition = "2021",
+    visibility = ["//visibility:public"],
+    deps = all_crate_deps(normal = True),
+)
+
+# ── Non-docker e2e tests ────────────────────────────────────────────────────
+#
+# Adding a new test:
+#   1. Drop `tests/<name>.rs` in place.
+#   2. Add `sipi_e2e_test(name = "<name>", deps = _e2e_test_deps)` here.
+#   3. Add `":<name>"` to the `:all_e2e` test_suite below.
+#
+# Both `[dependencies]` and `[dev-dependencies]` are visible to
+# integration tests; `all_crate_deps()` queries the Cargo.toml in this
+# package and returns the union when both flags are set.
+_e2e_test_deps = all_crate_deps(
+    normal = True,
+    normal_dev = True,
+)
+
+sipi_e2e_test(name = "bilevel_tiff", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "cache", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "cli", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "cli_json", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "config", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "connection", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "health", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "heritage_jpeg", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "iiif_compliance", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "input_validation", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "latency", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "memory_budget", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "proptest_iiif_uri", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "range_requests", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "rate_limiter", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "resource_limits", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "security", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "server", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "shutdown", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "smoke", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "upload", deps = _e2e_test_deps)
+
+# ── Docker smoke test ──────────────────────────────────────────────────────
+#
+# `docker_smoke` differs from the macro-defined targets in three ways:
+#
+#   1. It needs the OCI image tarball at runtime — `:sipi_image_tar`
+#      extracts it from `//src:image_load`'s `tarball` output group
+#      (rules_oci 2.x convention). The Linux-only
+#      `target_compatible_with` matches `//src:image_load`'s gating.
+#   2. It tags `requires-network` + `requires-docker` so Bazel skips it
+#      on CI runners that can't run Docker (the macOS native build
+#      matrix in `ci.yml`).
+#   3. The test file is feature-gated by `#![cfg(feature = "docker")]`;
+#      `crate_features = ["docker"]` flips the matching `--cfg` flag.
+
+filegroup(
+    name = "sipi_image_tar",
+    srcs = ["//src:image_load"],
+    output_group = "tarball",
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:public"],
+)
+
+rust_test(
+    name = "docker_smoke",
+    srcs = [
+        "tests/docker_smoke.rs",
+        "tests/common/mod.rs",
+    ],
+    crate_features = ["docker"],
+    data = [
+        ":sipi_image_tar",
+        "//:test_fixtures",
+        "//src:sipi",
+    ],
+    edition = "2021",
+    env = {
+        "SIPI_BIN": "$(rootpath //src:sipi)",
+        # Same value as `sipi_e2e_test()` — the docker bind mounts in
+        # `tests/docker_smoke.rs` derive their host paths from
+        # `repo_root()`, which must resolve to the `copy_to_directory`
+        # materialised tree (where `config/sipi.config.lua`,
+        # `test/_test_data/...`, `scripts/...`, `server/...` actually
+        # live). Pointing this at `.` (runfiles workspace root) would
+        # leave those subtrees missing and sipi inside the container
+        # crashes with "--config: File does not exist:
+        # /sipi/config/sipi.config.lua".
+        "SIPI_REPO_ROOT": "$(rootpath //:test_fixtures)",
+        # `tests/docker_smoke.rs` runs `docker load -i $SIPI_IMAGE_TAR`
+        # on startup, then spawns containers via `SIPI_IMAGE_TAG`. The
+        # tag must match what `//src:image_load`'s `repo_tags = [...]`
+        # baked into the tarball — otherwise `docker run` fails with
+        # "Unable to find image '<tag>' locally". The Bazel-loaded
+        # image overwrites any pre-existing `daschswiss/sipi:latest`
+        # on the developer's daemon; that's acceptable since smoke
+        # tests are run intentionally and the inner-loop `just
+        # test-smoke` flow rebuilds + loads under the same tag.
+        "SIPI_IMAGE_TAR": "$(rootpath :sipi_image_tar)",
+        "SIPI_IMAGE_TAG": "daschswiss/sipi:latest",
+    },
+    args = ["--test-threads=1"],
+    tags = [
+        "exclusive",
+        # See `sipi_e2e_test.bzl` for the macOS-sandbox rationale; the
+        # smoke target also needs daemon access so `local` is required.
+        "local",
+        "requires-docker",
+        "requires-network",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [":sipi_e2e"] + _e2e_test_deps,
+)
+
+# ── Aggregator ─────────────────────────────────────────────────────────────
+#
+# `bazel test //test/e2e-rust:all_e2e` runs all non-docker tests in one
+# shot. `docker_smoke` is intentionally omitted — it has its own
+# `requires-docker` runtime constraint and CI invokes it separately
+# after the OCI image is built.
+test_suite(
+    name = "all_e2e",
+    tests = [
+        ":bilevel_tiff",
+        ":cache",
+        ":cli",
+        ":cli_json",
+        ":config",
+        ":connection",
+        ":health",
+        ":heritage_jpeg",
+        ":iiif_compliance",
+        ":input_validation",
+        ":latency",
+        ":memory_budget",
+        ":proptest_iiif_uri",
+        ":range_requests",
+        ":rate_limiter",
+        ":resource_limits",
+        ":security",
+        ":server",
+        ":shutdown",
+        ":smoke",
+        ":upload",
+    ],
+    visibility = ["//visibility:public"],
+)

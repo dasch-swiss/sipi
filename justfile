@@ -94,6 +94,31 @@ bazel-test-unit:
 bazel-test-approval:
     bazel test //test/approval:approvaltests
 
+# Run all Rust e2e `rust_test` targets against the Bazel-built `:sipi`
+# binary. Pass extra Bazel flags positionally: e.g. `--config=asan` for
+# the sanitiser run, `--test_output=streamed` for live stdout,
+# `--runs_per_test=3` for a flakiness gate on `iiif_compliance` /
+# `resource_limits` / `latency`.
+#
+# `--stamp` is on so `cli_version_flag` reads the stamped
+# `STABLE_SIPI_VERSION` rather than the `0.0.0-unstamped` fallback. Only
+# the `:sipi_version_h` action's cache key depends on `STABLE_*` values,
+# so the stamp adds at most one re-link per workspace_status change.
+bazel-test-e2e *FLAGS='':
+    bazel test --stamp --verbose_failures {{FLAGS}} //test/e2e-rust:all_e2e
+
+# Run the Docker smoke test against the Bazel-built OCI image. The image
+# tarball is produced by `//src:image_load` and consumed via the test's
+# runfiles (`SIPI_IMAGE_TAR` env), so no separate `bazel run
+# //src:image_load` step is needed — Bazel materialises the tarball as
+# a `data` dep of `:docker_smoke`.
+#
+# `--config=asan` does not apply: the test client is uninstrumented and
+# the sipi binary inside the container is already covered by
+# `bazel-test-e2e --config=asan` above.
+bazel-test-smoke *FLAGS='':
+    bazel test --stamp --verbose_failures {{FLAGS}} //test/e2e-rust:docker_smoke
+
 # Sanitized build: Debug + ASan + UBSan via Bazel `--config=asan --config=ubsan`.
 # Replaces the deleted `.#sanitized` Nix variant (DEV-6344, PR Y+2). The
 # resulting binary at `bazel-bin/src/sipi` is what `sanitizer.yml`'s e2e
@@ -306,10 +331,10 @@ bazel-docker-extract-debug arch *FLAGS='':
 # Tests (consume $SIPI_BIN, default ./result/bin/sipi)
 #####################################
 
-# Run Rust e2e tests against the built sipi.
-# Inner-loop dev path — uses cargo from the dev shell. CI uses
-# `nix-test-e2e` (below), which consumes pre-built test binaries from
-# the .#e2e-tests derivation and needs no cargo on PATH.
+# Run Rust e2e tests against the built sipi via cargo (inner-loop dev
+# path; needs the dev shell on PATH). CI uses `bazel-test-e2e` instead,
+# which runs the same `tests/<name>.rs` set as `rust_test` targets
+# without cargo.
 rust-test-e2e:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -319,40 +344,6 @@ rust-test-e2e:
         exit 1
     fi
     cd test/e2e-rust && SIPI_BIN="$SIPI_BIN" cargo test -- --test-threads=1
-
-# Run nix-built Rust e2e test binaries against the built sipi.
-# Equivalent coverage to `rust-test-e2e`, but the test binaries come
-# from the .#e2e-tests Nix derivation (Cachix-cacheable, no cargo needed).
-# `INSTA_WORKSPACE_ROOT` overrides insta's default `cargo metadata`-based
-# snapshot lookup, which fails when the binary was compiled in a Nix
-# sandbox whose source path no longer exists at runtime.
-nix-test-e2e:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/result/bin/sipi}"
-    if [ ! -x "$SIPI_BIN" ]; then
-        echo "sipi binary not found at $SIPI_BIN. Run 'just nix-build' first." >&2
-        exit 1
-    fi
-    {{_nix_build}} -o result-e2e .#e2e-tests
-    SIPI_BIN="$SIPI_BIN" \
-    SIPI_REPO_ROOT="{{justfile_directory()}}" \
-    INSTA_WORKSPACE_ROOT="{{justfile_directory()}}/test/e2e-rust" \
-        {{justfile_directory()}}/result-e2e/bin/run-e2e.sh
-
-# Run nix-built Docker smoke test against the loaded daschswiss/sipi:latest image.
-# Replaces `test-smoke-ci` for CI use; that recipe stays for the inner-loop dev path.
-nix-test-smoke:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if ! docker image inspect daschswiss/sipi:latest >/dev/null 2>&1; then
-        echo "ERROR: daschswiss/sipi:latest not loaded. Run 'just nix-docker-build-<arch>' first." >&2
-        exit 1
-    fi
-    {{_nix_build}} -o result-smoke .#smoke-test
-    SIPI_REPO_ROOT="{{justfile_directory()}}" \
-    INSTA_WORKSPACE_ROOT="{{justfile_directory()}}/test/e2e-rust" \
-        {{justfile_directory()}}/result-smoke/bin/docker_smoke --test-threads=1
 
 # Run Hurl HTTP contract tests against the built sipi.
 hurl-test:

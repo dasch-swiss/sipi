@@ -1,9 +1,8 @@
-"""Sipi runtime Lua scripts — exposed for the Bazel-built image (DEV-6346).
+"""Sipi runtime Lua scripts — exposed to Bazel-driven build + test paths.
 
-The OCI image consumes a tiny subset of `scripts/*.lua` at /sipi/scripts/;
-mirrors today's `fakeRootCommands` block in `flake.nix` 1:1. Other Lua
-scripts in this directory are admin/dev tooling and are NOT copied into
-the production image.
+`exports_files()` surfaces the tiny subset that the production OCI image
+copies into `/sipi/scripts/`. `:all_scripts` aggregates the entire
+directory for the Rust e2e tests' fixture tree.
 """
 
 package(default_visibility = ["//visibility:public"])
@@ -12,3 +11,15 @@ exports_files([
     "send_response.lua",
     "test_functions.lua",
 ])
+
+# Full `scripts/` tree. Consumed by `//:test_fixtures` to populate
+# `SIPI_REPO_ROOT/scripts/` for the Rust e2e tests; `docker_smoke` also
+# bind-mounts it into the container at `/sipi/scripts`. Catches every
+# Lua script the test config files `dofile`/`require` from this dir.
+filegroup(
+    name = "all_scripts",
+    srcs = glob(
+        ["**/*"],
+        allow_empty = False,
+    ),
+)
