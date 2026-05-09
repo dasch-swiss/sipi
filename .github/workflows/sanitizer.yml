@@ -7,12 +7,23 @@
 #
 # Also available on-demand via workflow_dispatch.
 #
-# The build step uses Bazel (`just bazel-build-sanitized` ⇒
-# `bazel build --config=asan --config=ubsan //src:sipi`); the e2e step
-# then exercises the resulting `bazel-bin/src/sipi` binary under
-# `just nix-test-e2e` with `LSAN_OPTIONS` and `ASAN_OPTIONS` set as
-# below. Unit-test sanitizer coverage moves to Bazel `cc_test`
-# execution in DEV-6348 (PR Y+6) — until then this workflow is e2e-only.
+# Single Bazel test step:
+#   `just bazel-test-e2e --config=asan --config=ubsan` rebuilds the
+#   sipi binary + e2e test binaries under ASan/UBSan and runs the
+#   suite in one action graph. No separate sanitised-build step:
+#   `bazel test //test/e2e-rust:all_e2e` already requires
+#   `data = ["//src:sipi"]` and produces sipi under the test
+#   invocation's configuration, so a pre-build with the same flags
+#   would be duplicate work and one with different flags would be
+#   discarded.
+#
+# `LSAN_OPTIONS` is set per-test by `test/e2e-rust/sipi_e2e_test.bzl`
+# (each rust_test data-deps `//:lsan_suppressions`). `ASAN_OPTIONS`
+# `log_path` is set by `.bazelrc`'s `test:asan` block to point at
+# `$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e`, which Bazel surfaces under
+# `bazel-testlogs/.../test.outputs/asan-e2e.<pid>`. This workflow is
+# e2e-only — unit-test sanitizer coverage gates on the cutover of
+# unit-test execution to Bazel `cc_test`.
 
 permissions:
   contents: read
@@ -110,27 +121,37 @@ jobs:
       # `.lsan_suppressions.txt` (`leak:lua*`) can never match.
       - run: nix profile install --inputs-from . nixpkgs#just nixpkgs#llvmPackages_19.llvm
 
-      - name: Build with sanitizers (ASan + UBSan)
+      - name: Run e2e tests under ASan + UBSan
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        # Wrap with `nix develop --command` so bazelisk runs inside the
-        # dev shell. This mirrors `.github/workflows/bazel-build.yml`'s
-        # invocation and is the only way `gh` (used by the kakadu
-        # repository_rule), `cmake`/`perl`/`pkg-config`/`autoconf`/
-        # `automake`/`libtoolize` (used by foreign_cc rules), and the
-        # Nix-injected `NIX_LDFLAGS`/`ACLOCAL_PATH` (forwarded into
-        # foreign_cc actions via `.bazelrc:--action_env=*`) reach the
-        # build. Running bare `just bazel-build-sanitized` falls back
-        # to the runner's pre-installed bazelisk + system tooling,
-        # which produces an inconsistent foreign_cc compile env and
-        # surfaces as kakadu output-extraction failures on linux-x86_64
-        # specifically.
-        # `--disk_cache` is set on the recipe's `*FLAGS` positional so bash
-        # expands `$HOME` here — Bazel does not expand env vars in
-        # .bazelrc paths (bazelbuild/bazel#15856). Path matches the
-        # `actions/cache` step above so the cache is restored and saved
-        # across CI runs.
-        run: nix develop --command bash -c "just bazel-build-sanitized --disk_cache=\$HOME/.cache/bazel-disk"
+        # `bazel test --config=asan --config=ubsan` rebuilds sipi (a
+        # `data` dep of every e2e `rust_test` target) plus the tests
+        # themselves under ASan/UBSan, then runs them — single action
+        # graph, no separate sanitised-build step.
+        #
+        # `nix develop --command` is required so foreign_cc rules see
+        # `gh` (kakadu repository_rule), `cmake`/`perl`/`pkg-config`/
+        # `autoconf`/`automake`/`libtoolize`, and the Nix-injected
+        # `NIX_LDFLAGS`/`ACLOCAL_PATH` (forwarded into foreign_cc
+        # actions via `.bazelrc:--action_env=*`).
+        #
+        # `LSAN_OPTIONS` (suppressions path) is injected per-test by
+        # `test/e2e-rust/sipi_e2e_test.bzl`; `ASAN_OPTIONS` (log_path)
+        # by `.bazelrc`'s `test:asan` block — no env vars on this step.
+        # `ASAN_SYMBOLIZER_PATH` is auto-detected via `llvm-symbolizer`
+        # on PATH (installed above); ASan honours it before falling
+        # through to PATH lookup, and the sanitised config keeps DWARF
+        # inline (`--strip=never` + `--compilation_mode=dbg`) so the
+        # symboliser has something to read.
+        #
+        # `--disk_cache` is set on the recipe's `*FLAGS` positional so
+        # bash expands `$HOME` here — Bazel does not expand env vars
+        # in .bazelrc paths (bazelbuild/bazel#15856). Path matches the
+        # `actions/cache` step above so the cache is restored and
+        # saved across CI runs.
+        run: |
+          export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer)"
+          nix develop --command bash -c "just bazel-test-e2e --config=asan --config=ubsan --disk_cache=\$HOME/.cache/bazel-disk"
 
       - name: dump foreign_cc Make.log files on failure
         if: failure()
@@ -153,51 +174,32 @@ jobs:
             done
           fi
 
-      - name: Run e2e tests under sanitizers
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-          SIPI_BIN: ${{ github.workspace }}/bazel-bin/src/sipi
-          ASAN_OPTIONS: detect_leaks=1:halt_on_error=0:log_path=/tmp/asan-e2e
-          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.lsan_suppressions.txt
-        # `nix-test-e2e` consumes the `.#e2e-tests` Nix derivation —
-        # no cargo on PATH needed, so the `nix develop` wrap is gone.
-        # ASan / LSan run in the sipi binary (already built sanitized
-        # by the previous step via `bazel build --config=asan --config=ubsan`);
-        # the test client itself doesn't need to be sanitized, so the
-        # crane-built e2e binaries from `.#e2e-tests` are fine as-is.
-        # Pass `ASAN_SYMBOLIZER_PATH` explicitly so the symbolizer
-        # is found regardless of what's on PATH at exec time
-        # (sanitizers honour this env before doing PATH lookup); the
-        # Bazel sanitized config keeps DWARF inline (`--strip=never`
-        # + `--compilation_mode=dbg` in `.bazelrc`) so the symbolizer
-        # has something to read.
-        run: |
-          export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer)"
-          just nix-test-e2e
-
       - name: Check for sanitizer findings in e2e
         if: always()
         run: |
           # Check for actual findings (SUMMARY lines), not just file existence.
           # ASan always writes a log file when log_path is set, even with zero
-          # findings. The Bazel build step doesn't run unit tests (Bazel
-          # `bazel build` is build-only), so this step covers the e2e suite
-          # only — unit-test sanitizer coverage returns when Y+6 cuts the
-          # unit-test execution path to Bazel `cc_test`.
+          # findings. The glob targets Bazel's per-test output dir:
+          # `bazel-testlogs/test/e2e-rust/<target>/test.outputs/asan-e2e.<pid>`
+          # — `.bazelrc`'s `test:asan` block sets
+          # `ASAN_OPTIONS=…log_path=$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e`,
+          # and Bazel surfaces `$TEST_UNDECLARED_OUTPUTS_DIR` files under
+          # `test.outputs/`.
+          GLOB="bazel-testlogs/test/e2e-rust/*/test.outputs/asan-e2e.*"
           HAS_FINDINGS=false
-          if grep -q "SUMMARY:" /tmp/asan-e2e.* 2>/dev/null; then
+          if compgen -G "$GLOB" >/dev/null 2>&1 && grep -q "SUMMARY:" $GLOB 2>/dev/null; then
             HAS_FINDINGS=true
           fi
           if [ "$HAS_FINDINGS" = "true" ]; then
             echo "::error::Sanitizer findings detected in e2e — PR cannot merge with memory safety issues"
             echo ""
             echo "=== Unique findings ==="
-            grep -h "SUMMARY:" /tmp/asan-e2e.* 2>/dev/null | sort -u || true
+            grep -h "SUMMARY:" $GLOB 2>/dev/null | sort -u || true
             echo ""
             echo "=== Full reports ==="
-            for f in /tmp/asan-e2e.*; do
+            for f in $GLOB; do
               [ -f "$f" ] || continue
-              echo "--- $(basename "$f") ---"
+              echo "--- $f ---"
               cat "$f"
               echo ""
             done
@@ -211,4 +213,7 @@ jobs:
         with:
           name: sanitizer-reports
           retention-days: 30
-          path: /tmp/asan-*
+          # Glob mirrors the findings-check step above. Keeps the
+          # artefact-name (`sanitizer-reports`) unchanged so the
+          # publish/Sentry side of the workflow keeps working.
+          path: bazel-testlogs/test/e2e-rust/*/test.outputs/asan-e2e.*

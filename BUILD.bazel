@@ -1,8 +1,60 @@
 # Workspace-root BUILD file. Hosts only labels needed at the root namespace
-# (currently the ICC-header generator script consumed by per-package
-# genrules); package-level rules live in their respective directories.
+# (the ICC-header generator script consumed by per-package genrules; the
+# LSan suppressions filegroup consumed by Rust e2e tests; the runtime
+# fixtures consumed by Rust e2e tests as `SIPI_REPO_ROOT`).
+# Package-level rules live in their respective directories.
+
+load("@aspect_bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 
 exports_files(
     ["generate_icc_header.sh"],
+    visibility = ["//visibility:public"],
+)
+
+# LeakSanitizer suppressions consumed by Rust e2e tests under
+# `--config=asan`. Each `rust_test` data-deps this filegroup and the
+# `sipi_e2e_test()` macro sets `LSAN_OPTIONS=suppressions=$(rootpath …)`.
+# Kept at the workspace root so future C++ test targets can share it
+# without depending on the e2e package.
+filegroup(
+    name = "lsan_suppressions",
+    srcs = [".lsan_suppressions.txt"],
+    visibility = ["//visibility:public"],
+)
+
+# Runtime fixtures bundle for Rust e2e tests. `sipi_e2e::repo_root()`
+# expects `SIPI_REPO_ROOT` to point at a directory containing
+# `test/_test_data` (image fixtures), `config/` (sipi server configs),
+# `scripts/` (Lua server scripts), `server/` (HTTP static assets), and
+# `version.txt`.
+#
+# **Why `copy_to_directory` instead of a `filegroup`.** Bazel's runfiles
+# tree symlinks individual files back to the source repository. Sipi's
+# path-traversal guard (`SipiHttpServer.cpp` `validate_resolved_path`)
+# resolves both `imgroot` and per-request `infile` via `realpath()` and
+# rejects mismatched prefixes — under symlinked runfiles, the imgroot's
+# resolved path stays inside runfiles while a file's resolved path
+# follows the symlink to the source tree, and every request gets
+# "Invalid IIIF identifier". The same realpath mismatch breaks Lua
+# script loading (server-side `require`) and `insta` snapshot lookup.
+# `copy_to_directory` materialises every input as a real file, so
+# realpath of any subpath stays inside the materialised root.
+copy_to_directory(
+    name = "test_fixtures",
+    srcs = [
+        # `cli_version_flag` reads `version.txt` via
+        # `repo_root().join("version.txt")` to compare against
+        # `sipi --version` output.
+        "version.txt",
+        "//test/_test_data:all_test_data",
+        "//config:all_configs",
+        "//scripts:all_scripts",
+        "//server:all_server",
+    ],
+    # Preserve the in-source layout in the materialised tree:
+    # `version.txt`, `test/_test_data/...`, `config/...`, `scripts/...`,
+    # `server/...`. The default would flatten everything by stripping
+    # the leading directory.
+    root_paths = ["."],
     visibility = ["//visibility:public"],
 )

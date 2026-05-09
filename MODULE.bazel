@@ -362,6 +362,54 @@ register_toolchains("@llvm_toolchain_fuzz//:all")
 
 register_toolchains("@llvm_toolchain//:all")
 
+# ── Rust toolchain + Crate Universe ─────────────────────────────────────────
+#
+# `rules_rust` produces one `rust_test` target per `tests/<name>.rs` file
+# under `//test/e2e-rust:`, mirroring Cargo's "one binary per `[[test]]`"
+# semantics.
+#
+# **Registration ordering is load-bearing.** `cargo_build_script` rules
+# (run during Crate Universe materialisation for every `*-sys` crate)
+# resolve `cc` from the registered cc_toolchain at materialisation time.
+# The LLVM toolchain blocks above MUST appear before the Rust extension —
+# otherwise build scripts silently pick up the host `cc` and produce
+# non-hermetic artifacts.
+bazel_dep(name = "rules_rust", version = "0.70.0")
+
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    edition = "2021",
+    # 1.88+ required: transitive `time-macros` crate uses
+    # `proc_macro_span` (stabilised in 1.88). Edition 2024 (1.85+) is
+    # also required by the transitive `pxfm` crate. `test/e2e-rust/
+    # Cargo.toml` itself stays on edition 2021 — the transitive bumps
+    # are invisible to first-party code.
+    versions = ["1.89.0"],
+)
+use_repo(rust, "rust_toolchains")
+register_toolchains("@rust_toolchains//:all")
+
+# `crate.from_cargo` is lazy resolution from `Cargo.lock` — the canonical
+# default since rules_rust 0.59. `crates_vendor` (vendored sources in-tree)
+# is reserved for offline CI scenarios that don't apply here.
+#
+# Repin via:  CARGO_BAZEL_REPIN=1 bazelisk fetch @crates//:all
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.from_cargo(
+    name = "crates",
+    cargo_lockfile = "//test/e2e-rust:Cargo.lock",
+    manifests = ["//test/e2e-rust:Cargo.toml"],
+)
+
+# `aws-lc-sys` is intentionally NOT in the dep graph — its cmake-based
+# build script panics inside Bazel actions ("rust_wrapper.h is not a
+# directory"). `test/e2e-rust/Cargo.toml` uses `jsonwebtoken`'s
+# `rust_crypto` (pure-Rust) backend instead. The only `tests/`
+# consumer is `security.rs`, which uses HS256 — a symmetric algorithm
+# not affected by the backend choice. If a future test needs RSA/ECDSA
+# JWT verification, `rust_crypto` covers both via `rsa` + `p256`/`p384`.
+use_repo(crate, "crates")
+
 # ── Kakadu (proprietary, GitHub-release-gated) ─────────────────────────────
 # Custom repository_rule mirroring today's Nix FOD auth UX 1:1 — shells out
 # to `gh release download` instead of `http_archive` + `auth_patterns` (the

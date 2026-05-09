@@ -5,12 +5,12 @@
 // `--json` CLI flag added in DEV-6249 / DEV-6250 / DEV-6257.
 
 use serde_json::Value;
-use sipi_e2e::{find_sipi_bin, test_data_dir};
+use sipi_e2e::{sipi_bin_path, test_data_dir};
 use std::path::PathBuf;
 use std::process::Command;
 
 fn sipi_bin() -> String {
-    std::env::var("SIPI_BIN").unwrap_or_else(|_| find_sipi_bin().to_string_lossy().to_string())
+    sipi_bin_path()
 }
 
 fn tmp_path(name: &str) -> PathBuf {

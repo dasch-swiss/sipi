@@ -48,8 +48,7 @@ impl SipiServer {
     /// `extra_args` — additional CLI arguments appended after standard ones.
     ///                 CLI args override Lua config values (CLI11 precedence).
     pub fn start_with_args(config: &str, working_dir: &Path, extra_args: &[&str]) -> Self {
-        let sipi_bin = std::env::var("SIPI_BIN")
-            .unwrap_or_else(|_| find_sipi_bin().to_string_lossy().to_string());
+        let sipi_bin = sipi_bin_path();
 
         let (http_port, ssl_port) = allocate_ports();
 
@@ -345,28 +344,153 @@ impl Drop for SipiServer {
 ///
 /// Resolution order:
 ///   1. `$SIPI_REPO_ROOT` if set — required when this crate is built in a
-///      Nix sandbox, because `CARGO_MANIFEST_DIR` is baked at compile time
-///      and points at the (now-deleted) sandbox source path.
-///   2. `CARGO_MANIFEST_DIR/../..` — the inner-loop `cargo test` path.
+///      sandbox, because `CARGO_MANIFEST_DIR` is baked at compile time
+///      and points at the (now-deleted) sandbox source path. Bazel
+///      `rust_test` sets it to the `:test_fixtures` `copy_to_directory`
+///      output (read-only).
+///   2. `CARGO_MANIFEST_DIR/../..` — the inner-loop `cargo test` path
+///      (writable source tree).
+///
+/// **Writability — Bazel-specific shim.** Bazel's `copy_to_directory`
+/// output is read-only (`-r-xr-xr-x`), but the e2e tests write under
+/// `test_data_dir()` for cache-isolation subdirs (`test/cache.rs`),
+/// throw-away configs (`test/config.rs`), and uploaded blobs
+/// (`test/upload.rs`). The first `repo_root()` call after Bazel sets
+/// `SIPI_REPO_ROOT` to a read-only directory therefore performs a
+/// one-shot recursive copy into `$TEST_TMPDIR/sipi-repo-root` and
+/// caches the writable path in `WRITABLE_REPO_ROOT` for subsequent
+/// calls. The copy is fast (the source is already laid out — Bazel
+/// just doesn't grant write perms) and per-test-binary, so the cost
+/// stays bounded.
+///
+/// The result is canonicalised to an absolute path so subsequent
+/// `Command::current_dir(repo_root().join(...))` calls don't compound
+/// with sipi's `--file`/`--config` resolution into path-prefix-doubled
+/// lookups.
 pub fn repo_root() -> PathBuf {
-    if let Ok(p) = std::env::var("SIPI_REPO_ROOT") {
-        return PathBuf::from(p);
+    static WRITABLE_REPO_ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+    WRITABLE_REPO_ROOT
+        .get_or_init(|| {
+            let raw = if let Ok(p) = std::env::var("SIPI_REPO_ROOT") {
+                PathBuf::from(p)
+            } else {
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .expect("e2e-rust should be two levels below repo root")
+                    .to_path_buf()
+            };
+            let canon = raw.canonicalize().unwrap_or_else(|_| raw.clone());
+
+            // Probe writability with a temp-file probe rather than
+            // checking permissions, so the cargo inner-loop (which
+            // points at the source tree, fully writable) skips the
+            // copy. The probe writes a tiny file in the target dir
+            // and removes it; if that fails with PermissionDenied,
+            // we know we need the TEST_TMPDIR copy.
+            let probe = canon.join(".sipi-e2e-writable-probe");
+            let writable = std::fs::File::create(&probe).is_ok();
+            let _ = std::fs::remove_file(&probe);
+            if writable {
+                return canon;
+            }
+
+            // Read-only source (Bazel `copy_to_directory` output).
+            // Copy into `$TEST_TMPDIR/sipi-repo-root` so tests can
+            // write under `test_data_dir()` etc. `TEST_TMPDIR` is set
+            // by Bazel for every test action and is per-binary, so
+            // siblings can't collide.
+            let tmpdir = std::env::var("TEST_TMPDIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| std::env::temp_dir());
+            let dst = tmpdir.join("sipi-repo-root");
+            // If a previous test in the same binary already populated
+            // `dst`, the copy is a no-op (skip on `dst` exists).
+            if !dst.exists() {
+                copy_dir_recursive_writable(&canon, &dst).unwrap_or_else(|e| {
+                    panic!(
+                        "copy repo_root from {} to {} failed: {}",
+                        canon.display(),
+                        dst.display(),
+                        e
+                    );
+                });
+            }
+            dst
+        })
+        .clone()
+}
+
+/// Recursive directory copy with `chmod u+w` applied to every output
+/// (so the cache/config/upload tests can subsequently write under
+/// it). Symlinks at the source are followed (the Bazel
+/// `copy_to_directory` output already materialises everything as
+/// real files, so there are no source symlinks; the cargo inner-loop
+/// path doesn't enter this function in the first place).
+fn copy_dir_recursive_writable(src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        let ft = entry.file_type()?;
+        if ft.is_dir() {
+            copy_dir_recursive_writable(&src_path, &dst_path)?;
+        } else {
+            std::fs::copy(&src_path, &dst_path)?;
+            // Add user-write so test write operations succeed.
+            // Read perms are inherited from the source (already 644+).
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = std::fs::metadata(&dst_path)?.permissions();
+                let mode = perms.mode() | 0o200;
+                perms.set_mode(mode);
+                std::fs::set_permissions(&dst_path, perms)?;
+            }
+        }
     }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|p| p.parent())
-        .expect("e2e-rust should be two levels below repo root")
-        .to_path_buf()
+    Ok(())
 }
 
 /// Default sipi binary path for the cmake inner-loop dev shell
 /// (`<repo>/build/sipi`).
 ///
 /// Test harness resolution prefers `$SIPI_BIN` (set by
-/// `just nix-test-e2e` to `<repo>/result/bin/sipi`); this fallback
-/// only fires when `SIPI_BIN` is unset.
+/// `just bazel-test-e2e` and the Bazel `rust_test` env to
+/// `$(rootpath //src:sipi)`); this fallback only fires when
+/// `SIPI_BIN` is unset (cmake inner-loop dev shell path).
 pub fn find_sipi_bin() -> PathBuf {
     repo_root().join("build").join("sipi")
+}
+
+/// Resolve the sipi binary path for spawning. Reads `SIPI_BIN` (or falls
+/// back to `find_sipi_bin()`) and canonicalises the result to an
+/// absolute path.
+///
+/// Why canonicalise: callers spawn sipi via `Command::new(&path).
+/// current_dir(working_dir)`, and Rust resolves the binary path AFTER
+/// applying `current_dir`. A relative `SIPI_BIN` like `src/sipi`
+/// (Bazel `$(rootpath …)` output) would be looked up under
+/// `working_dir/src/sipi` — wrong. The canonicalisation runs in the
+/// parent's cwd, which under Bazel `rust_test` is the runfiles
+/// workspace root where `src/sipi` does resolve.
+///
+/// Returns the binary path as a String (kept as String rather than
+/// PathBuf so callers can pass it straight to `Command::new` or to
+/// derived `PathBuf::from(&sipi_bin)` arithmetic in
+/// `SipiServer::start_with_args`).
+pub fn sipi_bin_path() -> String {
+    let raw = std::env::var("SIPI_BIN")
+        .unwrap_or_else(|_| find_sipi_bin().to_string_lossy().to_string());
+    std::path::Path::new(&raw)
+        .canonicalize()
+        .map(|p| p.to_string_lossy().into_owned())
+        // Fall back to the raw value if canonicalize fails (e.g. file
+        // doesn't exist yet) so the downstream `Command::spawn` panic
+        // surfaces the original user input rather than swallowing it.
+        .unwrap_or(raw)
 }
 
 /// Path to the test data directory.

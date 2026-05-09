@@ -21,3 +21,20 @@ filegroup(
         allow_empty = True,
     ),
 )
+
+# Every test-data file under this package — consumed by `//:test_fixtures`
+# which the Rust e2e suite materialises into runfiles and surfaces as
+# `SIPI_REPO_ROOT`. `repo_root()` traverses arbitrary sub-paths
+# (`<root>/test/_test_data/images/unit/lena512.jp2`,
+# `<root>/test/_test_data/jwt-keys/...`, etc.), so the filegroup must be
+# all-encompassing rather than path-specific. `images/thumbs/**` is the
+# CMake write-only target dir; tests under Bazel route writes to
+# `TEST_TMPDIR` instead, so it stays excluded here too.
+filegroup(
+    name = "all_test_data",
+    srcs = glob(
+        ["**/*"],
+        exclude = ["images/thumbs/**"],
+        allow_empty = False,
+    ),
+)

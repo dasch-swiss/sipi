@@ -43,8 +43,8 @@ just nix-build-release           # .#release: stripped, no tests
 just nix-coverage                # .#dev^coverage: produces result-coverage/coverage.xml
 
 # Tests (consume $SIPI_BIN, default ./result/bin/sipi)
-just nix-test-e2e                # Rust e2e tests via .#e2e-tests (CI canonical, no cargo)
-just nix-test-smoke              # Docker smoke test via .#smoke-test (CI canonical, against the Bazel-built image)
+just bazel-test-e2e              # Rust e2e tests via Bazel rules_rust (CI canonical, no cargo)
+just bazel-test-smoke            # Docker smoke test via Bazel rules_rust (CI canonical, OCI tarball loaded by the test)
 just rust-test-e2e               # inner-loop Rust e2e via cargo (needs dev shell)
 just hurl-test                   # Hurl HTTP contract tests (needs hurl — from dev shell)
 just nix-run                     # run sipi with the dev config
@@ -157,9 +157,9 @@ For the authoritative testing strategy (pyramid, layer definitions, decision tre
 For test framework details (how to run tests, directory layout, adding tests), see [`docs/src/development/developing.md`](docs/src/development/developing.md).
 
 - **Unit tests** (`test/unit/`): GoogleTest + ApprovalTests — run inside the `.#dev` / `.#default` derivation's `checkPhase` (`just nix-build` fails if any unit test fails)
-- **E2E tests** (`test/e2e-rust/`): Rust (reqwest + cargo test). CI: `just nix-test-e2e` (binaries from `.#e2e-tests`). Inner-loop: `just rust-test-e2e` (cargo from dev shell).
+- **E2E tests** (`test/e2e-rust/`): Rust (reqwest + cargo test). CI: `just bazel-test-e2e` (`rust_test` targets via `rules_rust`). Inner-loop: `just rust-test-e2e` (cargo from dev shell).
 - **Hurl tests** (`test/hurl/`): HTTP contract tests — `just hurl-test`
-- **Smoke tests** (`test/e2e-rust/tests/docker_smoke.rs`): against Docker image. CI: `just nix-test-smoke` (binary from `.#smoke-test`). Inner-loop: `just test-smoke`.
+- **Smoke tests** (`test/e2e-rust/tests/docker_smoke.rs`): against Docker image. CI: `just bazel-test-smoke` (`:docker_smoke` rust_test consumes the OCI tarball from `//src:image_load`). Inner-loop: `just test-smoke` (cargo + locally-built `daschswiss/sipi:latest`).
 - **Approval tests** (`test/approval/`): snapshot-based regression — included in unit tests
 
 Run a specific unit test binary in the dev-shell inner loop: `cd build && test/unit/<component>/<component>`

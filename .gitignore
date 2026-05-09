@@ -93,3 +93,4 @@ vendor/v8_5-*.zip
 # Claude Code
 .claude/worktrees/
 .claude/settings.local.json
+.claude/scheduled_tasks.lock

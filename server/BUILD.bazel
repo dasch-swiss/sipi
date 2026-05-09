@@ -1,9 +1,10 @@
-"""Sipi static-server assets — exposed for the Bazel-built image (DEV-6346).
+"""Sipi static-server assets — exposed to Bazel-driven build + test paths.
 
-The OCI image consumes only `test.html` (the smoke test's
-`/server/test.html` probe target) at /sipi/server/. Other server-side
-assets (jquery, openseadragon, .elua) are NOT copied into the image
-today — they're served from a volume-mounted host path in production.
+`exports_files()` surfaces `test.html`, the only server-side asset the
+production OCI image copies in (the smoke test's `/server/test.html`
+probe target). Other assets (jquery, openseadragon, .elua) ship via a
+volume-mounted host path in production. `:all_server` aggregates the
+entire directory for the Rust e2e tests' fixture tree.
 """
 
 package(default_visibility = ["//visibility:public"])
@@ -11,3 +12,14 @@ package(default_visibility = ["//visibility:public"])
 exports_files([
     "test.html",
 ])
+
+# Full `server/` tree. Consumed by `//:test_fixtures` to populate
+# `SIPI_REPO_ROOT/server/` for the Rust e2e tests; `docker_smoke` also
+# bind-mounts it into the container at `/sipi/server`.
+filegroup(
+    name = "all_server",
+    srcs = glob(
+        ["**/*"],
+        allow_empty = False,
+    ),
+)

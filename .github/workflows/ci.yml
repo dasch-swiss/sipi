@@ -110,12 +110,15 @@ jobs:
       - name: Rust e2e and Hurl tests
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        # `nix-test-e2e` consumes the .#e2e-tests Nix derivation — no
-        # cargo on PATH needed. `hurl-test` still shells out to `hurl`,
-        # which we install onto PATH alongside `just`.
+        # `bazel-test-e2e` runs the e2e `rust_test` targets. Wrapped in
+        # `nix develop` for the foreign_cc host tooling (`cmake`, `perl`,
+        # `pkg-config`, `autoconf`, …); bazelisk re-enters a clean Bazel
+        # sandbox per action. `--disk_cache` matches the `actions/cache@v5`
+        # step below. `hurl-test` shells out to `hurl`, which we install
+        # onto PATH alongside `just`.
         run: |
           nix profile install --inputs-from . nixpkgs#hurl
-          just nix-test-e2e
+          nix develop --command bash -c "just bazel-test-e2e --disk_cache=\$HOME/.cache/bazel-disk"
           just hurl-test
       - name: Gather code coverage
         if: ${{ matrix.arch == 'amd64' }}
@@ -154,10 +157,19 @@ jobs:
         # comment for `bazel-build-sanitized`).
         # `--disk_cache` matches `actions/cache@v5` step above.
         run: nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} --disk_cache=\$HOME/.cache/bazel-disk"
-      # Smoke tests still consume the Nix-built `.#smoke-test` runner
-      # until Y+5 (DEV-6347) ports them to `rules_rust`. The image
-      # under test is the Bazel-built one loaded by the step above.
-      - run: just nix-test-smoke
+      # `:docker_smoke`'s `:sipi_image_tar` data dep extracts the OCI
+      # tarball from `//src:image_load` and the test loads it via
+      # `docker load -i $SIPI_IMAGE_TAR` at startup — independent of
+      # the image already loaded by the build step above (which stays
+      # for Docker Scout's `local://` image probes below).
+      # `GH_TOKEN` propagates to the kakadu `repository_rule` which
+      # re-evaluates per fresh bazel server (the rule is non-hermetic
+      # by design — see `bazel/kakadu.bzl`). Without it, analysis
+      # aborts before the smoke target builds.
+      - name: Run Docker smoke tests
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+        run: nix develop --command bash -c "just bazel-test-smoke --disk_cache=\$HOME/.cache/bazel-disk"
       - name: Docker Scout — compare to production
         if: github.event_name == 'pull_request'
         uses: docker/scout-action@v1
