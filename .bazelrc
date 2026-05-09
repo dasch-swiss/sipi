@@ -288,18 +288,37 @@ build:ubsan --linkopt=-fno-sanitize=vptr
 # matching the corpus-search-space minimisation goal of the explicit
 # subset.
 #
-# `--linkopt=-fsanitize=…` stays global because foreign_cc rules don't read
-# Bazel linkopts; only the final first-party `cc_binary` link picks them
-# up, which is what we want (the libFuzzer + ASan runtimes must reach the
-# fuzz binary's link line).
+# **Why `--linkopt=-fsanitize=fuzzer` is NOT here.** `rules_foreign_cc`
+# 0.15.1 forwards Bazel `--linkopt` flags into each foreign dep's
+# `LDFLAGS` environment variable (verified against sqlite3's autoconf
+# `configure` invocation — fuzz CI 2026-05-04..09). With
+# `-fsanitize=fuzzer` in LDFLAGS, autoconf's "does the C compiler work"
+# probe (compile + link of `int main(){return 0;}`) fails because
+# libFuzzer requires `LLVMFuzzerTestOneInput`, breaking every
+# foreign_cc configure step downstream of `:fuzz_subset` (curl,
+# jansson, libmagic, lua, openssl, sqlite3, zlib via `:shttps_headers`).
+#
+# `-fsanitize=fuzzer` and `-fsanitize=address` are scoped to the fuzz
+# binary itself via `cc_binary(linkopts = [...])` in
+# `//fuzz/handlers:iiif_handler_uri_parser_fuzz` — target-level
+# linkopts apply only to that binary's own link line, leaving foreign
+# deps clean. `--per_file_copt` for the compile flags below is enough
+# on the compile side because `--copt` is the channel rules_foreign_cc
+# forwards into CFLAGS/CXXFLAGS; linkopts go through a parallel channel
+# that target-level attrs scope correctly.
+#
+# `-fsanitize=address` *could* stay global — the asan runtime
+# self-links without user-provided symbols, so the configure-test
+# executable links fine (proven by sanitizer.yml). Both libFuzzer
+# link flags live together on the target so the rationale-and-fix
+# stays in one place; see `fuzz/handlers/BUILD.bazel`.
+#
 # `--platforms` is set by the justfile recipe (per-host; see above), not
 # here — `.bazelrc` cannot pick a platform based on `uname`, but the
 # recipe can.
 build:fuzz --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsanitize=fuzzer-no-link
 build:fuzz --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsanitize-coverage=trace-cmp
 build:fuzz --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsanitize=address
-build:fuzz --linkopt=-fsanitize=fuzzer
-build:fuzz --linkopt=-fsanitize=address
 
 # ── Test ───────────────────────────────────────────────────────────────────
 # Surface test stderr immediately on failure rather than collecting it into

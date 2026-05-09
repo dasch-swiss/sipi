@@ -292,23 +292,27 @@ llvm.sysroot(
     targets = ["linux-aarch64"],
 )
 
-# ── Fuzz toolchain — libstdc++ for libFuzzer ABI parity (Linux) ────────────
+# ── Fuzz toolchain — libc++, fuzz-platform routing only ───────────────────
 #
 # `--config=fuzz` is platform-pinned by the `bazel-build-fuzz` /
 # `bazel-run-fuzz` justfile recipes:
-#   * linux-x86_64 → `//tools/fuzz:linux_x86_64_fuzz` (this toolchain wins:
-#     libstdc++, mirroring today's `pkgs.llvmPackages_19.stdenv` override
-#     in `flake.nix:325-329`).
+#   * linux-x86_64 → `//tools/fuzz:linux_x86_64_fuzz` (this toolchain wins
+#     via `extra_target_compatible_with(fuzz_enabled)` + first-registered
+#     order).
 #   * darwin-aarch64 → `//tools/fuzz:darwin_aarch64_fuzz` (the default
 #     `llvm_toolchain` wins for darwin entries here because this toolchain
 #     does not register a darwin sysroot — toolchain resolution falls
 #     through. macOS Apple SDK + libc++ is the libFuzzer ABI on darwin
-#     anyway; no stdenv swap needed).
+#     anyway).
 #
-# `stdlib` is baked into `cc_toolchain_config`, not exposed as a per-build
-# flag — `.bazelrc --config=fuzz` alone cannot swap stdlib. Registering
-# this second toolchain is the canonical workaround (research findings §5,
-# plan §"Toolchain — hermetic LLVM 19.1.x").
+# Modern libFuzzer (LLVM ≥ 16) ships its own private libc++ runtime, so
+# the harness binary's stdlib choice does not affect libFuzzer linkage.
+# Linux fuzz uses libc++ — same as the default `llvm_toolchain` — so the
+# LLVM-bundled libc++ archive ships with the toolchain and links cleanly.
+# An earlier draft pinned `stdlib = "stdc++"` for parity with the deleted
+# `pkgs.llvmPackages_19.stdenv` Nix variant; that broke the build because
+# the Chromium debian-bullseye sysroot does not include `libstdc++.a`,
+# so toolchains_llvm's `-l:libstdc++.a` was unsatisfiable at link time.
 #
 # `llvm.toolchain_root` shares `@llvm_toolchain_llvm` — Bazel does not
 # re-fetch the LLVM tarball for the fuzz toolchain. Verified post-build
@@ -318,16 +322,15 @@ llvm.sysroot(
 # `targets =` filter, so it applies to ALL platform entries this toolchain
 # auto-registers for) makes this toolchain match ONLY platforms that
 # carry `fuzz_enabled`. Without the broad scoping, the auto-created darwin
-# entries would silently match plain darwin builds too.
-#
-# Modern libFuzzer (LLVM ≥ 16) ships its own private libc++; the libstdc++
-# swap is belt-and-suspenders parity with today's behaviour and is
-# eligible for removal in a later refactor.
+# entries would silently match plain darwin builds too. The second
+# toolchain is now functionally identical to `llvm_toolchain` on linux —
+# kept distinct as routing infrastructure for any future fuzz-only
+# toolchain customisation.
 llvm.toolchain(
     name = "llvm_toolchain_fuzz",
     cxx_standard = {"": "c++23"},
     llvm_version = "19.1.7",
-    stdlib = {"linux-x86_64": "stdc++"},
+    stdlib = {"linux-x86_64": "libc++"},
 )
 llvm.toolchain_root(
     name = "llvm_toolchain_fuzz",
