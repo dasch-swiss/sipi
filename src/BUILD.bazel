@@ -254,7 +254,17 @@ cc_library(
         "//ext/zstd:zstd",
         "//ext/zlib:zlib",
         "@kakadu//:kdu",
-    ],
+    ] + select({
+        # glibc 2.42 → 2.31 ABI compatibility shims for kakadu's
+        # cross-toolchain compile and for libc++ headers compiled
+        # against glibc 2.39+. See //bazel:glibc23_compat for the
+        # full rationale. Declared on `:sipi_lib` (not just `:sipi`)
+        # so every cc_test under //test/unit/... — which links
+        # against libc++ paths like `std::stoi` that emit
+        # `__isoc23_strtol` — picks up the alias transitively.
+        "@platforms//os:linux": ["//bazel:glibc23_compat"],
+        "//conditions:default": [],
+    }),
 )
 
 # ── //src:sipi ─────────────────────────────────────────────────────────────
@@ -293,13 +303,9 @@ cc_binary(
         ],
         "//conditions:default": [],
     }),
-    deps = [":sipi_lib"] + select({
-        # glibc 2.42 → 2.31 ABI compatibility shims for kakadu's
-        # cross-toolchain compile. See //bazel:glibc23_compat for the
-        # full rationale.
-        "@platforms//os:linux": ["//bazel:glibc23_compat"],
-        "//conditions:default": [],
-    }),
+    # `:glibc23_compat` is propagated transitively via `:sipi_lib`'s
+    # `deps += select(...)`, so this binary doesn't need to declare it.
+    deps = [":sipi_lib"],
 )
 
 # ── NSS layer (DEV-6346, PR Y+4) ────────────────────────────────────────────

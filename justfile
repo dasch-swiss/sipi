@@ -2,10 +2,10 @@
 # Run `just` to list all available recipes.
 #
 # Build reproducibility invariant: every build-related recipe goes through
-# `nix build .#<variant>`. CI invokes only `just <recipe>`. Incremental
-# inner-loop development (seconds-fast rebuilds while editing one .cpp file)
-# is deliberately NOT a recipe — see CLAUDE.md / docs/src/development/developing.md
-# for the documented `nix develop` + `cmake --build build` workflow.
+# `bazel build` / `bazel test` / `bazel coverage`. CI invokes only
+# `just <recipe>` — no inline bazel calls. Bazel's own incremental rebuild
+# IS the inner-loop edit/rebuild cycle (`just bazel-build` after a single-
+# file edit completes in seconds via the action cache).
 
 # Auto-detect CPU cores
 nproc := `nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4`
@@ -33,64 +33,80 @@ test-smoke-ci:
     cd test/e2e-rust && cargo test --features docker --test docker_smoke -- --test-threads=1
 
 #####################################
-# Nix builds (reproducible — what CI runs)
+# Bazel — what CI runs
 #
-# Every recipe here wraps `nix build .#<variant>`. No imperative cmake.
-# For the fast inner-loop edit/rebuild cycle, drop into `nix develop` and
-# call cmake by hand — see CLAUDE.md "Inner-loop development".
+# Every build/test step in CI invokes one of these recipes. `bazelisk`
+# resolves the pinned Bazel version from `.bazelversion` and is on PATH
+# inside the Nix dev shell (`flake.nix`).
 #
-# Every recipe passes `--extra-experimental-features configurable-impure-env
-# --option impure-env "GH_TOKEN=$GH_TOKEN"` so the Kakadu FOD can pull the
-# archive on a cold Cachix cache. Harmless when GH_TOKEN is empty (the FOD
-# falls through to cache substitution or errors with a helpful message).
+# All non-trivial recipes accept `*FLAGS` so callers can pass extra Bazel
+# flags positionally — e.g. `--config=asan` for sanitiser runs,
+# `--disk_cache=$HOME/.cache/bazel-disk` in CI, `--runs_per_test=3` for
+# flakiness gates on the high-load e2e targets.
+#
+# `--stamp` is on for every recipe whose output reads
+# `STABLE_SIPI_VERSION` (set by `tools/workspace_status.sh`). Only the
+# `:sipi_version_h` action's cache key depends on `STABLE_*` values, so
+# the stamp adds at most one re-link per workspace_status change.
 #####################################
 
-_nix_build := "nix build --extra-experimental-features configurable-impure-env --option impure-env GH_TOKEN=${GH_TOKEN:-}"
-_nix_eval  := "nix eval --extra-experimental-features configurable-impure-env --option impure-env GH_TOKEN=${GH_TOKEN:-} --raw"
+# Build sipi. Bazel's fastbuild default — fast incremental rebuilds
+# for the inner-loop edit/rebuild cycle. Pass `-c opt`, `-c dbg`,
+# `--config=asan`, etc. as positional flags when needed.
+bazel-build *FLAGS='':
+    bazel build --stamp //src:sipi {{FLAGS}}
 
-# Dev build: Debug + coverage instrumentation, tests run in the Nix sandbox.
-# Canonical CI build — what `test.yml` invokes on every PR.
-nix-build:
-    {{_nix_build}} .#dev
-    @echo "Binary at: $(readlink result)/bin/sipi"
+# Build + run the full test pyramid (unit + approval + e2e) under
+# fastbuild — no coverage instrumentation. CI's linux-arm64 and
+# darwin-arm64 matrix entries use this path; only linux-amd64 (which
+# uploads to Codecov) runs `bazel-coverage`. Splitting the two avoids
+# paying instrumentation overhead (1.5-2x compile, slower runtime,
+# flakiness risk on the high-load e2e targets) for arches that don't
+# upload anyway.
+bazel-test *FLAGS='':
+    bazel test --stamp //test/unit/... //test/approval/... //test/e2e-rust/... {{FLAGS}}
 
-# Default build: RelWithDebInfo + tests, unstripped debug info in $debug.
-nix-build-default:
-    {{_nix_build}} .#default
-    @echo "Binary at: $(readlink result)/bin/sipi"
-
-# Release build: Release + tests disabled + dontStrip (for manual distribution).
-nix-build-release:
-    {{_nix_build}} .#release
-    @echo "Binary at: $(readlink result)/bin/sipi"
-
-# Coverage XML for Codecov (at result-coverage/coverage.xml).
-nix-coverage:
-    {{_nix_build}} .#dev^coverage
-    @echo "Coverage at: result-coverage/coverage.xml"
-
-#####################################
-# Bazel
+# Build + run all tests (unit + approval + e2e) under coverage
+# instrumentation; emit combined lcov at
+# `bazel-out/_coverage/_coverage_report.dat` for `codecov-action@v6`
+# to consume directly — no cobertura conversion.
 #
-# Inner-loop test recipes for the Nix → Bazel build orchestration
-# migration (DEV-6341). PR Y (DEV-6342) landed the build graph itself;
-# Y+1 (DEV-6343) ports unit + approval tests to `cc_test` targets and
-# wires them up here. CI continues to run unit + approval tests via
-# `just nix-build`'s `checkPhase` until Y+6 (DEV-6348) cuts CI fully
-# over to Bazel — these recipes are local-only.
+# `instrumentation_filter` keeps measurement scoped to first-party
+# code (`//src,//shttps`), excluding test bodies and ext/* deps.
+# Coverage spans unit + approval + e2e, so the reported % includes
+# HTTP and Lua paths the unit suite cannot reach.
 #
-# Requires `bazelisk` from the Nix dev shell (added to flake.nix in Y).
-#####################################
+# `COVERAGE_GCOV_PATH` (= llvm-profdata) and `LLVM_COV` (= llvm-cov) are
+# propagated from the dev-shell PATH into each test action. Bazel's
+# `tools/test/collect_cc_coverage.sh` reads these to decide the LLVM
+# coverage path (`llvm-profdata merge` + `llvm-cov export --format=lcov`)
+# when toolchains_llvm produces `.profraw` profiles. Required since the
+# Bazel 7.2+ env-clobber bug — fix landed in Bazel 9.1.0 (PR #25879,
+# closes #23247), which is pinned via `.bazelversion`.
+bazel-coverage *FLAGS='':
+    COVERAGE_GCOV_PATH=$(command -v llvm-profdata) \
+    LLVM_COV=$(command -v llvm-cov) \
+        bazel coverage \
+            --combined_report=lcov \
+            --instrumentation_filter='//src,//shttps' \
+            --features=llvm_coverage_map_format \
+            --features=-gcc_coverage_map_format \
+            --test_env=COVERAGE_GCOV_PATH \
+            --test_env=LLVM_COV \
+            --stamp \
+            //test/unit/... //test/approval/... //test/e2e-rust/... {{FLAGS}}
 
 # Run every GoogleTest unit-test target under //test/unit/. Covers all
-# 12 components (sipiimage joined the Bazel run in DEV-6354).
+# 12 components (sipiimage joined the Bazel run in DEV-6354). Useful
+# for inner-loop development; CI runs unit tests via `bazel-coverage`.
 bazel-test-unit:
     bazel test //test/unit/...
 
 # Run the approval-test target. SOURCE_DATE_EPOCH=946684800 and
 # SIPI_WORKSPACE_ROOT="." are injected by `test/approval/BUILD.bazel`;
 # any `.received.<ext>` file from a maintainer-driven re-approval
-# lands under `bazel-testlogs/test/approval/approvaltests/`.
+# lands under `bazel-testlogs/test/approval/approvaltests/`. Useful for
+# inner-loop development; CI runs approval tests via `bazel-coverage`.
 bazel-test-approval:
     bazel test //test/approval:approvaltests
 
@@ -98,7 +114,8 @@ bazel-test-approval:
 # binary. Pass extra Bazel flags positionally: e.g. `--config=asan` for
 # the sanitiser run, `--test_output=streamed` for live stdout,
 # `--runs_per_test=3` for a flakiness gate on `iiif_compliance` /
-# `resource_limits` / `latency`.
+# `resource_limits` / `latency`. Useful for inner-loop development; CI
+# runs e2e tests via `bazel-coverage`.
 #
 # `--stamp` is on so `cli_version_flag` reads the stamped
 # `STABLE_SIPI_VERSION` rather than the `0.0.0-unstamped` fallback. Only
@@ -338,9 +355,9 @@ bazel-docker-extract-debug arch *FLAGS='':
 rust-test-e2e:
     #!/usr/bin/env bash
     set -euo pipefail
-    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/result/bin/sipi}"
+    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/sipi}"
     if [ ! -x "$SIPI_BIN" ]; then
-        echo "sipi binary not found at $SIPI_BIN. Run 'just nix-build' first." >&2
+        echo "sipi binary not found at $SIPI_BIN. Run 'just bazel-build' first." >&2
         exit 1
     fi
     cd test/e2e-rust && SIPI_BIN="$SIPI_BIN" cargo test -- --test-threads=1
@@ -349,9 +366,9 @@ rust-test-e2e:
 hurl-test:
     #!/usr/bin/env bash
     set -euo pipefail
-    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/result/bin/sipi}"
+    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/sipi}"
     if [ ! -x "$SIPI_BIN" ]; then
-        echo "sipi binary not found at $SIPI_BIN. Run 'just nix-build' first." >&2
+        echo "sipi binary not found at $SIPI_BIN. Run 'just bazel-build' first." >&2
         exit 1
     fi
     cd test/_test_data && "$SIPI_BIN" --config config/sipi.e2e-test-config.lua &
@@ -367,17 +384,17 @@ hurl-test:
     cd {{justfile_directory()}}/test/hurl && hurl --test --insecure --variable host=http://127.0.0.1:1024 *.hurl
 
 # Run sipi with the localdev config.
-nix-run: nix-build # dep: keep result/bin/sipi fresh across variant switches
+run: bazel-build
     #!/usr/bin/env bash
     set -euo pipefail
-    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/result/bin/sipi}"
+    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/sipi}"
     "$SIPI_BIN" --config={{justfile_directory()}}/config/sipi.localdev-config.lua
 
 # Run sipi under Valgrind.
-nix-valgrind: nix-build
+valgrind: bazel-build
     #!/usr/bin/env bash
     set -euo pipefail
-    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/result/bin/sipi}"
+    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/sipi}"
     valgrind --leak-check=yes --track-origins=yes "$SIPI_BIN" --config={{justfile_directory()}}/config/sipi.config.lua
 
 # Download CI fuzz corpus and merge into seed corpus

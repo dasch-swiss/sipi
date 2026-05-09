@@ -59,24 +59,47 @@ build --enable_platform_specific_config
 build --cxxopt=-std=c++23
 build --host_cxxopt=-std=c++23
 
+# Force static linking for cc_binary / cc_test on Linux. cc_test on
+# Linux defaults to dynamic linking, which makes Bazel emit a `.so`
+# for every transitive cc_library and links each test against those
+# DSOs. That collides with two realities of this build:
+#   * exiv2 (foreign_cc) is shipped as `libexiv2.a` only — Bazel's
+#     auto-DSO for `//src:sipi_lib` then references exiv2 symbols
+#     across a DSO boundary, and the linker rejects them as
+#     "non-exported symbol 'Exiv2::…' in libexiv2.a is referenced by
+#     DSO libsrc_Slibsipi_Ulib.so".
+#   * toolchains_llvm's `libc++.a` carries non-PIC relocations on
+#     aarch64, so even when `.so` linking is otherwise correct, the
+#     C++ stdlib pull-in fails with `recompile with -fPIC`.
+# Static linking matches `bazel build //src:sipi` (which already
+# defaults to static via `cc_binary`'s `linkstatic=True`), so cc_test
+# behaves the same way as the production binary it tests against.
+# darwin is unaffected: its default is already mostly static and the
+# foreign_cc deps ship `.dylib`-friendly archives.
+build:linux --dynamic_mode=off
+
+# `__isoc23_strtol` / `fcntl64` glibc-2.39 → glibc-2.31 aliases are
+# provided by `//bazel:glibc23_compat` (Linux-only cc_library, propagated
+# via `//src:sipi_lib`'s deps select). The earlier `--linkopt=-Wl,--defsym`
+# approach was rejected because `--linkopt` flows into foreign_cc internal
+# link actions where neither side of the alias is yet linked, producing
+# `--defsym:1: symbol not found: strtol`.
+
 # ── Hardening neutralization ───────────────────────────────────────────────
-# Mirrors flake.nix `hardeningDisable = [ "all" ]`. Bazel's foreign_cc deps
-# (libtiff, exiv2, openssl, …) and Sipi's own code build today against a
-# stack stripped of nixpkgs' default hardening; keep parity here so Bazel
-# binaries match the Nix-built ones byte-for-byte where possible. PIE
-# specifically is required-on for macOS, so the -fno-pie/-no-pie pair is
-# scoped to Linux only.
+# Mirrors the historic flake.nix `hardeningDisable = [ "all" ]` for the
+# subset that doesn't conflict with Bazel's default link mode. PIE/PIC
+# *are* enabled — `cc_test` on Linux defaults to dynamic linking, which
+# requires PIC code to link transitive cc_library `.so` outputs (e.g.
+# `prometheus-cpp+//core:libcore.so`). Disabling PIE on linux-aarch64
+# specifically broke the link because toolchains_llvm's static `libc++.a`
+# carries non-PIC relocations.
 build --copt=-U_FORTIFY_SOURCE
 build --copt=-fno-stack-protector
 build --host_copt=-U_FORTIFY_SOURCE
 build --host_copt=-fno-stack-protector
 
 build:linux --copt=-fno-stack-clash-protection
-build:linux --copt=-fno-pie
-build:linux --linkopt=-no-pie
 build:linux --host_copt=-fno-stack-clash-protection
-build:linux --host_copt=-fno-pie
-build:linux --host_linkopt=-no-pie
 
 # ── macOS ──────────────────────────────────────────────────────────────────
 # Pin the deployment target so Bazel-built binaries are portable across
