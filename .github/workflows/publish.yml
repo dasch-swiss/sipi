@@ -57,10 +57,13 @@ jobs:
         # See ci.yml for the `nix develop --command` rationale (foreign_cc
         # host-tool PATH).
         run: nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} --disk_cache=\$HOME/.cache/bazel-disk"
-      # Smoke tests still consume the Nix-built `.#smoke-test` runner
-      # until Y+5 (DEV-6347) ports them to `rules_rust`. The image under
-      # test is the Bazel-built one loaded by the step above.
-      - run: just nix-test-smoke
+      # `:docker_smoke` rust_test loads the OCI tarball produced by
+      # `//src:image_load` and runs the smoke suite against it. The Docker
+      # image already loaded by the build step above is left alone.
+      - name: Run Docker smoke tests
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+        run: nix develop --command bash -c "just bazel-test-smoke --disk_cache=\$HOME/.cache/bazel-disk"
 
   release-gate:
     runs-on: ubuntu-latest
@@ -132,7 +135,10 @@ jobs:
         # build step just produced (the genrule depends on `:sipi`, which
         # is already built and in the disk cache).
         run: nix develop --command bash -c "just bazel-docker-extract-debug ${{ matrix.arch }} --disk_cache=\$HOME/.cache/bazel-disk"
-      - run: just nix-test-smoke
+      - name: Run Docker smoke tests
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+        run: nix develop --command bash -c "just bazel-test-smoke --disk_cache=\$HOME/.cache/bazel-disk"
       - name: Push image to Docker Hub
         run: nix develop --command bash -c "just bazel-docker-push-${{ matrix.arch }} --disk_cache=\$HOME/.cache/bazel-disk"
 

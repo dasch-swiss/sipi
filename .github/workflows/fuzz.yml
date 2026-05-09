@@ -10,12 +10,11 @@
 #
 # Build flow: `just bazel-build-fuzz` produces
 # `bazel-bin/fuzz/handlers/iiif_handler_uri_parser_fuzz` via
-# `bazel build --config=fuzz` (DEV-6345, PR Y+3 — replaces the prior
-# `just nix-build-fuzz` / `.#fuzz` derivation flow). `just bazel-run-fuzz`
-# runs the harness against a live corpus + read-only seed corpus; `bazel
-# run` resolves cwd to `$BUILD_WORKSPACE_DIRECTORY`, so corpus paths and
-# crash-file globs (`crash-*` / `oom-*` / `timeout-*`) keep matching the
-# workspace-relative paths the artifact-collection steps below expect.
+# `bazel build --config=fuzz`. `just bazel-run-fuzz` runs the harness
+# against a live corpus + read-only seed corpus; `bazel run` resolves
+# cwd to `$BUILD_WORKSPACE_DIRECTORY`, so corpus paths and crash-file
+# globs (`crash-*` / `oom-*` / `timeout-*`) match the workspace-relative
+# paths the artifact-collection steps below expect.
 
 permissions:
   contents: read
@@ -146,8 +145,8 @@ jobs:
           # `nix develop --command` activates the dev shell — same reason
           # the build step needs it. cwd inside the dev shell is the repo
           # root, which `bazel run` resolves to `$BUILD_WORKSPACE_DIRECTORY`,
-          # so `fuzz-corpus-live` and `fuzz/handlers/corpus` are still
-          # workspace-relative (matches the prior `nix-run-fuzz` flow).
+          # so `fuzz-corpus-live` and `fuzz/handlers/corpus` are workspace-
+          # relative.
           nix develop --command bash -c "just bazel-run-fuzz fuzz-corpus-live $FUZZ_DURATION fuzz/handlers/corpus" \
             2>&1 | tee fuzz-output.log
           echo "Corpus now has $(ls fuzz-corpus-live | wc -l) inputs"
