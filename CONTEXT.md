@@ -31,7 +31,7 @@ The following types live in shttps today but are SIPI domain concerns or generic
 
 Two cases violate the one-way SIPI → shttps direction. Both are tracked bugs, not sanctioned patterns. Both are scheduled to be cleared either by callback-hook inversion pre-Rust-port or by the strangler-fig migration itself (whichever lands first).
 
-1. **`shttps/Server.cpp` calls `SipiMetrics::instance()`.** Intended shape: a metrics-callback hook on `shttps::Server` that SIPI populates at startup.
+1. **`shttps/Server.cpp` calls `Sipi::observability::Metrics::instance()`.** Intended shape: a metrics-callback hook on `shttps::Server` that SIPI populates at startup.
 2. **`shttps/{Server,LuaServer,Shttp,ThreadControl}.{cpp,h}` consume `Logger.h`** (SIPI-side header at `include/Logger.h`, post-Probe-8 at `src/logging/logger.h`). Intended shape: a logging-callback interface on `shttps::Server` (or a separate small logging primitive owned by shttps), with the SIPI-side mode flags (`set_cli_mode`, `set_json_mode`) staying SIPI-domain. After the Rust strangler-fig port, shttps's Rust replacement uses the `tracing` crate; the leak disappears.
 
 ## Relationships with shttps

@@ -159,25 +159,25 @@ New config options need:
 
 ## Prometheus Metrics
 
-SIPI-side singleton at `Sipi::SipiMetrics::instance()`
-(`include/SipiMetrics.h`); exposed at `GET /metrics`.
+SIPI-side singleton at `Sipi::observability::Metrics::instance()`
+(`src/observability/metrics.h`); exposed at `GET /metrics`.
 
 ```cpp
 prometheus::Counter &my_counter_total =
   prometheus::BuildCounter()
     .Name("sipi_my_counter_total")
     .Help("Description")
-    .Register(*SipiMetrics::instance().registry)
+    .Register(*Sipi::observability::Metrics::instance().registry)
     .Add({});
 ```
 
 shttps-side instrumentation goes through the
 `shttps::ConnectionMetrics` Strategy interface (see
 `shttps/ConnectionMetrics.h`). At startup, `src/sipi.cpp` installs a
-`SipiConnectionMetricsAdapter` (Adapter pattern) that bridges shttps
-events into the `SipiMetrics` singleton. **Do not call
-`SipiMetrics::instance()` from `shttps/` code** — that direction is
-the SIPI ← shttps leak that
+`Sipi::observability::ConnectionMetricsAdapter` (Adapter pattern) that bridges
+shttps events into the `Sipi::observability::Metrics` singleton. **Do not call
+`Sipi::observability::Metrics::instance()` from `shttps/` code** — that
+direction is the SIPI ← shttps leak that
 [ADR-0001](docs/adr/0001-shttps-as-strangler-fig-target.md)'s
 strangler-fig is closing (commit `f2ee8cfd`, Apr 30 2026). New
 shttps-emitted events go on the `ConnectionMetrics` interface and

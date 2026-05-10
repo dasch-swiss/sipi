@@ -211,7 +211,7 @@ Lua-based configuration (`SipiConf.h`, `src/SipiConf.cpp`):
 
 ### Prometheus Metrics
 
-Metrics endpoint at `GET /metrics` (`SipiMetrics.h`, `src/SipiMetrics.cpp`):
+Metrics endpoint at `GET /metrics` (`src/observability/metrics.h`, `src/observability/metrics.cpp`):
 
 | Metric | Type | Description |
 |---|---|---|
