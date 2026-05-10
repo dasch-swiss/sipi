@@ -100,7 +100,7 @@ localdev config in one step.
 | Format Handlers | `include/formats/` | SipiIO base class + SipiIOTiff, SipiIOJ2k, SipiIOJpeg, SipiIOPng |
 | SHTTPS Framework | `shttps/` | HTTP server impl: threading, SSL/TLS, connection pooling, JWT auth |
 | Caching | `include/SipiCache.h` | File-based LRU cache with dual-limit eviction (size + file count), crash recovery |
-| Metrics | `include/SipiMetrics.h` | Prometheus metrics singleton — cache counters/gauges exposed at `GET /metrics` |
+| Metrics | `src/observability/metrics.h` | Prometheus metrics singleton (`Sipi::observability::Metrics`) — cache counters/gauges exposed at `GET /metrics` |
 | Memory Budget | `include/SipiMemoryBudget.h` | Lock-free decode memory budget with RAII guard — prevents OOM from concurrent large decodes |
 | Lua Integration | `include/SipiLua.h` | Lua bindings for image manipulation, HTTP handling, config/routes |
 
