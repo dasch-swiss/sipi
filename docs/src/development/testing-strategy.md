@@ -445,7 +445,7 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | Content-Type with Accept: ld+json | :white_check_mark: | `jsonld_media_type_with_accept` | |
 | Link header on default request | :white_check_mark: | `jsonld_default_has_link_header` | |
 | Canonical Link header | :white_check_mark: | `canonical_link_header` | |
-| Profile Link header | :x: IGNORED | `profile_link_header` | DEV-6003: sipi bug |
+| Profile Link header | :x: IGNORED | `profile_link_header` | known sipi bug; test ignored pending fix |
 | X-Forwarded-Proto HTTPS rewrite | :white_check_mark: | `info_json_x_forwarded_proto_https` | |
 | Required fields structural check | :white_check_mark: | `info_json_has_required_fields` | |
 | Structural: sizes array exists | :white_check_mark: | `info_json_has_sizes_array` | |
@@ -557,7 +557,7 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | Requirement | Status | Test | Notes |
 |---|---|---|---|
 | Encoded slash `%2F` | :white_check_mark: | `id_escaped_slash_decoded` | |
-| Encoded `#` (`%23`) | :x: IGNORED | `id_escaped` | DEV-6004: sipi bug |
+| Encoded `#` (`%23`) | :x: IGNORED | `id_escaped` | known sipi bug; test ignored pending fix |
 | Subdirectory identifier | :white_check_mark: | via server tests | |
 | Non-ASCII identifiers | :x: GAP | — | Not tested |
 | ARK/URN identifiers | :x: GAP | — | Not tested (may not apply) |
@@ -643,11 +643,11 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | 16-bit depth through IIIF pipeline | :x: GAP | — | Unit-tested, not HTTP-level |
 | Progressive JPEG handling | :x: GAP | — | Common in web content, untested |
 | TIFF with JPEG compression | :x: GAP | — | Known bug (YCrCb autoconvert) |
-| 1-bit TIFF (bi-level) | :white_check_mark: | unit + rust-e2e | MINISWHITE and MINISBLACK, LZW and uncompressed (DEV-6249) |
-| JPEG YCCK colorspace | :white_check_mark: | unit | Was throw; now decoded via CMYK path (DEV-6250) |
-| JPEG CMYK with APP14 (Photoshop) — inverted before ICC | :white_check_mark: | unit | DEV-6257 |
-| JPEG CMYK without APP14 (raw) — not inverted | :white_check_mark: | unit | DEV-6257 negative case |
-| JPEG with APP13 before APP1 + non-ASCII IPTC | :white_check_mark: | unit | Heritage collection regression (DEV-6250) |
+| 1-bit TIFF (bi-level) | :white_check_mark: | unit + rust-e2e | MINISWHITE and MINISBLACK, LZW and uncompressed |
+| JPEG YCCK colorspace | :white_check_mark: | unit | Was throw; now decoded via CMYK path |
+| JPEG CMYK with APP14 (Photoshop) — inverted before ICC | :white_check_mark: | unit | regression test |
+| JPEG CMYK without APP14 (raw) — not inverted | :white_check_mark: | unit | regression test (negative case) |
+| JPEG with APP13 before APP1 + non-ASCII IPTC | :white_check_mark: | unit | heritage collection regression |
 | CLI `--json` output contract | :white_check_mark: | unit + rust-e2e | success + error payloads, single-document stdout |
 | Watermark application via HTTP | :x: GAP | — | Unit-tested, not e2e |
 | Restrict + watermark combined | :x: GAP | — | Untested combination |
@@ -691,7 +691,7 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 - **Configuration** (6 gaps): parseSizeString, deprecated keys, CLI overrides, jwt_secret, invalid Lua, nonexistent paths
 - **Lua API** (5 gaps): SImage methods, JWT round-trip, UUID round-trip, HTTP client, error propagation
 - **Connection handling** (5 gaps): keep-alive, chunked, Connection: close, thread pool, graceful shutdown
-- **Format edge cases** (5 gaps): CMYK/CIELab/16-bit through IIIF, progressive JPEG, TIFF-JPEG. *Previously listed 1-bit TIFF and YCCK-JPEG; both resolved by DEV-6249 / DEV-6250 / DEV-6257.*
+- **Format edge cases** (5 gaps): CMYK/CIELab/16-bit through IIIF, progressive JPEG, TIFF-JPEG. *Previously listed 1-bit TIFF and YCCK-JPEG; both resolved.*
 - **Concurrency** (4 gaps): cache writes, eviction during read, parallel uploads, Lua state isolation
 - **Resource limits** (4 gaps): cache disabled, LRU purge, nfiles limit, keep-alive timeout
 - **Memory/OOM** (5 gaps): sustained load, concurrent decode, accounting, buffers, cache relief — **active production issue**
@@ -703,7 +703,7 @@ Memory leaks and undefined behavior are not a separate pyramid layer but a **bui
 
 **Current state:** ASan+UBSan infrastructure is in place — Bazel `--config=asan` and `--config=ubsan` blocks in `.bazelrc`, `just bazel-build-sanitized` (`bazel build --config=asan --config=ubsan //src:sipi`), and a `sanitizer.yml` CI workflow that exercises the e2e suite against the resulting binary. Known findings to triage on first run:
 
-- **DEV-6002: `SipiFilenameHash::operator=` memory leak** — `operator=` allocates `new vector<char>` without deleting the old `hash` pointer. Confirmed by code inspection. Fix: add `delete hash;` before the new allocation, or switch to `std::unique_ptr`.
+- **`SipiFilenameHash::operator=` memory leak** — `operator=` allocates `new vector<char>` without deleting the old `hash` pointer. Confirmed by code inspection. Fix: add `delete hash;` before the new allocation, or switch to `std::unique_ptr`.
 - **Potential: `SipiFilenameHash` copy constructor** — also `new`s without freeing, but only leaks if the destination object was previously constructed with a different hash (doesn't happen via typical usage).
 - **Expected: false positives from external libraries** — exiv2, lcms2, and other vendored libraries may trigger ASan warnings that aren't sipi bugs. These should be suppressed via an ASan suppression file if needed.
 
@@ -722,10 +722,10 @@ Memory leaks and undefined behavior are not a separate pyramid layer but a **bui
 | `--config=asan` / `--config=ubsan` in `.bazelrc` | Done | `-fsanitize=address` / `-fsanitize=undefined` plus `-fno-omit-frame-pointer`, `-fno-optimize-sibling-calls`, `--strip=never`, `--compilation_mode=dbg` (DWARF inline so `.lsan_suppressions.txt` symbol-name suppressions match) |
 | `just bazel-build-sanitized` | Done | Wraps `bazel build --config=asan --config=ubsan //src:sipi` |
 | PR CI (`sanitizer.yml`) | Done | Bazel-built binary at `bazel-bin/src/sipi`, e2e suite under `just nix-test-e2e` with ASan log capture; `.lsan_suppressions.txt` consumed by LSan via `LSAN_OPTIONS` |
-| Unit-test sanitizer coverage in CI | Returns at Y+6 | DEV-6348 cuts unit-test execution to Bazel `cc_test`; until then the Bazel-built binary covers e2e only |
+| Unit-test sanitizer coverage in CI | Returns when Bazel `cc_test` covers unit tests in CI | The Bazel-built binary covers e2e under sanitizers today; unit-test sanitizer coverage follows once `cc_test` runs in the sanitizer workflow. |
 | TSan variant | Future | Optional nightly, separate from ASan (can't combine) |
 
-**Strategy:** PR CI runs the e2e suite against an ASan+UBSan-instrumented binary. Unit-test coverage under sanitizers will return when DEV-6348 (Y+6) cuts CI's unit-test execution to Bazel `cc_test`. TSan remains a future option.
+**Strategy:** PR CI runs the e2e suite against an ASan+UBSan-instrumented binary. Unit-test coverage under sanitizers will return when the sanitizer workflow runs Bazel `cc_test` directly. TSan remains a future option.
 
 ## Cross-Cutting: Performance Regression Detection
 
@@ -775,9 +775,9 @@ insta::assert_json_snapshot!(info_json, {
 | Target | Just Recipe | When | Notes |
 |---|---|---|---|
 | C++ unit tests (CI) | `just nix-build` (`.#dev` checkPhase) | PR CI | GoogleTest via ctest, runs in the Nix sandbox |
-| C++ unit tests (Bazel inner-loop) | `just bazel-test-unit` | local | `bazel test //test/unit/...`; 11 of 12 components (sipiimage tagged manual, [DEV-6354](https://linear.app/dasch/issue/DEV-6354)). Local-only until [DEV-6348](https://linear.app/dasch/issue/DEV-6348) (Y+6) cuts CI over. |
+| C++ unit tests (Bazel) | `just bazel-test-unit` | local + CI | `bazel test //test/unit/...`. CI runs them via `just bazel-coverage`. |
 | C++ approval tests (CI) | `just nix-build` (`.#dev` checkPhase) | PR CI | ApprovalTests via ctest; `SOURCE_DATE_EPOCH=946684800` injected by CMake |
-| C++ approval tests (Bazel inner-loop) | `just bazel-test-approval` | local | `bazel test //test/approval:approvaltests`; same env injection via `BUILD.bazel`. Local-only until [DEV-6348](https://linear.app/dasch/issue/DEV-6348) (Y+6). |
+| C++ approval tests (Bazel) | `just bazel-test-approval` | local + CI | `bazel test //test/approval:approvaltests`; env injection via `BUILD.bazel`. CI runs them via `just bazel-coverage`. |
 | Rust e2e tests (CI) | `just nix-test-e2e` | PR CI | Pre-built binaries from `.#e2e-tests` (crane); reads `$SIPI_BIN` |
 | Rust e2e tests (inner-loop) | `just rust-test-e2e` | local | cargo-driven; reads `$SIPI_BIN`; same test code as `nix-test-e2e` |
 | Docker smoke (CI) | `just nix-test-smoke` | PR + tag CI | Pre-built binary from `.#smoke-test`; runs against loaded image |

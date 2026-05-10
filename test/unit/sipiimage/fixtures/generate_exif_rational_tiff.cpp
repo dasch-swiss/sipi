@@ -4,9 +4,9 @@
  *
  * One-shot fixture generator for a minimal TIFF carrying EXIF rational-array
  * metadata (LensSpecification = RATIONAL[4]). The fixture exercises the
- * `case EXIF_DT_RATIONAL_PTR` branch in `SipiIOTiff::readExif()` — previously
- * dead code, activated by the `EXIFTAG_LENSSPECIFICATION` entry added to
- * `exiftag_list[]` in DEV-6356.
+ * `case EXIF_DT_RATIONAL_PTR` branch in `SipiIOTiff::readExif()` —
+ * previously dead code, activated by the `EXIFTAG_LENSSPECIFICATION`
+ * entry in `exiftag_list[]`.
  *
  * Run **once** by a developer to regenerate the committed fixture under
  * `test/_test_data/images/unit/`. NOT invoked by CI. Commit both this source

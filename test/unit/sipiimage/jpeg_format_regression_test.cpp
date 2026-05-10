@@ -2,10 +2,10 @@
  * Copyright © 2016 - 2026 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * Regression tests for DEV-6250 (heritage JPEG read failures + metadata
- * robustness + YCCK support) and DEV-6257 (CMYK APP14 Adobe transform
- * inversion). Every test in this file fails on `main` and passes on the
- * matching fix commits.
+ * Regression tests for heritage JPEG read failures, metadata
+ * robustness, YCCK support, and CMYK APP14 Adobe transform inversion.
+ * Every test in this file pinned a specific bug fix at the time of
+ * its introduction.
  */
 
 #include "gtest/gtest.h"
@@ -45,7 +45,7 @@ Sipi::SipiImage readFixture(const std::string &path)
 }// namespace
 
 // -------------------------------------------------------------------------
-// DEV-6250 — heritage JPEG read + metadata robustness
+// Heritage JPEG read + metadata robustness
 // -------------------------------------------------------------------------
 
 /*! R6 — both heritage JPEG variants must read successfully after the
@@ -68,7 +68,7 @@ TEST_P(Jpeg_35_2421d_Reads, ReadsSuccessfully)
   EXPECT_EQ(img.getBps(), 8u);
 }
 
-/*! R6b — DEV-6259 follow-up to R6: the heritage Photoshop CS 2008 JPEGs
+/*! R6b — follow-up to R6: the heritage Photoshop CS 2008 JPEGs
  *  have an APP1 XMP segment that omits the optional `<?xpacket>` wrappers
  *  and starts directly with `<x:xmpmeta>`. Once the simple "everything
  *  after the namespace header is XMP" extractor lands, `img->xmp` must be
@@ -118,11 +118,11 @@ TEST(JpegFormatRegression, JpegCorruptXmpStillReadsImage)
  *  the test to remove the `DISABLED_` prefix. */
 TEST(JpegFormatRegression, DISABLED_JpegYcckColorspaceReads)
 {
-  GTEST_SKIP() << "Enable once a YCCK fixture is committed (DEV-6250 follow-up)";
+  GTEST_SKIP() << "Enable once a YCCK fixture is committed";
 }
 
 // -------------------------------------------------------------------------
-// DEV-6257 — JPEG CMYK APP14 Adobe transform inversion
+// JPEG CMYK APP14 Adobe transform inversion
 // -------------------------------------------------------------------------
 
 /*! R9 — a Photoshop-produced CMYK JPEG (APP14 with transform=0) must read

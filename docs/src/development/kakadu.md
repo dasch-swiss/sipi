@@ -1,112 +1,85 @@
-# Kakadu SDK and Sipi Builds
+# Kakadu SDK and Sipi builds
 
-Sipi's JPEG2000 support uses the proprietary **Kakadu SDK**. The SDK is
-not redistributable, so it lives in the private
+Sipi's JPEG2000 support uses the proprietary **Kakadu SDK**. The
+SDK is not redistributable, so it lives in the private
 [`dasch-swiss/dsp-ci-assets`](https://github.com/dasch-swiss/dsp-ci-assets)
-repo as a release asset. The SHA-256 is pinned in `flake.nix`, so
-builds are fully reproducible and verifiable.
+repo as a release asset. Bazel fetches it at build time via a
+custom `kakadu_archive` repository_rule that shells out to
+`gh release download`. The SHA-256 is pinned, so builds are fully
+reproducible and verifiable.
 
-Two independent fetch paths exist:
+## How it works
 
-| Build system | Fetches Kakadu via | Trigger |
-|---|---|---|
-| Nix (`nix build`, `nix develop`) | Fixed-output derivation in `flake.nix` | Automatic on build |
-| Bazel (`bazel build`, `bazel test`, `just bazel-docker-*`) | `kakadu_archive` repository_rule (`bazel/kakadu.bzl`) shells out to `gh release download` | Automatic on build |
-| Dev-shell inner loop (cmake by hand inside `nix develop`) | `scripts/fetch-kakadu.sh` into `vendor/` | `just kakadu-fetch` (one-time) |
+The repository_rule is declared in
+[`bazel/kakadu.bzl`](https://github.com/dasch-swiss/sipi/blob/main/bazel/kakadu.bzl)
+and registered in `MODULE.bazel`. On the first `bazel build`
+invocation that needs Kakadu (most do — `//src:sipi`,
+`//src:image`, every test that links sipi), Bazel:
 
-## Nix builds
+1. Resolves the `gh` binary on PATH (the dev shell provides it).
+2. Calls `gh release download <tag> --repo dasch-swiss/dsp-ci-assets
+   --pattern v8_5-XXX.zip` into Bazel's repository cache.
+3. Verifies the downloaded archive against the pinned SHA-256.
+4. Exposes the unpacked source tree as `@kakadu_archive//:archive`
+   for the foreign_cc rule under `//ext/kakadu` to consume.
 
-Export a GitHub token once per shell, then build normally:
+After the first download, the archive lives in Bazel's content-
+addressed repository cache and never re-downloads (until the SHA
+pin moves).
 
-```bash
-export GH_TOKEN=$(gh auth token)
-just nix-build-default
-```
+## Local-dev requirements
 
-The flake's fixed-output derivation calls `gh release download` inside
-the Nix sandbox to fetch `v8_5-01382N.zip` from the `kakadu-v8.5` release
-on `dsp-ci-assets`. The derivation is content-addressed by its pinned
-SHA-256, so:
+- Membership in the `dasch-swiss` GitHub organisation.
+- `gh auth login` completed once (so `gh` resolves a usable PAT).
+- The dev shell active (`nix develop`); `gh` is on PATH there.
 
-- A hash mismatch fails the build instead of producing a Kakadu-less
-  binary.
-- After the first successful build lands on Cachix, machines with
-  `cachix use dasch-swiss` substitute the output path and never need
-  `GH_TOKEN` again.
-
-Requirements for the first fetch on any given machine:
-
-- Membership in the `dasch-swiss` GitHub organisation
-- `gh auth login` completed (so `gh auth token` returns a usable PAT)
-
-Optional: put the export in a direnv `.envrc` to avoid re-running it:
+That's it. There is **no** `vendor/` step, no
+`just kakadu-fetch` recipe, no `GH_TOKEN` export. `gh` reads its
+token from `~/.config/gh/hosts.yml` automatically.
 
 ```bash
-# .envrc
-use flake
-if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-  export GH_TOKEN=$(gh auth token)
-fi
-```
-
-## Dev-shell inner loop
-
-The fast edit/rebuild cycle inside `nix develop` invokes `cmake` by
-hand and reads the archive from `vendor/`:
-
-```bash
-just kakadu-fetch    # downloads vendor/v8_5-01382N.zip if absent
+gh auth login          # one-time
 nix develop
-cmake -B build -S . && cmake --build build
+just bazel-build       # repository_rule fetches Kakadu on first build
 ```
 
-The recipe is idempotent; re-running it when the archive is already
-present is a no-op. `vendor/v8_5-*.zip` is gitignored, so the archive
-never enters the commit history.
+## CI requirements
 
-**Note:** `just bazel-docker-build-${arch}` does *not* need `vendor/`
-populated — the `kakadu_archive` repository_rule fetches Kakadu
-directly into Bazel's repository_cache. Likewise for `just nix-build*`,
-which uses the flake's FOD.
+Every Bazel-invoking workflow step sets
+`GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}` on its `env:` block so the
+`kakadu_archive` repository_rule can authenticate non-interactively.
+The PAT is scoped to read `dsp-ci-assets`. Bazel's repository cache
+is keyed by SHA-256, so subsequent CI runs on the same key (and
+the same `MODULE.bazel.lock`) reuse the download from the disk
+cache.
 
 ## Updating the Kakadu version
 
-1. Publish a new archive on `dsp-ci-assets` (see
+1. Publish the new archive on `dsp-ci-assets` (see
    [its `kakadu/README.md`](https://github.com/dasch-swiss/dsp-ci-assets/blob/main/kakadu/README.md))
-2. In `flake.nix`, update `kakaduVersion`, `kakaduAssetName`, and `kakaduSha256`
-3. In `MODULE.bazel`, update the `kakadu_archive` extension's `tag`,
-   `asset`, and `sha256` (in `bazel/kakadu_extension.bzl`'s default
-   attributes) to match
-4. Update `ASSET` and `TAG` in `scripts/fetch-kakadu.sh`
-5. Remove the local archive: `rm vendor/v8_5-*.zip`
-6. Re-build: `just nix-build-default` AND `bazel build //src:sipi` —
-   a SHA-256 mismatch on either side means a step above is wrong
-7. Dev-shell path: `just kakadu-fetch` to refresh `vendor/`
-8. Commit and open a PR
+2. In `MODULE.bazel`, update the `kakadu_archive` extension's
+   tag/asset/sha256 attributes to match the new release.
+3. Run `bazel build //src:sipi`. A SHA-256 mismatch at this step
+   means the pin disagrees with the published archive — check the
+   release asset and the pin are consistent.
+4. Run `just bazel-test` to confirm the new SDK passes the test
+   suite.
+5. Commit `MODULE.bazel` and `MODULE.bazel.lock`, open a PR.
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `gh: command not found` | `gh` CLI not installed | Install GitHub CLI |
-| `release not found` from `gh` | not authenticated, or no org membership | `gh auth login`; ask to be added to `dasch-swiss` |
-| Nix FOD fails with `GH_TOKEN or GITHUB_TOKEN must be set` | Token not exported into the Nix build sandbox | `export GH_TOKEN=$(gh auth token)` and retry |
-| Nix FOD: `hash mismatch` | Release asset replaced or pin out of date | Recompute SHA-256 from the release asset; update `kakaduSha256` in `flake.nix` |
-| Dev-shell cmake cannot find `vendor/v8_5-01382N.zip` | `just kakadu-fetch` not run | Run it once |
-
-## CI
-
-Every Nix CI step sets `GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}` in its
-`env:` so the FOD can authenticate against the private release. The PAT
-is scoped to read `dsp-ci-assets`. After each successful run, the
-content-addressed FOD output is pushed to Cachix and later runs
-substitute it without hitting `gh`.
+| `gh: command not found` | Outside the dev shell | `nix develop` |
+| `release not found` from `gh` | Not authenticated, or no org membership | `gh auth login`; ask to be added to `dasch-swiss` |
+| Bazel: `GH_TOKEN required` | CI: workflow step missing `env:` block | Add `GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}` to the offending step |
+| Bazel: `sha256 mismatch` | Release asset replaced or pin out of date | Recompute SHA-256 and update `MODULE.bazel` |
 
 ## Why not vendor it directly?
 
-- Sipi is a public repo; Kakadu is proprietary — committing it would be a
-  licence breach
-- Keeping it in `dsp-ci-assets` aligns the licence-compliance boundary
-  with repo membership
-- Hash-pinning in `flake.nix` gives reproducible, cacheable, pure builds
-  without the ~15 MB re-commit churn per version bump
+- Sipi is a public repo; Kakadu is proprietary — committing it
+  would be a licence breach.
+- Keeping it in `dsp-ci-assets` aligns the licence-compliance
+  boundary with repo membership.
+- Hash-pinning in `MODULE.bazel` gives reproducible, cacheable
+  builds without the ~15 MB re-commit churn per version bump.

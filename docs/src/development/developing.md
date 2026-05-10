@@ -4,45 +4,43 @@
 
 ### CLion
 
-If you are using the [CLion](https://www.jetbrains.com/clion/) IDE, note
-that code introspection in the CLion editor may not work until it has
-run CMake. Open the project root directory (which contains `CMakeLists.txt`)
-and let CLion configure the project automatically.
-
-For Nix-based development, launch CLion from inside the Nix shell so it
-inherits all required environment variables and dependencies:
+If you are using [CLion](https://www.jetbrains.com/clion/), open the
+project root and let CLion's Bazel support index the workspace via
+the [Bazel for IntelliJ](https://plugins.jetbrains.com/plugin/8609-bazel)
+plugin (project from `MODULE.bazel`). Launch CLion from inside the
+Nix dev shell so it inherits the build environment:
 
 ```bash
 nix develop
 clion .
 ```
 
-## Running Locally
+A direnv setup (see [Nix dev shell](nix.md#direnv)) gives the IDE
+the same PATH/env without launching it from a terminal.
+
+## Running locally
 
 A dedicated local development config is provided at
-`config/sipi.localdev-config.lua`. It points `imgroot` at the bundled test
-images and uses small cache limits (1 MB, 10 files) so IIIF requests work
-out of the box and cache eviction is easy to observe.
+`config/sipi.localdev-config.lua`. It points `imgroot` at the
+bundled test images and uses small cache limits (1 MB, 10 files)
+so IIIF requests work out of the box and cache eviction is easy
+to observe.
 
 ### Start the server
 
 ```bash
-# Reproducible (what CI runs) — build through Nix, then run the built binary
-just nix-build
-just nix-run
-```
-
-Or, for the inner-loop dev workflow (non-reproducible — does not match CI
-outputs byte-for-byte):
-
-```bash
 nix develop
-cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DCODE_COVERAGE=ON
-cmake --build build --parallel
-./build/sipi --config config/sipi.localdev-config.lua
+just run                                  # bazel build + run sipi --config localdev
 ```
 
 The server starts on `http://localhost:1024`.
+
+`just run` depends on `just bazel-build` so the binary at
+`bazel-bin/src/sipi` is always rebuilt before the run. After the
+first cold build (foreign_cc compiles for openssl/kakadu/libtiff/
+etc.), incremental rebuilds re-run only the affected compile + link
+through Bazel's per-action cache — typically sub-second through
+link.
 
 ### Try some requests
 
@@ -59,8 +57,8 @@ curl http://localhost:1024/metrics
 curl -u admin:Sipi-Admin http://localhost:1024/api/cache
 ```
 
-Make several different image requests to fill the cache past its 1 MB / 10 file
-limits and watch the eviction metrics change:
+Make several different image requests to fill the cache past its
+1 MB / 10 file limits and watch the eviction metrics change:
 
 ```bash
 # Format conversions (TIF → JPG) trigger caching — all well under 2 MB
@@ -85,102 +83,97 @@ curl http://localhost:1024/metrics | grep sipi_cache
 
 ### Pre-commit hook
 
-`nix develop` (and direnv-driven shell loads) automatically point Git at the
-repo-tracked hook directory `.githooks/` via `git config core.hooksPath
-.githooks`. The pre-commit hook runs `scripts/shttps-context-check.sh` on
-commits that touch `shttps/` and refuses commits that introduce a SIPI→shttps
-leak. Working outside the dev shell? Run the same `git config` line by hand.
-The mandatory gate is CI; the local hook is fast-feedback parity.
+`nix develop` (and direnv-driven shell loads) automatically point
+Git at the repo-tracked hook directory `.githooks/` via
+`git config core.hooksPath .githooks`. The pre-commit hook runs
+`scripts/shttps-context-check.sh` on commits that touch `shttps/`
+and refuses commits that introduce a SIPI → shttps leak. Working
+outside the dev shell? Run the same `git config` line by hand. The
+mandatory gate is CI; the local hook is fast-feedback parity.
 
-## Writing Tests
+## Writing tests
+
+For the authoritative testing strategy (pyramid, layer definitions,
+decision tree, IIIF coverage matrix, feature inventory), see
+[Testing strategy](testing-strategy.md).
 
 Unit + approval tests use [GoogleTest](https://github.com/google/googletest)
 (approval tests additionally use [ApprovalTests.cpp](https://github.com/approvals/ApprovalTests.cpp)).
 End-to-end tests are written in Rust and live under `test/e2e-rust/`;
 HTTP contract tests use [Hurl](https://hurl.dev/).
 
-C++ tests build under both CMake/ctest (the Nix-driven canonical CI
-path) and Bazel `cc_test` (DEV-6343, PR Y+1 of the Nix → Bazel migration —
-local-only inner loop until DEV-6348/Y+6 cuts CI over). The `just`
-recipes that wrap each:
+All tests build under Bazel:
 
 ```bash
-just nix-build                   # Builds + runs ctest unit + approval (CI)
-just bazel-test-unit             # bazel test //test/unit/...        (local)
-just bazel-test-approval         # bazel test //test/approval:approvaltests  (local)
+just bazel-test-unit             # bazel test //test/unit/...
+just bazel-test-approval         # bazel test //test/approval:approvaltests
+just bazel-test-e2e              # all rust_test e2e targets
+just bazel-test-smoke            # Docker smoke test
 ```
 
-### Unit Tests
+CI runs the full pyramid through `just bazel-coverage` (unit +
+approval + e2e under instrumentation, lcov for Codecov).
 
-Unit tests live in `test/unit/` and use GoogleTest with ApprovalTests.
-Tests are organized by component:
+### Unit tests
 
-- `test/unit/cache/` - LRU cache tests
-- `test/unit/configuration/` - Configuration parsing tests
-- `test/unit/decode_dims/` - Decode-time dimension tests
-- `test/unit/filenamehash/` - Filename hashing tests
-- `test/unit/handlers/` - HTTP handler tests
-- `test/unit/iiifparser/` - IIIF URL parser tests
-- `test/unit/logger/` - Logger tests
-- `test/unit/memory_budget/` - Decode memory budget tests
-- `test/unit/ratelimiter/` - Rate-limiter tests
-- `test/unit/shttps/` - HTTP server utility tests
-- `test/unit/sipiicc/` - ICC profile normalization tests (`SOURCE_DATE_EPOCH` helper)
-- `test/unit/sipiimage/` - Image processing tests
+Unit tests live in `test/unit/` and use GoogleTest with
+ApprovalTests. Tests are organized by component:
 
-Run all unit tests (inside the Nix sandbox via `doCheck = enableTests` in
-`package.nix` — `just nix-build` fails if any unit test fails):
+- `test/unit/cache/` — LRU cache tests
+- `test/unit/configuration/` — Configuration parsing tests
+- `test/unit/decode_dims/` — Decode-time dimension tests
+- `test/unit/filenamehash/` — Filename hashing tests
+- `test/unit/handlers/` — HTTP handler tests
+- `test/unit/iiifparser/` — IIIF URL parser tests
+- `test/unit/logger/` — Logger tests
+- `test/unit/memory_budget/` — Decode memory budget tests
+- `test/unit/ratelimiter/` — Rate-limiter tests
+- `test/unit/shttps/` — HTTP server utility tests
+- `test/unit/sipiconnectionmetrics/` — shttps→sipi metrics adapter tests
+- `test/unit/sipiicc/` — ICC profile normalization tests
+- `test/unit/sipiimage/` — Image processing tests
+
+Run one component:
 
 ```bash
-just nix-build
+bazel test //test/unit/iiifparser:iiifparser_test --test_output=streamed
 ```
 
-Run a specific test binary directly, from the dev-shell inner loop:
+When adding a new unit test, declare a matching `cc_test` target in
+`test/unit/<mod>/BUILD.bazel`. CI runs `just bazel-coverage` —
+which exercises every `cc_test` under `//test/unit/...` plus
+`//test/approval/...` and `//test/e2e-rust/...` in a single pass —
+so a missing `cc_test` target = no CI coverage.
 
-```bash
-nix develop
-cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DCODE_COVERAGE=ON
-cmake --build build --parallel
-cd build && test/unit/iiifparser/iiifparser
-```
+### Rust end-to-end tests
 
-### Rust End-to-End Tests
-
-Rust-based e2e tests live in `test/e2e-rust/` and use `reqwest` for HTTP
-requests, `serde_json` for JSON validation, and `insta` for golden baseline
-snapshots. They cover IIIF compliance, server behaviour, and upload
+Rust e2e tests live in `test/e2e-rust/` and use `reqwest` for HTTP,
+`serde_json` for JSON validation, and `insta` for golden snapshots.
+They cover IIIF compliance, server behaviour, and upload
 functionality.
 
-Two recipes run the same test code via two different build paths:
+Two recipes run the same test code via two different paths:
 
 ```bash
-# CI-canonical path: consume pre-built test binaries from the
-# `.#e2e-tests` Nix derivation (Cachix-cacheable, no cargo on PATH
-# required). This is what every CI job runs.
-just nix-test-e2e
-
-# Inner-loop dev path: build and run via `cargo test` in the dev
-# shell. Faster for iterating on the test code itself; not used by CI.
-just rust-test-e2e
+just bazel-test-e2e              # CI canonical: every tests/<name>.rs as a rust_test
+just rust-test-e2e               # Inner-loop: cargo test from the dev shell
 ```
 
-Both recipes resolve the sipi binary via `$SIPI_BIN` with a canonical
-default of `./result/bin/sipi` (the Nix artifact path). Override
-`SIPI_BIN` to point at a dev-shell-built binary if you are iterating on
-cmake locally.
+Both resolve the sipi binary via `$SIPI_BIN`, defaulting to
+`bazel-bin/src/sipi`. Override `SIPI_BIN` to point at a sanitized
+build (`bazel build --config=asan`) when investigating ASan
+findings.
 
 !!! note "Sequential execution required"
     Tests must run with `--test-threads=1` because each test starts its own
     SIPI server instance on a unique port. Both recipes handle this
     automatically.
 
-### Hurl HTTP Contract Tests
+### Hurl HTTP contract tests
 
 Declarative HTTP contract tests live in `test/hurl/` and use
-[Hurl](https://hurl.dev). Each `.hurl` file describes a sequence of HTTP
-requests and expected responses.
-
-Run Hurl tests:
+[Hurl](https://hurl.dev). Each `.hurl` file describes a sequence of
+HTTP requests and expected responses.
 
 ```bash
 just hurl-test
@@ -202,97 +195,102 @@ Current test files:
     Hurl is available inside `nix develop`. Outside Nix, install it from
     [hurl.dev](https://hurl.dev).
 
-### Smoke Tests
+### Smoke tests
 
 Smoke tests live in `test/e2e-rust/tests/docker_smoke.rs` and run
 against a built Docker image. They verify basic server functionality
 after a Docker build:
 
 ```bash
-# Inner-loop dev path: builds the image via Nix, then runs cargo test.
-just test-smoke
-
-# CI canonical path: builds the image via Nix, then runs the
-# pre-built smoke binary from the .#smoke-test derivation
-# (no cargo on PATH required).
-just nix-test-smoke
+just test-smoke                  # Inner-loop: build host-arch image (Bazel) + cargo smoke
+just bazel-test-smoke            # CI canonical: rust_test consuming the OCI tarball
 ```
 
-### Approval Tests
+### Approval tests
 
 Approval tests live in `test/approval/` and use snapshot-based
-testing for regression detection. Two equivalent runners:
+testing for regression detection. They run as part of every
+`just bazel-test`, `just bazel-coverage`, or focused
+`just bazel-test-approval` invocation.
+
+`SOURCE_DATE_EPOCH=946684800` and `SIPI_WORKSPACE_ROOT="."` are
+injected by `test/approval/BUILD.bazel`'s `env = {}` block, so the
+wall-clock-stamped ICC creation date that lcms2 stamps into JPEG /
+PNG / JP2 (and ICC-carrying TIFF) outputs is overwritten with a
+fixed value. Without these env vars, the seconds field drifts by
+one byte across consecutive runs.
+
+When running the binary directly outside of `bazel test`, export
+the same value first:
 
 ```bash
-# CMake/ctest (the canonical CI path, runs as part of just nix-build)
-cd build
-ctest -L approval --output-on-failure
-
-# Bazel cc_test (DEV-6343, local-only)
-just bazel-test-approval
-```
-
-Both runners inject `SOURCE_DATE_EPOCH=946684800` into the test process
-(CMake via `set_tests_properties(... ENVIRONMENT ...)`, Bazel via
-`test/approval/BUILD.bazel`'s `env = {}` block) so the wall-clock-stamped
-ICC creation date that lcms2 stamps into JPEG / PNG / JP2 (and
-ICC-carrying TIFF) outputs is overwritten with a fixed value. Without
-the env var the seconds field drifts by one byte across consecutive
-runs.
-
-When running the binary directly outside of ctest, export the same
-value first:
-
-```bash
-cd build/test/approval
-SOURCE_DATE_EPOCH=946684800 ./sipi.approvaltests \
+SOURCE_DATE_EPOCH=946684800 SIPI_WORKSPACE_ROOT="." \
+  ./bazel-bin/test/approval/approvaltests \
   --gtest_filter='ImageEncodeBaseline.*'
 ```
 
-Without it, expect `.received.*` files for every ICC-touching test —
-that's a deliberate test-infrastructure side-effect, not a regression.
-See [`test/approval/CHANGELOG.approval.md`](../../../test/approval/CHANGELOG.approval.md)
-for the full list and the re-approval procedure.
+Without it, expect `.received.*` files for every ICC-touching
+test — that's a deliberate test-infrastructure side-effect, not a
+regression. See
+[`test/approval/CHANGELOG.approval.md`](../../../test/approval/CHANGELOG.approval.md)
+for the full list and the re-approval procedure, and `docs/adr/0002-icc-profile-determinism-test-only.md`
+in the project root for the design rationale.
 
-## Managing Dependencies
+## Managing dependencies
 
-External library sources are vendored in `vendor/` and tracked with Git LFS.
-The manifest `cmake/dependencies.cmake` is the single source of truth for
-versions, download URLs, and SHA-256 hashes.
+Third-party C/C++ libraries are pinned by `http_archive`
+declarations in `MODULE.bazel`. Each pin owns its `name`, `urls`,
+`sha256`, and any required patches (`patches = []`,
+`patch_args = ["-p1"]`). The matching foreign_cc rule lives under
+`//ext/<lib>:<lib>` and consumes the archive's `@<lib>//:all_srcs`
+filegroup.
 
-See [Building: Vendored Dependencies](building.md#vendored-dependencies)
-for setup instructions and update/add workflows.
+To bump a version:
 
-Quick reference:
+1. Edit the relevant `http_archive(...)` in `MODULE.bazel` — update
+   `urls` and clear `sha256`.
+2. Run `bazel build //src:sipi` once. Bazel reports the actual
+   sha256 in the failure output.
+3. Paste the reported `sha256` into the `http_archive` block.
+4. Run `bazel build //src:sipi` and `just bazel-test` to confirm.
+5. Commit `MODULE.bazel` and `MODULE.bazel.lock`.
 
-```bash
-make vendor-download    # fetch all archives
-make vendor-verify      # check SHA-256 integrity
-make vendor-checksums   # print hashes for manifest updates
-```
+Adding a brand-new dependency:
 
-## Commit Message Schema
+1. Add an `http_archive(...)` block to `MODULE.bazel` with the same
+   shape as existing entries.
+2. Create `ext/<lib>/BUILD.bazel` declaring the foreign_cc rule
+   (`cmake()` / `configure_make()` / `make()`); use a sibling lib
+   as the template.
+3. Wire it into the consumers (`//src:sipi_lib`, `//shttps:shttps`,
+   etc.) via `deps = ["//ext/<lib>:<lib>"]`.
+
+Kakadu is special: it is fetched via a custom `kakadu_archive`
+repository_rule (`bazel/kakadu.bzl`) that shells out to
+`gh release download`. See [Kakadu setup](kakadu.md).
+
+## Commit message schema
 
 We use [Conventional Commits](https://www.conventionalcommits.org/).
 These prefixes drive [release-please](ci.md#release-automation-release-please)
-to automatically determine SemVer bumps and generate changelogs — **using the
-correct prefix is required, not optional**.
+to automatically determine SemVer bumps and generate changelogs —
+**using the correct prefix is required, not optional**.
 
     type(scope): subject
     body
 
 Types:
 
-- `feat` - new feature (SemVer minor)
-- `fix` - bug fix (SemVer patch)
-- `docs` - documentation changes
-- `style` - formatting, no code change
-- `refactor` - refactoring production code
-- `test` - adding or refactoring tests
-- `build` - changes to build system or dependencies
-- `chore` - miscellaneous maintenance
-- `ci` - continuous integration changes
-- `perf` - performance improvements
+- `feat` — new feature (SemVer minor)
+- `fix` — bug fix (SemVer patch)
+- `docs` — documentation changes
+- `style` — formatting, no code change
+- `refactor` — refactoring production code
+- `test` — adding or refactoring tests
+- `build` — changes to build system or dependencies
+- `chore` — miscellaneous maintenance
+- `ci` — continuous integration changes
+- `perf` — performance improvements
 
 Breaking changes are indicated with `!`:
 

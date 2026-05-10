@@ -1,7 +1,7 @@
 // Copyright © 2016 - 2026 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform
 // contributors. SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// End-to-end IIIF coverage for 1-bit bilevel TIFF support (DEV-6249).
+// End-to-end IIIF coverage for 1-bit bilevel TIFF support.
 // Complements the unit-level `tiff_bilevel_regression_test.cpp` by
 // exercising the full HTTP pipeline from request parsing through to
 // pixel output.

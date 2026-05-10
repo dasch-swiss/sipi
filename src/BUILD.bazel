@@ -31,13 +31,12 @@ load("@tar.bzl", "tar")
 
 package(default_visibility = ["//visibility:public"])
 
-# ── Cross-package surface for the fuzz subset (DEV-6345) ───────────────────
+# ── Cross-package surface for the fuzz subset ─────────────────────────────
 # The IIIF URI parser fuzz harness recompiles `iiif_handler.cpp` under the
 # libFuzzer instrumentation flags as part of `//shttps:fuzz_subset` (where
 # the four shttps cpps it joins also live). Linking the full `:sipi_lib`
 # archive into the fuzz binary would inflate the libFuzzer corpus
-# search-space cost (the explicit subset in `fuzz/handlers/CMakeLists.txt:28-29`
-# is what we mirror), so the only `//src` surface the fuzz graph reaches
+# search-space cost, so the only `//src` surface the fuzz graph reaches
 # is the single TU `iiif_handler.cpp` plus its companion header.
 #
 # `:iiif_handler_hdrs` makes `#include "handlers/iiif_handler.hpp"` resolve
@@ -175,9 +174,9 @@ cc_library(
             # these two — both still reference symbols that have moved
             # (`shttps/cJSON.h` was removed when shttps switched to
             # jansson; the Salsah session helper is unwired). Treating
-            # them as dead code matches the CMake behaviour. TODO Y+1
-            # (DEV-6343): delete the source files outright once unit
-            # tests confirm nothing else references them.
+            # them as dead code matches the historical behaviour;
+            # delete the source files outright once unit tests confirm
+            # nothing else references them.
             "PhpSession.cpp",
             "Salsah.cpp",
             "Template.cpp",
@@ -195,12 +194,9 @@ cc_library(
     copts = ["-fexceptions"],
     # System libs / frameworks required by transitive deps of any sipi_lib
     # consumer — i.e. //src:sipi (the binary) AND every cc_test under
-    # //test/unit/... (Y+1, DEV-6343). Declaring them here (not on
-    # //src:sipi) lets cc_library's `linkopts` propagation surface them on
-    # every downstream link line, so unit tests don't have to redeclare
-    # them. The CMake build does the equivalent on `libsipi_testable`
-    # (test/CMakeLists.txt: `target_link_libraries(libsipi_testable PUBLIC
-    # ... iconv -framework CoreFoundation -framework SystemConfiguration)`).
+    # //test/unit/... Declaring them here (not on //src:sipi) lets
+    # cc_library's `linkopts` propagation surface them on every downstream
+    # link line, so unit tests don't have to redeclare them.
     linkopts = select({
         # `-ldl` — Lua's package loader uses dlopen/dlclose/dlsym/dladdr
         # for runtime .so loading. On macOS those live in libSystem; on
@@ -284,10 +280,10 @@ cc_binary(
             # random; identical inputs ↔ identical build-id.
             "-Wl,--build-id=sha1",
             # Static-link libc++ runtime so the binary runs in
-            # distroless/base-debian12 (DEV-6346 production image),
-            # which ships only glibc + cacert + tzdata + openssl —
-            # there is no libc++.so.1 there for the dynamic loader to
-            # find. Without these flags sipi exits silently on first
+            # distroless/base-debian12 (the production image), which
+            # ships only glibc + cacert + tzdata + openssl — there is
+            # no libc++.so.1 there for the dynamic loader to find.
+            # Without these flags sipi exits silently on first
             # syscall under distroless. clang's libc++ ABI is stable
             # across LLVM 19.x patch releases, so static-linking does
             # not freeze us at toolchains_llvm 1.7.0.
@@ -308,19 +304,17 @@ cc_binary(
     deps = [":sipi_lib"],
 )
 
-# ── NSS layer (DEV-6346, PR Y+4) ────────────────────────────────────────────
+# ── NSS layer ──────────────────────────────────────────────────────────────
 # fakeNss-equivalent /etc/passwd + /etc/group + /etc/nsswitch.conf, replacing
 # `dockerTools.fakeNss` from today's Nix flake. The `:nss_layer_passwd` and
 # `:nss_layer_group` targets each produce a one-file tarball laying down
 # /etc/{passwd,group}; `:nss_layer_nsswitch` lays down /etc/nsswitch.conf.
 # All three are consumed as separate layers by `oci_image(tars = [...])`.
 #
-# `entries`-driven serialisation matches today's fakeNss behaviour 1:1 for
-# the two principals SIPI cares about:
-#   - root / uid=0 / gid=0  — the runtime user (see src/BUILD.bazel sipi
-#     binary entrypoint; SIPI runs as root because the NFS Image-root
-#     mount is owned by uids the orchestrator controls; tracked in DEV-5920
-#     for an eventual non-root pass)
+# `entries` declare the two principals SIPI needs:
+#   - root / uid=0 / gid=0  — the runtime user. SIPI runs as root because
+#     the NFS image-root mount is owned by uids the orchestrator controls;
+#     a non-root pass is a known follow-up.
 #   - nobody / uid=65534 / gid=65534 — POSIX-required entry that some
 #     glibc tooling probes (`getpwuid_r(65534, …)`) before falling through
 #     to NSS error paths
@@ -375,7 +369,7 @@ tar(
     ],
 )
 
-# ── Image stamping (DEV-6346, PR Y+4) ───────────────────────────────────────
+# ── Image stamping ─────────────────────────────────────────────────────────
 # OCI image `created` timestamp + image labels are stamped from the
 # `STABLE_*` keys emitted by `tools/workspace_status.sh` (already wired
 # by Y for SipiVersion.h). The `STABLE_*` prefix is critical: variables
@@ -443,7 +437,7 @@ expand_template(
     ],
 )
 
-# ── Debug-info split (DEV-6346, PR Y+4) ─────────────────────────────────────
+# ── Debug-info split ───────────────────────────────────────────────────────
 # Two-genrule pipeline replacing today's `separateDebugInfo = true` Nix
 # attribute (deleted in this PR's flake.nix thinning):
 #
@@ -539,7 +533,7 @@ tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \\
     target_compatible_with = ["@platforms//os:linux"],
 )
 
-# ── OCI image (DEV-6346, PR Y+4) ────────────────────────────────────────────
+# ── OCI image ──────────────────────────────────────────────────────────────
 # Layers, in the order the image graph reads them (leaf → root):
 #
 #   1. distroless/base-debian12 base layer          (oci_pull, MODULE.bazel)
@@ -583,7 +577,7 @@ tar(
     target_compatible_with = ["@platforms//os:linux"],
 )
 
-# Per-arch ffmpeg/ffprobe layer (DEV-6346, runtime extra). Sourced from
+# Per-arch ffmpeg/ffprobe layer (runtime extra). Sourced from
 # BtbN's LGPL static builds — see `MODULE.bazel`'s
 # `@ffmpeg_static_linux_*` http_archives for the rationale + pin. Only
 # the two binaries are laid out (no man pages, no LICENSE.txt sidecar
@@ -725,7 +719,7 @@ oci_image(
     workdir = "/sipi",
 )
 
-# ── Image push + load (DEV-6346, PR Y+4) ────────────────────────────────────
+# ── Image push + load ──────────────────────────────────────────────────────
 # Two ways to consume `:image`:
 #
 #   - `bazel run //src:image_load` materialises the image as a tarball

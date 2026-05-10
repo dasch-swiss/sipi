@@ -1,11 +1,10 @@
 """Approval tests — byte-exact image-encode baselines + metadata
-goldens (DEV-6343, plan §"PR Y+1").
+goldens.
 
-The `env = {"SOURCE_DATE_EPOCH": "946684800"}` injection mirrors
-`test/approval/CMakeLists.txt`'s `set_tests_properties(... ENVIRONMENT
-SOURCE_DATE_EPOCH=946684800 ...)`. Without it the JPEG/PNG/JP2 goldens
-drift on every run because `SipiIcc::iccBytes()` falls back to lcms2's
-wall-clock-stamped header (see ADR-0002,
+The `env = {"SOURCE_DATE_EPOCH": "946684800"}` injection makes the
+JPEG/PNG/JP2 goldens stable. Without it they drift on every run
+because `SipiIcc::iccBytes()` falls back to lcms2's wall-clock-stamped
+header (see ADR-0002,
 docs/adr/0002-icc-profile-determinism-test-only.md).
 
 `SIPI_WORKSPACE_ROOT="."` lets `sipi::test::workspace_path_for_approval()`

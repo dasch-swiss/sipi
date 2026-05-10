@@ -1,7 +1,6 @@
-"""IIIF URI parser libFuzzer harness — DEV-6345 / plan §"PR Y+3".
+"""IIIF URI parser libFuzzer harness.
 
-Replaces today's CMake fuzz target (`fuzz/handlers/CMakeLists.txt`,
-deleted in DEV-6345). Build via `just bazel-build-fuzz`; run via
+Build via `just bazel-build-fuzz`; run via
 `just bazel-run-fuzz <corpus> <duration> <seed>`. Both recipes wrap
 `bazel build|run --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz`,
 which:

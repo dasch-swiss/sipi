@@ -1,20 +1,16 @@
 """shttps — embedded HTTP framework, native first-party `cc_library`.
 
-The fake `ExternalProject_Add` in `ext/shttp/CMakeLists.txt:11` (which `cp -r`s
-this directory) is bypassed entirely by the Bazel graph. `ext/shttp/` itself
-is left in place — Y deletes nothing — but Bazel never visits it.
+Bounded-context boundary (`CONTEXT-MAP.md`): SIPI → shttps is one-way
+at the target level. `visibility` enforces this — only `//src/...` may
+depend on `//shttps:shttps`, and `//shttps:shttps` declares no
+`//src/...` deps.
 
-Bounded-context boundary (`CONTEXT-MAP.md`): SIPI → shttps is one-way at the
-target level. `visibility` enforces this — only `//src/...` may depend on
-`//shttps:shttps`, and `//shttps:shttps` declares no `//src/...` deps.
-
-`layering_check` (originally specified in the plan as a verification gate
-confirming the DEV-6339 rehome stuck) is **not** enabled yet because
-`shttps/*.cpp` still includes `Logger.h` from `//include`, which is the
-last residual SIPI → shttps reverse-direction reference. Enabling
-layering_check is a TODO immediately after the Logger.h rehome lands —
-either move it under `shttps/`, or split it out of the SIPI namespace as
-a third-party-style support lib.
+`layering_check` is **not** enabled yet because `shttps/*.cpp` still
+includes `Logger.h` from `//include`, which is the last residual
+SIPI → shttps reverse-direction reference. Enabling `layering_check`
+is a follow-up immediately after the Logger.h rehome lands — either
+move it under `shttps/`, or split it out of the SIPI namespace as a
+third-party-style support lib.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
@@ -27,8 +23,7 @@ package(default_visibility = [
 
 # Embeds libmagic's `share/misc/magic.mgc` database as a C array consumed
 # by `shttps/Parsing.cpp` (`magic_load_buffers(magic_mgc, magic_mgc_len, …)`).
-# Mirrors the CMake build's `magic_database` chain (CMakeLists.txt). The
-# custom rule lives in `//bazel:magic_database.bzl` because foreign_cc's
+# The custom rule lives in `//bazel:magic_database.bzl` because foreign_cc's
 # `$(execpath)` form only resolves to the primary CcInfo output (libmagic.a),
 # not data files under the rule's install tree.
 magic_mgc_header(
@@ -58,11 +53,11 @@ cc_library(
     includes = ["."],
     include_prefix = "shttps",
     deps = [
-        # TODO(DEV-6342): the cross-context include of `//include:Logger.h`
-        # is the last residual SIPI → shttps reverse-direction reference.
-        # Once Logger.h is rehomed under shttps/ (or a shared support lib),
-        # this dep drops and `features = ["layering_check"]` flips on as
-        # the verification gate the plan calls for.
+        # TODO: the cross-context include of `//include:Logger.h` is the
+        # last residual SIPI → shttps reverse-direction reference. Once
+        # Logger.h is rehomed under shttps/ (or a shared support lib),
+        # this dep drops and `features = ["layering_check"]` flips on
+        # as the build-graph enforcement of the bounded-context rule.
         "//include:headers",
         "//ext/curl:curl",
         "//ext/jansson:jansson",
@@ -88,12 +83,10 @@ cc_library(
     deps = [":shttps_headers"],
 )
 
-# ── //shttps:fuzz_subset — minimal slice for libFuzzer (DEV-6345) ──────────
+# ── //shttps:fuzz_subset — minimal slice for libFuzzer ─────────────────────
 # Deliberate subset of shttps (4 cpps) plus `iiif_handler.cpp` from //src,
 # recompiled under the libFuzzer instrumentation flags from `--config=fuzz`
-# (.bazelrc `build:fuzz` block). Mirrors today's
-# `lib_iiif_handler_uri_parser_fuzz` static library in
-# `fuzz/handlers/CMakeLists.txt:18-30`.
+# (.bazelrc `build:fuzz` block).
 #
 # Lives in `shttps/BUILD.bazel` (not `fuzz/handlers/BUILD.bazel`) because
 # four of its five sources are native to this package — keeping the

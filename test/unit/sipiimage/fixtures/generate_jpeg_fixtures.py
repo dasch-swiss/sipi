@@ -4,8 +4,8 @@
 # dependencies = ["Pillow>=10.0"]
 # ///
 """
-One-shot fixture generator for JPEG test fixtures used by the DEV-6250 /
-DEV-6257 regression tests.
+One-shot fixture generator for JPEG test fixtures used by the heritage
+JPEG read + CMYK APP14 regression tests.
 
 Produces three fixtures under test/_test_data/images/jpeg/:
 

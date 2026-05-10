@@ -1,162 +1,135 @@
 # Building SIPI from Source Code
 
-All build commands are defined in the root `justfile`. Run `just` to see
-the full list.
+SIPI's build system is **Bazel** (orchestrating every C/C++ target,
+the OCI Docker image, and the Rust e2e + smoke tests). Nix's role
+is reduced to **provisioning a dev shell** with bazelisk + the host
+tools `rules_foreign_cc` and the `kakadu_archive` repository_rule
+need on PATH.
+
+All build commands are wrapped by recipes in the root `justfile`.
+Run `just` to see the full list. Every CI step invokes one of these
+recipes — there are no inline `bazel ...` calls in any workflow.
+
+## Quick start
+
+```bash
+nix develop                                    # bazelisk + host tools on PATH
+just bazel-build                               # bazel build --stamp //src:sipi
+./bazel-bin/src/sipi --config config/sipi.localdev-config.lua
+```
+
+`just run` chains the two: it depends on `bazel-build` and starts
+sipi with the localdev config in one step.
+
+For Bazel concepts, common commands, `--config=` flags, and
+querying the build graph, see **[Building with Bazel](bazel.md)**.
+
+For dev-shell setup (Determinate Nix install, what the shell
+provides), see **[Nix dev shell](nix.md)**.
 
 ## Prerequisites
 
 ### Kakadu (JPEG 2000)
 
-SIPI uses [Kakadu](http://kakadusoftware.com/), a proprietary JPEG 2000
-toolkit licensed separately. The archive is published as a release asset
-on the private
+SIPI uses [Kakadu](http://kakadusoftware.com/), a proprietary JPEG
+2000 toolkit licensed separately. The archive is published as a
+release asset on the private
 [`dasch-swiss/dsp-ci-assets`](https://github.com/dasch-swiss/dsp-ci-assets)
-repo and is fetched into `vendor/` by a single command:
+repo and is fetched at build time by a custom Bazel
+`kakadu_archive` repository_rule (`bazel/kakadu.bzl`) that shells out
+to `gh release download`.
 
 ```bash
-just kakadu-fetch
+gh auth login    # one-time; needs dasch-swiss org membership
+just bazel-build # the repository_rule fetches Kakadu on first build
 ```
 
-This requires `gh auth login` and `dasch-swiss` org membership. After
-it succeeds, every build path (Nix, Docker) finds the archive in
-`vendor/v8_5-01382N.zip`. See [Kakadu setup](kakadu.md) for details
-and version bump procedure.
+CI passes `GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}` on every Bazel
+step so the repository_rule resolves there too. See
+[Kakadu setup](kakadu.md) for details and the version-bump
+procedure.
 
 ### Adobe ICC Color Profiles
 
-SIPI uses the Adobe ICC Color profiles, which are automatically
-downloaded by the build process. The user is responsible for reading
-and agreeing with Adobe's license conditions, which are specified in
-the file `Color Profile EULA.pdf`.
-
-## Vendored Dependencies
-
-SIPI builds all external libraries from source. Source archives are
-vendored in the `vendor/` directory and tracked with
-[Git LFS](https://git-lfs.com/). This ensures builds are reproducible
-and work offline — no internet access is needed during compilation.
-
-### First-time setup (Git LFS)
-
-After cloning the repository, pull the LFS objects:
-
-```bash
-git lfs install   # one-time setup
-git lfs pull      # download vendor archives and test images
-```
-
-### Dependency management
-
-All dependency metadata (version, URL, SHA-256 hash) is centralized in
-`cmake/dependencies.cmake`. The build system uses local archives from
-`vendor/` when present, and falls back to downloading from the URL if not.
-
-| Command | Description |
-|---------|-------------|
-| `just vendor-download` | Download all dependency archives to `vendor/` |
-| `just vendor-verify` | Verify SHA-256 checksums of all archives |
-| `just vendor-checksums` | Print current checksums (for updating the manifest) |
-
-### Updating a dependency
-
-1. Edit `cmake/dependencies.cmake` — update `DEP_<NAME>_VERSION`, `DEP_<NAME>_URL`, and `DEP_<NAME>_FILENAME`
-2. Run `just vendor-download` to fetch the new archive
-3. Run `just vendor-checksums` and update `DEP_<NAME>_SHA256` in the manifest
-4. Run `just vendor-verify` to confirm
-5. Clean build and test: `just clean && just nix-build` (unit tests run inside the Nix sandbox via `doCheck = enableTests`)
-
-### Adding a new dependency
-
-1. Add `DEP_<NAME>_*` variables to `cmake/dependencies.cmake`
-2. Create `ext/<name>/CMakeLists.txt` with the local fallback pattern (see existing deps for examples)
-3. Add `add_subdirectory(ext/<name>)` to the root `CMakeLists.txt`
-4. Run `just vendor-download` and `just vendor-checksums`
-5. Update the SHA-256 hash in the manifest
-
-## Building with Nix (Recommended)
-
-Nix is the single entry point for every Sipi build artifact — dev
-binary, static binary, Docker image, debug symbols. It's reproducible,
-hermetic, and shares its dependency cache with CI via Cachix.
-
-Full setup and usage: **[Building with Nix](nix.md)** (primer,
-one-time setup, all variants, dev-shell inner loop, cross-platform
-builds).
-
-Most common commands:
-
-```bash
-just nix-build                 # .#dev: Debug + coverage, tests in sandbox
-just nix-build-default         # .#default: RelWithDebInfo + tests
-just bazel-build-sanitized     # bazel build --config=asan --config=ubsan //src:sipi
-```
+SIPI uses Adobe ICC color profiles, which are downloaded
+automatically by the Bazel build. The user is responsible for
+reading and agreeing with Adobe's license conditions, which are
+specified in `Color Profile EULA.pdf` at the repo root.
 
 ## Building a Docker image
 
-The Docker image is built by Bazel `rules_oci` (`//src:image`,
-DEV-6346). There is no `Dockerfile` — the BUILD file in
-[`src/BUILD.bazel`](https://github.com/dasch-swiss/sipi/blob/main/src/BUILD.bazel)
-is the single source of truth. A running Docker daemon is still
-required for `docker load` / `docker push`, but `docker buildx` is
-not used (multi-arch manifest assembly happens via `crane index
-append` on a coordinator job).
+The Docker image is built by Bazel `rules_oci` (`//src:image`).
+There is no `Dockerfile` — `src/BUILD.bazel` is the
+single source of truth. A running Docker daemon is still required
+for `docker load` / `docker push`, but `docker buildx` is not used
+(multi-arch manifest assembly happens via `crane index append` on a
+coordinator job).
 
 ```bash
 just test-smoke                # build host-arch image (via Bazel) + run smoke tests
 ```
 
-### Platform-specific builds (used by CI)
+### Per-arch builds (used by CI)
 
 ```bash
-just bazel-docker-build-amd64           # build + load amd64 image as daschswiss/sipi:latest
-just bazel-docker-build-arm64           # build + load arm64 image
-just bazel-docker-extract-debug amd64   # surface sipi-amd64.debug for Sentry upload
-just bazel-docker-push-amd64            # push amd64 image as :v<version>-amd64 + :latest-amd64
-just bazel-docker-push-arm64            # push arm64 image as :v<version>-arm64 + :latest-arm64
+just bazel-docker-build-amd64           # build + load amd64 as daschswiss/sipi:latest
+just bazel-docker-build-arm64           # build + load arm64
+just bazel-docker-extract-debug amd64   # surface sipi-amd64.debug for sentry-cli
+just bazel-docker-push-amd64            # push as :v<version>-amd64 + :latest-amd64
+just bazel-docker-push-arm64            # push as :v<version>-arm64 + :latest-arm64
 just bazel-docker-publish-manifest      # crane index append → daschswiss/sipi:v<version>
 ```
 
-Each per-arch CI runner builds + pushes only the matching architecture
-(`target_compatible_with` rejects cross-arch invocations). A coordinator
-job runs `crane index append` to stitch the two pushed digests into a
-multi-arch manifest at `daschswiss/sipi:v<version>`.
+Each per-arch CI runner builds + pushes only its matching
+architecture (`target_compatible_with` rejects cross-arch
+invocations). A coordinator job runs `crane index append` to stitch
+the two pushed digests into a multi-arch manifest at
+`daschswiss/sipi:v<version>`.
 
-## Building on macOS without Nix (Not Recommended)
+## Cross-platform builds
 
-Building directly on macOS without Nix is unsupported. Use `just nix-build`
-or the dev-shell inner loop (see above) instead.
+The full test matrix runs on macOS-aarch64, linux-x86_64, and
+linux-aarch64. CI exercises every variant on every platform; a
+green CI run verifies macOS as well as Linux.
+
+For Linux-target builds from a macOS host, the simplest path is
+[OrbStack](https://orbstack.dev/) or any other lightweight Linux
+VM with the dev shell available inside it (`nix develop` from a
+shared workdir). Native cross-compilation via `toolchains_llvm`'s
+sysroot machinery is on the post-launch roadmap (out of scope for
+the Y → Y+7 migration).
 
 ## All `just` targets
 
-Run `just` (no arguments) to see the full list. Key target groups:
+Run `just` with no arguments to see the live list. Key target
+groups:
 
 | Target | Description |
 |--------|-------------|
-| `nix-build` | `.#dev` — Debug + coverage; unit tests run in the Nix sandbox |
-| `nix-build-default` | `.#default` — RelWithDebInfo + tests |
-| `nix-build-release` | `.#release` — stripped, no tests |
-| `bazel-build-sanitized` | `bazel build --config=asan --config=ubsan //src:sipi` — Debug + ASan + UBSan (DWARF inline; `.lsan_suppressions.txt` consulted by the e2e step) |
-| `bazel-build-fuzz` | `bazel build --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz` — libFuzzer harness binary (linux-x86_64 in CI, darwin-aarch64 for local dev; the recipe selects `//tools/fuzz:<host>_fuzz` from `uname`) |
-| `nix-coverage` | `.#dev^coverage` — writes `result-coverage/coverage.xml` |
-| `bazel-docker-build-{amd64,arm64}` | `bazel run :image_load --stamp` — build + load per-arch image as `daschswiss/sipi:latest` |
-| `bazel-docker-push-{amd64,arm64}` | `bazel run :image_push_${arch}` — push to `daschswiss/sipi:{latest,v<version>}-${arch}` |
-| `bazel-docker-publish-manifest` | `crane index append` — assemble multi-arch manifest at `daschswiss/sipi:v<version>` |
-| `bazel-docker-extract-debug arch` | Build `:sipi_debug_layout`, surface `sipi-<arch>.debug` for `sentry-cli` upload |
-| `test-smoke` | Inner-loop: build host-arch Docker image (via Bazel), then `cargo test` the smoke suite |
-| `nix-test-smoke` | CI canonical: run pre-built `.#smoke-test` binary against an already-loaded image |
-| `test-smoke-ci` | Inner-loop: run cargo smoke tests against an already-loaded Docker image |
-| `rust-test-e2e` | Inner-loop: cargo-driven Rust end-to-end tests (reads `$SIPI_BIN`) |
-| `nix-test-e2e` | CI canonical: run pre-built `.#e2e-tests` binaries via `run-e2e.sh` |
+| `bazel-build [*FLAGS]` | `bazel build --stamp //src:sipi` (fastbuild; pass `-c opt`/`--config=asan` etc.) |
+| `bazel-test [*FLAGS]` | `bazel test //test/unit/... //test/approval/... //test/e2e-rust/...` (no coverage) |
+| `bazel-coverage [*FLAGS]` | Same target set, instrumented; emits combined lcov for Codecov |
+| `bazel-test-unit` | `bazel test //test/unit/...` |
+| `bazel-test-approval` | `bazel test //test/approval:approvaltests` |
+| `bazel-test-e2e [*FLAGS]` | All Rust e2e `rust_test` targets |
+| `bazel-test-smoke [*FLAGS]` | Docker smoke test (consumes Bazel-built image tarball) |
+| `bazel-build-sanitized [*FLAGS]` | `bazel build --config=asan --config=ubsan //src:sipi` |
+| `bazel-build-fuzz [*FLAGS]` | libFuzzer harness (linux-x86_64 in CI, darwin-aarch64 local) |
+| `bazel-run-fuzz corpus duration [seed]` | Run libFuzzer harness against a corpus |
+| `bazel-docker-build-{amd64,arm64}` | Build + load per-arch image as `daschswiss/sipi:latest` |
+| `bazel-docker-push-{amd64,arm64}` | Push to `daschswiss/sipi:{latest,v<version>}-${arch}` |
+| `bazel-docker-publish-manifest` | `crane index append` → multi-arch manifest at `daschswiss/sipi:v<version>` |
+| `bazel-docker-extract-debug arch` | Build `:sipi_debug_layout`, surface `sipi-<arch>.debug` |
+| `test-smoke` | Inner-loop: build host-arch Docker image (via Bazel), then `cargo test` smoke |
+| `test-smoke-ci` | Run cargo smoke tests against an already-loaded Docker image |
+| `rust-test-e2e` | Inner-loop: cargo-driven Rust e2e tests (reads `$SIPI_BIN`) |
 | `hurl-test` | Hurl HTTP contract tests (reads `$SIPI_BIN`) |
-| `nix-run` | Run sipi with the dev config |
-| `nix-valgrind` | Run sipi under Valgrind |
-| `bazel-run-fuzz corpus duration [seed]` | Run libFuzzer harness against a corpus (linux-x86_64 in CI, darwin-aarch64 locally; recipe builds + execs the binary, setting `DYLD_LIBRARY_PATH` on darwin so the toolchain's ASan dylib resolves) |
-| `vendor-download` | Download all dependency archives to `vendor/` |
-| `vendor-verify` | Verify SHA-256 checksums of vendored archives |
-| `vendor-checksums` | Print SHA-256 checksums for all archives |
-| `kakadu-fetch` | Download Kakadu archive from `dsp-ci-assets` (dev-shell inner loop only; Nix builds fetch via FOD) |
-| `docs-build` | Build documentation |
-| `docs-serve` | Serve documentation locally |
+| `run` | `just bazel-build` then run sipi with the dev config |
+| `valgrind` | `just bazel-build` then run sipi under Valgrind |
+| `fuzz-corpus-update` | Download CI fuzz corpus and merge into the seed corpus |
+| `shttps-context-check` | Advisory grep that enforces SIPI → shttps boundary |
+| `docs-build` | Build documentation site (`mkdocs build`) |
+| `docs-serve` | Serve documentation locally for preview |
 
 ## Documentation
 

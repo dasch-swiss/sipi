@@ -629,7 +629,7 @@ bool SipiIOJpeg::read(SipiImage *img,
       // the simplest correct extraction is "everything after the namespace
       // header is the XMP packet".
       //
-      // TODO(DEV-6261): handle ExtendedXMP (multi-APP1-segment XMP packets
+      // TODO: handle ExtendedXMP (multi-APP1-segment XMP packets
       // larger than 64 KB). The "http://ns.adobe.com/xmp/extension/\0"
       // namespace is currently ignored.
       constexpr size_t kXmpNsLen = 29;// "http://ns.adobe.com/xap/1.0/" + NUL
@@ -762,7 +762,7 @@ bool SipiIOJpeg::read(SipiImage *img,
   ::close(infile);
 
   //
-  // CMYK / YCCK polarity handling (DEV-6257, Phase 5.2).
+  // CMYK / YCCK polarity handling.
   //
   // libjpeg-turbo's CMYK output is inverted when the source declares an
   // Adobe APP14 marker with transform=0 (Photoshop-style "Unknown / CMYK")
