@@ -35,11 +35,11 @@
 #include "CLI11.hpp"
 #include "Logger.h"
 #include "SipiConf.h"
-#include "SipiConnectionMetricsAdapter.h"
+#include "observability/connection_metrics_adapter.h"
 #include "SipiFilenameHash.h"
 #include "SipiHttpServer.hpp"
 #include "SipiMemoryBudget.h"
-#include "SipiMetrics.h"
+#include "observability/metrics.h"
 #include "SipiRateLimiter.h"
 #include "SipiIO.h"
 #include "SipiImage.hpp"
@@ -1568,11 +1568,11 @@ int main(int argc, char *argv[])
 
       // Install the SIPI-side telemetry adapter on the shttps server before
       // any other configuration runs, so early-startup events (queue depth,
-      // rejections during warm-up) reach SipiMetrics. shttps owns the
+      // rejections during warm-up) reach Metrics. shttps owns the
       // ConnectionMetrics strategy interface; SIPI plugs in the adapter that
       // bridges to its singleton — this is the seam that keeps shttps free
       // of any reverse dependency on Sipi:: types (see CONTEXT-MAP.md).
-      server.setMetrics(std::make_shared<Sipi::SipiConnectionMetricsAdapter>());
+      server.setMetrics(std::make_shared<Sipi::observability::ConnectionMetricsAdapter>());
 
       log_info("BUILD_TIMESTAMP: %s", BUILD_TIMESTAMP);
       log_info("BUILD_SCM_TAG: %s", BUILD_SCM_TAG);
@@ -1658,7 +1658,7 @@ int main(int argc, char *argv[])
             }
           }
           server.memory_budget(std::make_unique<Sipi::SipiMemoryBudget>(budget_bytes, mb_mode));
-          SipiMetrics::instance().decode_memory_budget_bytes.Set(static_cast<double>(budget_bytes));
+          Sipi::observability::Metrics::instance().decode_memory_budget_bytes.Set(static_cast<double>(budget_bytes));
           log_info("Memory budget enabled: mode=%s, budget=%zu bytes", mb_mode_str.c_str(), budget_bytes);
         } else {
           log_info("Memory budget disabled");

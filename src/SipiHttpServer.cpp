@@ -40,7 +40,7 @@
 
 #include "Logger.h"
 #include "SipiHttpServer.hpp"
-#include "SipiMetrics.h"
+#include "observability/metrics.h"
 #include "generated/SipiVersion.h"
 #include "SipiMemoryBudget.h"
 #include "SipiPeakMemory.h"
@@ -62,6 +62,7 @@ using observability::capture_image_error;
 using observability::format_type_to_string;
 using observability::get_file_size;
 using observability::ImageContext;
+using observability::Metrics;
 using observability::populate_from_image;
 using observability::SipiMode;
 
@@ -1646,7 +1647,7 @@ static void serve_iiif(Connection &conn_obj,
     if (output_pixels > server->max_pixel_limit()) {
       log_warn("Request rejected: output %zux%zu (%zu pixels) exceeds limit %zu: %s",
         tmp_r_w, tmp_r_h, output_pixels, server->max_pixel_limit(), uri.c_str());
-      SipiMetrics::instance().image_too_large_total.Increment();
+      Metrics::instance().image_too_large_total.Increment();
       send_error(conn_obj,
         Connection::BAD_REQUEST,
         "Requested output dimensions too large (" + std::to_string(tmp_r_w) + "x" + std::to_string(tmp_r_h) + ")");
@@ -1660,7 +1661,7 @@ static void serve_iiif(Connection &conn_obj,
     auto client_id = resolve_client_id(conn_obj);
     auto result = server->rate_limiter()->check_and_record(client_id, request_pixels);
 
-    auto &metrics = SipiMetrics::instance();
+    auto &metrics = Metrics::instance();
 
     if (result.over_budget) {
       std::string action = result.allowed ? "shadow_rejected" : "rejected";
@@ -1831,22 +1832,22 @@ static void serve_iiif(Connection &conn_obj,
         img_nc, img_bps, static_cast<double>(angle), needs_icc);
 
     // Record estimate in histogram for capacity planning
-    SipiMetrics::instance().decode_memory_estimate_bytes.Observe(static_cast<double>(estimated));
+    Metrics::instance().decode_memory_estimate_bytes.Observe(static_cast<double>(estimated));
 
     auto result = server->memory_budget()->try_acquire(estimated);
 
     // Update gauge
-    SipiMetrics::instance().decode_memory_used_bytes.Set(static_cast<double>(result.used));
+    Metrics::instance().decode_memory_used_bytes.Set(static_cast<double>(result.used));
 
     // Record decision
     if (result.allowed && !result.over_budget) {
-      SipiMetrics::instance().decode_memory_acquired.Increment();
+      Metrics::instance().decode_memory_acquired.Increment();
     } else if (result.allowed && result.over_budget) {
-      SipiMetrics::instance().decode_memory_shadow_rejected.Increment();
+      Metrics::instance().decode_memory_shadow_rejected.Increment();
       log_warn("Memory budget over limit (monitor): %zu / %zu bytes for %s",
           result.used, result.budget, uri.c_str());
     } else {
-      SipiMetrics::instance().decode_memory_rejected.Increment();
+      Metrics::instance().decode_memory_rejected.Increment();
       log_warn("Memory budget exhausted (enforce): %zu / %zu bytes, rejecting %s",
           result.used, result.budget, uri.c_str());
       conn_obj.header("Retry-After", "5");
@@ -1856,12 +1857,12 @@ static void serve_iiif(Connection &conn_obj,
 
     // Near-limit warning (>80%)
     if (result.used > result.budget - result.budget / 5) {
-      SipiMetrics::instance().decode_memory_near_limit_total.Increment();
+      Metrics::instance().decode_memory_near_limit_total.Increment();
     }
 
     // RAII guard — releases budget on scope exit or exception
     budget_guard.emplace(*server->memory_budget(), estimated, result.allowed, [server]() {
-      SipiMetrics::instance().decode_memory_used_bytes.Set(
+      Metrics::instance().decode_memory_used_bytes.Set(
           static_cast<double>(server->memory_budget()->used()));
     });
   }
@@ -1869,7 +1870,7 @@ static void serve_iiif(Connection &conn_obj,
   // Guard: check if client is still connected before expensive image loading
   if (!conn_obj.peerConnected()) {
     log_info("Client disconnected before image load, aborting: %s", uri.c_str());
-    SipiMetrics::instance().client_disconnected_total.Increment();
+    Metrics::instance().client_disconnected_total.Increment();
     return;
   }
 
@@ -1878,7 +1879,7 @@ static void serve_iiif(Connection &conn_obj,
     img.read(infile, region, size, quality_format.format() == SipiQualityFormat::JPG, server->scaling_quality());
   } catch (const std::bad_alloc &) {
     log_err("Memory allocation failed loading %s (%zux%zu)", infile.c_str(), img_w, img_h);
-    SipiMetrics::instance().memory_alloc_failures_total.Increment();
+    Metrics::instance().memory_alloc_failures_total.Increment();
     ImageContext sentry_ctx;
     sentry_ctx.input_file = infile;
     sentry_ctx.file_size_bytes = get_file_size(infile);
@@ -1906,14 +1907,14 @@ static void serve_iiif(Connection &conn_obj,
   if (mirror || (angle != 0.0)) {
     if (!conn_obj.peerConnected()) {
       log_info("Client disconnected before rotate, aborting: %s", uri.c_str());
-      SipiMetrics::instance().client_disconnected_total.Increment();
+      Metrics::instance().client_disconnected_total.Increment();
       return;
     }
     try {
       img.rotate(angle, mirror);
     } catch (const std::bad_alloc &) {
       log_err("Memory allocation failed during rotate: %s", infile.c_str());
-      SipiMetrics::instance().memory_alloc_failures_total.Increment();
+      Metrics::instance().memory_alloc_failures_total.Increment();
       send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Insufficient memory to process image");
       return;
     } catch (Sipi::SipiError &err) {
@@ -1931,7 +1932,7 @@ static void serve_iiif(Connection &conn_obj,
   if (quality_format.quality() != SipiQualityFormat::DEFAULT) {
     if (!conn_obj.peerConnected()) {
       log_info("Client disconnected before color conversion, aborting: %s", uri.c_str());
-      SipiMetrics::instance().client_disconnected_total.Increment();
+      Metrics::instance().client_disconnected_total.Increment();
       return;
     }
     switch (quality_format.quality()) {
@@ -1957,7 +1958,7 @@ static void serve_iiif(Connection &conn_obj,
   if (!watermark.empty()) {
     if (!conn_obj.peerConnected()) {
       log_info("Client disconnected before watermark, aborting: %s", uri.c_str());
-      SipiMetrics::instance().client_disconnected_total.Increment();
+      Metrics::instance().client_disconnected_total.Increment();
       return;
     }
     try {
@@ -1989,7 +1990,7 @@ static void serve_iiif(Connection &conn_obj,
   // Final connection check before writing response
   if (!conn_obj.peerConnected()) {
     log_info("Client disconnected before response write, aborting: %s", uri.c_str());
-    SipiMetrics::instance().client_disconnected_total.Increment();
+    Metrics::instance().client_disconnected_total.Increment();
     return;
   }
 
@@ -2076,7 +2077,7 @@ static void serve_iiif(Connection &conn_obj,
             log_warn("Converted file %s (%lld bytes) exceeds cache_size (%lld bytes), removing",
               cachefile.c_str(), static_cast<long long>(cache_stat.st_size), max_cs);
             ::unlink(cachefile.c_str());
-            SipiMetrics::instance().cache_skips_total.Increment();
+            Metrics::instance().cache_skips_total.Increment();
             skip_cache = true;
           }
         }
@@ -2108,7 +2109,7 @@ static void serve_iiif(Connection &conn_obj,
       unlink(cachefile.c_str());
     }
     log_info("Client aborted HTTP response for %s", uri.c_str());
-    SipiMetrics::instance().client_disconnected_total.Increment();
+    Metrics::instance().client_disconnected_total.Increment();
     return;
   } catch (Sipi::SipiImageError &err) {
     if (cache != nullptr) {
@@ -2202,7 +2203,7 @@ static void health_handler(Connection &conn_obj, shttps::LuaServer &, void *user
 
 static void metrics_handler(Connection &conn_obj, shttps::LuaServer &luaserver, void *user_data, void *dummy)
 {
-  std::string body = SipiMetrics::instance().serialize();
+  std::string body = Metrics::instance().serialize();
   conn_obj.status(Connection::OK);
   conn_obj.header("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
   conn_obj.send(body.data(), body.size());

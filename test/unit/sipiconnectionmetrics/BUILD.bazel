@@ -1,5 +1,5 @@
 """SipiConnectionMetricsAdapter unit tests — verifies the adapter
-forwards shttps connection-lifecycle events to SipiMetrics.
+forwards shttps connection-lifecycle events to Sipi::observability::Metrics.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_test")

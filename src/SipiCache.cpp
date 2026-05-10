@@ -28,11 +28,13 @@
 
 #include "SipiCache.h"
 #include "SipiError.hpp"
-#include "SipiMetrics.h"
+#include "observability/metrics.h"
 #include "shttps/Global.h"
 #include "Logger.h"
 
 namespace Sipi {
+
+using observability::Metrics;
 
 // Helper: remove all non-dotfiles from a directory, returns count removed
 static int clearCacheDir(const std::string &dir)
@@ -206,7 +208,7 @@ SipiCache::SipiCache(const std::string &cachedir_p,
     nfiles.load(), static_cast<double>(cache_used_bytes.load()) / (1024.0 * 1024.0), skipped, orphans_removed, evicted > 0 ? evicted : 0);
 
   // Update metrics gauges
-  auto &metrics = SipiMetrics::instance();
+  auto &metrics = Metrics::instance();
   metrics.cache_size_bytes.Set(static_cast<double>(cache_used_bytes));
   metrics.cache_files.Set(static_cast<double>(nfiles));
   metrics.cache_size_limit_bytes.Set(static_cast<double>(max_cache_size));
@@ -367,7 +369,7 @@ int SipiCache::purge(bool use_lock)
 
   // Update metrics after eviction
   if (n > 0) {
-    auto &metrics = SipiMetrics::instance();
+    auto &metrics = Metrics::instance();
     metrics.cache_evictions_total.Increment(static_cast<double>(n));
     metrics.cache_size_bytes.Set(static_cast<double>(cache_used_bytes));
     metrics.cache_files.Set(static_cast<double>(nfiles));
@@ -405,7 +407,7 @@ std::string SipiCache::check(const std::string &origpath_p, const std::string &c
   std::lock_guard<std::mutex> locking_mutex_guard(locking);
   auto it = cachetable.find(canonical_p);
   if (it == cachetable.end()) {
-    SipiMetrics::instance().cache_misses_total.Increment();
+    Metrics::instance().cache_misses_total.Increment();
     return res;// return empty string, because we didn't find the file in cache
   }
   fr = it->second;
@@ -419,10 +421,10 @@ std::string SipiCache::check(const std::string &origpath_p, const std::string &c
 
   if (tcompare(mtime, fr.mtime) > 0) {
     // original file is newer than cache, we have to replace it...
-    SipiMetrics::instance().cache_misses_total.Increment();
+    Metrics::instance().cache_misses_total.Increment();
     return res;// return empty string, means "replace the file in the cache!"
   } else {
-    SipiMetrics::instance().cache_hits_total.Increment();
+    Metrics::instance().cache_hits_total.Increment();
     std::string res = _cachedir + "/" + fr.cachepath;
     if (block_file) { blocked_files[res]++; }
     return res;
@@ -540,7 +542,7 @@ void SipiCache::add(const std::string &origpath_p,
 
   ++nfiles;
 
-  auto &metrics = SipiMetrics::instance();
+  auto &metrics = Metrics::instance();
   metrics.cache_size_bytes.Set(static_cast<double>(cache_used_bytes));
   metrics.cache_files.Set(static_cast<double>(nfiles));
 }
