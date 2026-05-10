@@ -36,6 +36,7 @@
 #include "Logger.h"
 #include "SipiConf.h"
 #include "observability/connection_metrics_adapter.h"
+#include "observability/sentry_init.h"
 #include "SipiFilenameHash.h"
 #include "SipiHttpServer.hpp"
 #include "SipiMemoryBudget.h"
@@ -443,46 +444,12 @@ int main(int argc, char *argv[])
   // when using the inproc backend — no manual signal() calls needed.
   std::set_terminate(my_terminate_handler);
 
-  // Attempt to read the environment variable
-  const char *sipi_sentry_dsn = getenv("SIPI_SENTRY_DSN");
-  std::string sentry_dsn{};
-  if (sipi_sentry_dsn != nullptr) { sentry_dsn = sipi_sentry_dsn; }
-
-  const char *sipi_sentry_release = getenv("SIPI_SENTRY_RELEASE");
-  std::string sentry_release{};
-  if (sipi_sentry_release != nullptr) { sentry_release = sipi_sentry_release; }
-
-  const char *sipi_sentry_environment = getenv("SIPI_SENTRY_ENVIRONMENT");
-  std::string sentry_environment{};
-  if (sipi_sentry_environment != nullptr) { sentry_environment = sipi_sentry_environment; }
-
-
-  // At this point the config is loaded and we can initialize sentry
-  if (!sentry_dsn.empty()) {
-    sentry_options_t *options = sentry_options_new();
-    sentry_options_set_dsn(options, sentry_dsn.c_str());
-    sentry_options_set_database_path(options, "/tmp/.sentry-native");
-
-    sentry_options_set_symbolize_stacktraces(options, true);
-
-    if (!sentry_release.empty()) {
-      std::string sentryReleaseTag = std::string(BUILD_SCM_TAG);
-      sentry_options_set_release(options, sentryReleaseTag.c_str());
-    }
-
-    if (!sentry_environment.empty()) {
-      sentry_options_set_environment(options, sentry_environment.c_str());
-    } else {
-      sentry_options_set_environment(options, "development");
-    }
-
-    sentry_options_set_debug(options, 0);
-
-    // configures the sampling rate for transactions
-    sentry_options_set_traces_sample_rate(options, 0.1);
-
-    sentry_init(options);
-  }
+  // Read SIPI_SENTRY_* env vars and initialize sentry-native.
+  Sipi::observability::SentryConfig sentry_cfg;
+  if (const char *p = getenv("SIPI_SENTRY_DSN"); p != nullptr) { sentry_cfg.dsn = p; }
+  if (const char *p = getenv("SIPI_SENTRY_RELEASE"); p != nullptr) { sentry_cfg.release = p; }
+  if (const char *p = getenv("SIPI_SENTRY_ENVIRONMENT"); p != nullptr) { sentry_cfg.environment = p; }
+  Sipi::observability::init_sentry(sentry_cfg);
 
 
   //
@@ -1057,14 +1024,14 @@ int main(int argc, char *argv[])
       Sipi::observability::capture_image_error(err.what(), "read", sentry_ctx);
       log_err("Error reading image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "read" }); }
-      sentry_close();
+      Sipi::observability::close_sentry();
       return EXIT_FAILURE;
     } catch (const std::exception &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
       Sipi::observability::capture_image_error(err.what(), "read", sentry_ctx);
       log_err("Error reading image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "read" }); }
-      sentry_close();
+      Sipi::observability::close_sentry();
       return EXIT_FAILURE;
     }
 
@@ -1171,14 +1138,14 @@ int main(int argc, char *argv[])
       Sipi::observability::capture_image_error(err.what(), "convert", sentry_ctx);
       log_err("Error processing image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "convert" }); }
-      sentry_close();
+      Sipi::observability::close_sentry();
       return EXIT_FAILURE;
     } catch (const std::exception &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
       Sipi::observability::capture_image_error(err.what(), "convert", sentry_ctx);
       log_err("Error processing image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "convert" }); }
-      sentry_close();
+      Sipi::observability::close_sentry();
       return EXIT_FAILURE;
     }
 
@@ -1216,14 +1183,14 @@ int main(int argc, char *argv[])
       Sipi::observability::capture_image_error(err.what(), "write", sentry_ctx);
       log_err("Error writing image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "write" }); }
-      sentry_close();
+      Sipi::observability::close_sentry();
       return EXIT_FAILURE;
     } catch (const std::exception &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
       Sipi::observability::capture_image_error(err.what(), "write", sentry_ctx);
       log_err("Error writing image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "write" }); }
-      sentry_close();
+      Sipi::observability::close_sentry();
       return EXIT_FAILURE;
     }
 
@@ -1702,11 +1669,11 @@ int main(int argc, char *argv[])
       server.run();
     } catch (shttps::Error &err) {
       log_err("Error starting server: %s", err.what());
-      sentry_close();
+      Sipi::observability::close_sentry();
       return EXIT_FAILURE;
     }
   }
   // make sure everything flushes
-  sentry_close();
+  Sipi::observability::close_sentry();
   return EXIT_SUCCESS;
 }
