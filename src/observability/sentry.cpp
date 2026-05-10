@@ -3,14 +3,14 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#include "SipiSentry.h"
+#include "observability/sentry.h"
 
 #include <sys/stat.h>
 
 #include "SipiImage.hpp"
 #include "metadata/SipiIcc.h"
 
-namespace Sipi {
+namespace Sipi::observability {
 
 namespace {
 
@@ -178,4 +178,4 @@ void capture_image_error(const std::string &error_message,
   sentry_flush(mode == SipiMode::CLI ? 2000 : 0);
 }
 
-}// namespace Sipi
+}// namespace Sipi::observability

@@ -166,6 +166,10 @@ cc_library(
         [
             "**/*.cpp",
             "**/*.hpp",
+            # `.h` for new modular subdirs (per ADR-0003: src/<mod>/{*.cpp, *.h, *_test.cpp}).
+            # Existing top-level src/ headers retain their `.hpp` extension; both forms
+            # coexist during the staged migration.
+            "**/*.h",
         ],
         exclude = [
             "sipi.cpp",  # executable entry point — lives in :sipi binary

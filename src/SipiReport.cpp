@@ -25,7 +25,7 @@ using JsonStr = std::unique_ptr<char, decltype(&std::free)>;
  * transferred to the caller via a new reference; the caller is expected
  * to pass the returned pointer to `json_pack` with the `o` format
  * (which steals the reference) or wrap it in a JsonPtr. */
-json_t *build_image_object(const ImageContext &ctx)
+json_t *build_image_object(const observability::ImageContext &ctx)
 {
   return json_pack("{s:I, s:I, s:I, s:I, s:s, s:s, s:s}",
     "width",
@@ -47,7 +47,7 @@ json_t *build_image_object(const ImageContext &ctx)
 }// namespace
 
 void emit_json_report(std::ostream &out,
-  const ImageContext &ctx,
+  const observability::ImageContext &ctx,
   std::optional<std::string> error_message,
   std::optional<std::string> phase)
 {
@@ -129,7 +129,7 @@ void emit_json_report(std::ostream &out,
 
 void emit_json_cli_arg_error(std::ostream &out, const std::string &err)
 {
-  ImageContext empty;
+  observability::ImageContext empty;
   emit_json_report(out, empty, err, std::string{ "cli_args" });
 }
 

@@ -46,7 +46,7 @@
 #include "SipiImageError.hpp"
 #include "SipiLua.h"
 #include "SipiReport.h"
-#include "SipiSentry.h"
+#include "observability/sentry.h"
 #include "formats/SipiIOTiff.h"
 
 #include "generated/SipiVersion.h"
@@ -1036,11 +1036,11 @@ int main(int argc, char *argv[])
     //
     // Prepare Sentry context for error reporting
     //
-    Sipi::ImageContext sentry_ctx;
+    Sipi::observability::ImageContext sentry_ctx;
     sentry_ctx.input_file = optInFile;
     sentry_ctx.output_file = optOutFile;
     sentry_ctx.output_format = format;
-    sentry_ctx.file_size_bytes = Sipi::get_file_size(optInFile);
+    sentry_ctx.file_size_bytes = Sipi::observability::get_file_size(optInFile);
 
     //
     // read the input image
@@ -1053,15 +1053,15 @@ int main(int argc, char *argv[])
         img.convertToIcc(Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_sRGB), 8);
       }
     } catch (const Sipi::SipiImageError &err) {
-      Sipi::populate_from_image(sentry_ctx, img);
-      Sipi::capture_image_error(err.what(), "read", sentry_ctx);
+      Sipi::observability::populate_from_image(sentry_ctx, img);
+      Sipi::observability::capture_image_error(err.what(), "read", sentry_ctx);
       log_err("Error reading image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "read" }); }
       sentry_close();
       return EXIT_FAILURE;
     } catch (const std::exception &err) {
-      Sipi::populate_from_image(sentry_ctx, img);
-      Sipi::capture_image_error(err.what(), "read", sentry_ctx);
+      Sipi::observability::populate_from_image(sentry_ctx, img);
+      Sipi::observability::capture_image_error(err.what(), "read", sentry_ctx);
       log_err("Error reading image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "read" }); }
       sentry_close();
@@ -1167,15 +1167,15 @@ int main(int argc, char *argv[])
 
       if (!sipiopt.get_option("--watermark")->empty()) { img.add_watermark(optWatermark); }
     } catch (const Sipi::SipiImageError &err) {
-      Sipi::populate_from_image(sentry_ctx, img);
-      Sipi::capture_image_error(err.what(), "convert", sentry_ctx);
+      Sipi::observability::populate_from_image(sentry_ctx, img);
+      Sipi::observability::capture_image_error(err.what(), "convert", sentry_ctx);
       log_err("Error processing image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "convert" }); }
       sentry_close();
       return EXIT_FAILURE;
     } catch (const std::exception &err) {
-      Sipi::populate_from_image(sentry_ctx, img);
-      Sipi::capture_image_error(err.what(), "convert", sentry_ctx);
+      Sipi::observability::populate_from_image(sentry_ctx, img);
+      Sipi::observability::capture_image_error(err.what(), "convert", sentry_ctx);
       log_err("Error processing image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "convert" }); }
       sentry_close();
@@ -1212,15 +1212,15 @@ int main(int argc, char *argv[])
     try {
       img.write(format, optOutFile, &comp_params);
     } catch (const Sipi::SipiImageError &err) {
-      Sipi::populate_from_image(sentry_ctx, img);
-      Sipi::capture_image_error(err.what(), "write", sentry_ctx);
+      Sipi::observability::populate_from_image(sentry_ctx, img);
+      Sipi::observability::capture_image_error(err.what(), "write", sentry_ctx);
       log_err("Error writing image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "write" }); }
       sentry_close();
       return EXIT_FAILURE;
     } catch (const std::exception &err) {
-      Sipi::populate_from_image(sentry_ctx, img);
-      Sipi::capture_image_error(err.what(), "write", sentry_ctx);
+      Sipi::observability::populate_from_image(sentry_ctx, img);
+      Sipi::observability::capture_image_error(err.what(), "write", sentry_ctx);
       log_err("Error writing image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "write" }); }
       sentry_close();
@@ -1234,7 +1234,7 @@ int main(int argc, char *argv[])
     // (fully processed) output image. Today this is only called in catch blocks;
     // the success call below is the missing piece for the --json contract.
     if (optJsonOutput) {
-      Sipi::populate_from_image(sentry_ctx, img);
+      Sipi::observability::populate_from_image(sentry_ctx, img);
       Sipi::emit_json_report(std::cout, sentry_ctx);
     }
   } else if (!(sipiopt.get_option("--config")->empty() && sipiopt.get_option("--serverport")->empty())) {
