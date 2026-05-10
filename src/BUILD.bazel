@@ -158,6 +158,30 @@ expand_template(
     ]
 ]
 
+# ── //src:sipi_generated_hdrs ──────────────────────────────────────────────
+# Wraps the build-time-generated `.h` files (SipiVersion stamp, ICC profile
+# C-arrays, SipiConfig platform probes) as a header-only `cc_library` so any
+# per-module `cc_library` under `//src/<mod>/` can depend on them without
+# pulling in the full `:sipi_lib` archive (which would create a cycle for
+# the per-module promotions, since `:sipi_lib` will itself depend on each
+# new per-module `cc_library`).
+cc_library(
+    name = "sipi_generated_hdrs",
+    hdrs = [
+        ":generated/SipiVersion.h",
+        ":generated/SipiConfig.h",
+        ":generated/AdobeRGB1998_icc.h",
+        ":generated/Rec709-Rec1886_icc.h",
+        ":generated/USWebCoatedSWOP_icc.h",
+        ":generated/YCC709_icc.h",
+    ],
+    # Consumers `#include "generated/SipiVersion.h"` etc. — `.` adds the
+    # bazel-out/.../src/ prefix to the include path so the relative
+    # `generated/...` form resolves.
+    includes = ["."],
+    visibility = ["//src:__subpackages__"],
+)
+
 # ── //src:sipi_lib ─────────────────────────────────────────────────────────
 # Every translation unit except the executable's `main`.
 cc_library(
@@ -166,10 +190,6 @@ cc_library(
         [
             "**/*.cpp",
             "**/*.hpp",
-            # `.h` for new modular subdirs (per ADR-0003: src/<mod>/{*.cpp, *.h, *_test.cpp}).
-            # Existing top-level src/ headers retain their `.hpp` extension; both forms
-            # coexist during the staged migration.
-            "**/*.h",
         ],
         exclude = [
             "sipi.cpp",  # executable entry point — lives in :sipi binary
@@ -186,14 +206,6 @@ cc_library(
             "Template.cpp",
         ],
     ),
-    hdrs = [
-        ":generated/SipiVersion.h",
-        ":generated/SipiConfig.h",
-        ":generated/AdobeRGB1998_icc.h",
-        ":generated/Rec709-Rec1886_icc.h",
-        ":generated/USWebCoatedSWOP_icc.h",
-        ":generated/YCC709_icc.h",
-    ],
     includes = ["."],
     copts = ["-fexceptions"],
     # System libs / frameworks required by transitive deps of any sipi_lib
@@ -231,8 +243,10 @@ cc_library(
         "//conditions:default": [],
     }),
     deps = [
+        ":sipi_generated_hdrs",
         "//include:headers",
         "//shttps:shttps",
+        "//src/observability:observability",
         "//ext/lcms2:lcms2",
         "//ext/exiv2:exiv2",
         "//ext/expat:expat",

@@ -64,7 +64,7 @@ bazel-build *FLAGS='':
 # flakiness risk on the high-load e2e targets) for arches that don't
 # upload anyway.
 bazel-test *FLAGS='':
-    bazel test --stamp //test/unit/... //test/approval/... //test/e2e-rust/... {{FLAGS}}
+    bazel test --stamp //src/... //test/unit/... //test/approval/... //test/e2e-rust/... {{FLAGS}}
 
 # Build + run all tests (unit + approval + e2e) under coverage
 # instrumentation; emit combined lcov at
@@ -94,13 +94,14 @@ bazel-coverage *FLAGS='':
             --test_env=COVERAGE_GCOV_PATH \
             --test_env=LLVM_COV \
             --stamp \
-            //test/unit/... //test/approval/... //test/e2e-rust/... {{FLAGS}}
+            //src/... //test/unit/... //test/approval/... //test/e2e-rust/... {{FLAGS}}
 
-# Run every GoogleTest unit-test target under //test/unit/.
-# Useful for inner-loop development; CI runs unit tests via
-# `bazel-coverage`.
+# Run every GoogleTest unit-test target — both the legacy
+# `//test/unit/<x>/` directories AND any per-module ADR-0003 co-located
+# `*_test.cpp` under `//src/<mod>/`. Useful for inner-loop development;
+# CI runs unit tests via `bazel-coverage`.
 bazel-test-unit:
-    bazel test //test/unit/...
+    bazel test //src/... //test/unit/...
 
 # Run the approval-test target. SOURCE_DATE_EPOCH=946684800 and
 # SIPI_WORKSPACE_ROOT="." are injected by `test/approval/BUILD.bazel`;
