@@ -1,0 +1,72 @@
+"""src/observability/ — operational telemetry surface (Y+8L per DEV-6353).
+
+First per-probe Bazel package promotion. Houses SIPI's Prometheus metrics
+(`Sipi::observability::Metrics`), the shttps connection-metrics adapter
+(`ConnectionMetricsAdapter`), Sentry error capture (`capture_image_error`,
+`ImageContext`), and Sentry-native init (`init_sentry`/`close_sentry`).
+
+Co-locates the unit test (`connection_metrics_adapter_test.cpp` +
+`test_main.cpp`) per ADR-0003 — moved from `test/unit/sipiconnectionmetrics/`.
+
+`layering_check` and `parse_headers` are **deferred** until SipiImage moves
+into its own package (DEV-6388 / DEV-6395). Today, `sentry.cpp` includes
+`SipiImage.hpp` through src/.'s permissive include path; with strict layering
+enabled that include would require an explicit dep on whichever target
+eventually owns SipiImage. Same disposition as `//shttps:shttps`
+(see shttps/BUILD.bazel comment about Logger.h rehome): the feature
+flips on globally in DEV-6353 once every per-module promotion has landed.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = [
+    "//src:__subpackages__",
+    # Documents the known `Sipi::observability::Metrics::instance()` consumption
+    # from `shttps/Server.cpp` (CONTEXT.md known-layering-leak entry #1).
+    # Same shape as the Logger leak (Probe 8). Both await the strangler-fig
+    # Rust port for proper inversion-of-control fixes.
+    "//shttps:__pkg__",
+])
+
+cc_library(
+    name = "observability",
+    srcs = [
+        "connection_metrics_adapter.cpp",
+        "metrics.cpp",
+        "sentry.cpp",
+        "sentry_init.cpp",
+    ],
+    hdrs = [
+        "connection_metrics_adapter.h",
+        "metrics.h",
+        "sentry.h",
+        "sentry_init.h",
+    ],
+    # No `includes` directive needed: cross-module consumers use the
+    # path-prefixed form (`#include "observability/metrics.h"`) which is
+    # resolved via a consumer's own `includes = ["."]` (typically via
+    # //src:sipi_lib). Siblings inside this package use the quote-form
+    # (`#include "metrics.h"`) which searches the current source's
+    # directory automatically. Crucially, we do not add `.` here — that
+    # would expose `sentry.h` to angle-form `<sentry.h>` lookups via
+    # `-isystem` and mask sentry-native's API header.
+    deps = [
+        "//ext/sentry:sentry",
+        "//include:headers",
+        "//shttps:shttps",
+        "//src:sipi_generated_hdrs",
+        "@prometheus_cpp//core",
+    ],
+)
+
+cc_test(
+    name = "connection_metrics_adapter_test",
+    srcs = [
+        "connection_metrics_adapter_test.cpp",
+        "test_main.cpp",
+    ],
+    deps = [
+        ":observability",
+        "@googletest//:gtest_main",
+    ],
+)

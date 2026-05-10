@@ -7,46 +7,7 @@
 
 #include <sys/stat.h>
 
-#include "SipiImage.hpp"
-#include "metadata/SipiIcc.h"
-
 namespace Sipi::observability {
-
-namespace {
-
-std::string predefined_profile_to_string(PredefinedProfiles p)
-{
-  switch (p) {
-  case icc_undefined: return "undefined";
-  case icc_unknown: return "unknown/embedded";
-  case icc_sRGB: return "sRGB";
-  case icc_AdobeRGB: return "AdobeRGB";
-  case icc_RGB: return "RGB (custom)";
-  case icc_CMYK_standard: return "CMYK (USWebCoatedSWOP)";
-  case icc_GRAY_D50: return "Gray D50";
-  case icc_LUM_D65: return "Luminance D65";
-  case icc_ROMM_GRAY: return "ROMM Gray";
-  case icc_LAB: return "L*a*b*";
-  default: return "unknown";
-  }
-}
-
-std::string orientation_to_string(Orientation o)
-{
-  switch (o) {
-  case TOPLEFT: return "TOPLEFT";
-  case TOPRIGHT: return "TOPRIGHT";
-  case BOTRIGHT: return "BOTRIGHT";
-  case BOTLEFT: return "BOTLEFT";
-  case LEFTTOP: return "LEFTTOP";
-  case RIGHTTOP: return "RIGHTTOP";
-  case RIGHTBOT: return "RIGHTBOT";
-  case LEFTBOT: return "LEFTBOT";
-  default: return "unknown";
-  }
-}
-
-}// namespace
 
 size_t get_file_size(const std::string &path)
 {
@@ -71,20 +32,12 @@ std::string format_type_to_string(SipiQualityFormat::FormatType f)
   }
 }
 
-void populate_from_image(ImageContext &ctx, const SipiImage &img)
-{
-  ctx.width = img.getNx();
-  ctx.height = img.getNy();
-  ctx.channels = img.getNc();
-  ctx.bps = img.getBps();
-  ctx.colorspace = to_string(img.getPhoto());
-  ctx.orientation = orientation_to_string(img.getOrientation());
-
-  auto icc = img.getIcc();
-  if (icc) {
-    ctx.icc_profile_type = predefined_profile_to_string(icc->getProfileType());
-  }
-}
+// `populate_from_image` lives in src/populate_from_image.cpp under
+// //src:sipi_lib because it dereferences `Sipi::SipiImage`, which currently
+// belongs to that target. Co-locating it here would force //src/observability
+// to depend on //src:sipi_lib, creating a cycle (sipi_lib already depends on
+// observability for the rest of this surface). Move the implementation back
+// into this TU once SipiImage gets its own package (DEV-6388 / DEV-6395).
 
 void capture_image_error(const std::string &error_message,
   const std::string &phase,
