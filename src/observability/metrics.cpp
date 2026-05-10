@@ -3,16 +3,18 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#include "SipiMetrics.h"
+#include "observability/metrics.h"
 #include "generated/SipiVersion.h"
 
-SipiMetrics &SipiMetrics::instance()
+namespace Sipi::observability {
+
+Metrics &Metrics::instance()
 {
-  static SipiMetrics inst;
+  static Metrics inst;
   return inst;
 }
 
-SipiMetrics::SipiMetrics()
+Metrics::Metrics()
   : registry_(std::make_shared<prometheus::Registry>()),
 
     cache_hits_total(prometheus::BuildCounter()
@@ -164,9 +166,11 @@ SipiMetrics::SipiMetrics()
   build_info.Set(1);
 }
 
-std::string SipiMetrics::serialize()
+std::string Metrics::serialize()
 {
   prometheus::TextSerializer serializer;
   auto collected = registry_->Collect();
   return serializer.Serialize(collected);
 }
+
+}// namespace Sipi::observability

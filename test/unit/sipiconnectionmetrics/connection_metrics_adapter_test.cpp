@@ -4,23 +4,26 @@
  * AGPL-3.0-or-later
  */
 
-// Unit tests for Sipi::SipiConnectionMetricsAdapter — the GoF Adapter that
-// bridges shttps's ConnectionMetrics strategy interface to the legacy
-// SipiMetrics singleton. Each test fires one callback and asserts the
-// expected mutation on SipiMetrics::instance() via a before/after delta
-// (the singleton is process-global, so absolute values are not reliable).
+// Unit tests for Sipi::observability::ConnectionMetricsAdapter — the GoF
+// Adapter that bridges shttps's ConnectionMetrics strategy interface to the
+// Sipi::observability::Metrics singleton. Each test fires one callback and
+// asserts the expected mutation on Metrics::instance() via a before/after
+// delta (the singleton is process-global, so absolute values are not reliable).
 
-#include "SipiConnectionMetricsAdapter.h"
-#include "SipiMetrics.h"
+#include "observability/connection_metrics_adapter.h"
+#include "observability/metrics.h"
 
 #include "gtest/gtest.h"
 
 namespace {
 
+using Sipi::observability::ConnectionMetricsAdapter;
+using Sipi::observability::Metrics;
+
 TEST(SipiConnectionMetricsAdapter, OnConnectionsRejectedIncrementsCounterByN)
 {
-  Sipi::SipiConnectionMetricsAdapter adapter;
-  auto &counter = SipiMetrics::instance().rejected_connections_total;
+  ConnectionMetricsAdapter adapter;
+  auto &counter = Metrics::instance().rejected_connections_total;
 
   const double before = counter.Value();
   adapter.onConnectionsRejected(7);
@@ -31,8 +34,8 @@ TEST(SipiConnectionMetricsAdapter, OnConnectionsRejectedIncrementsCounterByN)
 
 TEST(SipiConnectionMetricsAdapter, OnWaitingConnectionsChangedSetsGaugeAbsolute)
 {
-  Sipi::SipiConnectionMetricsAdapter adapter;
-  auto &gauge = SipiMetrics::instance().waiting_connections;
+  ConnectionMetricsAdapter adapter;
+  auto &gauge = Metrics::instance().waiting_connections;
 
   // Gauge::Set is absolute: the post-call value equals the supplied depth
   // regardless of prior state.
@@ -45,8 +48,8 @@ TEST(SipiConnectionMetricsAdapter, OnWaitingConnectionsChangedSetsGaugeAbsolute)
 
 TEST(SipiConnectionMetricsAdapter, OnRequestCompleteRecordsHistogramObservation)
 {
-  Sipi::SipiConnectionMetricsAdapter adapter;
-  auto &histogram = SipiMetrics::instance().request_duration_seconds;
+  ConnectionMetricsAdapter adapter;
+  auto &histogram = Metrics::instance().request_duration_seconds;
 
   const auto before = histogram.Collect();
   adapter.onRequestComplete(0.125);

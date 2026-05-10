@@ -3,8 +3,8 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#ifndef __defined_sipi_metrics_h
-#define __defined_sipi_metrics_h
+#ifndef SIPI_OBSERVABILITY_METRICS_H
+#define SIPI_OBSERVABILITY_METRICS_H
 
 #include <memory>
 #include <string>
@@ -15,13 +15,15 @@
 #include <prometheus/registry.h>
 #include <prometheus/text_serializer.h>
 
-class SipiMetrics
+namespace Sipi::observability {
+
+class Metrics
 {
   // registry_ must be declared first: C++ initializes members in declaration order
   std::shared_ptr<prometheus::Registry> registry_;
 
 public:
-  static SipiMetrics &instance();
+  static Metrics &instance();
 
   std::shared_ptr<prometheus::Registry> registry() { return registry_; }
 
@@ -68,7 +70,9 @@ public:
   prometheus::Histogram &request_duration_seconds;
 
 private:
-  SipiMetrics();
+  Metrics();
 };
 
-#endif
+}// namespace Sipi::observability
+
+#endif// SIPI_OBSERVABILITY_METRICS_H

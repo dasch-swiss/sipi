@@ -69,7 +69,7 @@ cc_library(
 # and the few TUs that include it recompile.
 #
 # Output path is `generated/SipiVersion.h` because `src/sipi.cpp`,
-# `src/SipiHttpServer.cpp`, and `src/SipiMetrics.cpp` consume it as
+# `src/SipiHttpServer.cpp`, and `src/observability/metrics.cpp` consume it as
 # `#include "generated/SipiVersion.h"` — the prefix is mandatory and
 # matches the existing CMake build's `${CMAKE_BINARY_DIR}/generated/`
 # layout.
