@@ -1,5 +1,5 @@
-"""SipiConnectionMetricsAdapter unit tests (DEV-6339 dependency
-inversion — verifies the adapter forwards to SipiMetrics).
+"""SipiConnectionMetricsAdapter unit tests — verifies the adapter
+forwards shttps connection-lifecycle events to SipiMetrics.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_test")

@@ -1,7 +1,7 @@
 # Bilevel TIFF test fixtures
 
 Synthetic 1-bit bilevel TIFF fixtures used by the `sipi_image_tests`
-regression tests for DEV-6249. Regenerate with:
+1-bit bilevel TIFF regression suite. Regenerate with:
 
     $TMPDIR/generate_bilevel_tiffs test/_test_data/images/bilevel/
 

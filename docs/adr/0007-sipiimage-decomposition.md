@@ -57,9 +57,9 @@ We accept this for five reasons.
 
 - **`app14_transform` field removed**. The JPEG handler inverts CMYK/YCCK at decode time so downstream code sees standard CMYK; no transient flag needed on the universal Image type.
 
-- **TeeSink for dual-write preservation**. ADR-0006's `OutputSink` variant gains a `TeeSink { std::vector<OutputSink> outputs; }` alternative. Tracked in [DEV-6382](https://linear.app/dasch/issue/DEV-6382).
+- **TeeSink for dual-write preservation**. ADR-0006's `OutputSink` variant gains a `TeeSink { std::vector<OutputSink> outputs; }` alternative.
 
-- **Migration is gated on [DEV-6341](https://linear.app/dasch/issue/DEV-6341) reaching Y+6** for the Bazel-package-dependent steps (move static `io` map, remove friends with public API, extract image-processing). The non-Bazel-dependent steps (raw-pointer audit, vector swap, `app14_transform` removal) can land in CMake era.
+- **Migration is gated on the Bazel build-system migration reaching its module-co-located layout phase** for the Bazel-package-dependent steps (move static `io` map, remove friends with public API, extract image-processing). The non-Bazel-dependent steps (raw-pointer audit, vector swap, `app14_transform` removal) can land independently.
 
 - **Approval-test surface unchanged**. Behaviour preservation is intended throughout the decomposition. Approval goldens stay valid.
 
@@ -67,4 +67,4 @@ We accept this for five reasons.
 
 - **Glossary deltas land in [`UBIQUITOUS_LANGUAGE.md`](../../UBIQUITOUS_LANGUAGE.md)** in the batched edit pass: add **Image processing** (umbrella for the free-function module). Sharpen **Image** (the code-level class becomes a narrow value type; domain term stays correct).
 
-- **Tracked in Linear** under a new parent issue (sibling to [DEV-6374](https://linear.app/dasch/issue/DEV-6374)) with 8 children corresponding to the staged sub-PRs. Inter-issue dependencies modelled via Linear's `blockedBy` relations.
+- **Sub-PR sequencing.** The decomposition lands as a series of staged sub-PRs with explicit dependency ordering between them (see "Migration plan" below).

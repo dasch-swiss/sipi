@@ -1,13 +1,10 @@
 """Custom repository_rule for fetching Kakadu (proprietary, GitHub-release-gated).
 
-Mirrors the Nix FOD pattern in `flake.nix:36-78` 1:1: shells out to `gh release
-download` so the auth UX is identical (local: `gh auth login`; CI:
-`GH_TOKEN=$DASCHBOT_PAT`). Plain `http_archive` + `auth_patterns` is rejected
-because `auth_patterns` consumes `~/.netrc`, which `gh` does not populate;
-preserving today's `gh auth token` flow avoids out-of-band `~/.netrc` plumbing.
-
-This rule replaces the FOD on the Bazel side. Nix flake's FOD remains
-authoritative until DEV-6348 (Y+6) deletes `package.nix`.
+Shells out to `gh release download`, so the auth UX is `gh auth login`
+locally and `GH_TOKEN=$DASCHBOT_PAT` in CI. Plain `http_archive` +
+`auth_patterns` is rejected because `auth_patterns` consumes `~/.netrc`,
+which `gh` does not populate; preserving the `gh auth token` flow avoids
+out-of-band `~/.netrc` plumbing.
 """
 
 def _kakadu_archive_impl(ctx):

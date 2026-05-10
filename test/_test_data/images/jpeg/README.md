@@ -1,17 +1,18 @@
 # JPEG test fixtures
 
-## Real failing fixtures (DEV-6250)
+## Real failing fixtures
 
 | File | Source | Characteristics |
 |---|---|---|
 | `35-2421d-o.jpg` | Heritage collection | 404×201, 8-bit RGB, JFIF + APP13 (Photoshop/IPTC with German umlauts) + APP2 (ICC) + APP1 (EXIF) + APP1 (XMP). Created by Adobe Photoshop CS (2008). |
 | `35-2421d-r.jpg` | Heritage collection | Same characteristics as above; sibling variant. |
 
-Both are legitimate archival images that sipi must be able to ingest as an
-IIIF-compatible preservation server. They fail on `main` prior to the
-DEV-6250 fix — see `Jpeg_35_2421d_ReadsSuccessfullyTest` (R6).
+Both are legitimate archival images that sipi must be able to ingest as
+an IIIF-compatible preservation server. They previously failed on read;
+the fix is regression-pinned by `Jpeg_35_2421d_ReadsSuccessfullyTest`
+(R6).
 
-## Synthetic fixtures (DEV-6250 / DEV-6257 / F3)
+## Synthetic fixtures
 
 Regenerate with:
 

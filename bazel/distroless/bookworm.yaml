@@ -38,7 +38,7 @@ packages:
   - "tini"
 
   # Runtime healthcheck probe — invoked by ops-deploy's compose-level
-  # `healthcheck.test: ["CMD", "curl", "-sf", "http://localhost:1024/health"]`
-  # (INFRA-1226). The healthcheck runs *inside* the container, so curl
-  # must be in the image regardless of where the directive lives.
+  # `healthcheck.test: ["CMD", "curl", "-sf", "http://localhost:1024/health"]`.
+  # The healthcheck runs *inside* the container, so curl must be in the
+  # image regardless of where the directive lives.
   - "curl"

@@ -633,10 +633,11 @@ fn canonical_link_header() {
 }
 
 #[test]
-#[ignore] // DEV-6003: sipi claims profileLinkHeader in extraFeatures but doesn't emit the header
+#[ignore] // sipi claims profileLinkHeader in extraFeatures but doesn't emit the header
 fn profile_link_header() {
-    // TODO(DEV-6003): sipi lists profileLinkHeader in extraFeatures (SipiHttpServer.cpp:827)
-    // but no code emits Link: <...level2.json>;rel="profile"
+    // TODO: sipi lists profileLinkHeader in extraFeatures
+    // (SipiHttpServer.cpp:827) but no code emits
+    // Link: <...level2.json>;rel="profile"
     // This test should pass once the compliance gap is fixed.
     let srv = server();
     let resp = client()
@@ -919,12 +920,13 @@ fn unsupported_formats_rejected() {
 // --- Phase 8: Identifier and Error Handling Tests ---
 
 #[test]
-#[ignore] // DEV-6004: sipi returns 500 for filenames containing # — compliance gap
+#[ignore] // sipi returns 500 for filenames containing # — compliance gap
 fn id_escaped() {
     // test#image.jp2 is a symlink to lena512.jp2 (created in Phase 1)
     // %23 is the URL encoding of #
-    // TODO(DEV-6004): sipi returns 500 when trying to serve files with # in the name.
-    // The IIIF spec requires escaped characters to work (id_escaped test).
+    // TODO: sipi returns 500 when trying to serve files with # in the
+    // name. The IIIF spec requires escaped characters to work
+    // (id_escaped test).
     let srv = server();
     let resp = client()
         .get(format!(

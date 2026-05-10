@@ -1,18 +1,12 @@
 """Custom repository_rule for ApprovalTests.cpp (single-header library).
 
-ApprovalTests.cpp ships its release as a single .hpp file (not a tarball), so
-`http_archive` does not apply and BCR has no `approvaltests_cpp` module. This
-rule mirrors today's CMake flow in `test/CMakeLists.txt:53-72`:
+ApprovalTests.cpp ships its release as a single .hpp file (not a tarball),
+so `http_archive` does not apply and BCR has no `approvaltests_cpp` module.
 
-    file(DOWNLOAD ${HEADER_URL} ${HEADER_FILE} EXPECTED_HASH SHA256=...)
-
-It downloads `ApprovalTests.v.<version>.hpp` to `ApprovalTests.hpp` inside the
-generated repo and writes a `BUILD.bazel` exposing the header as a
-`cc_library(name = "approval_tests")`. The plan's `@approvaltests_cpp//:approval_tests`
-target name (DEV-6343, plan §"PR Y+1") resolves through this rule.
-
-Version + checksum match the values pinned in `test/CMakeLists.txt:60` so the
-Bazel-built and Nix-built test paths consume the exact same header bytes.
+This rule downloads `ApprovalTests.v.<version>.hpp` to `ApprovalTests.hpp`
+inside the generated repo and writes a `BUILD.bazel` exposing the header
+as `cc_library(name = "approval_tests")`. Consumers reference it as
+`@approvaltests_cpp//:approval_tests`.
 """
 
 def _approvaltests_cpp_impl(ctx):

@@ -1,9 +1,9 @@
 // Copyright © 2016 - 2026 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform
 // contributors. SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// End-to-end IIIF coverage for the heritage JPEG files unblocked by
-// DEV-6250 (Photoshop-CS APP13-before-APP1 + German umlauts in IPTC +
-// resilient metadata parsing).
+// End-to-end IIIF coverage for heritage JPEG files (Photoshop-CS
+// APP13-before-APP1 + German umlauts in IPTC + resilient metadata
+// parsing).
 
 mod common;
 

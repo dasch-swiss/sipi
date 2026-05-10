@@ -1,11 +1,9 @@
 """Seed corpus for the IIIF URI parser fuzz harness.
 
-Today the corpus is consumed by two callers:
-  * `fuzz/handlers/iiif_handler_uri_parser_fuzz` — exposed via Bazel in Y+3
-    (DEV-6345) when the fuzz harness moves off Nix.
-  * `test/unit/handlers/parse_iiif_uri_corpus_test` — the Y+1 unit test that
-    re-runs the corpus against the parser as a regression suite. Today
-    (Y+1, DEV-6343) this is the only consumer.
+Consumers:
+  * `fuzz/handlers/iiif_handler_uri_parser_fuzz` — the libFuzzer harness.
+  * `test/unit/handlers/parse_iiif_uri_corpus_test` — re-runs the corpus
+    against the parser as a regression suite.
 
 Exposing the corpus as a Bazel `filegroup` lets the unit test declare it
 as a `data` dep and find the files at workspace-relative paths in the

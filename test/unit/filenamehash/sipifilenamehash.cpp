@@ -72,7 +72,7 @@ TEST(SipiFilenameHash, CopyConstructorCopiesHash)
     for (int i = 0; i < 6; ++i) {
         EXPECT_EQ(h1[i], h2[i]);
     }
-    // BUG(DEV-6002): copy constructor does not copy 'path' and 'name' members,
+    // BUG: copy constructor does not copy 'path' and 'name' members,
     // so filepath() returns only directory components without filename.
     // h2.filepath() == "W/A/" instead of "W/A/test.jp2"
 }
@@ -91,7 +91,7 @@ TEST(SipiFilenameHash, AssignmentOperator)
     // not free h2's original 'path'/'name' allocations before overwriting them.
     // Same as copy constructor: 'path' and 'name' are not copied, so
     // h2.filepath() returns only directory components without filename.
-    // TODO(DEV-6002): Fix operator= to properly manage 'path'/'name' members.
+    // TODO: Fix operator= to properly manage 'path'/'name' members.
 }
 
 TEST(SipiFilenameHash, InvalidIndexThrows)

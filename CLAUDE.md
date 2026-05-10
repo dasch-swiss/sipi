@@ -17,9 +17,9 @@ Read these before reasoning about names, boundaries, or architectural decisions:
 ## Build System and Common Commands
 
 All targets are in a single `justfile`. Run `just` for a complete list.
-For full build instructions (Docker, Nix, macOS), see [`docs/src/development/building.md`](docs/src/development/building.md).
+For full build instructions, see [`docs/src/development/building.md`](docs/src/development/building.md) and [`docs/src/development/bazel.md`](docs/src/development/bazel.md).
 
-**Build reproducibility invariant:** every build/test/coverage step in CI invokes one of the `just bazel-*` recipes — no inline `bazel` calls, no `nix build` calls. Bazel's own incremental rebuild IS the inner-loop edit/rebuild cycle (`just bazel-build` after a single-file edit completes in seconds via the action cache).
+**Build reproducibility invariant:** Bazel is the build system; Nix provisions only the dev shell. Every build/test/coverage step in CI invokes one of the `just bazel-*` recipes — no inline `bazel` calls, no `nix build` calls. Bazel's own incremental rebuild IS the inner-loop edit/rebuild cycle (`just bazel-build` after a single-file edit completes in seconds via the action cache).
 
 **Build completeness invariant:** every build target must succeed on every supported platform — macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. The Docker image (`//src:image` via `rules_oci`) is Linux-only — `bazel-docker-build-{amd64,arm64}` is gated by host-CPU `target_compatible_with`. The sanitized variant is `bazel build --config=asan --config=ubsan //src:sipi`; the libFuzzer harness is Bazel-native on linux-x86_64 (CI) and darwin-aarch64 (local dev) — the `bazel-build-fuzz` / `bazel-run-fuzz` recipes detect the host and select the matching `//tools/fuzz:<host>_fuzz` platform. linux-aarch64 is out of scope for the fuzz harness. CI runs the test matrix on all three platforms, so a green CI run verifies macOS as well as Linux. Before shipping any change to `flake.nix`, `MODULE.bazel`, `BUILD.bazel`, or a `justfile` build recipe, run `just bazel-build` and `just bazel-coverage` locally on macOS at minimum.
 
@@ -64,13 +64,6 @@ just bazel-docker-push-amd64             # push amd64 image as :v<version>-amd64
 just bazel-docker-push-arm64             # push arm64 image as :v<version>-arm64 + :latest-arm64
 just bazel-docker-publish-manifest       # crane index append → daschswiss/sipi:v<version> multi-arch
 just bazel-docker-extract-debug <arch>   # surface sipi-<arch>.debug for sentry-cli upload
-
-# Vendor dependencies (used by sanitizer/fuzz dev-shell flows; Bazel builds
-# fetch via repository_rule and do not consume vendor/)
-just vendor-download             # download all dep archives to vendor/
-just vendor-verify               # verify SHA-256 checksums
-just vendor-checksums            # print checksums for manifest updates
-just kakadu-fetch                # download Kakadu archive (dev-shell inner loop only)
 
 # Documentation
 just docs-serve                  # serve docs locally
@@ -129,19 +122,19 @@ localdev config in one step.
 
 ### Dependencies
 
-**External Libraries (built from source in `ext/`):**
+**External Libraries (built from source via `rules_foreign_cc` under `ext/<lib>`):**
 Image formats (libtiff, libpng, libjpeg, libwebp), compression (zlib, bzip2, xz, zstd), JPEG2000 (kakadu — requires license), metadata (exiv2, lcms2), Lua + luarocks, jansson, sqlite3, sentry, prometheus-cpp (core only), OpenSSL, libcurl, libmagic.
 
 **System Dependencies:** Threads (pthread), iconv (macOS only).
 
 ### Important Files
 
-- `CMakeLists.txt` — main build configuration
+- `MODULE.bazel` — Bazel module + `http_archive` pins for every ext/* dep
+- `BUILD.bazel` (root + `src/`, `shttps/`, `test/`, `ext/<lib>/`) — target graph
 - `justfile` — all build targets (run `just` to list)
-- `version.txt` — version information
-- `flake.nix` — Nix build system (overlay, package variants, dev shells)
-- `package.nix` — Nix derivation for Sipi
-- `nix/` — Nix expressions imported by `flake.nix`. Each file is a function over `{ pkgs, … }` returning attribute set(s) that `flake.nix` merges into the right output. New derivations go here, not into `flake.nix` — keeping the flake an orchestrator is an explicit goal. Existing in-flake builders (Kakadu FOD, static builds, Docker image, dev shells) are slated for migration into `nix/<topic>.nix` files using this pattern.
+- `flake.nix` — dev-shell only (`default` clang+libc++, `gcc` diagnostic)
+- `version.txt` — version information; baked in via `tools/workspace_status.sh`
+  + `expand_template` substitution into `include/SipiVersion.h.in`
 
 ## Testing
 
@@ -193,8 +186,13 @@ These are not style preferences — they are contract with the maintainer. Code 
 
 ## Development Notes
 
-**Compiler Requirements:** C++23, Clang >= 15.0 or GCC >= 13.0, CMake >= 3.28
+**Compiler Requirements:** C++23. Bazel selects a hermetic LLVM 19 toolchain via `toolchains_llvm`; the host compiler does not need to be Clang.
 
-**Build Types:** Debug (`-O0 -g`), Release (`-O3 -DNDEBUG`), RelWithDebInfo (`-O3 -g`)
+**Build configurations:**
+- `bazel build //src:sipi` — fastbuild (`-O0 -g`, fast incremental)
+- `bazel build -c opt //src:sipi` — production (`-O3 -DNDEBUG`)
+- `bazel build -c dbg //src:sipi` — Debug (`-O0 -g`)
+- `bazel build --config=asan --config=ubsan //src:sipi` — sanitizers
+- `bazel build --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz` — libFuzzer harness
 
 **Error Reporting:** Optional Sentry integration via `SIPI_SENTRY_DSN`, `SIPI_SENTRY_ENVIRONMENT`, `SIPI_SENTRY_RELEASE` environment variables.

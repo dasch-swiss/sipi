@@ -22,9 +22,16 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     steps:
-      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+      - uses: actions/checkout@v4
         with:
-          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+          fetch-depth: 0
+          lfs: false
+      - name: restore LFS cache
+        uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-${{ hashFiles('.gitattributes') }}
+          restore-keys: lfs-
       - name: pull LFS objects
         run: |
           git lfs install
@@ -34,10 +41,6 @@ jobs:
         with:
           extra-conf: |
             extra-experimental-features = configurable-impure-env
-      - uses: cachix/cachix-action@v17
-        with:
-          name: dasch-swiss
-          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
       - uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKER_USER }}
@@ -91,9 +94,16 @@ jobs:
             sbom_file: sbom-arm64.spdx.json
             sbom_name: sbom-arm64
     steps:
-      - uses: dasch-swiss/sipi/.github/actions/checkout@main
+      - uses: actions/checkout@v4
         with:
-          DASCHBOT_PAT: ${{ secrets.DASCHBOT_PAT }}
+          fetch-depth: 0
+          lfs: false
+      - name: restore LFS cache
+        uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-${{ hashFiles('.gitattributes') }}
+          restore-keys: lfs-
       - name: pull LFS objects
         run: |
           git lfs install
@@ -103,10 +113,6 @@ jobs:
         with:
           extra-conf: |
             extra-experimental-features = configurable-impure-env
-      - uses: cachix/cachix-action@v17
-        with:
-          name: dasch-swiss
-          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
       - uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKER_USER }}
@@ -195,10 +201,6 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       - uses: DeterminateSystems/determinate-nix-action@v3
-      - uses: cachix/cachix-action@v17
-        with:
-          name: dasch-swiss
-          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
       - run: nix profile install --inputs-from . nixpkgs#just
       # `bazel-docker-publish-manifest` shells out to `crane index append`,
       # which only exists inside the dev shell (go-containerregistry).

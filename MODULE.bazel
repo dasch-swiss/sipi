@@ -1,8 +1,7 @@
 """Sipi — IIIF-compatible media server.
 
-Bazel 9.0.2 LTS module. Phase 1 of the Nix → Bazel migration (DEV-6342, PR Y);
-nothing in CI invokes Bazel yet — Nix flake remains authoritative on `main`
-until DEV-6348 (Y+6) deletes `package.nix`.
+Bazel 9.0.2 LTS module. Bazel is the build system; Nix provisions the
+dev shell only.
 
 Versioning: `version.txt` is the single source of truth for the Sipi version
 string. `tools/workspace_status.sh` reads it into `STABLE_SIPI_VERSION`, which
@@ -71,14 +70,12 @@ single_version_override(
 # toolchains_llvm); MACOSX_DEPLOYMENT_TARGET=12.0 is pinned in .bazelrc.
 bazel_dep(name = "toolchains_llvm", version = "1.7.0")
 
-# ── Container image rules (DEV-6346, PR Y+4) ───────────────────────────────
-# `rules_oci` replaces today's Nix `dockerTools.{buildLayeredImage,
-# streamLayeredImage}` (deleted in this PR's flake.nix thinning). Image is
-# assembled per-arch by oci_image, pushed by oci_push; the multi-arch
-# manifest is built by `crane index append` on a coordinator job (NOT
-# `oci_image_index`, which only consumes same-build-graph labels — see
-# `dasch-specs/specs/2026-04-29-sipi-bazel-migration/02-research-findings-bazel-implementation.md`
-# §1).
+# ── Container image rules ─────────────────────────────────────────────────
+# `rules_oci` builds the OCI image. The image is assembled per-arch by
+# `oci_image`, pushed by `oci_push`; the multi-arch manifest is built by
+# `crane index append` on a coordinator job (NOT `oci_image_index`, which
+# only consumes same-build-graph labels — per-arch CI runners produce
+# digests that cross job boundaries).
 #
 # `rules_oci` 2.x maintainer CI does not yet list Bazel 9 as tested;
 # community reports indicate it works. If a Bazel-9 incompat surfaces, the
@@ -130,8 +127,8 @@ use_repo(oci, "distroless_base", "distroless_base_linux_amd64", "distroless_base
 #   - tini:  `/usr/bin/tini`     PID 1 zombie reaping + signal forwarding
 #                                (entrypoint `["tini", "--", "/sbin/sipi"]`).
 #   - curl:  `/usr/bin/curl`     Used by ops-deploy's compose-level
-#                                healthcheck (INFRA-1226) — `CMD curl
-#                                -sf http://localhost:1024/health`.
+#                                healthcheck — `CMD curl -sf
+#                                http://localhost:1024/health`.
 #
 # Snapshot pin: snapshot.debian.org timestamp freezes Debian's apt index
 # so the lock file is reproducible across runs. Bumping the snapshot
@@ -219,13 +216,12 @@ exports_files([
     url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-05-08-13-23/ffmpeg-n8.1.1-linuxarm64-lgpl-8.1.tar.xz",
 )
 
-# ── Test-only deps (DEV-6343, PR Y+1) ──────────────────────────────────────
+# ── Test-only deps ────────────────────────────────────────────────────────
 # Pinned to 1.17.0.bcr.2 because transitive deps (`aspect_bazel_lib` and the
 # rules under it) already pull in `googletest@1.17.0`; declaring an older
 # version here triggers a `--check_direct_dependencies` warning under
-# Bazel 9's MVS resolver. 1.17.0 is API-compatible with 1.16.0 (the
-# version pinned in `test/CMakeLists.txt`) — gtest's API has been stable
-# across the 1.1x line, and no SIPI test calls a 1.17-specific symbol.
+# Bazel 9's MVS resolver. 1.17.0 is API-compatible with the 1.16.x line
+# (gtest's API has been stable across 1.1x).
 # The `dev_dependency = True` flag keeps it out of the runtime build graph
 # so production targets in `//src` and `//shttps` cannot accidentally take
 # a transitive dep on test infrastructure.
@@ -420,9 +416,6 @@ use_repo(kakadu_extension, "kakadu")
 # ── ApprovalTests.cpp (single-header release, no BCR module) ───────────────
 # `bazel/approvaltests_cpp.bzl` downloads the .hpp file released by the
 # upstream project and exposes it as `cc_library(name = "approval_tests")`.
-# Version + checksum mirror `test/CMakeLists.txt:60` verbatim so the
-# Bazel-built and Nix-built test paths consume the same header bytes
-# (DEV-6343, plan §"PR Y+1").
 approvaltests_cpp = use_repo_rule("//bazel:approvaltests_cpp.bzl", "approvaltests_cpp")
 
 approvaltests_cpp(
@@ -432,10 +425,7 @@ approvaltests_cpp(
 )
 
 # ── Third-party C/C++ libs (rules_foreign_cc) ──────────────────────────────
-# URLs and SHA256s are the single source of truth, no longer split between
-# `cmake/dependencies.cmake` and per-lib `ext/<lib>/CMakeLists.txt`.
-# `cmake/dependencies.cmake` itself is preserved until DEV-6349 (Y+7); its
-# values are mirrored here verbatim during the migration window.
+# URLs and SHA256s are the single source of truth.
 #
 # Each archive's `build_file = "//bazel:all_content.BUILD.bazel"` exposes
 # the raw source tree as `@<lib>//:all_srcs`; the foreign_cc rule lives

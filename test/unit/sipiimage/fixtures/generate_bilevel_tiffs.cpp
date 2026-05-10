@@ -124,9 +124,9 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  // Match the characteristics of the real DEV-6249 files (CanoScan 9000F +
-  // Photoshop CC, bps=1, LZW, MINISWHITE) but at a tractable size so the
-  // fixture bytes are small enough to commit.
+  // Match the characteristics of the real failing-on-read fixtures
+  // (CanoScan 9000F + Photoshop CC, bps=1, LZW, MINISWHITE) but at a
+  // tractable size so the fixture bytes are small enough to commit.
   const std::vector<BilevelSpec> specs{
     { "bilevel_lzw_miniswhite.tif", 128, 128, COMPRESSION_LZW, PHOTOMETRIC_MINISWHITE, 64 },
     { "bilevel_none_miniswhite.tif", 128, 128, COMPRESSION_NONE, PHOTOMETRIC_MINISWHITE, 64 },

@@ -88,9 +88,8 @@ The codebase has two coexisting layouts:
   `src/<mod>/{Foo.cpp, Foo.h, foo_test.cpp}` with flat-style includes
   (`#include "metadata/Foo.h"` cross-module, `#include "Foo.h"`
   intra-module). `shttps/` and `src/handlers/` already follow this.
-  Migration is staged behind the Bazel build-tool migration
-  (DEV-6343..DEV-6348) and lands as five mechanical per-module PRs
-  (Y+8a..Y+8e).
+  Migration is staged behind the Bazel build-tool migration and lands
+  as five mechanical per-module PRs.
 
 Until ADR-0003 is accepted and a module is migrated, follow the
 historical layout for that module. After migration, follow the new
@@ -147,11 +146,12 @@ New config options need:
 
 ## Docker
 
-- Build: `nix build .#docker-stream` via `dockerTools.streamLayeredImage`
-- Base image: nixpkgs userland (glibc, not musl/Alpine)
-- Init: `tini` from nixpkgs (PID 1 zombie reaping, signal forwarding)
-- Runtime user: `root` (NFS uid/gid coordination deferred to DEV-5920;
-  `flake.nix` documents the constraint near the unset `config.User`)
+- Build: `bazel run //src:image_load` (per-arch); `crane index append`
+  assembles the multi-arch manifest (see `src/BUILD.bazel`).
+- Base image: `gcr.io/distroless/base-debian12` (glibc, pinned by digest)
+- Init: `tini` (PID 1 zombie reaping, signal forwarding)
+- Runtime user: `root` (NFS uid/gid coordination is a known constraint;
+  documented inline in `src/BUILD.bazel` near the image rule)
 - Port: 1024 (non-privileged)
 - Config mount: `/sipi/config/`
 - Image root: `/sipi/images/`

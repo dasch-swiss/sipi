@@ -34,9 +34,8 @@ filegroup(
 )
 
 # Production-image config files — the two .lua entries copied into
-# `/sipi/config/` by today's flake.nix `fakeRootCommands`. Bazel's image
-# tar layer (`//src:sipi_runtime_layer`, DEV-6346) consumes them via
-# `$(execpath ...)`.
+# `/sipi/config/` by Bazel's image tar layer (`//src:sipi_runtime_layer`)
+# via `$(execpath ...)`.
 exports_files([
     "sipi.config.lua",
     "sipi.init.lua",

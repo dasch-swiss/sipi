@@ -2,10 +2,9 @@
  * Copyright © 2016 - 2026 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * Regression tests for DEV-6249 — 1-bit bilevel TIFF support and the
- * dormant ROI/switch bugs that were exposed once the rejection gate was
- * removed. Every test in this file fails on `main` and passes on the
- * matching fix commit.
+ * Regression tests for 1-bit bilevel TIFF support and the dormant
+ * ROI/switch bugs that were exposed once the rejection gate was
+ * removed.
  */
 
 #include "gtest/gtest.h"
@@ -61,9 +60,9 @@ TEST(TiffBilevelRegression, Tiff1BitLzwMinisWhiteReadsAs8Bit)
   EXPECT_EQ(img.getBps(), 8u);
 }
 
-/*! R2 — the same contract applies to uncompressed bilevel TIFFs. One of the
- *  22 failing DEV-6249 files (7-27_KV40_FN473) has Compression=None and was
- *  rejected by the same gate. */
+/*! R2 — the same contract applies to uncompressed bilevel TIFFs. One
+ *  of the originally-failing fixtures (7-27_KV40_FN473) has
+ *  Compression=None and was rejected by the same gate. */
 TEST(TiffBilevelRegression, Tiff1BitUncompressedReadsAs8Bit)
 {
   Sipi::SipiImage img;

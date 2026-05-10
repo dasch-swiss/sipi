@@ -7,13 +7,13 @@
 # *changes* — so editing a `.cpp` file does not regenerate `SipiVersion.h`
 # (the values stay identical) but bumping `version.txt` does.
 #
-# Consumers (planted in subsequent commits):
+# Consumers:
 #   - `src/BUILD.bazel`   — `expand_template(stamp_substitutions = {…})`
 #                           bakes STABLE_* values into `SipiVersion.h`.
 #   - `src/BUILD.bazel`   — `oci_image` rule reads STABLE_IMAGE_CREATED for
-#                           reproducible image timestamps (Y+4 / DEV-6346).
+#                           reproducible image timestamps.
 #   - `tools/sentry`      — Sentry release uploader reads STABLE_GIT_VERSION
-#                           on the publish.yml workflow (Y+4).
+#                           on the publish.yml workflow.
 #
 # `set -euo pipefail` ensures any read failure (e.g. missing version.txt)
 # fails Bazel loudly rather than producing an empty stamp.

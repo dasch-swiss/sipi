@@ -9,7 +9,7 @@ Consumers reference both forms via sibling `#include "Logger.h"` (resolved
 through `includes = ["."]` propagation) and prefixed
 `#include "metadata/SipiIcc.h"`. Internal headers like
 `include/metadata/SipiIccDetail.h` are still exposed in `hdrs` so unit
-tests can link against private symbols (Y+1 / DEV-6343).
+tests can link against private symbols.
 
 Cross-package consumers:
   //src:sipi_lib       — primary consumer

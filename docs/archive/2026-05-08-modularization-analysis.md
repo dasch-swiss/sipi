@@ -7,7 +7,7 @@ completed: 2026-05-08
 
 A multi-session exercise to identify Deep Modules (Ousterhout, *A Philosophy of Software Design*) in the SIPI codebase, using the ubiquitous language as a probe and extending the language as gaps surface. The output is the input list and seam shape for the Bazel package layout introduced by [ADR-0003](../adr/0003-module-co-located-source-and-tests.md).
 
-**This is a frozen artifact of a one-time exercise. Completed 2026-05-08.** The probe register (Probes 1-10), glossary delta register (~22 entries flushed to [`UBIQUITOUS_LANGUAGE.md`](../../UBIQUITOUS_LANGUAGE.md) on completion), method invariants, and closing-sweep findings are durable architectural records. The implementation work is tracked as Linear issues under the [SIPI Modularization project](https://linear.app/dasch/project/sipi-modularization-3e0cc2fd19f2); see [DEV-6353](https://linear.app/dasch/issue/DEV-6353) for the Y+8 rollout sequence.
+**This is a frozen artifact of a one-time exercise. Completed 2026-05-08.** The probe register (Probes 1-10), glossary delta register (~22 entries flushed to [`UBIQUITOUS_LANGUAGE.md`](../../UBIQUITOUS_LANGUAGE.md) on completion), method invariants, and closing-sweep findings are durable architectural records. The implementation work is tracked as Linear issues under the SIPI Modularization project; see [tracked separately] for the Y+8 rollout sequence.
 
 **Outcome:** 13 SIPI-side Bazel packages + 1 binary, plus the separate `shttps/` context. `include/` directory deleted entirely (per Y+8d). Hypothesis (every glossary term corresponds to either a deep module, a scattered concept to extract, or a language-only term) confirmed — see Probe 10's closing sweep.
 
@@ -102,10 +102,10 @@ Rows are added as probes complete. Format: one section per probe with the 8 temp
 - `check(origpath, canonical) → BlockedScope` (RAII pin; replaces `block_file=true` + manual `deblock`)
 - `add(origpath, canonical, cachepath, img_w, img_h, tile_w, tile_h, clevels, numpages)`
 - `remove(canonical) → bool`
-- `purge() → int`
-- `getNewCacheFileName() → string`
+- `purge → int`
+- `getNewCacheFileName → string`
 - `loop(worker, userdata, sort_method)` — admin/Lua iteration
-- `stats() → Stats` — collapses the five getters
+- `stats → Stats` — collapses the five getters
 - Public types kept: `CacheRecord` (callback contract for `loop`), `SortMethod`, `ProcessOneCacheFile`, `Stats`, `BlockedScope`.
 
 **4. Private surface.** `cache.cpp` + per-module unit test. Internals retained (not in `hdrs`):
@@ -119,10 +119,10 @@ Rows are added as probes complete. Format: one section per probe with the 8 temp
 - `_compare_access_time_*` / `_compare_fsize_*` static comparators.
 
 **5. Depth signal.** Core is a genuine deep module — dual-limit LRU + crash recovery + atomic eviction with low-water mark + persistence + concurrency, all behind a small conceptual surface. Today's `include/SipiCache.h` has four shallowness leaks that the proposed `hdrs` removes:
-- `tcompare()` is public (pure internal utility).
+- `tcompare` is public (pure internal utility).
 - `check(block_file=true)` paired with `deblock(name)` — manual pairing, locking concern leaks (RAII `BlockedScope` fixes this).
-- `getCacheDir()` exposes filesystem layout to Lua admin scripts (audit during `SipiLua` probe; either remove or fold into `stats()`).
-- Five separate getters (`getCacheUsedBytes`, `getMaxCacheSize`, `getNfiles`, `getMaxNfiles`, `getCacheDir`) → one `Stats stats()` struct.
+- `getCacheDir` exposes filesystem layout to Lua admin scripts (audit during `SipiLua` probe; either remove or fold into `stats`).
+- Five separate getters (`getCacheUsedBytes`, `getMaxCacheSize`, `getNfiles`, `getMaxNfiles`, `getCacheDir`) → one `Stats stats` struct.
 - `FileCacheRecord` (on-disk `char[256]` format) is in the public header but only `SipiCache` itself uses it.
 
 Plus one larger finding (see #6/#7) — the cache held two responsibilities, and the second is being amputated entirely rather than extracted.
@@ -133,9 +133,9 @@ Plus one larger finding (see #6/#7) — the cache held two responsibilities, and
 
 a. **Promote to Bazel package** per ADR-0003. Co-locate `cache_test.cpp` from current `test/unit/cache/cache.cpp`.
 
-b. **Tighten public interface** per #3: RAII `BlockedScope`, collapse getters to `Stats stats()`, privatize `FileCacheRecord` and `tcompare`. Mechanical; updates `SipiHttpServer.cpp` and `SipiLua.cpp` call sites.
+b. **Tighten public interface** per #3: RAII `BlockedScope`, collapse getters to `Stats stats`, privatize `FileCacheRecord` and `tcompare`. Mechanical; updates `SipiHttpServer.cpp` and `SipiLua.cpp` call sites.
 
-c. **Amputate the image-shape responsibility** — delete `SizeRecord`, `sizetable`, and `getSize()` from `SipiCache`. The two structs (`SizeRecord` and `CacheRecord`) overlap because they hold the same data with different keys; `sizetable` was a parasitic side-effect index populated only by `add()`, never independently persisted, surviving eviction (`purge` and `remove` don't clean it up — bug, made moot by the deletion), and never populated for un-cached origpaths. It was barely a cache. Image shape lookup moves to format handlers — see [ADR-0004](../adr/0004-image-shape-ownership.md).
+c. **Amputate the image-shape responsibility** — delete `SizeRecord`, `sizetable`, and `getSize` from `SipiCache`. The two structs (`SizeRecord` and `CacheRecord`) overlap because they hold the same data with different keys; `sizetable` was a parasitic side-effect index populated only by `add`, never independently persisted, surviving eviction (`purge` and `remove` don't clean it up — bug, made moot by the deletion), and never populated for un-cached origpaths. It was barely a cache. Image shape lookup moves to format handlers — see [ADR-0004](../adr/0004-image-shape-ownership.md).
 
 d. **Audit the Lua admin surface** during the `SipiLua` probe: `SipiLua.cpp` currently uses `getCacheDir`, `loop`, `remove`, `purge`, `add`. Decide whether the Lua-facing API is the same as the C++ public API or a thin facade. The `getCacheDir` exposure is the clearest case for separation.
 
@@ -148,7 +148,7 @@ d. **Audit the Lua admin surface** during the `SipiLua` probe: `SipiLua.cpp` cur
 **9. Open questions for later probes.**
 - `getCacheDir`'s removal or retention depends on the Lua admin surface (Probe `SipiLua`).
 - The exact set of fields in `Stats` depends on what the `/metrics` endpoint and `SipiLua` consumers actually need (Probes `Operational surface` and `SipiLua`).
-- `BlockedScope`'s API — pure RAII, or does it expose `blocked()` for the caller to detect "all-blocked, can't add"? — depends on Probe `SipiHttpServer` flow analysis.
+- `BlockedScope`'s API — pure RAII, or does it expose `blocked` for the caller to detect "all-blocked, can't add"? — depends on Probe `SipiHttpServer` flow analysis.
 
 ## Probe 2 — `metadata/`
 
@@ -162,7 +162,7 @@ d. **Audit the Lua admin surface** during the `SipiLua` probe: `SipiLua.cpp` cur
 | --- | --- | --- |
 | `metadata/essentials.h` | `SipiEssentials` | SIPI-owned preservation packet schema |
 | `metadata/exif.h` | `SipiExif` | EXIF wrapper (exiv2) |
-| `metadata/icc.h` | `SipiIcc` | ICC profile wrapper (lcms2) — `iccBytes()` chokepoint per ADR-0002 |
+| `metadata/icc.h` | `SipiIcc` | ICC profile wrapper (lcms2) — `iccBytes` chokepoint per ADR-0002 |
 | `metadata/iptc.h` | `SipiIptc` | IPTC wrapper (exiv2) |
 | `metadata/xmp.h` | `SipiXmp` | XMP wrapper (exiv2) |
 
@@ -174,10 +174,10 @@ The umbrella structure shows up as header organisation, not as separate Bazel pa
 
 | Class | hdr / cpp lines | Verdict | Reason |
 | --- | --- | --- | --- |
-| `SipiIcc` | 175 / 664 | **deep** | 1:4 ratio; `iccBytes()` chokepoint is the textbook Ousterhout hidden-complexity case (per ADR-0002) |
+| `SipiIcc` | 175 / 664 | **deep** | 1:4 ratio; `iccBytes` chokepoint is the textbook Ousterhout hidden-complexity case (per ADR-0002) |
 | `SipiXmp` | 93 / 166 | reasonable | depth in exiv2 RDF/XML wrapping |
 | `SipiIptc` | 66 / 59 | reasonable | small but bounded |
-| `SipiEssentials` | 209 / 213 | **shallow** | 1:1 ratio; inline `operator<<`, inline `operator std::string()`, 17 getter/setter pairs, pipe-delimited serialization in header |
+| `SipiEssentials` | 209 / 213 | **shallow** | 1:1 ratio; inline `operator<<`, inline `operator std::string`, 17 getter/setter pairs, pipe-delimited serialization in header |
 | `SipiExif` | **321 / 150** | **shallow** | header > cpp; 22 inline `assign_val` template overloads + `typeid`-dispatched template `addKeyVal` pull the entire exiv2 type universe into every consumer's TU |
 
 Plus one module-level leak: **third-party headers (`<exiv2/...>`, `<lcms2.h>`) appear in every public metadata header**. Every format handler, `SipiImage.hpp`, and `SipiSentry.h` get exiv2 + lcms2 in their compilation graph and see raw `Exiv2::`/`cms*` types in method signatures. Bazel `--strict_deps` will require either re-exporting these as transitive deps (anti-pattern) or hiding them via pImpl. One fix at the metadata boundary pays back at every consumer.
@@ -192,9 +192,9 @@ b. **Move `SipiIccDetail.h` → `metadata/internal/icc_normalization.h`** with `
 
 c. **Refactor `SipiExif` header**: move all inline `assign_val` and template `addKeyVal` definitions to `.cpp` with explicit instantiations for the types we use (`std::string`, `int`/`long`/`float`/`double` and their vectors, `Exiv2::Rational`/`URational`). Replace `typeid` dispatch with C++20 concepts or explicit specialization (matches the Rust-alignment direction discussed earlier). Hide `Exiv2::Rational` behind a SIPI-defined `Rational = std::pair<int32_t, int32_t>` if it doesn't break call sites materially.
 
-d. **Refactor `SipiEssentials`**: tighten public interface to one `parse(bytes) → SipiEssentials` (free function or static factory) + one `serialize() → std::vector<unsigned char>` + a small struct of accessors. Drop the inline string-conversion operators. Adopt versioned binary wire format per ADR-0005. Add image-shape fields per ADR-0004 (which lands inside the new format, not the legacy one).
+d. **Refactor `SipiEssentials`**: tighten public interface to one `parse(bytes) → SipiEssentials` (free function or static factory) + one `serialize → std::vector<unsigned char>` + a small struct of accessors. Drop the inline string-conversion operators. Adopt versioned binary wire format per ADR-0005. Add image-shape fields per ADR-0004 (which lands inside the new format, not the legacy one).
 
-e. **Modernize C-pointer ownership across the module**: drop the dual-overload pattern (`unsigned char* xxxBytes(unsigned int& len)` + `std::vector<unsigned char> xxxBytes()`); keep only the vector form. Matches `cpp-style-guide.md` "no raw owning new/delete" and aligns with Rust's no-raw-pointer-ownership rule.
+e. **Modernize C-pointer ownership across the module**: drop the dual-overload pattern (`unsigned char* xxxBytes(unsigned int& len)` + `std::vector<unsigned char> xxxBytes`); keep only the vector form. Matches `cpp-style-guide.md` "no raw owning new/delete" and aligns with Rust's no-raw-pointer-ownership rule.
 
 f. **Defer**: `SipiImage`-`SipiIcc` friend-class coupling (Probe 3); `SipiSentry::SipiIcc` dependency (Probe 9 — possibly vestigial); Lua-exposure surface (Probe 6).
 
@@ -227,20 +227,20 @@ Plus three concerns leave the class entirely:
 **3. Public interface (proposed `hdrs`).**
 
 ```
-src/image/image.h              — class Image (geometry, pixel access, metadata accessors, RAII pixel buffer)
-src/image/image_metadata.h     — ImageMetadata composite (5 standards bundle; possibly inlined into Image)
+src/image/image.h — class Image (geometry, pixel access, metadata accessors, RAII pixel buffer)
+src/image/image_metadata.h — ImageMetadata composite (5 standards bundle; possibly inlined into Image)
 
 src/image_processing/crop.h
-src/image_processing/scale.h            — one scale() taking ScalingQuality; replaces 3 named methods
+src/image_processing/scale.h — one scale taking ScalingQuality; replaces 3 named methods
 src/image_processing/rotate.h
-src/image_processing/color_convert.h    — convertYCC2RGB, convert_to_icc
-src/image_processing/channel_ops.h      — remove_channel, remove_extra_samples
-src/image_processing/bit_depth.h        — to_8bps, to_bitonal
-src/image_processing/watermark.h        — DEFERRED to Probe 5 / Watermark glossary entry
-src/image_processing/arithmetic.h       — operator-, operator+, operator==, compare (or test-only)
+src/image_processing/color_convert.h — convertYCC2RGB, convert_to_icc
+src/image_processing/channel_ops.h — remove_channel, remove_extra_samples
+src/image_processing/bit_depth.h — to_8bps, to_bitonal
+src/image_processing/watermark.h — DEFERRED to Probe 5 / Watermark glossary entry
+src/image_processing/arithmetic.h — operator-, operator+, operator==, compare (or test-only)
 ```
 
-**4. Private surface.** `.cpp` files implementing the above. The IO map / format dispatch moves to `format_handlers/`. The 5 friend classes (4 format handlers + `SipiIcc`) all go away — replaced by public `pixels_writable()` API + metadata setters + 1-2 new accessors for `iccFormatter`. The raw `byte *pixels` becomes `std::vector<byte>` (or `unique_ptr<byte[]>` if benchmarking shows any regression — the audit PR decides).
+**4. Private surface.** `.cpp` files implementing the above. The IO map / format dispatch moves to `format_handlers/`. The 5 friend classes (4 format handlers + `SipiIcc`) all go away — replaced by public `pixels_writable` API + metadata setters + 1-2 new accessors for `iccFormatter`. The raw `byte *pixels` becomes `std::vector<byte>` (or `unique_ptr<byte[]>` if benchmarking shows any regression — the audit PR decides).
 
 **5. Depth signal.** Six distinct responsibility groups in one class — textbook god-object:
 
@@ -248,9 +248,9 @@ src/image_processing/arithmetic.h       — operator-, operator+, operator==, co
 | --- | --- |
 | Image data container | `nx, ny, nc, bps, pixels (raw!), es, orientation, photo` |
 | Metadata holder | 4 `shared_ptr<Sipi{Exif,Icc,Iptc,Xmp}>` + `SipiEssentials` value |
-| Format I/O facade | static `io` map + `read()` / `readOriginal()` / `write()` / `getDim(filepath)` |
+| Format I/O facade | static `io` map + `read` / `readOriginal` / `write` / `getDim(filepath)` |
 | Image processing | `crop`, `scale`/`scaleFast`/`scaleMedium`, `rotate`, `convertYCC2RGB`, `convertToIcc`, `removeChannel`, `removeExtraSamples`, `to8bps`, `toBitonal`, `add_watermark`, `set_topleft` (12 methods) |
-| HTTP integration | `conobj` raw `shttps::Connection*` + `connection()` accessors |
+| HTTP integration | `conobj` raw `shttps::Connection*` + `connection` accessors |
 | Algebra / comparison | `operator-=`, `operator-`, `operator+=`, `operator+`, `operator==`, `compare`, `operator<<` |
 
 Plus **specific code smells**:
@@ -275,15 +275,15 @@ c. **Remove `app14_transform` field**. JPEG handler inverts CMYK/YCCK at decode 
 
 d. **Move static `io` map** to `format_handlers/`. SipiImage stops being a registry of format handlers.
 
-e. **Remove `conobj` field + `connection()` accessors**. Coupled with [DEV-6382](https://linear.app/dasch/issue/DEV-6382) (OutputSink with TeeSink for dual-write — see ADR-0006 / ADR-0007).
+e. **Remove `conobj` field + `connection` accessors**. Coupled with [tracked separately] (OutputSink with TeeSink for dual-write — see ADR-0006 / ADR-0007).
 
-f. **Add public `pixels_writable()` API + metadata setters**; remove the 4 format-handler friend declarations.
+f. **Add public `pixels_writable` API + metadata setters**; remove the 4 format-handler friend declarations.
 
 g. **Extract image-processing methods** to `src/image_processing/` free functions over `const Image&`. ~12 method-to-free-function rewrites at every call site.
 
 h. **Remove `SipiIcc` friend** (probably needs 1-2 new public Image accessors so `iccFormatter` works without internal access). Move arithmetic operators (`operator-`, `operator+`, `operator==`, `compare`) to free functions in `image_processing/arithmetic.{h,cpp}` or test-only.
 
-Bazel package promotion (steps d, f, g specifically) gated on [DEV-6341](https://linear.app/dasch/issue/DEV-6341) reaching Y+6. Steps a, b, c can land in CMake era.
+Bazel package promotion (steps d, f, g specifically) gated on [tracked separately] reaching Y+6. Steps a, b, c can land in CMake era.
 
 **8. Glossary delta.** Add **Image processing** (umbrella for the free-function module). Sharpen **Image** (the code-level class becomes a narrow value type post-refactor; domain term stays correct).
 
@@ -292,7 +292,7 @@ Bazel package promotion (steps d, f, g specifically) gated on [DEV-6341](https:/
 - **Lua-binding surface** ([SipiLua.cpp](../../src/SipiLua.cpp), Probe 6): the Lua API likely exposes `image:crop(...)` style method-call syntax; if so, the Lua binding layer absorbs the C++-method-to-free-function translation transparently. May require keeping thin facade methods on `Image` purely for binding ergonomics. Probe 6 resolves.
 - **Watermark module** (Probe 5): the watermark loading + applying logic might live entirely in route handlers (close to where `Permission` decides to apply it) rather than in `image_processing/`. Defer placement.
 - **`ImageMetadata` composite** — own type or just members of `Image`? Decide during implementation; tightly bundled either way.
-- **TeeSink composition** preserves the dual-write optimization (encoder writes to HTTP socket *and* cache file simultaneously). Documented in ADR-0006 + ADR-0007; implemented in DEV-6382.
+- **TeeSink composition** preserves the dual-write optimization (encoder writes to HTTP socket *and* cache file simultaneously). Documented in ADR-0006 + ADR-0007; implemented in .
 
 ## Probe 3 — `format_handlers/` (renamed from `formats/`)
 
@@ -330,8 +330,8 @@ Bazel package promotion (steps d, f, g specifically) gated on [DEV-6341](https:/
 
 **API modernization opportunities** (tracked in ADR-0006):
 
-1. Five `read()` overloads for default arguments → C++ default args.
-2. `bool read()` returns → `std::expected<void, IoError>`.
+1. Five `read` overloads for default arguments → C++ default args.
+2. `bool read` returns → `std::expected<void, IoError>`.
 3. `SipiImgInfo::success` tri-state enum → `std::expected<SipiImgInfo, ImgInfoError>`.
 4. `SipiCompressionParams = unordered_map<int, std::string>` (stringly-typed) → `std::variant<JpegParams, J2kParams, ...>`.
 5. Magic-string filepaths (`"-"` for stdout, `"HTTP"` for HTTP-server output) → `std::variant<FilePath, StdoutSink, HttpSink>`.
@@ -354,7 +354,7 @@ b. **Move headers**: `include/SipiIO.h` → `src/format_handlers/sipi_io.h`. `in
 
 c. **Forward-declare `SipiImage`** in headers; full include only in `.cpp`s. Eliminates `../../src/` cross-tree includes.
 
-d. **Implement ADR-0004** inside the existing `getDim()` virtual, then rename `getDim` → `read_shape` for self-documentation.
+d. **Implement ADR-0004** inside the existing `getDim` virtual, then rename `getDim` → `read_shape` for self-documentation.
 
 e. **Modernize the API per ADR-0006** — five changes, staged one PR per format handler after package promotion.
 
@@ -378,11 +378,11 @@ g. **Defer**: `SipiImage` heavy-include + friend-class coupling (Probe 4); magic
 
 | Outcome | Concern |
 | --- | --- |
-| New package `src/server/` | Server lifecycle: `class Server` (composition over `shttps::Server`), `ServerConfig` value type, `realpath()` imgroot validation, runtime-resource ownership (`Cache`, `RateLimiter`, `MemoryBudget`). |
+| New package `src/server/` | Server lifecycle: `class Server` (composition over `shttps::Server`), `ServerConfig` value type, `realpath` imgroot validation, runtime-resource ownership (`Cache`, `RateLimiter`, `MemoryBudget`). |
 | New package `src/route_handlers/` | URL-pattern-bound logic: shttps callbacks (`iiif_handler`, `health_handler`, `metrics_handler`, `favicon_handler`), `serve_*` per-route helpers, `register_routes(Server&, ServerContext)` public entry, preflight + error_response in `internal/` test seams, free-function `get_canonical_url`. |
 | Extension to `format_handlers/` | Two new public headers — `output_sink.h` (variant of `FilePath` / `StdoutSink` / `HttpSink` / `TeeSink`, callback-shape `HttpSink`) and `input_source.h` (variant of `FilePath` / `RangeSource`, callback-shape `RangeSource` for S3). Symmetric I/O abstractions. |
 | Extension to `image_processing/` | New file `watermark.{h,cpp}` exposing `apply_watermark(Image&, const Image&)`. Replaces `SipiImage::add_watermark` and the misplaced `read_watermark` free function (both deleted). |
-| Deferred (no Probe 5 outcome) | `iiif_parser/` (folds in `src/handlers/iiif_handler.{cpp,hpp}` per DEV-6399) — already on the plan; not new from this probe. |
+| Deferred (no Probe 5 outcome) | `iiif_parser/` (folds in `src/handlers/iiif_handler.{cpp,hpp}` per ) — already on the plan; not new from this probe. |
 
 Future Bazel packages: `//src/server:server`, `//src/route_handlers:route_handlers`. The `format_handlers/` and `image_processing/` extensions slot into existing planned packages.
 
@@ -391,22 +391,22 @@ Future Bazel packages: `//src/server:server`, `//src/route_handlers:route_handle
 **3. Public interface (proposed `hdrs`).**
 
 ```
-src/server/server.h                   — class Server (composition over shttps::Server)
-src/server/server_config.h            — struct ServerConfig (immutable bag of config)
+src/server/server.h — class Server (composition over shttps::Server)
+src/server/server_config.h — struct ServerConfig (immutable bag of config)
 
-src/route_handlers/route_handlers.h   — register_routes(shttps::Server&, const ServerContext&)
-src/route_handlers/server_context.h   — struct ServerContext (typed dependency bundle, server-scope)
-src/route_handlers/canonical_url.h    — free fn get_canonical_url(...)
+src/route_handlers/route_handlers.h — register_routes(shttps::Server&, const ServerContext&)
+src/route_handlers/server_context.h — struct ServerContext (typed dependency bundle, server-scope)
+src/route_handlers/canonical_url.h — free fn get_canonical_url(...)
 
-src/format_handlers/output_sink.h     — variant + 4 alternatives + free-fn dispatch
-src/format_handlers/input_source.h    — variant + 2 alternatives + free-fn dispatch
+src/format_handlers/output_sink.h — variant + 4 alternatives + free-fn dispatch
+src/format_handlers/input_source.h — variant + 2 alternatives + free-fn dispatch
 
-src/image_processing/watermark.h      — apply_watermark(Image&, const Image&)
+src/image_processing/watermark.h — apply_watermark(Image&, const Image&)
 ```
 
 **4. Private surface.**
 
-`server/server.cpp` (~150 lines): constructor, `run()` with `realpath()` imgroot validation + `register_routes()` + delegation to `_http.run()`, runtime-resource owners.
+`server/server.cpp` (~150 lines): constructor, `run` with `realpath` imgroot validation + `register_routes` + delegation to `_http.run`, runtime-resource owners.
 
 `route_handlers/`:
 - `iiif_handler.cpp` — shttps callback dispatcher (~50 lines), dispatches by URL parser into 5 `serve_*` functions.
@@ -426,8 +426,8 @@ src/image_processing/watermark.h      — apply_watermark(Image&, const Image&)
 
 | Package | hdrs / cpp | Verdict |
 | --- | --- | --- |
-| `server/` | 2 / 1 (~180 lines) | **deep** (lifecycle + composition + validation behind `Server::Server()` and `run()`) |
-| `route_handlers/` | 3 public / 2 internal / ~7 cpp (~1,800 lines) | **deep** (URL-table-binding + IIIF logic behind `register_routes()`; per-route logic behind `ServerContext`-only dependency surface) |
+| `server/` | 2 / 1 (~180 lines) | **deep** (lifecycle + composition + validation behind `Server::Server` and `run`) |
+| `route_handlers/` | 3 public / 2 internal / ~7 cpp (~1,800 lines) | **deep** (URL-table-binding + IIIF logic behind `register_routes`; per-route logic behind `ServerContext`-only dependency surface) |
 | `format_handlers/output_sink` | 1 / 1 (~80 lines) | **deep** (variant dispatch + codec-stream adapter glue in handlers' `.cpp`) |
 | `format_handlers/input_source` | 1 / 1 (~50 lines now; grows with S3 integration) | **deep** post-S3 |
 | `image_processing/watermark` | 1 / 1 (~120 lines) | reasonable (small but bounded; replaces 2 misplaced functions) |
@@ -437,8 +437,8 @@ src/image_processing/watermark.h      — apply_watermark(Image&, const Image&)
 - **God-pointer dependency.** Every handler does `static_cast<SipiHttpServer*>(user_data)` to reach into ~30 fields, of which it actually uses ~5. `ServerContext` makes the actual dependency surface explicit; Bazel `--strict_deps` enforces against accidental widening.
 - **Path-string typing for I/O.** Magic `"-"` and `"HTTP"` filename sentinels (called out in ADR-0006) replaced by `OutputSink`. Symmetric `InputSource` removes the path-string-only assumption from the read path, enabling S3 per ADR-0004.
 - **Manual cache-pin pairing.** `serve_iiif` has three explicit `cache->deblock(cachefile)` sites per branch (try-success, two catch-failures) at `SipiHttpServer.cpp:1796/1801/1804` → RAII `BlockedScope` (Probe 1 plan, confirmed by code).
-- **`shttps/Connection.h` in every format-handler `.cpp`.** Today every codec adapter (`J2kHttpStream`, `HtmlBuffer`, libpng `Connection*`, etc.) `#include`s shttps and reaches into `conobj->sendAndFlush()`. After the move, only the route handler's lambda touches `Connection`; format handlers see only `OutputSink`.
-- **Watermark loader duplicates `SipiIOTiff::read()`.** `read_watermark()` (decl `include/formats/SipiIOTiff.h:22`, def `src/formats/SipiIOTiff.cpp:314`) is a constrained mini-parser (bps==8 / `PLANARCONFIG_CONTIG` / 3-4 channels). Deleted; loading uses the format handler.
+- **`shttps/Connection.h` in every format-handler `.cpp`.** Today every codec adapter (`J2kHttpStream`, `HtmlBuffer`, libpng `Connection*`, etc.) `#include`s shttps and reaches into `conobj->sendAndFlush`. After the move, only the route handler's lambda touches `Connection`; format handlers see only `OutputSink`.
+- **Watermark loader duplicates `SipiIOTiff::read`.** `read_watermark` (decl `include/formats/SipiIOTiff.h:22`, def `src/formats/SipiIOTiff.cpp:314`) is a constrained mini-parser (bps==8 / `PLANARCONFIG_CONTIG` / 3-4 channels). Deleted; loading uses the format handler.
 - **`SipiImage::add_watermark` god-method.** Loading + applying entangled in one method on the image type. Replaced by `apply_watermark(Image&, const Image&)` free function with explicit two-step usage at the route handler.
 - **30-setter pattern on `SipiHttpServer`.** `sipi.cpp` lines 1581-1700 set 30 fields one by one (`server.ssl_port(...)`, `server.imgroot(...)`, …) on a half-built class. Replaced by `ServerConfig` value type passed at construction.
 - **Inheritance over `shttps::Server`.** Replaced by composition (`shttps::Server _http;` member); aligns with strangler-fig direction (when shttps moves to Rust, only the composition target changes; SIPI's server class stays). Forwarding methods only for what's actually needed.
@@ -447,11 +447,11 @@ src/image_processing/watermark.h      — apply_watermark(Image&, const Image&)
 
 **7. Action.** Twelve staged sub-PRs, each independently reversible:
 
-a. **`OutputSink` introduced** in `format_handlers/output_sink.h` — variant + alternatives + free-function dispatch + `TeeSink`. Format-handler `write()` signatures take `OutputSink&` instead of path string. Codec-stream adapters (`J2kHttpStream`, `HtmlBuffer`, etc.) updated. Removes the `"HTTP"` magic sentinel.
+a. **`OutputSink` introduced** in `format_handlers/output_sink.h` — variant + alternatives + free-function dispatch + `TeeSink`. Format-handler `write` signatures take `OutputSink&` instead of path string. Codec-stream adapters (`J2kHttpStream`, `HtmlBuffer`, etc.) updated. Removes the `"HTTP"` magic sentinel.
 
-b. **`InputSource` introduced** in `format_handlers/input_source.h` — symmetric to (a). Format-handler `read()` and `read_shape()` take `InputSource&`. `FilePath` integration in this PR; per-handler `RangeSource` integration deferred to (j).
+b. **`InputSource` introduced** in `format_handlers/input_source.h` — symmetric to (a). Format-handler `read` and `read_shape` take `InputSource&`. `FilePath` integration in this PR; per-handler `RangeSource` integration deferred to (j).
 
-c. **`SipiImage::conobj` removed** (Probe 4 step e, unblocked by (a)). Coupled with DEV-6382's `TeeSink` work.
+c. **`SipiImage::conobj` removed** (Probe 4 step e, unblocked by (a)). Coupled with 's `TeeSink` work.
 
 d. **`watermark/` extracted** to `image_processing/watermark.{h,cpp}`. `read_watermark` deleted; `SipiImage::add_watermark` deleted; replaced by `apply_watermark(Image&, const Image&)`. Route handler does explicit two-step load + apply.
 
@@ -467,11 +467,11 @@ i. **ADR-0006 amended** to add `InputSource` variant symmetric to `OutputSink`. 
 
 j. **Per-format-handler `RangeSource` integration** — kakadu, libtiff, libjpeg, libpng each get a custom-source-manager adapter wrapping `RangeSource`. One PR per handler. Gated on (b) + Bazel package promotion (Y+8c).
 
-k. **Bazel package promotion** of `server/` and `route_handlers/` per ADR-0003. Y+8 work; gated on DEV-6353 / DEV-6349.
+k. **Bazel package promotion** of `server/` and `route_handlers/` per ADR-0003. Y+8 work; gated on / .
 
 l. **Final cleanup** — delete `src/SipiHttpServer.{cpp,hpp}` once all responsibilities have moved.
 
-Bazel package promotions for new packages (`server/`, `route_handlers/`) extend DEV-6353's currently enumerated Y+8a..e scope; treat as Y+8f / Y+8g sub-PRs when DEV-6353 decomposes.
+Bazel package promotions for new packages (`server/`, `route_handlers/`) extend 's currently enumerated Y+8a..e scope; treat as Y+8f / Y+8g sub-PRs when decomposes.
 
 **8. Glossary delta.** Seven new entries + two confirmations of provisional entries + one sharpening — see [Glossary delta register](#glossary-delta-register). The `Watermark` and `Cache pin` candidate gaps from Probe 1 are confirmed and promoted from candidates to delta entries.
 
@@ -499,14 +499,14 @@ Future Bazel packages: `//src/lua_bindings:lua_bindings`, `//src/permission:perm
 **3. Public interface (proposed `hdrs`).**
 
 ```
-src/lua_bindings/lua_bindings.h    — register_sipi_globals(lua_State*, shttps::Connection&, LuaContext&)
-src/lua_bindings/lua_context.h     — struct LuaContext (server-scope; parallels ServerContext)
-src/lua_bindings/preflight.h       — call_iiif_preflight(...) → expected<Permission, Error>;
-                                     call_file_preflight(...) → expected<Permission, Error>
+src/lua_bindings/lua_bindings.h — register_sipi_globals(lua_State*, shttps::Connection&, LuaContext&)
+src/lua_bindings/lua_context.h — struct LuaContext (server-scope; parallels ServerContext)
+src/lua_bindings/preflight.h — call_iiif_preflight(...) → expected<Permission, Error>;
+ call_file_preflight(...) → expected<Permission, Error>
 
-src/permission/permission.h        — variant<AllowPermission, LoginPermission, ClickthroughPermission,
-                                              KioskPermission, ExternalPermission, RestrictPermission,
-                                              DenyPermission>
+src/permission/permission.h — variant<AllowPermission, LoginPermission, ClickthroughPermission,
+ KioskPermission, ExternalPermission, RestrictPermission,
+ DenyPermission>
 ```
 
 **4. Private surface.**
@@ -533,7 +533,7 @@ src/permission/permission.h        — variant<AllowPermission, LoginPermission,
 - **`sipiserver` Lua global god-pointer.** Every binding does `(SipiHttpServer*)lua_touserdata(L, -1)` to reach into the full server. Replaced by typed `LuaContext` carrying only `Cache&` (initially); Bazel `--strict_deps` enforces against accidental widening.
 - **`SImage { Image*; std::string*; }` raw-pointer wrapper** with manual `delete` in `__gc`. Replaced by by-value `SImage { Image; std::string; }` post-Probe-4. RAII via placement-destructor.
 - **Stringly-typed `Permission`** (`unordered_map<string, string>`). Replaced by per-type-struct variant in `permission/`. Compile-time exhaustiveness via `std::visit`; "DenyPermission with infile" anti-state is unrepresentable.
-- **Two-source-of-truth for cache state.** `cache.size()` / `cache.nfiles()` etc. duplicated `sipi_cache_size_bytes` / `sipi_cache_files`. Resolved by deletion of the `cache.*` cluster: Prometheus is the canonical inspection surface.
+- **Two-source-of-truth for cache state.** `cache.size` / `cache.nfiles` etc. duplicated `sipi_cache_size_bytes` / `sipi_cache_files`. Resolved by deletion of the `cache.*` cluster: Prometheus is the canonical inspection surface.
 - **Inline error returns** (`lua_pushboolean(false), lua_pushstring(msg)`). Paired with `std::expected` per ADR-0006; bindings use `SIPI_TRY` style or explicit dispatch.
 - **Lua as server-state mutation backdoor.** `cache.lua` deleted; the architectural principle is locked: **Lua is for request-shaping (preflight, custom content routes); server-state mutation is C++ in `route_handlers/`.** Audit follow-up for Probe 8 (`exit.lua` and similar candidates).
 
@@ -551,9 +551,9 @@ d. **Move preflight Lua-parsing** to `lua_bindings/preflight.{h,cpp}`. Returns `
 
 e. **Cascade Probe 4 method-to-free-function moves** into SipiImage Lua bindings. ~12 method-call sites change from `img->image->method(...)` to `image_processing::method(*img->image, ...)`. Lua scripts unchanged.
 
-f. **Refactor `SImage` userdata layout to by-value.** Gated on Probe 4's `Image` value-type changes (DEV-6390). RAII via placement-destructor in `__gc`.
+f. **Refactor `SImage` userdata layout to by-value.** Gated on Probe 4's `Image` value-type changes . RAII via placement-destructor in `__gc`.
 
-g. **Promote `lua_bindings/` and `permission/` to Bazel packages** per ADR-0003 (Y+8h, Y+8i — extends DEV-6353's currently enumerated scope).
+g. **Promote `lua_bindings/` and `permission/` to Bazel packages** per ADR-0003 (Y+8h, Y+8i — extends 's currently enumerated scope).
 
 h. **Add per-cluster unit tests during package promotion** — today: zero unit-test coverage for Lua bindings; covered only by integration tests through HTTP.
 
@@ -585,10 +585,10 @@ h. **Add per-cluster unit tests during package promotion** — today: zero unit-
 **3. Public interface (proposed `hdrs`).**
 
 ```
-src/throttling/output_size_guard.h   — class OutputSizeGuard + check(w, h) → optional<RejectReason>
-src/throttling/rate_limiter.h         — class RateLimiter + check_and_record(client_id, pixels)
-src/throttling/memory_budget.h        — class MemoryBudget + try_acquire(bytes) + RAII Guard
-src/throttling/client_id.h            — free fn client_id_from(Connection&) → string
+src/throttling/output_size_guard.h — class OutputSizeGuard + check(w, h) → optional<RejectReason>
+src/throttling/rate_limiter.h — class RateLimiter + check_and_record(client_id, pixels)
+src/throttling/memory_budget.h — class MemoryBudget + try_acquire(bytes) + RAII Guard
+src/throttling/client_id.h — free fn client_id_from(Connection&) → string
 ```
 
 No orchestrator entry point. Three independent entries called sequentially at one post-cache gate site in `route_handlers/serve_iiif.cpp`. A unified `throttling::admit(AdmissionRequest)` orchestrator was rejected as premature abstraction (one production caller, three policies, no plans for runtime composition; CLAUDE.md scope-discipline rule "prefer three similar lines over one parameterized helper").
@@ -634,15 +634,15 @@ e. **Promote to Bazel package** `//src/throttling:throttling` per ADR-0003. Co-l
 
 f. **Defer**: per-policy unit-test expansion if existing tests are insufficient post-relocation. Post-promotion, evaluate whether `output_size_guard` needs its own unit tests (likely yes — currently covered only by integration tests through HTTP).
 
-Bazel package promotion (step e) gated on [DEV-6353](https://linear.app/dasch/issue/DEV-6353) reaching Y+8. Steps a, b, c, d can land in CMake era.
+Bazel package promotion (step e) gated on [tracked separately] reaching Y+8. Steps a, b, c, d can land in CMake era.
 
 **8. Glossary delta.** See [Glossary delta register](#glossary-delta-register). Five entries: rename `Backpressure` → `Throttling`, add `Output size guard`, sharpen `Rate limiter` (post-cache placement), sharpen `Decode memory budget` (code-level placement), sharpen `Cache` (cache-hit short-circuits all Throttling gates).
 
 **9. Open questions for later probes.**
 - **Mode harmonization across the three policies.** Today: budget has OFF/MONITOR/ENFORCE; rate limiter has OFF/MONITOR/ENFORCE; output-size-guard has only "0=off, otherwise enforce." Worth aligning all three to OFF/MONITOR/ENFORCE for consistency. Defer to implementation time.
-- **Linear issue cutting** for the six sub-PRs — defer to Linear-issue-cutting pass when DEV-6353 decomposes.
+- **Linear issue cutting** for the six sub-PRs — defer to Linear-issue-cutting pass when decomposes.
 - **Probe 9 (Operational surface):** the three Throttling metrics families (`decode_memory_*`, `rate_limit_*`, `image_too_large_total`) live in `SipiMetrics`. When that probe lands, decide whether throttling-specific metrics get their own header / namespace inside the metrics module, or stay with the global registry.
-- **Should `compute_decode_dims` move to `image_processing/`?** Today it lives in `iiif_parser/` — pure IIIF semantics. Probe 4 (`image_processing/`) might pull it in if codec-side decode wrappers also start consuming it (likely, when reduce-level ROI-decode integrates with the format-handler `read()` path). Defer to Probe 4 follow-up.
+- **Should `compute_decode_dims` move to `image_processing/`?** Today it lives in `iiif_parser/` — pure IIIF semantics. Probe 4 (`image_processing/`) might pull it in if codec-side decode wrappers also start consuming it (likely, when reduce-level ROI-decode integrates with the format-handler `read` path). Defer to Probe 4 follow-up.
 
 ## Probe 8 — Curiosities and Lua-script audit
 
@@ -655,7 +655,7 @@ A **triage probe**, not a decomposition probe. Walks the unnamed C++ classes (`P
 | 1 | **Salsah cluster deletion** | Delete `Salsah.{h,cpp}`, `PhpSession.{h,cpp}`, `Template.{h,cpp}`, `--salsah` CLI flag (`sipi.cpp:649-650,:1230`), `_salsah_prefix` field + accessors (`SipiHttpServer.{hpp,cpp}` lines 47/107/109/2218/2254), `BUILD.bazel:143` "unwired" comment block, and the `mysql` link dependency. ~700 lines deleted. |
 | 2 | **Lua mutation / orphan deletion** | Delete `exit.lua`, `clean_temp_dir.lua`, `admin_upload.lua`, `debug.lua` + their config bindings. Per Probe 6 principle: server-state mutation does not live in Lua; lifecycle uses SIGTERM not HTTP. |
 | 3 | **Production-config cleanup** | Strip `test1.lua`, `test2.lua`, `test_sqlite.lua`, `test_functions.lua` bindings from `sipi.config.lua`. Keep them only in `sipi.test-config.lua`. Move the scripts themselves from `scripts/` → `test/scripts/`. |
-| 4 | **`Logger` promoted to `src/logging/`** | New Bazel package `//src/logging:logging`. `include/Logger.h` + `src/Logger.cpp` → `src/logging/logger.{h,cpp}`. The shttps consumption of Logger is documented as the second known layering leak in `CONTEXT.md` (alongside the existing `SipiMetrics::instance()` leak). |
+| 4 | **`Logger` promoted to `src/logging/`** | New Bazel package `//src/logging:logging`. `include/Logger.h` + `src/Logger.cpp` → `src/logging/logger.{h,cpp}`. The shttps consumption of Logger is documented as the second known layering leak in `CONTEXT.md` (alongside the existing `SipiMetrics::instance` leak). |
 | 5 | **`SipiReport` deferred** | Tightly CLI-mode-coupled (`--json` flag, schema-mirrors `ImageContext`). Defer placement to Probe 10 (`sipi.cpp` entry-point decomposition); SipiReport rides along when `src/cli/` settles. |
 
 Complementary work already in flight: [PR #619](https://github.com/dasch-swiss/sipi/pull/619) deletes `cache.lua` + the 8 `cache.*` Lua bindings (per Probe 6); same architectural principle.
@@ -697,7 +697,7 @@ See [Glossary delta register](#glossary-delta-register).
 | `token.lua` | `sipi.config.lua` | request-shaping (JWT) | **Keep** (audit pending). |
 | `orientation.lua` | `sipi.config.lua` | request-shaping | **Keep** (audit pending). |
 
-**4. The Logger cross-boundary leak.** Logger is consumed by 18+ files including `shttps/Server.{cpp,h}`, `shttps/LuaServer.cpp`, `shttps/Shttp.cpp`, `shttps/ThreadControl.cpp`. This violates the one-way `SIPI → shttps` direction documented in `CONTEXT-MAP.md`. Same shape as the existing `shttps/Server.cpp → SipiMetrics::instance()` leak — `CONTEXT.md` already documents that one with the prescribed fix (callback-hook on `shttps::Server`). The Logger leak is the **second** instance and is documented in `CONTEXT.md` with the same disposition: known transitional leak, awaits the strangler-fig migration to Rust (Rust shttps will use `tracing` crate; SIPI will use whatever its Rust replacement adopts).
+**4. The Logger cross-boundary leak.** Logger is consumed by 18+ files including `shttps/Server.{cpp,h}`, `shttps/LuaServer.cpp`, `shttps/Shttp.cpp`, `shttps/ThreadControl.cpp`. This violates the one-way `SIPI → shttps` direction documented in `CONTEXT-MAP.md`. Same shape as the existing `shttps/Server.cpp → SipiMetrics::instance` leak — `CONTEXT.md` already documents that one with the prescribed fix (callback-hook on `shttps::Server`). The Logger leak is the **second** instance and is documented in `CONTEXT.md` with the same disposition: known transitional leak, awaits the strangler-fig migration to Rust (Rust shttps will use `tracing` crate; SIPI will use whatever its Rust replacement adopts).
 
 The four SIPI-only symbols on Logger today (`set_cli_mode`, `is_cli_mode`, `set_json_mode`, `is_json_mode`) stay co-located in `src/logging/logger.h` despite being SIPI-domain — splitting a 32-line header into two files for a 4-symbol concern is diminishing returns. They're guarded by `std::atomic<bool>` already; thread-safety unaffected.
 
@@ -713,11 +713,11 @@ c. **Strip test_*.lua from production config; relocate scripts** — single PR. 
 
 d. **Promote `Logger` to `src/logging/`** — file rename PR. `include/Logger.h` → `src/logging/logger.h`; `src/Logger.cpp` → `src/logging/logger.cpp`. Update 23+ `#include "Logger.h"` sites (SIPI + shttps). No namespace flip in this PR — Logger is currently a global-namespace API; namespace migration deferred (or done as part of the Bazel-promotion PR).
 
-e. **Promote `//src/logging:logging` Bazel package** — Y+8k. Blocked on (d) + [DEV-6353](https://linear.app/dasch/issue/DEV-6353) reaching Y+8. Visibility: `["//src/...:__subpackages__", "//shttps:__pkg__"]` (the shttps allowlist documents the known leak in the build graph).
+e. **Promote `//src/logging:logging` Bazel package** — Y+8k. Blocked on (d) + [tracked separately] reaching Y+8. Visibility: `["//src/...:__subpackages__", "//shttps:__pkg__"]` (the shttps allowlist documents the known leak in the build graph).
 
 **7. Glossary delta.** See [Glossary delta register](#glossary-delta-register). Two adds + one note: add **Logger**, add **Mutation script** (anti-pattern term), note **CLI report** as deferred-to-Probe-10.
 
-**8. CONTEXT.md update.** Add the Logger layering leak to the `## Known layering leak` section in `CONTEXT.md`, alongside the existing `SipiMetrics::instance()` entry. Same disposition: tracked bug, transitional, fixed by Rust port.
+**8. CONTEXT.md update.** Add the Logger layering leak to the `## Known layering leak` section in `CONTEXT.md`, alongside the existing `SipiMetrics::instance` entry. Same disposition: tracked bug, transitional, fixed by Rust port.
 
 **9. Open questions for later probes.**
 - **`token.lua` / `orientation.lua` content audit.** Listed as keep but content not deeply read. Probe 9 or Probe 10 may surface follow-ups if either touches state mutation.
@@ -736,7 +736,7 @@ Why two packages, not one: telemetry is runtime instrumentation with many consum
 | Outcome | Action |
 |---|---|
 | New package `src/observability/` | Lifts `SipiMetrics`, `SipiConnectionMetricsAdapter`, `SipiSentry` (with header surgery — see below). Adds new `sentry_init.{h,cpp}` extracted from `sipi.cpp:442-484`. |
-| New package `src/config/` | `SipiConf` (Lua parser, kept) + new `ServerConfig` immutable value type + free fn `to_server_config(const SipiConf&)`. Unblocks [DEV-6444](https://linear.app/dasch/issue/DEV-6444) / [DEV-6450](https://linear.app/dasch/issue/DEV-6450) (Probe 5 ServerConfig work). |
+| New package `src/config/` | `SipiConf` (Lua parser, kept) + new `ServerConfig` immutable value type + free fn `to_server_config(const SipiConf&)`. Unblocks [tracked separately] / [tracked separately] (Probe 5 ServerConfig work). |
 | `SipiSentry` heavyweight-header surgery | Move all `inline` impls (`get_file_size`, `predefined_profile_to_string`, `populate_from_image`, `capture_image_error`, etc.) to `sentry.cpp`. Drop `#include "SipiImage.hpp"` from the public header. Eliminates a heavy transitive include from every Sentry consumer (today: `SipiImage.hpp` + 5 metadata headers + exiv2 + lcms2 in every TU that calls `capture_image_error`). |
 | Sentry init extraction | `sipi.cpp:442-484` (sentry_options_new + sentry_init + close) → `observability/sentry_init.{h,cpp}` with a `SentryConfig` struct. Env-var reading (`SIPI_SENTRY_DSN/ENVIRONMENT/RELEASE`) stays at the `sipi.cpp` call site (CLI-mode policy). |
 | `SipiMetrics` stays a singleton (for now) | Dependency injection is a tempting Probe-5/6-pattern extension but would touch 18+ call sites across SIPI + shttps for arguable correctness benefit. Singleton is the prevailing prometheus-cpp idiom. Probe 9 just **relocates** the singleton into `observability/metrics.{h,cpp}`. Defer DI to a separate cleanup if ever needed. |
@@ -746,14 +746,14 @@ Why two packages, not one: telemetry is runtime instrumentation with many consum
 **3. Public interface (proposed `hdrs`).**
 
 ```
-src/observability/metrics.h                       — class Metrics + instance() (singleton, relocated)
-src/observability/connection_metrics_adapter.h    — class ConnectionMetricsAdapter : shttps::ConnectionMetrics
-src/observability/sentry.h                        — ImageContext, capture_image_error(...), enum SipiMode
-src/observability/sentry_init.h                   — struct SentryConfig + init_sentry / close_sentry
+src/observability/metrics.h — class Metrics + instance (singleton, relocated)
+src/observability/connection_metrics_adapter.h — class ConnectionMetricsAdapter : shttps::ConnectionMetrics
+src/observability/sentry.h — ImageContext, capture_image_error(...), enum SipiMode
+src/observability/sentry_init.h — struct SentryConfig + init_sentry / close_sentry
 
-src/config/sipi_conf.h         — class SipiConf (Lua-binding parser; existing surface)
-src/config/server_config.h     — struct ServerConfig (immutable value type, 38 fields, 7 logical groups)
-                                  + free fn to_server_config(const SipiConf&) → ServerConfig
+src/config/sipi_conf.h — class SipiConf (Lua-binding parser; existing surface)
+src/config/server_config.h — struct ServerConfig (immutable value type, 38 fields, 7 logical groups)
+ + free fn to_server_config(const SipiConf&) → ServerConfig
 ```
 
 **4. Private surface.**
@@ -781,7 +781,7 @@ Knora field names (`knora_path`, `knora_port`) stay matching the Lua keys for tr
 
 **6. Depth signal.**
 
-- `observability/`: 4 public headers / 4 .cpp files / ~450 lines hidden. Deep — Prometheus instrumentation + Sentry-protocol packet construction + shttps strategy adapter. Small public surface (one `Metrics::instance()`, one `capture_image_error(...)`, one `ConnectionMetricsAdapter` ctor, one `init_sentry(SentryConfig)`).
+- `observability/`: 4 public headers / 4 .cpp files / ~450 lines hidden. Deep — Prometheus instrumentation + Sentry-protocol packet construction + shttps strategy adapter. Small public surface (one `Metrics::instance`, one `capture_image_error(...)`, one `ConnectionMetricsAdapter` ctor, one `init_sentry(SentryConfig)`).
 - `config/`: 2 public headers / 2 .cpp files / ~250 lines. Reasonable depth — Lua-binding parsing logic on the SipiConf side; mechanical translation on the ServerConfig side.
 
 **Specific code smells eliminated:**
@@ -801,30 +801,30 @@ a. **`SipiSentry` header surgery** — move all `inline` bodies to `sentry.cpp`;
 
 b. **Move `SipiMetrics` + `SipiConnectionMetricsAdapter` into `src/observability/`** — file-rename PR. `include/SipiMetrics.h` + `src/SipiMetrics.cpp` → `src/observability/metrics.{h,cpp}`. `include/SipiConnectionMetricsAdapter.h` + `src/SipiConnectionMetricsAdapter.cpp` → `src/observability/connection_metrics_adapter.{h,cpp}`. Class names: `SipiMetrics` → `Sipi::observability::Metrics`; `Sipi::SipiConnectionMetricsAdapter` → `Sipi::observability::ConnectionMetricsAdapter`. Update consumers.
 
-c. **Extract Sentry init** from `sipi.cpp:442-484` → `src/observability/sentry_init.{h,cpp}`. Define `Sipi::observability::SentryConfig` struct + free fns `init_sentry(const SentryConfig&)` / `close_sentry()`. Env-var reads stay at the `sipi.cpp` call site.
+c. **Extract Sentry init** from `sipi.cpp:442-484` → `src/observability/sentry_init.{h,cpp}`. Define `Sipi::observability::SentryConfig` struct + free fns `init_sentry(const SentryConfig&)` / `close_sentry`. Env-var reads stay at the `sipi.cpp` call site.
 
-d. **Promote `//src/observability:observability` Bazel package** (Y+8L) — gated on a + b + c + [DEV-6353](https://linear.app/dasch/issue/DEV-6353).
+d. **Promote `//src/observability:observability` Bazel package** (Y+8L) — gated on a + b + c + [tracked separately].
 
 **Config parent — four sub-PRs:**
 
 a. **Define `ServerConfig` value type** in new files `src/server_config.{h,cpp}` (top-level for now; moves into `config/` in step (c)). 38 fields, 7 logical groups. Add free fn `to_server_config(const SipiConf&) → ServerConfig`. No consumer changes yet.
 
-b. **Convert `SipiHttpServer` to consume `ServerConfig`** at construction. Drop 30 setters from `SipiHttpServer.hpp`. New ctor: `Server(const ServerConfig&)`. The 30-setter call cluster in `sipi.cpp:1581-1700` collapses to one aggregate construction. **Unblocks [DEV-6444](https://linear.app/dasch/issue/DEV-6444) and [DEV-6450](https://linear.app/dasch/issue/DEV-6450)** (Probe 5 deferred field list).
+b. **Convert `SipiHttpServer` to consume `ServerConfig`** at construction. Drop 30 setters from `SipiHttpServer.hpp`. New ctor: `Server(const ServerConfig&)`. The 30-setter call cluster in `sipi.cpp:1581-1700` collapses to one aggregate construction. **Unblocks [tracked separately] and [tracked separately]** (Probe 5 deferred field list).
 
 c. **Move `SipiConf` + `ServerConfig` into `src/config/`** — file-rename PR. `include/SipiConf.h` + `src/SipiConf.cpp` → `src/config/sipi_conf.{h,cpp}`. `src/server_config.{h,cpp}` (from step (a)) → `src/config/server_config.{h,cpp}`. Update consumers.
 
-d. **Promote `//src/config:config` Bazel package** (Y+8M) — gated on a + b + c + [DEV-6353](https://linear.app/dasch/issue/DEV-6353).
+d. **Promote `//src/config:config` Bazel package** (Y+8M) — gated on a + b + c + [tracked separately].
 
 **9. Open questions for later probes.**
 
-- **`SipiMetrics` dependency injection.** Defer indefinitely. Singleton is the prevailing prometheus-cpp idiom; the documented `shttps/Server.cpp → SipiMetrics::instance()` leak is the same shape as the Logger leak (Probe 8) — both await the strangler-fig Rust port. If a new SIPI consumer ever justifies typed access, revisit.
+- **`SipiMetrics` dependency injection.** Defer indefinitely. Singleton is the prevailing prometheus-cpp idiom; the documented `shttps/Server.cpp → SipiMetrics::instance` leak is the same shape as the Logger leak (Probe 8) — both await the strangler-fig Rust port. If a new SIPI consumer ever justifies typed access, revisit.
 - **Knora field rename.** `knora_path` / `knora_port` are deprecated names per the glossary. Field names stay matching Lua keys for back-compat traceability. Open question whether to rename internally to `dsp_path` / `dsp_port` post-Rust-port. Defer.
 - **`max_temp_file_age` vs cache.** The field's home (cache module vs server config) is currently in `ServerConfig`'s "Image storage" group; semantically it's a cache concern. Decide during implementation if it makes more sense to thread it through `Cache::Cache(...)` directly. Cosmetic.
 - **Shape of `scaling_quality`.** Currently `std::map<std::string, std::string>`. Probe 4 noted scaling-quality is a rendering concern; possibly worth a typed enum. Defer to Probe 4 follow-up; ServerConfig matches today's shape.
 
 ## Probe 10 — `cli/` (entry-point decomposition) + closing sweep
 
-The final probe. `sipi.cpp` is **1,712 lines** dominated by a ~1,280-line `int main()` that interleaves: CLI11 argument declarations (~400 lines), CLI-mode dispatchers (query / compare / convert), server-mode bootstrap, library initialisation, Sentry init, signal handling. After all prior probes' moves, the file is the last god-function in the codebase.
+The final probe. `sipi.cpp` is **1,712 lines** dominated by a ~1,280-line `int main` that interleaves: CLI11 argument declarations (~400 lines), CLI-mode dispatchers (query / compare / convert), server-mode bootstrap, library initialisation, Sentry init, signal handling. After all prior probes' moves, the file is the last god-function in the codebase.
 
 This probe also closes the deep-modules exercise with a directory sweep — every loose file under `src/` and `include/` gets a final verdict.
 
@@ -833,7 +833,7 @@ This probe also closes the deep-modules exercise with a directory sweep — ever
 | Outcome | Action |
 |---|---|
 | New package `src/cli/` | Houses CLI-mode dispatchers, server-mode bootstrap, CLI11 options, library init, system-resource detection (cgroup + sysctl), `SipiReport` (Probe 8 deferred decision settled), and `my_terminate_handler`. |
-| New top-level `src/main.cpp` | The `cc_binary`'s `int main()` ONLY — ~50 lines. The 1,280-line main collapses to: version check → terminate handler → Sentry init → library init → CLI11 parse → mode dispatch. Each branch hands off to a `Sipi::cli::run_*(opts)` entry point. |
+| New top-level `src/main.cpp` | The `cc_binary`'s `int main` ONLY — ~50 lines. The 1,280-line main collapses to: version check → terminate handler → Sentry init → library init → CLI11 parse → mode dispatch. Each branch hands off to a `Sipi::cli::run_*(opts)` entry point. |
 | `SipiReport` placement (Probe 8 deferred) | Confirmed: `src/cli/report.{h,cpp}` (CLI-only consumer; tightly coupled to `--json` flag). |
 | Closing sweep | Six loose files / directories classified — see §3 below. |
 
@@ -846,31 +846,31 @@ After all 9 prior probes' moves, the surviving loose files under `src/` + `inclu
 | File | Today | Verdict | Action |
 |---|---|---|---|
 | `include/SipiCommon.h` (14 lines) + `src/SipiCommon.cpp` (12 lines) | empty namespace declarations only (verified — no symbols inside) | **dead** | Delete outright. |
-| `include/SipiFilenameHash.h` (85 lines) + `src/SipiFilenameHash.cpp` (229 lines) | cache filename hashing helper | **misplaced** | Move into `src/cache/filename_hash.{h,cpp}` per Probe 1 ([DEV-6397](https://linear.app/dasch/issue/DEV-6397)). |
+| `include/SipiFilenameHash.h` (85 lines) + `src/SipiFilenameHash.cpp` (229 lines) | cache filename hashing helper | **misplaced** | Move into `src/cache/filename_hash.{h,cpp}` per Probe 1 ([tracked separately]). |
 | `src/SipiError.{hpp,cpp}` (69 + 33 lines) | SIPI-wide exception base type | **cross-cutting** | New small package `src/errors/sipi_error.{h,cpp}`. Every domain throws `SipiError`; small inheritance hierarchy; co-locating in any one domain would require dependency reverse-direction. Recommend new package. |
-| `src/SipiImageError.hpp` (129 lines) | image-specific exception thrown from image processing | **per-domain** | Move into `src/image/image_error.h` per Probe 4 ([DEV-6388](https://linear.app/dasch/issue/DEV-6388)). Inherits from `Sipi::errors::SipiError`. |
-| `include/favicon.h` | static favicon byte data | **co-locate with consumer** | Move into `src/route_handlers/favicon.h` per Probe 5 ([DEV-6440](https://linear.app/dasch/issue/DEV-6440)). Consumed only by `favicon_handler`. |
-| `include/CLI11.hpp` (~9 KLOC vendored) | vendored single-header library | **vendored dep** | Move out of `include/` into `ext/CLI11/`. Matches pattern of other vendored libs. The `include/` directory disappears entirely per [DEV-6353](https://linear.app/dasch/issue/DEV-6353) Y+8d. |
-| `include/ICC-Profiles/` + `include/VideoHD.icm` | static ICC profile binary data | **resource asset** | Move into `src/metadata/profiles/` (consumer-co-located with `metadata/`) per Probe 2 ([DEV-6398](https://linear.app/dasch/issue/DEV-6398)). |
+| `src/SipiImageError.hpp` (129 lines) | image-specific exception thrown from image processing | **per-domain** | Move into `src/image/image_error.h` per Probe 4 ([tracked separately]). Inherits from `Sipi::errors::SipiError`. |
+| `include/favicon.h` | static favicon byte data | **co-locate with consumer** | Move into `src/route_handlers/favicon.h` per Probe 5 ([tracked separately]). Consumed only by `favicon_handler`. |
+| `include/CLI11.hpp` (~9 KLOC vendored) | vendored single-header library | **vendored dep** | Move out of `include/` into `ext/CLI11/`. Matches pattern of other vendored libs. The `include/` directory disappears entirely per [tracked separately] Y+8d. |
+| `include/ICC-Profiles/` + `include/VideoHD.icm` | static ICC profile binary data | **resource asset** | Move into `src/metadata/profiles/` (consumer-co-located with `metadata/`) per Probe 2 ([tracked separately]). |
 
-The `include/` directory disappears entirely (per the Y+8d plan in DEV-6353) once all of these moves complete. No new headers ever land in `include/`; ADR-0003's co-located shape is the only direction going forward.
+The `include/` directory disappears entirely (per the Y+8d plan in ) once all of these moves complete. No new headers ever land in `include/`; ADR-0003's co-located shape is the only direction going forward.
 
 **4. Public interface (proposed `hdrs`).**
 
 ```
-src/cli/options.h            — Options struct + CLI11 declare_options(App&, Options&)
-src/cli/cli_mode.h           — run_query(opts), run_compare(opts), run_convert(opts) → int
-src/cli/server_mode.h        — run_server(opts) → int
+src/cli/options.h — Options struct + CLI11 declare_options(App&, Options&)
+src/cli/cli_mode.h — run_query(opts), run_compare(opts), run_convert(opts) → int
+src/cli/server_mode.h — run_server(opts) → int
 src/cli/library_initialiser.h — class LibraryInitialiser (RAII singleton)
-src/cli/system_resources.h    — detect_available_cores(), detect_available_memory()
-src/cli/report.h              — emit_json_report(...), emit_json_cli_arg_error(...) (lifted from SipiReport.h)
-src/cli/terminate_handler.h   — my_terminate_handler() declaration
-src/cli/sentry_env.h          — sentry_config_from_env() → optional<SentryConfig>
+src/cli/system_resources.h — detect_available_cores, detect_available_memory
+src/cli/report.h — emit_json_report(...), emit_json_cli_arg_error(...) (lifted from SipiReport.h)
+src/cli/terminate_handler.h — my_terminate_handler declaration
+src/cli/sentry_env.h — sentry_config_from_env → optional<SentryConfig>
 ```
 
 **5. Private surface.** ~7 .cpp files totaling ~1,400 lines lifted from `sipi.cpp`. The ~50-line `src/main.cpp` is the only top-level binary source after the move.
 
-**6. Depth signal.** Pre-Probe-10 `sipi.cpp` is **`god-function` / `god-file`** — 1,712 lines, one main() function dominating, six unrelated responsibility groups (option declarations, library init, Sentry init, CLI dispatchers, server bootstrap, signal handling). Post-Probe-10:
+**6. Depth signal.** Pre-Probe-10 `sipi.cpp` is **`god-function` / `god-file`** — 1,712 lines, one main function dominating, six unrelated responsibility groups (option declarations, library init, Sentry init, CLI dispatchers, server bootstrap, signal handling). Post-Probe-10:
 
 | Package | hdrs / cpp | Verdict |
 |---|---|---|
@@ -878,8 +878,8 @@ src/cli/sentry_env.h          — sentry_config_from_env() → optional<SentryCo
 | `src/main.cpp` | 0 / 1 / ~50 lines | **thin** (cc_binary entry point; mode dispatch only) |
 
 **Specific code smells eliminated:**
-- **1,280-line `int main()`** → 50-line dispatch.
-- **Sentry init duplicated in main + close paths** (the `sentry_close()` calls scattered across CLI-mode error branches at `:1060`, `:1067`, `:1174`, `:1181`, etc.) — replaced by RAII or by a single `Sipi::observability::close_sentry()` call at the right point. Probe 9a's `sentry_init.{h,cpp}` makes this clean.
+- **1,280-line `int main`** → 50-line dispatch.
+- **Sentry init duplicated in main + close paths** (the `sentry_close` calls scattered across CLI-mode error branches at `:1060`, `:1067`, `:1174`, `:1181`, etc.) — replaced by RAII or by a single `Sipi::observability::close_sentry` call at the right point. Probe 9a's `sentry_init.{h,cpp}` makes this clean.
 - **`detect_available_cores` / `detect_available_memory`** as static functions in `sipi.cpp` — promoted to a tested module (`system_resources.{h,cpp}`), unit-testable in isolation.
 - **`my_terminate_handler`** at `sipi.cpp:400` — moved into its own small file; lifecycle / signal-handling concerns separated from arg-parsing concerns.
 - **`SipiReport`'s top-level placement** — finally settled (Probe 8 deferred decision): lives in `cli/report.{h,cpp}` since it's purely CLI-mode (`--json` flag).
@@ -902,29 +902,29 @@ e. **Extract CLI11 `Options` struct + `declare_options`** to `src/cli/options.{h
 
 f. **Extract CLI-mode dispatchers** (`run_query`, `run_compare`, `run_convert`) to `src/cli/cli_mode.{h,cpp}`. ~600 lines covering the three CLI modes plus the `--json` integration.
 
-g. **Extract server-mode bootstrap** to `src/cli/server_mode.{h,cpp}`. Lua config loading + `to_server_config(SipiConf)` (gated on Probe 9b [DEV-6494](https://linear.app/dasch/issue/DEV-6494)) + `Server::Server(ServerConfig)` (gated on Probe 9b [DEV-6495](https://linear.app/dasch/issue/DEV-6495)) + `server.run()`.
+g. **Extract server-mode bootstrap** to `src/cli/server_mode.{h,cpp}`. Lua config loading + `to_server_config(SipiConf)` (gated on Probe 9b [tracked separately]) + `Server::Server(ServerConfig)` (gated on Probe 9b [tracked separately]) + `server.run`.
 
-h. **Slim `main()`** — replace `sipi.cpp` with a ~50-line `src/main.cpp` calling the per-mode dispatchers. Original `sipi.cpp` deleted.
+h. **Slim `main`** — replace `sipi.cpp` with a ~50-line `src/main.cpp` calling the per-mode dispatchers. Original `sipi.cpp` deleted.
 
-i. **Bazel package promotion** `//src/cli:cli` (Y+8N) — gated on a..h + [DEV-6353](https://linear.app/dasch/issue/DEV-6353).
+i. **Bazel package promotion** `//src/cli:cli` (Y+8N) — gated on a..h + [tracked separately].
 
 **Closing sweep parent — six sub-PRs:**
 
 j. Delete `SipiCommon.{h,cpp}` (empty namespace).
 
-k. Move `SipiFilenameHash.{h,cpp}` into `src/cache/filename_hash.{h,cpp}` — folds into Probe 1 cache parent ([DEV-6397](https://linear.app/dasch/issue/DEV-6397)).
+k. Move `SipiFilenameHash.{h,cpp}` into `src/cache/filename_hash.{h,cpp}` — folds into Probe 1 cache parent ([tracked separately]).
 
 l. Extract `SipiError` to new package `src/errors/sipi_error.{h,cpp}` — small new Bazel package or fold into a small "common" package alongside.
 
-m. Move `SipiImageError.hpp` into `src/image/image_error.h` — folds into Probe 4 image parent ([DEV-6388](https://linear.app/dasch/issue/DEV-6388)).
+m. Move `SipiImageError.hpp` into `src/image/image_error.h` — folds into Probe 4 image parent ([tracked separately]).
 
-n. Move `favicon.h` into `src/route_handlers/favicon.h` — folds into Probe 5 route_handlers parent ([DEV-6440](https://linear.app/dasch/issue/DEV-6440)).
+n. Move `favicon.h` into `src/route_handlers/favicon.h` — folds into Probe 5 route_handlers parent ([tracked separately]).
 
 o. Move `CLI11.hpp` from `include/` to `ext/CLI11/` — matches pattern of other vendored single-header libs.
 
-p. Move `ICC-Profiles/` + `VideoHD.icm` into `src/metadata/profiles/` — folds into Probe 2 metadata parent ([DEV-6398](https://linear.app/dasch/issue/DEV-6398)).
+p. Move `ICC-Profiles/` + `VideoHD.icm` into `src/metadata/profiles/` — folds into Probe 2 metadata parent ([tracked separately]).
 
-After (j)..(p): `include/` directory is empty (or contains only the `*.h.in` CMake-generated headers). The Y+8d step in [DEV-6353](https://linear.app/dasch/issue/DEV-6353) deletes `include/` entirely.
+After (j)..(p): `include/` directory is empty (or contains only the `*.h.in` CMake-generated headers). The Y+8d step in [tracked separately] deletes `include/` entirely.
 
 **9. Open questions for later (post-exercise).**
 
@@ -934,27 +934,27 @@ After (j)..(p): `include/` directory is empty (or contains only the `*.h.in` CMa
 
 ## Closing directory sweep — final state
 
-Post-Probes-1-10 + DEV-6353 Y+8 layout flip, `src/` contains exactly these packages:
+Post-Probes-1-10 + Y+8 layout flip, `src/` contains exactly these packages:
 
 ```
-src/cache/             (Probe 1)
-src/metadata/          (Probe 2)
-src/format_handlers/   (Probe 3)
-src/image/             (Probe 4) + image_processing/   (Probe 4)
-src/iiif_parser/       (Probe 4 follow-up + DEV-6399)
-src/route_handlers/    (Probe 5) + server/             (Probe 5)
-src/lua_bindings/      (Probe 6) + permission/         (Probe 6)
-src/throttling/        (Probe 7)
-src/logging/           (Probe 8)
-src/observability/     (Probe 9a)
-src/config/            (Probe 9b)
-src/cli/               (Probe 10)
-src/errors/            (Probe 10 closing sweep)
-src/main.cpp           (cc_binary entry, ~50 lines)
-src/BUILD.bazel        (top-level cc_binary declaration)
+src/cache/ (Probe 1)
+src/metadata/ (Probe 2)
+src/format_handlers/ (Probe 3)
+src/image/ (Probe 4) + image_processing/ (Probe 4)
+src/iiif_parser/ (Probe 4 follow-up + )
+src/route_handlers/ (Probe 5) + server/ (Probe 5)
+src/lua_bindings/ (Probe 6) + permission/ (Probe 6)
+src/throttling/ (Probe 7)
+src/logging/ (Probe 8)
+src/observability/ (Probe 9a)
+src/config/ (Probe 9b)
+src/cli/ (Probe 10)
+src/errors/ (Probe 10 closing sweep)
+src/main.cpp (cc_binary entry, ~50 lines)
+src/BUILD.bazel (top-level cc_binary declaration)
 ```
 
-`include/` is deleted entirely (per DEV-6353 Y+8d). `shttps/` is a separate context (not in this exercise's scope).
+`include/` is deleted entirely (per Y+8d). `shttps/` is a separate context (not in this exercise's scope).
 
 13 SIPI-side packages + 1 binary. The exercise's hypothesis (every glossary term corresponds to either a deep module, a scattered concept to extract, or a language-only term) is confirmed: the 13 packages map cleanly to the language, with the umbrella terms (Throttling, Observability, Image processing, Permission) showing up as both vocabulary umbrellas and code seams.
 
@@ -990,14 +990,14 @@ Pending edits to [`UBIQUITOUS_LANGUAGE.md`](../../UBIQUITOUS_LANGUAGE.md), accum
 | **Essentials packet** | sharpen further | Probe 3 | Per ADR-0004 (expanded scope): the packet's role broadens from "shape cache" to "shape + S3-access file-structure index." The load-bearing rationale shifts to remote storage (S3 in 3-6 months, NFS today). Contents: image shape (8 fields), per-format file-structure offsets (TIFF: per-IFD offset/size; JP2: codestream + per-resolution offsets), ICC profile, original filename / mimetype / hash / pixel checksum. Wire format CBOR (ADR-0005). Position: a known fixed prefix offset in the file (TIFF tag in the first IFD; JP2 UUID box near the start) so SIPI can fetch with one range GET of the prefix. |
 | **Image processing** | add | Probe 4 | Umbrella term for the free-function module (`src/image_processing/`) over `const Image&`: crop, scale, rotate, colour conversion, channel ops, bit-depth reduction, dithering, watermark application, comparison, arithmetic. Replaces the ~12 image-processing methods on the `SipiImage` god-object per ADR-0007. Free-function-over-value-type maps cleanly to Rust traits in the eventual port. |
 | **Image** | sharpen | Probe 4 | The domain-level term ("a pixel-bearing artefact processed through the IIIF pipeline") stays correct conceptually. The *code-level* `Image` class becomes a narrow value type post-refactor (geometry + photometric + RAII pixel buffer + metadata composite; ~15 public methods) per ADR-0007. Image-processing behaviour moves to free functions in `image_processing/`. |
-| **Tee sink** | add (provisional) | Probe 4 | Composition primitive in the `OutputSink` variant per ADR-0006: `TeeSink { std::vector<OutputSink> outputs; }` broadcasts each output chunk to multiple sub-sinks. Preserves SIPI's existing dual-write optimization (encoder writes simultaneously to HTTP socket + cache file). Generalises to write-through to S3 / other sinks. Provisional naming — confirm during DEV-6382 implementation. **Confirmed Probe 5** as a variant alternative in `format_handlers/output_sink.h`. |
-| **Server (Sipi side)** | sharpen | Probe 5 | Today: `class SipiHttpServer : public shttps::Server`. Post-refactor: `Sipi::Server` in `src/server/` *composing* (not inheriting) `shttps::Server`. Composition aligns with the strangler-fig direction in [ADR-0001](../adr/0001-shttps-as-strangler-fig-target.md): when shttps moves to Rust, only the composition target changes; SIPI's server class stays. The class becomes paper-thin (~180 lines): constructor, `run()` (realpath imgroot validation + `register_routes()` + delegation), runtime-resource owners. |
+| **Tee sink** | add (provisional) | Probe 4 | Composition primitive in the `OutputSink` variant per ADR-0006: `TeeSink { std::vector<OutputSink> outputs; }` broadcasts each output chunk to multiple sub-sinks. Preserves SIPI's existing dual-write optimization (encoder writes simultaneously to HTTP socket + cache file). Generalises to write-through to S3 / other sinks. Provisional naming — confirm during implementation. **Confirmed Probe 5** as a variant alternative in `format_handlers/output_sink.h`. |
+| **Server (Sipi side)** | sharpen | Probe 5 | Today: `class SipiHttpServer : public shttps::Server`. Post-refactor: `Sipi::Server` in `src/server/` *composing* (not inheriting) `shttps::Server`. Composition aligns with the strangler-fig direction in [ADR-0001](../adr/0001-shttps-as-strangler-fig-target.md): when shttps moves to Rust, only the composition target changes; SIPI's server class stays. The class becomes paper-thin (~180 lines): constructor, `run` (realpath imgroot validation + `register_routes` + delegation), runtime-resource owners. |
 | **Server config** | add | Probe 5 | Immutable C++ value type aggregating SIPI server configuration: imgroot, docroot, prefix-as-path, scaling-quality, jpeg-quality, j2k-compression-profiles, max-pixel-limit, salsah-prefix, dirs-to-exclude, plus shttps-side fields (port, threads, ssl, jwt). Replaces the 30-setter half-built-state pattern on `SipiHttpServer`. The C++ counterpart of `SipiConf` (Lua-bound config object). Detailed field list deferred to Probe 9. |
-| **Server context** | add | Probe 5 (renamed from `Route context` per Probe 6 follow-up) | Typed, server-scope dependency bundle passed to `register_routes()` and stored as the `user_data` argument of shttps's `add_route()`. Contains the const-references and pointers each route handler actually needs (`Cache&`, `RateLimiter*`, `MemoryBudget*`, `const ServerConfig&`, `start_time`, `resolved_imgroot`). Replaces today's `static_cast<SipiHttpServer*>(user_data)` god-pointer that reaches into ~30 fields when only ~5 are actually used. Bazel `--strict_deps` enforces against accidental widening. **Server-scope** (set once at registration, shared across requests); request-scope state stays in function arguments. Parallels [Lua context](#glossary-delta-register) (the server-scope bundle for Lua FFI). |
-| **Output sink** | add | Probe 5 | Typed sum type for write-path I/O destinations: `std::variant<FilePath, StdoutSink, HttpSink, TeeSink>`. Format-handler `write()` API takes one, replacing magic-string sentinels (`"-"` for stdout, `"HTTP"` for HTTP server). `HttpSink` carries opaque write/finalize callbacks, so `format_handlers/` does not depend on `shttps/`. `TeeSink` composes outputs for the dual-write-to-HTTP-and-cache optimization. Per ADR-0006. Lives in `format_handlers/output_sink.h`. |
-| **Input source** | add | Probe 5 | Typed sum type for read-path I/O sources: `std::variant<FilePath, RangeSource>`. Symmetric to `Output sink`. Format-handler `read()` and `read_shape()` API takes one, enabling the S3 transition per ADR-0004 without changing handler signatures. `RangeSource` carries an opaque byte-range-GET callback + total size; format handlers wrap it in codec-specific source-manager adapters (libtiff `TIFFClientOpen`, kakadu `kdu_compressed_source` subclass, libjpeg `jpeg_source_mgr`, libpng `png_set_read_fn`). Per ADR-0006 (amended in this session). Lives in `format_handlers/input_source.h`. |
+| **Server context** | add | Probe 5 (renamed from `Route context` per Probe 6 follow-up) | Typed, server-scope dependency bundle passed to `register_routes` and stored as the `user_data` argument of shttps's `add_route`. Contains the const-references and pointers each route handler actually needs (`Cache&`, `RateLimiter*`, `MemoryBudget*`, `const ServerConfig&`, `start_time`, `resolved_imgroot`). Replaces today's `static_cast<SipiHttpServer*>(user_data)` god-pointer that reaches into ~30 fields when only ~5 are actually used. Bazel `--strict_deps` enforces against accidental widening. **Server-scope** (set once at registration, shared across requests); request-scope state stays in function arguments. Parallels [Lua context](#glossary-delta-register) (the server-scope bundle for Lua FFI). |
+| **Output sink** | add | Probe 5 | Typed sum type for write-path I/O destinations: `std::variant<FilePath, StdoutSink, HttpSink, TeeSink>`. Format-handler `write` API takes one, replacing magic-string sentinels (`"-"` for stdout, `"HTTP"` for HTTP server). `HttpSink` carries opaque write/finalize callbacks, so `format_handlers/` does not depend on `shttps/`. `TeeSink` composes outputs for the dual-write-to-HTTP-and-cache optimization. Per ADR-0006. Lives in `format_handlers/output_sink.h`. |
+| **Input source** | add | Probe 5 | Typed sum type for read-path I/O sources: `std::variant<FilePath, RangeSource>`. Symmetric to `Output sink`. Format-handler `read` and `read_shape` API takes one, enabling the S3 transition per ADR-0004 without changing handler signatures. `RangeSource` carries an opaque byte-range-GET callback + total size; format handlers wrap it in codec-specific source-manager adapters (libtiff `TIFFClientOpen`, kakadu `kdu_compressed_source` subclass, libjpeg `jpeg_source_mgr`, libpng `png_set_read_fn`). Per ADR-0006 (amended in this session). Lives in `format_handlers/input_source.h`. |
 | **Range source** | add | Probe 5 | Variant alternative of `Input source` covering any backend that supports byte-range reads via callback: S3, Azure Blob, GCS, in-memory buffers. Names the *capability* (range reads), not the location (remote). Production target post-3-6-month S3 migration per ADR-0004. |
-| **Watermark** | confirm (was Probe 1 candidate) | Probe 1 candidate → confirmed Probe 5 | Overlay image applied to an `Image` before serving when `Permission.watermark` is set. The path on `Permission.watermark` is loaded into a regular `Image` via `format_handlers/SipiIOTiff::read()` (or its successor), then applied via free function `apply_watermark(Image& target, const Image& watermark)` in `image_processing/watermark.{h,cpp}`. Watermark presence extends the `Canonical URL` into the `Cache key` (`/0` or `/1` suffix). Replaces the misplaced `read_watermark` free function (deleted) and `SipiImage::add_watermark` method (deleted) — load + apply are decoupled. |
+| **Watermark** | confirm (was Probe 1 candidate) | Probe 1 candidate → confirmed Probe 5 | Overlay image applied to an `Image` before serving when `Permission.watermark` is set. The path on `Permission.watermark` is loaded into a regular `Image` via `format_handlers/SipiIOTiff::read` (or its successor), then applied via free function `apply_watermark(Image& target, const Image& watermark)` in `image_processing/watermark.{h,cpp}`. Watermark presence extends the `Canonical URL` into the `Cache key` (`/0` or `/1` suffix). Replaces the misplaced `read_watermark` free function (deleted) and `SipiImage::add_watermark` method (deleted) — load + apply are decoupled. |
 | **Cache pin** | confirm (was provisional) | Probe 1 → confirmed Probe 5 | Per-cachefile in-use refcount preventing eviction while a representation is being served. RAII type `BlockedScope` (per Probe 1) replaces today's manual `cache->check(infile, canonical, true)` paired with three explicit `cache->deblock(cachefile)` calls per `serve_iiif` branch (try-success, two catch-failures). Confirmed by reading `SipiHttpServer.cpp:1758-1804`. |
 | **C++ route handler** | sharpen | Probe 5 | Existing definition (Probe 1 follow-up): a `shttps::RequestHandler` callback registered at server startup. Probe 5 sharpens the registration mechanism: routes are registered via the `register_routes(shttps::Server&, const ServerContext&)` free function in `route_handlers/route_handlers.h`, not by code inside the server lifecycle. Adding a new C++ route is a code change inside `route_handlers/`, not inside `server/`. |
 | **Lua context** | add | Probe 6 | Server-scope typed dependency bundle passed to Lua-binding C functions via shttps's `add_lua_globals_func(func, user_data=&lua_context)`. Replaces today's `sipiserver` Lua lightuserdata global pointing at `SipiHttpServer*` (god-pointer). Carries the typed slice of server state Lua bindings actually use (initially `Cache&`; future entries when Lua admin scripts grow). Per-request data flows through Lua function arguments (e.g. `pre_flight(prefix, identifier, cookie)`), not through this bundle. **Server-scope** (set once at registration). Parallels `Server context` (the server-scope bundle for C++ route handlers, [Probe 5](#glossary-delta-register)). Lives in `lua_bindings/lua_context.h`. |
@@ -1008,21 +1008,21 @@ Pending edits to [`UBIQUITOUS_LANGUAGE.md`](../../UBIQUITOUS_LANGUAGE.md), accum
 | **Throttling** | rename (was `Backpressure`) | Probe 7 | Umbrella term for SIPI's load-driven request-rejection policies. Renamed from `Backpressure` because backpressure technically denotes upstream feedback flow control (TCP windows, Reactive Streams, bounded channels) — the consumer signals the producer to slow down. SIPI does not do this: it rejects under load with HTTP 429/503/400, which is *load shedding* / *throttling*. The new name was chosen specifically to (a) describe the rejection-style mechanism accurately (HTTP 429 = throttling response, common AWS / Azure / Kubernetes terminology), and (b) avoid colliding with `Permission` (the identity-driven authorization decision, also a form of admission control). Comprises three sub-policies: `Decode memory budget` (process-wide instantaneous decode RAM), `Rate limiter` (per-client sliding-window pixel rate), `Output size guard` (intrinsic max-output-pixels ceiling). All three fire at one post-cache gate site per Probe 7 + ADR-0008. Aliases to avoid: backpressure, flow control, admission control. Lives in `src/throttling/` post-Probe-7. |
 | **Output size guard** | add | Probe 7 | Third Throttling sub-policy. Stateless rejection of requests whose IIIF output dimensions exceed `max_pixel_limit` (i.e. `requested_w * requested_h > max_pixel_limit`). Returns HTTP 400 Bad Request. Currently inline at `SipiHttpServer.cpp:1631-1644`; promoted to a small class in `throttling/output_size_guard.{h,cpp}` post-Probe-7. Distinct in *kind* from the other two Throttling sub-policies — its trigger is intrinsic (the request's output is too big), not load-dependent (the server is stressed) — but shares the gate-site location, the OFF/ENFORCE shape, and the protection-against-oversized-work purpose. The slightly loose fit under "Throttling" was accepted in Probe 7 in preference to splitting the umbrella for one stateless policy. |
 | **Rate limiter** | sharpen | Probe 7 | Existing definition correct (per-client request-rate ceiling enforced before decode admission). Probe 7 sharpens placement: fires **post-cache** per [ADR-0008](../adr/0008-rate-limit-post-cache.md). Cache-hit responses are not rate-limited. The historical pre-cache placement was an over-fit to a non-existent attack model — harvest bots sweep unique URLs (cache-miss-dominant workload), so cache-hit rate-limiting was protecting against an attack scenario that doesn't appear in production. Code-level: lives in `throttling/rate_limiter.{h,cpp}` post-package promotion; class renamed `Sipi::SipiRateLimiter` → `Sipi::throttling::RateLimiter`. The stranded helper `resolve_client_id` (today at `SipiHttpServer.cpp:324`) becomes `Sipi::throttling::client_id_from(...)` in `throttling/client_id.{h,cpp}`. |
-| **Decode memory budget** | sharpen | Probe 7 | Existing definition correct. Probe 7 sharpens placement: lives in `throttling/memory_budget.{h,cpp}` post-package promotion; class renamed `Sipi::SipiMemoryBudget` → `Sipi::throttling::MemoryBudget`; helper `estimate_peak_memory()` moves to `throttling/internal/peak_memory.h` as a Test seam (Probe 2 pattern). Gate-site location unchanged — already post-cache today. |
+| **Decode memory budget** | sharpen | Probe 7 | Existing definition correct. Probe 7 sharpens placement: lives in `throttling/memory_budget.{h,cpp}` post-package promotion; class renamed `Sipi::SipiMemoryBudget` → `Sipi::throttling::MemoryBudget`; helper `estimate_peak_memory` moves to `throttling/internal/peak_memory.h` as a Test seam (Probe 2 pattern). Gate-site location unchanged — already post-cache today. |
 | **Cache** | sharpen further | Probe 7 | Existing definition (Probe 6 sharpening on inspection-via-Prometheus) carries forward. Probe 7 adds a placement note: cache-hit responses **bypass all three Throttling policies entirely** (per ADR-0008). The cache-hit short-circuit returns before any throttling gate fires. Cache hits are genuinely free at the response layer — no rate-limit accounting, no memory-budget acquire, no output-size check. This is a load-bearing fact for the throttling threat model: the rate limiter exists to mitigate harvest bots, which are by construction cache-miss-dominant. |
 | **Example dialogue** (UBIQUITOUS_LANGUAGE.md) | cleanup | Probe 7 | The line in the example dialogue ("we reject with backpressure — the request never touches the codec") rewords during the batched glossary edit pass to use the new umbrella name and the now-three-sub-policy framing. Cosmetic cleanup; tracked here so it isn't missed when the delta register flushes to `UBIQUITOUS_LANGUAGE.md`. |
-| **Logger** | add | Probe 8 | Basic logging primitives + level / mode control, used across both SIPI and shttps. Public API: `log_debug` / `log_info` / `log_warn` / `log_err`, `set_log_level` / `get_log_level`, plus four SIPI-only mode flags (`set_cli_mode`, `is_cli_mode`, `set_json_mode`, `is_json_mode`) that route logs to stderr when CLI mode emits a JSON document on stdout. Lives in `src/logging/` post-Probe-8. The shttps consumption of Logger is documented as a known layering leak in `CONTEXT.md` (the second leak alongside `SipiMetrics::instance()`); both leaks await the strangler-fig Rust port. |
+| **Logger** | add | Probe 8 | Basic logging primitives + level / mode control, used across both SIPI and shttps. Public API: `log_debug` / `log_info` / `log_warn` / `log_err`, `set_log_level` / `get_log_level`, plus four SIPI-only mode flags (`set_cli_mode`, `is_cli_mode`, `set_json_mode`, `is_json_mode`) that route logs to stderr when CLI mode emits a JSON document on stdout. Lives in `src/logging/` post-Probe-8. The shttps consumption of Logger is documented as a known layering leak in `CONTEXT.md` (the second leak alongside `SipiMetrics::instance`); both leaks await the strangler-fig Rust port. |
 | **Mutation script** | add (anti-pattern) | Probe 8 | Formalizes the [Probe 6 principle](#probe-6--lua_bindings-renamed-from-sipilua-decomposition). A *Lua route handler* that mutates **server state** (cache eviction, server lifecycle, filesystem cleanup, config reload, …) is a Mutation script and is forbidden in SIPI. The canonical surface for server-state mutation is a *C++ route handler* (or a signal handler for lifecycle). Probe 6 deleted the `cache.*` cluster + `cache.lua` ([PR #619](https://github.com/dasch-swiss/sipi/pull/619)); Probe 8 deletes `exit.lua`, `clean_temp_dir.lua`, `admin_upload.lua`, `debug.lua`. Lua route handlers are kept only for **request-shaping** (preflight permission decisions, content-shaping endpoints like `upload.lua`). |
 | **CLI report** | add (deferred) | Probe 8 → Probe 10 | The structured JSON document `SipiReport::emit_json_report` writes to stdout when the `--json` CLI flag is set. Schema mirrors `ImageContext` (the Sentry context struct). Used so environments without a Sentry DSN still get the full diagnostic payload. Glossary entry deferred to Probe 10 (`sipi.cpp` entry-point decomposition); name + final placement settle there. |
 | **Lua route handler** | sharpen further | Probe 8 | The Probe 6 sharpening (request-shaping vs server-state-mutation) carries forward. Probe 8 enumerates the surviving content-shaping cluster after PR #619 + Probe 8 deletions: `upload.lua`, `send_response.lua` (utility module), `token.lua`, `orientation.lua`. Test-only scripts (`test1.lua`, `test2.lua`, `test_sqlite.lua`, `test_functions.lua`) are not Lua route handlers — they're test scaffolding and move to `test/scripts/` per Probe 8. |
 | **Observability** | add (umbrella) | Probe 9 | Umbrella term for the operational telemetry surface. Comprises three sub-concerns: **Metrics** (Prometheus instrumentation), **Sentry context** (the `ImageContext` + `capture_image_error` pattern for per-image-error capture), and **Connection metrics adapter** (the canonical inversion-of-control bridge between `shttps::ConnectionMetrics` and SIPI's metrics registry). Lives in `src/observability/` post-Probe-9. Distinct from `src/logging/` (which handles SIPI's structured-log primitives) — observability is the umbrella for what crosses the SIPI/shttps boundary as telemetry; logging is a SIPI-side utility. Both await the strangler-fig Rust port for the boundary-leak fixes (per `CONTEXT.md`). |
-| **Metrics** | add | Probe 9 | The Prometheus instrumentation surface. ~25 metrics today: counters (cache hits/misses/evictions/skips, image-too-large, client-disconnects, memory-alloc-failures, rate-limit decisions, decode-memory decisions, rejected-connections), gauges (waiting-connections, cache size/files, decode-memory-budget/used, rate-limit-clients-tracked, build-info), histograms (request duration, decode-memory estimate). Exposed at `GET /metrics` (text-format `text/plain; version=0.0.4`). Singleton today (relocated, not redesigned, in Probe 9); the `shttps/Server.cpp → SipiMetrics::instance()` consumption is documented as the first known layering leak in `CONTEXT.md`. Code-level: lives in `observability/metrics.{h,cpp}` post-Probe-9; class renamed `SipiMetrics` → `Sipi::observability::Metrics`. |
+| **Metrics** | add | Probe 9 | The Prometheus instrumentation surface. ~25 metrics today: counters (cache hits/misses/evictions/skips, image-too-large, client-disconnects, memory-alloc-failures, rate-limit decisions, decode-memory decisions, rejected-connections), gauges (waiting-connections, cache size/files, decode-memory-budget/used, rate-limit-clients-tracked, build-info), histograms (request duration, decode-memory estimate). Exposed at `GET /metrics` (text-format `text/plain; version=0.0.4`). Singleton today (relocated, not redesigned, in Probe 9); the `shttps/Server.cpp → SipiMetrics::instance` consumption is documented as the first known layering leak in `CONTEXT.md`. Code-level: lives in `observability/metrics.{h,cpp}` post-Probe-9; class renamed `SipiMetrics` → `Sipi::observability::Metrics`. |
 | **Sentry context** | add | Probe 9 | The error-capture payload sent to Sentry from SIPI. Comprises an `ImageContext` struct (12 fields: `input_file`, `output_file`, `output_format`, `width`, `height`, `channels`, `bps`, `colorspace`, `icc_profile_type`, `orientation`, `file_size_bytes`, `request_uri`) plus the `capture_image_error(error_message, phase, ctx, mode)` entry point. `phase` is `"read" / "convert" / "write" / "cli_args"`. `mode` is `SipiMode::CLI` (blocking flush, 2s) or `SipiMode::Server` (non-blocking flush). Lives in `observability/sentry.{h,cpp}` post-Probe-9; thread-safe (tags attached to event, not global scope). |
-| **Connection metrics adapter** | add | Probe 9 | The canonical inversion-of-control bridge for cross-context telemetry. shttps owns the `shttps::ConnectionMetrics` strategy interface (3 methods: `onConnectionsRejected`, `onWaitingConnectionsChanged`, `onRequestComplete`); SIPI installs a `Sipi::observability::ConnectionMetricsAdapter` instance on `shttps::Server` at startup that translates events into Prometheus updates on the `Metrics` singleton. shttps holds no reverse dependency on `Sipi::` symbols. **This is the prescribed pattern for resolving cross-boundary observability without violating one-way SIPI → shttps direction**; the existing `SipiMetrics::instance()` leak from `shttps/Server.cpp` (CONTEXT.md known-layering-leak entry #1) and the Logger leak (Probe 8, leak #2) both await analogous fixes. |
-| **Server config** | add | Probe 9 | Immutable C++ value type aggregating SIPI runtime configuration: 38 fields in 7 logical groups (Network/TLS, Image storage, Encoding, Cache, Lua, Webserver/Auth/Logging, Concurrency, Throttling). Constructed by `Sipi::config::to_server_config(const SipiConf&) → ServerConfig` after Lua parsing. Replaces the 30-setter half-built-state pattern on `SipiHttpServer` (`sipi.cpp:1581-1700`). The C++ counterpart of `SipiConf` (Lua-bound parser); the runtime sees only `ServerConfig`, never `SipiConf`. **Unblocks Probe 5's deferred field list (DEV-6444 / DEV-6450).** Lives in `config/server_config.{h,cpp}` post-Probe-9. |
+| **Connection metrics adapter** | add | Probe 9 | The canonical inversion-of-control bridge for cross-context telemetry. shttps owns the `shttps::ConnectionMetrics` strategy interface (3 methods: `onConnectionsRejected`, `onWaitingConnectionsChanged`, `onRequestComplete`); SIPI installs a `Sipi::observability::ConnectionMetricsAdapter` instance on `shttps::Server` at startup that translates events into Prometheus updates on the `Metrics` singleton. shttps holds no reverse dependency on `Sipi::` symbols. **This is the prescribed pattern for resolving cross-boundary observability without violating one-way SIPI → shttps direction**; the existing `SipiMetrics::instance` leak from `shttps/Server.cpp` (CONTEXT.md known-layering-leak entry #1) and the Logger leak (Probe 8, leak #2) both await analogous fixes. |
+| **Server config** | add | Probe 9 | Immutable C++ value type aggregating SIPI runtime configuration: 38 fields in 7 logical groups (Network/TLS, Image storage, Encoding, Cache, Lua, Webserver/Auth/Logging, Concurrency, Throttling). Constructed by `Sipi::config::to_server_config(const SipiConf&) → ServerConfig` after Lua parsing. Replaces the 30-setter half-built-state pattern on `SipiHttpServer` (`sipi.cpp:1581-1700`). The C++ counterpart of `SipiConf` (Lua-bound parser); the runtime sees only `ServerConfig`, never `SipiConf`. **Unblocks Probe 5's deferred field list .** Lives in `config/server_config.{h,cpp}` post-Probe-9. |
 | **`SipiMode`** | sharpen (provisional → confirmed) | Probe 9 | Existing CLI vs Server distinction confirmed and elevated. Used by Sentry flush behaviour (CLI: blocking 2s flush before exit; Server: non-blocking flush to avoid stalling request threads), by error-reporting paths (`capture_image_error(..., SipiMode mode)`), and by the route-handler / format-handler asymmetries documented earlier (Server reads service masters; CLI writes them). Promoted from informal usage to glossary term. |
 | **CLI report** | add (was deferred from Probe 8) | Probe 10 | The structured JSON document that `emit_json_report` writes to stdout when the `--json` CLI flag is set. Schema mirrors `ImageContext` (the Sentry context — see [`Sentry context`](#glossary-delta-register)) so environments without a Sentry DSN still get the full diagnostic payload. Top-level keys: `status` (`"ok"` / `"error"`), `phase` (`"cli_args"` / `"read"` / `"convert"` / `"write"`), `error_message`, and an `image` object populated from `ImageContext`. On `phase == "cli_args"` the `image` object is omitted (no image was loaded yet). Lives in `cli/report.{h,cpp}` post-Probe-10 (Probe 8 deferred decision settled here — placement is CLI-only, not observability). |
-| **CLI mode** | confirm + elevate | Probe 10 | Existing entry from Probe 1 confirmed and elevated. Post-Probe-10 the CLI/server boundary is a *code* boundary: `src/cli/cli_mode.{h,cpp}` (`run_query`, `run_compare`, `run_convert`) is exclusively CLI mode; `src/cli/server_mode.{h,cpp}` (`run_server`) is exclusively server mode. Each maps to one branch of the slim `int main()` dispatch. **CLI mode characteristics:** one-shot invocation, blocking Sentry flush, `--json` report on stdout, `set_cli_mode(true)` redirects logs to stderr. |
+| **CLI mode** | confirm + elevate | Probe 10 | Existing entry from Probe 1 confirmed and elevated. Post-Probe-10 the CLI/server boundary is a *code* boundary: `src/cli/cli_mode.{h,cpp}` (`run_query`, `run_compare`, `run_convert`) is exclusively CLI mode; `src/cli/server_mode.{h,cpp}` (`run_server`) is exclusively server mode. Each maps to one branch of the slim `int main` dispatch. **CLI mode characteristics:** one-shot invocation, blocking Sentry flush, `--json` report on stdout, `set_cli_mode(true)` redirects logs to stderr. |
 | **Server mode** | confirm + elevate | Probe 10 | Existing entry from Probe 1 confirmed and elevated to code-boundary status (see CLI mode entry above). **Server mode characteristics:** long-running HTTP server, `ServerConfig` value type at construction (Probe 9b), three Throttling sub-policies at the post-cache gate (Probe 7), the Connection metrics adapter installed on shttps at startup (Probe 9a), non-blocking Sentry flush. |
 
 ## Candidate gaps already spotted (pre-probe)
@@ -1060,7 +1060,7 @@ This section described how to cold-start re-entry into the live exercise. The ex
 - **Batch glossary edits.** Add rows to the delta register per probe; apply to `UBIQUITOUS_LANGUAGE.md` in one editing pass.
 - **ADRs are sparing.** Only when all three of (hard to reverse, surprising without context, real trade-off) hold.
 - **Bound by [ADR-0001](../adr/0001-shttps-as-strangler-fig-target.md).** Reshaping SIPI ↔ shttps seams is bounded by the strangler-fig direction. SIPI-side modules can absorb work re-homed *from* shttps (see `CONTEXT.md` "Re-homing schedule"), but new SIPI → shttps coupling is out of scope.
-- **Aligned with the Bazel migration's Y+8 tracker ([DEV-6353](https://linear.app/dasch/issue/DEV-6353)).** The per-module Bazel-package promotions surfaced by these probes (one per module: `cache/`, `metadata/`, `format_handlers/`, `iiif_parser/`, …) are exactly Y+8a..Y+8e in the migration plan — five sequential mechanical PRs, gated on Y+7 cleanup ([DEV-6349](https://linear.app/dasch/issue/DEV-6349)) merging. Probe outcomes that promote existing directories to Bazel packages should be considered Y+8 work and dependency-modelled against DEV-6353. Probe outcomes that *create new packages* (e.g. `image/` and `image_processing/` from Probe 4) are also Y+8-positioned but extend the plan's currently enumerated scope; they may land as additional sub-PRs (Y+8f, etc.) when DEV-6353 is decomposed (per its note: "Decompose when DEV-6349 is in QA").
+- **Aligned with the Bazel migration's Y+8 tracker ([tracked separately]).** The per-module Bazel-package promotions surfaced by these probes (one per module: `cache/`, `metadata/`, `format_handlers/`, `iiif_parser/`, …) are exactly Y+8a..Y+8e in the migration plan — five sequential mechanical PRs, gated on Y+7 cleanup ([tracked separately]) merging. Probe outcomes that promote existing directories to Bazel packages should be considered Y+8 work and dependency-modelled against . Probe outcomes that *create new packages* (e.g. `image/` and `image_processing/` from Probe 4) are also Y+8-positioned but extend the plan's currently enumerated scope; they may land as additional sub-PRs (Y+8f, etc.) when is decomposed (per its note: "Decompose when is in QA").
 - **Module directory naming.** `snake_case` for compound words (`iiif_parser/`, `format_handlers/`, `route_handlers/`, `image_shape/`); single word otherwise (`cache/`, `metadata/`, `throttling/`). Plural for collections of sibling types (`format_handlers/` — four format-handler classes; `route_handlers/` — multiple route-callback functions); singular for topics, mass nouns, or single concepts (`cache/`, `metadata/`, `throttling/`, `iiif_parser/`). The `name` answers *what kind of thing this directory is about*, not *how many things are inside*. Aligns with Rust target, Google C++ Style Guide, Abseil / Chromium / BDE conventions. The `.cpp` / `.h` *file*-naming convention (PascalCase `SipiCache.cpp` vs snake_case `cache.cpp` vs BDE-style `sipi_cache.cpp`) is a separate, deferred decision — out of scope for the deep-modules exercise; will get its own ADR if and when it lands.
 - **Disambiguate overloaded terms with umbrella + sub-types.** When a glossary term naturally covers multiple variants (different implementation language, different layer, different lifecycle), promote it to an umbrella in `UBIQUITOUS_LANGUAGE.md` and define each variant as a sub-type. Example: `Route handler` umbrella with `C++ route handler` + `Lua route handler` sub-types. This is preferred over silent overload (the source of `CONTEXT.md`'s mid-paragraph clarifications about `RequestHandler` vs `Route handler` and the two `file_handler`s).
 - **Rust-aligned, transitional C++.** SIPI's C++ codebase is transitional ahead of the strangler-fig migration to Rust ([ADR-0001](../adr/0001-shttps-as-strangler-fig-target.md)). When choosing between a more-ergonomic C++ pattern that won't survive the Rust port and a less-ergonomic one that will, prefer the latter. Examples: `std::expected<T, E>` over `absl::StatusOr<T>` (the former maps directly to Rust's `Result<T, E>`; the latter implies adopting Abseil, a C++-only commitment); `std::variant<A, B>` over inheritance hierarchies (maps to Rust enums / sum types); RAII + `unique_ptr` over exception-based ownership (maps to Rust's move semantics). Cosmetic ergonomic gaps (e.g. `std::expected`'s lack of a `?` operator) are addressed by small SIPI-local helpers (e.g. a `SIPI_TRY` macro), not by adopting upstream libraries that don't outlive the C++ codebase.

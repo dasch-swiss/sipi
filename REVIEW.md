@@ -53,7 +53,7 @@
 - New metrics use correct Prometheus types (counter for monotonic, gauge for current state, histogram for distributions)
 - Metric names follow `sipi_` prefix convention with `_total` suffix for counters
 - Instrumentation in the correct layer (not duplicated across call chain)
-- shttps-side instrumentation (request lifecycle, queue events) emits through the `shttps::ConnectionMetrics` Strategy interface (`shttps/ConnectionMetrics.h`) — never call `Sipi::SipiMetrics::instance()` directly from `shttps/`. The SIPI → shttps direction is enforced by `package_group()` visibility under Bazel and by `scripts/shttps-context-check.sh` under CMake
+- shttps-side instrumentation (request lifecycle, queue events) emits through the `shttps::ConnectionMetrics` Strategy interface (`shttps/ConnectionMetrics.h`) — never call `Sipi::SipiMetrics::instance()` directly from `shttps/`. The SIPI → shttps direction is enforced by `package_group()` visibility in `BUILD.bazel`; `scripts/shttps-context-check.sh` is the advisory pre-commit grep variant of the same rule
 
 ### Thread safety
 - Shared mutable state protected by `std::mutex` + `std::scoped_lock` or `std::atomic`
@@ -74,8 +74,7 @@
 
 ## Skip
 
-- Generated files under `ext/` (third-party vendored dependencies)
+- Generated files under `ext/` (third-party `rules_foreign_cc` build wrappers; updates flow from `MODULE.bazel`'s `http_archive` pins)
 - Formatting-only changes (enforced by clang-format)
-- Files under `vendor/` (LFS-tracked dependency archives)
 - Lua script changes in `scripts/` that only modify response text (not logic)
 - Changes to `CHANGELOG.md`, `version.txt`, or `manifest.json` (managed by release-please)

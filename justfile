@@ -96,9 +96,9 @@ bazel-coverage *FLAGS='':
             --stamp \
             //test/unit/... //test/approval/... //test/e2e-rust/... {{FLAGS}}
 
-# Run every GoogleTest unit-test target under //test/unit/. Covers all
-# 12 components (sipiimage joined the Bazel run in DEV-6354). Useful
-# for inner-loop development; CI runs unit tests via `bazel-coverage`.
+# Run every GoogleTest unit-test target under //test/unit/.
+# Useful for inner-loop development; CI runs unit tests via
+# `bazel-coverage`.
 bazel-test-unit:
     bazel test //test/unit/...
 
@@ -136,10 +136,10 @@ bazel-test-e2e *FLAGS='':
 bazel-test-smoke *FLAGS='':
     bazel test --stamp --verbose_failures {{FLAGS}} //test/e2e-rust:docker_smoke
 
-# Sanitized build: Debug + ASan + UBSan via Bazel `--config=asan --config=ubsan`.
-# Replaces the deleted `.#sanitized` Nix variant (DEV-6344, PR Y+2). The
-# resulting binary at `bazel-bin/src/sipi` is what `sanitizer.yml`'s e2e
-# step consumes via `SIPI_BIN`. DWARF stays inline (`--strip=never` in
+# Sanitized build: Debug + ASan + UBSan via Bazel
+# `--config=asan --config=ubsan`. The resulting binary at
+# `bazel-bin/src/sipi` is what `sanitizer.yml`'s e2e step consumes
+# via `SIPI_BIN`. DWARF stays inline (`--strip=never` in
 # `.bazelrc`) so the symbol-name suppressions in `.lsan_suppressions.txt`
 # match. `--verbose_failures` surfaces the underlying cmake/make output
 # from any failing `rules_foreign_cc` ext/* dep — without it, Bazel only
@@ -174,9 +174,9 @@ _fuzz-platform:
             ;;
     esac
 
-# Fuzz harness build: produces the libFuzzer binary only. Replaces the
-# deleted `.#fuzz` Nix variant (DEV-6345, PR Y+3). The `--platforms=` is
-# resolved by `_fuzz-platform` from the host (`uname`) — linux-x86_64
+# Fuzz harness build: produces the libFuzzer binary only. The
+# `--platforms=` is resolved by `_fuzz-platform` from the host
+# (`uname`) — linux-x86_64
 # routes to the libstdc++ toolchain, darwin-aarch64 to the default
 # libc++ toolchain. The `target_compatible_with = ["//tools/fuzz:fuzz_enabled"]`
 # gate on the binary activates under both. CI's `fuzz.yml` workflow's
@@ -238,7 +238,7 @@ bazel-run-fuzz corpus duration seed="":
         -max_total_time={{duration}} -timeout=1 -rss_limit_mb=1024 -print_final_stats=1
 
 #####################################
-# Bazel Docker (DEV-6346, PR Y+4)
+# Bazel Docker (rules_oci)
 #
 # Each per-arch CI runner builds + loads the matching architecture's
 # image into its local Docker daemon (`bazel-docker-build-${arch}`) and
@@ -415,33 +415,13 @@ fuzz-corpus-update:
     rm -rf {{justfile_directory()}}/.fuzz-corpus-ci
 
 #####################################
-# Vendor dependencies
+# Architecture boundaries
 #####################################
-
-# Download all dependency archives to vendor/
-vendor-download:
-    @scripts/vendor.sh download
-
-# Verify SHA-256 checksums of vendored archives
-vendor-verify:
-    @scripts/vendor.sh verify
-
-# Print SHA-256 checksums for all vendor archives
-vendor-checksums:
-    @scripts/vendor.sh checksums
 
 # Enforce shttps → sipi one-way dependency boundary.
 # See sipi/shttps/CONTEXT.md and docs/adr/0001-shttps-as-strangler-fig-target.md.
 shttps-context-check:
     @scripts/shttps-context-check.sh
-
-# Fetch the proprietary Kakadu archive from dsp-ci-assets release into vendor/.
-# Only required for the production Dockerfile and local Docker dev builds.
-# Nix builds fetch Kakadu directly via flake.nix's FOD (no vendor/ step).
-# Requires: gh CLI authenticated (org membership = access).
-# In CI: set GH_TOKEN to a PAT with read access to dsp-ci-assets (DASCHBOT_PAT).
-kakadu-fetch:
-    @./scripts/fetch-kakadu.sh
 
 #####################################
 # Documentation
@@ -467,9 +447,9 @@ docs-install-requirements:
 # Utilities
 #####################################
 
-# Clean build artifacts (cmake trees from the dev-shell inner loop + Nix result symlinks)
+# Clean local build artifacts (Bazel symlinks + docs site + IDE-emitted dirs).
+# Bazel's own cache is at `bazel info output_base`; use `bazel clean
+# --expunge` to drop it.
 clean:
-    rm -rf build/
-    rm -rf cmake-build-relwithdebinfo-inside-docker/
+    rm -rf bazel-bin bazel-out bazel-testlogs bazel-* || true
     rm -rf site/
-    rm -f result result-* || true

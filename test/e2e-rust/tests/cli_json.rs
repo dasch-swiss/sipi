@@ -1,8 +1,7 @@
 // Copyright © 2016 - 2026 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform
 // contributors. SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Feature-contract tests (F1–F3 from the image-format-support plan) for the
-// `--json` CLI flag added in DEV-6249 / DEV-6250 / DEV-6257.
+// Feature-contract tests (F1–F3) for the `--json` CLI flag.
 
 use serde_json::Value;
 use sipi_e2e::{sipi_bin_path, test_data_dir};

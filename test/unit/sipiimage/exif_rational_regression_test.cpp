@@ -2,7 +2,7 @@
  * Copyright © 2016 - 2026 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * Regression test for DEV-6356 — uninitialized loop counter in
+ * Regression test — uninitialized loop counter in
  * SipiIOTiff::readExif() corrupted EXIF rational arrays. The bug lived in
  * the `case EXIF_DT_RATIONAL_PTR` branch and was provably unreachable in
  * earlier SIPI revisions because no entry in `exiftag_list[]` carried that

@@ -1,4 +1,4 @@
-"""Plain Linux platform definitions (DEV-6346, PR Y+4).
+"""Plain Linux platform definitions.
 
 Used by the `bazel-docker-build-${arch}` and `bazel-docker-push-${arch}`
 just recipes via `--platforms=//bazel/platforms:linux_${arch}`. Per-arch
