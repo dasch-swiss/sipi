@@ -10,7 +10,7 @@
 #include <ostream>
 #include <string>
 
-#include "SipiSentry.h"
+#include "observability/sentry.h"
 
 namespace Sipi {
 
@@ -20,7 +20,7 @@ namespace Sipi {
  * Sentry DSN still get the full diagnostic payload.
  *
  * The produced document is a single JSON object terminated by a trailing
- * newline. The schema matches the ImageContext struct in SipiSentry.h, minus
+ * newline. The schema matches the ImageContext struct in observability/sentry.h, minus
  * `request_uri` (reserved for future server-side use).
  *
  * On success (no error_message / no phase): `status == "ok"` and the `image`
@@ -38,7 +38,7 @@ namespace Sipi {
  * \param[in]  phase           "cli_args" | "read" | "convert" | "write"
  */
 void emit_json_report(std::ostream &out,
-  const ImageContext &ctx,
+  const observability::ImageContext &ctx,
   std::optional<std::string> error_message = std::nullopt,
   std::optional<std::string> phase = std::nullopt);
 

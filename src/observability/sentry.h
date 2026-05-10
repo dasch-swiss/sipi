@@ -3,8 +3,8 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#ifndef SIPISENTRY_H
-#define SIPISENTRY_H
+#ifndef SIPI_OBSERVABILITY_SENTRY_H
+#define SIPI_OBSERVABILITY_SENTRY_H
 
 #include <string>
 
@@ -13,8 +13,10 @@
 #include "iiifparser/SipiQualityFormat.h"
 
 namespace Sipi {
-
 class SipiImage;
+}// namespace Sipi
+
+namespace Sipi::observability {
 
 /*!
  * Operating mode for Sentry flush behavior.
@@ -82,6 +84,6 @@ void capture_image_error(const std::string &error_message,
   SipiMode mode = SipiMode::CLI,
   sentry_level_e level = SENTRY_LEVEL_ERROR);
 
-}// namespace Sipi
+}// namespace Sipi::observability
 
-#endif// SIPISENTRY_H
+#endif// SIPI_OBSERVABILITY_SENTRY_H

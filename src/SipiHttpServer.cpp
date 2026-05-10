@@ -46,7 +46,7 @@
 #include "SipiPeakMemory.h"
 #include "SipiRateLimiter.h"
 #include "iiifparser/SipiDecodeDims.h"
-#include "SipiSentry.h"
+#include "observability/sentry.h"
 #include "favicon.h"
 #include "handlers/iiif_handler.hpp"
 #include "jansson.h"
@@ -54,6 +54,17 @@
 using namespace shttps;
 
 namespace Sipi {
+
+// Hoist the observability:: free functions + types into Sipi:: scope inside
+// this TU so the existing call-site shape (`capture_image_error`, `ImageContext`,
+// etc.) keeps working without per-call qualification.
+using observability::capture_image_error;
+using observability::format_type_to_string;
+using observability::get_file_size;
+using observability::ImageContext;
+using observability::populate_from_image;
+using observability::SipiMode;
+
 /*!
  * The name of the Lua function that checks permissions before a file is returned to an HTTP client.
  */
