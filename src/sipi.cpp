@@ -1014,7 +1014,7 @@ int main(int argc, char *argv[])
       img.readOriginal(optInFile, region, size, shttps::HashType::sha256);
       if (format == "jpg") {
         img.to8bps();
-        img.convertToIcc(Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_sRGB), 8);
+        img.convertToIcc(Sipi::Icc(Sipi::PredefinedProfiles::icc_sRGB), 8);
       }
     } catch (const Sipi::SipiImageError &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
@@ -1041,7 +1041,7 @@ int main(int argc, char *argv[])
       //
       if (!sipiopt.get_option("--topleft")->empty()) {
         Sipi::Orientation orientation = img.getOrientation();
-        std::shared_ptr<Sipi::SipiExif> exif = img.getExif();
+        std::shared_ptr<Sipi::Exif> exif = img.getExif();
         if (exif != nullptr) {
           unsigned short ori;
           if (exif->getValByKey("Exif.Image.Orientation", ori)) { orientation = static_cast<Sipi::Orientation>(ori); }
@@ -1076,7 +1076,7 @@ int main(int argc, char *argv[])
         img.setOrientation(Sipi::TOPLEFT);
 
         orientation = img.getOrientation();
-        std::shared_ptr<Sipi::SipiExif> exif2 = img.getExif();
+        std::shared_ptr<Sipi::Exif> exif2 = img.getExif();
         if (exif2 != nullptr) {
           unsigned short ori;
           if (exif2->getValByKey("Exif.Image.Orientation", ori)) { orientation = static_cast<Sipi::Orientation>(ori); }
@@ -1092,16 +1092,16 @@ int main(int argc, char *argv[])
       // color profile processing
       //
       if (!sipiopt.get_option("--icc")->empty()) {
-        Sipi::SipiIcc icc;
+        Sipi::Icc icc;
         switch (optIcc) {
         case OptIcc::sRGB:
-          icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_sRGB);
+          icc = Sipi::Icc(Sipi::PredefinedProfiles::icc_sRGB);
           break;
         case OptIcc::AdobeRGB:
-          icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_AdobeRGB);
+          icc = Sipi::Icc(Sipi::PredefinedProfiles::icc_AdobeRGB);
           break;
         case OptIcc::GRAY:
-          icc = Sipi::SipiIcc(Sipi::PredefinedProfiles::icc_GRAY_D50);
+          icc = Sipi::Icc(Sipi::PredefinedProfiles::icc_GRAY_D50);
           break;
         case OptIcc::none:
           break;

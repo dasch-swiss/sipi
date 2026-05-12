@@ -3,7 +3,7 @@ goldens.
 
 The `env = {"SOURCE_DATE_EPOCH": "946684800"}` injection makes the
 JPEG/PNG/JP2 goldens stable. Without it they drift on every run
-because `SipiIcc::iccBytes()` falls back to lcms2's wall-clock-stamped
+because `Icc::iccBytes()` falls back to lcms2's wall-clock-stamped
 header (see ADR-0002,
 docs/adr/0002-icc-profile-determinism-test-only.md).
 

@@ -47,7 +47,7 @@ We accept this for five reasons.
 
 - **Free-function-style image processing**. `image.crop(...)` becomes `Sipi::processing::crop(image, ...)`. ~12 method-to-free-function rewrites at every call site. Lua bindings (`SipiLua.cpp`) need updating; thin facade methods may be retained on `Image` purely for binding ergonomics if Probe 6 finds it cleaner.
 
-- **No more friend classes**. The 5 `friend class` declarations (`SipiIcc` + 4 format handlers) all go away. Format handlers gain a public `pixels_writable()` API + metadata setters; `SipiIcc::iccFormatter` gains 1-2 new public Image accessors (whatever it needed via friend access today).
+- **No more friend classes**. The 5 `friend class` declarations (`Icc` + 4 format handlers) all go away. Format handlers gain a public `pixels_writable()` API + metadata setters; `Icc::iccFormatter` gains 1-2 new public Image accessors (whatever it needed via friend access today).
 
 - **No more raw `byte *pixels`**. Replaced by `std::vector<byte>` (or `std::unique_ptr<byte[]>` if benchmarking demands). RAII eliminates the explicit deep-copy ctor / move ctor / move-assignment / dtor dance — the compiler's defaults work correctly with a vector member. `cpp-style-guide.md`'s "no raw owning new/delete" rule honoured.
 

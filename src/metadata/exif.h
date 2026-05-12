@@ -6,8 +6,8 @@
 /*!
  * This file implements the virtual abstract class which implements the image file I/O.
  */
-#ifndef defined_exif_h
-#define defined_exif_h
+#ifndef SIPI_METADATA_EXIF_H
+#define SIPI_METADATA_EXIF_H
 
 
 #include <string>
@@ -24,7 +24,7 @@
 namespace Sipi {
 
 /**
- * @class SipiXmp
+ * @class Exif
  * @author Lukas Rosenthaler
  * @version 0.1
  *
@@ -35,7 +35,7 @@ namespace Sipi {
  * can be handled by exiv2. Therefore there are methods to get/add EXIF-data tagwise.
  * A list of all valid EXIF tags can be found at http://www.exiv2.org/tags.html .
  */
-class SipiExif
+class Exif
 {
 private:
   unsigned char *binaryExif;
@@ -44,7 +44,7 @@ private:
   Exiv2::ByteOrder byteorder;//!< Private member holding the byteorder of the EXIF data
 
   // Type-dispatched assignment helpers backing the inline `getValByKey<T>`
-  // templates below. Definitions live in SipiExif.cpp so the 22 inline bodies
+  // templates below. Definitions live in Exif.cpp so the 22 inline bodies
   // don't have to be parsed by every TU that includes this header (DEV-6407).
   static bool assign_val(Exiv2::Value::UniquePtr &v, std::string &val);
   static bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<std::string> &val);
@@ -71,7 +71,7 @@ public:
   /*!
    * Constructor (default)
    */
-  SipiExif();
+  Exif();
 
 
   /*!
@@ -80,10 +80,10 @@ public:
    * \param[in] exif Buffer containing the EXIF data
    * \Param[in] len Length of the EXIF buffer
    */
-  SipiExif(const unsigned char *exif, unsigned int len);
+  Exif(const unsigned char *exif, unsigned int len);
 
 
-  ~SipiExif();
+  ~Exif();
 
   /*!
    * Returns the bytes of the EXIF data as a vector.
@@ -209,7 +209,7 @@ public:
     }
   }
 
-  friend std::ostream &operator<<(std::ostream &lhs, SipiExif &rhs);
+  friend std::ostream &operator<<(std::ostream &lhs, Exif &rhs);
 };
 
 }// namespace Sipi

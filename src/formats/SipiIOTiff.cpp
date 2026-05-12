@@ -1022,22 +1022,22 @@ bool SipiIOTiff::read(SipiImage *img,
     //
     /*
                 if (1 == TIFFGetField(tif, TIFFTAG_PAGENAME, &str)) {
-                    if (img->exif == NULL) img->exif = std::make_shared<SipiExif>();
+                    if (img->exif == NULL) img->exif = std::make_shared<Exif>();
                     img->exif->addKeyVal(string("Exif.Image.PageName"), string(str));
                 }
                 if (1 == TIFFGetField(tif, TIFFTAG_PAGENUMBER, &str)) {
-                    if (img->exif == NULL) img->exif = std::make_shared<SipiExif>();
+                    if (img->exif == NULL) img->exif = std::make_shared<Exif>();
                     img->exif->addKeyVal(string("Exif.Image.PageNumber"), string(str));
                 }
     */
     float f;
     if (1 == TIFFGetField(tif, TIFFTAG_XRESOLUTION, &f)) {
       img->ensure_exif();
-      img->exif->addKeyVal(std::string("Exif.Image.XResolution"), SipiExif::toRational(f));
+      img->exif->addKeyVal(std::string("Exif.Image.XResolution"), Exif::toRational(f));
     }
     if (1 == TIFFGetField(tif, TIFFTAG_YRESOLUTION, &f)) {
       img->ensure_exif();
-      img->exif->addKeyVal(std::string("Exif.Image.YResolution"), SipiExif::toRational(f));
+      img->exif->addKeyVal(std::string("Exif.Image.YResolution"), Exif::toRational(f));
     }
 
     short s;
@@ -1054,7 +1054,7 @@ bool SipiIOTiff::read(SipiImage *img,
 
     if (TIFFGetField(tif, TIFFTAG_RICHTIFFIPTC, &iptc_length, &iptc_content) != 0) {
       try {
-        img->iptc = std::make_shared<SipiIptc>(iptc_content, iptc_length);
+        img->iptc = std::make_shared<Iptc>(iptc_content, iptc_length);
       } catch (SipiError &err) {
         log_err("%s", err.to_string().c_str());
       }
@@ -1077,7 +1077,7 @@ bool SipiIOTiff::read(SipiImage *img,
 
     if (1 == TIFFGetField(tif, TIFFTAG_XMLPACKET, &xmp_length, &xmp_content)) {
       try {
-        img->xmp = std::make_shared<SipiXmp>(xmp_content, xmp_length);
+        img->xmp = std::make_shared<Xmp>(xmp_content, xmp_length);
       } catch (SipiError &err) {
         log_err("%s", err.to_string().c_str());
       }
@@ -1093,7 +1093,7 @@ bool SipiIOTiff::read(SipiImage *img,
 
     if (1 == TIFFGetField(tif, TIFFTAG_ICCPROFILE, &icc_len, &icc_buf)) {
       try {
-        img->icc = std::make_shared<SipiIcc>(icc_buf, icc_len);
+        img->icc = std::make_shared<Icc>(icc_buf, icc_len);
       } catch (SipiError &err) {
         log_err("%s", err.to_string().c_str());
       }
@@ -1133,7 +1133,7 @@ bool SipiIOTiff::read(SipiImage *img,
       // the intent is documented in the code.
       if (img->bps == 8 || img->bps == 16) {
         // RAII-wrap the transfer-function buffer so that an exception from
-        // the SipiIcc constructor cannot leak it. `tfunc_ti` is owned by
+        // the Icc constructor cannot leak it. `tfunc_ti` is owned by
         // libtiff and must not be freed; only our copy (`tfunc`) is owned here.
         auto tfunc = std::make_unique<unsigned short[]>(3 * (1 << img->bps));
         unsigned short *tfunc_ti;
@@ -1154,11 +1154,11 @@ bool SipiIOTiff::read(SipiImage *img,
           }
         }
 
-        img->icc = std::make_shared<SipiIcc>(
+        img->icc = std::make_shared<Icc>(
           whitepoint, primaries, has_tfunc ? tfunc.get() : nullptr, has_tfunc ? tfunc_len : 0);
       } else {
         // bilevel / 4-bit / non-standard — no transfer function
-        img->icc = std::make_shared<SipiIcc>(whitepoint, primaries, nullptr, 0);
+        img->icc = std::make_shared<Icc>(whitepoint, primaries, nullptr, 0);
       }
     }
 
@@ -1169,7 +1169,7 @@ bool SipiIOTiff::read(SipiImage *img,
 
     if (1 == TIFFGetField(tif, TIFFTAG_SIPIMETA, &emdatastr)) {
       if (strlen(emdatastr) > 0) {
-        SipiEssentials se(emdatastr);
+        Essentials se(emdatastr);
         img->essential_metadata(se);
       }
     }
@@ -1295,25 +1295,25 @@ bool SipiIOTiff::read(SipiImage *img,
         // read_standard_data<uint8_t>() already converts 1-bit to 8-bit via
         // one2eight<T>(); by the time we reach this block `img->bps == 8`.
         // The previous `cvrt1BitTo8Bit` call was dead code.
-        img->icc = std::make_shared<SipiIcc>(icc_GRAY_D50);
+        img->icc = std::make_shared<Icc>(icc_GRAY_D50);
         break;
       }
 
       case PhotometricInterpretation::MINISWHITE: {
         // Same as MINISBLACK above — 1-bit → 8-bit conversion already happened.
-        img->icc = std::make_shared<SipiIcc>(icc_GRAY_D50);
+        img->icc = std::make_shared<Icc>(icc_GRAY_D50);
         break;
       }
 
       case PhotometricInterpretation::SEPARATED: {
-        img->icc = std::make_shared<SipiIcc>(icc_CMYK_standard);
+        img->icc = std::make_shared<Icc>(icc_CMYK_standard);
         break;
       }
 
       case PhotometricInterpretation::YCBCR:// fall through!
 
       case PhotometricInterpretation::RGB: {
-        img->icc = std::make_shared<SipiIcc>(icc_sRGB);
+        img->icc = std::make_shared<Icc>(icc_sRGB);
         break;
       }
 
@@ -1334,7 +1334,7 @@ bool SipiIOTiff::read(SipiImage *img,
               img->pixels[img->nc * (y * img->nx + x) + 2] = 128 + v.s;
             }
           }
-          img->icc = std::make_shared<SipiIcc>(icc_LAB);
+          img->icc = std::make_shared<Icc>(icc_LAB);
         } else if (img->bps == 16) {
           auto *data = (unsigned short *)img->pixels;
           for (size_t y = 0; y < img->ny; y++) {
@@ -1349,7 +1349,7 @@ bool SipiIOTiff::read(SipiImage *img,
               data[img->nc * (y * img->nx + x) + 2] = 32768 + v.s;
             }
           }
-          img->icc = std::make_shared<SipiIcc>(icc_LAB);
+          img->icc = std::make_shared<Icc>(icc_LAB);
         } else {
           throw Sipi::SipiImageError("Unsupported bits per sample (" + std::to_string(img->bps) + ")");
         }
@@ -1363,7 +1363,7 @@ bool SipiIOTiff::read(SipiImage *img,
     }
     /*
     if ((img->nc == 3) && (img->photo == PHOTOMETRIC_YCBCR)) {
-        std::shared_ptr<SipiIcc> target_profile = std::make_shared<SipiIcc>(img->icc);
+        std::shared_ptr<Icc> target_profile = std::make_shared<Icc>(img->icc);
         switch (img->bps) {
             case 8: {
                 img->convertToIcc(target_profile, TYPE_YCbCr_8);
@@ -1380,7 +1380,7 @@ bool SipiIOTiff::read(SipiImage *img,
         }
     }
     else if ((img->nc == 4) && (img->photo == PHOTOMETRIC_SEPARATED)) { // CMYK image
-        std::shared_ptr<SipiIcc> target_profile = std::make_shared<SipiIcc>(icc_sRGB);
+        std::shared_ptr<Icc> target_profile = std::make_shared<Icc>(icc_sRGB);
         switch (img->bps) {
             case 8: {
                 img->convertToIcc(target_profile, TYPE_CMYK_8);
@@ -1464,7 +1464,7 @@ SipiImgInfo SipiIOTiff::getDim(const std::string &filepath)
 
     char *emdatastr;
     if (1 == TIFFGetField(tif.get(), TIFFTAG_SIPIMETA, &emdatastr)) {
-      SipiEssentials se(emdatastr);
+      Essentials se(emdatastr);
       info.origmimetype = se.fields().mimetype;
       info.origname = se.fields().origname;
       info.success = SipiImgInfo::ALL;
@@ -1649,7 +1649,7 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
 
     if (img->exif->getValByKey("Exif.Image.ResolutionUnit", s)) { TIFFSetField(tif, TIFFTAG_RESOLUTIONUNIT, s); }
   }
-  SipiEssentials es = img->essential_metadata();
+  Essentials es = img->essential_metadata();
   if (((img->icc != nullptr) || es.fields().use_icc) & (!(img->skip_metadata & SKIP_ICC))) {
     std::vector<unsigned char> buf;
     try {
@@ -1865,7 +1865,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
       case EXIF_DT_RATIONAL: {
         float f;
         if (TIFFGetField(tif, exiftag_list[i].tag_id, &f)) {
-          Exiv2::Rational r = SipiExif::toRational(f);
+          Exiv2::Rational r = Exif::toRational(f);
           try {
             img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", r);
           } catch (const SipiError &err) {
@@ -1940,7 +1940,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
         }
         if (got) {
           auto r = std::make_unique<Exiv2::Rational[]>(len);
-          for (int j = 0; j < len; j++) { r[j] = SipiExif::toRational(tmpbuf[j]); }
+          for (int j = 0; j < len; j++) { r[j] = Exif::toRational(tmpbuf[j]); }
           try {
             img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", r.get(), len);
           } catch (const SipiError &err) {

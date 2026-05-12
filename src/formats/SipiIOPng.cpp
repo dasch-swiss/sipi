@@ -192,7 +192,7 @@ bool SipiIOPng::read(SipiImage *img,
   png_uint_32 res_x, res_y;
   int unit_type;
   if (png_get_pHYs(png_ptr, info_ptr, &res_x, &res_y, &unit_type)) {
-    img->exif = std::make_shared<SipiExif>();
+    img->exif = std::make_shared<Exif>();
     float fres_x, fres_y;
     if (unit_type == PNG_RESOLUTION_METER) {
       fres_x = res_x / 39.37007874015748;
@@ -201,8 +201,8 @@ bool SipiIOPng::read(SipiImage *img,
       fres_x = res_x;
       fres_y = res_y;
     }
-    img->exif->addKeyVal("Exif.Image.XResolution", SipiExif::toRational(fres_x));
-    img->exif->addKeyVal("Exif.Image.YResolution", SipiExif::toRational(fres_y));
+    img->exif->addKeyVal("Exif.Image.XResolution", Exif::toRational(fres_x));
+    img->exif->addKeyVal("Exif.Image.YResolution", Exif::toRational(fres_y));
     img->exif->addKeyVal("Exif.Image.ResolutionUnit", 2);// DPI
   }
 
@@ -247,14 +247,14 @@ bool SipiIOPng::read(SipiImage *img,
   //
   int srgb_intent;
   if (png_get_sRGB(png_ptr, info_ptr, &srgb_intent) != 0) {
-    img->icc = std::make_shared<SipiIcc>(icc_sRGB);
+    img->icc = std::make_shared<Icc>(icc_sRGB);
   } else {
     png_charp name;
     int compression_type = PNG_COMPRESSION_TYPE_BASE;
     png_bytep profile;
     png_uint_32 proflen;
     if (png_get_iCCP(png_ptr, info_ptr, &name, &compression_type, &profile, &proflen) != 0) {
-      img->icc = std::make_shared<SipiIcc>((unsigned char *)profile, (int)proflen);
+      img->icc = std::make_shared<Icc>((unsigned char *)profile, (int)proflen);
     }
   }
   png_text *png_texts;
@@ -262,19 +262,19 @@ bool SipiIOPng::read(SipiImage *img,
 
   for (int i = 0; i < num_comments; i++) {
     if (strcmp(png_texts[i].key, xmp_tag) == 0) {
-      img->xmp = std::make_shared<SipiXmp>((char *)png_texts[i].text, (int)png_texts[i].text_length);
+      img->xmp = std::make_shared<Xmp>((char *)png_texts[i].text, (int)png_texts[i].text_length);
     } else if (strcmp(png_texts[i].key, exif_tag) == 0) {
       try {
         img->exif =
-          std::make_shared<SipiExif>((unsigned char *)png_texts[i].text, (unsigned int)png_texts[i].text_length);
+          std::make_shared<Exif>((unsigned char *)png_texts[i].text, (unsigned int)png_texts[i].text_length);
       } catch (SipiError &err) {
         // TODO: better error handling – now we nothing at all
       }
     } else if (strcmp(png_texts[i].key, iptc_tag) == 0) {
       img->iptc =
-        std::make_shared<SipiIptc>((unsigned char *)png_texts[i].text, (unsigned int)png_texts[i].text_length);
+        std::make_shared<Iptc>((unsigned char *)png_texts[i].text, (unsigned int)png_texts[i].text_length);
     } else if (strcmp(png_texts[i].key, sipi_tag) == 0) {
-      SipiEssentials se(png_texts[i].text);
+      Essentials se(png_texts[i].text);
       img->essential_metadata(se);
     } else {
       fprintf(stderr, "PNG-COMMENT: key=\"%s\" text=\"%s\"\n", png_texts[i].key, png_texts[i].text);
@@ -523,7 +523,7 @@ void SipiIOPng::write(SipiImage *img, const std::string &filepath, const SipiCom
   } else if ((img->nc == 4) && (img->es.size() == 1)) {// RGB + ALPHA
     color_type = PNG_COLOR_TYPE_RGB_ALPHA;
   } else if (img->nc == 4) {
-    img->convertToIcc(SipiIcc(Sipi::PredefinedProfiles::icc_sRGB), 8);
+    img->convertToIcc(Icc(Sipi::PredefinedProfiles::icc_sRGB), 8);
     color_type = PNG_COLOR_TYPE_RGB;
     img->nc = 3;
     img->bps = 8;
@@ -545,10 +545,10 @@ void SipiIOPng::write(SipiImage *img, const std::string &filepath, const SipiCom
   //
   // ICC profile handfling is special...
   //
-  SipiEssentials es = img->essential_metadata();
+  Essentials es = img->essential_metadata();
   if ((img->icc != nullptr) || es.fields().use_icc) {
     if ((img->icc != nullptr) && (img->icc->getProfileType() == icc_LAB)) {
-      img->convertToIcc(SipiIcc(Sipi::PredefinedProfiles::icc_sRGB), img->bps);
+      img->convertToIcc(Icc(Sipi::PredefinedProfiles::icc_sRGB), img->bps);
     }
     std::vector<unsigned char> icc_buf;
     try {

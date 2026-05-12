@@ -89,10 +89,10 @@ SipiImage::SipiImage(const SipiImage &img_p)
   }
 
   // R11: Null-check metadata before deep copy
-  if (img_p.xmp) xmp = std::make_shared<SipiXmp>(*img_p.xmp);
-  if (img_p.icc) icc = std::make_shared<SipiIcc>(*img_p.icc);
-  if (img_p.iptc) iptc = std::make_shared<SipiIptc>(*img_p.iptc);
-  if (img_p.exif) exif = std::make_shared<SipiExif>(*img_p.exif);
+  if (img_p.xmp) xmp = std::make_shared<Xmp>(*img_p.xmp);
+  if (img_p.icc) icc = std::make_shared<Icc>(*img_p.icc);
+  if (img_p.iptc) iptc = std::make_shared<Iptc>(*img_p.iptc);
+  if (img_p.exif) exif = std::make_shared<Exif>(*img_p.exif);
   emdata = img_p.emdata;
   skip_metadata = img_p.skip_metadata;
   conobj = img_p.conobj;
@@ -214,10 +214,10 @@ SipiImage &SipiImage::operator=(const SipiImage &img_p)
     }
 
     // R11: Null-check metadata before deep copy, reset if source is null
-    if (img_p.xmp)  xmp  = std::make_shared<SipiXmp>(*img_p.xmp);   else xmp.reset();
-    if (img_p.icc)  icc  = std::make_shared<SipiIcc>(*img_p.icc);   else icc.reset();
-    if (img_p.iptc) iptc = std::make_shared<SipiIptc>(*img_p.iptc); else iptc.reset();
-    if (img_p.exif) exif = std::make_shared<SipiExif>(*img_p.exif); else exif.reset();
+    if (img_p.xmp)  xmp  = std::make_shared<Xmp>(*img_p.xmp);   else xmp.reset();
+    if (img_p.icc)  icc  = std::make_shared<Icc>(*img_p.icc);   else icc.reset();
+    if (img_p.iptc) iptc = std::make_shared<Iptc>(*img_p.iptc); else iptc.reset();
+    if (img_p.exif) exif = std::make_shared<Exif>(*img_p.exif); else exif.reset();
   }
 
   return *this;
@@ -259,11 +259,11 @@ SipiImage &SipiImage::operator=(SipiImage &&other) noexcept
 //============================================================================
 
 /*!
- * If this image has no SipiExif, creates an empty one.
+ * If this image has no Exif, creates an empty one.
  */
 void SipiImage::ensure_exif()
 {
-  if (exif == nullptr) exif = std::make_shared<SipiExif>();
+  if (exif == nullptr) exif = std::make_shared<Exif>();
 }
 //============================================================================
 
@@ -323,7 +323,7 @@ bool SipiImage::readOriginal(const std::string &filepath,
     std::string mimetype = shttps::Parsing::getFileMimetype(filepath).first;
     std::vector<unsigned char> iccprofile;
     if (icc != nullptr) { iccprofile = icc->iccBytes(); }
-    SipiEssentials emdata2(EssentialsFields{
+    Essentials emdata2(EssentialsFields{
       .origname = origname,
       .mimetype = mimetype,
       .hash_type = shttps::HashType::sha256,
@@ -358,7 +358,7 @@ bool SipiImage::readOriginal(const std::string &filepath,
     internal_hash.add_data(pixels, nx * ny * nc * bps / 8);
     std::string checksum = internal_hash.hash();
     std::string mimetype = shttps::Parsing::getFileMimetype(filepath).first;
-    SipiEssentials emdata2(EssentialsFields{
+    Essentials emdata2(EssentialsFields{
       .origname = origname,
       .mimetype = mimetype,
       .hash_type = shttps::HashType::sha256,
@@ -492,7 +492,7 @@ void SipiImage::convertYCC2RGB()
 
 //============================================================================
 
-void SipiImage::convertToIcc(const SipiIcc &target_icc_p, int new_bps)
+void SipiImage::convertToIcc(const Icc &target_icc_p, int new_bps)
 {
   cmsSetLogErrorHandler(icc_error_logger);
   cmsUInt32Number in_formatter, out_formatter;
@@ -500,17 +500,17 @@ void SipiImage::convertToIcc(const SipiIcc &target_icc_p, int new_bps)
   if (icc == nullptr) {
     switch (nc) {
     case 1: {
-      icc = std::make_shared<SipiIcc>(icc_GRAY_D50);// assume gray value image with D50
+      icc = std::make_shared<Icc>(icc_GRAY_D50);// assume gray value image with D50
       break;
     }
 
     case 3: {
-      icc = std::make_shared<SipiIcc>(icc_sRGB);// assume sRGB
+      icc = std::make_shared<Icc>(icc_sRGB);// assume sRGB
       break;
     }
 
     case 4: {
-      icc = std::make_shared<SipiIcc>(icc_CMYK_standard);// assume CYMK
+      icc = std::make_shared<Icc>(icc_CMYK_standard);// assume CYMK
       break;
     }
 
@@ -550,7 +550,7 @@ void SipiImage::convertToIcc(const SipiIcc &target_icc_p, int new_bps)
   byte *outbuf = new byte[nx * ny * nnc * new_bps / 8];
   cmsDoTransform(hTransform, inbuf, outbuf, nx * ny);
   cmsDeleteTransform(hTransform);
-  icc = std::make_shared<SipiIcc>(target_icc_p);
+  icc = std::make_shared<Icc>(target_icc_p);
   pixels = outbuf;
   delete[] inbuf;
   nc = nnc;
@@ -1452,7 +1452,7 @@ bool SipiImage::to8bps()
 bool SipiImage::toBitonal()
 {
   if ((photo != PhotometricInterpretation::MINISBLACK) && (photo != PhotometricInterpretation::MINISWHITE)) {
-    convertToIcc(SipiIcc(icc_GRAY_D50), 8);
+    convertToIcc(Icc(icc_GRAY_D50), 8);
   }
 
   bool doit = false;// will be set true if we find a value not equal 0 or 255

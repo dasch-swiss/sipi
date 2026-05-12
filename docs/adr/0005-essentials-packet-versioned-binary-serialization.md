@@ -34,13 +34,13 @@ Forward-compatibility in CBOR works at two levels and we use both:
 
 ## Consequences
 
-- **`SipiEssentials::parse(bytes)` becomes a dispatcher**: probe the leading bytes for a CBOR tag → CBOR parse via the chosen library; otherwise fall back to the legacy pipe-delimited parser. The legacy parser is retained indefinitely (longevity invariant). If both parsers fail, treat as no Essentials packet present (same as today's "is_set = false" path).
+- **`Essentials::parse(bytes)` becomes a dispatcher**: probe the leading bytes for a CBOR tag → CBOR parse via the chosen library; otherwise fall back to the legacy pipe-delimited parser. The legacy parser is retained indefinitely (longevity invariant). If both parsers fail, treat as no Essentials packet present (same as today's "is_set = false" path).
 
-- **`SipiEssentials::serialize()` always emits CBOR** with `format_version = 1` for the initial cutover. The class's in-memory representation is unchanged; only the wire format moves. The existing `operator std::string()` and `operator<<` overloads — which the [Probe 2 deep-module analysis](../deep-modules.md#probe-2--metadata) flagged as shallowness leaks anyway — are removed in favour of an explicit `serialize() → std::vector<unsigned char>`. The on-disk artefact is *bytes*, not a `std::string`; the existing API's typing was a mistake.
+- **`Essentials::serialize()` always emits CBOR** with `format_version = 1` for the initial cutover. The class's in-memory representation is unchanged; only the wire format moves. The existing `operator std::string()` and `operator<<` overloads — which the [Probe 2 deep-module analysis](../deep-modules.md#probe-2--metadata) flagged as shallowness leaks anyway — are removed in favour of an explicit `serialize() → std::vector<unsigned char>`. The on-disk artefact is *bytes*, not a `std::string`; the existing API's typing was a mistake.
 
 - **New build dep**: a CBOR library. Candidates include `tinycbor` (lightweight, C, used by IoT/embedded), `jsoncons` (header-only C++, broad format support), or an in-tree minimal encoder (CBOR is small enough that a few hundred lines covers our needs). Choice deferred to implementation time; not an architectural decision.
 
-- **`SipiEssentials::parse()` becomes fallible in a way the current API doesn't expose** (the dispatcher needs to report which parser was used, and CBOR-parse can fail in more ways than text-parse). Consider switching the API to `std::expected<SipiEssentials, ParseError>` to match `cpp-style-guide.md`'s preference. Aligns with the Rust target.
+- **`Essentials::parse()` becomes fallible in a way the current API doesn't expose** (the dispatcher needs to report which parser was used, and CBOR-parse can fail in more ways than text-parse). Consider switching the API to `std::expected<Essentials, ParseError>` to match `cpp-style-guide.md`'s preference. Aligns with the Rust target.
 
 - **Approval-test goldens for image-header bytes change**: where the test asserts on the embedded packet bytes (any test that round-trips a master file through the encoder and inspects the header), the goldens are regenerated alongside ADR-0004's image-shape-field addition. Do both changes in one PR so the approval-suite churn is single.
 
@@ -48,6 +48,6 @@ Forward-compatibility in CBOR works at two levels and we use both:
 
 - **The pipe-delimited fragility goes away for new packets**: filenames with `|`, no schema versioning, no field discovery, no escape semantics — all replaced by CBOR's well-defined encoding rules. Old packets remain fragile but, by definition, are read-only at this point (they're already on disk; nothing new will be written in the legacy format).
 
-- **The `metadata/` Bazel package documented in [Probe 2](../deep-modules.md#probe-2--metadata) gains a CBOR-library dep but no visibility change.** Consumers (`SipiImage`, format handlers) see no API surface change at the call sites that already use `SipiEssentials` getters/setters. Only `parse` / `serialize` change shape.
+- **The `metadata/` Bazel package documented in [Probe 2](../deep-modules.md#probe-2--metadata) gains a CBOR-library dep but no visibility change.** Consumers (`SipiImage`, format handlers) see no API surface change at the call sites that already use `Essentials` getters/setters. Only `parse` / `serialize` change shape.
 
 - **Future schema additions become low-friction**. Adding a new field is: (a) extend the in-memory struct, (b) write the new key in `serialize()`, (c) read the new key (with a sensible default) in `parse()`. No `format_version` bump, no migration tooling, no coordinated deploys. This is the operational property the 100K-master-file horizon requires.

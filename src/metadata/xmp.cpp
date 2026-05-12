@@ -7,7 +7,7 @@
 #include <pthread.h>
 
 #include "SipiError.hpp"
-#include "metadata/SipiXmp.h"
+#include "metadata/xmp.h"
 
 /*!
  * ToDo: remove provisional code as soon as Exiv2::Xmp is thread safe (expected v.26)
@@ -32,7 +32,7 @@ void xmplock_func(void *pLockData, bool lockUnlock)
 }
 //=========================================================================
 
-SipiXmp::SipiXmp(const std::string &xmp)
+Xmp::Xmp(const std::string &xmp)
 {
   __xmpstr = xmp;// provisional code until Exiv2::Xmp is threadsafe
   return;// provisional code until Exiv2::Xmp is threadsafe
@@ -51,7 +51,7 @@ SipiXmp::SipiXmp(const std::string &xmp)
 }
 //============================================================================
 
-SipiXmp::SipiXmp(const char *xmp)
+Xmp::Xmp(const char *xmp)
 {
   __xmpstr = xmp;// provisional code until Exiv2::Xmp is threadsafe
   return;// provisional code until Exiv2::Xmp is threadsafe
@@ -70,7 +70,7 @@ SipiXmp::SipiXmp(const char *xmp)
 }
 //============================================================================
 
-SipiXmp::SipiXmp(const char *xmp, int len)
+Xmp::Xmp(const char *xmp, int len)
 {
   std::string buf(xmp, len);
   __xmpstr = buf;// provisional code until Exiv2::Xmp is threadsafe
@@ -91,7 +91,7 @@ SipiXmp::SipiXmp(const char *xmp, int len)
 //============================================================================
 
 
-SipiXmp::~SipiXmp()
+Xmp::~Xmp()
 {
   // Exiv2::XmpParser::terminate();
 }
@@ -103,10 +103,10 @@ SipiXmp::~SipiXmp()
 // it is not thread-safe in the Exiv2 version we depend on. Once Exiv2's
 // XMP encoder becomes thread-safe, swap in the parser-driven path here
 // without touching call sites.
-std::string SipiXmp::xmpBytes() { return __xmpstr; }
+std::string Xmp::xmpBytes() { return __xmpstr; }
 //============================================================================
 
-std::ostream &operator<<(std::ostream &outstr, const SipiXmp &rhs)
+std::ostream &operator<<(std::ostream &outstr, const Xmp &rhs)
 {
   /*
   for (Exiv2::XmpData::const_iterator md = rhs.xmpData.begin();

@@ -126,7 +126,7 @@ expand_template(
 # `xxd -i`-style C arrays embedding the binary ICC profiles. Mirrors
 # `CMakeLists.txt`'s ICC `add_custom_command` chain. Each genrule copies the
 # binary to a working file with the right name (so `xxd -i`'s array-name
-# inference matches what `src/metadata/SipiIcc.cpp` references), runs the
+# inference matches what `src/metadata/Icc.cpp` references), runs the
 # converter, then drops the temp.
 [
     genrule(

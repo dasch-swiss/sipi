@@ -129,9 +129,13 @@ ApprovalTests. Tests are organized by component:
 - `test/unit/memory_budget/` — Decode memory budget tests
 - `test/unit/ratelimiter/` — Rate-limiter tests
 - `test/unit/shttps/` — HTTP server utility tests
-- `test/unit/sipiconnectionmetrics/` — shttps→sipi metrics adapter tests
-- `test/unit/sipiicc/` — ICC profile normalization tests
 - `test/unit/sipiimage/` — Image processing tests
+
+Per-module Bazel packages co-locate their unit tests alongside the sources
+(per ADR-0003). Co-located tests today:
+
+- `//src/observability:connection_metrics_adapter_test` — shttps→sipi metrics adapter tests (was `test/unit/sipiconnectionmetrics/`)
+- `//src/metadata:icc_normalize_test` — ICC profile normalization tests (was `test/unit/sipiicc/`)
 
 Run one component:
 

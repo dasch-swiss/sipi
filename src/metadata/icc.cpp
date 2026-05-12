@@ -3,7 +3,7 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#include "metadata/SipiIcc.h"
+#include "metadata/icc.h"
 #include "metadata/internal/icc_normalization.h"
 
 #include <cerrno>
@@ -59,7 +59,7 @@ void icc_error_logger(cmsContext ContextID, cmsUInt32Number ErrorCode, const cha
   log_err("ICC-CMS error: %s", Text);
 }
 
-SipiIcc::SipiIcc(const unsigned char *icc_buf, int icc_len)
+Icc::Icc(const unsigned char *icc_buf, int icc_len)
 {
   cmsSetLogErrorHandler(icc_error_logger);
   if ((icc_profile = cmsOpenProfileFromMem(icc_buf, icc_len)) == nullptr) {
@@ -77,7 +77,7 @@ SipiIcc::SipiIcc(const unsigned char *icc_buf, int icc_len)
   }
 }
 
-SipiIcc::SipiIcc(const SipiIcc &icc_p)
+Icc::Icc(const Icc &icc_p)
 {
   cmsSetLogErrorHandler(icc_error_logger);
   if (icc_p.icc_profile != nullptr) {
@@ -96,7 +96,7 @@ SipiIcc::SipiIcc(const SipiIcc &icc_p)
   }
 }
 
-SipiIcc::SipiIcc(cmsHPROFILE &icc_profile_p)
+Icc::Icc(cmsHPROFILE &icc_profile_p)
 {
   cmsSetLogErrorHandler(icc_error_logger);
   if (icc_profile_p != nullptr) {
@@ -111,7 +111,7 @@ SipiIcc::SipiIcc(cmsHPROFILE &icc_profile_p)
   profile_type = icc_unknown;
 }
 
-SipiIcc::SipiIcc(PredefinedProfiles predef)
+Icc::Icc(PredefinedProfiles predef)
 {
   cmsSetLogErrorHandler(icc_error_logger);
   switch (predef) {
@@ -177,7 +177,7 @@ SipiIcc::SipiIcc(PredefinedProfiles predef)
   }
 }
 
-SipiIcc::SipiIcc(float white_point_p[], float primaries_p[], const unsigned short tfunc[], const int tfunc_len)
+Icc::Icc(float white_point_p[], float primaries_p[], const unsigned short tfunc[], const int tfunc_len)
 {
   cmsSetLogErrorHandler(icc_error_logger);
   cmsCIExyY white_point;
@@ -213,12 +213,12 @@ SipiIcc::SipiIcc(float white_point_p[], float primaries_p[], const unsigned shor
   cmsFreeToneCurveTriple(tonecurve);
 }
 
-SipiIcc::~SipiIcc()
+Icc::~Icc()
 {
   if (icc_profile != nullptr) { cmsCloseProfile(icc_profile); }
 }
 
-SipiIcc &SipiIcc::operator=(const SipiIcc &rhs)
+Icc &Icc::operator=(const Icc &rhs)
 {
   if (this != &rhs) {
     if (rhs.icc_profile != nullptr) {
@@ -235,7 +235,7 @@ SipiIcc &SipiIcc::operator=(const SipiIcc &rhs)
   return *this;
 }
 
-std::vector<unsigned char> SipiIcc::iccBytes()
+std::vector<unsigned char> Icc::iccBytes()
 {
   if (icc_profile == nullptr) return {};
 
@@ -253,9 +253,9 @@ std::vector<unsigned char> SipiIcc::iccBytes()
   return data;
 }
 
-cmsHPROFILE SipiIcc::getIccProfile() const { return icc_profile; }
+cmsHPROFILE Icc::getIccProfile() const { return icc_profile; }
 
-unsigned int SipiIcc::iccFormatter(int bps) const
+unsigned int Icc::iccFormatter(int bps) const
 {
   cmsSetLogErrorHandler(icc_error_logger);
   cmsUInt32Number format = (bps == 16) ? BYTES_SH(2) : BYTES_SH(1);
@@ -290,7 +290,7 @@ unsigned int SipiIcc::iccFormatter(int bps) const
 }
 
 
-unsigned int SipiIcc::iccFormatter(SipiImage *img) const
+unsigned int Icc::iccFormatter(SipiImage *img) const
 {
   cmsSetLogErrorHandler(icc_error_logger);
   cmsUInt32Number format = 0;
@@ -371,7 +371,7 @@ unsigned int SipiIcc::iccFormatter(SipiImage *img) const
   return format;
 }
 
-std::ostream &operator<<(std::ostream &outstr, SipiIcc &rhs)
+std::ostream &operator<<(std::ostream &outstr, Icc &rhs)
 {
   unsigned int len =
     cmsGetProfileInfoASCII(rhs.icc_profile, cmsInfoDescription, cmsNoLanguage, cmsNoCountry, nullptr, 0);

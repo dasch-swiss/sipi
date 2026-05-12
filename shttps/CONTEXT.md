@@ -65,7 +65,7 @@ The one-way direction is enforced by `just shttps-context-check`, which fails CI
 
 These currently live in shttps but are not seam types. They are utilities or domain-flavoured types that ended up in shttps for historical reasons. The migration plan re-homes them into SIPI so the Rust replacement does not need to reproduce them:
 
-- `Hash` / `HashType` — used by `SipiEssentials::pixel_checksum`. Belongs to SIPI's preservation domain, not the HTTP framework.
+- `Hash` / `HashType` — used by `Essentials::pixel_checksum`. Belongs to SIPI's preservation domain, not the HTTP framework.
 - `Parsing` — URL decoding, mime-type magic, header parsing helpers. Generic utilities; can move to a SIPI-side `support/` module.
 - `Error` — base class of `SipiError`. Re-home as part of SIPI's error hierarchy.
 - `Global`, `makeunique` — pure utilities. Inline or move to SIPI-side support.

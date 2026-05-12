@@ -44,15 +44,15 @@ Sipi implements the full [IIIF Image API 3.0](https://iiif.io/api/image/3.0/) at
 
 | System | Library | Read | Write | Source |
 |---|---|---|---|---|
-| EXIF | Exiv2 | Yes | Yes | `src/metadata/SipiExif.cpp` |
-| XMP | Exiv2 | Yes | Yes | `src/metadata/SipiXmp.cpp` |
-| IPTC | Exiv2 | Yes | Yes | `src/metadata/SipiIptc.cpp` |
-| ICC Profiles | littleCMS2 | Yes | Yes | `src/metadata/SipiIcc.cpp` |
-| SipiEssentials | Custom | Yes | Yes | `src/metadata/SipiEssentials.cpp` |
+| EXIF | Exiv2 | Yes | Yes | `src/metadata/Exif.cpp` |
+| XMP | Exiv2 | Yes | Yes | `src/metadata/Xmp.cpp` |
+| IPTC | Exiv2 | Yes | Yes | `src/metadata/Iptc.cpp` |
+| ICC Profiles | littleCMS2 | Yes | Yes | `src/metadata/Icc.cpp` |
+| Essentials | Custom | Yes | Yes | `src/metadata/Essentials.cpp` |
 
 **Predefined ICC Profiles:** sRGB, AdobeRGB, GRAY_D50, LUM_D65, CMYK_standard, LAB, ROMM_GRAY.
 
-**SipiEssentials** is a custom metadata packet embedded in image headers. It stores: original filename, MIME type, pixel data checksum (MD5/SHA1/SHA256/SHA384/SHA512), and a backup of the ICC profile. This survives format conversions and enables provenance tracking.
+**Essentials** is a custom metadata packet embedded in image headers. It stores: original filename, MIME type, pixel data checksum (MD5/SHA1/SHA256/SHA384/SHA512), and a backup of the ICC profile. This survives format conversions and enables provenance tracking.
 
 **Color Space Support:** RGB, Grayscale, Bitonal, YCbCr, CMYK (with conversion to sRGB), CIELab (with conversion). 8 TIFF orientations handled; `topleft()` normalization for tiling compatibility. 16-bit big-endian internal representation with automatic 8-bit conversion where needed.
 
@@ -230,7 +230,7 @@ Metrics endpoint at `GET /metrics` (`src/observability/metrics.h`, `src/observab
 - Format conversion on upload (e.g., TIFF → JP2) via Lua routes
 - knora.json sidecar generation with checksums, MIME type, original filename, dimensions
 - Admin-protected upload route (`/admin/upload` via `admin_upload.lua`)
-- SipiEssentials metadata embedded during ingest
+- Essentials metadata embedded during ingest
 
 ### Security Features
 
@@ -338,7 +338,7 @@ Behavior that *is* HTTP-observable belongs in Hurl (status/header contracts) or 
 
 **Pattern:** Use `insta::assert_json_snapshot!` with redactions for dynamic fields (`id`, timestamps).
 
-**ICC determinism gate.** Approval tests under `test/approval/image_encode_baseline_test.cpp` are byte-stable only when `SOURCE_DATE_EPOCH` is set. lcms2 stamps wall-clock UTC into bytes 24-35 of every freshly-created ICC profile (and several emit paths in SipiImage round-trip through that), so without the env var the seconds field drifts across consecutive runs of the same binary. `SipiIcc::iccBytes()` overwrites those bytes (and zeros the Profile ID at bytes 84-99) when the env var is set; CMake injects `SOURCE_DATE_EPOCH=946684800` (2000-01-01T00:00:00Z UTC) into the `sipi.approvaltests` invocation via `set_tests_properties(... ENVIRONMENT ...)`. Production never sets the var and retains lcms2's wall-clock behaviour. See [`docs/adr/0002-icc-profile-determinism-test-only.md`](../../adr/0002-icc-profile-determinism-test-only.md) for the architectural rationale and [`test/approval/CHANGELOG.approval.md`](../../../test/approval/CHANGELOG.approval.md) for the maintainer's how-to.
+**ICC determinism gate.** Approval tests under `test/approval/image_encode_baseline_test.cpp` are byte-stable only when `SOURCE_DATE_EPOCH` is set. lcms2 stamps wall-clock UTC into bytes 24-35 of every freshly-created ICC profile (and several emit paths in SipiImage round-trip through that), so without the env var the seconds field drifts across consecutive runs of the same binary. `Icc::iccBytes()` overwrites those bytes (and zeros the Profile ID at bytes 84-99) when the env var is set; CMake injects `SOURCE_DATE_EPOCH=946684800` (2000-01-01T00:00:00Z UTC) into the `sipi.approvaltests` invocation via `set_tests_properties(... ENVIRONMENT ...)`. Production never sets the var and retains lcms2's wall-clock behaviour. See [`docs/adr/0002-icc-profile-determinism-test-only.md`](../../adr/0002-icc-profile-determinism-test-only.md) for the architectural rationale and [`test/approval/CHANGELOG.approval.md`](../../../test/approval/CHANGELOG.approval.md) for the maintainer's how-to.
 
 ### Layer 3: E2E Contract Tests (HTTP-level)
 
@@ -595,7 +595,7 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | XMP preservation through IIIF pipeline | :x: GAP | — | No test verifies XMP survives transforms |
 | ICC profile preservation/conversion | :x: GAP | — | C++ unit tests exist but no HTTP-level test |
 | IPTC metadata preservation | :x: GAP | — | No e2e test |
-| SipiEssentials round-trip | :x: GAP | — | Custom metadata not tested via HTTP |
+| Essentials round-trip | :x: GAP | — | Custom metadata not tested via HTTP |
 | CLI conversion metadata fidelity | :x: GAP | — | Untested |
 | MIME consistency check (`/api/mimetest`) | :x: GAP | — | Python-only |
 | Thumbnail generation (`/make_thumbnail`) | :x: GAP | — | Python-only |
@@ -685,7 +685,7 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 
 **Key gap categories:**
 
-- **Metadata** (6 gaps): EXIF, XMP, ICC, IPTC, SipiEssentials, CLI metadata — silent drift risk
+- **Metadata** (6 gaps): EXIF, XMP, ICC, IPTC, Essentials, CLI metadata — silent drift risk
 - **Error handling** (6 gaps): corrupt images, Lua errors, empty uploads, config, double-encoding, long URLs — crash/hang risk
 - **Security** (7 gaps): JWT, decompression bombs, upload limits, CRLF injection, cache poisoning, info disclosure, slowloris
 - **Configuration** (6 gaps): parseSizeString, deprecated keys, CLI overrides, jwt_secret, invalid Lua, nonexistent paths

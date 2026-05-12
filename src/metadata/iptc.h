@@ -6,8 +6,8 @@
 /*!
  * This file implements the virtual abstract class which implements the image file I/O.
  */
-#ifndef __defined_iptc_h
-#define __defined_iptc_h
+#ifndef SIPI_METADATA_IPTC_H
+#define SIPI_METADATA_IPTC_H
 
 #include <exiv2/iptc.hpp>
 #include <string>
@@ -18,7 +18,7 @@ namespace Sipi {
 /*!
  * Handles IPTC data based on the exiv2 library
  */
-class SipiIptc
+class Iptc
 {
 private:
   Exiv2::IptcData iptcData;//!< Private member variable holding the exiv2 IPTC object
@@ -30,12 +30,12 @@ public:
    * \param[in] Buffer containing the IPTC data in native format
    * \param[in] Length of the buffer
    */
-  SipiIptc(const unsigned char *iptc, unsigned int len);
+  Iptc(const unsigned char *iptc, unsigned int len);
 
   /*!
    * Destructor
    */
-  ~SipiIptc();
+  ~Iptc();
 
   /*!
    * Returns the bytes of the IPTC data as a std::vector.
@@ -47,10 +47,10 @@ public:
    * The overloaded << operator which is used to write the IPTC data formatted to the outstream
    *
    * \param[in] lhs The output stream
-   * \param[in] rhs Reference to an instance of a SipiIptc
+   * \param[in] rhs Reference to an instance of a Iptc
    * \returns Returns ostream object
    */
-  friend std::ostream &operator<<(std::ostream &lhs, SipiIptc &rhs);
+  friend std::ostream &operator<<(std::ostream &lhs, Iptc &rhs);
 };
 
 }// namespace Sipi

@@ -20,7 +20,7 @@
 
 ### C library boundary safety (FFI)
 - **Type width:** C library APIs often expect specific integer widths (`uint16_t`, `uint32_t`). When passing C++ enum values or vectors to C functions, verify the underlying type matches what the C API expects. Example: libtiff's `TIFFSetField(TIFFTAG_EXTRASAMPLES, ...)` expects `uint16_t*`, not `uint8_t*` — passing a `vector<uint8_t>` causes a heap-buffer-overflow via `memcpy`
-- **Ownership handoff:** When calling C++ functions that return raw `new[]` pointers (e.g., `SipiIcc::iccBytes(len)`), the caller **must** `delete[]` after use. If a C library takes ownership, document it. Prefer wrapping in `std::unique_ptr<T[]>` immediately after receiving the pointer
+- **Ownership handoff:** When calling C++ functions that return raw `new[]` pointers (e.g., `Icc::iccBytes(len)`), the caller **must** `delete[]` after use. If a C library takes ownership, document it. Prefer wrapping in `std::unique_ptr<T[]>` immediately after receiving the pointer
 - **RAII wrappers for C handles:** All C resource handles (`DIR*`, `FILE*`, `TIFF*`, `cmsHPROFILE`) must be wrapped in RAII — either `std::unique_ptr` with a custom deleter or a dedicated scope guard. Never rely on manual cleanup after a loop or before early returns
 - **Variadic C functions:** `TIFFSetField`, `TIFFGetField`, and similar variadic APIs perform no type checking. Mismatched argument types compile silently and cause UB at runtime. Always cast arguments to the exact type the API documents
 

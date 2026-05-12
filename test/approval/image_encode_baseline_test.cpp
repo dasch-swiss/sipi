@@ -15,7 +15,7 @@
 //
 // Determinism gate. JPEG / PNG / JP2-decode outputs go through lcms2's
 // profile generator, which stamps wall-clock UTC into ICC bytes 24-35.
-// SipiIcc::iccBytes() rewrites those bytes (and zeros the Profile ID at
+// Icc::iccBytes() rewrites those bytes (and zeros the Profile ID at
 // bytes 84-99) when SOURCE_DATE_EPOCH is set. CMake injects the env var
 // for sipi.approvaltests via set_tests_properties, so byte-for-byte
 // comparison is stable under ctest. Production never sets the var and

@@ -4,7 +4,7 @@
  * AGPL-3.0-or-later
  */
 
-// Internal helpers for SipiIcc::iccBytes()'s SOURCE_DATE_EPOCH
+// Internal helpers for Icc::iccBytes()'s SOURCE_DATE_EPOCH
 // reproducibility hook (per ADR-0002). Visibility is restricted at the
 // build-graph level to //src/metadata:__pkg__ — replacing the prior
 // comment-as-policy in SipiIccDetail.h with an analysis-time invariant.

@@ -389,7 +389,7 @@ static int SImage_dims(lua_State *L)
 //=========================================================================
 
 
-static void get_exif_string(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
+static void get_exif_string(lua_State *L, const std::shared_ptr<Exif> &exif, const std::string &tagname)
 {
   std::string tagvalue;
   if (!exif->getValByKey(tagname, tagvalue)) {
@@ -403,7 +403,7 @@ static void get_exif_string(lua_State *L, const std::shared_ptr<SipiExif> &exif,
   lua_pushstring(L, tagvalue.c_str());
 }
 
-static void get_exif_stringv(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
+static void get_exif_stringv(lua_State *L, const std::shared_ptr<Exif> &exif, const std::string &tagname)
 {
   std::vector<std::string> val;
   if (!exif->getValByKey(tagname, val)) {
@@ -421,7 +421,7 @@ static void get_exif_stringv(lua_State *L, const std::shared_ptr<SipiExif> &exif
   }
 }
 
-static void get_exif_byte(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
+static void get_exif_byte(lua_State *L, const std::shared_ptr<Exif> &exif, const std::string &tagname)
 {
   char val{ 0 };
   if (!exif->getValByKey(tagname, val)) {
@@ -435,7 +435,7 @@ static void get_exif_byte(lua_State *L, const std::shared_ptr<SipiExif> &exif, c
   lua_pushinteger(L, static_cast<lua_Integer>(val));
 }
 
-static void get_exif_bytev(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
+static void get_exif_bytev(lua_State *L, const std::shared_ptr<Exif> &exif, const std::string &tagname)
 {
   std::vector<char> val;
   if (!exif->getValByKey(tagname, val)) {
@@ -453,7 +453,7 @@ static void get_exif_bytev(lua_State *L, const std::shared_ptr<SipiExif> &exif, 
   }
 }
 
-static void get_exif_ubyte(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
+static void get_exif_ubyte(lua_State *L, const std::shared_ptr<Exif> &exif, const std::string &tagname)
 {
   unsigned char val{ 0 };
   if (!exif->getValByKey(tagname, val)) {
@@ -467,7 +467,7 @@ static void get_exif_ubyte(lua_State *L, const std::shared_ptr<SipiExif> &exif, 
   lua_pushinteger(L, static_cast<lua_Integer>(val));
 }
 
-static void get_exif_ubytev(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
+static void get_exif_ubytev(lua_State *L, const std::shared_ptr<Exif> &exif, const std::string &tagname)
 {
   std::vector<unsigned char> val;
   if (!exif->getValByKey(tagname, val)) {
@@ -485,7 +485,7 @@ static void get_exif_ubytev(lua_State *L, const std::shared_ptr<SipiExif> &exif,
   }
 }
 
-static void get_exif_short(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
+static void get_exif_short(lua_State *L, const std::shared_ptr<Exif> &exif, const std::string &tagname)
 {
   short val{ 0 };
   if (!exif->getValByKey(tagname, val)) {
@@ -499,7 +499,7 @@ static void get_exif_short(lua_State *L, const std::shared_ptr<SipiExif> &exif, 
   lua_pushinteger(L, val);
 }
 
-static void get_exif_shortv(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
+static void get_exif_shortv(lua_State *L, const std::shared_ptr<Exif> &exif, const std::string &tagname)
 {
   std::vector<short> val;
   if (!exif->getValByKey(tagname, val)) {
@@ -517,7 +517,7 @@ static void get_exif_shortv(lua_State *L, const std::shared_ptr<SipiExif> &exif,
   }
 }
 
-static void get_exif_ushort(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
+static void get_exif_ushort(lua_State *L, const std::shared_ptr<Exif> &exif, const std::string &tagname)
 {
   unsigned short uval{ 0 };
   if (!exif->getValByKey(tagname, uval)) {
@@ -531,7 +531,7 @@ static void get_exif_ushort(lua_State *L, const std::shared_ptr<SipiExif> &exif,
   lua_pushinteger(L, uval);
 }
 
-static void get_exif_ushortv(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
+static void get_exif_ushortv(lua_State *L, const std::shared_ptr<Exif> &exif, const std::string &tagname)
 {
   std::vector<unsigned short> val;
   if (!exif->getValByKey(tagname, val)) {
@@ -549,7 +549,7 @@ static void get_exif_ushortv(lua_State *L, const std::shared_ptr<SipiExif> &exif
   }
 }
 
-static void get_exif_int(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
+static void get_exif_int(lua_State *L, const std::shared_ptr<Exif> &exif, const std::string &tagname)
 {
   int uval{ 0 };
   if (!exif->getValByKey(tagname, uval)) {
@@ -563,7 +563,7 @@ static void get_exif_int(lua_State *L, const std::shared_ptr<SipiExif> &exif, co
   lua_pushinteger(L, uval);
 }
 
-static void get_exif_intv(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
+static void get_exif_intv(lua_State *L, const std::shared_ptr<Exif> &exif, const std::string &tagname)
 {
   std::vector<int> val;
   if (!exif->getValByKey(tagname, val)) {
@@ -581,7 +581,7 @@ static void get_exif_intv(lua_State *L, const std::shared_ptr<SipiExif> &exif, c
   }
 }
 
-static void get_exif_uint(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
+static void get_exif_uint(lua_State *L, const std::shared_ptr<Exif> &exif, const std::string &tagname)
 {
   unsigned int uval{ 0 };
   if (!exif->getValByKey(tagname, uval)) {
@@ -595,7 +595,7 @@ static void get_exif_uint(lua_State *L, const std::shared_ptr<SipiExif> &exif, c
   lua_pushinteger(L, uval);
 }
 
-static void get_exif_uintv(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
+static void get_exif_uintv(lua_State *L, const std::shared_ptr<Exif> &exif, const std::string &tagname)
 {
   std::vector<unsigned int> val;
   if (!exif->getValByKey(tagname, val)) {
@@ -613,7 +613,7 @@ static void get_exif_uintv(lua_State *L, const std::shared_ptr<SipiExif> &exif, 
   }
 }
 
-static void get_exif_float(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
+static void get_exif_float(lua_State *L, const std::shared_ptr<Exif> &exif, const std::string &tagname)
 {
   float val{ 0 };
   if (!exif->getValByKey(tagname, val)) {
@@ -627,7 +627,7 @@ static void get_exif_float(lua_State *L, const std::shared_ptr<SipiExif> &exif, 
   lua_pushnumber(L, static_cast<lua_Number>(val));
 }
 
-static void get_exif_floatv(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
+static void get_exif_floatv(lua_State *L, const std::shared_ptr<Exif> &exif, const std::string &tagname)
 {
   std::vector<float> val;
   if (!exif->getValByKey(tagname, val)) {
@@ -645,7 +645,7 @@ static void get_exif_floatv(lua_State *L, const std::shared_ptr<SipiExif> &exif,
   }
 }
 
-static void get_exif_rational(lua_State *L, const std::shared_ptr<SipiExif> &exif, const std::string &tagname)
+static void get_exif_rational(lua_State *L, const std::shared_ptr<Exif> &exif, const std::string &tagname)
 {
   Exiv2::Rational ratval{ 0, 1 };
   if (!exif->getValByKey(tagname, ratval)) {
@@ -689,7 +689,7 @@ static int SImage_get_exif(lua_State *L)
     return 2;
   }
   const char *tagname = lua_tostring(L, 2);
-  std::shared_ptr<SipiExif> exif = img->image->getExif();
+  std::shared_ptr<Exif> exif = img->image->getExif();
   if (exif == nullptr) {
     lua_pop(L, lua_gettop(L));
     lua_pushboolean(L, false);
@@ -869,7 +869,7 @@ static int SImage_get_exifgps(lua_State *L)
     lua_pushstring(L, "SipiImage.gps(): not a valid image");
     return 2;
   }
-  std::shared_ptr<SipiExif> exif = img->image->getExif();
+  std::shared_ptr<Exif> exif = img->image->getExif();
   if (exif == nullptr) {
     lua_pop(L, lua_gettop(L));
     lua_pushboolean(L, false);

@@ -440,21 +440,21 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
 
     switch (id) {
     case 0x0404: {
-      if (img->iptc == nullptr) img->iptc = std::make_shared<SipiIptc>((unsigned char *)ptr, datalen);
+      if (img->iptc == nullptr) img->iptc = std::make_shared<Iptc>((unsigned char *)ptr, datalen);
       break;
     }
     case 0x040f: {
-      if (img->icc == nullptr) img->icc = std::make_shared<SipiIcc>((unsigned char *)ptr, datalen);
+      if (img->icc == nullptr) img->icc = std::make_shared<Icc>((unsigned char *)ptr, datalen);
       break;
     }
     case 0x0422: {
-      if (img->exif == nullptr) img->exif = std::make_shared<SipiExif>((unsigned char *)ptr, datalen);
+      if (img->exif == nullptr) img->exif = std::make_shared<Exif>((unsigned char *)ptr, datalen);
       uint16_t ori;
       if (img->exif->getValByKey("Exif.Image.Orientation", ori)) { img->orientation = Orientation(ori); }
       break;
     }
     case 0x0424: {
-      if (img->xmp == nullptr) img->xmp = std::make_shared<SipiXmp>(ptr, datalen);
+      if (img->xmp == nullptr) img->xmp = std::make_shared<Xmp>(ptr, datalen);
       break;  // Fix: was missing, causing fall-through to default
     }
     default: {
@@ -595,7 +595,7 @@ bool SipiIOJpeg::read(SipiImage *img,
     if (marker->marker == JPEG_COM) {
       std::string emdatastr(reinterpret_cast<char *>(marker->data), marker->data_length);
       if (emdatastr.compare(0, 5, "SIPI:", 5) == 0) {
-        SipiEssentials se(emdatastr);
+        Essentials se(emdatastr);
         img->essential_metadata(se);
       }
     } else if (marker->marker == JPEG_APP0 + 1) {
@@ -609,7 +609,7 @@ bool SipiIOJpeg::read(SipiImage *img,
         // (e.g. APP13-before-APP1 with non-ASCII IPTC) does not abort the
         // whole read. See Phase 5.3 of the image-format-support plan.
         try {
-          img->exif = std::make_shared<SipiExif>(pos + 6, marker->data_length - (pos - marker->data) - 6);
+          img->exif = std::make_shared<Exif>(pos + 6, marker->data_length - (pos - marker->data) - 6);
           uint16_t ori;
           if (img->exif->getValByKey("Exif.Image.Orientation", ori)) { img->orientation = static_cast<Orientation>(ori); }
         } catch (const std::exception &err) {
@@ -624,8 +624,8 @@ bool SipiIOJpeg::read(SipiImage *img,
       // bytes (typically beginning with `<?xpacket begin` or directly with
       // `<x:xmpmeta`). Older Photoshop versions (e.g., CS 2008) omit the
       // optional `<?xpacket>` wrappers entirely, which the previous
-      // hand-rolled boundary scanner did not tolerate. Since SipiXmp stores
-      // the raw string and does not currently parse it (see SipiXmp.cpp),
+      // hand-rolled boundary scanner did not tolerate. Since Xmp stores
+      // the raw string and does not currently parse it (see Xmp.cpp),
       // the simplest correct extraction is "everything after the namespace
       // header is the XMP packet".
       //
@@ -640,7 +640,7 @@ bool SipiIOJpeg::read(SipiImage *img,
           const unsigned char *xmp_start = pos + kXmpNsLen;
           if (xmp_start < data_end) {
             const size_t xmp_len = data_end - xmp_start;
-            img->xmp = std::make_shared<SipiXmp>(std::string((const char *)xmp_start, xmp_len));
+            img->xmp = std::make_shared<Xmp>(std::string((const char *)xmp_start, xmp_len));
           }
         } catch (const std::exception &err) {
           log_warn("Failed to parse XMP metadata from JPEG: %s", err.what());
@@ -666,7 +666,7 @@ bool SipiIOJpeg::read(SipiImage *img,
       // Wrapped in try/catch so a malformed IPTC / EXIF / XMP inside the
       // Photoshop resource block does not prevent the image from being read.
       // See Phase 5.3 of the image-format-support plan.
-      // TODO(SipiReport-style-guide): refactor SipiIptc / SipiExif / SipiXmp
+      // TODO(SipiReport-style-guide): refactor Iptc / Exif / Xmp
       // constructors to return std::expected<T, E> and delete this try/catch.
       if (strncmp("Photoshop 3.0", (char *)marker->data, 14) == 0) {
         try {
@@ -697,8 +697,8 @@ bool SipiIOJpeg::read(SipiImage *img,
     marker = marker->next;
   }
   if (icc_buffer != nullptr) {
-    img->icc = std::make_shared<SipiIcc>(icc_buffer, icc_buffer_len);
-    free(icc_buffer);// SipiIcc constructor copies the data
+    img->icc = std::make_shared<Icc>(icc_buffer, icc_buffer_len);
+    free(icc_buffer);// Icc constructor copies the data
     icc_buffer = nullptr;  // prevent double-free if longjmp fires later
   }
 
@@ -914,7 +914,7 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
     if (marker->marker == JPEG_COM) {
       std::string emdatastr((char *)marker->data, marker->data_length);
       if (emdatastr.compare(0, 5, "SIPI:", 5) == 0) {
-        SipiEssentials se(emdatastr);
+        Essentials se(emdatastr);
         img.essential_metadata(se);
       }
     } else if (marker->marker == JPEG_APP0 + 1) {
@@ -924,7 +924,7 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
       //
       auto *pos = (unsigned char *)memmem(marker->data, marker->data_length, "Exif\000\000", 6);
       if (pos != nullptr) {
-        img.exif = std::make_shared<SipiExif>(pos + 6, marker->data_length - (pos - marker->data) - 6);
+        img.exif = std::make_shared<Exif>(pos + 6, marker->data_length - (pos - marker->data) - 6);
       }
 
       //
@@ -991,7 +991,7 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
           size_t npos = xmpstr.find("</x:xmpmeta>");
           if (npos != std::string::npos) xmpstr = xmpstr.substr(0, npos + 12);
 
-          img.xmp = std::make_shared<SipiXmp>(xmpstr);
+          img.xmp = std::make_shared<Xmp>(xmpstr);
         } catch (SipiImageError &err) {
           cleanup_jpeg();
           info.success = SipiImgInfo::FAILURE;
@@ -1059,7 +1059,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
     img->removeExtraSamples(false);
   }
 
-  auto icc = Sipi::SipiIcc(Sipi::icc_sRGB);// force sRGB !!
+  auto icc = Sipi::Icc(Sipi::icc_sRGB);// force sRGB !!
   img->convertToIcc(icc, 8);// only 8 bit JPEGs are supported by the spec
 
   jpeg_compress_struct cinfo{};
@@ -1172,7 +1172,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
     break;
   }
   case PhotometricInterpretation::CIELAB: {
-    img->convertToIcc(SipiIcc(Sipi::PredefinedProfiles::icc_sRGB), 8);
+    img->convertToIcc(Icc(Sipi::PredefinedProfiles::icc_sRGB), 8);
     cinfo.in_color_space = JCS_RGB;
     cinfo.jpeg_color_space = JCS_RGB;
     break;
@@ -1223,7 +1223,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
     }
   }
 
-  SipiEssentials es = img->essential_metadata();
+  Essentials es = img->essential_metadata();
 
   if ((img->icc != nullptr) || es.fields().use_icc) {
     std::vector<unsigned char> buf;

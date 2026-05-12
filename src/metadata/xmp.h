@@ -6,8 +6,8 @@
 /*!
  * This file implements the virtual abstract class which implements the image file I/O.
  */
-#ifndef __defined_xmp_h
-#define __defined_xmp_h
+#ifndef SIPI_METADATA_XMP_H
+#define SIPI_METADATA_XMP_H
 
 #include <exiv2/error.hpp>
 #include <exiv2/xmp_exiv2.hpp>//!< Import xmp from the exiv2 library!
@@ -28,7 +28,7 @@ extern void xmplock_func(void *pLockData, bool lockUnlock);
 /*!
  * This class handles XMP metadata. It uses the Exiv2 library
  */
-class SipiXmp
+class Xmp
 {
 private:
   Exiv2::XmpData xmpData;//!< Private member variable holding the exiv2 XMP data
@@ -40,14 +40,14 @@ public:
    *
    * \param[in] xmp A std::string containing RDF/XML with XMP data
    */
-  SipiXmp(const std::string &xmp);
+  Xmp(const std::string &xmp);
 
   /*!
    * Constructor
    *
    * \param[in] xmp A C-string (char *)containing RDF/XML with XMP data
    */
-  SipiXmp(const char *xmp);
+  Xmp(const char *xmp);
 
   /*!
    * Constructor
@@ -55,13 +55,13 @@ public:
    * \param[in] xmp A string containing RDF/XML with XMP data
    * \param[in] len Length of the string
    */
-  SipiXmp(const char *xmp, int len);
+  Xmp(const char *xmp, int len);
 
 
   /*!
    * Destructor
    */
-  ~SipiXmp();
+  ~Xmp();
 
 
   /*!
@@ -75,10 +75,10 @@ public:
    * The overloaded << operator which is used to write the xmp formatted to the outstream
    *
    * \param[in] lhs The output stream
-   * \param[in] rhs Reference to an instance of a SipiXmp
+   * \param[in] rhs Reference to an instance of a Xmp
    * \returns Returns ostream object
    */
-  friend std::ostream &operator<<(std::ostream &lhs, const SipiXmp &rhs);
+  friend std::ostream &operator<<(std::ostream &lhs, const Xmp &rhs);
 };
 
 }// namespace Sipi

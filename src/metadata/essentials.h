@@ -37,25 +37,25 @@ struct EssentialsFields
  * The pipe-delimited wire format is retained indefinitely for reading legacy
  * packets per DEV-6398 scope; DEV-6410 (ADR-0005) adds CBOR for new emissions.
  */
-class SipiEssentials
+class Essentials
 {
 private:
   bool _is_set = false;
   EssentialsFields _fields{};
 
 public:
-  SipiEssentials() = default;
+  Essentials() = default;
 
   /*!
    * Construct from fully-populated fields. Marks the packet as set.
    */
-  explicit SipiEssentials(EssentialsFields fields) : _is_set(true), _fields(std::move(fields)) {}
+  explicit Essentials(EssentialsFields fields) : _is_set(true), _fields(std::move(fields)) {}
 
   /*!
    * Parse a serialized (pipe-delimited) packet. Marks the packet as set on
    * successful parse.
    */
-  explicit SipiEssentials(const std::string &serialized);
+  explicit Essentials(const std::string &serialized);
 
   [[nodiscard]] bool is_set() const { return _is_set; }
 
@@ -77,7 +77,7 @@ public:
    */
   [[nodiscard]] std::string serialize() const;
 
-  friend std::ostream &operator<<(std::ostream &os, const SipiEssentials &rhs) { return os << rhs.serialize(); }
+  friend std::ostream &operator<<(std::ostream &os, const Essentials &rhs) { return os << rhs.serialize(); }
 };
 
 }// namespace Sipi

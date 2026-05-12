@@ -1,9 +1,9 @@
 """src/metadata/ — image metadata + colour profile surface (Y+8a per DEV-6353).
 
 Second per-module Bazel package promotion (after //src/observability).
-Houses SIPI's EXIF (`SipiExif`), IPTC (`SipiIptc`), XMP (`SipiXmp`), and ICC
-(`SipiIcc`) wrappers around exiv2 / lcms2, plus the Essentials packet
-(`SipiEssentials`) sidecar serialization. Headers were lifted from
+Houses SIPI's EXIF (`Exif`), IPTC (`Iptc`), XMP (`Xmp`), and ICC
+(`Icc`) wrappers around exiv2 / lcms2, plus the Essentials packet
+(`Essentials`) sidecar serialization. Headers were lifted from
 `include/metadata/` per ADR-0003 so `.cpp`, `.h`, and `*_test.cpp` live
 co-located.
 
@@ -16,7 +16,7 @@ exercises the helper through the same restricted edge.
 
 `layering_check` and `parse_headers` are **deferred** for the same reason as
 //src/observability: every `.cpp` here `#include`s `SipiImage.hpp` (and
-`SipiImage.hpp`'s `friend class SipiIcc;` — a known coupling tracked under
+`SipiImage.hpp`'s `friend class Icc;` — a known coupling tracked under
 DEV-6396), which is reachable only through the permissive
 `includes = ["."]` on the parent `:sipi_lib` target. With strict layering
 on, that transitive include would require explicit ownership of `SipiImage`
@@ -31,24 +31,24 @@ package(default_visibility = ["//src:__subpackages__"])
 cc_library(
     name = "metadata",
     srcs = [
-        "SipiEssentials.cpp",
-        "SipiExif.cpp",
-        "SipiIcc.cpp",
-        "SipiIptc.cpp",
-        "SipiXmp.cpp",
+        "essentials.cpp",
+        "exif.cpp",
+        "icc.cpp",
+        "iptc.cpp",
+        "xmp.cpp",
     ],
     hdrs = [
-        "SipiEssentials.h",
-        "SipiExif.h",
-        "SipiIcc.h",
-        "SipiIptc.h",
-        "SipiXmp.h",
+        "essentials.h",
+        "exif.h",
+        "icc.h",
+        "iptc.h",
+        "xmp.h",
     ],
     # No `includes` directive: cross-module consumers use the path-prefixed
-    # form (`#include "metadata/SipiIcc.h"`) which is resolved via the
+    # form (`#include "metadata/icc.h"`) which is resolved via the
     # consumer's own `includes = ["."]` (typically via //src:sipi_lib).
     # Siblings inside this package use the quote-form (`#include
-    # "SipiIcc.h"`) which auto-searches the current source's directory.
+    # "icc.h"`) which auto-searches the current source's directory.
     deps = [
         "//ext/exiv2:exiv2",
         "//ext/lcms2:lcms2",
@@ -66,7 +66,7 @@ cc_library(
 # epochs, so unlike //test/approval:approvaltests this target does NOT need
 # to set SOURCE_DATE_EPOCH.
 cc_test(
-    name = "sipi_icc_normalize_test",
+    name = "icc_normalize_test",
     srcs = [
         "icc_normalize_test.cpp",
         "test_main.cpp",
