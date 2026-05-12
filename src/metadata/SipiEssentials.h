@@ -149,9 +149,8 @@ public:
    *
    * @return ICC profile binary data as std::vector
    */
-  std::vector<unsigned char> icc_profile(void);
+  std::vector<unsigned char> icc_profile();
 
-  unsigned char *icc_profile(unsigned int &len);
   /*!
    * Setter for ICC profile
    *

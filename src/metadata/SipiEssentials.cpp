@@ -143,17 +143,7 @@ void SipiEssentials::hash_type(const std::string &hash_type_p)
     _hash_type = shttps::HashType::none;
 }
 
-std::vector<unsigned char> SipiEssentials::icc_profile(void) { return base64Decode(_icc_profile); }
-
-unsigned char *SipiEssentials::icc_profile(unsigned int &len)
-{
-  std::vector<unsigned char> tmp = base64Decode(_icc_profile);
-  len = tmp.size();
-
-  unsigned char *buf = new unsigned char[len];
-  memcpy(buf, tmp.data(), len);
-  return buf;
-}
+std::vector<unsigned char> SipiEssentials::icc_profile() { return base64Decode(_icc_profile); }
 
 void SipiEssentials::icc_profile(const std::vector<unsigned char> &icc_profile_p)
 {

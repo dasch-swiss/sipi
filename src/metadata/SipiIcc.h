@@ -122,17 +122,7 @@ public:
    * See test/approval/CHANGELOG.approval.md and docs/adr/0002-icc-
    * profile-determinism-test-only.md for the rationale.
    *
-   * @param[out] len Length of the buffer returned
-   * @returns Buffer containing the binary ICC profile (caller owns; `delete[]` it)
-   */
-  [[nodiscard]] unsigned char *iccBytes(unsigned int &len);
-
-  /*!
-   * Get the blob containing the ICC profile as std::vector. Calls the
-   * raw-buffer overload, so the same SOURCE_DATE_EPOCH normalization
-   * applies.
-   *
-   * @return std::vector containing the binary ICC profile
+   * @return std::vector containing the binary ICC profile (empty if no profile is set)
    */
   [[nodiscard]] std::vector<unsigned char> iccBytes();
 

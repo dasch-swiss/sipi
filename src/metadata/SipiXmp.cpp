@@ -98,48 +98,12 @@ SipiXmp::~SipiXmp()
 //============================================================================
 
 
-char *SipiXmp::xmpBytes(unsigned int &len)
-{
-  char *__buf = new char[__xmpstr.length() + 1];
-  memcpy(__buf, __xmpstr.c_str(), __xmpstr.length());
-  __buf[__xmpstr.length()] = '\0';
-  len = __xmpstr.length();
-  return __buf;// provisional code until Exiv2::Xmp is threadsafe
-  // TODO: Testing required if now Exiv2::Xmp is thread save
-
-  /*
-  std::string xmpPacket;
-  try {
-      if (0 != Exiv2::XmpParser::encode(xmpPacket, xmpData, Exiv2::XmpParser::useCompactFormat)) {
-          throw SipiError(thisSourceFile, __LINE__, "Failed to serialize XMP data!");
-      }
-  }
-  catch(Exiv2::Error &err) {
-      throw SipiError(thisSourceFile, __LINE__, err.what());
-  }
-  Exiv2::XmpParser::terminate();
-
-  len = xmpPacket.size();
-  char *buf = new char[len + 1];
-  memcpy (buf, xmpPacket.c_str(), len);
-  buf[len] = '\0';
-  return buf;
-   */
-}
-//============================================================================
-
-std::string SipiXmp::xmpBytes(void)
-{
-  unsigned int len = 0;
-  char *buf = xmpBytes(len);
-  std::string data;
-  if (buf != nullptr) {
-    data.reserve(len);
-    for (int i = 0; i < len; i++) data.push_back(buf[i]);
-    delete[] buf;
-  }
-  return data;
-}
+// Provisional implementation: returns the cached RDF/XML packet directly.
+// The Exiv2::XmpParser::encode path remains the long-term replacement, but
+// it is not thread-safe in the Exiv2 version we depend on. Once Exiv2's
+// XMP encoder becomes thread-safe, swap in the parser-driven path here
+// without touching call sites.
+std::string SipiXmp::xmpBytes() { return __xmpstr; }
 //============================================================================
 
 std::ostream &operator<<(std::ostream &outstr, const SipiXmp &rhs)

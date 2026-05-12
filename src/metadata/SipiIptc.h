@@ -38,18 +38,10 @@ public:
   ~SipiIptc();
 
   /*!
-   * Returns the bytes of the IPTC data. The buffer must be
-   * deleted by the caller after it is no longer used!
-   * \param[out] len Length of the data in bytes
-   * \returns Chunk of chars holding the IPTC data
-   */
-  unsigned char *iptcBytes(unsigned int &len);
-
-  /*!
-   * Returns the bytes of the IPTC data as std::vector
+   * Returns the bytes of the IPTC data as a std::vector.
    * @return IPTC bytes as std::vector
    */
-  std::vector<unsigned char> iptcBytes(void);
+  std::vector<unsigned char> iptcBytes();
 
   /*!
    * The overloaded << operator which is used to write the IPTC data formatted to the outstream

@@ -19,27 +19,11 @@ SipiIptc::SipiIptc(const unsigned char *iptc, unsigned int len)
 SipiIptc::~SipiIptc() {}
 
 
-unsigned char *SipiIptc::iptcBytes(unsigned int &len)
+std::vector<unsigned char> SipiIptc::iptcBytes()
 {
   Exiv2::DataBuf databuf = Exiv2::IptcParser::encode(iptcData);
-  unsigned char *buf = new unsigned char[databuf.size()];
-  if (databuf.size() > 0) memcpy(buf, databuf.data(), databuf.size());
-  len = databuf.size();
-  return buf;
-}
-//============================================================================
-
-std::vector<unsigned char> SipiIptc::iptcBytes(void)
-{
-  unsigned int len = 0;
-  unsigned char *buf = iptcBytes(len);
-  std::vector<unsigned char> data;
-  if (buf != nullptr) {
-    data.reserve(len);
-    for (int i = 0; i < len; i++) data.push_back(buf[i]);
-    delete[] buf;
-  }
-  return data;
+  if (databuf.size() == 0) return {};
+  return std::vector<unsigned char>(databuf.data(), databuf.data() + databuf.size());
 }
 //============================================================================
 
