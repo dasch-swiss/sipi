@@ -108,7 +108,7 @@ In command line mode, SIPI supports the following options:
   properties, and — on failure — a `phase` (`cli_args` | `read` | `convert` | `write`) with the `error_message`.
   Useful for programmatic consumers and for debugging when no Sentry DSN is configured. Stderr carries any log output
   so stdout stays reserved for the single JSON document. CLI-only: has no effect with `--config` (server mode).
-  Mutually exclusive with `--salsah` and `--query`. See [`json-output.md`](json-output.md) for the full schema and
+  Mutually exclusive with `--query`. See [`json-output.md`](json-output.md) for the full schema and
   worked examples. Example:
   ```bash
   sipi --json --file input.jpg out.jp2 | jq '.image.bps'

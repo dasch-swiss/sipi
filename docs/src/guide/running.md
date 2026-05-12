@@ -110,7 +110,7 @@ If none is specified, the default level is `INFO`.
 
 | Flag | Description |
 |------|-------------|
-| `--json` | Emit a single JSON document to `stdout` instead of human-readable output. Useful for programmatic consumers and for local debugging when no Sentry DSN is configured. Mutually exclusive with `--salsah` and `--query`; silently ignored with `--config` (server mode). |
+| `--json` | Emit a single JSON document to `stdout` instead of human-readable output. Useful for programmatic consumers and for local debugging when no Sentry DSN is configured. Mutually exclusive with `--query`; silently ignored with `--config` (server mode). |
 
 Use cases:
 
@@ -179,7 +179,6 @@ examples, and the `stdout` / `stderr` contract.
 
 | Flag | Description |
 |------|-------------|
-| `--salsah` | Legacy flag for old SALSAH system conversions |
 | `--subdirlevels <n>` | Number of subdirectory levels (deprecated) |
 | `--subdirexcludes <dirs>` | Directories excluded from subdir calculations |
 | `--pathprefix` | Treat IIIF prefix as file path (deprecated) |

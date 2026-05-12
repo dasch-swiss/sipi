@@ -33,8 +33,7 @@ namespace Sipi {
 /*!
  * The class SipiHttpServer implements a webserver that can be used to serve images using the IIIF
  * API. For details on the API look for  \url http://iiif.io . I implemented support for
- * cross domain scripting (CORS according to \url http://www.html5rocks.com/en/tutorials/cors/). As a
- * special feature we support acces to the old PHP-based salsah version (this is a bad hack!)
+ * cross domain scripting (CORS according to \url http://www.html5rocks.com/en/tutorials/cors/).
  */
 class SipiHttpServer : public shttps::Server
 {
@@ -44,7 +43,6 @@ protected:
   // Document root + URL prefix for shttps::file_handler. Empty = route disabled.
   std::string _docroot;
   std::string _imgroot;
-  std::string _salsah_prefix;
   std::string _wwwroute;
   // Stable storage for the (wwwroute, docroot) pair passed to shttps::file_handler
   // as its handler_data argument (4th arg of add_route). Must outlive the run loop.
@@ -103,10 +101,6 @@ public:
   void imgroot(const std::string &imgroot_p) { _imgroot = imgroot_p; }
 
   std::string imgroot() const { return _imgroot; }
-
-  std::string salsah_prefix() const { return _salsah_prefix; }
-
-  void salsah_prefix(const std::string &salsah_prefix) { _salsah_prefix = salsah_prefix; }
 
   void wwwroute(const std::string &wwwroute_p) { _wwwroute = wwwroute_p; }
 

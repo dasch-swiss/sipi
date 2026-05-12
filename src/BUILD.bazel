@@ -193,17 +193,6 @@ cc_library(
         ],
         exclude = [
             "sipi.cpp",  # executable entry point — lives in :sipi binary
-            # The CMake build (CMakeLists.txt:461 add_executable(sipi …))
-            # explicitly enumerates the TUs it wants and silently skips
-            # these two — both still reference symbols that have moved
-            # (`shttps/cJSON.h` was removed when shttps switched to
-            # jansson; the Salsah session helper is unwired). Treating
-            # them as dead code matches the historical behaviour;
-            # delete the source files outright once unit tests confirm
-            # nothing else references them.
-            "PhpSession.cpp",
-            "Salsah.cpp",
-            "Template.cpp",
         ],
     ),
     includes = ["."],

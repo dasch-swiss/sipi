@@ -613,16 +613,13 @@ int main(int argc, char *argv[])
   bool optQuery = false;
   auto *queryOpt = sipiopt.add_flag("-x,--query", optQuery, "Dump all information about the given file.");
 
-  bool optSalsah = false;
-  auto *salsahOpt = sipiopt.add_flag("-a,--salsah", optSalsah, "Special optioons for conversions in old salsah.");
-
   bool optJsonOutput = false;
   auto *jsonOpt = sipiopt.add_flag("--json",
     optJsonOutput,
     "Emit a structured JSON report (success or error) to stdout instead of human-readable messages. "
     "Useful for programmatic consumers and for debugging when no Sentry DSN is configured. "
-    "CLI mode only (ignored with --config). Mutually exclusive with --salsah and --query.");
-  jsonOpt->excludes(salsahOpt)->excludes(queryOpt);
+    "CLI mode only (ignored with --config). Mutually exclusive with --query.");
+  jsonOpt->excludes(queryOpt);
 
   //
   // below are server options
@@ -1193,8 +1190,6 @@ int main(int argc, char *argv[])
       Sipi::observability::close_sentry();
       return EXIT_FAILURE;
     }
-
-    if (!sipiopt.get_option("--salsah")->empty()) { std::cout << img.getNx() << " " << img.getNy() << std::endl; }
 
     // Successful CLI completion — emit the structured JSON report if --json was set.
     // populate_from_image() fills in the final width/height/bps/colorspace from the
