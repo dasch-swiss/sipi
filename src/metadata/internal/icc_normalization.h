@@ -4,13 +4,14 @@
  * AGPL-3.0-or-later
  */
 
-// Internal helpers for SipiIcc — exposed in a header solely so the unit tests
-// in test/unit/sipiicc/ can exercise them with explicit epoch values, side-
-// stepping the magic-static cache that drives production reads of
-// SOURCE_DATE_EPOCH. No production code outside src/metadata/SipiIcc.cpp
-// should include this header.
-#ifndef SIPI_METADATA_SIPI_ICC_DETAIL_H
-#define SIPI_METADATA_SIPI_ICC_DETAIL_H
+// Internal helpers for SipiIcc::iccBytes()'s SOURCE_DATE_EPOCH
+// reproducibility hook (per ADR-0002). Visibility is restricted at the
+// build-graph level to //src/metadata:__pkg__ — replacing the prior
+// comment-as-policy in SipiIccDetail.h with an analysis-time invariant.
+// Any #include outside the metadata package fails the Bazel analysis
+// phase.
+#ifndef SIPI_METADATA_INTERNAL_ICC_NORMALIZATION_H
+#define SIPI_METADATA_INTERNAL_ICC_NORMALIZATION_H
 
 #include <cstddef>
 #include <ctime>

@@ -1,0 +1,36 @@
+"""//src/metadata/internal — canonical Test seam package (DEV-6406).
+
+Houses the pure byte-mutation helper that backs SipiIcc::iccBytes()'s
+SOURCE_DATE_EPOCH reproducibility hook (ADR-0002). Exists as a separate
+Bazel package solely to encode "this header is internal to the metadata
+module" as a build-graph invariant instead of comment-as-policy.
+
+Visibility is restricted to //src/metadata:__pkg__ — every production
+TU outside `src/metadata/` that tries to `#include
+"metadata/internal/icc_normalization.h"` fails the Bazel analysis phase.
+The co-located icc_normalize_test in `//src/metadata` is on the
+visibility list by virtue of living in `//src/metadata:__pkg__`.
+
+This is the **canonical Test seam pattern** for SIPI per the Probe 2
+glossary delta: any future module that needs to expose internal symbols
+to its co-located test should follow this `internal/` + restricted-
+visibility recipe rather than commenting "do not include me from
+elsewhere" in a `*Detail.h` header.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//src/metadata:__pkg__"])
+
+cc_library(
+    name = "icc_normalization",
+    srcs = ["icc_normalization.cpp"],
+    hdrs = ["icc_normalization.h"],
+    # `strip_include_prefix = "/src"` re-roots the header at the
+    # repo-relative `src/` prefix so consumers can `#include
+    # "metadata/internal/icc_normalization.h"` — the canonical
+    # path-prefixed form per ADR-0003 — without needing to pull in
+    # `:sipi_top` (or any other library) just to put `src/` on the
+    # include path. The internal package becomes self-sufficient.
+    strip_include_prefix = "/src",
+)

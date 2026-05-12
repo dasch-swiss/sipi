@@ -7,11 +7,12 @@ Houses SIPI's EXIF (`SipiExif`), IPTC (`SipiIptc`), XMP (`SipiXmp`), and ICC
 `include/metadata/` per ADR-0003 so `.cpp`, `.h`, and `*_test.cpp` live
 co-located.
 
-`SipiIccDetail.h` is still exposed in `hdrs` here so the co-located
-`icc_normalize_test.cpp` (moved from `test/unit/sipiicc/`) can exercise
-the byte-mutation helper directly. DEV-6406 relocates it to
-`metadata/internal/icc_normalization.h` with a tighter visibility, replacing
-today's comment-as-policy with a build-graph invariant.
+The byte-mutation helper `apply_icc_header_normalization` lives in
+`//src/metadata/internal:icc_normalization` per DEV-6406 — the canonical
+Test seam pattern. Its visibility is restricted to `//src/metadata:__pkg__`
+at the Bazel analysis level, replacing today's comment-as-policy header
+with a build-graph invariant. The co-located `icc_normalize_test`
+exercises the helper through the same restricted edge.
 
 `layering_check` and `parse_headers` are **deferred** for the same reason as
 //src/observability: every `.cpp` here `#include`s `SipiImage.hpp` (and
@@ -40,7 +41,6 @@ cc_library(
         "SipiEssentials.h",
         "SipiExif.h",
         "SipiIcc.h",
-        "SipiIccDetail.h",
         "SipiIptc.h",
         "SipiXmp.h",
     ],
@@ -57,6 +57,7 @@ cc_library(
         "//shttps:shttps",
         "//src:sipi_generated_hdrs",
         "//src:sipi_top",
+        "//src/metadata/internal:icc_normalization",
     ],
 )
 
@@ -71,7 +72,7 @@ cc_test(
         "test_main.cpp",
     ],
     deps = [
-        ":metadata",
+        "//src/metadata/internal:icc_normalization",
         "@googletest//:gtest_main",
     ],
 )

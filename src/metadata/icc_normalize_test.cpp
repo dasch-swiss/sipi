@@ -10,7 +10,7 @@
 // have to fight with the production magic-static cache that backs
 // read_source_date_epoch().
 
-#include "metadata/SipiIccDetail.h"
+#include "metadata/internal/icc_normalization.h"
 
 #include "gtest/gtest.h"
 
