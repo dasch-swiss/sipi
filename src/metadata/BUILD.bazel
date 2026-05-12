@@ -1,0 +1,77 @@
+"""src/metadata/ — image metadata + colour profile surface (Y+8a per DEV-6353).
+
+Second per-module Bazel package promotion (after //src/observability).
+Houses SIPI's EXIF (`SipiExif`), IPTC (`SipiIptc`), XMP (`SipiXmp`), and ICC
+(`SipiIcc`) wrappers around exiv2 / lcms2, plus the Essentials packet
+(`SipiEssentials`) sidecar serialization. Headers were lifted from
+`include/metadata/` per ADR-0003 so `.cpp`, `.h`, and `*_test.cpp` live
+co-located.
+
+`SipiIccDetail.h` is still exposed in `hdrs` here so the co-located
+`icc_normalize_test.cpp` (moved from `test/unit/sipiicc/`) can exercise
+the byte-mutation helper directly. DEV-6406 relocates it to
+`metadata/internal/icc_normalization.h` with a tighter visibility, replacing
+today's comment-as-policy with a build-graph invariant.
+
+`layering_check` and `parse_headers` are **deferred** for the same reason as
+//src/observability: every `.cpp` here `#include`s `SipiImage.hpp` (and
+`SipiImage.hpp`'s `friend class SipiIcc;` — a known coupling tracked under
+DEV-6396), which is reachable only through the permissive
+`includes = ["."]` on the parent `:sipi_lib` target. With strict layering
+on, that transitive include would require explicit ownership of `SipiImage`
+in a Bazel package. The feature flips on globally in DEV-6353 (Y+8e) once
+every per-module promotion has landed and SipiImage has its own package.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//src:__subpackages__"])
+
+cc_library(
+    name = "metadata",
+    srcs = [
+        "SipiEssentials.cpp",
+        "SipiExif.cpp",
+        "SipiIcc.cpp",
+        "SipiIptc.cpp",
+        "SipiXmp.cpp",
+    ],
+    hdrs = [
+        "SipiEssentials.h",
+        "SipiExif.h",
+        "SipiIcc.h",
+        "SipiIccDetail.h",
+        "SipiIptc.h",
+        "SipiXmp.h",
+    ],
+    # No `includes` directive: cross-module consumers use the path-prefixed
+    # form (`#include "metadata/SipiIcc.h"`) which is resolved via the
+    # consumer's own `includes = ["."]` (typically via //src:sipi_lib).
+    # Siblings inside this package use the quote-form (`#include
+    # "SipiIcc.h"`) which auto-searches the current source's directory.
+    deps = [
+        "//ext/exiv2:exiv2",
+        "//ext/lcms2:lcms2",
+        "//ext/openssl:openssl",
+        "//include:headers",
+        "//shttps:shttps",
+        "//src:sipi_generated_hdrs",
+        "//src:sipi_top",
+    ],
+)
+
+# Co-located unit test per ADR-0003 — moved from test/unit/sipiicc/.
+# Tests Sipi::detail::apply_icc_header_normalization directly with explicit
+# epochs, so unlike //test/approval:approvaltests this target does NOT need
+# to set SOURCE_DATE_EPOCH.
+cc_test(
+    name = "sipi_icc_normalize_test",
+    srcs = [
+        "icc_normalize_test.cpp",
+        "test_main.cpp",
+    ],
+    deps = [
+        ":metadata",
+        "@googletest//:gtest_main",
+    ],
+)

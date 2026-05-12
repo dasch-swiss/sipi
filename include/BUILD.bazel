@@ -7,9 +7,11 @@ The `include/` directory holds Sipi's headers in a flat-ish layout:
 
 Consumers reference both forms via sibling `#include "Logger.h"` (resolved
 through `includes = ["."]` propagation) and prefixed
-`#include "metadata/SipiIcc.h"`. Internal headers like
-`include/metadata/SipiIccDetail.h` are still exposed in `hdrs` so unit
-tests can link against private symbols.
+`#include "formats/SipiIOTiff.h"`.
+
+`metadata/` has been promoted out of this filegroup into
+`//src/metadata:metadata` (DEV-6405 / Y+8a, ADR-0003) — consumers of those
+headers now depend on the new package directly.
 
 Cross-package consumers:
   //src:sipi_lib       — primary consumer
@@ -29,7 +31,6 @@ cc_library(
             "*.hpp",
             "formats/*.h",
             "iiifparser/*.h",
-            "metadata/*.h",
         ],
         # Future-proof against new subdirs (e.g. include/handlers/) without
         # tripping the empty-glob lint when a subdir is empty or absent.
@@ -37,12 +38,11 @@ cc_library(
     ),
     # Each per-subsystem header dir is on the include path so SIPI's mix of
     # sibling-relative (`#include "SipiDecodeDims.h"`) and prefixed
-    # (`#include "metadata/SipiIcc.h"`) include forms both resolve.
+    # (`#include "formats/SipiIOTiff.h"`) include forms both resolve.
     includes = [
         ".",
         "formats",
         "iiifparser",
-        "metadata",
     ],
 )
 

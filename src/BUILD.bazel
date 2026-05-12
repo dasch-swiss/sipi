@@ -182,6 +182,66 @@ cc_library(
     visibility = ["//src:__subpackages__"],
 )
 
+# ── //src:sipi_top ─────────────────────────────────────────────────────────
+# Foundational `cc_library` covering the two infrastructure source files
+# (`Logger.cpp`, `SipiError.cpp`) and the top-level `.hpp` headers
+# (`SipiError.hpp`, `SipiImage.hpp`) that per-module packages need to consume.
+#
+# Why this split exists:
+#
+#   - Per-module `cc_library` targets under `//src/<mod>/` (e.g.
+#     `//src/metadata:metadata`) cannot depend on `:sipi_lib` — that
+#     would close a cycle, since `:sipi_lib` deps on every per-module
+#     target.
+#
+#   - Those modules' `.cpp` files reference symbols from
+#     `Logger.cpp` (`log_err` family) and `SipiError.cpp` (the constructors
+#     emitted by every `throw SipiError(...)` site). Unit tests that link
+#     only the per-module `cc_library` would fail with undefined-symbol
+#     errors without those definitions in the link line.
+#
+# Including the implementations here (not just headers) is what lets each
+# module's co-located unit test link cleanly with `deps = [":<mod>"]` +
+# gtest.
+#
+# `:sipi_lib` excludes these files from its srcs glob and instead depends
+# on `:sipi_top` so each TU stays in exactly one library — no
+# duplicate-symbol risk.
+#
+# When `SipiImage` moves into its own package (DEV-6396), `SipiImage.hpp`
+# leaves this library; same for `SipiError`/`Logger` if a future probe
+# extracts them into dedicated modules. This target is transitional
+# scaffolding for the Y+8 per-module flip series.
+cc_library(
+    name = "sipi_top",
+    srcs = [
+        "Logger.cpp",
+        "SipiError.cpp",
+    ],
+    hdrs = [
+        "SipiError.hpp",
+        "SipiImage.hpp",
+    ],
+    # Consumers `#include "SipiError.hpp"` — `.` (i.e. `src/`) on the
+    # include path resolves the quote-form lookup.
+    includes = ["."],
+    visibility = ["//src:__subpackages__"],
+    # `SipiImage.hpp` transitively includes `metadata/Sipi*.h` and
+    # `shttps/...`; the deps here surface those headers so a consumer
+    # picking up `:sipi_top` can compile against `SipiImage.hpp` without
+    # separately declaring every transitive header bundle.
+    # Note we deliberately do NOT list `//src/metadata:metadata` here —
+    # the metadata package itself consumes `:sipi_top`, so listing
+    # metadata as a dep would close a cycle. The transitive
+    # `metadata/Sipi*.h` includes from `SipiImage.hpp` resolve through
+    # the consumer's own metadata dep instead (or via `:sipi_lib`'s
+    # `includes = ["."]` for the unstrict-deps grace period).
+    deps = [
+        "//include:headers",
+        "//shttps:shttps",
+    ],
+)
+
 # ── //src:sipi_lib ─────────────────────────────────────────────────────────
 # Every translation unit except the executable's `main`.
 cc_library(
@@ -193,6 +253,11 @@ cc_library(
         ],
         exclude = [
             "sipi.cpp",  # executable entry point — lives in :sipi binary
+            # Owned by `:sipi_top` so per-module unit tests can link them
+            # transitively without depending on `:sipi_lib` (which would
+            # close a cycle).
+            "Logger.cpp",
+            "SipiError.cpp",
         ],
     ),
     includes = ["."],
@@ -233,8 +298,10 @@ cc_library(
     }),
     deps = [
         ":sipi_generated_hdrs",
+        ":sipi_top",
         "//include:headers",
         "//shttps:shttps",
+        "//src/metadata:metadata",
         "//src/observability:observability",
         "//ext/lcms2:lcms2",
         "//ext/exiv2:exiv2",
