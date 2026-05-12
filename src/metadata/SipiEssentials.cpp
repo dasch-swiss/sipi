@@ -3,40 +3,42 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#include <math.h>
+#include <cerrno>
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <vector>
+
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
 #include <openssl/evp.h>
-#include <stdlib.h>
-#include <string.h>
-#include <vector>
 
 #include "metadata/SipiEssentials.h"
 #include "shttps/Error.h"
-#include "shttps/Global.h"
 
-static int calcDecodeLength(const std::string &b64input)
+namespace {
+
+int calcDecodeLength(const std::string &b64input)
 {
   int padding = 0;
-
-  // Check for trailing '=''s as padding
-  if (b64input[b64input.length() - 1] == '=' && b64input[b64input.length() - 2] == '=')
+  if (b64input.length() >= 2 && b64input[b64input.length() - 1] == '=' && b64input[b64input.length() - 2] == '=')
     padding = 2;
-  else if (b64input[b64input.length() - 1] == '=')
+  else if (!b64input.empty() && b64input[b64input.length() - 1] == '=')
     padding = 1;
-
-  return (int)b64input.length() * 0.75 - padding;
+  return static_cast<int>(b64input.length() * 0.75) - padding;
 }
 
 std::string base64Encode(const std::vector<unsigned char> &message)
 {
+  if (message.empty()) return {};
+
   BIO *bio;
   BIO *b64;
   FILE *stream;
 
-  size_t encodedSize = 4 * ceil((double)message.size() / 3);
+  std::size_t encodedSize = 4 * static_cast<std::size_t>(std::ceil(static_cast<double>(message.size()) / 3));
 
-  char *buffer = (char *)malloc(encodedSize + 1);
+  char *buffer = static_cast<char *>(std::malloc(encodedSize + 1));
   if (buffer == nullptr) { throw shttps::Error("Failed to allocate memory", errno); }
 
   stream = fmemopen(buffer, encodedSize + 1, "w");
@@ -44,160 +46,128 @@ std::string base64Encode(const std::vector<unsigned char> &message)
   bio = BIO_new_fp(stream, BIO_NOCLOSE);
   bio = BIO_push(b64, bio);
   BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
-  BIO_write(bio, message.data(), message.size());
+  BIO_write(bio, message.data(), static_cast<int>(message.size()));
   (void)BIO_flush(bio);
   BIO_free_all(bio);
-  fclose(stream);
+  std::fclose(stream);
 
   std::string res(buffer);
-  free(buffer);
+  std::free(buffer);
   return res;
 }
 
 std::vector<unsigned char> base64Decode(const std::string &b64message)
 {
+  if (b64message.empty()) return {};
+
   BIO *bio;
   BIO *b64;
-  size_t decodedLength = calcDecodeLength(b64message);
+  std::size_t decodedLength = calcDecodeLength(b64message);
 
-  unsigned char *buffer = (unsigned char *)malloc(decodedLength + 1);
-  if (buffer == NULL) { throw shttps::Error("Failed to allocate memory", errno); }
-  FILE *stream = fmemopen((char *)b64message.c_str(), b64message.size(), "r");
+  auto *buffer = static_cast<unsigned char *>(std::malloc(decodedLength + 1));
+  if (buffer == nullptr) { throw shttps::Error("Failed to allocate memory", errno); }
+  FILE *stream = fmemopen(const_cast<char *>(b64message.c_str()), b64message.size(), "r");
 
   b64 = BIO_new(BIO_f_base64());
   bio = BIO_new_fp(stream, BIO_NOCLOSE);
   bio = BIO_push(b64, bio);
   BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
-  decodedLength = BIO_read(bio, buffer, b64message.size());
+  decodedLength = BIO_read(bio, buffer, static_cast<int>(b64message.size()));
   buffer[decodedLength] = '\0';
 
   BIO_free_all(bio);
-  fclose(stream);
+  std::fclose(stream);
 
-  std::vector<unsigned char> data;
-  data.reserve(decodedLength);
-  for (int i = 0; i < decodedLength; i++) data.push_back(buffer[i]);
-
-  free(buffer);
+  std::vector<unsigned char> data(buffer, buffer + decodedLength);
+  std::free(buffer);
   return data;
 }
 
-namespace Sipi {
-
-SipiEssentials::SipiEssentials(const std::string &origname_p,
-  const std::string &mimetype_p,
-  shttps::HashType hash_type_p,
-  const std::string &data_chksum_p,
-  const std::vector<unsigned char> &icc_profile_p)
-  : _origname(origname_p), _mimetype(mimetype_p), _hash_type(hash_type_p), _data_chksum(data_chksum_p)
+std::vector<std::string> split(const std::string &s, const std::string &delimiter)
 {
-  _is_set = true;
-  _use_icc = false;
-  if (!_icc_profile.empty()) {
-    _icc_profile = base64Encode(icc_profile_p);
-    _use_icc = true;
-  }
-}
-
-std::string SipiEssentials::hash_type_string(void) const
-{
-  std::string hash_type_str;
-  switch (_hash_type) {
-  case shttps::HashType::none:
-    hash_type_str = "none";
-    break;
-  case shttps::HashType::md5:
-    hash_type_str = "md5";
-    break;
-  case shttps::HashType::sha1:
-    hash_type_str = "sha1";
-    break;
-  case shttps::HashType::sha256:
-    hash_type_str = "sha256";
-    break;
-  case shttps::HashType::sha384:
-    hash_type_str = "sha384";
-    break;
-  case shttps::HashType::sha512:
-    hash_type_str = "sha512";
-    break;
-  }
-  return hash_type_str;
-}
-
-void SipiEssentials::hash_type(const std::string &hash_type_p)
-{
-  if (hash_type_p == "none")
-    _hash_type = shttps::HashType::none;
-  else if (hash_type_p == "md5")
-    _hash_type = shttps::HashType::md5;
-  else if (hash_type_p == "sha1")
-    _hash_type = shttps::HashType::sha1;
-  else if (hash_type_p == "sha256")
-    _hash_type = shttps::HashType::sha256;
-  else if (hash_type_p == "sha384")
-    _hash_type = shttps::HashType::sha384;
-  else if (hash_type_p == "sha512")
-    _hash_type = shttps::HashType::sha512;
-  else
-    _hash_type = shttps::HashType::none;
-}
-
-std::vector<unsigned char> SipiEssentials::icc_profile() { return base64Decode(_icc_profile); }
-
-void SipiEssentials::icc_profile(const std::vector<unsigned char> &icc_profile_p)
-{
-  _icc_profile = base64Encode(icc_profile_p);
-}
-
-// for string delimiter
-std::vector<std::string> split(std::string s, std::string delimiter)
-{
-  size_t pos_start = 0, pos_end, delim_len = delimiter.length();
-  std::string token;
+  std::size_t pos_start = 0;
+  std::size_t pos_end;
+  std::size_t delim_len = delimiter.length();
   std::vector<std::string> res;
 
   while ((pos_end = s.find(delimiter, pos_start)) != std::string::npos) {
-    token = s.substr(pos_start, pos_end - pos_start);
+    res.emplace_back(s.substr(pos_start, pos_end - pos_start));
     pos_start = pos_end + delim_len;
-    res.push_back(token);
   }
-
-  res.push_back(s.substr(pos_start));
+  res.emplace_back(s.substr(pos_start));
   return res;
 }
 
-void SipiEssentials::parse(const std::string &str)
+std::string hash_type_to_string(shttps::HashType ht)
 {
-  std::vector<std::string> result = split(str, "|");
-  _origname = result[0];
-  _mimetype = result[1];
-  std::string _hash_type_str = result[2];
-  if (_hash_type_str == "none")
-    _hash_type = shttps::HashType::none;
-  else if (_hash_type_str == "md5")
-    _hash_type = shttps::HashType::md5;
-  else if (_hash_type_str == "sha1")
-    _hash_type = shttps::HashType::sha1;
-  else if (_hash_type_str == "sha256")
-    _hash_type = shttps::HashType::sha256;
-  else if (_hash_type_str == "sha384")
-    _hash_type = shttps::HashType::sha384;
-  else if (_hash_type_str == "sha512")
-    _hash_type = shttps::HashType::sha512;
-  else
-    _hash_type = shttps::HashType::none;
-  _data_chksum = result[3];
+  switch (ht) {
+  case shttps::HashType::none:
+    return "none";
+  case shttps::HashType::md5:
+    return "md5";
+  case shttps::HashType::sha1:
+    return "sha1";
+  case shttps::HashType::sha256:
+    return "sha256";
+  case shttps::HashType::sha384:
+    return "sha384";
+  case shttps::HashType::sha512:
+    return "sha512";
+  }
+  return "none";
+}
+
+shttps::HashType hash_type_from_string(const std::string &s)
+{
+  if (s == "md5") return shttps::HashType::md5;
+  if (s == "sha1") return shttps::HashType::sha1;
+  if (s == "sha256") return shttps::HashType::sha256;
+  if (s == "sha384") return shttps::HashType::sha384;
+  if (s == "sha512") return shttps::HashType::sha512;
+  return shttps::HashType::none;
+}
+
+}// namespace
+
+namespace Sipi {
+
+SipiEssentials::SipiEssentials(const std::string &serialized)
+{
+  std::vector<std::string> result = split(serialized, "|");
+  if (result.size() < 4) return;// Malformed packet — leave _is_set = false.
+
+  _fields.origname = result[0];
+  _fields.mimetype = result[1];
+  _fields.hash_type = hash_type_from_string(result[2]);
+  _fields.data_chksum = result[3];
 
   if (result.size() > 5) {
-    std::string tmp_use_icc = result[4];
-    _use_icc = (tmp_use_icc == "USE_ICC");
-    if (_use_icc) {
-      _icc_profile = result[5];
-    } else {
-      _icc_profile = std::string();
-    }
+    _fields.use_icc = (result[4] == "USE_ICC");
+    if (_fields.use_icc && result[5] != "NULL") { _fields.icc_profile = base64Decode(result[5]); }
   }
   _is_set = true;
 }
+
+std::string SipiEssentials::serialize() const
+{
+  std::string out;
+  out.reserve(_fields.origname.size() + _fields.mimetype.size() + _fields.data_chksum.size() + 64);
+  out += _fields.origname;
+  out += '|';
+  out += _fields.mimetype;
+  out += '|';
+  out += hash_type_to_string(_fields.hash_type);
+  out += '|';
+  out += _fields.data_chksum;
+  out += '|';
+  out += _fields.use_icc ? "USE_ICC" : "IGNORE_ICC";
+  out += '|';
+  if (!_fields.icc_profile.empty()) {
+    out += base64Encode(_fields.icc_profile);
+  } else {
+    out += "NULL";
+  }
+  return out;
+}
+
 }// namespace Sipi

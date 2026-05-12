@@ -1465,8 +1465,8 @@ SipiImgInfo SipiIOTiff::getDim(const std::string &filepath)
     char *emdatastr;
     if (1 == TIFFGetField(tif.get(), TIFFTAG_SIPIMETA, &emdatastr)) {
       SipiEssentials se(emdatastr);
-      info.origmimetype = se.mimetype();
-      info.origname = se.origname();
+      info.origmimetype = se.fields().mimetype;
+      info.origname = se.fields().origname;
       info.success = SipiImgInfo::ALL;
     }
 
@@ -1650,11 +1650,11 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
     if (img->exif->getValByKey("Exif.Image.ResolutionUnit", s)) { TIFFSetField(tif, TIFFTAG_RESOLUTIONUNIT, s); }
   }
   SipiEssentials es = img->essential_metadata();
-  if (((img->icc != nullptr) || es.use_icc()) & (!(img->skip_metadata & SKIP_ICC))) {
+  if (((img->icc != nullptr) || es.fields().use_icc) & (!(img->skip_metadata & SKIP_ICC))) {
     std::vector<unsigned char> buf;
     try {
-      if (es.use_icc()) {
-        buf = es.icc_profile();
+      if (es.fields().use_icc) {
+        buf = es.fields().icc_profile;
       } else {
         buf = img->icc->iccBytes();
       }
@@ -1691,7 +1691,7 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
   // Custom tag for SipiEssential metadata
   //
   if (es.is_set()) {
-    std::string emdata = es;
+    std::string emdata = es.serialize();
     TIFFSetField(tif, TIFFTAG_SIPIMETA, emdata.c_str());
   }
   // TIFFCheckpointDirectory(tif);

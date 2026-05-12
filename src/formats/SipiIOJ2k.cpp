@@ -704,8 +704,8 @@ SipiImgInfo SipiIOJ2k::getDim(const std::string &filepath)
     const char *cstr = comment.get_text();
     if (strncmp(cstr, "SIPI:", 5) == 0) {
       SipiEssentials se(cstr + 5);
-      info.origmimetype = se.mimetype();
-      info.origname = se.origname();
+      info.origmimetype = se.fields().mimetype;
+      info.origname = se.fields().origname;
       info.success = SipiImgInfo::ALL;
       break;
     }
@@ -1035,12 +1035,12 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
           break;
         }
         case icc_LUM_D65: {
-          if (es.is_set()) es.use_icc(true);
+          if (es.is_set()) es.fields_mut().use_icc = true;
           jp2_family_colour.init(JP2_sLUM_SPACE);// TODO: just a fallback
           break;
         }
         case icc_ROMM_GRAY: {
-          if (es.is_set()) es.use_icc(true);
+          if (es.is_set()) es.fields_mut().use_icc = true;
           jp2_family_colour.init(JP2_sLUM_SPACE);// TODO: just a fallback
           break;
         }
@@ -1061,7 +1061,7 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
         }
         }
       } catch (kdu_exception e) {
-        if (es.is_set()) es.use_icc(true);
+        if (es.is_set()) es.fields_mut().use_icc = true;
         switch (img->nc - img->es.size()) {
         case 1: {
           jp2_family_colour.init(JP2_sLUM_SPACE);
@@ -1098,7 +1098,7 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
     // Custom tag for SipiEssential metadata
     //
     if (es.is_set()) {
-      std::string esstr = es;
+      std::string esstr = es.serialize();
       std::string emdata = "SIPI:" + esstr;
       kdu_codestream_comment comment = codestream.add_comment();
       comment.put_text(emdata.c_str());

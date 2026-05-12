@@ -323,13 +323,20 @@ bool SipiImage::readOriginal(const std::string &filepath,
     std::string mimetype = shttps::Parsing::getFileMimetype(filepath).first;
     std::vector<unsigned char> iccprofile;
     if (icc != nullptr) { iccprofile = icc->iccBytes(); }
-    SipiEssentials emdata2(origname, mimetype, shttps::HashType::sha256, checksum, iccprofile);
+    SipiEssentials emdata2(EssentialsFields{
+      .origname = origname,
+      .mimetype = mimetype,
+      .hash_type = shttps::HashType::sha256,
+      .data_chksum = checksum,
+      .use_icc = !iccprofile.empty(),
+      .icc_profile = std::move(iccprofile),
+    });
     essential_metadata(emdata2);
   } else {
-    shttps::Hash internal_hash(emdata.hash_type());
+    shttps::Hash internal_hash(emdata.fields().hash_type);
     internal_hash.add_data(pixels, nx * ny * nc * bps / 8);
     std::string checksum = internal_hash.hash();
-    if (checksum != emdata.data_chksum()) { return false; }
+    if (checksum != emdata.fields().data_chksum) { return false; }
   }
 
   return true;
@@ -351,13 +358,18 @@ bool SipiImage::readOriginal(const std::string &filepath,
     internal_hash.add_data(pixels, nx * ny * nc * bps / 8);
     std::string checksum = internal_hash.hash();
     std::string mimetype = shttps::Parsing::getFileMimetype(filepath).first;
-    SipiEssentials emdata2(origname, mimetype, shttps::HashType::sha256, checksum);
+    SipiEssentials emdata2(EssentialsFields{
+      .origname = origname,
+      .mimetype = mimetype,
+      .hash_type = shttps::HashType::sha256,
+      .data_chksum = checksum,
+    });
     essential_metadata(emdata2);
   } else {
-    shttps::Hash internal_hash(emdata.hash_type());
+    shttps::Hash internal_hash(emdata.fields().hash_type);
     internal_hash.add_data(pixels, nx * ny * nc * bps / 8);
     std::string checksum = internal_hash.hash();
-    if (checksum != emdata.data_chksum()) { return false; }
+    if (checksum != emdata.fields().data_chksum) { return false; }
   }
 
   return true;
