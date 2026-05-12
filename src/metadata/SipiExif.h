@@ -43,125 +43,29 @@ private:
   Exiv2::ExifData exifData;//!< Private member variable holding the exiv2 EXIF data
   Exiv2::ByteOrder byteorder;//!< Private member holding the byteorder of the EXIF data
 
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, std::string &val)
-  {
-    val = v->toString();
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<std::string> &val)
-  {
-    for (int i = 0; i < v->count(); i++) { val.push_back(v->toString(i)); }
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, char &val)
-  {
-    val = static_cast<char>(v->toInt64());
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<char> &val)
-  {
-    for (int i = 0; i < v->count(); i++) { val.push_back(static_cast<char>(v->toInt64(i))); }
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, unsigned char &val)
-  {
-    val = static_cast<unsigned char>(v->toInt64());
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<unsigned char> &val)
-  {
-    for (int i = 0; i < v->count(); i++) { val.push_back(static_cast<unsigned char>(v->toInt64(i))); }
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, short &val)
-  {
-    val = static_cast<short>(v->toInt64());
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<short> &val)
-  {
-    for (int i = 0; i < v->count(); i++) { val.push_back(static_cast<short>(v->toInt64(i))); }
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, unsigned short &val)
-  {
-    val = static_cast<unsigned short>(v->toInt64());
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<unsigned short> &val)
-  {
-    for (int i = 0; i < v->count(); i++) { val.push_back(static_cast<unsigned short>(v->toInt64(i))); }
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, int &val)
-  {
-    val = static_cast<int>(v->toInt64());
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<int> &val)
-  {
-    for (int i = 0; i < v->count(); i++) { val.push_back(static_cast<int>(v->toInt64(i))); }
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, unsigned int &val)
-  {
-    val = static_cast<unsigned int>(v->toInt64());
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<unsigned int> &val)
-  {
-    for (int i = 0; i < v->count(); i++) { val.push_back(static_cast<unsigned int>(v->toInt64(i))); }
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, float &val)
-  {
-    val = static_cast<float>(v->toFloat());
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<float> &val)
-  {
-    for (int i = 0; i < v->count(); i++) { val.push_back(static_cast<float>(v->toFloat(i))); }
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, double &val)
-  {
-    val = static_cast<double>(v->toFloat());
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<double> &val)
-  {
-    for (int i = 0; i < v->count(); i++) { val.push_back(static_cast<double>(v->toFloat(i))); }
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, Exiv2::Rational &val)
-  {
-    val = v->toRational();
-    return v->ok();
-  }
-
-  static inline bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<Exiv2::Rational> &val)
-  {
-    for (int i = 0; i < v->count(); i++) { val.push_back(v->toRational(i)); }
-    return v->ok();
-  }
+  // Type-dispatched assignment helpers backing the inline `getValByKey<T>`
+  // templates below. Definitions live in SipiExif.cpp so the 22 inline bodies
+  // don't have to be parsed by every TU that includes this header (DEV-6407).
+  static bool assign_val(Exiv2::Value::UniquePtr &v, std::string &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<std::string> &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, char &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<char> &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, unsigned char &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<unsigned char> &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, short &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<short> &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, unsigned short &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<unsigned short> &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, int &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<int> &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, unsigned int &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<unsigned int> &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, float &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<float> &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, double &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<double> &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, Exiv2::Rational &val);
+  static bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<Exiv2::Rational> &val);
 
 public:
   /*!
