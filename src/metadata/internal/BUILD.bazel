@@ -1,6 +1,6 @@
 """//src/metadata/internal — canonical Test seam package (DEV-6406).
 
-Houses the pure byte-mutation helper that backs SipiIcc::iccBytes()'s
+Houses the pure byte-mutation helper that backs Icc::iccBytes()'s
 SOURCE_DATE_EPOCH reproducibility hook (ADR-0002). Exists as a separate
 Bazel package solely to encode "this header is internal to the metadata
 module" as a build-graph invariant instead of comment-as-policy.

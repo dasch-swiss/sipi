@@ -1937,10 +1937,10 @@ static void serve_iiif(Connection &conn_obj,
     }
     switch (quality_format.quality()) {
     case SipiQualityFormat::COLOR:
-      img.convertToIcc(SipiIcc(icc_sRGB), 8);
+      img.convertToIcc(Icc(icc_sRGB), 8);
       break;// for now, force 8 bit/sample
     case SipiQualityFormat::GRAY:
-      img.convertToIcc(SipiIcc(icc_GRAY_D50), 8);
+      img.convertToIcc(Icc(icc_GRAY_D50), 8);
       break;// for now, force 8 bit/sample
     case SipiQualityFormat::BITONAL:
       img.toBitonal();

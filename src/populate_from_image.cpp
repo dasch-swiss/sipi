@@ -15,7 +15,7 @@
 #include "observability/sentry.h"
 
 #include "SipiImage.hpp"
-#include "metadata/SipiIcc.h"
+#include "metadata/icc.h"
 
 namespace Sipi::observability {
 

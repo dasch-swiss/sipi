@@ -22,7 +22,7 @@ This context **consumes** [shttps](./shttps/CONTEXT.md) one-way. The four primar
 
 The following types live in shttps today but are SIPI domain concerns or generic utilities; they are scheduled to move SIPI-side so the planned Rust replacement of shttps does not need to reproduce them:
 
-- `shttps::Hash` / `shttps::HashType` → SIPI preservation module (used by `SipiEssentials::pixel_checksum`).
+- `shttps::Hash` / `shttps::HashType` → SIPI preservation module (used by `Essentials::pixel_checksum`).
 - `shttps::Parsing` → SIPI-side support module.
 - `shttps::Error` → folded into SIPI's error hierarchy.
 - `shttps::Global`, `shttps::makeunique` → inline or SIPI-side support.

@@ -8,8 +8,8 @@
 
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
-#include "metadata/SipiExif.h"
-#include "metadata/SipiIcc.h"
+#include "metadata/exif.h"
+#include "metadata/icc.h"
 #include "test_paths.hpp"
 
 #include <filesystem>

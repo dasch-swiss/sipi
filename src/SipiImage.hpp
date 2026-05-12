@@ -20,11 +20,11 @@
 
 #include "SipiIO.h"
 // #include "iiifparser/SipiRegion.h"
-#include "metadata/SipiEssentials.h"
-#include "metadata/SipiExif.h"
-#include "metadata/SipiIcc.h"
-#include "metadata/SipiIptc.h"
-#include "metadata/SipiXmp.h"
+#include "metadata/essentials.h"
+#include "metadata/exif.h"
+#include "metadata/icc.h"
+#include "metadata/iptc.h"
+#include "metadata/xmp.h"
 
 
 /*!
@@ -140,11 +140,11 @@ protected:
   PhotometricInterpretation photo;//!< Image type, that is the meaning of the channels
   byte *pixels;//!< Pointer to block of memory holding the pixels (allways in big-endian format if interpreted as 16
                //!< bit/sample)
-  std::shared_ptr<SipiXmp> xmp;//!< Pointer to instance SipiXmp class (\ref SipiXmp), or NULL
-  std::shared_ptr<SipiIcc> icc;//!< Pointer to instance of SipiIcc class (\ref SipiIcc), or NULL
-  std::shared_ptr<SipiIptc> iptc;//!< Pointer to instance of SipiIptc class (\ref SipiIptc), or NULL
-  std::shared_ptr<SipiExif> exif;//!< Pointer to instance of SipiExif class (\ref SipiExif), or NULL
-  SipiEssentials emdata;//!< Metadata to be stored in file header
+  std::shared_ptr<Xmp> xmp;//!< Pointer to instance Xmp class (\ref Xmp), or NULL
+  std::shared_ptr<Icc> icc;//!< Pointer to instance of Icc class (\ref Icc), or NULL
+  std::shared_ptr<Iptc> iptc;//!< Pointer to instance of Iptc class (\ref Iptc), or NULL
+  std::shared_ptr<Exif> exif;//!< Pointer to instance of Exif class (\ref Exif), or NULL
+  Essentials emdata;//!< Metadata to be stored in file header
   shttps::Connection *conobj;//!< Pointer to HTTP connection
   SkipMetadata skip_metadata;//!< If true, all metadata is stripped off
 
@@ -226,19 +226,19 @@ public:
    * Get the exif metadata of the image.
    * \return exif metadata
    */
-  [[nodiscard]] std::shared_ptr<SipiExif> getExif() const { return exif; };
+  [[nodiscard]] std::shared_ptr<Exif> getExif() const { return exif; };
 
   /**
    * Get the ICC color profile of the image.
    * \return ICC profile, or nullptr if not set
    */
-  [[nodiscard]] std::shared_ptr<SipiIcc> getIcc() const { return icc; }
+  [[nodiscard]] std::shared_ptr<Icc> getIcc() const { return icc; }
 
   /**
    * Get the XMP metadata of the image.
    * \return XMP metadata, or nullptr if not set
    */
-  [[nodiscard]] std::shared_ptr<SipiXmp> getXmp() const { return xmp; }
+  [[nodiscard]] std::shared_ptr<Xmp> getXmp() const { return xmp; }
 
   /*!
    * Get orientation
@@ -350,9 +350,9 @@ public:
    */
   [[nodiscard]] shttps::Connection *connection() const { return conobj; };
 
-  void essential_metadata(const SipiEssentials &emdata_p) { emdata = emdata_p; }
+  void essential_metadata(const Essentials &emdata_p) { emdata = emdata_p; }
 
-  [[nodiscard]] SipiEssentials essential_metadata() const { return emdata; }
+  [[nodiscard]] Essentials essential_metadata() const { return emdata; }
 
   /*!
    * Read an image from the given path
@@ -377,13 +377,13 @@ public:
 
   /*!
    * Read an image that is to be considered an "original image". In this case
-   * a SipiEssentials object is created containing the original name, the
+   * a Essentials object is created containing the original name, the
    * original mime type. In addition also a checksum of the pixel values
    * is added in order to guarantee the integrity of the image pixels.
    * if the image is written as J2K or as TIFF image, these informations
    * are added to the file header (in case of TIFF as a private tag 65111,
    * in case of J2K as comment box).
-   * If the file read already contains a SipiEssentials as embedded metadata,
+   * If the file read already contains a Essentials as embedded metadata,
    * it is not overwritten, put the embedded and pixel checksums are compared.
    *
    * \param[in] filepath A string containing the path to the image file
@@ -402,13 +402,13 @@ public:
 
   /*!
    * Read an image that is to be considered an "original image". In this case
-   * a SipiEssentials object is created containing the original name, the
+   * a Essentials object is created containing the original name, the
    * original mime type. In addition also a checksum of the pixel values
    * is added in order to guarantee the integrity of the image pixels.
    * if the image is written as J2K or as TIFF image, these informations
    * are added to the file header (in case of TIFF as a private tag 65111,
    * in case of J2K as comment box).
-   * If the file read already contains a SipiEssentials as embedded metadata,
+   * If the file read already contains a Essentials as embedded metadata,
    * it is not overwritten, put the embedded and pixel checksums are compared.
    *
    * \param[in] filepath A string containing the path to the image file
@@ -473,7 +473,7 @@ public:
    * \param[in] target_icc_p ICC profile which determines the new image representation
    * \param[in] bps Bits/sample of the new image representation
    */
-  void convertToIcc(const SipiIcc &target_icc_p, int bps);
+  void convertToIcc(const Icc &target_icc_p, int bps);
 
 
   /*!
@@ -642,7 +642,7 @@ public:
    */
   friend std::ostream &operator<<(std::ostream &lhs, const SipiImage &rhs);
 
-  friend class SipiIcc;//!< We need SipiIcc as friend class
+  friend class Icc;//!< We need Icc as friend class
   friend class SipiIOTiff;//!< I/O class for the TIFF file format
   friend class SipiIOJ2k;//!< I/O class for the JPEG2000 file format
   friend class SipiIOJpeg;//!< I/O class for the JPEG file format

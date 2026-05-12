@@ -9,11 +9,11 @@
 #include <memory>
 
 #include "SipiError.hpp"
-#include "metadata/SipiExif.h"
+#include "metadata/exif.h"
 
 namespace Sipi {
 
-SipiExif::SipiExif()
+Exif::Exif()
 {
   binaryExif = nullptr;
   binary_size = 0;
@@ -22,7 +22,7 @@ SipiExif::SipiExif()
 //============================================================================
 
 
-SipiExif::SipiExif(const unsigned char *exif, unsigned int len)
+Exif::Exif(const unsigned char *exif, unsigned int len)
 {
   //
   // first we save the binary exif... we use it later for constructing a binary exif again!
@@ -46,134 +46,134 @@ SipiExif::SipiExif(const unsigned char *exif, unsigned int len)
 }
 //============================================================================
 
-SipiExif::~SipiExif() { delete[] binaryExif; }
+Exif::~Exif() { delete[] binaryExif; }
 //============================================================================
 
 // Type-dispatched assignment helpers backing the inline `getValByKey<T>`
 // templates in the header. Moved out-of-line per DEV-6407 to keep
-// `metadata/SipiExif.h` lean.
+// `metadata/exif.h` lean.
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, std::string &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, std::string &val)
 {
   val = v->toString();
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<std::string> &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<std::string> &val)
 {
   for (int i = 0; i < v->count(); i++) { val.push_back(v->toString(i)); }
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, char &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, char &val)
 {
   val = static_cast<char>(v->toInt64());
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<char> &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<char> &val)
 {
   for (int i = 0; i < v->count(); i++) { val.push_back(static_cast<char>(v->toInt64(i))); }
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, unsigned char &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, unsigned char &val)
 {
   val = static_cast<unsigned char>(v->toInt64());
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<unsigned char> &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<unsigned char> &val)
 {
   for (int i = 0; i < v->count(); i++) { val.push_back(static_cast<unsigned char>(v->toInt64(i))); }
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, short &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, short &val)
 {
   val = static_cast<short>(v->toInt64());
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<short> &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<short> &val)
 {
   for (int i = 0; i < v->count(); i++) { val.push_back(static_cast<short>(v->toInt64(i))); }
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, unsigned short &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, unsigned short &val)
 {
   val = static_cast<unsigned short>(v->toInt64());
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<unsigned short> &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<unsigned short> &val)
 {
   for (int i = 0; i < v->count(); i++) { val.push_back(static_cast<unsigned short>(v->toInt64(i))); }
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, int &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, int &val)
 {
   val = static_cast<int>(v->toInt64());
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<int> &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<int> &val)
 {
   for (int i = 0; i < v->count(); i++) { val.push_back(static_cast<int>(v->toInt64(i))); }
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, unsigned int &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, unsigned int &val)
 {
   val = static_cast<unsigned int>(v->toInt64());
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<unsigned int> &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<unsigned int> &val)
 {
   for (int i = 0; i < v->count(); i++) { val.push_back(static_cast<unsigned int>(v->toInt64(i))); }
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, float &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, float &val)
 {
   val = static_cast<float>(v->toFloat());
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<float> &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<float> &val)
 {
   for (int i = 0; i < v->count(); i++) { val.push_back(static_cast<float>(v->toFloat(i))); }
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, double &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, double &val)
 {
   val = static_cast<double>(v->toFloat());
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<double> &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<double> &val)
 {
   for (int i = 0; i < v->count(); i++) { val.push_back(static_cast<double>(v->toFloat(i))); }
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, Exiv2::Rational &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, Exiv2::Rational &val)
 {
   val = v->toRational();
   return v->ok();
 }
 
-bool SipiExif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<Exiv2::Rational> &val)
+bool Exif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<Exiv2::Rational> &val)
 {
   for (int i = 0; i < v->count(); i++) { val.push_back(v->toRational(i)); }
   return v->ok();
 }
 
-std::vector<unsigned char> SipiExif::exifBytes()
+std::vector<unsigned char> Exif::exifBytes()
 {
   Exiv2::Blob blob;
   Exiv2::WriteMethod wm = Exiv2::ExifParser::encode(blob, binaryExif, binary_size, byteorder, exifData);
@@ -189,7 +189,7 @@ std::vector<unsigned char> SipiExif::exifBytes()
 }
 //============================================================================
 
-Exiv2::Rational SipiExif::toRational(float f)
+Exiv2::Rational Exif::toRational(float f)
 {
   if (!std::isfinite(f)) { return std::make_pair(0, 1); }
 
@@ -218,7 +218,7 @@ Exiv2::Rational SipiExif::toRational(float f)
 }
 //============================================================================
 
-Exiv2::URational SipiExif::toURational(float f)
+Exiv2::URational Exif::toURational(float f)
 {
   if (!std::isfinite(f)) throw SipiError("Cannot convert non-finite float to URational!");
   if (f < 0.0F) throw SipiError("Cannot convert negative float to URational!");
@@ -247,7 +247,7 @@ Exiv2::URational SipiExif::toURational(float f)
 //============================================================================
 
 
-std::ostream &operator<<(std::ostream &outstr, SipiExif &rhs)
+std::ostream &operator<<(std::ostream &outstr, Exif &rhs)
 {
   auto end = rhs.exifData.end();
   for (auto i = rhs.exifData.begin(); i != end; ++i) {

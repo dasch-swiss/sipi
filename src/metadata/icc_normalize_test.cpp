@@ -5,7 +5,7 @@
  */
 
 // Unit tests for Sipi::detail::apply_icc_header_normalization — the pure
-// byte-mutation function that backs SipiIcc::iccBytes()'s SOURCE_DATE_EPOCH
+// byte-mutation function that backs Icc::iccBytes()'s SOURCE_DATE_EPOCH
 // reproducibility hook. Tests pass an explicit epoch directly so they don't
 // have to fight with the production magic-static cache that backs
 // read_source_date_epoch().

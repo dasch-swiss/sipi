@@ -19,7 +19,7 @@
 
 #include "../../../src/SipiImage.hpp"
 #include "SipiIOTiff.h"
-#include "metadata/SipiExif.h"
+#include "metadata/exif.h"
 #include "test_paths.hpp"
 
 namespace {
@@ -54,7 +54,7 @@ TEST(ExifRationalRegression, LensSpecificationArrayRoundTrips)
 
   // Each rational converts back to its float via numerator/denominator.
   // The fixture wrote 32-bit floats; libtiff stored them as RATIONAL pairs;
-  // SipiExif::toRational converts back. Tolerance accounts for two passes
+  // Exif::toRational converts back. Tolerance accounts for two passes
   // of float<->rational conversion.
   for (size_t i = 0; i < 4; ++i) {
     const double recovered =
@@ -68,8 +68,8 @@ TEST(ExifRationalRegression, LensSpecificationArrayRoundTrips)
 
 // LensMake / LensModel string round-trip is intentionally NOT asserted here.
 // Both tags are present in the fixture (verifiable via exiftool) but
-// SipiExif's std::string conversion is platform-dependent: on macOS the
+// Exif's std::string conversion is platform-dependent: on macOS the
 // values come through cleanly, on Linux they collapse to the modified-UTF-8
 // NUL sentinel `\xC0\x80` because Exiv2 reports the values as `unsignedByte`
-// rather than `asciiString`. That is a separate SipiExif issue tracked
+// rather than `asciiString`. That is a separate Exif issue tracked
 // independently from this rational-array fix.

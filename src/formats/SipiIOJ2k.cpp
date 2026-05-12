@@ -256,7 +256,7 @@ bool SipiIOJ2k::read(SipiImage *img,
             auto xmp_buf = shttps::make_unique<char[]>(xmp_len);
             box.read((kdu_byte *)xmp_buf.get(), xmp_len);
             try {
-              img->xmp = std::make_shared<SipiXmp>(xmp_buf.get(),
+              img->xmp = std::make_shared<Xmp>(xmp_buf.get(),
                 xmp_len);// ToDo: Problem with thread safety!!!!!!!!!!!!!!
             } catch (SipiError &err) {
               log_err("%s", err.to_string().c_str());
@@ -266,7 +266,7 @@ bool SipiIOJ2k::read(SipiImage *img,
             auto iptc_buf = shttps::make_unique<unsigned char[]>(iptc_len);
             box.read(iptc_buf.get(), iptc_len);
             try {
-              img->iptc = std::make_shared<SipiIptc>(iptc_buf.get(), iptc_len);
+              img->iptc = std::make_shared<Iptc>(iptc_buf.get(), iptc_len);
             } catch (SipiError &err) {
               log_err("%s", err.to_string().c_str());
             }
@@ -275,7 +275,7 @@ bool SipiIOJ2k::read(SipiImage *img,
             auto exif_buf = shttps::make_unique<unsigned char[]>(exif_len);
             box.read(exif_buf.get(), exif_len);
             try {
-              img->exif = std::make_shared<SipiExif>(exif_buf.get(), exif_len);
+              img->exif = std::make_shared<Exif>(exif_buf.get(), exif_len);
             } catch (SipiError &err) {
               log_err("%s", err.to_string().c_str());
             }
@@ -301,13 +301,13 @@ bool SipiIOJ2k::read(SipiImage *img,
   int maximal_reduce = codestream.get_min_dwt_levels();
 
   //
-  // get SipiEssentials (if present) as codestream comment
+  // get Essentials (if present) as codestream comment
   //
   kdu_codestream_comment comment = codestream.get_comment();
   while (comment.exists()) {
     const char *cstr = comment.get_text();
     if (strncmp(cstr, "SIPI:", 5) == 0) {
-      SipiEssentials se(cstr + 5);
+      Essentials se(cstr + 5);
       img->essential_metadata(se);
       break;
     }
@@ -427,17 +427,17 @@ bool SipiIOJ2k::read(SipiImage *img,
       switch (space) {
       case kdu_supp::JP2_sRGB_SPACE: {
         img->photo = PhotometricInterpretation::RGB;
-        img->icc = std::make_shared<SipiIcc>(icc_sRGB);
+        img->icc = std::make_shared<Icc>(icc_sRGB);
         break;
       }
       case kdu_supp::JP2_CMYK_SPACE: {
         img->photo = PhotometricInterpretation::SEPARATED;
-        img->icc = std::make_shared<SipiIcc>(icc_CMYK_standard);
+        img->icc = std::make_shared<Icc>(icc_CMYK_standard);
         break;
       }
       case kdu_supp::JP2_YCbCr1_SPACE: {
         img->photo = PhotometricInterpretation::YCBCR;
-        img->icc = std::make_shared<SipiIcc>(icc_sRGB);
+        img->icc = std::make_shared<Icc>(icc_sRGB);
         break;
       }
       case kdu_supp::JP2_YCbCr2_SPACE:
@@ -445,14 +445,14 @@ bool SipiIOJ2k::read(SipiImage *img,
         float whitepoint[] = { 0.3127, 0.3290 };
         float primaries[] = { 0.630, 0.340, 0.310, 0.595, 0.155, 0.070 };
         img->photo = PhotometricInterpretation::YCBCR;
-        img->icc = std::make_shared<SipiIcc>(whitepoint, primaries);
+        img->icc = std::make_shared<Icc>(whitepoint, primaries);
         break;
       }
       case kdu_supp::JP2_iccRGB_SPACE: {
         img->photo = PhotometricInterpretation::RGB;
         int icc_len;
         const unsigned char *icc_buf = colinfo.get_icc_profile(&icc_len);
-        img->icc = std::make_shared<SipiIcc>(icc_buf, icc_len);
+        img->icc = std::make_shared<Icc>(icc_buf, icc_len);
         break;
       }
       case kdu_supp::JP2_iccANY_SPACE: {
@@ -468,27 +468,27 @@ bool SipiIOJ2k::read(SipiImage *img,
         }
         int icc_len;
         const unsigned char *icc_buf = colinfo.get_icc_profile(&icc_len);
-        img->icc = std::make_shared<SipiIcc>(icc_buf, icc_len);
+        img->icc = std::make_shared<Icc>(icc_buf, icc_len);
         break;
       }
       case kdu_supp::JP2_sLUM_SPACE: {
         img->photo = PhotometricInterpretation::MINISBLACK;
-        img->icc = std::make_shared<SipiIcc>(icc_LUM_D65);
+        img->icc = std::make_shared<Icc>(icc_LUM_D65);
         break;
       }
       case kdu_supp::JP2_sYCC_SPACE: {
         img->photo = PhotometricInterpretation::YCBCR;
-        img->icc = std::make_shared<SipiIcc>(icc_sRGB);
+        img->icc = std::make_shared<Icc>(icc_sRGB);
         break;
       }
       case kdu_supp::JP2_CIELab_SPACE: {
         img->photo = PhotometricInterpretation::CIELAB;
-        img->icc = std::make_shared<SipiIcc>(icc_LAB);
+        img->icc = std::make_shared<Icc>(icc_LAB);
         break;
       }
       case 100: {
         img->photo = PhotometricInterpretation::MINISBLACK;
-        img->icc = std::make_shared<SipiIcc>(icc_ROMM_GRAY);
+        img->icc = std::make_shared<Icc>(icc_ROMM_GRAY);
         break;
       }
 
@@ -703,7 +703,7 @@ SipiImgInfo SipiIOJ2k::getDim(const std::string &filepath)
   while (comment.exists()) {
     const char *cstr = comment.get_text();
     if (strncmp(cstr, "SIPI:", 5) == 0) {
-      SipiEssentials se(cstr + 5);
+      Essentials se(cstr + 5);
       info.origmimetype = se.fields().mimetype;
       info.origname = se.fields().origname;
       info.success = SipiImgInfo::ALL;
@@ -989,7 +989,7 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
     //
     // we need the essential metadata in order to preserve unsupported ICC profiles
     //
-    SipiEssentials es = img->essential_metadata();
+    Essentials es = img->essential_metadata();
 
     jp2_colour jp2_family_colour = jpx_layer.add_colour();
     if (img->icc != nullptr) {

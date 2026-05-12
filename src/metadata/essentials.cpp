@@ -13,7 +13,7 @@
 #include <openssl/buffer.h>
 #include <openssl/evp.h>
 
-#include "metadata/SipiEssentials.h"
+#include "metadata/essentials.h"
 #include "shttps/Error.h"
 
 namespace {
@@ -131,7 +131,7 @@ shttps::HashType hash_type_from_string(const std::string &s)
 
 namespace Sipi {
 
-SipiEssentials::SipiEssentials(const std::string &serialized)
+Essentials::Essentials(const std::string &serialized)
 {
   std::vector<std::string> result = split(serialized, "|");
   if (result.size() < 4) return;// Malformed packet — leave _is_set = false.
@@ -148,7 +148,7 @@ SipiEssentials::SipiEssentials(const std::string &serialized)
   _is_set = true;
 }
 
-std::string SipiEssentials::serialize() const
+std::string Essentials::serialize() const
 {
   std::string out;
   out.reserve(_fields.origname.size() + _fields.mimetype.size() + _fields.data_chksum.size() + 64);

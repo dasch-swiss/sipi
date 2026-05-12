@@ -7,8 +7,8 @@
  * This file implements the Handling of ICC color profiles. It makes heavy use of the functions
  * provided by the littleCMS2 library (see http://www.littlecms.com )
  */
-#ifndef __sipi_icc_h
-#define __sipi_icc_h
+#ifndef SIPI_METADATA_ICC_H
+#define SIPI_METADATA_ICC_H
 
 #include <string>
 #include <vector>
@@ -27,7 +27,7 @@ extern void icc_error_logger(cmsContext ContextID, cmsUInt32Number ErrorCode, co
 
 class SipiImage;//!< forward declaration
 
-/*! Defines predefined profiles which are used by SipiIcc */
+/*! Defines predefined profiles which are used by Icc */
 typedef enum {
   icc_undefined,//!< No profile data defined, empty profile
   icc_unknown,//!< This is a unknown, proprietary profile, probably embedded
@@ -44,7 +44,7 @@ typedef enum {
 /*!
  * This class implements the handling of ICC color profiles
  */
-class SipiIcc
+class Icc
 {
 private:
   cmsHPROFILE icc_profile{};//!< Handle of the littleCMS profile data
@@ -54,7 +54,7 @@ public:
   /*!
    * Constructor (default) which results in empty, undefined profile
    */
-  inline SipiIcc()
+  inline Icc()
   {
     icc_profile = NULL;
     profile_type = icc_undefined;
@@ -65,25 +65,25 @@ public:
    * \param[in] buf Buffer holding the binary profile data
    * \param]in len Length of the buffer
    */
-  SipiIcc(const unsigned char *buf, int len);
+  Icc(const unsigned char *buf, int len);
 
   /*!
    * Copy constructor. Uses deep copy and allocates new data buffers.
    * \param[in] icc_p Profile that acts as template for the new profile.
    */
-  SipiIcc(const SipiIcc &icc_p);
+  Icc(const Icc &icc_p);
 
   /*!
    * Constructor using littleCMS profile
    * \param[in] icc_profile_p LittleCMS profile
    */
-  explicit SipiIcc(cmsHPROFILE &icc_profile_p);
+  explicit Icc(cmsHPROFILE &icc_profile_p);
 
   /**
    * Constructor to create a predefined profile
    * \param[in] predef Desired predefined profile
    */
-  explicit SipiIcc(PredefinedProfiles predef);
+  explicit Icc(PredefinedProfiles predef);
 
   /**
    * Constructor of an ICC RGB profile using white point, primaries and transfer function (if available),
@@ -93,18 +93,18 @@ public:
    * \param[in] tfunc Transfer function tables as retrieved by libtiff with either (1 << bitspersample) or 3*(1 <<
    * bitspersample) entries \param[in] Length of tranfer function table
    */
-  SipiIcc(float white_point_p[], float primaries_p[], const unsigned short *tfunc = nullptr, int tfunc_len = 0);
+  Icc(float white_point_p[], float primaries_p[], const unsigned short *tfunc = nullptr, int tfunc_len = 0);
 
   /**
    * Destructor
    */
-  ~SipiIcc();
+  ~Icc();
 
   /*!
    * Assignment operator which makes deep copy
-   * \param[in] rhs Instance of SipiIcc
+   * \param[in] rhs Instance of Icc
    */
-  SipiIcc &operator=(const SipiIcc &rhs);
+  Icc &operator=(const Icc &rhs);
 
   /*!
    * Get the blob containing the ICC profile.
@@ -155,9 +155,9 @@ public:
   /**
    * Print info to output stream
    * \param[in] lhs Output stream
-   * \param[in] rhs SipiIcc instance
+   * \param[in] rhs Icc instance
    */
-  friend std::ostream &operator<<(std::ostream &lhs, SipiIcc &rhs);
+  friend std::ostream &operator<<(std::ostream &lhs, Icc &rhs);
 };
 
 }// namespace Sipi
