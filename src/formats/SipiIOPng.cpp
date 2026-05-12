@@ -546,14 +546,14 @@ void SipiIOPng::write(SipiImage *img, const std::string &filepath, const SipiCom
   // ICC profile handfling is special...
   //
   SipiEssentials es = img->essential_metadata();
-  if ((img->icc != nullptr) || es.use_icc()) {
+  if ((img->icc != nullptr) || es.fields().use_icc) {
     if ((img->icc != nullptr) && (img->icc->getProfileType() == icc_LAB)) {
       img->convertToIcc(SipiIcc(Sipi::PredefinedProfiles::icc_sRGB), img->bps);
     }
     std::vector<unsigned char> icc_buf;
     try {
-      if (es.use_icc()) {
-        icc_buf = es.icc_profile();
+      if (es.fields().use_icc) {
+        icc_buf = es.fields().icc_profile;
       } else {
         icc_buf = img->icc->iccBytes();
       }
@@ -591,7 +591,7 @@ void SipiIOPng::write(SipiImage *img, const std::string &filepath, const SipiCom
   // to avoid stack-use-after-scope when png_set_text reads the pointer.
   char sipi_buf[512 + 1] = {};
   if (es.is_set()) {
-    std::string esstr = es;
+    std::string esstr = es.serialize();
     unsigned int len = esstr.length();
     strncpy(sipi_buf, esstr.c_str(), 512);
     sipi_buf[512] = '\0';

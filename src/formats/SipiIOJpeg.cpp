@@ -1225,11 +1225,11 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
 
   SipiEssentials es = img->essential_metadata();
 
-  if ((img->icc != nullptr) || es.use_icc()) {
+  if ((img->icc != nullptr) || es.fields().use_icc) {
     std::vector<unsigned char> buf;
     try {
-      if (es.use_icc()) {
-        buf = es.icc_profile();
+      if (es.fields().use_icc) {
+        buf = es.fields().icc_profile;
       } else {
         buf = img->icc->iccBytes();
       }
@@ -1280,7 +1280,7 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   }
 
   if (es.is_set()) {
-    std::string esstr = es;
+    std::string esstr = es.serialize();
     unsigned int len = esstr.length();
     char sipi_buf[512 + 1];
     strncpy(sipi_buf, esstr.c_str(), 512);
