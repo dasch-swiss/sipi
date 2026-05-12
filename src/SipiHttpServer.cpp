@@ -2227,7 +2227,6 @@ SipiHttpServer::SipiHttpServer(int port_p,
   const std::string &loglevel_p)
   : Server::Server(port_p, nthreads_p, userid_str, logfile_p, loglevel_p)
 {
-  _salsah_prefix = "imgrep";
   _cache = nullptr;
   _scaling_quality = { ScalingMethod::HIGH, ScalingMethod::HIGH, ScalingMethod::HIGH, ScalingMethod::HIGH };
 }
@@ -2263,7 +2262,6 @@ void SipiHttpServer::run()
   _resolved_imgroot = std::string(resolved_root);
 
   log_info("Serving images from %s (resolved: %s)", _imgroot.c_str(), _resolved_imgroot.c_str());
-  log_debug("Salsah prefix: %s", _salsah_prefix.c_str());
 
   _start_time = std::chrono::steady_clock::now();
 

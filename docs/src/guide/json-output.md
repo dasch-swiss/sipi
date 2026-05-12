@@ -22,8 +22,8 @@ exit-code / stream contract.
 - The flag is CLI-only: passing `--json` together with `--config`
   (server mode) is silently ignored. Server-mode errors continue to go
   through Sentry and HTTP responses.
-- `--json` is mutually exclusive with `--salsah` and `--query` at CLI
-  parse time (both also write to `stdout` in incompatible ways).
+- `--json` is mutually exclusive with `--query` at CLI parse time
+  (`--query` also writes to `stdout` in an incompatible way).
 - The schema is **not versioned** today — there is a single consumer
   (local debugging / ad-hoc integrations) and the cost of adding a
   `schema_version` field exceeds its value while there is only one
