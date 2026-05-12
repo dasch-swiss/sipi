@@ -182,15 +182,7 @@ public:
   ~SipiExif();
 
   /*!
-   * Returns the bytes of the EXIF data
-   *
-   * \param[out] len Length of buffer returned
-   * \returns Buffer with EXIF data
-   */
-  unsigned char *exifBytes(unsigned int &len);
-
-  /*!
-   * Returns the bytes of the EXIF data as vector
+   * Returns the bytes of the EXIF data as a vector.
    *
    * @return Vector with EXIF data
    */

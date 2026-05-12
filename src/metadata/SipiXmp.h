@@ -65,18 +65,11 @@ public:
 
 
   /*!
-   * Returns the bytes of the RDF/XML data
-   * \param[out] len Length of the data on bytes
-   * \returns Chunk of chars holding the xmp data
-   */
-  char *xmpBytes(unsigned int &len);
-
-  /*!
-   * Returns the bytes of the RDF/XML data as std::string
+   * Returns the bytes of the RDF/XML data as a std::string.
    *
    * @return String holding the xmp data
    */
-  std::string xmpBytes(void);
+  std::string xmpBytes();
 
   /*!
    * The overloaded << operator which is used to write the xmp formatted to the outstream

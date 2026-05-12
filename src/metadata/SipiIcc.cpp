@@ -235,35 +235,21 @@ SipiIcc &SipiIcc::operator=(const SipiIcc &rhs)
   return *this;
 }
 
-unsigned char *SipiIcc::iccBytes(unsigned int &len)
-{
-  unsigned char *buf = nullptr;
-  len = 0;
-  if (icc_profile != nullptr) {
-    if (!cmsSaveProfileToMem(icc_profile, nullptr, &len))
-      throw SipiError("cmsSaveProfileToMem failed");
-    buf = new unsigned char[len];
-    if (!cmsSaveProfileToMem(icc_profile, buf, &len)) {
-      delete[] buf;
-      throw SipiError("cmsSaveProfileToMem failed");
-    }
-    // ICC normalization for reproducibility — no-op unless SOURCE_DATE_EPOCH
-    // is set in the environment. Production never sets it.
-    detail::apply_icc_header_normalization(buf, len, read_source_date_epoch());
-  }
-  return buf;
-}
-
 std::vector<unsigned char> SipiIcc::iccBytes()
 {
-  unsigned int len = 0;
-  unsigned char *buf = iccBytes(len);
-  std::vector<unsigned char> data;
-  if (buf != nullptr) {
-    data.reserve(len);
-    for (size_t i = 0; i < len; i++) data.push_back(buf[i]);
-    delete[] buf;
-  }
+  if (icc_profile == nullptr) return {};
+
+  cmsUInt32Number len = 0;
+  if (!cmsSaveProfileToMem(icc_profile, nullptr, &len))
+    throw SipiError("cmsSaveProfileToMem failed");
+
+  std::vector<unsigned char> data(len);
+  if (!cmsSaveProfileToMem(icc_profile, data.data(), &len))
+    throw SipiError("cmsSaveProfileToMem failed");
+
+  // ICC normalization for reproducibility — no-op unless SOURCE_DATE_EPOCH
+  // is set in the environment. Production never sets it.
+  detail::apply_icc_header_normalization(data.data(), data.size(), read_source_date_epoch());
   return data;
 }
 

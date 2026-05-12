@@ -997,17 +997,13 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
       try {
         switch (icc_type) {
         case icc_undefined: {
-          unsigned int icc_len;
-          kdu_byte *icc_bytes = (kdu_byte *)img->icc->iccBytes(icc_len);
-          jp2_family_colour.init(icc_bytes);
-          delete[] icc_bytes;
+          std::vector<unsigned char> icc_buf = img->icc->iccBytes();
+          jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
           break;
         }
         case icc_unknown: {
-          unsigned int icc_len;
-          kdu_byte *icc_bytes = (kdu_byte *)img->icc->iccBytes(icc_len);
-          jp2_family_colour.init(icc_bytes);
-          delete[] icc_bytes;
+          std::vector<unsigned char> icc_buf = img->icc->iccBytes();
+          jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
           break;
         }
         case icc_sRGB: {
@@ -1020,17 +1016,13 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
           break;
         }
         case icc_AdobeRGB: {
-          unsigned int icc_len;
-          kdu_byte *icc_bytes = (kdu_byte *)img->icc->iccBytes(icc_len);
-          jp2_family_colour.init(icc_bytes);
-          delete[] icc_bytes;
+          std::vector<unsigned char> icc_buf = img->icc->iccBytes();
+          jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
           break;
         }
         case icc_RGB: {// TODO: DOES NOT WORK AS EXPECTED!!!!! Fallback below
-          unsigned int icc_len;
-          kdu_byte *icc_bytes = (kdu_byte *)img->icc->iccBytes(icc_len);
-          jp2_family_colour.init(icc_bytes);
-          delete[] icc_bytes;
+          std::vector<unsigned char> icc_buf = img->icc->iccBytes();
+          jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
           break;
         }
         case icc_CMYK_standard: {
@@ -1038,10 +1030,8 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
           break;
         }
         case icc_GRAY_D50: {
-          unsigned int icc_len;
-          kdu_byte *icc_bytes = (kdu_byte *)img->icc->iccBytes(icc_len);
-          jp2_family_colour.init(icc_bytes);// TODO: DOES NOT WORK AS EXPECTED!!!!! Fallback below
-          delete[] icc_bytes;
+          std::vector<unsigned char> icc_buf = img->icc->iccBytes();
+          jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));// TODO: DOES NOT WORK AS EXPECTED!!!!! Fallback below
           break;
         }
         case icc_LUM_D65: {
@@ -1066,10 +1056,8 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
           break;
         };
         default: {
-          unsigned int icc_len;
-          kdu_byte *icc_bytes = (kdu_byte *)img->icc->iccBytes(icc_len);
-          jp2_family_colour.init(icc_bytes);
-          delete[] icc_bytes;
+          std::vector<unsigned char> icc_buf = img->icc->iccBytes();
+          jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
         }
         }
       } catch (kdu_exception e) {

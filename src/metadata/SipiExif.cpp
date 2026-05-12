@@ -48,30 +48,19 @@ SipiExif::SipiExif(const unsigned char *exif, unsigned int len)
 
 SipiExif::~SipiExif() { delete[] binaryExif; }
 
-unsigned char *SipiExif::exifBytes(unsigned int &len)
+std::vector<unsigned char> SipiExif::exifBytes()
 {
   Exiv2::Blob blob;
   Exiv2::WriteMethod wm = Exiv2::ExifParser::encode(blob, binaryExif, binary_size, byteorder, exifData);
-  unsigned char *tmpbuf = nullptr;
   if (wm == Exiv2::wmIntrusive) {
-    // we use blob
+    // Refresh the cached binary blob so subsequent reads see the encoded form.
     binary_size = blob.size();
-    tmpbuf = new unsigned char[binary_size];
+    unsigned char *tmpbuf = new unsigned char[binary_size];
     if (binary_size > 0) memcpy(tmpbuf, blob.data(), binary_size);
-    delete[] binaryExif;// cleanup tmpbuf!
+    delete[] binaryExif;
     binaryExif = tmpbuf;
   }
-  len = binary_size;
-  return binaryExif;
-}
-//============================================================================
-
-std::vector<unsigned char> SipiExif::exifBytes()
-{
-  unsigned int len = 0;
-  unsigned char *buf = exifBytes(len);
-  std::vector<unsigned char> data(buf, buf + len);
-  return data;
+  return std::vector<unsigned char>(binaryExif, binaryExif + binary_size);
 }
 //============================================================================
 
