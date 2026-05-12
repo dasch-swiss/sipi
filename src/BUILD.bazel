@@ -4,9 +4,11 @@ Two targets:
 
   //src:sipi_lib  — `cc_library` containing every Sipi translation unit
                     *except* the executable's `main`. Headers come via
-                    `//include:headers` (which exposes private internal
-                    headers like `metadata/SipiIccDetail.h` so per-component
-                    unit tests in Y+1 can link against private symbols).
+                    `//include:headers` for the legacy include/ tree.
+                    Per-module Bazel packages under `//src/<mod>/` (e.g.
+                    `//src/metadata`, `//src/observability`) own their
+                    own headers — including internal/ subpackages with
+                    restricted visibility for Test seam helpers.
   //src:sipi      — thin `cc_binary` (`srcs = ["sipi.cpp"]`) deps-only on
                     `:sipi_lib`. `linkopts = ["-Wl,--build-id=sha1"]`
                     content-addresses the build-id for Y+4 debug-info
