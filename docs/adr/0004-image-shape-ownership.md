@@ -19,7 +19,7 @@ The **Service File format handlers** — `SipiIOJ2k` (JP2) today, `SipiIOTiff` (
 
 Other format handlers (`SipiIOPng`, `SipiIOJpeg`, plain `SipiIOTiff`) implement `read_shape` via standard format-native header parsing only. They are not in the server hot path: they are used for IIIF output writes in server mode (post-decode encoding to JPEG / PNG / TIFF; latency dominated by the encode itself), and for reading input files of arbitrary format in CLI mode (the read side of conversion; offline, not S3-bound). Neither use case warrants the Essentials-packet fast path.
 
-CLI-mode conversion writes the Essentials packet with shape + structure offsets. Server-mode reads benefit from the fast path. The Essentials-packet schema is format-agnostic — same CBOR wire format ([ADR-0005](./0005-essentials-packet-versioned-binary-serialization.md)) for JP2 and pyramidal TIFF — but the *embedding mechanism* is handler-specific (a JP2 UUID box positioned after the JP2 signature + FTYP boxes; a tag in the first IFD of a TIFF, reachable via the file-header offset at bytes 4-7).
+CLI-mode conversion writes the Essentials packet with shape + structure offsets. Server-mode reads benefit from the fast path. The Essentials-packet schema is format-agnostic — same wire format ([ADR-0005](./0005-essentials-packet-versioned-binary-serialization.md)) for JP2 and pyramidal TIFF — but the *embedding mechanism* is handler-specific (a JP2 UUID box positioned after the JP2 signature + FTYP boxes; a tag in the first IFD of a TIFF, reachable via the file-header offset at bytes 4-7).
 
 We accept this for four coupled reasons.
 
@@ -53,7 +53,7 @@ We accept this for four coupled reasons.
 
 - **Service File format handlers (`SipiIOJ2k` + pyramidal `SipiIOTiff`) get the Essentials-packet fast path** in `read_shape`. Implementation: range-read a fixed prefix (e.g. first 64KB), parse the packet from its known location, return shape from the packet's `shape` section. Fallback to format-native parsing if the packet is absent or lacks the requested fields.
 
-- **The Essentials packet schema gains image-shape AND file-structure-offset fields**. Wire format is CBOR per ADR-0005. The packet's role broadens from "preserve cross-conversion identity" to "preserve identity *and* serve as the S3-access index for the file." Old Service Files without the new fields fall back to format-native parsing.
+- **The Essentials packet schema gains image-shape AND file-structure-offset fields**. Wire format per [ADR-0005](./0005-essentials-packet-versioned-binary-serialization.md). The packet's role broadens from "preserve cross-conversion identity" to "preserve identity *and* serve as the S3-access index for the file." Old Service Files without the new fields fall back to format-native parsing.
 
 - **`SipiHttpServer.cpp` request flow simplifies**. The call site at line 1571 becomes `format_handler->read_shape(infile)`, returning a full `SipiImgInfo` with `nc`/`bps` populated (the "remain 0" overestimate comment at line 1563 disappears). The decode-memory-budget admission check gets accurate inputs as a happy side effect.
 
@@ -65,6 +65,6 @@ We accept this for four coupled reasons.
 
 - **Migration path for existing Service Files**: existing JP2s and TIFFs in production lacking the packet (or lacking the structure-offset additions) fall back to format-native parsing — slower over S3 but functionally correct. New conversions populate the packet. No mass re-conversion required; fast path activates incrementally as files are re-processed. This is the load-bearing operational property — given the 100K Service File install base ([ADR-0005](./0005-essentials-packet-versioned-binary-serialization.md)'s longevity invariant), mass re-encoding is not feasible.
 
-- **The decision is coupled with [ADR-0005](./0005-essentials-packet-versioned-binary-serialization.md)** (CBOR wire format). The CBOR choice matters more under S3 — every byte of header sits inside a range-GET span, and forward-compat allows future schema additions (e.g. per-tile offset tables for ultra-tile-heavy access patterns) without re-encoding.
+- **The decision is coupled with [ADR-0005](./0005-essentials-packet-versioned-binary-serialization.md)** (wire format). The wire-format choice matters more under S3 — every byte of header sits inside a range-GET span, and forward-compat allows future schema additions (e.g. per-tile offset tables for ultra-tile-heavy access patterns) without re-encoding.
 
 - **Glossary deltas land in [`UBIQUITOUS_LANGUAGE.md`](../../UBIQUITOUS_LANGUAGE.md)**: `Image shape`, `Operating mode` / `Server mode` / `CLI mode`, the three-tier *File role* taxonomy per [ADR-0009](./0009-file-role-taxonomy.md) (**Preservation File** / **Service File** / **Access File** plus `File role` umbrella and format entries), `Pyramidal TIFF`, `Object storage`, `Range GET`, `Codec` (sharpened), `read_shape` (rename of `getDim`), and a sharpened `Essentials packet` definition. Tracked in the [glossary delta register](../deep-modules.md#glossary-delta-register).
