@@ -422,7 +422,7 @@ static void tiffWarning(const char *module, const char *fmt, va_list args)
 // New protobuf-binary carrier for the Essentials packet (ADR-0005 / DEV-6410).
 // Field type TIFF_UNDEFINED with variable count so TIFFGetField returns the
 // byte length alongside the data pointer (the legacy ASCII tag does not). The
-// pyramidal TIFF writer emits this gated on `master_mode == service-file`;
+// pyramidal TIFF writer emits this gated on `file role == service-file`;
 // plain TIFF never carries it (ADR-0009).
 #define TIFFTAG_SIPIMETA_PB 65112
 
@@ -1772,7 +1772,7 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
   // Essentials packet emission is gated on file role per ADR-0009 / ADR-0010:
   // plain TIFF is an Access File and MUST NOT carry the packet. The pyramidal
   // branch emits the new TIFFTAG_SIPIMETA_PB carrier (ADR-0005 / DEV-6410)
-  // gated on `master_mode == service-file`. The legacy TIFFTAG_SIPIMETA tag
+  // gated on `file role == service-file`. The legacy TIFFTAG_SIPIMETA tag
   // is never emitted from this writer anymore; readers retain it via the
   // Phase 7.4 dual-carrier path. The `Essentials es` declaration above
   // (line 1652) still feeds the ICC fallback at line 1653+.
@@ -1780,7 +1780,7 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
   const bool pyramid =
     params && params->contains(TIFF_Pyramid) && params->at(TIFF_Pyramid).compare("yes") == 0;
   const bool emit_essentials_pb = pyramid && es.is_set() && params
-    && params->contains(TIFF_MasterMode) && params->at(TIFF_MasterMode) == "service-file";
+    && params->contains(TIFF_FileRole) && params->at(TIFF_FileRole) == "service-file";
   if (emit_essentials_pb) {
     const std::vector<std::byte> bytes = es.serialize_bytes();
     TIFFSetField(tif, TIFFTAG_SIPIMETA_PB, static_cast<uint32_t>(bytes.size()), bytes.data());

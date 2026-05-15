@@ -83,6 +83,20 @@ bazel_dep(name = "protobuf", version = "34.1", repo_name = "com_google_protobuf"
 # Drop this override once a protobuf release pins a Bazel-9-clean rules_go.
 bazel_dep(name = "rules_go", version = "0.60.0")
 
+# Same story for `rules_android` — protobuf 34.1 transitively pulls
+# `rules_android@0.6.4`, whose `android_local_test/attrs.bzl` still loads
+# `CcInfo` from `@rules_cc//cc:defs.bzl`. Bazel resolves the registered
+# `@androidsdk//:all` toolchain at analysis time for every target's
+# toolchain query (even pure C++ ones), so the broken load tanks every
+# `bazel build` / `bazel test` on CI runners that lack an Android SDK
+# install. rules_android 0.7.x loads CcInfo from the new path and no
+# longer eagerly fails when ANDROID_HOME is unset. Drop this override
+# once protobuf bumps to a rules_android that's clean on Bazel 9.
+single_version_override(
+    module_name = "rules_android",
+    version = "0.7.2",
+)
+
 # `toolchains_llvm` registers a hermetic LLVM 19.1.x toolchain. Sysroot wiring
 # (Chromium debian sysroots for linux-x86_64 / linux-aarch64) lives below.
 # macOS uses the system Xcode CLT SDK (no bundled macOS sysroot in

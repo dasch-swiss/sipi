@@ -168,6 +168,26 @@ build:macos --repo_env=PATH
 build:macos --repo_env=DEVELOPER_DIR=/Library/Developer/CommandLineTools
 build:macos --repo_env=SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
 
+# Force `rules_android`'s `android_sdk_repository_extension` to take the
+# empty-SDK branch instead of validating an actual Android SDK install.
+# `rules_android` is pulled transitively by `protobuf` (BCR) and its
+# `@androidsdk//:all` toolchain registration runs at toolchain-resolution
+# time for *every* target — even pure C++ ones. The extension reads
+# `ANDROID_HOME` and fails with "No Android SDK apis found …" when the
+# path exists but has no `platforms/android-XX` subdirs. GitHub Actions
+# runners pre-set `ANDROID_HOME=/usr/local/lib/android/sdk` (Linux) or
+# `/Library/Android/sdk` (macOS) without populated platforms, so the
+# check tanks every CI build until we explicitly clear it for Bazel.
+#
+# The bypass is in rules_android 0.7.x's
+# `_android_sdk_repository_impl`: an unset/empty `ANDROID_HOME` falls
+# through to the empty-SDK template path (`return None`), satisfying
+# the toolchain registration without requiring real Android tooling.
+# Local dev with a real Android SDK is unaffected — devs don't typically
+# set ANDROID_HOME for SIPI work, and if they do they can override on
+# the command line.
+common --repo_env=ANDROID_HOME=
+
 # ── Sanitizers — opt-in via --config=asan and/or --config=ubsan ─────────────
 # Replaces the deleted `.#sanitized` Nix variant. CI's sanitizer.yml uses
 # both together via `just bazel-build-sanitized`

@@ -65,6 +65,21 @@ cc_library(
     # consumer's own `includes = ["."]` (typically via //src:sipi_lib).
     # Siblings inside this package use the quote-form (`#include
     # "icc.h"`) which auto-searches the current source's directory.
+    #
+    # `-ldl` / `-lpthread` propagate to every consumer at link time:
+    # exiv2 + sentry (transitive deps of `:icc` and `:exif`) call into
+    # libdl + libpthread directly. //src:sipi_lib declares these for its
+    # own consumers, but cc_tests that link `:metadata` standalone
+    # (e.g. essentials_test) don't go through `:sipi_lib`, so the
+    # linkopts must live here too. Linux-only; macOS folds dl/pthread
+    # into libSystem.
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-ldl",
+            "-lpthread",
+        ],
+        "//conditions:default": [],
+    }),
     deps = [
         "//ext/exiv2:exiv2",
         "//ext/lcms2:lcms2",

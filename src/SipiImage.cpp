@@ -343,6 +343,15 @@ void SipiImage::readSource(const std::string &filepath,
 
 //============================================================================
 
+std::vector<std::byte> SipiImage::compute_pixel_hash(shttps::HashType type) const
+{
+  shttps::Hash digest(type);
+  if (pixels != nullptr) { digest.add_data(pixels, nx * ny * nc * bps / 8); }
+  return Essentials::from_hex(digest.hash());
+}
+
+//============================================================================
+
 SipiImgInfo SipiImage::read_shape(const std::string &filepath) const
 {
   size_t pos = filepath.find_last_of('.');

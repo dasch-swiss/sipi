@@ -97,13 +97,14 @@ enum SipiCompressionParamName : std::uint8_t {
   J2K_Stiles,
   J2K_rates,
   TIFF_Pyramid,
-  /// File-role mode gating Essentials packet emission for the Service File
-  /// formats (pyramidal TIFF + JP2) per ADR-0009 / ADR-0010. Accepted values:
+  /// File role per ADR-0009. Gates Essentials packet emission for the
+  /// two Service File carriers (pyramidal TIFF + JP2). Accepted values:
   /// "service-file" emits the Essentials carrier; "access-file" / "none" /
-  /// absent emit no carrier. The Phase 12 orchestrator (DEV-6540) is the only
-  /// caller that sets this to "service-file".
-  TIFF_MasterMode,
-  J2K_MasterMode,
+  /// absent emit no carrier. The Service File orchestrator
+  /// (`src/cli/service_file_orchestrator.cpp`, DEV-6540 Phase 12.1) is
+  /// the only caller that sets this to "service-file".
+  TIFF_FileRole,
+  J2K_FileRole,
 };
 
 using SipiCompressionParams = std::unordered_map<int, std::string>;

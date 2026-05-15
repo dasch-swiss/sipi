@@ -355,6 +355,21 @@ public:
   [[nodiscard]] Essentials essential_metadata() const { return emdata; }
 
   /*!
+   * Hash the current pixel buffer with the requested digest algorithm and
+   * return the raw digest bytes (NOT hex). Used by the Service File creation
+   * orchestrator (`sipi convert service-file`, Phase 12.1 — DEV-6540) to
+   * populate `EssentialsFields::data_chksum` over the **post-transformation**
+   * pixel buffer, and by the corruption-tripwire branch in `readSource`
+   * (which compares against the on-disk `data_chksum` from an existing
+   * Essentials packet — same digest, hex-vs-raw bridged via
+   * `Essentials::to_hex`).
+   *
+   * Buffer layout matches `readSource`'s tripwire: `nx * ny * nc * bps / 8`
+   * raw bytes, big-endian when `bps == 16`.
+   */
+  [[nodiscard]] std::vector<std::byte> compute_pixel_hash(shttps::HashType type) const;
+
+  /*!
    * Read an image from the given path
    *
    * \param[in] filepath A string containing the path to the image file
@@ -396,7 +411,7 @@ public:
     const std::shared_ptr<SipiSize> &size = nullptr);
 
   /*!
-   * Overload accepting an `origname` hint. Until the master-creation
+   * Overload accepting an `origname` hint. Until the Service File creation
    * orchestrator lands (Phase 12, DEV-6540), `origname` is consumed by the
    * orchestrator — not by readSource itself — so this overload behaves
    * identically to the 3-arg form. Kept for the existing Lua-side call site.

@@ -12,7 +12,7 @@
                        on `:sipi_lib`. Lives in its own package so the
                        CLI subcommand restructure (DEV-6540) lands in
                        its natural home alongside the per-subcommand
-                       callbacks and master-creation orchestrators.
+                       callbacks and Service File orchestrators.
 
 The split is mandatory infrastructure for Y+1 (per-component unit tests)
 and scaffolds the post-Y+6 layout flip — the eventual Y+8 series breaks
@@ -705,7 +705,10 @@ tar(
 oci_image(
     name = "image",
     base = "@distroless_base",
-    cmd = ["--config=/sipi/config/sipi.config.lua"],
+    cmd = [
+        "server",
+        "--config=/sipi/config/sipi.config.lua",
+    ],
     created = ":image_created",
     # Match today's flake.nix entrypoint chain: tini reaps zombies and
     # forwards SIGTERM to sipi for graceful shutdown on `docker stop`.

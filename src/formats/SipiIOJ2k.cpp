@@ -847,7 +847,7 @@ static void write_exif_box(kdu_supp::jp2_family_tgt *tgt, kdu_core::kdu_byte *ex
 // SIPI Essentials carrier (ADR-0005 / DEV-6410). Emits the protobuf-serialized
 // packet as the box payload, preceded by `sipi_essentials_uuid`. Mirrors the
 // XMP/IPTC/EXIF helpers above so the four UUID-box carriers stay symmetric.
-// The Phase 12 orchestrator gates the call site on `master_mode == service-file`.
+// The Phase 12 orchestrator gates the call site on `file role == service-file`.
 static void write_essentials_box(kdu_supp::jp2_family_tgt *tgt, const std::vector<std::byte> &payload)
 {
   kdu_supp::jp2_output_box out;
@@ -1201,7 +1201,7 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
 
     // Essentials carrier migrated from codestream-comment to UUID box (slot 4
     // after Signature → FTYP → jp2h, before jp2c) per ADR-0005 / DEV-6410.
-    // Emission is gated on master_mode == service-file per ADR-0009 / ADR-0010
+    // Emission is gated on file role == service-file per ADR-0009 / ADR-0010
     // — Access File JP2s do NOT carry the packet. The actual UUID-box write
     // happens after `jpx_out.write_headers()` (below), alongside the IPTC /
     // EXIF / XMP UUID boxes, so all four carrier boxes land in the same
@@ -1226,10 +1226,10 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
 
     //
     // SIPI Essentials carrier (slot 4 — first UUID box after jp2h). Gated on
-    // master_mode == service-file per ADR-0009 / ADR-0010.
+    // file role == service-file per ADR-0009 / ADR-0010.
     //
-    const bool emit_essentials_box = es.is_set() && params && params->contains(J2K_MasterMode)
-      && params->at(J2K_MasterMode) == "service-file";
+    const bool emit_essentials_box = es.is_set() && params && params->contains(J2K_FileRole)
+      && params->at(J2K_FileRole) == "service-file";
     if (emit_essentials_box) { write_essentials_box(&jp2_ultimate_tgt, es.serialize_bytes()); }
 
     if (img->iptc != nullptr) {

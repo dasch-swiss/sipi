@@ -34,6 +34,9 @@
 
 #include "CLI11.hpp"
 #include "Logger.h"
+#include "cli/access_file_orchestrator.h"
+#include "cli/service_file_orchestrator.h"
+#include "cli/verify_orchestrator.h"
 #include "SipiConf.h"
 #include "observability/connection_metrics_adapter.h"
 #include "observability/sentry_init.h"
@@ -1301,14 +1304,9 @@ int main(int argc, char *argv[])
   //
   // `sipiopt.require_subcommand(1)` (set near the top of main) gates
   // every invocation through one of these subcommands; a bare `sipi`
-  // exits with a usage error. The role-noun callbacks under `convert`
-  // and `verify` remain stubs until Phase 12 lands the orchestrators.
+  // exits with a usage error. The `preservation-file` callbacks under
+  // `convert` and `verify` remain stubs pending ADR-0012.
   //
-  auto subcommand_stub = [](const std::string &name) {
-    log_err("`sipi %s` is not yet implemented; tracking ticket DEV-6537 (Phase 12).",
-      name.c_str());
-    return EXIT_FAILURE;
-  };
   auto stub_preservation_file = [](const std::string &name) {
     log_err("`sipi %s preservation-file` awaits ADR-0012; not yet implemented.", name.c_str());
     return EXIT_FAILURE;
@@ -1356,7 +1354,7 @@ int main(int argc, char *argv[])
   // J2K + pyramidal-TIFF tuning knobs from `kdu_compress`. Attached only
   // to `convert` since that is the verb that can produce JP2 or pyramidal
   // TIFF outputs. `convert service-file` deliberately omits these — the
-  // Service File master-creation orchestrator (Phase 12.1) bakes in good
+  // Service File Service File orchestrator (Phase 12.1) bakes in good
   // baseline defaults, not operator-controlled.
   auto attach_j2k_opts = [&](CLI::App *cmd) {
     cmd->add_option("--Sprofile", j2k_Sprofile,
@@ -1533,15 +1531,63 @@ int main(int argc, char *argv[])
   attach_color_space_opts(cmd_convert_access);
   attach_normalize_opts(cmd_convert_access);
   attach_output_opts(cmd_convert_access);
-  cmd_convert_access->callback([&]() { exit(subcommand_stub("convert access-file")); });
+  cmd_convert_access->callback([&]() {
+    auto user_set = [&](const std::string &name) -> bool {
+      auto *s = cmd_convert_access->get_option_no_throw(name);
+      return s != nullptr && !s->empty();
+    };
 
-  // ----- convert service-file (master-creation) -------------------------
+    Sipi::cli::AccessFileRequest req;
+    req.input_path = optInFile;
+    req.output_path = optOutFile;
+    if (user_set("--format")) {
+      switch (optFormat) {
+      case OptFormat::jpx: req.format = "jpx"; break;
+      case OptFormat::jpg: req.format = "jpg"; break;
+      case OptFormat::tif: req.format = "tif"; break;
+      case OptFormat::png: req.format = "png"; break;
+      }
+    }
+    if (user_set("--region")) { req.region = optRegion; }
+    if (user_set("--size")) { req.size = optSize; }
+    if (user_set("--scale")) { req.scale = optScale; }
+    if (optReduce > 0) { req.reduce = optReduce; }
+    if (user_set("--rotate")) { req.rotate = optRotate; }
+    if (user_set("--mirror")) {
+      switch (optMirror) {
+      case OptMirror::horizontal: req.mirror = "horizontal"; break;
+      case OptMirror::vertical: req.mirror = "vertical"; break;
+      case OptMirror::none: break;
+      }
+    }
+    if (user_set("--watermark")) { req.watermark = optWatermark; }
+    if (user_set("--quality")) { req.jpeg_quality = optJpegQuality; }
+    if (user_set("--icc")) {
+      switch (optIcc) {
+      case OptIcc::sRGB: req.icc = "sRGB"; break;
+      case OptIcc::AdobeRGB: req.icc = "AdobeRGB"; break;
+      case OptIcc::GRAY: req.icc = "GRAY"; break;
+      case OptIcc::none: break;
+      }
+    }
+    req.set_topleft = optSetTopleft;
+    req.json_output = optJsonOutput;
+    exit(Sipi::cli::run_access_file_orchestrator(req));
+  });
+
+  // ----- convert service-file (Service File creation) -------------------------
   CLI::App *cmd_convert_service = cmd_convert->add_subcommand(
     "service-file", "Create a Service File (writes Essentials packet); restricted option set.");
   cmd_convert_service->add_option("input", optInFile, "Input source file.")->check(CLI::ExistingFile);
   cmd_convert_service->add_option("output", optOutFile, "Output Service File.");
   attach_normalize_opts(cmd_convert_service);
-  cmd_convert_service->callback([&]() { exit(subcommand_stub("convert service-file")); });
+  cmd_convert_service->callback([&]() {
+    Sipi::cli::ServiceFileRequest req;
+    req.input_path = optInFile;
+    req.output_path = optOutFile;
+    req.set_topleft = optSetTopleft;
+    exit(Sipi::cli::run_service_file_orchestrator(req));
+  });
 
   // ----- convert preservation-file (stub) -------------------------------
   CLI::App *cmd_convert_preservation = cmd_convert->add_subcommand(
@@ -1549,22 +1595,35 @@ int main(int argc, char *argv[])
   cmd_convert_preservation->callback([&]() { exit(stub_preservation_file("convert")); });
 
   // ----- verify (role-agnostic decoder check) ---------------------------
+  auto run_verify_with_mode = [&](Sipi::cli::VerifyMode mode) {
+    Sipi::cli::VerifyRequest req;
+    req.mode = mode;
+    req.input_path = optInFile;
+    req.json_output = optJsonOutput;
+    return Sipi::cli::run_verify(req);
+  };
   CLI::App *cmd_verify = sipiopt.add_subcommand("verify", "Role-agnostic decoder-coverage check.");
   cmd_verify->add_option("file", optInFile, "File to verify.")->check(CLI::ExistingFile);
+  attach_output_opts(cmd_verify);
   cmd_verify->callback([&]() {
-    if (cmd_verify->get_subcommands().empty()) { exit(subcommand_stub("verify")); }
+    // Bare `verify <file>` only fires if no nested subcommand matched.
+    if (cmd_verify->get_subcommands().empty()) {
+      exit(run_verify_with_mode(Sipi::cli::VerifyMode::Generic));
+    }
   });
 
   // ----- verify access-file / service-file / preservation-file ---------
   CLI::App *cmd_verify_access = cmd_verify->add_subcommand(
     "access-file", "Assert file is a valid Access File (no Essentials; well-formed XMP).");
   cmd_verify_access->add_option("file", optInFile, "Access File to verify.")->check(CLI::ExistingFile);
-  cmd_verify_access->callback([&]() { exit(subcommand_stub("verify access-file")); });
+  attach_output_opts(cmd_verify_access);
+  cmd_verify_access->callback([&]() { exit(run_verify_with_mode(Sipi::cli::VerifyMode::AccessFile)); });
 
   CLI::App *cmd_verify_service = cmd_verify->add_subcommand(
     "service-file", "Assert Essentials parses, hash matches, shape consistent.");
   cmd_verify_service->add_option("file", optInFile, "Service File to verify.")->check(CLI::ExistingFile);
-  cmd_verify_service->callback([&]() { exit(subcommand_stub("verify service-file")); });
+  attach_output_opts(cmd_verify_service);
+  cmd_verify_service->callback([&]() { exit(run_verify_with_mode(Sipi::cli::VerifyMode::ServiceFile)); });
 
   CLI::App *cmd_verify_preservation = cmd_verify->add_subcommand(
     "preservation-file", "(stub) Awaits ADR-0012; not yet implemented.");
