@@ -3,16 +3,15 @@ use std::path::PathBuf;
 use std::process::Command;
 
 // =============================================================================
-// CLI mode tests — `sipi --file <input> --outf <output>`
+// CLI mode tests — `sipi convert <input> <output> --format <fmt>`
 // =============================================================================
 
 fn sipi_convert(input: &str, output: &str, format: &str) -> std::process::Output {
     let sipi_bin = sipi_bin_path();
 
     Command::new(&sipi_bin)
-        .arg("--file")
+        .arg("convert")
         .arg(input)
-        .arg("--outf")
         .arg(output)
         .arg("--format")
         .arg(format)

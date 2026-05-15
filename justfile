@@ -372,7 +372,7 @@ hurl-test:
         echo "sipi binary not found at $SIPI_BIN. Run 'just bazel-build' first." >&2
         exit 1
     fi
-    cd test/_test_data && "$SIPI_BIN" --config config/sipi.e2e-test-config.lua &
+    cd test/_test_data && "$SIPI_BIN" server --config config/sipi.e2e-test-config.lua &
     SIPI_PID=$!
     # Don't propagate sipi's SIGTERM exit code (143) as the recipe exit code.
     trap 'kill $SIPI_PID 2>/dev/null || true; wait $SIPI_PID 2>/dev/null || true' EXIT
@@ -389,14 +389,14 @@ run: bazel-build
     #!/usr/bin/env bash
     set -euo pipefail
     SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/cli/sipi}"
-    "$SIPI_BIN" --config={{justfile_directory()}}/config/sipi.localdev-config.lua
+    "$SIPI_BIN" server --config={{justfile_directory()}}/config/sipi.localdev-config.lua
 
 # Run sipi under Valgrind.
 valgrind: bazel-build
     #!/usr/bin/env bash
     set -euo pipefail
     SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/cli/sipi}"
-    valgrind --leak-check=yes --track-origins=yes "$SIPI_BIN" --config={{justfile_directory()}}/config/sipi.config.lua
+    valgrind --leak-check=yes --track-origins=yes "$SIPI_BIN" server --config={{justfile_directory()}}/config/sipi.config.lua
 
 # Download CI fuzz corpus and merge into seed corpus
 fuzz-corpus-update:

@@ -183,11 +183,11 @@ Sipi operates in three CLI modes (`src/cli/sipi.cpp`):
 
 **JP2-specific options:** `--Sprofile`, `--Clayers`, `--Clevels`, `--Corder`, `--Cprecincts`, `--Cblk`, `--Stiles`, `--Cuse_sop`, `--rates`, `--Ctiff_pyramid`
 
-**Query Mode:** `sipi -x infile` / `sipi --query infile` — print image metadata.
+**Query Mode:** `sipi query infile` — print image metadata.
 
-**Compare Mode:** `sipi -C file1 file2` / `sipi --compare file1 file2` — compare two images.
+**Compare Mode:** `sipi compare file1 file2` — compare two images.
 
-**Server Mode:** `sipi --config config.lua` with CLI overrides for port, hostname, imgroot, cache settings, SSL, JWT, admin credentials, logging, etc.
+**Server Mode:** `sipi server --config config.lua` with CLI overrides for port, hostname, imgroot, cache settings, SSL, JWT, admin credentials, logging, etc.
 
 ### Configuration System
 
@@ -586,7 +586,7 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | Video metadata extensions | :white_check_mark: | `server.rs` | |
 | Small-file range requests | :white_check_mark: | `range_requests.rs` | 7 tests |
 | Cache hit/miss verification | :x: GAP | — | No tests verify cache metrics or behavior |
-| CLI mode (file conversion) | :x: GAP | — | No tests for `sipi --file` mode |
+| CLI mode (file conversion) | :white_check_mark: | `test/e2e-rust/tests/cli.rs` | `sipi convert <in> <out>` covered |
 | Prometheus metrics endpoint | :x: GAP | — | No tests for `/metrics` |
 | SSL/TLS endpoints | :x: GAP | — | No Rust tests for HTTPS |
 | Large-file range requests (10MB+) | :x: GAP | — | Python-only |

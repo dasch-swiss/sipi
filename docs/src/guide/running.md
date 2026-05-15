@@ -10,42 +10,48 @@ docker run -p 1024:1024 daschswiss/sipi
 
 ## Running SIPI as a Command-line Image Converter
 
+SIPI now uses verb-noun subcommands (`convert`, `query`, `compare`,
+`verify`, `server`) instead of the legacy `--convert` / `--query` /
+`--compare` / `--file` / `--outf` flags. A bare `sipi` invocation
+errors with a usage message — every operation needs an explicit
+subcommand.
+
 Convert an image file to another format:
 
 ```bash
-sipi --format jpg -f input.tif output.jpg
+sipi convert input.tif output.jpg --format jpg
 ```
 
 Query image file information:
 
 ```bash
-sipi --query input.tif
+sipi query input.tif
 ```
 
 Compare two image files pixel-wise:
 
 ```bash
-sipi --compare file1.tif file2.jpg
+sipi compare file1.tif file2.jpg
 ```
 
 ## Running SIPI as a Server
 
 ```bash
-sipi --config config/sipi.config.lua
+sipi server --config config/sipi.config.lua
 ```
 
 ## Logging
 
 SIPI uses two logging modes depending on how it is running:
 
-- **CLI mode** (`--file`, `--compare`, `--query`): Plain text output.
+- **CLI mode** (`convert`, `compare`, `query`): Plain text output.
   Errors go to **stderr**, informational messages go to **stdout**.
   This is the standard Unix convention for command-line tools. When
   `--json` is also set (see [Structured JSON output](#structured-json-output-cli)),
   every level is routed to **stderr** so `stdout` stays reserved for the
   single JSON document.
 
-- **Server mode** (`--config`): JSON-formatted log lines go to **stdout**.
+- **Server mode** (`sipi server --config`): JSON-formatted log lines go to **stdout**.
   This follows container best practices — Docker, Kubernetes, and log
   collectors (Grafana Loki, Fluentd) expect structured logs on stdout.
   Each line is a JSON object: `{"level": "INFO", "message": "..."}`.
@@ -81,9 +87,13 @@ If none is specified, the default level is `INFO`.
 
 ### Image Conversion Options
 
+These options are accepted by the `convert` subcommand (and where
+documented in the per-subcommand matrix, by `convert access-file`
+and `convert service-file`). Usage: `sipi convert <input> <output>
+[options]`.
+
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--file <path>` | `-f` | Input file to be converted. Usage: `sipi [options] -f infile outfile` |
 | `--format <fmt>` | `-F` | Output format: `jpx`, `jp2`, `jpg`, `tif`, `png`, `webp`, `gif` |
 | `--icc <profile>` | `-I` | Convert to ICC profile: `none`, `sRGB`, `AdobeRGB`, `GRAY` |
 | `--quality <1-100>` | `-q` | JPEG compression quality (1 = highest compression, 100 = best quality) |
@@ -101,16 +111,19 @@ If none is specified, the default level is `INFO`.
 
 ### Query and Compare
 
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--query` | `-x` | Dump all information about the given file |
-| `--compare <f1> <f2>` | `-C` | Compare two files pixel-wise |
+Use the `query` and `compare` subcommands. `--query` / `--compare`
+flag forms are gone.
+
+| Subcommand | Description |
+|------------|-------------|
+| `sipi query <file>` | Dump all information about the given file |
+| `sipi compare <f1> <f2>` | Compare two files pixel-wise |
 
 ### Structured JSON output (CLI)
 
 | Flag | Description |
 |------|-------------|
-| `--json` | Emit a single JSON document to `stdout` instead of human-readable output. Useful for programmatic consumers and for local debugging when no Sentry DSN is configured. Mutually exclusive with `--query`; silently ignored with `--config` (server mode). |
+| `--json` | Emit a single JSON document to `stdout` instead of human-readable output. Accepted by `convert`, `convert access-file`, `query`, and `compare`. Useful for programmatic consumers and for local debugging when no Sentry DSN is configured. |
 
 Use cases:
 
@@ -139,6 +152,9 @@ examples, and the `stdout` / `stderr` contract.
 | `--Cuse_sop <val>` | Include SOP markers (default: yes) |
 
 ### Server Options
+
+These options are accepted by the `server` subcommand. Usage:
+`sipi server [options]`.
 
 | Flag | Short | Env Var | Default | Description |
 |------|-------|---------|---------|-------------|

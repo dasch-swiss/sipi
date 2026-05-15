@@ -56,13 +56,18 @@ The SIPI command line mode can be used for the following tasks:
 #### Format Conversions:
 
 ```bash
-/path/to/sipi infile outfile [options]
+/path/to/sipi convert infile outfile [options]
 ```
+
+For DSP preservation-chain workflows, use the role-noun forms:
+`sipi convert access-file ...`, `sipi convert service-file ...`,
+or `sipi convert preservation-file ...` (the last is a stub awaiting
+ADR-0012).
+
 #### Print Information about File and Metadata:
 
 ```bash
-/path/to/sipi -x infile
-/path/to/sipi --query infile
+/path/to/sipi query infile
 ```
 
 #### Compare two Images pixelwise
@@ -70,8 +75,7 @@ The images may have different formats: if the have exactely the same pixels, the
 is ignored for comparison:
 
 ```bash
-/path/to/sipi -C file1 file2
-/path/to/sipi --compare file1 file2
+/path/to/sipi compare file1 file2
 ```
 
 #### General Options for the Command Line Use 
@@ -145,7 +149,7 @@ The SIPI server requires a few directories to be setup and listed in the configu
 launched as follows:
 
 ```bash
-/path/to/sipi --config /path/to/config-file.lua
+/path/to/sipi server --config /path/to/config-file.lua
 ```
 
 #### SIPI specific extensions to IIIF

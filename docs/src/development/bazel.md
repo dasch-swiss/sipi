@@ -53,7 +53,7 @@ through link.
 ```bash
 nix develop                                    # bazelisk + host tools on PATH
 just bazel-build                               # bazel build --stamp //src/cli:sipi
-./bazel-bin/src/cli/sipi --config config/sipi.localdev-config.lua
+./bazel-bin/src/cli/sipi server --config config/sipi.localdev-config.lua
 # Subsequent edits:
 just bazel-build                               # incremental, sub-second through link
 ```
