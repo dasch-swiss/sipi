@@ -1260,7 +1260,7 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
     //
     const bool emit_essentials_box = es.is_set() && params && params->contains(J2K_FileRole)
       && params->at(J2K_FileRole) == "service-file";
-    if (emit_essentials_box) { write_essentials_box(&jp2_ultimate_tgt, es.serialize_bytes()); }
+    if (emit_essentials_box) { write_essentials_box(&jp2_ultimate_tgt, es.serialize()); }
 
     if (img->iptc != nullptr) {
       std::vector<unsigned char> iptc_buf = img->iptc->iptcBytes();

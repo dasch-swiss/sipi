@@ -64,7 +64,7 @@ EssentialsCodecFields make_codec_fields()
 TEST(EssentialsParse, RoundTripPopulatesAllFields)
 {
   // Encode via the internal codec (the only way to author the wire form from
-  // tests; production callers will use Essentials::serialize_bytes()).
+  // tests; production callers will use Essentials::serialize()).
   const auto bytes = encode_essentials(make_codec_fields());
   ASSERT_FALSE(bytes.empty());
 
@@ -90,7 +90,7 @@ TEST(EssentialsParse, RoundTripPopulatesAllFields)
   EXPECT_EQ(f.bps, 8u);
 }
 
-TEST(EssentialsParse, SerializeBytesRoundTripsThroughParse)
+TEST(EssentialsParse, SerializeRoundTripsThroughParse)
 {
   EssentialsFields in;
   in.origname = "roundtrip.tif";
@@ -108,7 +108,7 @@ TEST(EssentialsParse, SerializeBytesRoundTripsThroughParse)
   in.bps = 16;
 
   const Essentials a(std::move(in));
-  const auto bytes = a.serialize_bytes();
+  const auto bytes = a.serialize();
   ASSERT_FALSE(bytes.empty());
 
   const auto result = Essentials::parse(std::span<const std::byte>(bytes));
@@ -199,22 +199,9 @@ TEST(EssentialsParseLegacy, FrozenBaselinePopulatesEveryField)
 TEST(EssentialsParseLegacy, MalformedReturnsUnsetPacket)
 {
   // Fewer than 4 pipe-delimited tokens — the legacy reader silently produces
-  // an unset packet. Same behaviour as the pre-Phase-5 ctor.
+  // an unset packet.
   const auto e = Essentials::parse_legacy("only|three|fields");
   EXPECT_FALSE(e.is_set());
-}
-
-TEST(EssentialsParseLegacy, LegacyCtorIsAliasForParseLegacy)
-{
-  // The deprecated `Essentials(const std::string&)` ctor forwards to
-  // `parse_legacy`. Removing the ctor in Phase 14 must not change observed
-  // behaviour for the legacy reader sites in Phase 6.
-  const std::string s(kLegacyBaseline);
-  const Essentials via_ctor(s);
-  const Essentials via_factory = Essentials::parse_legacy(s);
-  EXPECT_EQ(via_ctor.is_set(), via_factory.is_set());
-  EXPECT_EQ(via_ctor.fields().origname, via_factory.fields().origname);
-  EXPECT_EQ(via_ctor.fields().data_chksum, via_factory.fields().data_chksum);
 }
 
 // --- to_hex / from_hex -----------------------------------------------------

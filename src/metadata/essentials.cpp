@@ -33,34 +33,6 @@ int calcDecodeLength(const std::string &b64input)
   return static_cast<int>(b64input.length() * 0.75) - padding;
 }
 
-std::string base64Encode(const std::vector<unsigned char> &message)
-{
-  if (message.empty()) return {};
-
-  BIO *bio;
-  BIO *b64;
-  FILE *stream;
-
-  std::size_t encodedSize = 4 * static_cast<std::size_t>(std::ceil(static_cast<double>(message.size()) / 3));
-
-  char *buffer = static_cast<char *>(std::malloc(encodedSize + 1));
-  if (buffer == nullptr) { throw shttps::Error("Failed to allocate memory", errno); }
-
-  stream = fmemopen(buffer, encodedSize + 1, "w");
-  b64 = BIO_new(BIO_f_base64());
-  bio = BIO_new_fp(stream, BIO_NOCLOSE);
-  bio = BIO_push(b64, bio);
-  BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
-  BIO_write(bio, message.data(), static_cast<int>(message.size()));
-  (void)BIO_flush(bio);
-  BIO_free_all(bio);
-  std::fclose(stream);
-
-  std::string res(buffer);
-  std::free(buffer);
-  return res;
-}
-
 std::vector<unsigned char> base64Decode(const std::string &b64message)
 {
   if (b64message.empty()) return {};
@@ -103,25 +75,6 @@ std::vector<std::string> split(std::string_view s, std::string_view delimiter)
   return res;
 }
 
-std::string hash_type_to_string(shttps::HashType ht)
-{
-  switch (ht) {
-  case shttps::HashType::none:
-    return "none";
-  case shttps::HashType::md5:
-    return "md5";
-  case shttps::HashType::sha1:
-    return "sha1";
-  case shttps::HashType::sha256:
-    return "sha256";
-  case shttps::HashType::sha384:
-    return "sha384";
-  case shttps::HashType::sha512:
-    return "sha512";
-  }
-  return "none";
-}
-
 shttps::HashType hash_type_from_string(const std::string &s)
 {
   if (s == "md5") return shttps::HashType::md5;
@@ -154,8 +107,6 @@ Sipi::ParseError adapt_codec_error(Sipi::metadata::internal::CodecParseError e)
 }// namespace
 
 namespace Sipi {
-
-Essentials::Essentials(const std::string &serialized) { *this = parse_legacy(serialized); }
 
 Essentials Essentials::parse_legacy(std::string_view serialized)
 {
@@ -205,7 +156,7 @@ std::expected<Essentials, ParseError> Essentials::parse(std::span<const std::byt
   return Essentials(std::move(f));
 }
 
-std::vector<std::byte> Essentials::serialize_bytes() const
+std::vector<std::byte> Essentials::serialize() const
 {
   metadata::internal::EssentialsCodecFields c;
   c.format_version = 1;
@@ -224,29 +175,6 @@ std::vector<std::byte> Essentials::serialize_bytes() const
   c.nc = _fields.nc;
   c.bps = _fields.bps;
   return metadata::internal::encode_essentials(c);
-}
-
-std::string Essentials::serialize() const
-{
-  std::string chksum_hex = Essentials::to_hex(_fields.data_chksum);
-  std::string out;
-  out.reserve(_fields.origname.size() + _fields.mimetype.size() + chksum_hex.size() + 64);
-  out += _fields.origname;
-  out += '|';
-  out += _fields.mimetype;
-  out += '|';
-  out += hash_type_to_string(_fields.hash_type);
-  out += '|';
-  out += chksum_hex;
-  out += '|';
-  out += _fields.use_icc ? "USE_ICC" : "IGNORE_ICC";
-  out += '|';
-  if (!_fields.icc_profile.empty()) {
-    out += base64Encode(_fields.icc_profile);
-  } else {
-    out += "NULL";
-  }
-  return out;
 }
 
 std::string Essentials::to_hex(std::span<const std::byte> bytes)

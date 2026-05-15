@@ -1810,7 +1810,7 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
   const bool emit_essentials_pb = pyramid && es.is_set() && params
     && params->contains(TIFF_FileRole) && params->at(TIFF_FileRole) == "service-file";
   if (emit_essentials_pb) {
-    const std::vector<std::byte> bytes = es.serialize_bytes();
+    const std::vector<std::byte> bytes = es.serialize();
     TIFFSetField(tif, TIFFTAG_SIPIMETA_PB, static_cast<uint32_t>(bytes.size()), bytes.data());
   }
   // TIFFCheckpointDirectory(tif);
