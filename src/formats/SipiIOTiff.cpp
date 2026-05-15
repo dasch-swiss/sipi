@@ -27,6 +27,7 @@
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
 #include "formats/SipiIOTiff.h"
+#include "observability/metrics.h"
 
 
 #include "shttps/Global.h"
@@ -1501,6 +1502,9 @@ SipiImgInfo SipiIOTiff::read_shape(const std::string &filepath)
     // fields are populated (later commits), the fast path returns from
     // here without calling read_resolutions().
     bool take_fast_path = false;
+    bool essentials_parse_failed = false;
+    bool essentials_partial = false;
+    bool essentials_from_legacy = false;
     {
       uint32_t pb_count = 0;
       const void *pb_data = nullptr;
@@ -1531,27 +1535,51 @@ SipiImgInfo SipiIOTiff::read_shape(const std::string &filepath)
             info.nc = static_cast<int>(f.nc);
             info.bps = static_cast<int>(f.bps);
             take_fast_path = true;
+          } else if (f.img_w != 0 || f.img_h != 0) {
+            essentials_partial = true;
           }
         } else if (has_legacy) {
           Essentials se = Essentials::parse_legacy(emdatastr);
           info.origmimetype = se.fields().mimetype;
           info.origname = se.fields().origname;
           info.success = SipiImgInfo::ALL;
+          essentials_parse_failed = true;
+          essentials_from_legacy = true;
+        } else {
+          essentials_parse_failed = true;
         }
       } else if (has_legacy) {
         Essentials se = Essentials::parse_legacy(emdatastr);
         info.origmimetype = se.fields().mimetype;
         info.origname = se.fields().origname;
         info.success = SipiImgInfo::ALL;
+        essentials_from_legacy = true;
       }
     }
 
     if (take_fast_path) {
-      // TODO(DEV-6537 Phase 13): bump sipi_read_shape_fast_path_total{format="tiff",outcome="hit"}.
+      Sipi::observability::read_shape_fast_path_counter(
+        Sipi::observability::EssentialsFormat::Tiff,
+        Sipi::observability::ReadShapeFastPathOutcome::Hit)
+        .Increment();
       return info;
     }
 
     info.resolutions = read_resolutions(tmp_width, tif.get());
+
+    // Slow-path outcome classification (ADR-0004 / Phase 13). Precedence:
+    // parse failure > partial > fallback (legacy carrier) > miss.
+    using Outcome = Sipi::observability::ReadShapeFastPathOutcome;
+    Outcome outcome = Outcome::Miss;
+    if (essentials_parse_failed && !essentials_from_legacy) {
+      outcome = Outcome::Fallback;
+    } else if (essentials_partial) {
+      outcome = Outcome::Partial;
+    } else if (essentials_from_legacy) {
+      outcome = Outcome::Fallback;
+    }
+    Sipi::observability::read_shape_fast_path_counter(
+      Sipi::observability::EssentialsFormat::Tiff, outcome).Increment();
   }
   return info;
 }

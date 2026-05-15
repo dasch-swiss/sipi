@@ -69,9 +69,89 @@ public:
   // Histograms
   prometheus::Histogram &request_duration_seconds;
 
+  // read_shape fast path (ADR-0004 / DEV-6537 Phase 13).
+  // Labels: format = {jp2, tiff}; outcome = {hit, miss, partial, fallback}.
+  //   - hit:      Essentials packet parsed; img_w & img_h populated;
+  //               fast path returned shape from packet.
+  //   - miss:     No Essentials packet found; slow path computed shape.
+  //   - partial:  Essentials parsed but only one of img_w/img_h
+  //               non-zero; slow path computed shape.
+  //   - fallback: Legacy pipe-delimited carrier present (no shape
+  //               fields) OR new-carrier parse error; slow path
+  //               computed shape.
+  prometheus::Family<prometheus::Counter> &read_shape_fast_path_total;
+  prometheus::Counter &read_shape_fast_path_jp2_hit;
+  prometheus::Counter &read_shape_fast_path_jp2_miss;
+  prometheus::Counter &read_shape_fast_path_jp2_partial;
+  prometheus::Counter &read_shape_fast_path_jp2_fallback;
+  prometheus::Counter &read_shape_fast_path_tiff_hit;
+  prometheus::Counter &read_shape_fast_path_tiff_miss;
+  prometheus::Counter &read_shape_fast_path_tiff_partial;
+  prometheus::Counter &read_shape_fast_path_tiff_fallback;
+
+  // Essentials hash-mismatch corruption tripwire (ADR-0010 /
+  // DEV-6537 Phase 13). Incremented from:
+  //   - `SipiImage::readSource` when the source carries an
+  //     Essentials packet and the recomputed pixel hash doesn't
+  //     match `data_chksum` (soft signal — log + continue).
+  //   - `sipi verify service-file` on the same mismatch
+  //     (hard signal — log + non-zero exit).
+  // Label: format = {jp2, tiff, jpeg, png, other}.
+  prometheus::Family<prometheus::Counter> &essentials_hash_mismatch_total;
+  prometheus::Counter &essentials_hash_mismatch_jp2;
+  prometheus::Counter &essentials_hash_mismatch_tiff;
+  prometheus::Counter &essentials_hash_mismatch_jpeg;
+  prometheus::Counter &essentials_hash_mismatch_png;
+  prometheus::Counter &essentials_hash_mismatch_other;
+
 private:
   Metrics();
 };
+
+/*!
+ * Outcome labels for `read_shape_fast_path_total`.
+ */
+enum class ReadShapeFastPathOutcome {
+  Hit,
+  Miss,
+  Partial,
+  Fallback,
+};
+
+/*!
+ * Format labels recognised by the Essentials counters. `Other`
+ * exists as a safety valve for any path that funnels into the
+ * tripwire from a non-carrier format (which should not happen
+ * post-Phase 6, but is included for defence-in-depth observability).
+ */
+enum class EssentialsFormat {
+  Jp2,
+  Tiff,
+  Jpeg,
+  Png,
+  Other,
+};
+
+/*!
+ * Map a filename extension to an EssentialsFormat. Used by call sites
+ * that only have a filesystem path and need to attribute a metric.
+ * Falls back to `Other` for unrecognised extensions.
+ */
+[[nodiscard]] EssentialsFormat format_from_path(const std::string &path);
+
+/*!
+ * Resolve the pre-created counter child for the (format, outcome) pair.
+ * Lives next to the Family so call sites don't pay for label-map lookups
+ * on every read.
+ */
+[[nodiscard]] prometheus::Counter &read_shape_fast_path_counter(
+  EssentialsFormat format,
+  ReadShapeFastPathOutcome outcome);
+
+/*!
+ * Resolve the pre-created counter child for the given format.
+ */
+[[nodiscard]] prometheus::Counter &essentials_hash_mismatch_counter(EssentialsFormat format);
 
 }// namespace Sipi::observability
 

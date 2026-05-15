@@ -35,6 +35,7 @@
 #include "shttps/Connection.h"
 #include "shttps/Global.h"
 #include "shttps/makeunique.h"
+#include "observability/metrics.h"
 
 #include "SipiError.hpp"
 #include "SipiImageError.hpp"
@@ -703,6 +704,8 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
 
   bool essentials_from_uuid_box = false;
   bool take_fast_path = false;
+  bool essentials_parse_failed = false;
+  bool essentials_partial = false;
   if (jpx_in.open(&jp2_ultimate_src, true)
       < 0) {// if < 0, not compatible with JP2 or JPX.  Try opening as a raw code-stream.
     jp2_ultimate_src.close();
@@ -745,7 +748,11 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
                 info.nc = static_cast<int>(f.nc);
                 info.bps = static_cast<int>(f.bps);
                 take_fast_path = true;
+              } else if (f.img_w != 0 || f.img_h != 0) {
+                essentials_partial = true;
               }
+            } else {
+              essentials_parse_failed = true;
             }
           }
         }
@@ -753,10 +760,15 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
       } while (box.open_next());
     }
     if (take_fast_path) {
-      // TODO(DEV-6537 Phase 13): bump sipi_read_shape_fast_path_total{format="jp2",outcome="hit"}.
+      Sipi::observability::read_shape_fast_path_counter(
+        Sipi::observability::EssentialsFormat::Jp2,
+        Sipi::observability::ReadShapeFastPathOutcome::Hit)
+        .Increment();
       jpx_in.close();
       return info;
     }
+    // Pre-record fast-path outcome for the slow path; the actual
+    // increment happens in the unified post-shape block below.
     int stream_id = 0;
     jpx_stream = jpx_in.access_codestream(stream_id);
     input = jpx_stream.open_stream();
@@ -787,6 +799,7 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
   info.nc = codestream.get_num_components();
   info.bps = codestream.get_bit_depth(0);
 
+  bool essentials_from_codestream_comment = false;
   if (!essentials_from_uuid_box) {
     kdu_codestream_comment comment = codestream.get_comment();
     while (comment.exists()) {
@@ -796,11 +809,28 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
         info.origmimetype = se.fields().mimetype;
         info.origname = se.fields().origname;
         info.success = SipiImgInfo::ALL;
+        essentials_from_codestream_comment = true;
         break;
       }
       comment = codestream.get_comment(comment);
     }
   }
+
+  // Slow-path outcome classification (ADR-0004 / Phase 13). Reached when
+  // either no SIPI UUID box was found, or one was found but did not
+  // populate both img_w and img_h. Precedence: parse failure > partial >
+  // fallback (legacy carrier) > miss.
+  using Outcome = Sipi::observability::ReadShapeFastPathOutcome;
+  Outcome outcome = Outcome::Miss;
+  if (essentials_parse_failed) {
+    outcome = Outcome::Fallback;
+  } else if (essentials_partial) {
+    outcome = Outcome::Partial;
+  } else if (essentials_from_codestream_comment) {
+    outcome = Outcome::Fallback;
+  }
+  Sipi::observability::read_shape_fast_path_counter(
+    Sipi::observability::EssentialsFormat::Jp2, outcome).Increment();
 
   codestream.destroy();
   input->close();
