@@ -13,7 +13,7 @@ reproducible and verifiable.
 The repository_rule is declared in
 [`bazel/kakadu.bzl`](https://github.com/dasch-swiss/sipi/blob/main/bazel/kakadu.bzl)
 and registered in `MODULE.bazel`. On the first `bazel build`
-invocation that needs Kakadu (most do — `//src:sipi`,
+invocation that needs Kakadu (most do — `//src/cli:sipi`,
 `//src:image`, every test that links sipi), Bazel:
 
 1. Resolves the `gh` binary on PATH (the dev shell provides it).
@@ -59,7 +59,7 @@ cache.
    [its `kakadu/README.md`](https://github.com/dasch-swiss/dsp-ci-assets/blob/main/kakadu/README.md))
 2. In `MODULE.bazel`, update the `kakadu_archive` extension's
    tag/asset/sha256 attributes to match the new release.
-3. Run `bazel build //src:sipi`. A SHA-256 mismatch at this step
+3. Run `bazel build //src/cli:sipi`. A SHA-256 mismatch at this step
    means the pin disagrees with the published archive — check the
    release asset and the pin are consistent.
 4. Run `just bazel-test` to confirm the new SDK passes the test

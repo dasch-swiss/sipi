@@ -14,8 +14,8 @@ recipes — there are no inline `bazel ...` calls in any workflow.
 
 ```bash
 nix develop                                    # bazelisk + host tools on PATH
-just bazel-build                               # bazel build --stamp //src:sipi
-./bazel-bin/src/sipi --config config/sipi.localdev-config.lua
+just bazel-build                               # bazel build --stamp //src/cli:sipi
+./bazel-bin/src/cli/sipi --config config/sipi.localdev-config.lua
 ```
 
 `just run` chains the two: it depends on `bazel-build` and starts
@@ -106,14 +106,14 @@ groups:
 
 | Target | Description |
 |--------|-------------|
-| `bazel-build [*FLAGS]` | `bazel build --stamp //src:sipi` (fastbuild; pass `-c opt`/`--config=asan` etc.) |
+| `bazel-build [*FLAGS]` | `bazel build --stamp //src/cli:sipi` (fastbuild; pass `-c opt`/`--config=asan` etc.) |
 | `bazel-test [*FLAGS]` | `bazel test //test/unit/... //test/approval/... //test/e2e-rust/...` (no coverage) |
 | `bazel-coverage [*FLAGS]` | Same target set, instrumented; emits combined lcov for Codecov |
 | `bazel-test-unit` | `bazel test //test/unit/...` |
 | `bazel-test-approval` | `bazel test //test/approval:approvaltests` |
 | `bazel-test-e2e [*FLAGS]` | All Rust e2e `rust_test` targets |
 | `bazel-test-smoke [*FLAGS]` | Docker smoke test (consumes Bazel-built image tarball) |
-| `bazel-build-sanitized [*FLAGS]` | `bazel build --config=asan --config=ubsan //src:sipi` |
+| `bazel-build-sanitized [*FLAGS]` | `bazel build --config=asan --config=ubsan //src/cli:sipi` |
 | `bazel-build-fuzz [*FLAGS]` | libFuzzer harness (linux-x86_64 in CI, darwin-aarch64 local) |
 | `bazel-run-fuzz corpus duration [seed]` | Run libFuzzer harness against a corpus |
 | `bazel-docker-build-{amd64,arm64}` | Build + load per-arch image as `daschswiss/sipi:latest` |

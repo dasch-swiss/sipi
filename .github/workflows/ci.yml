@@ -204,7 +204,7 @@ jobs:
 
       # Hurl is an HTTP-contract test that shells out to the built sipi
       # binary directly (not via Bazel). Both `bazel-coverage` and
-      # `bazel-test` produce `bazel-bin/src/sipi` (with or without
+      # `bazel-test` produce `bazel-bin/src/cli/sipi` (with or without
       # coverage instrumentation; HTTP behaviour is identical).
       - name: Run Hurl contract tests
         run: just hurl-test

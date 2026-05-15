@@ -58,7 +58,7 @@ Enable address and undefined behavior sanitizers in Bazel via the
 `--config=asan` and `--config=ubsan` blocks in `.bazelrc`:
 
 ```bash
-bazel build --config=asan --config=ubsan //src:sipi
+bazel build --config=asan --config=ubsan //src/cli:sipi
 # or via the wrapper:
 just bazel-build-sanitized
 ```

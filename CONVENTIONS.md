@@ -130,7 +130,7 @@ Config flows: CLI args (CLI11) → Lua config file → `SipiConf` struct → `Si
 
 New config options need:
 1. Field in `SipiConf.h` / `SipiConf.cpp` (Lua table read)
-2. CLI option in `src/sipi.cpp` (CLI11)
+2. CLI option in `src/cli/sipi.cpp` (CLI11)
 3. Accessor in `SipiHttpServer.hpp`
 4. Documentation in `config/sipi.config.lua`
 5. Environment variable override (optional, for Docker)
@@ -173,7 +173,7 @@ prometheus::Counter &my_counter_total =
 
 shttps-side instrumentation goes through the
 `shttps::ConnectionMetrics` Strategy interface (see
-`shttps/ConnectionMetrics.h`). At startup, `src/sipi.cpp` installs a
+`shttps/ConnectionMetrics.h`). At startup, `src/cli/sipi.cpp` installs a
 `Sipi::observability::ConnectionMetricsAdapter` (Adapter pattern) that bridges
 shttps events into the `Sipi::observability::Metrics` singleton. **Do not call
 `Sipi::observability::Metrics::instance()` from `shttps/` code** — that

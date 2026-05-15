@@ -12,7 +12,7 @@
 #   sipi binary + e2e test binaries under ASan/UBSan and runs the
 #   suite in one action graph. No separate sanitised-build step:
 #   `bazel test //test/e2e-rust:all_e2e` already requires
-#   `data = ["//src:sipi"]` and produces sipi under the test
+#   `data = ["//src/cli:sipi"]` and produces sipi under the test
 #   invocation's configuration, so a pre-build with the same flags
 #   would be duplicate work and one with different flags would be
 #   discarded.

@@ -26,7 +26,7 @@ BUILD.bazel that declares its `cc_library`/`cc_binary`/`cc_test`/
 
 **Hermetic toolchain.** `toolchains_llvm` registers a pinned LLVM 19
 toolchain that every cc action runs under. The host compiler version
-is irrelevant — `bazel build //src:sipi` produces the same binary on
+is irrelevant — `bazel build //src/cli:sipi` produces the same binary on
 macOS, linux-x86_64, and linux-aarch64 (modulo platform-specific
 codegen).
 
@@ -44,7 +44,7 @@ by the `oci_image` rule to stamp Docker labels and tags.
 | Repository cache | Downloaded `http_archive` source tarballs | `~/.cache/bazel/_bazel_<user>/cache/repos/v1` |
 | Disk cache | Action cache mirrored to a stable path (CI) | `~/.cache/bazel-disk` (CI only) |
 
-`bazel build //src:sipi` after a single-file edit re-runs only the
+`bazel build //src/cli:sipi` after a single-file edit re-runs only the
 affected compile + link via the action cache — typically sub-second
 through link.
 
@@ -52,8 +52,8 @@ through link.
 
 ```bash
 nix develop                                    # bazelisk + host tools on PATH
-just bazel-build                               # bazel build --stamp //src:sipi
-./bazel-bin/src/sipi --config config/sipi.localdev-config.lua
+just bazel-build                               # bazel build --stamp //src/cli:sipi
+./bazel-bin/src/cli/sipi --config config/sipi.localdev-config.lua
 # Subsequent edits:
 just bazel-build                               # incremental, sub-second through link
 ```
@@ -68,7 +68,7 @@ Every CI step invokes one of these recipes — there are no inline
 
 ```bash
 # Build sipi (fastbuild — fast incremental for inner-loop edits)
-just bazel-build                 # bazel build --stamp //src:sipi
+just bazel-build                 # bazel build --stamp //src/cli:sipi
 just bazel-build -c opt          # production-shape build (matches Docker image)
 just bazel-build --config=asan   # ASan+UBSan; same flag form for ad-hoc variants
 
@@ -83,7 +83,7 @@ just bazel-coverage              # unit + approval + e2e under instrumentation;
                                  # lcov at bazel-out/_coverage/_coverage_report.dat
 
 # Sanitizer + fuzz
-just bazel-build-sanitized       # bazel build --config=asan --config=ubsan //src:sipi
+just bazel-build-sanitized       # bazel build --config=asan --config=ubsan //src/cli:sipi
 just bazel-build-fuzz            # libFuzzer harness (linux-x86_64 in CI, darwin-aarch64 local)
 just bazel-run-fuzz <corpus> <duration> [seed]
 
@@ -113,8 +113,8 @@ Defined in `.bazelrc`. Each flag composes with `bazel build` /
 without running an action:
 
 ```bash
-# What does //src:sipi depend on?
-bazel query 'deps(//src:sipi)' --output=label_kind | head -20
+# What does //src/cli:sipi depend on?
+bazel query 'deps(//src/cli:sipi)' --output=label_kind | head -20
 
 # Which targets transitively depend on //shttps:shttps?
 bazel query 'rdeps(//..., //shttps:shttps)' --output=label

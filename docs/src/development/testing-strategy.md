@@ -162,7 +162,7 @@ Per-request isolated Lua 5.3.5 interpreter with full server access:
 
 ### CLI Mode
 
-Sipi operates in three CLI modes (`src/sipi.cpp`):
+Sipi operates in three CLI modes (`src/cli/sipi.cpp`):
 
 **File Conversion:** `sipi infile outfile [options]`
 
@@ -701,7 +701,7 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 
 Memory leaks and undefined behavior are not a separate pyramid layer but a **build variant** that runs existing tests with compiler instrumentation. This is critical for sipi as a long-running C++ server where leaks accumulate.
 
-**Current state:** ASan+UBSan infrastructure is in place — Bazel `--config=asan` and `--config=ubsan` blocks in `.bazelrc`, `just bazel-build-sanitized` (`bazel build --config=asan --config=ubsan //src:sipi`), and a `sanitizer.yml` CI workflow that exercises the e2e suite against the resulting binary. Known findings to triage on first run:
+**Current state:** ASan+UBSan infrastructure is in place — Bazel `--config=asan` and `--config=ubsan` blocks in `.bazelrc`, `just bazel-build-sanitized` (`bazel build --config=asan --config=ubsan //src/cli:sipi`), and a `sanitizer.yml` CI workflow that exercises the e2e suite against the resulting binary. Known findings to triage on first run:
 
 - **`SipiFilenameHash::operator=` memory leak** — `operator=` allocates `new vector<char>` without deleting the old `hash` pointer. Confirmed by code inspection. Fix: add `delete hash;` before the new allocation, or switch to `std::unique_ptr`.
 - **Potential: `SipiFilenameHash` copy constructor** — also `new`s without freeing, but only leaks if the destination object was previously constructed with a different hash (doesn't happen via typical usage).
@@ -720,8 +720,8 @@ Memory leaks and undefined behavior are not a separate pyramid layer but a **bui
 | Component | Status | Details |
 |-----------|--------|---------|
 | `--config=asan` / `--config=ubsan` in `.bazelrc` | Done | `-fsanitize=address` / `-fsanitize=undefined` plus `-fno-omit-frame-pointer`, `-fno-optimize-sibling-calls`, `--strip=never`, `--compilation_mode=dbg` (DWARF inline so `.lsan_suppressions.txt` symbol-name suppressions match) |
-| `just bazel-build-sanitized` | Done | Wraps `bazel build --config=asan --config=ubsan //src:sipi` |
-| PR CI (`sanitizer.yml`) | Done | Bazel-built binary at `bazel-bin/src/sipi`, e2e suite under `just nix-test-e2e` with ASan log capture; `.lsan_suppressions.txt` consumed by LSan via `LSAN_OPTIONS` |
+| `just bazel-build-sanitized` | Done | Wraps `bazel build --config=asan --config=ubsan //src/cli:sipi` |
+| PR CI (`sanitizer.yml`) | Done | Bazel-built binary at `bazel-bin/src/cli/sipi`, e2e suite under `just nix-test-e2e` with ASan log capture; `.lsan_suppressions.txt` consumed by LSan via `LSAN_OPTIONS` |
 | Unit-test sanitizer coverage in CI | Returns when Bazel `cc_test` covers unit tests in CI | The Bazel-built binary covers e2e under sanitizers today; unit-test sanitizer coverage follows once `cc_test` runs in the sanitizer workflow. |
 | TSan variant | Future | Optional nightly, separate from ASan (can't combine) |
 
@@ -784,7 +784,7 @@ insta::assert_json_snapshot!(info_json, {
 | Hurl contract tests | `just hurl-test` | PR CI | Declarative HTTP tests |
 | Python e2e tests | *(retired)* | — | Replaced by Rust e2e tests |
 | Fuzz testing | `.github/workflows/fuzz.yml` | Nightly | libFuzzer corpus growth |
-| Sanitizer builds | `just bazel-build-sanitized` (`bazel build --config=asan --config=ubsan //src:sipi`) | PR | ASan+UBSan; e2e suite against `bazel-bin/src/sipi` with `.lsan_suppressions.txt` |
+| Sanitizer builds | `just bazel-build-sanitized` (`bazel build --config=asan --config=ubsan //src/cli:sipi`) | PR | ASan+UBSan; e2e suite against `bazel-bin/src/cli/sipi` with `.lsan_suppressions.txt` |
 
 ## Python Test Deprecation — Parity Checklist
 
