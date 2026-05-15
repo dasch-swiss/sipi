@@ -5,10 +5,12 @@
 
 #include <assert.h>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -127,6 +129,19 @@ static kdu_core::kdu_byte
   iptc_uuid[] = { 0x33, 0xc7, 0xa4, 0xd2, 0xb8, 0x1d, 0x47, 0x23, 0xa0, 0xba, 0xf1, 0xa3, 0xe0, 0x97, 0xad, 0x38 };
 static kdu_core::kdu_byte
   exif_uuid[] = { 'J', 'p', 'g', 'T', 'i', 'f', 'f', 'E', 'x', 'i', 'f', '-', '>', 'J', 'P', '2' };
+
+// SIPI Essentials UUID (ADR-0005 / DEV-6410). Generated via `uuidgen` on
+// 2026-05-15: 7B28A646-B9C3-4FB2-900B-B6855DF23882. Identifies the JP2 UUID
+// box that carries the protobuf-serialized Essentials packet for Service
+// Files. Position: slot 4 after Signature → FTYP → `jp2h`, before `jp2c`.
+// Layout inside the UUID box: 16-byte UUID + protobuf payload (no separate
+// length prefix — the box's own length field encodes it).
+//
+// Documented in `docs/adr/0005-essentials-packet-versioned-binary-serialization.md`
+// and `UBIQUITOUS_LANGUAGE.md`. jpylyzer reports unknown UUIDs as
+// informational, so this carrier is preservation-validator-safe (Phase 15.11).
+static kdu_core::kdu_byte sipi_essentials_uuid[] = { 0x7B, 0x28, 0xA6, 0x46, 0xB9, 0xC3, 0x4F, 0xB2, 0x90, 0x0B, 0xB6,
+  0x85, 0x5D, 0xF2, 0x38, 0x82 };
 // static kdu_core::kdu_byte geojp2_uuid[] = {0xB1, 0x4B, 0xF8, 0xBD, 0x08, 0x3D, 0x4B, 0x43, 0xA5, 0xAE, 0x8C, 0xD7,
 // 0xD5, 0xA6, 0xCE, 0x03}; static kdu_core::kdu_byte world_uuid[] = {0x96, 0xa9, 0xf1, 0xf1, 0xdc, 0x98, 0x40, 0x2d,
 // 0xa7, 0xae, 0xd6, 0x8e, 0x34, 0x45, 0x18, 0x09};
@@ -239,6 +254,7 @@ bool SipiIOJ2k::read(SipiImage *img,
 
   jp2_ultimate_src.open(filepath.c_str());
 
+  bool essentials_from_uuid_box = false;
   if (jpx_in.open(&jp2_ultimate_src, true)
       < 0) {// if < 0, not compatible with JP2 or JPX.  Try opening as a raw code-stream.
     jp2_ultimate_src.close();
@@ -279,6 +295,22 @@ bool SipiIOJ2k::read(SipiImage *img,
             } catch (SipiError &err) {
               log_err("%s", err.to_string().c_str());
             }
+          } else if (memcmp(buf, sipi_essentials_uuid, 16) == 0) {
+            // SIPI Essentials carrier (ADR-0005 / DEV-6410). New on-disk
+            // location for the packet; the codestream-comment branch below
+            // remains as the legacy fallback for pre-rollout JP2 files.
+            auto ess_len = box.get_remaining_bytes();
+            auto ess_buf = shttps::make_unique<std::byte[]>(ess_len);
+            box.read(reinterpret_cast<kdu_byte *>(ess_buf.get()), ess_len);
+            std::span<const std::byte> bytes(ess_buf.get(), ess_len);
+            if (auto parsed = Essentials::parse(bytes)) {
+              img->essential_metadata(*parsed);
+              essentials_from_uuid_box = true;
+            } else {
+              log_warn("Essentials: protobuf parse failed for %s (variant=%d); falling back to codestream comment",
+                filepath.c_str(),
+                static_cast<int>(parsed.error()));
+            }
           }
         }
         box.close();
@@ -301,17 +333,23 @@ bool SipiIOJ2k::read(SipiImage *img,
   int maximal_reduce = codestream.get_min_dwt_levels();
 
   //
-  // get Essentials (if present) as codestream comment
+  // Legacy codestream-comment fallback. Only consulted when the SIPI UUID
+  // box was absent — pre-rollout JP2 files use this carrier. No in-tree
+  // writer emits both carriers; if a file somehow carries both, the
+  // UUID-box parse above has already populated `essential_metadata` and
+  // this loop is skipped.
   //
-  kdu_codestream_comment comment = codestream.get_comment();
-  while (comment.exists()) {
-    const char *cstr = comment.get_text();
-    if (strncmp(cstr, "SIPI:", 5) == 0) {
-      Essentials se = Essentials::parse_legacy(cstr + 5);
-      img->essential_metadata(se);
-      break;
+  if (!essentials_from_uuid_box) {
+    kdu_codestream_comment comment = codestream.get_comment();
+    while (comment.exists()) {
+      const char *cstr = comment.get_text();
+      if (strncmp(cstr, "SIPI:", 5) == 0) {
+        Essentials se = Essentials::parse_legacy(cstr + 5);
+        img->essential_metadata(se);
+        break;
+      }
+      comment = codestream.get_comment(comment);
     }
-    comment = codestream.get_comment(comment);
   }
 
   //
@@ -663,12 +701,38 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
 
   jp2_ultimate_src.open(filepath.c_str());
 
+  bool essentials_from_uuid_box = false;
   if (jpx_in.open(&jp2_ultimate_src, true)
       < 0) {// if < 0, not compatible with JP2 or JPX.  Try opening as a raw code-stream.
     jp2_ultimate_src.close();
     file_in.open(filepath.c_str());
     input = &file_in;
   } else {
+    // Walk top-level UUID boxes for the SIPI Essentials carrier (ADR-0005 /
+    // DEV-6410). Same scan loop as the main reader at the top of this file;
+    // the codestream-comment fallback below covers pre-rollout files.
+    jp2_input_box box;
+    if (box.open(&jp2_ultimate_src)) {
+      do {
+        if (box.get_box_type() == jp2_uuid_4cc) {
+          kdu_byte buf[16];
+          box.read(buf, 16);
+          if (memcmp(buf, sipi_essentials_uuid, 16) == 0) {
+            auto ess_len = box.get_remaining_bytes();
+            auto ess_buf = shttps::make_unique<std::byte[]>(ess_len);
+            box.read(reinterpret_cast<kdu_byte *>(ess_buf.get()), ess_len);
+            std::span<const std::byte> bytes(ess_buf.get(), ess_len);
+            if (auto parsed = Essentials::parse(bytes)) {
+              info.origmimetype = parsed->fields().mimetype;
+              info.origname = parsed->fields().origname;
+              info.success = SipiImgInfo::ALL;
+              essentials_from_uuid_box = true;
+            }
+          }
+        }
+        box.close();
+      } while (box.open_next());
+    }
     int stream_id = 0;
     jpx_stream = jpx_in.access_codestream(stream_id);
     input = jpx_stream.open_stream();
@@ -688,7 +752,7 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
   int tmp_width;
   siz->get(Ssize, 0, 1, tmp_width);
   info.width = tmp_width;
-  info.success = SipiImgInfo::DIMS;
+  if (info.success == SipiImgInfo::FAILURE) { info.success = SipiImgInfo::DIMS; }
 
   int __tnx, __tny;
   siz->get(Stiles, 0, 0, __tny);
@@ -699,17 +763,19 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
   info.nc = codestream.get_num_components();
   info.bps = codestream.get_bit_depth(0);
 
-  kdu_codestream_comment comment = codestream.get_comment();
-  while (comment.exists()) {
-    const char *cstr = comment.get_text();
-    if (strncmp(cstr, "SIPI:", 5) == 0) {
-      Essentials se = Essentials::parse_legacy(cstr + 5);
-      info.origmimetype = se.fields().mimetype;
-      info.origname = se.fields().origname;
-      info.success = SipiImgInfo::ALL;
-      break;
+  if (!essentials_from_uuid_box) {
+    kdu_codestream_comment comment = codestream.get_comment();
+    while (comment.exists()) {
+      const char *cstr = comment.get_text();
+      if (strncmp(cstr, "SIPI:", 5) == 0) {
+        Essentials se = Essentials::parse_legacy(cstr + 5);
+        info.origmimetype = se.fields().mimetype;
+        info.origname = se.fields().origname;
+        info.success = SipiImgInfo::ALL;
+        break;
+      }
+      comment = codestream.get_comment(comment);
     }
-    comment = codestream.get_comment(comment);
   }
 
   codestream.destroy();
@@ -750,6 +816,21 @@ static void write_exif_box(kdu_supp::jp2_family_tgt *tgt, kdu_core::kdu_byte *ex
   out.set_target_size(exif_len + sizeof(exif_uuid));
   out.write(exif_uuid, sizeof(exif_uuid));
   out.write((kdu_byte *)exif, exif_len);// NOT::: skip JPEG marker header 'E', 'x', 'i', 'f', '\0', '\0'..
+  out.close();
+}
+//=============================================================================
+
+// SIPI Essentials carrier (ADR-0005 / DEV-6410). Emits the protobuf-serialized
+// packet as the box payload, preceded by `sipi_essentials_uuid`. Mirrors the
+// XMP/IPTC/EXIF helpers above so the four UUID-box carriers stay symmetric.
+// The Phase 12 orchestrator gates the call site on `master_mode == service-file`.
+static void write_essentials_box(kdu_supp::jp2_family_tgt *tgt, const std::vector<std::byte> &payload)
+{
+  kdu_supp::jp2_output_box out;
+  out.open(tgt, jp2_uuid_4cc);
+  out.set_target_size(payload.size() + sizeof(sipi_essentials_uuid));
+  out.write(sipi_essentials_uuid, sizeof(sipi_essentials_uuid));
+  if (!payload.empty()) { out.write(reinterpret_cast<const kdu_core::kdu_byte *>(payload.data()), payload.size()); }
   out.close();
 }
 //=============================================================================
@@ -1094,15 +1175,13 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
       }
     }
 
-    //
-    // Custom tag for SipiEssential metadata
-    //
-    if (es.is_set()) {
-      std::string esstr = es.serialize();
-      std::string emdata = "SIPI:" + esstr;
-      kdu_codestream_comment comment = codestream.add_comment();
-      comment.put_text(emdata.c_str());
-    }
+    // Essentials carrier migrated from codestream-comment to UUID box (slot 4
+    // after Signature → FTYP → jp2h, before jp2c) per ADR-0005 / DEV-6410.
+    // Emission is gated on master_mode == service-file per ADR-0009 / ADR-0010
+    // — Access File JP2s do NOT carry the packet. The actual UUID-box write
+    // happens after `jpx_out.write_headers()` (below), alongside the IPTC /
+    // EXIF / XMP UUID boxes, so all four carrier boxes land in the same
+    // post-headers / pre-codestream region.
 
     jp2_channels jp2_family_channels = jpx_layer.access_channels();
     jp2_family_channels.init(img->nc - img->es.size());
@@ -1120,6 +1199,15 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
     }
 
     jpx_out.write_headers();
+
+    //
+    // SIPI Essentials carrier (slot 4 — first UUID box after jp2h). Gated on
+    // master_mode == service-file per ADR-0009 / ADR-0010.
+    //
+    const bool emit_essentials_box = es.is_set() && params && params->contains(J2K_MasterMode)
+      && params->at(J2K_MasterMode) == "service-file";
+    if (emit_essentials_box) { write_essentials_box(&jp2_ultimate_tgt, es.serialize_bytes()); }
+
     if (img->iptc != nullptr) {
       std::vector<unsigned char> iptc_buf = img->iptc->iptcBytes();
       write_iptc_box(&jp2_ultimate_tgt, iptc_buf.data(), iptc_buf.size());
