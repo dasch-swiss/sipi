@@ -9,7 +9,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
-#include <ostream>
 #include <span>
 #include <string>
 #include <string_view>
@@ -79,11 +78,12 @@ enum class ParseError {
  *
  * Two on-disk wire forms coexist (per ADR-0005 / DEV-6410):
  *   * **protobuf** — new emissions (Service Files only). Created via
- *     `serialize_bytes()`, parsed via `Essentials::parse(span)`.
+ *     `serialize()` → `std::vector<std::byte>`, parsed via
+ *     `Essentials::parse(span)`.
  *   * **pipe-delimited legacy** — retained indefinitely for reading legacy
- *     packets per DEV-6398 scope. Parsed via `Essentials::parse_legacy`.
- *     `serialize()` still produces this form during the Expand/Migrate
- *     window; Phase 14 contracts both the legacy ctor and `serialize()`.
+ *     packets per DEV-6398 scope. Parsed via `Essentials::parse_legacy`;
+ *     the legacy writer was contracted in Phase 14 (DEV-6537 / DEV-6410)
+ *     since all writers now emit the protobuf form.
  */
 class Essentials
 {
@@ -98,16 +98,6 @@ public:
    * Construct from fully-populated fields. Marks the packet as set.
    */
   explicit Essentials(EssentialsFields fields) : _is_set(true), _fields(std::move(fields)) {}
-
-  /*!
-   * Parse a serialized (pipe-delimited) packet. Marks the packet as set on
-   * successful parse.
-   *
-   * \deprecated Phase 14 removes this overload. New call sites should use
-   * `Essentials::parse_legacy(std::string_view)` for the legacy form or
-   * `Essentials::parse(std::span<const std::byte>)` for the protobuf form.
-   */
-  explicit Essentials(const std::string &serialized);
 
   [[nodiscard]] bool is_set() const { return _is_set; }
 
@@ -144,16 +134,7 @@ public:
    * — protobuf emits fields in field-number order, which is stable across protoc
    * revisions for the same `.proto` schema.
    */
-  [[nodiscard]] std::vector<std::byte> serialize_bytes() const;
-
-  /*!
-   * Serialize the packet to the legacy pipe-delimited wire form used by
-   * pre-protobuf SIPI emissions. Retained for the Expand/Migrate window;
-   * Phase 14 removes it.
-   *
-   * \deprecated Use `serialize_bytes()` for new emissions.
-   */
-  [[nodiscard]] std::string serialize() const;
+  [[nodiscard]] std::vector<std::byte> serialize() const;
 
   /*!
    * Hex-encode raw bytes using lowercase digits. The format-handler tripwire
@@ -170,8 +151,6 @@ public:
    * raw bytes.
    */
   [[nodiscard]] static std::vector<std::byte> from_hex(std::string_view hex);
-
-  friend std::ostream &operator<<(std::ostream &os, const Essentials &rhs) { return os << rhs.serialize(); }
 };
 
 }// namespace Sipi
