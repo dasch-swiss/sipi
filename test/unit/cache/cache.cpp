@@ -251,29 +251,10 @@ TEST_F(SipiCacheTest, AddCheckRemove)
 
 
 // -------------------------------------------------------------------
-// getSize
+// (Removed in Phase 10 / DEV-6538): the `cache.getSize()` shape-memo lookup
+// was deleted along with the `sizetable` it backed. `read_shape` now reads
+// the same data from the Essentials packet directly (ADR-0004 / DEV-6379).
 // -------------------------------------------------------------------
-
-TEST_F(SipiCacheTest, GetSizeAfterAdd)
-{
-  std::string origpath = createOrigFile(origdir, "img.tif", 100);
-  Sipi::SipiCache cache(cachedir, 10 * 1024 * 1024, 100);
-
-  std::string cachefile = cache.getNewCacheFileName();
-  createDummyFile(cachefile, 512);
-  cache.add(origpath, "/iiif/img/full/max/0/default.jpg", cachefile, 1024, 768, 256, 256, 5, 1);
-
-  size_t w, h, tw, th;
-  int clevels, numpages;
-  bool found = cache.getSize(origpath, w, h, tw, th, clevels, numpages);
-  EXPECT_TRUE(found);
-  EXPECT_EQ(w, 1024u);
-  EXPECT_EQ(h, 768u);
-  EXPECT_EQ(tw, 256u);
-  EXPECT_EQ(th, 256u);
-  EXPECT_EQ(clevels, 5);
-  EXPECT_EQ(numpages, 1);
-}
 
 
 // -------------------------------------------------------------------

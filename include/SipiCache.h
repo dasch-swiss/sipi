@@ -81,25 +81,11 @@ public:
     off_t fsize;
   } CacheRecord;
 
-  /*!
-   * SizeRecord is used to create a map of the original filenames in the image
-   * directory and the sizes of the full images.
-   */
-  typedef struct
-  {
-    size_t img_w;
-    size_t img_h;
-    size_t tile_w;
-    size_t tile_h;
-    int clevels;
-    int numpages;
-#if defined(HAVE_ST_ATIMESPEC)
-    struct timespec mtime;//!< entry time into cache
-#else
-    time_t mtime;
-#endif
-  } SizeRecord;
-
+  // The pre-DEV-6537 `SizeRecord` typedef + `sizetable` map cached an image's
+  // shape (width / height / tile_w / tile_h / clevels / numpages) keyed on its
+  // original path. ADR-0004's `read_shape` fast path now reads the same shape
+  // from the Essentials packet directly (DEV-6379 / Phase 9), so the parasitic
+  // shape memoization is dead weight. Deleted in Phase 10 / DEV-6538.
 
   /*!
    * This is the prototype function to used as parameter for the method SipiCache::loop
@@ -111,7 +97,6 @@ private:
   std::mutex locking;
   std::string _cachedir;//!< path to the cache directory
   std::unordered_map<std::string, CacheRecord> cachetable;//!< Internal map of all cached files
-  std::unordered_map<std::string, SizeRecord> sizetable;//!< Internal map of original file paths and image size
   std::unordered_map<std::string, int> blocked_files;
   std::atomic<unsigned long long> cache_used_bytes;//!< number of bytes in the cache
   long long max_cache_size;//!< maximum number of bytes that can be cached (-1=unlimited, 0=disabled, >0=limit)
@@ -248,21 +233,6 @@ public:
    * \param[in] Sort method used to determine the sequence how the cache is processed.
    */
   void loop(ProcessOneCacheFile worker, void *userdata, SortMethod sm = SORT_ATIME_ASC);
-
-  /*!
-   * Returns the sie of the image, if the file has ben cached
-   *
-   * \param[in] original filename
-   * \param[out] img_w Width of original image in pixels
-   * \param[out] img_h Height of original image in pixels
-   */
-  bool getSize(const std::string &origname_p,
-    size_t &img_w,
-    size_t &img_h,
-    size_t &tile_w,
-    size_t &tile_h,
-    int &clevels,
-    int &numpages);
 };
 }// namespace Sipi
 
