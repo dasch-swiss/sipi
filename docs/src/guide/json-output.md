@@ -1,11 +1,12 @@
 # Structured JSON Output (`--json`)
 
-When the `--json` flag is set on a CLI invocation (`sipi --json --file
-<input> --outf <output>`) sipi emits a single JSON document to `stdout`
-instead of human-readable text. The document mirrors the internal
-`ImageContext` that sipi otherwise sends to Sentry, so every CLI run —
-success or failure — yields the same structured payload a Sentry event
-would.
+When the `--json` flag is set on a `query` / `compare` / `verify`
+subcommand invocation (e.g. `sipi query --json <input>` or
+`sipi verify service-file --json <input>`) sipi emits a single JSON
+document to `stdout` instead of human-readable text. The document
+mirrors the internal `ImageContext` that sipi otherwise sends to
+Sentry, so every CLI run — success or failure — yields the same
+structured payload a Sentry event would.
 
 This page is the reference for the schema, the emission rules, and the
 exit-code / stream contract.
@@ -22,8 +23,9 @@ exit-code / stream contract.
 - The flag is CLI-only: passing `--json` together with `--config`
   (server mode) is silently ignored. Server-mode errors continue to go
   through Sentry and HTTP responses.
-- `--json` is mutually exclusive with `--query` at CLI parse time
-  (`--query` also writes to `stdout` in an incompatible way).
+- `--json` attaches via the `output_opts` group to the `query`,
+  `compare`, and all `verify` subcommands (per the D5 option-availability
+  matrix). It is not exposed on `convert` flows.
 - The schema is **not versioned** today — there is a single consumer
   (local debugging / ad-hoc integrations) and the cost of adding a
   `schema_version` field exceeds its value while there is only one

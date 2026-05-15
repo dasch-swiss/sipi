@@ -1,8 +1,11 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Image shape and S3-access index lookup is owned by format handlers via a fixed-offset Essentials packet
+
+> **Joint-implementation pointer (DEV-6537, 2026-05-15):** this ADR's fast path landed together with [ADR-0005](./0005-essentials-packet-versioned-binary-serialization.md)'s protobuf wire format and the file-role-taxonomy ADRs ([ADR-0009](./0009-file-role-taxonomy.md), [ADR-0010](./0010-file-role-creation-is-intentional.md), [ADR-0011](./0011-preservation-metadata-via-xmp.md)) in a single PR. See the [DEV-6537](https://linear.app/dasch/issue/DEV-6537) parent for the cross-ADR coordination and the merged implementation plan in `dasch-specs/specs/2026-05-13-sipi-essentials-wire-format/` for the per-phase commit map. The wire format reconciled from the original "CBOR" framing to **Protocol Buffers** at implementation time — see ADR-0005's "Why protobuf (CBOR → protobuf reconciliation)" section. Any "CBOR" reference in the prose below is shorthand for "the binary wire format specified by ADR-0005" and should be read as the protobuf form.
+
 
 A SIPI module that needs the intrinsic shape of a Service File — `(img_w, img_h, tile_w, tile_h, clevels, numpages, nc, bps)` — calls `SipiIO::read_shape(origpath) → SipiImgInfo` on the appropriate format handler. The cache holds no shape data; `SipiCache::SizeRecord`, `SipiCache::sizetable`, and `SipiCache::getSize()` are removed. The two consumers today are canonical-URL computation (always — it needs `img_w`/`img_h` to resolve pixel-coord cache keys) and the decode-memory-budget peak estimator (cache-miss only — the full struct).
 

@@ -111,11 +111,11 @@ In command line mode, SIPI supports the following options:
   the internal `ImageContext` that is otherwise sent to Sentry and includes the input/output paths, the decoded image
   properties, and — on failure — a `phase` (`cli_args` | `read` | `convert` | `write`) with the `error_message`.
   Useful for programmatic consumers and for debugging when no Sentry DSN is configured. Stderr carries any log output
-  so stdout stays reserved for the single JSON document. CLI-only: has no effect with `--config` (server mode).
-  Mutually exclusive with `--query`. See [`json-output.md`](json-output.md) for the full schema and
-  worked examples. Example:
+  so stdout stays reserved for the single JSON document. Attached only to the `query`, `compare`, and `verify`
+  subcommands per the D5 option-availability matrix; convert flows do not expose `--json`.
+  See [`json-output.md`](json-output.md) for the full schema and worked examples. Example:
   ```bash
-  sipi --json --file input.jpg out.jp2 | jq '.image.bps'
+  sipi query --json input.jpg | jq '.image.bps'
   ```
   
 #### JPEG2000 Specific Options

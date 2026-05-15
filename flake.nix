@@ -28,6 +28,11 @@
           just gcovr lcov llvmPackages_19.llvm
           rustc cargo hurl
           nginx graphicsmagick imagemagick libxml2 libxslt
+          # jpylyzer — JP2 conformance validator (Phase 15.11). Runs against
+          # regenerated JP2 goldens to confirm the SIPI UUID box reads as an
+          # informational `Unknown UUID` and the file otherwise passes
+          # ISO/IEC 15444-1 conformance.
+          python3Packages.jpylyzer
         ];
 
         commonShellHook = ''

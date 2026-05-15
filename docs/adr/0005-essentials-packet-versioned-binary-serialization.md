@@ -1,53 +1,149 @@
 ---
-status: proposed
+status: accepted
 ---
 
-# Essentials packet adopts a versioned, self-describing binary wire format (CBOR)
+# Essentials packet adopts a versioned, self-describing binary wire format (Protocol Buffers)
 
-The Essentials packet's wire format migrates from pipe-delimited text to **CBOR (RFC 8949)** with a top-level `format_version` field. New SIPI versions read every prior `format_version` they support; legacy text-format packets are detected by the absence of a CBOR-tagged byte sequence and parsed via the legacy reader indefinitely. New packets are always written in the CBOR form.
+The Essentials packet's wire format migrates from pipe-delimited text to **Protocol Buffers (`proto3`)** built with the `LITE_RUNTIME` option, consumed via Bazel Central Registry. A top-level `format_version` field discriminates reader dispatch. New SIPI versions read every prior `format_version` they support; legacy pipe-delimited packets continue to parse via `Essentials::parse_legacy(...)` indefinitely (longevity invariant). New packets are always written in the protobuf form, and only by the intentional master-creation orchestrator (`sipi convert service-file` per [ADR-0010](./0010-file-role-creation-is-intentional.md)) into the two Service File carriers (JP2 + pyramidal TIFF) per [ADR-0009](./0009-file-role-taxonomy.md).
 
-We accept this because SIPI's preservation guarantee is that conversions don't lose metadata, and SIPI's installed base is *hundreds of thousands* of files with legacy Essentials packets (today's *Service Files*, plus older derivative outputs from before the [ADR-0009](./0009-file-role-taxonomy.md) carrier-surface restriction). Mass re-encoding to flip serialization formats is not operationally feasible at that scale; the wire format must therefore be forward-evolvable forever — new fields, new optimizations, new types — without requiring coordination across the existing file population. The current pipe-delimited format has zero versioning, no schema, no escaping, and no field discovery; ADR-0004 alone (adding eight image-shape fields) already pushes it past its design limits, and any subsequent schema change would compound the fragility. Biting this bullet now, while the install base is smaller than it will be at any future point, is strictly cheaper than deferring.
+We accept this because SIPI's preservation guarantee is that conversions don't lose metadata, and SIPI's installed base is *hundreds of thousands* of files with legacy pipe-delimited Essentials packets. Mass re-encoding to flip serialization formats is not operationally feasible at that scale; the wire format must therefore be forward-evolvable forever — new fields, new optimisations, new types — without requiring coordination across the existing file population. The current pipe-delimited format has zero versioning, no schema, no escaping, and no field discovery; [ADR-0004](./0004-image-shape-ownership.md) alone (adding eight image-shape fields) already pushes it past its design limits, and any subsequent schema change would compound the fragility. Biting this bullet now, while the install base is smaller than it will be at any future point, is strictly cheaper than deferring.
 
-CBOR is chosen over the obvious alternatives:
+## Why protobuf (CBOR → protobuf reconciliation)
 
-- **Protocol Buffers** — solves forward-compat via field numbering, but adds a `protoc` codegen step and a `.proto` schema file to the build. The dep + workflow friction is not justified for a packet that's a few KB at most.
-- **MessagePack** — functionally equivalent to CBOR with comparable forward-compat semantics, but no IETF standard. CBOR's preservation-community traction (used by COSE / CWT, JOSE successor stacks, IoT data formats, and increasingly by IIIF-adjacent specs) is the tiebreaker.
-- **Custom versioned binary** — tightest bytes per packet, but reinventing schema-evolution semantics (length-prefixing, type tagging, default-value rules for missing fields) at a 100K-Service-File horizon is the kind of decision a longevity-driven codebase should not bet on. CBOR's primitives are exactly the schema-evolution semantics we would otherwise reinvent.
-- **JSON** — text-based; defeats the compactness goal in image headers and reintroduces the same escaping fragility that motivated this ADR.
+The original drafts of this ADR (v1, v2) selected **CBOR (RFC 8949)** for compactness + IETF standardisation. The implementation-time decision flipped to protobuf because:
 
-Forward-compatibility in CBOR works at two levels and we use both:
+- **Schema evolution is by field number, not field name.** Field numbers are stable; field renames cost nothing on the wire. CBOR-by-map-key works but treats the key string as the contract — exactly the kind of stringly-typed surface that bit us in the pipe-delimited era.
+- **Cross-language readiness.** The dsp-repository roadmap calls for a Rust IIIF service that will need to read the same Essentials packet. Protobuf has a first-class, well-maintained Rust codegen story (`prost`, `protobuf-rs`); CBOR-in-Rust has competent libraries but no shared schema artifact across SIPI's C++ and the Rust consumer.
+- **BCR makes integration one line.** `bazel_dep(name = "protobuf", version = "34.1", repo_name = "com_google_protobuf")` + `bazel_dep(name = "rules_proto", version = "7.1.0")` — no `rules_foreign_cc` integration, no manual codegen step in `justfile`, no host-environment fiddling. The "tooling overhead" objection from v1 is empirically smaller than the CBOR-library objection that motivated v1.
+- **`LITE_RUNTIME` keeps the static-link footprint small.** `option optimize_for = LITE_RUNTIME;` drops descriptor metadata, reflection, and text-format I/O from the generated code. Measured at link time: the sipi binary gains ~300-500 KB of code from the protobuf runtime + generated `essentials.pb.{cc,h}`, well within the 1 MB binary-size budget set by [DEV-6537](https://linear.app/dasch/issue/DEV-6537)'s acceptance criteria.
 
-- **Field-level**: additive schema changes (new fields) require no `format_version` bump. Readers ignore unknown CBOR map keys; writers add new keys at will. This covers the common case (e.g. ADR-0004's image-shape fields, future colour-space hints, future provenance fields).
-- **Format-level**: breaking changes (field type changes, semantic redefinition) bump `format_version`. The new SIPI version is responsible for retaining a migrating reader for every prior `format_version` it claims to support. `format_version` is the *only* thing a reader checks before dispatching to a per-version parser; everything else is field-level evolution.
+CBOR-jsoncons, tinycbor, and a custom in-tree binary codec were all considered and rejected for variants of "reinvents schema-evolution semantics we then have to maintain forever." Protobuf is the conservative choice for a 10+ year preservation horizon **because** it has the largest ecosystem footprint of the candidates — a dropped dependency three years from now is the load-bearing risk, and protobuf is the option least likely to be dropped.
+
+(Earlier drafts of this ADR are preserved in the repository's git history; see commits prior to the [DEV-6537](https://linear.app/dasch/issue/DEV-6537) joint-implementation merge for the v1/v2 CBOR-flavoured framing.)
+
+## Schema (`src/metadata/essentials.proto`)
+
+```protobuf
+syntax = "proto3";
+
+package sipi.metadata;
+
+option optimize_for = LITE_RUNTIME;
+
+enum HashType {
+  HASH_TYPE_UNSPECIFIED = 0;
+  HASH_TYPE_MD5 = 1;
+  HASH_TYPE_SHA1 = 2;
+  HASH_TYPE_SHA256 = 3;
+  HASH_TYPE_SHA384 = 4;
+  HASH_TYPE_SHA512 = 5;
+}
+
+message Essentials {
+  uint32 format_version = 1;
+
+  // Core preservation identity. Populated by the master-creation
+  // orchestrator from observed source + post-transformation hash.
+  string origname = 2;
+  string mimetype = 3;
+  HashType hash_type = 4;
+  bytes data_chksum = 5;
+  bool use_icc = 6;
+  bytes icc_profile = 7;
+
+  // Image-shape fields (ADR-0004). Populated by the writer from
+  // current (post-transformation) SipiImage state.
+  uint32 img_w = 8;
+  uint32 img_h = 9;
+  uint32 tile_w = 10;
+  uint32 tile_h = 11;
+  uint32 clevels = 12;
+  uint32 numpages = 13;
+  uint32 nc = 14;
+  uint32 bps = 15;
+
+  // Reserved runway for file-structure offsets (post-DEV-6442 work).
+  reserved 16 to 31;
+}
+```
+
+### Schema discipline
+
+These rules are documented inline in `essentials.proto` and enforced by reviewer convention (`docs/src/development/reviewer-guidelines.md` flags any `.proto` change for a two-reviewer rule):
+
+- **Never repurpose a field number.** Removed fields are marked `reserved <n>;`.
+- **Never repurpose an enum value.** `HashType` integer mapping is asserted in `essentials.cpp` via `static_assert(static_cast<int>(shttps::HashType::md5) == HASH_TYPE_MD5)` (and equivalents for every enumerator). The reverse-pointer comment in `shttps/Hash.h` declares the SIPI on-disk dependency so a future reorder of the upstream enum trips the assertion at compile time.
+- **Adding a field** picks the lowest unreserved field number; describes intent; defaults to optional semantics (proto3 makes everything optional anyway, but the comment block matters for readers).
+- **Breaking semantic change** bumps `format_version`. The reader switches dispatch on the new value and runs a per-version migration; the old version's reader is retained indefinitely.
+
+## Dispatcher semantics
+
+`Essentials::parse(std::span<const std::byte>) → std::expected<Essentials, ParseError>` is the new-format reader. It probes in the documented order:
+
+1. **Empty** input → `ParseError::Empty`.
+2. **`ParseFromArray`** fails → `ParseError::Malformed`.
+3. **`format_version == 0`** (proto3 default — field never set on the wire) → `ParseError::MissingVersion`. Distinct from `UnknownVersion` so future writers emitting `format_version=1` are still readable by today's reader; only literal-zero is treated as "not a versioned packet."
+4. **`format_version > 1`** → `ParseError::UnknownVersion`. A future writer emits `format_version=2`; today's reader logs once and falls through to the legacy reader if a dual-carrier file exposes one (otherwise returns the error to the caller).
+5. **Missing core fields** (`origname` / `mimetype` / `hash_type` / `data_chksum`) → `ParseError::MissingCore`. Protobuf accepted the bytes but the packet is semantically incomplete.
+
+`Essentials::parse_legacy(std::string_view)` is the **read-only** legacy reader. It retains the permissive pipe-split semantics of the pre-Phase-5 ctor; hex-decodes `data_chksum` into raw bytes; returns an unset `Essentials` (`is_set() == false`) on malformed input. It is **not** removed in Phase 14's Contract step — pre-rollout files must remain readable indefinitely (per the longevity invariant). What Phase 14 removes is the legacy *writer* (the `serialize() → std::string` overload and the `Essentials(const std::string&)` ctor).
+
+`Essentials::serialize() → std::vector<std::byte>` is the only emitter. Byte-deterministic — protobuf emits fields in field-number order, which is stable across protoc revisions for the same `.proto` schema.
+
+A per-read tripwire log fires on every successful `parse()`: `"Essentials: read format_version=%u (max supported: 1)"`. The format-handler decision-boundary metrics ([Phase 13](https://linear.app/dasch/issue/DEV-6537)) attribute the same event to a Prometheus counter (`sipi_read_shape_fast_path_total{format, outcome}`).
+
+## JP2 carrier — UUID box at slot 4
+
+Per [ADR-0004](./0004-image-shape-ownership.md), the Essentials packet must be readable from a known fixed prefix offset within the Service File so the S3 transition can prefetch shape + offsets with a single bounded range GET (target: <64 KB prefix). The JP2 implementation:
+
+- **Carrier:** a JP2 UUID box positioned at slot 4 — i.e. after the JP2 Signature box → FTYP box → `jp2h` box, and before the `jp2c` codestream box. The UUID is committed in source: `kSipiEssentialsUuid = 7B28A646-B9C3-4FB2-900B-B6855DF23882` (the constant lives in `src/formats/SipiIOJ2k.cpp` and is mirrored in `UBIQUITOUS_LANGUAGE.md`).
+- **Box layout:** `[16-byte UUID][N-byte protobuf payload]`. Kakadu's `jp2_output_box` writes the JP2 box header (4-byte length + 4-byte `uuid` type code) framing the payload; the box's own length field is the canonical packet size at read time. No separate `total_size: u32` is needed inside the box payload.
+- **Reader:** walks top-level boxes via `jp2_family_src` + `jp2_input_box::open_next()`; on a UUID box matching `kSipiEssentialsUuid`, reads `box.get_remaining_bytes()` into a buffer and calls `Essentials::parse(span)`. Falls through to the legacy codestream-comment scan + `parse_legacy(cstr+5)` on miss.
+- **64 KB prefix invariant:** the writer is structured so the UUID box always lands within the first 64 KB of the file. ICC profiles that would push past this bound are the only realistic spillover risk; the schema reserves `format_version`-and-up at fixed early-field positions specifically so a short header read can confirm "this is a protobuf packet and its `total_size` is N" before issuing a follow-up range GET for outliers. Range-source spillover handling is [DEV-6442](https://linear.app/dasch/issue/DEV-6442)'s scope.
+- **Slot-4 rationale:** earlier than this would precede the `jp2h` header box that JP2 readers rely on for codestream-independent shape recovery; later than this risks slipping past the 64 KB prefix budget for files with extensive XMP / IPTC / EXIF boxes.
+
+## Pyramidal TIFF carrier — private tag 65112
+
+- **Carrier:** new private tag `TIFFTAG_SIPIMETA_PB = 65112`, registered as `TIFF_UNDEFINED`. The libtiff field type lets us pass raw bytes through `TIFFSetField(tif, TIFFTAG_SIPIMETA_PB, count, data)` without TIFF treating the payload as text.
+- **Legacy carrier (read-only):** `TIFFTAG_SIPIMETA = 65111` (TIFF_ASCII) continues to parse via `parse_legacy(...)`. Re-encode through `convert service-file` strips the legacy tag from the output.
+- **First-IFD invariant:** TIFF's file header points to the first IFD at bytes 4-7; the first IFD is reachable in the first 64 KB by construction. The Essentials tag lives in the first IFD so the 64 KB-prefix invariant holds.
+
+## Carrier surface restriction
+
+Per [ADR-0009](./0009-file-role-taxonomy.md) and Phase 6 of the [DEV-6537](https://linear.app/dasch/issue/DEV-6537) implementation: JPEG, PNG, and plain TIFF outputs **do not** carry an Essentials packet. The writers in `SipiIOJpeg.cpp` / `SipiIOPng.cpp` and the non-pyramidal branch of `SipiIOTiff.cpp` have no Essentials emission path at all. Per [ADR-0010](./0010-file-role-creation-is-intentional.md), the Service File writers (pyramidal TIFF + JP2) emit the packet only when the orchestrator passes `J2K_FileRole = "service-file"` / `TIFF_FileRole = "service-file"`. The single point of control is the writer gate: `emit_essentials_box = es.is_set() && params && params->contains(*_FileRole) && params->at(*_FileRole) == "service-file"`.
 
 ## Considered Options
 
-- **Stay pipe-delimited; add ADR-0004 fields by appending more pipe segments** — rejected. Pushes past the format's design limits when we already know the next schema change is coming. The pipe-delimited reader has no escape mechanism (an `origname` containing `|` corrupts parse — latent bug today on macOS/Linux where filesystems allow `|`), no version discriminator, and no defined rule for unknown fields. Each future schema change pays the same cost; biting the bullet later is strictly more expensive than biting it now.
+- **Stay pipe-delimited; add ADR-0004 fields by appending more pipe segments** — rejected. Pushes past the format's design limits when we already know the next schema change is coming. The pipe-delimited reader has no escape mechanism (an `origname` containing `|` corrupts parse), no version discriminator, and no defined rule for unknown fields.
 
-- **Adopt Protocol Buffers** — rejected. The codegen + schema-file workflow is appropriate for service interfaces but heavyweight for a single embedded metadata packet. Forward-compat via field numbering is real but the tooling overhead is not.
+- **Adopt CBOR (jsoncons or tinycbor)** — rejected. Functionally adequate, but no shared schema artifact for the Rust IIIF service in dsp-repository. Schema evolution by field name is a weaker contract than by field number when the consumer count grows.
 
-- **Adopt MessagePack** — rejected. Functionally equivalent to CBOR but lacks IETF standardization. No technical advantage; CBOR is the conservative choice for a 10+ year preservation horizon.
+- **Adopt MessagePack** — rejected. Same as CBOR plus no IETF standard. No technical advantage.
 
-- **Custom versioned binary format** — rejected. Reinvents what CBOR's spec already nails down (canonical encoding, type tagging, length-prefixing, integer/float/string/array/map primitives). The maintenance cost of an in-house format compounds across the lifetime of the Service File population.
+- **Custom versioned binary format** — rejected. Reinvents what protobuf's spec already nails down (length-prefixing, type tagging, default-value rules, canonical encoding for cross-implementation equality). The maintenance cost of an in-house format compounds across the lifetime of the Service File population.
 
-- **Adopt CBOR but without a `format_version` field**, relying entirely on field-level forward-compat — rejected. Field-level evolution covers most cases but cannot handle semantic redefinition (e.g. if `numpages` semantics ever change for some IIIF-spec reason). A coarse-grained version field is cheap insurance against the cases field-level evolution can't handle.
+- **JSON** — rejected. Text-based; defeats the compactness goal in image headers and reintroduces the same escaping fragility that motivated this ADR.
+
+- **Adopt protobuf without `format_version`**, relying entirely on field-number evolution — rejected. Field-level evolution covers most cases but cannot handle semantic redefinition. A coarse-grained `format_version` field is cheap insurance against the cases field-level evolution can't handle, at the cost of one `uint32` per packet.
 
 ## Consequences
 
-- **`Essentials::parse(bytes)` becomes a dispatcher**: probe the leading bytes for a CBOR tag → CBOR parse via the chosen library; otherwise fall back to the legacy pipe-delimited parser. The legacy parser is retained indefinitely (longevity invariant). If both parsers fail, treat as no Essentials packet present (same as today's "is_set = false" path).
+- **`Essentials::parse(span<const std::byte>)` is the dispatcher**: protobuf parse → ParseError enum on failure, otherwise an `Essentials` populated from the codec adapter. The legacy reader is reachable via the static `parse_legacy(string_view)` factory and is retained indefinitely.
 
-- **`Essentials::serialize()` always emits CBOR** with `format_version = 1` for the initial cutover. The class's in-memory representation is unchanged; only the wire format moves. The existing `operator std::string()` and `operator<<` overloads — which the [Probe 2 deep-module analysis](../deep-modules.md#probe-2--metadata) flagged as shallowness leaks anyway — are removed in favour of an explicit `serialize() → std::vector<unsigned char>`. The on-disk artefact is *bytes*, not a `std::string`; the existing API's typing was a mistake.
+- **`Essentials::serialize() → std::vector<std::byte>`** is the only emitter (Phase 14 contracted the `std::string`-returning overload). The on-disk artefact is *bytes*; the existing API's typing was a mistake corrected by the rewrite.
 
-- **New build dep**: a CBOR library. Candidates include `tinycbor` (lightweight, C, used by IoT/embedded), `jsoncons` (header-only C++, broad format support), or an in-tree minimal encoder (CBOR is small enough that a few hundred lines covers our needs). Choice deferred to implementation time; not an architectural decision.
+- **New build dep**: protobuf + rules_proto, both via BCR. No `rules_foreign_cc` integration, no host-environment configuration. `cc_proto_library` consumed only by `src/metadata/internal/protobuf_codec.cpp` so the `.pb.h` header doesn't leak into client code.
 
-- **`Essentials::parse()` becomes fallible in a way the current API doesn't expose** (the dispatcher needs to report which parser was used, and CBOR-parse can fail in more ways than text-parse). Consider switching the API to `std::expected<Essentials, ParseError>` to match `cpp-style-guide.md`'s preference. Aligns with the Rust target.
+- **`std::expected<Essentials, ParseError>`** is the parse-API shape, matching [docs/src/development/cpp-style-guide.md](../src/development/cpp-style-guide.md)'s preference and the planned Rust target's `Result` ergonomics.
 
-- **Approval-test goldens for image-header bytes change**: where the test asserts on the embedded packet bytes (any test that round-trips a *Service File* through the encoder and inspects the header), the goldens are regenerated alongside ADR-0004's image-shape-field addition. Do both changes in one PR so the approval-suite churn is single.
+- **Approval-test goldens for image-header bytes change** where the test round-trips a Service File through the encoder. The regeneration ran with `SOURCE_DATE_EPOCH=946684800` and `SIPI_WORKSPACE_ROOT="."` injected by `test/approval/BUILD.bazel` so the wall-clock-stamped ICC creation date is overwritten with a fixed value and goldens stay byte-deterministic ([ADR-0002](./0002-icc-profile-determinism-test-only.md)).
 
-- **Existing files with legacy Essentials packets keep working unchanged**. Their pipe-delimited packets continue to parse via the legacy reader. The new wire-format fast path activates incrementally as files are re-processed by an intentional master-creation invocation (`sipi convert service-file` per [ADR-0010](./0010-file-role-creation-is-intentional.md)), without any mass re-encoding event. This is the load-bearing operational property of this ADR.
+- **Existing files with legacy Essentials packets keep working unchanged.** Pipe-delimited packets continue to parse via `parse_legacy`. The new wire-format fast path activates incrementally as files are re-processed by an intentional master-creation invocation (`sipi convert service-file`), without any mass re-encoding event. This is the load-bearing operational property of this ADR.
 
-- **The pipe-delimited fragility goes away for new packets**: filenames with `|`, no schema versioning, no field discovery, no escape semantics — all replaced by CBOR's well-defined encoding rules. Old packets remain fragile but, by definition, are read-only at this point (they're already on disk; nothing new will be written in the legacy format).
+- **Pipe-delimited fragility is gone for new packets**: protobuf's well-defined encoding rules replace the escape-less, schema-less, version-less legacy format. Old packets remain readable but read-only.
 
-- **The `metadata/` Bazel package documented in [Probe 2](../deep-modules.md#probe-2--metadata) gains a CBOR-library dep but no visibility change.** Consumers (`SipiImage`, format handlers) see no API surface change at the call sites that already use `Essentials` getters/setters. Only `parse` / `serialize` change shape.
+- **The `metadata/` Bazel package gains protobuf + rules_proto deps but no visibility change.** Consumers (`SipiImage`, format handlers) see no API surface change at the call sites that already use `Essentials` getters/setters. Only `parse` / `serialize` change shape.
 
-- **Future schema additions become low-friction**. Adding a new field is: (a) extend the in-memory struct, (b) write the new key in `serialize()`, (c) read the new key (with a sensible default) in `parse()`. No `format_version` bump, no migration tooling, no coordinated deploys. This is the operational property the 100K-Service-File horizon requires.
+- **Future schema additions become low-friction**: extend the `.proto` schema (lowest unreserved field number), regenerate via Bazel, populate the new fields in the codec adapter. No `format_version` bump for additive changes; the field-number contract is the contract.
+
+- **Cross-context coupling with `shttps::HashType` is documented and asserted**: `shttps/Hash.h` carries a comment declaring its enumeration is on-disk-stable; `essentials.cpp` carries `static_assert`s that trip at compile time if the upstream enum is reordered.
