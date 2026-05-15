@@ -129,7 +129,18 @@ for imgindex,imgparam in pairs(server.uploads) do
         --
         -- write the file to the destination
         --
-        local status, errmsg = myimg[imgindex]:write(fullfilepath)
+        -- Stamp a Service File Essentials packet on the output (DEV-6537 /
+        -- ADR-0009 / ADR-0010): the JP2 we're emitting here IS the Service
+        -- File that SIPI server reads back for IIIF requests, so it must
+        -- carry the role-establishing metadata. `file_role = "service-file"`
+        -- routes the write through the same Essentials-emission gate the
+        -- `sipi convert service-file` CLI orchestrator uses; origname /
+        -- mimetype come from the upload's HTTP multipart envelope.
+        local status, errmsg = myimg[imgindex]:write(fullfilepath, {
+            file_role = "service-file",
+            origname = imgparam["origname"],
+            mimetype = mimetype,
+        })
         if not status then
             server.print('Error converting image to j2k: ', filename, ' ** ', errmsg)
         end

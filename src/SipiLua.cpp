@@ -295,7 +295,7 @@ static int SImage_new(lua_State *L)
   try {
     if (!original.empty()) {
       // htype is parsed from Lua but no longer flows through readSource —
-      // hash type is decided at write time by the master-creation orchestrator
+      // hash type is decided at write time by the Service File orchestrator
       // (ADR-0010 / Phase 12 / DEV-6540). Param retained on the Lua-facing API.
       (void)htype;
       img->image->readSource(imgpath, region, size, original);
@@ -1347,6 +1347,17 @@ static int SImage_write(lua_State *L)
   const char *imgpath = lua_tostring(L, 2);
 
   Sipi::SipiCompressionParams comp_params;
+  // Service File stamping params (DEV-6537 Phase 12.1 server-upload wiring).
+  // When `file_role = "service-file"` is set in the params table along with
+  // `origname` + `mimetype`, this binding builds an `Essentials` packet from
+  // the post-transformation pixel buffer (SHA-256 hash) and stamps it on
+  // the SipiImage before write. The format-handler writer then emits the
+  // carrier (JP2 UUID box / TIFF tag 65112) per ADR-0009 / ADR-0010.
+  // Used by `scripts/upload.lua` so server-side uploads produce true
+  // Service Files (with Essentials) rather than bare Access Files.
+  std::string file_role_str;
+  std::string origname_str;
+  std::string mimetype_str;
   if (lua_gettop(L) > 2) {
     // we do have compressing parameters
     if (lua_istable(L, 3)) {
@@ -1451,6 +1462,20 @@ static int SImage_write(lua_State *L)
           comp_params[Sipi::J2K_rates] = value;
         } else if (key == std::string("quality")) {
           comp_params[Sipi::JPEG_QUALITY] = value;
+        } else if (key == std::string("file_role")) {
+          // Currently only "service-file" is supported (Phase 12.1).
+          // "access-file" / "preservation-file" land in later phases.
+          if (value != "service-file") {
+            lua_pop(L, lua_gettop(L));
+            lua_pushstring(L,
+              "SipiImage.write(): file_role must be \"service-file\" (other roles not yet implemented).");
+            return lua_error(L);
+          }
+          file_role_str = value;
+        } else if (key == std::string("origname")) {
+          origname_str = value;
+        } else if (key == std::string("mimetype")) {
+          mimetype_str = value;
         } else {
           lua_pop(L, lua_gettop(L));
           lua_pushstring(L, "SipiImage.write(): invalid compression parameter!");
@@ -1496,6 +1521,50 @@ static int SImage_write(lua_State *L)
     lua_pop(L, lua_gettop(L));
     lua_pushstring(L, "SipiImage.write(): unsupported file format");
     return lua_error(L);
+  }
+
+  // Service File stamping (DEV-6537 Phase 12.1). When the caller requests
+  // `file_role = "service-file"`, build the Essentials packet from the
+  // post-transformation pixel buffer + supplied origname/mimetype and
+  // stamp it on the image, then wire `J2K_FileRole` or `TIFF_FileRole`
+  // through to the writer so the carrier emission gates open. Service
+  // Files only live in JP2 + pyramidal TIFF per ADR-0009 — `.jpg`/`.png`
+  // outputs reject the role.
+  if (!file_role_str.empty()) {
+    if (origname_str.empty() || mimetype_str.empty()) {
+      lua_pop(L, lua_gettop(L));
+      lua_pushstring(L,
+        "SipiImage.write(): file_role=\"service-file\" requires both origname and mimetype.");
+      return lua_error(L);
+    }
+    if (ftype != "jpx" && ftype != "tif") {
+      lua_pop(L, lua_gettop(L));
+      lua_pushstring(L,
+        "SipiImage.write(): file_role=\"service-file\" requires JP2 or pyramidal TIFF output "
+        "(Service Files only live in those two carriers per ADR-0009).");
+      return lua_error(L);
+    }
+    Sipi::EssentialsFields fields;
+    fields.origname = origname_str;
+    fields.mimetype = mimetype_str;
+    fields.hash_type = shttps::HashType::sha256;
+    fields.data_chksum = img->image->compute_pixel_hash(fields.hash_type);
+    if (img->image->getIcc() != nullptr) {
+      fields.use_icc = true;
+      fields.icc_profile = img->image->getIcc()->iccBytes();
+    }
+    fields.img_w = static_cast<std::uint32_t>(img->image->getNx());
+    fields.img_h = static_cast<std::uint32_t>(img->image->getNy());
+    fields.nc = static_cast<std::uint32_t>(img->image->getNc());
+    fields.bps = static_cast<std::uint32_t>(img->image->getBps());
+    img->image->essential_metadata(Sipi::Essentials{ std::move(fields) });
+
+    if (ftype == "jpx") {
+      comp_params[Sipi::J2K_FileRole] = file_role_str;
+    } else {  // tif → pyramidal TIFF (Service Files are pyramidal per ADR-0009)
+      comp_params[Sipi::TIFF_FileRole] = file_role_str;
+      comp_params[Sipi::TIFF_Pyramid] = "yes";
+    }
   }
 
   if ((basename == "http") || (basename == "HTTP")) {

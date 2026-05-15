@@ -23,7 +23,15 @@ package(default_visibility = ["//visibility:public"])
 
 cc_binary(
     name = "sipi",
-    srcs = ["sipi.cpp"],
+    srcs = [
+        "access_file_orchestrator.cpp",
+        "access_file_orchestrator.h",
+        "service_file_orchestrator.cpp",
+        "service_file_orchestrator.h",
+        "sipi.cpp",
+        "verify_orchestrator.cpp",
+        "verify_orchestrator.h",
+    ],
     linkopts = select({
         "@platforms//os:linux": [
             # Content-addressed build-id for reproducible debug-info

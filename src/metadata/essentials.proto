@@ -40,7 +40,7 @@ enum HashType {
 message Essentials {
   uint32 format_version = 1;
 
-  // Core preservation identity. Populated by the master-creation orchestrator
+  // Core preservation identity. Populated by the Service File orchestrator
   // (Phase 12 / DEV-6540) from the observed source + computed pixel hash.
   string origname = 2;      // basename of the source file as supplied by the operator
   string mimetype = 3;      // detected from source magic bytes / extension
