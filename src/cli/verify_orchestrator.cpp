@@ -14,6 +14,7 @@
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
 #include "metadata/essentials.h"
+#include "observability/metrics.h"
 
 namespace Sipi::cli {
 
@@ -164,7 +165,8 @@ int run_verify(const VerifyRequest &req)
     std::vector<std::byte> recomputed = img.compute_pixel_hash(fields.hash_type);
     if (recomputed != fields.data_chksum) {
       log_err("%s: %s pixel hash mismatch — possible corruption.", label, req.input_path.c_str());
-      // TODO(DEV-6537 Phase 13): increment sipi_essentials_hash_mismatch_total{format}.
+      Sipi::observability::essentials_hash_mismatch_counter(
+        Sipi::observability::format_from_path(req.input_path)).Increment();
       return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

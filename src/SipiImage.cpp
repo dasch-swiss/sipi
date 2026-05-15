@@ -27,6 +27,7 @@
 #include "formats/SipiIOJpeg.h"
 #include "formats/SipiIOPng.h"
 #include "formats/SipiIOTiff.h"
+#include "observability/metrics.h"
 #include "shttps/Global.h"
 #include "shttps/Hash.h"
 
@@ -324,7 +325,8 @@ void SipiImage::readSource(const std::string &filepath,
     std::string checksum = internal_hash.hash();
     if (checksum != Essentials::to_hex(emdata.fields().data_chksum)) {
       log_err("Essentials data_chksum mismatch in %s; possible corruption", filepath.c_str());
-      // TODO(DEV-6537 Phase 13): increment sipi_essentials_hash_mismatch_total{format}
+      Sipi::observability::essentials_hash_mismatch_counter(
+        Sipi::observability::format_from_path(filepath)).Increment();
     }
   }
 }
