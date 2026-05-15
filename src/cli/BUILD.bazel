@@ -1,0 +1,57 @@
+"""Sipi CLI binary target.
+
+`//src/cli:sipi` is the thin `cc_binary` for the sipi executable. Its only
+translation unit is `sipi.cpp` (the program entry point); every other TU
+lives in `//src:sipi_lib`, which this target consumes via `deps`.
+
+Lives in its own package (separate from `//src`) so the upcoming CLI
+subcommand restructure (DEV-6540 / DEV-6537 Phase 11) lands in its
+natural home: per-subcommand callbacks and orchestrators
+(`service_file_orchestrator`, `access_file_orchestrator`) are added as
+siblings here, not bolted onto the root `src/` package.
+
+System-lib + framework linkopts (`-ldl`, `-lpthread`, `-liconv`,
+`-framework SystemConfiguration`, `-framework CoreFoundation`) are
+declared on `:sipi_lib` so they also propagate to every cc_test under
+`//test/unit/...` — see the linkopts block on `:sipi_lib`. This binary
+keeps only its own binary-specific flag (`--build-id=sha1`).
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_binary(
+    name = "sipi",
+    srcs = ["sipi.cpp"],
+    linkopts = select({
+        "@platforms//os:linux": [
+            # Content-addressed build-id for reproducible debug-info
+            # splitting in Y+4. `--build-id=sha1` derives the build-id
+            # from the binary's content hash rather than a wall-clock
+            # random; identical inputs ↔ identical build-id.
+            "-Wl,--build-id=sha1",
+            # Static-link libc++ runtime so the binary runs in
+            # distroless/base-debian12 (the production image), which
+            # ships only glibc + cacert + tzdata + openssl — there is
+            # no libc++.so.1 there for the dynamic loader to find.
+            # Without these flags sipi exits silently on first
+            # syscall under distroless. clang's libc++ ABI is stable
+            # across LLVM 19.x patch releases, so static-linking does
+            # not freeze us at toolchains_llvm 1.7.0.
+            #
+            # `-Wl,-Bstatic … -Wl,-Bdynamic` brackets these three
+            # archives only — system libs (`-lpthread`, `-lm`, `-ldl`)
+            # added by the toolchain after our linkopts stay dynamic.
+            "-Wl,-Bstatic",
+            "-lc++",
+            "-lc++abi",
+            "-lunwind",
+            "-Wl,-Bdynamic",
+        ],
+        "//conditions:default": [],
+    }),
+    # `:glibc23_compat` is propagated transitively via `:sipi_lib`'s
+    # `deps += select(...)`, so this binary doesn't need to declare it.
+    deps = ["//src:sipi_lib"],
+)

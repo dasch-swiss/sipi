@@ -837,79 +837,40 @@ int main(int argc, char *argv[])
   std::string optSipiSentryEnvironment;
   sipiopt.add_option("--sentry-environment", optSipiSentryEnvironment)->envname("SIPI_SENTRY_ENVIRONMENT");
 
-  CLI11_PARSE(sipiopt, argc, argv);
-
-  /*
-  argc -= (argc > 0);
-  argv += (argc > 0); // skip program name argv[0] if present
-
-  option::Stats stats(usage, argc, argv);
-  std::vector<option::Option> options(stats.options_max);
-  std::vector<option::Option> buffer(stats.buffer_max);
-  option::Parser parse(usage, argc, argv, &options[0], &buffer[0]);
-*/
-  if (!sipiopt.get_option("--query")->empty()) {
-    //
-    // we query all information from just one file
-    //
+  //
+  // Phase 11.3 — body lambdas (DEV-6540).
+  //
+  // Each CLI mode's body is captured in a named lambda over main()'s
+  // option storage. The subcommand callbacks below invoke them via
+  // `exit(run_X())`; the legacy if-else chain after CLI11_PARSE
+  // (Phase 11.4 will delete it) also calls them. One body, two
+  // entry points — no duplication during the transition.
+  //
+  auto run_query = [&]() -> int {
     set_cli_mode(true);
     Sipi::SipiImage img;
     img.read(optInFile);
     std::cout << img << std::endl;
-    return (0);
-  } else if (!sipiopt.get_option("--compare")->empty()) {
-    //
-    // command line function: we want to compare pixelwise to files. After having done this, we exit
-    //
-    set_cli_mode(true);
-    if (!exists_file(optCompare[0])) {
-      log_err("File not found: %s", optCompare[0].c_str());
-      return EXIT_FAILURE;
-    }
+    return 0;
+  };
 
-    if (!exists_file(optCompare[1])) {
-      log_err("File not found: %s", optCompare[1].c_str());
-      return EXIT_FAILURE;
-    }
-
-    Sipi::SipiImage img1, img2;
-    img1.read(optCompare[0]);
-    img2.read(optCompare[1]);
-    bool result = img1 == img2;
-
-    if (!result) {
-      img1 -= img2;
-      img1.write("tif", "diff.tif");
-    }
-
-    if (result) {
-      log_info("Files identical!");
-    } else {
-      double diffval = 0.;
-      size_t maxdiff = 0;
-      size_t max_x, max_y;
-      for (size_t y = 0; y < img1.getNy(); y++) {
-        for (size_t x = 0; x < img1.getNx(); x++) {
-          for (size_t c = 0; c < img1.getNc(); c++) {
-            size_t dv = img1.getPixel(x, y, c) - img2.getPixel(x, y, c);
-            if (dv > maxdiff) {
-              maxdiff = dv;
-              max_x = x;
-              max_y = y;
-            }
-            diffval += static_cast<float>(dv);
-          }
-        }
+  //
+  // The convert body is shared between the legacy `sipi --file <in> --outf <out>`
+  // form and the subcommand `sipi convert <in> <out>` form. The `src` parameter
+  // points at the subcommand whose own option group should be consulted (in
+  // addition to the legacy globals on `sipiopt`); `nullptr` means legacy-only.
+  // `user_set` checks both — Phase 11.4 will drop the legacy globals and the
+  // helper collapses to a single `src` query.
+  //
+  auto run_convert = [&](CLI::App *src) -> int {
+    auto user_set = [&](const std::string &name) -> bool {
+      if (auto *g = sipiopt.get_option_no_throw(name); g != nullptr && !g->empty()) return true;
+      if (src != nullptr) {
+        if (auto *s = src->get_option_no_throw(name); s != nullptr && !s->empty()) return true;
       }
-      diffval /= static_cast<double>(img1.getNy() * img1.getNx() * img1.getNc());
-      log_info("Files differ: avg: %f max: %zu (%zu, %zu) See diff.tif", diffval, maxdiff, max_x, max_y);
-    }
+      return false;
+    };
 
-    return (result) ? 0 : -1;
-  } else if (!(sipiopt.get_option("--file")->empty() || sipiopt.get_option("--outf")->empty())) {
-    //
-    // Commandline conversion with input and output file given
-    //
     set_cli_mode(true);
     // Under --json, route all log output (info, warn, err) to stderr so stdout
     // stays reserved for the single JSON document emitted at the end of the
@@ -920,20 +881,12 @@ int main(int argc, char *argv[])
     // get the output format
     //
     std::string format("jpg");
-    if (!sipiopt.get_option("--format")->empty()) {
+    if (user_set("--format")) {
       switch (optFormat) {
-      case OptFormat::jpx:
-        format = "jpx";
-        break;
-      case OptFormat::jpg:
-        format = "jpg";
-        break;
-      case OptFormat::tif:
-        format = "tif";
-        break;
-      case OptFormat::png:
-        format = "png";
-        break;
+      case OptFormat::jpx: format = "jpx"; break;
+      case OptFormat::jpg: format = "jpg"; break;
+      case OptFormat::tif: format = "tif"; break;
+      case OptFormat::png: format = "png"; break;
       }
     } else {
       //
@@ -964,20 +917,17 @@ int main(int argc, char *argv[])
     // getting information about a region of interest
     //
     std::shared_ptr<Sipi::SipiRegion> region = nullptr;
-    if (!sipiopt.get_option("--region")->empty()) {
+    if (user_set("--region")) {
       region = std::make_shared<Sipi::SipiRegion>(optRegion.at(0), optRegion.at(1), optRegion.at(2), optRegion.at(3));
     }
 
     //
     // get the reduce parameter
-    // "reduce" is a special feature of the JPEG2000 format. It is possible (given the JPEG2000 format
-    // is written a resolution pyramid). reduce=0 results in full resolution, reduce=1 is half the resolution
-    // etc.
     //
     std::shared_ptr<Sipi::SipiSize> size = nullptr;
     if (optReduce > 0) {
       size = std::make_shared<Sipi::SipiSize>(optReduce);
-    } else if (!sipiopt.get_option("--size")->empty()) {
+    } else if (user_set("--size")) {
       try {
         size = std::make_shared<Sipi::SipiSize>(optSize);
       } catch (std::exception &e) {
@@ -986,7 +936,7 @@ int main(int argc, char *argv[])
         if (optJsonOutput) { Sipi::emit_json_cli_arg_error(std::cout, msg); }
         return EXIT_FAILURE;
       }
-    } else if (!sipiopt.get_option("--scale")->empty()) {
+    } else if (user_set("--scale")) {
       try {
         size = std::make_shared<Sipi::SipiSize>(optScale);
       } catch (std::exception &e) {
@@ -1021,14 +971,12 @@ int main(int argc, char *argv[])
       Sipi::observability::capture_image_error(err.what(), "read", sentry_ctx);
       log_err("Error reading image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "read" }); }
-      Sipi::observability::close_sentry();
       return EXIT_FAILURE;
     } catch (const std::exception &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
       Sipi::observability::capture_image_error(err.what(), "read", sentry_ctx);
       log_err("Error reading image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "read" }); }
-      Sipi::observability::close_sentry();
       return EXIT_FAILURE;
     }
 
@@ -1036,10 +984,7 @@ int main(int argc, char *argv[])
     // image processing: orientation, metadata, ICC, rotation, watermark
     //
     try {
-      //
-      // enforce orientation topleft?
-      //
-      if (!sipiopt.get_option("--topleft")->empty()) {
+      if (user_set("--topleft")) {
         Sipi::Orientation orientation = img.getOrientation();
         std::shared_ptr<Sipi::Exif> exif = img.getExif();
         if (exif != nullptr) {
@@ -1047,102 +992,55 @@ int main(int argc, char *argv[])
           if (exif->getValByKey("Exif.Image.Orientation", ori)) { orientation = static_cast<Sipi::Orientation>(ori); }
         }
         switch (orientation) {
-        case Sipi::TOPLEFT:// 1
-          break;
-        case Sipi::TOPRIGHT:// 2
-          img.rotate(0., true);
-          break;
-        case Sipi::BOTRIGHT:// 3
-          img.rotate(180., false);
-          break;
-        case Sipi::BOTLEFT:// 4
-          img.rotate(180., true);
-          break;
-        case Sipi::LEFTTOP:// 5
-          img.rotate(270., true);
-          break;
-        case Sipi::RIGHTTOP:// 6
-          img.rotate(90., false);
-          break;
-        case Sipi::RIGHTBOT:// 7
-          img.rotate(90., true);
-          break;
-        case Sipi::LEFTBOT:// 8
-          img.rotate(270., false);
-          break;
-        default:;// nothing to do...
+        case Sipi::TOPLEFT: break;
+        case Sipi::TOPRIGHT: img.rotate(0., true); break;
+        case Sipi::BOTRIGHT: img.rotate(180., false); break;
+        case Sipi::BOTLEFT: img.rotate(180., true); break;
+        case Sipi::LEFTTOP: img.rotate(270., true); break;
+        case Sipi::RIGHTTOP: img.rotate(90., false); break;
+        case Sipi::RIGHTBOT: img.rotate(90., true); break;
+        case Sipi::LEFTBOT: img.rotate(270., false); break;
+        default:;
         }
         exif->addKeyVal("Exif.Image.Orientation", static_cast<unsigned short>(Sipi::TOPLEFT));
         img.setOrientation(Sipi::TOPLEFT);
-
-        orientation = img.getOrientation();
-        std::shared_ptr<Sipi::Exif> exif2 = img.getExif();
-        if (exif2 != nullptr) {
-          unsigned short ori;
-          if (exif2->getValByKey("Exif.Image.Orientation", ori)) { orientation = static_cast<Sipi::Orientation>(ori); }
-        }
       }
 
-      //
-      // if we want to remove all metadata from the file...
-      //
-      if (!sipiopt.get_option("--skipmeta")->empty()) { img.setSkipMetadata(Sipi::SkipMetadata::SKIP_ALL); }
+      if (user_set("--skipmeta")) { img.setSkipMetadata(Sipi::SkipMetadata::SKIP_ALL); }
 
-      //
-      // color profile processing
-      //
-      if (!sipiopt.get_option("--icc")->empty()) {
+      if (user_set("--icc")) {
         Sipi::Icc icc;
         switch (optIcc) {
-        case OptIcc::sRGB:
-          icc = Sipi::Icc(Sipi::PredefinedProfiles::icc_sRGB);
-          break;
-        case OptIcc::AdobeRGB:
-          icc = Sipi::Icc(Sipi::PredefinedProfiles::icc_AdobeRGB);
-          break;
-        case OptIcc::GRAY:
-          icc = Sipi::Icc(Sipi::PredefinedProfiles::icc_GRAY_D50);
-          break;
-        case OptIcc::none:
-          break;
+        case OptIcc::sRGB: icc = Sipi::Icc(Sipi::PredefinedProfiles::icc_sRGB); break;
+        case OptIcc::AdobeRGB: icc = Sipi::Icc(Sipi::PredefinedProfiles::icc_AdobeRGB); break;
+        case OptIcc::GRAY: icc = Sipi::Icc(Sipi::PredefinedProfiles::icc_GRAY_D50); break;
+        case OptIcc::none: break;
         }
         img.convertToIcc(icc, img.getBps());
       }
 
-      //
-      // mirroring and rotation
-      //
-      if (!(sipiopt.get_option("--mirror")->empty() && sipiopt.get_option("--rotate")->empty())) {
+      if (user_set("--mirror") || user_set("--rotate")) {
         switch (optMirror) {
-        case OptMirror::vertical: {
-          img.rotate(optRotate + 180.0F, true);
-          break;
-        }
-        case OptMirror::horizontal: {
-          img.rotate(optRotate, true);
-          break;
-        }
-        case OptMirror::none: {
+        case OptMirror::vertical: img.rotate(optRotate + 180.0F, true); break;
+        case OptMirror::horizontal: img.rotate(optRotate, true); break;
+        case OptMirror::none:
           if (optRotate != 0.0F) { img.rotate(optRotate, false); }
           break;
         }
-        }
       }
 
-      if (!sipiopt.get_option("--watermark")->empty()) { img.add_watermark(optWatermark); }
+      if (user_set("--watermark")) { img.add_watermark(optWatermark); }
     } catch (const Sipi::SipiImageError &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
       Sipi::observability::capture_image_error(err.what(), "convert", sentry_ctx);
       log_err("Error processing image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "convert" }); }
-      Sipi::observability::close_sentry();
       return EXIT_FAILURE;
     } catch (const std::exception &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
       Sipi::observability::capture_image_error(err.what(), "convert", sentry_ctx);
       log_err("Error processing image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "convert" }); }
-      Sipi::observability::close_sentry();
       return EXIT_FAILURE;
     }
 
@@ -1150,18 +1048,18 @@ int main(int argc, char *argv[])
     // write the output file
     //
     Sipi::SipiCompressionParams comp_params;
-    if (!sipiopt.get_option("--quality")->empty()) comp_params[Sipi::JPEG_QUALITY] = optJpegQuality;
-    if (!sipiopt.get_option("--Sprofile")->empty()) comp_params[Sipi::J2K_Sprofile] = j2k_Sprofile;
-    if (!sipiopt.get_option("--Clayers")->empty()) comp_params[Sipi::J2K_Clayers] = std::to_string(j2k_Clayers);
-    if (!sipiopt.get_option("--Clevels")->empty()) comp_params[Sipi::J2K_Clevels] = std::to_string(j2k_Clevels);
-    if (!sipiopt.get_option("--Corder")->empty()) comp_params[Sipi::J2K_Corder] = j2k_Corder;
-    if (!sipiopt.get_option("--Cprecincts")->empty()) comp_params[Sipi::J2K_Cprecincts] = j2k_Cprecincts;
-    if (!sipiopt.get_option("--Cblk")->empty()) comp_params[Sipi::J2K_Cblk] = j2k_Cblk;
-    if (!sipiopt.get_option("--Cuse_sop")->empty()) comp_params[Sipi::J2K_Cuse_sop] = j2k_Cuse_sop ? "yes" : "no";
-    if (!sipiopt.get_option("--Stiles")->empty()) comp_params[Sipi::J2K_Stiles] = j2k_Stiles;
-    if (!sipiopt.get_option("--Ctiff_pyramid")->empty()) comp_params[Sipi::TIFF_Pyramid] = tiff_Pyramid ? "yes" : "no";
+    if (user_set("--quality")) comp_params[Sipi::JPEG_QUALITY] = optJpegQuality;
+    if (user_set("--Sprofile")) comp_params[Sipi::J2K_Sprofile] = j2k_Sprofile;
+    if (user_set("--Clayers")) comp_params[Sipi::J2K_Clayers] = std::to_string(j2k_Clayers);
+    if (user_set("--Clevels")) comp_params[Sipi::J2K_Clevels] = std::to_string(j2k_Clevels);
+    if (user_set("--Corder")) comp_params[Sipi::J2K_Corder] = j2k_Corder;
+    if (user_set("--Cprecincts")) comp_params[Sipi::J2K_Cprecincts] = j2k_Cprecincts;
+    if (user_set("--Cblk")) comp_params[Sipi::J2K_Cblk] = j2k_Cblk;
+    if (user_set("--Cuse_sop")) comp_params[Sipi::J2K_Cuse_sop] = j2k_Cuse_sop ? "yes" : "no";
+    if (user_set("--Stiles")) comp_params[Sipi::J2K_Stiles] = j2k_Stiles;
+    if (user_set("--Ctiff_pyramid")) comp_params[Sipi::TIFF_Pyramid] = tiff_Pyramid ? "yes" : "no";
 
-    if (!sipiopt.get_option("--rates")->empty()) {
+    if (user_set("--rates")) {
       std::stringstream ss;
       for (auto &rate : j2k_rates) {
         if (rate == "X") {
@@ -1180,40 +1078,96 @@ int main(int argc, char *argv[])
       Sipi::observability::capture_image_error(err.what(), "write", sentry_ctx);
       log_err("Error writing image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "write" }); }
-      Sipi::observability::close_sentry();
       return EXIT_FAILURE;
     } catch (const std::exception &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
       Sipi::observability::capture_image_error(err.what(), "write", sentry_ctx);
       log_err("Error writing image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "write" }); }
-      Sipi::observability::close_sentry();
       return EXIT_FAILURE;
     }
 
     // Successful CLI completion — emit the structured JSON report if --json was set.
-    // populate_from_image() fills in the final width/height/bps/colorspace from the
-    // (fully processed) output image. Today this is only called in catch blocks;
-    // the success call below is the missing piece for the --json contract.
     if (optJsonOutput) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
       Sipi::emit_json_report(std::cout, sentry_ctx);
     }
-  } else if (!(sipiopt.get_option("--config")->empty() && sipiopt.get_option("--serverport")->empty())) {
-    //
-    // there is a configuration file given on the command line. Thus we try to start SIPI in
-    // server mode
-    //
+    return EXIT_SUCCESS;
+  };
+
+  auto run_compare = [&]() -> int {
+    set_cli_mode(true);
+    if (!exists_file(optCompare[0])) {
+      log_err("File not found: %s", optCompare[0].c_str());
+      return EXIT_FAILURE;
+    }
+    if (!exists_file(optCompare[1])) {
+      log_err("File not found: %s", optCompare[1].c_str());
+      return EXIT_FAILURE;
+    }
+
+    Sipi::SipiImage img1, img2;
+    img1.read(optCompare[0]);
+    img2.read(optCompare[1]);
+    bool result = img1 == img2;
+
+    if (!result) {
+      img1 -= img2;
+      img1.write("tif", "diff.tif");
+    }
+
+    if (result) {
+      log_info("Files identical!");
+    } else {
+      double diffval = 0.;
+      size_t maxdiff = 0;
+      size_t max_x = 0, max_y = 0;
+      for (size_t y = 0; y < img1.getNy(); y++) {
+        for (size_t x = 0; x < img1.getNx(); x++) {
+          for (size_t c = 0; c < img1.getNc(); c++) {
+            size_t dv = img1.getPixel(x, y, c) - img2.getPixel(x, y, c);
+            if (dv > maxdiff) {
+              maxdiff = dv;
+              max_x = x;
+              max_y = y;
+            }
+            diffval += static_cast<float>(dv);
+          }
+        }
+      }
+      diffval /= static_cast<double>(img1.getNy() * img1.getNx() * img1.getNc());
+      log_info("Files differ: avg: %f max: %zu (%zu, %zu) See diff.tif", diffval, maxdiff, max_x, max_y);
+    }
+
+    return result ? 0 : -1;
+  };
+
+  //
+  // The server body is also shared between the legacy
+  // `sipi --config <file>` form and the subcommand `sipi server` form.
+  // Same `src` / `user_set` contract as `run_convert`. Phase 11.4 moves
+  // the ~40 server options onto `cmd_server` and drops the globals; for
+  // this commit `cmd_server` has no options yet, so subcommand-form
+  // invocations of `server` run with defaults (legacy form is the only
+  // path that wires real config in).
+  //
+  auto run_server = [&](CLI::App *src) -> int {
+    auto user_set = [&](const std::string &name) -> bool {
+      if (auto *g = sipiopt.get_option_no_throw(name); g != nullptr && !g->empty()) return true;
+      if (src != nullptr) {
+        if (auto *s = src->get_option_no_throw(name); s != nullptr && !s->empty()) return true;
+      }
+      return false;
+    };
+
     set_cli_mode(false);
 
     try {
       Sipi::SipiConf sipiConf;
       bool config_loaded = false;
-      if (!sipiopt.get_option("--config")->empty()) {
+      if (user_set("--config")) {
         // read and parse the config file (config file is a lua script)
         shttps::LuaServer luacfg(optConfigfile);
-
-        // store the config option in a SipiConf obj
         sipiConf = Sipi::SipiConf(luacfg);
         config_loaded = true;
       }
@@ -1224,35 +1178,31 @@ int main(int argc, char *argv[])
       if (!config_loaded) {
         sipiConf.setPort(optServerport);
       } else {
-        if (!sipiopt.get_option("--serverport")->empty()) sipiConf.setPort(optServerport);
+        if (user_set("--serverport")) sipiConf.setPort(optServerport);
       }
-
       if (!config_loaded) {
         sipiConf.setSSLPort(optSSLport);
       } else {
-        if (!sipiopt.get_option("--sslport")->empty()) sipiConf.setSSLPort(optSSLport);
+        if (user_set("--sslport")) sipiConf.setSSLPort(optSSLport);
       }
-
       if (!config_loaded) {
         sipiConf.setHostname(optHostname);
       } else {
-        if (!sipiopt.get_option("--hostname")->empty()) sipiConf.setHostname(optHostname);
+        if (user_set("--hostname")) sipiConf.setHostname(optHostname);
       }
-
       if (!config_loaded) {
         sipiConf.setKeepAlive(optKeepAlive);
       } else {
-        if (!sipiopt.get_option("--keepalive")->empty()) sipiConf.setKeepAlive(optKeepAlive);
+        if (user_set("--keepalive")) sipiConf.setKeepAlive(optKeepAlive);
       }
-
       if (!config_loaded) {
         sipiConf.setNThreads(optNThreads);
         sipiConf.setMaxWaitingConnections(optMaxWaiting);
         sipiConf.setQueueTimeout(optQueueTimeout);
       } else {
-        if (!sipiopt.get_option("--nthreads")->empty()) sipiConf.setNThreads(optNThreads);
-        if (!sipiopt.get_option("--max-waiting")->empty()) sipiConf.setMaxWaitingConnections(optMaxWaiting);
-        if (!sipiopt.get_option("--queue-timeout")->empty()) sipiConf.setQueueTimeout(optQueueTimeout);
+        if (user_set("--nthreads")) sipiConf.setNThreads(optNThreads);
+        if (user_set("--max-waiting")) sipiConf.setMaxWaitingConnections(optMaxWaiting);
+        if (user_set("--queue-timeout")) sipiConf.setQueueTimeout(optQueueTimeout);
       }
 
       size_t l = optMaxPostSize.length();
@@ -1268,79 +1218,66 @@ int main(int argc, char *argv[])
       if (!config_loaded) {
         sipiConf.setMaxPostSize(maxpost_size);
       } else {
-        if (!sipiopt.get_option("--maxpost")->empty()) sipiConf.setMaxPostSize(maxpost_size);
+        if (user_set("--maxpost")) sipiConf.setMaxPostSize(maxpost_size);
       }
 
       if (!config_loaded) {
         sipiConf.setImgRoot(optImgroot);
       } else {
-        if (!sipiopt.get_option("--imgroot")->empty()) sipiConf.setImgRoot(optImgroot);
+        if (user_set("--imgroot")) sipiConf.setImgRoot(optImgroot);
       }
-
       if (!config_loaded) {
         sipiConf.setDocRoot(optDocroot);
       } else {
-        if (!sipiopt.get_option("--docroot")->empty()) sipiConf.setDocRoot(optDocroot);
+        if (user_set("--docroot")) sipiConf.setDocRoot(optDocroot);
       }
-
       if (!config_loaded) {
         sipiConf.setWWWRoute(optWWWRoute);
       } else {
-        if (!sipiopt.get_option("--wwwroute")->empty()) sipiConf.setWWWRoute(optWWWRoute);
+        if (user_set("--wwwroute")) sipiConf.setWWWRoute(optWWWRoute);
       }
-
       if (!config_loaded) {
         sipiConf.setScriptDir(optScriptDir);
       } else {
-        if (!sipiopt.get_option("--scriptdir")->empty()) sipiConf.setScriptDir(optScriptDir);
+        if (user_set("--scriptdir")) sipiConf.setScriptDir(optScriptDir);
       }
-
       if (!config_loaded) {
         sipiConf.setTmpDir(optTmpdir);
       } else {
-        if (!sipiopt.get_option("--tmpdir")->empty()) sipiConf.setTmpDir(optTmpdir);
+        if (user_set("--tmpdir")) sipiConf.setTmpDir(optTmpdir);
       }
-
       if (!config_loaded) {
         sipiConf.setMaxTempFileAge(optMaxTmpAge);
       } else {
-        if (!sipiopt.get_option("--maxtmpage")->empty()) sipiConf.setMaxTempFileAge(optMaxTmpAge);
+        if (user_set("--maxtmpage")) sipiConf.setMaxTempFileAge(optMaxTmpAge);
       }
-
       if (!config_loaded) {
         sipiConf.setPrefixAsPath(optPathprefix);
       } else {
-        if (!sipiopt.get_option("--pathprefix")->empty()) sipiConf.setPrefixAsPath(optPathprefix);
+        if (user_set("--pathprefix")) sipiConf.setPrefixAsPath(optPathprefix);
       }
-
       if (!config_loaded) {
         sipiConf.setSubdirLevels(optSubdirLevels);
       } else {
-        if (!sipiopt.get_option("--subdirlevels")->empty()) sipiConf.setSubdirLevels(optSubdirLevels);
+        if (user_set("--subdirlevels")) sipiConf.setSubdirLevels(optSubdirLevels);
       }
-
       if (!config_loaded) {
         sipiConf.setSubdirExcludes(optSubdirExcludes);
       } else {
-        if (!sipiopt.get_option("--subdirexcludes")->empty()) sipiConf.setSubdirExcludes(optSubdirExcludes);
+        if (user_set("--subdirexcludes")) sipiConf.setSubdirExcludes(optSubdirExcludes);
       }
-
       if (!config_loaded) {
         sipiConf.setInitScript(optInitscript);
       } else {
-        if (!sipiopt.get_option("--initscript")->empty()) sipiConf.setInitScript(optInitscript);
+        if (user_set("--initscript")) sipiConf.setInitScript(optInitscript);
       }
 
       // Cache dir — CLI overrides Lua config
-      bool cachedir_from_cli = !sipiopt.get_option("--cache-dir")->empty()
-        || !sipiopt.get_option("--cachedir")->empty();
-      if (!config_loaded || cachedir_from_cli) {
-        sipiConf.setCacheDir(optCachedir);
-      }
+      bool cachedir_from_cli = user_set("--cache-dir") || user_set("--cachedir");
+      if (!config_loaded || cachedir_from_cli) { sipiConf.setCacheDir(optCachedir); }
 
       // Cache size — CLI overrides Lua config
-      bool cachesize_from_cli = !sipiopt.get_option("--cache-size")->empty()
-        || !sipiopt.get_option("--cachesize")->empty();
+      bool cachesize_from_cli = user_set("--cache-size") || user_set("--cachesize");
       if (!config_loaded || cachesize_from_cli) {
         long long cli_cache_size = Sipi::parseSizeString(optCacheSize);
         if (cli_cache_size < -1) {
@@ -1351,108 +1288,81 @@ int main(int argc, char *argv[])
       }
 
       // Cache nfiles — CLI overrides Lua config
-      bool cachenfiles_from_cli = !sipiopt.get_option("--cache-nfiles")->empty()
-        || !sipiopt.get_option("--cachenfiles")->empty();
-      if (!config_loaded || cachenfiles_from_cli) {
-        sipiConf.setCacheNFiles(optCacheNFiles);
-      }
+      bool cachenfiles_from_cli = user_set("--cache-nfiles") || user_set("--cachenfiles");
+      if (!config_loaded || cachenfiles_from_cli) { sipiConf.setCacheNFiles(optCacheNFiles); }
 
       // Warn if deprecated --cachehysteresis was used
-      if (!sipiopt.get_option("--cachehysteresis")->empty()) {
+      if (user_set("--cachehysteresis")) {
         log_warn("--cachehysteresis is no longer supported (replaced by built-in 80%% low-water mark). Ignoring.");
       }
 
       if (!config_loaded) {
         sipiConf.setThumbSize(optThumbSize);
       } else {
-        if (!sipiopt.get_option("--thumbsize")->empty()) sipiConf.setThumbSize(optThumbSize);
+        if (user_set("--thumbsize")) sipiConf.setThumbSize(optThumbSize);
       }
-
       if (!config_loaded) {
         sipiConf.setSSLCertificate(optSSLCertificatePath);
       } else {
-        if (!sipiopt.get_option("--sslcert")->empty()) sipiConf.setSSLCertificate(optSSLCertificatePath);
+        if (user_set("--sslcert")) sipiConf.setSSLCertificate(optSSLCertificatePath);
       }
-
       if (!config_loaded) {
         sipiConf.setSSLKey(optSSLKeyPath);
       } else {
-        if (!sipiopt.get_option("--sslkey")->empty()) sipiConf.setSSLKey(optSSLKeyPath);
+        if (user_set("--sslkey")) sipiConf.setSSLKey(optSSLKeyPath);
       }
-
       if (!config_loaded) {
         sipiConf.setJwtSecret(optJWTKey);
       } else {
-        if (!sipiopt.get_option("--jwtkey")->empty()) sipiConf.setJwtSecret(optJWTKey);
+        if (user_set("--jwtkey")) sipiConf.setJwtSecret(optJWTKey);
       }
-
       if (!config_loaded) {
         sipiConf.setAdminUser(optAdminUser);
       } else {
-        if (!sipiopt.get_option("--adminuser")->empty()) sipiConf.setAdminUser(optAdminUser);
+        if (user_set("--adminuser")) sipiConf.setAdminUser(optAdminUser);
       }
-
       if (!config_loaded) {
         sipiConf.setPasswort(optAdminPassword);
       } else {
-        if (!sipiopt.get_option("--adminpasswd")->empty()) sipiConf.setPasswort(optAdminPassword);
+        if (user_set("--adminpasswd")) sipiConf.setPasswort(optAdminPassword);
       }
-
       if (!config_loaded) {
         sipiConf.setKnoraPath(optKnoraPath);
       } else {
-        if (!sipiopt.get_option("--knorapath")->empty()) sipiConf.setKnoraPath(optKnoraPath);
+        if (user_set("--knorapath")) sipiConf.setKnoraPath(optKnoraPath);
       }
-
       if (!config_loaded) {
         sipiConf.setKnoraPort(optKnoraPort);
       } else {
-        if (!sipiopt.get_option("--knoraport")->empty()) sipiConf.setKnoraPort(optKnoraPort);
+        if (user_set("--knoraport")) sipiConf.setKnoraPort(optKnoraPort);
       }
-
       if (!config_loaded) {
         sipiConf.setLogfile(optLogfilePath);
       } else {
-        if (!sipiopt.get_option("--logfile")->empty()) sipiConf.setLogfile(optLogfilePath);
+        if (user_set("--logfile")) sipiConf.setLogfile(optLogfilePath);
       }
 
       std::string loglevelstring;
       switch (optLogLevel) {
-      case LL_DEBUG:
-        loglevelstring = "DEBUG";
-        break;
-      case LL_INFO:
-        loglevelstring = "INFO";
-        break;
-      case LL_NOTICE:
-        loglevelstring = "NOTICE";
-        break;
-      case LL_WARNING:
-        loglevelstring = "WARNING";
-        break;
-      case LL_ERR:
-        loglevelstring = "ERR";
-        break;
-      case LL_CRIT:
-        loglevelstring = "CRIT";
-        break;
-      case LL_ALERT:
-        loglevelstring = "ALERT";
-        break;
-      case LL_EMERG:
-        loglevelstring = "EMERG";
-        break;
+      case LL_DEBUG: loglevelstring = "DEBUG"; break;
+      case LL_INFO: loglevelstring = "INFO"; break;
+      case LL_NOTICE: loglevelstring = "NOTICE"; break;
+      case LL_WARNING: loglevelstring = "WARNING"; break;
+      case LL_ERR: loglevelstring = "ERR"; break;
+      case LL_CRIT: loglevelstring = "CRIT"; break;
+      case LL_ALERT: loglevelstring = "ALERT"; break;
+      case LL_EMERG: loglevelstring = "EMERG"; break;
       }
       if (!config_loaded) {
         sipiConf.setLogLevel(loglevelstring);
       } else {
-        if (!sipiopt.get_option("--loglevel")->empty()) sipiConf.setLogLevel(loglevelstring);
+        if (user_set("--loglevel")) sipiConf.setLogLevel(loglevelstring);
       }
 
       // Apply the resolved log level to the Logger
       {
         const std::string &resolved = sipiConf.getLoglevel();
-        LogLevel resolvedLevel = LL_INFO;// default
+        LogLevel resolvedLevel = LL_INFO;
         if (resolved == "DEBUG") resolvedLevel = LL_DEBUG;
         else if (resolved == "INFO") resolvedLevel = LL_INFO;
         else if (resolved == "NOTICE") resolvedLevel = LL_NOTICE;
@@ -1469,10 +1379,6 @@ int main(int argc, char *argv[])
       //
       if (sipiConf.getPrefixAsPath()) {
         std::vector<std::string> dirs_to_exclude = sipiConf.getSubdirExcludes();
-
-        //
-        // the prefix is used as part of the path
-        //
         DIR *dirp = opendir(sipiConf.getImgRoot().c_str());
         if (dirp == nullptr) {
           throw shttps::Error(std::string("Couldn't read directory content! Path: ") + sipiConf.getImgRoot(), errno);
@@ -1498,9 +1404,6 @@ int main(int argc, char *argv[])
         }
         closedir(dirp);
       } else {
-        //
-        // the prefix is not used
-        //
         int levels = SipiFilenameHash::check_levels(sipiConf.getImgRoot());
         int new_levels = sipiConf.getSubdirLevels();
         if (levels != new_levels) {
@@ -1510,12 +1413,8 @@ int main(int argc, char *argv[])
       }
       SipiFilenameHash::setLevels(sipiConf.getSubdirLevels());
 
-
-      // TODO: At this point the config is loaded and we can initialize metrics
       if (!optSipiSentryDsn.empty()) log_info("SIPI_SENTRY_DSN: %s", optSipiSentryDsn.c_str());
-
       if (!optSipiSentryEnvironment.empty()) log_info("SIPI_SENTRY_ENVRONMENT: %s", optSipiSentryEnvironment.c_str());
-
       if (!optSipiSentryRelease.empty()) log_info("SIPI_SENTRY_Release: %s", optSipiSentryRelease.c_str());
 
       // Create object SipiHttpServer
@@ -1540,22 +1439,20 @@ int main(int argc, char *argv[])
       log_info("BUILD_SCM_TAG: %s", BUILD_SCM_TAG);
       log_info("BUILD_SCM_REVISION: %s", BUILD_SCM_REVISION);
 
-      server.ssl_port(sipiConf.getSSLPort());// set the secure connection port (-1 means no ssl socket)
+      server.ssl_port(sipiConf.getSSLPort());
       std::string tmps = sipiConf.getSSLCertificate();
       server.ssl_certificate(tmps);
       tmps = sipiConf.getSSLKey();
       server.ssl_key(tmps);
       server.jwt_secret(sipiConf.getJwtSecret());
 
-      // set tmpdir for uploads (defined in sipi.config.lua)
       server.tmpdir(sipiConf.getTmpDir());
       server.max_post_size(sipiConf.getMaxPostSize());
-      server.scriptdir(
-        sipiConf.getScriptDir());// set the directory where the Lua scripts are found for the "Lua"-routes
+      server.scriptdir(sipiConf.getScriptDir());
       server.luaRoutes(sipiConf.getRoutes());
       server.add_lua_globals_func(sipiConfGlobals, &sipiConf);
-      server.add_lua_globals_func(shttps::sqliteGlobals);// add new lua function "gaga"
-      server.add_lua_globals_func(Sipi::sipiGlobals, &server);// add Lua SImage functions
+      server.add_lua_globals_func(shttps::sqliteGlobals);
+      server.add_lua_globals_func(Sipi::sipiGlobals, &server);
       server.prefix_as_path(sipiConf.getPrefixAsPath());
       server.dirs_to_exclude(sipiConf.getSubdirExcludes());
       server.scaling_quality(sipiConf.getScalingQuality());
@@ -1564,26 +1461,21 @@ int main(int argc, char *argv[])
       // max pixel limit — CLI/env overrides config file
       {
         size_t pixel_limit = sipiConf.getMaxPixelLimit();
-        if (!sipiopt.get_option("--max-pixel-limit")->empty()) pixel_limit = optMaxPixelLimit;
+        if (user_set("--max-pixel-limit")) pixel_limit = optMaxPixelLimit;
         server.max_pixel_limit(pixel_limit);
-        if (pixel_limit > 0) {
-          log_info("Max output pixel limit: %zu", pixel_limit);
-        }
+        if (pixel_limit > 0) { log_info("Max output pixel limit: %zu", pixel_limit); }
       }
 
       // Rate limiter — CLI/env overrides config file
       {
         size_t rl_max = sipiConf.getRateLimitMaxPixels();
-        if (!sipiopt.get_option("--rate-limit-max-pixels")->empty()) rl_max = optRateLimitMaxPixels;
-
+        if (user_set("--rate-limit-max-pixels")) rl_max = optRateLimitMaxPixels;
         unsigned rl_window = sipiConf.getRateLimitWindow();
-        if (!sipiopt.get_option("--rate-limit-window")->empty()) rl_window = optRateLimitWindow;
-
+        if (user_set("--rate-limit-window")) rl_window = optRateLimitWindow;
         std::string rl_mode_str = sipiConf.getRateLimitMode();
-        if (!sipiopt.get_option("--rate-limit-mode")->empty()) rl_mode_str = optRateLimitMode;
-
+        if (user_set("--rate-limit-mode")) rl_mode_str = optRateLimitMode;
         size_t rl_threshold = sipiConf.getRateLimitPixelThreshold();
-        if (!sipiopt.get_option("--rate-limit-pixel-threshold")->empty()) rl_threshold = optRateLimitPixelThreshold;
+        if (user_set("--rate-limit-pixel-threshold")) rl_threshold = optRateLimitPixelThreshold;
 
         auto rl_mode = Sipi::parse_rate_limit_mode(rl_mode_str);
         if (rl_mode != Sipi::RateLimitMode::OFF && rl_max > 0) {
@@ -1598,17 +1490,15 @@ int main(int argc, char *argv[])
       // Memory budget — CLI/env overrides config file
       {
         size_t budget_bytes = sipiConf.getMaxDecodeMemory();
-        if (!sipiopt.get_option("--max-decode-memory")->empty()) {
+        if (user_set("--max-decode-memory")) {
           long long parsed = Sipi::parseSizeString(optMaxDecodeMemory);
           budget_bytes = (parsed > 0) ? static_cast<size_t>(parsed) : 0;
         }
-
         std::string mb_mode_str = sipiConf.getDecodeMemoryMode();
-        if (!sipiopt.get_option("--decode-memory-mode")->empty()) mb_mode_str = optDecodeMemoryMode;
+        if (user_set("--decode-memory-mode")) mb_mode_str = optDecodeMemoryMode;
 
         auto mb_mode = Sipi::parse_memory_budget_mode(mb_mode_str);
         if (mb_mode != Sipi::MemoryBudgetMode::OFF) {
-          // Auto-detect budget: 75% of available memory
           if (budget_bytes == 0) {
             size_t detected = detect_available_memory();
             if (detected > 0) {
@@ -1630,7 +1520,7 @@ int main(int argc, char *argv[])
       // Graceful shutdown drain timeout
       {
         unsigned dt = sipiConf.getDrainTimeout();
-        if (!sipiopt.get_option("--drain-timeout")->empty()) dt = optDrainTimeout;
+        if (user_set("--drain-timeout")) dt = optDrainTimeout;
         server.drain_timeout(dt);
         log_info("Drain timeout: %u seconds", dt);
       }
@@ -1644,9 +1534,7 @@ int main(int argc, char *argv[])
       if (conf_cache_size == 0) {
         log_info("Caching is disabled (cache_size = 0)");
       } else if (!cachedir.empty()) {
-        if (conf_cache_size == -1) {
-          log_info("Cache size is unlimited");
-        }
+        if (conf_cache_size == -1) { log_info("Cache size is unlimited"); }
         size_t nfiles = sipiConf.getCacheNFiles();
         server.cache(cachedir, conf_cache_size, nfiles);
       }
@@ -1664,9 +1552,189 @@ int main(int argc, char *argv[])
       server.run();
     } catch (shttps::Error &err) {
       log_err("Error starting server: %s", err.what());
-      Sipi::observability::close_sentry();
       return EXIT_FAILURE;
     }
+    return EXIT_SUCCESS;
+  };
+
+  //
+  // Subcommand surface (Phase 11.1 + 11.2 — DEV-6540).
+  //
+  // The verb-noun subcommand topology and the D5 option-availability
+  // matrix land here; the body migration (Phase 11.3) and legacy-flag
+  // removal (Phase 11.4) follow in separate commits. Each subcommand
+  // callback currently errors with a "not yet implemented" message so
+  // the parser surface is exercisable without disturbing the legacy
+  // flag flow (`--query` / `--compare` / `--file` + `--outf` /
+  // `--config`) below.
+  //
+  // `require_subcommand(1)` is intentionally NOT set yet: a bare
+  // `sipi` invocation continues to fall through to the legacy parser
+  // until Phase 11.4 removes the flag forms.
+  //
+  // Two tiers per ADR-0010:
+  //   - generic verbs: `convert <in> <out>`, `verify <file>`, `query`,
+  //     `compare` (anyone-use, ImageMagick-style).
+  //   - role-noun verbs under `convert` / `verify`: `access-file`,
+  //     `service-file`, `preservation-file` (DSP preservation-chain
+  //     semantics).
+  //
+  // The subcommand option groups bind to the **same** storage as the
+  // legacy global flags above (optInFile, optOutFile, optRegion, …).
+  // This lets Phase 11.3's body-migration commit move the existing
+  // if-else chain into the callbacks without renaming a single
+  // variable, and Phase 11.4 then deletes the global option
+  // declarations + the if-else chain together.
+  //
+  auto subcommand_stub = [](const std::string &name) {
+    log_err("`sipi %s` is not yet implemented; expected behavior after DEV-6540 lands. "
+            "Use the legacy flag form (`sipi --convert`, `sipi --query`, `sipi --compare`, "
+            "or `sipi --config <file>`) for now.",
+      name.c_str());
+    return EXIT_FAILURE;
+  };
+  auto stub_preservation_file = [](const std::string &name) {
+    log_err("`sipi %s preservation-file` awaits ADR-0012; not yet implemented.", name.c_str());
+    return EXIT_FAILURE;
+  };
+
+  // ----- Option-group helpers (D5 matrix) ------------------------------
+  // Each helper attaches a logical group of options to the given
+  // subcommand. CLI11 rejects options at parse time on subcommands the
+  // group isn't attached to — the option-availability matrix is
+  // enforced by which subcommands each helper is invoked on, below.
+  // All groups bind to the legacy storage variables so the
+  // if-else body chain (still active until Phase 11.4) keeps reading
+  // them transparently.
+  auto attach_generic_transform_opts = [&](CLI::App *cmd) {
+    cmd->add_option("-r,--region", optRegion, "Select region of interest, where x y w h are integer values.")
+      ->expected(4);
+    cmd->add_option("-R,--reduce", optReduce, "Reduce image size by factor (cannot be used together with --size and --scale).");
+    cmd->add_option("-s,--size", optSize, "Resize image to given size (cannot be used together with --reduce and --scale).");
+    cmd->add_option("-S,--scale", optScale,
+      "Resize image by the given percentage Value (cannot be used together with --size and --reduce).");
+    cmd->add_option("-o,--rotate", optRotate, "Rotate the image by degree Value, angle between (0.0 - 360.0).");
+    cmd->add_option("-m,--mirror", optMirror, "Mirror the image: 'none', 'horizontal', 'vertical'.")
+      ->transform(CLI::CheckedTransformer(optMirrorMap, CLI::ignore_case));
+    cmd->add_option("-w,--watermark", optWatermark, "Add a watermark to the image.");
+    cmd->add_option("-q,--quality", optJpegQuality, "Quality (compression).")->check(CLI::Range(1, 100));
+    cmd->add_option("-F,--format", optFormat, "Output format.")
+      ->transform(CLI::CheckedTransformer(optFormatMap, CLI::ignore_case));
+  };
+  auto attach_color_space_opts = [&](CLI::App *cmd) {
+    cmd->add_option("-I,--icc", optIcc, "Convert to ICC profile.")
+      ->transform(CLI::CheckedTransformer(optIccMap, CLI::ignore_case));
+  };
+  auto attach_normalize_opts = [&](CLI::App *cmd) {
+    cmd->add_flag("--topleft", optSetTopleft, "Enforce orientation TOPLEFT.");
+  };
+  auto attach_strip_opts = [&](CLI::App *cmd) {
+    cmd->add_flag("-k,--skipmeta", optSkipMeta, "Skip metadata of original file if flag is present.");
+  };
+  auto attach_output_opts = [&](CLI::App *cmd) {
+    cmd->add_flag("--json", optJsonOutput,
+      "Emit a structured JSON report (success or error) to stdout instead of human-readable messages.");
+  };
+
+  // ----- server ----------------------------------------------------------
+  CLI::App *cmd_server = sipiopt.add_subcommand("server", "Run sipi as a high-performance IIIF server.");
+  // Server options bind to the legacy globals (optServerport, etc.).
+  // Phase 11.4 will attach them onto the subcommand directly; for now
+  // the callback just routes into the shared `run_server` body and
+  // the subcommand form runs with defaults (the legacy `--config`
+  // form remains the path that wires real config in).
+  cmd_server->callback([&]() { exit(run_server(cmd_server)); });
+
+  // ----- convert (generic, ImageMagick-style) ----------------------------
+  CLI::App *cmd_convert =
+    sipiopt.add_subcommand("convert", "Generic format conversion (Access File output, no Essentials).");
+  cmd_convert->add_option("input", optInFile, "Input file to be converted.")->check(CLI::ExistingFile);
+  cmd_convert->add_option("output", optOutFile, "Output file.");
+  attach_generic_transform_opts(cmd_convert);
+  attach_color_space_opts(cmd_convert);
+  attach_normalize_opts(cmd_convert);
+  attach_strip_opts(cmd_convert);
+  cmd_convert->callback([&]() {
+    // Bare `convert <in> <out>` only fires if no nested subcommand matched.
+    if (cmd_convert->get_subcommands().empty()) { exit(run_convert(cmd_convert)); }
+  });
+
+  // ----- convert access-file (DSP-opinionated; Access File output) ------
+  CLI::App *cmd_convert_access = cmd_convert->add_subcommand(
+    "access-file", "Produce an Access File from a Service File input (validates input has Essentials).");
+  cmd_convert_access->add_option("input", optInFile, "Input Service File.")->check(CLI::ExistingFile);
+  cmd_convert_access->add_option("output", optOutFile, "Output Access File.");
+  attach_generic_transform_opts(cmd_convert_access);
+  attach_color_space_opts(cmd_convert_access);
+  attach_normalize_opts(cmd_convert_access);
+  cmd_convert_access->callback([&]() { exit(subcommand_stub("convert access-file")); });
+
+  // ----- convert service-file (master-creation) -------------------------
+  CLI::App *cmd_convert_service = cmd_convert->add_subcommand(
+    "service-file", "Create a Service File (writes Essentials packet); restricted option set.");
+  cmd_convert_service->add_option("input", optInFile, "Input source file.")->check(CLI::ExistingFile);
+  cmd_convert_service->add_option("output", optOutFile, "Output Service File.");
+  attach_normalize_opts(cmd_convert_service);
+  cmd_convert_service->callback([&]() { exit(subcommand_stub("convert service-file")); });
+
+  // ----- convert preservation-file (stub) -------------------------------
+  CLI::App *cmd_convert_preservation = cmd_convert->add_subcommand(
+    "preservation-file", "(stub) Awaits ADR-0012; not yet implemented.");
+  cmd_convert_preservation->callback([&]() { exit(stub_preservation_file("convert")); });
+
+  // ----- verify (role-agnostic decoder check) ---------------------------
+  CLI::App *cmd_verify = sipiopt.add_subcommand("verify", "Role-agnostic decoder-coverage check.");
+  cmd_verify->add_option("file", optInFile, "File to verify.")->check(CLI::ExistingFile);
+  cmd_verify->callback([&]() {
+    if (cmd_verify->get_subcommands().empty()) { exit(subcommand_stub("verify")); }
+  });
+
+  // ----- verify access-file / service-file / preservation-file ---------
+  CLI::App *cmd_verify_access = cmd_verify->add_subcommand(
+    "access-file", "Assert file is a valid Access File (no Essentials; well-formed XMP).");
+  cmd_verify_access->add_option("file", optInFile, "Access File to verify.")->check(CLI::ExistingFile);
+  cmd_verify_access->callback([&]() { exit(subcommand_stub("verify access-file")); });
+
+  CLI::App *cmd_verify_service = cmd_verify->add_subcommand(
+    "service-file", "Assert Essentials parses, hash matches, shape consistent.");
+  cmd_verify_service->add_option("file", optInFile, "Service File to verify.")->check(CLI::ExistingFile);
+  cmd_verify_service->callback([&]() { exit(subcommand_stub("verify service-file")); });
+
+  CLI::App *cmd_verify_preservation = cmd_verify->add_subcommand(
+    "preservation-file", "(stub) Awaits ADR-0012; not yet implemented.");
+  cmd_verify_preservation->callback([&]() { exit(stub_preservation_file("verify")); });
+
+  // ----- query -----------------------------------------------------------
+  CLI::App *cmd_query = sipiopt.add_subcommand("query", "Dump image information.");
+  cmd_query->add_option("file", optInFile, "File to query.")->check(CLI::ExistingFile);
+  attach_output_opts(cmd_query);
+  cmd_query->callback([&]() { exit(run_query()); });
+
+  // ----- compare ---------------------------------------------------------
+  CLI::App *cmd_compare = sipiopt.add_subcommand("compare", "Byte/pixel comparison of two files.");
+  cmd_compare->add_option("files", optCompare, "Two files to compare.")->expected(2);
+  attach_output_opts(cmd_compare);
+  cmd_compare->callback([&]() { exit(run_compare()); });
+
+  CLI11_PARSE(sipiopt, argc, argv);
+
+  /*
+  argc -= (argc > 0);
+  argv += (argc > 0); // skip program name argv[0] if present
+
+  option::Stats stats(usage, argc, argv);
+  std::vector<option::Option> options(stats.options_max);
+  std::vector<option::Option> buffer(stats.buffer_max);
+  option::Parser parse(usage, argc, argv, &options[0], &buffer[0]);
+*/
+  if (!sipiopt.get_option("--query")->empty()) {
+    return run_query();
+  } else if (!sipiopt.get_option("--compare")->empty()) {
+    return run_compare();
+  } else if (!(sipiopt.get_option("--file")->empty() || sipiopt.get_option("--outf")->empty())) {
+    return run_convert(nullptr);
+  } else if (!(sipiopt.get_option("--config")->empty() && sipiopt.get_option("--serverport")->empty())) {
+    return run_server(nullptr);
   }
   // make sure everything flushes
   Sipi::observability::close_sentry();

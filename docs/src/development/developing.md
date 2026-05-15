@@ -36,7 +36,7 @@ just run                                  # bazel build + run sipi --config loca
 The server starts on `http://localhost:1024`.
 
 `just run` depends on `just bazel-build` so the binary at
-`bazel-bin/src/sipi` is always rebuilt before the run. After the
+`bazel-bin/src/cli/sipi` is always rebuilt before the run. After the
 first cold build (foreign_cc compiles for openssl/kakadu/libtiff/
 etc.), incremental rebuilds re-run only the affected compile + link
 through Bazel's per-action cache — typically sub-second through
@@ -164,7 +164,7 @@ just rust-test-e2e               # Inner-loop: cargo test from the dev shell
 ```
 
 Both resolve the sipi binary via `$SIPI_BIN`, defaulting to
-`bazel-bin/src/sipi`. Override `SIPI_BIN` to point at a sanitized
+`bazel-bin/src/cli/sipi`. Override `SIPI_BIN` to point at a sanitized
 build (`bazel build --config=asan`) when investigating ASan
 findings.
 
@@ -253,10 +253,10 @@ To bump a version:
 
 1. Edit the relevant `http_archive(...)` in `MODULE.bazel` — update
    `urls` and clear `sha256`.
-2. Run `bazel build //src:sipi` once. Bazel reports the actual
+2. Run `bazel build //src/cli:sipi` once. Bazel reports the actual
    sha256 in the failure output.
 3. Paste the reported `sha256` into the `http_archive` block.
-4. Run `bazel build //src:sipi` and `just bazel-test` to confirm.
+4. Run `bazel build //src/cli:sipi` and `just bazel-test` to confirm.
 5. Commit `MODULE.bazel` and `MODULE.bazel.lock`.
 
 Adding a brand-new dependency:

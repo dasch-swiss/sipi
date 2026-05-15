@@ -54,7 +54,7 @@ test-smoke-ci:
 # for the inner-loop edit/rebuild cycle. Pass `-c opt`, `-c dbg`,
 # `--config=asan`, etc. as positional flags when needed.
 bazel-build *FLAGS='':
-    bazel build --stamp //src:sipi {{FLAGS}}
+    bazel build --stamp //src/cli:sipi {{FLAGS}}
 
 # Build + run the full test pyramid (unit + approval + e2e) under
 # fastbuild — no coverage instrumentation. CI's linux-arm64 and
@@ -139,7 +139,7 @@ bazel-test-smoke *FLAGS='':
 
 # Sanitized build: Debug + ASan + UBSan via Bazel
 # `--config=asan --config=ubsan`. The resulting binary at
-# `bazel-bin/src/sipi` is what `sanitizer.yml`'s e2e step consumes
+# `bazel-bin/src/cli/sipi` is what `sanitizer.yml`'s e2e step consumes
 # via `SIPI_BIN`. DWARF stays inline (`--strip=never` in
 # `.bazelrc`) so the symbol-name suppressions in `.lsan_suppressions.txt`
 # match. `--verbose_failures` surfaces the underlying cmake/make output
@@ -152,8 +152,8 @@ bazel-test-smoke *FLAGS='':
 # reports `sipi 0.0.0-unstamped` and the `cli_version_flag` e2e test
 # fails.
 bazel-build-sanitized *FLAGS='':
-    bazel build --config=asan --config=ubsan --verbose_failures --stamp {{FLAGS}} //src:sipi
-    @echo "Binary at: $(pwd)/bazel-bin/src/sipi"
+    bazel build --config=asan --config=ubsan --verbose_failures --stamp {{FLAGS}} //src/cli:sipi
+    @echo "Binary at: $(pwd)/bazel-bin/src/cli/sipi"
 
 # Resolve the per-host fuzz `--platforms=` label. linux-x86_64 → libstdc++
 # toolchain (`@llvm_toolchain_fuzz`) for libFuzzer ABI parity with the
@@ -356,7 +356,7 @@ bazel-docker-extract-debug arch *FLAGS='':
 rust-test-e2e:
     #!/usr/bin/env bash
     set -euo pipefail
-    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/sipi}"
+    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/cli/sipi}"
     if [ ! -x "$SIPI_BIN" ]; then
         echo "sipi binary not found at $SIPI_BIN. Run 'just bazel-build' first." >&2
         exit 1
@@ -367,7 +367,7 @@ rust-test-e2e:
 hurl-test:
     #!/usr/bin/env bash
     set -euo pipefail
-    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/sipi}"
+    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/cli/sipi}"
     if [ ! -x "$SIPI_BIN" ]; then
         echo "sipi binary not found at $SIPI_BIN. Run 'just bazel-build' first." >&2
         exit 1
@@ -388,14 +388,14 @@ hurl-test:
 run: bazel-build
     #!/usr/bin/env bash
     set -euo pipefail
-    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/sipi}"
+    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/cli/sipi}"
     "$SIPI_BIN" --config={{justfile_directory()}}/config/sipi.localdev-config.lua
 
 # Run sipi under Valgrind.
 valgrind: bazel-build
     #!/usr/bin/env bash
     set -euo pipefail
-    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/sipi}"
+    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/cli/sipi}"
     valgrind --leak-check=yes --track-origins=yes "$SIPI_BIN" --config={{justfile_directory()}}/config/sipi.config.lua
 
 # Download CI fuzz corpus and merge into seed corpus

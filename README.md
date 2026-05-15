@@ -77,9 +77,9 @@ All commands are run from the repository root via `just`. Run `just` for a full 
 
 ### Build and test with Bazel (what CI runs)
 ```bash
-just bazel-build       # bazel build --stamp //src:sipi (fastbuild — fast incremental rebuilds)
+just bazel-build       # bazel build --stamp //src/cli:sipi (fastbuild — fast incremental rebuilds)
 just bazel-coverage    # build + run all tests (unit + approval + e2e) under coverage instrumentation
-just hurl-test         # run Hurl HTTP contract tests against ./bazel-bin/src/sipi
+just hurl-test         # run Hurl HTTP contract tests against ./bazel-bin/src/cli/sipi
 just run               # start SIPI server with the localdev config
 ```
 
@@ -96,7 +96,7 @@ just test-smoke                 # build host-arch image, then run smoke tests ag
 ```bash
 nix develop            # dev shell with build deps + bazelisk
 just bazel-build       # cold action cache: slow; warm: seconds
-./bazel-bin/src/sipi --config config/sipi.localdev-config.lua
+./bazel-bin/src/cli/sipi --config config/sipi.localdev-config.lua
 ```
 
 See [Building SIPI from Source Code](https://sipi.io/development/building/) for full details.

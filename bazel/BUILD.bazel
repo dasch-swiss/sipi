@@ -18,7 +18,7 @@ exports_files(
 )
 
 # glibc 2.42 → 2.31 ABI compatibility shims. See glibc23_compat.c for
-# the full rationale. Linked into //src:sipi on Linux only (see
+# the full rationale. Linked into //src/cli:sipi on Linux only (see
 # `linkopts` selector there).
 load("@rules_cc//cc:defs.bzl", "cc_library")
 

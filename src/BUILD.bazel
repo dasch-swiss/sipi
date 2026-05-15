@@ -1,18 +1,18 @@
 """Sipi first-party C++ build graph.
 
-Two targets:
-
-  //src:sipi_lib  — `cc_library` containing every Sipi translation unit
-                    *except* the executable's `main`. Headers come via
-                    `//include:headers` for the legacy include/ tree.
-                    Per-module Bazel packages under `//src/<mod>/` (e.g.
-                    `//src/metadata`, `//src/observability`) own their
-                    own headers — including internal/ subpackages with
-                    restricted visibility for Test seam helpers.
-  //src:sipi      — thin `cc_binary` (`srcs = ["sipi.cpp"]`) deps-only on
-                    `:sipi_lib`. `linkopts = ["-Wl,--build-id=sha1"]`
-                    content-addresses the build-id for Y+4 debug-info
-                    reproducibility.
+  //src:sipi_lib       `cc_library` containing every Sipi translation unit
+                       *except* the executable's `main`. Headers come via
+                       `//include:headers` for the legacy include/ tree.
+                       Per-module Bazel packages under `//src/<mod>/` (e.g.
+                       `//src/metadata`, `//src/observability`, `//src/cli`)
+                       own their own headers — including internal/
+                       subpackages with restricted visibility for Test
+                       seam helpers.
+  //src/cli:sipi       thin `cc_binary` (`srcs = ["sipi.cpp"]`) deps-only
+                       on `:sipi_lib`. Lives in its own package so the
+                       CLI subcommand restructure (DEV-6540) lands in
+                       its natural home alongside the per-subcommand
+                       callbacks and master-creation orchestrators.
 
 The split is mandatory infrastructure for Y+1 (per-component unit tests)
 and scaffolds the post-Y+6 layout flip — the eventual Y+8 series breaks
@@ -26,7 +26,7 @@ Versioning: `expand_template` regenerates `SipiVersion.h` from
 """
 
 load("@aspect_bazel_lib//lib:expand_template.bzl", "expand_template")
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_distroless//distroless:defs.bzl", "group", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load", "oci_push")
 load("@tar.bzl", "tar")
@@ -70,7 +70,7 @@ cc_library(
 # bumping `version.txt` flips `STABLE_SIPI_VERSION`, the header regenerates,
 # and the few TUs that include it recompile.
 #
-# Output path is `generated/SipiVersion.h` because `src/sipi.cpp`,
+# Output path is `generated/SipiVersion.h` because `src/cli/sipi.cpp`,
 # `src/SipiHttpServer.cpp`, and `src/observability/metrics.cpp` consume it as
 # `#include "generated/SipiVersion.h"` — the prefix is mandatory and
 # matches the existing CMake build's `${CMAKE_BINARY_DIR}/generated/`
@@ -254,7 +254,6 @@ cc_library(
             "**/*.hpp",
         ],
         exclude = [
-            "sipi.cpp",  # executable entry point — lives in :sipi binary
             # Owned by `:sipi_top` so per-module unit tests can link them
             # transitively without depending on `:sipi_lib` (which would
             # close a cycle).
@@ -265,8 +264,8 @@ cc_library(
     includes = ["."],
     copts = ["-fexceptions"],
     # System libs / frameworks required by transitive deps of any sipi_lib
-    # consumer — i.e. //src:sipi (the binary) AND every cc_test under
-    # //test/unit/... Declaring them here (not on //src:sipi) lets
+    # consumer — i.e. //src/cli:sipi (the binary) AND every cc_test under
+    # //test/unit/... Declaring them here (not on //src/cli:sipi) lets
     # cc_library's `linkopts` propagation surface them on every downstream
     # link line, so unit tests don't have to redeclare them.
     linkopts = select({
@@ -339,46 +338,8 @@ cc_library(
     }),
 )
 
-# ── //src:sipi ─────────────────────────────────────────────────────────────
-# System-lib + framework linkopts (`-ldl`, `-lpthread`, `-liconv`,
-# `-framework SystemConfiguration`, `-framework CoreFoundation`) are
-# declared on `:sipi_lib` so they also propagate to every cc_test under
-# //test/unit/... — see the linkopts block on `:sipi_lib` above. This
-# binary keeps only its own binary-specific flag (`--build-id=sha1`).
-cc_binary(
-    name = "sipi",
-    srcs = ["sipi.cpp"],
-    linkopts = select({
-        "@platforms//os:linux": [
-            # Content-addressed build-id for reproducible debug-info
-            # splitting in Y+4. `--build-id=sha1` derives the build-id
-            # from the binary's content hash rather than a wall-clock
-            # random; identical inputs ↔ identical build-id.
-            "-Wl,--build-id=sha1",
-            # Static-link libc++ runtime so the binary runs in
-            # distroless/base-debian12 (the production image), which
-            # ships only glibc + cacert + tzdata + openssl — there is
-            # no libc++.so.1 there for the dynamic loader to find.
-            # Without these flags sipi exits silently on first
-            # syscall under distroless. clang's libc++ ABI is stable
-            # across LLVM 19.x patch releases, so static-linking does
-            # not freeze us at toolchains_llvm 1.7.0.
-            #
-            # `-Wl,-Bstatic … -Wl,-Bdynamic` brackets these three
-            # archives only — system libs (`-lpthread`, `-lm`, `-ldl`)
-            # added by the toolchain after our linkopts stay dynamic.
-            "-Wl,-Bstatic",
-            "-lc++",
-            "-lc++abi",
-            "-lunwind",
-            "-Wl,-Bdynamic",
-        ],
-        "//conditions:default": [],
-    }),
-    # `:glibc23_compat` is propagated transitively via `:sipi_lib`'s
-    # `deps += select(...)`, so this binary doesn't need to declare it.
-    deps = [":sipi_lib"],
-)
+# ── //src/cli:sipi ─────────────────────────────────────────────────────────
+# The sipi cc_binary lives at `//src/cli:sipi`; see `src/cli/BUILD.bazel`.
 
 # ── NSS layer ──────────────────────────────────────────────────────────────
 # fakeNss-equivalent /etc/passwd + /etc/group + /etc/nsswitch.conf, replacing
@@ -540,7 +501,7 @@ expand_template(
 # "incompatible target" message rather than a confusing failure.
 genrule(
     name = "sipi_debug_split",
-    srcs = ["//src:sipi"],
+    srcs = ["//src/cli:sipi"],
     outs = [
         "_dbg/sipi.stripped",
         "_dbg/sipi.debug",
@@ -550,7 +511,7 @@ genrule(
 set -euo pipefail
 OBJCOPY=$(execpath @llvm_toolchain_llvm//:objcopy)
 READELF=$(execpath @llvm_toolchain_llvm//:readelf)
-BIN=$(execpath //src:sipi)
+BIN=$(execpath //src/cli:sipi)
 
 # Build-id is encoded in `.note.gnu.build-id`; llvm-readelf -n prints
 # something like:
@@ -641,14 +602,14 @@ tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \\
 # Per-arch layer selection is via `select()` on the host CPU below.
 
 # Sipi binary at /sbin/sipi. Linux-only because the binary itself is
-# Linux ELF (cc_binary //src:sipi target_compatible_with linux for the
+# Linux ELF (cc_binary //src/cli:sipi target_compatible_with linux for the
 # image-build path; on darwin :sipi is Mach-O and not consumed here).
 tar(
     name = "sipi_bin_layer",
-    srcs = ["//src:sipi"],
+    srcs = ["//src/cli:sipi"],
     mtree = [
         "./sbin type=dir mode=0755 time=0",
-        "./sbin/sipi type=file mode=0755 time=0 content=$(execpath //src:sipi)",
+        "./sbin/sipi type=file mode=0755 time=0 content=$(execpath //src/cli:sipi)",
     ],
     target_compatible_with = ["@platforms//os:linux"],
 )

@@ -21,7 +21,7 @@ For full build instructions, see [`docs/src/development/building.md`](docs/src/d
 
 **Build reproducibility invariant:** Bazel is the build system; Nix provisions only the dev shell. Every build/test/coverage step in CI invokes one of the `just bazel-*` recipes — no inline `bazel` calls, no `nix build` calls. Bazel's own incremental rebuild IS the inner-loop edit/rebuild cycle (`just bazel-build` after a single-file edit completes in seconds via the action cache).
 
-**Build completeness invariant:** every build target must succeed on every supported platform — macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. The Docker image (`//src:image` via `rules_oci`) is Linux-only — `bazel-docker-build-{amd64,arm64}` is gated by host-CPU `target_compatible_with`. The sanitized variant is `bazel build --config=asan --config=ubsan //src:sipi`; the libFuzzer harness is Bazel-native on linux-x86_64 (CI) and darwin-aarch64 (local dev) — the `bazel-build-fuzz` / `bazel-run-fuzz` recipes detect the host and select the matching `//tools/fuzz:<host>_fuzz` platform. linux-aarch64 is out of scope for the fuzz harness. CI runs the test matrix on all three platforms, so a green CI run verifies macOS as well as Linux. Before shipping any change to `flake.nix`, `MODULE.bazel`, `BUILD.bazel`, or a `justfile` build recipe, run `just bazel-build` and `just bazel-coverage` locally on macOS at minimum.
+**Build completeness invariant:** every build target must succeed on every supported platform — macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. The Docker image (`//src:image` via `rules_oci`) is Linux-only — `bazel-docker-build-{amd64,arm64}` is gated by host-CPU `target_compatible_with`. The sanitized variant is `bazel build --config=asan --config=ubsan //src/cli:sipi`; the libFuzzer harness is Bazel-native on linux-x86_64 (CI) and darwin-aarch64 (local dev) — the `bazel-build-fuzz` / `bazel-run-fuzz` recipes detect the host and select the matching `//tools/fuzz:<host>_fuzz` platform. linux-aarch64 is out of scope for the fuzz harness. CI runs the test matrix on all three platforms, so a green CI run verifies macOS as well as Linux. Before shipping any change to `flake.nix`, `MODULE.bazel`, `BUILD.bazel`, or a `justfile` build recipe, run `just bazel-build` and `just bazel-coverage` locally on macOS at minimum.
 
 **First-time setup:** Bazel builds (including `just bazel-docker-build-${arch}`) fetch Kakadu directly via Bazel's `kakadu_archive` repository_rule (no `vendor/` step). Requires `gh auth login` and `dasch-swiss` org membership. See [`docs/src/development/kakadu.md`](docs/src/development/kakadu.md).
 
@@ -31,7 +31,7 @@ For full build instructions, see [`docs/src/development/building.md`](docs/src/d
 
 ```bash
 # Build sipi (fastbuild — fast incremental for inner-loop edits)
-just bazel-build                 # bazel build --stamp //src:sipi
+just bazel-build                 # bazel build --stamp //src/cli:sipi
 just bazel-build -c opt          # production-shape build (matches Docker image)
 just bazel-build --config=asan   # ASan+UBSan; same flag form for ad-hoc variants
 
@@ -52,7 +52,7 @@ just run                         # run sipi with the localdev config
 just valgrind                    # run sipi under Valgrind
 
 # Sanitizer + fuzz
-just bazel-build-sanitized       # bazel build --config=asan --config=ubsan //src:sipi  (sanitizer.yml CI)
+just bazel-build-sanitized       # bazel build --config=asan --config=ubsan //src/cli:sipi  (sanitizer.yml CI)
 just bazel-build-fuzz            # bazel build --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz  (fuzz.yml CI on linux-x86_64; darwin-aarch64 supported for local dev)
 just bazel-run-fuzz <corpus> <duration> [seed]  # libFuzzer args; recipe builds + execs the binary directly
 
@@ -79,7 +79,7 @@ re-runs the affected compile + link.
 ```bash
 nix develop                                   # dev shell with build deps + bazelisk
 just bazel-build                              # first build: cold action cache
-./bazel-bin/src/sipi --config config/sipi.localdev-config.lua
+./bazel-bin/src/cli/sipi --config config/sipi.localdev-config.lua
 # subsequent edits:
 just bazel-build                              # incremental, sub-second through link
 ```
@@ -93,7 +93,7 @@ localdev config in one step.
 
 | Component | Path | Purpose |
 |-----------|------|---------|
-| Main Application | `src/sipi.cpp` | Entry point (CLI + server modes), CLI11 arg parsing, Sentry integration |
+| Main Application | `src/cli/sipi.cpp` | Entry point (CLI + server modes), CLI11 arg parsing, Sentry integration |
 | SipiImage | `src/SipiImage.hpp` | Image processing: TIFF, JP2, PNG, JPEG; metadata (EXIF, IPTC, XMP); ICC profiles |
 | SipiHttpServer | `src/SipiHttpServer.hpp` | HTTP server, IIIF endpoints, caching, Lua scripting integration |
 | IIIF Parser | `include/iiifparser/` | IIIF URL parsing: identifier, region, size, rotation, quality/format |
@@ -189,10 +189,10 @@ These are not style preferences — they are contract with the maintainer. Code 
 **Compiler Requirements:** C++23. Bazel selects a hermetic LLVM 19 toolchain via `toolchains_llvm`; the host compiler does not need to be Clang.
 
 **Build configurations:**
-- `bazel build //src:sipi` — fastbuild (`-O0 -g`, fast incremental)
-- `bazel build -c opt //src:sipi` — production (`-O3 -DNDEBUG`)
-- `bazel build -c dbg //src:sipi` — Debug (`-O0 -g`)
-- `bazel build --config=asan --config=ubsan //src:sipi` — sanitizers
+- `bazel build //src/cli:sipi` — fastbuild (`-O0 -g`, fast incremental)
+- `bazel build -c opt //src/cli:sipi` — production (`-O3 -DNDEBUG`)
+- `bazel build -c dbg //src/cli:sipi` — Debug (`-O0 -g`)
+- `bazel build --config=asan --config=ubsan //src/cli:sipi` — sanitizers
 - `bazel build --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz` — libFuzzer harness
 
 **Error Reporting:** Optional Sentry integration via `SIPI_SENTRY_DSN`, `SIPI_SENTRY_ENVIRONMENT`, `SIPI_SENTRY_RELEASE` environment variables.

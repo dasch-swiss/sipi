@@ -9,7 +9,7 @@ others aren't.
 What the macro injects:
 
   * `data`:
-      - `//src:sipi`             sipi binary under test, via `SIPI_BIN`.
+      - `//src/cli:sipi`             sipi binary under test, via `SIPI_BIN`.
       - `//:test_fixtures`       `test/_test_data/`, `config/`,
                                  `scripts/`, `server/` materialised so
                                  `sipi_e2e::repo_root()` resolves under
@@ -20,7 +20,7 @@ What the macro injects:
                                  `tests/snapshots/`.
 
   * `env`:
-      - `SIPI_BIN`               `$(rootpath //src:sipi)` — runfiles-
+      - `SIPI_BIN`               `$(rootpath //src/cli:sipi)` — runfiles-
                                  relative; `SipiServer` canonicalises
                                  to absolute before spawning.
       - `SIPI_REPO_ROOT`         `$(rootpath //:test_fixtures)` — the
@@ -109,13 +109,13 @@ def sipi_e2e_test(
         # only a couple of tests consume it but the cost is trivial and
         # makes adding new `assert_*_snapshot!()` calls a no-op wiring-wise.
         data = [
-            "//src:sipi",
+            "//src/cli:sipi",
             "//:test_fixtures",
             "//:lsan_suppressions",
             ":snapshots",
         ] + extra_data,
         env = {
-            "SIPI_BIN": "$(rootpath //src:sipi)",
+            "SIPI_BIN": "$(rootpath //src/cli:sipi)",
             # Points at the `copy_to_directory` output that materialises
             # `version.txt`, `test/_test_data/`, `config/`, `scripts/`,
             # `server/` as real files (no symlinks). Required so sipi's

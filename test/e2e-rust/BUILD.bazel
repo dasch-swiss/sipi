@@ -28,7 +28,7 @@ Layout:
 
 Runtime contracts (set per-target by `sipi_e2e_test()` or below):
 
-  * `SIPI_BIN`         `$(rootpath //src:sipi)`; `SipiServer`
+  * `SIPI_BIN`         `$(rootpath //src/cli:sipi)`; `SipiServer`
                        canonicalises to absolute before spawning.
   * `SIPI_REPO_ROOT`   `$(rootpath //:test_fixtures)`. The materialised
                        tree is the host of the in-source layout under
@@ -164,11 +164,11 @@ rust_test(
     data = [
         ":sipi_image_tar",
         "//:test_fixtures",
-        "//src:sipi",
+        "//src/cli:sipi",
     ],
     edition = "2021",
     env = {
-        "SIPI_BIN": "$(rootpath //src:sipi)",
+        "SIPI_BIN": "$(rootpath //src/cli:sipi)",
         # Same value as `sipi_e2e_test()` — the docker bind mounts in
         # `tests/docker_smoke.rs` derive their host paths from
         # `repo_root()`, which must resolve to the `copy_to_directory`
