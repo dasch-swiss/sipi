@@ -307,7 +307,7 @@ bool SipiIOJ2k::read(SipiImage *img,
   while (comment.exists()) {
     const char *cstr = comment.get_text();
     if (strncmp(cstr, "SIPI:", 5) == 0) {
-      Essentials se(cstr + 5);
+      Essentials se = Essentials::parse_legacy(cstr + 5);
       img->essential_metadata(se);
       break;
     }
@@ -703,7 +703,7 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
   while (comment.exists()) {
     const char *cstr = comment.get_text();
     if (strncmp(cstr, "SIPI:", 5) == 0) {
-      Essentials se(cstr + 5);
+      Essentials se = Essentials::parse_legacy(cstr + 5);
       info.origmimetype = se.fields().mimetype;
       info.origname = se.fields().origname;
       info.success = SipiImgInfo::ALL;

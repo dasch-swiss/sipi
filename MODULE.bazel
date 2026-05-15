@@ -64,6 +64,25 @@ single_version_override(
     patches = ["//bazel/patches:prometheus_cpp_load_cc.patch"],
 )
 
+# `protobuf` consumed via BCR (DEV-6410 / ADR-0005). The Essentials packet
+# (`src/metadata/essentials.proto`) uses `optimize_for = LITE_RUNTIME`, so only
+# the protobuf-lite static archive enters the link (≈300-500 KB).
+# `proto_library` and `cc_proto_library` are exported by the protobuf module
+# itself (`@com_google_protobuf//bazel:{proto_library,cc_proto_library}.bzl`)
+# in protobuf 26+. `repo_name = "com_google_protobuf"` matches the canonical
+# name any future Rust IIIF service in dsp-repository will share via the BCR.
+bazel_dep(name = "protobuf", version = "34.1", repo_name = "com_google_protobuf")
+
+# protobuf 34.1 transitively pulls `rules_go@0.51.0-rc2` for its Go support.
+# That release's `go/private/rules/cgo.bzl` still references `CcInfo` from
+# `@rules_cc//cc:defs.bzl`, where the symbol was removed in rules_cc 0.2.x
+# (now `@rules_cc//cc/common:cc_info.bzl`). Bazel resolves the registered
+# `@go_toolchains//:all` toolchain at analysis time even for non-Go targets,
+# so the broken load fires on first `bazelisk build //src/metadata:essentials_cc_proto`.
+# Override to the latest stable rules_go, which loads CcInfo from the new path.
+# Drop this override once a protobuf release pins a Bazel-9-clean rules_go.
+bazel_dep(name = "rules_go", version = "0.60.0")
+
 # `toolchains_llvm` registers a hermetic LLVM 19.1.x toolchain. Sysroot wiring
 # (Chromium debian sysroots for linux-x86_64 / linux-aarch64) lives below.
 # macOS uses the system Xcode CLT SDK (no bundled macOS sysroot in
