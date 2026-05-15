@@ -5,6 +5,7 @@
 
 #include <cassert>
 #include <cstdarg>
+#include <cstddef>
 #include <cstdlib>
 
 #include <cmath>
@@ -12,6 +13,7 @@
 #include <cstring>
 #include <fstream>
 #include <memory>
+#include <span>
 #include <string>
 
 #include <cerrno>
@@ -417,9 +419,21 @@ static void tiffWarning(const char *module, const char *fmt, va_list args)
 
 #define N(a) (sizeof(a) / sizeof(a[0]))
 #define TIFFTAG_SIPIMETA 65111
+// New protobuf-binary carrier for the Essentials packet (ADR-0005 / DEV-6410).
+// Field type TIFF_UNDEFINED with variable count so TIFFGetField returns the
+// byte length alongside the data pointer (the legacy ASCII tag does not). The
+// pyramidal TIFF writer emits this gated on `master_mode == service-file`;
+// plain TIFF never carries it (ADR-0009).
+#define TIFFTAG_SIPIMETA_PB 65112
 
 static const TIFFFieldInfo xtiffFieldInfo[] = {
   { TIFFTAG_SIPIMETA, 1, 1, TIFF_ASCII, FIELD_CUSTOM, 1, 0, const_cast<char *>("SipiEssentialMetadata") },
+  // TIFF_VARIABLE2 = -3 means uint32 count + buffer (vs -1 for uint16). Service
+  // File Essentials packets are sub-kilobyte today (~200 bytes for shape +
+  // identity, +ICC payload), so even uint16 would suffice — uint32 is the
+  // forward-compatible default for binary blobs and matches the carrier-size
+  // budget reserved by the JP2 UUID box's `total_size: u32` field.
+  { TIFFTAG_SIPIMETA_PB, -3, -3, TIFF_UNDEFINED, FIELD_CUSTOM, 1, 1, const_cast<char *>("SipiEssentialMetadataPB") },
 };
 //============================================================================
 
@@ -1163,14 +1177,33 @@ bool SipiIOTiff::read(SipiImage *img,
     }
 
     //
-    // Read SipiEssential metadata
+    // Read SipiEssential metadata. Prefer the new TIFFTAG_SIPIMETA_PB
+    // (protobuf); fall back to the legacy TIFFTAG_SIPIMETA (pipe-delimited
+    // ASCII) when the new tag is absent or fails to parse. No in-tree writer
+    // ever emits both — the simultaneous presence of both tags would imply
+    // external tooling, and the prefer-new behaviour is the correct
+    // resolution either way.
     //
-    char *emdatastr = nullptr;
+    {
+      uint32_t pb_count = 0;
+      const void *pb_data = nullptr;
+      char *emdatastr = nullptr;
+      const bool has_pb = 1 == TIFFGetField(tif, TIFFTAG_SIPIMETA_PB, &pb_count, &pb_data) && pb_count > 0 && pb_data;
+      const bool has_legacy = 1 == TIFFGetField(tif, TIFFTAG_SIPIMETA, &emdatastr) && emdatastr && strlen(emdatastr) > 0;
 
-    if (1 == TIFFGetField(tif, TIFFTAG_SIPIMETA, &emdatastr)) {
-      if (strlen(emdatastr) > 0) {
-        Essentials se = Essentials::parse_legacy(emdatastr);
-        img->essential_metadata(se);
+      if (has_pb) {
+        std::span<const std::byte> bytes(static_cast<const std::byte *>(pb_data), pb_count);
+        auto parsed = Essentials::parse(bytes);
+        if (parsed) {
+          img->essential_metadata(*parsed);
+        } else {
+          log_warn("Essentials: protobuf parse failed for %s (variant=%d); falling back to legacy carrier",
+            filepath.c_str(),
+            static_cast<int>(parsed.error()));
+          if (has_legacy) { img->essential_metadata(Essentials::parse_legacy(emdatastr)); }
+        }
+      } else if (has_legacy) {
+        img->essential_metadata(Essentials::parse_legacy(emdatastr));
       }
     }
 
@@ -1462,12 +1495,37 @@ SipiImgInfo SipiIOTiff::read_shape(const std::string &filepath)
     TIFF_GET_FIELD(tif.get(), TIFFTAG_ORIENTATION, &ori, ORIENTATION_TOPLEFT);
     info.orientation = static_cast<Orientation>(ori);
 
-    char *emdatastr;
-    if (1 == TIFFGetField(tif.get(), TIFFTAG_SIPIMETA, &emdatastr)) {
-      Essentials se = Essentials::parse_legacy(emdatastr);
-      info.origmimetype = se.fields().mimetype;
-      info.origname = se.fields().origname;
-      info.success = SipiImgInfo::ALL;
+    // Essentials read for read_shape header probe. Prefer the new
+    // TIFFTAG_SIPIMETA_PB protobuf tag and fall back to the legacy
+    // TIFFTAG_SIPIMETA pipe-delimited form. Populates origmimetype /
+    // origname; later commits hoist this into a fast-path return.
+    {
+      uint32_t pb_count = 0;
+      const void *pb_data = nullptr;
+      char *emdatastr = nullptr;
+      const bool has_pb =
+        1 == TIFFGetField(tif.get(), TIFFTAG_SIPIMETA_PB, &pb_count, &pb_data) && pb_count > 0 && pb_data;
+      const bool has_legacy =
+        1 == TIFFGetField(tif.get(), TIFFTAG_SIPIMETA, &emdatastr) && emdatastr && strlen(emdatastr) > 0;
+
+      if (has_pb) {
+        std::span<const std::byte> bytes(static_cast<const std::byte *>(pb_data), pb_count);
+        if (auto parsed = Essentials::parse(bytes)) {
+          info.origmimetype = parsed->fields().mimetype;
+          info.origname = parsed->fields().origname;
+          info.success = SipiImgInfo::ALL;
+        } else if (has_legacy) {
+          Essentials se = Essentials::parse_legacy(emdatastr);
+          info.origmimetype = se.fields().mimetype;
+          info.origname = se.fields().origname;
+          info.success = SipiImgInfo::ALL;
+        }
+      } else if (has_legacy) {
+        Essentials se = Essentials::parse_legacy(emdatastr);
+        info.origmimetype = se.fields().mimetype;
+        info.origname = se.fields().origname;
+        info.success = SipiImgInfo::ALL;
+      }
     }
 
     info.resolutions = read_resolutions(tmp_width, tif.get());
@@ -1690,10 +1748,20 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
   //
   // Essentials packet emission is gated on file role per ADR-0009 / ADR-0010:
   // plain TIFF is an Access File and MUST NOT carry the packet. The pyramidal
-  // branch picks up the new TIFFTAG_SIPIMETA_PB carrier in Phase 7 / DEV-6379,
-  // gated on master_mode == service-file. The `Essentials es` declaration
-  // above (line 1652) still feeds the ICC fallback at line 1653+.
+  // branch emits the new TIFFTAG_SIPIMETA_PB carrier (ADR-0005 / DEV-6410)
+  // gated on `master_mode == service-file`. The legacy TIFFTAG_SIPIMETA tag
+  // is never emitted from this writer anymore; readers retain it via the
+  // Phase 7.4 dual-carrier path. The `Essentials es` declaration above
+  // (line 1652) still feeds the ICC fallback at line 1653+.
   //
+  const bool pyramid =
+    params && params->contains(TIFF_Pyramid) && params->at(TIFF_Pyramid).compare("yes") == 0;
+  const bool emit_essentials_pb = pyramid && es.is_set() && params
+    && params->contains(TIFF_MasterMode) && params->at(TIFF_MasterMode) == "service-file";
+  if (emit_essentials_pb) {
+    const std::vector<std::byte> bytes = es.serialize_bytes();
+    TIFFSetField(tif, TIFFTAG_SIPIMETA_PB, static_cast<uint32_t>(bytes.size()), bytes.data());
+  }
   // TIFFCheckpointDirectory(tif);
   if (its_1_bit) {
     unsigned int sll;
@@ -1703,10 +1771,6 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
 
     delete[] buf;
   } else {
-    bool pyramid = false;
-
-    if (params && params->contains(TIFF_Pyramid)) { pyramid = params->at(TIFF_Pyramid).compare("yes") == 0; }
-
     if (!pyramid) {
       for (size_t i = 0; i < img->ny; i++) {
         TIFFWriteScanline(tif, img->pixels + i * img->nc * img->nx * (img->bps / 8), (int)i, 0);
