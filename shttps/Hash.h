@@ -19,6 +19,16 @@
 
 namespace shttps {
 
+/*!
+ * Hash algorithm tag.
+ *
+ * \warning Enum value order is a SIPI on-disk contract — do NOT reorder.
+ * The integer mapping is mirrored by `sipi.metadata.HashType` in
+ * `src/metadata/essentials.proto` and locked at build time by the
+ * `static_assert`s in `src/metadata/internal/protobuf_codec.cpp`.
+ * Reordering would silently misinterpret `data_chksum` digests on every
+ * existing Service File (ADR-0005 / DEV-6410).
+ */
 typedef enum { none = 0, md5 = 1, sha1 = 2, sha256 = 3, sha384 = 4, sha512 = 5 } HashType;
 
 /*!

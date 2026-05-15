@@ -24,9 +24,25 @@ in a Bazel package. The feature flips on globally in DEV-6353 (Y+8e) once
 every per-module promotion has landed and SipiImage has its own package.
 """
 
+load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//src:__subpackages__"])
+
+# Essentials packet wire format (ADR-0005 / DEV-6410). `cc_proto_library` is
+# consumed only by `//src/metadata/internal:protobuf_codec` (added in Phase 4);
+# every other translation unit talks to the codec via the `EssentialsFields`
+# struct in `essentials.h` so `essentials.pb.h` stays out of the public ABI.
+proto_library(
+    name = "essentials_proto",
+    srcs = ["essentials.proto"],
+)
+
+cc_proto_library(
+    name = "essentials_cc_proto",
+    deps = [":essentials_proto"],
+)
 
 cc_library(
     name = "metadata",
@@ -58,6 +74,7 @@ cc_library(
         "//src:sipi_generated_hdrs",
         "//src:sipi_top",
         "//src/metadata/internal:icc_normalization",
+        "//src/metadata/internal:protobuf_codec",
     ],
 )
 
@@ -73,6 +90,20 @@ cc_test(
     ],
     deps = [
         "//src/metadata/internal:icc_normalization",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# Co-located unit test for the public Essentials factory surface (Phase 5 /
+# DEV-6410). Depends on the internal codec only to author wire bytes for the
+# 5 ParseError variants — production callers go through `Essentials::parse`
+# (protobuf) or `Essentials::parse_legacy` (pipe-delimited).
+cc_test(
+    name = "essentials_test",
+    srcs = ["essentials_test.cpp"],
+    deps = [
+        ":metadata",
+        "//src/metadata/internal:protobuf_codec",
         "@googletest//:gtest_main",
     ],
 )

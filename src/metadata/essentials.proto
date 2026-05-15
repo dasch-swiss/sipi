@@ -1,0 +1,68 @@
+// SIPI Essentials packet — versioned binary wire format (ADR-0005, DEV-6410).
+//
+// On-disk carrier for SIPI-internal identity + image-shape metadata, embedded
+// in Service Files only (JP2 UUID box at slot 4, or pyramidal TIFF private tag
+// 65112). Access Files do NOT carry this packet (ADR-0009 / ADR-0011).
+//
+// Schema discipline — read before editing:
+//   * Never repurpose a field number. Mark removed fields `reserved <n>;`.
+//   * Never repurpose an enum value. SIPI's `data_chksum` is keyed off
+//     `HashType`'s integer mapping (asserted via static_assert in
+//     `internal/protobuf_codec.cpp`).
+//   * Adding a field: pick the lowest unreserved number; describe in a
+//     leading comment; default to optional semantics.
+//   * Breaking semantic change: bump `format_version` and write a
+//     per-version reader path on the consumer side.
+//   * Field numbers 16-31 are reserved for file-structure offsets that
+//     `read_shape` consumers under DEV-6442 will populate. Until then,
+//     do not allocate in that range.
+//
+// HashType integer mapping is a cross-context contract with
+// `shttps::HashType` declaration order. See `shttps/Hash.h` for the
+// reverse-pointer comment and `internal/protobuf_codec.cpp` for the
+// `static_assert`s that lock the mapping.
+
+syntax = "proto3";
+
+package sipi.metadata;
+
+option optimize_for = LITE_RUNTIME;
+
+enum HashType {
+  HASH_TYPE_UNSPECIFIED = 0;
+  HASH_TYPE_MD5 = 1;
+  HASH_TYPE_SHA1 = 2;
+  HASH_TYPE_SHA256 = 3;
+  HASH_TYPE_SHA384 = 4;
+  HASH_TYPE_SHA512 = 5;
+}
+
+message Essentials {
+  uint32 format_version = 1;
+
+  // Core preservation identity. Populated by the master-creation orchestrator
+  // (Phase 12 / DEV-6540) from the observed source + computed pixel hash.
+  string origname = 2;      // basename of the source file as supplied by the operator
+  string mimetype = 3;      // detected from source magic bytes / extension
+  HashType hash_type = 4;
+  bytes data_chksum = 5;    // raw digest of the post-transformation pixel buffer
+  bool use_icc = 6;
+  bytes icc_profile = 7;
+
+  // Image-shape dimensions (ADR-0004). Populated by the format-handler writer
+  // from current (post-transformation) SipiImage state. `read_shape` fast-path
+  // consumers gate on `img_w != 0 && img_h != 0` (both required; partial
+  // population falls through to format-native parsing).
+  uint32 img_w = 8;
+  uint32 img_h = 9;
+  uint32 tile_w = 10;
+  uint32 tile_h = 11;
+  uint32 clevels = 12;
+  uint32 numpages = 13;
+  uint32 nc = 14;
+  uint32 bps = 15;
+
+  // Reserved runway for file-structure offsets — DEV-6442's range-source
+  // / S3-decode fast path will populate these. Do not allocate in this range.
+  reserved 16 to 31;
+}

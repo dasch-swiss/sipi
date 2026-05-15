@@ -595,7 +595,7 @@ bool SipiIOJpeg::read(SipiImage *img,
     if (marker->marker == JPEG_COM) {
       std::string emdatastr(reinterpret_cast<char *>(marker->data), marker->data_length);
       if (emdatastr.compare(0, 5, "SIPI:", 5) == 0) {
-        Essentials se(emdatastr);
+        Essentials se = Essentials::parse_legacy(emdatastr);
         img->essential_metadata(se);
       }
     } else if (marker->marker == JPEG_APP0 + 1) {
@@ -914,7 +914,7 @@ SipiImgInfo SipiIOJpeg::read_shape(const std::string &filepath)
     if (marker->marker == JPEG_COM) {
       std::string emdatastr((char *)marker->data, marker->data_length);
       if (emdatastr.compare(0, 5, "SIPI:", 5) == 0) {
-        Essentials se(emdatastr);
+        Essentials se = Essentials::parse_legacy(emdatastr);
         img.essential_metadata(se);
       }
     } else if (marker->marker == JPEG_APP0 + 1) {
@@ -1279,14 +1279,11 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
     }
   }
 
-  if (es.is_set()) {
-    std::string esstr = es.serialize();
-    unsigned int len = esstr.length();
-    char sipi_buf[512 + 1];
-    strncpy(sipi_buf, esstr.c_str(), 512);
-    sipi_buf[512] = '\0';
-    jpeg_write_marker(&cinfo, JPEG_COM, (JOCTET *)sipi_buf, len);
-  }
+  // JPEG is an Access File format per ADR-0009 — it MUST NOT carry the
+  // Essentials packet. The legacy `Essentials es = img->essential_metadata()`
+  // declaration above (line 1226) still feeds the ICC fallback branch
+  // (lines 1228-1261) but the COM marker emission has been removed
+  // (Phase 6.5 / DEV-6379).
 
   row_stride = img->nx * img->nc;
 

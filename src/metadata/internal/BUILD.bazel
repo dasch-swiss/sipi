@@ -18,7 +18,7 @@ visibility recipe rather than commenting "do not include me from
 elsewhere" in a `*Detail.h` header.
 """
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//src/metadata:__pkg__"])
 
@@ -33,4 +33,29 @@ cc_library(
     # `:sipi_top` (or any other library) just to put `src/` on the
     # include path. The internal package becomes self-sufficient.
     strip_include_prefix = "/src",
+)
+
+# Protobuf adapter for the Essentials packet (ADR-0005 / DEV-6410). The .cpp is
+# the only translation unit that includes the generated `essentials.pb.h`; the
+# rest of the metadata module talks to it via `EssentialsCodecFields`. Visibility
+# stays at `//src/metadata:__pkg__` so the generated headers cannot leak into
+# `//src/formats` or `//shttps` even by accident.
+cc_library(
+    name = "protobuf_codec",
+    srcs = ["protobuf_codec.cpp"],
+    hdrs = ["protobuf_codec.h"],
+    strip_include_prefix = "/src",
+    deps = [
+        "//shttps:shttps",
+        "//src/metadata:essentials_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "protobuf_codec_test",
+    srcs = ["protobuf_codec_test.cpp"],
+    deps = [
+        ":protobuf_codec",
+        "@googletest//:gtest_main",
+    ],
 )

@@ -1169,7 +1169,7 @@ bool SipiIOTiff::read(SipiImage *img,
 
     if (1 == TIFFGetField(tif, TIFFTAG_SIPIMETA, &emdatastr)) {
       if (strlen(emdatastr) > 0) {
-        Essentials se(emdatastr);
+        Essentials se = Essentials::parse_legacy(emdatastr);
         img->essential_metadata(se);
       }
     }
@@ -1464,7 +1464,7 @@ SipiImgInfo SipiIOTiff::read_shape(const std::string &filepath)
 
     char *emdatastr;
     if (1 == TIFFGetField(tif.get(), TIFFTAG_SIPIMETA, &emdatastr)) {
-      Essentials se(emdatastr);
+      Essentials se = Essentials::parse_legacy(emdatastr);
       info.origmimetype = se.fields().mimetype;
       info.origname = se.fields().origname;
       info.success = SipiImgInfo::ALL;
@@ -1688,12 +1688,12 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
     }
   }
   //
-  // Custom tag for SipiEssential metadata
+  // Essentials packet emission is gated on file role per ADR-0009 / ADR-0010:
+  // plain TIFF is an Access File and MUST NOT carry the packet. The pyramidal
+  // branch picks up the new TIFFTAG_SIPIMETA_PB carrier in Phase 7 / DEV-6379,
+  // gated on master_mode == service-file. The `Essentials es` declaration
+  // above (line 1652) still feeds the ICC fallback at line 1653+.
   //
-  if (es.is_set()) {
-    std::string emdata = es.serialize();
-    TIFFSetField(tif, TIFFTAG_SIPIMETA, emdata.c_str());
-  }
   // TIFFCheckpointDirectory(tif);
   if (its_1_bit) {
     unsigned int sll;

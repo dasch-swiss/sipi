@@ -274,7 +274,7 @@ bool SipiIOPng::read(SipiImage *img,
       img->iptc =
         std::make_shared<Iptc>((unsigned char *)png_texts[i].text, (unsigned int)png_texts[i].text_length);
     } else if (strcmp(png_texts[i].key, sipi_tag) == 0) {
-      Essentials se(png_texts[i].text);
+      Essentials se = Essentials::parse_legacy(png_texts[i].text);
       img->essential_metadata(se);
     } else {
       fprintf(stderr, "PNG-COMMENT: key=\"%s\" text=\"%s\"\n", png_texts[i].key, png_texts[i].text);
@@ -587,16 +587,11 @@ void SipiIOPng::write(SipiImage *img, const std::string &filepath, const SipiCom
     chunk_ptr.add_iTXt(xmp_tag, (char *)xmp_buf.data(), xmp_buf.size());
   }
 
-  // sipi_buf must outlive chunk_ptr — declared outside the if block
-  // to avoid stack-use-after-scope when png_set_text reads the pointer.
-  char sipi_buf[512 + 1] = {};
-  if (es.is_set()) {
-    std::string esstr = es.serialize();
-    unsigned int len = esstr.length();
-    strncpy(sipi_buf, esstr.c_str(), 512);
-    sipi_buf[512] = '\0';
-    chunk_ptr.add_iTXt(sipi_tag, sipi_buf, len);
-  }
+  // PNG is an Access File format per ADR-0009 — it MUST NOT carry the
+  // Essentials packet. The legacy `Essentials es = img->essential_metadata()`
+  // declaration above (line 548) still feeds the ICC fallback branch
+  // (lines 549-564) but the iTXt SIPI-chunk emission has been removed
+  // (Phase 6.6 / DEV-6379).
 
   if (chunk_ptr.num() > 0) { png_set_text(png_ptr, info_ptr, chunk_ptr.ptr(), chunk_ptr.num()); }
 
