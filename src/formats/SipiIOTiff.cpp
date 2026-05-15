@@ -1497,8 +1497,10 @@ SipiImgInfo SipiIOTiff::read_shape(const std::string &filepath)
 
     // Essentials read for read_shape header probe. Prefer the new
     // TIFFTAG_SIPIMETA_PB protobuf tag and fall back to the legacy
-    // TIFFTAG_SIPIMETA pipe-delimited form. Populates origmimetype /
-    // origname; later commits hoist this into a fast-path return.
+    // TIFFTAG_SIPIMETA pipe-delimited form. When the packet's image-shape
+    // fields are populated (later commits), the fast path returns from
+    // here without calling read_resolutions().
+    bool take_fast_path = false;
     {
       uint32_t pb_count = 0;
       const void *pb_data = nullptr;
@@ -1511,9 +1513,25 @@ SipiImgInfo SipiIOTiff::read_shape(const std::string &filepath)
       if (has_pb) {
         std::span<const std::byte> bytes(static_cast<const std::byte *>(pb_data), pb_count);
         if (auto parsed = Essentials::parse(bytes)) {
-          info.origmimetype = parsed->fields().mimetype;
-          info.origname = parsed->fields().origname;
+          const auto &f = parsed->fields();
+          info.origmimetype = f.mimetype;
+          info.origname = f.origname;
           info.success = SipiImgInfo::ALL;
+          // Fast path (ADR-0004 / Phase 9.2): if BOTH img_w and img_h are
+          // non-zero, hoist every shape field from the packet over what
+          // TIFFGetField returned and skip read_resolutions(). Partial
+          // population falls through to the slow path.
+          if (f.img_w != 0 && f.img_h != 0) {
+            info.width = static_cast<int>(f.img_w);
+            info.height = static_cast<int>(f.img_h);
+            info.tile_width = static_cast<int>(f.tile_w);
+            info.tile_height = static_cast<int>(f.tile_h);
+            info.clevels = static_cast<int>(f.clevels);
+            info.numpages = static_cast<int>(f.numpages);
+            info.nc = static_cast<int>(f.nc);
+            info.bps = static_cast<int>(f.bps);
+            take_fast_path = true;
+          }
         } else if (has_legacy) {
           Essentials se = Essentials::parse_legacy(emdatastr);
           info.origmimetype = se.fields().mimetype;
@@ -1526,6 +1544,11 @@ SipiImgInfo SipiIOTiff::read_shape(const std::string &filepath)
         info.origname = se.fields().origname;
         info.success = SipiImgInfo::ALL;
       }
+    }
+
+    if (take_fast_path) {
+      // TODO(DEV-6537 Phase 13): bump sipi_read_shape_fast_path_total{format="tiff",outcome="hit"}.
+      return info;
     }
 
     info.resolutions = read_resolutions(tmp_width, tif.get());

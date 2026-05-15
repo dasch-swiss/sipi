@@ -186,20 +186,6 @@ SipiCache::SipiCache(const std::string &cachedir_p,
     }
   }
 
-  // Populate sizetable from cachetable
-  for (const auto &ele : cachetable) {
-    if (sizetable.find(ele.second.origpath) == sizetable.end()) {
-      SipiCache::SizeRecord tmp_cr = { ele.second.img_w,
-        ele.second.img_h,
-        ele.second.tile_w,
-        ele.second.tile_h,
-        ele.second.clevels,
-        ele.second.numpages,
-        ele.second.mtime };
-      sizetable[ele.second.origpath] = tmp_cr;
-    }
-  }
-
   // If over limits on startup, evict down to 80%
   int evicted = purge(false);
 
@@ -484,14 +470,13 @@ void SipiCache::add(const std::string &origpath_p,
 
   struct stat fileinfo;
   SipiCache::CacheRecord fr;
-  SipiCache::SizeRecord sr;
 
-  fr.img_w = sr.img_w = img_w_p;
-  fr.img_h = sr.img_h = img_h_p;
-  fr.tile_w = sr.tile_w = tile_w_p;
-  fr.tile_h = sr.tile_h = tile_h_p;
-  fr.clevels = sr.clevels = clevels_p;
-  fr.numpages = sr.numpages = numpages_p;
+  fr.img_w = img_w_p;
+  fr.img_h = img_h_p;
+  fr.tile_w = tile_w_p;
+  fr.tile_h = tile_h_p;
+  fr.clevels = clevels_p;
+  fr.numpages = numpages_p;
   fr.origpath = origpath_p;
   fr.cachepath = cachepath;
 
@@ -536,9 +521,6 @@ void SipiCache::add(const std::string &origpath_p,
 
   cachetable[canonical_p] = fr;
   cache_used_bytes += fr.fsize;
-
-  SipiCache::SizeRecord tmp_cr = { img_w_p, img_h_p, tile_w_p, tile_h_p, clevels_p, numpages_p, fr.mtime };
-  sizetable[origpath_p] = tmp_cr;
 
   ++nfiles;
 
@@ -614,48 +596,6 @@ void SipiCache::loop(ProcessOneCacheFile worker, void *userdata, SortMethod sm)
     worker(i, ele.canonical, cachetable[ele.canonical], userdata);
     i++;
   }
-}
-
-//============================================================================
-
-bool SipiCache::getSize(const std::string &origname_p,
-  size_t &img_w,
-  size_t &img_h,
-  size_t &tile_w,
-  size_t &tile_h,
-  int &clevels,
-  int &numpages)
-{
-  struct stat fileinfo;
-  if (stat(origname_p.c_str(), &fileinfo) != 0) {
-    throw SipiError("Couldn't stat file \"" + origname_p + "\"!", errno);
-  }
-#if defined(HAVE_ST_ATIMESPEC)
-  struct timespec mtime = fileinfo.st_mtimespec;
-#else
-  time_t mtime = fileinfo.st_mtime;
-#endif
-
-  std::lock_guard<std::mutex> locking_mutex_guard(locking);
-  auto it = sizetable.find(origname_p);
-  if (it == sizetable.end()) {
-    return false;
-  }
-
-  if (tcompare(mtime, it->second.mtime) > 0) {
-    // original file is newer than cache, we have to replace it..
-    sizetable.erase(it);
-    return false;// means "replace the file in the cache"
-  }
-
-  img_w = it->second.img_w;
-  img_h = it->second.img_h;
-  tile_w = it->second.tile_w;
-  tile_h = it->second.tile_h;
-  clevels = it->second.clevels;
-  numpages = it->second.numpages;
-
-  return true;
 }
 
 //============================================================================

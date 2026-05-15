@@ -957,30 +957,28 @@ static void serve_info_json_file(Connection &conn_obj,
     int clevels;
     int numpages = 0;
 
-    //
-    // get cache info
-    //
-    std::shared_ptr<SipiCache> cache = serv->cache();
-    if ((cache == nullptr) || !cache->getSize(access["infile"], width, height, t_width, t_height, clevels, pagenum)) {
-      Sipi::SipiImage tmpimg;
-      Sipi::SipiImgInfo info;
-      try {
-        info = tmpimg.read_shape(access["infile"]);
-      } catch (SipiImageError &err) {
-        send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());
-        return;
-      }
-      if (info.success == SipiImgInfo::FAILURE) {
-        send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Error getting image dimensions!");
-        return;
-      }
-      width = info.width;
-      height = info.height;
-      t_width = info.tile_width;
-      t_height = info.tile_height;
-      clevels = info.clevels;
-      numpages = info.numpages;
+    // Image shape used to come from `cache->getSize()` keyed on the original
+    // filepath; that parasitic memoization was deleted in Phase 10 / DEV-6538
+    // because `read_shape`'s Phase 9 fast path now hits the same packet (ADR-0004
+    // / DEV-6379). Always go through the format handler.
+    Sipi::SipiImage tmpimg;
+    Sipi::SipiImgInfo info;
+    try {
+      info = tmpimg.read_shape(access["infile"]);
+    } catch (SipiImageError &err) {
+      send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());
+      return;
     }
+    if (info.success == SipiImgInfo::FAILURE) {
+      send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Error getting image dimensions!");
+      return;
+    }
+    width = info.width;
+    height = info.height;
+    t_width = info.tile_width;
+    t_height = info.tile_height;
+    clevels = info.clevels;
+    numpages = info.numpages;
 
     //
     // basic info
@@ -1572,41 +1570,35 @@ static void serve_iiif(Connection &conn_obj,
   int clevels = 0;
   int numpages = 0;
   int img_nc = 0, img_bps = 0;  // for memory budget estimation
-  // Note: when cache->getSize() hits, nc/bps remain 0. estimate_peak_memory()
-  // defaults 0 to 4 channels / 8 bps — a conservative overestimate. This only
-  // matters on the rare cache-metadata-hit + file-miss path (race/eviction).
-  // Normal cache hits return early before the budget check runs.
 
-  //
-  // get image dimensions by accessing the file, needed for get_canonical...
-  //
-  if ((cache == nullptr) || !cache->getSize(infile, img_w, img_h, tile_w, tile_h, clevels, numpages)) {
-    Sipi::SipiImgInfo info;
-    try {
-      Sipi::SipiImage img;
-      info = img.read_shape(infile);
-    } catch (SipiImageError &err) {
-      ImageContext sentry_ctx;
-      sentry_ctx.input_file = infile;
-      sentry_ctx.file_size_bytes = get_file_size(infile);
-      sentry_ctx.request_uri = uri;
-      capture_image_error(err.to_string(), "read", sentry_ctx, SipiMode::Server);
-      send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());
-      return;
-    }
-    if (info.success == SipiImgInfo::FAILURE) {
-      send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Couldn't get image dimensions!");
-      return;
-    }
-    img_w = info.width;
-    img_h = info.height;
-    tile_w = info.tile_width;
-    tile_h = info.tile_height;
-    clevels = info.clevels;
-    numpages = info.numpages;
-    img_nc = info.nc;
-    img_bps = info.bps;
+  // get image dimensions by accessing the file (read_shape fast path —
+  // ADR-0004 / DEV-6379). The previous `cache->getSize()` memoization was
+  // deleted in Phase 10 / DEV-6538.
+  Sipi::SipiImgInfo info;
+  try {
+    Sipi::SipiImage img;
+    info = img.read_shape(infile);
+  } catch (SipiImageError &err) {
+    ImageContext sentry_ctx;
+    sentry_ctx.input_file = infile;
+    sentry_ctx.file_size_bytes = get_file_size(infile);
+    sentry_ctx.request_uri = uri;
+    capture_image_error(err.to_string(), "read", sentry_ctx, SipiMode::Server);
+    send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());
+    return;
   }
+  if (info.success == SipiImgInfo::FAILURE) {
+    send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Couldn't get image dimensions!");
+    return;
+  }
+  img_w = info.width;
+  img_h = info.height;
+  tile_w = info.tile_width;
+  tile_h = info.tile_height;
+  clevels = info.clevels;
+  numpages = info.numpages;
+  img_nc = info.nc;
+  img_bps = info.bps;
 
   size_t tmp_r_w{ 0L }, tmp_r_h{ 0L };
   int tmp_red{ 0 };

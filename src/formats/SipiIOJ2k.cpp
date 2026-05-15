@@ -702,6 +702,7 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
   jp2_ultimate_src.open(filepath.c_str());
 
   bool essentials_from_uuid_box = false;
+  bool take_fast_path = false;
   if (jpx_in.open(&jp2_ultimate_src, true)
       < 0) {// if < 0, not compatible with JP2 or JPX.  Try opening as a raw code-stream.
     jp2_ultimate_src.close();
@@ -710,7 +711,9 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
   } else {
     // Walk top-level UUID boxes for the SIPI Essentials carrier (ADR-0005 /
     // DEV-6410). Same scan loop as the main reader at the top of this file;
-    // the codestream-comment fallback below covers pre-rollout files.
+    // the codestream-comment fallback below covers pre-rollout files. When the
+    // packet's image-shape fields are populated (Phase 12 orchestrator), the
+    // fast path returns directly from here without calling codestream.create().
     jp2_input_box box;
     if (box.open(&jp2_ultimate_src)) {
       do {
@@ -723,15 +726,36 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
             box.read(reinterpret_cast<kdu_byte *>(ess_buf.get()), ess_len);
             std::span<const std::byte> bytes(ess_buf.get(), ess_len);
             if (auto parsed = Essentials::parse(bytes)) {
-              info.origmimetype = parsed->fields().mimetype;
-              info.origname = parsed->fields().origname;
+              const auto &f = parsed->fields();
+              info.origmimetype = f.mimetype;
+              info.origname = f.origname;
               info.success = SipiImgInfo::ALL;
               essentials_from_uuid_box = true;
+              // Fast path (ADR-0004 / Phase 9.1): if BOTH img_w and img_h are
+              // non-zero, populate every shape field from the packet and skip
+              // codestream creation entirely. Partial population (one but not
+              // the other) → fall through to slow path.
+              if (f.img_w != 0 && f.img_h != 0) {
+                info.width = static_cast<int>(f.img_w);
+                info.height = static_cast<int>(f.img_h);
+                info.tile_width = static_cast<int>(f.tile_w);
+                info.tile_height = static_cast<int>(f.tile_h);
+                info.clevels = static_cast<int>(f.clevels);
+                info.numpages = static_cast<int>(f.numpages);
+                info.nc = static_cast<int>(f.nc);
+                info.bps = static_cast<int>(f.bps);
+                take_fast_path = true;
+              }
             }
           }
         }
         box.close();
       } while (box.open_next());
+    }
+    if (take_fast_path) {
+      // TODO(DEV-6537 Phase 13): bump sipi_read_shape_fast_path_total{format="jp2",outcome="hit"}.
+      jpx_in.close();
+      return info;
     }
     int stream_id = 0;
     jpx_stream = jpx_in.access_codestream(stream_id);
