@@ -82,7 +82,7 @@ struct JpegErrorMgr {
   char error_message[JMSG_LENGTH_MAX]{};  // char[], not std::string — safe across longjmp
 };
 
-/// Error exit for all JPEG paths (read, getDim, write): longjmp back to the
+/// Error exit for all JPEG paths (read, read_shape, write): longjmp back to the
 /// setjmp point. This avoids throwing C++ exceptions through libjpeg's C frames.
 static void jpegErrorExit(j_common_ptr cinfo)
 {
@@ -837,7 +837,7 @@ bool SipiIOJpeg::read(SipiImage *img,
   } while (0)
 
 
-SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
+SipiImgInfo SipiIOJpeg::read_shape(const std::string &filepath)
 {
   SipiImgInfo info;
   //
@@ -884,7 +884,7 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
     jpeg_destroy_decompress(&cinfo);
   };
 
-  // setjmp error handler for getDim — libjpeg errors longjmp here
+  // setjmp error handler for read_shape — libjpeg errors longjmp here
   if (setjmp(jerr.error_jmp)) {
     cleanup_jpeg();
     info.success = SipiImgInfo::FAILURE;
@@ -962,7 +962,7 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
             pos++;
           }
           if (ll >= marker->data_length) {
-            throw SipiImageError("Failed to parse XMP in getDim: '>' not found");
+            throw SipiImageError("Failed to parse XMP in read_shape: '>' not found");
           }
           pos++;// skip past '>'
           unsigned char *start_xmp = pos;
@@ -980,7 +980,7 @@ SipiImgInfo SipiIOJpeg::getDim(const std::string &filepath)
             }
           } while (pos < data_end && *s != '\0');
           if (pos >= data_end || *s != '\0') {
-            throw SipiImageError("Failed to parse XMP in getDim: end marker not found");
+            throw SipiImageError("Failed to parse XMP in read_shape: end marker not found");
           }
           while (pos < data_end && *pos != '>') { pos++; }
           if (pos < data_end) pos++;

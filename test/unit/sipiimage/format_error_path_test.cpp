@@ -65,26 +65,26 @@ TEST(PngErrorPath, TruncatedPngReadThrowsCleanly)
   std::remove(truncated.c_str());
 }
 
-TEST(PngErrorPath, TruncatedPngGetDimReturnsFailure)
+TEST(PngErrorPath, TruncatedPngReadShapeReturnsFailure)
 {
   const std::string src = test_images + "unit/mario.png";
-  const std::string truncated = tmp_dir + "_truncated_getdim.png";
+  const std::string truncated = tmp_dir + "_truncated_read_shape.png";
   ASSERT_TRUE(file_exists(src));
 
   // Truncate after the PNG signature (8 bytes) but before IHDR is complete
   ASSERT_FALSE(create_truncated(src, truncated, 20).empty());
 
   Sipi::SipiIOPng io;
-  auto info = io.getDim(truncated);
+  auto info = io.read_shape(truncated);
   EXPECT_EQ(info.success, Sipi::SipiImgInfo::FAILURE);
 
   std::remove(truncated.c_str());
 }
 
-TEST(PngErrorPath, NonPngFileGetDimReturnsFailure)
+TEST(PngErrorPath, NonPngFileReadShapeReturnsFailure)
 {
   Sipi::SipiIOPng io;
-  auto info = io.getDim(test_images + "unit/lena512.tif");  // not a PNG
+  auto info = io.read_shape(test_images + "unit/lena512.tif");  // not a PNG
   EXPECT_EQ(info.success, Sipi::SipiImgInfo::FAILURE);
 }
 
@@ -113,16 +113,16 @@ TEST(TiffErrorPath, TruncatedTiffReadThrowsCleanly)
   std::remove(truncated.c_str());
 }
 
-TEST(TiffErrorPath, TruncatedTiffGetDimHandledCleanly)
+TEST(TiffErrorPath, TruncatedTiffReadShapeHandledCleanly)
 {
   const std::string src = test_images + "unit/lena512.tif";
-  const std::string truncated = tmp_dir + "_truncated_getdim.tif";
+  const std::string truncated = tmp_dir + "_truncated_read_shape.tif";
   ASSERT_TRUE(file_exists(src));
 
   ASSERT_FALSE(create_truncated(src, truncated, 50).empty());
 
   Sipi::SipiIOTiff io;
-  auto info = io.getDim(truncated);
+  auto info = io.read_shape(truncated);
   // Should return FAILURE or default, not crash
   EXPECT_NE(info.success, Sipi::SipiImgInfo::DIMS);
 
@@ -130,19 +130,19 @@ TEST(TiffErrorPath, TruncatedTiffGetDimHandledCleanly)
 }
 
 // ============================================================
-// JPEG getDim error-path test — exercises setjmp in getDim
+// JPEG read_shape error-path test — exercises setjmp in read_shape
 // ============================================================
 
-TEST(JpegErrorPath, TruncatedJpegGetDimReturnsFailure)
+TEST(JpegErrorPath, TruncatedJpegReadShapeReturnsFailure)
 {
   const std::string src = test_images + "unit/MaoriFigure.jpg";
-  const std::string truncated = tmp_dir + "_truncated_getdim.jpg";
+  const std::string truncated = tmp_dir + "_truncated_read_shape.jpg";
   ASSERT_TRUE(file_exists(src));
 
   ASSERT_FALSE(create_truncated(src, truncated, 100).empty());
 
   Sipi::SipiIOJpeg io;
-  auto info = io.getDim(truncated);
+  auto info = io.read_shape(truncated);
   EXPECT_EQ(info.success, Sipi::SipiImgInfo::FAILURE);
 
   std::remove(truncated.c_str());

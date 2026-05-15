@@ -1011,7 +1011,7 @@ int main(int argc, char *argv[])
     //
     Sipi::SipiImage img;
     try {
-      img.readOriginal(optInFile, region, size, shttps::HashType::sha256);
+      img.readSource(optInFile, region, size);
       if (format == "jpg") {
         img.to8bps();
         img.convertToIcc(Sipi::Icc(Sipi::PredefinedProfiles::icc_sRGB), 8);

@@ -281,7 +281,7 @@ TEST(SipiImage, CMYK_lossy_compression)
   const std::string cmyk = test_images + "unit/cmyk.tif";
   EXPECT_TRUE(exists_file(cmyk));
 
-  ASSERT_NO_THROW(img.readOriginal(cmyk, region, size, shttps::HashType::sha256));
+  ASSERT_NO_THROW(img.readSource(cmyk, region, size));
   Sipi::SipiCompressionParams params = {
     { Sipi::J2K_rates, "0.5 0.2 0.1 0.025" }, { Sipi::J2K_Clayers, "4" }, { Sipi::J2K_Clevels, "3" }
   };
@@ -295,7 +295,7 @@ TEST(SipiImage, WrongRotation)
   Sipi::SipiImage img;
   const std::shared_ptr<Sipi::SipiRegion> region = nullptr;
   const std::shared_ptr<Sipi::SipiSize> size = nullptr;
-  ASSERT_NO_THROW(img.readOriginal(wrongrotation, region, size, shttps::HashType::sha256));
+  ASSERT_NO_THROW(img.readSource(wrongrotation, region, size));
   // EXPECT_EQ(img.getNx(), 3264);
   // EXPECT_EQ(img.getNy(), 2448);
   // EXPECT_EQ(img.getNc(), 3);

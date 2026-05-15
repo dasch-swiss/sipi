@@ -158,11 +158,13 @@ public:
   }
 
   /*!
-   * Get the dimension of the image
+   * Read the image shape (dimensions, tiling, levels, channels, bit depth) from a file
+   * without performing a full decode. Service-file overrides may take a fast path via
+   * the Essentials packet when present (ADR-0004 / DEV-6537).
    *
    * \param filepath Pathname of the image file
    */
-  [[nodiscard]] virtual SipiImgInfo getDim(const std::string &filepath) = 0;
+  [[nodiscard]] virtual SipiImgInfo read_shape(const std::string &filepath) = 0;
 
 
   /*!

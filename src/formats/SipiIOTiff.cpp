@@ -1428,7 +1428,7 @@ bool SipiIOTiff::read(SipiImage *img,
 //============================================================================
 
 
-SipiImgInfo SipiIOTiff::getDim(const std::string &filepath)
+SipiImgInfo SipiIOTiff::read_shape(const std::string &filepath)
 {
   SipiImgInfo info;
   auto tif = std::unique_ptr<TIFF, decltype(&TIFFClose)>(TIFFOpen(filepath.c_str(), "r"), TIFFClose);

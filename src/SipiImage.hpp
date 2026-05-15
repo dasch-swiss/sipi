@@ -376,68 +376,49 @@ public:
       ScalingMethod::HIGH });
 
   /*!
-   * Read an image that is to be considered an "original image". In this case
-   * a Essentials object is created containing the original name, the
-   * original mime type. In addition also a checksum of the pixel values
-   * is added in order to guarantee the integrity of the image pixels.
-   * if the image is written as J2K or as TIFF image, these informations
-   * are added to the file header (in case of TIFF as a private tag 65111,
-   * in case of J2K as comment box).
-   * If the file read already contains a Essentials as embedded metadata,
-   * it is not overwritten, put the embedded and pixel checksums are compared.
+   * Read an image from disk into memory. The tool makes no claim that the file
+   * is "the original" — it is the source for the current operation (ADR-0009,
+   * ADR-0010, DEV-6539).
    *
-   * \param[in] filepath A string containing the path to the image file
-   * \param[in] region Pointer to a SipiRegion which indicates that we
-   *            are only interested in this region. The image will be cropped.
-   * \param[in] size Pointer to a size object. The image will be scaled accordingly
-   * \param[in] htype The checksum method that should be used if the checksum is
-   *            being calculated for the first time.
+   * If the source happens to be a Service File carrying an Essentials packet,
+   * the embedded pixel checksum is recomputed and compared against the
+   * `data_chksum` field as a corruption tripwire (ADR-0010): on mismatch, an
+   * ERROR is logged and reading continues. No Essentials packet is *created*
+   * during read; packet creation is intentional output gated by the
+   * `convert service-file` subcommand (Phase 12 / DEV-6540).
    *
-   * \returns true, if everything worked. False, if the checksums do not match.
+   * \param[in] filepath A string containing the path to the source image file
+   * \param[in] region Optional region of interest — the image will be cropped
+   * \param[in] size Optional size — the image will be scaled accordingly
    */
-  bool readOriginal(const std::string &filepath,
+  void readSource(const std::string &filepath,
     const std::shared_ptr<SipiRegion> &region = nullptr,
-    const std::shared_ptr<SipiSize> &size = nullptr,
-    shttps::HashType htype = shttps::HashType::sha256);
+    const std::shared_ptr<SipiSize> &size = nullptr);
 
   /*!
-   * Read an image that is to be considered an "original image". In this case
-   * a Essentials object is created containing the original name, the
-   * original mime type. In addition also a checksum of the pixel values
-   * is added in order to guarantee the integrity of the image pixels.
-   * if the image is written as J2K or as TIFF image, these informations
-   * are added to the file header (in case of TIFF as a private tag 65111,
-   * in case of J2K as comment box).
-   * If the file read already contains a Essentials as embedded metadata,
-   * it is not overwritten, put the embedded and pixel checksums are compared.
-   *
-   * \param[in] filepath A string containing the path to the image file
-   * \param[in] region Pointer to a SipiRegion which indicates that we
-   *            are only interested in this region. The image will be cropped.
-   * \param[in] size Pointer to a size object. The image will be scaled accordingly
-   * \param[in] origname Original file name
-   * \param[in] htype The checksum method that should be used if the checksum is
-   *            being calculated for the first time.
-   *
-   * \returns true, if everything worked. False, if the checksums do not match.
+   * Overload accepting an `origname` hint. Until the master-creation
+   * orchestrator lands (Phase 12, DEV-6540), `origname` is consumed by the
+   * orchestrator — not by readSource itself — so this overload behaves
+   * identically to the 3-arg form. Kept for the existing Lua-side call site.
    */
-  bool readOriginal(const std::string &filepath,
+  void readSource(const std::string &filepath,
     const std::shared_ptr<SipiRegion> &region,
     const std::shared_ptr<SipiSize> &size,
-    const std::string &origname,
-    shttps::HashType htype);
+    const std::string &origname);
 
 
   /*!
-   * Get the dimension of the image
+   * Read the image shape (dimensions, tiling, levels, channels, bit depth) from a file
+   * without performing a full decode. Dispatches to the format handler's read_shape;
+   * service-file handlers may take a fast path via the Essentials packet (ADR-0004).
    *
    * \param[in] filepath Pathname of the image file
    * \return Info about image (see SipiImgInfo)
    */
-  [[nodiscard]] SipiImgInfo getDim(const std::string &filepath) const;
+  [[nodiscard]] SipiImgInfo read_shape(const std::string &filepath) const;
 
   /*!
-   * Get the dimension of the image object
+   * Get the dimensions of an in-memory SipiImage (already loaded; no file I/O).
    *
    * @param[out] width Width of the image in pixels
    * @param[out] height Height of the image in pixels

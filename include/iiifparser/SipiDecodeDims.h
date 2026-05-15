@@ -38,9 +38,9 @@ struct DecodeDims {
 /// 2. size->get_size(roi_dims) to compute reduce level + output dims
 /// 3. Decode dims = ceil(roi_dims / 2^reduce)
 ///
-/// @param src_w     Source image width (from getDim)
-/// @param src_h     Source image height (from getDim)
-/// @param clevels   Max DWT levels (from getDim, -1 if not applicable)
+/// @param src_w     Source image width (from read_shape)
+/// @param src_h     Source image height (from read_shape)
+/// @param clevels   Max DWT levels (from read_shape, -1 if not applicable)
 /// @param region    IIIF region parameter (may be nullptr for FULL)
 /// @param size      IIIF size parameter (may be nullptr for FULL)
 /// @return DecodeDims with actual decode buffer dimensions
