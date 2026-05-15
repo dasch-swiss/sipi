@@ -342,7 +342,7 @@ bool SipiIOPng::read(SipiImage *img,
 /*==========================================================================*/
 
 
-SipiImgInfo SipiIOPng::getDim(const std::string &filepath)
+SipiImgInfo SipiIOPng::read_shape(const std::string &filepath)
 {
   SipiImgInfo info;
   unsigned char header[8];
@@ -374,7 +374,7 @@ SipiImgInfo SipiIOPng::getDim(const std::string &filepath)
     throw SipiImageError("Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_infop !");
   }
 
-  // setjmp error recovery for getDim
+  // setjmp error recovery for read_shape
   if (setjmp(png_jmpbuf(png_ptr))) {
     png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
     info.success = SipiImgInfo::FAILURE;

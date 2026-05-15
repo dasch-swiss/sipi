@@ -308,76 +308,42 @@ void SipiImage::read(const std::string &filepath,
 
 //============================================================================
 
-bool SipiImage::readOriginal(const std::string &filepath,
+void SipiImage::readSource(const std::string &filepath,
   const std::shared_ptr<SipiRegion> &region,
-  const std::shared_ptr<SipiSize> &size,
-  shttps::HashType htype)
+  const std::shared_ptr<SipiSize> &size)
 {
   read(filepath, region, size, false);
 
-  if (!emdata.is_set()) {
-    shttps::Hash internal_hash(htype);
-    internal_hash.add_data(pixels, nx * ny * nc * bps / 8);
-    std::string checksum = internal_hash.hash();
-    std::string origname = shttps::getFileName(filepath);
-    std::string mimetype = shttps::Parsing::getFileMimetype(filepath).first;
-    std::vector<unsigned char> iccprofile;
-    if (icc != nullptr) { iccprofile = icc->iccBytes(); }
-    Essentials emdata2(EssentialsFields{
-      .origname = origname,
-      .mimetype = mimetype,
-      .hash_type = shttps::HashType::sha256,
-      .data_chksum = checksum,
-      .use_icc = !iccprofile.empty(),
-      .icc_profile = std::move(iccprofile),
-    });
-    essential_metadata(emdata2);
-  } else {
+  // Corruption tripwire (ADR-0010): if the source carries an Essentials packet,
+  // recompute the pixel checksum and compare. On mismatch, log ERROR and continue —
+  // serving operates from Service Files, and an operator wants the signal, not an
+  // abort. Active deliberate validation lives in `sipi verify service-file`.
+  if (emdata.is_set()) {
     shttps::Hash internal_hash(emdata.fields().hash_type);
     internal_hash.add_data(pixels, nx * ny * nc * bps / 8);
     std::string checksum = internal_hash.hash();
-    if (checksum != emdata.fields().data_chksum) { return false; }
+    if (checksum != emdata.fields().data_chksum) {
+      log_err("Essentials data_chksum mismatch in %s; possible corruption", filepath.c_str());
+      // TODO(DEV-6537 Phase 13): increment sipi_essentials_hash_mismatch_total{format}
+    }
   }
-
-  return true;
 }
 
 //============================================================================
 
 
-bool SipiImage::readOriginal(const std::string &filepath,
+void SipiImage::readSource(const std::string &filepath,
   const std::shared_ptr<SipiRegion> &region,
   const std::shared_ptr<SipiSize> &size,
-  const std::string &origname,
-  shttps::HashType htype)
+  const std::string &origname)
 {
-  read(filepath, region, size, false);
-
-  if (!emdata.is_set()) {
-    shttps::Hash internal_hash(htype);
-    internal_hash.add_data(pixels, nx * ny * nc * bps / 8);
-    std::string checksum = internal_hash.hash();
-    std::string mimetype = shttps::Parsing::getFileMimetype(filepath).first;
-    Essentials emdata2(EssentialsFields{
-      .origname = origname,
-      .mimetype = mimetype,
-      .hash_type = shttps::HashType::sha256,
-      .data_chksum = checksum,
-    });
-    essential_metadata(emdata2);
-  } else {
-    shttps::Hash internal_hash(emdata.fields().hash_type);
-    internal_hash.add_data(pixels, nx * ny * nc * bps / 8);
-    std::string checksum = internal_hash.hash();
-    if (checksum != emdata.fields().data_chksum) { return false; }
-  }
-
-  return true;
+  (void)origname;  // consumed by the orchestrator (Phase 12 / DEV-6540), not here
+  readSource(filepath, region, size);
 }
 
 //============================================================================
 
-SipiImgInfo SipiImage::getDim(const std::string &filepath) const
+SipiImgInfo SipiImage::read_shape(const std::string &filepath) const
 {
   size_t pos = filepath.find_last_of('.');
   std::string fext = filepath.substr(pos + 1);
@@ -391,20 +357,20 @@ SipiImgInfo SipiImage::getDim(const std::string &filepath) const
   info.internalmimetype = mimetype;
 
   if ((mimetype == "image/tiff") || (mimetype == "image/x-tiff")) {
-    info = io[std::string("tif")]->getDim(filepath);
+    info = io[std::string("tif")]->read_shape(filepath);
   } else if ((mimetype == "image/jpeg") || (mimetype == "image/pjpeg")) {
-    info = io[std::string("jpg")]->getDim(filepath);
+    info = io[std::string("jpg")]->read_shape(filepath);
   } else if (mimetype == "image/png") {
-    info = io[std::string("png")]->getDim(filepath);
+    info = io[std::string("png")]->read_shape(filepath);
   } else if ((mimetype == "image/jp2") || (mimetype == "image/jpx")) {
-    info = io[std::string("jpx")]->getDim(filepath);
+    info = io[std::string("jpx")]->read_shape(filepath);
   } else {
     throw SipiImageError("unknown mimetype: \"" + mimetype + "\"!");
   }
 
   if (info.success == SipiImgInfo::FAILURE) {
     for (auto const &iterator : io) {
-      info = iterator.second->getDim(filepath);
+      info = iterator.second->read_shape(filepath);
       if (info.success != SipiImgInfo::FAILURE) break;
     }
   }

@@ -644,7 +644,7 @@ bool SipiIOJ2k::read(SipiImage *img,
 //=============================================================================
 
 
-SipiImgInfo SipiIOJ2k::getDim(const std::string &filepath)
+SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
 {
   SipiImgInfo info;
   if (!is_jpx(filepath.c_str())) {

@@ -49,7 +49,7 @@ public:
    * \param[out] width Width of the image in pixels
    * \param[out] height Height of the image in pixels
    */
-  Sipi::SipiImgInfo getDim(const std::string &filepath) override;
+  Sipi::SipiImgInfo read_shape(const std::string &filepath) override;
 
   /*!
    * Write a JPEG image to a file, stdout or to a memory buffer

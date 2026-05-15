@@ -98,7 +98,7 @@ public:
    * \param[in] filepath Pathname of the image file
    * \return Image information
    */
-  SipiImgInfo getDim(const std::string &filepath) override;
+  SipiImgInfo read_shape(const std::string &filepath) override;
 
   /*!
    * Write a TIFF image to a file, stdout or to a memory buffer

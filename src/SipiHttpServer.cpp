@@ -965,7 +965,7 @@ static void serve_info_json_file(Connection &conn_obj,
       Sipi::SipiImage tmpimg;
       Sipi::SipiImgInfo info;
       try {
-        info = tmpimg.getDim(access["infile"]);
+        info = tmpimg.read_shape(access["infile"]);
       } catch (SipiImageError &err) {
         send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());
         return;
@@ -1217,7 +1217,7 @@ static void serve_knora_json_file(Connection &conn_obj,
     Sipi::SipiImage tmpimg;
     Sipi::SipiImgInfo info;
     try {
-      info = tmpimg.getDim(infile);
+      info = tmpimg.read_shape(infile);
     } catch (SipiImageError &err) {
       send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());
       return;
@@ -1584,7 +1584,7 @@ static void serve_iiif(Connection &conn_obj,
     Sipi::SipiImgInfo info;
     try {
       Sipi::SipiImage img;
-      info = img.getDim(infile);
+      info = img.read_shape(infile);
     } catch (SipiImageError &err) {
       ImageContext sentry_ctx;
       sentry_ctx.input_file = infile;

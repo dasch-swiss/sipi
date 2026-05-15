@@ -294,7 +294,11 @@ static int SImage_new(lua_State *L)
 
   try {
     if (!original.empty()) {
-      img->image->readOriginal(imgpath, region, size, original, htype);
+      // htype is parsed from Lua but no longer flows through readSource —
+      // hash type is decided at write time by the master-creation orchestrator
+      // (ADR-0010 / Phase 12 / DEV-6540). Param retained on the Lua-facing API.
+      (void)htype;
+      img->image->readSource(imgpath, region, size, original);
     } else {
       img->image->read(imgpath, region, size);
     }
@@ -334,7 +338,7 @@ static int SImage_dims(lua_State *L)
     SipiImage img;
     SipiImgInfo info;
     try {
-      info = img.getDim(imgpath);
+      info = img.read_shape(imgpath);
     } catch (InfoError &e) {
       lua_pop(L, lua_gettop(L));
       lua_pushboolean(L, false);

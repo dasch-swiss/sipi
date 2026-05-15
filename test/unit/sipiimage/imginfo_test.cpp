@@ -24,126 +24,126 @@ static bool file_exists(const std::string &path) {
   return stat(path.c_str(), &buf) == 0;
 }
 
-// --- JP2 getDim() ---
+// --- JP2 read_shape() ---
 // Note: JP2 tests depend on Kakadu library initialization which may
-// not work in all environments. Tests skip if getDim returns FAILURE.
+// not work in all environments. Tests skip if read_shape returns FAILURE.
 
-TEST(ImgInfo, JP2GetDimReturnsDimensions)
+TEST(ImgInfo, JP2ReadShapeReturnsDimensions)
 {
   std::string jp2_path = test_images + "lena512.jp2";
   if (!file_exists(jp2_path)) GTEST_SKIP() << "Test image not found: " << jp2_path;
 
   Sipi::SipiIOJ2k io;
-  auto info = io.getDim(jp2_path);
-  if (info.success == Sipi::SipiImgInfo::FAILURE) GTEST_SKIP() << "JP2 getDim failed (Kakadu may not be available)";
+  auto info = io.read_shape(jp2_path);
+  if (info.success == Sipi::SipiImgInfo::FAILURE) GTEST_SKIP() << "JP2 read_shape failed (Kakadu may not be available)";
   EXPECT_EQ(info.width, 512);
   EXPECT_EQ(info.height, 512);
   EXPECT_GT(info.clevels, 0);
 }
 
-TEST(ImgInfo, JP2GetDimReturnsChannelsAndBps)
+TEST(ImgInfo, JP2ReadShapeReturnsChannelsAndBps)
 {
   std::string jp2_path = test_images + "lena512.jp2";
   if (!file_exists(jp2_path)) GTEST_SKIP() << "Test image not found: " << jp2_path;
 
   Sipi::SipiIOJ2k io;
-  auto info = io.getDim(jp2_path);
-  if (info.success == Sipi::SipiImgInfo::FAILURE) GTEST_SKIP() << "JP2 getDim failed (Kakadu may not be available)";
+  auto info = io.read_shape(jp2_path);
+  if (info.success == Sipi::SipiImgInfo::FAILURE) GTEST_SKIP() << "JP2 read_shape failed (Kakadu may not be available)";
   EXPECT_GT(info.nc, 0);
   EXPECT_GT(info.bps, 0);
 }
 
-TEST(ImgInfo, JP2GetDimInvalidFileReturnFailure)
+TEST(ImgInfo, JP2ReadShapeInvalidFileReturnFailure)
 {
   Sipi::SipiIOJ2k io;
-  auto info = io.getDim(test_images + "mario.png");// not a JP2
+  auto info = io.read_shape(test_images + "mario.png");// not a JP2
   EXPECT_EQ(info.success, Sipi::SipiImgInfo::FAILURE);
 }
 
-TEST(ImgInfo, JP2GetDimNonexistentFileReturnFailure)
+TEST(ImgInfo, JP2ReadShapeNonexistentFileReturnFailure)
 {
   Sipi::SipiIOJ2k io;
-  auto info = io.getDim(test_images + "nonexistent.jp2");
+  auto info = io.read_shape(test_images + "nonexistent.jp2");
   EXPECT_EQ(info.success, Sipi::SipiImgInfo::FAILURE);
 }
 
-// --- TIFF getDim() ---
+// --- TIFF read_shape() ---
 
-TEST(ImgInfo, TiffGetDimReturnsDimensions)
+TEST(ImgInfo, TiffReadShapeReturnsDimensions)
 {
   Sipi::SipiIOTiff io;
-  auto info = io.getDim(test_images + "lena512.tif");
+  auto info = io.read_shape(test_images + "lena512.tif");
   EXPECT_EQ(info.success, Sipi::SipiImgInfo::DIMS);
   EXPECT_EQ(info.width, 512);
   EXPECT_EQ(info.height, 512);
 }
 
-TEST(ImgInfo, TiffGetDimReturnsChannelsAndBps)
+TEST(ImgInfo, TiffReadShapeReturnsChannelsAndBps)
 {
   Sipi::SipiIOTiff io;
-  auto info = io.getDim(test_images + "lena512.tif");
+  auto info = io.read_shape(test_images + "lena512.tif");
   EXPECT_EQ(info.success, Sipi::SipiImgInfo::DIMS);
   EXPECT_GT(info.nc, 0);
   EXPECT_GT(info.bps, 0);
 }
 
-TEST(ImgInfo, TiffGetDimInvalidFileReturnsDefault)
+TEST(ImgInfo, TiffReadShapeInvalidFileReturnsDefault)
 {
   Sipi::SipiIOTiff io;
-  auto info = io.getDim(test_images + "mario.png");// not a TIFF
+  auto info = io.read_shape(test_images + "mario.png");// not a TIFF
   EXPECT_NE(info.success, Sipi::SipiImgInfo::DIMS);
 }
 
-// --- JPEG getDim() ---
+// --- JPEG read_shape() ---
 
-TEST(ImgInfo, JpegGetDimReturnsDimensions)
+TEST(ImgInfo, JpegReadShapeReturnsDimensions)
 {
   Sipi::SipiIOJpeg io;
-  auto info = io.getDim(test_images + "MaoriFigure.jpg");
+  auto info = io.read_shape(test_images + "MaoriFigure.jpg");
   EXPECT_EQ(info.success, Sipi::SipiImgInfo::DIMS);
   EXPECT_GT(info.width, 0);
   EXPECT_GT(info.height, 0);
 }
 
-TEST(ImgInfo, JpegGetDimReturnsChannelsAndBps)
+TEST(ImgInfo, JpegReadShapeReturnsChannelsAndBps)
 {
   Sipi::SipiIOJpeg io;
-  auto info = io.getDim(test_images + "MaoriFigure.jpg");
+  auto info = io.read_shape(test_images + "MaoriFigure.jpg");
   EXPECT_EQ(info.success, Sipi::SipiImgInfo::DIMS);
   EXPECT_GT(info.nc, 0);
   EXPECT_EQ(info.bps, 8);// JPEG is always 8-bit
 }
 
-TEST(ImgInfo, JpegGetDimInvalidFileReturnFailure)
+TEST(ImgInfo, JpegReadShapeInvalidFileReturnFailure)
 {
   Sipi::SipiIOJpeg io;
-  auto info = io.getDim(test_images + "lena512.tif");// not a JPEG
+  auto info = io.read_shape(test_images + "lena512.tif");// not a JPEG
   EXPECT_EQ(info.success, Sipi::SipiImgInfo::FAILURE);
 }
 
-// --- PNG getDim() ---
+// --- PNG read_shape() ---
 
-TEST(ImgInfo, PngGetDimReturnsDimensions)
+TEST(ImgInfo, PngReadShapeReturnsDimensions)
 {
   Sipi::SipiIOPng io;
-  auto info = io.getDim(test_images + "mario.png");
+  auto info = io.read_shape(test_images + "mario.png");
   EXPECT_EQ(info.success, Sipi::SipiImgInfo::DIMS);
   EXPECT_GT(info.width, 0);
   EXPECT_GT(info.height, 0);
 }
 
-TEST(ImgInfo, PngGetDimReturnsChannelsAndBps)
+TEST(ImgInfo, PngReadShapeReturnsChannelsAndBps)
 {
   Sipi::SipiIOPng io;
-  auto info = io.getDim(test_images + "mario.png");
+  auto info = io.read_shape(test_images + "mario.png");
   EXPECT_EQ(info.success, Sipi::SipiImgInfo::DIMS);
   EXPECT_GT(info.nc, 0);
   EXPECT_GT(info.bps, 0);
 }
 
-TEST(ImgInfo, PngGetDimInvalidFileReturnFailure)
+TEST(ImgInfo, PngReadShapeInvalidFileReturnFailure)
 {
   Sipi::SipiIOPng io;
-  auto info = io.getDim(test_images + "lena512.tif");// not a PNG
+  auto info = io.read_shape(test_images + "lena512.tif");// not a PNG
   EXPECT_EQ(info.success, Sipi::SipiImgInfo::FAILURE);
 }
