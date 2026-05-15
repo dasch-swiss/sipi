@@ -75,7 +75,8 @@ impl SipiServer {
         // on a still-draining server. Placed before `extra_args` so an
         // individual test can still override it (CLI11 last-wins).
         let mut cmd = Command::new(&sipi_bin);
-        cmd.arg("--config")
+        cmd.arg("server")
+            .arg("--config")
             .arg(config)
             .arg("--serverport")
             .arg(http_port.to_string())

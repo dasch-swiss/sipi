@@ -3,9 +3,9 @@
 --
 -- Usage:
 --   just nix-run                                   -- reproducible (consumes ./result/bin/sipi)
---   ./result/bin/sipi --config config/sipi.localdev-config.lua
+--   ./result/bin/sipi server --config config/sipi.localdev-config.lua
 --   -- or, from the dev-shell inner loop:
---   ./build/sipi --config config/sipi.localdev-config.lua
+--   ./build/sipi server --config config/sipi.localdev-config.lua
 --
 -- Points imgroot at test data so IIIF requests work out of the box.
 -- Small cache limits make it easy to observe eviction and metrics.

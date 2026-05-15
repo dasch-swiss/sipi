@@ -79,7 +79,7 @@ re-runs the affected compile + link.
 ```bash
 nix develop                                   # dev shell with build deps + bazelisk
 just bazel-build                              # first build: cold action cache
-./bazel-bin/src/cli/sipi --config config/sipi.localdev-config.lua
+./bazel-bin/src/cli/sipi server --config config/sipi.localdev-config.lua
 # subsequent edits:
 just bazel-build                              # incremental, sub-second through link
 ```

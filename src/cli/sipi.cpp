@@ -463,377 +463,120 @@ int main(int argc, char *argv[])
     return EXIT_FAILURE;
   }
 
-  CLI::App sipiopt("SIPI is a image format converter and - if started in server mode - a high performance IIIF server");
+  CLI::App sipiopt("SIPI is an IIIF image server and image format converter.");
+  sipiopt.require_subcommand(1);
 
+  //
+  // Option storage variables (Phase 11.4 — DEV-6540).
+  //
+  // Storage declarations live at the top of main so the helper lambdas
+  // (attach_*_opts) and the body lambdas (run_query, run_compare,
+  // run_convert, run_server) can all capture them by reference. Each
+  // option's CLI11 registration happens on the appropriate subcommand
+  // below.
+  //
   std::string optConfigfile;
-  sipiopt.add_option("-c,--config", optConfigfile, "Configuration file for web server.")
-    ->envname("SIPI_CONFIGFILE")
-    ->check(CLI::ExistingFile);
-  ;
-
   std::string optInFile;
-  sipiopt.add_option("-f,--file,--inf,infile", optInFile, "Input file to be converted.")->check(CLI::ExistingFile);
-  ;
-
   std::string optOutFile;
-  sipiopt.add_option("-z,--outf,outfile", optOutFile, "Output file to be converted.");
+  std::vector<std::string> optCompare;
 
   enum class OptFormat : int { jpx, jpg, tif, png };
   OptFormat optFormat = OptFormat::jpx;
-  std::vector<std::pair<std::string, OptFormat>> optFormatMap{ { "jpx", OptFormat::jpx },
+  const std::vector<std::pair<std::string, OptFormat>> optFormatMap{ { "jpx", OptFormat::jpx },
     { "jp2", OptFormat::jpx },
     { "jpg", OptFormat::jpg },
     { "tif", OptFormat::tif },
     { "png", OptFormat::png } };
-  sipiopt.add_option("-F,--format", optFormat, "Output format.")
-    ->transform(CLI::CheckedTransformer(optFormatMap, CLI::ignore_case));
 
   enum class OptIcc : int { none, sRGB, AdobeRGB, GRAY };
   OptIcc optIcc = OptIcc::none;
-  std::vector<std::pair<std::string, OptIcc>> optIccMap{
+  const std::vector<std::pair<std::string, OptIcc>> optIccMap{
     { "none", OptIcc::none }, { "sRGB", OptIcc::sRGB }, { "AdobeRGB", OptIcc::AdobeRGB }, { "GRAY", OptIcc::GRAY }
   };
-  sipiopt.add_option("-I,--icc", optIcc, "Convert to ICC profile.")
-    ->transform(CLI::CheckedTransformer(optIccMap, CLI::ignore_case));
-
-  int optJpegQuality = 60;
-  sipiopt.add_option("-q,--quality", optJpegQuality, "Quality (compression).")
-    ->check(CLI::Range(1, 100))
-    ->envname("SIPI_JPEGQUALITY");
-
-  //
-  // Parameters for JPEG2000 compression (see kakadu kdu_compress for details!)
-  //
-  std::string j2k_Sprofile;
-  sipiopt
-    .add_option("--Sprofile", j2k_Sprofile, "Restricted profile to which the code-stream conforms [Default: PART2].")
-    ->check(CLI::IsMember({ "PROFILE0",
-                            "PROFILE1",
-                            "PROFILE2",
-                            "PART2",
-                            "CINEMA2K",
-                            "CINEMA4K",
-                            "BROADCAST",
-                            "CINEMA2S",
-                            "CINEMA4S",
-                            "CINEMASS",
-                            "IMF" },
-      CLI::ignore_case));
-
-  std::vector<std::string> j2k_rates;
-  sipiopt.add_option("--rates",
-    j2k_rates,
-    "One or more bit-rates (see kdu_compress help!). A value "
-    "\"-1\" may be used in place of the first bit-rate in the list to indicate "
-    "that the final quality layer should include all compressed bits.");
-
-  int j2k_Clayers;
-  sipiopt.add_option("--Clayers", j2k_Clayers, "J2K: Number of quality layers [Default: 8].");
-
-  int j2k_Clevels;
-  sipiopt.add_option("--Clevels", j2k_Clevels, "J2K: Number of wavelet decomposition levels, or stages [default: 8].");
-
-  std::string j2k_Corder;
-  sipiopt
-    .add_option("--Corder",
-      j2k_Corder,
-      "J2K: Progression order. The four character identifiers have the following interpretation: "
-      "L=layer; R=resolution; C=component; P=position. The first character in the identifier refers to the "
-      "index which progresses most slowly, while the last refers to the index which progresses most quickly [Default: "
-      "RPCL].")
-    ->check(CLI::IsMember({ "LRCP", "RLCP", "RPCL", "PCRL", "CPRL" }, CLI::ignore_case));
-
-  std::string j2k_Stiles;
-  sipiopt.add_option("--Stiles", j2k_Stiles, "J2K: Tiles dimensions \"{tx,ty} [Default: {256,256}]\".");
-
-  std::string j2k_Cprecincts;
-  sipiopt.add_option(
-    "--Cprecincts", j2k_Cprecincts, "J2K: Precinct dimensions \"{px,py}\" (must be powers of 2) [Default: {256,256}].");
-
-  std::string j2k_Cblk;
-  sipiopt.add_option("--Cblk",
-    j2k_Cblk,
-    "J2K: Nominal code-block dimensions (must be powers of 2, no less than 4 and "
-    "no greater than 1024, whose product may not exceed 4096) [Default: {64,64}].");
-
-  bool j2k_Cuse_sop;
-  sipiopt.add_option(
-    "--Cuse_sop", j2k_Cuse_sop, "J2K Cuse_sop: Include SOP markers (i.e., resync markers) [Default: yes].");
-
-  bool tiff_Pyramid;
-  sipiopt.add_option(
-    "--Ctiff_pyramid", tiff_Pyramid, "TIFF: store in Pyramidal TIFF format [Default: no].");
-
-  //
-  // used for rendering only one page of multipage PDF or TIFF (NYI for tif...)
-  //
-  int optPagenum = 0;
-  sipiopt.add_option("-n,--pagenum", optPagenum, "Pagenumber for PDF documents or multipage TIFFs.");
-
-  std::vector<int> optRegion;
-  sipiopt.add_option("-r,--region", optRegion, "Select region of interest, where x y w h are integer values.")
-    ->expected(4);
-
-  int optReduce = 0;
-  sipiopt.add_option(
-    "-R,--reduce", optReduce, "Reduce image size by factor  (cannot be used together with --size and --scale)");
-
-  std::string optSize;
-  sipiopt.add_option(
-    "-s,--size", optSize, "Resize image to given size (cannot be used together with --reduce and --scale)");
-
-  int optScale;
-  sipiopt.add_option("-S,--scale",
-    optScale,
-    "Resize image by the given percentage Value (cannot be used together with --size and --reduce)");
-
-  bool optSkipMeta = false;
-  sipiopt.add_flag("-k,--skipmeta", optSkipMeta, "Skip metadata of original file if flag is present.");
 
   enum class OptMirror { none, horizontal, vertical };
   OptMirror optMirror = OptMirror::none;
-  std::vector<std::pair<std::string, OptMirror>> optMirrorMap{
+  const std::vector<std::pair<std::string, OptMirror>> optMirrorMap{
     { "none", OptMirror::none }, { "horizontal", OptMirror::horizontal }, { "vertical", OptMirror::vertical }
   };
-  sipiopt.add_option("-m,--mirror", optMirror, "Mirror the image. Value can be: 'none', 'horizontal', 'vertical'.")
-    ->transform(CLI::CheckedTransformer(optMirrorMap, CLI::ignore_case));
 
+  int optJpegQuality = 60;
+  std::vector<int> optRegion;
+  int optReduce = 0;
+  std::string optSize;
+  int optScale = 0;
+  bool optSkipMeta = false;
   float optRotate = 0.0;
-  sipiopt.add_option("-o,--rotate", optRotate, "Rotate the image. by degree Value, angle between (0.0 - 360.0).");
-
   bool optSetTopleft = false;
-  sipiopt.add_flag("--topleft", optSetTopleft, "Enforce orientation TOPLEFT.");
-
-  std::vector<std::string> optCompare;
-  sipiopt.add_option("-C,--compare", optCompare, "Compare two files.")->expected(2);
-
   std::string optWatermark;
-  sipiopt.add_option("-w,--watermark", optWatermark, "Add a watermark to the image.");
-
-  bool optQuery = false;
-  auto *queryOpt = sipiopt.add_flag("-x,--query", optQuery, "Dump all information about the given file.");
-
   bool optJsonOutput = false;
-  auto *jsonOpt = sipiopt.add_flag("--json",
-    optJsonOutput,
-    "Emit a structured JSON report (success or error) to stdout instead of human-readable messages. "
-    "Useful for programmatic consumers and for debugging when no Sentry DSN is configured. "
-    "CLI mode only (ignored with --config). Mutually exclusive with --query.");
-  jsonOpt->excludes(queryOpt);
+  int optPagenum = 0;
 
-  //
-  // below are server options
-  //
+  // JPEG2000 / pyramidal-TIFF tuning knobs (only valid on `convert`).
+  std::string j2k_Sprofile;
+  std::vector<std::string> j2k_rates;
+  int j2k_Clayers = 0;
+  int j2k_Clevels = 0;
+  std::string j2k_Corder;
+  std::string j2k_Stiles;
+  std::string j2k_Cprecincts;
+  std::string j2k_Cblk;
+  bool j2k_Cuse_sop = false;
+  bool tiff_Pyramid = false;
+
+  // Server options (only valid on the `server` subcommand).
   int optServerport = 80;
-  sipiopt.add_option("--serverport", optServerport, "Port of SIPI web server.")->envname("SIPI_SERVERPORT");
-
   int optSSLport = 443;
-  sipiopt.add_option("--sslport", optSSLport, "SSL-port of the SIPI server.")->envname("SIPI_SSLPORT");
-
   std::string optHostname = "localhost";
-  sipiopt.add_option("--hostname", optHostname, "Hostname to use for HTTP server.")->envname("SIPI_HOSTNAME");
-
   int optKeepAlive = 5;
-  sipiopt.add_option("--keepalive", optKeepAlive, "Number of seconds for the keeop-alive optioon of HTTP 1.1.")
-    ->envname("SIPI_KEEPALIVE");
-
-  unsigned int optNThreads = 0;// 0 = auto-detect from CPU cores
-  sipiopt.add_option("-t,--nthreads", optNThreads, "Number of threads for SIPI server (0 = auto-detect from CPU cores)")
-    ->envname("SIPI_NTHREADS");
-
-  size_t optMaxWaiting = 0;// 0 = unlimited (timeout-only)
-  sipiopt.add_option("--max-waiting", optMaxWaiting, "Max waiting connections before 503 (0 = unlimited, timeout-only)")
-    ->envname("SIPI_MAX_WAITING");
-
+  unsigned int optNThreads = 0;// 0 = auto-detect
+  size_t optMaxWaiting = 0;    // 0 = unlimited (timeout-only)
   unsigned int optQueueTimeout = 10;
-  sipiopt.add_option("--queue-timeout", optQueueTimeout, "Max seconds a request waits in queue before 503")
-    ->envname("SIPI_QUEUE_TIMEOUT");
-
   std::string optMaxPostSize = "300M";
-  sipiopt
-    .add_option("--maxpost", optMaxPostSize, "A string indicating the maximal size of a POST request, e.g. '300M'.")
-    ->envname("SIPI_MAXPOSTSIZE");
-
   std::string optImgroot = "./images";
-  sipiopt.add_option("--imgroot", optImgroot, "Root directory containing the images for the web server.")
-    ->envname("SIPI_IMGROOT")
-    ->check(CLI::ExistingDirectory);
-
   std::string optDocroot = "./server";
-  sipiopt.add_option("--docroot", optDocroot, "Path to document root for normal webserver.")
-    ->envname("SIPI_DOCROOT")
-    ->check(CLI::ExistingDirectory);
-
   std::string optWWWRoute = "/server";
-  sipiopt.add_option("--wwwroute", optWWWRoute, "URL route for standard webserver.")->envname("SIPI_WWWROUTE");
-
   std::string optScriptDir = "./scripts";
-  sipiopt.add_option("--scriptdir", optScriptDir, "Path to directory containing Lua scripts to implement routes.")
-    ->envname("SIPI_SCRIPTDIR")
-    ->check(CLI::ExistingDirectory);
-
   std::string optTmpdir = "./tmp";
-  sipiopt.add_option("--tmpdir", optTmpdir, "Path to the temporary directory (e.g. for uploads etc.).")
-    ->envname("SIPI_TMPDIR")
-    ->check(CLI::ExistingDirectory);
-
   int optMaxTmpAge = 86400;
-  sipiopt
-    .add_option(
-      "--maxtmpage", optMaxTmpAge, "The maximum allowed age of temporary files (in seconds) before they are deleted.")
-    ->envname("SIPI_MAXTMPAGE");
-
   bool optPathprefix = false;
-  sipiopt
-    .add_flag("--pathprefix",
-      optPathprefix,
-      "Flag, if set indicates that the IIIF prefix is part of the path to the image file (deprecated).")
-    ->envname("SIPI_PATHPREFIX");
-
   int optSubdirLevels = 0;
-  sipiopt.add_option("--subdirlevels", optSubdirLevels, "Number of subdir levels (deprecated).")
-    ->envname("SIPI_SUBDIRLEVELS");
-
   std::vector<std::string> optSubdirExcludes = { "tmp", "thumb" };
-  sipiopt.add_option("--subdirexcludes", optSubdirExcludes, "Directories not included in subdir calculations.")
-    ->envname("SIPI_SUBDIREXCLUDES");
-
   std::string optInitscript = "./config/sipi.init.lua";
-  sipiopt.add_option("--initscript", optInitscript, "Path to init script (Lua).")
-    ->envname("SIPI_INITSCRIPT")
-    ->check(CLI::ExistingFile);
-
-  // Cache options — new names with deprecated aliases
   std::string optCachedir = "./cache";
-  sipiopt.add_option("--cache-dir", optCachedir, "Path to cache folder.")->envname("SIPI_CACHE_DIR");
-  // Deprecated aliases (accepted silently for backwards compatibility)
-  sipiopt.add_option("--cachedir", optCachedir, "DEPRECATED: use --cache-dir")->envname("SIPI_CACHEDIR");
-
   std::string optCacheSize = "200M";
-  sipiopt.add_option("--cache-size", optCacheSize, "Cache size: '-1' (unlimited), '0' (disabled), or e.g. '200M'.")->envname("SIPI_CACHE_SIZE");
-  sipiopt.add_option("--cachesize", optCacheSize, "DEPRECATED: use --cache-size")->envname("SIPI_CACHESIZE");
-
   int optCacheNFiles = 200;
-  sipiopt.add_option("--cache-nfiles", optCacheNFiles, "Max number of files to cache (0=no limit).")->envname("SIPI_CACHE_NFILES");
-  sipiopt.add_option("--cachenfiles", optCacheNFiles, "DEPRECATED: use --cache-nfiles")->envname("SIPI_CACHENFILES");
-
-  // Deprecated: cachehysteresis — accept but warn
   double optCacheHysteresisIgnored = 0.0;
-  sipiopt
-    .add_option("--cachehysteresis",
-      optCacheHysteresisIgnored,
-      "DEPRECATED: no longer supported (replaced by built-in 80% low-water mark)")
-    ->envname("SIPI_CACHEHYSTERESIS");
-
   size_t optMaxPixelLimit = 0;
-  sipiopt
-    .add_option("--max-pixel-limit",
-      optMaxPixelLimit,
-      "Max output pixels (width*height) per IIIF request. 0 = unlimited.")
-    ->envname("SIPI_MAX_PIXEL_LIMIT");
-
   size_t optRateLimitMaxPixels = 0;
-  sipiopt
-    .add_option("--rate-limit-max-pixels",
-      optRateLimitMaxPixels,
-      "Max output pixels per client per window. 0 = disabled.")
-    ->envname("SIPI_RATE_LIMIT_MAX_PIXELS");
-
   unsigned optRateLimitWindow = 600;
-  sipiopt
-    .add_option("--rate-limit-window",
-      optRateLimitWindow,
-      "Rate limit sliding window in seconds (default 600).")
-    ->envname("SIPI_RATE_LIMIT_WINDOW");
-
   std::string optRateLimitMode = "off";
-  sipiopt
-    .add_option("--rate-limit-mode",
-      optRateLimitMode,
-      "Rate limit mode: off, monitor, enforce (default off).")
-    ->envname("SIPI_RATE_LIMIT_MODE");
-
   size_t optRateLimitPixelThreshold = 2000000;
-  sipiopt
-    .add_option("--rate-limit-pixel-threshold",
-      optRateLimitPixelThreshold,
-      "Requests below this pixel count are free (default 2000000).")
-    ->envname("SIPI_RATE_LIMIT_PIXEL_THRESHOLD");
-
   std::string optMaxDecodeMemory = "0";
-  sipiopt
-    .add_option("--max-decode-memory",
-      optMaxDecodeMemory,
-      "Max concurrent decode memory budget (e.g., 2G, 500M). 0 = auto (75% of detected memory).")
-    ->envname("SIPI_MAX_DECODE_MEMORY");
-
   std::string optDecodeMemoryMode = "off";
-  sipiopt
-    .add_option("--decode-memory-mode",
-      optDecodeMemoryMode,
-      "Decode memory mode: off, monitor, enforce (default off).")
-    ->envname("SIPI_DECODE_MEMORY_MODE");
-
   unsigned optDrainTimeout = 30;
-  sipiopt
-    .add_option("--drain-timeout",
-      optDrainTimeout,
-      "Seconds to wait for in-flight requests during graceful shutdown (default 30).")
-    ->envname("SIPI_DRAIN_TIMEOUT");
-
   std::string optThumbSize = "!128,128";
-  sipiopt.add_option("--thumbsize", optThumbSize, "Size of the thumbnails (to be used within Lua).")
-    ->envname("SIPI_THUMBSIZE");
-
   std::string optSSLCertificatePath = "./certificate/certificate.pem";
-  sipiopt.add_option("--sslcert", optSSLCertificatePath, "Path to SSL certificate.")->envname("SIPI_SSLCERTIFICATE");
-
   std::string optSSLKeyPath = "./certificate/key.pem";
-  sipiopt.add_option("--sslkey", optSSLKeyPath, "Path to the SSL key file.")->envname("SIPI_SSLKEY");
-
   std::string optJWTKey = "UP 4888, nice 4-8-4 steam engine";
-  sipiopt
-    .add_option("--jwtkey", optJWTKey, "The secret for generating JWT's (JSON Web Tokens) (exactly 42 characters).")
-    ->envname("SIPI_JWTKEY");
-
   std::string optAdminUser = "admin";
-  sipiopt.add_option("--adminuser", optAdminUser, "Username for SIPI admin user.")->envname("SIPI_ADMIINUSER");
-
   std::string optAdminPassword = "Sipi-Admin";
-  sipiopt.add_option("--adminpasswd", optAdminPassword, "Password of the admin user.")->envname("SIPI_ADMINPASSWD");
-
   std::string optKnoraPath = "localhost";
-  sipiopt.add_option("--knorapath", optKnoraPath, "Path to Knora server.")->envname("SIPI_KNORAPATH");
-
   std::string optKnoraPort = "3434";
-  sipiopt.add_option("--knoraport", optKnoraPort, "Portnumber for Knora.")->envname("SIPI_KNORAPORT");
-
   std::string optLogfilePath = "Sipi";
-  sipiopt.add_option("--logfile", optLogfilePath, "Name of the logfile (NYI).")->envname("SIPI_LOGFILE");
-
   LogLevel optLogLevel = LL_DEBUG;
-  std::vector<std::pair<std::string, LogLevel>> logLevelMap{ { "DEBUG", LL_DEBUG },
-    { "INFO", LL_INFO },
-    { "NOTICE", LL_NOTICE },
-    { "WARNING", LL_WARNING },
-    { "ERR", LL_ERR },
-    { "CRIT", LL_CRIT },
-    { "ALERT", LL_ALERT },
-    { "EMERG", LL_EMERG } };
-  sipiopt
-    .add_option("--loglevel",
-      optLogLevel,
-      "Logging level Value can be: 'DEBUG', 'INFO', 'WARNING', 'ERR', 'CRIT', 'ALERT', 'EMERG'.")
-    ->transform(CLI::CheckedTransformer(logLevelMap, CLI::ignore_case))
-    ->envname("SIPI_LOGLEVEL");
+  const std::vector<std::pair<std::string, LogLevel>> logLevelMap{ { "DEBUG", LL_DEBUG },
+    { "INFO", LL_INFO }, { "NOTICE", LL_NOTICE }, { "WARNING", LL_WARNING },
+    { "ERR", LL_ERR }, { "CRIT", LL_CRIT }, { "ALERT", LL_ALERT }, { "EMERG", LL_EMERG } };
 
-  // sentry configuration
+  // Sentry env-driven settings remain on `sipiopt` (top-level) so they
+  // apply uniformly across every subcommand. CLI11 reads them from the
+  // SIPI_SENTRY_* environment variables; no command-line override path
+  // is needed.
   std::string optSipiSentryDsn;
   sipiopt.add_option("--sentry-dsn", optSipiSentryDsn)->envname("SIPI_SENTRY_DSN");
-
   std::string optSipiSentryRelease;
   sipiopt.add_option("--sentry-release", optSipiSentryRelease)->envname("SIPI_SENTRY_RELEASE");
-
   std::string optSipiSentryEnvironment;
   sipiopt.add_option("--sentry-environment", optSipiSentryEnvironment)->envname("SIPI_SENTRY_ENVIRONMENT");
 
@@ -855,20 +598,16 @@ int main(int argc, char *argv[])
   };
 
   //
-  // The convert body is shared between the legacy `sipi --file <in> --outf <out>`
-  // form and the subcommand `sipi convert <in> <out>` form. The `src` parameter
-  // points at the subcommand whose own option group should be consulted (in
-  // addition to the legacy globals on `sipiopt`); `nullptr` means legacy-only.
-  // `user_set` checks both — Phase 11.4 will drop the legacy globals and the
-  // helper collapses to a single `src` query.
+  // Convert body. The `src` parameter points at the invoking subcommand
+  // (cmd_convert today; once Phase 12.2 lands, cmd_convert_access will
+  // call this body via the access-file orchestrator). `user_set` queries
+  // the subcommand's own option group to detect whether each flag was
+  // explicitly set by the operator.
   //
   auto run_convert = [&](CLI::App *src) -> int {
     auto user_set = [&](const std::string &name) -> bool {
-      if (auto *g = sipiopt.get_option_no_throw(name); g != nullptr && !g->empty()) return true;
-      if (src != nullptr) {
-        if (auto *s = src->get_option_no_throw(name); s != nullptr && !s->empty()) return true;
-      }
-      return false;
+      auto *s = src->get_option_no_throw(name);
+      return s != nullptr && !s->empty();
     };
 
     set_cli_mode(true);
@@ -1143,21 +882,14 @@ int main(int argc, char *argv[])
   };
 
   //
-  // The server body is also shared between the legacy
-  // `sipi --config <file>` form and the subcommand `sipi server` form.
-  // Same `src` / `user_set` contract as `run_convert`. Phase 11.4 moves
-  // the ~40 server options onto `cmd_server` and drops the globals; for
-  // this commit `cmd_server` has no options yet, so subcommand-form
-  // invocations of `server` run with defaults (legacy form is the only
-  // path that wires real config in).
+  // Server body. Invoked from `cmd_server`'s callback. The `src`
+  // parameter points at cmd_server so `user_set` can check the per-flag
+  // "was explicitly set" state on the subcommand's option table.
   //
   auto run_server = [&](CLI::App *src) -> int {
     auto user_set = [&](const std::string &name) -> bool {
-      if (auto *g = sipiopt.get_option_no_throw(name); g != nullptr && !g->empty()) return true;
-      if (src != nullptr) {
-        if (auto *s = src->get_option_no_throw(name); s != nullptr && !s->empty()) return true;
-      }
-      return false;
+      auto *s = src->get_option_no_throw(name);
+      return s != nullptr && !s->empty();
     };
 
     set_cli_mode(false);
@@ -1558,19 +1290,7 @@ int main(int argc, char *argv[])
   };
 
   //
-  // Subcommand surface (Phase 11.1 + 11.2 — DEV-6540).
-  //
-  // The verb-noun subcommand topology and the D5 option-availability
-  // matrix land here; the body migration (Phase 11.3) and legacy-flag
-  // removal (Phase 11.4) follow in separate commits. Each subcommand
-  // callback currently errors with a "not yet implemented" message so
-  // the parser surface is exercisable without disturbing the legacy
-  // flag flow (`--query` / `--compare` / `--file` + `--outf` /
-  // `--config`) below.
-  //
-  // `require_subcommand(1)` is intentionally NOT set yet: a bare
-  // `sipi` invocation continues to fall through to the legacy parser
-  // until Phase 11.4 removes the flag forms.
+  // Subcommand surface (Phases 11.1-11.4 — DEV-6540).
   //
   // Two tiers per ADR-0010:
   //   - generic verbs: `convert <in> <out>`, `verify <file>`, `query`,
@@ -1579,17 +1299,13 @@ int main(int argc, char *argv[])
   //     `service-file`, `preservation-file` (DSP preservation-chain
   //     semantics).
   //
-  // The subcommand option groups bind to the **same** storage as the
-  // legacy global flags above (optInFile, optOutFile, optRegion, …).
-  // This lets Phase 11.3's body-migration commit move the existing
-  // if-else chain into the callbacks without renaming a single
-  // variable, and Phase 11.4 then deletes the global option
-  // declarations + the if-else chain together.
+  // `sipiopt.require_subcommand(1)` (set near the top of main) gates
+  // every invocation through one of these subcommands; a bare `sipi`
+  // exits with a usage error. The role-noun callbacks under `convert`
+  // and `verify` remain stubs until Phase 12 lands the orchestrators.
   //
   auto subcommand_stub = [](const std::string &name) {
-    log_err("`sipi %s` is not yet implemented; expected behavior after DEV-6540 lands. "
-            "Use the legacy flag form (`sipi --convert`, `sipi --query`, `sipi --compare`, "
-            "or `sipi --config <file>`) for now.",
+    log_err("`sipi %s` is not yet implemented; tracking ticket DEV-6537 (Phase 12).",
       name.c_str());
     return EXIT_FAILURE;
   };
@@ -1636,13 +1352,159 @@ int main(int argc, char *argv[])
       "Emit a structured JSON report (success or error) to stdout instead of human-readable messages.");
   };
 
+  // ----- Format-specific options (Phase 11.4) ---------------------------
+  // J2K + pyramidal-TIFF tuning knobs from `kdu_compress`. Attached only
+  // to `convert` since that is the verb that can produce JP2 or pyramidal
+  // TIFF outputs. `convert service-file` deliberately omits these — the
+  // Service File master-creation orchestrator (Phase 12.1) bakes in good
+  // baseline defaults, not operator-controlled.
+  auto attach_j2k_opts = [&](CLI::App *cmd) {
+    cmd->add_option("--Sprofile", j2k_Sprofile,
+      "Restricted profile to which the code-stream conforms [Default: PART2].")
+      ->check(CLI::IsMember({ "PROFILE0", "PROFILE1", "PROFILE2", "PART2", "CINEMA2K", "CINEMA4K",
+                               "BROADCAST", "CINEMA2S", "CINEMA4S", "CINEMASS", "IMF" },
+        CLI::ignore_case));
+    cmd->add_option("--rates", j2k_rates,
+      "One or more bit-rates (see kdu_compress help!). A value \"-1\" may be used in place of the "
+      "first bit-rate in the list to indicate that the final quality layer should include all "
+      "compressed bits.");
+    cmd->add_option("--Clayers", j2k_Clayers, "J2K: Number of quality layers [Default: 8].");
+    cmd->add_option("--Clevels", j2k_Clevels,
+      "J2K: Number of wavelet decomposition levels, or stages [default: 8].");
+    cmd->add_option("--Corder", j2k_Corder,
+      "J2K: Progression order: LRCP, RLCP, RPCL (default), PCRL, CPRL.")
+      ->check(CLI::IsMember({ "LRCP", "RLCP", "RPCL", "PCRL", "CPRL" }, CLI::ignore_case));
+    cmd->add_option("--Stiles", j2k_Stiles, "J2K: Tiles dimensions \"{tx,ty}\" [Default: {256,256}].");
+    cmd->add_option("--Cprecincts", j2k_Cprecincts,
+      "J2K: Precinct dimensions \"{px,py}\" (powers of 2) [Default: {256,256}].");
+    cmd->add_option("--Cblk", j2k_Cblk,
+      "J2K: Nominal code-block dimensions (powers of 2, 4..1024, product <= 4096) [Default: {64,64}].");
+    cmd->add_option("--Cuse_sop", j2k_Cuse_sop,
+      "J2K Cuse_sop: Include SOP markers (resync markers) [Default: yes].");
+    cmd->add_option("--Ctiff_pyramid", tiff_Pyramid,
+      "TIFF: store in Pyramidal TIFF format [Default: no].");
+  };
+
+  // ----- Server options (Phase 11.4) ------------------------------------
+  // All ~40 server options live on the `server` subcommand. Sentry env
+  // settings remain on `sipiopt` (top-level) so they apply to every
+  // subcommand invocation.
+  auto attach_server_opts = [&](CLI::App *cmd) {
+    cmd->add_option("-c,--config", optConfigfile, "Configuration file for web server.")
+      ->envname("SIPI_CONFIGFILE")
+      ->check(CLI::ExistingFile);
+    cmd->add_option("--serverport", optServerport, "Port of SIPI web server.")
+      ->envname("SIPI_SERVERPORT");
+    cmd->add_option("--sslport", optSSLport, "SSL-port of the SIPI server.")->envname("SIPI_SSLPORT");
+    cmd->add_option("--hostname", optHostname, "Hostname to use for HTTP server.")
+      ->envname("SIPI_HOSTNAME");
+    cmd->add_option("--keepalive", optKeepAlive, "Number of seconds for the keep-alive option of HTTP 1.1.")
+      ->envname("SIPI_KEEPALIVE");
+    cmd->add_option("-t,--nthreads", optNThreads,
+        "Number of threads for SIPI server (0 = auto-detect from CPU cores).")
+      ->envname("SIPI_NTHREADS");
+    cmd->add_option("--max-waiting", optMaxWaiting,
+        "Max waiting connections before 503 (0 = unlimited, timeout-only).")
+      ->envname("SIPI_MAX_WAITING");
+    cmd->add_option("--queue-timeout", optQueueTimeout,
+        "Max seconds a request waits in queue before 503.")
+      ->envname("SIPI_QUEUE_TIMEOUT");
+    cmd->add_option("--maxpost", optMaxPostSize,
+        "Maximal size of a POST request, e.g. '300M'.")
+      ->envname("SIPI_MAXPOSTSIZE");
+    cmd->add_option("--imgroot", optImgroot,
+        "Root directory containing the images for the web server.")
+      ->envname("SIPI_IMGROOT")
+      ->check(CLI::ExistingDirectory);
+    cmd->add_option("--docroot", optDocroot, "Path to document root for normal webserver.")
+      ->envname("SIPI_DOCROOT")
+      ->check(CLI::ExistingDirectory);
+    cmd->add_option("--wwwroute", optWWWRoute, "URL route for standard webserver.")
+      ->envname("SIPI_WWWROUTE");
+    cmd->add_option("--scriptdir", optScriptDir,
+        "Path to directory containing Lua scripts to implement routes.")
+      ->envname("SIPI_SCRIPTDIR")
+      ->check(CLI::ExistingDirectory);
+    cmd->add_option("--tmpdir", optTmpdir,
+        "Path to the temporary directory (e.g. for uploads etc.).")
+      ->envname("SIPI_TMPDIR")
+      ->check(CLI::ExistingDirectory);
+    cmd->add_option("--maxtmpage", optMaxTmpAge,
+        "The maximum allowed age of temporary files (in seconds) before they are deleted.")
+      ->envname("SIPI_MAXTMPAGE");
+    cmd->add_flag("--pathprefix", optPathprefix,
+        "Flag: IIIF prefix is part of the path to the image file (deprecated).")
+      ->envname("SIPI_PATHPREFIX");
+    cmd->add_option("--subdirlevels", optSubdirLevels, "Number of subdir levels (deprecated).")
+      ->envname("SIPI_SUBDIRLEVELS");
+    cmd->add_option("--subdirexcludes", optSubdirExcludes,
+        "Directories not included in subdir calculations.")
+      ->envname("SIPI_SUBDIREXCLUDES");
+    cmd->add_option("--initscript", optInitscript, "Path to init script (Lua).")
+      ->envname("SIPI_INITSCRIPT")
+      ->check(CLI::ExistingFile);
+    cmd->add_option("--cache-dir", optCachedir, "Path to cache folder.")->envname("SIPI_CACHE_DIR");
+    cmd->add_option("--cachedir", optCachedir, "DEPRECATED: use --cache-dir.")->envname("SIPI_CACHEDIR");
+    cmd->add_option("--cache-size", optCacheSize,
+        "Cache size: '-1' (unlimited), '0' (disabled), or e.g. '200M'.")
+      ->envname("SIPI_CACHE_SIZE");
+    cmd->add_option("--cachesize", optCacheSize, "DEPRECATED: use --cache-size.")
+      ->envname("SIPI_CACHESIZE");
+    cmd->add_option("--cache-nfiles", optCacheNFiles, "Max number of files to cache (0=no limit).")
+      ->envname("SIPI_CACHE_NFILES");
+    cmd->add_option("--cachenfiles", optCacheNFiles, "DEPRECATED: use --cache-nfiles.")
+      ->envname("SIPI_CACHENFILES");
+    cmd->add_option("--cachehysteresis", optCacheHysteresisIgnored,
+        "DEPRECATED: no longer supported (replaced by built-in 80% low-water mark).")
+      ->envname("SIPI_CACHEHYSTERESIS");
+    cmd->add_option("--max-pixel-limit", optMaxPixelLimit,
+        "Max output pixels (width*height) per IIIF request. 0 = unlimited.")
+      ->envname("SIPI_MAX_PIXEL_LIMIT");
+    cmd->add_option("--rate-limit-max-pixels", optRateLimitMaxPixels,
+        "Max output pixels per client per window. 0 = disabled.")
+      ->envname("SIPI_RATE_LIMIT_MAX_PIXELS");
+    cmd->add_option("--rate-limit-window", optRateLimitWindow,
+        "Rate limit sliding window in seconds (default 600).")
+      ->envname("SIPI_RATE_LIMIT_WINDOW");
+    cmd->add_option("--rate-limit-mode", optRateLimitMode,
+        "Rate limit mode: off, monitor, enforce (default off).")
+      ->envname("SIPI_RATE_LIMIT_MODE");
+    cmd->add_option("--rate-limit-pixel-threshold", optRateLimitPixelThreshold,
+        "Requests below this pixel count are free (default 2000000).")
+      ->envname("SIPI_RATE_LIMIT_PIXEL_THRESHOLD");
+    cmd->add_option("--max-decode-memory", optMaxDecodeMemory,
+        "Max concurrent decode memory budget (e.g., 2G, 500M). 0 = auto (75% of detected memory).")
+      ->envname("SIPI_MAX_DECODE_MEMORY");
+    cmd->add_option("--decode-memory-mode", optDecodeMemoryMode,
+        "Decode memory mode: off, monitor, enforce (default off).")
+      ->envname("SIPI_DECODE_MEMORY_MODE");
+    cmd->add_option("--drain-timeout", optDrainTimeout,
+        "Seconds to wait for in-flight requests during graceful shutdown (default 30).")
+      ->envname("SIPI_DRAIN_TIMEOUT");
+    cmd->add_option("--thumbsize", optThumbSize, "Size of the thumbnails (to be used within Lua).")
+      ->envname("SIPI_THUMBSIZE");
+    cmd->add_option("--sslcert", optSSLCertificatePath, "Path to SSL certificate.")
+      ->envname("SIPI_SSLCERTIFICATE");
+    cmd->add_option("--sslkey", optSSLKeyPath, "Path to the SSL key file.")->envname("SIPI_SSLKEY");
+    cmd->add_option("--jwtkey", optJWTKey,
+        "Secret for generating JWTs (exactly 42 characters).")
+      ->envname("SIPI_JWTKEY");
+    cmd->add_option("--adminuser", optAdminUser, "Username for SIPI admin user.")
+      ->envname("SIPI_ADMIINUSER");
+    cmd->add_option("--adminpasswd", optAdminPassword, "Password of the admin user.")
+      ->envname("SIPI_ADMINPASSWD");
+    cmd->add_option("--knorapath", optKnoraPath, "Path to Knora server.")->envname("SIPI_KNORAPATH");
+    cmd->add_option("--knoraport", optKnoraPort, "Portnumber for Knora.")->envname("SIPI_KNORAPORT");
+    cmd->add_option("--logfile", optLogfilePath, "Name of the logfile (NYI).")->envname("SIPI_LOGFILE");
+    cmd->add_option("--loglevel", optLogLevel,
+        "Logging level: 'DEBUG', 'INFO', 'WARNING', 'ERR', 'CRIT', 'ALERT', 'EMERG'.")
+      ->transform(CLI::CheckedTransformer(logLevelMap, CLI::ignore_case))
+      ->envname("SIPI_LOGLEVEL");
+  };
+
   // ----- server ----------------------------------------------------------
   CLI::App *cmd_server = sipiopt.add_subcommand("server", "Run sipi as a high-performance IIIF server.");
-  // Server options bind to the legacy globals (optServerport, etc.).
-  // Phase 11.4 will attach them onto the subcommand directly; for now
-  // the callback just routes into the shared `run_server` body and
-  // the subcommand form runs with defaults (the legacy `--config`
-  // form remains the path that wires real config in).
+  attach_server_opts(cmd_server);
   cmd_server->callback([&]() { exit(run_server(cmd_server)); });
 
   // ----- convert (generic, ImageMagick-style) ----------------------------
@@ -1654,6 +1516,9 @@ int main(int argc, char *argv[])
   attach_color_space_opts(cmd_convert);
   attach_normalize_opts(cmd_convert);
   attach_strip_opts(cmd_convert);
+  attach_output_opts(cmd_convert);
+  attach_j2k_opts(cmd_convert);
+  cmd_convert->add_option("-n,--pagenum", optPagenum, "Page number for PDF documents or multipage TIFFs.");
   cmd_convert->callback([&]() {
     // Bare `convert <in> <out>` only fires if no nested subcommand matched.
     if (cmd_convert->get_subcommands().empty()) { exit(run_convert(cmd_convert)); }
@@ -1667,6 +1532,7 @@ int main(int argc, char *argv[])
   attach_generic_transform_opts(cmd_convert_access);
   attach_color_space_opts(cmd_convert_access);
   attach_normalize_opts(cmd_convert_access);
+  attach_output_opts(cmd_convert_access);
   cmd_convert_access->callback([&]() { exit(subcommand_stub("convert access-file")); });
 
   // ----- convert service-file (master-creation) -------------------------
@@ -1718,25 +1584,12 @@ int main(int argc, char *argv[])
 
   CLI11_PARSE(sipiopt, argc, argv);
 
-  /*
-  argc -= (argc > 0);
-  argv += (argc > 0); // skip program name argv[0] if present
-
-  option::Stats stats(usage, argc, argv);
-  std::vector<option::Option> options(stats.options_max);
-  std::vector<option::Option> buffer(stats.buffer_max);
-  option::Parser parse(usage, argc, argv, &options[0], &buffer[0]);
-*/
-  if (!sipiopt.get_option("--query")->empty()) {
-    return run_query();
-  } else if (!sipiopt.get_option("--compare")->empty()) {
-    return run_compare();
-  } else if (!(sipiopt.get_option("--file")->empty() || sipiopt.get_option("--outf")->empty())) {
-    return run_convert(nullptr);
-  } else if (!(sipiopt.get_option("--config")->empty() && sipiopt.get_option("--serverport")->empty())) {
-    return run_server(nullptr);
-  }
-  // make sure everything flushes
+  // `require_subcommand(1)` guarantees one of the subcommand callbacks
+  // fired and invoked `exit(...)`. The only way control reaches here is
+  // if CLI11 exited the program with a usage error before the callback
+  // ran — in which case we just flush sentry and return success
+  // (CLI11 has already written its own error to stderr and the user
+  // saw a non-zero exit via CLI11's own path).
   Sipi::observability::close_sentry();
   return EXIT_SUCCESS;
 }

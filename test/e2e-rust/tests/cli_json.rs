@@ -1,7 +1,7 @@
 // Copyright © 2016 - 2026 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform
 // contributors. SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Feature-contract tests (F1–F3) for the `--json` CLI flag.
+// Feature-contract tests (F1–F3) for the `sipi convert ... --json` CLI flag.
 
 use serde_json::Value;
 use sipi_e2e::{sipi_bin_path, test_data_dir};
@@ -30,11 +30,10 @@ fn cli_json_output_success_contains_metadata() {
     let output = tmp_path("sipi_f1_out.jp2");
 
     let result = Command::new(sipi_bin())
-        .arg("--json")
-        .arg("--file")
+        .arg("convert")
         .arg(&input)
-        .arg("--outf")
         .arg(&output)
+        .arg("--json")
         .arg("--format")
         .arg("jpx")
         .output()
@@ -89,11 +88,10 @@ fn cli_json_output_error_contains_image_context() {
     let bad_output = tmp_path("sipi_f2_out.unsupported_ext");
 
     let result = Command::new(sipi_bin())
-        .arg("--json")
-        .arg("--file")
+        .arg("convert")
         .arg(&input)
-        .arg("--outf")
         .arg(&bad_output)
+        .arg("--json")
         .output()
         .expect("sipi CLI invocation should run");
 
@@ -136,11 +134,10 @@ fn cli_json_output_stdout_is_single_json_doc() {
     let output = tmp_path("sipi_f3_out.jp2");
 
     let result = Command::new(sipi_bin())
-        .arg("--json")
-        .arg("--file")
+        .arg("convert")
         .arg(&input)
-        .arg("--outf")
         .arg(&output)
+        .arg("--json")
         .output()
         .expect("sipi CLI invocation should run");
 

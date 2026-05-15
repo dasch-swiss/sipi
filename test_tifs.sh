@@ -5,6 +5,6 @@ do
     if test -f "$file"
     then
 	echo "processing $file..."
-	/usr/local/bin/sipi --file $file --format jpx ${file%%.*}.jp2 
+	/usr/local/bin/sipi convert "$file" "${file%%.*}.jp2" --format jpx
     fi
 done

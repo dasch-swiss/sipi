@@ -15,7 +15,7 @@ recipes — there are no inline `bazel ...` calls in any workflow.
 ```bash
 nix develop                                    # bazelisk + host tools on PATH
 just bazel-build                               # bazel build --stamp //src/cli:sipi
-./bazel-bin/src/cli/sipi --config config/sipi.localdev-config.lua
+./bazel-bin/src/cli/sipi server --config config/sipi.localdev-config.lua
 ```
 
 `just run` chains the two: it depends on `bazel-build` and starts

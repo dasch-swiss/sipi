@@ -30,7 +30,7 @@ to observe.
 
 ```bash
 nix develop
-just run                                  # bazel build + run sipi --config localdev
+just run                                  # bazel build + run sipi server --config localdev
 ```
 
 The server starts on `http://localhost:1024`.
