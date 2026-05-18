@@ -59,7 +59,7 @@ The SIPI command line mode can be used for the following tasks:
 /path/to/sipi convert infile outfile [options]
 ```
 
-For DSP preservation-chain workflows, use the role-noun forms:
+For DSP preservation-pipeline workflows, use the pipeline-stage forms:
 `sipi convert access-file ...`, `sipi convert service-file ...`,
 or `sipi convert preservation-file ...` (the last is a stub awaiting
 ADR-0012).

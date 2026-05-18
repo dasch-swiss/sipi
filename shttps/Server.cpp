@@ -1063,7 +1063,7 @@ void Server::run()
                 // we have no waiting socket, so
                 // push the thread to the list of available threads
                 //
-                ThreadControl::ThreadMasterData tinfo = thread_control[i];// get thread info
+                ThreadControl::ThreadData tinfo = thread_control[i];// get thread info
                 thread_control.thread_push(tinfo);// push thread to list of waiting threads
               }
               break;
@@ -1088,7 +1088,7 @@ void Server::run()
                 // we have no waiting socket, so
                 // push the thread to the list of available threads
                 //
-                ThreadControl::ThreadMasterData tinfo = thread_control[i];// get thread info
+                ThreadControl::ThreadData tinfo = thread_control[i];// get thread info
                 thread_control.thread_push(tinfo);// push thread to list of waiting threads
               }
               break;
@@ -1185,7 +1185,7 @@ void Server::run()
             // DYN_SOCKET: a client socket (already accepted) has data -> dispatch the processing to a free thread
             // or put the request in the waiting queue (waiting for a free thread...)
             //
-            ThreadControl::ThreadMasterData tinfo;
+            ThreadControl::ThreadData tinfo;
             if (thread_control.thread_pop(tinfo)) {// thread available
               SocketControl::SocketInfo sockid;
               socket_control.remove(i, sockid);

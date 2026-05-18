@@ -29,7 +29,7 @@ public:
   {
     pthread_t tid;
     int control_pipe;
-  } ThreadMasterData;
+  } ThreadData;
 
   typedef struct
   {
@@ -41,9 +41,9 @@ public:
   typedef enum { INVALID_INDEX } ThreadControlErrors;
 
 private:
-  std::vector<ThreadMasterData> thread_list;//!> List of all threads
+  std::vector<ThreadData> thread_list;//!> List of all threads
   std::vector<ThreadChildData> child_data;//!> Data given to the thread
-  std::queue<ThreadMasterData> thread_queue;//!> Queue of available threads for processing
+  std::queue<ThreadData> thread_queue;//!> Queue of available threads for processing
   std::mutex thread_queue_mutex;
 
 public:
@@ -51,13 +51,13 @@ public:
 
   ~ThreadControl();
 
-  void thread_push(const ThreadMasterData &tinfo);
+  void thread_push(const ThreadData &tinfo);
 
-  bool thread_pop(ThreadMasterData &tinfo);
+  bool thread_pop(ThreadData &tinfo);
 
   int thread_delete(int pos);
 
-  ThreadMasterData &operator[](size_t index);
+  ThreadData &operator[](size_t index);
 
   inline int nthreads() const { return thread_list.size(); }
 

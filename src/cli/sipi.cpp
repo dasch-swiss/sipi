@@ -34,9 +34,9 @@
 
 #include "CLI11.hpp"
 #include "Logger.h"
-#include "cli/access_file_orchestrator.h"
-#include "cli/service_file_orchestrator.h"
-#include "cli/verify_orchestrator.h"
+#include "cli/commands/convert_access_file.h"
+#include "cli/commands/convert_service_file.h"
+#include "cli/commands/verify.h"
 #include "SipiConf.h"
 #include "observability/connection_metrics_adapter.h"
 #include "observability/sentry_init.h"
@@ -603,7 +603,7 @@ int main(int argc, char *argv[])
   //
   // Convert body. The `src` parameter points at the invoking subcommand
   // (cmd_convert today; once Phase 12.2 lands, cmd_convert_access will
-  // call this body via the access-file orchestrator). `user_set` queries
+  // call this body via the access-file command). `user_set` queries
   // the subcommand's own option group to detect whether each flag was
   // explicitly set by the operator.
   //
@@ -1298,7 +1298,7 @@ int main(int argc, char *argv[])
   // Two tiers per ADR-0010:
   //   - generic verbs: `convert <in> <out>`, `verify <file>`, `query`,
   //     `compare` (anyone-use, ImageMagick-style).
-  //   - role-noun verbs under `convert` / `verify`: `access-file`,
+  //   - pipeline-stage verbs under `convert` / `verify`: `access-file`,
   //     `service-file`, `preservation-file` (DSP preservation-chain
   //     semantics).
   //
@@ -1354,7 +1354,7 @@ int main(int argc, char *argv[])
   // J2K + pyramidal-TIFF tuning knobs from `kdu_compress`. Attached only
   // to `convert` since that is the verb that can produce JP2 or pyramidal
   // TIFF outputs. `convert service-file` deliberately omits these — the
-  // Service File Service File orchestrator (Phase 12.1) bakes in good
+  // `convert service-file` command (Phase 12.1) bakes in good
   // baseline defaults, not operator-controlled.
   auto attach_j2k_opts = [&](CLI::App *cmd) {
     cmd->add_option("--Sprofile", j2k_Sprofile,
@@ -1537,7 +1537,7 @@ int main(int argc, char *argv[])
       return s != nullptr && !s->empty();
     };
 
-    Sipi::cli::AccessFileRequest req;
+    Sipi::cli::ConvertAccessFileArgs req;
     req.input_path = optInFile;
     req.output_path = optOutFile;
     if (user_set("--format")) {
@@ -1572,7 +1572,7 @@ int main(int argc, char *argv[])
     }
     req.set_topleft = optSetTopleft;
     req.json_output = optJsonOutput;
-    exit(Sipi::cli::run_access_file_orchestrator(req));
+    exit(Sipi::cli::cmd_convert_access_file(req));
   });
 
   // ----- convert service-file (Service File creation) -------------------------
@@ -1582,11 +1582,11 @@ int main(int argc, char *argv[])
   cmd_convert_service->add_option("output", optOutFile, "Output Service File.");
   attach_normalize_opts(cmd_convert_service);
   cmd_convert_service->callback([&]() {
-    Sipi::cli::ServiceFileRequest req;
+    Sipi::cli::ConvertServiceFileArgs req;
     req.input_path = optInFile;
     req.output_path = optOutFile;
     req.set_topleft = optSetTopleft;
-    exit(Sipi::cli::run_service_file_orchestrator(req));
+    exit(Sipi::cli::cmd_convert_service_file(req));
   });
 
   // ----- convert preservation-file (stub) -------------------------------
@@ -1594,15 +1594,15 @@ int main(int argc, char *argv[])
     "preservation-file", "(stub) Awaits ADR-0012; not yet implemented.");
   cmd_convert_preservation->callback([&]() { exit(stub_preservation_file("convert")); });
 
-  // ----- verify (role-agnostic decoder check) ---------------------------
+  // ----- verify (generic decoder check) --------------------------------
   auto run_verify_with_mode = [&](Sipi::cli::VerifyMode mode) {
-    Sipi::cli::VerifyRequest req;
+    Sipi::cli::VerifyArgs req;
     req.mode = mode;
     req.input_path = optInFile;
     req.json_output = optJsonOutput;
-    return Sipi::cli::run_verify(req);
+    return Sipi::cli::cmd_verify(req);
   };
-  CLI::App *cmd_verify = sipiopt.add_subcommand("verify", "Role-agnostic decoder-coverage check.");
+  CLI::App *cmd_verify = sipiopt.add_subcommand("verify", "Generic decoder-coverage check (no stage assertions).");
   cmd_verify->add_option("file", optInFile, "File to verify.")->check(CLI::ExistingFile);
   attach_output_opts(cmd_verify);
   cmd_verify->callback([&]() {

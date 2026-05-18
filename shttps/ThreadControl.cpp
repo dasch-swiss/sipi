@@ -19,7 +19,7 @@ ThreadControl::ThreadControl(int n_threads, void *(*start_routine)(void *), Serv
   // child_data.reserve(n_threads);
   //
   //  first we have to create the vector for the child data. We misuse the "result"-field
-  //  to store the master's socket endpoint.
+  //  to store the controller's socket endpoint.
   //
   for (int n = 0; n < n_threads; n++) {
     int control_pipe[2];
@@ -35,7 +35,7 @@ ThreadControl::ThreadControl(int n_threads, void *(*start_routine)(void *), Serv
   //
   ThreadChildData *cd = child_data.data();// we get the raw array of child data
   for (int n = 0; n < n_threads; n++) {
-    ThreadMasterData thread_data;
+    ThreadData thread_data;
     thread_data.control_pipe = child_data[n].result;
     pthread_attr_t tattr;
     pthread_attr_init(&tattr);
@@ -59,14 +59,14 @@ ThreadControl::~ThreadControl()
 }
 //=========================================================================
 
-void ThreadControl::thread_push(const ThreadMasterData &tinfo)
+void ThreadControl::thread_push(const ThreadData &tinfo)
 {
   std::unique_lock<std::mutex> thread_queue_guard(thread_queue_mutex);
   thread_queue.push(tinfo);
 }
 //=========================================================================
 
-bool ThreadControl::thread_pop(ThreadMasterData &tinfo)
+bool ThreadControl::thread_pop(ThreadData &tinfo)
 {
   std::unique_lock<std::mutex> thread_queue_guard(thread_queue_mutex);
   tinfo = { 0, 0 };
@@ -79,7 +79,7 @@ bool ThreadControl::thread_pop(ThreadMasterData &tinfo)
 }
 //=========================================================================
 
-ThreadControl::ThreadMasterData &ThreadControl::operator[](size_t index)
+ThreadControl::ThreadData &ThreadControl::operator[](size_t index)
 {
   if (index < thread_list.size()) {
     return thread_list[index];

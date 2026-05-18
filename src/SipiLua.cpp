@@ -295,7 +295,7 @@ static int SImage_new(lua_State *L)
   try {
     if (!original.empty()) {
       // htype is parsed from Lua but no longer flows through readSource —
-      // hash type is decided at write time by the Service File orchestrator
+      // hash type is decided at write time by the `convert service-file` command
       // (ADR-0010 / Phase 12 / DEV-6540). Param retained on the Lua-facing API.
       (void)htype;
       img->image->readSource(imgpath, region, size, original);
@@ -1526,10 +1526,10 @@ static int SImage_write(lua_State *L)
   // Service File stamping (DEV-6537 Phase 12.1). When the caller requests
   // `file_role = "service-file"`, build the Essentials packet from the
   // post-transformation pixel buffer + supplied origname/mimetype and
-  // stamp it on the image, then wire `J2K_FileRole` or `TIFF_FileRole`
-  // through to the writer so the carrier emission gates open. Service
-  // Files only live in JP2 + pyramidal TIFF per ADR-0009 — `.jpg`/`.png`
-  // outputs reject the role.
+  // stamp it on the image. The writer's emit gate is the packet's
+  // presence in memory (per ADR-0010); no separate marker is passed.
+  // Service Files only live in JP2 + pyramidal TIFF per ADR-0009 —
+  // `.jpg`/`.png` outputs reject the keyword.
   if (!file_role_str.empty()) {
     if (origname_str.empty() || mimetype_str.empty()) {
       lua_pop(L, lua_gettop(L));
@@ -1559,12 +1559,13 @@ static int SImage_write(lua_State *L)
     fields.bps = static_cast<std::uint32_t>(img->image->getBps());
     img->image->essential_metadata(Sipi::Essentials{ std::move(fields) });
 
-    if (ftype == "jpx") {
-      comp_params[Sipi::J2K_FileRole] = file_role_str;
-    } else {  // tif → pyramidal TIFF (Service Files are pyramidal per ADR-0009)
-      comp_params[Sipi::TIFF_FileRole] = file_role_str;
+    if (ftype == "tif") {
+      // Service Files are pyramidal per ADR-0009.
       comp_params[Sipi::TIFF_Pyramid] = "yes";
     }
+    // No FileRole marker passed through to the writer: the in-memory
+    // Essentials packet (set on the image just above) is the writer's
+    // emit gate per ADR-0010.
   }
 
   if ((basename == "http") || (basename == "HTTP")) {

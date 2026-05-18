@@ -3,7 +3,7 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#include "cli/access_file_orchestrator.h"
+#include "cli/commands/convert_access_file.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -45,7 +45,7 @@ struct FormatResolution
   std::string error;
 };
 
-FormatResolution resolve_output_format(const AccessFileRequest &req)
+FormatResolution resolve_output_format(const ConvertAccessFileArgs &req)
 {
   if (!req.format.empty()) {
     if (req.format == "jpg" || req.format == "jpx" || req.format == "tif" || req.format == "png") {
@@ -74,7 +74,7 @@ struct SizeOrError
   std::string error;
 };
 
-SizeOrError build_size(const AccessFileRequest &req)
+SizeOrError build_size(const ConvertAccessFileArgs &req)
 {
   if (req.reduce > 0) {
     return { std::make_shared<SipiSize>(req.reduce), {} };
@@ -154,33 +154,33 @@ void apply_rotate_mirror(SipiImage &img, float rotate, const std::string &mirror
 
 }// namespace
 
-int run_access_file_orchestrator(const AccessFileRequest &req)
+int cmd_convert_access_file(const ConvertAccessFileArgs &args)
 {
   set_cli_mode(true);
-  if (req.json_output) { set_json_mode(true); }
+  if (args.json_output) { set_json_mode(true); }
 
-  const FormatResolution format_res = resolve_output_format(req);
+  const FormatResolution format_res = resolve_output_format(args);
   if (!format_res.error.empty()) {
     log_err("%s", format_res.error.c_str());
-    if (req.json_output) { emit_json_cli_arg_error(std::cout, format_res.error); }
+    if (args.json_output) { emit_json_cli_arg_error(std::cout, format_res.error); }
     return EXIT_FAILURE;
   }
   const std::string &format = format_res.format;
 
-  std::shared_ptr<SipiRegion> region = build_region(req.region);
-  const SizeOrError size_res = build_size(req);
+  std::shared_ptr<SipiRegion> region = build_region(args.region);
+  const SizeOrError size_res = build_size(args);
   if (!size_res.error.empty()) {
     log_err("%s", size_res.error.c_str());
-    if (req.json_output) { emit_json_cli_arg_error(std::cout, size_res.error); }
+    if (args.json_output) { emit_json_cli_arg_error(std::cout, size_res.error); }
     return EXIT_FAILURE;
   }
   const std::shared_ptr<SipiSize> size = size_res.size;
 
   observability::ImageContext sentry_ctx;
-  sentry_ctx.input_file = req.input_path;
-  sentry_ctx.output_file = req.output_path;
+  sentry_ctx.input_file = args.input_path;
+  sentry_ctx.output_file = args.output_path;
   sentry_ctx.output_format = format;
-  sentry_ctx.file_size_bytes = observability::get_file_size(req.input_path);
+  sentry_ctx.file_size_bytes = observability::get_file_size(args.input_path);
 
   //
   // Read input. The format-handler reader populates the Essentials packet
@@ -189,18 +189,18 @@ int run_access_file_orchestrator(const AccessFileRequest &req)
   //
   SipiImage img;
   try {
-    img.readSource(req.input_path, region, size);
+    img.readSource(args.input_path, region, size);
     if (format == "jpg") {
       img.to8bps();
       img.convertToIcc(Icc(PredefinedProfiles::icc_sRGB), 8);
     }
   } catch (const SipiImageError &err) {
     observability::populate_from_image(sentry_ctx, img);
-    report_error(sentry_ctx, "read", err.what(), req.json_output);
+    report_error(sentry_ctx, "read", err.what(), args.json_output);
     return EXIT_FAILURE;
   } catch (const std::exception &err) {
     observability::populate_from_image(sentry_ctx, img);
-    report_error(sentry_ctx, "read", err.what(), req.json_output);
+    report_error(sentry_ctx, "read", err.what(), args.json_output);
     return EXIT_FAILURE;
   }
 
@@ -209,10 +209,10 @@ int run_access_file_orchestrator(const AccessFileRequest &req)
   // Otherwise route the operator at the generic `sipi convert` verb.
   //
   if (!img.essential_metadata().is_set()) {
-    const std::string msg = "convert access-file requires a Service File input; " + req.input_path
+    const std::string msg = "convert access-file requires a Service File input; " + args.input_path
       + " has no Essentials packet. Use 'sipi convert' for generic format conversion.";
     log_err("%s", msg.c_str());
-    if (req.json_output) { emit_json_cli_arg_error(std::cout, msg); }
+    if (args.json_output) { emit_json_cli_arg_error(std::cout, msg); }
     return EXIT_FAILURE;
   }
 
@@ -226,44 +226,44 @@ int run_access_file_orchestrator(const AccessFileRequest &req)
   // Apply transformations.
   //
   try {
-    if (req.set_topleft) { apply_orientation_topleft(img); }
-    if (!req.icc.empty() && req.icc != "none") { apply_icc(img, req.icc); }
-    if (!req.mirror.empty() || req.rotate != 0.0F) {
-      apply_rotate_mirror(img, req.rotate, req.mirror);
+    if (args.set_topleft) { apply_orientation_topleft(img); }
+    if (!args.icc.empty() && args.icc != "none") { apply_icc(img, args.icc); }
+    if (!args.mirror.empty() || args.rotate != 0.0F) {
+      apply_rotate_mirror(img, args.rotate, args.mirror);
     }
-    if (!req.watermark.empty()) { img.add_watermark(req.watermark); }
+    if (!args.watermark.empty()) { img.add_watermark(args.watermark); }
   } catch (const SipiImageError &err) {
     observability::populate_from_image(sentry_ctx, img);
-    report_error(sentry_ctx, "convert", err.what(), req.json_output);
+    report_error(sentry_ctx, "convert", err.what(), args.json_output);
     return EXIT_FAILURE;
   } catch (const std::exception &err) {
     observability::populate_from_image(sentry_ctx, img);
-    report_error(sentry_ctx, "convert", err.what(), req.json_output);
+    report_error(sentry_ctx, "convert", err.what(), args.json_output);
     return EXIT_FAILURE;
   }
 
   //
-  // Write output. No `J2K_FileRole` / `TIFF_FileRole` param is set, so
-  // the writer's Essentials-emission gate stays closed (Phase 7/8 +
-  // ADR-0010). XMP / IPTC / EXIF / ICC propagate via the standard write
-  // paths (ADR-0011).
+  // Write output. The in-memory Essentials packet was dropped above, so
+  // the writer's emit gate (essential_metadata().is_set()) stays closed
+  // and no Essentials carrier is emitted (Phase 7/8 + ADR-0010). XMP /
+  // IPTC / EXIF / ICC propagate via the standard write paths (ADR-0011).
   //
   SipiCompressionParams params;
-  if (req.jpeg_quality > 0) { params[JPEG_QUALITY] = std::to_string(req.jpeg_quality); }
+  if (args.jpeg_quality > 0) { params[JPEG_QUALITY] = std::to_string(args.jpeg_quality); }
 
   try {
-    img.write(format, req.output_path, &params);
+    img.write(format, args.output_path, &params);
   } catch (const SipiImageError &err) {
     observability::populate_from_image(sentry_ctx, img);
-    report_error(sentry_ctx, "write", err.what(), req.json_output);
+    report_error(sentry_ctx, "write", err.what(), args.json_output);
     return EXIT_FAILURE;
   } catch (const std::exception &err) {
     observability::populate_from_image(sentry_ctx, img);
-    report_error(sentry_ctx, "write", err.what(), req.json_output);
+    report_error(sentry_ctx, "write", err.what(), args.json_output);
     return EXIT_FAILURE;
   }
 
-  if (req.json_output) {
+  if (args.json_output) {
     observability::populate_from_image(sentry_ctx, img);
     emit_json_report(std::cout, sentry_ctx);
   }

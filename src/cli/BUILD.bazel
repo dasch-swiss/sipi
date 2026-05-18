@@ -2,13 +2,10 @@
 
 `//src/cli:sipi` is the thin `cc_binary` for the sipi executable. Its only
 translation unit is `sipi.cpp` (the program entry point); every other TU
-lives in `//src:sipi_lib`, which this target consumes via `deps`.
-
-Lives in its own package (separate from `//src`) so the upcoming CLI
-subcommand restructure (DEV-6540 / DEV-6537 Phase 11) lands in its
-natural home: per-subcommand callbacks and orchestrators
-(`service_file_orchestrator`, `access_file_orchestrator`) are added as
-siblings here, not bolted onto the root `src/` package.
+lives in `//src:sipi_lib`, which this target consumes via `deps`. The
+per-subcommand command bodies live in `//src/cli/commands:commands` —
+that package houses one file per `sipi <verb> <noun>` subcommand
+(`convert_service_file`, `convert_access_file`, `verify`).
 
 System-lib + framework linkopts (`-ldl`, `-lpthread`, `-liconv`,
 `-framework SystemConfiguration`, `-framework CoreFoundation`) are
@@ -24,13 +21,7 @@ package(default_visibility = ["//visibility:public"])
 cc_binary(
     name = "sipi",
     srcs = [
-        "access_file_orchestrator.cpp",
-        "access_file_orchestrator.h",
-        "service_file_orchestrator.cpp",
-        "service_file_orchestrator.h",
         "sipi.cpp",
-        "verify_orchestrator.cpp",
-        "verify_orchestrator.h",
     ],
     linkopts = select({
         "@platforms//os:linux": [
@@ -61,5 +52,10 @@ cc_binary(
     }),
     # `:glibc23_compat` is propagated transitively via `:sipi_lib`'s
     # `deps += select(...)`, so this binary doesn't need to declare it.
-    deps = ["//src:sipi_lib"],
+    # `//src/cli/commands:commands` provides the per-subcommand bodies;
+    # sipi.cpp's main() function wires them into CLI11.
+    deps = [
+        "//src:sipi_lib",
+        "//src/cli/commands:commands",
+    ],
 )

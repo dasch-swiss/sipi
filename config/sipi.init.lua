@@ -245,7 +245,7 @@ end
 --         'kiosk': required: cookie-url token-url: IIIF Auth API kiosk profile
 --         'external': required: token-url: IIIF Auth API external profile
 --         'deny' : no access!
---    filepath: server-path where the master file is located
+--    filepath: server-path where the Service File is located
 -------------------------------------------------------------------------------
 function pre_flight(prefix,identifier,cookie)
     local success, result

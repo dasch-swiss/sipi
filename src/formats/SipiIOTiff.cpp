@@ -423,8 +423,8 @@ static void tiffWarning(const char *module, const char *fmt, va_list args)
 // New protobuf-binary carrier for the Essentials packet (ADR-0005 / DEV-6410).
 // Field type TIFF_UNDEFINED with variable count so TIFFGetField returns the
 // byte length alongside the data pointer (the legacy ASCII tag does not). The
-// pyramidal TIFF writer emits this gated on `file role == service-file`;
-// plain TIFF never carries it (ADR-0009).
+// pyramidal TIFF writer emits this gated on `pyramid && es.is_set()` (per
+// ADR-0010); plain TIFF never carries it (ADR-0009).
 #define TIFFTAG_SIPIMETA_PB 65112
 
 static const TIFFFieldInfo xtiffFieldInfo[] = {
@@ -1797,18 +1797,23 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
     }
   }
   //
-  // Essentials packet emission is gated on file role per ADR-0009 / ADR-0010:
-  // plain TIFF is an Access File and MUST NOT carry the packet. The pyramidal
-  // branch emits the new TIFFTAG_SIPIMETA_PB carrier (ADR-0005 / DEV-6410)
-  // gated on `file role == service-file`. The legacy TIFFTAG_SIPIMETA tag
-  // is never emitted from this writer anymore; readers retain it via the
+  // Essentials packet emission per ADR-0009 / ADR-0010: plain TIFF is an
+  // Access File and MUST NOT carry the packet. The pyramidal branch emits
+  // the new TIFFTAG_SIPIMETA_PB carrier (ADR-0005 / DEV-6410) gated on
+  // `pyramid && es.is_set()` — the `convert service-file` command stamps
+  // the packet on the SipiImage before write; other write paths leave it
+  // unset and don't carry it. The legacy TIFFTAG_SIPIMETA tag is never
+  // emitted from this writer anymore; readers retain it via the
   // Phase 7.4 dual-carrier path. The `Essentials es` declaration above
   // (line 1652) still feeds the ICC fallback at line 1653+.
   //
   const bool pyramid =
     params && params->contains(TIFF_Pyramid) && params->at(TIFF_Pyramid).compare("yes") == 0;
-  const bool emit_essentials_pb = pyramid && es.is_set() && params
-    && params->contains(TIFF_FileRole) && params->at(TIFF_FileRole) == "service-file";
+  // Essentials emit gate: the packet's presence in memory is the signal
+  // (caller's responsibility, per ADR-0010). The pyramid check stays —
+  // a plain TIFF carrying Essentials in memory would be a caller bug,
+  // and Service Files only live in pyramidal TIFF per ADR-0009.
+  const bool emit_essentials_pb = pyramid && es.is_set();
   if (emit_essentials_pb) {
     const std::vector<std::byte> bytes = es.serialize();
     TIFFSetField(tif, TIFFTAG_SIPIMETA_PB, static_cast<uint32_t>(bytes.size()), bytes.data());

@@ -3,7 +3,7 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#include "cli/verify_orchestrator.h"
+#include "cli/commands/verify.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -66,21 +66,21 @@ bool is_access_file_extension(const std::string &path)
 
 }// namespace
 
-int run_verify(const VerifyRequest &req)
+int cmd_verify(const VerifyArgs &args)
 {
   set_cli_mode(true);
-  if (req.json_output) { set_json_mode(true); }
+  if (args.json_output) { set_json_mode(true); }
 
-  const char *label = mode_label(req.mode);
+  const char *label = mode_label(args.mode);
 
-  if (req.mode == VerifyMode::ServiceFile && !is_service_file_extension(req.input_path)) {
+  if (args.mode == VerifyMode::ServiceFile && !is_service_file_extension(args.input_path)) {
     log_err("%s: %s — Service Files live in JP2 or pyramidal TIFF carriers (.jp2/.jpx/.tif/.tiff) per ADR-0009.",
       label,
-      req.input_path.c_str());
+      args.input_path.c_str());
     return EXIT_FAILURE;
   }
-  if (req.mode == VerifyMode::AccessFile && !is_access_file_extension(req.input_path)) {
-    log_err("%s: %s — unsupported Access File extension.", label, req.input_path.c_str());
+  if (args.mode == VerifyMode::AccessFile && !is_access_file_extension(args.input_path)) {
+    log_err("%s: %s — unsupported Access File extension.", label, args.input_path.c_str());
     return EXIT_FAILURE;
   }
 
@@ -90,35 +90,35 @@ int run_verify(const VerifyRequest &req)
   //
   SipiImage img;
   try {
-    img.readSource(req.input_path, /*region=*/nullptr, /*size=*/nullptr);
+    img.readSource(args.input_path, /*region=*/nullptr, /*size=*/nullptr);
   } catch (const SipiImageError &err) {
-    log_err("%s: failed to decode %s: %s", label, req.input_path.c_str(), err.what());
+    log_err("%s: failed to decode %s: %s", label, args.input_path.c_str(), err.what());
     return EXIT_FAILURE;
   } catch (const std::exception &err) {
-    log_err("%s: failed to decode %s: %s", label, req.input_path.c_str(), err.what());
+    log_err("%s: failed to decode %s: %s", label, args.input_path.c_str(), err.what());
     return EXIT_FAILURE;
   }
 
   const Essentials &es = img.essential_metadata();
 
-  switch (req.mode) {
+  switch (args.mode) {
   case VerifyMode::Generic:
     // No metadata assertions — read succeeded.
     return EXIT_SUCCESS;
 
   case VerifyMode::AccessFile:
     if (es.is_set()) {
-      log_err("%s: %s carries an Essentials packet — Access Files do not (ADR-0009 file-role taxonomy). "
+      log_err("%s: %s carries an Essentials packet — Access Files do not (ADR-0009). "
               "Use `verify service-file` to validate Service Files.",
         label,
-        req.input_path.c_str());
+        args.input_path.c_str());
       return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
 
   case VerifyMode::ServiceFile: {
     if (!es.is_set()) {
-      log_err("%s: %s carries no Essentials packet — Service Files MUST.", label, req.input_path.c_str());
+      log_err("%s: %s carries no Essentials packet — Service Files MUST.", label, args.input_path.c_str());
       return EXIT_FAILURE;
     }
     const EssentialsFields &fields = es.fields();
@@ -132,7 +132,7 @@ int run_verify(const VerifyRequest &req)
     auto shape_mismatch = [&](const char *which, std::uint32_t expected, std::uint32_t actual) {
       log_err("%s: %s shape field %s mismatch (packet=%u, codec=%u).",
         label,
-        req.input_path.c_str(),
+        args.input_path.c_str(),
         which,
         expected,
         actual);
@@ -164,9 +164,9 @@ int run_verify(const VerifyRequest &req)
     //
     std::vector<std::byte> recomputed = img.compute_pixel_hash(fields.hash_type);
     if (recomputed != fields.data_chksum) {
-      log_err("%s: %s pixel hash mismatch — possible corruption.", label, req.input_path.c_str());
+      log_err("%s: %s pixel hash mismatch — possible corruption.", label, args.input_path.c_str());
       Sipi::observability::essentials_hash_mismatch_counter(
-        Sipi::observability::format_from_path(req.input_path)).Increment();
+        Sipi::observability::format_from_path(args.input_path)).Increment();
       return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

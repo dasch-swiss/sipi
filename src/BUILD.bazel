@@ -12,7 +12,7 @@
                        on `:sipi_lib`. Lives in its own package so the
                        CLI subcommand restructure (DEV-6540) lands in
                        its natural home alongside the per-subcommand
-                       callbacks and Service File orchestrators.
+                       callbacks and Service File commands.
 
 The split is mandatory infrastructure for Y+1 (per-component unit tests)
 and scaffolds the post-Y+6 layout flip — the eventual Y+8 series breaks

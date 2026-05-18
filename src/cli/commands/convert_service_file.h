@@ -3,21 +3,20 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#ifndef SIPI_CLI_SERVICE_FILE_ORCHESTRATOR_H
-#define SIPI_CLI_SERVICE_FILE_ORCHESTRATOR_H
+#ifndef SIPI_CLI_COMMANDS_CONVERT_SERVICE_FILE_H
+#define SIPI_CLI_COMMANDS_CONVERT_SERVICE_FILE_H
 
 #include <string>
 
 namespace Sipi::cli {
 
 /*!
- * Inputs to the Service File orchestrator behind
- * `sipi convert service-file <in> <out>` (DEV-6537 / DEV-6540 Phase 12.1).
- * Each field maps to a CLI option attached to `cmd_convert_service` in
- * `sipi.cpp`; the orchestrator is the only path that ever produces an
- * Essentials packet per ADR-0010.
+ * Inputs to `sipi convert service-file <in> <out>` (DEV-6537 / DEV-6540
+ * Phase 12.1). Each field maps to a CLI option attached to
+ * `cmd_convert_service` in `sipi.cpp`; this command is the only path that
+ * ever produces an Essentials packet per ADR-0010.
  */
-struct ServiceFileRequest
+struct ConvertServiceFileArgs
 {
   std::string input_path;  //!< source file path supplied by the operator
   std::string output_path; //!< destination Service File path
@@ -25,7 +24,7 @@ struct ServiceFileRequest
 };
 
 /*!
- * Run the Service File orchestrator. Steps:
+ * Run `sipi convert service-file`. Steps:
  *
  *   1. Detect the output Service File format from the output extension
  *      (`.jp2` / `.jpx` → JP2; `.tif` / `.tiff` → pyramidal TIFF). Other
@@ -49,7 +48,7 @@ struct ServiceFileRequest
  *
  * Returns the process exit code (EXIT_SUCCESS or EXIT_FAILURE).
  */
-[[nodiscard]] int run_service_file_orchestrator(const ServiceFileRequest &req);
+[[nodiscard]] int cmd_convert_service_file(const ConvertServiceFileArgs &args);
 
 }// namespace Sipi::cli
 

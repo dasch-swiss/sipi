@@ -152,7 +152,7 @@ public:
   /*!
    * check if a file is already in the cache and up-to-date
    *
-   * \param[in] origpath_p The original path to the master file
+   * \param[in] origpath_p The path to the Service File
    * \param[in] canonical_p The canonical URL according to the IIIF standard
    *
    * \returns Returns an empty string if the file is not in the cache or if the file needs to be replaced.
@@ -173,7 +173,7 @@ public:
   /*!
    * Add (or replace) a file to the cache.
    *
-   * \param[in] origpath_p Path to the original master file
+   * \param[in] origpath_p Path to the Service File
    * \param[in] canonical_p Canonical IIIF URL
    * \param[in] cachepath_p Path of the cache file
    */

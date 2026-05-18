@@ -356,8 +356,8 @@ public:
 
   /*!
    * Hash the current pixel buffer with the requested digest algorithm and
-   * return the raw digest bytes (NOT hex). Used by the Service File creation
-   * orchestrator (`sipi convert service-file`, Phase 12.1 — DEV-6540) to
+   * return the raw digest bytes (NOT hex). Used by the `convert service-file`
+   * command (Phase 12.1 — DEV-6540) to
    * populate `EssentialsFields::data_chksum` over the **post-transformation**
    * pixel buffer, and by the corruption-tripwire branch in `readSource`
    * (which compares against the on-disk `data_chksum` from an existing
@@ -411,9 +411,9 @@ public:
     const std::shared_ptr<SipiSize> &size = nullptr);
 
   /*!
-   * Overload accepting an `origname` hint. Until the Service File creation
-   * orchestrator lands (Phase 12, DEV-6540), `origname` is consumed by the
-   * orchestrator — not by readSource itself — so this overload behaves
+   * Overload accepting an `origname` hint. Until the `convert service-file`
+   * command lands (Phase 12, DEV-6540), `origname` is consumed by the
+   * command — not by readSource itself — so this overload behaves
    * identically to the 3-arg form. Kept for the existing Lua-side call site.
    */
   void readSource(const std::string &filepath,
