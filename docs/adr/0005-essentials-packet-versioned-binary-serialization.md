@@ -4,7 +4,7 @@ status: accepted
 
 # Essentials packet adopts a versioned, self-describing binary wire format (Protocol Buffers)
 
-The Essentials packet's wire format migrates from pipe-delimited text to **Protocol Buffers (`proto3`)** built with the `LITE_RUNTIME` option, consumed via Bazel Central Registry. A top-level `format_version` field discriminates reader dispatch. New SIPI versions read every prior `format_version` they support; legacy pipe-delimited packets continue to parse via `Essentials::parse_legacy(...)` indefinitely (longevity invariant). New packets are always written in the protobuf form, and only by the intentional master-creation orchestrator (`sipi convert service-file` per [ADR-0010](./0010-file-role-creation-is-intentional.md)) into the two Service File carriers (JP2 + pyramidal TIFF) per [ADR-0009](./0009-file-role-taxonomy.md).
+The Essentials packet's wire format migrates from pipe-delimited text to **Protocol Buffers (`proto3`)** built with the `LITE_RUNTIME` option, consumed via Bazel Central Registry. A top-level `format_version` field discriminates reader dispatch. New SIPI versions read every prior `format_version` they support; legacy pipe-delimited packets continue to parse via `Essentials::parse_legacy(...)` indefinitely (longevity invariant). New packets are always written in the protobuf form, and only by the intentional `sipi convert service-file` subcommand (per [ADR-0010](./0010-file-creation-is-intentional.md)) into the two Service File carriers (JP2 + pyramidal TIFF) per [ADR-0009](./0009-file-taxonomy.md).
 
 We accept this because SIPI's preservation guarantee is that conversions don't lose metadata, and SIPI's installed base is *hundreds of thousands* of files with legacy pipe-delimited Essentials packets. Mass re-encoding to flip serialization formats is not operationally feasible at that scale; the wire format must therefore be forward-evolvable forever — new fields, new optimisations, new types — without requiring coordination across the existing file population. The current pipe-delimited format has zero versioning, no schema, no escaping, and no field discovery; [ADR-0004](./0004-image-shape-ownership.md) alone (adding eight image-shape fields) already pushes it past its design limits, and any subsequent schema change would compound the fragility. Biting this bullet now, while the install base is smaller than it will be at any future point, is strictly cheaper than deferring.
 
@@ -42,8 +42,8 @@ enum HashType {
 message Essentials {
   uint32 format_version = 1;
 
-  // Core preservation identity. Populated by the master-creation
-  // orchestrator from observed source + post-transformation hash.
+  // Core preservation identity. Populated by the `convert service-file`
+  // command from observed source + post-transformation hash.
   string origname = 2;
   string mimetype = 3;
   HashType hash_type = 4;
@@ -110,7 +110,7 @@ Per [ADR-0004](./0004-image-shape-ownership.md), the Essentials packet must be r
 
 ## Carrier surface restriction
 
-Per [ADR-0009](./0009-file-role-taxonomy.md) and Phase 6 of the [DEV-6537](https://linear.app/dasch/issue/DEV-6537) implementation: JPEG, PNG, and plain TIFF outputs **do not** carry an Essentials packet. The writers in `SipiIOJpeg.cpp` / `SipiIOPng.cpp` and the non-pyramidal branch of `SipiIOTiff.cpp` have no Essentials emission path at all. Per [ADR-0010](./0010-file-role-creation-is-intentional.md), the Service File writers (pyramidal TIFF + JP2) emit the packet only when the orchestrator passes `J2K_FileRole = "service-file"` / `TIFF_FileRole = "service-file"`. The single point of control is the writer gate: `emit_essentials_box = es.is_set() && params && params->contains(*_FileRole) && params->at(*_FileRole) == "service-file"`.
+Per [ADR-0009](./0009-file-taxonomy.md) and Phase 6 of the [DEV-6537](https://linear.app/dasch/issue/DEV-6537) implementation: JPEG, PNG, and plain TIFF outputs **do not** carry an Essentials packet. The writers in `SipiIOJpeg.cpp` / `SipiIOPng.cpp` and the non-pyramidal branch of `SipiIOTiff.cpp` have no Essentials emission path at all. Per [ADR-0010](./0010-file-creation-is-intentional.md), the Service File writers (pyramidal TIFF + JP2) emit the packet only when an in-memory *Essentials packet* is set on the `SipiImage`. The single point of control is the writer gate: `emit_essentials_box = es.is_set()` (JP2) or `pyramid && es.is_set()` (TIFF). The `convert service-file` command is the only path that sets the packet in production; ensuring the in-memory state matches the intended output is the command's responsibility, not a parallel writer flag.
 
 ## Considered Options
 
@@ -138,7 +138,7 @@ Per [ADR-0009](./0009-file-role-taxonomy.md) and Phase 6 of the [DEV-6537](https
 
 - **Approval-test goldens for image-header bytes change** where the test round-trips a Service File through the encoder. The regeneration ran with `SOURCE_DATE_EPOCH=946684800` and `SIPI_WORKSPACE_ROOT="."` injected by `test/approval/BUILD.bazel` so the wall-clock-stamped ICC creation date is overwritten with a fixed value and goldens stay byte-deterministic ([ADR-0002](./0002-icc-profile-determinism-test-only.md)).
 
-- **Existing files with legacy Essentials packets keep working unchanged.** Pipe-delimited packets continue to parse via `parse_legacy`. The new wire-format fast path activates incrementally as files are re-processed by an intentional master-creation invocation (`sipi convert service-file`), without any mass re-encoding event. This is the load-bearing operational property of this ADR.
+- **Existing files with legacy Essentials packets keep working unchanged.** Pipe-delimited packets continue to parse via `parse_legacy`. The new wire-format fast path activates incrementally as files are re-processed by an intentional `sipi convert service-file` invocation, without any mass re-encoding event. This is the load-bearing operational property of this ADR.
 
 - **Pipe-delimited fragility is gone for new packets**: protobuf's well-defined encoding rules replace the escape-less, schema-less, version-less legacy format. Old packets remain readable but read-only.
 

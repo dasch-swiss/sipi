@@ -101,7 +101,7 @@ std::ptrdiff_t tiff_first_ifd_offset(const std::string &path)
 
 // Build a SipiImage suitable for service-file emission: read the source,
 // populate `EssentialsFields` (identity + shape) the same way the
-// `convert service-file` orchestrator does. Used by both tests so the
+// `convert service-file` command does. Used by both tests so the
 // invariant check covers the actual production write path, not a
 // test-only shortcut.
 Sipi::SipiImage make_service_file_image(const std::string &src)
@@ -137,9 +137,9 @@ TEST(EssentialsPrefixInvariant, JP2UuidBoxWithin64KBPrefix)
   ASSERT_TRUE(file_exists(src)) << "Test image not found: " << src;
 
   auto img = make_service_file_image(src);
-  Sipi::SipiCompressionParams params;
-  params[Sipi::J2K_FileRole] = "service-file";
-  ASSERT_NO_THROW(img.write("jpx", dst, &params));
+  // Essentials packet on the image (set in make_service_file_image) is the
+  // writer's emit gate per ADR-0010. No FileRole marker is passed.
+  ASSERT_NO_THROW(img.write("jpx", dst, nullptr));
   ASSERT_TRUE(file_exists(dst));
 
   const auto offset = find_sipi_uuid_in_prefix(dst, kPrefixBudgetBytes);
@@ -165,8 +165,10 @@ TEST(EssentialsPrefixInvariant, DISABLED_TIFFFirstIFDWithin64KBPrefix)
   ASSERT_TRUE(file_exists(src)) << "Test image not found: " << src;
 
   auto img = make_service_file_image(src);
+  // Essentials packet on the image gates emission per ADR-0010; the
+  // TIFF_Pyramid param requests the pyramidal layout (required for the
+  // SIPI tag emission per the writer gate + ADR-0009).
   Sipi::SipiCompressionParams params;
-  params[Sipi::TIFF_FileRole] = "service-file";
   params[Sipi::TIFF_Pyramid] = "yes";
   ASSERT_NO_THROW(img.write("tif", dst, &params));
   ASSERT_TRUE(file_exists(dst));
@@ -191,7 +193,6 @@ TEST(EssentialsPrefixInvariant, TIFFFirstIFDOffsetIsResolvable)
 
   auto img = make_service_file_image(src);
   Sipi::SipiCompressionParams params;
-  params[Sipi::TIFF_FileRole] = "service-file";
   params[Sipi::TIFF_Pyramid] = "yes";
   ASSERT_NO_THROW(img.write("tif", dst, &params));
   ASSERT_TRUE(file_exists(dst));

@@ -3,7 +3,7 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#include "cli/service_file_orchestrator.h"
+#include "cli/commands/convert_service_file.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -46,7 +46,7 @@ std::string basename(const std::string &path)
 
 /// Service File output format: JP2 or pyramidal TIFF only. The CLI
 /// surface enforces "no --format" on `convert service-file`, so the
-/// orchestrator infers from the output extension alone.
+/// command infers from the output extension alone.
 enum class ServiceFormat { Jp2, PyramidalTiff };
 
 [[nodiscard]] std::expected<ServiceFormat, std::string>
@@ -63,11 +63,11 @@ detect_output_format(const std::string &output_path)
 
 }// namespace
 
-int run_service_file_orchestrator(const ServiceFileRequest &req)
+int cmd_convert_service_file(const ConvertServiceFileArgs &args)
 {
   set_cli_mode(true);
 
-  const auto format_or_err = detect_output_format(req.output_path);
+  const auto format_or_err = detect_output_format(args.output_path);
   if (!format_or_err) {
     log_err("%s", format_or_err.error().c_str());
     return EXIT_FAILURE;
@@ -76,7 +76,7 @@ int run_service_file_orchestrator(const ServiceFileRequest &req)
 
   Sipi::SipiImage img;
   try {
-    img.readSource(req.input_path, /*region=*/nullptr, /*size=*/nullptr);
+    img.readSource(args.input_path, /*region=*/nullptr, /*size=*/nullptr);
   } catch (const std::exception &err) {
     log_err("convert service-file: error reading source: %s", err.what());
     return EXIT_FAILURE;
@@ -90,7 +90,7 @@ int run_service_file_orchestrator(const ServiceFileRequest &req)
   // Orientation normalization (D5 matrix: `convert service-file` accepts
   // only --topleft). Other transforms are intentionally not exposed on
   // this verb — Service Files are baseline reads, not re-encodes.
-  if (req.set_topleft) {
+  if (args.set_topleft) {
     try {
       Sipi::Orientation orientation = img.getOrientation();
       auto exif = img.getExif();
@@ -123,8 +123,8 @@ int run_service_file_orchestrator(const ServiceFileRequest &req)
 
   // Build the Essentials packet from the post-transformation state.
   Sipi::EssentialsFields fields;
-  fields.origname = basename(req.input_path);
-  fields.mimetype = shttps::Parsing::getFileMimetype(req.input_path).first;
+  fields.origname = basename(args.input_path);
+  fields.mimetype = shttps::Parsing::getFileMimetype(args.input_path).first;
   fields.hash_type = shttps::HashType::sha256;
   fields.data_chksum = img.compute_pixel_hash(fields.hash_type);
 
@@ -142,25 +142,18 @@ int run_service_file_orchestrator(const ServiceFileRequest &req)
 
   img.essential_metadata(Sipi::Essentials{ std::move(fields) });
 
-  // Hand off to the format-handler writer with file_role = "service-file"
-  // so the Essentials carrier emission gates open (JP2 UUID box / TIFF tag
-  // 65112). Pyramidal TIFF mode is forced for .tif outputs.
+  // Hand off to the format-handler writer. The Essentials packet is
+  // already on the image (set above) — that's the writer's emit gate
+  // per ADR-0010. Pyramidal layout is requested explicitly for .tif
+  // since Service Files are pyramidal TIFF per ADR-0009.
   Sipi::SipiCompressionParams params;
-  switch (format) {
-  case ServiceFormat::Jp2:
-    params[Sipi::J2K_FileRole] = "service-file";
-    break;
-  case ServiceFormat::PyramidalTiff:
-    params[Sipi::TIFF_FileRole] = "service-file";
-    params[Sipi::TIFF_Pyramid] = "yes";
-    break;
-  }
+  if (format == ServiceFormat::PyramidalTiff) { params[Sipi::TIFF_Pyramid] = "yes"; }
 
   try {
     const std::string format_str = (format == ServiceFormat::Jp2) ? "jpx" : "tif";
-    img.write(format_str, req.output_path, &params);
+    img.write(format_str, args.output_path, params.empty() ? nullptr : &params);
   } catch (const std::exception &err) {
-    log_err("convert service-file: error writing %s: %s", req.output_path.c_str(), err.what());
+    log_err("convert service-file: error writing %s: %s", args.output_path.c_str(), err.what());
     return EXIT_FAILURE;
   }
 

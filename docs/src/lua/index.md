@@ -71,11 +71,11 @@ The pre-flight function must return at least 2 parameters:
      `{ type = 'restrict', size='!256,256' }`
     - SIPI also supports the [IIIF Authentification API](https://iiif.io/api/auth/1.0/). See section [IIIF
       Authentification]() on how to implement this feature in the pre-flight function.
-- `filepath`: The path to the master image file in the media files repository. This path can be assembled using the
+- `filepath`: The path to the Service File in the media files repository. This path can be assembled using the
   `prefix` and `identifier` using any additional information (e.g. accessing a database or using the LUA restful client)
   
-The most simple working pre-flight looks as follows assuming that the `identifier`is the name of the master image
-file in the repository and the `prefix` is the path:
+The most simple working pre-flight looks as follows assuming that the `identifier`is the name of the Service File
+in the repository and the `prefix` is the path:
 ```lua
 function pre_flight(prefix, identifier, cookie)
     if config.prefix_as_path then

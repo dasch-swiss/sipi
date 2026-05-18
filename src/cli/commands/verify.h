@@ -3,8 +3,8 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#ifndef SIPI_CLI_VERIFY_ORCHESTRATOR_H
-#define SIPI_CLI_VERIFY_ORCHESTRATOR_H
+#ifndef SIPI_CLI_COMMANDS_VERIFY_H
+#define SIPI_CLI_COMMANDS_VERIFY_H
 
 #include <string>
 
@@ -15,10 +15,9 @@ namespace Sipi::cli {
  *
  * Per ADR-0009 / ADR-0010 the verify surface is tiered:
  *
- *   - `Generic`      — `sipi verify <file>`. Role-agnostic decoder
- *                       coverage check (RDU sanity use case): can SIPI
- *                       open and decode this file? No metadata
- *                       assertions.
+ *   - `Generic`      — `sipi verify <file>`. Generic decoder-coverage
+ *                       check (RDU sanity use case): can SIPI open and
+ *                       decode this file? No metadata assertions.
  *   - `AccessFile`   — `sipi verify access-file <file>`. The above
  *                       plus: the file must NOT carry an Essentials
  *                       packet (its presence indicates a Service File
@@ -35,7 +34,7 @@ enum class VerifyMode {
   ServiceFile,
 };
 
-struct VerifyRequest
+struct VerifyArgs
 {
   VerifyMode mode = VerifyMode::Generic;
   std::string input_path;
@@ -43,19 +42,19 @@ struct VerifyRequest
 };
 
 /*!
- * Run the verify orchestrator. Exit codes:
+ * Run `sipi verify`. Exit codes:
  *
  *   - `EXIT_SUCCESS` — all assertions for the requested mode passed.
  *   - `EXIT_FAILURE` — decoder error, missing/extra Essentials packet,
  *                      pixel-hash mismatch, or shape inconsistency.
  *
- * On a `ServiceFile` pixel-hash mismatch the orchestrator also emits
+ * On a `ServiceFile` pixel-hash mismatch the command also emits
  * `log_err(...)` so the operator gets the diagnostic immediately
  * (a future change can wire this through the
  * `sipi_essentials_hash_mismatch_total{format}` Prometheus counter
  * once Phase 13 lands).
  */
-[[nodiscard]] int run_verify(const VerifyRequest &req);
+[[nodiscard]] int cmd_verify(const VerifyArgs &args);
 
 }// namespace Sipi::cli
 

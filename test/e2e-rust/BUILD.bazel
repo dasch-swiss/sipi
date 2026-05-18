@@ -114,6 +114,8 @@ sipi_e2e_test(name = "latency", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "memory_budget", deps = _e2e_test_deps)
 
+sipi_e2e_test(name = "option_matrix", deps = _e2e_test_deps)
+
 sipi_e2e_test(name = "proptest_iiif_uri", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "range_requests", deps = _e2e_test_deps)
@@ -225,6 +227,7 @@ test_suite(
         ":input_validation",
         ":latency",
         ":memory_budget",
+        ":option_matrix",
         ":proptest_iiif_uri",
         ":range_requests",
         ":rate_limiter",

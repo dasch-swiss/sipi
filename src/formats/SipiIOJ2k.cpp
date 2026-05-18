@@ -715,7 +715,7 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
     // Walk top-level UUID boxes for the SIPI Essentials carrier (ADR-0005 /
     // DEV-6410). Same scan loop as the main reader at the top of this file;
     // the codestream-comment fallback below covers pre-rollout files. When the
-    // packet's image-shape fields are populated (Phase 12 orchestrator), the
+    // packet's image-shape fields are populated (Phase 12 command), the
     // fast path returns directly from here without calling codestream.create().
     jp2_input_box box;
     if (box.open(&jp2_ultimate_src)) {
@@ -877,7 +877,9 @@ static void write_exif_box(kdu_supp::jp2_family_tgt *tgt, kdu_core::kdu_byte *ex
 // SIPI Essentials carrier (ADR-0005 / DEV-6410). Emits the protobuf-serialized
 // packet as the box payload, preceded by `sipi_essentials_uuid`. Mirrors the
 // XMP/IPTC/EXIF helpers above so the four UUID-box carriers stay symmetric.
-// The Phase 12 orchestrator gates the call site on `file role == service-file`.
+// The `convert service-file` command stamps the Essentials packet on the
+// SipiImage before calling write — that's what opens the call site gate
+// below (see line 1234).
 static void write_essentials_box(kdu_supp::jp2_family_tgt *tgt, const std::vector<std::byte> &payload)
 {
   kdu_supp::jp2_output_box out;
@@ -1231,9 +1233,11 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
 
     // Essentials carrier migrated from codestream-comment to UUID box (slot 4
     // after Signature → FTYP → jp2h, before jp2c) per ADR-0005 / DEV-6410.
-    // Emission is gated on file role == service-file per ADR-0009 / ADR-0010
-    // — Access File JP2s do NOT carry the packet. The actual UUID-box write
-    // happens after `jpx_out.write_headers()` (below), alongside the IPTC /
+    // Emission is gated on `es.is_set()` per ADR-0010 — the `convert
+    // service-file` command stamps the packet on the SipiImage before write;
+    // Access File JP2s arrive here with the packet unset and don't carry it.
+    // The actual UUID-box write happens after `jpx_out.write_headers()`
+    // (below), alongside the IPTC /
     // EXIF / XMP UUID boxes, so all four carrier boxes land in the same
     // post-headers / pre-codestream region.
 
@@ -1255,12 +1259,14 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
     jpx_out.write_headers();
 
     //
-    // SIPI Essentials carrier (slot 4 — first UUID box after jp2h). Gated on
-    // file role == service-file per ADR-0009 / ADR-0010.
+    // SIPI Essentials carrier (slot 4 — first UUID box after jp2h). The
+    // packet's presence in memory is the emit gate per ADR-0010 — the
+    // caller's responsibility (the `convert service-file` command, or
+    // the Lua `file_role = "service-file"` keyword path in SipiLua.cpp)
+    // is to ensure essential_metadata() carries the packet only when
+    // the output is intentionally a Service File.
     //
-    const bool emit_essentials_box = es.is_set() && params && params->contains(J2K_FileRole)
-      && params->at(J2K_FileRole) == "service-file";
-    if (emit_essentials_box) { write_essentials_box(&jp2_ultimate_tgt, es.serialize()); }
+    if (es.is_set()) { write_essentials_box(&jp2_ultimate_tgt, es.serialize()); }
 
     if (img->iptc != nullptr) {
       std::vector<unsigned char> iptc_buf = img->iptc->iptcBytes();

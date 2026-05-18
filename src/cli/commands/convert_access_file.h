@@ -3,8 +3,8 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#ifndef SIPI_CLI_ACCESS_FILE_ORCHESTRATOR_H
-#define SIPI_CLI_ACCESS_FILE_ORCHESTRATOR_H
+#ifndef SIPI_CLI_COMMANDS_CONVERT_ACCESS_FILE_H
+#define SIPI_CLI_COMMANDS_CONVERT_ACCESS_FILE_H
 
 #include <string>
 #include <vector>
@@ -12,11 +12,11 @@
 namespace Sipi::cli {
 
 /*!
- * Inputs to the Access File orchestrator behind
- * `sipi convert access-file <in> <out>` (DEV-6537 / DEV-6540 Phase 12.2).
+ * Inputs to `sipi convert access-file <in> <out>` (DEV-6537 / DEV-6540
+ * Phase 12.2).
  *
  * Per ADR-0009 / ADR-0010, an Access File is the end-user-delivery
- * format produced from a Service File. The orchestrator's contract:
+ * format produced from a Service File. The command's contract:
  *
  *   - Input MUST be a Service File (Essentials packet present + parses).
  *     Any other input is rejected with a clear error pointing the
@@ -29,7 +29,7 @@ namespace Sipi::cli {
  *     option-availability matrix): DSP-opinionated flows always
  *     propagate metadata.
  */
-struct AccessFileRequest
+struct ConvertAccessFileArgs
 {
   std::string input_path;            //!< source Service File path
   std::string output_path;           //!< destination Access File path
@@ -73,7 +73,7 @@ struct AccessFileRequest
 };
 
 /*!
- * Run the Access File orchestrator. Steps:
+ * Run `sipi convert access-file`. Steps:
  *
  *   1. Read source via `SipiImage::readSource`. The format-handler
  *      reader populates `Essentials` if the source carries it.
@@ -89,7 +89,7 @@ struct AccessFileRequest
  *
  * Returns the process exit code (EXIT_SUCCESS or EXIT_FAILURE).
  */
-[[nodiscard]] int run_access_file_orchestrator(const AccessFileRequest &req);
+[[nodiscard]] int cmd_convert_access_file(const ConvertAccessFileArgs &args);
 
 }// namespace Sipi::cli
 

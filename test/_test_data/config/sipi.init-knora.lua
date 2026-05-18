@@ -43,7 +43,7 @@ end
 --       'restrict:watermark=<path-to-watermark>' : Add a watermark
 --       'restrict:size=<iiif-size-string>' : reduce size/resolution
 --       'deny' : no access!
---    filepath: server-path where the master file is located
+--    filepath: server-path where the Service File is located
 -------------------------------------------------------------------------------
 function pre_flight(prefix, identifier, cookie)
 

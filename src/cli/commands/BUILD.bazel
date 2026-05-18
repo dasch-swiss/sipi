@@ -1,0 +1,63 @@
+"""//src/cli/commands — one file per `sipi <verb> <noun>` subcommand.
+
+Layout follows the Clap-community convention (cargo / jj / uv / deno):
+each leaf subcommand has its own `.cpp` / `.h` named after the command
+path, with the entry-point function named `cmd_<command_path>`. Tests
+live co-located with their command per ADR-0003.
+
+Today's commands:
+
+  * `sipi convert service-file` → `convert_service_file.{h,cpp}` →
+    `cmd_convert_service_file(ConvertServiceFileArgs)`
+  * `sipi convert access-file`  → `convert_access_file.{h,cpp}`  →
+    `cmd_convert_access_file(ConvertAccessFileArgs)`
+  * `sipi verify [access-file|service-file]` → `verify.{h,cpp}` →
+    `cmd_verify(VerifyArgs)`
+
+The `:commands` cc_library is consumed by `//src/cli:sipi` (the binary
+target) and by `:commands_test` (the co-located unit tests).
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//src/cli:__pkg__"])
+
+cc_library(
+    name = "commands",
+    srcs = [
+        "convert_access_file.cpp",
+        "convert_service_file.cpp",
+        "verify.cpp",
+    ],
+    hdrs = [
+        "convert_access_file.h",
+        "convert_service_file.h",
+        "verify.h",
+    ],
+    copts = ["-fexceptions"],
+    deps = ["//src:sipi_lib"],
+)
+
+# Co-located unit tests for each subcommand (DEV-6537 Phase 12.5-12.7),
+# per ADR-0003. The tests exercise `cmd_*` functions directly plus the
+# SipiImage / SipiIOTiff plumbing they call into, so `:sipi_lib` is a
+# direct dep alongside `:commands`.
+#
+# Fixture paths resolve via `//test:test_paths`, which honours
+# `SIPI_WORKSPACE_ROOT` and `TEST_TMPDIR`.
+cc_test(
+    name = "commands_test",
+    srcs = [
+        "convert_access_file_test.cpp",
+        "convert_service_file_test.cpp",
+        "verify_test.cpp",
+    ],
+    data = ["//test/_test_data:images"],
+    env = {"SIPI_WORKSPACE_ROOT": "."},
+    deps = [
+        ":commands",
+        "//src:sipi_lib",
+        "//test:test_paths",
+        "@googletest//:gtest_main",
+    ],
+)

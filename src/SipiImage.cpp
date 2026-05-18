@@ -339,7 +339,7 @@ void SipiImage::readSource(const std::string &filepath,
   const std::shared_ptr<SipiSize> &size,
   const std::string &origname)
 {
-  (void)origname;  // consumed by the orchestrator (Phase 12 / DEV-6540), not here
+  (void)origname;  // consumed by the `convert service-file` command (Phase 12 / DEV-6540), not here
   readSource(filepath, region, size);
 }
 
