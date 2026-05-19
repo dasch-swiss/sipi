@@ -5,18 +5,19 @@ The `include/` directory holds Sipi's headers in a flat-ish layout:
   include/<Module>.h               — top-level public API headers
   include/<subsystem>/<Module>.h   — per-subsystem (formats, iiifparser, …)
 
-Consumers reference both forms via sibling `#include "Logger.h"` (resolved
+Consumers reference both forms via sibling `#include "SipiCache.h"` (resolved
 through `includes = ["."]` propagation) and prefixed
 `#include "formats/SipiIOTiff.h"`.
 
-`metadata/` has been promoted out of this filegroup into
-`//src/metadata:metadata` (DEV-6405 / Y+8a, ADR-0003) — consumers of those
-headers now depend on the new package directly.
+Per-module packages NOT bundled here (consumers depend on the dedicated
+target directly):
+
+  `metadata/`  → `//src/metadata:metadata`
+  Logger       → `//src/logging:logging`
 
 Cross-package consumers:
   //src:sipi_lib       — primary consumer
-  //shttps:shttps      — temporary cross-context include of `Logger.h`
-                         (TODO rehome; see shttps/BUILD.bazel comment)
+  //shttps:shttps      — consumes shttps-relevant headers via this bundle
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
@@ -50,7 +51,6 @@ cc_library(
 # rather than the whole bundle (e.g. expand_template's `template` argument
 # accepts a single Label, not a `cc_library`).
 exports_files([
-    "Logger.h",
     "SipiVersion.h.in",
     "SipiConfig.h.in",
     # ICC profile binaries embedded as C arrays at build time by

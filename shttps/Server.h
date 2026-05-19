@@ -40,7 +40,7 @@
 #include "ConnectionMetrics.h"
 #include "Error.h"
 #include "Global.h"
-#include "Logger.h"
+#include "logging/logger.h"
 #include "LuaServer.h"
 #include "SocketControl.h"
 #include "ThreadControl.h"

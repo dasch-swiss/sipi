@@ -10,7 +10,7 @@
 #include <exception>
 #include <string>
 
-#include "Logger.h"
+#include "logging/logger.h"
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
 #include "metadata/essentials.h"

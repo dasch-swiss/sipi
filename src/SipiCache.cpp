@@ -30,7 +30,7 @@
 #include "SipiError.hpp"
 #include "observability/metrics.h"
 #include "shttps/Global.h"
-#include "Logger.h"
+#include "logging/logger.h"
 
 namespace Sipi {
 

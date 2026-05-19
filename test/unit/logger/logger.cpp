@@ -4,7 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "Logger.h"
+#include "logging/logger.h"
 #include "gtest/gtest.h"
 
 // ---- helpers to capture stdout / stderr ----

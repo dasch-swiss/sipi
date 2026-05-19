@@ -22,7 +22,7 @@
 #include <tiff.h>
 #include <zlib.h>
 
-#include "Logger.h"
+#include "logging/logger.h"
 #include "SipiImageError.hpp"
 #include "formats/SipiIOPng.h"
 

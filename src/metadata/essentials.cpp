@@ -16,7 +16,7 @@
 #include <openssl/buffer.h>
 #include <openssl/evp.h>
 
-#include "Logger.h"
+#include "logging/logger.h"
 #include "metadata/essentials.h"
 #include "metadata/internal/protobuf_codec.h"
 #include "shttps/Error.h"

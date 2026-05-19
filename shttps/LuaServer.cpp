@@ -32,7 +32,7 @@
 #include "SockStream.h"
 #include "curl/curl.h"
 
-#include "Logger.h"
+#include "logging/logger.h"
 #include "jwt.h"
 #include "sole.hpp"
 #include <jansson.h>

@@ -8,7 +8,7 @@
 #include <sstream>
 #include <string>
 
-#include "Logger.h"
+#include "logger.h"
 
 static bool g_cli_mode = false;
 // `g_json_mode` is read from every request worker thread in server mode and

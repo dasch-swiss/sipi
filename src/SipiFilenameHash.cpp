@@ -10,7 +10,7 @@
 
 #include <cstring>
 
-#include "Logger.h"
+#include "logging/logger.h"
 #include "SipiFilenameHash.h"
 #include "shttps/Error.h"
 

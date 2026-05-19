@@ -11,7 +11,7 @@
 #include <ctime>
 #include <optional>
 
-#include "Logger.h"
+#include "logging/logger.h"
 
 #include "SipiError.hpp"
 #include "generated/AdobeRGB1998_icc.h"
