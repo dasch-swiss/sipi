@@ -98,22 +98,11 @@ jobs:
           extra-conf: |
             extra-experimental-features = configurable-impure-env
 
-      # Bazel disk cache. Without this, every sanitizer-gate run rebuilds
-      # all foreign_cc ext libs (kakadu, openssl, exiv2, libtiff, …) under
-      # `--compilation_mode=dbg` from cold — easily 10+ minutes per run
-      # and at risk of hitting the 30-minute job timeout on bandwidth-poor
-      # runners. Cache strategy mirrors `.github/workflows/bazel-build.yml`
-      # `actions/cache` directly (not setup-bazel's built-in)
-      # to avoid 0-byte poisoning on analysis-phase failures, and a
-      # targeted key formula that excludes app/test sources whose changes
-      # don't affect ext/ action keys.
-      - uses: actions/cache@v5
-        id: bazel-disk-cache
-        with:
-          path: ~/.cache/bazel-disk
-          key: bazel-disk-sanitizer-linux-x86_64-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'BUILD.bazel', 'ext/**/BUILD.bazel', 'bazel/**', 'patches/**', 'platforms/**', '.bazelrc', '.bazelversion', 'flake.lock') }}
-          restore-keys: |
-            bazel-disk-sanitizer-linux-x86_64-
+      # Cache via bazel-remote on Cloud Run (gRPC). See ci.yml for the
+      # full topology. Credentials are supplied by a Bazel credential
+      # helper (`tools/bazel-cred-helper.sh`) which reads
+      # $BAZEL_CACHE_PASSWORD from the workflow env. Skipped on fork
+      # PRs (env var empty → no cache).
       # `just` drives the build; `llvmPackages_19.llvm` ships
       # `llvm-symbolizer`, which ASan/LSan need to resolve the
       # `(/nix/store/.../sipi+0xOFFSET)` frames into function names.
@@ -122,8 +111,6 @@ jobs:
       - run: nix profile install --inputs-from . nixpkgs#just nixpkgs#llvmPackages_19.llvm
 
       - name: Run e2e tests under ASan + UBSan
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         # `bazel test --config=asan --config=ubsan` rebuilds sipi (a
         # `data` dep of every e2e `rust_test` target) plus the tests
         # themselves under ASan/UBSan, then runs them — single action
@@ -144,11 +131,10 @@ jobs:
         # inline (`--strip=never` + `--compilation_mode=dbg`) so the
         # symboliser has something to read.
         #
-        # `--disk_cache` is set on the recipe's `*FLAGS` positional so
-        # bash expands `$HOME` here — Bazel does not expand env vars
-        # in .bazelrc paths (bazelbuild/bazel#15856). Path matches the
-        # `actions/cache` step above so the cache is restored and
-        # saved across CI runs.
+        # The `if [ -n "$BAZEL_CACHE_PASSWORD" ]` block below injects
+        # --remote_cache, --experimental_remote_downloader, and
+        # --credential_helper flags when the secret is present. Fork
+        # PRs run cold.
         #
         # `--flaky_test_attempts=<target>@3` retries the latency-budget
         # tests up to 3 times under sanitizer instrumentation. Their
@@ -161,14 +147,23 @@ jobs:
         # regex (e.g. `:(latency|…)`) would traverse the outer `bash -c
         # "…"` quoting and get mis-parsed as a shell subshell, so
         # explicit per-target flags are safer.
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
         run: |
+          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
+            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
+            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
+          else
+            REMOTE=""
+          fi
           export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer)"
           nix develop --command bash -c "just bazel-test-e2e \
             --config=asan --config=ubsan \
             --flaky_test_attempts=//test/e2e-rust:latency@3 \
             --flaky_test_attempts=//test/e2e-rust:iiif_compliance@3 \
             --flaky_test_attempts=//test/e2e-rust:resource_limits@3 \
-            --disk_cache=\$HOME/.cache/bazel-disk"
+            $REMOTE"
 
       - name: dump foreign_cc Make.log files on failure
         if: failure()

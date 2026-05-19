@@ -79,20 +79,10 @@ jobs:
           extra-conf: |
             extra-experimental-features = configurable-impure-env
 
-      # Bazel disk cache. Without this, every fuzz run rebuilds the LLVM
-      # toolchain + foreign_cc ext libs reachable from `:fuzz_subset` from
-      # cold — easily 10+ minutes per run. Cache strategy mirrors
-      # `bazel-build.yml` / `sanitizer.yml`: `actions/cache` directly (not
-      # `setup-bazel`'s built-in disk cache, which 0-byte-poisons on
-      # analysis-phase failures) and a targeted key formula that excludes
-      # app/test sources whose changes don't affect ext/ action keys.
-      - uses: actions/cache@v5
-        id: bazel-disk-cache
-        with:
-          path: ~/.cache/bazel-disk
-          key: bazel-disk-fuzz-linux-x86_64-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'BUILD.bazel', 'ext/**/BUILD.bazel', 'bazel/**', 'patches/**', 'tools/fuzz/BUILD.bazel', '.bazelrc', '.bazelversion', 'flake.lock') }}
-          restore-keys: |
-            bazel-disk-fuzz-linux-x86_64-
+      # Cache via bazel-remote on Cloud Run (gRPC). See ci.yml for the
+      # full topology. Credentials are supplied by a Bazel credential
+      # helper (`tools/bazel-cred-helper.sh`) which reads
+      # $BAZEL_CACHE_PASSWORD from the workflow env.
 
       - name: Find last successful fuzz run
         id: last-run
@@ -116,15 +106,20 @@ jobs:
       - name: Build fuzz target
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
         # `nix develop --command` mirrors `sanitizer.yml`'s wrapper — it
         # activates the dev shell so bazelisk + `gh` (used by the kakadu
         # repository_rule) + the foreign_cc host tools (`cmake`, `perl`,
         # `pkg-config`, `autoconf`, `automake`, `libtoolize`) are on PATH,
-        # and `NIX_LDFLAGS` / `ACLOCAL_PATH` are set. Bare `just
-        # bazel-build-fuzz` falls back to the runner's preinstalled
-        # tooling and produces inconsistent foreign_cc compile env.
-        # `--disk_cache` matches `actions/cache@v5` step above.
-        run: nix develop --command bash -c "just bazel-build-fuzz --disk_cache=\$HOME/.cache/bazel-disk"
+        # and `NIX_LDFLAGS` / `ACLOCAL_PATH` are set.
+        run: |
+          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
+            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
+            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
+          else
+            REMOTE=""
+          fi
+          nix develop --command bash -c "just bazel-build-fuzz $REMOTE"
 
       - name: Prepare live corpus (merge previous-run findings)
         run: |
