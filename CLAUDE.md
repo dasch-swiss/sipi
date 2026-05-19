@@ -11,8 +11,8 @@ SIPI (Simple Image Presentation Interface) is a multithreaded, high-performance,
 Read these before reasoning about names, boundaries, or architectural decisions:
 
 - [`UBIQUITOUS_LANGUAGE.md`](UBIQUITOUS_LANGUAGE.md) — canonical SIPI glossary. Defines Image vs Bitstream, the IIIF pipeline terms (Region / Size / Rotation / Quality / Format / Decode level / Canonical URL / Cache key), Preservation metadata, the three Lua entry points, the seven Permission types, and more. Use these terms in code comments, commit messages, and PR descriptions; aliases listed there are *avoid*.
-- [`CONTEXT-MAP.md`](CONTEXT-MAP.md) — declares two bounded contexts ([SIPI image server](CONTEXT.md) + [shttps embedded HTTP framework](shttps/CONTEXT.md)) with strict one-way SIPI → shttps dependency direction. Lists the four primary seam types and the secondary surface scheduled for re-homing.
-- [`docs/adr/`](docs/adr/) — architectural decision records. Start with [`0001-shttps-as-strangler-fig-target.md`](docs/adr/0001-shttps-as-strangler-fig-target.md).
+- [`CONTEXT.md`](CONTEXT.md) — SIPI is the IIIF subdomain implementation of the **Access Area** bounded context in the wider [`dsp-repository`](https://github.com/dasch-swiss/dsp-repository) system. Defines the Published Language inherited from Access Area (**Preservation File** / **Service File** / **Access File**) and points at the SIPI-local glossary. [`src/shttps/README.md`](src/shttps/README.md) documents the internal HTTP-framework module and its four-type seam API.
+- [`docs/adr/`](docs/adr/) — architectural decision records. Start with [`0013-shttps-as-internal-module.md`](docs/adr/0013-shttps-as-internal-module.md).
 
 ## Build System and Common Commands
 
@@ -98,7 +98,7 @@ localdev config in one step.
 | SipiHttpServer | `src/SipiHttpServer.hpp` | HTTP server, IIIF endpoints, caching, Lua scripting integration |
 | IIIF Parser | `include/iiifparser/` | IIIF URL parsing: identifier, region, size, rotation, quality/format |
 | Format Handlers | `include/formats/` | SipiIO base class + SipiIOTiff, SipiIOJ2k, SipiIOJpeg, SipiIOPng |
-| SHTTPS Framework | `shttps/` | HTTP server impl: threading, SSL/TLS, connection pooling, JWT auth |
+| SHTTPS Framework | `src/shttps/` | HTTP server impl: threading, SSL/TLS, connection pooling, JWT auth |
 | Caching | `include/SipiCache.h` | File-based LRU cache with dual-limit eviction (size + file count), crash recovery |
 | Metrics | `src/observability/metrics.h` | Prometheus metrics singleton (`Sipi::observability::Metrics`) — cache counters/gauges exposed at `GET /metrics` |
 | Memory Budget | `include/SipiMemoryBudget.h` | Lock-free decode memory budget with RAII guard — prevents OOM from concurrent large decodes |
@@ -130,7 +130,7 @@ Image formats (libtiff, libpng, libjpeg, libwebp), compression (zlib, bzip2, xz,
 ### Important Files
 
 - `MODULE.bazel` — Bazel module + `http_archive` pins for every ext/* dep
-- `BUILD.bazel` (root + `src/`, `shttps/`, `test/`, `ext/<lib>/`) — target graph
+- `BUILD.bazel` (root + `src/`, `test/`, `ext/<lib>/`) — target graph
 - `justfile` — all build targets (run `just` to list)
 - `flake.nix` — dev-shell only (`default` clang+libc++, `gcc` diagnostic)
 - `version.txt` — version information; baked in via `tools/workspace_status.sh`

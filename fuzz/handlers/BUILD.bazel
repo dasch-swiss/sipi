@@ -15,7 +15,7 @@ which:
      (link) — see `.bazelrc` `build:fuzz` block.
 
 The four shttps cpps + `iiif_handler.cpp` that make up the harness's
-explicit subset live under `//shttps:fuzz_subset` (kept in shttps's
+explicit subset live under `//src/shttps:fuzz_subset` (kept in shttps's
 package because four of its five sources are native there). The seed
 corpus stays committed under `fuzz/handlers/corpus/` and is exposed as
 `//fuzz/handlers/corpus:seed_corpus`. `data = [...]` makes it available
@@ -60,5 +60,5 @@ cc_binary(
         "-fsanitize=address",
     ],
     target_compatible_with = ["//tools/fuzz:fuzz_enabled"],
-    deps = ["//shttps:fuzz_subset"],
+    deps = ["//src/shttps:fuzz_subset"],
 )

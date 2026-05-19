@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # Enforce the shttps → sipi one-way dependency direction.
-# See sipi/shttps/CONTEXT.md and docs/adr/0001-shttps-as-strangler-fig-target.md.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -44,7 +43,7 @@ is_allowed() {
 run_pass() {
     local kind="$1" pattern="$2"
     local raw entry file rest line content
-    raw=$(grep -rEn "${GREP_FLAGS[@]}" "$pattern" shttps/ || true)
+    raw=$(grep -rEn "${GREP_FLAGS[@]}" "$pattern" src/shttps/ || true)
     if [ -z "$raw" ]; then
         return 0
     fi

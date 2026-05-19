@@ -85,7 +85,7 @@ cc_library(
         "//ext/lcms2:lcms2",
         "//ext/openssl:openssl",
         "//include:headers",
-        "//shttps:shttps",
+        "//src/shttps:shttps",
         "//src:sipi_generated_hdrs",
         "//src:sipi_top",
         "//src/metadata/internal:icc_normalization",

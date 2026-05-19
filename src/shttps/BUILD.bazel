@@ -1,10 +1,24 @@
 """shttps — embedded HTTP framework, internal SIPI module.
 
 Strict SIPI → shttps one-way dependency direction: only `//src/...` may
-depend on `//shttps:shttps`, and shttps declares no `//src/...` deps
+depend on `//src/shttps:shttps`, and shttps declares no `//src/...` deps
 except `//src/logging:logging` — a generic logging primitive,
 visibility-allowlisted on the consumer side as a shared support
 library.
+
+Direction enforcement:
+  - `visibility` restricts consumers to `//src/...` packages only.
+  - `scripts/shttps-context-check.sh` (wired into the `just
+    shttps-context-check` recipe and CI) regex-scans `src/shttps/*` for
+    `#include "Sipi*.h"` or `Sipi*::` symbol references.
+  - The direct-deps list is curated to a single SIPI-side entry.
+
+Bazel `--features=layering_check` is not enabled on this package:
+foreign_cc targets (every `ext/*` build) do not emit Clang modulemaps,
+so layering_check fails compilation on any cc_library that consumes
+them. Enabling it requires either wrapping each foreign_cc output in
+a modulemap-bearing `cc_library` shim or switching layering_check to
+a Bazel-graph check that does not rely on Clang modules.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
@@ -12,7 +26,7 @@ load("//bazel:magic_database.bzl", "magic_mgc_header")
 
 package(default_visibility = [
     "//src:__subpackages__",
-    "//shttps:__subpackages__",
+    "//src/shttps:__subpackages__",
 ])
 
 # Embeds libmagic's `share/misc/magic.mgc` database as a C array consumed
@@ -26,7 +40,7 @@ magic_mgc_header(
     out = "generated/magic_mgc.h",
 )
 
-# ── //shttps:shttps_headers ────────────────────────────────────────────────
+# ── //src/shttps:shttps_headers ────────────────────────────────────────────────
 # Header-only surface of shttps. Split out so `//fuzz/handlers:fuzz_subset`
 # can compile its 5-cpp slice with the full shttps include graph available
 # (sibling-relative `#include "Server.h"` chains pull LuaServer.h, Global.h,
@@ -74,7 +88,7 @@ cc_library(
     deps = [":shttps_headers"],
 )
 
-# ── //shttps:fuzz_subset — minimal slice for libFuzzer ─────────────────────
+# ── //src/shttps:fuzz_subset — minimal slice for libFuzzer ─────────────────────
 # Deliberate subset of shttps (4 cpps) plus `iiif_handler.cpp` from //src,
 # recompiled under the libFuzzer instrumentation flags from `--config=fuzz`
 # (.bazelrc `build:fuzz` block).

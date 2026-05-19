@@ -140,7 +140,7 @@ jobs:
       #      flake.lock pins the dev-shell store paths consumed via
       #      --action_env=PATH/NIX_LDFLAGS/ACLOCAL_PATH.
       #
-      # NOT in the key: src/**, include/**, shttps/**, test/**, fuzz/**,
+      # NOT in the key: src/**, include/**, test/**, fuzz/**,
       # tools/**, config/** — app/test code does not change ext/ action
       # outputs, so changes there should not evict the foreign_cc cache.
       - uses: actions/cache@v5
