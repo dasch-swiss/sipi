@@ -248,7 +248,7 @@ Metrics endpoint at `GET /metrics` (`src/observability/metrics.h`, `src/observab
 | Feature | Details |
 |---|---|
 | **Knora/DSP** | Session cookie validation, knora.json sidecar, configurable API path/port |
-| **API endpoints** | `/api/cache` (manage cache), `/api/exit` (shutdown), `/metrics` (Prometheus) |
+| **API endpoints** | `/metrics` (Prometheus) |
 | **File access** | Raw file download via `/prefix/identifier/file` with `file_pre_flight` auth |
 | **Sentry** | Error reporting via `SIPI_SENTRY_DSN`, `SIPI_SENTRY_ENVIRONMENT`, `SIPI_SENTRY_RELEASE` |
 

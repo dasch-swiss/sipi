@@ -66,10 +66,4 @@ fileserver = {
     wwwroute = '/server'
 }
 
-routes = {
-    {
-        method = 'GET',
-        route = '/api/exit',
-        script = 'exit.lua'
-    }
-}
+routes = {}

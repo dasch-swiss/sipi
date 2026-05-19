@@ -261,44 +261,14 @@ fileserver = {
 --
 routes = {
     {
-        method = 'GET',
-        route = '/api/exit',
-        script = 'exit.lua'
-    },
-    {
-        method = 'GET',
-        route = '/luaexe/test1',
-        script = 'test1.lua'
-    },
-    {
-        method = 'POST',
-        route = '/luaexe/test1',
-        script = 'test1.lua'
-    },
-    {
-        method = 'GET',
-        route = '/luaexe/test2',
-        script = 'test2.lua'
-    },
-    {
         method = 'POST',
         route = '/api/upload',
         script = 'upload.lua'
     },
     {
         method = 'GET',
-        route = '/sqlite',
-        script = 'test_sqlite.lua'
-    },
-    {
-        method = 'GET',
         route = '/api/token',
         script = 'token.lua'
-    },
-    {
-        method = 'GET',
-        route = '/test/luafunctions',
-        script = 'test_functions.lua'
     },
     {
         method = 'GET',
