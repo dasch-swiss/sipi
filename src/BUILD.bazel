@@ -35,7 +35,7 @@ package(default_visibility = ["//visibility:public"])
 
 # ── Cross-package surface for the fuzz subset ─────────────────────────────
 # The IIIF URI parser fuzz harness recompiles `iiif_handler.cpp` under the
-# libFuzzer instrumentation flags as part of `//shttps:fuzz_subset` (where
+# libFuzzer instrumentation flags as part of `//src/shttps:fuzz_subset` (where
 # the four shttps cpps it joins also live). Linking the full `:sipi_lib`
 # archive into the fuzz binary would inflate the libFuzzer corpus
 # search-space cost, so the only `//src` surface the fuzz graph reaches
@@ -43,14 +43,14 @@ package(default_visibility = ["//visibility:public"])
 #
 # `:iiif_handler_hdrs` makes `#include "handlers/iiif_handler.hpp"` resolve
 # explicitly — both for `iiif_handler.cpp` itself when compiled inside
-# `//shttps:fuzz_subset` and for the fuzz harness target.cpp at
+# `//src/shttps:fuzz_subset` and for the fuzz harness target.cpp at
 # `//fuzz/handlers:iiif_handler_uri_parser_fuzz` (which uses the same
 # `handlers/`-prefixed include form). Without the header cc_library, that
 # include resolution would rely on Bazel's workspace-root quote_includes
 # default — fragile under future sandbox-strip changes.
 exports_files(
     ["handlers/iiif_handler.cpp"],
-    visibility = ["//shttps:__pkg__"],
+    visibility = ["//src/shttps:__pkg__"],
 )
 
 cc_library(
@@ -58,7 +58,7 @@ cc_library(
     hdrs = ["handlers/iiif_handler.hpp"],
     includes = ["."],
     visibility = [
-        "//shttps:__pkg__",
+        "//src/shttps:__pkg__",
         "//fuzz/handlers:__pkg__",
     ],
 )
@@ -239,7 +239,7 @@ cc_library(
     # `includes = ["."]` for the unstrict-deps grace period).
     deps = [
         "//include:headers",
-        "//shttps:shttps",
+        "//src/shttps:shttps",
         "//src/logging:logging",
     ],
 )
@@ -300,7 +300,7 @@ cc_library(
         ":sipi_generated_hdrs",
         ":sipi_top",
         "//include:headers",
-        "//shttps:shttps",
+        "//src/shttps:shttps",
         "//src/logging:logging",
         "//src/metadata:metadata",
         "//src/observability:observability",

@@ -32,7 +32,6 @@ on:
   pull_request:
     paths:
       - 'src/**'
-      - 'shttps/**'
       - 'include/**'
       - 'test/**'
       - 'tools/**'

@@ -72,9 +72,10 @@ bazel-test *FLAGS='':
 # to consume directly — no cobertura conversion.
 #
 # `instrumentation_filter` keeps measurement scoped to first-party
-# code (`//src,//shttps`), excluding test bodies and ext/* deps.
-# Coverage spans unit + approval + e2e, so the reported % includes
-# HTTP and Lua paths the unit suite cannot reach.
+# code (`//src`, which now subsumes the shttps module at //src/shttps),
+# excluding test bodies and ext/* deps. Coverage spans unit + approval +
+# e2e, so the reported % includes HTTP and Lua paths the unit suite cannot
+# reach.
 #
 # `COVERAGE_GCOV_PATH` (= llvm-profdata) and `LLVM_COV` (= llvm-cov) are
 # propagated from the dev-shell PATH into each test action. Bazel's
@@ -88,7 +89,7 @@ bazel-coverage *FLAGS='':
     LLVM_COV=$(command -v llvm-cov) \
         bazel coverage \
             --combined_report=lcov \
-            --instrumentation_filter='//src,//shttps' \
+            --instrumentation_filter='//src' \
             --features=llvm_coverage_map_format \
             --features=-gcc_coverage_map_format \
             --test_env=COVERAGE_GCOV_PATH \
@@ -420,7 +421,6 @@ fuzz-corpus-update:
 #####################################
 
 # Enforce shttps → sipi one-way dependency boundary.
-# See sipi/shttps/CONTEXT.md and docs/adr/0001-shttps-as-strangler-fig-target.md.
 shttps-context-check:
     @scripts/shttps-context-check.sh
 

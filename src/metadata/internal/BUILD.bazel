@@ -46,7 +46,7 @@ cc_library(
     hdrs = ["protobuf_codec.h"],
     strip_include_prefix = "/src",
     deps = [
-        "//shttps:shttps",
+        "//src/shttps:shttps",
         "//src/metadata:essentials_cc_proto",
     ],
 )

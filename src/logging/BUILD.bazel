@@ -4,7 +4,7 @@
 namespace (`log_info`, `log_warn`, `log_err`, `log_debug`, plus the
 `set_cli_mode` / `set_json_mode` mode flags). No `Sipi::` business
 logic — any module in this codebase can legitimately depend on it,
-including `//shttps:shttps`. The visibility allowlist below reflects
+including `//src/shttps:shttps`. The visibility allowlist below reflects
 this.
 
 `logger.cpp` deps only on the standard library plus its own header,
@@ -16,7 +16,7 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 package(default_visibility = [
     "//src:__subpackages__",
     # Generic primitive consumed by shttps as a shared support library.
-    "//shttps:__pkg__",
+    "//src/shttps:__pkg__",
 ])
 
 cc_library(
@@ -26,7 +26,7 @@ cc_library(
     # Virtual-include staging publishes `logger.h` as `logging/logger.h`
     # regardless of where the consumer sits — required for top-level
     # packages whose include path does not have `src/` on it (e.g.
-    # `//shttps:shttps`) and thus cannot resolve the include via
+    # `//src/shttps:shttps`) and thus cannot resolve the include via
     # `:sipi_lib`'s `includes = ["."]`.
     include_prefix = "logging",
     features = ["layering_check", "parse_headers"],
