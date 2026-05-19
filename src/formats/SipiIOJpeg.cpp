@@ -20,7 +20,7 @@
 #include "shttps/Connection.h"
 #include "shttps/makeunique.h"
 
-#include "Logger.h"
+#include "logging/logger.h"
 #include "SipiCommon.h"
 #include "SipiError.hpp"
 #include "SipiIO.h"

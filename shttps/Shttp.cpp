@@ -13,7 +13,7 @@
 #include "Error.h"
 #include "Server.h"
 #include "LuaServer.h"
-#include "Logger.h"
+#include "logging/logger.h"
 
 shttps::Server *serverptr = nullptr;
 

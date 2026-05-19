@@ -13,7 +13,7 @@
 #include <stdexcept>
 #include <string>
 
-#include "Logger.h"
+#include "logging/logger.h"
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
 #include "SipiRegion.h"

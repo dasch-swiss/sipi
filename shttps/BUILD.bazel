@@ -1,16 +1,10 @@
-"""shttps — embedded HTTP framework, native first-party `cc_library`.
+"""shttps — embedded HTTP framework, internal SIPI module.
 
-Bounded-context boundary (`CONTEXT-MAP.md`): SIPI → shttps is one-way
-at the target level. `visibility` enforces this — only `//src/...` may
-depend on `//shttps:shttps`, and `//shttps:shttps` declares no
-`//src/...` deps.
-
-`layering_check` is **not** enabled yet because `shttps/*.cpp` still
-includes `Logger.h` from `//include`, which is the last residual
-SIPI → shttps reverse-direction reference. Enabling `layering_check`
-is a follow-up immediately after the Logger.h rehome lands — either
-move it under `shttps/`, or split it out of the SIPI namespace as a
-third-party-style support lib.
+Strict SIPI → shttps one-way dependency direction: only `//src/...` may
+depend on `//shttps:shttps`, and shttps declares no `//src/...` deps
+except `//src/logging:logging` — a generic logging primitive,
+visibility-allowlisted on the consumer side as a shared support
+library.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
@@ -35,8 +29,8 @@ magic_mgc_header(
 # ── //shttps:shttps_headers ────────────────────────────────────────────────
 # Header-only surface of shttps. Split out so `//fuzz/handlers:fuzz_subset`
 # can compile its 5-cpp slice with the full shttps include graph available
-# (sibling-relative `#include "Server.h"` chains pull Logger.h, LuaServer.h,
-# Global.h, etc.) without linking shttps's compiled archive — only the four
+# (sibling-relative `#include "Server.h"` chains pull LuaServer.h, Global.h,
+# etc.) without linking shttps's compiled archive — only the four
 # explicitly-listed cpps end up in the fuzz binary.
 #
 # `includes = ["."]` + `include_prefix = "shttps"` produce the same virtual-
@@ -53,12 +47,9 @@ cc_library(
     includes = ["."],
     include_prefix = "shttps",
     deps = [
-        # TODO: the cross-context include of `//include:Logger.h` is the
-        # last residual SIPI → shttps reverse-direction reference. Once
-        # Logger.h is rehomed under shttps/ (or a shared support lib),
-        # this dep drops and `features = ["layering_check"]` flips on
-        # as the build-graph enforcement of the bounded-context rule.
-        "//include:headers",
+        # Generic levelled-logging primitive; visibility-allowlisted for
+        # this package as a shared support library.
+        "//src/logging:logging",
         "//ext/curl:curl",
         "//ext/jansson:jansson",
         "//ext/libmagic:libmagic",

@@ -40,7 +40,7 @@
 #include "SipiError.hpp"
 #include "SipiImageError.hpp"
 #include "formats/SipiIOJ2k.h"
-#include "Logger.h"
+#include "logging/logger.h"
 
 using namespace kdu_core;
 using namespace kdu_supp;

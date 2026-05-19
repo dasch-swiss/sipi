@@ -20,7 +20,7 @@
 #include "shttps/Parsing.h"
 #include "shttps/makeunique.h"
 
-#include "Logger.h"
+#include "logging/logger.h"
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
 #include "formats/SipiIOJ2k.h"

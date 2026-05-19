@@ -12,7 +12,7 @@
 #include <string>
 #include <utility>
 
-#include "Logger.h"
+#include "logging/logger.h"
 #include "SipiImage.hpp"
 #include "metadata/essentials.h"
 #include "metadata/icc.h"

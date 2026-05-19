@@ -22,7 +22,7 @@
 
 #include "shttps/Connection.h"
 
-#include "Logger.h"
+#include "logging/logger.h"
 #include "SipiError.hpp"
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"

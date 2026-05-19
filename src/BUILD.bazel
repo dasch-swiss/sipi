@@ -185,9 +185,9 @@ cc_library(
 )
 
 # ── //src:sipi_top ─────────────────────────────────────────────────────────
-# Foundational `cc_library` covering the two infrastructure source files
-# (`Logger.cpp`, `SipiError.cpp`) and the top-level `.hpp` headers
-# (`SipiError.hpp`, `SipiImage.hpp`) that per-module packages need to consume.
+# Foundational `cc_library` covering the SipiError infrastructure source
+# file and the top-level `.hpp` headers (`SipiError.hpp`, `SipiImage.hpp`)
+# that per-module packages need to consume.
 #
 # Why this split exists:
 #
@@ -196,28 +196,27 @@ cc_library(
 #     would close a cycle, since `:sipi_lib` deps on every per-module
 #     target.
 #
-#   - Those modules' `.cpp` files reference symbols from
-#     `Logger.cpp` (`log_err` family) and `SipiError.cpp` (the constructors
-#     emitted by every `throw SipiError(...)` site). Unit tests that link
-#     only the per-module `cc_library` would fail with undefined-symbol
-#     errors without those definitions in the link line.
+#   - Those modules' `.cpp` files reference symbols from `SipiError.cpp`
+#     (the constructors emitted by every `throw SipiError(...)` site).
+#     Unit tests that link only the per-module `cc_library` would fail
+#     with undefined-symbol errors without those definitions in the
+#     link line.
 #
-# Including the implementations here (not just headers) is what lets each
+# Including the implementation here (not just headers) is what lets each
 # module's co-located unit test link cleanly with `deps = [":<mod>"]` +
 # gtest.
 #
-# `:sipi_lib` excludes these files from its srcs glob and instead depends
+# `:sipi_lib` excludes this file from its srcs glob and instead depends
 # on `:sipi_top` so each TU stays in exactly one library — no
 # duplicate-symbol risk.
 #
 # When `SipiImage` moves into its own package (DEV-6396), `SipiImage.hpp`
-# leaves this library; same for `SipiError`/`Logger` if a future probe
-# extracts them into dedicated modules. This target is transitional
-# scaffolding for the Y+8 per-module flip series.
+# leaves this library; same for `SipiError` if a future probe extracts
+# it into a dedicated module. This target is transitional scaffolding
+# for the Y+8 per-module flip series.
 cc_library(
     name = "sipi_top",
     srcs = [
-        "Logger.cpp",
         "SipiError.cpp",
     ],
     hdrs = [
@@ -241,6 +240,7 @@ cc_library(
     deps = [
         "//include:headers",
         "//shttps:shttps",
+        "//src/logging:logging",
     ],
 )
 
@@ -254,10 +254,9 @@ cc_library(
             "**/*.hpp",
         ],
         exclude = [
-            # Owned by `:sipi_top` so per-module unit tests can link them
+            # Owned by `:sipi_top` so per-module unit tests can link it
             # transitively without depending on `:sipi_lib` (which would
             # close a cycle).
-            "Logger.cpp",
             "SipiError.cpp",
         ],
     ),
@@ -302,6 +301,7 @@ cc_library(
         ":sipi_top",
         "//include:headers",
         "//shttps:shttps",
+        "//src/logging:logging",
         "//src/metadata:metadata",
         "//src/observability:observability",
         "//ext/lcms2:lcms2",

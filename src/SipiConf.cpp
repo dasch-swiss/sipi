@@ -4,7 +4,7 @@
  */
 
 #include "SipiConf.h"
-#include "Logger.h"
+#include "logging/logger.h"
 #include <stdexcept>
 #include <string>
 #include <thread>

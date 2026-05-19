@@ -33,7 +33,7 @@
 
 
 #include "CLI11.hpp"
-#include "Logger.h"
+#include "logging/logger.h"
 #include "cli/commands/convert_access_file.h"
 #include "cli/commands/convert_service_file.h"
 #include "cli/commands/verify.h"

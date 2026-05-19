@@ -38,7 +38,7 @@
 #include "iiifparser/SipiRotation.h"
 #include "iiifparser/SipiSize.h"
 
-#include "Logger.h"
+#include "logging/logger.h"
 #include "SipiHttpServer.hpp"
 #include "observability/metrics.h"
 #include "generated/SipiVersion.h"
