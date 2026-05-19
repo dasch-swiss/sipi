@@ -9,7 +9,6 @@ package(default_visibility = ["//visibility:public"])
 
 exports_files([
     "send_response.lua",
-    "test_functions.lua",
 ])
 
 # Full `scripts/` tree. Consumed by `//:test_fixtures` to populate

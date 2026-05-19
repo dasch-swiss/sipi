@@ -431,24 +431,19 @@ Thus, the routing section of a SIPI configuration file may look as follows:
 ```lua
 routes = {
     {
-        method = 'DELETE',
-        route = '/api/cache',
-        script = 'cache.lua'
-    },
-    {
-        method = 'GET',
-        route = '/api/cache',
-        script = 'cache.lua'
-    },
-    {
         method = 'POST',
         route = '/api/upload',
         script = 'upload.lua'
     },
     {
         method = 'GET',
-        route = '/sqlite',
-        script = 'test_sqlite.lua'
+        route = '/api/token',
+        script = 'token.lua'
+    },
+    {
+        method = 'GET',
+        route = '/test/orientation',
+        script = 'orientation.lua'
     }
 }
 ```

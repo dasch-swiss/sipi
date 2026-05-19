@@ -675,7 +675,6 @@ tar(
         "//config:sipi.config.lua",
         "//config:sipi.init.lua",
         "//scripts:send_response.lua",
-        "//scripts:test_functions.lua",
         "//server:test.html",
     ],
     mtree = [
@@ -689,7 +688,6 @@ tar(
         "./sipi/config/sipi.config.lua type=file mode=0644 time=0 content=$(execpath //config:sipi.config.lua)",
         "./sipi/config/sipi.init.lua type=file mode=0644 time=0 content=$(execpath //config:sipi.init.lua)",
         "./sipi/scripts/send_response.lua type=file mode=0644 time=0 content=$(execpath //scripts:send_response.lua)",
-        "./sipi/scripts/test_functions.lua type=file mode=0644 time=0 content=$(execpath //scripts:test_functions.lua)",
         "./sipi/server/test.html type=file mode=0644 time=0 content=$(execpath //server:test.html)",
     ],
 )
