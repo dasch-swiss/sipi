@@ -103,23 +103,156 @@ Gate model:
 
 ## Cache strategy
 
-CI's Bazel disk cache is managed by `actions/cache@v5` rather than
-`setup-bazel`'s built-in disk-cache wiring. The full rationale
-(0-byte poisoning on analysis-phase failures, targeted key formula,
-repository-cache disabled to fit the 10 GB GHA quota) is documented
-inline in `.github/workflows/ci.yml`'s "CACHE STRATEGY" comment.
+CI routes **all three Bazel cache layers — AC, CAS, and the
+repository_cache for `http_archive` source tarballs — through a
+single bazel-remote gRPC endpoint** hosted on Cloud Run, backed by
+GCS. One bucket, one auth path, one endpoint.
 
-The cache key formula covers only inputs that actually affect
-`rules_foreign_cc` action keys: `MODULE.bazel{,.lock}`,
-`ext/**/BUILD.bazel`, `bazel/**`, `patches/**`, `platforms/**`,
-`.bazelrc`, `.bazelversion`, `flake.lock`. App/test sources are
-deliberately excluded so changes there do not evict the foreign_cc
-cache.
+**Topology.**
 
-`--incompatible_strict_action_env` is set in `.bazelrc`, so it
-applies to every CI invocation — preventing host env vars (e.g.
-GitHub-injected `GITHUB_RUN_ID`) from poisoning Bazel's cache keys
-across runs.
+```
+GHA workflow ──gRPC over TLS, HTTP basic auth──▶ Cloud Run: bazel-cache-proxy
+                                                  │ (us-central1, scale-to-zero,
+                                                  │  buchgr/bazel-remote-cache)
+                                                  ▼
+                                                gs://dasch-bazel-cache
+                                                (us-central1, STANDARD,
+                                                 uniform IAM, 30-day lifecycle)
+```
+
+The Cloud Run service runs `buchgr/bazel-remote-cache:latest` with
+flags:
+
+- `--gcs_proxy.bucket=dasch-bazel-cache --gcs_proxy.use_default_credentials`
+  — GCS as the upstream tier via ADC (the attached
+  `bazel-cache-proxy@dsp-repository-automation` service account).
+  Local disk cache is the primary tier; ephemeral per Cloud Run
+  instance but content survives in GCS.
+- `--experimental_remote_asset_api` — enables the Remote Asset API
+  that Bazel's `--experimental_remote_downloader` calls to mirror
+  `http_archive` tarballs through the cache.
+- `--htpasswd_file=/etc/bazel-remote/htpasswd` — basic-auth gate.
+  The htpasswd file is mounted from Secret Manager
+  (`bazel-cache-htpasswd`) as a Cloud Run secret file.
+- `--grpc_address=0.0.0.0:8080 --http_address=unix:///tmp/http.sock`
+  — gRPC on Cloud Run's expected port; HTTP listener bound to a
+  unix socket and so not externally reachable.
+
+**Auth.** Bazel sends HTTP Basic Auth credentials via a credential
+helper script (`tools/bazel-cred-helper.sh`). The helper reads
+`$BAZEL_CACHE_PASSWORD` from the Bazel subprocess environment at
+request time, base64-encodes `ci-runner:<password>`, and emits
+`{"headers":{"Authorization":["Basic <b64>"]}}` per the Bazel
+[credential-helper protocol](https://github.com/bazelbuild/proposals/blob/main/designs/2022-06-07-bazel-credential-helpers.md).
+Cloud Run IAM is **not** used to gate access — Bazel's gRPC client
+doesn't speak Cloud Run OIDC. The password lives in Secret Manager
+(`bazel-cache-htpasswd`, bcrypt-hashed for bazel-remote to verify)
+and in the GH repo secret `BAZEL_CACHE_PASSWORD` (plain text, read
+by the helper at runtime). Fork PRs cannot see the GH secret →
+helper emits empty headers → request goes unauthenticated → bucket
+declines → Bazel falls back to local execution via
+`--remote_local_fallback`.
+
+**Why a credential helper instead of inline credentials?** Two
+simpler approaches don't work in our setup:
+
+- `--remote_cache=grpcs://ci-runner:<password>@<host>:443` puts the
+  credentials in the HTTP/2 `:authority` pseudo-header. Cloud Run's
+  Google Front End (GFE) rejects `:authority` values that contain
+  `user:pass@host` with HTTP 400 before the request reaches our
+  container.
+- `--remote_header=Authorization=Basic <b64>` is the Bazel-native
+  flag for adding metadata. It works directly on the bazel CLI, but
+  the space between `Basic` and the base64 token loses its
+  argument-boundary protection when `just`'s `{{FLAGS}}` textual
+  substitution re-tokenises the recipe args inside the
+  `bash -c "..."` invocation. Bazel ends up parsing the value as
+  `Basic` (the literal token) without the base64 payload, and
+  bazel-remote rejects the request as `UNAUTHENTICATED`.
+
+The credential helper sidesteps both: the `--credential_helper=
+$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh` flag has no embedded
+whitespace, and the credentials never appear on the Bazel command
+line at all.
+
+**Bazel wiring.** Each Bazel-running workflow step assembles the
+flag string in a shell variable when `BAZEL_CACHE_PASSWORD` is
+present:
+
+```
+--remote_cache=grpcs://<host>:443
+--experimental_remote_downloader=grpcs://<host>:443
+--credential_helper=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh
+--remote_upload_local_results=true
+```
+
+Bazel does not expand environment variables inside `.bazelrc`, so
+these CLI flags live in workflow steps; the `.bazelrc` only carries
+cache-backend-agnostic static flags
+(`--remote_cache_compression`, `--remote_download_minimal`,
+`--remote_local_fallback`, `--remote_timeout=30s`,
+`--remote_max_connections=100`) that are safe-no-op without
+`--remote_cache`.
+
+Local dev never sets `BAZEL_CACHE_PASSWORD` and never passes
+`--remote_cache=…`, so local builds don't touch the bucket. If a
+developer somehow invokes Bazel with `--credential_helper=` while
+their env doesn't have `BAZEL_CACHE_PASSWORD`, the helper emits
+empty headers and the request goes unauthenticated.
+
+**Top-level flags in `.bazelrc`** (always on, safe-no-op without a
+remote cache): `--remote_cache_compression` (zstd over the wire),
+`--remote_download_minimal` (don't fetch intermediate action
+outputs), `--remote_local_fallback` (build locally if the cache is
+unreachable — a Cloud Run outage degrades CI wall-clock but never
+breaks it).
+
+`--incompatible_strict_action_env` is set in `.bazelrc` so host env
+vars (e.g. GitHub-injected `GITHUB_RUN_ID`) don't poison Bazel's
+cache keys across runs.
+
+### Cost
+
+Cloud Run with `--min-instances=0`: zero cost while CI is idle.
+Active CI runs incur ~$0/month at current PR volume (low-millis of
+CPU-seconds per build, free egress within GCP since the bucket is
+in the same region). GCS storage: ~$0.40-$0.80/month at 20-40 GB
+sustained, STANDARD class in `us-central1`. Total expected monthly
+spend on the cache: under $2.
+
+### Runbooks
+
+**Password rotation (annual).**
+
+```bash
+NEW_PASS=$(openssl rand -hex 16)
+# 1. New htpasswd line into Secret Manager
+htpasswd -nbB ci-runner "$NEW_PASS" > /tmp/htpasswd
+gcloud secrets versions add bazel-cache-htpasswd --data-file=/tmp/htpasswd
+shred -u /tmp/htpasswd
+# 2. Push the plain password to GH (workflows read this)
+gh secret set BAZEL_CACHE_PASSWORD --repo dasch-swiss/sipi --body "$NEW_PASS"
+# 3. Bounce the Cloud Run revision so the new secret version is picked up
+gcloud run services update bazel-cache-proxy --region=us-central1 \
+  --update-secrets=/etc/bazel-remote/htpasswd=bazel-cache-htpasswd:latest
+# 4. (After verifying CI works) disable the old Secret Manager version
+gcloud secrets versions list bazel-cache-htpasswd
+gcloud secrets versions disable <OLD_VERSION> --secret=bazel-cache-htpasswd
+```
+
+**Cache nuke (suspected corruption).** Bazel re-populates on the
+next run:
+
+```bash
+gcloud storage rm --recursive gs://dasch-bazel-cache/**
+```
+
+**Inspect cache state.**
+
+```bash
+gcloud storage du gs://dasch-bazel-cache --readable-sizes
+gcloud storage ls gs://dasch-bazel-cache --recursive | head
+```
 
 ## Local reproduction
 
