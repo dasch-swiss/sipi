@@ -46,27 +46,38 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       - run: nix profile install --inputs-from . nixpkgs#just
-      - uses: actions/cache@v5
-        id: bazel-disk-cache
-        with:
-          path: ~/.cache/bazel-disk
-          key: bazel-disk-publish-validate-${{ matrix.arch }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'BUILD.bazel', 'ext/**/BUILD.bazel', 'bazel/**', 'patches/**', 'platforms/**', '.bazelrc', '.bazelversion', 'flake.lock') }}
-          restore-keys: |
-            bazel-disk-publish-validate-${{ matrix.arch }}-
-            bazel-disk-ci-test-${{ matrix.arch }}-
+      # Cache via bazel-remote on Cloud Run (gRPC). See ci.yml for full
+      # topology. publish.yml only runs on `v*` tag pushes — no fork-PR
+      # gating needed.
       - name: Build Docker image (Bazel rules_oci)
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
         # See ci.yml for the `nix develop --command` rationale (foreign_cc
         # host-tool PATH).
-        run: nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} --disk_cache=\$HOME/.cache/bazel-disk"
+        run: |
+          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
+            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
+            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
+          else
+            REMOTE=""
+          fi
+          nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} $REMOTE"
       # `:docker_smoke` rust_test loads the OCI tarball produced by
       # `//src:image_load` and runs the smoke suite against it. The Docker
       # image already loaded by the build step above is left alone.
       - name: Run Docker smoke tests
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: nix develop --command bash -c "just bazel-test-smoke --disk_cache=\$HOME/.cache/bazel-disk"
+          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
+        run: |
+          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
+            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
+            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
+          else
+            REMOTE=""
+          fi
+          nix develop --command bash -c "just bazel-test-smoke $REMOTE"
 
   release-gate:
     runs-on: ubuntu-latest
@@ -119,34 +130,62 @@ jobs:
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       - run: nix profile install --inputs-from . nixpkgs#just
-      - uses: actions/cache@v5
-        id: bazel-disk-cache
-        with:
-          path: ~/.cache/bazel-disk
-          key: bazel-disk-publish-${{ matrix.arch }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'BUILD.bazel', 'ext/**/BUILD.bazel', 'bazel/**', 'patches/**', 'platforms/**', '.bazelrc', '.bazelversion', 'flake.lock') }}
-          restore-keys: |
-            bazel-disk-publish-${{ matrix.arch }}-
-            bazel-disk-publish-validate-${{ matrix.arch }}-
-            bazel-disk-ci-test-${{ matrix.arch }}-
+      # Cache via bazel-remote on Cloud Run (gRPC). The validate-docker
+      # job warmed the cache; this job should hit it for ~100 % of
+      # compile actions when the source tree is unchanged between the
+      # two jobs (release-please tag push).
       - name: Build Docker image (Bazel rules_oci) + sipi-debug
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
         # Binary version + OCI image tag come from version.txt, which
         # release-please updates before cutting the tag — no extra
         # plumbing required to keep them in sync with `${github.ref_name}`.
         # See ci.yml for the `nix develop --command` rationale.
-        run: nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} --disk_cache=\$HOME/.cache/bazel-disk"
+        run: |
+          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
+            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
+            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
+          else
+            REMOTE=""
+          fi
+          nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} $REMOTE"
       - name: Extract debug symbols for Sentry upload
-        # `--disk_cache` lets the genrule reuse the build artifacts the
-        # build step just produced (the genrule depends on `:sipi`, which
-        # is already built and in the disk cache).
-        run: nix develop --command bash -c "just bazel-docker-extract-debug ${{ matrix.arch }} --disk_cache=\$HOME/.cache/bazel-disk"
+        env:
+          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
+        # The genrule depends on `:sipi`, already built and in the
+        # remote cache from the build step just above.
+        run: |
+          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
+            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
+            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
+          else
+            REMOTE=""
+          fi
+          nix develop --command bash -c "just bazel-docker-extract-debug ${{ matrix.arch }} $REMOTE"
       - name: Run Docker smoke tests
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: nix develop --command bash -c "just bazel-test-smoke --disk_cache=\$HOME/.cache/bazel-disk"
+          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
+        run: |
+          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
+            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
+            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
+          else
+            REMOTE=""
+          fi
+          nix develop --command bash -c "just bazel-test-smoke $REMOTE"
       - name: Push image to Docker Hub
-        run: nix develop --command bash -c "just bazel-docker-push-${{ matrix.arch }} --disk_cache=\$HOME/.cache/bazel-disk"
+        env:
+          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
+        run: |
+          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
+            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
+            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
+          else
+            REMOTE=""
+          fi
+          nix develop --command bash -c "just bazel-docker-push-${{ matrix.arch }} $REMOTE"
 
       - name: Docker Scout — record production
         uses: docker/scout-action@v1

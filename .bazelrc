@@ -379,6 +379,41 @@ build:fuzz --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsani
 # bazel-testlogs — useful for inner-loop iteration. CI flips this off.
 test --test_output=errors
 
+# ── Remote cache ────────────────────────────────────────────────────────────
+# DEV-6517: gRPC remote cache via bazel-remote on Cloud Run, backed by GCS.
+# The URL and a pointer to the credential helper are constructed in each
+# CI workflow step:
+#   --remote_cache=grpcs://<host>:443
+#   --experimental_remote_downloader=grpcs://<host>:443
+#   --credential_helper=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh
+# Bazel does NOT do shell env-var expansion in .bazelrc, so these flags
+# live in the workflow env, not here. The credential helper reads
+# $BAZEL_CACHE_PASSWORD from the Bazel subprocess env and emits an
+# `Authorization: Basic <b64>` gRPC metadata header on demand.
+# Credentials cannot live in the URL (Cloud Run's GFE rejects gRPC
+# :authority headers that contain user:pass@host) nor in --remote_header
+# directly (the embedded space loses arg boundary through `just`'s
+# {{FLAGS}} textual substitution).
+#
+# The flags below are cache-backend-agnostic and safe-no-op when no remote
+# cache is configured (i.e. local dev runs without --remote_cache=…):
+#   --remote_cache_compression: zstd-compress action outputs over the wire;
+#     cuts egress 2-4x for compile/link outputs.
+#   --remote_download_minimal: only fetch outputs of explicitly-built
+#     targets; intermediate action outputs stay in CAS.
+#   --remote_local_fallback: if the cache is unreachable, build locally
+#     instead of failing — a Cloud Run outage degrades wall-clock, never
+#     breaks CI.
+#   --remote_timeout=30s: per-request budget; allows for occasional
+#     Cloud Run cold-start without falling through to local fallback.
+#   --remote_max_connections=100: raises gRPC parallelism ceiling for fast
+#     bulk lookup at build-graph evaluation time.
+build --remote_cache_compression
+build --remote_download_minimal
+build --remote_local_fallback
+build --remote_timeout=30s
+build --remote_max_connections=100
+
 # ── User overrides ─────────────────────────────────────────────────────────
 # Local-machine-only flags (e.g. --disk_cache=...) belong in user.bazelrc;
 # the file is gitignored.

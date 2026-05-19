@@ -117,56 +117,27 @@ jobs:
 
       # CACHE STRATEGY:
       #
-      # The disk-cache is managed by `actions/cache@v5` directly rather
-      # than through `setup-bazel`'s built-in disk-cache wiring. Two
-      # failure modes in the previous setup made this necessary:
+      # bazel-remote on Cloud Run (us-central1, scale-to-zero) fronts
+      # gs://dasch-bazel-cache and serves the gRPC Remote Cache + Remote
+      # Asset APIs. One bucket backs three Bazel cache layers from the
+      # same endpoint: AC, CAS (--remote_cache), and http_archive
+      # tarballs (--experimental_remote_downloader).
       #
-      #   1. 0-byte poisoning. setup-bazel <=0.17 saved the disk-cache
-      #      from its post-step unconditionally — a build that failed
-      #      during analysis (e.g. a transient `http_archive` 415 from
-      #      zlib.net) would write an empty `~/.cache/bazel-disk` to GHA
-      #      under the input-content-derived cache key. GHA cache keys
-      #      are immutable, so every subsequent run hashing to the same
-      #      inputs restored 0 bytes and re-built kakadu/openssl from
-      #      source (~12 min on linux-x86_64). actions/cache@v5 saves
-      #      only on job success by default.
+      # Access is gated by HTTP Basic Auth inside bazel-remote (Cloud
+      # Run IAM is bypassed because Bazel's gRPC client doesn't speak
+      # Cloud Run OIDC). Credentials are supplied by a Bazel credential
+      # helper (`tools/bazel-cred-helper.sh`), which reads
+      # `$BAZEL_CACHE_PASSWORD` from the workflow env and emits an
+      # `Authorization: Basic <b64>` gRPC metadata header on demand.
+      # This sidesteps two failure modes of the simpler approaches:
+      # (1) inline URI credentials (grpcs://user:pass@host) trip Cloud
+      # Run's GFE which rejects :authority headers that contain user:
+      # pass@host; (2) --remote_header=Authorization=Basic <b64> loses
+      # its embedded space when `just`'s {{FLAGS}} substitution
+      # re-tokenises the recipe args.
       #
-      #   2. Cache-key churn from incidental edits. The targeted key
-      #      below covers only inputs that actually affect a foreign_cc
-      #      action's cache key: MODULE.bazel{,.lock} pin all third-
-      #      party deps; root + ext/ + bazel/ + patches/ + platforms/
-      #      shape the rule graph + kakadu Makefile patches; .bazelrc /
-      #      .bazelversion shape the build engine and action env;
-      #      flake.lock pins the dev-shell store paths consumed via
-      #      --action_env=PATH/NIX_LDFLAGS/ACLOCAL_PATH.
-      #
-      # NOT in the key: src/**, include/**, test/**, fuzz/**,
-      # tools/**, config/** — app/test code does not change ext/ action
-      # outputs, so changes there should not evict the foreign_cc cache.
-      - uses: actions/cache@v5
-        id: bazel-disk-cache
-        with:
-          path: ~/.cache/bazel-disk
-          key: bazel-disk-ci-test-${{ matrix.platform }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'BUILD.bazel', 'ext/**/BUILD.bazel', 'bazel/**', 'patches/**', 'platforms/**', '.bazelrc', '.bazelversion', 'flake.lock') }}
-          restore-keys: |
-            bazel-disk-ci-test-${{ matrix.platform }}-
-
-      # `setup-bazel` continues to manage bazelisk + repository-cache
-      # (the `--repository_cache` for http_archive downloads — these are
-      # content-addressed by sha256 and have no poisoning risk).
-      # disk-cache is disabled here so the actions/cache@v5 step above
-      # is the single owner. `--incompatible_strict_action_env` is set
-      # in `.bazelrc` so it applies to every invocation.
-      #
-      # repository-cache is intentionally OFF. It would
-      # persist the LLVM 19.1.x toolchain (~2 GB), Chromium debian
-      # sysroots (~500 MB each), and 22 ext lib http_archive source
-      # tarballs across runs — ~4 GB per arch, ~12 GB across all three
-      # platforms — which blows GHA's 10 GB per-repo cache cap and
-      # LRU-evicts the small (~33 MB) bazel-disk-cache that actually
-      # delivers the speedup. Bazel still uses an in-job repository
-      # cache for de-dup within a single build; the cost is a one-time
-      # http_archive re-download per platform per run.
+      # Skipped on fork PRs (secrets unavailable). Those builds run cold
+      # without the remote cache — same gating idiom as docker/login-action.
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
@@ -184,23 +155,39 @@ jobs:
       # `nix develop --command` activates the dev shell so `gh`
       # (kakadu_archive repository_rule) + foreign_cc host tools
       # (cmake, perl, pkg-config, autoconf, automake, libtoolize) are
-      # on PATH. `--disk_cache` matches the actions/cache@v5 step
-      # above. `--sandbox_debug` keeps the sandbox tree on failure so
-      # foreign_cc Make.log files (dumped by the failure step below)
-      # survive.
+      # on PATH. The `if [ -n "$BAZEL_CACHE_PASSWORD" ]` block builds
+      # the `--remote_cache` + `--experimental_remote_downloader` +
+      # `--credential_helper` flag string in $REMOTE only when the
+      # secret is present (fork PRs run cold). `--sandbox_debug`
+      # keeps the sandbox tree on failure so foreign_cc Make.log
+      # files (dumped by the failure step below) survive.
       - name: Build + run all tests under coverage
         if: ${{ matrix.platform == 'linux-amd64' }}
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
         run: |
-          nix develop --command bash -c "just bazel-coverage --disk_cache=\$HOME/.cache/bazel-disk --sandbox_debug"
+          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
+            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
+            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
+          else
+            REMOTE=""
+          fi
+          nix develop --command bash -c "just bazel-coverage $REMOTE --sandbox_debug"
 
       - name: Build + run all tests (no coverage)
         if: ${{ matrix.platform != 'linux-amd64' }}
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
         run: |
-          nix develop --command bash -c "just bazel-test --disk_cache=\$HOME/.cache/bazel-disk --sandbox_debug"
+          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
+            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
+            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
+          else
+            REMOTE=""
+          fi
+          nix develop --command bash -c "just bazel-test $REMOTE --sandbox_debug"
 
       # Hurl is an HTTP-contract test that shells out to the built sipi
       # binary directly (not via Bazel). Both `bazel-coverage` and
@@ -260,7 +247,15 @@ jobs:
         if: runner.os == 'Linux'
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: nix develop --command bash -c "just bazel-test-smoke --disk_cache=\$HOME/.cache/bazel-disk"
+          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
+        run: |
+          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
+            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
+            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
+          else
+            REMOTE=""
+          fi
+          nix develop --command bash -c "just bazel-test-smoke $REMOTE"
 
       - name: Docker Scout — compare to production
         if: runner.os == 'Linux' && github.event_name == 'pull_request'
