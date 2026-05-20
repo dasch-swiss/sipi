@@ -257,7 +257,7 @@ Metrics endpoint at `GET /metrics` (`src/observability/metrics.h`, `src/observab
 | Feature | Details |
 |---|---|
 | **Build systems** | CMake, Nix |
-| **CI** | GitHub Actions: unit tests, e2e tests, Hurl tests, fuzz (nightly), Docker builds |
+| **CI** | GitHub Actions: unit tests, e2e tests, fuzz (nightly), Docker builds |
 | **Documentation** | MkDocs Material site, LLM-optimized `llms.txt` output |
 | **Dependency management** | Vendored archives in `vendor/` with SHA-256 checksums |
 
@@ -272,7 +272,7 @@ Four layers, from fastest/narrowest to slowest/broadest:
                     │  Fuzz   │  Continuous (nightly CI)
                     │ Testing │  Finds crashes & edge cases
                 ┌───┴─────────┴───┐
-                │   E2E Contract   │  Rust harness + Hurl
+                │   E2E Contract   │  Rust harness (reqwest)
                 │   Tests (HTTP)   │  Tests the API contract
             ┌───┴─────────────────┴───┐
             │   Integration / Snapshot │  insta golden baselines
@@ -293,7 +293,7 @@ Four layers, from fastest/narrowest to slowest/broadest:
 
 | Sublayer | Framework | Location | When to use |
 |---|---|---|---|
-| C++ unit | GoogleTest | `test/unit/` | When the behavior cannot be reached from Rust/e2e/Hurl — internal C++ state, FFI boundaries, RAII / exception paths, concurrency primitives |
+| C++ unit | GoogleTest | `test/unit/` | When the behavior cannot be reached from Rust e2e — internal C++ state, FFI boundaries, RAII / exception paths, concurrency primitives |
 | Rust unit (preferred) | `#[test]` + `proptest` | Future `src/` modules | During Rust migration: inline `#[cfg(test)]` modules |
 | Rust property-based | `proptest` | Future `src/` modules | Parsers, serializers, roundtrip invariants |
 
@@ -306,7 +306,7 @@ Four layers, from fastest/narrowest to slowest/broadest:
 - Image metadata extraction
 - Any pure function with well-defined inputs/outputs
 
-**C++ unit-test policy:** Default to Rust unit tests, Hurl, or Rust e2e for new coverage — they survive the migration and exercise the contract clients see. Add C++ unit tests where they are the only practical reach, and only there. In practice this means:
+**C++ unit-test policy:** Default to Rust unit tests or Rust e2e for new coverage — they survive the migration and exercise the contract clients see. Add C++ unit tests where they are the only practical reach, and only there. In practice this means:
 
 - **Internal C++ state** that has no HTTP-observable surface (cache eviction order, memory-budget acquire/release, parser intermediate AST).
 - **FFI / C-library boundaries** where the bug class lives in the C++↔C interop (libtiff variadic-arg type widths, kakadu callback lifetimes, lcms2 profile ownership) and Rust e2e would observe only the downstream symptom.
@@ -314,7 +314,7 @@ Four layers, from fastest/narrowest to slowest/broadest:
 - **Concurrency primitives** with lock-free or atomic semantics (`SipiMemoryBudget`) where deterministic e2e reproduction is impractical.
 - **Replacement-target coverage:** components scheduled for Rust replacement (shttps, Lua scripting, cache management) are covered with C++ unit tests that travel with the C++ code and disappear cleanly when the component is replaced. This documents existing behavior for the rewrite team and avoids false failures when the Rust replacement changes internal behavior while preserving the HTTP contract.
 
-Behavior that *is* HTTP-observable belongs in Hurl (status/header contracts) or Rust e2e (multi-step flows, response-body inspection, golden snapshots) — not in C++ unit tests.
+Behavior that *is* HTTP-observable belongs in Rust e2e — not in C++ unit tests.
 
 ### Layer 2: Snapshot / Golden Baseline Tests
 
@@ -325,7 +325,7 @@ Behavior that *is* HTTP-observable belongs in Hurl (status/header contracts) or 
 | `insta` (Rust) | `test/e2e-rust/tests/snapshots/` | info.json structure, HTTP headers, response metadata |
 | ApprovalTests (C++) | `test/approval/` | Image-conversion metadata fingerprints; byte-exact encoder output baselines |
 
-**ApprovalTests scope:** New C++ approval suites are admissible only for byte-exact encoder-output gating against dependency migrations (e.g. libtiff, libjpeg, kakadu, lcms2 version bumps) and for metadata fingerprints that have no Rust-side equivalent. Functional behaviour belongs in Layer 3 (Hurl/Rust e2e), not here.
+**ApprovalTests scope:** New C++ approval suites are admissible only for byte-exact encoder-output gating against dependency migrations (e.g. libtiff, libjpeg, kakadu, lcms2 version bumps) and for metadata fingerprints that have no Rust-side equivalent. Functional behaviour belongs in Layer 3 (Rust e2e), not here.
 
 **What belongs here:**
 
@@ -346,8 +346,7 @@ Behavior that *is* HTTP-observable belongs in Hurl (status/header contracts) or 
 
 | Sublayer | Framework | Location | When to use |
 |---|---|---|---|
-| Complex flows | Rust (`reqwest`) | `test/e2e-rust/tests/` | Multi-step workflows, response body inspection, uploads |
-| Simple contracts | Hurl | `test/hurl/` | Status codes, headers, redirects — no response body logic |
+| All HTTP contracts | Rust (`reqwest`) | `test/e2e-rust/tests/` | Status/header smokes, multi-step workflows, response body inspection, uploads, golden snapshots |
 
 **What belongs here:**
 
@@ -363,16 +362,6 @@ Behavior that *is* HTTP-observable belongs in Hurl (status/header contracts) or 
 - CLI mode testing (via process spawn + file output verification)
 - Range requests
 - Concurrent request handling
-
-**Division of labor — Rust vs Hurl:**
-
-| Use Rust when... | Use Hurl when... |
-|---|---|
-| Need to inspect response body (JSON, image bytes) | Only checking status code + headers |
-| Multi-step flow (upload then fetch) | Single request/response |
-| Need golden baseline (insta snapshot) | Simple assertion (status, header value) |
-| Need to compute something (checksum, dimension) | Declarative assertion suffices |
-| Need test setup/teardown (create files, etc.) | No setup needed |
 
 ### Layer 4: Fuzz Testing (continuous, nightly)
 
@@ -400,8 +389,7 @@ New test needed?
 │   ├── C++ component not yet migrated → maintain existing GoogleTest (no new suites)
 │   └── Rust component → #[test] + proptest for property-based
 ├── Is it testing HTTP API behavior?
-│   ├── Simple status/header check (no body logic, no setup) → Hurl
-│   └── Any of: body inspection, multi-step flow, snapshot, file setup → Rust e2e
+│   └── Rust e2e (`reqwest` + `serde_json` / `insta` for snapshots)
 ├── Is it regression detection for complex output?
 │   └── insta snapshot (JSON structure, headers) — this is a Rust e2e test with insta
 ├── Is it testing untrusted input handling?
@@ -577,8 +565,8 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | Lua orientation endpoint | :white_check_mark: | `server.rs` | |
 | Lua exif_gps endpoint | :white_check_mark: | `server.rs` | |
 | Lua read_write endpoint | :white_check_mark: | `server.rs` | |
-| SQLite API | :white_check_mark: | `server.rs` + Hurl | |
-| Missing sidecar handling | :white_check_mark: | `server.rs` + Hurl | |
+| SQLite API | :white_check_mark: | `server.rs` | |
+| Missing sidecar handling | :white_check_mark: | `server.rs` | |
 | Concurrent request handling | :white_check_mark: | `server.rs` | |
 | File access allowed/denied | :white_check_mark: | `server.rs` | |
 | Knora.json validation | :white_check_mark: | `server.rs` | |
@@ -750,10 +738,20 @@ Memory leaks and undefined behavior are not a separate pyramid layer but a **bui
 
 Sipi uses [insta](https://insta.rs/) for golden baseline snapshots. When a snapshot changes:
 
-1. Run tests: `cargo test` (in `test/e2e-rust/`)
-2. Review pending snapshots: `cargo insta review`
-3. Accept intentional changes, reject regressions
-4. Commit updated `.snap` files
+1. Run tests: `just bazel-test-e2e` (pending snapshots are written as
+   `*.snap.new` next to the existing `*.snap`)
+2. Review the diff between each `.snap` and `.snap.new` (a regular
+   `git diff` works, or open both in your editor)
+3. For intentional changes, replace: `mv path/to/foo.snap.new path/to/foo.snap`
+4. For regressions, delete the `.snap.new` and fix the code
+5. Commit updated `.snap` files
+
+For interactive review, install `cargo-insta` ad-hoc — it operates on
+`.snap.new` files and doesn't need the dev-shell rust toolchain:
+
+```bash
+nix shell nixpkgs#cargo-insta --command cargo insta review
+```
 
 **When to use insta:**
 
@@ -779,9 +777,9 @@ insta::assert_json_snapshot!(info_json, {
 | C++ approval tests (CI) | `just nix-build` (`.#dev` checkPhase) | PR CI | ApprovalTests via ctest; `SOURCE_DATE_EPOCH=946684800` injected by CMake |
 | C++ approval tests (Bazel) | `just bazel-test-approval` | local + CI | `bazel test //test/approval:approvaltests`; env injection via `BUILD.bazel`. CI runs them via `just bazel-coverage`. |
 | Rust e2e tests (CI) | `just nix-test-e2e` | PR CI | Pre-built binaries from `.#e2e-tests` (crane); reads `$SIPI_BIN` |
-| Rust e2e tests (inner-loop) | `just rust-test-e2e` | local | cargo-driven; reads `$SIPI_BIN`; same test code as `nix-test-e2e` |
-| Docker smoke (CI) | `just nix-test-smoke` | PR + tag CI | Pre-built binary from `.#smoke-test`; runs against loaded image |
-| Hurl contract tests | `just hurl-test` | PR CI | Declarative HTTP tests |
+| Rust e2e tests (inner-loop) | `bazel test //test/e2e-rust:<name>` | local | Same hermetic toolchain as CI |
+| Docker smoke (CI) | `just bazel-test-smoke` | PR + tag CI | Bazel-built OCI tarball, `docker load`ed by the test |
+| Hurl contract tests | *(retired)* | — | Folded into Rust e2e (`tests/http_contracts.rs` + `iiif_compliance.rs`) |
 | Python e2e tests | *(retired)* | — | Replaced by Rust e2e tests |
 | Fuzz testing | `.github/workflows/fuzz.yml` | Nightly | libFuzzer corpus growth |
 | Sanitizer builds | `just bazel-build-sanitized` (`bazel build --config=asan --config=ubsan //src/cli:sipi`) | PR | ASan+UBSan; e2e suite against `bazel-bin/src/cli/sipi` with `.lsan_suppressions.txt` |

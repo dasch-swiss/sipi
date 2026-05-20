@@ -44,7 +44,7 @@
 ### Testing
 - Security fixes include fuzz corpus entries and e2e tests
 - Memory fixes verified under ASan (no leaks, no UB)
-- New HTTP behavior tested in Rust e2e or Hurl (not Python — Python tests are frozen)
+- New HTTP behavior tested in Rust e2e
 - Tests verify behavior (dimensions, content, structure), not just HTTP status codes
 - **Sanitizer gate:** PRs touching `src/`, `shttps/`, `include/`, or `test/` automatically run the sanitizer CI workflow (`sanitizer.yml`). Zero findings required to merge. The sanitizer build runs the full e2e suite under ASan/UBSan; first-party translation units are instrumented at compile time
 - **Bazel test parity:** PRs that add a new unit test must add the matching `cc_test` target in `test/unit/<mod>/BUILD.bazel`. CI runs `just bazel-coverage`, which exercises every `cc_test` under `//test/unit/...` plus `//test/approval/...` and `//test/e2e-rust/...` in a single pass — a missing `cc_test` target = no CI coverage

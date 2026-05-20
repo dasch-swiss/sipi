@@ -45,7 +45,6 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: nix profile install --inputs-from . nixpkgs#just
       # Cache via bazel-remote on Cloud Run (gRPC). See ci.yml for full
       # topology. publish.yml only runs on `v*` tag pushes — no fork-PR
       # gating needed.
@@ -129,7 +128,6 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      - run: nix profile install --inputs-from . nixpkgs#just
       # Cache via bazel-remote on Cloud Run (gRPC). The validate-docker
       # job warmed the cache; this job should hit it for ~100 % of
       # compile actions when the source tree is unchanged between the
@@ -240,7 +238,6 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       - uses: DeterminateSystems/determinate-nix-action@v3
-      - run: nix profile install --inputs-from . nixpkgs#just
       # `bazel-docker-publish-manifest` shells out to `crane index append`,
       # which only exists inside the dev shell (go-containerregistry).
       - run: nix develop --command bash -c "just bazel-docker-publish-manifest"

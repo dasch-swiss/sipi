@@ -34,30 +34,22 @@ to determine the SemVer bump and generate the changelog.
 
 ## Pull request CI
 
-Workflow: `.github/workflows/ci.yml`.
+Workflow: `.github/workflows/ci.yml`. Trigger: `pull_request` only.
 
 ### Test matrix
 
 The `test` job runs on three platforms — `linux-amd64`,
-`linux-arm64`, `darwin-arm64`. On each:
+`linux-arm64`, `darwin-arm64`. Every platform runs the same steps:
 
-1. **Build + test** via Bazel.
-   - `linux-amd64` runs `just bazel-coverage` (instrumented build,
-     emits lcov for Codecov).
-   - The other two arches run `just bazel-test` (fastbuild, no
-     instrumentation; same test signal without paying the
-     1.5–2× compile/runtime cost on arches that don't upload).
-2. **Hurl HTTP contract tests** — `just hurl-test` against the
-   built sipi binary.
-3. **Coverage upload (linux-amd64 only)** — Codecov consumes the
-   combined lcov directly from
-   `bazel-out/_coverage/_coverage_report.dat`.
-4. **Docker smoke tests (Linux only)** — `just bazel-test-smoke`
+1. **Build + test** — `just bazel-test` (fastbuild, no
+   instrumentation; unit + approval + e2e in a single Bazel
+   invocation).
+2. **Docker smoke tests (Linux only)** — `just bazel-test-smoke`
    builds `//src:image` as a transitive `data` dep of the
    `:docker_smoke` rust_test, the test loads the OCI tarball into
    the local Docker daemon, and runs the smoke suite against the
    loaded container.
-5. **Docker Scout** (Linux PRs only):
+3. **Docker Scout** (Linux PRs only):
    - `Docker Scout — compare to production` — both arches.
    - `Docker Scout — CVE report (SARIF)` and
      `Upload SARIF to GitHub Security` — amd64 only (CVE findings
@@ -74,6 +66,34 @@ Every Bazel-invoking step sets
 `kakadu_archive` repository_rule can authenticate. Forked PRs
 don't have access to `DASCHBOT_PAT`, so the Kakadu fetch fails
 and the build short-circuits. Internal PRs are unaffected.
+
+## Post-merge coverage
+
+Workflow: `.github/workflows/coverage.yml`. Trigger:
+`push: branches: [main]` + `workflow_dispatch` for manual runs.
+Fires on every merge to `main`.
+
+A single `linux-amd64` job enters the `.#llvm-tools` dev shell
+(default shell + `llvmPackages_19.llvm` for `llvm-cov` /
+`llvm-profdata`) and runs `just bazel-coverage`. The combined
+lcov report at `bazel-out/_coverage/_coverage_report.dat` is
+uploaded to Codecov.
+
+**Why split out:** Coverage instrumentation adds 1.5–2× compile
+overhead and slower test runtime; running it on every PR push
+across three platforms wasted CI minutes without commensurate
+signal. Per-PR coverage delta in Codecov is the trade-off — drift
+shows up immediately after merge instead. To restore PR-scoped
+signal selectively, add a `pull_request: paths: ['src/**']` trigger
+to this workflow.
+
+**Why a separate dev shell:** `bazel coverage`'s
+`collect_cc_coverage.sh` hard-requires `COVERAGE_GCOV_PATH` and
+`LLVM_COV` env vars on every test action. The justfile recipe
+resolves them via `$(command -v llvm-{cov,profdata})`, so those
+binaries must be on PATH. Keeping LLVM 19 host binaries out of the
+default shell saves ~200 MB of closure on first `nix develop` for
+everyday users.
 
 ## Tag release CI/CD
 
@@ -263,10 +283,12 @@ locally, run the same recipe inside `nix develop`:
 ```bash
 nix develop
 
-# Full PR test job, one arch (matches `ci.yml test` on linux-amd64)
-just bazel-coverage
-just hurl-test
+# Full PR test job, one arch (matches `ci.yml test`)
+just bazel-test
 just bazel-test-smoke
+
+# Coverage (matches `coverage.yml`; needs the .#llvm-tools shell)
+nix develop .#llvm-tools --command just bazel-coverage
 
 # Sanitizer build + e2e (what sanitizer.yml runs)
 just bazel-build-sanitized

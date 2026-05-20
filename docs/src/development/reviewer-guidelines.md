@@ -58,7 +58,7 @@ Checklist for human and AI reviewers. Not every item applies to every PR — use
 ## Testing Strategy Compliance
 
 - [ ] New tests placed in the correct pyramid layer — consult the [decision tree](testing-strategy.md#test-decision-tree)
-- [ ] New HTTP behavior tests are Rust e2e or Hurl (not Python) — Python tests are frozen
+- [ ] New HTTP behavior tests are Rust e2e
 - [ ] Tests verify behavior (dimensions, content, structure), not just status codes
 - [ ] Snapshot tests use `insta` with appropriate redactions for dynamic fields
 - [ ] No new `test/unit/` directories — C++ unit tests are frozen (maintain existing only)

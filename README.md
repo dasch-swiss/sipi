@@ -79,14 +79,13 @@ All commands are run from the repository root via `just`. Run `just` for a full 
 ```bash
 just bazel-build       # bazel build --stamp //src/cli:sipi (fastbuild — fast incremental rebuilds)
 just bazel-coverage    # build + run all tests (unit + approval + e2e) under coverage instrumentation
-just hurl-test         # run Hurl HTTP contract tests against ./bazel-bin/src/cli/sipi
 just run               # start SIPI server with the localdev config
 ```
 
 ### Build a Docker image (Bazel rules_oci)
 ```bash
 just bazel-docker-build-amd64   # or bazel-docker-build-arm64 — build + load image as daschswiss/sipi:latest
-just test-smoke                 # build host-arch image, then run smoke tests against it
+just bazel-test-smoke           # Docker smoke test (Bazel builds + loads the image)
 ```
 
 ### Inner-loop development

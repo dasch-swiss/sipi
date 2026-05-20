@@ -66,7 +66,8 @@ for `docker load` / `docker push`, but `docker buildx` is not used
 coordinator job).
 
 ```bash
-just test-smoke                # build host-arch image (via Bazel) + run smoke tests
+just bazel-docker-build-arm64  # or -amd64; loads daschswiss/sipi:latest
+just bazel-test-smoke          # builds //src:image and probes the loaded image
 ```
 
 ### Per-arch builds (used by CI)
@@ -120,10 +121,6 @@ groups:
 | `bazel-docker-push-{amd64,arm64}` | Push to `daschswiss/sipi:{latest,v<version>}-${arch}` |
 | `bazel-docker-publish-manifest` | `crane index append` → multi-arch manifest at `daschswiss/sipi:v<version>` |
 | `bazel-docker-extract-debug arch` | Build `:sipi_debug_layout`, surface `sipi-<arch>.debug` |
-| `test-smoke` | Inner-loop: build host-arch Docker image (via Bazel), then `cargo test` smoke |
-| `test-smoke-ci` | Run cargo smoke tests against an already-loaded Docker image |
-| `rust-test-e2e` | Inner-loop: cargo-driven Rust e2e tests (reads `$SIPI_BIN`) |
-| `hurl-test` | Hurl HTTP contract tests (reads `$SIPI_BIN`) |
 | `run` | `just bazel-build` then run sipi with the dev config |
 | `valgrind` | `just bazel-build` then run sipi under Valgrind |
 | `fuzz-corpus-update` | Download CI fuzz corpus and merge into the seed corpus |
