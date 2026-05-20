@@ -274,6 +274,50 @@ gcloud storage du gs://dasch-bazel-cache --readable-sizes
 gcloud storage ls gs://dasch-bazel-cache --recursive | head
 ```
 
+## Build Event Service (BuildBuddy)
+
+CI publishes a Bazel **Build Event Service (BES)** stream to
+`dasch.buildbuddy.io` for every invocation. BES is read-only build-event
+mirroring (invocation timeline, action graph, per-test logs, failure
+stderr); it does not affect caching or build execution.
+
+Each Bazel-running workflow step appends a `$BES` flag string to its
+`just bazel-*` invocation when the repo secret `BUILDBUDDY_ORG_API_KEY`
+is set:
+
+```
+--bes_backend=grpcs://dasch.buildbuddy.io
+--bes_results_url=https://dasch.buildbuddy.io/invocation/
+--bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY
+--build_metadata=ROLE=CI
+```
+
+Bazel prints `Streaming build results to:
+https://dasch.buildbuddy.io/invocation/<uuid>` near the start of the
+build; that URL renders the action graph, target timings, and per-test
+output for that invocation.
+
+**Fork PRs.** GitHub does not expose secrets to forked-PR runs, so
+`BUILDBUDDY_ORG_API_KEY` is empty and `$BES=""` — Bazel runs without
+publishing. Mirrors the existing `$REMOTE` fork-safety gate.
+
+**Why not in `.bazelrc`.** Bazel does not expand env vars in
+`.bazelrc`, so the API-key-bearing flag cannot live there. Splitting
+the static URLs into `.bazelrc` and the API key into the workflow
+would leave `.bazelrc` in a half-configured state where local builds
+attempt to publish to BuildBuddy without credentials. Keeping all
+three flags together in the workflow keeps the convention consistent
+with the cache wiring above. `--bes_header` (BES-scoped) is used in
+preference to `common --remote_header` so the BuildBuddy key does not
+attach to bazel-remote / downloader gRPC streams, which authenticate
+through `tools/bazel-cred-helper.sh`.
+
+**Out of scope here.** Caching stays on bazel-remote on Cloud Run; RBE
+is not used. Future workstreams may collapse cache + BES + RBE under a
+single BuildBuddy endpoint, at which point a single `common
+--remote_header=x-buildbuddy-api-key=…` line replaces all three
+auth paths.
+
 ## Local reproduction
 
 Every CI step invokes `just <recipe>` — there are no inline

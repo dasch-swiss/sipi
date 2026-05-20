@@ -52,6 +52,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
+          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
         # See ci.yml for the `nix develop --command` rationale (foreign_cc
         # host-tool PATH).
         run: |
@@ -61,7 +62,12 @@ jobs:
           else
             REMOTE=""
           fi
-          nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} $REMOTE"
+          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
+            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
+          else
+            BES=""
+          fi
+          nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} $REMOTE $BES"
       # `:docker_smoke` rust_test loads the OCI tarball produced by
       # `//src:image_load` and runs the smoke suite against it. The Docker
       # image already loaded by the build step above is left alone.
@@ -69,6 +75,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
+          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
         run: |
           if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
             CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
@@ -76,7 +83,12 @@ jobs:
           else
             REMOTE=""
           fi
-          nix develop --command bash -c "just bazel-test-smoke $REMOTE"
+          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
+            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
+          else
+            BES=""
+          fi
+          nix develop --command bash -c "just bazel-test-smoke $REMOTE $BES"
 
   release-gate:
     runs-on: ubuntu-latest
@@ -136,6 +148,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
+          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
         # Binary version + OCI image tag come from version.txt, which
         # release-please updates before cutting the tag — no extra
         # plumbing required to keep them in sync with `${github.ref_name}`.
@@ -147,10 +160,16 @@ jobs:
           else
             REMOTE=""
           fi
-          nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} $REMOTE"
+          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
+            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
+          else
+            BES=""
+          fi
+          nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} $REMOTE $BES"
       - name: Extract debug symbols for Sentry upload
         env:
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
+          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
         # The genrule depends on `:sipi`, already built and in the
         # remote cache from the build step just above.
         run: |
@@ -160,11 +179,17 @@ jobs:
           else
             REMOTE=""
           fi
-          nix develop --command bash -c "just bazel-docker-extract-debug ${{ matrix.arch }} $REMOTE"
+          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
+            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
+          else
+            BES=""
+          fi
+          nix develop --command bash -c "just bazel-docker-extract-debug ${{ matrix.arch }} $REMOTE $BES"
       - name: Run Docker smoke tests
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
+          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
         run: |
           if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
             CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
@@ -172,10 +197,16 @@ jobs:
           else
             REMOTE=""
           fi
-          nix develop --command bash -c "just bazel-test-smoke $REMOTE"
+          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
+            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
+          else
+            BES=""
+          fi
+          nix develop --command bash -c "just bazel-test-smoke $REMOTE $BES"
       - name: Push image to Docker Hub
         env:
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
+          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
         run: |
           if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
             CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
@@ -183,7 +214,12 @@ jobs:
           else
             REMOTE=""
           fi
-          nix develop --command bash -c "just bazel-docker-push-${{ matrix.arch }} $REMOTE"
+          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
+            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
+          else
+            BES=""
+          fi
+          nix develop --command bash -c "just bazel-docker-push-${{ matrix.arch }} $REMOTE $BES"
 
       - name: Docker Scout — record production
         uses: docker/scout-action@v1

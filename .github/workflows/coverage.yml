@@ -85,6 +85,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
+          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
         run: |
           if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
             CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
@@ -92,7 +93,12 @@ jobs:
           else
             REMOTE=""
           fi
-          nix develop .#llvm-tools --command bash -c "just bazel-coverage $REMOTE --sandbox_debug"
+          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
+            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
+          else
+            BES=""
+          fi
+          nix develop .#llvm-tools --command bash -c "just bazel-coverage $REMOTE $BES --sandbox_debug"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6.0.0
