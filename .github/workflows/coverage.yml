@@ -43,7 +43,7 @@ jobs:
           fetch-depth: 0
           lfs: false  # don't auto-pull LFS — use cache below
       - name: restore LFS cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .git/lfs
           key: lfs-${{ hashFiles('.gitattributes') }}
