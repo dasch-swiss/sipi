@@ -38,7 +38,7 @@ jobs:
       group: ${{ github.workflow }}-${{ github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           lfs: false  # don't auto-pull LFS — use cache below

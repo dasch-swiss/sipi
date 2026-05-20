@@ -52,7 +52,7 @@ jobs:
             arch: arm64
             runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           lfs: false  # don't auto-pull LFS — use cache below
@@ -256,7 +256,7 @@ jobs:
       group: ${{ github.workflow }}-docs-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           lfs: false
