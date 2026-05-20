@@ -10,27 +10,9 @@
 # Auto-detect CPU cores
 nproc := `nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4`
 
-# Map host arch to the matching `bazel-docker-*` recipe suffix. Used by
-# `test-smoke` to build the host-arch image without exposing arch logic
-# to the caller. arch() returns "aarch64" / "x86_64" regardless of OS.
-_host_docker_arch := if arch() == "aarch64" { "arm64" } else { "amd64" }
-
 # List all recipes
 default:
     @just --list
-
-#####################################
-# Smoke tests (run against Docker image)
-#####################################
-
-# Build host-arch Docker image (via Bazel) and run smoke tests against it.
-test-smoke:
-    just bazel-docker-build-{{_host_docker_arch}}
-    cd test/e2e-rust && cargo test --features docker --test docker_smoke -- --test-threads=1
-
-# Run smoke tests against an already-loaded Docker image.
-test-smoke-ci:
-    cd test/e2e-rust && cargo test --features docker --test docker_smoke -- --test-threads=1
 
 #####################################
 # Bazel — what CI runs
@@ -345,45 +327,6 @@ bazel-docker-extract-debug arch *FLAGS='':
     fi
     cp "$debug_file" "sipi-{{arch}}.debug"
     echo "Debug symbols copied to: sipi-{{arch}}.debug"
-
-#####################################
-# Tests (consume $SIPI_BIN, default ./result/bin/sipi)
-#####################################
-
-# Run Rust e2e tests against the built sipi via cargo (inner-loop dev
-# path; needs the dev shell on PATH). CI uses `bazel-test-e2e` instead,
-# which runs the same `tests/<name>.rs` set as `rust_test` targets
-# without cargo.
-rust-test-e2e:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/cli/sipi}"
-    if [ ! -x "$SIPI_BIN" ]; then
-        echo "sipi binary not found at $SIPI_BIN. Run 'just bazel-build' first." >&2
-        exit 1
-    fi
-    cd test/e2e-rust && SIPI_BIN="$SIPI_BIN" cargo test -- --test-threads=1
-
-# Run Hurl HTTP contract tests against the built sipi.
-hurl-test:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/cli/sipi}"
-    if [ ! -x "$SIPI_BIN" ]; then
-        echo "sipi binary not found at $SIPI_BIN. Run 'just bazel-build' first." >&2
-        exit 1
-    fi
-    cd test/_test_data && "$SIPI_BIN" server --config config/sipi.e2e-test-config.lua &
-    SIPI_PID=$!
-    # Don't propagate sipi's SIGTERM exit code (143) as the recipe exit code.
-    trap 'kill $SIPI_PID 2>/dev/null || true; wait $SIPI_PID 2>/dev/null || true' EXIT
-    READY=0
-    for i in $(seq 1 30); do
-        curl -sf http://127.0.0.1:1024/unit/lena512.jp2/info.json > /dev/null 2>&1 && READY=1 && break
-        sleep 0.5
-    done
-    if [ "$READY" -ne 1 ]; then echo "ERROR: sipi failed to start within 15s"; exit 1; fi
-    cd {{justfile_directory()}}/test/hurl && hurl --test --insecure --variable host=http://127.0.0.1:1024 *.hurl
 
 # Run sipi with the localdev config.
 run: bazel-build

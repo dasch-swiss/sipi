@@ -1,0 +1,120 @@
+# Post-merge coverage workflow.
+#
+# Runs `just bazel-coverage` on a single linux-amd64 runner whenever
+# `main` advances (i.e. on every PR merge) and uploads the combined
+# lcov report to Codecov. Split out from `ci.yml` so PR CI stays fast
+# (skips instrumentation overhead, 1.5-2x compile + slower test
+# runtime, and Codecov network latency on every push).
+#
+# Trade-off: PRs no longer surface a Codecov coverage delta in the
+# review UI; coverage drift is detected on each merge to main instead.
+# If we ever want per-PR coverage signal back, scope it to PRs that
+# touch `src/` in a separate workflow.
+#
+# Uses the `.#llvm-tools` dev shell, which extends the default shell
+# with `llvmPackages_19.llvm`. Bazel's `tools/test/collect_cc_coverage.sh`
+# hard-requires `COVERAGE_GCOV_PATH` (llvm-profdata) and `LLVM_COV`
+# (llvm-cov) env vars on every test action; the justfile recipe
+# resolves them via `$(command -v llvm-{cov,profdata})`. The default
+# shell deliberately omits these — keeping the everyday `nix develop`
+# closure ~200 MB lighter.
+
+name: coverage
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    runs-on: ubuntu-24.04
+    name: coverage / linux-amd64
+    timeout-minutes: 90
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false  # don't auto-pull LFS — use cache below
+      - name: restore LFS cache
+        uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-${{ hashFiles('.gitattributes') }}
+          restore-keys: lfs-
+      - name: pull LFS objects
+        run: |
+          git lfs install
+          git lfs fetch --all
+          git lfs checkout
+      - uses: DeterminateSystems/determinate-nix-action@v3
+        with:
+          # The `kakadu_archive` repository_rule reads GH_TOKEN from the
+          # environment via `gh release download`; configurable-impure-env
+          # keeps Nix's daemon from sanitising it out of `nix develop`.
+          extra-conf: |
+            extra-experimental-features = configurable-impure-env
+      # Authenticated Docker Hub pulls (rate-limit avoidance) for any
+      # foreign_cc image the build may need. Skipped if secrets missing
+      # (e.g. manually dispatched fork).
+      - uses: docker/login-action@v4
+        if: ${{ env.DOCKER_HUB_TOKEN != '' }}
+        env:
+          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+      # Cache strategy mirrors ci.yml — same bazel-remote endpoint on
+      # Cloud Run fronting gs://dasch-bazel-cache. Auth via the credential
+      # helper (`tools/bazel-cred-helper.sh`), gated on
+      # `$BAZEL_CACHE_PASSWORD`. See `.github/workflows/ci.yml` and
+      # `docs/src/development/ci.md` for the full topology. Bazelisk
+      # itself comes from the `.#llvm-tools` dev shell (nixpkgs); no
+      # runner-level Bazel install needed.
+
+      # `nix develop .#llvm-tools` is the meaningful difference vs ci.yml:
+      # adds llvm-cov / llvm-profdata to PATH so `just bazel-coverage`'s
+      # `$(command -v llvm-{cov,profdata})` lookups resolve.
+      - name: Build + run all tests under coverage
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
+        run: |
+          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
+            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
+            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
+          else
+            REMOTE=""
+          fi
+          nix develop .#llvm-tools --command bash -c "just bazel-coverage $REMOTE --sandbox_debug"
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v6.0.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: dasch-swiss/sipi
+          files: bazel-out/_coverage/_coverage_report.dat
+
+      # On any bazel failure above, locate and dump every foreign_cc
+      # Make.log under the bazel output base. Mirrors the equivalent
+      # step in `ci.yml`.
+      - name: Dump foreign_cc Make.log files on failure
+        if: failure()
+        run: |
+          set +e
+          echo "=== searching for foreign_cc *.log files ==="
+          find "$HOME/.bazel" /home/runner/work -type f \
+            \( -name "Make.log" -o -name "configure.log" -o -name "build.log" -o -name "CMake.log" \) \
+            -print 2>/dev/null | while read -r f; do
+            echo
+            echo "===== $f ====="
+            cat "$f"
+          done
+          echo
+          echo "=== end of foreign_cc log dump ==="

@@ -6,60 +6,115 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils, ... }:
-    flake-utils.lib.eachSystem [
-      "x86_64-linux"
-      "aarch64-linux"
-      "x86_64-darwin"
-      "aarch64-darwin"
-    ] (system:
-      let
-        pkgs = import nixpkgs { inherit system; };
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+      ...
+    }:
+    flake-utils.lib.eachSystem
+      [
+        "x86_64-linux"
+        "aarch64-linux"
+        "x86_64-darwin"
+        "aarch64-darwin"
+      ]
+      (
+        system:
+        let
+          pkgs = import nixpkgs { inherit system; };
 
-        # Bazelisk reads `.bazelversion`; rules_foreign_cc shells out to the
-        # host tools (perl/cmake/pkg-config/autotools); the `kakadu_archive`
-        # repository_rule shells out to `gh`; `crane` is used by the
-        # `bazel-docker-publish-manifest` recipe.
-        commonPackages = with pkgs; [
-          bazelisk
-          (writeShellScriptBin "bazel" ''exec ${bazelisk}/bin/bazelisk "$@"'')
-          perl cmake pkg-config autoconf automake libtool m4
-          gh cacert go-containerregistry
-          just gcovr lcov llvmPackages_19.llvm
-          rustc cargo hurl
-          nginx graphicsmagick imagemagick libxml2 libxslt
-          # jpylyzer — JP2 conformance validator (Phase 15.11). Runs against
-          # regenerated JP2 goldens to confirm the SIPI UUID box reads as an
-          # informational `Unknown UUID` and the file otherwise passes
-          # ISO/IEC 15444-1 conformance.
-          python3Packages.jpylyzer
-        ];
+          # Bazelisk reads `.bazelversion`; rules_foreign_cc shells out to the
+          # host tools (perl/cmake/pkg-config/autotools); the `kakadu_archive`
+          # repository_rule shells out to `gh`; `crane` is used by the
+          # `bazel-docker-publish-manifest` recipe.
+          commonPackages = with pkgs; [
+            bazelisk
+            (writeShellScriptBin "bazel" ''exec ${bazelisk}/bin/bazelisk "$@"'')
+            perl
+            cmake
+            pkg-config
+            autoconf
+            automake
+            libtool
+            m4
+            gh
+            cacert
+            go-containerregistry
+            just
 
-        commonShellHook = ''
-          git config core.hooksPath .githooks 2>/dev/null || true
-          # gh's Go-based TLS needs an explicit cert bundle on headless Linux.
-          export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
-          # On macOS, prepend /usr/bin so toolchains_llvm's `xcrun --show-
-          # sdk-path` probe finds Apple's xcrun (real Xcode CLT SDK) ahead of
-          # nixpkgs' xcbuild stub (apple-sdk-14.4, no `libc++.tbd`).
-          if [ "$(uname)" = "Darwin" ]; then
-            export PATH="/usr/bin:/bin:/usr/local/bin:$PATH"
-          fi
-        '';
+            # jpylyzer — JP2 conformance validator (Phase 15.11). Runs against
+            # regenerated JP2 goldens to confirm the SIPI UUID box reads as an
+            # informational `Unknown UUID` and the file otherwise passes
+            # ISO/IEC 15444-1 conformance.
+            python3Packages.jpylyzer
+          ];
+          # Rust toolchain is intentionally NOT in commonPackages — `rules_rust`
+          # in `MODULE.bazel` pins a hermetic rustc (1.89.0). E2E + smoke
+          # tests run as `rust_test` Bazel targets in CI and locally; a
+          # parallel `cargo` path would risk version skew against the
+          # hermetic toolchain.
 
-        mkSipiShell = { name, stdenv }: pkgs.mkShell.override { inherit stdenv; } {
-          inherit name;
-          hardeningDisable = [ "all" ];
-          packages = commonPackages;
-          shellHook = ''export PS1="\\u@\\h | ${name}> "'' + commonShellHook;
-        };
+          commonShellHook = ''
+            git config core.hooksPath .githooks 2>/dev/null || true
+            # gh's Go-based TLS needs an explicit cert bundle on headless Linux.
+            export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+            # On macOS, prepend /usr/bin so toolchains_llvm's `xcrun --show-
+            # sdk-path` probe finds Apple's xcrun (real Xcode CLT SDK) ahead of
+            # nixpkgs' xcbuild stub (apple-sdk-14.4, no `libc++.tbd`).
+            if [ "$(uname)" = "Darwin" ]; then
+              export PATH="/usr/bin:/bin:/usr/local/bin:$PATH"
+            fi
+          '';
 
-      in {
-        devShells = {
-          # Clang + libc++ — matches the toolchains_llvm production toolchain.
-          default = mkSipiShell { name = "sipi"; stdenv = pkgs.llvmPackages_19.libcxxStdenv; };
-          # GCC + libstdc++ — diagnostic escape hatch; not used by CI.
-          gcc = mkSipiShell { name = "sipi-gcc"; stdenv = pkgs.gcc14Stdenv; };
-        };
-      });
+          mkSipiShell =
+            {
+              name,
+              stdenv,
+              extraPackages ? [ ],
+            }:
+            pkgs.mkShell.override { inherit stdenv; } {
+              inherit name;
+              hardeningDisable = [ "all" ];
+              packages = commonPackages ++ extraPackages;
+              shellHook = ''export PS1="\\u@\\h | ${name}> "'' + commonShellHook;
+            };
+
+        in
+        {
+          devShells = {
+            # Clang + libc++ — matches the toolchains_llvm production toolchain.
+            default = mkSipiShell {
+              name = "sipi";
+              stdenv = pkgs.llvmPackages_19.libcxxStdenv;
+            };
+            # GCC + libstdc++ — diagnostic escape hatch; not used by CI.
+            gcc = mkSipiShell {
+              name = "sipi-gcc";
+              stdenv = pkgs.gcc14Stdenv;
+            };
+            # LLVM-host-tools shell — `default` + `llvmPackages_19.llvm`,
+            # which ships `llvm-cov`, `llvm-profdata`, and `llvm-symbolizer`.
+            # Two consumers, both gated on host LLVM binaries on PATH:
+            #   - `just bazel-coverage` — Bazel's `collect_cc_coverage.sh`
+            #     hard-requires `COVERAGE_GCOV_PATH` (= llvm-profdata) and
+            #     `LLVM_COV` (= llvm-cov); the justfile recipe resolves
+            #     them via `$(command -v llvm-{cov,profdata})`.
+            #   - ASan/LSan in `just bazel-test-e2e --config=asan` —
+            #     `llvm-symbolizer` resolves `(/nix/store/.../sipi+0xOFFSET)`
+            #     frames into function names so the name-based
+            #     suppressions in `.lsan_suppressions.txt` (`leak:lua*`)
+            #     can match.
+            # Used by `.github/workflows/coverage.yml` and `sanitizer.yml`.
+            # Local devs running coverage or sanitizers should
+            # `nix develop .#llvm-tools` instead of the default shell.
+            llvm-tools = mkSipiShell {
+              name = "sipi-llvm-tools";
+              stdenv = pkgs.llvmPackages_19.libcxxStdenv;
+              extraPackages = [ pkgs.llvmPackages_19.llvm ];
+            };
+          };
+        }
+      );
 }

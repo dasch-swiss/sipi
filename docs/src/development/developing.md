@@ -99,8 +99,8 @@ decision tree, IIIF coverage matrix, feature inventory), see
 
 Unit + approval tests use [GoogleTest](https://github.com/google/googletest)
 (approval tests additionally use [ApprovalTests.cpp](https://github.com/approvals/ApprovalTests.cpp)).
-End-to-end tests are written in Rust and live under `test/e2e-rust/`;
-HTTP contract tests use [Hurl](https://hurl.dev/).
+End-to-end and HTTP-contract tests are written in Rust and live under
+`test/e2e-rust/`.
 
 All tests build under Bazel:
 
@@ -156,48 +156,24 @@ Rust e2e tests live in `test/e2e-rust/` and use `reqwest` for HTTP,
 They cover IIIF compliance, server behaviour, and upload
 functionality.
 
-Two recipes run the same test code via two different paths:
+Run via Bazel — `rules_rust` produces one `rust_test` target per
+`tests/<name>.rs`:
 
 ```bash
-just bazel-test-e2e              # CI canonical: every tests/<name>.rs as a rust_test
-just rust-test-e2e               # Inner-loop: cargo test from the dev shell
+just bazel-test-e2e                                  # full suite (CI canonical)
+bazel test //test/e2e-rust:server                    # single target, inner-loop
+bazel test //test/e2e-rust:server --test_output=streamed   # see live output
 ```
 
-Both resolve the sipi binary via `$SIPI_BIN`, defaulting to
-`bazel-bin/src/cli/sipi`. Override `SIPI_BIN` to point at a sanitized
-build (`bazel build --config=asan`) when investigating ASan
-findings.
+The full suite resolves the sipi binary via `$SIPI_BIN`, defaulting
+to `bazel-bin/src/cli/sipi`. Override `SIPI_BIN` to point at a
+sanitized build (`bazel build --config=asan`) when investigating
+ASan findings.
 
-!!! note "Sequential execution required"
-    Tests must run with `--test-threads=1` because each test starts its own
-    SIPI server instance on a unique port. Both recipes handle this
-    automatically.
-
-### Hurl HTTP contract tests
-
-Declarative HTTP contract tests live in `test/hurl/` and use
-[Hurl](https://hurl.dev). Each `.hurl` file describes a sequence of
-HTTP requests and expected responses.
-
-```bash
-just hurl-test
-```
-
-Current test files:
-
-- `file_access.hurl` — File access and permission checks
-- `health.hurl` — `/health` liveness/version/uptime contract
-- `iiif_transform.hurl` — IIIF Image API 3.0 transform + canonical-redirect contract
-- `info_json.hurl` — IIIF info.json structure and conformance fields
-- `lua_endpoints.hurl` — Lua script endpoint responses
-- `metrics.hurl` — Prometheus `/metrics` exposition contract
-- `missing_sidecar.hurl` — Behaviour when sidecar files are absent
-- `sqlite_api.hurl` — SQLite API endpoint tests
-- `video_knora_json.hurl` — Video metadata JSON responses
-
-!!! note "Requires Hurl binary"
-    Hurl is available inside `nix develop`. Outside Nix, install it from
-    [hurl.dev](https://hurl.dev).
+!!! note "Sequential execution"
+    Each test starts its own SIPI server on a unique port. The
+    `sipi_e2e_test` Bazel macro sets `--test-threads=1` so this
+    works out of the box.
 
 ### Smoke tests
 
@@ -206,8 +182,7 @@ against a built Docker image. They verify basic server functionality
 after a Docker build:
 
 ```bash
-just test-smoke                  # Inner-loop: build host-arch image (Bazel) + cargo smoke
-just bazel-test-smoke            # CI canonical: rust_test consuming the OCI tarball
+just bazel-test-smoke            # builds //src:image, loads tarball, probes
 ```
 
 ### Approval tests

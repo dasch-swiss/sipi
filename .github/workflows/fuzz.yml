@@ -42,23 +42,6 @@ jobs:
     timeout-minutes: 60
     name: fuzz / iiif-uri-parser
     steps:
-      # Bazel-driven fuzz builds compile every foreign_cc ext lib that
-      # transitively reaches `:fuzz_subset` (curl, jansson, libmagic, lua,
-      # openssl, sqlite3, zlib via shttps_headers). Without freeing
-      # pre-installed SDKs first, the LLVM 19 toolchain (~3 GB) plus the
-      # Bazel disk cache blow past ubuntu-24.04's ~14 GB free quota.
-      # Mirrors `.github/workflows/sanitizer.yml` and `bazel-build.yml`.
-      - name: free disk space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: false
-
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0

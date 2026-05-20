@@ -1,11 +1,16 @@
-# Main CI workflow for pull requests and scheduled verification.
+# Main CI workflow for pull requests.
 #
 # Test matrix runs on all three supported platforms (linux-x86_64,
-# linux-aarch64, darwin-aarch64). Every platform runs the full test suite
-# under coverage instrumentation via `just bazel-coverage` (unit + approval
-# + e2e). Linux entries additionally build the Docker image, run the
-# Bazel-built smoke test against it, and feed Docker Scout. amd64 uploads
-# the Codecov lcov report and the SARIF CVE scan.
+# linux-aarch64, darwin-aarch64) and executes `just bazel-test`
+# (fastbuild, no instrumentation; unit + approval + e2e). Linux entries
+# additionally build the Docker image, run the Bazel-built smoke test
+# against it, and feed Docker Scout. amd64 uploads the SARIF CVE scan.
+#
+# Coverage instrumentation moved out of this workflow to
+# `.github/workflows/coverage.yml`, which runs on every push to `main`
+# (post-merge) on a single linux-amd64 runner and uploads lcov to
+# Codecov. PRs no longer get a per-PR coverage delta in Codecov;
+# trade-off accepted for faster PR CI.
 #
 # Every step invokes `just <recipe>`. No inline bazel calls — recipes are
 # the contract surface. See the justfile "Bazel — what CI runs" section.
@@ -15,9 +20,6 @@
 name: ci
 
 on:
-  schedule:
-    # run on midnight every day
-    - cron: '0 0 * * *'
   pull_request:
     types: [opened, synchronize, reopened]
 
@@ -50,24 +52,6 @@ jobs:
             arch: arm64
             runs-on: macos-14
     steps:
-      # GitHub-hosted ubuntu-24.04 runners ship ~14 GB of free disk space,
-      # ~6 GB of which is consumed by pre-installed SDKs the Bazel build
-      # doesn't touch (Android, .NET, Haskell, Boost…). The LLVM 19.1.7
-      # toolchain alone extracts to ~3 GB; piling the 22 ext libs +
-      # sysroot + cache directory on top blows past the quota and kills
-      # the build with `No space left on device`. macOS runners have
-      # plenty of headroom and skip this step.
-      - name: free disk space (linux only)
-        if: runner.os == 'Linux'
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: false
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -107,14 +91,12 @@ jobs:
       # unavailable to forks (and macOS doesn't run Docker steps anyway).
       # The smoke test consumes a locally loaded image, so login is only
       # useful for authenticated Docker Hub pulls (rate-limit avoidance)
-      # on internal Linux PRs and the nightly schedule.
+      # on internal Linux PRs.
       - uses: docker/login-action@v4
         if: runner.os == 'Linux' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - run: nix profile install --inputs-from . nixpkgs#just nixpkgs#hurl
-
       # CACHE STRATEGY:
       #
       # bazel-remote on Cloud Run (us-central1, scale-to-zero) fronts
@@ -138,19 +120,18 @@ jobs:
       #
       # Skipped on fork PRs (secrets unavailable). Those builds run cold
       # without the remote cache — same gating idiom as docker/login-action.
-      - uses: bazel-contrib/setup-bazel@0.19.0
-        with:
-          bazelisk-cache: true
-          disk-cache: false
-          repository-cache: false
+      #
+      # No `bazel-contrib/setup-bazel` action: every Bazel invocation
+      # goes through `nix develop --command`, where the dev shell
+      # provides `bazelisk` from nixpkgs (which reads `.bazelversion`
+      # like any other bazelisk install). Bazelisk's Bazel-binary cache
+      # under `~/.cache/bazelisk` re-fills on every cold runner; the
+      # ~10-30s download is negligible against the multi-minute build.
 
-      # Build sipi + run the full test suite (unit + approval + e2e).
-      # linux-amd64 runs `bazel-coverage` (instrumented build, emits
-      # lcov at bazel-out/_coverage/_coverage_report.dat for the
-      # Codecov upload below). linux-arm64 and darwin-arm64 run
-      # `bazel-test` (fastbuild, no instrumentation) — same test
-      # signal without paying the 1.5-2x compile + runtime cost of
-      # coverage instrumentation on arches that don't upload.
+      # Build sipi + run the full test suite (unit + approval + e2e)
+      # under fastbuild on every platform. Coverage instrumentation has
+      # moved to `.github/workflows/coverage.yml` (post-merge to main,
+      # linux-amd64).
       #
       # `nix develop --command` activates the dev shell so `gh`
       # (kakadu_archive repository_rule) + foreign_cc host tools
@@ -161,22 +142,7 @@ jobs:
       # secret is present (fork PRs run cold). `--sandbox_debug`
       # keeps the sandbox tree on failure so foreign_cc Make.log
       # files (dumped by the failure step below) survive.
-      - name: Build + run all tests under coverage
-        if: ${{ matrix.platform == 'linux-amd64' }}
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
-        run: |
-          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
-            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
-            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
-          else
-            REMOTE=""
-          fi
-          nix develop --command bash -c "just bazel-coverage $REMOTE --sandbox_debug"
-
-      - name: Build + run all tests (no coverage)
-        if: ${{ matrix.platform != 'linux-amd64' }}
+      - name: Build + run all tests
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
@@ -188,24 +154,6 @@ jobs:
             REMOTE=""
           fi
           nix develop --command bash -c "just bazel-test $REMOTE --sandbox_debug"
-
-      # Hurl is an HTTP-contract test that shells out to the built sipi
-      # binary directly (not via Bazel). Both `bazel-coverage` and
-      # `bazel-test` produce `bazel-bin/src/cli/sipi` (with or without
-      # coverage instrumentation; HTTP behaviour is identical).
-      - name: Run Hurl contract tests
-        run: just hurl-test
-
-      # Codecov consumes the combined lcov directly — no cobertura
-      # conversion. Linux-amd64 only: a single platform's report is
-      # sufficient signal; Codecov merges if we ever enable more.
-      - name: Upload coverage to Codecov
-        if: ${{ matrix.platform == 'linux-amd64' }}
-        uses: codecov/codecov-action@v6.0.0
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          slug: dasch-swiss/sipi
-          files: bazel-out/_coverage/_coverage_report.dat
 
       # On any bazel failure above, locate and dump every foreign_cc
       # Make.log under the bazel output base. rules_foreign_cc writes
@@ -313,6 +261,6 @@ jobs:
           git lfs checkout
       - uses: dasch-swiss/sipi/.github/actions/setup-python@main
       - uses: DeterminateSystems/determinate-nix-action@v3
-      - run: nix profile install --inputs-from . nixpkgs#just
+      - uses: extractions/setup-just@v3
       - run: just docs-install-requirements
       - run: just docs-build

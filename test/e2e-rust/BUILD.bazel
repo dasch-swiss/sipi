@@ -106,6 +106,8 @@ sipi_e2e_test(name = "health", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "heritage_jpeg", deps = _e2e_test_deps)
 
+sipi_e2e_test(name = "http_contracts", deps = _e2e_test_deps)
+
 sipi_e2e_test(name = "iiif_compliance", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "input_validation", deps = _e2e_test_deps)
@@ -223,6 +225,7 @@ test_suite(
         ":connection",
         ":health",
         ":heritage_jpeg",
+        ":http_contracts",
         ":iiif_compliance",
         ":input_validation",
         ":latency",

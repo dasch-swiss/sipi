@@ -5,8 +5,10 @@ a reproducible bash environment with bazelisk, the host tools that
 `rules_foreign_cc` shells out to (perl, cmake, pkg-config,
 autoconf/automake/libtool/m4), `gh` (consumed by the
 `kakadu_archive` repository_rule), `crane` (used by
-`bazel-docker-publish-manifest`), and the test runtimes
-(rustc, cargo, hurl, nginx, graphicsmagick, imagemagick).
+`bazel-docker-publish-manifest`), and `jpylyzer` (JP2 conformance
+validator). Rust + LLVM toolchains are provisioned hermetically by
+Bazel (`rules_rust` + `toolchains_llvm` in `MODULE.bazel`) — neither
+`rustc`/`cargo` nor `clang` ship in the dev shell.
 
 It is **not** the build system. Sipi's binaries, tests, and Docker
 image are all produced by Bazel. See [Building with Bazel](bazel.md).
@@ -39,15 +41,17 @@ nix develop                    # default shell — Clang + libc++ + host tools
 just bazel-build               # subsequent commands work as usual
 ```
 
-Two shells are exposed:
+Three shells are exposed:
 
 | Shell | Stdenv | Purpose |
 |---|---|---|
 | `default` | `llvmPackages_19.libcxxStdenv` | Matches the Bazel toolchain (`toolchains_llvm`). 99% of work happens here. |
 | `gcc` | `pkgs.gcc14Stdenv` | Diagnostic escape hatch when the LLVM toolchain produces a confusing error. Not used by CI. |
+| `llvm-tools` | `llvmPackages_19.libcxxStdenv` | `default` + `llvmPackages_19.llvm` (host `llvm-cov`, `llvm-profdata`, `llvm-symbolizer`). Used by `coverage.yml` (coverage) and `sanitizer.yml` (ASan/LSan symbolization); local devs running `just bazel-coverage` or sanitizer e2e should enter this shell. |
 
 ```bash
 nix develop .#gcc              # GCC + libstdc++ environment
+nix develop .#llvm-tools       # default + LLVM host binaries on PATH
 ```
 
 `bazel build` invokes its own hermetic LLVM toolchain regardless of
@@ -69,13 +73,14 @@ Highlights:
 - **go-containerregistry** — provides `crane`, used by
   `just bazel-docker-publish-manifest` to assemble the multi-arch
   manifest from per-arch digests.
-- **just, gcovr, lcov, llvmPackages_19.llvm** — recipe runner +
-  coverage tooling.
-- **rustc, cargo, hurl** — the Rust e2e harness's inner-loop tools
-  (used by `just rust-test-e2e` and `just hurl-test`; CI uses
-  `bazel test` instead and does not need `cargo` on PATH).
-- **nginx, graphicsmagick, imagemagick, libxml2, libxslt** — test
-  runtimes consumed by the e2e + smoke tests.
+- **just** — recipe runner.
+- **python3Packages.jpylyzer** — JP2 conformance validator used to
+  verify regenerated JP2 goldens (see ADR-0010 / Phase 15.11).
+- **llvmPackages_19.llvm** *(coverage shell only)* — `llvm-cov` /
+  `llvm-profdata` for `just bazel-coverage`. Bazel's
+  `collect_cc_coverage.sh` hard-requires `COVERAGE_GCOV_PATH` and
+  `LLVM_COV` env vars on every test action; the justfile recipe
+  resolves them via `$(command -v llvm-{cov,profdata})`.
 
 ## Shell hooks
 

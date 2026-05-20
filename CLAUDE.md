@@ -40,8 +40,6 @@ just bazel-test-unit             # bazel test //test/unit/...  (12 components)
 just bazel-test-approval         # bazel test //test/approval:approvaltests
 just bazel-test-e2e              # Rust e2e tests via rules_rust
 just bazel-test-smoke            # Docker smoke test (OCI tarball loaded by the test)
-just rust-test-e2e               # inner-loop Rust e2e via cargo (needs dev shell)
-just hurl-test                   # Hurl HTTP contract tests (needs hurl — from dev shell)
 
 # Coverage (canonical CI build — what ci.yml invokes on every PR)
 just bazel-coverage              # unit + approval + e2e under instrumentation; lcov
@@ -57,7 +55,6 @@ just bazel-build-fuzz            # bazel build --config=fuzz //fuzz/handlers:iii
 just bazel-run-fuzz <corpus> <duration> [seed]  # libFuzzer args; recipe builds + execs the binary directly
 
 # Docker (Bazel rules_oci)
-just test-smoke                          # build host-arch image via Bazel, then run smoke tests (inner-loop)
 just bazel-docker-build-amd64            # build + load amd64 image as daschswiss/sipi:latest (CI on amd64 runner)
 just bazel-docker-build-arm64            # build + load arm64 image (CI on arm64 runner)
 just bazel-docker-push-amd64             # push amd64 image as :v<version>-amd64 + :latest-amd64
@@ -144,9 +141,8 @@ For test framework details (how to run tests, directory layout, adding tests), s
 
 - **Unit tests** (`test/unit/`): GoogleTest — `just bazel-test-unit` (or via `bazel-coverage` in CI)
 - **Approval tests** (`test/approval/`): snapshot-based regression — `just bazel-test-approval` (or via `bazel-coverage` in CI). `SOURCE_DATE_EPOCH=946684800` and `SIPI_WORKSPACE_ROOT="."` are injected by `test/approval/BUILD.bazel`.
-- **E2E tests** (`test/e2e-rust/`): Rust (reqwest + cargo test). CI: `just bazel-test-e2e` (`rust_test` targets via `rules_rust`). Inner-loop: `just rust-test-e2e` (cargo from dev shell).
-- **Hurl tests** (`test/hurl/`): HTTP contract tests — `just hurl-test`
-- **Smoke tests** (`test/e2e-rust/tests/docker_smoke.rs`): against Docker image. CI: `just bazel-test-smoke` (`:docker_smoke` rust_test consumes the OCI tarball from `//src:image_load`). Inner-loop: `just test-smoke` (cargo + locally-built `daschswiss/sipi:latest`).
+- **E2E tests** (`test/e2e-rust/`): Rust (reqwest + `rules_rust`'s hermetic rustc). Run via `just bazel-test-e2e`, or a single target with `bazel test //test/e2e-rust:<name> --test_output=streamed`.
+- **Smoke tests** (`test/e2e-rust/tests/docker_smoke.rs`): against Docker image. Run via `just bazel-test-smoke` — the `:docker_smoke` rust_test consumes the OCI tarball from `//src:image_load` and `docker load`s it before probing endpoints.
 
 Run a single unit-test target with `bazel test //test/unit/<component>:<component>_test --test_output=streamed`.
 
