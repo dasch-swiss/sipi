@@ -146,6 +146,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
+          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
         run: |
           if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
             CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
@@ -153,7 +154,12 @@ jobs:
           else
             REMOTE=""
           fi
-          nix develop --command bash -c "just bazel-test $REMOTE --sandbox_debug"
+          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
+            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
+          else
+            BES=""
+          fi
+          nix develop --command bash -c "just bazel-test $REMOTE $BES --sandbox_debug"
 
       # On any bazel failure above, locate and dump every foreign_cc
       # Make.log under the bazel output base. rules_foreign_cc writes
@@ -196,6 +202,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
+          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
         run: |
           if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
             CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
@@ -203,7 +210,12 @@ jobs:
           else
             REMOTE=""
           fi
-          nix develop --command bash -c "just bazel-test-smoke $REMOTE"
+          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
+            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
+          else
+            BES=""
+          fi
+          nix develop --command bash -c "just bazel-test-smoke $REMOTE $BES"
 
       - name: Docker Scout — compare to production
         if: runner.os == 'Linux' && github.event_name == 'pull_request'
