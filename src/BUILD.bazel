@@ -434,21 +434,6 @@ expand_template(
     template = ["1970-01-01T00:00:00Z"],
 )
 
-# Image tag is consumed by `oci_push.remote_tags`; stamping makes
-# `daschswiss/sipi:v<version>` resolve at push time. The `v` prefix
-# matches today's Dockerfile-era tag (release-please tags `v<version>`
-# directly, but the binary's --version output and the OCI label both
-# read `<version>` without the prefix — so we add it here in the tag-
-# emitting template only).
-expand_template(
-    name = "image_tag",
-    out = "image_tag.txt",
-    stamp_substitutions = {
-        "0.0.0-unstamped": "v{{STABLE_SIPI_VERSION}}",
-    },
-    template = ["0.0.0-unstamped"],
-)
-
 # Labels file in `KEY=VALUE` form — oci_image's `labels` attribute
 # accepts a label producing a file with one entry per line (matching
 # today's `dockerTools.image.config.Labels` map).

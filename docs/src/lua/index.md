@@ -22,9 +22,6 @@ Each lua-instance in SIPI includes additional SIPI-specific information:
 In general, the SIPI LUA function make use that a Lua function's return value may consist of
 more than one element (see [Multiple Results](http://www.lua.org/pil/5.3.html)):
 
-Sipi provides the [LuaRocks](https://luarocks.org/)
-package manager which must be used in the context of SIPI.
-
 *The Lua interpreter in Sipi runs in a multithreaded environment: each
 request runs in its own thread and has its own Lua interpreter.
 Therefore, only Lua packages that are known to be thread-safe may be
@@ -1441,23 +1438,4 @@ success, hashed_path = helper.filename_hash(filename)
 ```
 
 Convert a filename into a hashed filesystem path, using SIPI's internal hash algorithm for cache file organization.
-
-## Installing Lua modules
-
-To install Lua modules that can be used in Lua scripts, use
-`local/bin/luarocks`. Make sure that the location where the modules are
-stored is in the Lua package path, which is printed by
-local/bin/lurocks path. The Lua paths will be used by the Lua
-interpreter when loading modules in a script with `require` (see [Using
-LuaRocks to install packages in the current
-directory](http://leafo.net/guides/customizing-the-luarocks-tree.html)).
-
-For example, using `local/bin/luarocks install --local package`, the
-package will be installed in `~/.luarocks/`. To include this path in the
-Lua's interpreter package search path, you can use an environment
-variable. Running `local/bin/luarocks path` outputs the code you can use
-to do so. Alternatively, you can build the package path at the beginning
-of a Lua file by setting `package.path` and `package.cpath` (see
-[Running scripts with
-packages](http://leafo.net/guides/customizing-the-luarocks-tree.html#the-install-locations/using-a-custom-directory/quick-guide/running-scripts-with-packages)).
 
