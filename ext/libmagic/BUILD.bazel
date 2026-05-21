@@ -34,7 +34,7 @@ configure_make(
     set_file_prefix_map = True,
     deps = [
         "@bzip2//:bz2",
-        "//ext/xz:xz",
+        "@xz//:lzma",
         "//ext/zlib:zlib",
         "@zstd",
     ],
