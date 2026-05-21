@@ -315,7 +315,7 @@ cc_library(
         "//ext/libmagic:libmagic",
         "//ext/lua:lua",
         "//ext/jansson:jansson",
-        "//ext/sqlite3:sqlite3",
+        "@sqlite3",
         "//ext/sentry:sentry",
         "@prometheus-cpp//core",
         "//ext/curl:curl",
