@@ -311,7 +311,7 @@ cc_library(
         "//ext/webp:webp",
         "//ext/jbigkit:jbigkit",
         "//ext/png:png",
-        "//ext/xz:xz",
+        "@xz//:lzma",
         "//ext/libmagic:libmagic",
         "//ext/lua:lua",
         "//ext/jansson:jansson",

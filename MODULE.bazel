@@ -85,6 +85,7 @@ bazel_dep(name = "protobuf", version = "34.1")
 # and the cc_library under `@bzip2//:bz2`).
 bazel_dep(name = "bzip2", version = "1.0.8.bcr.4")
 bazel_dep(name = "zstd", version = "1.5.7.bcr.1")
+bazel_dep(name = "xz", version = "5.4.5.bcr.8")
 
 # protobuf 34.1 transitively pulls `rules_go@0.51.0-rc2` for its Go support.
 # That release's `go/private/rules/cgo.bzl` still references `CcInfo` from
@@ -632,14 +633,6 @@ http_archive(
     sha256 = "2fc8bbde9f97f2ab403c0224fb9ca62b2e6852cbc519e91ceaa7c153ffd88a0c",
     strip_prefix = "libwebp-1.2.0",
     url = "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.2.0.tar.gz",
-)
-
-http_archive(
-    name = "xz",
-    build_file = "//bazel:all_content.BUILD.bazel",
-    sha256 = "f6f4910fd033078738bd82bfba4f49219d03b17eb0794eb91efbae419f4aba10",
-    strip_prefix = "xz-5.2.5",
-    url = "https://tukaani.org/xz/xz-5.2.5.tar.gz",
 )
 
 http_archive(

@@ -50,7 +50,7 @@ cmake(
         "//ext/jpeg:jpeg",
         "//ext/png:png",
         "//ext/webp:webp",
-        "//ext/xz:xz",
+        "@xz//:lzma",
         "@zstd",
     ],
 )
