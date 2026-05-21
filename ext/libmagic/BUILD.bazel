@@ -35,7 +35,7 @@ configure_make(
     deps = [
         "@bzip2//:bz2",
         "@xz//:lzma",
-        "//ext/zlib:zlib",
+        "@zlib",
         "@zstd",
     ],
 )

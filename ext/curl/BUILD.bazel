@@ -40,9 +40,12 @@ cmake(
         # SSL backend: foreign_cc-built OpenSSL.
         "CURL_USE_OPENSSL": "ON",
         "OPENSSL_ROOT_DIR": "$$EXT_BUILD_DEPS/openssl",
-        "ZLIB_ROOT": "$$EXT_BUILD_DEPS/zlib",
-        "ZLIB_INCLUDE_DIR": "$$EXT_BUILD_DEPS/zlib/include",
-        "ZLIB_LIBRARY": "$$EXT_BUILD_DEPS/zlib/lib/libz.a",
+        # BCR cc_library deps stage *flat* under `$EXT_BUILD_DEPS/{include,lib}/`,
+        # unlike the per-dep `$EXT_BUILD_DEPS/<dep>/...` layout used for
+        # foreign_cc-built deps (openssl above).
+        "ZLIB_ROOT": "$$EXT_BUILD_DEPS",
+        "ZLIB_INCLUDE_DIR": "$$EXT_BUILD_DEPS/include",
+        "ZLIB_LIBRARY": "$$EXT_BUILD_DEPS/lib/libz.a",
         # Drop transports we don't need so we don't hunt for system libs.
         "CURL_USE_LIBPSL": "OFF",
         "CURL_BROTLI": "OFF",
@@ -70,6 +73,6 @@ cmake(
     set_file_prefix_map = True,
     deps = [
         "//ext/openssl:openssl",
-        "//ext/zlib:zlib",
+        "@zlib",
     ],
 )

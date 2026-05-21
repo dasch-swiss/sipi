@@ -34,6 +34,6 @@ cmake(
     deps = [
         "//ext/expat:expat",
         "//ext/png:png",
-        "//ext/zlib:zlib",
+        "@zlib",
     ],
 )
