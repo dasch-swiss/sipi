@@ -313,7 +313,7 @@ cc_library(
         "//ext/png:png",
         "@xz//:lzma",
         "@libmagic//:lib",
-        "//ext/lua:lua",
+        "@lua",
         "//ext/jansson:jansson",
         "@sqlite3",
         "//ext/sentry:sentry",
