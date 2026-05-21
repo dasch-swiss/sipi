@@ -88,15 +88,17 @@
     "https://bcr.bazel.build/modules/bazel_worker_java/0.0.8/MODULE.bazel": "e76479eae70bd4e8f5f4c2dfc5d03ab971cfb18750246c7b3f3454c5c2ee6629",
     "https://bcr.bazel.build/modules/boringssl/0.0.0-20230215-5c22014/MODULE.bazel": "4b03dc0d04375fa0271174badcd202ed249870c8e895b26664fd7298abea7282",
     "https://bcr.bazel.build/modules/boringssl/0.0.0-20240530-2db0eb3/MODULE.bazel": "d0405b762c5e87cd445b7015f2b8da5400ef9a8dbca0bfefa6c1cea79d528a97",
-    "https://bcr.bazel.build/modules/boringssl/0.0.0-20240530-2db0eb3/source.json": "0d413869349e82e5d679802abe9ce23e0326bbf56daa97ae9e7dbdcec72982fc",
+    "https://bcr.bazel.build/modules/boringssl/0.20241024.0/MODULE.bazel": "b540cff73d948cb79cb0bc108d7cef391d2098a25adabfda5043e4ef548dbc87",
+    "https://bcr.bazel.build/modules/boringssl/0.20241024.0/source.json": "d843092e682b84188c043ac742965d7f96e04c846c7e338187e03238674909a9",
     "https://bcr.bazel.build/modules/buildozer/8.5.1/MODULE.bazel": "a35d9561b3fc5b18797c330793e99e3b834a473d5fbd3d7d7634aafc9bdb6f8f",
     "https://bcr.bazel.build/modules/buildozer/8.5.1/source.json": "e3386e6ff4529f2442800dee47ad28d3e6487f36a1f75ae39ae56c70f0cd2fbd",
     "https://bcr.bazel.build/modules/bzip2/1.0.8.bcr.4/MODULE.bazel": "80a6a6a7493885b113dec2760403636d97009356b33df1720e79a65d126149cf",
     "https://bcr.bazel.build/modules/bzip2/1.0.8.bcr.4/source.json": "a769883197aebe54f78671f1a2c7e0fae5cd8f045bae1230f04f4902856e3bca",
     "https://bcr.bazel.build/modules/civetweb/1.16.bcr.1/MODULE.bazel": "d4cd273eae3ab919f6ae2eb7da3692e9bc1420346f645916290d4d8688b1bd06",
     "https://bcr.bazel.build/modules/civetweb/1.16.bcr.1/source.json": "a2dddab6e51dfbf8480a43a6a5d7272f88cb4cde53a5b6ebcd13ca76b1b68721",
+    "https://bcr.bazel.build/modules/curl/8.12.0.bcr.1/MODULE.bazel": "4f44af081ff8e3ae3fe09bf60da815002320fb4d27f0c3013c4057db4beef591",
+    "https://bcr.bazel.build/modules/curl/8.12.0.bcr.1/source.json": "bb7f565878dd3045c07e273089c0c5ccfe0746eb370125efe930cead83b502ea",
     "https://bcr.bazel.build/modules/curl/8.7.1/MODULE.bazel": "088221c35a2939c555e6e47cb31a81c15f8b59f4daa8009b1e9271a502d33485",
-    "https://bcr.bazel.build/modules/curl/8.7.1/source.json": "bf9890e809717445b10a3ddc323b6d25c46631589c693a232df8310a25964484",
     "https://bcr.bazel.build/modules/gawk/5.3.2.bcr.1/MODULE.bazel": "cdf8cbe5ee750db04b78878c9633cc76e80dcf4416cbe982ac3a9222f80713c8",
     "https://bcr.bazel.build/modules/gawk/5.3.2.bcr.3/MODULE.bazel": "f1b7bb2dd53e8f2ef984b39485ec8a44e9076dda5c4b8efd2fb4c6a6e856a31d",
     "https://bcr.bazel.build/modules/gawk/5.3.2.bcr.3/source.json": "ebe931bfe362e4b41e59ee00a528db6074157ff2ced92eb9e970acab2e1089c9",
@@ -130,8 +132,11 @@
     "https://bcr.bazel.build/modules/lua/5.3.6/MODULE.bazel": "477d3405409495e8a237d5b8d4bf17af47e948aab0e4070eb73394d05a05fecc",
     "https://bcr.bazel.build/modules/lua/5.3.6/source.json": "4ee017ef6eb438d583c135e636f86e3d52912466fd818f557c5f0ddbc0f0f6ee",
     "https://bcr.bazel.build/modules/mbedtls/3.6.0/MODULE.bazel": "8e380e4698107c5f8766264d4df92e36766248447858db28187151d884995a09",
-    "https://bcr.bazel.build/modules/mbedtls/3.6.0/source.json": "1dbe7eb5258050afcc3806b9d43050f71c6f539ce0175535c670df606790b30c",
+    "https://bcr.bazel.build/modules/mbedtls/3.6.5/MODULE.bazel": "f68edc3db5a01add21c85c2dc2211ecef43a974756656268d8171ad4fb1f30e3",
+    "https://bcr.bazel.build/modules/mbedtls/3.6.5/source.json": "e94d5925d46562f393784d0a5ea66635cb2f15740b6dc1d7cb1371f01fcf0e0e",
     "https://bcr.bazel.build/modules/nlohmann_json/3.6.1/MODULE.bazel": "6f7b417dcc794d9add9e556673ad25cb3ba835224290f4f848f8e2db1e1fca74",
+    "https://bcr.bazel.build/modules/openssl/3.3.1.bcr.1/MODULE.bazel": "49c0c07e8fb87b480bccb842cfee1b32617f11dac590f732573c69058699a3d1",
+    "https://bcr.bazel.build/modules/openssl/3.3.1.bcr.1/source.json": "0c0872e048bbea052a9c541fb47019481a19201ba5555a71d762ad591bf94e1f",
     "https://bcr.bazel.build/modules/package_metadata/0.0.2/MODULE.bazel": "fb8d25550742674d63d7b250063d4580ca530499f045d70748b1b142081ebb92",
     "https://bcr.bazel.build/modules/package_metadata/0.0.3/MODULE.bazel": "77890552ecea9e284b5424c9de827a58099348763a4359e975c359a83d4faa83",
     "https://bcr.bazel.build/modules/package_metadata/0.0.5/MODULE.bazel": "ef4f9439e3270fdd6b9fd4dbc3d2f29d13888e44c529a1b243f7a31dfbc2e8e4",
@@ -262,6 +267,8 @@
     "https://bcr.bazel.build/modules/rules_license/1.0.0/source.json": "a52c89e54cc311196e478f8382df91c15f7a2bfdf4c6cd0e2675cc2ff0b56efb",
     "https://bcr.bazel.build/modules/rules_oci/2.3.0/MODULE.bazel": "49075197960c924c0a4d759b7c765c3d00a41d2fdd4a943b42823c1d016ab4ec",
     "https://bcr.bazel.build/modules/rules_oci/2.3.0/source.json": "47710c28446211b5e61a24015a4669c50c6862d5f91e6bdbc710de8d750cf613",
+    "https://bcr.bazel.build/modules/rules_perl/0.2.4/MODULE.bazel": "5f5af7be4bf5fb88d91af7469518f0fd2161718aefc606188f7cd51f436ca938",
+    "https://bcr.bazel.build/modules/rules_perl/0.2.4/source.json": "574317d6b3c7e4843fe611b76f15e62a1889949f5570702e1ee4ad335ea3c339",
     "https://bcr.bazel.build/modules/rules_pkg/0.7.0/MODULE.bazel": "df99f03fc7934a4737122518bb87e667e62d780b610910f0447665a7e2be62dc",
     "https://bcr.bazel.build/modules/rules_pkg/1.0.1/MODULE.bazel": "5b1df97dbc29623bccdf2b0dcd0f5cb08e2f2c9050aab1092fd39a41e82686ff",
     "https://bcr.bazel.build/modules/rules_pkg/1.0.1/source.json": "bd82e5d7b9ce2d31e380dd9f50c111d678c3bdaca190cb76b0e1c71b05e1ba8a",
@@ -427,6 +434,69 @@
           "androidsdk": {
             "repoRuleId": "@@rules_android+//rules/android_sdk_repository:rule.bzl%_android_sdk_repository",
             "attributes": {}
+          }
+        }
+      }
+    },
+    "@@rules_perl+//perl:extensions.bzl%perl_repositories": {
+      "general": {
+        "bzlTransitiveDigest": "T3CUJFKUj0hwwbPycv/t4jBcjNDyL5Umt5ZO8+14Q5A=",
+        "usagesDigest": "qSSNDdCNVxNhY36wMndEAFacdhR0ooLTmumfad0km9s=",
+        "recordedInputs": [
+          "REPO_MAPPING:rules_perl+,bazel_tools bazel_tools",
+          "REPO_MAPPING:rules_perl+,rules_perl rules_perl+"
+        ],
+        "generatedRepoSpecs": {
+          "perl_darwin_arm64": {
+            "repoRuleId": "@@rules_perl+//perl:repo.bzl%perl_download",
+            "attributes": {
+              "strip_prefix": "perl-darwin-arm64",
+              "sha256": "285769f3c50c339fb59a3987b216ae3c5c573b95babe6875a1ef56fb178433da",
+              "urls": [
+                "https://github.com/skaji/relocatable-perl/releases/download/5.36.0.1/perl-darwin-arm64.tar.xz"
+              ]
+            }
+          },
+          "perl_darwin_amd64": {
+            "repoRuleId": "@@rules_perl+//perl:repo.bzl%perl_download",
+            "attributes": {
+              "strip_prefix": "perl-darwin-amd64",
+              "sha256": "63bc5ee36f5394d71c50cca6cafdd333ee58f9eaa40bca63c85f9bd06f2c1fd6",
+              "urls": [
+                "https://github.com/skaji/relocatable-perl/releases/download/5.36.0.1/perl-darwin-amd64.tar.xz"
+              ]
+            }
+          },
+          "perl_linux_amd64": {
+            "repoRuleId": "@@rules_perl+//perl:repo.bzl%perl_download",
+            "attributes": {
+              "strip_prefix": "perl-linux-amd64",
+              "sha256": "3bdffa9d7a3f97c0207314637b260ba5115b1d0829f97e3e2e301191a4d4d076",
+              "urls": [
+                "https://github.com/skaji/relocatable-perl/releases/download/5.36.0.1/perl-linux-amd64.tar.xz"
+              ]
+            }
+          },
+          "perl_linux_arm64": {
+            "repoRuleId": "@@rules_perl+//perl:repo.bzl%perl_download",
+            "attributes": {
+              "strip_prefix": "perl-linux-arm64",
+              "sha256": "6fa4ece99e790ecbc2861f6ecb7b52694c01c2eeb215b4370f16a3b12d952117",
+              "urls": [
+                "https://github.com/skaji/relocatable-perl/releases/download/5.36.0.1/perl-linux-arm64.tar.xz"
+              ]
+            }
+          },
+          "perl_windows_x86_64": {
+            "repoRuleId": "@@rules_perl+//perl:repo.bzl%perl_download",
+            "attributes": {
+              "strip_prefix": "",
+              "sha256": "aeb973da474f14210d3e1a1f942dcf779e2ae7e71e4c535e6c53ebabe632cc98",
+              "urls": [
+                "https://mirror.bazel.build/strawberryperl.com/download/5.32.1.1/strawberry-perl-5.32.1.1-64bit.zip",
+                "https://strawberryperl.com/download/5.32.1.1/strawberry-perl-5.32.1.1-64bit.zip"
+              ]
+            }
           }
         }
       }
