@@ -148,7 +148,7 @@ std::pair<std::string, std::string> parseMimetype(const std::string &mimestr)
 std::pair<std::string, std::string> getFileMimetype(const std::string &fpath)
 {
   magic_t handle;
-  if ((handle = magic_open(MAGIC_MIME | MAGIC_PRESERVE_ATIME)) == nullptr) {
+  if ((handle = magic_open(MAGIC_MIME)) == nullptr) {
     throw Error("magic_open() failed");
   }
 
