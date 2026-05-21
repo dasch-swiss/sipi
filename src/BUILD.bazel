@@ -312,7 +312,7 @@ cc_library(
         "//ext/jbigkit:jbigkit",
         "//ext/png:png",
         "@xz//:lzma",
-        "//ext/libmagic:libmagic",
+        "@libmagic//:lib",
         "//ext/lua:lua",
         "//ext/jansson:jansson",
         "@sqlite3",

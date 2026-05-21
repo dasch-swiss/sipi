@@ -29,14 +29,13 @@ package(default_visibility = [
     "//src/shttps:__subpackages__",
 ])
 
-# Embeds libmagic's `share/misc/magic.mgc` database as a C array consumed
-# by `shttps/Parsing.cpp` (`magic_load_buffers(magic_mgc, magic_mgc_len, …)`).
-# The custom rule lives in `//bazel:magic_database.bzl` because foreign_cc's
-# `$(execpath)` form only resolves to the primary CcInfo output (libmagic.a),
-# not data files under the rule's install tree.
+# Embeds libmagic's `magic.mgc` database as a C array consumed by
+# `shttps/Parsing.cpp` (`magic_load_buffers(magic_mgc, magic_mgc_len, …)`).
+# The BCR libmagic module exposes the compiled database directly as
+# `@libmagic//:magic.mgc` (output of the upstream `gen_magic` genrule).
 magic_mgc_header(
     name = "magic_mgc_h",
-    libmagic = "//ext/libmagic:libmagic",
+    mgc = "@libmagic//:magic.mgc",
     out = "generated/magic_mgc.h",
 )
 
@@ -66,7 +65,7 @@ cc_library(
         "//src/logging:logging",
         "//ext/curl:curl",
         "//ext/jansson:jansson",
-        "//ext/libmagic:libmagic",
+        "@libmagic//:lib",
         "//ext/lua:lua",
         "//ext/openssl:openssl",
         "@sqlite3",
