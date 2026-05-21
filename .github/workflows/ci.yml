@@ -87,6 +87,24 @@ jobs:
           # keeps Nix's daemon from sanitising it out of `nix develop`.
           extra-conf: |
             extra-experimental-features = configurable-impure-env
+      # Magic Nix Cache uses GitHub Actions' built-in cache as the
+      # binary-cache backend for `/nix/store`. Free, zero-config; shrinks
+      # the cold-runner `nix develop` bootup from 30-70s to ~5-15s once
+      # the per-branch cache key warms.
+      #
+      # Linux-only: on GitHub-hosted macOS runners the Nix daemon doesn't
+      # list the runner user in `trusted-users`, so the magic-nix-cache
+      # daemon refuses to enable the GHA cache backend. The cache-restore
+      # steps then add overhead without benefit — see DEV-6565 for the
+      # measured regression on darwin-arm64.
+      - uses: DeterminateSystems/magic-nix-cache-action@v13
+        if: runner.os != 'macOS'
+        with:
+          # GHA cache backend only; skip the FlakeHub probe (paid product,
+          # DaSCH org not enrolled). Without this, the action emits a
+          # misleading `##[error]Unable to authenticate to FlakeHub`
+          # annotation even though the GHA cache works fine.
+          use-flakehub: "false"
       # Skip on forked PRs and on macOS runners — DOCKER_HUB_TOKEN is
       # unavailable to forks (and macOS doesn't run Docker steps anyway).
       # The smoke test consumes a locally loaded image, so login is only
@@ -273,6 +291,13 @@ jobs:
           git lfs checkout
       - uses: dasch-swiss/sipi/.github/actions/setup-python@main
       - uses: DeterminateSystems/determinate-nix-action@v3
+      - uses: DeterminateSystems/magic-nix-cache-action@v13
+        with:
+          # GHA cache backend only; skip the FlakeHub probe (paid product,
+          # DaSCH org not enrolled). Without this, the action emits a
+          # misleading `##[error]Unable to authenticate to FlakeHub`
+          # annotation even though the GHA cache works fine.
+          use-flakehub: "false"
       - uses: extractions/setup-just@v3
       - run: just docs-install-requirements
       - run: just docs-build
