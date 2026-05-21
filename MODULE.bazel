@@ -40,13 +40,13 @@ bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
 # `prometheus-cpp` consumed via the BCR module rather than the foreign_cc
 # `cmake()` wrapper used for the remaining third-party libs. SIPI only
 # links the core counters/gauges/histograms (no HTTP exposer — metrics are
-# served by SIPI's own shttps handler), so `@prometheus_cpp//core` is the
+# served by SIPI's own shttps handler), so `@prometheus-cpp//core` is the
 # only target consumed; the BCR module's optional `pull`/`push`/`civetweb`
 # subgraphs stay outside the action graph. Version `1.3.0.bcr.2` is the
 # BCR re-pack of upstream `v1.3.0` — same source, no upstream bump.
-# `repo_name = "prometheus_cpp"` (underscore) keeps consumer BUILDs short
-# vs. the BCR canonical `com_github_jupp0r_prometheus_cpp`.
-bazel_dep(name = "prometheus-cpp", version = "1.3.0.bcr.2", repo_name = "prometheus_cpp")
+# Canonical-shape `bazel_dep` per BCR `docs/bcr-policies.md`: module name
+# is the apparent name; no `repo_name=` override.
+bazel_dep(name = "prometheus-cpp", version = "1.3.0.bcr.2")
 
 # Surgical fix for the BCR repack: upstream `core/BUILD.bazel` uses bare
 # `cc_library(...)` without a `load()`, which Bazel 9 rejects (the legacy
@@ -68,10 +68,12 @@ single_version_override(
 # (`src/metadata/essentials.proto`) uses `optimize_for = LITE_RUNTIME`, so only
 # the protobuf-lite static archive enters the link (≈300-500 KB).
 # `proto_library` and `cc_proto_library` are exported by the protobuf module
-# itself (`@com_google_protobuf//bazel:{proto_library,cc_proto_library}.bzl`)
-# in protobuf 26+. `repo_name = "com_google_protobuf"` matches the canonical
-# name any future Rust IIIF service in dsp-repository will share via the BCR.
-bazel_dep(name = "protobuf", version = "34.1", repo_name = "com_google_protobuf")
+# itself (`@protobuf//bazel:{proto_library,cc_proto_library}.bzl`) in
+# protobuf 26+. Canonical-shape `bazel_dep` per BCR `docs/bcr-policies.md`:
+# the BCR canonical name (`protobuf`) is the apparent name; no `repo_name=`
+# override. The legacy WORKSPACE-era alias `com_google_protobuf` is not
+# propagated — any future cross-repo consumer should also adopt `@protobuf`.
+bazel_dep(name = "protobuf", version = "34.1")
 
 # protobuf 34.1 transitively pulls `rules_go@0.51.0-rc2` for its Go support.
 # That release's `go/private/rules/cgo.bzl` still references `CcInfo` from
