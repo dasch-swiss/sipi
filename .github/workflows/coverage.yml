@@ -60,6 +60,9 @@ jobs:
           # keeps Nix's daemon from sanitising it out of `nix develop`.
           extra-conf: |
             extra-experimental-features = configurable-impure-env
+      - uses: DeterminateSystems/magic-nix-cache-action@v13
+        with:
+          use-flakehub: "false"  # GHA cache backend only; FlakeHub requires a paid plan we're not on.
       # Authenticated Docker Hub pulls (rate-limit avoidance) for any
       # foreign_cc image the build may need. Skipped if secrets missing
       # (e.g. manually dispatched fork).

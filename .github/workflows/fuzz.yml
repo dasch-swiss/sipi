@@ -61,6 +61,9 @@ jobs:
         with:
           extra-conf: |
             extra-experimental-features = configurable-impure-env
+      - uses: DeterminateSystems/magic-nix-cache-action@v13
+        with:
+          use-flakehub: "false"  # GHA cache backend only; FlakeHub requires a paid plan we're not on.
 
       # Cache via bazel-remote on Cloud Run (gRPC). See ci.yml for the
       # full topology. Credentials are supplied by a Bazel credential
