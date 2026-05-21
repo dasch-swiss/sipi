@@ -55,7 +55,7 @@ cc_library(
         "//include:headers",
         "//src/shttps:shttps",
         "//src:sipi_generated_hdrs",
-        "@prometheus_cpp//core",
+        "@prometheus-cpp//core",
     ],
 )
 
