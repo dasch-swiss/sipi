@@ -321,7 +321,7 @@ cc_library(
         "//ext/curl:curl",
         "//ext/openssl:openssl",
         "//ext/jpeg:jpeg",
-        "//ext/bzip2:bzip2",
+        "@bzip2//:bz2",
         "//ext/zstd:zstd",
         "//ext/zlib:zlib",
         "@kakadu//:kdu",
