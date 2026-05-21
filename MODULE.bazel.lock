@@ -122,6 +122,8 @@
     "https://bcr.bazel.build/modules/jsoncpp/1.9.6.bcr.1/MODULE.bazel": "be2a0db3289111ad410f91ca7e9a84da2dec4441a53a4026892cb29c92a60ca7",
     "https://bcr.bazel.build/modules/jsoncpp/1.9.6.bcr.1/source.json": "089bd0e9656760a0b872bb78d6e2694820170a76edd10adf368f08ab2d246360",
     "https://bcr.bazel.build/modules/jsoncpp/1.9.6/MODULE.bazel": "2f8d20d3b7d54143213c4dfc3d98225c42de7d666011528dc8fe91591e2e17b0",
+    "https://bcr.bazel.build/modules/libexpat/2.7.1.bcr.1/MODULE.bazel": "ad0933e7da133de74cc535911cab2f1b2f224b340898656748d2c1f48d031e70",
+    "https://bcr.bazel.build/modules/libexpat/2.7.1.bcr.1/source.json": "8e120a44b11853250a501634148058edad44c4a6fabb1c494cbf9ebc2cc3d6dd",
     "https://bcr.bazel.build/modules/libpfm/4.11.0/MODULE.bazel": "45061ff025b301940f1e30d2c16bea596c25b176c8b6b3087e92615adbd52902",
     "https://bcr.bazel.build/modules/mbedtls/3.6.0/MODULE.bazel": "8e380e4698107c5f8766264d4df92e36766248447858db28187151d884995a09",
     "https://bcr.bazel.build/modules/mbedtls/3.6.0/source.json": "1dbe7eb5258050afcc3806b9d43050f71c6f539ce0175535c670df606790b30c",

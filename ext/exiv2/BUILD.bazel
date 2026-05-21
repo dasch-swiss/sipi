@@ -32,7 +32,7 @@ cmake(
     ],
     set_file_prefix_map = True,
     deps = [
-        "//ext/expat:expat",
+        "@libexpat",
         "//ext/png:png",
         "@zlib",
     ],
