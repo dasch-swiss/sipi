@@ -322,7 +322,7 @@ cc_library(
         "//ext/openssl:openssl",
         "//ext/jpeg:jpeg",
         "@bzip2//:bz2",
-        "//ext/zstd:zstd",
+        "@zstd",
         "//ext/zlib:zlib",
         "@kakadu//:kdu",
     ] + select({

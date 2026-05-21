@@ -36,6 +36,6 @@ configure_make(
         "@bzip2//:bz2",
         "//ext/xz:xz",
         "//ext/zlib:zlib",
-        "//ext/zstd:zstd",
+        "@zstd",
     ],
 )
