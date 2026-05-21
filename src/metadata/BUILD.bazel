@@ -83,7 +83,8 @@ cc_library(
     deps = [
         "//ext/exiv2:exiv2",
         "//ext/lcms2:lcms2",
-        "//ext/openssl:openssl",
+        "@openssl//:crypto",
+        "@openssl//:ssl",
         "//include:headers",
         "//src/shttps:shttps",
         "//src:sipi_generated_hdrs",

@@ -1,7 +1,6 @@
-"""sentry-native — cmake, inproc backend. Depends on curl.
+"""sentry-native — cmake, inproc backend. Depends on curl + OpenSSL 3.x.
 
-Mirrors `ext/sentry/CMakeLists.txt`. The inproc backend's curl transport
-links against our foreign_cc-built curl.
+The inproc backend's curl transport links against curl's static archive.
 """
 
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
@@ -23,10 +22,13 @@ cmake(
         # Sentry's CMake transitively resolves curl → CURLConfig.cmake →
         # find_dependency(OpenSSL). On Linux the Chromium debian-bullseye
         # sysroot ships OpenSSL 1.1.1w, but recent curl's CURLConfig
-        # requires OpenSSL >= 3, so the find_package fails outright.
-        # Point sentry at our foreign_cc-built OpenSSL 3.x explicitly so
-        # the version check resolves against the right copy.
-        "OPENSSL_ROOT_DIR": "$$EXT_BUILD_DEPS/openssl",
+        # requires OpenSSL >= 3, so the find_package fails outright
+        # unless OPENSSL_ROOT_DIR points at a 3.x install. BCR cc_library
+        # deps stage flat under `$EXT_BUILD_DEPS/{include,lib}/`.
+        "OPENSSL_ROOT_DIR": "$$EXT_BUILD_DEPS",
+        "OPENSSL_INCLUDE_DIR": "$$EXT_BUILD_DEPS/include",
+        "OPENSSL_SSL_LIBRARY": "$$EXT_BUILD_DEPS/lib/libssl.a",
+        "OPENSSL_CRYPTO_LIBRARY": "$$EXT_BUILD_DEPS/lib/libcrypto.a",
     },
     # Pin --config used by `cmake --build` and `cmake --install` —
     # see ext/png/BUILD.bazel for the rationale.
@@ -35,6 +37,7 @@ cmake(
     set_file_prefix_map = True,
     deps = [
         "@curl",
-        "//ext/openssl:openssl",
+        "@openssl//:crypto",
+        "@openssl//:ssl",
     ],
 )
