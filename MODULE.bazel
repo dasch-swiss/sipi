@@ -94,6 +94,12 @@ bazel_dep(name = "libmagic", version = "5.47")
 # Lua C API extensively, and 5.3 → 5.4 is not ABI-compatible (lua_resume
 # signature change, integer-subtype defaults, bitlib removal).
 bazel_dep(name = "lua", version = "5.3.6")
+# 8.12.0.bcr.1 (one patch behind upstream 8.12.1 we previously pinned).
+# Accept the tiny downgrade: SIPI consumes curl for outbound HTTP/HTTPS
+# (Knora API auth callbacks); no curl features land between 8.12.0 and
+# 8.12.1 that we exercise. The bcr.1 patch level lets the BCR module
+# carry security backports independent of upstream point releases.
+bazel_dep(name = "curl", version = "8.12.0.bcr.1")
 
 # protobuf 34.1 transitively pulls `rules_go@0.51.0-rc2` for its Go support.
 # That release's `go/private/rules/cgo.bzl` still references `CcInfo` from
@@ -488,14 +494,6 @@ approvaltests_cpp(
 #
 # `http_archive` itself is bound near the top of this file (alongside
 # the FFmpeg static pull). One binding services every consumer.
-
-http_archive(
-    name = "curl",
-    build_file = "//bazel:all_content.BUILD.bazel",
-    sha256 = "7b40ea64947e0b440716a4d7f0b7aa56230a5341c8377d7b609649d4aea8dbcf",
-    strip_prefix = "curl-8.12.1",
-    url = "https://curl.se/download/curl-8.12.1.tar.gz",
-)
 
 http_archive(
     name = "exiv2",

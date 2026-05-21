@@ -34,7 +34,7 @@ cmake(
     out_static_libs = ["libsentry.a"],
     set_file_prefix_map = True,
     deps = [
-        "//ext/curl:curl",
+        "@curl",
         "//ext/openssl:openssl",
     ],
 )

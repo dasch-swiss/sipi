@@ -318,7 +318,7 @@ cc_library(
         "@sqlite3",
         "//ext/sentry:sentry",
         "@prometheus-cpp//core",
-        "//ext/curl:curl",
+        "@curl",
         "//ext/openssl:openssl",
         "//ext/jpeg:jpeg",
         "@bzip2//:bz2",

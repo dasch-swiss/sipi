@@ -63,7 +63,7 @@ cc_library(
         # Generic levelled-logging primitive; visibility-allowlisted for
         # this package as a shared support library.
         "//src/logging:logging",
-        "//ext/curl:curl",
+        "@curl",
         "//ext/jansson:jansson",
         "@libmagic//:lib",
         "@lua",

@@ -432,6 +432,14 @@ build --remote_max_connections=100
 # gRPC streams, which authenticate via a different mechanism
 # (tools/bazel-cred-helper.sh).
 
+# BCR curl ships with three configurable TLS backends (boringssl default,
+# mbedtls, openssl) selected via a `string_flag`. Pin to `openssl` so the
+# resolved cc dep is `@openssl//:{ssl,crypto}` rather than BoringSSL —
+# sipi's `src/shttps/jwt.c` calls OpenSSL 3.x APIs (`EVP_PKEY_get_int_param`
+# etc.) that BoringSSL doesn't expose, and a mixed include path causes
+# the BoringSSL `openssl/evp.h` to shadow the real OpenSSL header.
+build --@curl//:ssl_lib=openssl
+
 # ── User overrides ─────────────────────────────────────────────────────────
 # Local-machine-only flags (e.g. --disk_cache=...) belong in user.bazelrc;
 # the file is gitignored.
