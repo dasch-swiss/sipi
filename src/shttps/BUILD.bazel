@@ -69,7 +69,7 @@ cc_library(
         "//ext/libmagic:libmagic",
         "//ext/lua:lua",
         "//ext/openssl:openssl",
-        "//ext/sqlite3:sqlite3",
+        "@sqlite3",
         "@zlib",
     ],
 )
