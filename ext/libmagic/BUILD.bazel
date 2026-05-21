@@ -33,7 +33,7 @@ configure_make(
     out_data_dirs = ["share"],  # libmagic ships magic.mgc database
     set_file_prefix_map = True,
     deps = [
-        "//ext/bzip2:bzip2",
+        "@bzip2//:bz2",
         "//ext/xz:xz",
         "//ext/zlib:zlib",
         "//ext/zstd:zstd",

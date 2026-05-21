@@ -91,6 +91,8 @@
     "https://bcr.bazel.build/modules/boringssl/0.0.0-20240530-2db0eb3/source.json": "0d413869349e82e5d679802abe9ce23e0326bbf56daa97ae9e7dbdcec72982fc",
     "https://bcr.bazel.build/modules/buildozer/8.5.1/MODULE.bazel": "a35d9561b3fc5b18797c330793e99e3b834a473d5fbd3d7d7634aafc9bdb6f8f",
     "https://bcr.bazel.build/modules/buildozer/8.5.1/source.json": "e3386e6ff4529f2442800dee47ad28d3e6487f36a1f75ae39ae56c70f0cd2fbd",
+    "https://bcr.bazel.build/modules/bzip2/1.0.8.bcr.4/MODULE.bazel": "80a6a6a7493885b113dec2760403636d97009356b33df1720e79a65d126149cf",
+    "https://bcr.bazel.build/modules/bzip2/1.0.8.bcr.4/source.json": "a769883197aebe54f78671f1a2c7e0fae5cd8f045bae1230f04f4902856e3bca",
     "https://bcr.bazel.build/modules/civetweb/1.16.bcr.1/MODULE.bazel": "d4cd273eae3ab919f6ae2eb7da3692e9bc1420346f645916290d4d8688b1bd06",
     "https://bcr.bazel.build/modules/civetweb/1.16.bcr.1/source.json": "a2dddab6e51dfbf8480a43a6a5d7272f88cb4cde53a5b6ebcd13ca76b1b68721",
     "https://bcr.bazel.build/modules/curl/8.7.1/MODULE.bazel": "088221c35a2939c555e6e47cb31a81c15f8b59f4daa8009b1e9271a502d33485",

@@ -75,6 +75,16 @@ single_version_override(
 # propagated — any future cross-repo consumer should also adopt `@protobuf`.
 bazel_dep(name = "protobuf", version = "34.1")
 
+# Third-party C/C++ libraries consumed via BCR. Each entry replaces a
+# `http_archive` block + `ext/<dep>/BUILD.bazel` foreign_cc wrapper.
+# Canonical-shape `bazel_dep` per BCR `docs/bcr-policies.md`: no
+# `repo_name=` override. Consumer label is the cc_library target the
+# module actually exports — verify with `bazel query '@<dep>//...'`
+# (the `@<dep>` shortform only works when the module exports a target
+# of the same name; bzip2 for example exports its CLI under that name
+# and the cc_library under `@bzip2//:bz2`).
+bazel_dep(name = "bzip2", version = "1.0.8.bcr.4")
+
 # protobuf 34.1 transitively pulls `rules_go@0.51.0-rc2` for its Go support.
 # That release's `go/private/rules/cgo.bzl` still references `CcInfo` from
 # `@rules_cc//cc:defs.bzl`, where the symbol was removed in rules_cc 0.2.x
@@ -468,15 +478,6 @@ approvaltests_cpp(
 #
 # `http_archive` itself is bound near the top of this file (alongside
 # the FFmpeg static pull). One binding services every consumer.
-
-# bzip2 — gitlab archive
-http_archive(
-    name = "bzip2",
-    build_file = "//bazel:all_content.BUILD.bazel",
-    sha256 = "1afcfe4d3eb95bac3b7f43588c9457ccf772360f7e657ba7279fac776f2469d4",
-    strip_prefix = "bzip2-bzip2-1.0.8",
-    url = "https://gitlab.com/bzip2/bzip2/-/archive/bzip2-1.0.8/bzip2-bzip2-1.0.8.tar.bz2",
-)
 
 http_archive(
     name = "curl",
