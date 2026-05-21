@@ -306,7 +306,7 @@ cc_library(
         "//src/observability:observability",
         "//ext/lcms2:lcms2",
         "//ext/exiv2:exiv2",
-        "//ext/expat:expat",
+        "@libexpat",
         "//ext/tiff:tiff",
         "//ext/webp:webp",
         "//ext/jbigkit:jbigkit",
