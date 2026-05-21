@@ -67,7 +67,8 @@ cc_library(
         "//ext/jansson:jansson",
         "@libmagic//:lib",
         "@lua",
-        "//ext/openssl:openssl",
+        "@openssl//:crypto",
+        "@openssl//:ssl",
         "@sqlite3",
         "@zlib",
     ],
@@ -119,7 +120,8 @@ cc_library(
     visibility = ["//fuzz/handlers:__pkg__"],
     deps = [
         ":shttps_headers",
-        "//ext/openssl:openssl",
+        "@openssl//:crypto",
+        "@openssl//:ssl",
         "//src:iiif_handler_hdrs",
     ],
 )
