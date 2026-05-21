@@ -51,6 +51,6 @@ cmake(
         "//ext/png:png",
         "//ext/webp:webp",
         "//ext/xz:xz",
-        "//ext/zstd:zstd",
+        "@zstd",
     ],
 )
