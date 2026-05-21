@@ -120,7 +120,7 @@ localdev config in one step.
 ### Dependencies
 
 **External Libraries (built from source via `rules_foreign_cc` under `ext/<lib>`):**
-Image formats (libtiff, libpng, libjpeg, libwebp), compression (zlib, bzip2, xz, zstd), JPEG2000 (kakadu — requires license), metadata (exiv2, lcms2), Lua + luarocks, jansson, sqlite3, sentry, prometheus-cpp (core only), OpenSSL, libcurl, libmagic.
+Image formats (libtiff, libpng, libjpeg, libwebp), compression (zlib, bzip2, xz, zstd), JPEG2000 (kakadu — requires license), metadata (exiv2, lcms2), Lua, jansson, sqlite3, sentry, prometheus-cpp (core only), OpenSSL, libcurl, libmagic.
 
 **System Dependencies:** Threads (pthread), iconv (macOS only).
 

@@ -579,14 +579,6 @@ http_archive(
 )
 
 http_archive(
-    name = "luarocks",
-    build_file = "//bazel:all_content.BUILD.bazel",
-    sha256 = "eb20cd9814df05535d9aae98da532217c590fc07d48d90ca237e2a7cdcf284fe",
-    strip_prefix = "luarocks-3.3.1",
-    url = "https://luarocks.github.io/luarocks/releases/luarocks-3.3.1.tar.gz",
-)
-
-http_archive(
     name = "openssl",
     build_file = "//bazel:all_content.BUILD.bazel",
     sha256 = "002a2d6b30b58bf4bea46c43bdd96365aaf8daa6c428782aa4feee06da197df3",
