@@ -323,7 +323,7 @@ cc_library(
         "//ext/jpeg:jpeg",
         "@bzip2//:bz2",
         "@zstd",
-        "//ext/zlib:zlib",
+        "@zlib",
         "@kakadu//:kdu",
     ] + select({
         # glibc 2.42 → 2.31 ABI compatibility shims for kakadu's
