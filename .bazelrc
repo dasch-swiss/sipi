@@ -85,21 +85,46 @@ build:linux --dynamic_mode=off
 # link actions where neither side of the alias is yet linked, producing
 # `--defsym:1: symbol not found: strtol`.
 
-# ── Hardening neutralization ───────────────────────────────────────────────
-# Mirrors the historic flake.nix `hardeningDisable = [ "all" ]` for the
-# subset that doesn't conflict with Bazel's default link mode. PIE/PIC
-# *are* enabled — `cc_test` on Linux defaults to dynamic linking, which
-# requires PIC code to link transitive cc_library `.so` outputs (e.g.
-# `prometheus-cpp+//core:libcore.so`). Disabling PIE on linux-aarch64
-# specifically broke the link because toolchains_llvm's static `libc++.a`
-# carries non-PIC relocations.
-build --copt=-U_FORTIFY_SOURCE
-build --copt=-fno-stack-protector
-build --host_copt=-U_FORTIFY_SOURCE
-build --host_copt=-fno-stack-protector
+# ── Hardening (production target binary) ───────────────────────────────────
+# Re-enables stack-protector-strong, fortify-source, stack-clash protection,
+# and BindNow for the publicly-deployed sipi binary (DEV-6282). PIE/PIC are
+# already on by toolchain default since DEV-6348.
+#
+# Host config is deliberately left unhardened — host-built tools (e.g.
+# libmagic's `file` bootstrap that generates magic.mgc, protoc, etc.) are
+# never deployment artifacts, and `-D_FORTIFY_SOURCE=2` conflicts with
+# libmagic 5.47's `file.h:666` (glibc's `__dprintf_chk` fortified macro vs
+# libmagic's own dprintf-related declaration). Hardening host tools adds
+# no security value, so the simpler course is to keep host config clean.
+#
+# Sanitizer (`--config=asan`/`--config=ubsan`) and fuzz (`--config=fuzz`)
+# builds keep target hardening off — `_FORTIFY_SOURCE=2` intercepts the
+# same libc functions ASan does (memcpy/memmove/etc.), and the
+# instrumentation already subsumes the stack canary's intent. The
+# per-config overrides further down ensure those compile lines do NOT
+# carry the new hardening flags.
+build --copt=-fstack-protector-strong
+build --copt=-D_FORTIFY_SOURCE=2
 
-build:linux --copt=-fno-stack-clash-protection
-build:linux --host_copt=-fno-stack-clash-protection
+# Target build of libmagic 5.47 hits the same glibc fortify-header
+# conflict that breaks host config. Undef FORTIFY for libmagic source
+# files only; stack-protector is fine — the conflict is fortify-specific.
+# This is the per-dep narrowing escape hatch the DEV-6282 plan called out:
+# narrow per-dep rather than rolling back hardening globally.
+#
+# Substring `libmagic` (no anchor / regex escapes) is used deliberately —
+# Bazel's `.bazelrc` parser treats `\+` in anchored forms like
+# `^external/libmagic\+/...$` as a literal that fails to match the source
+# path (verified via aquery), while the same anchored form works when
+# passed via shell-quoted command-line `--per_file_copt='…'`. The
+# substring is unambiguous: no other source path in the build graph
+# contains the string "libmagic".
+build --per_file_copt=libmagic@-U_FORTIFY_SOURCE
+
+# Linux-only: stack-clash-protection is a clang-on-Linux feature (warns on
+# darwin); `-Wl,-z,now` is ELF/GNU-ld syntax not understood by ld64.
+build:linux --copt=-fstack-clash-protection
+build:linux --linkopt=-Wl,-z,now
 
 # ── macOS ──────────────────────────────────────────────────────────────────
 # Pin the deployment target so Bazel-built binaries are portable across
@@ -256,6 +281,19 @@ common --repo_env=ANDROID_HOME=
 # unaffected — they don't go through cmake; their `-fsanitize=…`
 # reaches them via the `--per_file_copt` block above.
 
+# Neutralize the production hardening flags (`build --copt=…` block above)
+# for sanitizer builds. `_FORTIFY_SOURCE=2` intercepts the same libc
+# functions ASan does (memcpy/memmove/etc.), causing duplicate-symbol or
+# poisoned-memory conflicts; stack-protector is subsumed by ASan's
+# stack-frame redzones. The `--copt` flags below are appended AFTER the
+# global `build --copt=…` block, and the compiler's "last wins" precedence
+# (for `-U_FORTIFY_SOURCE` after `-D_FORTIFY_SOURCE=2`, and
+# `-fno-stack-protector` after `-fstack-protector-strong`) yields a clean
+# un-hardened compile line. Verified via
+#   bazel aquery --config=asan 'mnemonic("CppCompile", //src/cli:sipi)'
+# 2026-05-26.
+build:asan --copt=-U_FORTIFY_SOURCE
+build:asan --copt=-fno-stack-protector
 build:asan --compilation_mode=dbg
 build:asan --strip=never
 build:asan --copt=-fno-omit-frame-pointer
@@ -274,6 +312,9 @@ build:asan --linkopt=-fsanitize=address
 # every leak in one report rather than needing N reruns.
 test:asan --test_env=ASAN_OPTIONS=detect_leaks=1:halt_on_error=0:log_path=$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e
 
+# Neutralize production hardening for UBSan — same rationale as `build:asan`.
+build:ubsan --copt=-U_FORTIFY_SOURCE
+build:ubsan --copt=-fno-stack-protector
 build:ubsan --compilation_mode=dbg
 build:ubsan --strip=never
 build:ubsan --copt=-fno-omit-frame-pointer
@@ -370,6 +411,10 @@ build:ubsan --linkopt=-fno-sanitize=vptr
 # `--platforms` is set by the justfile recipe (per-host; see above), not
 # here — `.bazelrc` cannot pick a platform based on `uname`, but the
 # recipe can.
+# Neutralize production hardening for fuzz — same rationale as `build:asan`
+# (fuzz inherits ASan instrumentation; fortify conflict is identical).
+build:fuzz --copt=-U_FORTIFY_SOURCE
+build:fuzz --copt=-fno-stack-protector
 build:fuzz --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsanitize=fuzzer-no-link
 build:fuzz --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsanitize-coverage=trace-cmp
 build:fuzz --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsanitize=address

@@ -76,6 +76,17 @@
             }:
             pkgs.mkShell.override { inherit stdenv; } {
               inherit name;
+              # `hardeningDisable` applies only to nixpkgs' wrapper around the
+              # dev-shell's compiler. It does NOT affect Bazel actions, which
+              # run under toolchains_llvm with their own compile flags
+              # (production hardening: -fstack-protector-strong,
+              # -D_FORTIFY_SOURCE=2, -fstack-clash-protection on Linux,
+              # -Wl,-z,now; see `.bazelrc` "Hardening (production target
+              # binary)" block). The disable here remains for the dev shell
+              # itself: ad-hoc `nix develop`-driven compiles, shell hooks,
+              # and tools that link via Nix's wrapped clang. Keeping it off
+              # matches the historical setting and avoids surprising
+              # interactions for one-off builds done outside Bazel.
               hardeningDisable = [ "all" ];
               packages = commonPackages ++ extraPackages;
               shellHook = ''export PS1="\\u@\\h | ${name}> "'' + commonShellHook;

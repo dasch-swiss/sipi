@@ -179,7 +179,9 @@ For Linux-target builds from a macOS host, see
 - [`MODULE.bazel`](https://github.com/dasch-swiss/sipi/blob/main/MODULE.bazel)
   — module manifest + every third-party `http_archive` pin
 - [`.bazelrc`](https://github.com/dasch-swiss/sipi/blob/main/.bazelrc)
-  — flag defaults, sanitizer/fuzz configs, hardening neutralization
+  — flag defaults, sanitizer/fuzz configs, production hardening
+  (stack-protector-strong, _FORTIFY_SOURCE=2, stack-clash-protection,
+  BindNow) with per-config exemptions for asan/ubsan/fuzz
 - [`tools/workspace_status.sh`](https://github.com/dasch-swiss/sipi/blob/main/tools/workspace_status.sh)
   — emits `STABLE_*` keys consumed by `expand_template` and
   `oci_image`'s stamping

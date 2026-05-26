@@ -129,19 +129,35 @@ make(
         #      adds the lib search path, but explicit LIBRARY_PATH ensures
         #      it survives any wrapper post-processing.
         "LIBCXX_DIR=$$(printf '%s\\n' \"$${NIX_LDFLAGS:-}\" | tr ' ' '\\n' | grep -E '^-L.*libcxx[^/]*/lib$$' | head -1 | sed 's/^-L//' || true) && " +
+        # Hardening flags for kakadu (DEV-6282). Bazel's `--copt` flow
+        # never reaches kakadu's compile lines — its hand-written
+        # `Makefile-*-gcc` files use their own `CXXFLAGS_ADD` and ignore
+        # foreign_cc-forwarded CFLAGS/CXXFLAGS. The wrapper synthesized
+        # below intercepts `$(CC)`/`$(CXX)` invocations so we can inject
+        # hardening flags one level above the Makefile.
+        #
+        # `-fstack-clash-protection` is clang-on-Linux only (warns on
+        # darwin's clang), so it is gated by `uname -s`. `-fstack-protector-strong`
+        # and `-D_FORTIFY_SOURCE=2` apply uniformly across both platforms.
+        # Sanitizer/fuzz Bazel configs do not propagate here (kakadu is
+        # never sanitized — first-party --per_file_copt scoping leaves it
+        # alone), so kakadu carries hardening unconditionally; the ASan
+        # runtime's libc interposition handles `__*_chk` symbols cleanly.
         "case \"$$(uname -s)\" in " +
         "  Linux) SYSROOT_DIR=$$(find $$EXT_BUILD_ROOT/external -maxdepth 1 -type d -name '+sysroot+sysroot_linux_*' 2>/dev/null | head -1); " +
-        "          [ -n \"$$SYSROOT_DIR\" ] && SYSROOT_FLAG=\"--sysroot=$$SYSROOT_DIR/sysroot\" || SYSROOT_FLAG=\"\" ;; " +
-        "  *)     SYSROOT_FLAG=\"\" ;; " +
+        "          [ -n \"$$SYSROOT_DIR\" ] && SYSROOT_FLAG=\"--sysroot=$$SYSROOT_DIR/sysroot\" || SYSROOT_FLAG=\"\"; " +
+        "          HARDENING_FLAGS=\"-fstack-protector-strong -D_FORTIFY_SOURCE=2 -fstack-clash-protection\" ;; " +
+        "  *)     SYSROOT_FLAG=\"\"; " +
+        "          HARDENING_FLAGS=\"-fstack-protector-strong -D_FORTIFY_SOURCE=2\" ;; " +
         "esac && " +
-        "echo \"kakadu: LIBCXX_DIR=$$LIBCXX_DIR SYSROOT_FLAG=$$SYSROOT_FLAG\" && " +
+        "echo \"kakadu: LIBCXX_DIR=$$LIBCXX_DIR SYSROOT_FLAG=$$SYSROOT_FLAG HARDENING_FLAGS=$$HARDENING_FLAGS\" && " +
         "export LIBRARY_PATH=\"$$LIBCXX_DIR$${LIBRARY_PATH:+:$$LIBRARY_PATH}\" && " +
-        # Synthesize a wrapper that prepends the sysroot flag so kakadu's
-        # `$(CC) -c file.cpp` lines pick it up. Make CLI vars must be a
-        # single token, so `make CC=\"clang++ --sysroot=…\"` won't work —
-        # make would split on whitespace.
+        # Synthesize a wrapper that prepends the sysroot + hardening flags
+        # so kakadu's `$(CC) -c file.cpp` lines pick them up. Make CLI
+        # vars must be a single token, so `make CC=\"clang++ --sysroot=…\"`
+        # won't work — make would split on whitespace.
         "WRAPPER=$$BUILD_TMPDIR/bazel_cxx_wrapper.sh && " +
-        "printf '%s\\n' '#!/bin/bash' \"exec clang++ $$SYSROOT_FLAG \\\"\\$$@\\\"\" > \"$$WRAPPER\" && " +
+        "printf '%s\\n' '#!/bin/bash' \"exec clang++ $$SYSROOT_FLAG $$HARDENING_FLAGS \\\"\\$$@\\\"\" > \"$$WRAPPER\" && " +
         "chmod +x \"$$WRAPPER\" && " +
         "make -j1 -f " + _KDU_MAKE + " EXEC_PLATFORM=" + _KDU_EXEC_PLATFORM + " CC=\"$$WRAPPER\" CXX=\"$$WRAPPER\" all_but_jni && " +
         "mkdir -p $$INSTALLDIR/lib $$INSTALLDIR/include && " +
