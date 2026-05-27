@@ -269,3 +269,18 @@ fn docker_image_health_endpoint() {
     assert!(body["version"].is_string(), "version should be present");
     assert!(body["uptime_seconds"].is_number(), "uptime_seconds should be present");
 }
+
+// The `sipi health` subcommand run *inside* the container — the exact command
+// the orchestration-layer healthcheck uses (no `curl` dependency). The server
+// listens on 1024 (the image default), so zero-arg `health` probes it and
+// exits 0. `docker exec` of an explicit binary path needs no shell, so the
+// distroless image is fine.
+#[test]
+fn docker_image_health_subcommand() {
+    let container = DockerContainer::start();
+    let status = Command::new("docker")
+        .args(["exec", &container.id, "/sbin/sipi", "health"])
+        .status()
+        .expect("docker exec sipi health failed");
+    assert!(status.success(), "in-container `sipi health` should exit 0 against a healthy server");
+}

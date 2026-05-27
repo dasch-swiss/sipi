@@ -78,6 +78,17 @@ is ignored for comparison:
 /path/to/sipi compare file1 file2
 ```
 
+#### Health Check
+Probe a running SIPI server's `/health` endpoint and exit `0` (healthy) or `1`
+(unhealthy). Used as the container/orchestrator liveness command:
+
+```bash
+/path/to/sipi health [--port <n>]   # default port 1024
+```
+
+See [Running SIPI](running.md) and [Health Endpoint](../operation/health-endpoint.md)
+for details.
+
 #### General Options for the Command Line Use 
 In command line mode, SIPI supports the following options:
 

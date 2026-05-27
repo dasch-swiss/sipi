@@ -12,18 +12,28 @@ Returns JSON with server status, version, and uptime:
 - **Method**: GET only
 - **Route**: Registered before the catch-all IIIF handler
 
-## Docker Swarm HEALTHCHECK
+## Healthcheck Ownership
 
-The image (built from `flake.nix` via `pkgs.dockerTools.streamLayeredImage`)
-declares the equivalent of:
+The image does **not** embed a Docker `HEALTHCHECK`. `HEALTHCHECK` is a
+Docker-specific extension, not part of the OCI image spec, so the Bazel
+`rules_oci` image carries none. Liveness is owned by the orchestration layer —
+the docker-compose / Swarm `healthcheck:` stanza (provisioned in ops-deploy,
+INFRA-1226):
 
+```yaml
+healthcheck:
+  test: ["CMD", "/sbin/sipi", "health", "--port", "1024"]
+  interval: 30s
+  timeout: 5s
+  start_period: 10s
+  retries: 3
 ```
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -sf http://localhost:1024/health || exit 1
-```
 
-The actual encoding is in `flake.nix` under `config.Healthcheck`
-(durations in nanoseconds).
+The check uses the self-contained
+[`sipi health`](../guide/running.md#health-check) subcommand, which probes
+`http://127.0.0.1:1024/health` and exits `0` (healthy) or `1` (unhealthy).
+Because the probe is a sipi subcommand, the image needs no `curl` binary for the
+healthcheck.
 
 **Swarm behavior**: Docker Swarm has a single HEALTHCHECK — no separate liveness/readiness probes. When HEALTHCHECK fails after `retries`, Swarm kills and replaces the container. The `start_period` gives 10s for initialization (failures don't count, but container *receives traffic* during this period).
 

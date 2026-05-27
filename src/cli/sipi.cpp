@@ -36,6 +36,7 @@
 #include "logging/logger.h"
 #include "cli/commands/convert_access_file.h"
 #include "cli/commands/convert_service_file.h"
+#include "cli/commands/health.h"
 #include "cli/commands/verify.h"
 #include "SipiConf.h"
 #include "observability/connection_metrics_adapter.h"
@@ -1640,6 +1641,18 @@ int main(int argc, char *argv[])
   cmd_compare->add_option("files", optCompare, "Two files to compare.")->expected(2);
   attach_output_opts(cmd_compare);
   cmd_compare->callback([&]() { exit(run_compare()); });
+
+  // ----- health ----------------------------------------------------------
+  // Self-contained liveness probe for container/orchestrator healthchecks:
+  // GET http://127.0.0.1:<port>/health, exit 0 if healthy, 1 otherwise. The
+  // caller passes the port the server was configured with (`--port`); a
+  // separate process can't discover it from config/env/flags.
+  int optHealthPort = 1024;
+  CLI::App *cmd_health = sipiopt.add_subcommand(
+    "health", "Probe the local /health endpoint; exit 0 if healthy, 1 otherwise.");
+  cmd_health->add_option("--port", optHealthPort, "Port the sipi server listens on.")
+    ->check(CLI::Range(1, 65535));
+  cmd_health->callback([&]() { exit(Sipi::cli::cmd_health({ optHealthPort })); });
 
   CLI11_PARSE(sipiopt, argc, argv);
 
