@@ -388,6 +388,23 @@ docs-install-requirements:
     pip3 install -r docs/requirements.txt
 
 #####################################
+# Infra (OpenTofu) — out-of-band, NOT part of the Bazel build graph
+#
+# Manages the `bazel-cache-proxy` Cloud Run service. Needs `gcloud auth`
+# and the dev shell (`opentofu` is in flake.nix). The TF state bucket is
+# bootstrapped separately (see infra/bootstrap). Details and the one-time
+# import sequence: docs/src/development/ci.md.
+#####################################
+
+# Show planned changes to the bazel-cache-proxy deployment.
+tf-plan *FLAGS='':
+    tofu -chdir=infra/bazel-cache plan {{FLAGS}}
+
+# Apply the bazel-cache-proxy deployment (rolls a new Cloud Run revision).
+tf-apply *FLAGS='':
+    tofu -chdir=infra/bazel-cache apply {{FLAGS}}
+
+#####################################
 # Utilities
 #####################################
 

@@ -86,3 +86,13 @@ icc.zip
 .claude/worktrees/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# Terraform / OpenTofu (infra/). The provider lock (.terraform.lock.hcl) IS
+# tracked; the local provider cache and any state/backups are not.
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+.terraformrc
+terraform.rc

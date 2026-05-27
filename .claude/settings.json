@@ -13,6 +13,9 @@
       "Bash(nix develop:*)",
       "Bash(direnv allow:*)",
       "Bash(docker run:*)",
+      "Bash(gcloud run *)",
+      "Bash(gcloud storage *)",
+      "Bash(gcloud projects *)",
       "mcp__linear__get_issue"
     ],
     "deny": []

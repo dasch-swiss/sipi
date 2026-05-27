@@ -140,14 +140,19 @@ GHA workflow ──gRPC over TLS, HTTP basic auth──▶ Cloud Run: bazel-cach
                                                  uniform IAM, 30-day lifecycle)
 ```
 
-The Cloud Run service runs `buchgr/bazel-remote-cache:latest` with
-flags:
+The Cloud Run service runs `buchgr/bazel-remote-cache` (digest-pinned)
+with flags:
 
+- `--dir=/data --max_size=4` — bazel-remote's **mandatory local disk
+  cache** (both flags are required; there is no GCS-only mode). The
+  GCS bucket rides *behind* this as an async write-behind proxy, not
+  as a replacement. `--max_size` is the cap in GiB.
 - `--gcs_proxy.bucket=dasch-bazel-cache --gcs_proxy.use_default_credentials`
-  — GCS as the upstream tier via ADC (the attached
+  — GCS as the durable upstream tier via ADC (the attached
   `bazel-cache-proxy@dsp-repository-automation` service account).
-  Local disk cache is the primary tier; ephemeral per Cloud Run
-  instance but content survives in GCS.
+  The local disk cache is a per-instance hot tier (ephemeral, empty
+  on every scale-from-zero cold start); persistent content lives in
+  GCS under `ac/` and `cas.v2/`.
 - `--experimental_remote_asset_api` — enables the Remote Asset API
   that Bazel's `--experimental_remote_downloader` calls to mirror
   `http_archive` tarballs through the cache.
@@ -156,7 +161,22 @@ flags:
   (`bazel-cache-htpasswd`) as a Cloud Run secret file.
 - `--grpc_address=0.0.0.0:8080 --http_address=unix:///tmp/http.sock`
   — gRPC on Cloud Run's expected port; HTTP listener bound to a
-  unix socket and so not externally reachable.
+  unix socket and so not externally reachable (which is also why
+  bazel-remote's own `/metrics` is not scrapeable as deployed — see
+  Monitoring).
+
+**Service configuration.** `cpu=4`, `memory=6Gi`, container
+concurrency `320`, `maxScale=1`, scale-to-zero (`minScale=0`),
+startup-cpu-boost on, TCP startup probe on `8080`. A single instance
+(one shared tmpfs hot tier) maximises local cache-hit rate; `cpu` and
+concurrency are sized to absorb the concurrent CI burst without 429-ing.
+If it saturates, raise `cpu` or `maxScale`.
+
+**`--max_size` vs `memory`.** On Cloud Run `/data` is in-memory
+**tmpfs**, so bazel-remote's local disk cache counts against the
+container memory limit. Keep `--max_size` well below `memory` (here `4`
+vs `6Gi`) — with a proxy backend the disk can transiently overshoot
+`--max_size` as eviction and uploads drain.
 
 **Auth.** Bazel sends HTTP Basic Auth credentials via a credential
 helper script (`tools/bazel-cred-helper.sh`). The helper reads
@@ -231,6 +251,51 @@ breaks it).
 vars (e.g. GitHub-injected `GITHUB_RUN_ID`) don't poison Bazel's
 cache keys across runs.
 
+### Infrastructure as code
+
+The whole deployment is defined in OpenTofu under
+[`infra/bazel-cache/`](../../../infra/bazel-cache) (the Cloud Run
+service, the `dasch-bazel-cache` bucket + service account, the
+`bazel-cache-htpasswd` secret resource, and monitoring). Remote state
+lives in `gs://dasch-tf-state`, provisioned once by
+[`infra/bootstrap/`](../../../infra/bootstrap). **`infra/` is the source
+of truth** — change the deployment by editing the HCL and running
+`just tf-plan` / `just tf-apply` (or `tofu -chdir=infra/bazel-cache …`),
+not by hand-editing the service in the console.
+
+If a resource already exists in GCP (created outside Terraform), import
+it before `apply` so nothing is destroyed/recreated, e.g.:
+
+```bash
+tofu -chdir=infra/bazel-cache import google_cloud_run_v2_service.bazel_cache_proxy \
+  projects/dsp-repository-automation/locations/us-central1/services/bazel-cache-proxy
+```
+
+The OpenTofu CLI is provisioned by the Nix dev shell (`flake.nix`); it
+is deliberately **not** wrapped in a Bazel rule — infra provisioning is
+out-of-band ops, not part of the Bazel build graph.
+
+### Monitoring
+
+Cloud Run already exports `run.googleapis.com/container/memory/utilizations`
+(and CPU, request, instance metrics) to Cloud Monitoring with no setup.
+The Terraform module defines a **memory-utilization alert** (> 90% for
+5 min → email) and a
+**dashboard** (memory, CPU, requests, instances, and GCS bucket size via
+`storage.googleapis.com/storage/total_bytes`, which is sampled ~daily):
+
+- Dashboard:
+  <https://console.cloud.google.com/monitoring/dashboards/builder/ee61ec2c-a5ce-4b0f-8231-e9f5f8a49dab?project=dsp-repository-automation>
+  (also via `tofu -chdir=infra/bazel-cache output dashboard_url`).
+
+bazel-remote's *own* `/metrics` (disk bytes, hit/miss, eviction,
+upload-queue depth) is **not reachable as deployed**: its HTTP listener is
+on the `/tmp/http.sock` unix socket and Cloud Run only routes the gRPC
+port. Surfacing those needs the Google Managed-Service-for-Prometheus
+sidecar (`run-gmp-sidecar`) plus repointing `--http_address` to a
+localhost TCP port — deferred until cache-internal metrics are actually
+needed (e.g. to size a `max_size_hard_limit`).
+
 ### Cost
 
 Cloud Run with `--min-instances=0`: zero cost while CI is idle.
@@ -252,13 +317,22 @@ gcloud secrets versions add bazel-cache-htpasswd --data-file=/tmp/htpasswd
 shred -u /tmp/htpasswd
 # 2. Push the plain password to GH (workflows read this)
 gh secret set BAZEL_CACHE_PASSWORD --repo dasch-swiss/sipi --body "$NEW_PASS"
-# 3. Bounce the Cloud Run revision so the new secret version is picked up
-gcloud run services update bazel-cache-proxy --region=us-central1 \
-  --update-secrets=/etc/bazel-remote/htpasswd=bazel-cache-htpasswd:latest
+# 3. Roll a new Cloud Run revision so the new secret version is picked up.
+#    The volume references `latest`, so a fresh revision is enough. Prefer
+#    forcing it through Terraform to avoid drift from infra/bazel-cache:
+tofu -chdir=infra/bazel-cache apply
+#    (A direct `gcloud run services update ... --update-secrets=...` also works
+#    but leaves the live service out of sync with TF until the next apply.)
 # 4. (After verifying CI works) disable the old Secret Manager version
 gcloud secrets versions list bazel-cache-htpasswd
 gcloud secrets versions disable <OLD_VERSION> --secret=bazel-cache-htpasswd
 ```
+
+Note: secret *versions* are managed out-of-band (above), not by Terraform —
+only the secret *resource* is in `infra/bazel-cache`. A plain `tofu apply` with
+no spec change may be a no-op and not roll a revision; if so, bump a revision
+annotation in the HCL or fall back to the `gcloud run services update` form,
+then re-`apply` to reconcile.
 
 **Cache nuke (suspected corruption).** Bazel re-populates on the
 next run:
