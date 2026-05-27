@@ -1,6 +1,8 @@
 mod common;
 
 use common::{client, server};
+use sipi_e2e::sipi_bin_path;
+use std::process::Command;
 
 #[test]
 fn health_returns_200_with_json() {
@@ -34,4 +36,27 @@ fn health_responds_quickly() {
 
     assert_eq!(resp.status().as_u16(), 200);
     assert!(elapsed.as_millis() < 100, "health should respond within 100ms, took {}ms", elapsed.as_millis());
+}
+
+// `sipi health` against a live server returns exit 0 (healthy). The `--port`
+// flag lets the probe target the harness's ephemeral server port.
+#[test]
+fn health_subcommand_exits_zero_when_healthy() {
+    let srv = server();
+    let status = Command::new(sipi_bin_path())
+        .args(["health", "--port", &srv.http_port.to_string()])
+        .status()
+        .expect("failed to run sipi health");
+    assert!(status.success(), "sipi health should exit 0 against a healthy server");
+}
+
+// `sipi health` with nothing listening returns exit 1 (unhealthy). Port 1 is
+// never bound, so the connection is refused.
+#[test]
+fn health_subcommand_exits_one_when_no_server() {
+    let status = Command::new(sipi_bin_path())
+        .args(["health", "--port", "1"])
+        .status()
+        .expect("failed to run sipi health");
+    assert_eq!(status.code(), Some(1), "sipi health should exit 1 when nothing is listening");
 }

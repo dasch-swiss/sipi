@@ -13,6 +13,7 @@ Today's commands:
     `cmd_convert_access_file(ConvertAccessFileArgs)`
   * `sipi verify [access-file|service-file]` → `verify.{h,cpp}` →
     `cmd_verify(VerifyArgs)`
+  * `sipi health` → `health.{h,cpp}` → `cmd_health(HealthArgs)`
 
 The `:commands` cc_library is consumed by `//src/cli:sipi` (the binary
 target) and by `:commands_test` (the co-located unit tests).
@@ -27,11 +28,13 @@ cc_library(
     srcs = [
         "convert_access_file.cpp",
         "convert_service_file.cpp",
+        "health.cpp",
         "verify.cpp",
     ],
     hdrs = [
         "convert_access_file.h",
         "convert_service_file.h",
+        "health.h",
         "verify.h",
     ],
     copts = ["-fexceptions"],
@@ -50,6 +53,7 @@ cc_test(
     srcs = [
         "convert_access_file_test.cpp",
         "convert_service_file_test.cpp",
+        "health_test.cpp",
         "verify_test.cpp",
     ],
     data = ["//test/_test_data:images"],

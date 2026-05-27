@@ -11,7 +11,7 @@ docker run -p 1024:1024 daschswiss/sipi
 ## Running SIPI as a Command-line Image Converter
 
 SIPI now uses verb-noun subcommands (`convert`, `query`, `compare`,
-`verify`, `server`) instead of the legacy `--convert` / `--query` /
+`verify`, `server`, `health`) instead of the legacy `--convert` / `--query` /
 `--compare` / `--file` / `--outf` flags. A bare `sipi` invocation
 errors with a usage message — every operation needs an explicit
 subcommand.
@@ -39,6 +39,30 @@ sipi compare file1.tif file2.jpg
 ```bash
 sipi server --config config/sipi.config.lua
 ```
+
+## Health Check
+
+`sipi health` is a self-contained liveness probe. It performs an HTTP `GET` on
+the local [`/health`](../operation/health-endpoint.md) endpoint and maps the
+result to a process exit code, following the Docker/Swarm healthcheck
+convention:
+
+- **0** — the endpoint returned HTTP 200 (healthy).
+- **1** — connection refused, timeout, or any non-200 response (unhealthy).
+
+```bash
+sipi health            # probes http://127.0.0.1:1024/health
+sipi health --port 80  # probe a server running on a different port
+```
+
+The host is always `127.0.0.1` and the path is always `/health`; only the port
+is configurable. A separate `sipi health` process cannot know whether the
+running server took its port from a config file, an env var, or `--serverport`,
+so the caller passes the port it configured (`--port`, default `1024`). The
+probe uses a short (~2 s) timeout so a wedged server reports unhealthy rather
+than hanging. Because it needs no `curl` in the image, it is the intended
+container/orchestrator liveness command (see
+[Health Endpoint](../operation/health-endpoint.md)).
 
 ## Logging
 
@@ -257,6 +281,10 @@ whether the conversion succeeded:
 
 **Important for calling services:** Always check the exit code. A non-zero exit code
 means the output file was not produced (or is incomplete).
+
+The `sipi health` subcommand follows the same convention: **0** = healthy
+(`/health` returned 200), **1** = unhealthy (connection refused, timeout, or
+non-200).
 
 ### Error Output
 
