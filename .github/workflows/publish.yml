@@ -21,6 +21,13 @@ jobs:
             runner: ubuntu-24.04
           - arch: arm64
             runner: ubuntu-24.04-arm
+    env:
+      # Every bazel build/run/test in this job re-evaluates the
+      # kakadu_archive repository_rule, which fetches from a private
+      # GitHub release and requires GH_TOKEN. Hoisted to the job level so
+      # any future Bazel step inherits it (cf. publish.yml history where
+      # adding it per-step caused repeated near-miss failures).
+      GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -53,7 +60,6 @@ jobs:
       # gating needed.
       - name: Build Docker image (Bazel rules_oci)
         env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
           BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
         # See ci.yml for the `nix develop --command` rationale (foreign_cc
@@ -76,7 +82,6 @@ jobs:
       # image already loaded by the build step above is left alone.
       - name: Run Docker smoke tests
         env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
           BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
         run: |
@@ -118,6 +123,12 @@ jobs:
             debug_file: sipi-arm64.debug
             sbom_file: sbom-arm64.spdx.json
             sbom_name: sbom-arm64
+    env:
+      # Every bazel build/run/test in this job re-evaluates the
+      # kakadu_archive repository_rule, which fetches from a private
+      # GitHub release and requires GH_TOKEN. Hoisted to the job level so
+      # any future Bazel step inherits it.
+      GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -152,7 +163,6 @@ jobs:
       # two jobs (release-please tag push).
       - name: Build Docker image (Bazel rules_oci) + sipi-debug
         env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
           BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
         # Binary version + OCI image tag come from version.txt, which
@@ -174,10 +184,6 @@ jobs:
           nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} $REMOTE $BES"
       - name: Extract debug symbols for Sentry upload
         env:
-          # Bazel re-evaluates the kakadu_archive repository_rule on every
-          # invocation, even when :sipi is fully cached. The rule fetches
-          # from a private GitHub release and requires GH_TOKEN.
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
           BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
         # The genrule depends on `:sipi`, already built and in the
@@ -197,7 +203,6 @@ jobs:
           nix develop --command bash -c "just bazel-docker-extract-debug ${{ matrix.arch }} $REMOTE $BES"
       - name: Run Docker smoke tests
         env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
           BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
         run: |
