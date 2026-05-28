@@ -174,6 +174,10 @@ jobs:
           nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} $REMOTE $BES"
       - name: Extract debug symbols for Sentry upload
         env:
+          # Bazel re-evaluates the kakadu_archive repository_rule on every
+          # invocation, even when :sipi is fully cached. The rule fetches
+          # from a private GitHub release and requires GH_TOKEN.
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
           BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
         # The genrule depends on `:sipi`, already built and in the
