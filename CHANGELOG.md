@@ -1,5 +1,41 @@
 # Changelog
 
+## [5.0.0](https://github.com/dasch-swiss/sipi/compare/v4.1.1...v5.0.0) (2026-05-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** bare `sipi --convert ...` (and --query, --compare) now fails with a CLI11 usage error. Operators must use the verb-noun subcommand surface introduced in the previous commit:
+* **lua:** The HTTP endpoints `GET /api/cache` and `DELETE /api/cache` are removed. External cache management requires either a future dedicated C++ route in route_handlers/ or scraping Prometheus metrics for inspection. The architectural principle established here (Lua = request-shaping; mutation = C++ route) will guide subsequent script-removal decisions in Probe 8 (e.g. exit.lua).
+
+### Features
+
+* Add --version flag to CLI ([0c5da66](https://github.com/dasch-swiss/sipi/commit/0c5da66130e7cecf3769aab57d789cc3371a8d7f))
+* **cli/server:** Intentional Service File creation ([980aa8a](https://github.com/dasch-swiss/sipi/commit/980aa8af1bea057158414555234a9125f9018a1e))
+* **cli:** Add `sipi health` subcommand for container healthchecks ([6dd5dc6](https://github.com/dasch-swiss/sipi/commit/6dd5dc671fd955a5519107d877e6b015d89eaa50))
+* **cli:** Remove legacy --convert / --query / --compare flag forms ([7179451](https://github.com/dasch-swiss/sipi/commit/7179451baf8317baa29e1cc8a1bc2d23f6eace95))
+* **format:** Expand EXIF metadata coverage and harden rational-array path ([2f6970f](https://github.com/dasch-swiss/sipi/commit/2f6970f35cec9016e5c957346b8e3c88bbfa4685))
+* **formats:** Read_shape fast path + cache shrinkage ([04b9dc3](https://github.com/dasch-swiss/sipi/commit/04b9dc33b06878d90d8e528a275e766e4dad6435))
+* **formats:** Service File Essentials carriers (JP2 + pyramidal TIFF) ([4017a03](https://github.com/dasch-swiss/sipi/commit/4017a03f8107b8a890dde677b6622ae68258faf2))
+* **icc:** Normalize ICC profile creation date when SOURCE_DATE_EPOCH is set ([45f1caf](https://github.com/dasch-swiss/sipi/commit/45f1caf21d47cc29f45d0065695575f449a300e5))
+* **lua:** Remove cache.* Lua bindings and /api/cache admin endpoint ([e412b25](https://github.com/dasch-swiss/sipi/commit/e412b254a8e8048411c6c8302d0aaa3a9ea396f0))
+* **metadata:** Protobuf Essentials wire format API ([e130ced](https://github.com/dasch-swiss/sipi/commit/e130ceda8a6c02e3ea67ed1af4a06c5a72262ca5))
+* **observability:** Read_shape fast-path + Essentials hash-mismatch metrics ([a8efe11](https://github.com/dasch-swiss/sipi/commit/a8efe119af20c668d3a00fee16bac427871e1778))
+
+
+### Bug Fixes
+
+* **exif:** Plug leak when EXIF parser throws on malformed bytes ([79ddfe3](https://github.com/dasch-swiss/sipi/commit/79ddfe33443e9295182b88b898da937bbef8cf11))
+* Handle --version before library init to avoid LSan exit-time leaks ([269e8fe](https://github.com/dasch-swiss/sipi/commit/269e8fe86d6d7f694dacd3ba96fa0ab97d71d197))
+* **http:** Treat any OUTPUT_WRITE_FAIL as client abort ([311578f](https://github.com/dasch-swiss/sipi/commit/311578f780b5bfde39b4cd11f3219395ea78ea0a))
+* **icc:** Bail on gmtime_r failure / out-of-range year ([408a018](https://github.com/dasch-swiss/sipi/commit/408a0181d1b2d7b2bb2bcb6ececcdbe34ca2b999))
+* **sanitizer:** Symbolize stack frames so Lua leak suppressions match ([fc96101](https://github.com/dasch-swiss/sipi/commit/fc961012b79f37a9be6a669aa629715a21c4149e))
+
+
+### Reverts
+
+* Remove mkdocs from nix devShells ([99e72be](https://github.com/dasch-swiss/sipi/commit/99e72be2bce7c9a19b92a68e19675677002b604c))
+
 ## [4.1.1](https://github.com/dasch-swiss/sipi/compare/v4.1.0...v4.1.1) (2026-04-27)
 
 
