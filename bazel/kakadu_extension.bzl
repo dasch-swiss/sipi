@@ -12,11 +12,11 @@ def _kakadu_extension_impl(_ctx):
     kakadu_archive(
         name = "kakadu",
         # Release tag matches the GitHub release at dasch-swiss/dsp-ci-assets.
-        tag = "kakadu-v8.5",
-        asset = "v8_5-01382N.zip",
+        tag = "kakadu-v8.7",
+        asset = "v8_7-01727L.zip",
         repo = "dasch-swiss/dsp-ci-assets",
-        sha256 = "c19c7579d1dee023316e7de090d9de3eb24764e349b4069e5af3a540fb644e75",
-        strip_prefix = "v8_5-01382N",
+        sha256 = "d5fc94e4a8fa08e49b387c72aea16af267b41ab8f411ec4c1a616c3394cfafbc",
+        strip_prefix = "v8_7-01727L",
         patches = [
             "//patches:kakadu-Makefile-Linux-x86-64-clang.patch",
             "//patches:kakadu-Makefile-Linux-arm-64-clang.patch",
