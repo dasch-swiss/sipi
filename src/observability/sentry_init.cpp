@@ -5,6 +5,7 @@
 
 #include "observability/sentry_init.h"
 
+#include <atomic>
 #include <string>
 
 #include <sentry.h>
@@ -44,6 +45,17 @@ void init_sentry(const SentryConfig &cfg)
   sentry_init(options);
 }
 
-void close_sentry() { sentry_close(); }
+void close_sentry()
+{
+  // Idempotent: only the first caller invokes sentry_close(). sentry_close()
+  // blocks until the background transport thread has drained/joined — it must
+  // complete before ~LibraryInitialiser runs curl_global_cleanup() at process
+  // exit (see the std::atexit registration in sipi.cpp). It is NULL-guarded in
+  // sentry-native (no-op when never initialised), so the flag mainly prevents
+  // a redundant shutdown attempt and its spurious warning on repeated calls.
+  static std::atomic_flag closed = ATOMIC_FLAG_INIT;
+  if (closed.test_and_set()) { return; }
+  sentry_close();
+}
 
 }// namespace Sipi::observability
