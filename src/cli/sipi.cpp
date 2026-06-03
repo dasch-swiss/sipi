@@ -7,6 +7,7 @@
  * \brief Implements an IIIF server with many features.
  *
  */
+#include <cstdlib>
 #include <dirent.h>
 #include <iostream>
 #include <string>
@@ -466,6 +467,18 @@ int main(int argc, char *argv[])
     log_err("Library initialization failed: %s", e.to_string().c_str());
     return EXIT_FAILURE;
   }
+
+  // Shut down sentry's background transport thread (joined/drained by
+  // sentry_close()) before static destructors run — in particular before
+  // ~LibraryInitialiser calls curl_global_cleanup(). Registered AFTER the
+  // static LibraryInitialiser has finished construction, so per
+  // [basic.start.term] this handler runs BEFORE ~LibraryInitialiser at exit.
+  // This covers every exit path: subcommand callbacks that call exit(), a
+  // CLI11 parse error that returns from main, and normal return. Without it,
+  // curl teardown races the live sentry-http thread and corrupts the heap.
+  // (std::abort() from my_terminate_handler bypasses atexit, leaving
+  // sentry-native's inproc crash reporting intact.)
+  std::atexit([] { Sipi::observability::close_sentry(); });
 
   CLI::App sipiopt("SIPI is an IIIF image server and image format converter.");
   sipiopt.require_subcommand(1);
@@ -1656,12 +1669,10 @@ int main(int argc, char *argv[])
 
   CLI11_PARSE(sipiopt, argc, argv);
 
-  // `require_subcommand(1)` guarantees one of the subcommand callbacks
-  // fired and invoked `exit(...)`. The only way control reaches here is
-  // if CLI11 exited the program with a usage error before the callback
-  // ran — in which case we just flush sentry and return success
-  // (CLI11 has already written its own error to stderr and the user
-  // saw a non-zero exit via CLI11's own path).
-  Sipi::observability::close_sentry();
+  // Unreachable in practice: `require_subcommand(1)` means either a
+  // subcommand callback fired and called exit(), or CLI11_PARSE already
+  // returned from main with the parse-error code. Sentry teardown is handled
+  // by the std::atexit(close_sentry) registered above, which runs on every
+  // exit() / return path. Kept only to give main a return value.
   return EXIT_SUCCESS;
 }
