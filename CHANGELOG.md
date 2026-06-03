@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.0.1](https://github.com/dasch-swiss/sipi/compare/v5.0.0...v5.0.1) (2026-06-03)
+
+
+### Bug Fixes
+
+* **cli:** Shut down sentry transport before curl cleanup on all exit paths ([cfcb38b](https://github.com/dasch-swiss/sipi/commit/cfcb38b1e976867c36a7a8a92969e7189b57957c))
+
 ## [5.0.0](https://github.com/dasch-swiss/sipi/compare/v4.1.1...v5.0.0) (2026-05-28)
 
 
