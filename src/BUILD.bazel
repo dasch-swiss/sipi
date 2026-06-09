@@ -26,7 +26,7 @@ Versioning: `expand_template` regenerates `SipiVersion.h` from
 """
 
 load("@aspect_bazel_lib//lib:expand_template.bzl", "expand_template")
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 load("@rules_distroless//distroless:defs.bzl", "group", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load", "oci_push")
 load("@tar.bzl", "tar")
@@ -258,6 +258,14 @@ cc_library(
             # transitively without depending on `:sipi_lib` (which would
             # close a cycle).
             "SipiError.cpp",
+            # Google Benchmark microbenchmark sources are `cc_binary`
+            # main()-providers, not library TUs. Excluded here so they
+            # never enter the production library or the `--instrumentation_filter=//src`
+            # coverage build. They are declared as separate manual-tagged
+            # `cc_binary` targets below and run only via `just bench`.
+            # (ADR-0003 will extend the same exclude to `**/*_test.cpp`
+            # when unit tests move into `src/`.)
+            "**/*_benchmark.cpp",
         ],
     ),
     includes = ["."],
@@ -337,6 +345,34 @@ cc_library(
         "@platforms//os:linux": ["//bazel:glibc23_compat"],
         "//conditions:default": [],
     }),
+)
+
+# ── Microbenchmarks (Google Benchmark; `just bench`) ───────────────────────
+# Manual-tagged `cc_binary` benchmarks that time the production codec and the
+# IIIF parser front door in-process. Built only by `just bench` (`-c opt`,
+# never under `--config=asan/ubsan/fuzz`, never instrumented). Two isolation
+# mechanisms keep them out of the production and coverage graphs:
+#   1. the `**/*_benchmark.cpp` glob exclude on `:sipi_lib` (above) keeps the
+#      sources out of the production library and the `instrumentation_filter=//src`
+#      coverage build;
+#   2. `tags = ["manual"]` + being a dep of no test keeps them out of
+#      `bazel test //...` and `bazel coverage //...`.
+# `testonly = True` (every benchmark is a dev/test tool, and the fixture-backed
+# tiers depend on the `testonly` `//test:test_paths`). They depend on
+# `:sipi_lib` today; per ADR-0003 each moves into its module's BUILD when that
+# module is promoted (the `deps` line + BUILD location move with the module).
+# See docs/src/development/benchmarking.md.
+
+# Parse tier — IIIF URL component string parsers. Pure CPU, no fixtures.
+cc_binary(
+    name = "parse_benchmark",
+    srcs = ["iiifparser/parse_benchmark.cpp"],
+    tags = ["manual"],
+    testonly = True,
+    deps = [
+        ":sipi_lib",
+        "@google_benchmark//:benchmark_main",
+    ],
 )
 
 # ── //src/cli:sipi ─────────────────────────────────────────────────────────
