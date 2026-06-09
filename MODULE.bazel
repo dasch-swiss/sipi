@@ -293,6 +293,15 @@ exports_files([
 # a transitive dep on test infrastructure.
 bazel_dep(name = "googletest", version = "1.17.0.bcr.2", dev_dependency = True)
 
+# Google Benchmark — the C++ microbenchmark harness behind `just bench`.
+# `dev_dependency = True` for the same reason as googletest: the benchmark
+# `cc_binary` targets are `tags=["manual"]` dev-loop tools, never linked into
+# `//src/cli:sipi` or any production target, so they must stay out of the
+# runtime build graph. Targets: `@google_benchmark//:benchmark` and
+# `:benchmark_main` (the latter provides `main()` + arg parsing). The
+# transitive `libpfm` (Linux perf counters) is benign and unused on macOS.
+bazel_dep(name = "google_benchmark", version = "1.9.5", dev_dependency = True)
+
 # ── LLVM toolchain — hermetic, LLVM 19.1.7, libc++ ─────────────────────────
 #
 # Linux libc++ ships in the LLVM tarball built against glibc, so it still
