@@ -49,6 +49,10 @@ just bazel-coverage              # unit + approval + e2e under instrumentation; 
 just run                         # run sipi with the localdev config
 just valgrind                    # run sipi under Valgrind
 
+# Microbenchmarks (local dev loop, never CI-gated)
+just bench <tier>                # tier ∈ parse|decode|process|encode; -c opt build + direct exec
+just bench-compare before after  # U-test deltas + geomean via //tools/benchmark:compare
+
 # Sanitizer + fuzz
 just bazel-build-sanitized       # bazel build --config=asan --config=ubsan //src/cli:sipi  (sanitizer.yml CI)
 just bazel-build-fuzz            # bazel build --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz  (fuzz.yml CI on linux-x86_64; darwin-aarch64 supported for local dev)
@@ -147,6 +151,8 @@ For test framework details (how to run tests, directory layout, adding tests), s
 - **Smoke tests** (`test/e2e-rust/tests/docker_smoke.rs`): against Docker image. Run via `just bazel-test-smoke` — the `:docker_smoke` rust_test consumes the OCI tarball from `//src:image_load` and `docker load`s it before probing endpoints.
 
 Run a single unit-test target with `bazel test //test/unit/<component>:<component>_test --test_output=streamed`.
+
+**Hot-path changes require a benchmark.** Before changing any image decode/encode hot path (`src/formats/*`, `SipiImage` read/write, `iiifparser`), a Google Benchmark microbench must exist, co-located with the module (per ADR-0003) as a manual-tagged `*_benchmark.cpp` `cc_binary`. Add one if it doesn't. Justify the change with a before/after `just bench` + `just bench-compare` run on the same `-c opt` binary and machine (trust a delta only if the U-test is green AND the median shift exceeds the baseline CV; sub-3% is noise). See [`docs/src/development/benchmarking.md`](docs/src/development/benchmarking.md).
 
 ## CI, Release, and Commit Messages
 

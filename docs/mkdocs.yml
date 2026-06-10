@@ -22,6 +22,7 @@ nav:
   - CI and Release: development/ci.md
   - Developing: development/developing.md
   - Fuzz Testing: development/fuzzing.md
+  - Benchmarking: development/benchmarking.md
   - Testing Strategy: development/testing-strategy.md
   - Downstream Dependencies: development/downstream-dependencies.md
   - Commit and PR Conventions: development/commit-conventions.md
@@ -89,6 +90,7 @@ plugins:
           - development/developing.md: "Development guide"
           - development/downstream-dependencies.md: "Runtime packages and downstream consumers"
           - development/fuzzing.md: "Fuzz testing with libFuzzer"
+          - development/benchmarking.md: "Microbenchmarks with Google Benchmark: just bench, bench-compare, the regression decision rule"
           - development/testing-strategy.md: "Testing strategy, coverage matrices, and feature inventory"
           - development/commit-conventions.md: "Commit organization and PR description conventions"
           - development/reviewer-guidelines.md: "Code review checklist for human and AI reviewers"

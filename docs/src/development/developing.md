@@ -215,6 +215,13 @@ regression. See
 for the full list and the re-approval procedure, and `docs/adr/0002-icc-profile-determinism-test-only.md`
 in the project root for the design rationale.
 
+### Microbenchmarks
+
+Performance work uses the Google Benchmark suite: `just bench <tier>` and
+`just bench-compare <before> <after>`. The canonical how-to — tiers,
+fixtures, the before/after workflow, and the regression decision rule
+("no benchmark, no hot-path change") — is [Benchmarking](benchmarking.md).
+
 ## Managing dependencies
 
 Third-party C/C++ libraries are pinned by `http_archive`
