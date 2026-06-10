@@ -356,7 +356,7 @@
   "moduleExtensions": {
     "//bazel:benchmark_fixtures_extension.bzl%benchmark_fixtures_extension": {
       "general": {
-        "bzlTransitiveDigest": "EaoRBcFSjpK96X83FnbDtTlc9KmubCc6Mdvd5AUrNJA=",
+        "bzlTransitiveDigest": "LTpreO52kIPpVsBKekTBnXnonOEfi/B0L7PcGwN1Xd8=",
         "usagesDigest": "/OVd0sRob8VDNWU93dMHAiBNsg7C2sxDHY58Rp2wOJw=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
@@ -376,7 +376,7 @@
     },
     "//bazel:kakadu_extension.bzl%kakadu_extension": {
       "general": {
-        "bzlTransitiveDigest": "ts6COk7aFOC3oiEWF0n1jbGIJw84saguGoZFxuSjhl0=",
+        "bzlTransitiveDigest": "PHk6uIsMB70os7HQ2t8rrBHV4AS9qvzWFOzyNV8n2N0=",
         "usagesDigest": "qQJAPNB0P4wpi2VGK88Ly/QPw3k4aStJZGi3BDzVzjc=",
         "recordedInputs": [],
         "generatedRepoSpecs": {

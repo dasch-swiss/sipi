@@ -51,7 +51,7 @@
 #   gh release create sipi-bench-fixtures-v1 --repo dasch-swiss/dsp-ci-assets \
 #     --title "SIPI benchmark fixtures v1" --notes-file <notes> \
 #     <workdir>/sipi-bench-fixtures-v1.tar.zst
-#   ...then update the sha256 in MODULE.bazel's benchmark_fixtures extension.
+#   ...then update the sha256 in bazel/benchmark_fixtures_extension.bzl.
 
 set -euo pipefail
 

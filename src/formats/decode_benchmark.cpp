@@ -82,14 +82,18 @@ void decode_tile(benchmark::State &state, const char *file)
 void decode_thumb(benchmark::State &state, const char *file)
 {
   const std::string path = fixture(file);
+  // !256,256 best-fits the 4:3 master to 256×192, not 256×256 — report
+  // throughput from the actual decoded dimensions.
+  int64_t thumb_bytes = 0;
   for (auto _ : state) {
     Sipi::SipiImage img;
     auto size = std::make_shared<Sipi::SipiSize>("!256,256");
     img.read(path, nullptr, size);
     benchmark::DoNotOptimize(img.getNx());
     benchmark::ClobberMemory();
+    thumb_bytes = static_cast<int64_t>(img.getNx() * img.getNy() * img.getNc());
   }
-  state.SetBytesProcessed(state.iterations() * 256 * 256 * 3);
+  state.SetBytesProcessed(state.iterations() * thumb_bytes);
 }
 
 #define SIPI_DECODE_BENCH(name, file)                                                             \

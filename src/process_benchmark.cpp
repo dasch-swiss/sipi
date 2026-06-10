@@ -14,7 +14,8 @@
 // iteration OUTSIDE the timed region (PauseTiming/ResumeTiming) because
 // every operator below mutates the image in place. The pause/resume pair
 // costs O(µs) per iteration — negligible against the ms-scale operators
-// measured here.
+// measured here; the one µs-scale operator (to8bps) batches 64 ops per
+// timed iteration to amortize it.
 //
 // Built only via `just bench` (-c opt, manual-tagged cc_binary); never part
 // of `bazel test //...` or coverage. See docs/src/development/benchmarking.md
@@ -23,7 +24,10 @@
 #include <benchmark/benchmark.h>
 
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <string>
+#include <vector>
 
 #include "SipiImage.hpp"
 #include "metadata/icc.h"
@@ -53,18 +57,34 @@ const Sipi::SipiImage &leaves_alpha()
   return img;
 }
 
-// 209×197 RGBA 16bps — 16-bps source for to8bps.
+// 209×197 RGBA 16bps — 16-bps source for to8bps. The shape is what the
+// benchmark name asserts, so verify it once: if the decoder ever changes
+// what this fixture yields, fail loudly instead of mislabeling the numbers.
 const Sipi::SipiImage &rgba16()
 {
-  static const Sipi::SipiImage img = load("knora/png_16bit.tif");
+  static const Sipi::SipiImage img = [] {
+    Sipi::SipiImage i = load("knora/png_16bit.tif");
+    if (i.getBps() != 16) {
+      std::fprintf(stderr, "rgba16 fixture decoded to %zu bps, expected 16\n", i.getBps());
+      std::exit(1);
+    }
+    return i;
+  }();
   return img;
 }
 
 // 128×128 CMYK (Photoshop APP14) — 4-channel source for the CMYK→sRGB
-// colour-transform shape.
+// colour-transform shape; shape verified once for the same reason.
 const Sipi::SipiImage &cmyk128()
 {
-  static const Sipi::SipiImage img = load("jpeg/cmyk/cmyk_photoshop_app14.jpg");
+  static const Sipi::SipiImage img = [] {
+    Sipi::SipiImage i = load("jpeg/cmyk/cmyk_photoshop_app14.jpg");
+    if (i.getNc() != 4) {
+      std::fprintf(stderr, "cmyk128 fixture decoded to %zu channels, expected 4\n", i.getNc());
+      std::exit(1);
+    }
+    return i;
+  }();
   return img;
 }
 
@@ -178,15 +198,26 @@ BENCHMARK(BM_Crop1024)->Unit(benchmark::kMillisecond);
 
 void BM_To8bps(benchmark::State &state)
 {
+  // The operator is µs-scale on this small fixture, so a per-op
+  // PauseTiming/ResumeTiming pair (O(µs) itself) would pollute the
+  // measurement. Batch the copies outside the timed region and run the
+  // whole batch per timed iteration to amortize the pause overhead.
+  constexpr int kBatch = 64;
   for (auto _ : state) {
     state.PauseTiming();
-    Sipi::SipiImage img(rgba16());
+    std::vector<Sipi::SipiImage> imgs(kBatch, rgba16());
     state.ResumeTiming();
-    img.to8bps();
-    benchmark::DoNotOptimize(img.getBps());
+    for (auto &img : imgs) {
+      img.to8bps();
+      benchmark::DoNotOptimize(img.getBps());
+    }
     benchmark::ClobberMemory();
+    state.PauseTiming();
+    imgs.clear();// keep the 64 destructors out of the timed region too
+    state.ResumeTiming();
   }
-  state.SetBytesProcessed(state.iterations() * src_bytes(rgba16()));
+  state.SetItemsProcessed(state.iterations() * kBatch);
+  state.SetBytesProcessed(state.iterations() * kBatch * src_bytes(rgba16()));
 }
 BENCHMARK(BM_To8bps);
 
@@ -209,6 +240,10 @@ void BM_ConvertToIccAdobeRgb(benchmark::State &state)
 }
 BENCHMARK(BM_ConvertToIccAdobeRgb)->Unit(benchmark::kMillisecond);
 
+// Despite the 128×128 source this is ms-scale (~16 ms measured): the lcms
+// LUT transform *creation* for the CMYK profile dominates, not the
+// per-pixel work — which is itself the finding (the server pays it per
+// request). Pause/resume overhead is negligible against it.
 void BM_ConvertToIccCmykToSrgb(benchmark::State &state)
 {
   for (auto _ : state) {
@@ -221,7 +256,7 @@ void BM_ConvertToIccCmykToSrgb(benchmark::State &state)
   }
   state.SetBytesProcessed(state.iterations() * src_bytes(cmyk128()));
 }
-BENCHMARK(BM_ConvertToIccCmykToSrgb);
+BENCHMARK(BM_ConvertToIccCmykToSrgb)->Unit(benchmark::kMillisecond);
 
 // ── Channel removal ─────────────────────────────────────────────────────
 // Drop the alpha channel (index 3 of RGBA) — what every JPEG emission of

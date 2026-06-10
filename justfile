@@ -7,6 +7,13 @@
 # IS the inner-loop edit/rebuild cycle (`just bazel-build` after a single-
 # file edit completes in seconds via the action cache).
 
+# Recipe arguments are also exposed as shell positionals ($1, $2, "$@") in
+# shebang recipes. Needed wherever an argument can contain shell
+# metacharacters — `{{VAR}}` interpolation pastes raw text into the script,
+# so e.g. a `|` inside `just bench parse --benchmark_filter='A|B'` would
+# otherwise become a shell pipe.
+set positional-arguments
+
 # Auto-detect CPU cores
 nproc := `nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4`
 
@@ -265,23 +272,23 @@ bench name *FLAGS='':
     TMP=$(mktemp -d)
     trap 'rm -rf "$TMP"' EXIT
     env SOURCE_DATE_EPOCH=946684800 SIPI_WORKSPACE_ROOT="." TEST_TMPDIR="$TMP" \
-        "${env_args[@]}" \
-        ./bazel-bin/src/{{name}}_benchmark {{FLAGS}}
+        ${env_args[@]+"${env_args[@]}"} \
+        ./bazel-bin/src/{{name}}_benchmark "${@:2}"
 
 # Compare two `just bench` JSON outputs: per-benchmark Mann-Whitney
 # U-test deltas + OVERALL_GEOMEAN via the vendored google_benchmark
 # compare.py (`//tools/benchmark:compare`, hermetic python + numpy/scipy).
-# Trust a delta only if it is green (p < 0.05) AND the median shift
-# exceeds the baseline CV; sub-3% deltas are noise. Extra FLAGS (e.g.
+# The regression decision rule lives in
+# docs/src/development/benchmarking.md. Extra FLAGS (e.g.
 # `--alpha=0.01`, `--no-utest`) are global compare.py options and must
 # precede the subcommand. Paths are resolved to absolute because
 # `bazel run` does not execute in the invocation directory.
 bench-compare before after *FLAGS='':
     #!/usr/bin/env bash
     set -euo pipefail
-    BEFORE="$(cd "$(dirname "{{before}}")" && pwd)/$(basename "{{before}}")"
-    AFTER="$(cd "$(dirname "{{after}}")" && pwd)/$(basename "{{after}}")"
-    bazel run //tools/benchmark:compare -- {{FLAGS}} benchmarks "$BEFORE" "$AFTER"
+    BEFORE="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+    AFTER="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
+    bazel run //tools/benchmark:compare -- "${@:3}" benchmarks "$BEFORE" "$AFTER"
 
 #####################################
 # Bazel Docker (rules_oci)
