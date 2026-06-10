@@ -354,14 +354,34 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
+    "//bazel:benchmark_fixtures_extension.bzl%benchmark_fixtures_extension": {
+      "general": {
+        "bzlTransitiveDigest": "EaoRBcFSjpK96X83FnbDtTlc9KmubCc6Mdvd5AUrNJA=",
+        "usagesDigest": "/OVd0sRob8VDNWU93dMHAiBNsg7C2sxDHY58Rp2wOJw=",
+        "recordedInputs": [],
+        "generatedRepoSpecs": {
+          "sipi_bench_fixtures": {
+            "repoRuleId": "@@//bazel:gh_release.bzl%gh_release_archive",
+            "attributes": {
+              "tag": "sipi-bench-fixtures-v1",
+              "asset": "sipi-bench-fixtures-v1.tar.zst",
+              "repo": "dasch-swiss/dsp-ci-assets",
+              "sha256": "9ce90bb3d1cd7ecf7a5ad27efd3cd0fb03f97a3145d4f4f1f9f85fea9869bd3e",
+              "strip_prefix": "sipi-bench-fixtures-v1",
+              "build_file": "@@//bazel:benchmark_fixtures.BUILD.bazel"
+            }
+          }
+        }
+      }
+    },
     "//bazel:kakadu_extension.bzl%kakadu_extension": {
       "general": {
-        "bzlTransitiveDigest": "n//iePnTUA3pPiuaWtjJ32hB/R7/MVBemJ6y3l5b7sM=",
+        "bzlTransitiveDigest": "ts6COk7aFOC3oiEWF0n1jbGIJw84saguGoZFxuSjhl0=",
         "usagesDigest": "qQJAPNB0P4wpi2VGK88Ly/QPw3k4aStJZGi3BDzVzjc=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "kakadu": {
-            "repoRuleId": "@@//bazel:kakadu.bzl%kakadu_archive",
+            "repoRuleId": "@@//bazel:gh_release.bzl%gh_release_archive",
             "attributes": {
               "tag": "kakadu-v8.7",
               "asset": "v8_7-01727L.zip",
