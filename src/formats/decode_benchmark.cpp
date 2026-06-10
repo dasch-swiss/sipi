@@ -54,7 +54,7 @@ std::string fixture(const std::string &name)
     std::fprintf(stderr, "SIPI_BENCH_FIXTURES_DIR not set — run via `just bench decode`\n");
     std::exit(1);
   }
-  return std::string{dir} + "/big_building/" + name;
+  return std::string{ dir } + "/big_building/" + name;
 }
 
 // Full-resolution dim×dim tile at (1024,1024) — what a deep-zoom viewer
@@ -92,8 +92,8 @@ void decode_thumb(benchmark::State &state, const char *file)
   state.SetBytesProcessed(state.iterations() * 256 * 256 * 3);
 }
 
-#define SIPI_DECODE_BENCH(name, file)                                                                 \
-  BENCHMARK_CAPTURE(decode_tile, name, file)->Arg(256)->Arg(1024)->Unit(benchmark::kMillisecond);    \
+#define SIPI_DECODE_BENCH(name, file)                                                             \
+  BENCHMARK_CAPTURE(decode_tile, name, file)->Arg(256)->Arg(1024)->Unit(benchmark::kMillisecond); \
   BENCHMARK_CAPTURE(decode_thumb, name, file)->Unit(benchmark::kMillisecond)
 
 SIPI_DECODE_BENCH(pyr_none, "pyr-none.tif");
