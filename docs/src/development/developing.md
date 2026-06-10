@@ -251,8 +251,8 @@ Adding a brand-new dependency:
 3. Wire it into the consumers (`//src:sipi_lib`, `//shttps:shttps`,
    etc.) via `deps = ["//ext/<lib>:<lib>"]`.
 
-Kakadu is special: it is fetched via a custom `kakadu_archive`
-repository_rule (`bazel/kakadu.bzl`) that shells out to
+Kakadu is special: it is fetched via a custom `gh_release_archive`
+repository_rule (`bazel/gh_release.bzl`) that shells out to
 `gh release download`. See [Kakadu setup](kakadu.md).
 
 ## Commit message schema

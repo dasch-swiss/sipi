@@ -153,7 +153,7 @@ including the repository cache.
 ## Kakadu
 
 The proprietary Kakadu SDK is fetched at build time by a custom
-`kakadu_archive` repository_rule (`bazel/kakadu.bzl`) that shells out
+`gh_release_archive` repository_rule (`bazel/gh_release.bzl`) that shells out
 to `gh release download` against `dasch-swiss/dsp-ci-assets`. Auth
 flows through `GH_TOKEN`; locally `gh auth login` once is enough, in
 CI the workflow injects `GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}` on

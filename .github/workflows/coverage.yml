@@ -55,7 +55,7 @@ jobs:
           git lfs checkout
       - uses: DeterminateSystems/determinate-nix-action@v3
         with:
-          # The `kakadu_archive` repository_rule reads GH_TOKEN from the
+          # The `gh_release_archive` repository_rule reads GH_TOKEN from the
           # environment via `gh release download`; configurable-impure-env
           # keeps Nix's daemon from sanitising it out of `nix develop`.
           extra-conf: |

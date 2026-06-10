@@ -23,7 +23,7 @@ jobs:
             runner: ubuntu-24.04-arm
     env:
       # Every bazel build/run/test in this job re-evaluates the
-      # kakadu_archive repository_rule, which fetches from a private
+      # gh_release_archive repository_rule, which fetches from a private
       # GitHub release and requires GH_TOKEN. Hoisted to the job level so
       # any future Bazel step inherits it (cf. publish.yml history where
       # adding it per-step caused repeated near-miss failures).
@@ -125,7 +125,7 @@ jobs:
             sbom_name: sbom-arm64
     env:
       # Every bazel build/run/test in this job re-evaluates the
-      # kakadu_archive repository_rule, which fetches from a private
+      # gh_release_archive repository_rule, which fetches from a private
       # GitHub release and requires GH_TOKEN. Hoisted to the job level so
       # any future Bazel step inherits it.
       GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}

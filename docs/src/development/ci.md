@@ -63,7 +63,7 @@ catches broken cross-links and stale nav entries on every PR.
 
 Every Bazel-invoking step sets
 `GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}` on its `env:` so the
-`kakadu_archive` repository_rule can authenticate. Forked PRs
+`gh_release_archive` repository_rule can authenticate. Forked PRs
 don't have access to `DASCHBOT_PAT`, so the Kakadu fetch fails
 and the build short-circuits. Internal PRs are unaffected.
 

@@ -10,7 +10,7 @@ Mirrors the existing `ext/kakadu/CMakeLists.txt:67-77` invocation:
 
 with $KDU_MAKE / $KDU_EXEC_PLATFORM / $KDU_ARCH selected per (os, cpu) per
 `CMakeLists.txt:145-174`. Per-arch sed mutations from the same file are
-already applied at extract time by `kakadu_archive` via `patches/`.
+already applied at extract time by `gh_release_archive` via `patches/`.
 
 `make()`'s standard `targets`/`args` shape can't drive a working-directory-
 sensitive build, so the entire build + stage is funnelled through
