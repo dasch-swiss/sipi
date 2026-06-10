@@ -59,7 +59,10 @@ const Sipi::SipiImage &master()
   return img;
 }
 
-int64_t src_bytes() { return static_cast<int64_t>(master().getNx() * master().getNy() * master().getNc()); }
+int64_t src_bytes()
+{
+  return static_cast<int64_t>(master().getNx() * master().getNy() * master().getNc() * (master().getBps() / 8));
+}
 
 void encode(benchmark::State &state, const char *ftype, const Sipi::SipiCompressionParams *params)
 {

@@ -420,7 +420,7 @@ cc_binary(
 )
 
 # Encode tier — SipiImage::write() across the four formats SIPI emits
-# (jpg/png/tif/j2k) from the decoded fixture master. SOURCE_DATE_EPOCH pins
+# (jpg/png/tif/jpx) from the decoded fixture master. SOURCE_DATE_EPOCH pins
 # the wall-clock-stamped ICC creation date in emitted headers (ADR-0002);
 # the `env` applies under `bazel run`, and `just bench` exports the same
 # variables (plus TEST_TMPDIR for the output files) when exec'ing directly.

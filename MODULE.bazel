@@ -327,7 +327,7 @@ use_repo(pip, "sipi_bench_pip")
 # dasch-swiss/dsp-ci-assets (next to the Kakadu archives, fetched the same
 # way via `gh_release_archive`). Pins (tag/asset/sha256) live in the
 # extension. Dev-only AND consumed solely by the manual-tagged
-# `//src:{decode,encode}_benchmark` targets, so the ~320 MB fetch happens
+# `//src:{decode,encode}_benchmark` targets, so the 321 MB fetch happens
 # lazily on first `just bench decode|encode` — never in production or CI
 # test builds.
 benchmark_fixtures = use_extension("//bazel:benchmark_fixtures_extension.bzl", "benchmark_fixtures_extension", dev_dependency = True)
