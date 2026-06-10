@@ -1,0 +1,16 @@
+"""BUILD file symlinked into the @sipi_bench_fixtures repository root.
+
+The archive layout is produced by tools/benchmark/generate_fixtures.sh:
+big_building/{flat.tif, baseline.jpg, pyr-none.tif, pyr-zstd.tif,
+pyr-webp.tif, pyr.jp2} plus README.md and the upstream redistribution
+notice. Consumed as `data` by the manual-tagged decode/encode benchmark
+cc_binary targets in //src — nothing in the production or CI test graph
+references this repo, so the archive is only ever fetched by `just bench`.
+"""
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "images",
+    srcs = glob(["big_building/**"]),
+)
