@@ -302,6 +302,26 @@ bazel_dep(name = "googletest", version = "1.17.0.bcr.2", dev_dependency = True)
 # transitive `libpfm` (Linux perf counters) is benign and unused on macOS.
 bazel_dep(name = "google_benchmark", version = "1.9.5", dev_dependency = True)
 
+# Python for `//tools/benchmark:compare` (the vendored google_benchmark
+# compare.py — see tools/benchmark/BUILD.bazel for why it is vendored).
+# `rules_python` is already resolved transitively at exactly 1.7.0
+# (googletest→re2→pybind11, protobuf, rules_foreign_cc), so this direct
+# dev_dependency causes zero MVS churn. The hermetic 3.12 toolchain and the
+# `sipi_bench_pip` hub (numpy/scipy, mirroring google_benchmark 1.9.5's own
+# tools/requirements.txt) keep the compare workflow off the host/Nix python.
+bazel_dep(name = "rules_python", version = "1.7.0", dev_dependency = True)
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python", dev_dependency = True)
+python.toolchain(python_version = "3.12")
+
+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip", dev_dependency = True)
+pip.parse(
+    hub_name = "sipi_bench_pip",
+    python_version = "3.12",
+    requirements_lock = "//tools/benchmark:requirements.txt",
+)
+use_repo(pip, "sipi_bench_pip")
+
 # ── LLVM toolchain — hermetic, LLVM 19.1.7, libc++ ─────────────────────────
 #
 # Linux libc++ ships in the LLVM tarball built against glibc, so it still
