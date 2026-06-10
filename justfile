@@ -249,14 +249,24 @@ bazel-run-fuzz corpus duration seed="":
 # touch the ICC machinery whose creation date is wall-clock-stamped
 # (ADR-0002), and `//test:test_paths` resolves fixtures relative to the
 # workspace root. They are exported here (not via the cc_binary `env`
-# attr) because the recipe execs the binary directly — `env` only applies
-# under `bazel run`/`bazel test`.
+# attr) because the recipe runs the binary directly — `env` only applies
+# under `bazel run`/`bazel test`. The decode/encode tiers additionally
+# read the @sipi_bench_fixtures external repo (fetched lazily on first
+# build) out of the binary's runfiles tree via SIPI_BENCH_FIXTURES_DIR,
+# and the encode tier writes its outputs to a throwaway TEST_TMPDIR.
 bench name *FLAGS='':
     #!/usr/bin/env bash
     set -euo pipefail
     bazel build -c opt //src:{{name}}_benchmark
-    SOURCE_DATE_EPOCH=946684800 SIPI_WORKSPACE_ROOT="." \
-        exec ./bazel-bin/src/{{name}}_benchmark {{FLAGS}}
+    shopt -s nullglob
+    fixtures=(./bazel-bin/src/{{name}}_benchmark.runfiles/+*sipi_bench_fixtures)
+    env_args=()
+    [ ${#fixtures[@]} -gt 0 ] && env_args+=("SIPI_BENCH_FIXTURES_DIR=${fixtures[0]}")
+    TMP=$(mktemp -d)
+    trap 'rm -rf "$TMP"' EXIT
+    env SOURCE_DATE_EPOCH=946684800 SIPI_WORKSPACE_ROOT="." TEST_TMPDIR="$TMP" \
+        "${env_args[@]}" \
+        ./bazel-bin/src/{{name}}_benchmark {{FLAGS}}
 
 # Compare two `just bench` JSON outputs: per-benchmark Mann-Whitney
 # U-test deltas + OVERALL_GEOMEAN via the vendored google_benchmark
