@@ -1,15 +1,15 @@
-"""Module extension that wires `kakadu_archive` into MODULE.bazel.
+"""Module extension that wires the Kakadu source archive into MODULE.bazel.
 
 Bzlmod requires repository rules to be invoked via a module extension; this is
-the thinnest viable wiring. The single `kakadu` target invokes
-`kakadu_archive` with the values pinned in MODULE.bazel; bumping Kakadu means
-editing MODULE.bazel only.
+the thinnest viable wiring. The single `kakadu` repo invokes
+`gh_release_archive` with the values pinned here; bumping Kakadu means
+editing this file only.
 """
 
-load("//bazel:kakadu.bzl", "kakadu_archive")
+load("//bazel:gh_release.bzl", "gh_release_archive")
 
 def _kakadu_extension_impl(_ctx):
-    kakadu_archive(
+    gh_release_archive(
         name = "kakadu",
         # Release tag matches the GitHub release at dasch-swiss/dsp-ci-assets.
         tag = "kakadu-v8.7",
