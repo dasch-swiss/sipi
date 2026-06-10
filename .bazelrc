@@ -104,6 +104,12 @@ build:linux --dynamic_mode=off
 # per-config overrides further down ensure those compile lines do NOT
 # carry the new hardening flags.
 build --copt=-fstack-protector-strong
+# Bazel's unix-toolchain `opt` feature injects `-D_FORTIFY_SOURCE=1` ahead of
+# user copts; redefining straight to 2 trips `-Wmacro-redefined` in every
+# `-c opt` TU — a warning for our code, a hard error for deps that compile
+# with `-Werror` (google_benchmark broke first, via `just bench`). The
+# canonical idiom is undef-then-define.
+build --copt=-U_FORTIFY_SOURCE
 build --copt=-D_FORTIFY_SOURCE=2
 
 # Target build of libmagic 5.47 hits the same glibc fortify-header
