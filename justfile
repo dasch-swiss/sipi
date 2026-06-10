@@ -222,6 +222,58 @@ bazel-run-fuzz corpus duration seed="":
         -max_total_time={{duration}} -timeout=1 -rss_limit_mb=1024 -print_final_stats=1
 
 #####################################
+# Microbenchmarks (Google Benchmark)
+#
+# Local dev-loop tooling only — never a CI gate. The discipline:
+# *no benchmark, no hot-path change* — before/after numbers from the SAME
+# machine and the SAME `-c opt` configuration accompany every codec/parser
+# hot-path PR. See docs/src/development/benchmarking.md for the full
+# workflow and the regression decision rule.
+#####################################
+
+# Build (`-c opt`, matching production codegen — never fastbuild, never
+# sanitized/instrumented) and exec the named microbenchmark binary
+# directly, forwarding Google Benchmark flags. `name` is the tier:
+# parse | decode | encode | process → `//src:<name>_benchmark`.
+#
+# Typical before/after loop:
+#   just bench parse --benchmark_repetitions=20 \
+#       --benchmark_out=before.json --benchmark_out_format=json
+#   ... make the hot-path change ...
+#   just bench parse --benchmark_repetitions=20 \
+#       --benchmark_out=after.json --benchmark_out_format=json
+#   just bench-compare before.json after.json
+#
+# SOURCE_DATE_EPOCH + SIPI_WORKSPACE_ROOT mirror what
+# `test/approval/BUILD.bazel` injects for tests: the encode/process tiers
+# touch the ICC machinery whose creation date is wall-clock-stamped
+# (ADR-0002), and `//test:test_paths` resolves fixtures relative to the
+# workspace root. They are exported here (not via the cc_binary `env`
+# attr) because the recipe execs the binary directly — `env` only applies
+# under `bazel run`/`bazel test`.
+bench name *FLAGS='':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bazel build -c opt //src:{{name}}_benchmark
+    SOURCE_DATE_EPOCH=946684800 SIPI_WORKSPACE_ROOT="." \
+        exec ./bazel-bin/src/{{name}}_benchmark {{FLAGS}}
+
+# Compare two `just bench` JSON outputs: per-benchmark Mann-Whitney
+# U-test deltas + OVERALL_GEOMEAN via the vendored google_benchmark
+# compare.py (`//tools/benchmark:compare`, hermetic python + numpy/scipy).
+# Trust a delta only if it is green (p < 0.05) AND the median shift
+# exceeds the baseline CV; sub-3% deltas are noise. Extra FLAGS (e.g.
+# `--alpha=0.01`, `--no-utest`) are global compare.py options and must
+# precede the subcommand. Paths are resolved to absolute because
+# `bazel run` does not execute in the invocation directory.
+bench-compare before after *FLAGS='':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    BEFORE="$(cd "$(dirname "{{before}}")" && pwd)/$(basename "{{before}}")"
+    AFTER="$(cd "$(dirname "{{after}}")" && pwd)/$(basename "{{after}}")"
+    bazel run //tools/benchmark:compare -- {{FLAGS}} benchmarks "$BEFORE" "$AFTER"
+
+#####################################
 # Bazel Docker (rules_oci)
 #
 # Each per-arch CI runner builds + loads the matching architecture's
