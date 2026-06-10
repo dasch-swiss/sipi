@@ -1,0 +1,30 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("@sipi_bench_pip//:requirements.bzl", "requirement")
+
+# Vendored from google_benchmark 1.9.5 `tools/` (compare.py + gbench/).
+# The upstream `@google_benchmark//tools:compare` py_binary is unconsumable:
+# google_benchmark declares both `rules_python` and its `tools_pip_deps` pip
+# hub as `dev_dependency = True`, which Bzlmod drops for non-root modules, so
+# `@tools_pip_deps` never exists in our module graph. We vendor the scripts
+# pinned to the same release and supply numpy/scipy via our own dev pip hub
+# (`sipi_bench_pip`, MODULE.bazel). Re-sync when bumping google_benchmark.
+#
+# Run via `just bench-compare <before.json> <after.json>` →
+#   bazel run //tools/benchmark:compare -- benchmarks <before> <after>
+
+py_library(
+    name = "gbench",
+    srcs = glob(["gbench/*.py"]),
+    deps = [
+        requirement("numpy"),
+        requirement("scipy"),
+    ],
+)
+
+py_binary(
+    name = "compare",
+    srcs = ["compare.py"],
+    imports = ["."],
+    tags = ["manual"],
+    deps = [":gbench"],
+)
