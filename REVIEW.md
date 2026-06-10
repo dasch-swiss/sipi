@@ -49,6 +49,10 @@
 - **Sanitizer gate:** PRs touching `src/`, `shttps/`, `include/`, or `test/` automatically run the sanitizer CI workflow (`sanitizer.yml`). Zero findings required to merge. The sanitizer build runs the full e2e suite under ASan/UBSan; first-party translation units are instrumented at compile time
 - **Bazel test parity:** PRs that add a new unit test must add the matching `cc_test` target in `test/unit/<mod>/BUILD.bazel`. CI runs `just bazel-coverage`, which exercises every `cc_test` under `//test/unit/...` plus `//test/approval/...` and `//test/e2e-rust/...` in a single pass — a missing `cc_test` target = no CI coverage
 
+### Performance
+- Hot-path changes (codec decode/encode, `SipiImage::read`/`write`, IIIF parsing) include a before/after microbenchmark comparison in the PR. **No benchmark, no hot-path change** — add a `*_benchmark.cpp` first if none covers the path. See [docs/src/development/benchmarking.md](docs/src/development/benchmarking.md)
+- Trust a delta only if it is green (U-test p < 0.05) AND the median shift exceeds the baseline CV; same machine, same `-c opt` binary for before and after. Sub-3% deltas are noise
+
 ### Metrics
 - New metrics use correct Prometheus types (counter for monotonic, gauge for current state, histogram for distributions)
 - Metric names follow `sipi_` prefix convention with `_total` suffix for counters

@@ -725,7 +725,7 @@ Memory leaks and undefined behavior are not a separate pyramid layer but a **bui
 |---|---|---|---|
 | Smoke latency | Assert response time < threshold in e2e tests | Rust `Instant::now()` | PR CI |
 | Load baseline | Throughput against realistic workload | `wrk` / `k6` | **Future** — staging environment, not CI |
-| Component benchmarks | Micro-benchmarks for parsers, decode | `criterion` (Rust, future) | Post-migration |
+| Component microbenchmarks | Parse / decode / process / encode tiers, before/after comparisons for hot-path PRs | Google Benchmark (`just bench`) | **Done** — local dev loop, never a CI gate; see [Benchmarking](benchmarking.md) |
 
 **Smoke latency thresholds (proposed):**
 
@@ -910,5 +910,9 @@ fn my_flaky_test() {
 ## Future Additions
 
 - **Doc tests:** Once sipi has Rust library code (post-migration), `///` example doc tests become valuable
-- **`criterion` benchmarks:** Fine-grained micro-benchmarks for parsers, image decode, ICC conversion — after Rust migration
 - **`sipi_request_duration_seconds`:** Prometheus histogram for production latency monitoring
+
+(Component microbenchmarks — formerly listed here as a post-Rust-migration
+`criterion` aspiration — exist today as the C++ Google Benchmark suite; see
+[Benchmarking](benchmarking.md). If/when the codec migrates to Rust, the
+discipline carries over to `criterion` unchanged.)
