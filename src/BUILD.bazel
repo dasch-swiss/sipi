@@ -400,6 +400,47 @@ cc_binary(
     ],
 )
 
+# Decode tier — SipiImage::read() across the @sipi_bench_fixtures input-
+# format matrix (full-resolution tile + thumbnail access shapes, incl. the
+# plain-JPEG / flat-TIFF slow baselines). Fixture paths resolve via
+# SIPI_BENCH_FIXTURES_DIR, which `just bench` exports from the binary's
+# runfiles tree — external-repo files are invisible to the workspace-
+# relative resolution //test:test_paths provides, so the env var (not
+# test_paths) is the seam here.
+cc_binary(
+    name = "decode_benchmark",
+    srcs = ["formats/decode_benchmark.cpp"],
+    data = ["@sipi_bench_fixtures//:images"],
+    tags = ["manual"],
+    testonly = True,
+    deps = [
+        ":sipi_lib",
+        "@google_benchmark//:benchmark_main",
+    ],
+)
+
+# Encode tier — SipiImage::write() across the four formats SIPI emits
+# (jpg/png/tif/j2k) from the decoded fixture master. SOURCE_DATE_EPOCH pins
+# the wall-clock-stamped ICC creation date in emitted headers (ADR-0002);
+# the `env` applies under `bazel run`, and `just bench` exports the same
+# variables (plus TEST_TMPDIR for the output files) when exec'ing directly.
+cc_binary(
+    name = "encode_benchmark",
+    srcs = ["formats/encode_benchmark.cpp"],
+    data = ["@sipi_bench_fixtures//:images"],
+    env = {
+        "SIPI_WORKSPACE_ROOT": ".",
+        "SOURCE_DATE_EPOCH": "946684800",
+    },
+    tags = ["manual"],
+    testonly = True,
+    deps = [
+        ":sipi_lib",
+        "//test:test_paths",
+        "@google_benchmark//:benchmark_main",
+    ],
+)
+
 # ── //src/cli:sipi ─────────────────────────────────────────────────────────
 # The sipi cc_binary lives at `//src/cli:sipi`; see `src/cli/BUILD.bazel`.
 
