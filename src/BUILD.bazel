@@ -375,6 +375,31 @@ cc_binary(
     ],
 )
 
+# Process tier — the image-processing operators between decode and encode
+# (scale/rotate/crop/to8bps/convertToIcc/removeChannel). Uses existing small
+# repo fixtures via the `//test/_test_data:images` filegroup — not blocked on
+# the benchmark fixture archive. The `env` applies under `bazel run`; `just
+# bench` exports the same variables when exec'ing the binary directly
+# (SOURCE_DATE_EPOCH pins the wall-clock-stamped ICC creation date on the
+# convertToIcc path per ADR-0002; SIPI_WORKSPACE_ROOT resolves fixtures via
+# //test:test_paths).
+cc_binary(
+    name = "process_benchmark",
+    srcs = ["process_benchmark.cpp"],
+    data = ["//test/_test_data:images"],
+    env = {
+        "SIPI_WORKSPACE_ROOT": ".",
+        "SOURCE_DATE_EPOCH": "946684800",
+    },
+    tags = ["manual"],
+    testonly = True,
+    deps = [
+        ":sipi_lib",
+        "//test:test_paths",
+        "@google_benchmark//:benchmark_main",
+    ],
+)
+
 # ── //src/cli:sipi ─────────────────────────────────────────────────────────
 # The sipi cc_binary lives at `//src/cli:sipi`; see `src/cli/BUILD.bazel`.
 
