@@ -8,18 +8,6 @@ consumes `~/.netrc`, which `gh` does not populate; preserving the
 `gh auth token` flow avoids out-of-band `~/.netrc` plumbing.
 """
 
-# `ctx.extract` infers the archive type from the file extension, so the
-# downloaded asset must keep a suffix from this list (which mirrors what
-# `ctx.extract` supports for our use).
-_ARCHIVE_SUFFIXES = [".tar.zst", ".tzst", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar.bz2", ".zip", ".tar"]
-
-def _archive_suffix(asset):
-    for suffix in _ARCHIVE_SUFFIXES:
-        if asset.endswith(suffix):
-            return suffix
-    fail("gh_release_archive: unsupported archive suffix on asset '%s' (expected one of %s)" %
-         (asset, ", ".join(_ARCHIVE_SUFFIXES)))
-
 def _gh_release_archive_impl(ctx):
     gh = ctx.which("gh")
     if not gh:
@@ -42,8 +30,10 @@ def _gh_release_archive_impl(ctx):
             )
         token = result.stdout.strip()
 
-    suffix = _archive_suffix(ctx.attr.asset)
-    raw_archive = "asset.raw" + suffix
+    # Download under the asset's own filename — `ctx.extract` infers the
+    # archive type from the extension, and the asset name never collides
+    # with the extracted content (`strip_prefix` differs in both callers).
+    raw_archive = ctx.attr.asset
     download_result = ctx.execute(
         [
             gh,
@@ -84,6 +74,10 @@ def _gh_release_archive_impl(ctx):
         fail("gh_release_archive: sha256 mismatch for asset '%s': expected %s, got %s" %
              (ctx.attr.asset, ctx.attr.sha256, got_sha256))
     ctx.extract(raw_archive, stripPrefix = ctx.attr.strip_prefix)
+
+    # The verified blob is not needed after extraction — deleting it halves
+    # the repository directory's footprint (the fixture archive is ~321 MB).
+    ctx.delete(raw_archive)
 
     # Bazel's `ctx.patch` requires hunks to match line numbers exactly — it
     # does not implement GNU patch's fuzz tolerance. The Kakadu Linux Makefile
