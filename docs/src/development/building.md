@@ -3,7 +3,7 @@
 SIPI's build system is **Bazel** (orchestrating every C/C++ target,
 the OCI Docker image, and the Rust e2e + smoke tests). Nix's role
 is reduced to **provisioning a dev shell** with bazelisk + the host
-tools `rules_foreign_cc` and the `kakadu_archive` repository_rule
+tools `rules_foreign_cc` and the `gh_release_archive` repository_rule
 need on PATH.
 
 All build commands are wrapped by recipes in the root `justfile`.
@@ -36,7 +36,7 @@ SIPI uses [Kakadu](http://kakadusoftware.com/), a proprietary JPEG
 release asset on the private
 [`dasch-swiss/dsp-ci-assets`](https://github.com/dasch-swiss/dsp-ci-assets)
 repo and is fetched at build time by a custom Bazel
-`kakadu_archive` repository_rule (`bazel/kakadu.bzl`) that shells out
+`gh_release_archive` repository_rule (`bazel/gh_release.bzl`) that shells out
 to `gh release download`.
 
 ```bash

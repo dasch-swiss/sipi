@@ -82,7 +82,7 @@ jobs:
           file test/_test_data/unit/HasCommentBlock.JPG 2>/dev/null || echo "HasCommentBlock.JPG not found"
       - uses: DeterminateSystems/determinate-nix-action@v3
         with:
-          # The `kakadu_archive` repository_rule reads GH_TOKEN from the
+          # The `gh_release_archive` repository_rule reads GH_TOKEN from the
           # environment via `gh release download`; configurable-impure-env
           # keeps Nix's daemon from sanitising it out of `nix develop`.
           extra-conf: |
@@ -152,7 +152,7 @@ jobs:
       # linux-amd64).
       #
       # `nix develop --command` activates the dev shell so `gh`
-      # (kakadu_archive repository_rule) + foreign_cc host tools
+      # (gh_release_archive repository_rule) + foreign_cc host tools
       # (cmake, perl, pkg-config, autoconf, automake, libtoolize) are
       # on PATH. The `if [ -n "$BAZEL_CACHE_PASSWORD" ]` block builds
       # the `--remote_cache` + `--experimental_remote_downloader` +
