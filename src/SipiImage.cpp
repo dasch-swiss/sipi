@@ -403,7 +403,11 @@ void SipiImage::getDim(size_t &width, size_t &height) const
 
 void SipiImage::write(const std::string &ftype, const std::string &filepath, const SipiCompressionParams *params)
 {
-  io[ftype]->write(this, filepath, params);
+  // .at(): an unknown ftype must throw, not operator[]-insert a null
+  // handler and segfault on the virtual call. Callers pass validated
+  // format strings; the historical write() docstring advertised "j2k"
+  // (the map key is "jpx"), which is exactly how this fired.
+  io.at(ftype)->write(this, filepath, params);
 }
 
 //============================================================================

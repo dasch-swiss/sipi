@@ -449,9 +449,12 @@ public:
    * - to the websocket, if the filepath is the string "HTTP" (given the webserver is activated)
    *
    * \param[in] ftype The file format that should be used to write the file. Supported are
+   * the keys of the static SipiIO handler map (SipiImage.cpp):
    * - "tif" for TIFF files
-   * - "j2k" for JPEG2000 files
+   * - "jpx" for JPEG2000 files
    * - "png" for PNG files
+   * - "jpg" for JPEG files
+   * Any other value throws std::out_of_range.
    * \param[in] filepath String containing the path/filename
    */
   void write(const std::string &ftype, const std::string &filepath, const SipiCompressionParams *params = nullptr);
