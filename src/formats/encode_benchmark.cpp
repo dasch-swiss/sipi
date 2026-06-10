@@ -45,7 +45,7 @@ std::string fixture(const std::string &name)
     std::fprintf(stderr, "SIPI_BENCH_FIXTURES_DIR not set — run via `just bench encode`\n");
     std::exit(1);
   }
-  return std::string{dir} + "/big_building/" + name;
+  return std::string{ dir } + "/big_building/" + name;
 }
 
 // 7216×5412 RGB 8bps, decoded once.
