@@ -14,9 +14,10 @@ Rust e2e + smoke test binaries.
 A few concepts that make the rest of this page click:
 
 **MODULE.bazel** is the project's manifest. It declares the Bazel
-modules sipi depends on (`rules_foreign_cc`, `rules_oci`,
-`toolchains_llvm`, `rules_rust`, …) and pins every third-party C/C++
-source archive via `http_archive`. Version bumps live here.
+modules sipi depends on (`rules_foreign_cc`, `rules_oci`, the BCR
+`llvm` (hermetic-llvm) module, `rules_rust`, …) and pins every
+third-party C/C++ source archive via `http_archive`. Version bumps
+live here.
 
 **BUILD.bazel** files describe the *target graph*. Each first-party
 package — `//src`, `//shttps`, `//test/unit/<mod>`, `//ext/<lib>`,
@@ -24,11 +25,17 @@ package — `//src`, `//shttps`, `//test/unit/<mod>`, `//ext/<lib>`,
 BUILD.bazel that declares its `cc_library`/`cc_binary`/`cc_test`/
 `oci_image`/`rust_test` targets and visibility rules.
 
-**Hermetic toolchain.** `toolchains_llvm` registers a pinned LLVM 19
-toolchain that every cc action runs under. The host compiler version
-is irrelevant — `bazel build //src/cli:sipi` produces the same binary on
-macOS, linux-x86_64, and linux-aarch64 (modulo platform-specific
-codegen).
+**Hermetic toolchain.** The BCR `llvm` (hermetic-llvm) module, pinned
+at 0.8.8, registers a single constraint-based LLVM 22.1.7 toolchain
+that every cc action runs under — it serves all platforms, including
+the `//tools/fuzz:*` fuzz platforms. libc++ is the default stdlib.
+The bundle ships per-target glibc (~2.28) + libc++ + compiler-rt on
+Linux (no external Chromium debian sysroots) and fetches the macOS
+SDK hermetically from Apple's CDN (no host Xcode CLT). The host
+compiler version is irrelevant — `bazel build //src/cli:sipi` produces
+the same binary on macOS, linux-x86_64, and linux-aarch64 (modulo
+platform-specific codegen). See
+[ADR-0014](../../adr/0014-toolchain-provider-swap.md).
 
 **Stamping.** `tools/workspace_status.sh` reads `version.txt` and
 emits `STABLE_*` keys (`STABLE_SIPI_VERSION`, `STABLE_GIT_COMMIT`,
@@ -105,7 +112,7 @@ Defined in `.bazelrc`. Each flag composes with `bazel build` /
 | `-c dbg` | `-O0 -g`. Full debug symbols; what `bazel-build-sanitized` consumes. |
 | `--config=asan` | AddressSanitizer + DWARF inline; consults `.lsan_suppressions.txt` at e2e time. |
 | `--config=ubsan` | UndefinedBehaviorSanitizer. Composes with `--config=asan`. |
-| `--config=fuzz` | Selects the libstdc++ LLVM toolchain for libFuzzer ABI parity (linux-x86_64) or the default libc++ toolchain (darwin-aarch64). |
+| `--config=fuzz` | libFuzzer harness on the single hermetic-llvm toolchain (libc++) via the `//tools/fuzz:<host>_fuzz` platform. |
 
 ## Querying the build graph
 
@@ -189,4 +196,5 @@ For Linux-target builds from a macOS host, see
 - [Bazelmod (`MODULE.bazel`)](https://bazel.build/external/module)
 - [`rules_foreign_cc`](https://github.com/bazel-contrib/rules_foreign_cc)
 - [`rules_oci`](https://github.com/bazel-contrib/rules_oci)
-- [`toolchains_llvm`](https://github.com/bazel-contrib/toolchains_llvm)
+- [hermetic-llvm (`llvm` BCR module)](https://github.com/hermeticbuild/hermetic-llvm)
+- [ADR-0014: toolchain provider swap](../../adr/0014-toolchain-provider-swap.md)

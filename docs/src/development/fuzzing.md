@@ -19,9 +19,8 @@ fuzz/
 
 The Bazel build also wires:
 
-- `tools/fuzz/BUILD.bazel` — `constraint_setting`/`constraint_value` plus the `linux_x86_64_fuzz` platform that `--config=fuzz` targets.
-- `MODULE.bazel` — registers a second `llvm_toolchain_fuzz` (libstdc++) sharing `@llvm_toolchain_llvm` via `llvm.toolchain_root` and gated by `extra_target_compatible_with = ["//tools/fuzz:fuzz_enabled"]`.
-- `.bazelrc` `build:fuzz` — pins `--platforms=//tools/fuzz:linux_x86_64_fuzz`, injects `-fsanitize=fuzzer-no-link` + `-fsanitize-coverage=trace-cmp` + ASan, and adds `-fsanitize=fuzzer` at link.
+- `tools/fuzz/BUILD.bazel` — `constraint_setting`/`constraint_value` plus the `linux_x86_64_fuzz` and `darwin_aarch64_fuzz` platforms that `--config=fuzz` targets.
+- `.bazelrc` `build:fuzz` — pins `--platforms=//tools/fuzz:<host>_fuzz`, injects `-fsanitize=fuzzer-no-link` + `-fsanitize-coverage=trace-cmp` + ASan, and adds `-fsanitize=fuzzer` at link.
 
 The fuzz harness is minimal — it converts the fuzzer's byte input to a `std::string` and calls `parse_iiif_uri()`:
 
@@ -39,17 +38,15 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
 
 ## Requirements
 
-libFuzzer ships in Clang's compiler-rt. The build uses two registered
-LLVM toolchains, both sharing the same LLVM 19.1.7 download:
-
-* On linux-x86_64, `@llvm_toolchain_fuzz` wins (libstdc++, mirroring
-  today's `pkgs.llvmPackages_19.stdenv` override). The platform
-  `//tools/fuzz:linux_x86_64_fuzz` carries the `fuzz_enabled` constraint
-  the toolchain is gated on.
-* On darwin-aarch64, the default `@llvm_toolchain` wins (Apple SDK +
-  libc++, which is libFuzzer's ABI on darwin anyway). The platform
-  `//tools/fuzz:darwin_aarch64_fuzz` activates the harness's
-  `target_compatible_with = ["//tools/fuzz:fuzz_enabled"]` gate.
+libFuzzer ships in Clang's compiler-rt. A single hermetic-llvm
+toolchain (LLVM 22.1.7, libc++ on every platform) serves the
+`//tools/fuzz:<host>_fuzz` platforms — the separate libstdc++ fuzz
+toolchain that previously won on linux-x86_64 was folded away in the
+toolchain-provider swap (see
+[ADR-0014](../../adr/0014-toolchain-provider-swap.md)). Both fuzz
+platforms carry the `fuzz_enabled` constraint that the harness gates on
+via `target_compatible_with = ["//tools/fuzz:fuzz_enabled"]`. On
+darwin-aarch64, libc++ is libFuzzer's ABI anyway.
 
 The `bazel-build-fuzz` and `bazel-run-fuzz` justfile recipes detect the
 host via `uname` and select the matching platform automatically. linux-
@@ -122,9 +119,15 @@ For anything beyond duration + seed corpus, invoke the fuzzer binary directly (t
 
 ## CI Integration
 
+> **Auto-trigger currently disabled.** Under hermetic-llvm 0.8.8 the
+> minimal prebuilt ships no libFuzzer runtime, so the fuzz workflow's
+> nightly auto-trigger is carved out; only `workflow_dispatch` is kept.
+> Re-arm condition and rationale are tracked in
+> [ADR-0014](../../adr/0014-toolchain-provider-swap.md).
+
 The fuzz workflow (`.github/workflows/fuzz.yml`) runs:
 
-- **Nightly** at 02:00 UTC
+- **Nightly** at 02:00 UTC *(auto-trigger disabled — see note above)*
 - **On demand** via the Actions tab → "fuzz" → "Run workflow" (with configurable duration)
 
 ### What it does
