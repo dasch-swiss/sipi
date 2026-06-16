@@ -9,10 +9,12 @@
 # Bazel's cache keys across CI runs.
 build --incompatible_strict_action_env
 
-# Force the resolved toolchain (toolchains_llvm in MODULE.bazel) instead of
-# Bazel's autodetected host C++ toolchain. Without this, Bazel can fall back
-# to the host clang/gcc when toolchain resolution misfires, which silently
-# breaks hermeticity.
+# Force the resolved toolchain (the hermetic `llvm` toolchain in MODULE.bazel)
+# instead of Bazel's autodetected host C++ toolchain. Without this, Bazel can
+# fall back to the host clang/gcc when toolchain resolution misfires, which
+# silently breaks hermeticity. (Candidate for removal under the hermetic
+# toolchain — a properly registered toolchain shouldn't fall back; left in
+# place until the swap is proven green on all platforms, then test-removed.)
 build --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
 
 # Inherit PATH from the invocation environment. `--incompatible_strict_action_env`
@@ -133,71 +135,27 @@ build:linux --copt=-fstack-clash-protection
 build:linux --linkopt=-Wl,-z,now
 
 # ── macOS ──────────────────────────────────────────────────────────────────
-# Pin the deployment target so Bazel-built binaries are portable across
-# macOS releases. Required because toolchains_llvm does not bundle a macOS
-# sysroot — the Xcode CLT SDK is consulted at build time and its default
-# version is whatever shipped with the host OS.
-#
-# 13.3 is the floor: Apple's libc++ marks `std::bad_expected_access`
-# (and the rest of the C++23 `<expected>` machinery's vtables/typeinfo)
-# as available from macOS 13.3 onwards. With the previous 12.0 pin,
-# linking sipi failed with `ld64.lld: error: undefined symbol: vtable
-# for std::__1::bad_expected_access<void>` because SipiHttpServer.cpp
-# uses `std::expected` per the C++23 style guide. The CMake build path
-# escapes this because it inherits the SDK default (whatever shipped
-# with the host's Xcode CLT) instead of explicitly pinning low.
+# Pin the deployment target so Bazel-built binaries are portable across macOS
+# releases. The hermetic `llvm` toolchain fetches the MacOSX26.4 SDK from
+# Apple's CDN; a recent SDK otherwise defaults the deployment target high, so
+# pin the floor explicitly. 13.3 is retained from the toolchains_llvm era (the
+# floor at which Apple's libc++ marked the C++23 `<expected>` machinery
+# available) and remains a safe minimum under hermetic-llvm's own libc++.
 build:macos --copt=-mmacosx-version-min=13.3
 build:macos --linkopt=-mmacosx-version-min=13.3
 build:macos --host_copt=-mmacosx-version-min=13.3
 build:macos --host_linkopt=-mmacosx-version-min=13.3
 build:macos --action_env=MACOSX_DEPLOYMENT_TARGET=13.3
 
-# Use Apple SDK's libc++ for compile AND link, instead of LLVM 19.1.7's
-# bundled libc++ headers + Apple SDK libc++.dylib. Without this, clang
-# emits ABI-tagged symbols against its bundled headers (e.g.
-# `std::__1::bad_expected_access<void>::bad_expected_access[abi:ne190107]`)
-# but ld64.lld links against `/usr/lib/libc++.dylib` which has Apple's
-# different ABI tags — final sipi link fails with `undefined symbol:
-# vtable for std::__1::bad_expected_access<void>`.
-#
-# `-nostdinc++` strips clang's bundled C++ stdlib include path; the
-# explicit `-isystem` pointing at the Xcode CLT SDK's `c++/v1` directory
-# adds Apple's libc++ headers back. The link automatically picks Apple's
-# libc++.dylib via `-isysroot` (which toolchains_llvm sets from
-# DEVELOPER_DIR/SDKROOT), so compile + link agree on ABI.
-#
-# Mirrors the existing CMake build's behavior — Apple's clang from
-# `/Library/Developer/CommandLineTools` uses Apple's libc++ throughout,
-# so the macOS dev path is consistent across both toolchains.
-build:macos --copt=-nostdinc++
-build:macos --copt=-isystem/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1
-build:macos --host_copt=-nostdinc++
-build:macos --host_copt=-isystem/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1
-
-# Force toolchains_llvm to resolve the macOS SDK against the system Xcode
-# Command Line Tools rather than nixpkgs' stripped-down `apple-sdk-14.4`
-# (`/nix/store/…-apple-sdk-14.4`), which only ships private Apple framework
-# stubs — no `libc++.tbd`/`libc++abi.tbd` under `usr/lib/`. nix-develop
-# inherits `SDKROOT`/`DEVELOPER_DIR` from the host env and prepends
-# `xcbuild`'s reimplemented `xcrun` (always pinned to the Nix SDK) to PATH;
-# `toolchains_llvm`'s repository rule shells out to `xcrun --show-sdk-path`
-# at module-evaluation time and bakes whatever it gets into `cc_wrapper.sh`,
-# producing link errors like `ld64.lld: error: library not found for -lc++`.
-#
-# Overriding via `--repo_env` confines the change to repo rule evaluation —
-# build actions still see the user's full env (cmake's nix-wrapped clang
-# hardcodes `--sysroot` and ignores SDKROOT, so the inner-loop CMake build
-# is unaffected).
-#
-# `--repo_env=PATH` (no value) inherits PATH from the invocation env. The
-# `clang` dev shell in flake.nix prepends `/usr/bin:/bin:/usr/local/bin`
-# to PATH on darwin, so toolchains_llvm's `xcrun` probe still finds
-# Apple's `/usr/bin/xcrun` first while Nix-only tools (`gh` for
-# `kakadu_archive`, `perl`/`autoconf`/`automake`/`libtoolize` for the
-# autotools libs) remain reachable for repo-rule script execution.
+# Inherit PATH during repo-rule evaluation on macOS so the Kakadu
+# `gh_release_archive` fetch (needs `gh`) and the foreign_cc autotools libs
+# (`perl`/`autoconf`/`automake`/`libtoolize` from the Nix dev shell) stay
+# reachable. The toolchains_llvm-era macOS SDK hacks are gone: hermetic-llvm
+# manages its own libc++ and fetches the SDK from Apple's CDN, so the
+# `-nostdinc++`/`-isystem .../MacOSX.sdk/c++/v1` libc++-ABI workaround and the
+# DEVELOPER_DIR/SDKROOT xcrun overrides (which steered toolchains_llvm's SDK
+# probe at the host Xcode CLT) are no longer needed.
 build:macos --repo_env=PATH
-build:macos --repo_env=DEVELOPER_DIR=/Library/Developer/CommandLineTools
-build:macos --repo_env=SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
 
 # Force `rules_android`'s `android_sdk_repository_extension` to take the
 # empty-SDK branch instead of validating an actual Android SDK install.
@@ -353,18 +311,14 @@ build:ubsan --linkopt=-fno-sanitize=vptr
 # `darwin_aarch64_fuzz`) — both platforms carry the
 # `//tools/fuzz:fuzz_enabled` constraint, which:
 #
-#   1. Routes toolchain resolution. On linux-x86_64, `@llvm_toolchain_fuzz`
-#      wins (libstdc++ for libFuzzer ABI; mirrors today's
-#      `pkgs.llvmPackages_19.stdenv` override in `flake.nix:325-329`). On
-#      darwin-aarch64, the default `@llvm_toolchain` wins (Apple SDK +
-#      libc++, which is libFuzzer's ABI on darwin). See MODULE.bazel for
-#      the registration-order rationale that makes this work.
+#   1. Does not select a toolchain. One hermetic LLVM toolchain (libc++ on
+#      every platform) serves both the normal and the fuzz build, and
+#      libc++ is libFuzzer's ABI on linux-x86_64 and darwin-aarch64 alike.
 #
 #   2. Activates the `target_compatible_with = ["//tools/fuzz:fuzz_enabled"]`
 #      gate on `//fuzz/handlers:iiif_handler_uri_parser_fuzz`, so it
 #      builds under `--config=fuzz` and skips analysis otherwise —
-#      equivalent to today's `if (CMAKE_CXX_COMPILER_ID MATCHES Clang)`
-#      gate in `fuzz/handlers/CMakeLists.txt`.
+#      equivalent to a `if (CMAKE_CXX_COMPILER_ID MATCHES Clang)` source gate.
 #
 # Sanitizer flags mirror today's CMake build:
 #   * `-fsanitize=fuzzer-no-link` (compile) + `-fsanitize=fuzzer` (link) —

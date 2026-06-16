@@ -1,59 +1,51 @@
 #!/bin/bash
 #
-# Filters Apple-libtool flags out of `ar` invocations and forwards to
-# `/usr/bin/ar`. Used as the `AR` env override for autotools/foreign_cc
-# rules on darwin.
+# `AR` shim for autotools/foreign_cc rules on darwin. Strips the Apple-libtool
+# flags that rules_foreign_cc prepends from the hermetic-llvm toolchain's macOS
+# archiver and forwards a clean GNU-`ar` invocation to the hermetic `llvm-ar`
+# (its path comes in via $SIPI_AR, set by `darwin_autotools_env()`).
 #
-# Why this exists: toolchains_llvm 1.7.0 hard-codes `archiver_flags=["-static"]`
-# in its darwin cc_toolchain_config, because the toolchain's own archiver is
-# Apple `libtool` (`libtool -static -o foo.a *.o`). rules_foreign_cc reads
-# the toolchain's archiver_flags and **prepends** them to whatever the user
-# passes via `env = {"ARFLAGS": ...}`, so an override of `ARFLAGS=cr`
-# becomes `ARFLAGS="-static cr"` at the configure command line. autotools'
-# generated `libtool` script then bakes that string into its archive_cmds
-# template, and at link time runs `$AR -static cr <lib>.a <objs>` against
-# `/usr/bin/ar` (BSD ar in macOS clean-env, or LLVM-ar in BSD-compat when
-# invoked as `ar`) — both of which reject `-static` outright.
-#
-# Pointing `AR` at this wrapper short-circuits the flag-mismatch by
-# stripping `-static` before delegating to `/usr/bin/ar`. The remaining
-# `cr <lib>.a <objs>` is the standard ar-create syntax, accepted by every
-# ar implementation we ship against.
+# Why this exists: the hermetic `llvm` toolchain's default macOS archiver is
+# `llvm-libtool-darwin` (Apple-style — `libtool -static -o foo.a *.o`, with
+# `archiver_flags = ["-D", "-no_warning_for_no_symbols", "-static"]`).
+# rules_foreign_cc reads the toolchain's archiver_flags and **prepends** them to
+# whatever autotools passes via `$AR_FLAGS`, so autotools' generated `libtool`
+# archive template runs `$AR -D -no_warning_for_no_symbols -static <lib>.a
+# <objs>`. `llvm-ar` (GNU interface) rejects the libtool-only flags. Stripping
+# them and forwarding `llvm-ar cr <lib>.a <objs>` restores standard ar-create
+# syntax. Forwarding to the bundle's GNU `llvm-ar` (not the host `/usr/bin/ar`)
+# keeps the archive step hermetic — the point of the toolchains_llvm → llvm
+# swap. On Linux the toolchain's default archiver is already `llvm-ar`, so this
+# wrapper is darwin-only (see `darwin_autotools_env()`).
 
 set -euo pipefail
 
-# Pass-through query/help flags untouched — autotools/automake probes the
-# archiver with `$AR --version` (and similar) at configure time to decide
-# which ar interface to use. Mangling these would yield "unknown" and break
-# the configure step.
+AR="${SIPI_AR:?ar_wrapper.sh: SIPI_AR (hermetic llvm-ar path) is not set}"
+
+# Pass query/help probes straight through — autotools/automake runs
+# `$AR --version` (and similar) at configure time to decide which ar
+# interface to use. Mangling these would break the configure step.
 case "${1:-}" in
     --version|--help|-V|-h|"")
-        exec /usr/bin/ar "$@"
+        exec "$AR" "$@"
         ;;
 esac
 
-# autotools libtool's static-link template is:
-#     $AR $AR_FLAGS $oldlib $oldobjs
-# With foreign_cc + toolchains_llvm 1.7.0 on darwin, $AR_FLAGS resolves to
-# "-static" (Apple-libtool flavour). After stripping `-static` the remaining
-# args are `<archive>.a <obj>.o…`, but BSD ar (`/usr/bin/ar`) requires an
-# explicit operation letter as the first argument and rejects bare paths
-# with `illegal option -- .` (it parses the leading char of `.libs/foo.a`
-# as a flag). For real archive operations, prepend the standard `cr`
-# (create + replace) so the forwarded invocation is `ar cr <archive> <objs>`.
-
+# Drop the Apple-libtool-only flags that `llvm-ar` does not understand.
 filtered=()
 for arg in "$@"; do
     case "$arg" in
-        -static) ;;            # Apple-libtool flavour, ignore.
+        -static|-D|-no_warning_for_no_symbols) ;;  # libtool-only, ignore.
         *) filtered+=("$arg") ;;
     esac
 done
 
-# If the first remaining arg already looks like an ar operation (single
-# alpha-only string), forward as-is — otherwise prepend `cr`.
+# `llvm-ar` GNU syntax is `ar <operation> <archive> <objs…>`. If the first
+# surviving arg is already an ar operation string, forward as-is; otherwise
+# the libtool template left only `<archive> <objs>`, so prepend `cr`
+# (create + replace) to make a valid create invocation.
 if [[ ${#filtered[@]} -gt 0 && "${filtered[0]}" =~ ^[crqsdmptux]+$ ]]; then
-    exec /usr/bin/ar "${filtered[@]}"
+    exec "$AR" "${filtered[@]}"
 else
-    exec /usr/bin/ar cr "${filtered[@]}"
+    exec "$AR" cr "${filtered[@]}"
 fi

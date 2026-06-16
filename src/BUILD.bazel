@@ -597,8 +597,8 @@ genrule(
     ],
     cmd = """
 set -euo pipefail
-OBJCOPY=$(execpath @llvm_toolchain_llvm//:objcopy)
-READELF=$(execpath @llvm_toolchain_llvm//:readelf)
+OBJCOPY=$(execpath //bazel:llvm-objcopy)
+READELF=$(execpath //bazel:llvm-readelf)
 BIN=$(execpath //src/cli:sipi)
 
 # Build-id is encoded in `.note.gnu.build-id`; llvm-readelf -n prints
@@ -627,8 +627,8 @@ cp "$$BIN" $(execpath _dbg/sipi.stripped)
 """,
     target_compatible_with = ["@platforms//os:linux"],
     tools = [
-        "@llvm_toolchain_llvm//:objcopy",
-        "@llvm_toolchain_llvm//:readelf",
+        "//bazel:llvm-objcopy",
+        "//bazel:llvm-readelf",
     ],
 )
 

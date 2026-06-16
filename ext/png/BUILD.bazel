@@ -8,13 +8,14 @@ foreign_cc uses for its own configure_make/cmake outputs.
 """
 
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+load("//bazel:foreign_cc_helpers.bzl", "darwin_cmake_build_data", "darwin_cmake_cache_entries")
 
 package(default_visibility = ["//visibility:public"])
 
 cmake(
     name = "png",
     lib_source = "@png//:all_srcs",
-    cache_entries = {
+    cache_entries = darwin_cmake_cache_entries({
         "CMAKE_INSTALL_LIBDIR": "lib",
         # Override Bazel's auto-injected `CMAKE_BUILD_TYPE=Debug` (which
         # foreign_cc sets from `--compilation_mode=dbg` under
@@ -66,7 +67,7 @@ cmake(
         "ZLIB_ROOT": "$$EXT_BUILD_DEPS",
         "ZLIB_INCLUDE_DIR": "$$EXT_BUILD_DEPS/include",
         "ZLIB_LIBRARY": "$$EXT_BUILD_DEPS/lib/libz.a",
-    },
+    }),
     # `cache_entries[CMAKE_BUILD_TYPE]` only affects the cmake CONFIGURE
     # step. The subsequent `cmake --build … --config <X>` and
     # `cmake --install … --config <X>` commands read the `configuration`
@@ -79,5 +80,6 @@ cmake(
     configuration = "RelWithDebInfo",
     out_static_libs = ["libpng16.a"],
     set_file_prefix_map = True,
+    build_data = darwin_cmake_build_data(),
     deps = ["@zlib"],
 )

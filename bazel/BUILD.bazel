@@ -6,14 +6,97 @@ exports_files([
     "all_content.BUILD.bazel",
 ])
 
-# `ar` wrapper that strips Apple-libtool's `-static` flag before delegating
-# to `/usr/bin/ar`. Consumed via `darwin_autotools_env()` (see
-# `foreign_cc_helpers.bzl`) by every autotools `ext/<lib>/BUILD.bazel` on
-# darwin. Exposed as a shipped script (rather than a `sh_binary`) so the
-# `env = {"AR": ...}` reference in foreign_cc rules resolves to a
-# concrete path inside the sandbox.
+# `ar` wrapper that strips Apple-libtool flags (`-static`, `-D`,
+# `-no_warning_for_no_symbols`) that foreign_cc prepends from the hermetic
+# toolchain's macOS archiver (`llvm-libtool-darwin`), then delegates to the
+# GNU-style hermetic `llvm-ar` (via `$SIPI_AR`). Consumed via
+# `darwin_autotools_env()` (see `foreign_cc_helpers.bzl`) by every autotools
+# `ext/<lib>/BUILD.bazel` on darwin. Exposed as a shipped script (rather than
+# a `sh_binary`) so the `env = {"AR": ...}` reference in foreign_cc rules
+# resolves to a concrete path inside the sandbox.
 exports_files(
     ["ar_wrapper.sh"],
+    visibility = ["//visibility:public"],
+)
+
+# Hermetic GNU-style archiver + ranlib from the prebuilt LLVM bundle, used to
+# archive foreign_cc deps on darwin (the toolchain's default macOS archiver,
+# `llvm-libtool-darwin`, rejects the GNU-`ar` conventions cmake/autotools use).
+# Referenced only in darwin-gated foreign_cc contexts (CMAKE_AR/CMAKE_RANLIB
+# for cmake() deps, $SIPI_AR for the autotools ar_wrapper), so a plain alias to
+# the darwin bundle suffices — these are never evaluated under a Linux config,
+# where the toolchain already archives with GNU `llvm-ar`. Bumping LLVM_VERSION
+# means updating the bundle name here and in MODULE.bazel (ADR-0014 policy).
+alias(
+    name = "llvm-ar",
+    actual = "@llvm-toolchain-minimal-22.1.7-darwin-arm64//:bin/llvm-ar",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "llvm-ranlib",
+    actual = "@llvm-toolchain-minimal-22.1.7-darwin-arm64//:bin/llvm-ranlib",
+    visibility = ["//visibility:public"],
+)
+
+# Hermetic clang++ from the prebuilt LLVM bundle. Referenced — absolutized via
+# `$EXT_BUILD_ROOT` — as the `LLVM_CLANGXX` the macOS link-wrapper execs, so
+# C++ foreign_cc deps link their CMake compiler-detection test from the
+# relocated build dir. See `foreign_cc_helpers.bzl` `darwin_link_wrapper_env`
+# for the full write-up. Same version-fragility note as `llvm-ar` above.
+alias(
+    name = "clang++",
+    actual = "@llvm-toolchain-minimal-22.1.7-darwin-arm64//:bin/clang++",
+    visibility = ["//visibility:public"],
+)
+
+# Per-tool binutils from the prebuilt LLVM bundle, version-matched to the
+# toolchain (LLVM 22). Unlike the darwin-only archiver aliases above, these are
+# selected by the *exec* platform: the debug-split genrule (`//src:sipi_debug_
+# split`, Linux-only) needs llvm-objcopy/llvm-readelf, and `just bazel-coverage`
+# needs llvm-cov/llvm-profdata version-matched to the instrumented `.profraw`
+# (a host LLVM 19 profdata cannot read an LLVM 22 profile). The Linux branches
+# cover CI's two arches; the darwin default keeps `bazel build //...` resolving
+# on macOS (where the genrule is incompatible-skipped and coverage uses the
+# darwin bundle). Bumping LLVM_VERSION means updating the bundle names here and
+# in MODULE.bazel (ADR-0014 policy).
+alias(
+    name = "llvm-objcopy",
+    actual = select({
+        "//platforms:is_linux_x86_64": "@llvm-toolchain-minimal-22.1.7-linux-amd64//:bin/llvm-objcopy",
+        "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-22.1.7-linux-arm64//:bin/llvm-objcopy",
+        "//conditions:default": "@llvm-toolchain-minimal-22.1.7-darwin-arm64//:bin/llvm-objcopy",
+    }),
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "llvm-readelf",
+    actual = select({
+        "//platforms:is_linux_x86_64": "@llvm-toolchain-minimal-22.1.7-linux-amd64//:bin/llvm-readelf",
+        "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-22.1.7-linux-arm64//:bin/llvm-readelf",
+        "//conditions:default": "@llvm-toolchain-minimal-22.1.7-darwin-arm64//:bin/llvm-readelf",
+    }),
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "llvm-cov",
+    actual = select({
+        "//platforms:is_linux_x86_64": "@llvm-toolchain-minimal-22.1.7-linux-amd64//:bin/llvm-cov",
+        "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-22.1.7-linux-arm64//:bin/llvm-cov",
+        "//conditions:default": "@llvm-toolchain-minimal-22.1.7-darwin-arm64//:bin/llvm-cov",
+    }),
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "llvm-profdata",
+    actual = select({
+        "//platforms:is_linux_x86_64": "@llvm-toolchain-minimal-22.1.7-linux-amd64//:bin/llvm-profdata",
+        "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-22.1.7-linux-arm64//:bin/llvm-profdata",
+        "//conditions:default": "@llvm-toolchain-minimal-22.1.7-darwin-arm64//:bin/llvm-profdata",
+    }),
     visibility = ["//visibility:public"],
 )
 

@@ -21,8 +21,8 @@ module(
 # `platforms` declares the OS/CPU pairs `//platforms:*` resolves against;
 # `rules_cc` is required at the top of every BUILD.bazel using cc_* in
 # Bazel 9 (built-in cc_* rules removed from the global namespace).
-bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "rules_cc", version = "0.2.18")
+bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "rules_cc", version = "0.2.19")
 
 # `aspect_bazel_lib` provides `expand_template` with `stamp_substitutions=`,
 # which Y consumes to bake `STABLE_SIPI_VERSION` etc. into SipiVersion.h.
@@ -36,6 +36,27 @@ bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
 # `prometheus-cpp` (now consumed via the BCR `bazel_dep` below) and `fmt`
 # (dead dep — see comment in the http_archive section).
 bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
+
+# Use the Nix-dev-shell build tools for foreign_cc instead of bootstrapping
+# make / pkg-config / cmake from source. Those from-source bootstraps fail
+# under the hermetic-llvm toolchain: the toolchain's macOS archiver is
+# `llvm-libtool-darwin` (which requires `-o`), but the bootstrap build scripts
+# (GNU Make's gnulib `build.sh`, pkg-config's bundled glib) archive with GNU-
+# `ar` positional syntax (`ar … lib.a *.o`), so the bundled `llvm-libtool-
+# darwin` rejects them ("error: -o option: must be specified" / empty AR →
+# unresolved `g_*` symbols). Using the preinstalled tools sidesteps the
+# bootstraps entirely and is consistent with the other foreign_cc build tools
+# (autoconf/automake/perl) that already come from Nix — the hermetic *compiler*
+# does not make the autotools/build-tool layer hermetic (see the .bazelrc
+# PATH/ACLOCAL_PATH/NIX_LDFLAGS notes). Root-module registration wins over
+# rules_foreign_cc's own `built_*` defaults. cmake pulls ninja, so register
+# both. See docs/adr/0014-toolchain-provider-swap.md.
+register_toolchains(
+    "@rules_foreign_cc//toolchains:preinstalled_make_toolchain",
+    "@rules_foreign_cc//toolchains:preinstalled_pkgconfig_toolchain",
+    "@rules_foreign_cc//toolchains:preinstalled_cmake_toolchain",
+    "@rules_foreign_cc//toolchains:preinstalled_ninja_toolchain",
+)
 
 # `prometheus-cpp` consumed via the BCR module rather than the foreign_cc
 # `cmake()` wrapper used for the remaining third-party libs. SIPI only
@@ -90,16 +111,19 @@ bazel_dep(name = "zlib", version = "1.3.2")
 bazel_dep(name = "sqlite3", version = "3.51.2.bcr.1")
 bazel_dep(name = "libexpat", version = "2.7.1.bcr.1")
 bazel_dep(name = "libmagic", version = "5.47")
+
 # Hard pin to the 5.3 line — SipiLua.cpp and src/shttps/LuaServer.cpp use the
 # Lua C API extensively, and 5.3 → 5.4 is not ABI-compatible (lua_resume
 # signature change, integer-subtype defaults, bitlib removal).
 bazel_dep(name = "lua", version = "5.3.6")
+
 # 8.12.0.bcr.1 (one patch behind upstream 8.12.1 we previously pinned).
 # Accept the tiny downgrade: SIPI consumes curl for outbound HTTP/HTTPS
 # (Knora API auth callbacks); no curl features land between 8.12.0 and
 # 8.12.1 that we exercise. The bcr.1 patch level lets the BCR module
 # carry security backports independent of upstream point releases.
 bazel_dep(name = "curl", version = "8.12.0.bcr.1")
+
 # OpenSSL 3.x is consumed via @openssl//:ssl + @openssl//:crypto by
 # src/shttps/jwt.c (EVP_PKEY_get_int_param / OSSL_PKEY_PARAM_BITS),
 # the rest of shttps, sentry's crash uploader, and curl's TLS backend
@@ -130,11 +154,14 @@ single_version_override(
     version = "0.7.2",
 )
 
-# `toolchains_llvm` registers a hermetic LLVM 19.1.x toolchain. Sysroot wiring
-# (Chromium debian sysroots for linux-x86_64 / linux-aarch64) lives below.
-# macOS uses the system Xcode CLT SDK (no bundled macOS sysroot in
-# toolchains_llvm); MACOSX_DEPLOYMENT_TARGET=12.0 is pinned in .bazelrc.
-bazel_dep(name = "toolchains_llvm", version = "1.7.0")
+# `llvm` (hermeticbuild/hermetic-llvm) registers a fully-hermetic LLVM
+# toolchain. Unlike toolchains_llvm it bundles per-target glibc stubs +
+# libc++ + compiler-rt (no external Chromium debian-sysroot tarballs) and
+# fetches the macOS SDK from Apple's CDN (no host Xcode CLT), so the build
+# decouples from host Nix/Xcode tooling. The toolchain-extension wiring
+# (LLVM version, exec/target platforms) lives below.
+# See docs/adr/0014-toolchain-provider-swap.md.
+bazel_dep(name = "llvm", version = "0.8.8")
 
 # ── Container image rules ─────────────────────────────────────────────────
 # `rules_oci` builds the OCI image. The image is assembled per-arch by
@@ -333,136 +360,98 @@ use_repo(pip, "sipi_bench_pip")
 benchmark_fixtures = use_extension("//bazel:benchmark_fixtures_extension.bzl", "benchmark_fixtures_extension", dev_dependency = True)
 use_repo(benchmark_fixtures, "sipi_bench_fixtures")
 
-# ── LLVM toolchain — hermetic, LLVM 19.1.7, libc++ ─────────────────────────
+# ── LLVM toolchain — hermetic, LLVM 22.1.7, libc++ ─────────────────────────
 #
-# Linux libc++ ships in the LLVM tarball built against glibc, so it still
-# needs sysroot headers and runtime libs at build time. Without an explicit
-# sysroot the build silently links against the host's glibc — non-hermetic.
-# Chromium's debian sysroot tarballs are the canonical fix (research-doc §4).
+# hermeticbuild/hermetic-llvm is zero-sysroot: it links each Linux target
+# against per-version glibc stubs it generates itself (default floor: the
+# earliest glibc that supports the target, ~2.28 — strictly more portable
+# than the prior toolchains_llvm Chromium debian-bullseye 2.31) and ships its
+# own libc++/compiler-rt, so there are no Chromium sysroot tarballs to pin and
+# no host-glibc leakage into Bazel-driven compiles. The macOS SDK
+# (MacOSX26.4.sdk) is fetched hermetically from Apple's CDN, so darwin needs
+# no host Xcode CLT and no `.bazelrc` SDK hacks.
 #
-# The `stdlib` map pins libc++ on Linux to avoid cc_toolchain_config.bzl
-# silently demoting "builtin-libc++" to "stdc++" under cross-compile (research
-# §4 footnote). Y+8's eventual cross-compile work expects libc++; pin
-# explicitly now to prevent the silent swap.
-#
-# darwin entries deliberately omitted: setting stdlib="libc++" appends
-# `-l:libc++.a -l:libc++abi.a` to LDFLAGS (Linux-style static archive
-# linkage), which ld64.lld rejects ("library not found for -l:libc++.a")
-# because macOS only ships dynamic libc++ in the SDK. On darwin the
-# toolchain default already uses libc++ via the Xcode CLT SDK; pinning is
-# unnecessary and breaks the build.
-sysroot = use_repo_rule("@toolchains_llvm//toolchain:sysroot.bzl", "sysroot")
+# LLVM 22.1.7 is the module's prebuilt default. 19.1.7 (the prior
+# toolchains_llvm pin) has NO prebuilt in hermetic-llvm 0.8.x and would force
+# a multi-hour from-source clang bootstrap, so the provider swap necessarily
+# carries a 19→22 compiler bump. libc++ is the toolchain default on every
+# target, so the old `stdlib = {linux-*: libc++}` map is gone. C++23 comes
+# from the global `--cxxopt=-std=c++23` in .bazelrc (the module exposes no
+# `cxx_standard` attr). See docs/adr/0014-toolchain-provider-swap.md for the
+# rationale and the v0.8.x / compatibility-level-0 pinning policy.
+llvm_source = use_extension("@llvm//extensions:llvm_source.bzl", "llvm_source")
+llvm_source.version(llvm_version = "22.1.7")
+use_repo(llvm_source, "llvm-raw", "llvm_config", "llvm_zlib", "llvm_zstd")
 
-# Chromium's debian-bullseye sysroots — pulled from the canonical
-# `sysroots.json` at:
-#   https://chromium.googlesource.com/chromium/src/+/refs/heads/main/build/linux/sysroot_scripts/sysroots.json
-# The URL is `{base}/{Sha256Sum}` per Chromium's `install-sysroot.py`
-# (the sha doubles as the path component AND the integrity check). Bumping
-# bullseye → bookworm later means re-running:
-#   curl -s https://chromium.googlesource.com/chromium/src/+/refs/heads/main/build/linux/sysroot_scripts/sysroots.json?format=TEXT | base64 -d | jq '.bookworm_amd64'
-# and copying the `Sha256Sum` field into both `urls` and `sha256` below.
-sysroot(
-    name = "sysroot_linux_x86_64",
-    sha256 = "52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d",
-    urls = ["https://commondatastorage.googleapis.com/chrome-linux-sysroot/52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d"],
-)
-
-sysroot(
-    name = "sysroot_linux_aarch64",
-    sha256 = "c7176a4c7aacbf46bda58a029f39f79a68008d3dee6518f154dcf5161a5486d8",
-    urls = ["https://commondatastorage.googleapis.com/chrome-linux-sysroot/c7176a4c7aacbf46bda58a029f39f79a68008d3dee6518f154dcf5161a5486d8"],
-)
-
-llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm")
-llvm.toolchain(
-    name = "llvm_toolchain",
-    cxx_standard = {"": "c++23"},
-    llvm_version = "19.1.7",
-    stdlib = {
-        "linux-x86_64": "libc++",
-        "linux-aarch64": "libc++",
-    },
-)
-llvm.sysroot(
-    name = "llvm_toolchain",
-    label = "@sysroot_linux_x86_64//sysroot",
-    targets = ["linux-x86_64"],
-)
-llvm.sysroot(
-    name = "llvm_toolchain",
-    label = "@sysroot_linux_aarch64//sysroot",
-    targets = ["linux-aarch64"],
-)
-
-# ── Fuzz toolchain — libc++, fuzz-platform routing only ───────────────────
+# `exec` = the hosts we build ON; `target` = the platforms we build FOR. CI
+# runs the test matrix natively on all three (macOS-arm64, linux-x86_64, and
+# linux-aarch64 on an `ubuntu-24.04-arm` runner), so each is declared as an
+# exec host. Omitting `exec(linux-aarch64)` makes Bazel fall back to the
+# autodetected Nix host CC toolchain on the native arm64 runner, which compiles
+# `-stdlib=libc++` but never links the libc++ runtime — a flood of
+# `undefined reference to std::__1::…`. (darwin→linux cross-compile, Phase 3,
+# is a separate path and does not need a linux-aarch64 exec host.)
 #
-# `--config=fuzz` is platform-pinned by the `bazel-build-fuzz` /
-# `bazel-run-fuzz` justfile recipes:
-#   * linux-x86_64 → `//tools/fuzz:linux_x86_64_fuzz` (this toolchain wins
-#     via `extra_target_compatible_with(fuzz_enabled)` + first-registered
-#     order).
-#   * darwin-aarch64 → `//tools/fuzz:darwin_aarch64_fuzz` (the default
-#     `llvm_toolchain` wins for darwin entries here because this toolchain
-#     does not register a darwin sysroot — toolchain resolution falls
-#     through. macOS Apple SDK + libc++ is the libFuzzer ABI on darwin
-#     anyway).
-#
-# Modern libFuzzer (LLVM ≥ 16) ships its own private libc++ runtime, so
-# the harness binary's stdlib choice does not affect libFuzzer linkage.
-# Linux fuzz uses libc++ — same as the default `llvm_toolchain` — so the
-# LLVM-bundled libc++ archive ships with the toolchain and links cleanly.
-# An earlier draft pinned `stdlib = "stdc++"` for parity with the deleted
-# `pkgs.llvmPackages_19.stdenv` Nix variant; that broke the build because
-# the Chromium debian-bullseye sysroot does not include `libstdc++.a`,
-# so toolchains_llvm's `-l:libstdc++.a` was unsatisfiable at link time.
-#
-# `llvm.toolchain_root` shares `@llvm_toolchain_llvm` — Bazel does not
-# re-fetch the LLVM tarball for the fuzz toolchain. Verified post-build
-# by inspecting `bazel-out/external/` (only one `llvm_toolchain_llvm` dir).
-#
-# `extra_target_compatible_with(constraints = [fuzz_enabled])` (no
-# `targets =` filter, so it applies to ALL platform entries this toolchain
-# auto-registers for) makes this toolchain match ONLY platforms that
-# carry `fuzz_enabled`. Without the broad scoping, the auto-created darwin
-# entries would silently match plain darwin builds too. The second
-# toolchain is now functionally identical to `llvm_toolchain` on linux —
-# kept distinct as routing infrastructure for any future fuzz-only
-# toolchain customisation.
-llvm.toolchain(
-    name = "llvm_toolchain_fuzz",
-    cxx_standard = {"": "c++23"},
-    llvm_version = "19.1.7",
-    stdlib = {"linux-x86_64": "libc++"},
+# A single registered toolchain serves every platform, INCLUDING the
+# `//tools/fuzz:*_fuzz` platforms: the extra `fuzz_enabled` constraint they
+# carry comes from a constraint_setting this toolchain never references, so it
+# is ignored during resolution (Bazel matches by subset inclusion). This folds
+# away the prior second `llvm_toolchain_fuzz` toolchain, which was functionally
+# identical on Linux (both libc++) and existed only for the first-registered-
+# wins routing that a single toolchain makes unnecessary.
+toolchain = use_extension("@llvm//extensions:toolchain.bzl", "toolchain")
+toolchain.exec(
+    arch = "aarch64",
+    os = "macos",
 )
-llvm.toolchain_root(
-    name = "llvm_toolchain_fuzz",
-    # Must be a fully-qualified label — the rule's impl splits on `:` and
-    # only the package portion is consumed. A bare `@llvm_toolchain_llvm`
-    # (no `//:target`) fails validation.
-    label = "@llvm_toolchain_llvm//:BUILD",
+toolchain.exec(
+    arch = "x86_64",
+    os = "linux",
 )
-llvm.sysroot(
-    name = "llvm_toolchain_fuzz",
-    label = "@sysroot_linux_x86_64//sysroot",
-    targets = ["linux-x86_64"],
+toolchain.exec(
+    arch = "aarch64",
+    os = "linux",
 )
-llvm.extra_target_compatible_with(
-    name = "llvm_toolchain_fuzz",
-    constraints = ["//tools/fuzz:fuzz_enabled"],
+toolchain.target(
+    arch = "aarch64",
+    os = "macos",
 )
-use_repo(llvm, "llvm_toolchain", "llvm_toolchain_llvm")
-use_repo(llvm, "llvm_toolchain_fuzz")
+toolchain.target(
+    arch = "x86_64",
+    os = "linux",
+)
+toolchain.target(
+    arch = "aarch64",
+    os = "linux",
+)
+use_repo(toolchain, "llvm_toolchains")
 
-# Registration order matters: when both `llvm_toolchain_fuzz` and
-# `llvm_toolchain` match a target platform (e.g. linux_x86_64_fuzz, where
-# the default toolchain's [os:linux, cpu:x86_64] is a subset of the
-# platform's [os:linux, cpu:x86_64, fuzz_enabled]), Bazel picks the
-# first-registered. Register `llvm_toolchain_fuzz` first so it wins on
-# fuzz_enabled platforms; non-fuzz builds skip past it (their platform
-# lacks fuzz_enabled) and fall through to `llvm_toolchain`.
-register_toolchains("@llvm_toolchain_fuzz//:all")
+register_toolchains("@llvm_toolchains//:all")
 
-register_toolchains("@llvm_toolchain//:all")
+# Expose the prebuilt LLVM release bundle so individual binutils-class tools
+# (llvm-ar, llvm-ranlib, …) are referenceable as `@<bundle>//:bin/<tool>`.
+# Needed because on darwin the toolchain's default archiver is
+# `llvm-libtool-darwin` (Apple-style, needs `-static -o`), which foreign_cc's
+# cmake/autotools deps invoke with GNU-`ar` conventions and reject. We point
+# those deps' AR/CMAKE_AR at the bundle's GNU-style `llvm-ar` instead (see
+# //bazel:llvm-ar and bazel/foreign_cc_helpers.bzl). On Linux the toolchain's
+# default archiver is already `llvm-ar`, so no override is needed there.
+# The repo name embeds the LLVM version + exec triple — bumping LLVM_VERSION
+# means updating it here and in //bazel (see ADR-0014's pinning policy).
+llvm_toolchain_minimal = use_extension("@llvm//extensions:llvm_toolchain_minimal.bzl", "llvm_toolchain_minimal")
+
+# `bazel mod tidy` drops these lines — it can't see the bundles referenced from
+# the string labels in `//bazel`'s `alias(actual = "@llvm-toolchain-minimal-…")`
+# targets, so it judges the repos unused. They are required for the
+# //bazel:{clang++,llvm-ar,llvm-ranlib} (darwin foreign_cc) and
+# //bazel:{llvm-objcopy,llvm-readelf,llvm-cov,llvm-profdata} (Linux debug-split
+# + coverage) aliases. Re-add after running `bazel mod tidy`.
+use_repo(
+    llvm_toolchain_minimal,
+    "llvm-toolchain-minimal-22.1.7-darwin-arm64",
+    "llvm-toolchain-minimal-22.1.7-linux-amd64",
+    "llvm-toolchain-minimal-22.1.7-linux-arm64",
+)
 
 # ── Rust toolchain + Crate Universe ─────────────────────────────────────────
 #
@@ -489,6 +478,7 @@ rust.toolchain(
     versions = ["1.89.0"],
 )
 use_repo(rust, "rust_toolchains")
+
 register_toolchains("@rust_toolchains//:all")
 
 # `crate.from_cargo` is lazy resolution from `Cargo.lock` — the canonical
@@ -626,4 +616,3 @@ http_archive(
     strip_prefix = "libwebp-1.2.0",
     url = "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.2.0.tar.gz",
 )
-

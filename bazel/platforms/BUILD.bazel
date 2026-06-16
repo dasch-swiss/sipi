@@ -9,10 +9,10 @@ deterministic regardless of how the runner advertises its host triple
 arm64 runner, for example).
 
 The fuzz harness has its own platform definitions under //tools/fuzz/
-because it needs the additional `fuzz_enabled` constraint to route
-toolchain resolution to `@llvm_toolchain_fuzz`. Keep these two sets
+because it needs the additional `fuzz_enabled` constraint to flip the
+`target_compatible_with` gate on the fuzz target. Keep these two sets
 deliberately separate — folding them together would couple the image
-build to fuzz-toolchain resolution.
+build to the fuzz gate.
 """
 
 package(default_visibility = ["//visibility:public"])
