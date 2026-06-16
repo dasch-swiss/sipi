@@ -28,25 +28,13 @@
 permissions:
   contents: read
 
+# PR trigger disabled under the hermetic-llvm toolchain. Its minimal prebuilt
+# ships no ASan/UBSan runtime, and the only build mechanism instruments the
+# whole toolchain globally (which breaks the foreign_cc deps). Kept as a manual
+# (workflow_dispatch) target so it can be re-run once the runtime story matures.
+# See docs/adr/0014-toolchain-provider-swap.md ("Carved-out instrumentation
+# gates"). Restore the `pull_request:` block below to re-arm the merge gate.
 on:
-  pull_request:
-    paths:
-      - 'src/**'
-      - 'include/**'
-      - 'test/**'
-      - 'tools/**'
-      - 'ext/**'
-      - 'flake.nix'
-      - 'flake.lock'
-      - 'justfile'
-      - '.bazelrc'
-      - '.bazelversion'
-      - 'MODULE.bazel'
-      - 'MODULE.bazel.lock'
-      - 'BUILD.bazel'
-      - '**/BUILD.bazel'
-      - 'bazel/**'
-      - '.github/workflows/sanitizer.yml'
   workflow_dispatch:
 
 name: sanitizer
