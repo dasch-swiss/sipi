@@ -21,9 +21,13 @@
 
 name: coverage
 
+# Post-merge `push: branches: [main]` trigger disabled under the hermetic-llvm
+# toolchain: its `llvm_coverage_map_format` feature does not activate (gated on
+# the unmerged rules_cc PR #385), so `bazel coverage` produces an empty lcov
+# (no DA records). Kept as a manual (workflow_dispatch) target. See
+# docs/adr/0014-toolchain-provider-swap.md ("Carved-out instrumentation
+# gates"). Restore the `push:` block below once coverage instrumentation works.
 on:
-  push:
-    branches: [main]
   workflow_dispatch: {}
 
 permissions:

@@ -19,10 +19,13 @@
 permissions:
   contents: read
 
+# Nightly `schedule` disabled under the hermetic-llvm toolchain: its minimal
+# prebuilt ships no libFuzzer runtime, and the only build mechanism instruments
+# the whole toolchain globally (which breaks the foreign_cc deps in the fuzz
+# subset). Kept as a manual (workflow_dispatch) target. See
+# docs/adr/0014-toolchain-provider-swap.md ("Carved-out instrumentation
+# gates"). Restore the `schedule:` block below once a fuzz runtime is wired.
 on:
-  schedule:
-    # Run at 02:00 UTC every night
-    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       duration:
