@@ -7,13 +7,20 @@ including it via a postfix copy step.
 """
 
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+load(
+    "//bazel:foreign_cc_helpers.bzl",
+    "darwin_cmake_build_data",
+    "darwin_cmake_cache_entries",
+    "darwin_link_wrapper_build_data",
+    "darwin_link_wrapper_env",
+)
 
 package(default_visibility = ["//visibility:public"])
 
 cmake(
     name = "tiff",
     lib_source = "@tiff//:all_srcs",
-    cache_entries = {
+    cache_entries = darwin_cmake_cache_entries({
         # Suppress Bazel's auto-injected CMAKE_BUILD_TYPE=Debug — see
         # ext/png/BUILD.bazel for the rationale (Debug-postfix hazard).
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
@@ -33,7 +40,7 @@ cmake(
         "tiff-tests": "OFF",
         "tiff-contrib": "OFF",
         "tiff-docs": "OFF",
-    },
+    }),
     # `tif_dir.h` is a libtiff internal header that upstream deliberately
     # does NOT install (`include/` ships only the public surface). SIPI's
     # `src/formats/SipiIOTiff.cpp` consumes it for `_TIFFFieldArray`, so
@@ -44,8 +51,24 @@ cmake(
     # Pin --config used by `cmake --build` and `cmake --install` —
     # see ext/png/BUILD.bazel for the rationale.
     configuration = "RelWithDebInfo",
+    # Build only the libraries (libtiff.a + libtiffxx.a, the latter expected by
+    # the install manifest), NOT libtiff's `tiff_mkg3states` codegen tool.
+    # Under the hermetic LLVM toolchain foreign_cc cannot link executables: the
+    # bundled libm/glibc are built-from-source Bazel inputs absent from the
+    # foreign_cc action, so `mkg3states`'s `-lm` falls back to the host
+    # libm.so.6 whose `@GLIBC_PRIVATE` deps mismatch the bundled glibc 2.28.
+    # mkg3states only regenerates the checked-in `tif_fax3sm.c`, so skipping its
+    # build is safe. See docs/adr/0014-toolchain-provider-swap.md.
+    targets = [
+        "tiff",
+        "tiffxx",
+    ],
     out_static_libs = ["libtiff.a"],
     set_file_prefix_map = True,
+    # libtiff's CMake enables CXX (the libtiffxx API), so the macOS
+    # link-wrapper needs an absolute clang++ for the compiler-detection test.
+    env = darwin_link_wrapper_env(),
+    build_data = darwin_cmake_build_data() + darwin_link_wrapper_build_data(),
     deps = [
         "//ext/jpeg:jpeg",
         "//ext/png:png",

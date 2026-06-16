@@ -4,13 +4,14 @@ Mirrors `ext/jansson/CMakeLists.txt`. Static lib.
 """
 
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+load("//bazel:foreign_cc_helpers.bzl", "darwin_cmake_build_data", "darwin_cmake_cache_entries")
 
 package(default_visibility = ["//visibility:public"])
 
 cmake(
     name = "jansson",
     lib_source = "@jansson//:all_srcs",
-    cache_entries = {
+    cache_entries = darwin_cmake_cache_entries({
         # Suppress Bazel's auto-injected CMAKE_BUILD_TYPE=Debug — see
         # ext/png/BUILD.bazel for the rationale (Debug-postfix hazard).
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
@@ -20,10 +21,11 @@ cmake(
         "JANSSON_BUILD_SHARED_LIBS": "OFF",
         "JANSSON_EXAMPLES": "OFF",
         "JANSSON_TEST": "OFF",
-    },
+    }),
     # Pin --config used by `cmake --build` and `cmake --install` —
     # see ext/png/BUILD.bazel for the rationale.
     configuration = "RelWithDebInfo",
     out_static_libs = ["libjansson.a"],
     set_file_prefix_map = True,
+    build_data = darwin_cmake_build_data(),
 )

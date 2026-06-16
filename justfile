@@ -67,24 +67,31 @@ bazel-test *FLAGS='':
 # reach.
 #
 # `COVERAGE_GCOV_PATH` (= llvm-profdata) and `LLVM_COV` (= llvm-cov) are
-# propagated from the dev-shell PATH into each test action. Bazel's
-# `tools/test/collect_cc_coverage.sh` reads these to decide the LLVM
-# coverage path (`llvm-profdata merge` + `llvm-cov export --format=lcov`)
-# when toolchains_llvm produces `.profraw` profiles. Required since the
-# Bazel 7.2+ env-clobber bug — fix landed in Bazel 9.1.0 (PR #25879,
-# closes #23247), which is pinned via `.bazelversion`.
+# propagated into each test action. Bazel's `tools/test/collect_cc_coverage.sh`
+# reads these to decide the LLVM coverage path (`llvm-profdata merge` +
+# `llvm-cov export --format=lcov`) for the `.profraw` profiles. They MUST be
+# the hermetic toolchain's binaries (LLVM 22), version-matched to the
+# instrumented profile — a host/Nix `llvm-profdata` of a different major
+# version cannot read the profile and yields an empty lcov. Resolved from the
+# `//bazel:llvm-{profdata,cov}` aliases (exec-platform-selected bundle) rather
+# than PATH. Required since the Bazel 7.2+ env-clobber bug — fix landed in
+# Bazel 9.1.0 (PR #25879, closes #23247), which is pinned via `.bazelversion`.
 bazel-coverage *FLAGS='':
-    COVERAGE_GCOV_PATH=$(command -v llvm-profdata) \
-    LLVM_COV=$(command -v llvm-cov) \
-        bazel coverage \
-            --combined_report=lcov \
-            --instrumentation_filter='//src' \
-            --features=llvm_coverage_map_format \
-            --features=-gcc_coverage_map_format \
-            --test_env=COVERAGE_GCOV_PATH \
-            --test_env=LLVM_COV \
-            --stamp \
-            //src/... //test/unit/... //test/approval/... //test/e2e-rust/... {{FLAGS}}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bazel build //bazel:llvm-profdata //bazel:llvm-cov
+    EXEC_ROOT="$(bazel info execution_root)"
+    export COVERAGE_GCOV_PATH="$EXEC_ROOT/$(bazel cquery --output=files //bazel:llvm-profdata 2>/dev/null)"
+    export LLVM_COV="$EXEC_ROOT/$(bazel cquery --output=files //bazel:llvm-cov 2>/dev/null)"
+    bazel coverage \
+        --combined_report=lcov \
+        --instrumentation_filter='//src' \
+        --features=llvm_coverage_map_format \
+        --features=-gcc_coverage_map_format \
+        --test_env=COVERAGE_GCOV_PATH \
+        --test_env=LLVM_COV \
+        --stamp \
+        //src/... //test/unit/... //test/approval/... //test/e2e-rust/... {{FLAGS}}
 
 # Run every GoogleTest unit-test target — both the legacy
 # `//test/unit/<x>/` directories AND any per-module ADR-0003 co-located
