@@ -7,8 +7,8 @@ autoconf/automake/libtool/m4), `gh` (consumed by the
 `gh_release_archive` repository_rule), `crane` (used by
 `bazel-docker-publish-manifest`), and `jpylyzer` (JP2 conformance
 validator). Rust + LLVM toolchains are provisioned hermetically by
-Bazel (`rules_rust` + `toolchains_llvm` in `MODULE.bazel`) — neither
-`rustc`/`cargo` nor `clang` ship in the dev shell.
+Bazel (`rules_rust` + the BCR `llvm` (hermetic-llvm) module in
+`MODULE.bazel`) — the Bazel cc actions never use the dev-shell `clang`.
 
 It is **not** the build system. Sipi's binaries, tests, and Docker
 image are all produced by Bazel. See [Building with Bazel](bazel.md).
@@ -45,7 +45,7 @@ Three shells are exposed:
 
 | Shell | Stdenv | Purpose |
 |---|---|---|
-| `default` | `llvmPackages_19.libcxxStdenv` | Matches the Bazel toolchain (`toolchains_llvm`). 99% of work happens here. |
+| `default` | `llvmPackages_19.libcxxStdenv` | Clang + libc++ for non-Bazel tooling (clang-tidy, ad-hoc shell compiles). The Bazel cc actions run under the hermetic LLVM 22.1.7 toolchain, not this stdenv. 99% of work happens here. |
 | `gcc` | `pkgs.gcc14Stdenv` | Diagnostic escape hatch when the LLVM toolchain produces a confusing error. Not used by CI. |
 | `llvm-tools` | `llvmPackages_19.libcxxStdenv` | `default` + `llvmPackages_19.llvm` (host `llvm-cov`, `llvm-profdata`, `llvm-symbolizer`). Used by `coverage.yml` (coverage) and `sanitizer.yml` (ASan/LSan symbolization); local devs running `just bazel-coverage` or sanitizer e2e should enter this shell. |
 
@@ -91,11 +91,13 @@ The default shell hook does three things:
   check).
 - Exports `SSL_CERT_FILE` from the `cacert` package so `gh`'s
   Go-based TLS works on headless Linux dev shells.
-- On macOS, prepends `/usr/bin` to `PATH` so toolchains_llvm's
-  `xcrun --show-sdk-path` probe (run inside Bazel repo rules)
-  finds Apple's `/usr/bin/xcrun` ahead of nixpkgs' xcbuild stub
-  (which returns the apple-sdk-14.4 stub — private frameworks
-  only, no `libc++.tbd`).
+- On macOS, prepends `/usr/bin` to `PATH` so Apple's
+  `/usr/bin/xcrun` resolves ahead of nixpkgs' xcbuild stub (which
+  returns the apple-sdk-14.4 stub — private frameworks only, no
+  `libc++.tbd`). Note: the hermetic-llvm toolchain now fetches the
+  macOS SDK from Apple's CDN, so the Bazel cc actions no longer
+  depend on this `xcrun` SDK probe; the hook is retained for host
+  tools that still shell out to `xcrun`.
 
 ## direnv
 

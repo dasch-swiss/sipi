@@ -96,9 +96,9 @@ green CI run verifies macOS as well as Linux.
 For Linux-target builds from a macOS host, the simplest path is
 [OrbStack](https://orbstack.dev/) or any other lightweight Linux
 VM with the dev shell available inside it (`nix develop` from a
-shared workdir). Native cross-compilation via `toolchains_llvm`'s
-sysroot machinery is on the post-launch roadmap (out of scope for
-the Y → Y+7 migration).
+shared workdir). Native cross-compilation via the hermetic-llvm
+toolchain's bundled per-target sysroots is on the post-launch
+roadmap (out of scope for the Y → Y+7 migration).
 
 ## All `just` targets
 

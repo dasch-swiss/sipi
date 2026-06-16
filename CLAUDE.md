@@ -190,7 +190,7 @@ These are not style preferences — they are contract with the maintainer. Code 
 
 ## Development Notes
 
-**Compiler Requirements:** C++23. Bazel selects a hermetic LLVM 19 toolchain via `toolchains_llvm`; the host compiler does not need to be Clang.
+**Compiler Requirements:** C++23. Bazel selects a hermetic LLVM 22.1.7 toolchain via the BCR `llvm` (hermetic-llvm) module pinned at 0.8.8; the host compiler does not need to be Clang. libc++ is the default stdlib and a single toolchain serves all platforms including the fuzz platforms. See [`docs/adr/0014-toolchain-provider-swap.md`](docs/adr/0014-toolchain-provider-swap.md).
 
 **Build configurations:**
 - `bazel build //src/cli:sipi` — fastbuild (`-O0 -g`, fast incremental)
