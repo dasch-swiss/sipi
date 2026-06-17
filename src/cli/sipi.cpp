@@ -865,37 +865,33 @@ int main(int argc, char *argv[])
     Sipi::SipiImage img1, img2;
     img1.read(optCompare[0]);
     img2.read(optCompare[1]);
-    bool result = img1 == img2;
 
-    if (!result) {
-      img1 -= img2;
-      img1.write("tif", "diff.tif");
-    }
-
-    if (result) {
+    if (img1 == img2) {
       log_info("Files identical!");
-    } else {
-      double diffval = 0.;
-      size_t maxdiff = 0;
-      size_t max_x = 0, max_y = 0;
-      for (size_t y = 0; y < img1.getNy(); y++) {
-        for (size_t x = 0; x < img1.getNx(); x++) {
-          for (size_t c = 0; c < img1.getNc(); c++) {
-            size_t dv = img1.getPixel(x, y, c) - img2.getPixel(x, y, c);
-            if (dv > maxdiff) {
-              maxdiff = dv;
-              max_x = x;
-              max_y = y;
-            }
-            diffval += static_cast<float>(dv);
-          }
-        }
-      }
-      diffval /= static_cast<double>(img1.getNy() * img1.getNx() * img1.getNc());
-      log_info("Files differ: avg: %f max: %zu (%zu, %zu) See diff.tif", diffval, maxdiff, max_x, max_y);
+      return 0;
     }
 
-    return result ? 0 : -1;
+    // Capture the per-channel delta from the original pixels before the
+    // `img1 -= img2` visualization step below rewrites img1 into the
+    // normalized diff (which would otherwise corrupt the reported avg/max).
+    const std::optional<Sipi::PixelDelta> delta = img1.maxPixelDelta(img2);
+
+    if (!delta.has_value()) {
+      // Differing channel count / bit depth / photometric interpretation:
+      // no meaningful per-channel delta, and `img1 -= img2` would throw.
+      log_info("Files differ: dimensions or format not comparable.");
+      return -1;
+    }
+
+    img1 -= img2;
+    img1.write("tif", "diff.tif");
+    log_info("Files differ: avg: %f max: %d (%zu, %zu) See diff.tif",
+      delta->mean_abs,
+      delta->max_abs,
+      delta->max_x,
+      delta->max_y);
+
+    return -1;
   };
 
   //

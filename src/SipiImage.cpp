@@ -1839,6 +1839,69 @@ std::optional<double> SipiImage::compare(const SipiImage &rhs) const
 
 /*==========================================================================*/
 
+std::optional<PixelDelta> SipiImage::maxPixelDelta(const SipiImage &rhs) const
+{
+  if ((nx != rhs.nx) || (ny != rhs.ny) || (nc != rhs.nc) || (bps != rhs.bps) || (photo != rhs.photo)) { return {}; }
+
+  // Read the raw pixel store directly in row-major order (`y * nx + x`),
+  // matching operator-= and the format handlers — NOT getPixel, whose
+  // transposed `x * nx + y` indexing is only correct for square images.
+  double sum_abs = 0.;
+  int max_abs = 0;
+  size_t max_x = 0, max_y = 0;
+
+  // Absolute per-channel difference over a signed widening of the two
+  // samples: a plain `s1 - s2` is non-negative-typed at the call site
+  // (getPixel returns int but the historical compare loop stored it in a
+  // size_t), which underflows for s2 > s1 and corrupts the maximum.
+  auto accumulate = [&](size_t x, size_t y, int s1, int s2) {
+    const int signed_diff = s1 - s2;
+    const int dv = signed_diff < 0 ? -signed_diff : signed_diff;
+    if (dv > max_abs) {
+      max_abs = dv;
+      max_x = x;
+      max_y = y;
+    }
+    sum_abs += dv;
+  };
+
+  switch (bps) {
+  case 8: {
+    const byte *ltmp = pixels;
+    const byte *rtmp = rhs.pixels;
+    for (size_t y = 0; y < ny; y++) {
+      for (size_t x = 0; x < nx; x++) {
+        for (size_t c = 0; c < nc; c++) {
+          const size_t idx = nc * (y * nx + x) + c;
+          accumulate(x, y, ltmp[idx], rtmp[idx]);
+        }
+      }
+    }
+    break;
+  }
+  case 16: {
+    const word *ltmp = reinterpret_cast<const word *>(pixels);
+    const word *rtmp = reinterpret_cast<const word *>(rhs.pixels);
+    for (size_t y = 0; y < ny; y++) {
+      for (size_t x = 0; x < nx; x++) {
+        for (size_t c = 0; c < nc; c++) {
+          const size_t idx = nc * (y * nx + x) + c;
+          accumulate(x, y, ltmp[idx], rtmp[idx]);
+        }
+      }
+    }
+    break;
+  }
+  default:
+    return {};
+  }
+
+  const double mean_abs = sum_abs / static_cast<double>(nx * ny * nc);
+  return PixelDelta{ .mean_abs = mean_abs, .max_abs = max_abs, .max_x = max_x, .max_y = max_y };
+}
+
+/*==========================================================================*/
+
 
 std::ostream &operator<<(std::ostream &outstr, const SipiImage &rhs)
 {
