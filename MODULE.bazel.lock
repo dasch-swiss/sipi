@@ -379,7 +379,7 @@
     },
     "//bazel:kakadu_extension.bzl%kakadu_extension": {
       "general": {
-        "bzlTransitiveDigest": "PHk6uIsMB70os7HQ2t8rrBHV4AS9qvzWFOzyNV8n2N0=",
+        "bzlTransitiveDigest": "Jr0+G+GPDj5PAPvJYQKjufqx411DvwnrXf2C2+0mTuY=",
         "usagesDigest": "qQJAPNB0P4wpi2VGK88Ly/QPw3k4aStJZGi3BDzVzjc=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
@@ -391,10 +391,6 @@
               "repo": "dasch-swiss/dsp-ci-assets",
               "sha256": "d5fc94e4a8fa08e49b387c72aea16af267b41ab8f411ec4c1a616c3394cfafbc",
               "strip_prefix": "v8_7-01727L",
-              "patches": [
-                "@@//patches:kakadu-Makefile-Linux-x86-64-clang.patch",
-                "@@//patches:kakadu-Makefile-Linux-arm-64-clang.patch"
-              ],
               "build_file": "@@//bazel:kakadu.BUILD.bazel"
             }
           }

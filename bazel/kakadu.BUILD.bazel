@@ -1,178 +1,343 @@
-"""BUILD file symlinked into the @kakadu repository's extracted source root.
+"""Native `cc_library` build for Kakadu — replaces the `rules_foreign_cc` `make()` wrapper.
 
-Wraps Kakadu's hand-written, per-arch Makefile build (`make/` subdirectory)
-in a `rules_foreign_cc` `make()` rule that produces `libkdu.a` + `libkdu_aux.a`,
-then re-exposes them as a single `:kdu` target consumable by Sipi.
+Source/flag spec is a direct translation of the upstream per-arch makefiles
+shipped in the v8.7 release (the authoritative build spec — Kakadu builds from
+these today). For each platform `P`:
+  make/Makefile-<P>                       orchestration
+  coresys/make/{Makefile-<P>,Targets.mk}  -> libkdu.a   (GENERIC + SIMD objs)
+  managed/make/{Makefile-<P>,Targets.mk}  -> libkdu_aux.a (compiles apps/* objs)
 
-Mirrors the existing `ext/kakadu/CMakeLists.txt:67-77` invocation:
+`apps/make` only builds standalone executables Sipi never links, so it is
+omitted. `libkdu_aux.a` is exactly the `managed` `ALL_OBJS` set (the static-lib
+rule excludes `kdu_aux.cpp`; that wrapper is only used by the .so / JNI builds).
 
-    make -j1 --directory=$src/make/ -f $KDU_MAKE EXEC_PLATFORM=$KDU_EXEC_PLATFORM all_but_jni
+SIMD layout (`Targets.mk` + the per-platform makefiles):
+  - AArch64 (darwin + linux): the NEON objects compile with the base `copts`
+    (`NEONFLAGS` is empty — NEON is unconditional under AArch64), so they fold
+    directly into the main libraries.
+  - x86_64 (linux): each SIMD ISA needs its own `-m<isa>` flag, so they are
+    split into per-ISA `alwayslink` sub-libraries (selected only on x86). The
+    objects are reached via Kakadu's run-time CPUID dispatch tables, so
+    `alwayslink` guarantees the linker keeps them.
 
-with $KDU_MAKE / $KDU_EXEC_PLATFORM / $KDU_ARCH selected per (os, cpu) per
-`CMakeLists.txt:145-174`. Per-arch sed mutations from the same file are
-already applied at extract time by `gh_release_archive` via `patches/`.
-
-`make()`'s standard `targets`/`args` shape can't drive a working-directory-
-sensitive build, so the entire build + stage is funnelled through
-`postfix_script` which runs after foreign_cc's setup (working tree
-materialised under `$BUILD_TMPDIR`, install prefix at `$INSTALLDIR`).
+Kakadu's own TUs are pinned to `-std=gnu++17` (clang's default at the version
+this code targets); the global `--cxxopt=-std=c++23` would otherwise force
+C++23 onto pre-C++23 source. Sipi stays C++23 and includes Kakadu's public
+headers under C++23 exactly as it does today. `-fPIC`, `-m64`/`-arch` and the
+linker-only `-z noexecstack` are dropped — the hermetic toolchain manages them.
 """
 
-load("@rules_foreign_cc//foreign_cc:defs.bzl", "make")
+load("@rules_cc//cc:cc_import.bzl", "cc_import")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
-filegroup(
-    name = "all_srcs",
-    # Same lesson as `bazel/all_content.BUILD.bazel`: the upstream Kakadu
-    # build_all target (`all_but_jni`) builds `kdu_hyperdoc` which `cd`s
-    # into `documentation/` and reads `hyperdoc.src` — excluding the dir
-    # for cache-key stability breaks the build outright. Pin by SHA in
-    # MODULE.bazel; let the glob expose the full source tree.
-    srcs = glob(["**"]),
-)
+_DARWIN_AARCH64 = "@@//platforms:is_darwin_aarch64"
+_LINUX_X86_64 = "@@//platforms:is_linux_x86_64"
+_LINUX_AARCH64 = "@@//platforms:is_linux_aarch64"
 
-# Per-arch make config selectors — values track CMakeLists.txt:145-174.
-# The aarch64 macOS Makefile name uses upper-case "MAC" (Kakadu inconsistency
-# preserved from upstream).
-_KDU_MAKE = select({
-    "@@//platforms:is_linux_x86_64": "Makefile-Linux-x86-64-gcc",
-    "@@//platforms:is_linux_aarch64": "Makefile-Linux-arm-64-gcc",
-    # Upstream actually ships `Makefile-Mac-arm-64-gcc` (mixed case).
-    # The earlier "MAC" upper-case spelling worked locally on macOS's
-    # default case-insensitive APFS but fails on GitHub-hosted runners
-    # whose work volumes are case-sensitive.
-    "@@//platforms:is_darwin_aarch64": "Makefile-Mac-arm-64-gcc",
+# Warning suppressions + language level shared by every Kakadu TU.
+_BASE_COPTS = [
+    "-std=gnu++17",
+    "-DNDEBUG",
+    "-Wall",
+    "-Wno-unused-function",
+    "-Wno-overloaded-virtual",
+]
+
+# Per-platform base flags from coresys/make/Makefile-<P> C_OPT (minus the
+# toolchain-managed -fPIC/-m64/-arch and the linker-only -z noexecstack).
+_CORESYS_PLATFORM_COPTS = select({
+    _DARWIN_AARCH64: ["-O3", "-DKDU_NEON_INTRINSICS"],
+    _LINUX_AARCH64: ["-O2", "-flax-vector-conversions", "-DKDU_NO_NEON81", "-DKDU_NEON_INTRINSICS"],
+    _LINUX_X86_64: ["-O2", "-msse2", "-DKDU_X86_INTRINSICS"],
 })
 
-_KDU_EXEC_PLATFORM = select({
-    "@@//platforms:is_linux_x86_64": "Linux-x86-64-gcc",
-    "@@//platforms:is_linux_aarch64": "Linux-arm-64-gcc",
-    "@@//platforms:is_darwin_aarch64": "Mac-arm-64-gcc",
-})
+# managed/make/Makefile-<P> adds the large-file defines to the same base.
+_AUX_LARGEFILE_COPTS = [
+    "-D_LARGEFILE64_SOURCE",
+    "-D_FILE_OFFSET_BITS=64",
+]
 
-_KDU_ARCH = select({
-    "@@//platforms:is_linux_x86_64": "Linux-x86-64-gcc",
-    "@@//platforms:is_linux_aarch64": "Linux-arm-64-gcc",
-    "@@//platforms:is_darwin_aarch64": "Mac-arm-64-gcc",
-})
+# Shared base for the x86-only per-ISA sub-libraries (the _LINUX_X86_64 branch
+# above; these targets are only ever selected on x86, so it is inlined).
+_X86_BASE_COPTS = _BASE_COPTS + ["-O2", "-msse2", "-DKDU_X86_INTRINSICS"]
 
-# The default `make()` rule runs `make && make install` from `$BUILD_TMPDIR`.
-# Kakadu has no `install` target, so we run an empty default `make` (no-op-ish
-# from the working dir) and do everything real in `postfix_script`: cd into
-# the source's `make/` directory, run `make all_but_jni` with the per-arch
-# Makefile, then stage outputs under `$INSTALLDIR`.
-make(
-    name = "kakadu",
-    lib_source = ":all_srcs",
-    out_static_libs = [
-        "libkdu.a",
-        "libkdu_aux.a",
+# All Kakadu headers, for in-tree quote includes; the public subset Sipi
+# compiles against is exported via `includes` on `:kdu`.
+_KDU_HDRS = glob(
+    [
+        "coresys/**/*.h",
+        "coresys/**/*.tpp",
+        "apps/**/*.h",
+        "apps/**/*.tpp",
     ],
-    out_include_dir = "include",
-    targets = [],
-    # macOS libtool-PATH workaround from `ext/kakadu/CMakeLists.txt:21-22`:
-    # if Nix puts GNU libtool on PATH first, it shadows Apple's libtool and
-    # fails with "unrecognised option: -static". Prepend /usr/bin so the
-    # macOS libtool is always found. No-op on Linux.
-    env = select({
-        "@platforms//os:macos": {"PATH": "/usr/bin:$$PATH"},
-        "//conditions:default": {},
-    }),
-    # postfix_script uses `$$VAR` (single trailing `$`) — see
-    # ext/png/BUILD.bazel for the substitution-form write-up.
-    #
-    # Kakadu's hand-written Makefiles write build artefacts to relative
-    # paths (`lib/<arch>/`, `bin/<arch>/`, `documentation/html_pages/`, …)
-    # which resolve via foreign_cc's symlink farm back to the @kakadu
-    # source under `$EXT_BUILD_ROOT/external/+kakadu_extension+kakadu/`.
-    # Some writes succeed (lib/, bin/ — those dirs already get populated
-    # by foreign_cc's setup so they sit on writable storage) but others
-    # fail: `kdu_hyperdoc` runs from `documentation/`, mkdirs
-    # `html_pages/`, then fails to fopen() `html_pages/blank.html` with
-    # the generic "Unable to create the HTML file" error — the freshly
-    # created dir falls outside the sandbox's writable areas.
-    #
-    # Canonical foreign_cc fix for in-tree builds that write next to
-    # source: dereference the symlink farm into a real copy under
-    # BUILD_TMPDIR (which IS fully writable) and run make there. The
-    # CMake build (`ext/kakadu/CMakeLists.txt`) sidesteps this by
-    # extracting the archive directly into a fresh dir; staging here
-    # achieves the same shape inside Bazel's sandbox.
-    postfix_script = (
-        "STAGE=$$BUILD_TMPDIR/.kakadu-stage && " +
-        "mkdir -p $$STAGE && " +
-        "cp -RL $$EXT_BUILD_ROOT/external/+kakadu_extension+kakadu/. $$STAGE/ && " +
-        "cd $$STAGE/make && " +
-        # On Linux, Nix's clang++ on PATH sees the host runner's glibc
-        # 2.39 headers, which contain C23 transparent renames like
-        # `#define strtol __isoc23_strtol` (gated by __GLIBC_USE(ISOC2X)
-        # which is true under _GNU_SOURCE / C++23). The kakadu .o files
-        # then reference `__isoc23_strtol` (a glibc 2.38+ symbol). The
-        # final sipi link uses toolchains_llvm's Chromium debian-bullseye
-        # sysroot which only has glibc 2.31 — symbol mismatch.
-        #
-        # Force Nix's clang++ to use the Chromium sysroot for headers
-        # via `--sysroot=…`. The sysroot ships glibc 2.31, which has no
-        # __isoc23_strtol redirect, so the .o files contain the canonical
-        # glibc 2.31 symbols that the final link can resolve.
-        # No-op on darwin (no Linux sysroot to find; clang already uses
-        # CLT SDK by default).
-        #
-        # Two LIBRARY_PATH entries injected via env:
-        #   1. libcxx: extracted from NIX_LDFLAGS so ld.bfd can resolve
-        #      `-lc++` (Nix's clang adds `-lc++` to link automatically;
-        #      ld needs to find libc++.so somewhere). The grep is a no-op
-        #      on macOS where /usr/lib satisfies the linker.
-        #   2. sysroot's lib path so the final link finds glibc 2.31 libs
-        #      that match the headers. Belt-and-braces; --sysroot already
-        #      adds the lib search path, but explicit LIBRARY_PATH ensures
-        #      it survives any wrapper post-processing.
-        "LIBCXX_DIR=$$(printf '%s\\n' \"$${NIX_LDFLAGS:-}\" | tr ' ' '\\n' | grep -E '^-L.*libcxx[^/]*/lib$$' | head -1 | sed 's/^-L//' || true) && " +
-        # Hardening flags for kakadu (DEV-6282). Bazel's `--copt` flow
-        # never reaches kakadu's compile lines — its hand-written
-        # `Makefile-*-gcc` files use their own `CXXFLAGS_ADD` and ignore
-        # foreign_cc-forwarded CFLAGS/CXXFLAGS. The wrapper synthesized
-        # below intercepts `$(CC)`/`$(CXX)` invocations so we can inject
-        # hardening flags one level above the Makefile.
-        #
-        # `-fstack-clash-protection` is clang-on-Linux only (warns on
-        # darwin's clang), so it is gated by `uname -s`. `-fstack-protector-strong`
-        # and `-D_FORTIFY_SOURCE=2` apply uniformly across both platforms.
-        # Sanitizer/fuzz Bazel configs do not propagate here (kakadu is
-        # never sanitized — first-party --per_file_copt scoping leaves it
-        # alone), so kakadu carries hardening unconditionally; the ASan
-        # runtime's libc interposition handles `__*_chk` symbols cleanly.
-        "case \"$$(uname -s)\" in " +
-        "  Linux) SYSROOT_DIR=$$(find $$EXT_BUILD_ROOT/external -maxdepth 1 -type d -name '+sysroot+sysroot_linux_*' 2>/dev/null | head -1); " +
-        "          [ -n \"$$SYSROOT_DIR\" ] && SYSROOT_FLAG=\"--sysroot=$$SYSROOT_DIR/sysroot\" || SYSROOT_FLAG=\"\"; " +
-        "          HARDENING_FLAGS=\"-fstack-protector-strong -D_FORTIFY_SOURCE=2 -fstack-clash-protection\" ;; " +
-        "  *)     SYSROOT_FLAG=\"\"; " +
-        "          HARDENING_FLAGS=\"-fstack-protector-strong -D_FORTIFY_SOURCE=2\" ;; " +
-        "esac && " +
-        "echo \"kakadu: LIBCXX_DIR=$$LIBCXX_DIR SYSROOT_FLAG=$$SYSROOT_FLAG HARDENING_FLAGS=$$HARDENING_FLAGS\" && " +
-        "export LIBRARY_PATH=\"$$LIBCXX_DIR$${LIBRARY_PATH:+:$$LIBRARY_PATH}\" && " +
-        # Synthesize a wrapper that prepends the sysroot + hardening flags
-        # so kakadu's `$(CC) -c file.cpp` lines pick them up. Make CLI
-        # vars must be a single token, so `make CC=\"clang++ --sysroot=…\"`
-        # won't work — make would split on whitespace.
-        "WRAPPER=$$BUILD_TMPDIR/bazel_cxx_wrapper.sh && " +
-        "printf '%s\\n' '#!/bin/bash' \"exec clang++ $$SYSROOT_FLAG $$HARDENING_FLAGS \\\"\\$$@\\\"\" > \"$$WRAPPER\" && " +
-        "chmod +x \"$$WRAPPER\" && " +
-        "make -j1 -f " + _KDU_MAKE + " EXEC_PLATFORM=" + _KDU_EXEC_PLATFORM + " CC=\"$$WRAPPER\" CXX=\"$$WRAPPER\" all_but_jni && " +
-        "mkdir -p $$INSTALLDIR/lib $$INSTALLDIR/include && " +
-        "cp $$STAGE/lib/" + _KDU_ARCH + "/libkdu.a $$INSTALLDIR/lib/ && " +
-        "cp $$STAGE/lib/" + _KDU_ARCH + "/libkdu_aux.a $$INSTALLDIR/lib/ && " +
-        "cp -R $$STAGE/managed/all_includes/. $$INSTALLDIR/include/"
-    ),
-    # Cache portability: rules_foreign_cc emits debug-info paths under
-    # `$EXT_BUILD_ROOT` by default, which embeds machine-local sandbox paths
-    # into objects and breaks remote-cache hits.
-    set_file_prefix_map = True,
+    allow_empty = True,
 )
 
-# Convenience alias. Sipi consumes `@kakadu//:kdu`.
-alias(
+_CORESYS_INCLUDES = [
+    "coresys/common",
+    "coresys/shared",
+]
+
+# ----------------------------------------------------------------------------
+# coresys -> libkdu.a
+# ----------------------------------------------------------------------------
+
+# GENERIC_OBJS (coresys/make/Targets.mk) — built on every platform.
+_CORESYS_GENERIC_SRCS = [
+    # coding/
+    "coresys/coding/block_coding_common.cpp",
+    "coresys/coding/block_decoder.cpp",
+    "coresys/coding/block_encoder.cpp",
+    "coresys/coding/decoder.cpp",
+    "coresys/coding/encoder.cpp",
+    "coresys/coding/cplex_analysis.cpp",
+    "coresys/coding/mq_decoder.cpp",
+    "coresys/coding/mq_encoder.cpp",
+    # compressed/
+    "coresys/compressed/blocks.cpp",
+    "coresys/compressed/codestream.cpp",
+    "coresys/compressed/compressed.cpp",
+    # shared/ kernels/ messaging/ parameters/ common/ threads/ roi/
+    "coresys/shared/core_local.cpp",
+    "coresys/kernels/kernels.cpp",
+    "coresys/messaging/messaging.cpp",
+    "coresys/parameters/params.cpp",
+    "coresys/common/kdu_arch.cpp",
+    "coresys/threads/kdu_threads.cpp",
+    "coresys/roi/roi.cpp",
+    # transform/
+    "coresys/transform/colour.cpp",
+    "coresys/transform/transform.cpp",
+    "coresys/transform/analysis.cpp",
+    "coresys/transform/synthesis.cpp",
+    "coresys/transform/fusion.cpp",
+    "coresys/transform/multi_transform.cpp",
+    "coresys/transform/analysis2.cpp",
+    "coresys/transform/synthesis2.cpp",
+    "coresys/transform/transform2.cpp",
+    # fast_coding/ (HTJ2K block coder, source form)
+    "coresys/fast_coding/fbc_common.cpp",
+    "coresys/fast_coding/fbc_encoder.cpp",
+    "coresys/fast_coding/fbc_decoder.cpp",
+    "coresys/fast_coding/fbc_encoder_tools.cpp",
+    "coresys/fast_coding/fbc_decoder_tools.cpp",
+]
+
+# NEON_OBJS — AArch64 (NEONFLAGS empty, so they use the base copts).
+_CORESYS_NEON_SRCS = [
+    "coresys/coding/neon_coder_local.cpp",
+    "coresys/transform/neon_colour_local.cpp",
+    "coresys/transform/neon_dwt_local.cpp",
+    "coresys/transform/neon_multi_transform_local.cpp",
+    "coresys/transform/neon_analysis2.cpp",
+    "coresys/transform/neon_synthesis2.cpp",
+]
+
+# srclib_ht/<platform>/libkdu_ht.a — the scalar fast-block-coder fallback
+# (single object `fbc_noopt.o`), merged into libkdu.a by the upstream rule.
+cc_import(
+    name = "kdu_ht",
+    static_library = select({
+        _DARWIN_AARCH64: "srclib_ht/Mac-arm-64-gcc/libkdu_ht.a",
+        _LINUX_X86_64: "srclib_ht/Linux-x86-64-gcc/libkdu_ht.a",
+        _LINUX_AARCH64: "srclib_ht/Linux-arm-64-gcc/libkdu_ht.a",
+    }),
+)
+
+# x86-only per-ISA SIMD sub-libraries (coresys/make/Targets.mk SIMD_*_OBJS).
+cc_library(
+    name = "coresys_ssse3",
+    srcs = [
+        "coresys/coding/ssse3_coder_local.cpp",
+        "coresys/transform/ssse3_colour_local.cpp",
+        "coresys/transform/ssse3_dwt_local.cpp",
+    ],
+    copts = _X86_BASE_COPTS + ["-mssse3"],
+    includes = _CORESYS_INCLUDES,
+    textual_hdrs = _KDU_HDRS,
+    alwayslink = True,
+)
+
+cc_library(
+    name = "coresys_sse4",
+    srcs = ["coresys/transform/sse4_multi_transform_local.cpp"],
+    copts = _X86_BASE_COPTS + ["-msse4.1"],
+    includes = _CORESYS_INCLUDES,
+    textual_hdrs = _KDU_HDRS,
+    alwayslink = True,
+)
+
+cc_library(
+    name = "coresys_avx",
+    srcs = [
+        "coresys/coding/avx_coder_local.cpp",
+        "coresys/transform/avx_colour_local.cpp",
+    ],
+    copts = _X86_BASE_COPTS + ["-mavx"],
+    includes = _CORESYS_INCLUDES,
+    textual_hdrs = _KDU_HDRS,
+    alwayslink = True,
+)
+
+cc_library(
+    name = "coresys_avx2",
+    srcs = [
+        "coresys/coding/avx2_coder_local.cpp",
+        "coresys/transform/avx2_colour_local.cpp",
+        "coresys/transform/avx2_dwt_local.cpp",
+        "coresys/transform/avx2_multi_transform_local.cpp",
+        # AVX2_X64_OBJS (INCLUDE_X64)
+        "coresys/transform/avx2_analysis2.cpp",
+        "coresys/transform/avx2_synthesis2.cpp",
+    ],
+    copts = _X86_BASE_COPTS + ["-mavx2", "-mfma", "-mbmi", "-mbmi2", "-mlzcnt"],
+    includes = _CORESYS_INCLUDES,
+    textual_hdrs = _KDU_HDRS,
+    alwayslink = True,
+)
+
+cc_library(
+    name = "coresys",
+    srcs = _CORESYS_GENERIC_SRCS + select({
+        _DARWIN_AARCH64: _CORESYS_NEON_SRCS,
+        _LINUX_AARCH64: _CORESYS_NEON_SRCS,
+        _LINUX_X86_64: [],
+    }),
+    copts = _BASE_COPTS + _CORESYS_PLATFORM_COPTS,
+    includes = _CORESYS_INCLUDES,
+    textual_hdrs = _KDU_HDRS,
+    deps = [":kdu_ht"] + select({
+        _LINUX_X86_64: [
+            ":coresys_ssse3",
+            ":coresys_sse4",
+            ":coresys_avx",
+            ":coresys_avx2",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+# ----------------------------------------------------------------------------
+# managed -> libkdu_aux.a (compiles apps/* sources)
+# ----------------------------------------------------------------------------
+
+_AUX_INCLUDES = [
+    "apps/args",
+    "apps/caching_sources",
+    "apps/client_server",
+    "apps/compressed_io",
+    "apps/image",
+    "apps/jp2",
+    "apps/kdu_client",
+    "apps/kdu_compress",
+    "apps/kdu_server",
+    "apps/support",
+    "coresys/common",
+]
+
+# managed ALL_OBJS minus the SIMD-accelerated objects (managed/make/Targets.mk).
+_AUX_GENERIC_SRCS = [
+    "apps/compressed_io/file_io.cpp",
+    "apps/jp2/jp2.cpp",
+    "apps/jp2/jpb.cpp",
+    "apps/jp2/jpx.cpp",
+    "apps/jp2/mj2.cpp",
+    "apps/image/kdu_tiff.cpp",
+    "apps/image/sample_reorg.cpp",
+    "apps/support/kdu_region_compositor.cpp",
+    "apps/support/kdu_region_decompressor.cpp",
+    "apps/support/kdu_stripe_compressor.cpp",
+    "apps/support/kdu_stripe_decompressor.cpp",
+    "apps/support/kdu_stream_decompressor.cpp",
+    "apps/support/supp_local.cpp",
+    "apps/caching_sources/kdu_cache.cpp",
+    "apps/client_server/kdu_client_window.cpp",
+    "apps/client_server/kdcs_comms.cpp",
+    "apps/kdu_client/kdu_client.cpp",
+    "apps/kdu_client/kdu_clientx.cpp",
+    "apps/kdu_server/kdu_serve.cpp",
+    "apps/kdu_server/kdu_servex.cpp",
+    "apps/kdu_compress/roi_sources.cpp",
+    "apps/args/args.cpp",
+]
+
+# NEON SIMD_ACCELERATED_OBJS — AArch64 (base copts).
+_AUX_NEON_SRCS = [
+    "apps/image/neon_sample_reorg.cpp",
+    "apps/support/neon_stripe_transfer.cpp",
+    "apps/support/neon_region_decompressor.cpp",
+    "apps/support/neon_region_compositor.cpp",
+]
+
+# x86-only per-ISA SIMD sub-libraries (managed AVX2FLAGS = -mavx2 -mfma; no AVX).
+cc_library(
+    name = "kdu_aux_ssse3",
+    srcs = [
+        "apps/support/ssse3_stripe_transfer.cpp",
+        "apps/support/ssse3_region_decompressor.cpp",
+    ],
+    copts = _X86_BASE_COPTS + _AUX_LARGEFILE_COPTS + ["-mssse3"],
+    includes = _AUX_INCLUDES,
+    textual_hdrs = _KDU_HDRS,
+    alwayslink = True,
+)
+
+cc_library(
+    name = "kdu_aux_sse4",
+    srcs = ["apps/support/sse4_region_decompressor.cpp"],
+    copts = _X86_BASE_COPTS + _AUX_LARGEFILE_COPTS + ["-msse4.1"],
+    includes = _AUX_INCLUDES,
+    textual_hdrs = _KDU_HDRS,
+    alwayslink = True,
+)
+
+cc_library(
+    name = "kdu_aux_avx2",
+    srcs = [
+        "apps/support/avx2_stripe_transfer.cpp",
+        "apps/support/avx2_region_decompressor.cpp",
+        "apps/support/avx2_region_compositor.cpp",
+        "apps/image/avx2_sample_reorg.cpp",
+    ],
+    copts = _X86_BASE_COPTS + _AUX_LARGEFILE_COPTS + ["-mavx2", "-mfma"],
+    includes = _AUX_INCLUDES,
+    textual_hdrs = _KDU_HDRS,
+    alwayslink = True,
+)
+
+cc_library(
+    name = "kdu_aux",
+    srcs = _AUX_GENERIC_SRCS + select({
+        _DARWIN_AARCH64: _AUX_NEON_SRCS,
+        _LINUX_AARCH64: _AUX_NEON_SRCS,
+        _LINUX_X86_64: [],
+    }),
+    copts = _BASE_COPTS + _CORESYS_PLATFORM_COPTS + _AUX_LARGEFILE_COPTS,
+    includes = _AUX_INCLUDES,
+    textual_hdrs = _KDU_HDRS,
+    deps = [":coresys"] + select({
+        _LINUX_X86_64: [
+            ":kdu_aux_ssse3",
+            ":kdu_aux_sse4",
+            ":kdu_aux_avx2",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+# The single target Sipi consumes (`@kakadu//:kdu`): both static libs plus the
+# public header search paths Sipi's `#include "kdu_*.h"` / "jp2.h" resolve via.
+cc_library(
     name = "kdu",
-    actual = ":kakadu",
+    includes = [
+        "apps/compressed_io",
+        "apps/support",
+        "coresys/common",
+    ],
+    deps = [
+        ":coresys",
+        ":kdu_aux",
+    ],
 )
