@@ -22,11 +22,12 @@ using Sipi::PhotometricInterpretation;
 using Sipi::PixelDelta;
 using Sipi::SipiImage;
 
-// `setPixel`/`getPixel` index pixels as `x * nx + y`, whereas the pixel
-// store (and `maxPixelDelta`) is row-major `y * nx + x`. The two are
-// transposes of one another, so the (max_x, max_y) reported for a value
-// written via setPixel(a, b) comes back as (b, a). Placing the maximum on
-// the diagonal (x == y) makes the location assertion transpose-invariant.
+// `setPixel`/`getPixel` and the pixel store read by `maxPixelDelta` are
+// both row-major `y * nx + x`, so the (max_x, max_y) reported for a value
+// written via setPixel(x, y) is exactly (x, y). The non-square case is
+// covered by pixel_accessor_regression_test; this square fixture passes with
+// or without the fix only because its maximum-delta pixel is on the diagonal
+// (2, 2), where the two index formulae coincide.
 
 TEST(MaxPixelDelta, AbsoluteDeltaBothDirections)
 {
