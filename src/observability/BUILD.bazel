@@ -51,7 +51,7 @@ cc_library(
     # would expose `sentry.h` to angle-form `<sentry.h>` lookups via
     # `-isystem` and mask sentry-native's API header.
     deps = [
-        "//ext/sentry:sentry",
+        "@sentry//:sentry",
         "//include:headers",
         "//src/shttps:shttps",
         "//src:sipi_generated_hdrs",

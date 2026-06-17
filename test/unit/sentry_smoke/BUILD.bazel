@@ -1,0 +1,22 @@
+"""Native sentry-native smoke test — verifies the inproc backend + libbacktrace
+unwinder initialize and deliver a captured event at runtime (DEV-6563)."""
+
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "sentry_smoke_tests",
+    srcs = glob(["*.cpp"]),
+    # sentry's symbolizer/unwinder call dlopen/dladdr + pthread directly; macOS
+    # folds both into libSystem.
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-ldl",
+            "-lpthread",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "@googletest//:gtest_main",
+        "@sentry//:sentry",
+    ],
+)

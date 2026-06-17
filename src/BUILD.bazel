@@ -322,7 +322,7 @@ cc_library(
         "@lua",
         "@jansson//:jansson",
         "@sqlite3",
-        "//ext/sentry:sentry",
+        "@sentry//:sentry",
         "@prometheus-cpp//core",
         "@curl",
         "@openssl//:crypto",
