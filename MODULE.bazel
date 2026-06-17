@@ -346,6 +346,14 @@ pip.parse(
     hub_name = "sipi_bench_pip",
     python_version = "3.12",
     requirements_lock = "//tools/benchmark:requirements.txt",
+    # Use prebuilt binary wheels only (discard sdists). numpy/scipy ship
+    # cp312 wheels for every platform we target, so nothing compiles from
+    # source — which also means rules_python skips its macOS `xcrun
+    # xcodebuild` SDK probe (it only runs when building an sdist). That
+    # probe fails in the Nix dev shell, whose DEVELOPER_DIR points at the
+    # nix apple-sdk (SDK headers + xcrun, but no `xcodebuild` tool). Keeps
+    # `just bench-compare` hermetic and host-Xcode-free.
+    download_only = True,
 )
 use_repo(pip, "sipi_bench_pip")
 
