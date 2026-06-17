@@ -15,6 +15,11 @@ load("@sipi_bench_pip//:requirements.bzl", "requirement")
 py_library(
     name = "gbench",
     srcs = glob(["gbench/*.py"]),
+    # `manual` keeps `bazel build //...` from analyzing this (and fetching
+    # the numpy/scipy wheels) — the bench tooling is local-dev only and its
+    # sole consumer `:compare` is itself `manual` and pulls it explicitly
+    # via `just bench-compare`.
+    tags = ["manual"],
     deps = [
         requirement("numpy"),
         requirement("scipy"),
