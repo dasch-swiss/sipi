@@ -6,3 +6,19 @@
 .vscode
 .direnv
 .claude
+
+# Out-of-Bazel build-output trees (also in .gitignore). These hold
+# extracted third-party sources (gtest, sentry-native's vendored
+# benchmark, …) carrying their own BUILD files that are not part of the
+# Bazel graph — without this, `bazel build //...` descends into them and
+# fails to load. Bazel is the build system; these are CMake-era leftovers.
+_build
+build
+build-linux
+build-mac
+build-fuzz
+cmake-build-debug
+cmake-build-debug-remote
+cmake-build-debug-inside-docker
+cmake-build-dockerdebug
+cmake-build-relwithdebinfo-inside-docker
