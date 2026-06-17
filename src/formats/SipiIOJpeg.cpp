@@ -518,7 +518,14 @@ bool SipiIOJpeg::read(SipiImage *img,
   jerr.pub.error_exit = jpegErrorExit;
 
   jpeg_create_decompress(&cinfo);
-  cinfo.dct_method = JDCT_FLOAT;
+  // JDCT_ISLOW (integer), not JDCT_FLOAT: libjpeg documents the float IDCT as
+  // giving different results across machines/compilers (roundoff), while the
+  // integer method is bit-exact on all platforms — verified by libjpeg-turbo's
+  // own single-MD5 integer tests across x86 SSE2/AVX2 and ARM NEON. This keeps
+  // decoded pixels (and the downstream approval goldens) architecture-invariant,
+  // matches the encoder's default, and is faster. The <0.1 dB accuracy
+  // difference is imperceptible and irrelevant for an archive.
+  cinfo.dct_method = JDCT_ISLOW;
 
   //
   // setjmp error handler — ALL libjpeg errors from this point longjmp here.
@@ -874,7 +881,7 @@ SipiImgInfo SipiIOJpeg::read_shape(const std::string &filepath)
   jerr.pub.error_exit = jpegErrorExit;
 
   jpeg_create_decompress(&cinfo);
-  cinfo.dct_method = JDCT_FLOAT;
+  cinfo.dct_method = JDCT_ISLOW;// integer IDCT — cross-arch bit-exact (see the main read path)
 
   // Helper to clean up jpeg resources (source manager + decompress struct).
   auto cleanup_jpeg = [&cinfo]() {
@@ -1184,14 +1191,23 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
       + ", channels: " + std::to_string(img->nc) + ", bps: " + std::to_string(img->bps) + ")");
   }
   }
-  cinfo.progressive_mode = TRUE;
   cinfo.write_Adobe_marker = TRUE;
   cinfo.write_JFIF_header = TRUE;
 
   // All libjpeg calls below — errors trigger longjmp to the setjmp handler above
   jpeg_set_defaults(&cinfo);
   jpeg_set_quality(&cinfo, quality, TRUE);
-  jpeg_simple_progression(&cinfo);
+  // Baseline sequential JPEG, not progressive. libjpeg-turbo's x86 SSE2
+  // progressive Huffman encoder (jcphuff) emits "Missing Huffman code table
+  // entry" for some scan scripts — its statistics-gather pass and its encode
+  // pass disagree on the emitted symbol stream, so a symbol that is written was
+  // never assigned a code. This is architecture-divergent (the Arm NEON path is
+  // unaffected) and cannot be worked around via optimize_coding, because the
+  // disagreement *is* between the two passes optimize_coding runs. Baseline uses
+  // the jchuff encoder, which is bit-exact across SIMD implementations and the
+  // canonical libjpeg-turbo path. optimize_coding builds compact Huffman tables
+  // from the image data (smaller output, still fully deterministic).
+  cinfo.optimize_coding = TRUE;
   jpeg_start_compress(&cinfo, TRUE);
 
   //
