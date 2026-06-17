@@ -17,10 +17,9 @@ def _kakadu_extension_impl(_ctx):
         repo = "dasch-swiss/dsp-ci-assets",
         sha256 = "d5fc94e4a8fa08e49b387c72aea16af267b41ab8f411ec4c1a616c3394cfafbc",
         strip_prefix = "v8_7-01727L",
-        patches = [
-            "//patches:kakadu-Makefile-Linux-x86-64-clang.patch",
-            "//patches:kakadu-Makefile-Linux-arm-64-clang.patch",
-        ],
+        # No patches: the native cc_library (//bazel:kakadu.BUILD.bazel) compiles
+        # the sources directly and never invokes Kakadu's makefiles, so the old
+        # `Makefile-*-clang.patch` clang/flag adjustments are obsolete.
         build_file = "//bazel:kakadu.BUILD.bazel",
     )
 
