@@ -64,7 +64,7 @@ cc_library(
         # this package as a shared support library.
         "//src/logging:logging",
         "@curl",
-        "//ext/jansson:jansson",
+        "@jansson//:jansson",
         "@libmagic//:lib",
         "@lua",
         "@openssl//:crypto",

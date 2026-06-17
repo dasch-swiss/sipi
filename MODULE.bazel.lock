@@ -98,6 +98,8 @@
     "https://bcr.bazel.build/modules/bzip2/1.0.8.bcr.4/source.json": "a769883197aebe54f78671f1a2c7e0fae5cd8f045bae1230f04f4902856e3bca",
     "https://bcr.bazel.build/modules/civetweb/1.16.bcr.1/MODULE.bazel": "d4cd273eae3ab919f6ae2eb7da3692e9bc1420346f645916290d4d8688b1bd06",
     "https://bcr.bazel.build/modules/civetweb/1.16.bcr.1/source.json": "a2dddab6e51dfbf8480a43a6a5d7272f88cb4cde53a5b6ebcd13ca76b1b68721",
+    "https://bcr.bazel.build/modules/cmake_configure_file/0.1.7/MODULE.bazel": "e8d52a54c04a2934b63f74c6e93cc9d7886a543afd553a5eef9185080e0b0827",
+    "https://bcr.bazel.build/modules/cmake_configure_file/0.1.7/source.json": "6ab1815e9cdb2744d57e3271817d549cf51d0ef32bbb6bcceca57cba6c6dfe53",
     "https://bcr.bazel.build/modules/curl/8.12.0.bcr.1/MODULE.bazel": "4f44af081ff8e3ae3fe09bf60da815002320fb4d27f0c3013c4057db4beef591",
     "https://bcr.bazel.build/modules/curl/8.12.0.bcr.1/source.json": "bb7f565878dd3045c07e273089c0c5ccfe0746eb370125efe930cead83b502ea",
     "https://bcr.bazel.build/modules/curl/8.7.1/MODULE.bazel": "088221c35a2939c555e6e47cb31a81c15f8b59f4daa8009b1e9271a502d33485",
