@@ -1,0 +1,112 @@
+"""Native `cc_library` for jansson — replaces the `rules_foreign_cc` `cmake()` wrapper.
+
+Two config headers are reproduced natively from the upstream CMake templates via
+`cmake_configure_file` (the same mechanism the BCR libtiff overlay uses):
+  - `jansson_config.h`          (public; included by `jansson.h`)
+  - `jansson_private_config.h`  (private; pulled in under `HAVE_CONFIG_H`, which
+                                 upstream CMake defines via `add_definitions`)
+
+Token values are platform-invariant under clang on all three SIPI platforms
+except `HAVE_ENDIAN_H` (Linux ships `<endian.h>`; macOS uses
+`<machine/endian.h>`), split with a `select()`. The `@VAR@` typedef fallbacks in
+the private template live in dead `#ifndef HAVE_*_T` branches (the `HAVE_*_T`
+tokens are defined), but `cmake_configure_file` substitutes `@VAR@` regardless of
+`#if` context, so they must still be supplied.
+"""
+
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cmake_configure_file(
+    name = "jansson_config_h",
+    src = "cmake/jansson_config.h.cmake",
+    out = "src/jansson_config.h",
+    defines = [
+        "HAVE_STDINT_H=1",
+        "HAVE_INTTYPES_H=1",
+        "HAVE_SYS_TYPES_H=1",
+        "JSON_INLINE=inline",
+        "JSON_INT_T=long long",
+        "JSON_STRTOINT=strtoll",
+        "JSON_INTEGER_FORMAT=\"lld\"",
+        "JSON_HAVE_LOCALECONV=1",
+        "JSON_HAVE_ATOMIC_BUILTINS=1",
+        "JSON_HAVE_SYNC_BUILTINS=1",
+    ],
+)
+
+cmake_configure_file(
+    name = "jansson_private_config_h",
+    src = "cmake/jansson_private_config.h.cmake",
+    out = "src/jansson_private_config.h",
+    defines = [
+        "HAVE_FCNTL_H=1",
+        "HAVE_SCHED_H=1",
+        "HAVE_UNISTD_H=1",
+        "HAVE_SYS_PARAM_H=1",
+        "HAVE_SYS_STAT_H=1",
+        "HAVE_SYS_TIME_H=1",
+        "HAVE_SYS_TYPES_H=1",
+        "HAVE_STDINT_H=1",
+        "HAVE_CLOSE=1",
+        "HAVE_GETPID=1",
+        "HAVE_GETTIMEOFDAY=1",
+        "HAVE_OPEN=1",
+        "HAVE_READ=1",
+        "HAVE_SCHED_YIELD=1",
+        "HAVE_SYNC_BUILTINS=1",
+        "HAVE_ATOMIC_BUILTINS=1",
+        "HAVE_LOCALE_H=1",
+        "HAVE_SETLOCALE=1",
+        "HAVE_INT32_T=1",
+        "HAVE_UINT32_T=1",
+        "HAVE_UINT16_T=1",
+        "HAVE_UINT8_T=1",
+        "HAVE_SSIZE_T=1",
+        "USE_URANDOM=1",
+        "JSON_INT32=int32_t",
+        "JSON_UINT32=uint32_t",
+        "JSON_UINT16=uint16_t",
+        "JSON_UINT8=uint8_t",
+        "JSON_SSIZE=ssize_t",
+        "JANSSON_INITIAL_HASHTABLE_ORDER=3",
+    ] + select({
+        "@platforms//os:linux": ["HAVE_ENDIAN_H=1"],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "jansson",
+    srcs = [
+        "src/dump.c",
+        "src/error.c",
+        "src/hashtable.c",
+        "src/hashtable_seed.c",
+        "src/load.c",
+        "src/memory.c",
+        "src/pack_unpack.c",
+        "src/strbuffer.c",
+        "src/strconv.c",
+        "src/utf.c",
+        "src/value.c",
+        "src/version.c",
+        "src/hashtable.h",
+        "src/jansson_private.h",
+        "src/lookup3.h",
+        "src/strbuffer.h",
+        "src/utf.h",
+        ":jansson_private_config_h",
+    ],
+    hdrs = [
+        "src/jansson.h",
+        ":jansson_config_h",
+    ],
+    # `add_definitions(-DHAVE_CONFIG_H)` in upstream CMakeLists — gates the
+    # early `#include <jansson_private_config.h>` in strconv.c / hashtable_seed.c.
+    local_defines = ["HAVE_CONFIG_H=1"],
+    includes = ["src"],
+    linkstatic = True,
+)

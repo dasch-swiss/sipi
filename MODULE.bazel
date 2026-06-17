@@ -24,6 +24,13 @@ module(
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "rules_cc", version = "0.2.19")
 
+# `cmake_configure_file` reproduces CMake `configure_file()` config-header
+# generation natively (`#cmakedefine` / `@VAR@` substitution), so the native
+# `cc_library` deps that replaced foreign_cc (jansson, libtiff, exiv2) generate
+# their config headers without running CMake. Same module the BCR libtiff
+# overlay uses; loaded as `@cmake_configure_file//:cmake_configure_file.bzl`.
+bazel_dep(name = "cmake_configure_file", version = "0.1.7")
+
 # `aspect_bazel_lib` provides `expand_template` with `stamp_substitutions=`,
 # which Y consumes to bake `STABLE_SIPI_VERSION` etc. into SipiVersion.h.
 # Y+4 will reuse it for OCI image stamping (`image_created`, `image_labels`).
@@ -559,7 +566,7 @@ http_archive(
 
 http_archive(
     name = "jansson",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    build_file = "//bazel:jansson.BUILD.bazel",
     sha256 = "f4f377da17b10201a60c1108613e78ee15df6b12016b116b6de42209f47a474f",
     strip_prefix = "jansson-2.13.1",
     url = "https://www.digip.org/jansson/releases/jansson-2.13.1.tar.gz",
@@ -567,7 +574,7 @@ http_archive(
 
 http_archive(
     name = "jbigkit",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    build_file = "//bazel:jbigkit.BUILD.bazel",
     sha256 = "de7106b6bfaf495d6865c7dd7ac6ca1381bd12e0d81405ea81e7f2167263d932",
     strip_prefix = "jbigkit-2.1",
     url = "https://www.cl.cam.ac.uk/~mgk25/jbigkit/download/jbigkit-2.1.tar.gz",
@@ -583,7 +590,7 @@ http_archive(
 
 http_archive(
     name = "lcms2",
-    build_file = "//bazel:all_content.BUILD.bazel",
+    build_file = "//bazel:lcms2.BUILD.bazel",
     sha256 = "d873d34ad8b9b4cea010631f1a6228d2087475e4dc5e763eb81acc23d9d45a51",
     strip_prefix = "lcms2-2.16",
     url = "https://github.com/mm2/Little-CMS/releases/download/lcms2.16/lcms2-2.16.tar.gz",

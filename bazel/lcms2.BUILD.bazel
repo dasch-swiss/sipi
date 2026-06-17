@@ -1,0 +1,32 @@
+"""Native `cc_library` for Little CMS 2 — replaces the `rules_foreign_cc` `configure_make()` wrapper.
+
+The core `liblcms2` is the full `src/*.c` set plus the checked-in private header
+`src/lcms2_internal.h`; there is no generated config header. The old recipe's
+`--with-jpeg` / `--with-tiff` only built the `utils/` CLI tools (jpgicc/tifficc),
+never the core library, so those deps are dropped here.
+
+`HAVE_GMTIME_R=1` matches what the autotools/meson builds detect on macOS and
+Linux (cmsplugin.c selects the reentrant `gmtime_r`); it does not change emitted
+ICC bytes — those funnel through `Icc::iccBytes()` and the date is fixed under
+`SOURCE_DATE_EPOCH` in tests (ADR-0002). Symbol visibility is left default
+(static archive), so `HAVE_FUNC_ATTRIBUTE_VISIBILITY` is intentionally unset.
+"""
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "lcms2",
+    srcs = glob([
+        "src/*.c",
+        "src/*.h",
+    ]),
+    hdrs = [
+        "include/lcms2.h",
+        "include/lcms2_plugin.h",
+    ],
+    local_defines = ["HAVE_GMTIME_R=1"],
+    includes = ["include"],
+    linkstatic = True,
+)
