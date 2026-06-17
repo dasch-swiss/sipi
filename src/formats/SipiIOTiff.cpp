@@ -18,8 +18,6 @@
 
 #include <cerrno>
 
-#include "tif_dir.h"// libtiff internals; for _TIFFFieldArray
-
 #include "shttps/Connection.h"
 
 #include "logging/logger.h"

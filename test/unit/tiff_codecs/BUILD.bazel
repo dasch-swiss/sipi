@@ -1,0 +1,13 @@
+"""Native libtiff codec-coverage proof — verifies the re-enabled ingest codecs
+(JPEG/LZMA/ZSTD/WebP/JBIG) are compiled into the vendored libtiff (DEV-6563)."""
+
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "tiff_codecs_tests",
+    srcs = glob(["*.cpp"]),
+    deps = [
+        "@googletest//:gtest_main",
+        "@tiff//:tiff",
+    ],
+)
