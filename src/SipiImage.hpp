@@ -114,6 +114,28 @@ enum SkipMetadata : std::uint8_t {
 enum InfoError { INFO_ERROR };
 
 /*!
+ * \struct PixelDelta
+ *
+ * Per-channel absolute pixel-difference statistics between two images,
+ * as reported by the `sipi compare` command. `max_abs` is the largest
+ * |sample₁ − sample₂| across all pixels and channels, located at
+ * (`max_x`, `max_y`); `mean_abs` is the mean |Δ| over every sample.
+ *
+ * NOTE: `max_x`/`max_y` are codec-store (row-major `y * nx + x`)
+ * coordinates, matching the pixel layout used by `operator-=` and the
+ * format handlers. They are NOT compatible with `getPixel`/`setPixel`,
+ * which index transposed as `x * nx + y`; do not feed them back into
+ * those accessors.
+ */
+struct PixelDelta
+{
+  double mean_abs;//!< mean absolute per-channel difference
+  int max_abs;//!< maximum absolute per-channel difference
+  size_t max_x;//!< x coordinate of the maximum absolute difference (codec-store order)
+  size_t max_y;//!< y coordinate of the maximum absolute difference (codec-store order)
+};
+
+/*!
  * \class SipiImage
  *
  * Base class for all images in the Sipi package.
@@ -586,6 +608,19 @@ public:
    * \returns Returns similarity index, returns in [0..1]
    */
   std::optional<double> compare(const SipiImage &rhs) const;
+
+  /*!
+   * Computes the per-channel absolute pixel-difference statistics against
+   * another image. Unlike `operator-=` (which rescales the signed diff into
+   * a displayable visualization), this reads the raw samples and reports the
+   * true mean and maximum |Δ| plus the location of the maximum. Used by
+   * `sipi compare` as the codec-rebaseline tolerance metric.
+   *
+   * \param[in] rhs image to compare against
+   * \returns the difference statistics, or nullopt if the images are not
+   *          comparable (differing dimensions, channels, bit depth, or photometric interpretation)
+   */
+  [[nodiscard]] std::optional<PixelDelta> maxPixelDelta(const SipiImage &rhs) const;
 
   /*!
    * Add a watermark to a file...
