@@ -1,0 +1,135 @@
+"""Native `cc_library` for Exiv2 0.28.5 — replaces the `rules_foreign_cc` `cmake()` wrapper.
+
+Two generated headers are reproduced without CMake:
+  - `exv_conf.h` — via `cmake_configure_file` on `cmake/config.h.cmake`. Token
+    values match what the foreign_cc build generated on this toolchain (the
+    on-disk darwin `exv_conf.h` was the reference). `EXV_HAVE_ICONV` is the only
+    platform-divergent token (macOS links libiconv; the glibc-Linux build left
+    it off), split with a `select()`. The `EXV_STRERROR_R_CHAR_P` /
+    `ICONV_ACCEPTS_CONST_INPUT` tokens stay undefined on both: under
+    `-std=gnu++17` (below) glibc exposes the XSI `strerror_r` (int) and the
+    non-const `iconv`, same as macOS.
+  - `exiv2lib_export.h` — a checked-in static shim (CMake's
+    `generate_export_header` expands the `EXIV2API` macros to empty for a static
+    build; reproduced via `write_file`).
+
+`-std=gnu++17` overrides SIPI's global `-std=c++23` for exiv2's TUs (it targets
+C++17, and `gnu++17` keeps glibc POSIX symbols visible on Linux — strict
+`-std=c++23` hides `strerror_r`/`iconv`). Same pattern as `bazel/kakadu.BUILD.bazel`.
+Exiv2's public headers are unaffected; SIPI keeps including them under C++23.
+
+Deps are `@libexpat` (the bundled XMP SDK's ExpatAdapter) + `@zlib` (PNG-chunk
+inflate/deflate). **No libpng** — exiv2's PNG path links zlib only (verified:
+no `<png.h>`/`png_*` references; EXIV2_ENABLE_PNG links `ZLIB::ZLIB`).
+`http.cpp` is excluded (WEBREADY off, as in the foreign_cc build).
+"""
+
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cmake_configure_file(
+    name = "exv_conf_h",
+    src = "cmake/config.h.cmake",
+    out = "include/exiv2/exv_conf.h",
+    defines = [
+        "EXV_ENABLE_FILESYSTEM=1",
+        "EXV_ENABLE_VIDEO=1",
+        "EXV_ENABLE_BMFF=1",
+        "EXV_HAVE_STRERROR_R=1",
+        "EXV_HAVE_LIBZ=1",
+        "EXV_HAVE_XMP_TOOLKIT=1",
+        "EXV_HAVE_LENSDATA=1",
+        "EXV_PACKAGE_NAME=exiv2",
+        "EXV_PACKAGE_STRING=exiv2 0.28.5",
+        "EXV_PACKAGE_VERSION=1",  # guard for the #cmakedefine; value comes from @PROJECT_VERSION@
+        "PROJECT_VERSION=0.28.5",
+        "PROJECT_VERSION_MAJOR=0",
+        "PROJECT_VERSION_MINOR=28",
+        "PROJECT_VERSION_PATCH=5",
+        "PROJECT_VERSION_TWEAK=",  # no tweak version -> EXIV2_TWEAK_VERSION (U), matching CMake
+    ] + select({
+        "@platforms//os:macos": ["EXV_HAVE_ICONV=1"],
+        "//conditions:default": [],
+    }),
+)
+
+# Static `generate_export_header` output: with a static archive the EXIV2API
+# visibility macros expand to empty. Emitted via a native genrule (no cross-repo
+# Starlark load from this external-repo build file).
+genrule(
+    name = "exiv2lib_export_h",
+    outs = ["include/exiv2/exiv2lib_export.h"],
+    cmd = """cat > $@ << 'EXIV2_EXPORT_HDR'
+#ifndef EXIV2API_H
+#define EXIV2API_H
+#define EXIV2API
+#define EXIV2LIB_NO_EXPORT
+#ifndef EXIV2LIB_DEPRECATED
+#  define EXIV2LIB_DEPRECATED __attribute__((__deprecated__))
+#endif
+#define EXIV2LIB_DEPRECATED_EXPORT EXIV2API EXIV2LIB_DEPRECATED
+#define EXIV2LIB_DEPRECATED_NO_EXPORT EXIV2LIB_NO_EXPORT EXIV2LIB_DEPRECATED
+#endif
+EXIV2_EXPORT_HDR
+""",
+)
+
+_GENERATED_HEADERS = [
+    ":exv_conf_h",
+    ":exiv2lib_export_h",
+]
+
+cc_library(
+    name = "exiv2_impl",
+    srcs = glob(
+        [
+            "src/*.cpp",
+            "src/*.hpp",
+            "src/*.h",
+            "xmpsdk/src/*.cpp",
+            "xmpsdk/src/*.hpp",
+            "xmpsdk/src/*.h",
+            "xmpsdk/include/**/*.hpp",
+            "xmpsdk/include/**/*.h",
+            "include/exiv2/*.hpp",
+            "include/exiv2/*.h",
+        ],
+        exclude = ["src/http.cpp"],  # WEBREADY off (matches the foreign_cc build)
+    ) + _GENERATED_HEADERS,
+    # `.incl_cpp` are textually #included by the XMP SDK TUs, not compiled alone.
+    textual_hdrs = glob([
+        "xmpsdk/src/*.incl_cpp",
+        "xmpsdk/include/**/*.incl_cpp",
+    ]),
+    copts = ["-std=gnu++17"],
+    includes = [
+        "include",
+        "include/exiv2",
+        "src",
+        "xmpsdk/include",
+        "xmpsdk/src",
+    ],
+    linkstatic = True,
+    local_defines = ["BanAllEntityUsage=1"],  # XMP SDK / expat entity-expansion guard
+    visibility = ["//visibility:private"],
+    deps = [
+        "@libexpat",
+        "@zlib",
+    ],
+)
+
+cc_library(
+    name = "exiv2",
+    hdrs = glob([
+        "include/exiv2/*.hpp",
+        "include/exiv2/*.h",
+    ]) + _GENERATED_HEADERS,
+    includes = [
+        "include",
+        "include/exiv2",
+    ],
+    implementation_deps = [":exiv2_impl"],
+    visibility = ["//visibility:public"],
+)
