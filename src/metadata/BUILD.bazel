@@ -81,7 +81,7 @@ cc_library(
         "//conditions:default": [],
     }),
     deps = [
-        "//ext/exiv2:exiv2",
+        "@exiv2//:exiv2",
         "@lcms2//:lcms2",
         "@openssl//:crypto",
         "@openssl//:ssl",
