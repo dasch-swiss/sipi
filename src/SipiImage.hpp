@@ -121,11 +121,9 @@ enum InfoError { INFO_ERROR };
  * |sample₁ − sample₂| across all pixels and channels, located at
  * (`max_x`, `max_y`); `mean_abs` is the mean |Δ| over every sample.
  *
- * NOTE: `max_x`/`max_y` are codec-store (row-major `y * nx + x`)
- * coordinates, matching the pixel layout used by `operator-=` and the
- * format handlers. They are NOT compatible with `getPixel`/`setPixel`,
- * which index transposed as `x * nx + y`; do not feed them back into
- * those accessors.
+ * `max_x`/`max_y` are row-major (`y * nx + x`) pixel coordinates, matching
+ * the layout used by `operator-=`, the format handlers, and
+ * `getPixel`/`setPixel` — so they may be fed back into those accessors.
  */
 struct PixelDelta
 {
@@ -288,7 +286,18 @@ public:
    */
   ~SipiImage();
 
-  int getPixel(size_t x, size_t y, size_t c)
+  /*!
+   * Gets the value of a pixel sample.
+   *
+   * Indexes the pixel buffer row-major (`nc * (y * nx + x) + c`), matching the
+   * codec store written by the format handlers and read by `maxPixelDelta`.
+   *
+   * \param[in] x X position
+   * \param[in] y Y position
+   * \param[in] c Color channel
+   * \return The sample value
+   */
+  [[nodiscard]] int getPixel(size_t x, size_t y, size_t c)
   {
     if (x >= nx) throw((int)1);
     if (y >= ny) throw((int)2);
@@ -296,11 +305,11 @@ public:
     switch (bps) {
     case 8: {
       unsigned char *tmp = (unsigned char *)pixels;
-      return static_cast<int>(tmp[nc * (x * nx + y) + c]);
+      return static_cast<int>(tmp[nc * (y * nx + x) + c]);
     }
     case 16: {
       unsigned short *tmp = (unsigned short *)pixels;
-      return static_cast<int>(tmp[nc * (x * nx + y) + c]);
+      return static_cast<int>(tmp[nc * (y * nx + x) + c]);
     }
     default: {
       throw((int)6);
@@ -326,13 +335,13 @@ public:
     case 8: {
       if (val > 0xff) throw((int)4);
       unsigned char *tmp = (unsigned char *)pixels;
-      tmp[nc * (x * nx + y) + c] = (unsigned char)val;
+      tmp[nc * (y * nx + x) + c] = (unsigned char)val;
       break;
     }
     case 16: {
       if (val > 0xffff) throw((int)5);
       unsigned short *tmp = (unsigned short *)pixels;
-      tmp[nc * (x * nx + y) + c] = (unsigned short)val;
+      tmp[nc * (y * nx + x) + c] = (unsigned short)val;
       break;
     }
     default: {

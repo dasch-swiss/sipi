@@ -1844,8 +1844,7 @@ std::optional<PixelDelta> SipiImage::maxPixelDelta(const SipiImage &rhs) const
   if ((nx != rhs.nx) || (ny != rhs.ny) || (nc != rhs.nc) || (bps != rhs.bps) || (photo != rhs.photo)) { return {}; }
 
   // Read the raw pixel store directly in row-major order (`y * nx + x`),
-  // matching operator-= and the format handlers — NOT getPixel, whose
-  // transposed `x * nx + y` indexing is only correct for square images.
+  // matching operator-=, the format handlers, and getPixel/setPixel.
   double sum_abs = 0.;
   int max_abs = 0;
   size_t max_x = 0, max_y = 0;
