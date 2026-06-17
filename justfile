@@ -295,7 +295,12 @@ bench-compare before after *FLAGS='':
     set -euo pipefail
     BEFORE="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
     AFTER="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
-    bazel run //tools/benchmark:compare -- "${@:3}" benchmarks "$BEFORE" "$AFTER"
+    # `set positional-arguments` + the `*FLAGS=''` default expand to a single
+    # empty positional when no flags are given, which compare.py would read as
+    # the (invalid) `mode`. Keep only the non-empty extra flags.
+    flags=()
+    for f in "${@:3}"; do [ -n "$f" ] && flags+=("$f"); done
+    bazel run //tools/benchmark:compare -- ${flags[@]+"${flags[@]}"} benchmarks "$BEFORE" "$AFTER"
 
 #####################################
 # Bazel Docker (rules_oci)
