@@ -292,20 +292,28 @@ build:fuzz --@llvm//config:asan=true
 # bazel-testlogs — useful for inner-loop iteration. CI flips this off.
 test --test_output=errors
 
-# Retry the three timing-sensitive e2e tests up to 3x. They assert on
-# connection / cache timing budgets that a loaded CI runner (observed on
-# linux-arm64) can blow on a single attempt — surfacing as a transient
-# `hyper::Error(IncompleteMessage)` on a cache-hit GET, not a logic bug. A
-# genuinely broken test still fails all 3 attempts, so this masks flakes, not
+# Retry the timing-sensitive e2e tests up to 3x — the single retry mechanism
+# for the suite (replaces the bespoke Rust `retry_flaky` helper / inline poll
+# loops, removed in favour of Bazel's native `--flaky_test_attempts`). These
+# four assert on server-side timing the test can't pin down deterministically:
+#   - latency / iiif_compliance / resource_limits: connection / cache budgets a
+#     loaded CI runner (observed on linux-arm64) blows on a single attempt —
+#     surfacing as a transient `hyper::Error(IncompleteMessage)`.
+#   - memory_budget / resource_limits: an eventually-consistent state settling
+#     just after the response (the decode-budget gauge returning to 0; the musl
+#     binary recovering after a heavy transform pipeline).
+# A genuinely broken test still fails all 3 attempts, so this masks flakes, not
 # regressions. `--flaky_test_attempts` is `accumulate_value` (one entry per
-# target) and matches the target label as a regex; a no-op for invocations
-# that don't include the target. Living in `.bazelrc` (not a per-workflow
-# flag) means ci.yml, sanitizer.yml, and local `just bazel-test` all inherit
-# it — single source of truth. (sanitizer.yml also passes these inline for
-# the ASan run; the duplicate same-value entries are harmless.)
+# target) and matches the target label as a regex; a no-op for invocations that
+# don't include the target. Living in `.bazelrc` (not a per-workflow flag)
+# means ci.yml, sanitizer.yml, and local `just bazel-test` all inherit it —
+# single source of truth. (sanitizer.yml still passes latency/iiif_compliance/
+# resource_limits inline for the ASan run; the duplicate same-value entries are
+# harmless and can be dropped once that PR lands.)
 test --flaky_test_attempts=//test/e2e-rust:latency@3
 test --flaky_test_attempts=//test/e2e-rust:iiif_compliance@3
 test --flaky_test_attempts=//test/e2e-rust:resource_limits@3
+test --flaky_test_attempts=//test/e2e-rust:memory_budget@3
 
 # ── Remote cache ────────────────────────────────────────────────────────────
 # DEV-6517: gRPC remote cache via bazel-remote on Cloud Run, backed by GCS.
