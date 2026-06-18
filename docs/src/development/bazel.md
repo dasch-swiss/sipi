@@ -172,8 +172,16 @@ See [Kakadu setup](kakadu.md) for the full version-bump procedure.
 
 Linux-only targets (`//src:image`, `//src:image_load`,
 `//src:image_push_*`, `//src:sipi_debug_layout`) are gated by
-`target_compatible_with = ["@platforms//os:linux"]` and skipped on
-macOS hosts. The fuzz harness is supported on linux-x86_64 (CI) and
+`target_compatible_with = ["@platforms//os:linux"]` — on the **target**
+OS, not the host. A macOS host builds them by setting the target
+platform explicitly (`--platforms=//bazel/platforms:linux_{amd64,arm64}`),
+which the hermetic-llvm toolchain cross-compiles end to end (bundled
+per-target glibc + libc++; no sysroot). `just bazel-cross-build-image
+{amd64,arm64}` wraps this; the darwin-arm64 CI runner exercises both on
+every PR. Without a `--platforms` override the default host platform on
+macOS is darwin, which fails the linux gate and skips the target.
+
+The fuzz harness is supported on linux-x86_64 (CI) and
 darwin-aarch64 (local dev) — `just bazel-build-fuzz` selects the
 host's matching `//tools/fuzz:<host>_fuzz` platform automatically.
 linux-aarch64 is out of scope for the fuzz harness.
