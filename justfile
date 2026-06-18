@@ -330,6 +330,28 @@ bazel-docker-build-amd64 *FLAGS='':
 bazel-docker-build-arm64 *FLAGS='':
     bazel run --stamp --platforms=//bazel/platforms:linux_arm64 --verbose_failures {{FLAGS}} //src:image_load
 
+# Cross-build the Linux OCI image for `arch` (amd64|arm64) WITHOUT loading it
+# into a Docker daemon. This is the darwin→linux cross-compilation gate: it
+# builds `//src:image` under `--platforms=//bazel/platforms:linux_${arch}` so a
+# macOS host (where there is no Linux Docker daemon, so `bazel-docker-build-*`
+# cannot `docker load`) can still prove every native dep cross-compiles through
+# the relocatable hermetic clang toolchain. CI runs both arches on the
+# darwin-arm64 runner so the capability can't silently regress. No `--stamp`:
+# cross-compile validity is independent of the workspace-status version embed,
+# and skipping it keeps the gate fast.
+bazel-cross-build-image arch *FLAGS='':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{arch}}" in
+        amd64) PLATFORM=//bazel/platforms:linux_amd64 ;;
+        arm64) PLATFORM=//bazel/platforms:linux_arm64 ;;
+        *)
+            echo "ERROR: unknown arch '{{arch}}' (expected: amd64, arm64)" >&2
+            exit 1
+            ;;
+    esac
+    bazel build --platforms="$PLATFORM" --verbose_failures {{FLAGS}} //src:image
+
 # Push the per-arch image to docker.io/daschswiss/sipi with two tags:
 # `latest-${arch}` and `v<version>-${arch}`. Driven by `oci_push`'s
 # `remote_tags` attribute consuming `:remote_tags_${arch}`. The

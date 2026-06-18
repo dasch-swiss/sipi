@@ -93,12 +93,25 @@ The full test matrix runs on macOS-aarch64, linux-x86_64, and
 linux-aarch64. CI exercises every variant on every platform; a
 green CI run verifies macOS as well as Linux.
 
-For Linux-target builds from a macOS host, the simplest path is
-[OrbStack](https://orbstack.dev/) or any other lightweight Linux
-VM with the dev shell available inside it (`nix develop` from a
-shared workdir). Native cross-compilation via the hermetic-llvm
-toolchain's bundled per-target sysroots is on the post-launch
-roadmap (out of scope for the Y → Y+7 migration).
+A macOS host cross-compiles the Linux OCI image directly — the
+hermetic-llvm toolchain declares every exec×target pair and bundles a
+per-target glibc + libc++ + compiler-rt, so no sysroot, VM, or host
+Linux toolchain is needed. `rules_foreign_cc` was the only thing that
+host-bound the build; with it gone (ADR-0015), every native
+`cc_library` (kakadu/libtiff/exiv2/…) compiles through the relocatable
+clang for the target platform:
+
+```bash
+just bazel-cross-build-image amd64   # build //src:image for linux-x86_64
+just bazel-cross-build-image arm64   # build //src:image for linux-aarch64
+```
+
+These are build-only (no `docker load`, since a macOS host has no Linux
+Docker daemon) and run on the darwin-arm64 CI runner on every PR so the
+capability can't silently regress. To actually load/run the image,
+either use a Linux host's `bazel-docker-build-{amd64,arm64}` or a
+lightweight Linux VM such as [OrbStack](https://orbstack.dev/) with the
+dev shell available inside it (`nix develop` from a shared workdir).
 
 ## All `just` targets
 
@@ -117,6 +130,7 @@ groups:
 | `bazel-build-sanitized [*FLAGS]` | `bazel build --config=asan --config=ubsan //src/cli:sipi` |
 | `bazel-build-fuzz [*FLAGS]` | libFuzzer harness (linux-x86_64 in CI, darwin-aarch64 local) |
 | `bazel-run-fuzz corpus duration [seed]` | Run libFuzzer harness against a corpus |
+| `bazel-cross-build-image {amd64,arm64}` | Cross-build `//src:image` for the Linux target arch (build-only; darwin→linux gate) |
 | `bazel-docker-build-{amd64,arm64}` | Build + load per-arch image as `daschswiss/sipi:latest` |
 | `bazel-docker-push-{amd64,arm64}` | Push to `daschswiss/sipi:{latest,v<version>}-${arch}` |
 | `bazel-docker-publish-manifest` | `crane index append` → multi-arch manifest at `daschswiss/sipi:v<version>` |
