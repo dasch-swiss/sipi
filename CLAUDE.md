@@ -73,8 +73,8 @@ just docs-serve                  # serve docs locally
 ### Inner-loop development (incremental rebuilds)
 
 `bazel build` IS the inner loop. The first build is slow (cold action cache,
-foreign_cc compiles for openssl/kakadu/libtiff/etc), but subsequent edits to
-a single `.cpp` file rebuild in seconds — Bazel's per-action cache only
+the native `cc_library` deps kakadu/libtiff/exiv2/etc compile from source), but
+subsequent edits to a single `.cpp` file rebuild in seconds — Bazel's per-action cache only
 re-runs the affected compile + link.
 
 ```bash
@@ -123,15 +123,21 @@ localdev config in one step.
 
 ### Dependencies
 
-**External Libraries (built from source via `rules_foreign_cc` under `ext/<lib>`):**
-Image formats (libtiff, libpng, libjpeg, libwebp), compression (zlib, bzip2, xz, zstd), JPEG2000 (kakadu — requires license), metadata (exiv2, lcms2), Lua, jansson, sqlite3, sentry, prometheus-cpp (core only), OpenSSL, libcurl, libmagic.
+**External Libraries.** Each is either a BCR `bazel_dep` (drop-in) or a
+hand-written native `cc_library` over an `http_archive`/release fetch
+(`bazel/<lib>.BUILD.bazel`) — never `rules_foreign_cc` (see
+[`docs/adr/0015-native-cc_library-over-foreign_cc.md`](docs/adr/0015-native-cc_library-over-foreign_cc.md)).
+BCR drop-ins: libpng, libjpeg_turbo, libwebp, libdeflate, zlib, bzip2, xz, zstd,
+sqlite3, libexpat, libmagic, Lua, curl, OpenSSL, prometheus-cpp (core only),
+protobuf. Native `cc_library`: libtiff (codecs re-enabled + JBIG via jbigkit),
+exiv2, lcms2, jansson, sentry-native, jbigkit, and Kakadu (requires license).
 
 **System Dependencies:** Threads (pthread), iconv (macOS only).
 
 ### Important Files
 
-- `MODULE.bazel` — Bazel module + `http_archive` pins for every ext/* dep
-- `BUILD.bazel` (root + `src/`, `test/`, `ext/<lib>/`) — target graph
+- `MODULE.bazel` — Bazel module + BCR `bazel_dep`s + `http_archive` pins for the native-`cc_library` deps
+- `BUILD.bazel` (root + `src/`, `test/`) — target graph; `bazel/<lib>.BUILD.bazel` — native dep build files
 - `justfile` — all build targets (run `just` to list)
 - `flake.nix` — dev-shell only (`default` clang+libc++, `gcc` diagnostic)
 - `version.txt` — version information; baked in via `tools/workspace_status.sh`

@@ -1,4 +1,4 @@
-"""Native `cc_library` for JBIG-KIT — replaces the `rules_foreign_cc` `make()` wrapper.
+"""Native `cc_library` for JBIG-KIT.
 
 JBIG-KIT's portable library is two translation units (`jbig.c` + `jbig_ar.c`)
 with no generated config header and no external deps. The T.85-only

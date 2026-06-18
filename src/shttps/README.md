@@ -65,7 +65,7 @@ Enforcement today:
 - `scripts/shttps-context-check.sh` — CI regex gate that fails on any new `#include "Sipi*.h"` or `Sipi*::` symbol in `src/shttps/`.
 - Curated direct-deps list in `src/shttps/BUILD.bazel`.
 
-Bazel `--features=layering_check` is **deferred** to the broader Y+8 layering rollout (DEV-6353) — foreign_cc deps in `//ext/*` do not emit Clang modulemaps, which blocks layering_check on any cc_library that consumes them. The shell-script gate is the active enforcement until DEV-6353 resolves the foreign_cc story.
+Bazel `--features=layering_check` is **deferred** to the broader Y+8 layering rollout (DEV-6353) — the third-party native `cc_library` deps (libtiff, exiv2, …) are not layering-clean (they freely include each other's internal headers), so enabling layering_check globally fails their compiles. The shell-script gate is the active enforcement until DEV-6353.
 
 ## Utilities scheduled for re-homing
 

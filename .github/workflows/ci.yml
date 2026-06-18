@@ -152,14 +152,11 @@ jobs:
       # linux-amd64).
       #
       # `nix develop --command` activates the dev shell so `gh`
-      # (gh_release_archive repository_rule) + foreign_cc host tools
-      # (cmake, perl, pkg-config, autoconf, automake, libtoolize) are
-      # on PATH. The `if [ -n "$BAZEL_CACHE_PASSWORD" ]` block builds
+      # (the gh_release_archive repository_rule, for the Kakadu fetch)
+      # is on PATH. The `if [ -n "$BAZEL_CACHE_PASSWORD" ]` block builds
       # the `--remote_cache` + `--experimental_remote_downloader` +
       # `--credential_helper` flag string in $REMOTE only when the
-      # secret is present (fork PRs run cold). `--sandbox_debug`
-      # keeps the sandbox tree on failure so foreign_cc Make.log
-      # files (dumped by the failure step below) survive.
+      # secret is present (fork PRs run cold).
       - name: Build + run all tests
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
@@ -177,29 +174,7 @@ jobs:
           else
             BES=""
           fi
-          nix develop --command bash -c "just bazel-test $REMOTE $BES --sandbox_debug"
-
-      # On any bazel failure above, locate and dump every foreign_cc
-      # Make.log under the bazel output base. rules_foreign_cc writes
-      # the captured stderr/stdout of each `make()` action into a
-      # Make.log alongside the action's output tree; with
-      # `--sandbox_debug` those survive action failure. Converts
-      # "output X was not created" diagnostics into the actual Make
-      # stderr.
-      - name: Dump foreign_cc Make.log files on failure
-        if: failure()
-        run: |
-          set +e
-          echo "=== searching for foreign_cc *.log files ==="
-          find "$HOME/.bazel" /home/runner/work /Users/runner/work -type f \
-            \( -name "Make.log" -o -name "configure.log" -o -name "build.log" -o -name "CMake.log" \) \
-            -print 2>/dev/null | while read -r f; do
-            echo
-            echo "===== $f ====="
-            cat "$f"
-          done
-          echo
-          echo "=== end of foreign_cc log dump ==="
+          nix develop --command bash -c "just bazel-test $REMOTE $BES"
 
       # Docker steps run on Linux only: //src:image is gated by host-CPU
       # `target_compatible_with` and would error out on macOS-aarch64.

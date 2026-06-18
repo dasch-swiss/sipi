@@ -28,10 +28,11 @@
 permissions:
   contents: read
 
-# PR trigger disabled under the hermetic-llvm toolchain. Its minimal prebuilt
-# ships no ASan/UBSan runtime, and the only build mechanism instruments the
-# whole toolchain globally (which breaks the foreign_cc deps). Kept as a manual
-# (workflow_dispatch) target so it can be re-run once the runtime story matures.
+# PR trigger disabled under the hermetic-llvm toolchain: its minimal prebuilt
+# ships no ASan/UBSan runtime. Kept as a manual (workflow_dispatch) target so it
+# can be re-run once the compiler-rt runtime is provisioned. (The old
+# global-instrument-breaks-third-party-CMake-deps blocker is gone now that the
+# build is all-native — see docs/adr/0015-native-cc_library-over-foreign_cc.md.)
 # See docs/adr/0014-toolchain-provider-swap.md ("Carved-out instrumentation
 # gates"). Restore the `pull_request:` block below to re-arm the merge gate.
 on:
@@ -90,11 +91,8 @@ jobs:
         # themselves under ASan/UBSan, then runs them — single action
         # graph, no separate sanitised-build step.
         #
-        # `nix develop --command` is required so foreign_cc rules see
-        # `gh` (kakadu repository_rule), `cmake`/`perl`/`pkg-config`/
-        # `autoconf`/`automake`/`libtoolize`, and the Nix-injected
-        # `NIX_LDFLAGS`/`ACLOCAL_PATH` (forwarded into foreign_cc
-        # actions via `.bazelrc:--action_env=*`).
+        # `nix develop --command` is required so `gh` (the kakadu
+        # repository_rule) is on PATH.
         #
         # `LSAN_OPTIONS` (suppressions path) is injected per-test by
         # `test/e2e-rust/sipi_e2e_test.bzl`; `ASAN_OPTIONS` (log_path)
@@ -146,27 +144,6 @@ jobs:
               --flaky_test_attempts=//test/e2e-rust:iiif_compliance@3 \
               --flaky_test_attempts=//test/e2e-rust:resource_limits@3 \
               $REMOTE $BES"
-
-      - name: dump foreign_cc Make.log files on failure
-        if: failure()
-        # Same pattern as `bazel-build.yml`. When a `make()` /
-        # `cmake()` foreign_cc rule fails, rules_foreign_cc captures
-        # the underlying make/cmake stderr into a per-action `*.log`
-        # file. With the build invoked above using
-        # `--verbose_failures` (set in the recipe) the action's
-        # command line is shown but the log file is not auto-cat'd —
-        # do it here so the actual failure cause reaches the CI log.
-        run: |
-          OUTPUT_BASE=$(nix develop --command bash -c 'bazelisk info output_base' 2>/dev/null)
-          if [ -n "$OUTPUT_BASE" ]; then
-            find "$OUTPUT_BASE" -path '*foreign_cc*' -name '*.log' -print 2>/dev/null | while read -r log; do
-              echo ""
-              echo "═══════════════════════════════════════════════════"
-              echo "Foreign_cc log: $log"
-              echo "═══════════════════════════════════════════════════"
-              cat "$log" || true
-            done
-          fi
 
       - name: Check for sanitizer findings in e2e
         if: always()

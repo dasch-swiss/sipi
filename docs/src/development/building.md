@@ -3,8 +3,8 @@
 SIPI's build system is **Bazel** (orchestrating every C/C++ target,
 the OCI Docker image, and the Rust e2e + smoke tests). Nix's role
 is reduced to **provisioning a dev shell** with bazelisk + the host
-tools `rules_foreign_cc` and the `gh_release_archive` repository_rule
-need on PATH.
+tools the `gh_release_archive` repository_rule needs on PATH (`gh`, for
+the Kakadu fetch).
 
 All build commands are wrapped by recipes in the root `justfile`.
 Run `just` to see the full list. Every CI step invokes one of these

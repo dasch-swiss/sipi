@@ -1,26 +1,26 @@
 # Building with Bazel
 
 [Bazel](https://bazel.build/) is the build system for SIPI. It owns
-the entire build graph — every C/C++ target (sipi binary, foreign_cc
-ext libraries, unit + approval tests), the OCI Docker image, and the
-Rust e2e + smoke test binaries.
+the entire build graph — every C/C++ target (sipi binary, the native
+third-party `cc_library` deps, unit + approval tests), the OCI Docker
+image, and the Rust e2e + smoke test binaries.
 
 [Nix](nix.md) is no longer the build orchestrator — it provisions the
-*dev shell* (bazelisk, host tools needed by `rules_foreign_cc`, `gh`,
-`crane`, `just`, etc.) and nothing else.
+*dev shell* (bazelisk, `gh` for the Kakadu fetch, `crane`,
+`just`, etc.) and nothing else.
 
 ## Mental model
 
 A few concepts that make the rest of this page click:
 
 **MODULE.bazel** is the project's manifest. It declares the Bazel
-modules sipi depends on (`rules_foreign_cc`, `rules_oci`, the BCR
-`llvm` (hermetic-llvm) module, `rules_rust`, …) and pins every
-third-party C/C++ source archive via `http_archive`. Version bumps
-live here.
+modules sipi depends on (`rules_oci`, the BCR `llvm` (hermetic-llvm)
+module, `rules_rust`, the BCR codec/util `bazel_dep`s, …) and pins the
+native-`cc_library` deps' source archives via `http_archive`. Version
+bumps live here.
 
 **BUILD.bazel** files describe the *target graph*. Each first-party
-package — `//src`, `//shttps`, `//test/unit/<mod>`, `//ext/<lib>`,
+package — `//src`, `//shttps`, `//test/unit/<mod>`,
 `//fuzz/handlers`, `//tools/fuzz`, `//bazel/...` — has its own
 BUILD.bazel that declares its `cc_library`/`cc_binary`/`cc_test`/
 `oci_image`/`rust_test` targets and visibility rules.
@@ -146,10 +146,10 @@ the long "CACHE STRATEGY" comment block):
 - Disk cache managed by `actions/cache@v5` (not `setup-bazel`'s
   built-in disk-cache wiring) so an analysis-phase failure cannot
   0-byte-poison the cache.
-- Targeted key formula on inputs that actually affect foreign_cc
-  action keys: `MODULE.bazel{,.lock}`, `ext/**/BUILD.bazel`,
-  `bazel/**`, `patches/**`, `.bazelrc`, `.bazelversion`,
-  `flake.lock`. App/test sources are deliberately excluded.
+- Targeted key formula on inputs that actually affect the native-dep
+  action keys: `MODULE.bazel{,.lock}`, `bazel/**`, `.bazelrc`,
+  `.bazelversion`, `flake.lock`. App/test sources are deliberately
+  excluded.
 - Repository cache off in CI (would persist ~4 GB per arch and
   evict the real disk-cache speedup).
 
@@ -194,7 +194,7 @@ For Linux-target builds from a macOS host, see
   `oci_image`'s stamping
 - [Bazel: BUILD files](https://bazel.build/concepts/build-files)
 - [Bazelmod (`MODULE.bazel`)](https://bazel.build/external/module)
-- [`rules_foreign_cc`](https://github.com/bazel-contrib/rules_foreign_cc)
 - [`rules_oci`](https://github.com/bazel-contrib/rules_oci)
+- [`cmake_configure_file`](https://github.com/wep21/cmake_configure_file)
 - [hermetic-llvm (`llvm` BCR module)](https://github.com/hermeticbuild/hermetic-llvm)
 - [ADR-0014: toolchain provider swap](../../adr/0014-toolchain-provider-swap.md)

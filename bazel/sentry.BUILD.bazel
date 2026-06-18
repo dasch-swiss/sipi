@@ -1,11 +1,10 @@
-"""Native `cc_library` for sentry-native 0.9.0 — replaces the `rules_foreign_cc` `cmake()` wrapper.
+"""Native `cc_library` for sentry-native 0.9.0.
 
 Source selection mirrors sentry's `src/CMakeLists.txt` for a non-Windows,
 non-musl (glibc-Linux / macOS) build with the **inproc** backend, the **curl**
-transport, and the **libbacktrace** unwinder — exactly what the old foreign_cc
-recipe configured (`SENTRY_BACKEND=inproc`, transport/unwinder left at their
-unix defaults). Windows / Android / AIX / musl paths and the breakpad/crashpad
-backends are out of scope.
+transport, and the **libbacktrace** unwinder (`SENTRY_BACKEND=inproc`,
+transport/unwinder left at their unix defaults). Windows / Android / AIX / musl
+paths and the breakpad/crashpad backends are out of scope.
 
 No generated config header: sentry-native is configured purely by compile
 definitions. The four below are the ones its sources actually consume —
@@ -85,11 +84,22 @@ cc_library(
         "src",
     ],
     linkstatic = True,
+    # The symbolizer (dladdr) + sync (pthread) call into libdl/libpthread; macOS
+    # folds both into libSystem. Declared here so the library is self-contained
+    # and consumers can't forget them (also declared on //src/metadata for the
+    # standalone metadata cc_tests).
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-ldl",
+            "-lpthread",
+        ],
+        "//conditions:default": [],
+    }),
     local_defines = [
         "SENTRY_BACKEND_INPROC",
         "SENTRY_WITH_UNWINDER_LIBBACKTRACE",
         "SENTRY_HANDLER_STACK_SIZE=64",
-        "SIZEOF_LONG=8",
+        "SIZEOF_LONG=8",  # LP64 (all three SIPI targets); sentry_sync.h reads it
     ],
     deps = [
         "@curl",

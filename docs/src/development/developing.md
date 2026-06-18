@@ -37,8 +37,8 @@ The server starts on `http://localhost:1024`.
 
 `just run` depends on `just bazel-build` so the binary at
 `bazel-bin/src/cli/sipi` is always rebuilt before the run. After the
-first cold build (foreign_cc compiles for openssl/kakadu/libtiff/
-etc.), incremental rebuilds re-run only the affected compile + link
+first cold build (the native `cc_library` deps kakadu/libtiff/exiv2/etc
+compile from source), incremental rebuilds re-run only the affected compile + link
 through Bazel's per-action cache — typically sub-second through
 link.
 
@@ -224,32 +224,43 @@ fixtures, the before/after workflow, and the regression decision rule
 
 ## Managing dependencies
 
-Third-party C/C++ libraries are pinned by `http_archive`
-declarations in `MODULE.bazel`. Each pin owns its `name`, `urls`,
-`sha256`, and any required patches (`patches = []`,
-`patch_args = ["-p1"]`). The matching foreign_cc rule lives under
-`//ext/<lib>:<lib>` and consumes the archive's `@<lib>//:all_srcs`
-filegroup.
+Every C/C++ dependency is one of two shapes (there is no
+`rules_foreign_cc` — see
+[ADR-0015](../../adr/0015-native-cc_library-over-foreign_cc.md)):
 
-To bump a version:
+- **BCR `bazel_dep`** — a one-line pin in `MODULE.bazel` for libs whose
+  Bazel Central Registry module is a true drop-in (zlib, libpng,
+  libjpeg_turbo, libwebp, curl, openssl, …).
+- **Native `cc_library`** — for libs with no BCR module or where stock
+  BCR would compromise capability (libtiff, exiv2, lcms2, jansson,
+  sentry, jbigkit, kakadu). The source is fetched by an `http_archive`
+  in `MODULE.bazel`; the build rule is a hand-written `cc_library` in
+  `bazel/<lib>.BUILD.bazel` (referenced as the archive's `build_file`),
+  compiled by the hermetic LLVM toolchain like first-party code.
+  Config headers are reproduced via the `cmake_configure_file` module.
+
+To bump a **BCR `bazel_dep`**: change the `version` string and run
+`bazel build //src/cli:sipi` + `just bazel-test`; commit `MODULE.bazel`
+and `MODULE.bazel.lock`.
+
+To bump a **native `cc_library`** dep:
 
 1. Edit the relevant `http_archive(...)` in `MODULE.bazel` — update
-   `urls` and clear `sha256`.
-2. Run `bazel build //src/cli:sipi` once. Bazel reports the actual
-   sha256 in the failure output.
-3. Paste the reported `sha256` into the `http_archive` block.
+   `url` and clear `sha256`.
+2. Run `bazel build //src/cli:sipi` once; Bazel reports the actual
+   sha256 in the failure output. Paste it into the block.
+3. Re-diff any `*.cmake.in` config templates the `bazel/<lib>.BUILD.bazel`
+   reproduces — upstream may have added a `#cmakedefine`/`@VAR@` token
+   that `cmake_configure_file` now needs declared.
 4. Run `bazel build //src/cli:sipi` and `just bazel-test` to confirm.
-5. Commit `MODULE.bazel` and `MODULE.bazel.lock`.
+5. Commit `MODULE.bazel`, `MODULE.bazel.lock`, and any `bazel/<lib>.BUILD.bazel`
+   change.
 
-Adding a brand-new dependency:
-
-1. Add an `http_archive(...)` block to `MODULE.bazel` with the same
-   shape as existing entries.
-2. Create `ext/<lib>/BUILD.bazel` declaring the foreign_cc rule
-   (`cmake()` / `configure_make()` / `make()`); use a sibling lib
-   as the template.
-3. Wire it into the consumers (`//src:sipi_lib`, `//shttps:shttps`,
-   etc.) via `deps = ["//ext/<lib>:<lib>"]`.
+Adding a brand-new dependency: prefer a BCR `bazel_dep` if the module is
+a true drop-in. Otherwise add an `http_archive(...)` + a native
+`cc_library` in `bazel/<lib>.BUILD.bazel` (use a sibling lib as the
+template) and wire it into the consumers (`//src:sipi_lib`,
+`//src/shttps:shttps`, …) via `@<lib>//:<target>`.
 
 Kakadu is special: it is fetched via a custom `gh_release_archive`
 repository_rule (`bazel/gh_release.bzl`) that shells out to

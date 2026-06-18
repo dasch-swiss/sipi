@@ -78,7 +78,7 @@
 
 ## Skip
 
-- Generated files under `ext/` (third-party `rules_foreign_cc` build wrappers; updates flow from `MODULE.bazel`'s `http_archive` pins)
+- Third-party source vendored via `http_archive` (the native `cc_library` deps; review their `bazel/<lib>.BUILD.bazel`, not the upstream source — updates flow from `MODULE.bazel`'s pins)
 - Formatting-only changes (enforced by clang-format)
 - Lua script changes in `scripts/` that only modify response text (not logic)
 - Changes to `CHANGELOG.md`, `version.txt`, or `manifest.json` (managed by release-please)

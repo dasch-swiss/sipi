@@ -1,4 +1,4 @@
-"""Native `cc_library` for Little CMS 2 — replaces the `rules_foreign_cc` `configure_make()` wrapper.
+"""Native `cc_library` for Little CMS 2.
 
 The core `liblcms2` is the full `src/*.c` set plus the checked-in private header
 `src/lcms2_internal.h`; there is no generated config header. The old recipe's

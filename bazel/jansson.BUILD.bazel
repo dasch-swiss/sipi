@@ -1,4 +1,4 @@
-"""Native `cc_library` for jansson — replaces the `rules_foreign_cc` `cmake()` wrapper.
+"""Native `cc_library` for jansson.
 
 Two config headers are reproduced natively from the upstream CMake templates via
 `cmake_configure_file` (the same mechanism the BCR libtiff overlay uses):

@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -31,6 +32,14 @@ std::string scratch_path(const char *name)
 {
   const char *dir = std::getenv("TEST_TMPDIR");
   return std::string(dir ? dir : "/tmp") + "/" + name;
+}
+
+// RAII for the libtiff handle so a failing ASSERT_* (which returns from the
+// function) still closes it.
+using TiffPtr = std::unique_ptr<TIFF, void (*)(TIFF *)>;
+TiffPtr tiff_open(const std::string &path, const char *mode)
+{
+  return TiffPtr(TIFFOpen(path.c_str(), mode), &TIFFClose);
 }
 
 }// namespace
@@ -89,31 +98,29 @@ TEST(TiffCodecs, LosslessRgbRoundTrip)
   for (const auto &c : codecs) {
     const std::string path = scratch_path((std::string("tiff_codecs_") + c.name + ".tif").c_str());
     {
-      TIFF *tif = TIFFOpen(path.c_str(), "w");
+      TiffPtr tif = tiff_open(path, "w");
       ASSERT_NE(tif, nullptr) << c.name;
-      TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, w);
-      TIFFSetField(tif, TIFFTAG_IMAGELENGTH, h);
-      TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 3);
-      TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 8);
-      TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
-      TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
-      TIFFSetField(tif, TIFFTAG_COMPRESSION, c.scheme);
+      TIFFSetField(tif.get(), TIFFTAG_IMAGEWIDTH, w);
+      TIFFSetField(tif.get(), TIFFTAG_IMAGELENGTH, h);
+      TIFFSetField(tif.get(), TIFFTAG_SAMPLESPERPIXEL, 3);
+      TIFFSetField(tif.get(), TIFFTAG_BITSPERSAMPLE, 8);
+      TIFFSetField(tif.get(), TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+      TIFFSetField(tif.get(), TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+      TIFFSetField(tif.get(), TIFFTAG_COMPRESSION, c.scheme);
       for (uint32_t row = 0; row < h; ++row) {
-        ASSERT_EQ(TIFFWriteScanline(tif, src.data() + static_cast<size_t>(row) * w * 3, row, 0), 1) << c.name;
+        ASSERT_EQ(TIFFWriteScanline(tif.get(), src.data() + static_cast<size_t>(row) * w * 3, row, 0), 1) << c.name;
       }
-      TIFFClose(tif);
     }
     {
-      TIFF *tif = TIFFOpen(path.c_str(), "r");
+      TiffPtr tif = tiff_open(path, "r");
       ASSERT_NE(tif, nullptr) << c.name;
       uint16_t compression = 0;
-      TIFFGetField(tif, TIFFTAG_COMPRESSION, &compression);
+      TIFFGetField(tif.get(), TIFFTAG_COMPRESSION, &compression);
       EXPECT_EQ(compression, c.scheme) << c.name;
       std::vector<uint8_t> out(src.size());
       for (uint32_t row = 0; row < h; ++row) {
-        ASSERT_EQ(TIFFReadScanline(tif, out.data() + static_cast<size_t>(row) * w * 3, row, 0), 1) << c.name;
+        ASSERT_EQ(TIFFReadScanline(tif.get(), out.data() + static_cast<size_t>(row) * w * 3, row, 0), 1) << c.name;
       }
-      TIFFClose(tif);
       EXPECT_EQ(src, out) << c.name;
     }
     std::error_code ec;

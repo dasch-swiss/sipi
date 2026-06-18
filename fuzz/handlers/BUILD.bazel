@@ -38,23 +38,14 @@ cc_binary(
     # interface, preserved verbatim by the new bazel-run-fuzz recipe).
     data = ["//fuzz/handlers/corpus:seed_corpus"],
     # libFuzzer + ASan link flags scoped to this target — NOT global
-    # `--linkopt` in `.bazelrc`. `rules_foreign_cc` 0.15.1 forwards
-    # Bazel `--linkopt` flags into the foreign deps' `LDFLAGS`
-    # environment variable; with `-fsanitize=fuzzer` in LDFLAGS,
-    # autoconf's "does the C compiler work" probe (compile + link of
-    # `int main(){return 0;}`) fails because libFuzzer requires
-    # `LLVMFuzzerTestOneInput`. That broke every foreign_cc ext lib
-    # reachable from `:fuzz_subset` (sqlite3 was the first to fail —
-    # see fuzz CI runs from 2026-05-04 onward). Target-level `linkopts`
-    # apply only to this `cc_binary`'s own link line, leaving every
-    # foreign_cc configure step clean.
-    #
-    # `-fsanitize=address` could stay global (the asan/ubsan runtimes
-    # self-link without user symbols, so configure-test executables
-    # link fine — proven by `sanitizer.yml`). Pairing it with
-    # `-fsanitize=fuzzer` here keeps both libFuzzer link flags in one
-    # place; the rationale-and-fix lives next to the binary that needs
-    # them.
+    # `--linkopt` in `.bazelrc`. `-fsanitize=fuzzer` pulls in the
+    # libFuzzer runtime (which defines `main()` and expects
+    # `LLVMFuzzerTestOneInput`); putting it on a global linkopt would
+    # break the production `//src/cli:sipi` link and every other
+    # `cc_binary`/`cc_test`. Target-level `linkopts` apply only to this
+    # binary's own link line, so the fuzzer runtime reaches only the
+    # harness. `-fsanitize=address` is paired here so both libFuzzer
+    # link flags live next to the binary that needs them.
     linkopts = [
         "-fsanitize=fuzzer",
         "-fsanitize=address",
