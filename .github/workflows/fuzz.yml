@@ -19,14 +19,17 @@
 permissions:
   contents: read
 
-# Nightly `schedule` disabled under the hermetic-llvm toolchain: its minimal
-# prebuilt ships no libFuzzer runtime. Kept as a manual (workflow_dispatch)
-# target. (The old global-instrument-breaks-third-party-CMake-deps blocker is
-# gone now that the build is all-native — see
-# docs/adr/0015-native-cc_library-over-foreign_cc.md.) See
-# docs/adr/0014-toolchain-provider-swap.md ("Carved-out instrumentation
-# gates"). Restore the `schedule:` block below once a fuzz runtime is wired.
+# Re-armed under hermetic-llvm (DEV-6563 Phase 13). `--config=fuzz` sets
+# `--@llvm//config:{fuzzer,asan}=true`, so the toolchain builds + links the
+# compiler-rt libFuzzer + ASan runtimes from source — the missing-runtime
+# blocker ADR-0014 carved this gate out for. foreign_cc=0 (ADR-0015) removed
+# the global-instrument-breaks-third-party-CMake-deps blocker. Runs on
+# linux-x86_64 (darwin sanitizer runtimes are upstream-gapped — see
+# docs/adr/0014-toolchain-provider-swap.md "Carved-out instrumentation gates").
 on:
+  schedule:
+    # Run at 02:00 UTC every night
+    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       duration:

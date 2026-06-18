@@ -5,14 +5,16 @@ Build via `just bazel-build-fuzz`; run via
 `bazel build|run --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz`,
 which:
 
-  1. Selects platform `//tools/fuzz:linux_x86_64_fuzz`, routing toolchain
-     resolution to `@llvm_toolchain_fuzz` (libstdc++ for libFuzzer ABI).
+  1. Selects platform `//tools/fuzz:<host>_fuzz`. A single hermetic LLVM
+     toolchain (libc++) serves the fuzz build on every platform.
   2. Activates the `target_compatible_with = ["//tools/fuzz:fuzz_enabled"]`
      gate on the binary — without `--config=fuzz` the target is skipped.
-  3. Injects `-fsanitize=fuzzer-no-link` + `-fsanitize-coverage=trace-cmp`
-     + `-fsanitize=address` (compile, scoped to first-party via
-     `--per_file_copt`) and `-fsanitize=fuzzer` + `-fsanitize=address`
-     (link) — see `.bazelrc` `build:fuzz` block.
+  3. Sets `--@llvm//config:fuzzer=true` + `--@llvm//config:asan=true` (via
+     `.bazelrc` `build:fuzz`), so the toolchain adds the libFuzzer + ASan
+     instrumentation and builds + links their compiler-rt runtimes from
+     source. libFuzzer supplies this binary's `main()`; it is the only
+     `cc_binary` built under `--config=fuzz`. linux-x86_64 only (darwin
+     sanitizer runtimes are upstream-gapped — see `.bazelrc` `build:fuzz`).
 
 The four shttps cpps + `iiif_handler.cpp` that make up the harness's
 explicit subset live under `//src/shttps:fuzz_subset` (kept in shttps's
@@ -37,19 +39,12 @@ cc_binary(
     # `just nix-run-fuzz <corpus> <duration> fuzz/handlers/corpus`
     # interface, preserved verbatim by the new bazel-run-fuzz recipe).
     data = ["//fuzz/handlers/corpus:seed_corpus"],
-    # libFuzzer + ASan link flags scoped to this target — NOT global
-    # `--linkopt` in `.bazelrc`. `-fsanitize=fuzzer` pulls in the
-    # libFuzzer runtime (which defines `main()` and expects
-    # `LLVMFuzzerTestOneInput`); putting it on a global linkopt would
-    # break the production `//src/cli:sipi` link and every other
-    # `cc_binary`/`cc_test`. Target-level `linkopts` apply only to this
-    # binary's own link line, so the fuzzer runtime reaches only the
-    # harness. `-fsanitize=address` is paired here so both libFuzzer
-    # link flags live next to the binary that needs them.
-    linkopts = [
-        "-fsanitize=fuzzer",
-        "-fsanitize=address",
-    ],
+    # No target-level `-fsanitize` linkopts: `--config=fuzz` sets
+    # `--@llvm//config:{fuzzer,asan}=true`, so the toolchain adds the
+    # libFuzzer + ASan link flags and their runtimes globally. Only this
+    # one `cc_binary` is built under `--config=fuzz`, so the global
+    # `-fsanitize=fuzzer` link flag (which pulls libFuzzer's `main()`)
+    # never reaches a production binary.
     target_compatible_with = ["//tools/fuzz:fuzz_enabled"],
     deps = ["//src/shttps:fuzz_subset"],
 )
