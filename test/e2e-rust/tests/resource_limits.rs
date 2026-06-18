@@ -218,26 +218,21 @@ fn transform_pipeline_memory() {
         );
     }
 
-    // Verify server still responsive after all transforms.
-    // The musl static binary may need a moment to recover after heavy
-    // transform work, so allow a few retries for the health check.
+    // Verify server still responsive after all transforms. If the musl
+    // static binary hasn't recovered from the heavy transform work yet,
+    // this fails and Bazel re-runs the whole test
+    // (`--flaky_test_attempts` for this target in `.bazelrc`) — the single
+    // retry mechanism for the suite.
     let health_url = format!(
         "{}/unit/lena512.jp2/full/max/0/default.jpg",
         srv.base_url
     );
-    let mut health_ok = false;
-    for attempt in 1..=3 {
-        match c.get(&health_url).send() {
-            Ok(r) if r.status().as_u16() == 200 => {
-                health_ok = true;
-                break;
-            }
-            Ok(r) => eprintln!("[health] attempt {} returned {}", attempt, r.status()),
-            Err(e) => eprintln!("[health] attempt {} failed: {}", attempt, e),
-        }
-        std::thread::sleep(std::time::Duration::from_millis(500));
-    }
-    assert!(health_ok, "server not responsive after transform pipeline");
+    let resp = c.get(&health_url).send().expect("health check request failed");
+    assert_eq!(
+        resp.status().as_u16(),
+        200,
+        "server not responsive after transform pipeline"
+    );
 }
 
 #[test]

@@ -1,4 +1,4 @@
-use sipi_e2e::{http_client, retry_flaky, test_data_dir, SipiServer};
+use sipi_e2e::{http_client, test_data_dir, SipiServer};
 
 /// Start with enforce mode and a given budget.
 fn start_enforce(budget: &str) -> SipiServer {
@@ -215,27 +215,25 @@ fn metrics_used_gauge_returns_to_zero() {
     let _ = resp.bytes(); // consume body
 
     // The RAII guard releases budget when the handler function returns,
-    // which is slightly after the response body is sent. Retry to allow
-    // the server to finish cleanup.
-    let base = srv.base_url.clone();
-    retry_flaky(5, move || {
-        let metrics = c
-            .get(format!("{}/metrics", base))
-            .send()
-            .map_err(|e| format!("metrics request failed: {}", e))?
-            .text()
-            .map_err(|e| format!("metrics body failed: {}", e))?;
+    // which is slightly after the response body is sent. If the gauge has
+    // not settled to 0 by the time we scrape /metrics, the assertion fails
+    // and Bazel re-runs the whole test (`--flaky_test_attempts` for this
+    // target in `.bazelrc`) — the single retry mechanism for the suite.
+    let metrics = c
+        .get(format!("{}/metrics", srv.base_url))
+        .send()
+        .expect("metrics request failed")
+        .text()
+        .expect("metrics body failed");
 
-        let used_line = metrics
-            .lines()
-            .find(|l| l.starts_with("sipi_decode_memory_used_bytes "));
+    let used_line = metrics
+        .lines()
+        .find(|l| l.starts_with("sipi_decode_memory_used_bytes "));
 
-        match used_line {
-            Some(line) if line.ends_with(" 0") => Ok(()),
-            Some(line) => Err(format!("used bytes not yet 0: {}", line)),
-            None => Ok(()), // metric not present = budget not tracked
-        }
-    });
+    // `None` = budget not tracked (metric absent); only assert when present.
+    if let Some(line) = used_line {
+        assert!(line.ends_with(" 0"), "used bytes not yet 0: {}", line);
+    }
 }
 
 #[test]

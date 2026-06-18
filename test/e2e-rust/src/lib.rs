@@ -566,37 +566,3 @@ pub fn http_client() -> reqwest::blocking::Client {
         .expect("Failed to build HTTP client")
 }
 
-/// Retry a test assertion up to `max_attempts` times.
-///
-/// The closure should return `Ok(())` on success or `Err(message)` on failure.
-/// Between attempts, sleeps for 2 seconds. Panics if all attempts fail.
-///
-/// Use this for assertions that depend on server-side timing (e.g., an RAII
-/// guard releasing after the response is sent, so metrics don't update
-/// instantly). Do NOT use this for connection-level retries — those are
-/// solved by disabling connection pooling in `http_client()`.
-pub fn retry_flaky<F>(max_attempts: u32, f: F)
-where
-    F: Fn() -> Result<(), String>,
-{
-    let mut last_err = String::new();
-    for attempt in 1..=max_attempts {
-        match f() {
-            Ok(()) => return,
-            Err(e) => {
-                last_err = e;
-                if attempt < max_attempts {
-                    eprintln!(
-                        "[retry_flaky] attempt {}/{} failed: {}",
-                        attempt, max_attempts, last_err
-                    );
-                    std::thread::sleep(Duration::from_secs(2));
-                }
-            }
-        }
-    }
-    panic!(
-        "Test failed after {} attempts. Last error: {}",
-        max_attempts, last_err
-    );
-}
