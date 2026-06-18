@@ -176,35 +176,6 @@ jobs:
           fi
           nix develop --command bash -c "just bazel-test $REMOTE $BES"
 
-      # darwin→linux cross-compilation gate (DEV-6563 Phase 10). Builds the
-      # Linux OCI image for both target arches FROM the macOS runner, proving
-      # every native cc_library (kakadu/libtiff/exiv2/…) cross-compiles through
-      # the relocatable hermetic clang toolchain with no host-include leaks.
-      # darwin-only: the Linux runners build `//src:image` natively in the
-      # Docker-smoke step, so cross-compilation is the macOS host's job to
-      # prove. Build-only (no `docker load`) — there is no Linux Docker daemon
-      # on the macOS runner.
-      - name: Cross-build Linux image (darwin→linux)
-        if: matrix.platform == 'darwin-arm64'
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
-          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
-        run: |
-          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
-            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
-            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
-          else
-            REMOTE=""
-          fi
-          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
-            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
-          else
-            BES=""
-          fi
-          nix develop --command bash -c "just bazel-cross-build-image amd64 $REMOTE $BES"
-          nix develop --command bash -c "just bazel-cross-build-image arm64 $REMOTE $BES"
-
       # Docker steps run on Linux only because they `docker load` the image
       # into a local Linux Docker daemon (absent on the macOS runner) — not
       # because the image can't be built on macOS. //src:image is gated on the
@@ -273,6 +244,59 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: scout-results.sarif
+
+  # Cross-compilation gate (DEV-6563 Phase 10). A dedicated linux-amd64 runner
+  # cross-builds for linux-arm64 and darwin-arm64, proving every native
+  # cc_library (kakadu/libtiff/exiv2/…) compiles through the relocatable
+  # hermetic clang toolchain for a non-host target. Kept as its own job on its
+  # own runner — NOT a step in the `test` matrix — so the cross-build never
+  # slows the (expensive) darwin gate; it runs in parallel instead. Build-only:
+  # no `docker load`, no tests.
+  cross-build:
+    name: cross-build / amd64→{linux-arm64,darwin}
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: ${{ github.workflow }}-cross-build-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # workspace_status.sh stamp needs git history
+          lfs: false      # build-only — no LFS test fixtures needed
+      - uses: DeterminateSystems/determinate-nix-action@v3
+        with:
+          # gh_release_archive (Kakadu fetch) reads GH_TOKEN via `gh`; keep it
+          # out of the daemon's env sanitisation.
+          extra-conf: |
+            extra-experimental-features = configurable-impure-env
+      - uses: DeterminateSystems/magic-nix-cache-action@v13
+        with:
+          use-flakehub: "false"  # GHA cache backend only; FlakeHub is a paid plan we're not on.
+
+      # `//src:image` is `@platforms//os:linux`-gated, so the linux-arm64
+      # check builds the image (same as the darwin gate) while the darwin
+      # check builds the `sipi` binary (which pulls every native dep through
+      # the cross toolchain). The `if [ -n "$BAZEL_CACHE_PASSWORD" ]` blocks
+      # mirror the test job — fork PRs run cold.
+      - name: Cross-build (amd64 → linux-arm64 image + darwin sipi)
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
+          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
+        run: |
+          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
+            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
+            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
+          else
+            REMOTE=""
+          fi
+          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
+            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
+          else
+            BES=""
+          fi
+          nix develop --command bash -c "just bazel-cross-build-image arm64 $REMOTE $BES"
+          nix develop --command bash -c "just bazel-build --platforms=//bazel/platforms:darwin_arm64 $REMOTE $BES"
 
   # Build documentation. Pure Python/MkDocs — Nix is only here so we can
   # provision `just` consistently with the other jobs.

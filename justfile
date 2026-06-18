@@ -331,14 +331,14 @@ bazel-docker-build-arm64 *FLAGS='':
     bazel run --stamp --platforms=//bazel/platforms:linux_arm64 --verbose_failures {{FLAGS}} //src:image_load
 
 # Cross-build the Linux OCI image for `arch` (amd64|arm64) WITHOUT loading it
-# into a Docker daemon. This is the darwin→linux cross-compilation gate: it
-# builds `//src:image` under `--platforms=//bazel/platforms:linux_${arch}` so a
-# macOS host (where there is no Linux Docker daemon, so `bazel-docker-build-*`
-# cannot `docker load`) can still prove every native dep cross-compiles through
-# the relocatable hermetic clang toolchain. CI runs both arches on the
-# darwin-arm64 runner so the capability can't silently regress. No `--stamp`:
-# cross-compile validity is independent of the workspace-status version embed,
-# and skipping it keeps the gate fast.
+# into a Docker daemon. Builds `//src:image` under
+# `--platforms=//bazel/platforms:linux_${arch}` so a host of any OS (e.g. a
+# macOS dev box, where there is no Linux Docker daemon so `bazel-docker-build-*`
+# cannot `docker load`) can prove every native dep cross-compiles through the
+# relocatable hermetic clang toolchain. The dedicated linux-amd64 `cross-build`
+# CI job runs the arm64 arch on every PR so the capability can't silently
+# regress. No `--stamp`: cross-compile validity is independent of the
+# workspace-status version embed, and skipping it keeps the gate fast.
 bazel-cross-build-image arch *FLAGS='':
     #!/usr/bin/env bash
     set -euo pipefail

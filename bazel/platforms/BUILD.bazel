@@ -1,12 +1,21 @@
-"""Plain Linux platform definitions.
+"""Target platform definitions for explicit `--platforms=` builds.
 
-Used by the `bazel-docker-build-${arch}` and `bazel-docker-push-${arch}`
-just recipes via `--platforms=//bazel/platforms:linux_${arch}`. Per-arch
-CI runners typically have a matching host platform already, but pinning
-the build platform explicitly makes the image's `architecture` config
-deterministic regardless of how the runner advertises its host triple
-(GitHub-hosted ubuntu-24.04-arm reports differently from a self-hosted
-arm64 runner, for example).
+The `linux_*` platforms drive the `bazel-docker-build-${arch}` and
+`bazel-docker-push-${arch}` just recipes via
+`--platforms=//bazel/platforms:linux_${arch}`. Per-arch CI runners
+typically have a matching host platform already, but pinning the build
+platform explicitly makes the image's `architecture` config deterministic
+regardless of how the runner advertises its host triple (GitHub-hosted
+ubuntu-24.04-arm reports differently from a self-hosted arm64 runner, for
+example).
+
+`darwin_arm64` exists for the cross-compilation gates: it lets a non-macOS
+exec host (e.g. the linux-amd64 CI runner) cross-build `//src/cli:sipi` for
+macOS via `--platforms=//bazel/platforms:darwin_arm64`. There is no
+`darwin_amd64` — the toolchain declares only the `macos-aarch64` target
+(`MODULE.bazel`'s `toolchain.target` tags). The Linux-only OCI image targets
+(`//src:image`, …) cannot target darwin, so the darwin cross-check builds the
+`sipi` binary, not the image.
 
 The fuzz harness has its own platform definitions under //tools/fuzz/
 because it needs the additional `fuzz_enabled` constraint to flip the
@@ -30,5 +39,13 @@ platform(
     constraint_values = [
         "@platforms//cpu:arm64",
         "@platforms//os:linux",
+    ],
+)
+
+platform(
+    name = "darwin_arm64",
+    constraint_values = [
+        "@platforms//cpu:arm64",
+        "@platforms//os:macos",
     ],
 )
