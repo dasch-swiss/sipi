@@ -244,67 +244,48 @@ build:ubsan --linkopt=-fno-sanitize=vptr
 
 # ── Fuzz harness — opt-in via --config=fuzz ────────────────────────────────
 # Replaces the deleted `.#fuzz` Nix variant. CI's `fuzz.yml` workflow
-# (`Build fuzz target` and `Run fuzzer` steps) consumes it via
-# `just bazel-build-fuzz` and `just bazel-run-fuzz <corpus> <duration>
-# <seed>`.
+# consumes it via `just bazel-build-fuzz` and `just bazel-run-fuzz
+# <corpus> <duration> <seed>`.
 #
 # `--platforms=//tools/fuzz:<host>_fuzz` is set by the justfile recipes
-# based on `uname` (linux-x86_64 → `linux_x86_64_fuzz`, darwin-aarch64 →
-# `darwin_aarch64_fuzz`) — both platforms carry the
-# `//tools/fuzz:fuzz_enabled` constraint, which:
+# based on `uname`. The platform carries `//tools/fuzz:fuzz_enabled`,
+# which activates the `target_compatible_with` gate on
+# `//fuzz/handlers:iiif_handler_uri_parser_fuzz` (it builds under
+# `--config=fuzz`, skips analysis otherwise). A single hermetic LLVM
+# toolchain (libc++) serves both the normal and the fuzz build.
 #
-#   1. Does not select a toolchain. One hermetic LLVM toolchain (libc++ on
-#      every platform) serves both the normal and the fuzz build, and
-#      libc++ is libFuzzer's ABI on linux-x86_64 and darwin-aarch64 alike.
+# Instrumentation + runtimes come from the toolchain's own sanitizer
+# flags — same mechanism as `build:asan` above (DEV-6563 Phase 13):
+#   * `--@llvm//config:fuzzer=true` — `-fsanitize=fuzzer` on every target
+#     compile (libFuzzer coverage: trace-pc-guard / trace-cmp / …) and
+#     link, and builds + links the compiler-rt **libFuzzer runtime** from
+#     source (the runtime ADR-0014 carved this gate out for).
+#   * `--@llvm//config:asan=true` — ASan instrumentation + runtime, which
+#     the harness has always carried alongside libFuzzer.
+# These are global (every reachable dep instrumented), not the old
+# first-party `--per_file_copt` scoping — the toolchain bundles runtime
+# provisioning with the global flag and exposes no runtime-only knob. The
+# fuzz binary's reachable graph is just `//src/shttps:fuzz_subset`
+# (+ curl / jansson / libmagic / lua / openssl / sqlite3 / zlib), so the
+# coverage map stays bounded. libFuzzer supplies the binary's `main()`;
+# only that one `cc_binary` is built under `--config=fuzz`, so the global
+# `-fsanitize=fuzzer` link flag never reaches a production binary.
 #
-#   2. Activates the `target_compatible_with = ["//tools/fuzz:fuzz_enabled"]`
-#      gate on `//fuzz/handlers:iiif_handler_uri_parser_fuzz`, so it
-#      builds under `--config=fuzz` and skips analysis otherwise —
-#      equivalent to a `if (CMAKE_CXX_COMPILER_ID MATCHES Clang)` source gate.
+# **linux-x86_64 only.** Darwin is gapped under hermetic-llvm, on two
+# layers: (1) the macOS toolchain args omit the sanitizer header/runtime
+# wiring the Linux args carry (`undefined symbol: __asan_init`), and (2)
+# even once that is patched in, building the darwin compiler-rt sanitizer
+# runtimes from source hits an upstream Bazel-sandbox bug ("Could not copy
+# inputs into sandbox: compiler-rt/include (File exists)"). The module README
+# flags non-Linux sanitizer support as WIP. `bazel-build-fuzz` still selects
+# `darwin_aarch64_fuzz` locally but will not link until both close upstream;
+# the CI gate is linux-x86_64 regardless. See the `build:asan` note.
 #
-# Sanitizer flags mirror today's CMake build:
-#   * `-fsanitize=fuzzer-no-link` (compile) + `-fsanitize=fuzzer` (link) —
-#     libFuzzer harness instrumentation. Compile-side uses the
-#     `-no-link` variant so the runtime is added only at the binary's
-#     final link line, not pulled into every transitive `cc_library`.
-#   * `-fsanitize-coverage=trace-cmp` — `__sanitizer_cov_trace_*` callbacks
-#     for libFuzzer's value-profile heuristic (matches
-#     `fuzz/handlers/CMakeLists.txt:34`).
-#   * `-fsanitize=address` (compile + link) — today's fuzz target builds
-#     with ASan as well (`fuzz/handlers/CMakeLists.txt:35,40-41`).
-#
-# Compile flags are scoped to first-party translation units via
-# `--per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@<flag>`,
-# matching the asan/ubsan blocks above: only sipi's own four shttps cpps +
-# `iiif_handler.cpp` carry libFuzzer instrumentation, while the third-party
-# deps reachable from `//shttps:fuzz_subset` (curl / jansson / libmagic /
-# lua / openssl / sqlite3 / zlib via `:shttps_headers`) build uninstrumented —
-# the corpus-search-space minimisation goal of the explicit subset.
-#
-# **Why `--linkopt=-fsanitize=fuzzer` is NOT here.** The libFuzzer runtime
-# defines `main()` and expects `LLVMFuzzerTestOneInput`; a global linkopt
-# would break the production `//src/cli:sipi` link and every other
-# `cc_binary`/`cc_test`. `-fsanitize=fuzzer` and `-fsanitize=address` are
-# scoped to the fuzz binary itself via `cc_binary(linkopts = [...])` in
-# `//fuzz/handlers:iiif_handler_uri_parser_fuzz` — target-level linkopts
-# apply only to that binary's own link line.
-#
-# `-fsanitize=address` *could* stay global — the asan runtime
-# self-links without user-provided symbols, so the configure-test
-# executable links fine (proven by sanitizer.yml). Both libFuzzer
-# link flags live together on the target so the rationale-and-fix
-# stays in one place; see `fuzz/handlers/BUILD.bazel`.
-#
-# `--platforms` is set by the justfile recipe (per-host; see above), not
-# here — `.bazelrc` cannot pick a platform based on `uname`, but the
-# recipe can.
-# Neutralize production hardening for fuzz — same rationale as `build:asan`
-# (fuzz inherits ASan instrumentation; fortify conflict is identical).
+# Neutralize production hardening for fuzz — same rationale as `build:asan`.
 build:fuzz --copt=-U_FORTIFY_SOURCE
 build:fuzz --copt=-fno-stack-protector
-build:fuzz --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsanitize=fuzzer-no-link
-build:fuzz --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsanitize-coverage=trace-cmp
-build:fuzz --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsanitize=address
+build:fuzz --@llvm//config:fuzzer=true
+build:fuzz --@llvm//config:asan=true
 
 # ── Test ───────────────────────────────────────────────────────────────────
 # Surface test stderr immediately on failure rather than collecting it into
