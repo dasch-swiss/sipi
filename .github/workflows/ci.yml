@@ -176,42 +176,13 @@ jobs:
           fi
           nix develop --command bash -c "just bazel-test $REMOTE $BES"
 
-      # darwin→linux cross-compilation gate (DEV-6563 Phase 10). Builds the
-      # Linux OCI image for both target arches FROM the macOS runner, proving
-      # every native cc_library (kakadu/libtiff/exiv2/…) cross-compiles through
-      # the relocatable hermetic clang toolchain with no host-include leaks.
-      # darwin-only: the Linux runners build `//src:image` natively in the
-      # Docker-smoke step, so cross-compilation is the macOS host's job to
-      # prove. Build-only (no `docker load`) — there is no Linux Docker daemon
-      # on the macOS runner.
-      - name: Cross-build Linux image (darwin→linux)
-        if: matrix.platform == 'darwin-arm64'
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
-          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
-        run: |
-          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
-            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
-            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
-          else
-            REMOTE=""
-          fi
-          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
-            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
-          else
-            BES=""
-          fi
-          nix develop --command bash -c "just bazel-cross-build-image amd64 $REMOTE $BES"
-          nix develop --command bash -c "just bazel-cross-build-image arm64 $REMOTE $BES"
-
       # Docker steps run on Linux only because they `docker load` the image
       # into a local Linux Docker daemon (absent on the macOS runner) — not
       # because the image can't be built on macOS. //src:image is gated on the
-      # target OS (`target_compatible_with = ["@platforms//os:linux"]`), which
-      # the cross-build step above satisfies via `--platforms=linux_*`. With no
-      # platform override the default host platform on macOS is darwin, which
-      # fails that gate, so building it here would need the same override.
+      # target OS (`target_compatible_with = ["@platforms//os:linux"]`), which a
+      # macOS host can satisfy with `--platforms=linux_*` (see
+      # `just bazel-cross-build-image`). With no platform override the default
+      # host platform on macOS is darwin, which fails that gate.
       #
       # `bazel-test-smoke` is one Bazel invocation that:
       #   1. Builds //src:image as a transitive `data` dep of
