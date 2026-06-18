@@ -177,9 +177,11 @@ OS, not the host. A macOS host builds them by setting the target
 platform explicitly (`--platforms=//bazel/platforms:linux_{amd64,arm64}`),
 which the hermetic-llvm toolchain cross-compiles end to end (bundled
 per-target glibc + libc++; no sysroot). `just bazel-cross-build-image
-{amd64,arm64}` wraps this; the darwin-arm64 CI runner exercises both on
-every PR. Without a `--platforms` override the default host platform on
-macOS is darwin, which fails the linux gate and skips the target.
+{amd64,arm64}` wraps this. Cross-compilation is **not currently
+CI-gated** (a gate was prototyped and removed for being too slow; the
+approach is being reconsidered) — verify it locally. Without a
+`--platforms` override the default host platform on macOS is darwin,
+which fails the linux gate and skips the target.
 
 The fuzz harness is supported on linux-x86_64 (CI) and
 darwin-aarch64 (local dev) — `just bazel-build-fuzz` selects the

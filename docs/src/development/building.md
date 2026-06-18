@@ -107,11 +107,13 @@ just bazel-cross-build-image arm64   # build //src:image for linux-aarch64
 ```
 
 These are build-only (no `docker load`, since a macOS host has no Linux
-Docker daemon) and run on the darwin-arm64 CI runner on every PR so the
-capability can't silently regress. To actually load/run the image,
-either use a Linux host's `bazel-docker-build-{amd64,arm64}` or a
-lightweight Linux VM such as [OrbStack](https://orbstack.dev/) with the
-dev shell available inside it (`nix develop` from a shared workdir).
+Docker daemon). Cross-compilation is a supported capability but is **not
+currently CI-gated** — verify it locally with the recipes above (a
+CI gate was prototyped and removed for being too slow; the approach is
+being reconsidered). To actually load/run the image, either use a Linux
+host's `bazel-docker-build-{amd64,arm64}` or a lightweight Linux VM such
+as [OrbStack](https://orbstack.dev/) with the dev shell available inside
+it (`nix develop` from a shared workdir).
 
 ## All `just` targets
 
