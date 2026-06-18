@@ -28,14 +28,16 @@
 permissions:
   contents: read
 
-# PR trigger disabled under the hermetic-llvm toolchain: its minimal prebuilt
-# ships no ASan/UBSan runtime. Kept as a manual (workflow_dispatch) target so it
-# can be re-run once the compiler-rt runtime is provisioned. (The old
-# global-instrument-breaks-third-party-CMake-deps blocker is gone now that the
-# build is all-native — see docs/adr/0015-native-cc_library-over-foreign_cc.md.)
-# See docs/adr/0014-toolchain-provider-swap.md ("Carved-out instrumentation
-# gates"). Restore the `pull_request:` block below to re-arm the merge gate.
+# Re-armed under hermetic-llvm (DEV-6563 Phase 12). `--config=asan` /
+# `--config=ubsan` now set `--@llvm//config:{asan,ubsan}=true`, which makes the
+# toolchain build + link the compiler-rt ASan/UBSan runtimes from source and put
+# the sanitizer headers on the include path — the missing-runtime blocker
+# ADR-0014 carved this gate out for. foreign_cc=0 (ADR-0015) removed the
+# global-instrument-breaks-third-party-CMake-deps blocker. Runs on linux-x86_64
+# only (the macOS toolchain args omit the sanitizer header path).
 on:
+  pull_request:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 name: sanitizer
@@ -47,7 +49,11 @@ concurrency:
 jobs:
   sanitizer:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # 45 not 30: `--@llvm//config:{asan,ubsan}` instruments the whole target
+    # graph (every native dep) and builds compiler-rt from source — a cold
+    # remote cache rebuilds all of it. Warm-cache runs are far faster (only
+    # changed first-party TUs + re-link + the e2e run).
+    timeout-minutes: 45
     name: asan-ubsan / amd64
     steps:
       - uses: actions/checkout@v6

@@ -164,28 +164,33 @@ common --repo_env=ANDROID_HOME=
 # actually match — the same invariant the old override enforced via
 # `dontStrip = true` + `separateDebugInfo = false`.
 #
-# **Why `--per_file_copt` instead of `--copt` for `-fsanitize=…`.**
-# `--per_file_copt=<regex>@<flag>` is action-scoped — it applies only to
-# compile actions whose source file path matches the regex. Scoping by
-# `^(src|shttps|fuzz|test)/` instruments every first-party translation
-# unit while leaving the third-party native `cc_library` deps
-# (kakadu / libtiff / openssl / …) uninstrumented. Mixing instrumented
-# sipi code with uninstrumented deps is supported by ASan and UBSan; it
-# keeps instrumentation focused on the code we own (and, for fuzzing,
-# keeps the corpus search space small). A global `--copt=-fsanitize=…`
-# would also work now that every dep is a native cc_library — the
-# scoping is the current default, revisited when asan/fuzz are re-armed
-# (see docs/adr/0014 "Carved-out instrumentation gates").
+# **Instrumentation via the toolchain's `--@llvm//config:{asan,ubsan}`
+# flags** (DEV-6563 Phase 12). Setting `--@llvm//config:asan=true` makes
+# the hermetic-llvm toolchain (a) add `-fsanitize=address` to every
+# target compile + link, (b) put the compiler-rt `sanitizer/*.h` headers
+# on the include path (abseil's `dynamic_annotations.h` includes
+# `sanitizer/common_interface_defs.h` whenever ASan is active), and
+# (c) build + link the compiler-rt ASan runtime from source. The three
+# are bundled in the one flag — the toolchain has no "provide the runtime
+# but let me scope the instrument myself" knob. ADR-0014 carved this gate
+# out precisely because the minimal prebuilt shipped no runtime;
+# foreign_cc=0 (ADR-0015) then removed the global-instrument blocker
+# (no CMake compiler-detection links left to break), so the toolchain
+# flag is now the supported re-arm path. `--config=ubsan` is the same
+# shape (`-fsanitize=undefined` + the toolchain's own ignorelist).
 #
-# `--linkopt=-fsanitize=…` stays global — only the final first-party
-# `cc_binary` link picks it up, which is what we want (the runtime
-# library and its initializers must reach the sipi binary's link line).
-#
-# `-fno-omit-frame-pointer` and `-fno-optimize-sibling-calls` stay as
-# global `--copt`. Both are advisory hints harmless to the deps; keeping
-# them across the whole stack means stack traces from any layer
-# (kakadu / libtiff / openssl / sipi) carry frame pointers and don't get
-# mangled by tail-call optimisation when ASan unwinds.
+# This instruments the native deps (kakadu / libtiff / openssl / …) too,
+# not only first-party code — broader than the old `--per_file_copt`
+# scoping, which the toolchain cannot reproduce (provisioning the runtime
+# forces the global flag). For a sanitizer *gate* that is strictly more
+# coverage (it catches memory errors in how sipi drives the deps); the
+# cost is a from-scratch instrumented build (compiler-rt from source +
+# every dep), amortised by the remote cache. The vptr check now links
+# cleanly — hermetic-llvm builds + statically links `libubsan_standalone`
+# (incl. the C++ runtime) from source, so the old `-fno-sanitize=vptr`
+# workaround (toolchains_llvm shipped only the dynamic ubsan-cxx runtime)
+# is gone. Darwin remains unsupported (the macOS toolchain args omit the
+# sanitizer header path); the gate runs on linux-x86_64.
 
 # Neutralize the production hardening flags (`build --copt=…` block above)
 # for sanitizer builds. `_FORTIFY_SOURCE=2` intercepts the same libc
@@ -202,10 +207,7 @@ build:asan --copt=-U_FORTIFY_SOURCE
 build:asan --copt=-fno-stack-protector
 build:asan --compilation_mode=dbg
 build:asan --strip=never
-build:asan --copt=-fno-omit-frame-pointer
-build:asan --copt=-fno-optimize-sibling-calls
-build:asan --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsanitize=address
-build:asan --linkopt=-fsanitize=address
+build:asan --@llvm//config:asan=true
 
 # ASan runtime env for `bazel test --config=asan`.
 # `log_path=$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e` lands findings under
@@ -223,24 +225,7 @@ build:ubsan --copt=-U_FORTIFY_SOURCE
 build:ubsan --copt=-fno-stack-protector
 build:ubsan --compilation_mode=dbg
 build:ubsan --strip=never
-build:ubsan --copt=-fno-omit-frame-pointer
-build:ubsan --copt=-fno-optimize-sibling-calls
-build:ubsan --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fsanitize=undefined
-# Disable the vptr check. `-fsanitize=undefined` activates it by default,
-# but verifying RTTI at run time requires a UBSan symbol set
-# (`__ubsan_vptr_type_cache`, `__ubsan_handle_dynamic_type_cache_miss`)
-# that toolchains_llvm's compiler-rt only ships in the dynamic
-# `libclang_rt.ubsan_standalone_cxx-…so` form; the toolchain's link
-# line forces static `-l:libc++.a -l:libc++abi.a`, so the dynamic
-# runtime is never pulled in and lld fails the link with `undefined
-# symbol: __ubsan_vptr_type_cache`. The other UBSan checks (integer
-# overflow, null deref, signed-integer wraparound, alignment, etc.)
-# don't need the C++-specific runtime and link cleanly. Sipi's prior
-# CMake build worked with full UBSan because the Nix toolchain linked
-# C++ dynamically and the runtime resolved against the system libc++.
-build:ubsan --per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@-fno-sanitize=vptr
-build:ubsan --linkopt=-fsanitize=undefined
-build:ubsan --linkopt=-fno-sanitize=vptr
+build:ubsan --@llvm//config:ubsan=true
 
 # ── Fuzz harness — opt-in via --config=fuzz ────────────────────────────────
 # Replaces the deleted `.#fuzz` Nix variant. CI's `fuzz.yml` workflow
