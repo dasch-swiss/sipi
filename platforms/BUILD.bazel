@@ -32,7 +32,7 @@ platform(
 )
 
 # Config settings for per-platform `select()` branches in BUILD files
-# (foreign_cc rules with per-arch configure options, etc.).
+# (e.g. the native cc_library deps' per-arch SIMD copts/defines).
 # `platform()` cannot be used in `select()`; `config_setting` can.
 config_setting(
     name = "is_linux_x86_64",

@@ -1,13 +1,13 @@
 # Nix dev shell
 
 Nix's role in SIPI is **dev-shell provisioning only**. It assembles
-a reproducible bash environment with bazelisk, the host tools that
-`rules_foreign_cc` shells out to (perl, cmake, pkg-config,
-autoconf/automake/libtool/m4), `gh` (consumed by the
-`gh_release_archive` repository_rule), `crane` (used by
-`bazel-docker-publish-manifest`), and `jpylyzer` (JP2 conformance
-validator). Rust + LLVM toolchains are provisioned hermetically by
-Bazel (`rules_rust` + the BCR `llvm` (hermetic-llvm) module in
+a reproducible bash environment with bazelisk, `gh` (consumed by the
+`gh_release_archive` repository_rule for the Kakadu fetch), `crane`
+(used by `bazel-docker-publish-manifest`), and `jpylyzer` (JP2
+conformance validator). No host C/C++ build tools are needed — every
+dep is a BCR `bazel_dep` or a native `cc_library` compiled by the
+hermetic LLVM toolchain. Rust + LLVM toolchains are provisioned
+hermetically by Bazel (`rules_rust` + the BCR `llvm` (hermetic-llvm) module in
 `MODULE.bazel`) — the Bazel cc actions never use the dev-shell `clang`.
 
 It is **not** the build system. Sipi's binaries, tests, and Docker
@@ -65,8 +65,6 @@ Highlights:
 
 - **bazelisk** + a `bazel` shim — reads `.bazelversion` and downloads
   the matching Bazel.
-- **perl, cmake, pkg-config, autoconf, automake, libtool, m4** —
-  host tools that `rules_foreign_cc` invokes during ext/* builds.
 - **gh, cacert** — the `gh_release_archive` Bazel repository_rule shells
   out to `gh release download`; `cacert` provides a TLS bundle on
   headless Linux dev shells.

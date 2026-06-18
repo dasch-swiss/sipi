@@ -333,9 +333,9 @@ cc_library(
         "@zlib",
         "@kakadu//:kdu",
     ] + select({
-        # glibc 2.42 → 2.31 ABI compatibility shims for kakadu's
-        # cross-toolchain compile and for libc++ headers compiled
-        # against glibc 2.39+. See //bazel:glibc23_compat for the
+        # glibc C23 / LFS ABI compatibility shims for the native deps
+        # and for libc++ headers compiled against glibc 2.39+ on the
+        # Linux runners. See //bazel:glibc23_compat for the
         # full rationale. Declared on `:sipi_lib` (not just `:sipi`)
         # so every cc_test under //test/unit/... — which links
         # against libc++ paths like `std::stoi` that emit

@@ -1,4 +1,4 @@
-"""Native `cc_library` build for Kakadu — replaces the `rules_foreign_cc` `make()` wrapper.
+"""Native `cc_library` build for Kakadu.
 
 Source/flag spec is a direct translation of the upstream per-arch makefiles
 shipped in the v8.7 release (the authoritative build spec — Kakadu builds from

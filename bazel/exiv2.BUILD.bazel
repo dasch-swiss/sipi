@@ -1,14 +1,17 @@
-"""Native `cc_library` for Exiv2 0.28.5 — replaces the `rules_foreign_cc` `cmake()` wrapper.
+"""Native `cc_library` for Exiv2 0.28.5.
 
 Two generated headers are reproduced without CMake:
   - `exv_conf.h` — via `cmake_configure_file` on `cmake/config.h.cmake`. Token
-    values match what the foreign_cc build generated on this toolchain (the
-    on-disk darwin `exv_conf.h` was the reference). `EXV_HAVE_ICONV` is the only
-    platform-divergent token (macOS links libiconv; the glibc-Linux build left
-    it off), split with a `select()`. The `EXV_STRERROR_R_CHAR_P` /
-    `ICONV_ACCEPTS_CONST_INPUT` tokens stay undefined on both: under
-    `-std=gnu++17` (below) glibc exposes the XSI `strerror_r` (int) and the
-    non-const `iconv`, same as macOS.
+    values match what upstream CMake's feature probes detect on this toolchain,
+    split per platform with a `select()`:
+      - macOS: `EXV_HAVE_ICONV` (libiconv) on; `strerror_r` is XSI (returns
+        int), so `EXV_STRERROR_R_CHAR_P` is off.
+      - Linux (glibc): this toolchain exposes the GNU `strerror_r` (returns
+        char*), so `EXV_STRERROR_R_CHAR_P` is on — futils.cpp's `#ifdef`
+        branch; without it the `#else` `const int = strerror_r(...)` fails to
+        compile. `EXV_HAVE_ICONV` is left off (matching the prior build).
+    `ICONV_ACCEPTS_CONST_INPUT` is off on both (glibc + macOS take non-const
+    `char**`).
   - `exiv2lib_export.h` — a checked-in static shim (CMake's
     `generate_export_header` expands the `EXIV2API` macros to empty for a static
     build; reproduced via `write_file`).
@@ -21,7 +24,7 @@ Exiv2's public headers are unaffected; SIPI keeps including them under C++23.
 Deps are `@libexpat` (the bundled XMP SDK's ExpatAdapter) + `@zlib` (PNG-chunk
 inflate/deflate). **No libpng** — exiv2's PNG path links zlib only (verified:
 no `<png.h>`/`png_*` references; EXIV2_ENABLE_PNG links `ZLIB::ZLIB`).
-`http.cpp` is excluded (WEBREADY off, as in the foreign_cc build).
+`http.cpp` is excluded (WEBREADY off).
 """
 
 load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
@@ -50,7 +53,13 @@ cmake_configure_file(
         "PROJECT_VERSION_PATCH=5",
         "PROJECT_VERSION_TWEAK=",  # no tweak version -> EXIV2_TWEAK_VERSION (U), matching CMake
     ] + select({
+        # macOS: XSI strerror_r returns int (EXV_STRERROR_R_CHAR_P off); iconv via libiconv.
         "@platforms//os:macos": ["EXV_HAVE_ICONV=1"],
+        # Linux glibc under this toolchain exposes the GNU strerror_r (returns
+        # char*), so futils.cpp's `#ifdef EXV_STRERROR_R_CHAR_P` branch is the
+        # correct one — without it the `#else` `const int = strerror_r(...)`
+        # fails to compile (char* -> int).
+        "@platforms//os:linux": ["EXV_STRERROR_R_CHAR_P=1"],
         "//conditions:default": [],
     }),
 )
@@ -96,7 +105,7 @@ cc_library(
             "include/exiv2/*.hpp",
             "include/exiv2/*.h",
         ],
-        exclude = ["src/http.cpp"],  # WEBREADY off (matches the foreign_cc build)
+        exclude = ["src/http.cpp"],  # WEBREADY off
     ) + _GENERATED_HEADERS,
     # `.incl_cpp` are textually #included by the XMP SDK TUs, not compiled alone.
     textual_hdrs = glob([

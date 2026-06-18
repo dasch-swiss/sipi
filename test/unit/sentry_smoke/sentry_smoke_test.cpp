@@ -50,7 +50,11 @@ TEST(SentrySmoke, InitUnwindCaptureDeliver)
   ASSERT_EQ(sentry_init(options), 0);
 
   sentry_value_t event = sentry_value_new_message_event(SENTRY_LEVEL_INFO, "test", "native sentry smoke");
-  sentry_event_value_add_stacktrace(event, nullptr, 0);// exercises the libbacktrace unwinder
+  // Deprecated upstream but kept deliberately: with ips==NULL it captures the
+  // current stack via the configured unwinder, which is exactly what this test
+  // needs to exercise libbacktrace. If a sentry bump removes it, migrate to
+  // sentry_value_new_stacktrace + sentry_value_new_thread + sentry_event_add_thread.
+  sentry_event_value_add_stacktrace(event, nullptr, 0);
   sentry_capture_event(event);
 
   ASSERT_EQ(sentry_close(), 0);

@@ -25,20 +25,14 @@
         let
           pkgs = import nixpkgs { inherit system; };
 
-          # Bazelisk reads `.bazelversion`; rules_foreign_cc shells out to the
-          # host tools (perl/cmake/pkg-config/autotools); the `kakadu_archive`
-          # repository_rule shells out to `gh`; `crane` is used by the
-          # `bazel-docker-publish-manifest` recipe.
+          # Bazelisk reads `.bazelversion` and drives the whole build (every
+          # C/C++ dep is a native `cc_library` compiled by the hermetic LLVM
+          # toolchain — no host cmake/autotools/perl). The `kakadu_archive`
+          # repository_rule shells out to `gh`; `crane` (go-containerregistry)
+          # is used by the `bazel-docker-publish-manifest` recipe.
           commonPackages = with pkgs; [
             bazelisk
             (writeShellScriptBin "bazel" ''exec ${bazelisk}/bin/bazelisk "$@"'')
-            perl
-            cmake
-            pkg-config
-            autoconf
-            automake
-            libtool
-            m4
             gh
             cacert
             go-containerregistry

@@ -1,34 +1,27 @@
-/* glibc 2.42 → 2.31 ABI compatibility shims (Linux only).
+/* glibc C23 / LFS ABI compatibility shims (Linux only).
  *
- * kakadu's foreign_cc make() rule compiles via Nix's clang++, which sees
- * the host runner's glibc 2.42 headers. Those have C23 transparent
- * renames like `#define strtol __isoc23_strtol` (gated by
- * __GLIBC_USE(ISOC2X), enabled under _GNU_SOURCE) and LFS folding
- * (`fcntl` → `fcntl64` from glibc 2.34 onward). The kakadu .o files
- * therefore reference symbols that the toolchains_llvm Chromium
- * debian-bullseye sysroot's glibc 2.31 doesn't export under those names.
+ * On the Linux CI runners the build sees glibc 2.39+ headers, which apply C23
+ * transparent renames like `#define strtol __isoc23_strtol` (gated by
+ * __GLIBC_USE(ISOC2X), enabled under _GNU_SOURCE) and LFS folding (`fcntl` →
+ * `fcntl64` from glibc 2.34 onward). Code compiled against those headers — both
+ * SIPI's own libc++-using TUs (e.g. std::stoi → strtol) and the native C/C++
+ * deps — therefore references symbols that the hermetic toolchain's older
+ * link-target glibc does not export under those names.
  *
- * This translation unit provides the missing aliases as wrapper
- * functions calling the canonical glibc 2.31 entry points. It's linked
- * into the final sipi binary on Linux only — see
- * src/BUILD.bazel:sipi_lib's `deps += ":glibc23_compat"` selector. The
- * earlier ld.lld --defsym approach failed because lld requires both
- * sides of an alias to be resolved at link time, but `strtol` lives in
- * libc.so (dynamic) and isn't visible during the defsym pass.
+ * This translation unit provides the missing aliases as wrapper functions
+ * calling the canonical glibc entry points. It's linked into the final sipi
+ * binary on Linux only — see src/BUILD.bazel:sipi_lib's `deps +=
+ * ":glibc23_compat"` selector. The earlier ld.lld --defsym approach failed
+ * because lld requires both sides of an alias to be resolved at link time, but
+ * `strtol` lives in libc.so (dynamic) and isn't visible during the defsym pass.
  *
  * ABI equivalence on this code path:
- *   * The C23 strto*l functions only differ from C99's in accepting a
- *     0x prefix on octal input. kakadu's kdu_window CID parsing and
- *     file_io fd-flag mapping don't rely on that distinction, so the
- *     shim is exact for our usage.
- *   * fcntl64 was folded into fcntl from glibc 2.34 onward; on glibc
- *     2.31 fcntl is the LFS-aware canonical entry, so the alias is
- *     identical at the syscall layer.
- *
- * Y+1 cleanup: refactor kakadu.BUILD.bazel to `targets=[…]` +
- * `prefix_script` so foreign_cc declares the cc_toolchain as an action
- * input. With Bazel's toolchain clang doing the kakadu compile, --sysroot
- * is honoured natively and this whole shim file becomes deletable.
+ *   * The C23 strto*l functions only differ from C99's in accepting a 0x prefix
+ *     on octal input; no caller relies on that distinction, so the shim is
+ *     exact for our usage.
+ *   * fcntl64 was folded into fcntl from glibc 2.34 onward; on the link-target
+ *     glibc fcntl is the LFS-aware canonical entry, so the alias is identical
+ *     at the syscall layer.
  */
 
 #define _GNU_SOURCE

@@ -13,12 +13,12 @@ Direction enforcement:
     `#include "Sipi*.h"` or `Sipi*::` symbol references.
   - The direct-deps list is curated to a single SIPI-side entry.
 
-Bazel `--features=layering_check` is not enabled on this package:
-foreign_cc targets (every `ext/*` build) do not emit Clang modulemaps,
-so layering_check fails compilation on any cc_library that consumes
-them. Enabling it requires either wrapping each foreign_cc output in
-a modulemap-bearing `cc_library` shim or switching layering_check to
-a Bazel-graph check that does not rely on Clang modules.
+Bazel `--features=layering_check` is not enabled on this package: the
+third-party native `cc_library` deps (libtiff, exiv2, …) are not
+layering-clean — they freely include each other's internal headers — so
+enabling layering_check globally fails their compiles. Deferred to the
+broader layering rollout (DEV-6353); the shell-script context check above
+is the active enforcement until then.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library")

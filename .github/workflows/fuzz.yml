@@ -20,9 +20,10 @@ permissions:
   contents: read
 
 # Nightly `schedule` disabled under the hermetic-llvm toolchain: its minimal
-# prebuilt ships no libFuzzer runtime, and the only build mechanism instruments
-# the whole toolchain globally (which breaks the foreign_cc deps in the fuzz
-# subset). Kept as a manual (workflow_dispatch) target. See
+# prebuilt ships no libFuzzer runtime. Kept as a manual (workflow_dispatch)
+# target. (The old global-instrument-breaks-third-party-CMake-deps blocker is
+# gone now that the build is all-native — see
+# docs/adr/0015-native-cc_library-over-foreign_cc.md.) See
 # docs/adr/0014-toolchain-provider-swap.md ("Carved-out instrumentation
 # gates"). Restore the `schedule:` block below once a fuzz runtime is wired.
 on:
@@ -99,9 +100,7 @@ jobs:
           BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
         # `nix develop --command` mirrors `sanitizer.yml`'s wrapper — it
         # activates the dev shell so bazelisk + `gh` (used by the kakadu
-        # repository_rule) + the foreign_cc host tools (`cmake`, `perl`,
-        # `pkg-config`, `autoconf`, `automake`, `libtoolize`) are on PATH,
-        # and `NIX_LDFLAGS` / `ACLOCAL_PATH` are set.
+        # repository_rule) are on PATH.
         run: |
           if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
             CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app

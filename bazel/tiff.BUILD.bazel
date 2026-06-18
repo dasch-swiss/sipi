@@ -1,4 +1,4 @@
-"""Native `cc_library` for libtiff 4.7.1 — replaces the `rules_foreign_cc` `cmake()` wrapper.
+"""Native `cc_library` for libtiff 4.7.1.
 
 Vendored from the BCR `libtiff/4.7.1/overlay/BUILD.bazel` and customized to
 RE-ENABLE the four ingest codecs stock BCR ships disabled. SIPI is an archive:
@@ -20,6 +20,11 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 # Common defines for tif_config.h (platform-independent). The codec-enable
 # tokens (LZMA/ZSTD/WEBP) live here per the 4.7.1 tif_config.h.cmake.in layout.
+# `SIZEOF_SIZE_T=8` (and `HOST_BIG_ENDIAN=0` in tiffconf.h below) hardcode the
+# LP64 + little-endian assumption — correct for all three SIPI targets
+# (darwin-arm64, linux-amd64, linux-arm64). A future big-endian or ILP32 target
+# would need these split with a select() (no guard today; this is the
+# config-header-replication trade-off ADR-0015 accepts).
 _TIF_CONFIG_COMMON_DEFINES = [
     "CCITT_SUPPORT=1",
     "CHECK_JPEG_YCBCR_SUBSAMPLING=1",
@@ -154,6 +159,10 @@ TIFF_COMMON_SRCS = [
     "libtiff/tif_jbig.c",
     "libtiff/tif_jpeg.c",
     "libtiff/tif_jpeg_12.c",
+    # tif_lerc.c + tif_jpeg_12.c compile to inert stubs: LERC_SUPPORT and
+    # JPEG_DUAL_MODE_8_12 are intentionally unset (no LERC dep / no 12-bit
+    # libjpeg), so their codec bodies are #ifdef'd out. Kept in srcs to match
+    # the upstream overlay and avoid drift on version bumps.
     "libtiff/tif_lerc.c",
     "libtiff/tif_luv.c",
     "libtiff/tif_lzma.c",

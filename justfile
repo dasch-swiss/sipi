@@ -139,10 +139,9 @@ bazel-test-smoke *FLAGS='':
 # `bazel-bin/src/cli/sipi` is what `sanitizer.yml`'s e2e step consumes
 # via `SIPI_BIN`. DWARF stays inline (`--strip=never` in
 # `.bazelrc`) so the symbol-name suppressions in `.lsan_suppressions.txt`
-# match. `--verbose_failures` surfaces the underlying cmake/make output
-# from any failing `rules_foreign_cc` ext/* dep — without it, Bazel only
-# reports the higher-level "output X was not created" line, which makes
-# triage of CFLAGS-propagation interactions impossible. `--stamp` runs
+# match. `--verbose_failures` surfaces the full failing compile/link
+# command line — without it, Bazel reports only the higher-level summary,
+# which makes triage harder. `--stamp` runs
 # `tools/workspace_status.sh` so `STABLE_SIPI_VERSION` (from `version.txt`)
 # is baked into `SipiVersion.h` via `src/BUILD.bazel`'s
 # `expand_template(stamp_substitutions = {…})`. Without it, the binary

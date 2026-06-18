@@ -26,9 +26,9 @@ bazel_dep(name = "rules_cc", version = "0.2.19")
 
 # `cmake_configure_file` reproduces CMake `configure_file()` config-header
 # generation natively (`#cmakedefine` / `@VAR@` substitution), so the native
-# `cc_library` deps that replaced foreign_cc (jansson, libtiff, exiv2) generate
-# their config headers without running CMake. Same module the BCR libtiff
-# overlay uses; loaded as `@cmake_configure_file//:cmake_configure_file.bzl`.
+# `cc_library` deps (jansson, libtiff, exiv2) generate their config headers
+# without running CMake. Same module the BCR libtiff overlay uses; loaded as
+# `@cmake_configure_file//:cmake_configure_file.bzl`.
 bazel_dep(name = "cmake_configure_file", version = "0.1.7")
 
 # `aspect_bazel_lib` provides `expand_template` with `stamp_substitutions=`,
@@ -36,37 +36,12 @@ bazel_dep(name = "cmake_configure_file", version = "0.1.7")
 # Y+4 will reuse it for OCI image stamping (`image_created`, `image_labels`).
 bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
 
-# `rules_foreign_cc` wraps the 20 remaining third-party libs (cmake/,
-# configure_make/, make/) — see ext/<lib>/BUILD.bazel files. Pinned
-# versions are declared via http_archive() calls in this file. Two libs
-# that historically lived under foreign_cc are no longer in the set:
-# `prometheus-cpp` (now consumed via the BCR `bazel_dep` below) and `fmt`
-# (dead dep — see comment in the http_archive section).
-bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
+# Every C/C++ dep is a BCR `bazel_dep` or a native `cc_library`
+# (`bazel/<lib>.BUILD.bazel`) compiled by the hermetic LLVM toolchain — no
+# third-party CMake/Make build step runs during the build.
+# See docs/adr/0015-native-cc_library-over-foreign_cc.md.
 
-# Use the Nix-dev-shell build tools for foreign_cc instead of bootstrapping
-# make / pkg-config / cmake from source. Those from-source bootstraps fail
-# under the hermetic-llvm toolchain: the toolchain's macOS archiver is
-# `llvm-libtool-darwin` (which requires `-o`), but the bootstrap build scripts
-# (GNU Make's gnulib `build.sh`, pkg-config's bundled glib) archive with GNU-
-# `ar` positional syntax (`ar … lib.a *.o`), so the bundled `llvm-libtool-
-# darwin` rejects them ("error: -o option: must be specified" / empty AR →
-# unresolved `g_*` symbols). Using the preinstalled tools sidesteps the
-# bootstraps entirely and is consistent with the other foreign_cc build tools
-# (autoconf/automake/perl) that already come from Nix — the hermetic *compiler*
-# does not make the autotools/build-tool layer hermetic (see the .bazelrc
-# PATH/ACLOCAL_PATH/NIX_LDFLAGS notes). Root-module registration wins over
-# rules_foreign_cc's own `built_*` defaults. cmake pulls ninja, so register
-# both. See docs/adr/0014-toolchain-provider-swap.md.
-register_toolchains(
-    "@rules_foreign_cc//toolchains:preinstalled_make_toolchain",
-    "@rules_foreign_cc//toolchains:preinstalled_pkgconfig_toolchain",
-    "@rules_foreign_cc//toolchains:preinstalled_cmake_toolchain",
-    "@rules_foreign_cc//toolchains:preinstalled_ninja_toolchain",
-)
-
-# `prometheus-cpp` consumed via the BCR module rather than the foreign_cc
-# `cmake()` wrapper used for the remaining third-party libs. SIPI only
+# `prometheus-cpp` consumed via the BCR module. SIPI only
 # links the core counters/gauges/histograms (no HTTP exposer — metrics are
 # served by SIPI's own shttps handler), so `@prometheus-cpp//core` is the
 # only target consumed; the BCR module's optional `pull`/`push`/`civetweb`
@@ -103,8 +78,7 @@ single_version_override(
 # propagated — any future cross-repo consumer should also adopt `@protobuf`.
 bazel_dep(name = "protobuf", version = "34.1")
 
-# Third-party C/C++ libraries consumed via BCR. Each entry replaces a
-# `http_archive` block + `ext/<dep>/BUILD.bazel` foreign_cc wrapper.
+# Third-party C/C++ libraries consumed via BCR `bazel_dep`.
 # Canonical-shape `bazel_dep` per BCR `docs/bcr-policies.md`: no
 # `repo_name=` override. Consumer label is the cc_library target the
 # module actually exports — verify with `bazel query '@<dep>//...'`
@@ -119,13 +93,11 @@ bazel_dep(name = "sqlite3", version = "3.51.2.bcr.1")
 bazel_dep(name = "libexpat", version = "2.7.1.bcr.1")
 bazel_dep(name = "libmagic", version = "5.47")
 
-# Codec libs migrated off foreign_cc to BCR drop-ins (DEV-6563). libjpeg_turbo
-# replaces IJG libjpeg 9f at the classic ≤v8 API target `@libjpeg_turbo//:jpeg`
-# (SipiIOJpeg.cpp uses only that surface; `:turbojpeg` is a separate API we
-# don't consume). libwebp is reached only via WebP-in-TIFF — SIPI emits no WebP
-# directly. libdeflate is the modern Deflate path the native libtiff enables
-# (LIBDEFLATE_SUPPORT); it is new to the build (foreign_cc libtiff set
-# `libdeflate: FALSE`).
+# Codec libs consumed as BCR drop-ins. libjpeg_turbo is consumed at the classic
+# ≤v8 API target `@libjpeg_turbo//:jpeg` (SipiIOJpeg.cpp uses only that surface;
+# `:turbojpeg` is a separate API we don't consume). libwebp is reached only via
+# WebP-in-TIFF — SIPI emits no WebP directly. libdeflate is the modern Deflate
+# path the native libtiff enables (LIBDEFLATE_SUPPORT).
 bazel_dep(name = "libpng", version = "1.6.54")
 bazel_dep(name = "libjpeg_turbo", version = "3.1.3.bcr.5")
 bazel_dep(name = "libwebp", version = "1.6.0")
@@ -254,8 +226,8 @@ apt.install(
 )
 use_repo(apt, "bookworm")
 
-# `http_archive` is also used (later in this file) for `ext/<lib>/`
-# foreign_cc archive ingest, but those entries are below the LLVM
+# `http_archive` is also used (later in this file) to fetch the native-lib
+# source archives, but those entries are below the LLVM
 # toolchain block. We need it available here for the FFmpeg static
 # pull, so bind it once now — `use_repo_rule` may be called multiple
 # times for the same upstream rule.
@@ -351,7 +323,7 @@ bazel_dep(name = "google_benchmark", version = "1.9.5", dev_dependency = True)
 # Python for `//tools/benchmark:compare` (the vendored google_benchmark
 # compare.py — see tools/benchmark/BUILD.bazel for why it is vendored).
 # `rules_python` is already resolved transitively at exactly 1.7.0
-# (googletest→re2→pybind11, protobuf, rules_foreign_cc), so this direct
+# (googletest→re2→pybind11, protobuf), so this direct
 # dev_dependency causes zero MVS churn. The hermetic 3.12 toolchain and the
 # `sipi_bench_pip` hub (numpy/scipy, mirroring google_benchmark 1.9.5's own
 # tools/requirements.txt) keep the compare workflow off the host/Nix python.
@@ -456,21 +428,17 @@ use_repo(toolchain, "llvm_toolchains")
 register_toolchains("@llvm_toolchains//:all")
 
 # Expose the prebuilt LLVM release bundle so individual binutils-class tools
-# (llvm-ar, llvm-ranlib, …) are referenceable as `@<bundle>//:bin/<tool>`.
-# Needed because on darwin the toolchain's default archiver is
-# `llvm-libtool-darwin` (Apple-style, needs `-static -o`), which foreign_cc's
-# cmake/autotools deps invoke with GNU-`ar` conventions and reject. We point
-# those deps' AR/CMAKE_AR at the bundle's GNU-style `llvm-ar` instead (see
-# //bazel:llvm-ar and bazel/foreign_cc_helpers.bzl). On Linux the toolchain's
-# default archiver is already `llvm-ar`, so no override is needed there.
-# The repo name embeds the LLVM version + exec triple — bumping LLVM_VERSION
-# means updating it here and in //bazel (see ADR-0014's pinning policy).
+# (llvm-objcopy, llvm-cov, …) are referenceable as `@<bundle>//:bin/<tool>`.
+# Needed for the Linux debug-split genrule (objcopy/readelf) and `bazel
+# coverage` (llvm-cov/llvm-profdata version-matched to the instrumented
+# `.profraw`). The repo name embeds the LLVM
+# version + exec triple — bumping LLVM_VERSION means updating it here and in
+# //bazel (see ADR-0014's pinning policy).
 llvm_toolchain_minimal = use_extension("@llvm//extensions:llvm_toolchain_minimal.bzl", "llvm_toolchain_minimal")
 
 # `bazel mod tidy` drops these lines — it can't see the bundles referenced from
 # the string labels in `//bazel`'s `alias(actual = "@llvm-toolchain-minimal-…")`
 # targets, so it judges the repos unused. They are required for the
-# //bazel:{clang++,llvm-ar,llvm-ranlib} (darwin foreign_cc) and
 # //bazel:{llvm-objcopy,llvm-readelf,llvm-cov,llvm-profdata} (Linux debug-split
 # + coverage) aliases. Re-add after running `bazel mod tidy`.
 use_repo(
@@ -547,12 +515,13 @@ approvaltests_cpp(
     url = "https://github.com/approvals/ApprovalTests.cpp/releases/download/v.10.13.0/ApprovalTests.v.10.13.0.hpp",
 )
 
-# ── Third-party C/C++ libs (rules_foreign_cc) ──────────────────────────────
+# ── Third-party C/C++ libs (native cc_library) ─────────────────────────────
 # URLs and SHA256s are the single source of truth.
 #
-# Each archive's `build_file = "//bazel:all_content.BUILD.bazel"` exposes
-# the raw source tree as `@<lib>//:all_srcs`; the foreign_cc rule lives
-# under `//ext/<lib>:<lib>` and consumes that filegroup.
+# Each archive's `build_file = "//bazel:<lib>.BUILD.bazel"` is a hand-written
+# native `cc_library` we own, compiled by the hermetic LLVM toolchain like
+# first-party code; consumers reference `@<lib>//:<target>`.
+# See docs/adr/0015-native-cc_library-over-foreign_cc.md.
 #
 # `http_archive` itself is bound near the top of this file (alongside
 # the FFmpeg static pull). One binding services every consumer.

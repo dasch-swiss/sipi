@@ -68,7 +68,7 @@ jobs:
         with:
           use-flakehub: "false"  # GHA cache backend only; FlakeHub requires a paid plan we're not on.
       # Authenticated Docker Hub pulls (rate-limit avoidance) for any
-      # foreign_cc image the build may need. Skipped if secrets missing
+      # base image the build may need. Skipped if secrets missing
       # (e.g. manually dispatched fork).
       - uses: docker/login-action@v4
         if: ${{ env.DOCKER_HUB_TOKEN != '' }}
@@ -105,7 +105,7 @@ jobs:
           else
             BES=""
           fi
-          nix develop .#llvm-tools --command bash -c "just bazel-coverage $REMOTE $BES --sandbox_debug"
+          nix develop .#llvm-tools --command bash -c "just bazel-coverage $REMOTE $BES"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6.0.1
@@ -113,21 +113,3 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: dasch-swiss/sipi
           files: bazel-out/_coverage/_coverage_report.dat
-
-      # On any bazel failure above, locate and dump every foreign_cc
-      # Make.log under the bazel output base. Mirrors the equivalent
-      # step in `ci.yml`.
-      - name: Dump foreign_cc Make.log files on failure
-        if: failure()
-        run: |
-          set +e
-          echo "=== searching for foreign_cc *.log files ==="
-          find "$HOME/.bazel" /home/runner/work -type f \
-            \( -name "Make.log" -o -name "configure.log" -o -name "build.log" -o -name "CMake.log" \) \
-            -print 2>/dev/null | while read -r f; do
-            echo
-            echo "===== $f ====="
-            cat "$f"
-          done
-          echo
-          echo "=== end of foreign_cc log dump ==="

@@ -62,8 +62,8 @@ jobs:
         env:
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
           BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
-        # See ci.yml for the `nix develop --command` rationale (foreign_cc
-        # host-tool PATH).
+        # See ci.yml for the `nix develop --command` rationale (`gh` on PATH
+        # for the kakadu fetch).
         run: |
           if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
             CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app

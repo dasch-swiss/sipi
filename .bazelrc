@@ -19,33 +19,10 @@ build --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
 
 # Inherit PATH from the invocation environment. `--incompatible_strict_action_env`
 # above otherwise rebuilds PATH from a small allow-list (`/bin:/usr/bin:/usr/local/bin`),
-# which omits the Nix dev-shell's `/nix/store/…/bin` entries. Several
-# foreign_cc rules (libmagic's `autoreconf -fi`, openssl's `perl Configure`)
-# need `autoconf` / `automake` / `libtoolize` / `perl` from the dev shell —
-# all of which Nix installs into store paths only. Inheriting PATH lets
-# those tools through without scattering toolchain paths across the action's
-# env. flake.nix ensures the relevant host tools are in the dev-shell PATH.
+# which omits the Nix dev-shell's `/nix/store/…/bin` entries. Inheriting PATH
+# keeps the dev-shell tools (e.g. `git` for `tools/workspace_status.sh`)
+# reachable without scattering toolchain paths across the action's env.
 build --action_env=PATH
-
-# Inherit ACLOCAL_PATH alongside PATH. Nix's `autoconf` / `automake` /
-# `libtool` packages each install their m4 macros (`libtool.m4`, `ltversion.m4`,
-# automake's own helper macros) under per-package prefixes; the dev shell
-# composes them into `ACLOCAL_PATH`. Without that env var, libmagic's
-# `autoreconf -fi` preflight fails with `Libtool library used but
-# 'LIBTOOL' is undefined` because aclocal can't locate libtool's macros.
-build --action_env=ACLOCAL_PATH
-
-# Inherit NIX_LDFLAGS so the Nix-wrapped `clang++` on PATH can find the
-# C++ standard library at link time. The wrapper reads NIX_LDFLAGS and
-# prepends its -L paths to the linker invocation; without it, kakadu's
-# foreign_cc sub-make links libkdu_v85R.so via clang++ which auto-adds
-# `-lc++`, but ld.bfd can't find libc++.so anywhere (it lives at
-# `/nix/store/…-libcxx-19.1.7/lib/libc++.so` — not on any default search
-# path). Toolchains_llvm's own clang doesn't read NIX_LDFLAGS, so this
-# is a no-op for Bazel-driven cc actions; it only affects Nix-wrapped
-# tools spawned by foreign_cc rules. Required on Linux; harmless on
-# macOS (system libc++ at /usr/lib/ resolves without env help).
-build --action_env=NIX_LDFLAGS
 
 # Stamp inputs for reproducible binaries and OCI images. The script writes
 # STABLE_GIT_COMMIT, STABLE_GIT_VERSION, STABLE_IMAGE_CREATED, and
@@ -65,26 +42,25 @@ build --host_cxxopt=-std=c++23
 # Linux defaults to dynamic linking, which makes Bazel emit a `.so`
 # for every transitive cc_library and links each test against those
 # DSOs. That collides with two realities of this build:
-#   * exiv2 (foreign_cc) is shipped as `libexiv2.a` only — Bazel's
-#     auto-DSO for `//src:sipi_lib` then references exiv2 symbols
+#   * the native `cc_library` deps (e.g. exiv2) ship a static `.a` only —
+#     Bazel's auto-DSO for `//src:sipi_lib` then references their symbols
 #     across a DSO boundary, and the linker rejects them as
 #     "non-exported symbol 'Exiv2::…' in libexiv2.a is referenced by
 #     DSO libsrc_Slibsipi_Ulib.so".
-#   * toolchains_llvm's `libc++.a` carries non-PIC relocations on
+#   * the hermetic toolchain's `libc++.a` carries non-PIC relocations on
 #     aarch64, so even when `.so` linking is otherwise correct, the
 #     C++ stdlib pull-in fails with `recompile with -fPIC`.
 # Static linking matches `bazel build //src:sipi` (which already
 # defaults to static via `cc_binary`'s `linkstatic=True`), so cc_test
 # behaves the same way as the production binary it tests against.
-# darwin is unaffected: its default is already mostly static and the
-# foreign_cc deps ship `.dylib`-friendly archives.
+# darwin is unaffected: its default is already mostly static.
 build:linux --dynamic_mode=off
 
 # `__isoc23_strtol` / `fcntl64` glibc-2.39 → glibc-2.31 aliases are
 # provided by `//bazel:glibc23_compat` (Linux-only cc_library, propagated
 # via `//src:sipi_lib`'s deps select). The earlier `--linkopt=-Wl,--defsym`
-# approach was rejected because `--linkopt` flows into foreign_cc internal
-# link actions where neither side of the alias is yet linked, producing
+# approach was rejected because `--linkopt` flows into every link
+# action where neither side of the alias is yet linked, producing
 # `--defsym:1: symbol not found: strtol`.
 
 # ── Hardening (production target binary) ───────────────────────────────────
@@ -148,13 +124,9 @@ build:macos --host_linkopt=-mmacosx-version-min=13.3
 build:macos --action_env=MACOSX_DEPLOYMENT_TARGET=13.3
 
 # Inherit PATH during repo-rule evaluation on macOS so the Kakadu
-# `gh_release_archive` fetch (needs `gh`) and the foreign_cc autotools libs
-# (`perl`/`autoconf`/`automake`/`libtoolize` from the Nix dev shell) stay
-# reachable. The toolchains_llvm-era macOS SDK hacks are gone: hermetic-llvm
-# manages its own libc++ and fetches the SDK from Apple's CDN, so the
-# `-nostdinc++`/`-isystem .../MacOSX.sdk/c++/v1` libc++-ABI workaround and the
-# DEVELOPER_DIR/SDKROOT xcrun overrides (which steered toolchains_llvm's SDK
-# probe at the host Xcode CLT) are no longer needed.
+# `gh_release_archive` fetch (needs `gh` from the Nix dev shell) stays
+# reachable. hermetic-llvm manages its own libc++ and fetches the SDK from
+# Apple's CDN, so no SDK/xcrun env overrides are needed.
 build:macos --repo_env=PATH
 
 # Force `rules_android`'s `android_sdk_repository_extension` to take the
@@ -193,57 +165,27 @@ common --repo_env=ANDROID_HOME=
 # `dontStrip = true` + `separateDebugInfo = false`.
 #
 # **Why `--per_file_copt` instead of `--copt` for `-fsanitize=…`.**
-# `rules_foreign_cc`'s `make()` / `cmake()` / `configure_make()` rules
-# collect `--copt` flags from the cc toolchain and forward them to the
-# upstream build via CFLAGS / CXXFLAGS. Adding `--copt=-fsanitize=address`
-# poisons kakadu's hand-written Makefile (which builds `libkdu.a` /
-# `libkdu_aux.a` in `@kakadu`) and the autotools/cmake wrappers around
-# openssl, exiv2, tiff, etc. Many of those Makefiles either ignore
-# foreign-injected CFLAGS or fail to mirror the matching `-fsanitize=…`
-# linkopt, leaving the foreign_cc rule with no `.a` to package.
+# `--per_file_copt=<regex>@<flag>` is action-scoped — it applies only to
+# compile actions whose source file path matches the regex. Scoping by
+# `^(src|shttps|fuzz|test)/` instruments every first-party translation
+# unit while leaving the third-party native `cc_library` deps
+# (kakadu / libtiff / openssl / …) uninstrumented. Mixing instrumented
+# sipi code with uninstrumented deps is supported by ASan and UBSan; it
+# keeps instrumentation focused on the code we own (and, for fuzzing,
+# keeps the corpus search space small). A global `--copt=-fsanitize=…`
+# would also work now that every dep is a native cc_library — the
+# scoping is the current default, revisited when asan/fuzz are re-armed
+# (see docs/adr/0014 "Carved-out instrumentation gates").
 #
-# `--per_file_copt=<regex>@<flag>` is action-scoped — it applies only
-# when Bazel itself runs a compile action whose source file path matches
-# the regex, and is NOT consulted when foreign_cc collects toolchain
-# flags for its env-var forwarding. Scoping by `^(src|shttps|fuzz|test)/`
-# instruments every first-party translation unit while leaving the
-# foreign_cc deps unsanitised. Mixing instrumented sipi code with
-# uninstrumented kakadu/openssl/png/etc. is supported by ASan and UBSan;
-# the previous CMake build had the exact same property — the
-# `sanitizer_config` INTERFACE library only attached to `sipi` and
-# `libsipi_testable`, never to the `ext/*` foreign_cc targets.
-#
-# `--linkopt=-fsanitize=…` stays global because foreign_cc's `make()` /
-# `cmake()` rules don't read Bazel linkopts; only the final first-party
-# `cc_binary` link picks them up, which is what we want (the runtime
+# `--linkopt=-fsanitize=…` stays global — only the final first-party
+# `cc_binary` link picks it up, which is what we want (the runtime
 # library and its initializers must reach the sipi binary's link line).
 #
 # `-fno-omit-frame-pointer` and `-fno-optimize-sibling-calls` stay as
-# global `--copt`. Both are advisory hints harmless to the foreign_cc
-# deps; keeping them across the whole stack means stack traces from any
-# layer (kakadu / libtiff / openssl / sipi) carry frame pointers and
-# don't get mangled by tail-call optimisation when ASan unwinds.
-#
-# **Note for cmake() deps.** `--compilation_mode=dbg` also propagates
-# into `rules_foreign_cc`'s `cmake()` rules as `-DCMAKE_BUILD_TYPE=Debug`.
-# Two separate hazards follow from that:
-#   1. Some upstream `CMakeLists.txt` files apply
-#      `set_target_properties(... DEBUG_POSTFIX "d")` (libpng, sentry, …)
-#      or `"-d"` (curl) in Debug mode and produce e.g. `libpng16d.a` /
-#      `libcurl-d.a` instead of the unsuffixed name, breaking the
-#      foreign_cc `out_static_libs` invariant.
-#   2. Per-config IMPORTED-target files (`XConfig-debug.cmake`,
-#      `XConfig-relwithdebinfo.cmake`) only exist for the matching
-#      build type; downstream cmake() consumers that resolve a
-#      different config fail with
-#      `IMPORTED_LOCATION not set for … configuration "<X>"`.
-# Each cmake() ext/* dep pins `cache_entries["CMAKE_BUILD_TYPE"] =
-# "RelWithDebInfo"`; that value beats the auto-injected `=Debug` in
-# `rules_foreign_cc`'s `cmake_script.bzl`, so the deps build uniformly
-# at -O2 -g and ship `XConfig-relwithdebinfo.cmake` files that match
-# downstream resolution. Sipi's own first-party translation units are
-# unaffected — they don't go through cmake; their `-fsanitize=…`
-# reaches them via the `--per_file_copt` block above.
+# global `--copt`. Both are advisory hints harmless to the deps; keeping
+# them across the whole stack means stack traces from any layer
+# (kakadu / libtiff / openssl / sipi) carry frame pointers and don't get
+# mangled by tail-call optimisation when ASan unwinds.
 
 # Neutralize the production hardening flags (`build --copt=…` block above)
 # for sanitizer builds. `_FORTIFY_SOURCE=2` intercepts the same libc
@@ -333,34 +275,19 @@ build:ubsan --linkopt=-fno-sanitize=vptr
 #
 # Compile flags are scoped to first-party translation units via
 # `--per_file_copt=^(src|shttps|fuzz|test)/.*\.(cpp|cc|cxx|c|mm)$@<flag>`,
-# matching the asan/ubsan blocks above and for the same reason: a global
-# `--copt` poisons foreign_cc deps' CFLAGS / CXXFLAGS forwarding (see the
-# §"Why `--per_file_copt` instead of `--copt` for `-fsanitize=…`" rationale
-# in the asan block). Foreign_cc deps reachable from `//shttps:fuzz_subset`
-# (curl / jansson / libmagic / lua / openssl / sqlite3 / zlib via
-# `:shttps_headers`) build under default toolchain flags; only sipi's own
-# four shttps cpps + `iiif_handler.cpp` carry libFuzzer instrumentation,
-# matching the corpus-search-space minimisation goal of the explicit
-# subset.
+# matching the asan/ubsan blocks above: only sipi's own four shttps cpps +
+# `iiif_handler.cpp` carry libFuzzer instrumentation, while the third-party
+# deps reachable from `//shttps:fuzz_subset` (curl / jansson / libmagic /
+# lua / openssl / sqlite3 / zlib via `:shttps_headers`) build uninstrumented —
+# the corpus-search-space minimisation goal of the explicit subset.
 #
-# **Why `--linkopt=-fsanitize=fuzzer` is NOT here.** `rules_foreign_cc`
-# 0.15.1 forwards Bazel `--linkopt` flags into each foreign dep's
-# `LDFLAGS` environment variable (verified against sqlite3's autoconf
-# `configure` invocation — fuzz CI 2026-05-04..09). With
-# `-fsanitize=fuzzer` in LDFLAGS, autoconf's "does the C compiler work"
-# probe (compile + link of `int main(){return 0;}`) fails because
-# libFuzzer requires `LLVMFuzzerTestOneInput`, breaking every
-# foreign_cc configure step downstream of `:fuzz_subset` (curl,
-# jansson, libmagic, lua, openssl, sqlite3, zlib via `:shttps_headers`).
-#
-# `-fsanitize=fuzzer` and `-fsanitize=address` are scoped to the fuzz
-# binary itself via `cc_binary(linkopts = [...])` in
-# `//fuzz/handlers:iiif_handler_uri_parser_fuzz` — target-level
-# linkopts apply only to that binary's own link line, leaving foreign
-# deps clean. `--per_file_copt` for the compile flags below is enough
-# on the compile side because `--copt` is the channel rules_foreign_cc
-# forwards into CFLAGS/CXXFLAGS; linkopts go through a parallel channel
-# that target-level attrs scope correctly.
+# **Why `--linkopt=-fsanitize=fuzzer` is NOT here.** The libFuzzer runtime
+# defines `main()` and expects `LLVMFuzzerTestOneInput`; a global linkopt
+# would break the production `//src/cli:sipi` link and every other
+# `cc_binary`/`cc_test`. `-fsanitize=fuzzer` and `-fsanitize=address` are
+# scoped to the fuzz binary itself via `cc_binary(linkopts = [...])` in
+# `//fuzz/handlers:iiif_handler_uri_parser_fuzz` — target-level linkopts
+# apply only to that binary's own link line.
 #
 # `-fsanitize=address` *could* stay global — the asan runtime
 # self-links without user-provided symbols, so the configure-test
