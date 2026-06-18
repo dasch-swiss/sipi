@@ -1,4 +1,4 @@
-# Sanitizer build: ASan + UBSan on the e2e suite.
+# Sanitizer build: ASan + UBSan on the full functional test pyramid.
 # Catches memory errors (buffer overflow, use-after-free, leaks) and
 # undefined behavior that functional tests miss.
 #
@@ -7,23 +7,28 @@
 #
 # Also available on-demand via workflow_dispatch.
 #
-# Single Bazel test step:
-#   `just bazel-test-e2e --config=asan --config=ubsan` rebuilds the
-#   sipi binary + e2e test binaries under ASan/UBSan and runs the
-#   suite in one action graph. No separate sanitised-build step:
-#   `bazel test //test/e2e-rust:all_e2e` already requires
-#   `data = ["//src/cli:sipi"]` and produces sipi under the test
-#   invocation's configuration, so a pre-build with the same flags
-#   would be duplicate work and one with different flags would be
-#   discarded.
+# Scope: unit + e2e under ASan/UBSan (`just bazel-test-unit`,
+# `bazel-test-e2e`, each `--config=asan --config=ubsan`). Covering unit — not
+# just e2e — puts the sanitizers over the codec/ICC/metadata paths (the
+# unit round-trip + delivery code) where memory bugs in a media server are
+# most likely. Two suites are intentionally excluded:
+#   - `//test/approval` — a byte-exact codec-OUTPUT regression gate, not a
+#     memory-safety gate. ASan requires a `-c dbg` instrumented build, whose
+#     codec output (notably PNG compression) is not byte-identical to the
+#     goldens approved under the shipping build, so it can only ever fail the
+#     byte comparison regardless of memory safety. It runs on the normal /
+#     coverage gate where its goldens are valid; its emission paths still get
+#     ASan coverage via the unit round-trips + e2e delivery.
+#   - `docker_smoke` — a packaging test (covered at fastbuild + in
+#     publish.yml); instrumenting the OCI image adds no memory-safety signal.
+# Each `just bazel-test-*` rebuilds sipi + its test binaries under ASan/UBSan
+# in one action graph; sipi is a shared dep, compiled once and reused.
 #
-# `LSAN_OPTIONS` is set per-test by `test/e2e-rust/sipi_e2e_test.bzl`
-# (each rust_test data-deps `//:lsan_suppressions`). `ASAN_OPTIONS`
-# `log_path` is set by `.bazelrc`'s `test:asan` block to point at
-# `$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e`, which Bazel surfaces under
-# `bazel-testlogs/.../test.outputs/asan-e2e.<pid>`. This workflow is
-# e2e-only — unit-test sanitizer coverage gates on the cutover of
-# unit-test execution to Bazel `cc_test`.
+# `LSAN_OPTIONS` (leak suppressions) is set per-e2e-test by
+# `test/e2e-rust/sipi_e2e_test.bzl` (data-deps `//:lsan_suppressions`).
+# `ASAN_OPTIONS log_path` is set by `.bazelrc`'s `test:asan` block to
+# `$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e`, surfaced by Bazel under
+# `bazel-testlogs/**/test.outputs/asan-e2e.<pid>` for every layer.
 
 permissions:
   contents: read
@@ -49,11 +54,11 @@ concurrency:
 jobs:
   sanitizer:
     runs-on: ubuntu-24.04
-    # 45 not 30: `--@llvm//config:{asan,ubsan}` instruments the whole target
-    # graph (every native dep) and builds compiler-rt from source — a cold
-    # remote cache rebuilds all of it. Warm-cache runs are far faster (only
-    # changed first-party TUs + re-link + the e2e run).
-    timeout-minutes: 45
+    # 60 not 30: `--@llvm//config:{asan,ubsan}` instruments the whole target
+    # graph (every native dep) and builds compiler-rt from source, across
+    # unit + e2e — a cold remote cache rebuilds all of it. Warm-cache runs are
+    # far faster (only changed first-party TUs + re-link + the test runs).
+    timeout-minutes: 60
     name: asan-ubsan / amd64
     steps:
       - uses: actions/checkout@v6
@@ -91,41 +96,25 @@ jobs:
       # suppressions in `.lsan_suppressions.txt` (`leak:lua*`) can never
       # match. Same shell is used by `coverage.yml`.
 
-      - name: Run e2e tests under ASan + UBSan
-        # `bazel test --config=asan --config=ubsan` rebuilds sipi (a
-        # `data` dep of every e2e `rust_test` target) plus the tests
-        # themselves under ASan/UBSan, then runs them — single action
-        # graph, no separate sanitised-build step.
+      - name: Run unit + e2e under ASan + UBSan
+        # Each `just bazel-test-*` rebuilds sipi (a shared dep) + that layer's
+        # test binaries under ASan/UBSan and runs them. sipi is compiled once
+        # and reused across the two layers.
         #
-        # `nix develop --command` is required so `gh` (the kakadu
-        # repository_rule) is on PATH.
+        # `nix develop .#llvm-tools` puts `llvm-symbolizer` on PATH so ASan/LSan
+        # resolve `(/nix/store/.../sipi+0xOFFSET)` frames into function names
+        # (the name-based `.lsan_suppressions.txt` matches depend on it); the
+        # sanitised config keeps DWARF inline (`--strip=never` +
+        # `--compilation_mode=dbg`). `gh` (the kakadu repository_rule) is also
+        # on PATH via the dev shell.
         #
-        # `LSAN_OPTIONS` (suppressions path) is injected per-test by
-        # `test/e2e-rust/sipi_e2e_test.bzl`; `ASAN_OPTIONS` (log_path)
-        # by `.bazelrc`'s `test:asan` block — no env vars on this step.
-        # `ASAN_SYMBOLIZER_PATH` is exported inside the dev shell below
-        # (via `command -v llvm-symbolizer`, which resolves to the
-        # `.#llvm-tools`-provided binary); ASan honours it before
-        # falling through to PATH lookup, and the sanitised config
-        # keeps DWARF inline (`--strip=never` + `--compilation_mode=dbg`)
-        # so the symboliser has something to read.
+        # Timing-sensitive e2e retries (`--flaky_test_attempts` for
+        # latency/iiif_compliance/resource_limits) now come from `.bazelrc`, not
+        # inline here. `rc` collects failures across both layers so one failing
+        # layer doesn't mask another and the step still fails the gate.
         #
-        # The `if [ -n "$BAZEL_CACHE_PASSWORD" ]` block below injects
-        # --remote_cache, --experimental_remote_downloader, and
-        # --credential_helper flags when the secret is present. Fork
-        # PRs run cold.
-        #
-        # `--flaky_test_attempts=<target>@3` retries the latency-budget
-        # tests up to 3 times under sanitizer instrumentation. Their
-        # thresholds are calibrated for fastbuild; ASan/UBSan add 2-5x
-        # runtime overhead which can push connection/cache assertions
-        # over the budget on a single attempt. Scoped to the three
-        # known timing-sensitive targets only — non-flaky tests keep
-        # the default single-attempt run. The flag is `accumulate_value`,
-        # so repeating it adds rather than overwrites; an alternation
-        # regex (e.g. `:(latency|…)`) would traverse the outer `bash -c
-        # "…"` quoting and get mis-parsed as a shell subshell, so
-        # explicit per-target flags are safer.
+        # The `if [ -n "$BAZEL_CACHE_PASSWORD" ]` blocks inject the remote-cache
+        # + BES flags when the secret is present; fork PRs run cold.
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
           BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
@@ -144,45 +133,38 @@ jobs:
           fi
           nix develop .#llvm-tools --command bash -c "
             export ASAN_SYMBOLIZER_PATH=\$(command -v llvm-symbolizer)
-            just bazel-test-e2e \
-              --config=asan --config=ubsan \
-              --flaky_test_attempts=//test/e2e-rust:latency@3 \
-              --flaky_test_attempts=//test/e2e-rust:iiif_compliance@3 \
-              --flaky_test_attempts=//test/e2e-rust:resource_limits@3 \
-              $REMOTE $BES"
+            rc=0
+            just bazel-test-unit --config=asan --config=ubsan $REMOTE $BES || rc=1
+            just bazel-test-e2e  --config=asan --config=ubsan $REMOTE $BES || rc=1
+            exit \$rc"
 
-      - name: Check for sanitizer findings in e2e
+      - name: Check for sanitizer findings
         if: always()
         run: |
-          # Check for actual findings (SUMMARY lines), not just file existence.
-          # ASan always writes a log file when log_path is set, even with zero
-          # findings. The glob targets Bazel's per-test output dir:
-          # `bazel-testlogs/test/e2e-rust/<target>/test.outputs/asan-e2e.<pid>`
-          # — `.bazelrc`'s `test:asan` block sets
-          # `ASAN_OPTIONS=…log_path=$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e`,
-          # and Bazel surfaces `$TEST_UNDECLARED_OUTPUTS_DIR` files under
-          # `test.outputs/`.
-          GLOB="bazel-testlogs/test/e2e-rust/*/test.outputs/asan-e2e.*"
-          HAS_FINDINGS=false
-          if compgen -G "$GLOB" >/dev/null 2>&1 && grep -q "SUMMARY:" $GLOB 2>/dev/null; then
-            HAS_FINDINGS=true
-          fi
-          if [ "$HAS_FINDINGS" = "true" ]; then
-            echo "::error::Sanitizer findings detected in e2e — PR cannot merge with memory safety issues"
+          # Check for actual findings (SUMMARY lines), not just file existence:
+          # `.bazelrc`'s `test:asan` block sets
+          # `ASAN_OPTIONS=…halt_on_error=0:log_path=$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e`,
+          # so ASan writes a report (even empty) per test, Bazel surfaces it under
+          # `<pkg>/<target>/test.outputs/`, and `halt_on_error=0` lets a leak be
+          # reported without failing the test — so trust `SUMMARY:`, not exit
+          # codes. `find` (not a fixed glob) collects reports across every layer
+          # (src / unit / approval / e2e), since the scope is no longer e2e-only.
+          mapfile -t REPORTS < <(find bazel-testlogs -type f -path '*/test.outputs/asan-e2e.*' 2>/dev/null)
+          if [ ${#REPORTS[@]} -gt 0 ] && grep -q "SUMMARY:" "${REPORTS[@]}" 2>/dev/null; then
+            echo "::error::Sanitizer findings detected — PR cannot merge with memory-safety issues"
             echo ""
             echo "=== Unique findings ==="
-            grep -h "SUMMARY:" $GLOB 2>/dev/null | sort -u || true
+            grep -h "SUMMARY:" "${REPORTS[@]}" 2>/dev/null | sort -u || true
             echo ""
             echo "=== Full reports ==="
-            for f in $GLOB; do
-              [ -f "$f" ] || continue
+            for f in "${REPORTS[@]}"; do
               echo "--- $f ---"
               cat "$f"
               echo ""
             done
             exit 1
           fi
-          echo "No sanitizer findings in e2e. All tests passed cleanly under ASan + UBSan."
+          echo "No sanitizer findings. All tests passed cleanly under ASan + UBSan."
 
       - name: Upload sanitizer reports
         if: failure()
@@ -190,7 +172,7 @@ jobs:
         with:
           name: sanitizer-reports
           retention-days: 30
-          # Glob mirrors the findings-check step above. Keeps the
-          # artefact-name (`sanitizer-reports`) unchanged so the
-          # publish/Sentry side of the workflow keeps working.
-          path: bazel-testlogs/test/e2e-rust/*/test.outputs/asan-e2e.*
+          # `**` mirrors the findings-check `find` above — reports land under
+          # every layer's test.outputs dir, not just e2e. Artefact name
+          # unchanged so downstream consumers keep working.
+          path: bazel-testlogs/**/test.outputs/asan-e2e.*

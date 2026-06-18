@@ -96,9 +96,10 @@ bazel-coverage *FLAGS='':
 # Run every GoogleTest unit-test target — both the legacy
 # `//test/unit/<x>/` directories AND any per-module ADR-0003 co-located
 # `*_test.cpp` under `//src/<mod>/`. Useful for inner-loop development;
-# CI runs unit tests via `bazel-coverage`.
-bazel-test-unit:
-    bazel test //src/... //test/unit/...
+# CI runs unit tests via `bazel-coverage`. Accepts `*FLAGS` (e.g.
+# `--config=asan --config=ubsan` for the sanitizer gate).
+bazel-test-unit *FLAGS='':
+    bazel test //src/... //test/unit/... {{FLAGS}}
 
 # Run the approval-test target. SOURCE_DATE_EPOCH=946684800 and
 # SIPI_WORKSPACE_ROOT="." are injected by `test/approval/BUILD.bazel`;
