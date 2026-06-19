@@ -12,7 +12,7 @@ reliance on a consumer's `includes = ["."]`. Siblings within the package
 use the bare quote form (`#include "Error.h"`).
 """
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load("//bazel:magic_database.bzl", "magic_mgc_header")
 
 package(default_visibility = ["//src:__subpackages__"])
@@ -48,5 +48,20 @@ cc_library(
         "@openssl//:crypto",
         # Parsing's libmagic MIME sniffing + the embedded magic database.
         "@libmagic//:lib",
+    ],
+)
+
+# Co-located unit tests (ADR-0003): Hash + Parsing/urldecode. Each depends
+# only on the util library, so a forbidden cross-module include shows up as
+# a build error rather than slipping through a `:sipi_lib`-wide dep.
+cc_test(
+    name = "util_test",
+    srcs = [
+        "hash_test.cpp",
+        "parsing_test.cpp",
+    ],
+    deps = [
+        ":util",
+        "@googletest//:gtest_main",
     ],
 )
