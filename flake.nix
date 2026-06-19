@@ -124,6 +124,16 @@
               stdenv = pkgs.llvmPackages_19.libcxxStdenv;
               extraPackages = [ pkgs.llvmPackages_19.llvm ];
             };
+            # Tracy profiler GUI + capture tool, for `just bazel-build-tracy`
+            # sessions. Local-dev only. Gated to Linux: the nixpkgs `tracy` GUI
+            # build is unreliable on aarch64-darwin, so macOS devs install the
+            # GUI via `brew install tracy` instead (it connects over TCP, so a
+            # macOS GUI can also attach to a Tracy-instrumented server on Linux).
+            profiling = mkSipiShell {
+              name = "sipi-profiling";
+              stdenv = pkgs.llvmPackages_19.libcxxStdenv;
+              extraPackages = pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.tracy ];
+            };
           };
         }
       );
