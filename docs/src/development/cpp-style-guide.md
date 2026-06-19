@@ -288,6 +288,16 @@ Useful for error reporting and diagnostics. Library support varies — verify av
 
 ### 3.2 Headers
 
+**File extensions.** First-party C++ sources use `.cpp`; headers use `.h`. Do not
+introduce `.cc`, `.cxx`, `.hpp`, or `.hh` for first-party code. This matches the
+existing tree and the tooling in §6 (the `.clang-format` / `.clang-tidy`
+invocations glob `*.cpp` and `*.h`, so any other extension silently escapes
+formatting and lint). Google's `.cc` convention was rejected — renaming the whole
+tree buys nothing against the industry-dominant `.cpp`. Vendored third-party
+single headers keep their upstream extension (e.g. `CLI11.hpp`). The separate
+question of file-*name casing* (`SipiCache.cpp` vs `cache.cpp`) is deferred to its
+own ADR.
+
 - Always use `#pragma once` — not include guards (simpler, universally supported)
 - Headers must be self-contained (compilable on their own)
 - Use forward declarations aggressively to reduce compile times
