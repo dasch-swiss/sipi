@@ -21,7 +21,7 @@ broader layering rollout (DEV-6353); the shell-script context check above
 is the active enforcement until then.
 """
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = [
     "//src:__subpackages__",
@@ -80,6 +80,8 @@ cc_library(
         ],
         exclude = [
             "transport/Shttp.cpp",  # standalone test driver, not part of the library
+            "transport/*_test.cpp",  # co-located unit tests (see :transport_test)
+            "lua/*_test.cpp",
         ],
     ),
     deps = [
@@ -137,5 +139,20 @@ cc_library(
         "@openssl//:crypto",
         "@openssl//:ssl",
         "//src:iiif_handler_hdrs",
+    ],
+)
+
+# Co-located unit tests for the transport module (ADR-0003): Connection's
+# urldecode + the SocketControl/ThreadControl pair. Depends only on the
+# transport+lua core archive, not the whole `:sipi_lib`.
+cc_test(
+    name = "transport_test",
+    srcs = [
+        "transport/socketcontrol_test.cpp",
+        "transport/urldecode_test.cpp",
+    ],
+    deps = [
+        ":shttps",
+        "@googletest//:gtest_main",
     ],
 )
