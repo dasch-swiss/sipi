@@ -39,6 +39,10 @@ cc_library(
     hdrs = [
         "connection_metrics_adapter.h",
         "metrics.h",
+        # The Tracy zone-macro shim. Header-only; the `@tracy//:tracy` dep below
+        # propagates the (inert-unless-`--config=tracy`) profiler to every
+        # //src:sipi_lib TU that `#include "observability/profiling.h"`.
+        "profiling.h",
         "sentry.h",
         "sentry_init.h",
     ],
@@ -56,6 +60,9 @@ cc_library(
         "//src/shttps:shttps",
         "//src:sipi_generated_hdrs",
         "@prometheus-cpp//core",
+        # Profiler shim (profiling.h). Inert unless `--config=tracy` defines
+        # TRACY_ENABLE; see bazel/tracy.BUILD.bazel.
+        "@tracy//:tracy",
     ],
 )
 

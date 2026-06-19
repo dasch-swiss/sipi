@@ -25,6 +25,7 @@
 #include "logging/logger.h"
 #include "SipiImageError.hpp"
 #include "formats/SipiIOPng.h"
+#include "observability/profiling.h"
 
 // bad hack in order to include definitions in png.h on debian systems
 #if !defined(PNG_TEXT_SUPPORTED)
@@ -132,6 +133,7 @@ bool SipiIOPng::read(SipiImage *img,
   bool force_bps_8,
   ScalingQuality scaling_quality)
 {
+  SIPI_ZONE_N("SipiIOPng::read");
   FILE *infile;
   unsigned char header[PNG_BYTES_TO_CHECK];
   png_structp png_ptr;
@@ -344,6 +346,7 @@ bool SipiIOPng::read(SipiImage *img,
 
 SipiImgInfo SipiIOPng::read_shape(const std::string &filepath)
 {
+  SIPI_ZONE_N("SipiIOPng::read_shape");
   SipiImgInfo info;
   unsigned char header[8];
 
@@ -461,6 +464,7 @@ static void conn_flush_data(png_structp png_ptr)
 
 void SipiIOPng::write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params)
 {
+  SIPI_ZONE_N("SipiIOPng::write");
   FILE *outfile = nullptr;
   png_structp png_ptr;
 

@@ -41,6 +41,7 @@
 #include "logging/logger.h"
 #include "SipiHttpServer.hpp"
 #include "observability/metrics.h"
+#include "observability/profiling.h"
 #include "generated/SipiVersion.h"
 #include "SipiMemoryBudget.h"
 #include "SipiPeakMemory.h"
@@ -1442,6 +1443,7 @@ static void serve_iiif(Connection &conn_obj,
   const std::string &uri,
   std::vector<std::string> params)
 {
+  SIPI_ZONE_N("serve_iiif");
   auto not_head_request = conn_obj.method() != Connection::HEAD;
   //
   // getting the identifier (which in case of a PDF or multipage TIFF my contain a page id (identifier@pagenum)
@@ -2129,6 +2131,7 @@ static void serve_iiif(Connection &conn_obj,
  */
 static void iiif_handler(Connection &conn_obj, shttps::LuaServer &luaserver, void *user_data, void *dummy)
 {
+  SIPI_ZONE_N("iiif_handler");
   auto *serv = static_cast<SipiHttpServer *>(user_data);
   const bool prefix_as_path = serv->prefix_as_path();
   const auto uri = conn_obj.uri();// has form "/pre/fix/es.../BAU_1_000441077_2_1.j2k/full/,1000/0/default.jpg"
@@ -2136,12 +2139,15 @@ static void iiif_handler(Connection &conn_obj, shttps::LuaServer &luaserver, voi
   std::vector<std::string> params{};
   auto request_type{ handlers::iiif_handler::UNDEFINED };
 
-  if (auto parse_url_result = handlers::iiif_handler::parse_iiif_uri(uri); parse_url_result.has_value()) {
-    params = parse_url_result.value().params;
-    request_type = parse_url_result.value().request_type;
-  } else {
-    send_error(conn_obj, Connection::BAD_REQUEST, parse_url_result.error());
-    return;
+  {
+    SIPI_ZONE_N("parse_iiif_uri");
+    if (auto parse_url_result = handlers::iiif_handler::parse_iiif_uri(uri); parse_url_result.has_value()) {
+      params = parse_url_result.value().params;
+      request_type = parse_url_result.value().request_type;
+    } else {
+      send_error(conn_obj, Connection::BAD_REQUEST, parse_url_result.error());
+      return;
+    }
   }
 
   switch (request_type) {

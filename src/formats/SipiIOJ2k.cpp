@@ -41,6 +41,7 @@
 #include "SipiImageError.hpp"
 #include "formats/SipiIOJ2k.h"
 #include "logging/logger.h"
+#include "observability/profiling.h"
 
 using namespace kdu_core;
 using namespace kdu_supp;
@@ -231,6 +232,7 @@ bool SipiIOJ2k::read(SipiImage *img,
   bool force_bps_8,
   ScalingQuality scaling_quality)
 {
+  SIPI_ZONE_N("SipiIOJ2k::read");
   if (!is_jpx(filepath.c_str())) return false;// It's not a JPGE2000....
 
   int num_threads;
@@ -685,6 +687,7 @@ bool SipiIOJ2k::read(SipiImage *img,
 
 SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
 {
+  SIPI_ZONE_N("SipiIOJ2k::read_shape");
   SipiImgInfo info;
   if (!is_jpx(filepath.c_str())) {
     info.success = SipiImgInfo::FAILURE;
@@ -893,6 +896,7 @@ static void write_essentials_box(kdu_supp::jp2_family_tgt *tgt, const std::vecto
 
 void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params)
 {
+  SIPI_ZONE_N("SipiIOJ2k::write");
   kdu_customize_warnings(&kdu_sipi_warn);
   kdu_customize_errors(&kdu_sipi_error);
 
