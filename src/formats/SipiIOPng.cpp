@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -424,7 +425,7 @@ void create_text_chunk(PngTextPtr *png_textptr, char *key, char *str, unsigned i
  */
 struct PngHttpCtx
 {
-  shttps::Connection *conn;
+  SinkStream *sink;
   bool client_aborted;
 };
 
@@ -432,39 +433,34 @@ static void conn_write_data(png_structp png_ptr, png_bytep data, png_size_t leng
 {
   auto *ctx = static_cast<PngHttpCtx *>(png_get_io_ptr(png_ptr));
 
-  try {
-    ctx->conn->sendAndFlush(data, length);
-  } catch (...) {
-    // Any throw out of sendAndFlush — bare shttps::OUTPUT_WRITE_FAIL or
-    // shttps::Error — means the response stream is no longer usable. We mark
-    // the abort here unconditionally because peerConnected()'s POLLRDHUP poll
-    // misses RST/timeout aborts. We can't narrow the catch (e.g. to `int`)
-    // without re-introducing C++-exception-through-libpng-C-frame UB.
+  // A non-zero sink return means the response stream (the HTTP socket) is no
+  // longer usable. No C++ exception crosses libpng's C frames — the sink
+  // callback returns a status code, which we route to libpng's error path.
+  if (ctx->sink->write(data, length) != 0) {
     ctx->client_aborted = true;
-    // Signal error via libpng's error mechanism → sipi_error_fn → longjmp
-    png_error(png_ptr, "HTTP write failed");
+    png_error(png_ptr, "HTTP write failed");// → sipi_error_fn → longjmp
   }
 }
 
 /*==========================================================================*/
 
-static void conn_flush_data(png_structp png_ptr)
+static void conn_flush_data(png_structp /*png_ptr*/)
 {
-  auto *ctx = static_cast<PngHttpCtx *>(png_get_io_ptr(png_ptr));
-
-  try {
-    ctx->conn->flush();
-  } catch (...) {
-    ctx->client_aborted = true;
-    png_error(png_ptr, "HTTP flush failed");
-  }
+  // No-op: the per-chunk SinkStream write already pushed bytes downstream, and
+  // the HTTP framing/terminator is flushed by the request handler after write()
+  // returns (SipiHttpServer serve_iiif). libpng requires a non-null flush fn.
 }
 
 /*==========================================================================*/
 
-void SipiIOPng::write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params)
+void SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
 {
   SIPI_ZONE_N("SipiIOPng::write");
+  // A streamed sink (callback/tee) is driven through SinkStream via libpng's
+  // write callback; a FilePath uses libpng's native file/stdout writer.
+  const bool streaming = is_streaming_sink(sink);
+  const std::string filepath = streaming ? std::string("<http response>") : std::get<FilePath>(sink).path;
+
   FILE *outfile = nullptr;
   png_structp png_ptr;
 
@@ -472,14 +468,18 @@ void SipiIOPng::write(SipiImage *img, const std::string &filepath, const SipiCom
     throw SipiImageError("Error writing PNG file \"" + filepath + "\": png_create_write_struct failed !");
   }
 
-  // HTTP write context: kept on the stack so its address is valid for the
-  // lifetime of SipiIOPng::write. The address is stable across longjmp.
-  PngHttpCtx http_ctx{ img->connection(), false };
+  // Streamed-write context: SinkStream and http_ctx are kept alive for the
+  // whole of SipiIOPng::write so their addresses stay valid across longjmp.
+  // For a FilePath we leave them unused and let libpng's native file writer run.
+  std::unique_ptr<SinkStream> sink_stream;
+  PngHttpCtx http_ctx{ nullptr, false };
 
-  if (filepath == "stdout:") {
-    outfile = stdout;
-  } else if (filepath == "HTTP") {
+  if (streaming) {
+    sink_stream = std::make_unique<SinkStream>(sink);
+    http_ctx.sink = sink_stream.get();
     png_set_write_fn(png_ptr, &http_ctx, conn_write_data, conn_flush_data);
+  } else if (filepath == "stdout:") {
+    outfile = stdout;
   } else {
     if (!(outfile = fopen(filepath.c_str(), "wb"))) {
       png_free_data(png_ptr, nullptr, PNG_FREE_ALL, -1);

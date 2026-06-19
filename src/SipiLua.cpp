@@ -56,6 +56,19 @@ typedef struct
   std::string *filename;
 } SImage;
 
+// Bridges a Lua-bound shttps::Connection to the OutputSink body-write callback
+// (ADR-0006). An shttps throw (OUTPUT_WRITE_FAIL / shttps::Error) must not cross
+// into the codec, so it becomes a non-zero return.
+static int lua_conn_write(void *ctx, const uint8_t *data, size_t len)
+{
+  try {
+    static_cast<shttps::Connection *>(ctx)->sendAndFlush(data, len);
+    return 0;
+  } catch (...) {
+    return 1;
+  }
+}
+
 
 static int lua_filenamehash_helper(lua_State *L)
 {
@@ -1572,9 +1585,9 @@ static int SImage_write(lua_State *L)
     lua_getglobal(L, shttps::luaconnection);// push onto stack
     auto *conn = (shttps::Connection *)lua_touserdata(L, -1);// does not change the stack
     lua_remove(L, -1);// remove from stack
-    img->image->connection(conn);
     try {
-      img->image->write(ftype, "HTTP", comp_params.size() > 0 ? &comp_params : nullptr);
+      img->image->write(
+        ftype, CallbackSink{ lua_conn_write, conn }, comp_params.size() > 0 ? &comp_params : nullptr);
     } catch (SipiImageError &err) {
       lua_pop(L, lua_gettop(L));
       lua_pushboolean(L, false);
@@ -1643,10 +1656,8 @@ static int SImage_send(lua_State *L)
   auto *conn = (shttps::Connection *)lua_touserdata(L, -1);// does not change the stack
   lua_remove(L, -1);// remove from stack
 
-  img->image->connection(conn);
-
   try {
-    img->image->write(ftype, "HTTP");
+    img->image->write(ftype, CallbackSink{ lua_conn_write, conn });
   } catch (SipiImageError &err) {
     lua_pushboolean(L, false);
     lua_pushstring(L, err.to_string().c_str());

@@ -1,0 +1,12 @@
+"""OutputSink / SinkStream unit tests (ADR-0006 write-destination types)."""
+
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "output_sink_test",
+    srcs = ["output_sink_test.cpp"],
+    deps = [
+        "//src:sipi_lib",
+        "@googletest//:gtest_main",
+    ],
+)

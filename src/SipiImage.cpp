@@ -53,7 +53,6 @@ SipiImage::SipiImage()
   iptc = nullptr;
   exif = nullptr;
   skip_metadata = SkipMetadata::SKIP_NONE;
-  conobj = nullptr;
   ensure_exif();
 };
 //============================================================================
@@ -97,7 +96,6 @@ SipiImage::SipiImage(const SipiImage &img_p)
   if (img_p.exif) exif = std::make_shared<Exif>(*img_p.exif);
   emdata = img_p.emdata;
   skip_metadata = img_p.skip_metadata;
-  conobj = img_p.conobj;
   app14_transform = img_p.app14_transform;
 }
 
@@ -108,13 +106,12 @@ SipiImage::SipiImage(SipiImage &&other) noexcept
     es(std::move(other.es)), orientation(other.orientation), photo(other.photo),
     pixels(other.pixels), xmp(std::move(other.xmp)), icc(std::move(other.icc)),
     iptc(std::move(other.iptc)), exif(std::move(other.exif)),
-    emdata(std::move(other.emdata)), conobj(other.conobj),
+    emdata(std::move(other.emdata)),
     skip_metadata(other.skip_metadata), app14_transform(other.app14_transform)
 {
   other.pixels = nullptr;
   other.nx = 0;
   other.ny = 0;
-  other.conobj = nullptr;
   other.app14_transform = 255;
 }
 
@@ -164,7 +161,6 @@ SipiImage::SipiImage(size_t nx_p, size_t ny_p, size_t nc_p, size_t bps_p, Photom
   iptc = nullptr;
   ensure_exif();
   skip_metadata = SkipMetadata::SKIP_NONE;
-  conobj = nullptr;
 }
 
 //============================================================================
@@ -189,7 +185,6 @@ SipiImage &SipiImage::operator=(const SipiImage &img_p)
     photo = img_p.photo;      // BUG FIX: missing in original operator=
     emdata = img_p.emdata;    // BUG FIX: missing in original operator=
     skip_metadata = img_p.skip_metadata;
-    conobj = img_p.conobj;
     app14_transform = img_p.app14_transform;
 
     size_t bufsiz;
@@ -246,13 +241,11 @@ SipiImage &SipiImage::operator=(SipiImage &&other) noexcept
     exif = std::move(other.exif);
     emdata = std::move(other.emdata);
     skip_metadata = other.skip_metadata;
-    conobj = other.conobj;
     app14_transform = other.app14_transform;
 
     other.pixels = nullptr;
     other.nx = 0;
     other.ny = 0;
-    other.conobj = nullptr;
     other.app14_transform = 255;
   }
   return *this;
@@ -404,13 +397,18 @@ void SipiImage::getDim(size_t &width, size_t &height) const
 
 //============================================================================
 
-void SipiImage::write(const std::string &ftype, const std::string &filepath, const SipiCompressionParams *params)
+void SipiImage::write(const std::string &ftype, const OutputSink &sink, const SipiCompressionParams *params)
 {
   // .at(): an unknown ftype must throw, not operator[]-insert a null
   // handler and segfault on the virtual call. Callers pass validated
   // format strings; the historical write() docstring advertised "j2k"
   // (the map key is "jpx"), which is exactly how this fired.
-  io.at(ftype)->write(this, filepath, params);
+  io.at(ftype)->write(this, sink, params);
+}
+
+void SipiImage::write(const std::string &ftype, const std::string &filepath, const SipiCompressionParams *params)
+{
+  write(ftype, OutputSink{ FilePath{ filepath } }, params);
 }
 
 //============================================================================

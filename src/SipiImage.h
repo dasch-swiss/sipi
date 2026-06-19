@@ -15,9 +15,6 @@
 #include <string>
 // #include <unordered_map>
 
-#include "shttps/transport/Connection.h"
-//#include "shttps/util/Hash.h"
-
 #include "SipiIO.h"
 // #include "iiifparser/SipiRegion.h"
 #include "metadata/essentials.h"
@@ -165,7 +162,6 @@ protected:
   std::shared_ptr<Iptc> iptc;//!< Pointer to instance of Iptc class (\ref Iptc), or NULL
   std::shared_ptr<Exif> exif;//!< Pointer to instance of Exif class (\ref Exif), or NULL
   Essentials emdata;//!< Metadata to be stored in file header
-  shttps::Connection *conobj;//!< Pointer to HTTP connection
   SkipMetadata skip_metadata;//!< If true, all metadata is stripped off
 
   /*!
@@ -366,21 +362,6 @@ public:
    */
   void setSkipMetadata(SkipMetadata smd) { skip_metadata = smd; };
 
-
-  /*!
-   * Stores the connection parameters of the shttps server in an Image instance
-   *
-   * \param[in] conn_p Pointer to connection data
-   */
-  void connection(shttps::Connection *conobj_p) { conobj = conobj_p; };
-
-  /*!
-   * Retrieves the connection parameters of the mongoose server from an Image instance
-   *
-   * \returns Pointer to connection data
-   */
-  [[nodiscard]] shttps::Connection *connection() const { return conobj; };
-
   void essential_metadata(const Essentials &emdata_p) { emdata = emdata_p; }
 
   [[nodiscard]] Essentials essential_metadata() const { return emdata; }
@@ -472,12 +453,7 @@ public:
   void getDim(size_t &width, size_t &height) const;
 
   /*!
-   * Write an image to somewhere
-   *
-   * This method writes the image to a destination. The destination can be
-   * - a file if w path (filename) is given
-   * - stdout of the filepath is "-"
-   * - to the websocket, if the filepath is the string "HTTP" (given the webserver is activated)
+   * Write an image to the given OutputSink (ADR-0006).
    *
    * \param[in] ftype The file format that should be used to write the file. Supported are
    * the keys of the static SipiIO handler map (SipiImage.cpp):
@@ -486,7 +462,14 @@ public:
    * - "png" for PNG files
    * - "jpg" for JPEG files
    * Any other value throws std::out_of_range.
-   * \param[in] filepath String containing the path/filename
+   * \param[in] sink Where the encoded bytes go: a FilePath (file, or stdout via
+   * "-"/"stdout:"), a CallbackSink, or a TeeSink.
+   */
+  void write(const std::string &ftype, const OutputSink &sink, const SipiCompressionParams *params = nullptr);
+
+  /*!
+   * Convenience overload: write to a filesystem path (or stdout via "-" /
+   * "stdout:"). Equivalent to write(ftype, FilePath{filepath}, params).
    */
   void write(const std::string &ftype, const std::string &filepath, const SipiCompressionParams *params = nullptr);
 
