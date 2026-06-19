@@ -259,7 +259,7 @@ Metrics endpoint at `GET /metrics` (`src/observability/metrics.h`, `src/observab
 | **Build systems** | CMake, Nix |
 | **CI** | GitHub Actions: unit tests, e2e tests, fuzz (nightly), Docker builds |
 | **Documentation** | MkDocs Material site, LLM-optimized `llms.txt` output |
-| **Dependency management** | Vendored archives in `vendor/` with SHA-256 checksums |
+| **Dependency management** | Bazel `bazel_dep` (BCR) + `http_archive` source pins with SHA-256 checksums in `MODULE.bazel` |
 
 ---
 
