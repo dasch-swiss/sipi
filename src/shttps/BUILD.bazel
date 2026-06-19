@@ -1,5 +1,21 @@
 """shttps — embedded HTTP framework, internal SIPI module.
 
+The sources are carved into five sub-packages, one per module, so the
+module boundary is a build-graph fact rather than a naming convention:
+
+  - `transport/` — the HTTP/socket layer (Server, Connection,
+    SocketControl, SockStream, ChunkReader, ThreadControl, ConnectionMetrics)
+  - `lua/`       — the per-request Lua interpreter (LuaServer)
+  - `util/`      — generic helpers (Parsing, Hash, Error, Global, makeunique)
+  - `jwt/`       — JWT verify/sign
+  - `lua_sqlite/`— SQLite-backed Lua bindings
+
+`transport` and `lua` are mutually dependent (Server holds a LuaServer;
+LuaServer needs the full Connection type), so they share this package
+(`:shttps_headers` + `:shttps`); util/jwt/lua_sqlite are separate leaf
+packages. util and jwt are leaves; lua_sqlite depends one-directionally
+on `:shttps`.
+
 Strict SIPI → shttps one-way dependency direction: only `//src/...` may
 depend on `//src/shttps:shttps`, and shttps declares no `//src/...` deps
 except `//src/logging:logging` — a generic logging primitive,
@@ -9,8 +25,8 @@ library.
 Direction enforcement:
   - `visibility` restricts consumers to `//src/...` packages only.
   - `scripts/shttps-context-check.sh` (wired into the `just
-    shttps-context-check` recipe and CI) regex-scans `src/shttps/*` for
-    `#include "Sipi*.h"` or `Sipi*::` symbol references.
+    shttps-context-check` recipe and CI) recursively regex-scans
+    `src/shttps/` for `#include "Sipi*.h"` or `Sipi*::` symbol references.
   - The direct-deps list is curated to a single SIPI-side entry.
 
 Bazel `--features=layering_check` is not enabled on this package: the

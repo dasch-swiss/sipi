@@ -22,7 +22,7 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 package(default_visibility = [
     "//src:__subpackages__",
     # Documents the known `Sipi::observability::Metrics::instance()` consumption
-    # from `shttps/Server.cpp` (CONTEXT.md known-layering-leak entry #1).
+    # from `shttps/transport/Server.cpp` (CONTEXT.md known-layering-leak entry #1).
     # Same shape as the Logger leak (Probe 8). Both await the strangler-fig
     # Rust port for proper inversion-of-control fixes.
     "//src/shttps:__pkg__",

@@ -113,7 +113,7 @@ The catch-all `/` route must be registered **last** — it matches everything.
 
 ## HTTP Status Codes
 
-Available in `Connection::StatusCodes` enum (`shttps/Connection.h`):
+Available in `Connection::StatusCodes` enum (`shttps/transport/Connection.h`):
 
 | Code | Enum | Use for |
 |---|---|---|
@@ -173,7 +173,7 @@ prometheus::Counter &my_counter_total =
 
 shttps-side instrumentation goes through the
 `shttps::ConnectionMetrics` Strategy interface (see
-`shttps/ConnectionMetrics.h`). At startup, `src/cli/sipi.cpp` installs a
+`shttps/transport/ConnectionMetrics.h`). At startup, `src/cli/sipi.cpp` installs a
 `Sipi::observability::ConnectionMetricsAdapter` (Adapter pattern) that bridges
 shttps events into the `Sipi::observability::Metrics` singleton. **Do not call
 `Sipi::observability::Metrics::instance()` from `shttps/` code** — that
