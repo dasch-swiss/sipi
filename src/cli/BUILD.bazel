@@ -57,5 +57,7 @@ cc_binary(
     deps = [
         "//src:sipi_lib",
         "//src/cli/commands:commands",
+        # sipi.cpp's `#include <CLI/CLI.hpp>` — the sole CLI11 consumer.
+        "@cli11//:cli11",
     ],
 )

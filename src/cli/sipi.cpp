@@ -33,7 +33,7 @@
 #include "shttps/Server.h"
 
 
-#include "CLI11.hpp"
+#include <CLI/CLI.hpp>
 #include "logging/logger.h"
 #include "cli/commands/convert_access_file.h"
 #include "cli/commands/convert_service_file.h"
