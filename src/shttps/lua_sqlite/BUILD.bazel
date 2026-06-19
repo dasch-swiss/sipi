@@ -1,0 +1,27 @@
+"""shttps/lua_sqlite — Lua `server.db` bindings backed by SQLite.
+
+Registers a SQLite-backed table API into the Lua VM (`sqliteGlobals` is a
+`LuaSetGlobalsFunc`). Depends one-directionally on the core `:shttps` for
+the `LuaServer` / `Connection` surface it binds against, plus SQLite and
+the Lua C API directly.
+
+`strip_include_prefix = "/src"` exposes the header at the path-prefixed
+form `#include "shttps/lua_sqlite/LuaSqlite.h"` (ADR-0003).
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//src:__subpackages__"])
+
+cc_library(
+    name = "lua_sqlite",
+    srcs = ["LuaSqlite.cpp"],
+    hdrs = ["LuaSqlite.h"],
+    strip_include_prefix = "/src",
+    deps = [
+        # LuaServer.h / Connection.h surface + their link symbols.
+        "//src/shttps:shttps",
+        "@lua",
+        "@sqlite3",
+    ],
+)

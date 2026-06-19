@@ -27,7 +27,7 @@
 #include "SipiImage.h"
 #include "SipiImageError.h"
 #include "metadata/essentials.h"
-#include "shttps/Hash.h"
+#include "shttps/util/Hash.h"
 #include "test_paths.h"
 
 namespace {

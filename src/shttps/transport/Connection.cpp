@@ -27,9 +27,9 @@
 #include "ChunkReader.h"
 #include "Connection.h"
 #include "SockStream.h"
-#include "Error.h"
+#include "shttps/util/Error.h"
 #include "Server.h"// TEMPORARY !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-#include "makeunique.h"
+#include "shttps/util/makeunique.h"
 
 using namespace std;
 

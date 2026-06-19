@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <string_view>
 
-#include "shttps/Connection.h"
+#include "shttps/transport/Connection.h"
 
 namespace handlers::iiif_handler {
 

@@ -27,10 +27,10 @@
 #include <jansson.h>
 #include <sentry.h>
 
-#include "shttps/LuaServer.h"
-#include "shttps/LuaSqlite.h"
-#include "shttps/Parsing.h"
-#include "shttps/Server.h"
+#include "shttps/lua/LuaServer.h"
+#include "shttps/lua_sqlite/LuaSqlite.h"
+#include "shttps/util/Parsing.h"
+#include "shttps/transport/Server.h"
 
 
 #include <CLI/CLI.hpp>

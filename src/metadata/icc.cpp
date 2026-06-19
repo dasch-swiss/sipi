@@ -19,7 +19,7 @@
 #include "generated/USWebCoatedSWOP_icc.h"
 
 #include "SipiImage.h"
-#include "shttps/makeunique.h"
+#include "shttps/util/makeunique.h"
 
 namespace Sipi {
 

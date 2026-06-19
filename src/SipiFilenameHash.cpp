@@ -12,7 +12,7 @@
 
 #include "logging/logger.h"
 #include "SipiFilenameHash.h"
-#include "shttps/Error.h"
+#include "shttps/util/Error.h"
 
 int SipiFilenameHash::__levels = 0;
 

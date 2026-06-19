@@ -17,8 +17,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "Connection.h"
-#include "Error.h"
+#include "shttps/transport/Connection.h"
+#include "shttps/util/Error.h"
 
 #include "lua.hpp"
 

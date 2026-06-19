@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 
-#include "shttps/Hash.h"
+#include "shttps/util/Hash.h"
 
 TEST(Hash, Md5KnownValue)
 {

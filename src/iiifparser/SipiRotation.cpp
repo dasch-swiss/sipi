@@ -9,7 +9,7 @@
 
 #include "../SipiError.h"
 #include "SipiRotation.h"
-#include "shttps/Parsing.h"
+#include "shttps/util/Parsing.h"
 
 namespace Sipi {
 

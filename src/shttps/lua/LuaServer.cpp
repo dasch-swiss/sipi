@@ -23,17 +23,17 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "Connection.h"
-#include "Error.h"
-#include "Global.h"
+#include "shttps/transport/Connection.h"
+#include "shttps/util/Error.h"
+#include "shttps/util/Global.h"
 #include "LuaServer.h"
-#include "Parsing.h"
-#include "Server.h"
-#include "SockStream.h"
+#include "shttps/util/Parsing.h"
+#include "shttps/transport/Server.h"
+#include "shttps/transport/SockStream.h"
 #include "curl/curl.h"
 
 #include "logging/logger.h"
-#include "jwt.h"
+#include "shttps/jwt/jwt.h"
 #include "sole.hpp"
 #include <jansson.h>
 

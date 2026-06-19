@@ -25,9 +25,9 @@
 #include <utility>
 #include <vector>
 
-#include "shttps/Connection.h"
-#include "shttps/LuaServer.h"
-#include "shttps/Parsing.h"
+#include "shttps/transport/Connection.h"
+#include "shttps/lua/LuaServer.h"
+#include "shttps/util/Parsing.h"
 
 #include "SipiError.h"
 #include "SipiImage.h"

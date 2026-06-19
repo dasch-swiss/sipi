@@ -6,7 +6,7 @@
 #include "gtest/gtest.h"
 
 #include "../../../include/SipiConf.h"
-#include "shttps/LuaServer.h"
+#include "shttps/lua/LuaServer.h"
 #include "test_paths.h"
 
 #include <cstdio>

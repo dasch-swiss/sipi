@@ -20,7 +20,7 @@ namespace {
 // `hash_type` field, whose integer value is the same on both sides of the
 // codec. If a future change reorders `shttps::HashType`, these static_asserts
 // fire at build time — long before the first failed file read in production.
-// See `shttps/Hash.h` for the reverse-pointer comment.
+// See `shttps/util/Hash.h` for the reverse-pointer comment.
 static_assert(static_cast<int>(shttps::none) == sipi::metadata::HASH_TYPE_UNSPECIFIED,
   "shttps::HashType::none integer mapping changed; update essentials.proto in lockstep");
 static_assert(static_cast<int>(shttps::md5) == sipi::metadata::HASH_TYPE_MD5,
