@@ -6,7 +6,7 @@
 #include "gtest/gtest.h"
 
 #include "../../../include/SipiCache.h"
-#include "../../../src/SipiError.hpp"
+#include "../../../src/SipiError.h"
 
 #include <cstdio>
 #include <cstring>

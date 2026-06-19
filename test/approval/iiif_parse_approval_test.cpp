@@ -1,7 +1,7 @@
 #include "ApprovalTests.hpp"
 #include "gtest/gtest.h"
 
-#include "handlers/iiif_handler.hpp"
+#include "handlers/iiif_handler.h"
 
 #include <sstream>
 

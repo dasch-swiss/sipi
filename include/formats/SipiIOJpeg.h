@@ -12,7 +12,7 @@
 #include <string>
 
 #include "SipiIO.h"
-#include "SipiImage.hpp"
+#include "SipiImage.h"
 
 namespace Sipi {
 

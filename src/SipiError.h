@@ -25,7 +25,7 @@
 namespace Sipi {
 
 /*!
- * \class SipiError "SipiError.hpp"
+ * \class SipiError "SipiError.h"
  * \brief Class that implements the error handling with exceptions
  *
  * Used for giving error messages while throwing

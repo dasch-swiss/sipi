@@ -14,8 +14,8 @@
 #include <string>
 
 #include "logging/logger.h"
-#include "SipiImage.hpp"
-#include "SipiImageError.hpp"
+#include "SipiImage.h"
+#include "SipiImageError.h"
 #include "SipiRegion.h"
 #include "SipiReport.h"
 #include "SipiSize.h"

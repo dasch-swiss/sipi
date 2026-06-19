@@ -7,7 +7,7 @@
 
 #include "../../../include/SipiConf.h"
 #include "shttps/LuaServer.h"
-#include "test_paths.hpp"
+#include "test_paths.h"
 
 #include <cstdio>
 #include <unistd.h>
@@ -32,7 +32,7 @@ inline bool exists_file(const std::string &name)
 
 // `sipi::test::config_dir()` honours Bazel's SIPI_WORKSPACE_ROOT env and
 // falls back to the historical CMake build-tree relative path when
-// unset. See test/test_paths.hpp.
+// unset. See test/test_paths.h.
 const std::string configfile = sipi::test::config_dir() + "/sipi.config.lua";
 
 // Check if configuration file can be found

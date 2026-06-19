@@ -13,9 +13,9 @@
 
 #include "SipiCache.h"
 #include "SipiFilenameHash.h"
-#include "SipiHttpServer.hpp"
-#include "SipiImage.hpp"
-#include "SipiImageError.hpp"
+#include "SipiHttpServer.h"
+#include "SipiImage.h"
+#include "SipiImageError.h"
 #include "SipiLua.h"
 
 

@@ -38,14 +38,14 @@
 #include <memory>
 #include <string>
 
-#include "SipiImage.hpp"
+#include "SipiImage.h"
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiSize.h"
 
 namespace {
 
 // Fixtures live in the @sipi_bench_fixtures external repo, not the source
-// tree, so workspace-relative resolution (test_paths.hpp) cannot find them
+// tree, so workspace-relative resolution (test_paths.h) cannot find them
 // under direct exec. The `just bench` recipe exports the runfiles location.
 std::string fixture(const std::string &name)
 {

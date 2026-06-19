@@ -21,8 +21,8 @@
 #include "shttps/makeunique.h"
 
 #include "logging/logger.h"
-#include "SipiImage.hpp"
-#include "SipiImageError.hpp"
+#include "SipiImage.h"
+#include "SipiImageError.h"
 #include "formats/SipiIOJ2k.h"
 #include "formats/SipiIOJpeg.h"
 #include "formats/SipiIOPng.h"

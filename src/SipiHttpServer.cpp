@@ -29,9 +29,9 @@
 #include "shttps/LuaServer.h"
 #include "shttps/Parsing.h"
 
-#include "SipiError.hpp"
-#include "SipiImage.hpp"
-#include "SipiImageError.hpp"
+#include "SipiError.h"
+#include "SipiImage.h"
+#include "SipiImageError.h"
 #include "iiifparser/SipiIdentifier.h"
 #include "iiifparser/SipiQualityFormat.h"
 #include "iiifparser/SipiRegion.h"
@@ -39,7 +39,7 @@
 #include "iiifparser/SipiSize.h"
 
 #include "logging/logger.h"
-#include "SipiHttpServer.hpp"
+#include "SipiHttpServer.h"
 #include "observability/metrics.h"
 #include "observability/profiling.h"
 #include "generated/SipiVersion.h"
@@ -49,7 +49,7 @@
 #include "iiifparser/SipiDecodeDims.h"
 #include "observability/sentry.h"
 #include "favicon.h"
-#include "handlers/iiif_handler.hpp"
+#include "handlers/iiif_handler.h"
 #include "jansson.h"
 
 using namespace shttps;

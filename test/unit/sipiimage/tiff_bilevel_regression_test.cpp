@@ -9,12 +9,12 @@
 
 #include "gtest/gtest.h"
 
-#include "../../../src/SipiImage.hpp"
-#include "../../../src/SipiImageError.hpp"
+#include "../../../src/SipiImage.h"
+#include "../../../src/SipiImageError.h"
 #include "SipiIOTiff.h"
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiSize.h"
-#include "test_paths.hpp"
+#include "test_paths.h"
 
 #include <memory>
 #include <string>
@@ -23,7 +23,7 @@ namespace {
 
 // `sipi::test::data_dir()` honours Bazel's SIPI_TEST_DATA_DIR env and
 // falls back to the historical CMake build-tree relative path when
-// unset. See test/test_paths.hpp. `static const std::string` (rather
+// unset. See test/test_paths.h. `static const std::string` (rather
 // than `constexpr const char *`) is required because the path is built
 // at static-init time from `std::getenv`.
 static const std::string kBilevelDir = sipi::test::data_dir() + "/images/bilevel";

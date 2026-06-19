@@ -6,7 +6,7 @@
 #include <mutex>
 #include <pthread.h>
 
-#include "SipiError.hpp"
+#include "SipiError.h"
 #include "metadata/xmp.h"
 
 /*!

@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <string>
 
-#include "handlers/iiif_handler.hpp"
+#include "handlers/iiif_handler.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
   // parse_iiif_uri is noexcept and returns std::expected — no crash expected.

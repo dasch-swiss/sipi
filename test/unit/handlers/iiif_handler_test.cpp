@@ -11,7 +11,7 @@
 #include <string>
 #include <thread>
 
-#include "handlers/iiif_handler.hpp"
+#include "handlers/iiif_handler.h"
 
 using namespace handlers::iiif_handler;
 

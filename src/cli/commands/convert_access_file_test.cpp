@@ -30,11 +30,11 @@
 #include <string>
 #include <sys/stat.h>
 
-#include "SipiImage.hpp"
+#include "SipiImage.h"
 #include "cli/commands/convert_access_file.h"
 #include "cli/commands/convert_service_file.h"
 #include "metadata/essentials.h"
-#include "test_paths.hpp"
+#include "test_paths.h"
 
 namespace {
 

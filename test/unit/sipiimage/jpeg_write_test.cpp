@@ -10,14 +10,14 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "SipiImage.hpp"
-#include "SipiImageError.hpp"
+#include "SipiImage.h"
+#include "SipiImageError.h"
 #include "SipiIO.h"
-#include "test_paths.hpp"
+#include "test_paths.h"
 
 // `sipi::test::{data_dir,tmp_dir}` honour Bazel's SIPI_TEST_DATA_DIR /
 // TEST_TMPDIR envs and fall back to the historical CMake build-tree
-// relative paths when unset. See test/test_paths.hpp.
+// relative paths when unset. See test/test_paths.h.
 static const std::string test_images = sipi::test::data_dir() + "/images/";
 static const std::string tmp_dir = sipi::test::tmp_dir() + "/";
 

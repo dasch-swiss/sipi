@@ -21,9 +21,9 @@
 #include "shttps/Connection.h"
 
 #include "logging/logger.h"
-#include "SipiError.hpp"
-#include "SipiImage.hpp"
-#include "SipiImageError.hpp"
+#include "SipiError.h"
+#include "SipiImage.h"
+#include "SipiImageError.h"
 #include "formats/SipiIOTiff.h"
 #include "observability/metrics.h"
 #include "observability/profiling.h"

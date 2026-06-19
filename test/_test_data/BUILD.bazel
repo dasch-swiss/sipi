@@ -4,7 +4,7 @@ Filegroups expose subtrees under `test/_test_data/` so individual `cc_test`
 targets can declare just the data they need rather than the whole tree.
 The Bazel-set `TEST_SRCDIR/TEST_WORKSPACE` cwd is the workspace root in
 runfiles; a test reading these files looks at workspace-relative paths
-like `test/_test_data/images/unit/lena512.jp2` (see `test/test_paths.hpp`
+like `test/_test_data/images/unit/lena512.jp2` (see `test/test_paths.h`
 for the env-var-driven path resolution).
 """
 

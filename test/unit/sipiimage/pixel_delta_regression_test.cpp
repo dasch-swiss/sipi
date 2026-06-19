@@ -14,7 +14,7 @@
 
 #include <gtest/gtest.h>
 
-#include "../../../src/SipiImage.hpp"
+#include "../../../src/SipiImage.h"
 
 namespace {
 

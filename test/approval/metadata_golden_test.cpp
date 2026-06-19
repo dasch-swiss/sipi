@@ -6,11 +6,11 @@
 #include "ApprovalTests.hpp"
 #include "gtest/gtest.h"
 
-#include "SipiImage.hpp"
-#include "SipiImageError.hpp"
+#include "SipiImage.h"
+#include "SipiImageError.h"
 #include "metadata/exif.h"
 #include "metadata/icc.h"
-#include "test_paths.hpp"
+#include "test_paths.h"
 
 #include <filesystem>
 #include <sstream>
@@ -19,7 +19,7 @@
 // `sipi::test::workspace_path()` honours Bazel's SIPI_WORKSPACE_ROOT env
 // (cc_test cwd = workspace root in runfiles). The CMake fallback
 // `"../../.."` is the 3-level traversal from build/test/approval/ to
-// the workspace root. See test/test_paths.hpp.
+// the workspace root. See test/test_paths.h.
 static const std::string test_images = sipi::test::workspace_path("test/_test_data/images", "../../..") + "/";
 
 static bool file_exists(const std::string &path)

@@ -23,7 +23,7 @@
 #include <zlib.h>
 
 #include "logging/logger.h"
-#include "SipiImageError.hpp"
+#include "SipiImageError.h"
 #include "formats/SipiIOPng.h"
 #include "observability/profiling.h"
 
