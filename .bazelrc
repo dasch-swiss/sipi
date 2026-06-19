@@ -272,6 +272,31 @@ build:fuzz --copt=-fno-stack-protector
 build:fuzz --@llvm//config:fuzzer=true
 build:fuzz --@llvm//config:asan=true
 
+# ── Tracy profiler — opt-in via --config=tracy ─────────────────────────────
+# Local-dev only, never CI-gated (like `just bench` / `just valgrind`).
+# `just bazel-build-tracy` adds `-c opt` and builds //src/cli:sipi; run the
+# binary and connect the Tracy GUI over TCP 8086. The `@tracy//:tracy` dep is
+# always in the graph but inert until TRACY_ENABLE is defined here, so these
+# flags are the *only* thing that arms the profiler.
+#
+#   * TRACY_ENABLE   — master switch. Defined globally so it reaches both
+#     TracyClient.cpp and every instrumented first-party TU (the zone macros in
+#     `src/observability/profiling.h` are no-ops without it).
+#   * TRACY_ON_DEMAND — a long-running server must not buffer profiling data
+#     when no GUI is attached; with this, collection starts only on connect.
+#   * -fno-omit-frame-pointer + -g + --strip=never — symbol-accurate zones and
+#     enable Tracy's statistical call-stack sampling alongside the manual zones.
+build:tracy --copt=-DTRACY_ENABLE
+build:tracy --copt=-DTRACY_ON_DEMAND
+build:tracy --copt=-fno-omit-frame-pointer
+build:tracy --copt=-g
+build:tracy --strip=never
+# Tracy's headers (pulled into instrumented first-party TUs via profiling.h) trip
+# -Wthread-safety-analysis on their lock-free queue internals. Vendored code we
+# don't maintain; silence it for this dev-only config (the warning still applies
+# to first-party code in the normal/sanitizer builds).
+build:tracy --copt=-Wno-thread-safety-analysis
+
 # ── Test ───────────────────────────────────────────────────────────────────
 # Surface test stderr immediately on failure rather than collecting it into
 # bazel-testlogs — useful for inner-loop iteration. CI flips this off.

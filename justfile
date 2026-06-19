@@ -152,6 +152,19 @@ bazel-build-sanitized *FLAGS='':
     bazel build --config=asan --config=ubsan --verbose_failures --stamp {{FLAGS}} //src/cli:sipi
     @echo "Binary at: $(pwd)/bazel-bin/src/cli/sipi"
 
+# Tracy-instrumented profiling build: `-c opt --config=tracy`. Local dev only,
+# never CI-gated (like `bench` / `valgrind`). `-c opt` so the timeline reflects
+# production codegen; `--config=tracy` (see `.bazelrc`) defines TRACY_ENABLE +
+# TRACY_ON_DEMAND so the binary profiles only while the Tracy GUI is connected.
+# Run the binary, then open the Tracy profiler and Connect (TCP 8086). The GUI
+# comes from `nix develop .#profiling` on Linux or `brew install tracy` on macOS;
+# it connects over the network too, so a macOS GUI can profile a Linux server.
+# See docs/src/development/profiling.md.
+bazel-build-tracy *FLAGS='':
+    bazel build -c opt --config=tracy --verbose_failures --stamp {{FLAGS}} //src/cli:sipi
+    @echo "Tracy-instrumented binary at: $(pwd)/bazel-bin/src/cli/sipi"
+    @echo "Run it, then open the Tracy profiler and Connect (localhost:8086)."
+
 # Resolve the per-host fuzz `--platforms=` label. linux-x86_64 → libstdc++
 # toolchain (`@llvm_toolchain_fuzz`) for libFuzzer ABI parity with the
 # prior CMake build. darwin-aarch64 → default `@llvm_toolchain` (Apple SDK

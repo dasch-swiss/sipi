@@ -588,3 +588,18 @@ http_archive(
     url = "https://github.com/libsdl-org/libtiff/archive/refs/tags/v4.7.1.tar.gz",
 )
 
+# Tracy — opt-in, dev-only frame/zone profiler (https://github.com/wolfpld/tracy).
+# Not a BCR module (verified: registry has no `tracy`), so it follows the native
+# `cc_library` pattern per ADR-0015. The dep is *always* in the graph but inert:
+# the profiler machinery in `public/client/*.cpp` is gated behind `TRACY_ENABLE`,
+# which only `--config=tracy` defines, so a normal build links no listening
+# socket and collects nothing. See `bazel/tracy.BUILD.bazel` and
+# `docs/adr/0016-tracy-opt-in-dev-profiler.md`.
+http_archive(
+    name = "tracy",
+    build_file = "//bazel:tracy.BUILD.bazel",
+    sha256 = "d4efc50ebcb0bfcfdbba148995aeb75044c0d80f5d91223aebfaa8fa9e563d2b",
+    strip_prefix = "tracy-0.13.1",
+    url = "https://github.com/wolfpld/tracy/archive/refs/tags/v0.13.1.tar.gz",
+)
+

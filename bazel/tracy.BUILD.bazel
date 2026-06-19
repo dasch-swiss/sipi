@@ -1,0 +1,52 @@
+"""Native `cc_library` for the Tracy profiler client.
+
+Tracy's "fast integration" path compiles exactly one translation unit,
+`public/TracyClient.cpp`, which `#include`s the implementation `.cpp` files
+(`client/*.cpp`, `common/*.cpp`) directly. Those included sources must therefore
+be available for textual inclusion but must NOT be compiled as separate `srcs`
+(they have no standalone linkage and would collide). They go in `textual_hdrs`.
+
+The whole profiler — sockets, sampling, the rpmalloc arena — sits behind
+`#ifdef TRACY_ENABLE` inside those files. `--config=tracy` defines `TRACY_ENABLE`
+globally (`.bazelrc`); without it, `TracyClient.cpp` compiles down to the thread-
+name helpers in `common/TracySystem.cpp` and nothing else — no listening socket,
+no background thread, no buffering. So this target is safe to keep as an
+unconditional dependency of the production graph. See
+`docs/adr/0016-tracy-opt-in-dev-profiler.md`.
+"""
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "tracy",
+    srcs = ["public/TracyClient.cpp"],
+    # The public instrumentation API consumers `#include <tracy/Tracy.hpp>`.
+    hdrs = glob([
+        "public/tracy/*.h",
+        "public/tracy/*.hpp",
+    ]),
+    # Everything TracyClient.cpp pulls in by relative `#include` — including the
+    # `.cpp` implementation files — exposed for textual inclusion only.
+    textual_hdrs = glob([
+        "public/client/**",
+        "public/common/**",
+        "public/libbacktrace/**",
+        "public/tracy/**",
+    ]),
+    includes = ["public"],
+    # Vendored third-party code we do not maintain: silence its warnings
+    # wholesale (deprecated sprintf, thread-safety-analysis, unused-function)
+    # rather than track upstream's churn flag-by-flag.
+    copts = ["-w"],
+    linkstatic = True,
+    linkopts = select({
+        # libbacktrace dlopen + the client's background socket thread.
+        "@platforms//os:linux": [
+            "-ldl",
+            "-lpthread",
+        ],
+        "//conditions:default": [],
+    }),
+)
