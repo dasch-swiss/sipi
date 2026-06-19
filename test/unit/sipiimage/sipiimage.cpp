@@ -5,15 +5,15 @@
 
 #include "gtest/gtest.h"
 
-#include "../../../src/SipiImage.hpp"
-#include "../../../src/SipiImageError.hpp"
+#include "../../../src/SipiImage.h"
+#include "../../../src/SipiImageError.h"
 #include "SipiIOTiff.h"
-#include "test_paths.hpp"
+#include "test_paths.h"
 #include <cmath>
 #include <ranges>
 #include <sys/stat.h>
 
-// See test/test_paths.hpp for the data_dir/tmp_dir env-var contract.
+// See test/test_paths.h for the data_dir/tmp_dir env-var contract.
 static const std::string test_images = sipi::test::data_dir() + "/images/";
 static const std::string tmp_dir = sipi::test::tmp_dir() + "/";
 

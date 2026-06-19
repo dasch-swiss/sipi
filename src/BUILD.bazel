@@ -41,7 +41,7 @@ package(default_visibility = ["//visibility:public"])
 # search-space cost, so the only `//src` surface the fuzz graph reaches
 # is the single TU `iiif_handler.cpp` plus its companion header.
 #
-# `:iiif_handler_hdrs` makes `#include "handlers/iiif_handler.hpp"` resolve
+# `:iiif_handler_hdrs` makes `#include "handlers/iiif_handler.h"` resolve
 # explicitly — both for `iiif_handler.cpp` itself when compiled inside
 # `//src/shttps:fuzz_subset` and for the fuzz harness target.cpp at
 # `//fuzz/handlers:iiif_handler_uri_parser_fuzz` (which uses the same
@@ -55,7 +55,7 @@ exports_files(
 
 cc_library(
     name = "iiif_handler_hdrs",
-    hdrs = ["handlers/iiif_handler.hpp"],
+    hdrs = ["handlers/iiif_handler.h"],
     includes = ["."],
     visibility = [
         "//src/shttps:__pkg__",
@@ -186,7 +186,7 @@ cc_library(
 
 # ── //src:sipi_top ─────────────────────────────────────────────────────────
 # Foundational `cc_library` covering the SipiError infrastructure source
-# file and the top-level `.hpp` headers (`SipiError.hpp`, `SipiImage.hpp`)
+# file and the top-level `.h` headers (`SipiError.h`, `SipiImage.h`)
 # that per-module packages need to consume.
 #
 # Why this split exists:
@@ -210,7 +210,7 @@ cc_library(
 # on `:sipi_top` so each TU stays in exactly one library — no
 # duplicate-symbol risk.
 #
-# When `SipiImage` moves into its own package (DEV-6396), `SipiImage.hpp`
+# When `SipiImage` moves into its own package (DEV-6396), `SipiImage.h`
 # leaves this library; same for `SipiError` if a future probe extracts
 # it into a dedicated module. This target is transitional scaffolding
 # for the Y+8 per-module flip series.
@@ -220,21 +220,21 @@ cc_library(
         "SipiError.cpp",
     ],
     hdrs = [
-        "SipiError.hpp",
-        "SipiImage.hpp",
+        "SipiError.h",
+        "SipiImage.h",
     ],
-    # Consumers `#include "SipiError.hpp"` — `.` (i.e. `src/`) on the
+    # Consumers `#include "SipiError.h"` — `.` (i.e. `src/`) on the
     # include path resolves the quote-form lookup.
     includes = ["."],
     visibility = ["//src:__subpackages__"],
-    # `SipiImage.hpp` transitively includes `metadata/Sipi*.h` and
+    # `SipiImage.h` transitively includes `metadata/Sipi*.h` and
     # `shttps/...`; the deps here surface those headers so a consumer
-    # picking up `:sipi_top` can compile against `SipiImage.hpp` without
+    # picking up `:sipi_top` can compile against `SipiImage.h` without
     # separately declaring every transitive header bundle.
     # Note we deliberately do NOT list `//src/metadata:metadata` here —
     # the metadata package itself consumes `:sipi_top`, so listing
     # metadata as a dep would close a cycle. The transitive
-    # `metadata/Sipi*.h` includes from `SipiImage.hpp` resolve through
+    # `metadata/Sipi*.h` includes from `SipiImage.h` resolve through
     # the consumer's own metadata dep instead (or via `:sipi_lib`'s
     # `includes = ["."]` for the unstrict-deps grace period).
     deps = [
@@ -251,7 +251,7 @@ cc_library(
     srcs = glob(
         [
             "**/*.cpp",
-            "**/*.hpp",
+            "**/*.h",
         ],
         exclude = [
             # Owned by `:sipi_top` so per-module unit tests can link it

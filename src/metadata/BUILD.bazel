@@ -15,8 +15,8 @@ with a build-graph invariant. The co-located `icc_normalize_test`
 exercises the helper through the same restricted edge.
 
 `layering_check` and `parse_headers` are **deferred** for the same reason as
-//src/observability: every `.cpp` here `#include`s `SipiImage.hpp` (and
-`SipiImage.hpp`'s `friend class Icc;` — a known coupling tracked under
+//src/observability: every `.cpp` here `#include`s `SipiImage.h` (and
+`SipiImage.h`'s `friend class Icc;` — a known coupling tracked under
 DEV-6396), which is reachable only through the permissive
 `includes = ["."]` on the parent `:sipi_lib` target. With strict layering
 on, that transitive include would require explicit ownership of `SipiImage`

@@ -13,7 +13,7 @@
 #include <utility>
 
 #include "logging/logger.h"
-#include "SipiImage.hpp"
+#include "SipiImage.h"
 #include "metadata/essentials.h"
 #include "metadata/icc.h"
 #include "shttps/Hash.h"

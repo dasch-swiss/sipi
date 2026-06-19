@@ -15,7 +15,7 @@
 #include <cstring>
 
 
-#include "../SipiError.hpp"
+#include "../SipiError.h"
 #include "SipiSize.h"
 #include "shttps/Parsing.h"
 

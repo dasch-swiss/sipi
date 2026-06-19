@@ -19,7 +19,7 @@
 #include <exiv2/types.hpp>
 #include <exiv2/value.hpp>
 
-#include "SipiError.hpp"
+#include "SipiError.h"
 
 namespace Sipi {
 

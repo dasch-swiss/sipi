@@ -41,12 +41,12 @@
 #include <sys/stat.h>
 #include <vector>
 
-#include "SipiImage.hpp"
+#include "SipiImage.h"
 #include "cli/commands/convert_service_file.h"
 #include "SipiIOTiff.h"
 #include "metadata/essentials.h"
 #include "shttps/Hash.h"
-#include "test_paths.hpp"
+#include "test_paths.h"
 
 namespace {
 

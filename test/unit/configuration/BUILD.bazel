@@ -2,7 +2,7 @@
 
 The Lua-driven config loader reads `config/sipi.config.lua`. We declare
 the config tree as a `data` dep and pass `SIPI_WORKSPACE_ROOT="."` so
-`sipi::test::config_dir()` (`test/test_paths.hpp`) resolves to the
+`sipi::test::config_dir()` (`test/test_paths.h`) resolves to the
 runfiles `<workspace>/config/` path. The env-unset fallback preserves
 CMake/ctest behaviour.
 """

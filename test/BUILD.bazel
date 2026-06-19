@@ -9,7 +9,7 @@ package(default_visibility = ["//visibility:public"])
 # `test/_test_data/` or writes to a scratch dir.
 cc_library(
     name = "test_paths",
-    hdrs = ["test_paths.hpp"],
+    hdrs = ["test_paths.h"],
     includes = ["."],
     testonly = True,
 )

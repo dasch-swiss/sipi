@@ -22,10 +22,10 @@
 
 #include "logging/logger.h"
 #include "SipiCommon.h"
-#include "SipiError.hpp"
+#include "SipiError.h"
 #include "SipiIO.h"
-#include "SipiImage.hpp"
-#include "SipiImageError.hpp"
+#include "SipiImage.h"
+#include "SipiImageError.h"
 #include "formats/SipiIOJpeg.h"
 #include "observability/profiling.h"
 

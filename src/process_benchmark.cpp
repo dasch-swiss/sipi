@@ -29,9 +29,9 @@
 #include <string>
 #include <vector>
 
-#include "SipiImage.hpp"
+#include "SipiImage.h"
 #include "metadata/icc.h"
-#include "test_paths.hpp"
+#include "test_paths.h"
 
 namespace {
 

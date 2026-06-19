@@ -6,7 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "../SipiError.hpp"
+#include "../SipiError.h"
 #include "SipiIdentifier.h"
 #include "shttps/Connection.h"
 

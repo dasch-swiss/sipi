@@ -6,7 +6,7 @@
 #include <sstream>
 
 
-#include "SipiError.hpp"
+#include "SipiError.h"
 
 namespace Sipi {
 

@@ -28,11 +28,11 @@
 #include <string>
 #include <sys/stat.h>
 
-#include "SipiImage.hpp"
+#include "SipiImage.h"
 #include "cli/commands/convert_service_file.h"
 #include "cli/commands/verify.h"
 #include "metadata/essentials.h"
-#include "test_paths.hpp"
+#include "test_paths.h"
 
 namespace {
 

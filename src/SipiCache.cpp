@@ -27,7 +27,7 @@
 
 
 #include "SipiCache.h"
-#include "SipiError.hpp"
+#include "SipiError.h"
 #include "observability/metrics.h"
 #include "observability/profiling.h"
 #include "shttps/Global.h"

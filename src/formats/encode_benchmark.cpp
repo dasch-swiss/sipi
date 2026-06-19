@@ -33,8 +33,8 @@
 #include <string>
 
 #include "SipiIO.h"
-#include "SipiImage.hpp"
-#include "test_paths.hpp"
+#include "SipiImage.h"
+#include "test_paths.h"
 
 namespace {
 

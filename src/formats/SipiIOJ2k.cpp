@@ -37,8 +37,8 @@
 #include "shttps/makeunique.h"
 #include "observability/metrics.h"
 
-#include "SipiError.hpp"
-#include "SipiImageError.hpp"
+#include "SipiError.h"
+#include "SipiImageError.h"
 #include "formats/SipiIOJ2k.h"
 #include "logging/logger.h"
 #include "observability/profiling.h"

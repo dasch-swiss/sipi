@@ -17,7 +17,7 @@
 #include <string>
 #include <thread>
 
-#include "handlers/iiif_handler.hpp"
+#include "handlers/iiif_handler.h"
 
 #ifndef SIPI_FUZZ_CORPUS_DIR
 #error "SIPI_FUZZ_CORPUS_DIR must point at fuzz/handlers/corpus/"

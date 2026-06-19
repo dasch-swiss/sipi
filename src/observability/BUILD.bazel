@@ -10,7 +10,7 @@ Co-locates the unit test (`connection_metrics_adapter_test.cpp` +
 
 `layering_check` and `parse_headers` are **deferred** until SipiImage moves
 into its own package (DEV-6388 / DEV-6395). Today, `sentry.cpp` includes
-`SipiImage.hpp` through src/.'s permissive include path; with strict layering
+`SipiImage.h` through src/.'s permissive include path; with strict layering
 enabled that include would require an explicit dep on whichever target
 eventually owns SipiImage. Same disposition as `//src/shttps:shttps`
 (see shttps/BUILD.bazel comment about Logger.h rehome): the feature

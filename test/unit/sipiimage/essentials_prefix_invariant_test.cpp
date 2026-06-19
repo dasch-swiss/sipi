@@ -24,11 +24,11 @@
 #include <vector>
 
 #include "SipiIO.h"
-#include "SipiImage.hpp"
-#include "SipiImageError.hpp"
+#include "SipiImage.h"
+#include "SipiImageError.h"
 #include "metadata/essentials.h"
 #include "shttps/Hash.h"
-#include "test_paths.hpp"
+#include "test_paths.h"
 
 namespace {
 

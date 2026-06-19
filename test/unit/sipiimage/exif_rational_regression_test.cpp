@@ -17,10 +17,10 @@
 #include <memory>
 #include <vector>
 
-#include "../../../src/SipiImage.hpp"
+#include "../../../src/SipiImage.h"
 #include "SipiIOTiff.h"
 #include "metadata/exif.h"
-#include "test_paths.hpp"
+#include "test_paths.h"
 
 namespace {
 
