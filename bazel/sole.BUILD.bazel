@@ -1,0 +1,17 @@
+"""Native `cc_library` for sole — r-lyeh's single-header UUID library.
+
+Header-only (since 1.0.0): consumers `#include "sole.hpp"`; the bundled `sole.cpp`
+is only for non-header-only builds and is intentionally unused. shttps/LuaServer.cpp
+is the sole consumer. Not on BCR, so vendored via http_archive per ADR-0015.
+"""
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "sole",
+    hdrs = ["sole.hpp"],
+    includes = ["."],
+    linkstatic = True,
+)
