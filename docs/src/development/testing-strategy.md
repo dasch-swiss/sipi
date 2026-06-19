@@ -76,16 +76,16 @@ The `shttps` library is a custom lightweight HTTP server:
 
 | Feature | Details | Source |
 |---|---|---|
-| SSL/TLS | Configurable port, certificate, and key paths | `shttps/Server.h` |
-| Threading | Configurable thread pool (`nthreads`, default 8) | `shttps/Server.h` |
-| Keep-alive | Configurable timeout (seconds) | `shttps/Connection.h` |
-| Chunked transfer | `Transfer-Encoding: chunked` support | `shttps/Connection.h` |
+| SSL/TLS | Configurable port, certificate, and key paths | `shttps/transport/Server.h` |
+| Threading | Configurable thread pool (`nthreads`, default 8) | `shttps/transport/Server.h` |
+| Keep-alive | Configurable timeout (seconds) | `shttps/transport/Connection.h` |
+| Chunked transfer | `Transfer-Encoding: chunked` support | `shttps/transport/Connection.h` |
 | Range requests | HTTP 206 Partial Content | Handler-level |
 | CORS | Via Lua preflight scripts | `scripts/` |
-| Methods | GET, POST, PUT, DELETE | `shttps/Connection.h` |
-| Authentication | JWT (HS256), HTTP Basic Auth, cookie support | `shttps/jwt.h` |
-| Max POST size | Configurable (`max_post_size`, default 300M) | `shttps/Connection.cpp` |
-| Multipart upload | Form-data file upload with metadata | `shttps/Connection.h` |
+| Methods | GET, POST, PUT, DELETE | `shttps/transport/Connection.h` |
+| Authentication | JWT (HS256), HTTP Basic Auth, cookie support | `shttps/jwt/jwt.h` |
+| Max POST size | Configurable (`max_post_size`, default 300M) | `shttps/transport/Connection.cpp` |
+| Multipart upload | Form-data file upload with metadata | `shttps/transport/Connection.h` |
 
 ### Caching System
 

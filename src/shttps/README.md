@@ -8,6 +8,20 @@ See [ADR-0013](../../docs/adr/0013-shttps-as-internal-module.md) for the framing
 
 shttps is the **first strangler-fig slice** of a planned Rust rewrite of the whole of SIPI. Until that lands, the four seam types below must stay semantically stable so the eventual Rust replacement can reproduce them (not necessarily symbol-for-symbol).
 
+## Module layout
+
+The sources are split into five sub-packages, one Bazel package per module, so the relocation that the Rust cutover performs is a whole-directory delete rather than a file-by-file extraction:
+
+| Sub-package | Contents | Fate at the Rust cutover |
+|-------------|----------|--------------------------|
+| `transport/` | `Server`, `Connection`, `SocketControl`, `SockStream`, `ChunkReader`, `ThreadControl`, `ConnectionMetrics`, `Shttp` | **Deleted** → axum/hyper/tokio |
+| `lua/` | `LuaServer` (the per-request interpreter) | Kept, fed by a buffered request context, then ported to mlua |
+| `lua_sqlite/` | `LuaSqlite` (SQLite Lua bindings) | Kept, then ported |
+| `jwt/` | `jwt.{c,h}` | Kept (or → Rust `jsonwebtoken`) |
+| `util/` | `Parsing`, `Hash`, `Error`, `Global`, `makeunique` | Kept, re-homed SIPI-side |
+
+`transport` and `lua` are mutually dependent (`Server` holds a `LuaServer`; `LuaServer` needs the full `Connection` type), so they share one Bazel package (`:shttps_headers` + `:shttps`); `util` and `jwt` are leaf packages and `lua_sqlite` depends one-directionally on `:shttps`. Cross-module includes are written in the explicit `shttps/<module>/X.h` form; same-directory siblings stay bare (ADR-0003).
+
 ## Module API surface — four seam types
 
 **Server**:
@@ -69,7 +83,7 @@ Bazel `--features=layering_check` is **deferred** to the broader Y+8 layering ro
 
 ## Utilities scheduled for re-homing
 
-A handful of files in this module are SIPI domain concerns or generic helpers, not HTTP-framework code. They live here for historical reasons. Re-homing them SIPI-side is a backlog **consistency cleanup**:
+A handful of files in this module are SIPI domain concerns or generic helpers, not HTTP-framework code. They are grouped in the `util/` sub-package but still live under `shttps/` for historical reasons. Re-homing them fully SIPI-side is a backlog **consistency cleanup**:
 
 - `Hash` / `HashType` — used by `Essentials::pixel_checksum`. Belongs to SIPI's preservation domain.
 - `Parsing` — URL decoding, mime-type magic, header parsing helpers. Generic utilities; SIPI-side support module.

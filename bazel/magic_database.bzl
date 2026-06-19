@@ -1,7 +1,7 @@
 """`magic_mgc_header` — embed libmagic's `magic.mgc` database as a C header.
 
 Reads a single `magic.mgc` file and emits a C header that declares the
-two symbols `shttps/Parsing.cpp` consumes via
+two symbols `shttps/util/Parsing.cpp` consumes via
 `magic_load_buffers(magic_mgc, magic_mgc_len, …)` — so SIPI binaries
 ship with the magic database in-binary and don't need an external
 `magic.mgc` on disk.

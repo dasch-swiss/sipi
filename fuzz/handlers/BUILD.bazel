@@ -16,9 +16,10 @@ which:
      `cc_binary` built under `--config=fuzz`. linux-x86_64 only (darwin
      sanitizer runtimes are upstream-gapped — see `.bazelrc` `build:fuzz`).
 
-The four shttps cpps + `iiif_handler.cpp` that make up the harness's
-explicit subset live under `//src/shttps:fuzz_subset` (kept in shttps's
-package because four of its five sources are native there). The seed
+The three shttps transport cpps + `iiif_handler.cpp` that make up the
+harness's explicit subset live under `//src/shttps:fuzz_subset` (kept in
+shttps's package because three of its four sources are native there;
+`Error` is supplied by the `//src/shttps/util` archive dep). The seed
 corpus stays committed under `fuzz/handlers/corpus/` and is exposed as
 `//fuzz/handlers/corpus:seed_corpus`. `data = [...]` makes it available
 in runfiles for `bazel test`; `bazel run` resolves seed paths via

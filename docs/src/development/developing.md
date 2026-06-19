@@ -105,7 +105,7 @@ End-to-end and HTTP-contract tests are written in Rust and live under
 All tests build under Bazel:
 
 ```bash
-just bazel-test-unit             # bazel test //test/unit/...
+just bazel-test-unit             # bazel test //src/... //test/unit/...
 just bazel-test-approval         # bazel test //test/approval:approvaltests
 just bazel-test-e2e              # all rust_test e2e targets
 just bazel-test-smoke            # Docker smoke test
@@ -128,7 +128,6 @@ ApprovalTests. Tests are organized by component:
 - `test/unit/logger/` — Logger tests
 - `test/unit/memory_budget/` — Decode memory budget tests
 - `test/unit/ratelimiter/` — Rate-limiter tests
-- `test/unit/shttps/` — HTTP server utility tests
 - `test/unit/sipiimage/` — Image processing tests
 
 Per-module Bazel packages co-locate their unit tests alongside the sources
@@ -136,6 +135,8 @@ Per-module Bazel packages co-locate their unit tests alongside the sources
 
 - `//src/observability:connection_metrics_adapter_test` — shttps→sipi metrics adapter tests (was `test/unit/sipiconnectionmetrics/`)
 - `//src/metadata:icc_normalize_test` — ICC profile normalization tests (was `test/unit/sipiicc/`)
+- `//src/shttps/util:util_test` — shttps util tests: Hash, Parsing (was `test/unit/shttps/`)
+- `//src/shttps:transport_test` — shttps transport tests: urldecode, SocketControl (was `test/unit/shttps/`)
 
 Run one component:
 
