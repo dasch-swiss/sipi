@@ -55,7 +55,6 @@ cc_library(
     name = "shttps_headers",
     hdrs = glob([
         "*.h",
-        "*.hpp",
     ]) + [":magic_mgc_h"],
     includes = ["."],
     include_prefix = "shttps",
@@ -87,10 +86,13 @@ cc_library(
     ),
     deps = [
         ":shttps_headers",
+        # sole — r-lyeh's single-header UUID lib; LuaServer.cpp's server.uuid*
+        # Lua bindings (incl. the DSP base62 IRI scheme).
+        "@sole//:sole",
         # Server.cpp names the pool's worker threads for the Tracy timeline
-        # (`tracy::SetThreadName`). External dep, so it does not breach the
-        # SIPI→shttps one-way rule. Inert unless `--config=tracy`.
+        # (`tracy::SetThreadName`). Inert unless `--config=tracy`.
         "@tracy//:tracy",
+        # Both are external deps, so neither breaches the SIPI -> shttps one-way rule.
     ],
 )
 

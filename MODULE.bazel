@@ -578,6 +578,18 @@ http_archive(
 )
 
 http_archive(
+    name = "sole",
+    build_file = "//bazel:sole.BUILD.bazel",
+    sha256 = "70dbd71f2601963684195f4c7d8a1c2d45a0d53114bc4d06f8cebe6d3d3ffa69",
+    strip_prefix = "sole-95612e5cda1accc0369a51edfe0f32bfb4bee2a0",
+    # r-lyeh's single-header UUID lib (used by shttps/LuaServer.cpp). Not on BCR.
+    # SOLE_VERSION 1.0.5 is the latest but untagged upstream, so pin the commit;
+    # 1.0.5 carries the threaded-init (#18/#39) and socket-leak (#38) fixes the
+    # previously-vendored 1.0.0 lacked.
+    url = "https://github.com/r-lyeh-archived/sole/archive/95612e5cda1accc0369a51edfe0f32bfb4bee2a0.tar.gz",
+)
+
+http_archive(
     name = "tiff",
     build_file = "//bazel:tiff.BUILD.bazel",
     sha256 = "a3faec056a490c62b8749847317521204f8c4d9933cce834e691a74524ec38fe",
