@@ -312,3 +312,90 @@ fn cli_no_subcommand_with_sentry_dsn_exits_clean() {
         );
     }
 }
+
+// =============================================================================
+// `convert -q/--quality` value plumbing (regression).
+//
+// `SipiCompressionParams` is `unordered_map<int, std::string>`. The CLI quality
+// option (`int optJpegQuality`) must be stringified before it lands in that map;
+// assigning the int directly bound to `std::string::operator=(char)`, storing
+// the byte 0x50 ('P') so the JPEG writer's `stoi()` threw "JPEG quality argument
+// must be integer between 0 and 100" for EVERY `convert -q ...` invocation.
+//
+// These tests run the real binary through the bare `convert` path (Access File
+// output via the string-map params — distinct from `convert access-file`, which
+// threads an int field). They guard both failure modes a mis-threaded numeric
+// option can take: erroring out, and being silently ignored.
+// =============================================================================
+
+fn sipi_convert_quality(input: &str, output: &str, quality: u32) -> std::process::Output {
+    Command::new(sipi_bin_path())
+        .arg("convert")
+        .arg("--quality")
+        .arg(quality.to_string())
+        .arg("--format")
+        .arg("jpg")
+        .arg(input)
+        .arg(output)
+        .current_dir(test_data_dir())
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to run sipi CLI: {}", e))
+}
+
+#[test]
+fn cli_convert_quality_succeeds_and_emits_jpeg() {
+    let input = test_data_dir().join("images/unit/lena512.tif");
+    let output = tmp_path("sipi_cli_quality_ok.jpg");
+    let _ = std::fs::remove_file(&output);
+
+    let result = sipi_convert_quality(input.to_str().unwrap(), output.to_str().unwrap(), 80);
+
+    assert!(
+        result.status.success(),
+        "`convert --quality 80` must succeed; stderr:\n{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(output.exists(), "quality conversion should emit an output file");
+
+    // Valid JPEG: SOI marker 0xFFD8 followed by 0xFF.
+    let bytes = std::fs::read(&output).expect("read output jpeg");
+    assert!(
+        bytes.len() > 2 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF,
+        "output should be a valid JPEG (SOI marker), got first bytes {:?}",
+        &bytes[..bytes.len().min(3)]
+    );
+
+    let _ = std::fs::remove_file(&output);
+}
+
+#[test]
+fn cli_convert_quality_actually_affects_output() {
+    // The strongest guard: the quality value must reach the encoder, not just
+    // avoid erroring. A low-quality encode must be meaningfully smaller than a
+    // high-quality one — false if the option is dropped or mis-threaded.
+    let input = test_data_dir().join("images/unit/lena512.tif");
+    let low = tmp_path("sipi_cli_quality_low.jpg");
+    let high = tmp_path("sipi_cli_quality_high.jpg");
+    let _ = std::fs::remove_file(&low);
+    let _ = std::fs::remove_file(&high);
+
+    let r_low = sipi_convert_quality(input.to_str().unwrap(), low.to_str().unwrap(), 10);
+    let r_high = sipi_convert_quality(input.to_str().unwrap(), high.to_str().unwrap(), 95);
+
+    assert!(
+        r_low.status.success() && r_high.status.success(),
+        "both quality conversions must succeed; low stderr:\n{}\nhigh stderr:\n{}",
+        String::from_utf8_lossy(&r_low.stderr),
+        String::from_utf8_lossy(&r_high.stderr)
+    );
+
+    let low_size = std::fs::metadata(&low).expect("low jpeg").len();
+    let high_size = std::fs::metadata(&high).expect("high jpeg").len();
+    assert!(
+        low_size < high_size,
+        "quality must affect output: -q 10 ({low_size} B) should be smaller than -q 95 ({high_size} B)"
+    );
+
+    let _ = std::fs::remove_file(&low);
+    let _ = std::fs::remove_file(&high);
+}

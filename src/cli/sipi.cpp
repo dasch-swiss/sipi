@@ -804,7 +804,11 @@ int main(int argc, char *argv[])
     // write the output file
     //
     Sipi::SipiCompressionParams comp_params;
-    if (user_set("--quality")) comp_params[Sipi::JPEG_QUALITY] = optJpegQuality;
+    // SipiCompressionParams maps to std::string; optJpegQuality is an int, so it
+    // MUST be stringified (like the J2K int params below). Assigning the int
+    // directly bound to std::string::operator=(char), storing the byte 0x50
+    // ('P') and making the JPEG writer's stoi() throw.
+    if (user_set("--quality")) comp_params[Sipi::JPEG_QUALITY] = std::to_string(optJpegQuality);
     if (user_set("--Sprofile")) comp_params[Sipi::J2K_Sprofile] = j2k_Sprofile;
     if (user_set("--Clayers")) comp_params[Sipi::J2K_Clayers] = std::to_string(j2k_Clayers);
     if (user_set("--Clevels")) comp_params[Sipi::J2K_Clevels] = std::to_string(j2k_Clevels);
