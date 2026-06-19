@@ -29,6 +29,7 @@
 #include "SipiCache.h"
 #include "SipiError.hpp"
 #include "observability/metrics.h"
+#include "observability/profiling.h"
 #include "shttps/Global.h"
 #include "logging/logger.h"
 
@@ -376,6 +377,7 @@ int SipiCache::purge(bool use_lock)
 
 std::string SipiCache::check(const std::string &origpath_p, const std::string &canonical_p, bool block_file)
 {
+  SIPI_ZONE_N("SipiCache::check");
   struct stat fileinfo;
   SipiCache::CacheRecord fr;
 
@@ -459,6 +461,7 @@ void SipiCache::add(const std::string &origpath_p,
   int clevels_p,
   int numpages_p)
 {
+  SIPI_ZONE_N("SipiCache::add");
   size_t pos = cachepath_p.rfind('/');
   std::string cachepath;
 

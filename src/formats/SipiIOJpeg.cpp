@@ -27,6 +27,7 @@
 #include "SipiImage.hpp"
 #include "SipiImageError.hpp"
 #include "formats/SipiIOJpeg.h"
+#include "observability/profiling.h"
 
 #include "jerror.h"
 #include "jpeglib.h"
@@ -483,6 +484,7 @@ bool SipiIOJpeg::read(SipiImage *img,
   bool force_bps_8,
   ScalingQuality scaling_quality)
 {
+  SIPI_ZONE_N("SipiIOJpeg::read");
   int infile;
   //
   // open the input file
@@ -846,6 +848,7 @@ bool SipiIOJpeg::read(SipiImage *img,
 
 SipiImgInfo SipiIOJpeg::read_shape(const std::string &filepath)
 {
+  SIPI_ZONE_N("SipiIOJpeg::read_shape");
   SipiImgInfo info;
   //
   // open the input file
@@ -1037,6 +1040,7 @@ SipiImgInfo SipiIOJpeg::read_shape(const std::string &filepath)
 
 void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params)
 {
+  SIPI_ZONE_N("SipiIOJpeg::write");
   int quality = 80;
   if ((params != nullptr) && (!params->empty())) {
     try {

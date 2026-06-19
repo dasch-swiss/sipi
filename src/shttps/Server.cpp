@@ -38,6 +38,11 @@
 #include "SockStream.h"
 #include "makeunique.h"
 
+// Tracy thread naming. shttps sits below //src/observability in the dependency
+// graph, so it uses the upstream header directly rather than the first-party
+// `observability/profiling.h` shim. Inert unless `--config=tracy`.
+#include <tracy/Tracy.hpp>
+
 static std::mutex debugio;// mutex to protect debugging messages from threads
 
 namespace shttps {
@@ -685,6 +690,9 @@ static int close_socket(const SocketControl::SocketInfo &socket_info)
 // waiting at the socket level, as soon as a thread from the thread pool is available.
 static void *socket_request_processor(void *arg)
 {
+#ifdef TRACY_ENABLE
+  tracy::SetThreadName("sipi-worker");
+#endif
   auto *tdata = static_cast<ThreadControl::ThreadChildData *>(arg);
   // pthread_t my_tid = pthread_self();
 

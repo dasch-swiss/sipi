@@ -26,6 +26,7 @@
 #include "SipiImageError.hpp"
 #include "formats/SipiIOTiff.h"
 #include "observability/metrics.h"
+#include "observability/profiling.h"
 
 
 #include "shttps/Global.h"
@@ -886,6 +887,7 @@ bool SipiIOTiff::read(SipiImage *img,
   bool force_bps_8,
   ScalingQuality scaling_quality)
 {
+  SIPI_ZONE_N("SipiIOTiff::read");
   TIFF *tif;
 
   if (nullptr != (tif = TIFFOpen(filepath.c_str(), "r"))) {
@@ -1462,6 +1464,7 @@ bool SipiIOTiff::read(SipiImage *img,
 
 SipiImgInfo SipiIOTiff::read_shape(const std::string &filepath)
 {
+  SIPI_ZONE_N("SipiIOTiff::read_shape");
   SipiImgInfo info;
   auto tif = std::unique_ptr<TIFF, decltype(&TIFFClose)>(TIFFOpen(filepath.c_str(), "r"), TIFFClose);
   if (tif) {
@@ -1617,6 +1620,7 @@ void SipiIOTiff::write_basic_tags(const SipiImage &img,
 
 void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params)
 {
+  SIPI_ZONE_N("SipiIOTiff::write");
   TIFF *tif;
   MEMTIFF *memtif = nullptr;
   auto rowsperstrip = (uint32_t)-1;

@@ -28,6 +28,7 @@
 #include "formats/SipiIOPng.h"
 #include "formats/SipiIOTiff.h"
 #include "observability/metrics.h"
+#include "observability/profiling.h"
 #include "shttps/Global.h"
 #include "shttps/Hash.h"
 
@@ -280,6 +281,7 @@ void SipiImage::read(const std::string &filepath,
   bool force_bps_8,
   ScalingQuality scaling_quality)
 {
+  SIPI_ZONE_N("SipiImage::read");
   size_t pos = filepath.find_last_of('.');
   std::string fext = filepath.substr(pos + 1);
   std::string _fext;
@@ -356,6 +358,7 @@ std::vector<std::byte> SipiImage::compute_pixel_hash(shttps::HashType type) cons
 
 SipiImgInfo SipiImage::read_shape(const std::string &filepath) const
 {
+  SIPI_ZONE_N("SipiImage::read_shape");
   size_t pos = filepath.find_last_of('.');
   std::string fext = filepath.substr(pos + 1);
   std::string _fext;
@@ -475,6 +478,7 @@ void SipiImage::convertYCC2RGB()
 
 void SipiImage::convertToIcc(const Icc &target_icc_p, int new_bps)
 {
+  SIPI_ZONE_N("SipiImage::convertToIcc");
   cmsSetLogErrorHandler(icc_error_logger);
   cmsUInt32Number in_formatter, out_formatter;
 
@@ -711,6 +715,7 @@ void SipiImage::removeChannel(const unsigned int channel, const bool force_gray_
 
 bool SipiImage::crop(int x, int y, size_t width, size_t height)
 {
+  SIPI_ZONE_N("SipiImage::crop");
   if (x < 0) {
     width += x;
     x = 0;
@@ -908,6 +913,7 @@ word SipiImage::bilinn(word buf[], const int nx, const int ny, const double x, c
 
 bool SipiImage::scaleFast(size_t nnx, size_t nny)
 {
+  SIPI_ZONE_N("SipiImage::scaleFast");
   if (nnx <= 1 || nny <= 1 || nx <= 1 || ny <= 1) {
     log_warn("scaleFast: degenerate dimensions (src=%zux%zu, dst=%zux%zu), skipping", nx, ny, nnx, nny);
     return false;
@@ -953,6 +959,7 @@ bool SipiImage::scaleFast(size_t nnx, size_t nny)
 
 bool SipiImage::scaleMedium(size_t nnx, size_t nny)
 {
+  SIPI_ZONE_N("SipiImage::scaleMedium");
   if (nnx <= 1 || nny <= 1 || nx <= 1 || ny <= 1) {
     log_warn("scaleMedium: degenerate dimensions (src=%zux%zu, dst=%zux%zu), skipping", nx, ny, nnx, nny);
     return false;
@@ -1008,6 +1015,7 @@ bool SipiImage::scaleMedium(size_t nnx, size_t nny)
 
 bool SipiImage::scale(size_t nnx, size_t nny)
 {
+  SIPI_ZONE_N("SipiImage::scale");
   if (nnx <= 1 || nny <= 1 || nx <= 1 || ny <= 1) {
     log_warn("scale: degenerate dimensions (src=%zux%zu, dst=%zux%zu), skipping", nx, ny, nnx, nny);
     return false;
@@ -1132,6 +1140,7 @@ bool SipiImage::scale(size_t nnx, size_t nny)
 
 bool SipiImage::rotate(float angle, bool mirror)
 {
+  SIPI_ZONE_N("SipiImage::rotate");
   if (mirror) {
     if (bps == 8) {
       byte *inbuf = (byte *)pixels;
@@ -1432,6 +1441,7 @@ bool SipiImage::to8bps()
 
 bool SipiImage::toBitonal()
 {
+  SIPI_ZONE_N("SipiImage::toBitonal");
   if ((photo != PhotometricInterpretation::MINISBLACK) && (photo != PhotometricInterpretation::MINISWHITE)) {
     convertToIcc(Icc(icc_GRAY_D50), 8);
   }

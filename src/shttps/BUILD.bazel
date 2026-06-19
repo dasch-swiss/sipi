@@ -85,7 +85,13 @@ cc_library(
             "Shttp.cpp",  # standalone test driver, not part of the library
         ],
     ),
-    deps = [":shttps_headers"],
+    deps = [
+        ":shttps_headers",
+        # Server.cpp names the pool's worker threads for the Tracy timeline
+        # (`tracy::SetThreadName`). External dep, so it does not breach the
+        # SIPI→shttps one-way rule. Inert unless `--config=tracy`.
+        "@tracy//:tracy",
+    ],
 )
 
 # ── //src/shttps:fuzz_subset — minimal slice for libFuzzer ─────────────────────
