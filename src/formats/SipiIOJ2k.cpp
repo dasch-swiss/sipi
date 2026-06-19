@@ -32,7 +32,6 @@
 #include "kdu_stripe_compressor.h"
 #include "kdu_stripe_decompressor.h"
 
-#include "shttps/transport/Connection.h"
 #include "shttps/util/Global.h"
 #include "shttps/util/makeunique.h"
 #include "observability/metrics.h"
@@ -55,15 +54,15 @@ namespace Sipi {
 class J2kHttpStream : public kdu_core::kdu_compressed_target
 {
 private:
-  shttps::Connection *conobj;
+  SinkStream *sink;
 
 public:
-  //! Set when write()/close() fails because the peer closed the socket.
+  //! Set when write()/close() fails because the body sink (the socket) failed.
   //! Read from the top-level SipiIOJ2k::write error handler to distinguish
   //! client aborts from genuine Kakadu failures.
   bool client_aborted{ false };
 
-  J2kHttpStream(shttps::Connection *conobj_p);
+  J2kHttpStream(SinkStream *sink_p);
 
   ~J2kHttpStream() override;
 
@@ -84,7 +83,7 @@ public:
 //-------------------------------------------------------------------------
 // Constructor which takes the HTTP server connection as parameter
 //........................................................................
-J2kHttpStream::J2kHttpStream(shttps::Connection *conobj_p) : kdu_core::kdu_compressed_target() { conobj = conobj_p; };
+J2kHttpStream::J2kHttpStream(SinkStream *sink_p) : kdu_core::kdu_compressed_target() { sink = sink_p; };
 //-------------------------------------------------------------------------
 
 
@@ -101,12 +100,10 @@ J2kHttpStream::~J2kHttpStream(){
 //........................................................................
 bool J2kHttpStream::write(const kdu_byte *buf, int num_bytes)
 {
-  try {
-    conobj->sendAndFlush(buf, num_bytes);
-  } catch (int) {
-    // Catches shttps::OUTPUT_WRITE_FAIL — by definition a socket-write
-    // failure (peer FIN, RST, or write timeout). peerConnected()'s POLLRDHUP
-    // poll misses RST/timeout, so the throw itself is the abort signal.
+  // A non-zero sink return is a body-write failure (the socket is gone) — the
+  // equivalent of the old OUTPUT_WRITE_FAIL abort signal. No C++ exception
+  // crosses Kakadu's frames; the sink callback returns a status code.
+  if (sink->write(reinterpret_cast<const uint8_t *>(buf), static_cast<size_t>(num_bytes)) != 0) {
     client_aborted = true;
     return false;
   }
@@ -116,12 +113,8 @@ bool J2kHttpStream::write(const kdu_byte *buf, int num_bytes)
 
 bool J2kHttpStream::close()
 {
-  try {
-    conobj->flush();
-  } catch (int) {
-    client_aborted = true;
-    return false;
-  }
+  // Nothing to flush: each write() already pushed its chunk to the sink, and
+  // the HTTP framing/terminator is flushed by the request handler after write().
   return true;
 }
 
@@ -894,9 +887,15 @@ static void write_essentials_box(kdu_supp::jp2_family_tgt *tgt, const std::vecto
 }
 //=============================================================================
 
-void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params)
+void SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
 {
   SIPI_ZONE_N("SipiIOJ2k::write");
+  // A streamed sink (callback/tee) writes via J2kHttpStream → SinkStream; a
+  // FilePath opens the JP2 target on the path. `filepath` is derived only for
+  // the file branch and the error messages below.
+  const bool streaming = is_streaming_sink(sink);
+  const std::string filepath = streaming ? std::string("<http response>") : std::get<FilePath>(sink).path;
+
   kdu_customize_warnings(&kdu_sipi_warn);
   kdu_customize_errors(&kdu_sipi_error);
 
@@ -907,7 +906,9 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
   if ((num_threads = kdu_get_num_processors()) < 2) num_threads = 0;
 
   // Declared outside the try so the catch below can read `http->client_aborted`
-  // to distinguish client aborts from genuine Kakadu failures.
+  // to distinguish client aborts from genuine Kakadu failures. sink_stream
+  // outlives http (J2kHttpStream holds a raw SinkStream*).
+  std::unique_ptr<SinkStream> sink_stream;
   std::unique_ptr<J2kHttpStream> http;
 
   try {
@@ -958,9 +959,9 @@ void SipiIOJ2k::write(SipiImage *img, const std::string &filepath, const SipiCom
 
     jp2_family_tgt jp2_ultimate_tgt;
 
-    if (filepath == "HTTP") {
-      shttps::Connection *conobj = img->connection();
-      http = std::make_unique<J2kHttpStream>(conobj);
+    if (streaming) {
+      sink_stream = std::make_unique<SinkStream>(sink);
+      http = std::make_unique<J2kHttpStream>(sink_stream.get());
       jp2_ultimate_tgt.open(http.get(), &membroker);
     } else {
       jp2_ultimate_tgt.open(filepath.c_str(), &membroker);

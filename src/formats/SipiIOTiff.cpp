@@ -18,8 +18,6 @@
 
 #include <cerrno>
 
-#include "shttps/transport/Connection.h"
-
 #include "logging/logger.h"
 #include "SipiError.h"
 #include "SipiImage.h"
@@ -1618,13 +1616,19 @@ void SipiIOTiff::write_basic_tags(const SipiImage &img,
   TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, img.photo);
 }
 
-void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params)
+void SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
 {
   SIPI_ZONE_N("SipiIOTiff::write");
+  // A streamed sink (callback/tee) and stdout both need an in-memory TIFF
+  // (libtiff requires a seekable target); a real FilePath is written directly.
+  // `filepath` is derived only for the file branch and the error messages.
+  const bool streaming = is_streaming_sink(sink);
+  const std::string filepath = streaming ? std::string("<http response>") : std::get<FilePath>(sink).path;
+
   TIFF *tif;
   MEMTIFF *memtif = nullptr;
   auto rowsperstrip = (uint32_t)-1;
-  if ((filepath == "stdout:") || (filepath == "HTTP")) {
+  if (streaming || (filepath == "stdout:")) {
     memtif = memTiffOpen();
     tif = TIFFClientOpen("MEMTIFF",
       "w",
@@ -1859,7 +1863,7 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
   TIFFClose(tif);
 
   if (memtif != nullptr) {
-    if (filepath == "stdout:") {
+    if (!streaming && filepath == "stdout:") {
       size_t n = 0;
 
       while (n < memtif->flen) {
@@ -1867,13 +1871,12 @@ void SipiIOTiff::write(SipiImage *img, const std::string &filepath, const SipiCo
       }
 
       fflush(stdout);
-    } else if (filepath == "HTTP") {
-      try {
-        img->connection()->sendAndFlush(memtif->data, memtif->flen);
-      } catch (int i) {
-        // Catches shttps::OUTPUT_WRITE_FAIL — by definition a socket-write
-        // failure. peerConnected()'s POLLRDHUP poll misses RST/timeout, so the
-        // throw itself is the abort signal.
+    } else if (streaming) {
+      // The whole in-memory TIFF is broadcast to the sink in one write. A
+      // non-zero return is a body-write failure (the socket is gone) — the
+      // equivalent of the old OUTPUT_WRITE_FAIL abort signal.
+      SinkStream stream{ sink };
+      if (stream.write(memtif->data, memtif->flen) != 0) {
         memTiffFree(memtif);
         throw Sipi::SipiImageClientAbortError("Client aborted HTTP response during TIFF write");
       }

@@ -15,6 +15,7 @@
 
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiSize.h"
+#include "formats/output_sink.h"
 
 #include <memory>
 
@@ -168,17 +169,15 @@ public:
 
 
   /*!
-   * Write an image for a file using the given file format implemented by the subclass
+   * Write an image using the given file format implemented by the subclass.
    *
    * \param img Pointer to SipiImage instance
-   * \param filepath Name of the image file to be written. Please note that
-   * - "-" means to write the image data to stdout
-   * - "HTTP" means to write the image data to the HTTP-server output
+   * \param sink Where the encoded bytes go (ADR-0006). A `FilePath` is written
+   * via the codec's native file/stdout writer (`"-"`/`"stdout:"` mean stdout);
+   * a `CallbackSink` or `TeeSink` is streamed through `SinkStream`.
    * \param params Compression parameters
    */
-  virtual void write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params) = 0;
-
-  void write(SipiImage *img, const std::string &filepath) { write(img, filepath, nullptr); }
+  virtual void write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params) = 0;
 };
 }// namespace Sipi
 

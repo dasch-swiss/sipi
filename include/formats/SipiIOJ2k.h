@@ -52,12 +52,13 @@ public:
   Sipi::SipiImgInfo read_shape(const std::string &filepath) override;
 
   /*!
-   * Write a TIFF image to a file, stdout or to a memory buffer
+   * Write a JPEG2000 image to the given OutputSink (file/stdout, or a streamed
+   * callback/tee per ADR-0006).
    *
    * \param *img Pointer to SipiImage instance
-   * \param filepath Name of the image file to be written.
+   * \param sink Where the encoded bytes go.
    */
-  void write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params) override;
+  void write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params) override;
 };
 }// namespace Sipi
 

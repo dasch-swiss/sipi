@@ -1988,25 +1988,46 @@ static void serve_iiif(Connection &conn_obj,
     return;
   }
 
-  img.connection(&conn_obj);
   conn_obj.header("Cache-Control", "must-revalidate, post-check=0, pre-check=0");
   std::string cachefile;
 
   bool skip_cache = false;
 
+  // Body-write callback bridging the connection to the OutputSink seam — the
+  // one place shttps meets the format handlers in the IIIF write path. An
+  // shttps throw (OUTPUT_WRITE_FAIL / shttps::Error) must not cross into the
+  // codec (the Phase B/C FFI no-throw rule), so it becomes a non-zero return.
+  auto socket_write = [](void *ctx, const uint8_t *data, size_t len) -> int {
+    try {
+      static_cast<Connection *>(ctx)->sendAndFlush(data, len);
+      return 0;
+    } catch (...) {
+      return 1;
+    }
+  };
+
   try {
-    if (cache != nullptr) {
-      if (!skip_cache) {
-        try {
-          //!> open the cache file to write into.
-          cachefile = cache->getNewCacheFileName();
-          conn_obj.openCacheFile(cachefile);
-        } catch (const shttps::Error &err) {
-          send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
-          return;
-        }
+    if (cache != nullptr && !skip_cache) {
+      //!> name the cache file to write into.
+      cachefile = cache->getNewCacheFileName();
+      // Preserve openCacheFile()'s writability check: a cache file we cannot
+      // create is a 500. The FilePath sink itself treats writes as best-effort.
+      std::ofstream cache_probe(cachefile, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
+      if (cache_probe.fail()) {
+        send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Could not open cache file!");
+        return;
       }
     }
+
+    // The encoder writes once; the bytes are broadcast to the socket and, when
+    // caching, the cache file. This is the tee shttps::Connection performed via
+    // openCacheFile + sendAndFlush, moved into the write loop (ADR-0007).
+    const Sipi::OutputSink sink =
+      (cache != nullptr && !skip_cache)
+        ? Sipi::OutputSink{ Sipi::TeeSink{
+            { Sipi::CallbackSink{ socket_write, &conn_obj }, Sipi::FilePath{ cachefile } } } }
+        : Sipi::OutputSink{ Sipi::CallbackSink{ socket_write, &conn_obj } };
+
     switch (quality_format.format()) {
     case SipiQualityFormat::JPG: {
       conn_obj.status(Connection::OK);
@@ -2014,7 +2035,7 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.header("Content-Type", "image/jpeg");// set the header (mimetype)
       conn_obj.setChunkedTransfer();
       Sipi::SipiCompressionParams qp = { { JPEG_QUALITY, std::to_string(server->jpeg_quality()) } };
-      if (not_head_request) img.write("jpg", "HTTP", &qp);
+      if (not_head_request) img.write("jpg", sink, &qp);
       break;
     }
     case SipiQualityFormat::JP2: {
@@ -2022,7 +2043,7 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.header("Link", canonical_header);
       conn_obj.header("Content-Type", "image/jp2");// set the header (mimetype)
       conn_obj.setChunkedTransfer();
-      if (not_head_request) img.write("jpx", "HTTP");
+      if (not_head_request) img.write("jpx", sink);
       break;
     }
     case SipiQualityFormat::TIF: {
@@ -2031,7 +2052,7 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.header("Content-Type", "image/tiff");// set the header (mimetype)
       // no chunked transfer needed...
 
-      if (not_head_request) img.write("tif", "HTTP");
+      if (not_head_request) img.write("tif", sink);
       break;
     }
     case SipiQualityFormat::PNG: {
@@ -2040,7 +2061,7 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.header("Content-Type", "image/png");// set the header (mimetype)
       conn_obj.setChunkedTransfer();
 
-      if (not_head_request) img.write("png", "HTTP");
+      if (not_head_request) img.write("png", sink);
       break;
     }
     default: {
@@ -2059,11 +2080,12 @@ static void serve_iiif(Connection &conn_obj,
       conn_obj.flush();
     }
 
-    if (conn_obj.isCacheFileOpen()) {
-      conn_obj.closeCacheFile();
+    if (cache != nullptr) {
+      // The cache file was written by the FilePath sink and closed when
+      // SipiImage::write() returned (the SinkStream's ofstream destructs there).
 
       // Post-write check: if converted file exceeds cache_size, remove and skip
-      if (!skip_cache && cache != nullptr) {
+      if (!skip_cache) {
         long long max_cs = cache->getMaxCacheSize();
         if (max_cs > 0) {
           struct stat cache_stat;
@@ -2083,7 +2105,6 @@ static void serve_iiif(Connection &conn_obj,
     }
   } catch (Sipi::SipiError &err) {
     if (cache != nullptr) {
-      conn_obj.closeCacheFile();
       unlink(cachefile.c_str());
     }
     ImageContext sentry_ctx;
@@ -2099,7 +2120,6 @@ static void serve_iiif(Connection &conn_obj,
     // Client closed the socket mid-response (matches Traefik HTTP 499).
     // Not a server error: no Sentry capture, no response (the peer is gone).
     if (cache != nullptr) {
-      conn_obj.closeCacheFile();
       unlink(cachefile.c_str());
     }
     log_info("Client aborted HTTP response for %s", uri.c_str());
@@ -2107,7 +2127,6 @@ static void serve_iiif(Connection &conn_obj,
     return;
   } catch (Sipi::SipiImageError &err) {
     if (cache != nullptr) {
-      conn_obj.closeCacheFile();
       unlink(cachefile.c_str());
     }
     ImageContext sentry_ctx;

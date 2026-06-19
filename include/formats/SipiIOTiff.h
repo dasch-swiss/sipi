@@ -103,16 +103,15 @@ public:
   /*!
    * Write a TIFF image to a file, stdout or to a memory buffer
    *
-   * If the filepath is "-", the TIFF file is built in an internal memory buffer
-   * and after finished transfered to stdout. This is necessary because libtiff
-   * makes extensive use of "lseek" which is not available on stdout!
+   * For a streamed sink (callback/tee) or stdout the TIFF is built in an
+   * internal memory buffer first, because libtiff makes extensive use of
+   * "lseek" which is not available on a non-seekable destination.
    *
    * \param *img Pointer to SipiImage instance
-   * \param filepath Name of the image file to be written. Please note that
-   * - "-" means to write the image data to stdout
-   * - "HTTP" means to write the image data to the HTTP-server output
+   * \param sink Where the encoded bytes go (ADR-0006): a FilePath (file or
+   * stdout via "-"/"stdout:"), or a streamed CallbackSink / TeeSink.
    */
-  void write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params) override;
+  void write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params) override;
 };
 }// namespace Sipi
 

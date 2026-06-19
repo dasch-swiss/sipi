@@ -17,7 +17,6 @@
 
 #include <tiff.h>
 
-#include "shttps/transport/Connection.h"
 #include "shttps/util/makeunique.h"
 
 #include "logging/logger.h"
@@ -301,13 +300,13 @@ static void jpeg_file_src(struct jpeg_decompress_struct *cinfo, int file_id)
  */
 struct HtmlBuffer
 {
-  explicit HtmlBuffer(shttps::Connection *conn, size_t buflen_p = 65536)
-    : buffer(std::make_unique<JOCTET[]>(buflen_p)), buflen(buflen_p), conobj(conn)
+  explicit HtmlBuffer(SinkStream *sink_p, size_t buflen_p = 65536)
+    : buffer(std::make_unique<JOCTET[]>(buflen_p)), buflen(buflen_p), sink(sink_p)
   {}
 
   std::unique_ptr<JOCTET[]> buffer;
   size_t buflen;
-  shttps::Connection *conobj;
+  SinkStream *sink;
   bool client_aborted{ false };
 };
 
@@ -329,27 +328,18 @@ static void init_html_destination(j_compress_ptr cinfo)
 static boolean empty_html_buffer(j_compress_ptr cinfo)
 {
   auto *html_buffer = static_cast<HtmlBuffer *>(cinfo->client_data);
-  std::string err_msg;
-  try {
-    html_buffer->conobj->sendAndFlush(html_buffer->buffer.get(), html_buffer->buflen);
-    cinfo->dest->free_in_buffer = html_buffer->buflen;
-    cinfo->dest->next_output_byte = html_buffer->buffer.get();
-    return static_cast<boolean>(true);
-  } catch (const std::exception &e) {
-    // shttps::Error and other std::exception subclasses → genuine error path.
-    err_msg = e.what();
-  } catch (...) {
-    // sendAndFlush throws the bare shttps::OUTPUT_WRITE_FAIL enum — not derived
-    // from std::exception, so it reaches this branch. The throw itself is the
-    // abort signal: every OUTPUT_WRITE_FAIL means the underlying socket write
-    // failed (peer FIN, RST, write timeout). peerConnected() polls POLLRDHUP
-    // and misses RST/timeout, so we don't consult it.
-    err_msg = "shttps::OUTPUT_WRITE_FAIL";
+  // A non-zero return means the body sink (the HTTP socket) failed — the
+  // equivalent of the old OUTPUT_WRITE_FAIL: the client is gone. No C++
+  // exception crosses libjpeg's C frames (the sink callback returns a code).
+  if (html_buffer->sink->write(html_buffer->buffer.get(), html_buffer->buflen) != 0) {
     html_buffer->client_aborted = true;
+    log_err("JPEG HTTP write failed: sink write error");
+    ERREXIT(cinfo, JERR_FILE_WRITE);// triggers jpegErrorExit → longjmp
+    return FALSE;// unreachable
   }
-  log_err("JPEG HTTP write failed: %s", err_msg.c_str());
-  ERREXIT(cinfo, JERR_FILE_WRITE);  // triggers jpegErrorExit → longjmp
-  return FALSE;  // unreachable
+  cinfo->dest->free_in_buffer = html_buffer->buflen;
+  cinfo->dest->next_output_byte = html_buffer->buffer.get();
+  return static_cast<boolean>(true);
 }
 
 //=============================================================================
@@ -361,21 +351,13 @@ static void term_html_destination(j_compress_ptr cinfo)
 {
   auto *html_buffer = static_cast<HtmlBuffer *>(cinfo->client_data);
   const size_t nbytes = cinfo->dest->next_output_byte - html_buffer->buffer.get();
-  std::string err_msg;
-  try {
-    html_buffer->conobj->sendAndFlush(html_buffer->buffer.get(), nbytes);
-    return;
-  } catch (const std::exception &e) {
-    err_msg = e.what();
-  } catch (...) {
-    // See empty_html_buffer for the rationale: OUTPUT_WRITE_FAIL is itself
-    // the abort signal; no peerConnected() check needed.
-    err_msg = "shttps::OUTPUT_WRITE_FAIL";
+  if (html_buffer->sink->write(html_buffer->buffer.get(), nbytes) != 0) {
+    // See empty_html_buffer: a non-zero sink return is the abort signal.
     html_buffer->client_aborted = true;
+    log_err("JPEG HTTP write (term) failed: sink write error");
+    ERREXIT(cinfo, JERR_FILE_WRITE);
+    // unreachable
   }
-  log_err("JPEG HTTP write (term) failed: %s", err_msg.c_str());
-  ERREXIT(cinfo, JERR_FILE_WRITE);
-  // unreachable
 }
 
 //=============================================================================
@@ -1038,9 +1020,15 @@ SipiImgInfo SipiIOJpeg::read_shape(const std::string &filepath)
 //============================================================================
 
 
-void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCompressionParams *params)
+void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
 {
   SIPI_ZONE_N("SipiIOJpeg::write");
+  // A streamed sink (callback/tee) writes to the response stream via SinkStream;
+  // a FilePath uses libjpeg's native file/stdout writer. `filepath` is derived
+  // only for the file branch and the error messages below.
+  const bool streaming = is_streaming_sink(sink);
+  const std::string filepath = streaming ? std::string("<http response>") : std::get<FilePath>(sink).path;
+
   int quality = 80;
   if ((params != nullptr) && (!params->empty())) {
     try {
@@ -1086,11 +1074,11 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
   // setjmp so destructors are on the normal C++ unwind path when we throw
   // from the setjmp handler (longjmp would skip destructors of objects
   // constructed *between* setjmp and longjmp — these live outside that window).
+  std::unique_ptr<SinkStream> sink_stream;
   std::unique_ptr<HtmlBuffer> html_buffer;
   std::unique_ptr<jpeg_destination_mgr> destmgr;
   JSAMPROW row_pointer[1];
   int row_stride;
-  bool is_http = (filepath == "HTTP");
 
   jpeg_create_compress(&cinfo);  // errors → longjmp → setjmp handler below
 
@@ -1115,8 +1103,9 @@ void SipiIOJpeg::write(SipiImage *img, const std::string &filepath, const SipiCo
     throw SipiImageError("JPEG write failed: " + std::string(jerr.error_message));
   }
 
-  if (is_http) {
-    html_buffer = std::make_unique<HtmlBuffer>(img->connection());
+  if (streaming) {
+    sink_stream = std::make_unique<SinkStream>(sink);
+    html_buffer = std::make_unique<HtmlBuffer>(sink_stream.get());
     destmgr = std::make_unique<jpeg_destination_mgr>();
     jpeg_html_dest(&cinfo, html_buffer.get(), destmgr.get());
   } else {
