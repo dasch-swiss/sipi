@@ -17,7 +17,7 @@
 
 #include "../SipiError.h"
 #include "SipiSize.h"
-#include "shttps/Parsing.h"
+#include "shttps/util/Parsing.h"
 
 
 namespace Sipi {

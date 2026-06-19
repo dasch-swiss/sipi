@@ -24,7 +24,7 @@
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiRotation.h"
 #include "iiifparser/SipiSize.h"
-#include "shttps/Server.h"
+#include "shttps/transport/Server.h"
 
 #include "SipiIO.h"
 

@@ -14,7 +14,7 @@
 #include <string_view>
 #include <vector>
 
-#include "shttps/Hash.h"
+#include "shttps/util/Hash.h"
 
 namespace Sipi {
 

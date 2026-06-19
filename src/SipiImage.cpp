@@ -17,8 +17,8 @@
 
 #include "lcms2.h"
 
-#include "shttps/Parsing.h"
-#include "shttps/makeunique.h"
+#include "shttps/util/Parsing.h"
+#include "shttps/util/makeunique.h"
 
 #include "logging/logger.h"
 #include "SipiImage.h"
@@ -29,8 +29,8 @@
 #include "formats/SipiIOTiff.h"
 #include "observability/metrics.h"
 #include "observability/profiling.h"
-#include "shttps/Global.h"
-#include "shttps/Hash.h"
+#include "shttps/util/Global.h"
+#include "shttps/util/Hash.h"
 
 namespace Sipi {
 

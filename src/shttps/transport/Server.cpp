@@ -32,11 +32,11 @@
 
 
 #include "logging/logger.h"
-#include "LuaServer.h"
-#include "Parsing.h"
+#include "shttps/lua/LuaServer.h"
+#include "shttps/util/Parsing.h"
 #include "Server.h"
 #include "SockStream.h"
-#include "makeunique.h"
+#include "shttps/util/makeunique.h"
 
 // Tracy thread naming. shttps sits below //src/observability in the dependency
 // graph, so it uses the upstream header directly rather than the first-party

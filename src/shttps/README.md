@@ -84,7 +84,7 @@ Per ADR-0013, the re-homing is no longer a *Rust precondition* — the whole cod
 - The handler reads request data from the `shttps::Connection`, runs SIPI's **Preflight script** through the request-scoped `shttps::LuaServer`, and uses the resulting **Permission** to decide what to serve.
 - SIPI's **Route handler** (Lua) is wired through a generic `RequestHandler` that loads the script into the same `LuaServer`.
 - Response bytes (cache hit, decoded image, streamed bitstream) are written back through the same `Connection`.
-- Telemetry crosses the boundary via the `ConnectionMetrics` strategy interface owned by this module (`shttps/ConnectionMetrics.h` + `Server::setMetrics`). SIPI installs `Sipi::observability::ConnectionMetricsAdapter` at startup, which bridges connection lifecycle events to `Sipi::observability::Metrics`. shttps does not name any `Sipi::` type.
+- Telemetry crosses the boundary via the `ConnectionMetrics` strategy interface owned by this module (`shttps/transport/ConnectionMetrics.h` + `Server::setMetrics`). SIPI installs `Sipi::observability::ConnectionMetricsAdapter` at startup, which bridges connection lifecycle events to `Sipi::observability::Metrics`. shttps does not name any `Sipi::` type.
 
 ## Naming gotchas
 

@@ -6,7 +6,7 @@
 #ifndef SIPI_OBSERVABILITY_CONNECTION_METRICS_ADAPTER_H
 #define SIPI_OBSERVABILITY_CONNECTION_METRICS_ADAPTER_H
 
-#include "shttps/ConnectionMetrics.h"
+#include "shttps/transport/ConnectionMetrics.h"
 
 namespace Sipi::observability {
 

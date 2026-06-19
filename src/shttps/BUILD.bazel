@@ -22,49 +22,47 @@ is the active enforcement until then.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
-load("//bazel:magic_database.bzl", "magic_mgc_header")
 
 package(default_visibility = [
     "//src:__subpackages__",
     "//src/shttps:__subpackages__",
 ])
 
-# Embeds libmagic's `magic.mgc` database as a C array consumed by
-# `shttps/Parsing.cpp` (`magic_load_buffers(magic_mgc, magic_mgc_len, …)`).
-# The BCR libmagic module exposes the compiled database directly as
-# `@libmagic//:magic.mgc` (output of the upstream `gen_magic` genrule).
-magic_mgc_header(
-    name = "magic_mgc_h",
-    mgc = "@libmagic//:magic.mgc",
-    out = "generated/magic_mgc.h",
-)
-
 # ── //src/shttps:shttps_headers ────────────────────────────────────────────────
-# Header-only surface of shttps. Split out so `//fuzz/handlers:fuzz_subset`
-# can compile its 5-cpp slice with the full shttps include graph available
-# (sibling-relative `#include "Server.h"` chains pull LuaServer.h, Global.h,
-# etc.) without linking shttps's compiled archive — only the four
-# explicitly-listed cpps end up in the fuzz binary.
+# Header-only surface of the transport + lua modules. Split out so
+# `//fuzz/handlers:fuzz_subset` can compile its transport-cpp slice with the
+# full include graph available (`#include "Server.h"` chains pull
+# LuaServer.h, ConnectionMetrics.h, etc.) without linking shttps's compiled
+# archive — only the explicitly-listed cpps end up in the fuzz binary.
 #
-# `includes = ["."]` + `include_prefix = "shttps"` produce the same virtual-
-# include layout the original `shttps` cc_library exposed: consumers reach
-# the headers as `#include "shttps/X.h"` (prefix form) AND sibling-relative
-# `#include "X.h"` keeps working from inside shttps/*.cpp because Clang
-# searches the source file's directory by default for quoted-form includes.
+# `includes = [".", "transport", "lua"]` + `include_prefix = "shttps"` give
+# three include forms: external consumers reach the headers as
+# `#include "shttps/transport/X.h"` / `#include "shttps/lua/X.h"` (prefix
+# form); same-directory siblings keep working as `#include "X.h"` (the
+# `transport`/`lua` entries put each module dir on the quote path); and the
+# cross-module edges between the two dirs are written in the explicit
+# `shttps/transport/…` / `shttps/lua/…` form. The generic utilities live in
+# `//src/shttps/util`, reached as `#include "shttps/util/X.h"`, so util is a
+# direct dep.
 cc_library(
     name = "shttps_headers",
     hdrs = glob([
-        "*.h",
-    ]) + [":magic_mgc_h"],
-    includes = ["."],
+        "transport/*.h",
+        "lua/*.h",
+    ]),
+    includes = [
+        ".",
+        "transport",
+        "lua",
+    ],
     include_prefix = "shttps",
     deps = [
         # Generic levelled-logging primitive; visibility-allowlisted for
         # this package as a shared support library.
         "//src/logging:logging",
+        "//src/shttps/util",
         "@curl",
         "@jansson//:jansson",
-        "@libmagic//:lib",
         "@lua",
         "@openssl//:crypto",
         "@openssl//:ssl",
@@ -77,15 +75,21 @@ cc_library(
     name = "shttps",
     srcs = glob(
         [
-            "*.cpp",
-            "*.c",
+            "transport/*.cpp",
+            "lua/*.cpp",
         ],
         exclude = [
-            "Shttp.cpp",  # standalone test driver, not part of the library
+            "transport/Shttp.cpp",  # standalone test driver, not part of the library
         ],
     ),
     deps = [
         ":shttps_headers",
+        # Generic SIPI-domain utilities; the transport/lua sources here
+        # `#include "shttps/util/X.h"`.
+        "//src/shttps/util",
+        # JWT verify/sign; LuaServer.cpp's `server.jwt` bindings
+        # `#include "shttps/jwt/jwt.h"`.
+        "//src/shttps/jwt",
         # sole — r-lyeh's single-header UUID lib; LuaServer.cpp's server.uuid*
         # Lua bindings (incl. the DSP base62 IRI scheme).
         "@sole//:sole",
@@ -102,13 +106,15 @@ cc_library(
 # (.bazelrc `build:fuzz` block).
 #
 # Lives in `shttps/BUILD.bazel` (not `fuzz/handlers/BUILD.bazel`) because
-# four of its five sources are native to this package — keeping the
-# cc_library here avoids a four-way `exports_files` cross-package reach.
-# Same precedent as `bazel/magic_database.bzl`: build-graph machinery lives
-# where the inputs live. The single cross-package source — //src's
-# `iiif_handler.cpp` — is reached via `exports_files` in `src/BUILD.bazel`,
-# with its companion header surfaced via `//src:iiif_handler_hdrs` to make
-# the include resolution explicit.
+# three of its sources are native to this package — keeping the cc_library
+# here avoids a cross-package `exports_files` reach for each. Same precedent
+# as `bazel/magic_database.bzl`: build-graph machinery lives where the
+# inputs live. The cross-package source — //src's `iiif_handler.cpp` — is
+# reached via `exports_files` in `src/BUILD.bazel`, with its companion
+# header surfaced via `//src:iiif_handler_hdrs`. `Error`'s exception types
+# are referenced by the compiled cpps; `Error` lives in `//src/shttps/util`,
+# whose archive supplies both its header and object code under the fuzz
+# instrumentation.
 #
 # Linking the full `:shttps` archive under fuzz flags would pull Lua VM /
 # prometheus / sentry symbols the harness never exercises and inflate the
@@ -118,16 +124,16 @@ cc_library(
 cc_library(
     name = "fuzz_subset",
     srcs = [
-        "ChunkReader.cpp",
-        "Connection.cpp",
-        "Error.cpp",
-        "SockStream.cpp",
+        "transport/ChunkReader.cpp",
+        "transport/Connection.cpp",
+        "transport/SockStream.cpp",
         "//src:handlers/iiif_handler.cpp",
     ],
     target_compatible_with = ["//tools/fuzz:fuzz_enabled"],
     visibility = ["//fuzz/handlers:__pkg__"],
     deps = [
         ":shttps_headers",
+        "//src/shttps/util",
         "@openssl//:crypto",
         "@openssl//:ssl",
         "//src:iiif_handler_hdrs",

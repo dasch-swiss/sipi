@@ -8,7 +8,7 @@
 
 #include "../SipiError.h"
 #include "SipiIdentifier.h"
-#include "shttps/Connection.h"
+#include "shttps/transport/Connection.h"
 
 namespace Sipi {
 SipiIdentifier::SipiIdentifier(const std::string &str)

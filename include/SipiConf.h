@@ -10,8 +10,8 @@
 #ifndef __sipi_conf_h
 #define __sipi_conf_h
 
-#include "shttps/Connection.h"
-#include "shttps/LuaServer.h"
+#include "shttps/transport/Connection.h"
+#include "shttps/lua/LuaServer.h"
 
 namespace Sipi {
 

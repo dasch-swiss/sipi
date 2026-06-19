@@ -1,0 +1,52 @@
+"""shttps/util — generic SIPI-domain utilities (parsing, hashing, errors).
+
+Generic helpers — MIME/string parsing, file hashing, the shttps error type
+— that are SIPI-domain rather than HTTP transport, kept as a leaf package
+so the boundary is a build-graph invariant. The only external dependencies
+are OpenSSL (Hash's EVP digest context) and libmagic (Parsing's MIME
+sniffing plus the embedded `magic.mgc` database).
+
+`strip_include_prefix = "/src"` exposes the headers at the path-prefixed
+form `#include "shttps/util/Parsing.h"` (ADR-0003) self-sufficiently — no
+reliance on a consumer's `includes = ["."]`. Siblings within the package
+use the bare quote form (`#include "Error.h"`).
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//bazel:magic_database.bzl", "magic_mgc_header")
+
+package(default_visibility = ["//src:__subpackages__"])
+
+# Embeds libmagic's `magic.mgc` database as a C array consumed by
+# `Parsing.cpp` (`magic_load_buffers(magic_mgc, magic_mgc_len, …)`) so SIPI
+# binaries ship the magic database in-binary. Reached as
+# `#include "shttps/util/generated/magic_mgc.h"` via strip_include_prefix.
+magic_mgc_header(
+    name = "magic_mgc_h",
+    mgc = "@libmagic//:magic.mgc",
+    out = "generated/magic_mgc.h",
+)
+
+cc_library(
+    name = "util",
+    srcs = [
+        "Error.cpp",
+        "Hash.cpp",
+        "Parsing.cpp",
+    ],
+    hdrs = [
+        "Error.h",
+        "Global.h",
+        "Hash.h",
+        "Parsing.h",
+        "makeunique.h",
+        ":magic_mgc_h",
+    ],
+    strip_include_prefix = "/src",
+    deps = [
+        # Hash.h's EVP_MD_CTX digest context (SHA via OpenSSL EVP).
+        "@openssl//:crypto",
+        # Parsing's libmagic MIME sniffing + the embedded magic database.
+        "@libmagic//:lib",
+    ],
+)

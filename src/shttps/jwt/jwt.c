@@ -28,7 +28,7 @@
 
 #include <jansson.h>
 
-#include "shttps/jwt.h"
+#include "jwt.h"
 
 // #if !defined(USE_CMAKE)
 // #include "config.h"

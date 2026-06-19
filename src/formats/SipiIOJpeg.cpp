@@ -17,8 +17,8 @@
 
 #include <tiff.h>
 
-#include "shttps/Connection.h"
-#include "shttps/makeunique.h"
+#include "shttps/transport/Connection.h"
+#include "shttps/util/makeunique.h"
 
 #include "logging/logger.h"
 #include "SipiCommon.h"

@@ -45,7 +45,7 @@
 #include "cli/commands/convert_service_file.h"
 #include "SipiIOTiff.h"
 #include "metadata/essentials.h"
-#include "shttps/Hash.h"
+#include "shttps/util/Hash.h"
 #include "test_paths.h"
 
 namespace {

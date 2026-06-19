@@ -15,8 +15,8 @@
 #include <string>
 // #include <unordered_map>
 
-#include "shttps/Connection.h"
-//#include "shttps/Hash.h"
+#include "shttps/transport/Connection.h"
+//#include "shttps/util/Hash.h"
 
 #include "SipiIO.h"
 // #include "iiifparser/SipiRegion.h"

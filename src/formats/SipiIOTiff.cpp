@@ -18,7 +18,7 @@
 
 #include <cerrno>
 
-#include "shttps/Connection.h"
+#include "shttps/transport/Connection.h"
 
 #include "logging/logger.h"
 #include "SipiError.h"
@@ -29,7 +29,7 @@
 #include "observability/profiling.h"
 
 
-#include "shttps/Global.h"
+#include "shttps/util/Global.h"
 
 #define TIFF_GET_FIELD(file, tag, var, default)                      \
   {                                                                  \

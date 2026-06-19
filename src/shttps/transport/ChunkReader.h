@@ -13,7 +13,7 @@
 #include <iostream>
 #include <vector>
 
-#include "Error.h"
+#include "shttps/util/Error.h"
 
 namespace shttps {
 

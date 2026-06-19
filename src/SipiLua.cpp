@@ -7,9 +7,9 @@
 #include <iostream>
 #include <set>
 
-#include "shttps/Connection.h"
-#include "shttps/Error.h"
-#include "shttps/Parsing.h"
+#include "shttps/transport/Connection.h"
+#include "shttps/util/Error.h"
+#include "shttps/util/Parsing.h"
 
 #include "SipiCache.h"
 #include "SipiFilenameHash.h"

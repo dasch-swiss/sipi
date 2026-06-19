@@ -8,8 +8,8 @@
 #include <chrono>
 #include <thread>
 
-#include "shttps/SocketControl.h"
-#include "shttps/ThreadControl.h"
+#include "shttps/transport/SocketControl.h"
+#include "shttps/transport/ThreadControl.h"
 
 namespace {
 

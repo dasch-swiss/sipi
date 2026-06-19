@@ -32,9 +32,9 @@
 #include "kdu_stripe_compressor.h"
 #include "kdu_stripe_decompressor.h"
 
-#include "shttps/Connection.h"
-#include "shttps/Global.h"
-#include "shttps/makeunique.h"
+#include "shttps/transport/Connection.h"
+#include "shttps/util/Global.h"
+#include "shttps/util/makeunique.h"
 #include "observability/metrics.h"
 
 #include "SipiError.h"

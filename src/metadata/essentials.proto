@@ -18,7 +18,7 @@
 //     do not allocate in that range.
 //
 // HashType integer mapping is a cross-context contract with
-// `shttps::HashType` declaration order. See `shttps/Hash.h` for the
+// `shttps::HashType` declaration order. See `shttps/util/Hash.h` for the
 // reverse-pointer comment and `internal/protobuf_codec.cpp` for the
 // `static_assert`s that lock the mapping.
 
