@@ -1,19 +1,17 @@
 """Sipi public + private headers as a header-only `cc_library`.
 
-The `include/` directory holds Sipi's headers in a flat-ish layout:
-
-  include/<Module>.h               — top-level public API headers
-  include/<subsystem>/<Module>.h   — per-subsystem (formats, iiifparser, …)
-
-Consumers reference both forms via sibling `#include "SipiCache.h"` (resolved
-through `includes = ["."]` propagation) and prefixed
-`#include "formats/SipiIOTiff.h"`.
+The `include/` directory holds the server-side / config headers that are NOT
+owned by a dedicated module: the Lua config surface (`SipiConf.h`,
+`SipiLua.h`), the offline report (`SipiReport.h`), the embedded favicon, the
+generated-config templates, and the ICC profile binaries.
 
 Per-module packages NOT bundled here (consumers depend on the dedicated
 target directly):
 
-  `metadata/`  → `//src/metadata:metadata`
-  Logger       → `//src/logging:logging`
+  `//src:engine`         — image engine + iiifparser + cache headers, now
+                           co-located with their sources (ADR-0003)
+  `//src/metadata`       — EXIF/IPTC/XMP/ICC wrappers
+  `//src/logging`        — Logger
 
 Cross-package consumers:
   //src:sipi_lib       — primary consumer
@@ -30,21 +28,12 @@ cc_library(
         [
             "*.h",
             "*.hpp",
-            "formats/*.h",
-            "iiifparser/*.h",
         ],
-        # Future-proof against new subdirs (e.g. include/handlers/) without
-        # tripping the empty-glob lint when a subdir is empty or absent.
+        # Future-proof against new subdirs without tripping the empty-glob
+        # lint when a subdir is empty or absent.
         allow_empty = True,
     ),
-    # Each per-subsystem header dir is on the include path so SIPI's mix of
-    # sibling-relative (`#include "SipiDecodeDims.h"`) and prefixed
-    # (`#include "formats/SipiIOTiff.h"`) include forms both resolve.
-    includes = [
-        ".",
-        "formats",
-        "iiifparser",
-    ],
+    includes = ["."],
 )
 
 # Individual file labels — used where a target needs one specific header

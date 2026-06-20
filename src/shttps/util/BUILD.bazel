@@ -33,12 +33,14 @@ cc_library(
         "Error.cpp",
         "Hash.cpp",
         "Parsing.cpp",
+        "UrlDecode.cpp",
     ],
     hdrs = [
         "Error.h",
         "Global.h",
         "Hash.h",
         "Parsing.h",
+        "UrlDecode.h",
         "makeunique.h",
         ":magic_mgc_h",
     ],
@@ -51,7 +53,7 @@ cc_library(
     ],
 )
 
-# Co-located unit tests (ADR-0003): Hash + Parsing/urldecode. Each depends
+# Co-located unit tests (ADR-0003): Hash, Parsing, and urldecode. Each depends
 # only on the util library, so a forbidden cross-module include shows up as
 # a build error rather than slipping through a `:sipi_lib`-wide dep.
 cc_test(
@@ -59,6 +61,7 @@ cc_test(
     srcs = [
         "hash_test.cpp",
         "parsing_test.cpp",
+        "urldecode_test.cpp",
     ],
     deps = [
         ":util",

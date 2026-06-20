@@ -28,6 +28,7 @@
 #include "shttps/transport/Connection.h"
 #include "shttps/lua/LuaServer.h"
 #include "shttps/util/Parsing.h"
+#include "shttps/util/UrlDecode.h"
 
 #include "SipiError.h"
 #include "SipiImage.h"
@@ -61,7 +62,6 @@ namespace Sipi {
 // this TU so the existing call-site shape (`capture_image_error`, `ImageContext`,
 // etc.) keeps working without per-call qualification.
 using observability::capture_image_error;
-using observability::format_type_to_string;
 using observability::get_file_size;
 using observability::ImageContext;
 using observability::Metrics;

@@ -513,7 +513,7 @@ void SipiImage::convertToIcc(const Icc &target_icc_p, int new_bps)
   }
 
   cmsHTRANSFORM hTransform;
-  in_formatter = icc->iccFormatter(this);
+  in_formatter = icc->iccFormatter(bps, nc, photo);
   out_formatter = target_icc_p.iccFormatter(new_bps);
 
   hTransform = cmsCreateTransform(

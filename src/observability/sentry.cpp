@@ -18,26 +18,16 @@ size_t get_file_size(const std::string &path)
   return 0;
 }
 
-std::string format_type_to_string(SipiQualityFormat::FormatType f)
-{
-  switch (f) {
-  case SipiQualityFormat::JPG: return "jpg";
-  case SipiQualityFormat::TIF: return "tif";
-  case SipiQualityFormat::PNG: return "png";
-  case SipiQualityFormat::JP2: return "jp2";
-  case SipiQualityFormat::GIF: return "gif";
-  case SipiQualityFormat::PDF: return "pdf";
-  case SipiQualityFormat::WEBP: return "webp";
-  default: return "unsupported";
-  }
-}
+// `format_type_to_string` lives with the format enum in
+// src/iiifparser/SipiQualityFormat.{h,cpp}: this header (and so this package)
+// no longer has to depend on the iiifparser type just to stringify a format.
 
-// `populate_from_image` lives in src/populate_from_image.cpp under
-// //src:sipi_lib because it dereferences `Sipi::SipiImage`, which currently
-// belongs to that target. Co-locating it here would force //src/observability
-// to depend on //src:sipi_lib, creating a cycle (sipi_lib already depends on
-// observability for the rest of this surface). Move the implementation back
-// into this TU once SipiImage gets its own package (DEV-6388 / DEV-6395).
+// `populate_from_image` lives in src/populate_from_image.cpp under //src:engine
+// because it dereferences `Sipi::SipiImage`, which belongs to that target.
+// Co-locating it here would force //src/observability to depend on the engine,
+// creating a cycle (the engine already depends on observability for this
+// surface). Move the implementation back into this TU once SipiImage gets its
+// own package (DEV-6388 / DEV-6395).
 
 void capture_image_error(const std::string &error_message,
   const std::string &phase,

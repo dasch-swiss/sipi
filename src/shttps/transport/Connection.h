@@ -61,17 +61,6 @@ extern std::unordered_map<std::string, std::string>
   parse_header_options(const std::string &options, bool form_encoded = false, char sep = ';');
 
 /*!
- * urldecode is used to decode an according to the HTTP-standard urlencoded string
- *
- * \param[in] src Encoded string
- * \param[in] form_encoded Boolean which must be true if the string has been part
- * of a form
- *
- * \returns Decoded string
- */
-extern std::string urldecode(const std::string &src, bool form_encoded = false);
-
-/*!
  * Encode a string (value) acording the the rules of urlencoded strings
  *
  * \param[in] value String to be encoded

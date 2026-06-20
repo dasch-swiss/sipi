@@ -18,7 +18,6 @@
 #include "generated/Rec709-Rec1886_icc.h"
 #include "generated/USWebCoatedSWOP_icc.h"
 
-#include "SipiImage.h"
 #include "shttps/util/makeunique.h"
 
 namespace Sipi {
@@ -290,24 +289,24 @@ unsigned int Icc::iccFormatter(int bps) const
 }
 
 
-unsigned int Icc::iccFormatter(SipiImage *img) const
+unsigned int Icc::iccFormatter(int bps, int nc, PhotometricInterpretation photo) const
 {
   cmsSetLogErrorHandler(icc_error_logger);
   cmsUInt32Number format = 0;
-  switch (img->bps) {
+  switch (bps) {
   case 8: {
-    format = BYTES_SH(1) | CHANNELS_SH(img->nc) | PLANAR_SH(0);
+    format = BYTES_SH(1) | CHANNELS_SH(nc) | PLANAR_SH(0);
     break;
   }
   case 16: {
-    format = BYTES_SH(2) | CHANNELS_SH(img->nc) | PLANAR_SH(0);
+    format = BYTES_SH(2) | CHANNELS_SH(nc) | PLANAR_SH(0);
     break;
   }
   default: {
-    throw SipiError("Unsupported bits/sample (" + std::to_string(img->bps) + ")");
+    throw SipiError("Unsupported bits/sample (" + std::to_string(bps) + ")");
   }
   }
-  switch (img->photo) {
+  switch (photo) {
   case PhotometricInterpretation::MINISWHITE: {
     format |= COLORSPACE_SH(PT_GRAY);
     break;

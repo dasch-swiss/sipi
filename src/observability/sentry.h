@@ -10,8 +10,6 @@
 
 #include <sentry.h>
 
-#include "iiifparser/SipiQualityFormat.h"
-
 namespace Sipi {
 class SipiImage;
 }// namespace Sipi
@@ -51,11 +49,6 @@ struct ImageContext
  * \return File size in bytes, or 0 on failure
  */
 size_t get_file_size(const std::string &path);
-
-/*!
- * Convert a SipiQualityFormat::FormatType enum value to a human-readable string.
- */
-std::string format_type_to_string(SipiQualityFormat::FormatType f);
 
 /*!
  * Populate an ImageContext from a SipiImage.

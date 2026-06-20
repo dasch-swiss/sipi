@@ -21,6 +21,7 @@
 #include "metadata/exif.h"
 #include "metadata/icc.h"
 #include "metadata/iptc.h"
+#include "metadata/photometric_interpretation.h"
 #include "metadata/xmp.h"
 
 
@@ -34,63 +35,6 @@ using byte = unsigned char;
 
 // Used for 16 bits per sample (color channel) images
 using word = unsigned short;
-
-/*! Implements the values of the photometric tag of the TIFF format */
-enum class PhotometricInterpretation : std::uint16_t {
-  MINISWHITE = 0,//!< B/W or gray value image with 0 = white and 1 (255) = black
-  MINISBLACK = 1,//!< B/W or gray value image with 0 = black and 1 (255) = white (is default in SIPI)
-  RGB = 2,//!< Color image with RGB values
-  PALETTE = 3,//!< Palette color image, is not suppoted by Sipi
-  MASK = 4,//!< Mask image, not supported by Sipi
-  SEPARATED = 5,//!< Color separated image, is assumed to be CMYK
-  YCBCR = 6,//!< Color representation with YCbCr, is supported by Sipi, but converted to an ordinary RGB
-  CIELAB = 8,//!< CIE*a*b image, only very limited support (untested!)
-  ICCLAB = 9,//!< ICCL*a*b image, only very limited support (untested!)
-  ITULAB = 10,//!< ITUL*a*b image, not supported yet (what is this by the way?)
-  CFA = 32803,//!< Color field array, used for DNG and RAW image. Not supported!
-  LOGL = 32844,//!< LOGL format (not supported)
-  LOGLUV = 32845,//!< LOGLuv format (not supported)
-  LINEARRAW = 34892,//!< Linear raw array for DNG and RAW formats. Not supported!
-  INVALID = 65535//!< an invalid value
-};
-
-inline auto to_string(const PhotometricInterpretation photo) -> std::string
-{
-  switch (photo) {
-  case PhotometricInterpretation::MINISWHITE:
-    return "MINISWHITE";
-  case PhotometricInterpretation::MINISBLACK:
-    return "MINISBLACK";
-  case PhotometricInterpretation::RGB:
-    return "RGB";
-  case PhotometricInterpretation::PALETTE:
-    return "PALETTE";
-  case PhotometricInterpretation::MASK:
-    return "MASK";
-  case PhotometricInterpretation::SEPARATED:
-    return "SEPARATED";
-  case PhotometricInterpretation::YCBCR:
-    return "YCBCR";
-  case PhotometricInterpretation::CIELAB:
-    return "CIELAB";
-  case PhotometricInterpretation::ICCLAB:
-    return "ICCLAB";
-  case PhotometricInterpretation::ITULAB:
-    return "ITULAB";
-  case PhotometricInterpretation::CFA:
-    return "CFA";
-  case PhotometricInterpretation::LOGL:
-    return "LOGL";
-  case PhotometricInterpretation::LOGLUV:
-    return "LOGLUV";
-  case PhotometricInterpretation::LINEARRAW:
-    return "LINEARRAW";
-  case PhotometricInterpretation::INVALID:
-    return "INVALID";
-  default:
-    return "UNKNOWN";
-  }
-}
 
 /*! The meaning of extra channels as used in the TIF format */
 enum class ExtraSamples : std::uint8_t {
@@ -668,7 +612,6 @@ public:
    */
   friend std::ostream &operator<<(std::ostream &lhs, const SipiImage &rhs);
 
-  friend class Icc;//!< We need Icc as friend class
   friend class SipiIOTiff;//!< I/O class for the TIFF file format
   friend class SipiIOJ2k;//!< I/O class for the JPEG2000 file format
   friend class SipiIOJpeg;//!< I/O class for the JPEG file format

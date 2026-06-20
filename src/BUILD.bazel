@@ -221,27 +221,141 @@ cc_library(
     ],
     hdrs = [
         "SipiError.h",
-        "SipiImage.h",
     ],
     # Consumers `#include "SipiError.h"` — `.` (i.e. `src/`) on the
     # include path resolves the quote-form lookup.
     includes = ["."],
     visibility = ["//src:__subpackages__"],
-    # `SipiImage.h` transitively includes `metadata/Sipi*.h` and
-    # `shttps/...`; the deps here surface those headers so a consumer
-    # picking up `:sipi_top` can compile against `SipiImage.h` without
-    # separately declaring every transitive header bundle.
-    # Note we deliberately do NOT list `//src/metadata:metadata` here —
-    # the metadata package itself consumes `:sipi_top`, so listing
-    # metadata as a dep would close a cycle. The transitive
-    # `metadata/Sipi*.h` includes from `SipiImage.h` resolve through
-    # the consumer's own metadata dep instead (or via `:sipi_lib`'s
-    # `includes = ["."]` for the unstrict-deps grace period).
     deps = [
         "//include:headers",
         "//src/shttps:shttps",
         "//src/logging:logging",
     ],
+)
+
+# ── //src:engine ───────────────────────────────────────────────────────────
+# The transport-free image engine: decode/encode (SipiImage + the four format
+# handlers), IIIF parameter parsing (iiifparser), and the serve-time admission
+# primitives (cache, rate limiter, memory budget). Carved out of `:sipi_lib`
+# so the FFI seam (//src/ffi:sipi_ffi) can drive the engine WITHOUT a
+# dependency cycle — `:sipi_lib` deps `:sipi_ffi`, so `:sipi_ffi` cannot reach
+# the engine while it lives inside `:sipi_lib`. The engine *source* is free of
+# the shttps HTTP transport (no `shttps::Connection`/`Server` include — only
+# `shttps/util`). The one remaining transitive shttps link edge enters through
+# `:sipi_top` / //src/metadata / //src/observability, a pre-existing layering
+# leak those packages already carry (their BUILD comments note it; tracked
+# under DEV-6353), not a new coupling introduced here. Phase C's `rust_binary`
+# links the engine through //src/ffi:sipi_ffi.
+cc_library(
+    name = "engine",
+    srcs = [
+        "SipiCache.cpp",
+        "SipiCommon.cpp",
+        "SipiFilenameHash.cpp",
+        "SipiImage.cpp",
+        "SipiMemoryBudget.cpp",
+        "SipiRateLimiter.cpp",
+        "populate_from_image.cpp",
+        "formats/SipiIOJ2k.cpp",
+        "formats/SipiIOJpeg.cpp",
+        "formats/SipiIOPng.cpp",
+        "formats/SipiIOTiff.cpp",
+        "formats/output_sink.cpp",
+        "iiifparser/SipiDecodeDims.cpp",
+        "iiifparser/SipiIdentifier.cpp",
+        "iiifparser/SipiQualityFormat.cpp",
+        "iiifparser/SipiRegion.cpp",
+        "iiifparser/SipiRotation.cpp",
+        "iiifparser/SipiSize.cpp",
+    ],
+    hdrs = [
+        # The engine's headers, co-located with their sources (ADR-0003).
+        # SipiImage.h moved here from :sipi_top as part of the SipiImage
+        # repackaging — the engine now owns the image surface, sitting above
+        # //src/metadata (which no longer depends on SipiImage).
+        "SipiCache.h",
+        "SipiCommon.h",
+        "SipiFilenameHash.h",
+        "SipiIO.h",
+        "SipiImage.h",
+        "SipiImageError.h",
+        "SipiMemoryBudget.h",
+        "SipiPeakMemory.h",
+        "SipiRateLimiter.h",
+        "formats/SipiIOJ2k.h",
+        "formats/SipiIOJpeg.h",
+        "formats/SipiIOPng.h",
+        "formats/SipiIOTiff.h",
+        "formats/output_sink.h",
+        "iiifparser/SipiDecodeDims.h",
+        "iiifparser/SipiIdentifier.h",
+        "iiifparser/SipiQualityFormat.h",
+        "iiifparser/SipiRegion.h",
+        "iiifparser/SipiRotation.h",
+        "iiifparser/SipiSize.h",
+    ],
+    # Each per-subsystem header dir is on the include path so both the
+    # sibling-relative (`#include "SipiIOTiff.h"`) and prefixed
+    # (`#include "formats/SipiIOTiff.h"`) forms resolve — mirrors the layout
+    # //include:headers used before the carve.
+    includes = [
+        ".",
+        "formats",
+        "iiifparser",
+    ],
+    copts = ["-fexceptions"],
+    # Mirror :sipi_lib's system link surface so a target that links :engine
+    # standalone (its own cc_tests) resolves exiv2's iconv + curl's macOS
+    # frameworks / libdl + libpthread on Linux.
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-ldl",
+            "-lpthread",
+        ],
+        "@platforms//os:macos": [
+            "-liconv",
+            "-framework",
+            "SystemConfiguration",
+            "-framework",
+            "CoreFoundation",
+        ],
+        "//conditions:default": [],
+    }),
+    visibility = ["//src:__subpackages__"],
+    # The transport-free subset of :sipi_lib's deps: shttps transport
+    # (//src/shttps:shttps), Lua (@lua) and SQLite (@sqlite3) are dropped — no
+    # engine TU includes them. Everything else (codecs, metadata, observability,
+    # shttps/util) is retained.
+    deps = [
+        ":sipi_generated_hdrs",
+        ":sipi_top",
+        "//include:headers",
+        "//src/logging:logging",
+        "//src/metadata:metadata",
+        "//src/observability:observability",
+        "//src/shttps/util",
+        "@lcms2//:lcms2",
+        "@exiv2//:exiv2",
+        "@libexpat",
+        "@tiff//:tiff",
+        "@libpng//:png",
+        "@xz//:lzma",
+        "@libmagic//:lib",
+        "@jansson//:jansson",
+        "@sentry//:sentry",
+        "@prometheus-cpp//core",
+        "@curl",
+        "@openssl//:crypto",
+        "@openssl//:ssl",
+        "@libjpeg_turbo//:jpeg",
+        "@bzip2//:bz2",
+        "@zstd",
+        "@zlib",
+        "@kakadu//:kdu",
+    ] + select({
+        "@platforms//os:linux": ["//bazel:glibc23_compat"],
+        "//conditions:default": [],
+    }),
 )
 
 # ── //src:sipi_lib ─────────────────────────────────────────────────────────
@@ -258,6 +372,28 @@ cc_library(
             # transitively without depending on `:sipi_lib` (which would
             # close a cycle).
             "SipiError.cpp",
+            # Owned by `:engine` (the transport-free image engine carved out
+            # so //src/ffi:sipi_ffi can drive it without a cycle). The headers
+            # stay in the glob (harmless; headers aren't compiled) so callers
+            # in this package keep resolving them.
+            "SipiCache.cpp",
+            "SipiCommon.cpp",
+            "SipiFilenameHash.cpp",
+            "SipiImage.cpp",
+            "SipiMemoryBudget.cpp",
+            "SipiRateLimiter.cpp",
+            "populate_from_image.cpp",
+            "formats/SipiIOJ2k.cpp",
+            "formats/SipiIOJpeg.cpp",
+            "formats/SipiIOPng.cpp",
+            "formats/SipiIOTiff.cpp",
+            "formats/output_sink.cpp",
+            "iiifparser/SipiDecodeDims.cpp",
+            "iiifparser/SipiIdentifier.cpp",
+            "iiifparser/SipiQualityFormat.cpp",
+            "iiifparser/SipiRegion.cpp",
+            "iiifparser/SipiRotation.cpp",
+            "iiifparser/SipiSize.cpp",
             # Google Benchmark microbenchmark sources are `cc_binary`
             # main()-providers, not library TUs. Excluded here so they
             # never enter the production library or the `--instrumentation_filter=//src`
@@ -305,6 +441,7 @@ cc_library(
         "//conditions:default": [],
     }),
     deps = [
+        ":engine",
         ":sipi_generated_hdrs",
         ":sipi_top",
         "//include:headers",

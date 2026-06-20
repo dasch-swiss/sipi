@@ -20,12 +20,12 @@
 
 #include <lcms2.h>
 
+#include "photometric_interpretation.h"
+
 
 namespace Sipi {
 
 extern void icc_error_logger(cmsContext ContextID, cmsUInt32Number ErrorCode, const char *Text);
-
-class SipiImage;//!< forward declaration
 
 /*! Defines predefined profiles which are used by Icc */
 typedef enum {
@@ -146,11 +146,13 @@ public:
   unsigned int iccFormatter(int bps) const;
 
   /*!
-   * returns a littleCMS formatter with the given bits/sample for the given SipImage
-   * \param img The SipiImage instance whose color profile is used to create the formatter
-   * \returns Formatter as used by cmsTransfrom
+   * returns a littleCMS formatter for an image with the given pixel shape
+   * \param[in] bps Bits per sample (8 or 16)
+   * \param[in] nc Number of channels (samples per pixel)
+   * \param[in] photo Photometric interpretation (selects the lcms2 colour space)
+   * \returns Formatter as used by cmsTransform
    */
-  unsigned int iccFormatter(SipiImage *img) const;
+  unsigned int iccFormatter(int bps, int nc, PhotometricInterpretation photo) const;
 
   /**
    * Print info to output stream
