@@ -5,11 +5,14 @@
 
 #include "ffi/sipi_ffi.h"
 
+#include <cstdint>
 #include <utility>
 
 #include "ffi/engine_context.h"
+#include "ffi/metrics_snapshot.h"
 #include "ffi/serve_image.h"
 #include "ffi/serve_response.h"
+#include "observability/metrics.h"
 
 extern "C" {
 
@@ -38,6 +41,56 @@ int sipi_serve_image(const SipiServeRequest *req, const SipiResponse *resp)
     auto decision = Sipi::ffi::decide_serve_image(*req, Sipi::ffi::engine_context(), cancelled);
     if (!decision) { return static_cast<int>(decision.error()); }
     Sipi::ffi::apply(std::move(*decision), *resp);
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
+int sipi_metrics_snapshot(SipiMetricsSnapshot *out)
+{
+  // A thin read of the engine metrics singleton — no response sink and no
+  // fallible pre-commit work, so it needs no decide/apply split (that shape
+  // exists to drive the response callbacks correctly). Only the no-throw guard
+  // applies: the boundary contract is uniform — no entry lets a C++ exception
+  // cross into Rust. `out` is a caller-owned buffer, trusted like the response
+  // sinks of the serve entries.
+  return Sipi::ffi::sipi_guard([&] {
+    auto &m = Sipi::observability::Metrics::instance();
+
+    // prometheus stores every value as a double; the snapshot narrows to the
+    // integral type the OTel instrument wants — uint64 for monotonic counters,
+    // int64 for gauges (which may be negative: the cache size limit is -1 when
+    // unlimited).
+    const auto counter = [](const prometheus::Counter &c) { return static_cast<std::uint64_t>(c.Value()); };
+    const auto gauge = [](const prometheus::Gauge &g) { return static_cast<std::int64_t>(g.Value()); };
+
+    out->cache_hits_total = counter(m.cache_hits_total);
+    out->cache_misses_total = counter(m.cache_misses_total);
+    out->cache_evictions_total = counter(m.cache_evictions_total);
+    out->cache_skips_total = counter(m.cache_skips_total);
+    out->image_too_large_total = counter(m.image_too_large_total);
+    out->client_disconnected_total = counter(m.client_disconnected_total);
+    out->memory_alloc_failures_total = counter(m.memory_alloc_failures_total);
+    out->rejected_connections_total = counter(m.rejected_connections_total);
+
+    out->rate_limit_allowed_total = counter(m.rate_limit_allowed);
+    out->rate_limit_rejected_total = counter(m.rate_limit_rejected);
+    out->rate_limit_shadow_rejected_total = counter(m.rate_limit_shadow_rejected);
+    out->rate_limit_near_limit_total = counter(m.rate_limit_near_limit_total);
+
+    out->decode_memory_acquired_total = counter(m.decode_memory_acquired);
+    out->decode_memory_rejected_total = counter(m.decode_memory_rejected);
+    out->decode_memory_shadow_rejected_total = counter(m.decode_memory_shadow_rejected);
+    out->decode_memory_near_limit_total = counter(m.decode_memory_near_limit_total);
+
+    out->waiting_connections = gauge(m.waiting_connections);
+    out->cache_size_bytes = gauge(m.cache_size_bytes);
+    out->cache_files = gauge(m.cache_files);
+    out->cache_size_limit_bytes = gauge(m.cache_size_limit_bytes);
+    out->cache_files_limit = gauge(m.cache_files_limit);
+    out->rate_limit_clients_tracked = gauge(m.rate_limit_clients_tracked);
+    out->decode_memory_budget_bytes = gauge(m.decode_memory_budget_bytes);
+    out->decode_memory_used_bytes = gauge(m.decode_memory_used_bytes);
+
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
   });
 }

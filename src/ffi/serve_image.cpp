@@ -495,7 +495,7 @@ std::expected<ServeResponse, SipiStatus>
         client_id.c_str(), result.pixels_consumed, result.budget,
         eng.rate_limiter->mode() == RateLimitMode::MONITOR ? 0u : result.retry_after,
         action.c_str(), request_pixels, uri.c_str());
-      metrics.rate_limit_decisions_total.Add({ { "action", action } }).Increment();
+      (result.allowed ? metrics.rate_limit_shadow_rejected : metrics.rate_limit_rejected).Increment();
 
       if (!result.allowed) {
         ServeResponse out;
@@ -505,7 +505,7 @@ std::expected<ServeResponse, SipiStatus>
         return out;
       }
     } else {
-      metrics.rate_limit_decisions_total.Add({ { "action", "allowed" } }).Increment();
+      metrics.rate_limit_allowed.Increment();
     }
 
     if (result.pixels_consumed > result.budget * 80 / 100) { metrics.rate_limit_near_limit_total.Increment(); }

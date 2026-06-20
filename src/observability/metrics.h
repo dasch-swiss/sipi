@@ -40,6 +40,9 @@ public:
 
   // Rate limiter counters (R30)
   prometheus::Family<prometheus::Counter> &rate_limit_decisions_total;
+  prometheus::Counter &rate_limit_allowed;         ///< cached: decisions_total{action="allowed"}
+  prometheus::Counter &rate_limit_rejected;        ///< cached: decisions_total{action="rejected"}
+  prometheus::Counter &rate_limit_shadow_rejected; ///< cached: decisions_total{action="shadow_rejected"}
   prometheus::Counter &rate_limit_near_limit_total;
 
   // Queue counters

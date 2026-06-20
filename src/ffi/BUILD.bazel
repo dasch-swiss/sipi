@@ -29,7 +29,9 @@ cc_library(
         # ABI (variant body, pure decide_*, single apply driver, sipi_guard);
         # serve_image.{h,cpp} carves the IIIF decode pipeline behind the seam;
         # engine_context.{h,cpp} holds the engine services/config the pipeline
-        # reads; sipi_ffi.cpp is the thin extern "C" surface.
+        # reads; sipi_ffi.cpp is the thin extern "C" surface (incl.
+        # sipi_metrics_snapshot, which fills the SipiMetricsSnapshot layout
+        # defined in metrics_snapshot.h).
         "engine_context.cpp",
         "serve_image.cpp",
         "serve_response.cpp",
@@ -37,6 +39,7 @@ cc_library(
     ],
     hdrs = [
         "engine_context.h",
+        "metrics_snapshot.h",
         "serve_image.h",
         "serve_response.h",
         "sipi_ffi.h",
@@ -87,6 +90,20 @@ cc_test(
     deps = [
         ":sipi_ffi",
         "//test:test_paths",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# Co-located unit test for sipi_metrics_snapshot: bump the Metrics singleton
+# counters/gauges, snapshot, assert the struct fields ferry them (counter deltas
+# + the signed -1 cache-size-limit gauge). Deps the observability target directly
+# to drive the singleton.
+cc_test(
+    name = "metrics_snapshot_test",
+    srcs = ["metrics_snapshot_test.cpp"],
+    deps = [
+        ":sipi_ffi",
+        "//src/observability:observability",
         "@googletest//:gtest_main",
     ],
 )
