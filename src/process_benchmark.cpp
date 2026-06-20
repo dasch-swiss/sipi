@@ -63,7 +63,7 @@ const Sipi::SipiImage &leaves_alpha()
 const Sipi::SipiImage &rgba16()
 {
   static const Sipi::SipiImage img = [] {
-    Sipi::SipiImage i = load("knora/png_16bit.tif");
+    Sipi::SipiImage i = load("knora/png_16bit.png");
     if (i.getBps() != 16) {
       std::fprintf(stderr, "rgba16 fixture decoded to %zu bps, expected 16\n", i.getBps());
       std::exit(1);
