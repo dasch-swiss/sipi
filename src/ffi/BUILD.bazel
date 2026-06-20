@@ -27,11 +27,17 @@ cc_library(
     srcs = [
         # serve_response.{h,cpp} is the misuse-resistant C++ layer over the C
         # ABI (variant body, pure decide_*, single apply driver, sipi_guard);
-        # sipi_ffi.cpp is the thin extern "C" surface.
+        # serve_image.{h,cpp} carves the IIIF decode pipeline behind the seam;
+        # engine_context.{h,cpp} holds the engine services/config the pipeline
+        # reads; sipi_ffi.cpp is the thin extern "C" surface.
+        "engine_context.cpp",
+        "serve_image.cpp",
         "serve_response.cpp",
         "sipi_ffi.cpp",
     ],
     hdrs = [
+        "engine_context.h",
+        "serve_image.h",
         "serve_response.h",
         "sipi_ffi.h",
     ],
@@ -41,10 +47,19 @@ cc_library(
     # instead of unwinding across the C ABI (FFI contract).
     copts = ["-fexceptions"],
     deps = [
-        # shttps::Parsing::getBestFileMimetype — the libmagic MIME sniff used to
-        # set the /file Content-Type byte-identically to the legacy handler.
-        # A generic SIPI-domain utility (re-homed to the SIPI side in Phase C),
-        # not the HTTP transport, so this is no SIPI -> shttps-transport coupling.
+        # The transport-free image engine (SipiImage, iiifparser, cache, rate
+        # limiter, memory budget, format handlers) the IIIF pipeline drives.
+        # //src:engine does NOT depend on this package, so there is no cycle.
+        "//src:engine",
+        # Sentry error capture + the Prometheus metric counters serve_image emits.
+        "//src/observability:observability",
+        # Icc / predefined ICC profiles for the quality colour conversions.
+        "//src/metadata:metadata",
+        # log_warn/log_info/... in the decode pipeline.
+        "//src/logging:logging",
+        # shttps::Parsing::getBestFileMimetype / getFileMimetype (the libmagic
+        # MIME sniff) + shttps::urldecode. Generic SIPI-domain utilities, not the
+        # HTTP transport, so this is no SIPI -> shttps-transport coupling.
         "//src/shttps/util",
     ],
 )
@@ -56,6 +71,22 @@ cc_test(
     srcs = ["serve_response_test.cpp"],
     deps = [
         ":sipi_ffi",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# Co-located unit test for the transport-pure IIIF decision (decide_serve_image):
+# body shape (FileBody/StreamBody/EmptyBody) + pre-commit status codes, driven
+# off the lena512.tif fixture. Fixture paths resolve via //test:test_paths,
+# which honours SIPI_WORKSPACE_ROOT.
+cc_test(
+    name = "serve_image_test",
+    srcs = ["serve_image_test.cpp"],
+    data = ["//test/_test_data:images"],
+    env = {"SIPI_WORKSPACE_ROOT": "."},
+    deps = [
+        ":sipi_ffi",
+        "//test:test_paths",
         "@googletest//:gtest_main",
     ],
 )

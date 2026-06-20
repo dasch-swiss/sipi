@@ -74,11 +74,32 @@ public:
   SipiRegion(std::string str);
 
   /*!
+   * Reconstruct a region from its flattened components (the FFI seam), mirroring
+   * the string constructor's field assignment so canonical()/crop_coords() are
+   * byte-identical. `rx_p..rh_p` are the raw coordinates (pixels for COORDS,
+   * percentages for PERCENTS; unused for FULL/SQUARE).
+   */
+  inline SipiRegion(CoordType coord_type_p, float rx_p, float ry_p, float rw_p, float rh_p)
+    : coord_type(coord_type_p), rx(rx_p), ry(ry_p), rw(rw_p), rh(rh_p),
+      canonical_ok(coord_type_p == FULL)// "full" is the only self-canonical value
+  {}
+
+  /*!
    * Get the coordinate type that has bee used for construction of the region
    *
    * \returns CoordType
    */
   inline CoordType getType() const { return coord_type; };
+
+  /*! The raw coordinates, for flattening across the FFI seam (the inverse of the
+   *  component constructor). */
+  inline void get_coords(float &rx_p, float &ry_p, float &rw_p, float &rh_p) const
+  {
+    rx_p = rx;
+    ry_p = ry;
+    rw_p = rw;
+    rh_p = rh;
+  }
 
   inline void set_reduce(float reduce_p) { reduce = reduce_p; }
 

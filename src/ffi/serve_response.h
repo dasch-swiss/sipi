@@ -28,6 +28,7 @@
 
 #include <cstdint>
 #include <expected>
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -46,6 +47,12 @@ enum class SipiStatus : int {
   BadRequest = 400,
   NotFound = 404,
   InternalError = 500,
+  ServiceUnavailable = 503,//!< memory budget exhausted (with Retry-After)
+  TooManyRequests = 429,//!< rate limit exceeded (with Retry-After)
+  //! Not an HTTP status to render: the client disconnected mid-decode. The
+  //! caller emits nothing (the response was never committed); the engine has
+  //! already counted it. 499 mirrors the nginx/Traefik "client closed request".
+  ClientGone = 499,
 };
 
 using Header = std::pair<std::string, std::string>;
@@ -107,6 +114,10 @@ struct ServeResponse
   int http_status{};
   std::vector<Header> headers;
   Body body;
+  /*! Run by `apply` after the body has been delivered (on every path, including
+   *  a producer that aborts). Empty by default; `decide_serve_image` uses it to
+   *  unblock a cache file it pinned for a cache-hit `FileBody`. */
+  std::function<void()> on_complete;
 };
 
 /*! Decide how to serve a raw `/file` request: validate readability, stat, sniff

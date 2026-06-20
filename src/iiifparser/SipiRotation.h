@@ -24,6 +24,9 @@ public:
 
   SipiRotation(std::string str);
 
+  /*! Reconstruct from flattened components (the FFI seam). */
+  inline SipiRotation(float rotation_p, bool mirror_p) : mirror(mirror_p), rotation(rotation_p) {}
+
   inline bool get_rotation(float &rot)
   {
     rot = rotation;

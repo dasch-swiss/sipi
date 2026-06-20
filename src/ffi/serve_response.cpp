@@ -100,15 +100,27 @@ std::expected<ServeResponse, SipiStatus> decide_serve_file(const char *resolved_
 
 void apply(ServeResponse &&response, const SipiResponse &resp)
 {
+  // The post-delivery finalizer (e.g. unblock a pinned cache file) must run on
+  // every exit path, including a body delivery that throws — held in an RAII
+  // guard so it fires on scope exit regardless.
+  struct Finalizer
+  {
+    std::function<void()> fn;
+    ~Finalizer()
+    {
+      if (fn) { fn(); }
+    }
+  } finalizer{ std::move(response.on_complete) };
+
   resp.set_status(resp.ctx, response.http_status);
   for (const auto &[name, value] : response.headers) { resp.add_header(resp.ctx, name.c_str(), value.c_str()); }
 
   std::visit(overloaded{
                [](const EmptyBody &) {},
-               [&](const FileBody &f) { resp.send_file(resp.ctx, f.path.c_str(), f.offset, f.length); },
+               [&](const FileBody &f) { (void)resp.send_file(resp.ctx, f.path.c_str(), f.offset, f.length); },
                [&](StreamBody &s) {
                  const StreamSink sink(resp);
-                 s.producer->produce(sink);
+                 (void)s.producer->produce(sink);
                },
              },
     response.body);
