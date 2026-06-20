@@ -50,6 +50,7 @@
 #include "iiifparser/SipiDecodeDims.h"
 #include "observability/sentry.h"
 #include "favicon.h"
+#include "ffi/engine_context.h"
 #include "ffi/sipi_ffi.h"
 #include "handlers/iiif_handler.h"
 #include "jansson.h"
@@ -655,150 +656,6 @@ static std::unordered_map<std::string, std::string> check_file_access(Connection
 
 //=========================================================================
 
-std::pair<std::string, std::string> SipiHttpServer::get_canonical_url(size_t tmp_w,
-  size_t tmp_h,
-  const std::string &host,
-  const std::string &prefix,
-  const std::string &identifier,
-  std::shared_ptr<SipiRegion> region,
-  std::shared_ptr<SipiSize> size,
-  SipiRotation &rotation,
-  SipiQualityFormat &quality_format,
-  int pagenum,
-  const std::string &cannonical_watermark)
-{
-  static constexpr int canonical_len = 127;
-
-  char canonical_region[canonical_len + 1];
-  char canonical_size[canonical_len + 1];
-
-  int tmp_r_x = 0, tmp_r_y = 0, tmp_red = 0;
-  size_t tmp_r_w = 0, tmp_r_h = 0;
-  bool tmp_ro = false;
-
-  if (region->getType() != SipiRegion::FULL) { region->crop_coords(tmp_w, tmp_h, tmp_r_x, tmp_r_y, tmp_r_w, tmp_r_h); }
-
-  region->canonical(canonical_region, canonical_len);
-
-  if (size->getType() != SipiSize::FULL) {
-    try {
-      size->get_size(tmp_w, tmp_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
-    } catch (Sipi::SipiSizeError &err) {
-      throw SipiError("SipiSize error!");
-    }
-  }
-
-  size->canonical(canonical_size, canonical_len);
-  float angle;
-  const bool mirror = rotation.get_rotation(angle);
-  char canonical_rotation[canonical_len + 1];
-
-  if (mirror || (angle != 0.0)) {
-    if ((angle - floorf(angle)) < 1.0e-6) {
-      // it's an integer
-      if (mirror) {
-        (void)snprintf(canonical_rotation, canonical_len, "!%ld", std::lround(angle));
-      } else {
-        (void)snprintf(canonical_rotation, canonical_len, "%ld", std::lround(angle));
-      }
-    } else {
-      if (mirror) {
-        (void)snprintf(canonical_rotation, canonical_len, "!%1.1f", angle);
-      } else {
-        (void)snprintf(canonical_rotation, canonical_len, "%1.1f", angle);
-      }
-    }
-  } else {
-    (void)snprintf(canonical_rotation, canonical_len, "0");
-  }
-
-  constexpr unsigned canonical_header_len = 511;
-  char canonical_header[canonical_header_len + 1];
-  char ext[5];
-
-  switch (quality_format.format()) {
-  case SipiQualityFormat::JPG: {
-    ext[0] = 'j';
-    ext[1] = 'p';
-    ext[2] = 'g';
-    ext[3] = '\0';
-    break;// jpg
-  }
-  case SipiQualityFormat::JP2: {
-    ext[0] = 'j';
-    ext[1] = 'p';
-    ext[2] = '2';
-    ext[3] = '\0';
-    break;// jp2
-  }
-  case SipiQualityFormat::TIF: {
-    ext[0] = 't';
-    ext[1] = 'i';
-    ext[2] = 'f';
-    ext[3] = '\0';
-    break;// tif
-  }
-  case SipiQualityFormat::PNG: {
-    ext[0] = 'p';
-    ext[1] = 'n';
-    ext[2] = 'g';
-    ext[3] = '\0';
-    break;// png
-  }
-  default: {
-    throw SipiError("Unsupported file format requested! Supported are .jpg, .jp2, .tif, .png");
-  }
-  }
-
-  std::string format;
-  if (quality_format.quality() != SipiQualityFormat::DEFAULT) {
-    switch (quality_format.quality()) {
-    case SipiQualityFormat::COLOR: {
-      format = "/color.";
-      break;
-    }
-    case SipiQualityFormat::GRAY: {
-      format = "/gray.";
-      break;
-    }
-    case SipiQualityFormat::BITONAL: {
-      format = "/bitonal.";
-      break;
-    }
-    default: {
-      format = "/default.";
-    }
-    }
-  } else {
-    format = "/default.";
-  }
-
-  std::string fullid = identifier;
-  if (pagenum > 0) fullid += "@" + std::to_string(pagenum);
-  (void)snprintf(canonical_header,
-    canonical_header_len,
-    "<http://%s/%s/%s/%s/%s/%s/default.%s/%s>;rel=\"canonical\"",
-    host.c_str(),
-    prefix.c_str(),
-    fullid.c_str(),
-    canonical_region,
-    canonical_size,
-    canonical_rotation,
-    ext,
-    cannonical_watermark.c_str());
-
-  // Here we are creating the canonical URL. Attention: We have added the watermark to the URL, which is not part of the
-  // IIIF standard. This is necessary for correct caching, as the watermark is not part of the image, but is added
-  // by the server.
-  std::string canonical = host + "/" + prefix + "/" + fullid + "/" + std::string(canonical_region) + "/"
-                          + std::string(canonical_size) + "/" + std::string(canonical_rotation) + format
-                          + std::string{ ext } + "/" + std::string{ cannonical_watermark };
-
-  return make_pair(std::string(canonical_header), canonical);
-}
-
-//=========================================================================
-
 static void serve_redirect(Connection &conn_obj, const std::vector<std::string> &params)
 {
   conn_obj.setBuffer();
@@ -1293,16 +1150,23 @@ static void serve_knora_json_file(Connection &conn_obj,
 // Presents a live shttps::Connection as the C-ABI response sink the FFI core
 // (src/ffi/sipi_ffi.h) drives. Temporary: at the Phase C cutover the Rust shell
 // supplies SipiResponse directly and Connection is deleted, so this stays a
-// file-local helper rather than a durable abstraction.
+// file-local helper rather than a durable abstraction. The ctx is a small
+// struct (not the bare Connection) so conn_write can track that
+// setChunkedTransfer has run once before the first chunk.
+struct ConnResponseCtx
+{
+  Connection *conn;
+  bool chunked_started = false;
+};
+
+static Connection *conn_of(void *ctx) { return static_cast<ConnResponseCtx *>(ctx)->conn; }
+
 static void conn_set_status(void *ctx, int status)
 {
-  static_cast<Connection *>(ctx)->status(static_cast<Connection::StatusCodes>(status));
+  conn_of(ctx)->status(static_cast<Connection::StatusCodes>(status));
 }
 
-static void conn_add_header(void *ctx, const char *name, const char *value)
-{
-  static_cast<Connection *>(ctx)->header(name, value);
-}
+static void conn_add_header(void *ctx, const char *name, const char *value) { conn_of(ctx)->header(name, value); }
 
 // Known-length body: Connection::sendFile sends Content-Length + streams the
 // region (no whole-file buffering), the legacy /file framing. `length` is the
@@ -1312,21 +1176,36 @@ static int conn_send_file(void *ctx, const char *path, uint64_t offset, uint64_t
   try {
     const size_t from = static_cast<size_t>(offset);
     const size_t to = from + static_cast<size_t>(length) - 1;
-    static_cast<Connection *>(ctx)->sendFile(path, 8192, from, to);
+    conn_of(ctx)->sendFile(path, 8192, from, to);
     return 0;
   } catch (...) {
     return 1;// peer gone / socket error
   }
 }
 
-static int conn_cancelled(void *ctx) { return static_cast<Connection *>(ctx)->peerConnected() ? 0 : 1; }
-
-static ::SipiResponse make_connection_response(Connection &conn)
+// Unknown-length body (the image encoder): chunked framing. setChunkedTransfer
+// throws once the response header has been sent, so it must run exactly once,
+// before the first chunk — hence the chunked_started flag on the ctx.
+static int conn_write(void *ctx, const uint8_t *data, size_t len)
 {
-  // `write` (the unknown-length chunked path) is null until sipi_serve_image
-  // lands: it needs a one-time setChunkedTransfer before the first chunk, which
-  // belongs with that slice. sipi_serve_file delivers via send_file, never write.
-  return ::SipiResponse{ &conn, conn_set_status, conn_add_header, nullptr, conn_send_file, conn_cancelled };
+  try {
+    auto *rctx = static_cast<ConnResponseCtx *>(ctx);
+    if (!rctx->chunked_started) {
+      rctx->conn->setChunkedTransfer();
+      rctx->chunked_started = true;
+    }
+    rctx->conn->sendAndFlush(data, len);
+    return 0;
+  } catch (...) {
+    return 1;// peer gone / socket error
+  }
+}
+
+static int conn_cancelled(void *ctx) { return conn_of(ctx)->peerConnected() ? 0 : 1; }
+
+static ::SipiResponse make_connection_response(ConnResponseCtx &ctx)
+{
+  return ::SipiResponse{ &ctx, conn_set_status, conn_add_header, conn_write, conn_send_file, conn_cancelled };
 }
 
 static void serve_file_download(Connection &conn_obj,
@@ -1402,7 +1281,8 @@ static void serve_file_download(Connection &conn_obj,
     }
   }
 
-  ::SipiResponse resp = make_connection_response(conn_obj);
+  ConnResponseCtx rctx{ &conn_obj };
+  ::SipiResponse resp = make_connection_response(rctx);
   const int rc = ::sipi_serve_file(requested_file.c_str(), range.empty() ? nullptr : range.c_str(), &resp);
   if (rc != 0) {
     if (rc == 404) { log_warn("GET: %s not accessible", requested_file.c_str()); }
@@ -1432,29 +1312,30 @@ static void serve_iiif(Connection &conn_obj,
   std::vector<std::string> params)
 {
   SIPI_ZONE_N("serve_iiif");
-  auto not_head_request = conn_obj.method() != Connection::HEAD;
-  //
-  // getting the identifier (which in case of a PDF or multipage TIFF my contain a page id (identifier@pagenum)
-  //
+
+  // getting the identifier (which in case of a PDF or multipage TIFF may contain
+  // a page id: identifier@pagenum)
   SipiIdentifier sid = urldecode(params[iiif_identifier]);
 
   // R1: Early rejection of path traversal in identifier and prefix
   if (contains_traversal(sid.getIdentifier())) {
     log_warn("Path traversal blocked: client=%s identifier=%s",
-      conn_obj.peer_ip().c_str(), params[iiif_identifier].c_str());
+      conn_obj.peer_ip().c_str(),
+      params[iiif_identifier].c_str());
     send_error(conn_obj, Connection::BAD_REQUEST, "Invalid IIIF identifier");
     return;
   }
   if (prefix_as_path && contains_traversal(urldecode(params[iiif_prefix]))) {
     log_warn("Path traversal blocked in prefix: client=%s prefix=%s",
-      conn_obj.peer_ip().c_str(), params[iiif_prefix].c_str());
+      conn_obj.peer_ip().c_str(),
+      params[iiif_prefix].c_str());
     send_error(conn_obj, Connection::BAD_REQUEST, "Invalid IIIF identifier");
     return;
   }
 
-  //
-  // getting IIIF parameters
-  //
+  // Parse + validate the IIIF parameters. A syntax error is a 400 here, before
+  // the engine sees the request; the parsed objects are flattened into the FFI
+  // request below, and sipi_serve_image reconstructs them from the typed fields.
   auto region = std::make_shared<SipiRegion>();
   auto size = std::make_shared<SipiSize>();
   SipiRotation rotation;
@@ -1469,12 +1350,12 @@ static void serve_iiif(Connection &conn_obj,
     return;
   }
 
-  //
-  // here we start the lua script which checks for permissions
-  //
+  // Preflight (Lua) — resolves the on-disk file and any restrict size/watermark.
+  // Stays inline in the C++ server (the Lua FFI is Phase B-L); only the decode
+  // pipeline moves behind sipi_serve_image.
   std::string infile;// path to the input file on the server
-  std::string watermark;// path to watermark file, or empty, if no watermark required
-  auto restricted_size = std::make_shared<SipiSize>();// size of restricted image. (SizeType::FULL if unrestricted)
+  std::string watermark;// watermark file path, or empty
+  std::string restricted_size_str;// restrict downscale spec, or empty
 
   if (luaserver.luaFunctionExists(iiif_preflight_funcname)) {
     std::unordered_map<std::string, std::string> pre_flight_info;
@@ -1496,8 +1377,7 @@ static void serve_iiif(Connection &conn_obj,
           ;// do nothing, no watermark...
         }
         try {
-          std::string raw_size_str = pre_flight_info.at("size");
-          restricted_size = std::make_shared<SipiSize>(raw_size_str);
+          restricted_size_str = pre_flight_info.at("size");
           ok = true;
         } catch (const std::out_of_range &err) {
           ;// do nothing, no size restriction
@@ -1523,611 +1403,71 @@ static void serve_iiif(Connection &conn_obj,
   auto validated = validate_resolved_path(infile, server->resolved_imgroot());
   if (validated.status == PathValidation::TRAVERSAL) {
     log_warn("Path traversal blocked (realpath): client=%s identifier=%s",
-      conn_obj.peer_ip().c_str(), params[iiif_identifier].c_str());
+      conn_obj.peer_ip().c_str(),
+      params[iiif_identifier].c_str());
     send_error(conn_obj, Connection::BAD_REQUEST, "Invalid IIIF identifier");
     return;
   }
-  if (validated.status == PathValidation::OK) {
-    infile = validated.resolved_path;
+  if (validated.status == PathValidation::OK) { infile = validated.resolved_path; }
+
+  // Flatten the parsed params into the typed FFI seam (the enum values mirror
+  // the iiifparser enums 1:1, decision #7). The decode/transform/encode pipeline,
+  // admission (cache/rate-limit/budget), and canonical-URL building all live
+  // behind sipi_serve_image now.
+  ::SipiIiifParams p{};
+  p.region_type = static_cast<SipiRegionType>(region->getType());
+  region->get_coords(p.region[0], p.region[1], p.region[2], p.region[3]);
+  p.size_type = static_cast<SipiSizeType>(size->getType());
+  {
+    bool upscaling = false;
+    float percent = 0.F;
+    int reduce = 0;
+    size_t nx = 0, ny = 0;
+    size->get_params(upscaling, percent, reduce, nx, ny);
+    p.size_upscaling = upscaling ? 1 : 0;
+    p.size_percent = percent;
+    p.size_reduce = reduce;
+    p.size_nx = nx;
+    p.size_ny = ny;
   }
+  {
+    float angle = 0.F;
+    const bool mirror = rotation.get_rotation(angle);
+    p.rotation = angle;
+    p.rotation_mirror = mirror ? 1 : 0;
+  }
+  p.quality_type = static_cast<SipiQualityType>(quality_format.quality());
+  p.format_type = static_cast<SipiFormatType>(quality_format.format());
 
-  //
-  // determine the mimetype of the file in the SIPI repo
-  //
-  SipiQualityFormat::FormatType in_format = SipiQualityFormat::UNSUPPORTED;
+  const std::string client_id = resolve_client_id(conn_obj);
+  const std::string host = conn_obj.host();
 
-  std::string actual_mimetype = shttps::Parsing::getFileMimetype(infile).first;
-  if (actual_mimetype == "image/tiff") in_format = SipiQualityFormat::TIF;
-  if (actual_mimetype == "image/jpeg") in_format = SipiQualityFormat::JPG;
-  if (actual_mimetype == "image/png") in_format = SipiQualityFormat::PNG;
-  if ((actual_mimetype == "image/jpx") || (actual_mimetype == "image/jp2")) in_format = SipiQualityFormat::JP2;
+  ::SipiServeRequest req{};
+  req.resolved_path = infile.c_str();
+  req.prefix = params[iiif_prefix].c_str();
+  req.identifier = params[iiif_identifier].c_str();
+  req.client_ip = client_id.c_str();
+  req.params = p;
+  req.restricted_size = restricted_size_str.empty() ? nullptr : restricted_size_str.c_str();
+  req.watermark_path = watermark.empty() ? nullptr : watermark.c_str();
+  req.forwarded_proto = nullptr;
+  req.forwarded_host = host.c_str();
+  req.request_uri = uri.c_str();
+  req.is_head = (conn_obj.method() == Connection::HEAD) ? 1 : 0;
 
-  if (access(infile.c_str(), R_OK) != 0) {
-    // R3: Do not leak internal filesystem path in error message
-    send_error(conn_obj, Connection::NOT_FOUND);
+  ConnResponseCtx rctx{ &conn_obj };
+  ::SipiResponse resp = make_connection_response(rctx);
+  const int rc = ::sipi_serve_image(&req, &resp);
+  if (rc == 499) {
+    // SipiStatus::ClientGone — the client vanished mid-decode, the engine already
+    // counted it, and nothing was committed. Render no error.
     return;
   }
-
-  float angle;
-  bool mirror = rotation.get_rotation(angle);
-
-  //
-  // get cache info
-  //
-  std::shared_ptr<SipiCache> cache = server->cache();
-  size_t img_w = 0, img_h = 0;
-  size_t tile_w = 0, tile_h = 0;
-  int clevels = 0;
-  int numpages = 0;
-  int img_nc = 0, img_bps = 0;  // for memory budget estimation
-
-  // get image dimensions by accessing the file (read_shape fast path —
-  // ADR-0004 / DEV-6379). The previous `cache->getSize()` memoization was
-  // deleted in Phase 10 / DEV-6538.
-  Sipi::SipiImgInfo info;
-  try {
-    Sipi::SipiImage img;
-    info = img.read_shape(infile);
-  } catch (SipiImageError &err) {
-    ImageContext sentry_ctx;
-    sentry_ctx.input_file = infile;
-    sentry_ctx.file_size_bytes = get_file_size(infile);
-    sentry_ctx.request_uri = uri;
-    capture_image_error(err.to_string(), "read", sentry_ctx, SipiMode::Server);
-    send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());
+  if (rc != 0) {
+    if (rc == 404) { log_warn("GET: %s not accessible", infile.c_str()); }
+    send_error(conn_obj, static_cast<Connection::StatusCodes>(rc));
     return;
   }
-  if (info.success == SipiImgInfo::FAILURE) {
-    send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Couldn't get image dimensions!");
-    return;
-  }
-  img_w = info.width;
-  img_h = info.height;
-  tile_w = info.tile_width;
-  tile_h = info.tile_height;
-  clevels = info.clevels;
-  numpages = info.numpages;
-  img_nc = info.nc;
-  img_bps = info.bps;
-
-  size_t tmp_r_w{ 0L }, tmp_r_h{ 0L };
-  int tmp_red{ 0 };
-  bool tmp_ro{ false };
-  try {
-    size->get_size(img_w, img_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
-  } catch (Sipi::SipiSizeError &err) {
-    send_error(conn_obj, Connection::BAD_REQUEST, err.to_string());
-    return;
-  } catch (Sipi::SipiError &err) {
-    send_error(conn_obj, Connection::BAD_REQUEST, err);
-    return;
-  }
-
-  // Save requested output dimensions before restricted_size may overwrite them.
-  // restricted_size->get_size() sets tmp_r_w/tmp_r_h to 0 when UNDEFINED (the
-  // common case), which would make the pixel limit check always false.
-  const size_t requested_w = tmp_r_w;
-  const size_t requested_h = tmp_r_h;
-
-  try {
-    restricted_size->get_size(img_w, img_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
-  } catch (Sipi::SipiSizeError &err) {
-    send_error(conn_obj, Connection::BAD_REQUEST, err.to_string());
-    return;
-  } catch (Sipi::SipiError &err) {
-    send_error(conn_obj, Connection::BAD_REQUEST, err);
-    return;
-  }
-
-  // if restricted size is set and smaller, we use it
-  if (!restricted_size->undefined() && (*size > *restricted_size)) { size = restricted_size; }
-
-  // Guard: check output pixel count against max_pixel_limit
-  // Use the saved dimensions from before restricted_size overwrote them.
-  if (server->max_pixel_limit() > 0 && requested_w > 0 && requested_h > 0) {
-    size_t output_pixels = requested_w * requested_h;
-    if (output_pixels > server->max_pixel_limit()) {
-      log_warn("Request rejected: output %zux%zu (%zu pixels) exceeds limit %zu: %s",
-        tmp_r_w, tmp_r_h, output_pixels, server->max_pixel_limit(), uri.c_str());
-      Metrics::instance().image_too_large_total.Increment();
-      send_error(conn_obj,
-        Connection::BAD_REQUEST,
-        "Requested output dimensions too large (" + std::to_string(tmp_r_w) + "x" + std::to_string(tmp_r_h) + ")");
-      return;
-    }
-  }
-
-  // R23-R30: Per-client rate limiting
-  if (server->rate_limiter() != nullptr && requested_w > 0 && requested_h > 0) {
-    size_t request_pixels = requested_w * requested_h;
-    auto client_id = resolve_client_id(conn_obj);
-    auto result = server->rate_limiter()->check_and_record(client_id, request_pixels);
-
-    auto &metrics = Metrics::instance();
-
-    if (result.over_budget) {
-      std::string action = result.allowed ? "shadow_rejected" : "rejected";
-      // Structured log for per-IP detail (Loki queries)
-      log_warn("{\"event\":\"rate_limit_exceeded\",\"client_ip\":\"%s\","
-        "\"pixels_consumed\":%zu,\"budget\":%zu,\"window_seconds\":%u,"
-        "\"action\":\"%s\",\"request_pixels\":%zu,\"path\":\"%s\"}",
-        client_id.c_str(), result.pixels_consumed, result.budget,
-        server->rate_limiter()->mode() == RateLimitMode::MONITOR ? 0u : result.retry_after,
-        action.c_str(), request_pixels, uri.c_str());
-
-      metrics.rate_limit_decisions_total
-        .Add({{"action", action}}).Increment();
-
-      if (!result.allowed) {
-        conn_obj.header("Retry-After", std::to_string(result.retry_after));
-        send_error(conn_obj, Connection::TOO_MANY_REQUESTS,
-          "Rate limit exceeded. Try again in " + std::to_string(result.retry_after) + " seconds.");
-        return;
-      }
-    } else {
-      metrics.rate_limit_decisions_total
-        .Add({{"action", "allowed"}}).Increment();
-    }
-
-    // Near-limit warning (>80% of budget)
-    if (result.pixels_consumed > result.budget * 80 / 100) {
-      metrics.rate_limit_near_limit_total.Increment();
-    }
-
-    metrics.rate_limit_clients_tracked.Set(
-      static_cast<double>(server->rate_limiter()->tracked_clients()));
-  }
-
-  std::string cannonical_watermark = watermark.empty() ? "0" : "1";
-
-  //.....................................................................
-  // here we start building the canonical URL
-  //
-  std::pair<std::string, std::string> canonical_info;
-  try {
-    canonical_info = Sipi::SipiHttpServer::get_canonical_url(img_w,
-      img_h,
-      conn_obj.host(),
-      params[iiif_prefix],
-      sid.getIdentifier(),
-      region,
-      size,
-      rotation,
-      quality_format,
-      sid.getPage(),
-      cannonical_watermark);
-  } catch (Sipi::SipiError &err) {
-    send_error(conn_obj, Connection::BAD_REQUEST, err);
-    return;
-  }
-
-  std::string canonical_header = canonical_info.first;
-  std::string canonical = canonical_info.second;
-
-  // now we check if we can send the file directly
-  //
-  if ((region->getType() == SipiRegion::FULL) && (size->getType() == SipiSize::FULL) && (angle == 0.0) && (!mirror)
-      && watermark.empty() && (quality_format.format() == in_format)
-      && (quality_format.quality() == SipiQualityFormat::DEFAULT)) {
-    conn_obj.status(Connection::OK);
-    conn_obj.header("Cache-Control", "must-revalidate, post-check=0, pre-check=0");
-    conn_obj.header("Link", canonical_header);
-
-    // set the header (mimetype)
-    switch (quality_format.format()) {
-    case SipiQualityFormat::TIF:
-      conn_obj.header("Content-Type", "image/tiff");
-      break;
-    case SipiQualityFormat::JPG:
-      conn_obj.header("Content-Type", "image/jpeg");
-      break;
-    case SipiQualityFormat::PNG:
-      conn_obj.header("Content-Type", "image/png");
-      break;
-    case SipiQualityFormat::JP2:
-      conn_obj.header("Content-Type", "image/jp2");
-      break;
-    default: {
-    }
-    }
-    try {
-      if (not_head_request) {
-        conn_obj.sendFile(infile);
-      } else {
-        conn_obj.flush();
-      }
-    } catch (shttps::InputFailure iofail) {
-      log_debug("Browser unexpectedly closed connection");
-    } catch (Sipi::SipiError &err) {
-      send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
-    }
-    return;
-  }// finish sending unmodified file in toto
-
-  // we only allow the cache if the file is not watermarked
-  if (cache != nullptr) {
-    //!>
-    //!> here we check if the file is in the cache. If so, it's being blocked from deletion
-    //!>
-    std::string cachefile = cache->check(infile, canonical, true);
-    // we block the file from being deleted if successfull
-
-    if (!cachefile.empty()) {
-      log_debug("Using cachefile %s", cachefile.c_str());
-      conn_obj.status(Connection::OK);
-      conn_obj.header("Cache-Control", "must-revalidate, post-check=0, pre-check=0");
-      conn_obj.header("Link", canonical_header);
-
-      // set the header (mimetype)
-      switch (quality_format.format()) {
-      case SipiQualityFormat::TIF:
-        conn_obj.header("Content-Type", "image/tiff");
-        break;
-      case SipiQualityFormat::JPG:
-        conn_obj.header("Content-Type", "image/jpeg");
-        break;
-      case SipiQualityFormat::PNG:
-        conn_obj.header("Content-Type", "image/png");
-        break;
-      case SipiQualityFormat::JP2:
-        conn_obj.header("Content-Type", "image/jp2");
-        break;
-      default: {
-      }
-      }
-
-      try {
-        //!> send the file from cache
-        if (not_head_request) {
-          conn_obj.sendFile(cachefile);
-        } else {
-          conn_obj.flush();
-        }
-        //!> from now on the cache file can be deleted again
-      } catch (shttps::InputFailure err) {
-        // -1 was thrown
-        log_debug("Browser unexpectedly closed connection");
-        cache->deblock(cachefile);
-        return;
-      } catch (Sipi::SipiError &err) {
-        log_err("Error sending cache file: \"%s\": %s", cachefile.c_str(), err.to_string().c_str());
-        send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
-        cache->deblock(cachefile);
-        return;
-      }
-      cache->deblock(cachefile);
-      return;
-    }
-  }
-
-  // Memory budget check — only for requests that will decode (after cache/passthrough)
-  std::optional<MemoryBudgetGuard> budget_guard;
-  if (server->memory_budget() != nullptr) {
-    // Compute actual decode dimensions (with reduce levels + ROI)
-    auto ddims = compute_decode_dims(img_w, img_h, clevels, region, size);
-
-    // Estimate peak memory across the full processing pipeline
-    bool needs_icc = (quality_format.quality() == SipiQualityFormat::COLOR
-                      || quality_format.quality() == SipiQualityFormat::GRAY);
-    size_t estimated = estimate_peak_memory(
-        ddims.width, ddims.height, ddims.out_w, ddims.out_h,
-        img_nc, img_bps, static_cast<double>(angle), needs_icc);
-
-    // Record estimate in histogram for capacity planning
-    Metrics::instance().decode_memory_estimate_bytes.Observe(static_cast<double>(estimated));
-
-    auto result = server->memory_budget()->try_acquire(estimated);
-
-    // Update gauge
-    Metrics::instance().decode_memory_used_bytes.Set(static_cast<double>(result.used));
-
-    // Record decision
-    if (result.allowed && !result.over_budget) {
-      Metrics::instance().decode_memory_acquired.Increment();
-    } else if (result.allowed && result.over_budget) {
-      Metrics::instance().decode_memory_shadow_rejected.Increment();
-      log_warn("Memory budget over limit (monitor): %zu / %zu bytes for %s",
-          result.used, result.budget, uri.c_str());
-    } else {
-      Metrics::instance().decode_memory_rejected.Increment();
-      log_warn("Memory budget exhausted (enforce): %zu / %zu bytes, rejecting %s",
-          result.used, result.budget, uri.c_str());
-      conn_obj.header("Retry-After", "5");
-      send_error(conn_obj, Connection::SERVICE_UNAVAILABLE, "Server memory budget exhausted");
-      return;
-    }
-
-    // Near-limit warning (>80%)
-    if (result.used > result.budget - result.budget / 5) {
-      Metrics::instance().decode_memory_near_limit_total.Increment();
-    }
-
-    // RAII guard — releases budget on scope exit or exception
-    budget_guard.emplace(*server->memory_budget(), estimated, result.allowed, [server]() {
-      Metrics::instance().decode_memory_used_bytes.Set(
-          static_cast<double>(server->memory_budget()->used()));
-    });
-  }
-
-  // Guard: check if client is still connected before expensive image loading
-  if (!conn_obj.peerConnected()) {
-    log_info("Client disconnected before image load, aborting: %s", uri.c_str());
-    Metrics::instance().client_disconnected_total.Increment();
-    return;
-  }
-
-  Sipi::SipiImage img;
-  try {
-    img.read(infile, region, size, quality_format.format() == SipiQualityFormat::JPG, server->scaling_quality());
-  } catch (const std::bad_alloc &) {
-    log_err("Memory allocation failed loading %s (%zux%zu)", infile.c_str(), img_w, img_h);
-    Metrics::instance().memory_alloc_failures_total.Increment();
-    ImageContext sentry_ctx;
-    sentry_ctx.input_file = infile;
-    sentry_ctx.file_size_bytes = get_file_size(infile);
-    sentry_ctx.request_uri = uri;
-    capture_image_error("std::bad_alloc during image read", "read", sentry_ctx, SipiMode::Server);
-    send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Insufficient memory to process image");
-    return;
-  } catch (const SipiImageError &err) {
-    ImageContext sentry_ctx;
-    sentry_ctx.input_file = infile;
-    sentry_ctx.file_size_bytes = get_file_size(infile);
-    sentry_ctx.request_uri = uri;
-    populate_from_image(sentry_ctx, img);
-    capture_image_error(err.to_string(), "read", sentry_ctx, SipiMode::Server);
-    send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.to_string());
-    return;
-  } catch (const SipiSizeError &err) {
-    send_error(conn_obj, Connection::BAD_REQUEST, err.to_string());
-    return;
-  }
-
-  //
-  // now we rotate
-  //
-  if (mirror || (angle != 0.0)) {
-    if (!conn_obj.peerConnected()) {
-      log_info("Client disconnected before rotate, aborting: %s", uri.c_str());
-      Metrics::instance().client_disconnected_total.Increment();
-      return;
-    }
-    try {
-      img.rotate(angle, mirror);
-    } catch (const std::bad_alloc &) {
-      log_err("Memory allocation failed during rotate: %s", infile.c_str());
-      Metrics::instance().memory_alloc_failures_total.Increment();
-      send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Insufficient memory to process image");
-      return;
-    } catch (Sipi::SipiError &err) {
-      ImageContext sentry_ctx;
-      sentry_ctx.input_file = infile;
-      sentry_ctx.file_size_bytes = get_file_size(infile);
-      sentry_ctx.request_uri = uri;
-      populate_from_image(sentry_ctx, img);
-      capture_image_error(err.to_string(), "convert", sentry_ctx, SipiMode::Server);
-      send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
-      return;
-    }
-  }
-
-  if (quality_format.quality() != SipiQualityFormat::DEFAULT) {
-    if (!conn_obj.peerConnected()) {
-      log_info("Client disconnected before color conversion, aborting: %s", uri.c_str());
-      Metrics::instance().client_disconnected_total.Increment();
-      return;
-    }
-    switch (quality_format.quality()) {
-    case SipiQualityFormat::COLOR:
-      img.convertToIcc(Icc(icc_sRGB), 8);
-      break;// for now, force 8 bit/sample
-    case SipiQualityFormat::GRAY:
-      img.convertToIcc(Icc(icc_GRAY_D50), 8);
-      break;// for now, force 8 bit/sample
-    case SipiQualityFormat::BITONAL:
-      img.toBitonal();
-      break;
-    default: {
-      send_error(conn_obj, Connection::BAD_REQUEST, "Invalid quality specificer");
-      return;
-    }
-    }
-  }
-
-  //
-  // let's add a watermark if necessary
-  //
-  if (!watermark.empty()) {
-    if (!conn_obj.peerConnected()) {
-      log_info("Client disconnected before watermark, aborting: %s", uri.c_str());
-      Metrics::instance().client_disconnected_total.Increment();
-      return;
-    }
-    try {
-      img.add_watermark(watermark);
-    } catch (Sipi::SipiError &err) {
-      ImageContext sentry_ctx;
-      sentry_ctx.input_file = infile;
-      sentry_ctx.file_size_bytes = get_file_size(infile);
-      sentry_ctx.request_uri = uri;
-      populate_from_image(sentry_ctx, img);
-      capture_image_error(err.to_string(), "convert", sentry_ctx, SipiMode::Server);
-      send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
-      log_err("GET %s: error adding watermark: %s", uri.c_str(), err.to_string().c_str());
-      return;
-    } catch (std::exception &err) {
-      ImageContext sentry_ctx;
-      sentry_ctx.input_file = infile;
-      sentry_ctx.file_size_bytes = get_file_size(infile);
-      sentry_ctx.request_uri = uri;
-      populate_from_image(sentry_ctx, img);
-      capture_image_error(err.what(), "convert", sentry_ctx, SipiMode::Server);
-      send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.what());
-      log_err("GET %s: error adding watermark: %s", uri.c_str(), err.what());
-      return;
-    }
-    log_info("GET %s: adding watermark", uri.c_str());
-  }
-
-  // Final connection check before writing response
-  if (!conn_obj.peerConnected()) {
-    log_info("Client disconnected before response write, aborting: %s", uri.c_str());
-    Metrics::instance().client_disconnected_total.Increment();
-    return;
-  }
-
-  conn_obj.header("Cache-Control", "must-revalidate, post-check=0, pre-check=0");
-  std::string cachefile;
-
-  bool skip_cache = false;
-
-  // Body-write callback bridging the connection to the OutputSink seam — the
-  // one place shttps meets the format handlers in the IIIF write path. An
-  // shttps throw (OUTPUT_WRITE_FAIL / shttps::Error) must not cross into the
-  // codec (the Phase B/C FFI no-throw rule), so it becomes a non-zero return.
-  auto socket_write = [](void *ctx, const uint8_t *data, size_t len) -> int {
-    try {
-      static_cast<Connection *>(ctx)->sendAndFlush(data, len);
-      return 0;
-    } catch (...) {
-      return 1;
-    }
-  };
-
-  try {
-    if (cache != nullptr && !skip_cache) {
-      //!> name the cache file to write into.
-      cachefile = cache->getNewCacheFileName();
-      // Preserve openCacheFile()'s writability check: a cache file we cannot
-      // create is a 500. The FilePath sink itself treats writes as best-effort.
-      std::ofstream cache_probe(cachefile, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
-      if (cache_probe.fail()) {
-        send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, "Could not open cache file!");
-        return;
-      }
-    }
-
-    // The encoder writes once; the bytes are broadcast to the socket and, when
-    // caching, the cache file. This is the tee shttps::Connection performed via
-    // openCacheFile + sendAndFlush, moved into the write loop (ADR-0007).
-    const Sipi::OutputSink sink =
-      (cache != nullptr && !skip_cache)
-        ? Sipi::OutputSink{ Sipi::TeeSink{
-            { Sipi::CallbackSink{ socket_write, &conn_obj }, Sipi::FilePath{ cachefile } } } }
-        : Sipi::OutputSink{ Sipi::CallbackSink{ socket_write, &conn_obj } };
-
-    switch (quality_format.format()) {
-    case SipiQualityFormat::JPG: {
-      conn_obj.status(Connection::OK);
-      conn_obj.header("Link", canonical_header);
-      conn_obj.header("Content-Type", "image/jpeg");// set the header (mimetype)
-      conn_obj.setChunkedTransfer();
-      Sipi::SipiCompressionParams qp = { { JPEG_QUALITY, std::to_string(server->jpeg_quality()) } };
-      if (not_head_request) img.write("jpg", sink, &qp);
-      break;
-    }
-    case SipiQualityFormat::JP2: {
-      conn_obj.status(Connection::OK);
-      conn_obj.header("Link", canonical_header);
-      conn_obj.header("Content-Type", "image/jp2");// set the header (mimetype)
-      conn_obj.setChunkedTransfer();
-      if (not_head_request) img.write("jpx", sink);
-      break;
-    }
-    case SipiQualityFormat::TIF: {
-      conn_obj.status(Connection::OK);
-      conn_obj.header("Link", canonical_header);
-      conn_obj.header("Content-Type", "image/tiff");// set the header (mimetype)
-      // no chunked transfer needed...
-
-      if (not_head_request) img.write("tif", sink);
-      break;
-    }
-    case SipiQualityFormat::PNG: {
-      conn_obj.status(Connection::OK);
-      conn_obj.header("Link", canonical_header);
-      conn_obj.header("Content-Type", "image/png");// set the header (mimetype)
-      conn_obj.setChunkedTransfer();
-
-      if (not_head_request) img.write("png", sink);
-      break;
-    }
-    default: {
-      // HTTP 400 (format not supported)
-      log_warn("Unsupported file format requested! Supported are .jpg, .jp2, .tif, .png");
-      conn_obj.setBuffer();
-      conn_obj.status(Connection::BAD_REQUEST);
-      conn_obj.header("Content-Type", "text/plain");
-      conn_obj << "Not Implemented!\n";
-      conn_obj << "Unsupported file format requested! Supported are .jpg, .jp2, .tif, .png\n";
-      conn_obj.flush();
-    }
-    }
-
-    if (!not_head_request) {
-      conn_obj.flush();
-    }
-
-    if (cache != nullptr) {
-      // The cache file was written by the FilePath sink and closed when
-      // SipiImage::write() returned (the SinkStream's ofstream destructs there).
-
-      // Post-write check: if converted file exceeds cache_size, remove and skip
-      if (!skip_cache) {
-        long long max_cs = cache->getMaxCacheSize();
-        if (max_cs > 0) {
-          struct stat cache_stat;
-          if (stat(cachefile.c_str(), &cache_stat) == 0 && cache_stat.st_size > max_cs) {
-            log_warn("Converted file %s (%lld bytes) exceeds cache_size (%lld bytes), removing",
-              cachefile.c_str(), static_cast<long long>(cache_stat.st_size), max_cs);
-            ::unlink(cachefile.c_str());
-            Metrics::instance().cache_skips_total.Increment();
-            skip_cache = true;
-          }
-        }
-      }
-
-      if (!skip_cache) {
-        cache->add(infile, canonical, cachefile, img_w, img_h, tile_w, tile_h, clevels, numpages);
-      }
-    }
-  } catch (Sipi::SipiError &err) {
-    if (cache != nullptr) {
-      unlink(cachefile.c_str());
-    }
-    ImageContext sentry_ctx;
-    sentry_ctx.input_file = infile;
-    sentry_ctx.file_size_bytes = get_file_size(infile);
-    sentry_ctx.request_uri = uri;
-    sentry_ctx.output_format = format_type_to_string(quality_format.format());
-    populate_from_image(sentry_ctx, img);
-    capture_image_error(err.to_string(), "write", sentry_ctx, SipiMode::Server);
-    send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
-    return;
-  } catch (Sipi::SipiImageClientAbortError &) {
-    // Client closed the socket mid-response (matches Traefik HTTP 499).
-    // Not a server error: no Sentry capture, no response (the peer is gone).
-    if (cache != nullptr) {
-      unlink(cachefile.c_str());
-    }
-    log_info("Client aborted HTTP response for %s", uri.c_str());
-    Metrics::instance().client_disconnected_total.Increment();
-    return;
-  } catch (Sipi::SipiImageError &err) {
-    if (cache != nullptr) {
-      unlink(cachefile.c_str());
-    }
-    ImageContext sentry_ctx;
-    sentry_ctx.input_file = infile;
-    sentry_ctx.file_size_bytes = get_file_size(infile);
-    sentry_ctx.request_uri = uri;
-    sentry_ctx.output_format = format_type_to_string(quality_format.format());
-    populate_from_image(sentry_ctx, img);
-    capture_image_error(err.what(), "write", sentry_ctx, SipiMode::Server);
-    send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err.what());
-    return;
-  }
-
   conn_obj.flush();
 }
 
@@ -2283,6 +1623,21 @@ void SipiHttpServer::run()
   }
 
   user_data(this);
+
+  // Install the engine context the FFI image pipeline (sipi_serve_image) reads.
+  // Phase B parity: this server owns cache/rate-limiter/memory-budget, so it
+  // hands the FFI non-owning pointers + the config knobs. At the Phase C cutover
+  // sipi_init takes over and this install (and SipiHttpServer) go away.
+  Sipi::ffi::set_engine_context(Sipi::ffi::EngineContext{
+    .cache = _cache.get(),
+    .rate_limiter = _rate_limiter.get(),
+    .memory_budget = _memory_budget.get(),
+    .imgroot = _imgroot,
+    .resolved_imgroot = _resolved_imgroot,
+    .jpeg_quality = _jpeg_quality,
+    .scaling_quality = _scaling_quality,
+    .max_pixel_limit = _max_pixel_limit,
+  });
 
   // in shttps::Server::run(), add additional routes are added, namely the ones for the LUA scripts
   Server::run();

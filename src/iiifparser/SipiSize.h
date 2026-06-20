@@ -112,6 +112,28 @@ public:
   explicit SipiSize(std::string str);
 
   /*!
+   * Reconstruct a size from its flattened components (the FFI seam). Sets the
+   * same parse-time fields the string constructor does; the resulting w/h and
+   * the reduce factor are (re)derived by get_size(), exactly as for a
+   * string-parsed instance.
+   */
+  SipiSize(SizeType size_type_p, bool upscaling_p, float percent_p, int reduce_p, size_t nx_p, size_t ny_p)
+    : size_type(size_type_p), upscaling(upscaling_p), percent(percent_p), reduce(reduce_p), redonly(false), nx(nx_p),
+      ny(ny_p), w(0), h(0), canonical_ok(false)
+  {}
+
+  /*! The parse-time fields, for flattening across the FFI seam (the inverse of
+   *  the component constructor). */
+  inline void get_params(bool &upscaling_p, float &percent_p, int &reduce_p, size_t &nx_p, size_t &ny_p) const
+  {
+    upscaling_p = upscaling;
+    percent_p = percent;
+    reduce_p = reduce;
+    nx_p = nx;
+    ny_p = ny;
+  }
+
+  /*!
    * Comparison operator ">"
    */
   bool operator>(const SipiSize &s) const;

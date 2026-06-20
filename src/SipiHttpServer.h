@@ -79,19 +79,6 @@ public:
 
   void run() override;
 
-  static std::pair<std::string, std::string> get_canonical_url(size_t img_w,
-    size_t img_h,
-    const std::string &host,
-    const std::string &prefix,
-    const std::string &identifier,
-    std::shared_ptr<SipiRegion> region,
-    std::shared_ptr<SipiSize> size,
-    SipiRotation &rotation,
-    SipiQualityFormat &quality_format,
-    int pagenum = 0,
-    const std::string &canonnical_watermark = "0");
-
-
   pid_t pid() const { return _pid; }
 
   void docroot(const std::string &docroot_p) { _docroot = docroot_p; }

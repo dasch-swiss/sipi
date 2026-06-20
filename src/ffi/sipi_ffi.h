@@ -158,7 +158,9 @@ typedef struct
   const char *restricted_size; /* preflight `restrict` downscale, or NULL */
   const char *watermark_path; /* preflight `restrict` watermark, or NULL */
   const char *forwarded_proto; /* X-Forwarded-Proto → canonical-URL / redirect scheme */
-  const char *forwarded_host; /* X-Forwarded-Host  → canonical-URL `id` */
+  const char *forwarded_host; /* X-Forwarded-Host  → canonical-URL `id` (host for the canonical URL) */
+  const char *request_uri; /* raw request URI — error/log context only (Sentry), or NULL */
+  int is_head; /* 1 = HEAD: emit status + headers, no body, no cache write */
 } SipiServeRequest;
 
 /* ── Preflight (C++ LuaServer pre_flight) ───────────────────────────────────

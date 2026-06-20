@@ -29,6 +29,11 @@ public:
 
   SipiQualityFormat(std::string str);
 
+  /*! Reconstruct from flattened components (the FFI seam). */
+  inline SipiQualityFormat(QualityType quality_p, FormatType format_p)
+    : quality_type(quality_p), format_type(format_p)
+  {}
+
   friend std::ostream &operator<<(std::ostream &lhs, const SipiQualityFormat &rhs);
 
   inline QualityType quality() { return quality_type; };
