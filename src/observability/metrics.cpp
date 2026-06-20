@@ -67,6 +67,11 @@ Metrics::Metrics()
                                  .Help("Rate limit decisions by action (allowed, rejected, shadow_rejected)")
                                  .Register(*registry_)),
 
+    // Pre-create counter children to avoid per-request map lookups
+    rate_limit_allowed(rate_limit_decisions_total.Add({{"action", "allowed"}})),
+    rate_limit_rejected(rate_limit_decisions_total.Add({{"action", "rejected"}})),
+    rate_limit_shadow_rejected(rate_limit_decisions_total.Add({{"action", "shadow_rejected"}})),
+
     rate_limit_near_limit_total(prometheus::BuildCounter()
                                   .Name("sipi_rate_limit_near_limit_total")
                                   .Help("Clients at >80% of pixel budget")
