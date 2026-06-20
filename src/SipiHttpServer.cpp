@@ -49,6 +49,7 @@
 #include "iiifparser/SipiDecodeDims.h"
 #include "observability/sentry.h"
 #include "favicon.h"
+#include "ffi/sipi_ffi.h"
 #include "handlers/iiif_handler.h"
 #include "jansson.h"
 
@@ -1288,6 +1289,46 @@ static void serve_knora_json_file(Connection &conn_obj,
  * \param prefix_as_path
  * \param params
  */
+// ── Connection → SipiResponse adapter (strangler Phase B parity glue) ───────
+// Presents a live shttps::Connection as the C-ABI response sink the FFI core
+// (src/ffi/sipi_ffi.h) drives. Temporary: at the Phase C cutover the Rust shell
+// supplies SipiResponse directly and Connection is deleted, so this stays a
+// file-local helper rather than a durable abstraction.
+static void conn_set_status(void *ctx, int status)
+{
+  static_cast<Connection *>(ctx)->status(static_cast<Connection::StatusCodes>(status));
+}
+
+static void conn_add_header(void *ctx, const char *name, const char *value)
+{
+  static_cast<Connection *>(ctx)->header(name, value);
+}
+
+// Known-length body: Connection::sendFile sends Content-Length + streams the
+// region (no whole-file buffering), the legacy /file framing. `length` is the
+// byte count; sendFile takes an inclusive `to`.
+static int conn_send_file(void *ctx, const char *path, uint64_t offset, uint64_t length)
+{
+  try {
+    const size_t from = static_cast<size_t>(offset);
+    const size_t to = from + static_cast<size_t>(length) - 1;
+    static_cast<Connection *>(ctx)->sendFile(path, 8192, from, to);
+    return 0;
+  } catch (...) {
+    return 1;// peer gone / socket error
+  }
+}
+
+static int conn_cancelled(void *ctx) { return static_cast<Connection *>(ctx)->peerConnected() ? 0 : 1; }
+
+static ::SipiResponse make_connection_response(Connection &conn)
+{
+  // `write` (the unknown-length chunked path) is null until sipi_serve_image
+  // lands: it needs a one-time setChunkedTransfer before the first chunk, which
+  // belongs with that slice. sipi_serve_file delivers via send_file, never write.
+  return ::SipiResponse{ &conn, conn_set_status, conn_add_header, nullptr, conn_send_file, conn_cancelled };
+}
+
 static void serve_file_download(Connection &conn_obj,
   shttps::LuaServer &luaserver,
   SipiHttpServer *serv,
@@ -1344,84 +1385,31 @@ static void serve_file_download(Connection &conn_obj,
     requested_file = validated.resolved_path;
   }
 
-  if (access(requested_file.c_str(), R_OK) == 0) {
-    std::string actual_mimetype = shttps::Parsing::getBestFileMimetype(requested_file);
-    //
-    // first we get the filesize and time using fstat
-    //
-    struct stat fstatbuf
-    {
-    };
-
-    if (stat(requested_file.c_str(), &fstatbuf) != 0) {
-      log_err("Cannot fstat file %s ", requested_file.c_str());
-      send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR);
-    }
-    size_t fsize = fstatbuf.st_size;
-#ifdef __APPLE__
-    struct timespec rawtime = fstatbuf.st_mtimespec;
-#else
-    struct timespec rawtime = fstatbuf.st_mtim;
-#endif
-    char timebuf[100];
-    std::strftime(timebuf, sizeof timebuf, "%a, %d %b %Y %H:%M:%S %Z", std::gmtime(&rawtime.tv_sec));
-
-    std::string range = conn_obj.header("range");
-    if (range.empty()) {
-      // no "Content-Length" since send_file() will add this
-      conn_obj.header("Content-Type", actual_mimetype);
-      conn_obj.header("Cache-Control", "public, must-revalidate, max-age=0");
-      conn_obj.header("Pragma", "no-cache");
-      conn_obj.header("Accept-Ranges", "bytes");
-      conn_obj.header("Last-Modified", timebuf);
-      conn_obj.header("Content-Transfer-Encoding: binary");
-      conn_obj.sendFile(requested_file);
+  // The raw byte passthrough (stat, MIME, Range/206 parsing) lives behind the
+  // FFI core (sipi_serve_file), which delegates byte delivery back to the
+  // transport via send_file. The Rust shell drives the same seam in Phase C.
+  // Content-Disposition derives from the IIIF identifier (an edge/input concern
+  // with R8/R9 sanitization), so it stays caller-side and is set only on a Range
+  // request — matching the legacy 206 path.
+  std::string range = conn_obj.header("range");
+  if (!range.empty()) {
+    auto safe_name = sanitize_header_value(urldecode(params[iiif_identifier]));
+    if (is_ascii(safe_name)) {
+      auto quoted = escape_quoted_string(safe_name);
+      conn_obj.header("Content-Disposition", "inline; filename=\"" + quoted + "\"");
     } else {
-      //
-      // now we parse the range
-      //
-      std::regex re(R"(bytes=\s*(\d+)-(\d*)[\D.*]?)");
-      std::cmatch m;
-      size_t start = 0;// lets assume beginning of file
-      size_t end = fsize - 1;// lets assume whole file
-      if (std::regex_match(range.c_str(), m, re)) {
-        if (m.size() < 2) { throw Error("Range expression invalid!"); }
-        start = std::stoull(m[1]);
-        if ((m.size() > 1) && !m[2].str().empty()) { end = std::stoull(m[2]); }
-      } else {
-        throw Error("Range expression invalid!");
-      }
-
-      // no "Content-Length" since send_file() will add this
-      conn_obj.status(Connection::PARTIAL_CONTENT);
-      conn_obj.header("Content-Type", actual_mimetype);
-      conn_obj.header("Cache-Control", "public, must-revalidate, max-age=0");
-      conn_obj.header("Pragma", "no-cache");
-      conn_obj.header("Accept-Ranges", "bytes");
-      std::stringstream ss;
-      ss << "bytes " << start << "-" << end << "/" << fsize;
-      conn_obj.header("Content-Range", ss.str());
-      // R8/R9: Sanitize identifier for Content-Disposition header
-      {
-        auto safe_name = sanitize_header_value(urldecode(params[iiif_identifier]));
-        if (is_ascii(safe_name)) {
-          auto quoted = escape_quoted_string(safe_name);
-          conn_obj.header("Content-Disposition", "inline; filename=\"" + quoted + "\"");
-        } else {
-          conn_obj.header("Content-Disposition",
-            "inline; filename*=UTF-8''" + percent_encode_rfc6266(safe_name));
-        }
-      }
-      conn_obj.header("Content-Transfer-Encoding: binary");
-      conn_obj.header("Last-Modified", timebuf);
-      conn_obj.sendFile(requested_file, 8192, start, end);
+      conn_obj.header("Content-Disposition", "inline; filename*=UTF-8''" + percent_encode_rfc6266(safe_name));
     }
-    conn_obj.flush();
-  } else {
-    log_warn("GET: %s not accessible", requested_file.c_str());
-    send_error(conn_obj, Connection::NOT_FOUND);
-    conn_obj.flush();
   }
+
+  ::SipiResponse resp = make_connection_response(conn_obj);
+  const int rc = ::sipi_serve_file(requested_file.c_str(), range.empty() ? nullptr : range.c_str(), &resp);
+  if (rc != 0) {
+    if (rc == 404) { log_warn("GET: %s not accessible", requested_file.c_str()); }
+    send_error(conn_obj, static_cast<Connection::StatusCodes>(rc));
+    return;
+  }
+  conn_obj.flush();
 }
 
 /**

@@ -28,6 +28,137 @@ fn file_access_denied() {
     assert_eq!(resp.status().as_u16(), 401);
 }
 
+// --- IIIF /file download: full + HTTP Range/206 ---
+//
+// The `/{prefix}/{id}/file` download path is served by `serve_file_download`,
+// which Phase B routes through the C FFI core `sipi_serve_file` (raw byte
+// passthrough, Range/206, streamed via the SipiResponse callbacks). These
+// tests are the parity gate for that seam: status, body bytes, and the
+// Range-response headers must match the legacy handler. Self-validating —
+// the full body is fetched first, then ranges are checked against its slices,
+// so they hold regardless of the test file's exact content.
+
+fn iiif_file_full(srv: &sipi_e2e::SipiServer) -> Vec<u8> {
+    let resp = client()
+        .get(format!("{}/unit/test.csv/file", srv.base_url))
+        .send()
+        .expect("GET /unit/test.csv/file failed");
+    assert_eq!(resp.status().as_u16(), 200, "full download should be 200");
+    resp.bytes().expect("read full body").to_vec()
+}
+
+#[test]
+fn iiif_file_download_full() {
+    let srv = server();
+    let resp = client()
+        .get(format!("{}/unit/test.csv/file", srv.base_url))
+        .send()
+        .expect("GET /unit/test.csv/file failed");
+    assert_eq!(resp.status().as_u16(), 200);
+    // Known-size download is framed with Content-Length, not chunked — the
+    // shape browsers/media players rely on for size + seeking.
+    let declared = resp.content_length();
+    let body = resp.bytes().expect("read full body").to_vec();
+    assert!(!body.is_empty(), "full download should return bytes");
+    assert_eq!(
+        declared,
+        Some(body.len() as u64),
+        "full download must carry Content-Length matching the body"
+    );
+}
+
+#[test]
+fn iiif_file_download_range_first_bytes() {
+    let srv = server();
+    let full = iiif_file_full(srv);
+
+    let resp = client()
+        .get(format!("{}/unit/test.csv/file", srv.base_url))
+        .header("Range", "bytes=0-99")
+        .send()
+        .expect("GET /file range failed");
+
+    assert_eq!(resp.status().as_u16(), 206);
+    assert_eq!(
+        resp.headers()
+            .get("Content-Range")
+            .and_then(|v| v.to_str().ok()),
+        Some(format!("bytes 0-99/{}", full.len()).as_str()),
+        "Content-Range must report the requested span and total size"
+    );
+    assert_eq!(
+        resp.headers()
+            .get("Accept-Ranges")
+            .and_then(|v| v.to_str().ok()),
+        Some("bytes")
+    );
+    assert_eq!(
+        resp.content_length(),
+        Some(100),
+        "partial response must carry Content-Length for the range, not be chunked"
+    );
+    assert!(
+        resp.headers().contains_key("Content-Disposition"),
+        "Range response must carry Content-Disposition (set caller-side from the identifier)"
+    );
+    let body = resp.bytes().expect("read range body");
+    assert_eq!(body.len(), 100);
+    assert_eq!(&body[..], &full[..100]);
+}
+
+#[test]
+fn iiif_file_download_range_middle() {
+    let srv = server();
+    let full = iiif_file_full(srv);
+
+    let resp = client()
+        .get(format!("{}/unit/test.csv/file", srv.base_url))
+        .header("Range", "bytes=1000-1999")
+        .send()
+        .expect("GET /file range failed");
+
+    assert_eq!(resp.status().as_u16(), 206);
+    let body = resp.bytes().expect("read range body");
+    assert_eq!(body.len(), 1000);
+    assert_eq!(&body[..], &full[1000..2000]);
+}
+
+#[test]
+fn iiif_file_download_open_ended_from_middle() {
+    let srv = server();
+    let full = iiif_file_full(srv);
+    let start = full.len() / 2;
+
+    let resp = client()
+        .get(format!("{}/unit/test.csv/file", srv.base_url))
+        .header("Range", format!("bytes={}-", start))
+        .send()
+        .expect("GET /file open-ended range failed");
+
+    assert_eq!(resp.status().as_u16(), 206);
+    let body = resp.bytes().expect("read range body");
+    assert_eq!(body.len(), full.len() - start);
+    assert_eq!(&body[..], &full[start..]);
+}
+
+#[test]
+fn iiif_file_download_last_byte() {
+    let srv = server();
+    let full = iiif_file_full(srv);
+    let last = full.len() - 1;
+
+    let resp = client()
+        .get(format!("{}/unit/test.csv/file", srv.base_url))
+        .header("Range", format!("bytes={}-{}", last, last))
+        .send()
+        .expect("GET /file last-byte range failed");
+
+    assert_eq!(resp.status().as_u16(), 206);
+    let body = resp.bytes().expect("read range body");
+    assert_eq!(body.len(), 1);
+    assert_eq!(body[0], full[last]);
+}
+
 #[test]
 fn video_knora_json() {
     let srv = server();
