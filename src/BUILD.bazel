@@ -308,6 +308,7 @@ cc_library(
         ":sipi_generated_hdrs",
         ":sipi_top",
         "//include:headers",
+        "//src/ffi:sipi_ffi",
         "//src/shttps:shttps",
         "//src/logging:logging",
         "//src/metadata:metadata",

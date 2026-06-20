@@ -1,0 +1,61 @@
+"""src/ffi — the narrow C FFI seam (strangler-fig Phase B; ADR-0013).
+
+`sipi_ffi.h` is the durable `extern "C"` contract the Rust shell drives the C++
+image engine through (Phase C); the response is streamed through `SipiResponse`
+callbacks rather than returned in a struct, and no C++ exception crosses the
+boundary. Lives in its own Bazel package so the seam is a build-graph
+invariant and so Phase C's `rust_binary` can link this `cc_library` (via
+rules_rust `cc_import`/`deps`) as a defined unit. (It is not dependency-free:
+the `//src/shttps/util` dep below pulls libmagic transitively; as the engine
+slices land behind the FFI the target grows rather than shrinks.)
+
+`strip_include_prefix = "/src"` exposes the header at `#include "ffi/sipi_ffi.h"`
+self-sufficiently (ADR-0003), the same shape as `//src/shttps/util`. Siblings
+within the package use the bare quote form (`#include "sipi_ffi.h"`).
+
+The target hosts the C++ side of the seam; its `srcs` grow as the engine is
+carved behind the FFI (today: `sipi_serve_file`, the raw `/file` Range/206
+passthrough).
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//src:__subpackages__"])
+
+cc_library(
+    name = "sipi_ffi",
+    srcs = [
+        # serve_response.{h,cpp} is the misuse-resistant C++ layer over the C
+        # ABI (variant body, pure decide_*, single apply driver, sipi_guard);
+        # sipi_ffi.cpp is the thin extern "C" surface.
+        "serve_response.cpp",
+        "sipi_ffi.cpp",
+    ],
+    hdrs = [
+        "serve_response.h",
+        "sipi_ffi.h",
+    ],
+    strip_include_prefix = "/src",
+    # -fexceptions: the catch-all guard in each entry point relies on
+    # exceptions being enabled so a codec/std throw becomes a status code
+    # instead of unwinding across the C ABI (FFI contract).
+    copts = ["-fexceptions"],
+    deps = [
+        # shttps::Parsing::getBestFileMimetype — the libmagic MIME sniff used to
+        # set the /file Content-Type byte-identically to the legacy handler.
+        # A generic SIPI-domain utility (re-homed to the SIPI side in Phase C),
+        # not the HTTP transport, so this is no SIPI -> shttps-transport coupling.
+        "//src/shttps/util",
+    ],
+)
+
+# Co-located unit test (ADR-0003) for the pure serve decision — the Range
+# parse/clamp + status/header derivation, exercised without a transport.
+cc_test(
+    name = "serve_response_test",
+    srcs = ["serve_response_test.cpp"],
+    deps = [
+        ":sipi_ffi",
+        "@googletest//:gtest_main",
+    ],
+)
