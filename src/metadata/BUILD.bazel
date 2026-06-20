@@ -14,14 +14,14 @@ at the Bazel analysis level, replacing today's comment-as-policy header
 with a build-graph invariant. The co-located `icc_normalize_test`
 exercises the helper through the same restricted edge.
 
-`layering_check` and `parse_headers` are **deferred** for the same reason as
-//src/observability: every `.cpp` here `#include`s `SipiImage.h` (and
-`SipiImage.h`'s `friend class Icc;` — a known coupling tracked under
-DEV-6396), which is reachable only through the permissive
-`includes = ["."]` on the parent `:sipi_lib` target. With strict layering
-on, that transitive include would require explicit ownership of `SipiImage`
-in a Bazel package. The feature flips on globally in DEV-6353 (Y+8e) once
-every per-module promotion has landed and SipiImage has its own package.
+This package no longer depends on `SipiImage`: the one coupling — `Icc`'s
+`iccFormatter(SipiImage*)` plus `SipiImage`'s `friend class Icc` (DEV-6396) —
+was inverted so `iccFormatter` takes the pixel shape (`bps`/`nc`/`photo`) by
+value and the `PhotometricInterpretation` enum lives here in
+`photometric_interpretation.h`. Metadata now sits cleanly *below* the image
+engine (`SipiImage` is owned by `//src:engine`), depending only on `:sipi_top`
+for `SipiError`. `layering_check`/`parse_headers` stay deferred to the global
+DEV-6353 flip.
 """
 
 load("@protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
@@ -58,6 +58,7 @@ cc_library(
         "exif.h",
         "icc.h",
         "iptc.h",
+        "photometric_interpretation.h",
         "xmp.h",
     ],
     # No `includes` directive: cross-module consumers use the path-prefixed

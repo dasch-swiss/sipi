@@ -11,7 +11,7 @@
 #include <string>
 #include <thread>
 
-#include "shttps/transport/Connection.h"
+#include "shttps/util/UrlDecode.h"
 
 namespace {
 

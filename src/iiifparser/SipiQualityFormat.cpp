@@ -64,6 +64,22 @@ SipiQualityFormat::SipiQualityFormat(std::string str)
 
 
 //-------------------------------------------------------------------------
+
+std::string format_type_to_string(SipiQualityFormat::FormatType f)
+{
+  switch (f) {
+  case SipiQualityFormat::JPG: return "jpg";
+  case SipiQualityFormat::TIF: return "tif";
+  case SipiQualityFormat::PNG: return "png";
+  case SipiQualityFormat::JP2: return "jp2";
+  case SipiQualityFormat::GIF: return "gif";
+  case SipiQualityFormat::PDF: return "pdf";
+  case SipiQualityFormat::WEBP: return "webp";
+  default: return "unsupported";
+  }
+}
+
+//-------------------------------------------------------------------------
 // Output to stdout for debugging etc.
 //
 std::ostream &operator<<(std::ostream &outstr, const SipiQualityFormat &rhs)

@@ -36,6 +36,12 @@ public:
   inline FormatType format() { return format_type; };
 };
 
+/*! Human-readable lowercase token for a format type (`jpg`/`tif`/`png`/`jp2`/
+ *  `gif`/`pdf`/`webp`, else `unsupported`). Lives with the format enum it maps
+ *  so lower layers (e.g. observability's error context) need not depend on this
+ *  header transitively just to stringify a format. */
+[[nodiscard]] std::string format_type_to_string(SipiQualityFormat::FormatType f);
+
 }// namespace Sipi
 
 #endif// SIPI_SIPIQUALITYFORMAT_H
