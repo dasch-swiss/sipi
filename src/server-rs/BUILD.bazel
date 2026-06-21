@@ -1,0 +1,69 @@
+"""src/server-rs — the Rust HTTP shell (strangler-fig Phase C; ADR-0013).
+
+The `sipi` `rust_library` owns the axum + tokio server and statically links the
+C++ image engine through the FFI seam (`//src/ffi:sipi_ffi`, a `cc_library`);
+the `sipi_server` `rust_binary` is the thin default entry point (decision #9).
+This is the first Rust → C++ link in the graph — `rules_rust` threads the
+seam's `CcInfo` (and the engine's transitive linkopts: `-ldl`/`-lpthread` on
+Linux, the iconv + CoreFoundation/SystemConfiguration frameworks on macOS)
+through to the final binary link.
+
+Dependencies resolve from `@crates_prod` (the production Crate Universe manifest
+in `MODULE.bazel`, distinct from the e2e suite's `@crates`). Repin via:
+`CARGO_BAZEL_REPIN=1 bazelisk fetch @crates_prod//:all`.
+
+Phase C is additive: this binary runs in parallel with `//src/cli:sipi`, which
+keeps the production socket until the step-5 cutover renames this to the stock
+`sipi` entry point.
+"""
+
+load("@crates_prod//:defs.bzl", "all_crate_deps")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "sipi",
+    srcs = [
+        "src/ffi.rs",
+        "src/lib.rs",
+    ],
+    crate_name = "sipi",
+    edition = "2021",
+    deps = all_crate_deps(normal = True) + [
+        # The narrow C FFI seam → the transitive C++ image engine. This is the
+        # cc_library → rust_binary link (Open Question #1).
+        "//src/ffi:sipi_ffi",
+    ],
+)
+
+# The final binary link pulls in the C++ engine archives (via `:sipi`'s
+# `//src/ffi:sipi_ffi` dep) but rustc drives the link with the C linker driver,
+# which does NOT auto-link the C++ standard library the way the `clang++` driver
+# does for `//src/cli:sipi`. We append `-lc++` / `-lc++abi` as trailing
+# `-Clink-arg`s so they resolve the engine's libc++ symbols AFTER the archives
+# that reference them (trailing position is required for static-archive ordering
+# on Linux). Linux statically links the libc++ runtime + unwinder, matching
+# `//src/cli:sipi`'s distroless link surface (no libc++.so.1 in base-debian12).
+_CPP_STDLIB_LINK = select({
+    "@platforms//os:macos": [
+        "-Clink-arg=-lc++",
+        "-Clink-arg=-lc++abi",
+    ],
+    "@platforms//os:linux": [
+        "-Clink-arg=-Wl,-Bstatic",
+        "-Clink-arg=-lc++",
+        "-Clink-arg=-lc++abi",
+        "-Clink-arg=-lunwind",
+        "-Clink-arg=-Wl,-Bdynamic",
+    ],
+    "//conditions:default": [],
+})
+
+rust_binary(
+    name = "sipi_server",
+    srcs = ["src/main.rs"],
+    edition = "2021",
+    rustc_flags = _CPP_STDLIB_LINK,
+    deps = [":sipi"],
+)

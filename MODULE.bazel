@@ -497,6 +497,17 @@ crate.from_cargo(
     manifests = ["//test/e2e-rust:Cargo.toml"],
 )
 
+# Production Crate Universe manifest for the Rust HTTP shell (strangler-fig
+# Phase C; //src/server-rs). Kept separate from the e2e `crates` above so the
+# production dependency graph (axum/tokio/tower/tracing/clap) is independent of
+# the test-only graph (reqwest/insta/proptest/jsonwebtoken). Repin via:
+#   CARGO_BAZEL_REPIN=1 bazelisk fetch @crates_prod//:all
+crate.from_cargo(
+    name = "crates_prod",
+    cargo_lockfile = "//src/server-rs:Cargo.lock",
+    manifests = ["//src/server-rs:Cargo.toml"],
+)
+
 # `aws-lc-sys` is intentionally NOT in the dep graph — its cmake-based
 # build script panics inside Bazel actions ("rust_wrapper.h is not a
 # directory"). `test/e2e-rust/Cargo.toml` uses `jsonwebtoken`'s
@@ -505,6 +516,7 @@ crate.from_cargo(
 # not affected by the backend choice. If a future test needs RSA/ECDSA
 # JWT verification, `rust_crypto` covers both via `rsa` + `p256`/`p384`.
 use_repo(crate, "crates")
+use_repo(crate, "crates_prod")
 
 # ── Kakadu (proprietary, GitHub-release-gated) ─────────────────────────────
 # Custom repository_rule mirroring today's Nix FOD auth UX 1:1 — shells out
