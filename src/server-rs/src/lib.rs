@@ -164,9 +164,10 @@ pub fn app(state: Arc<routes::AppState>) -> Router {
         .route("/health", get(health))
         .route("/favicon.ico", get(favicon))
         // The bare root has no `*rest` capture, so register it explicitly; the
-        // handler classifies it (→ 400, matching the C++ parser).
-        .route("/", get(routes::iiif).head(routes::iiif))
-        .route("/{*rest}", get(routes::iiif).head(routes::iiif))
+        // handler classifies it (→ 400, matching the C++ parser). OPTIONS is the
+        // CORS preflight (engine-independent).
+        .route("/", get(routes::iiif).head(routes::iiif).options(routes::cors_preflight))
+        .route("/{*rest}", get(routes::iiif).head(routes::iiif).options(routes::cors_preflight))
         .with_state(state)
 }
 

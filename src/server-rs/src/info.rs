@@ -12,7 +12,7 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::ffi::SipiImageDims;
+use crate::ffi::{SipiImageDims, SipiPermType};
 
 const IMAGE_CONTEXT: &str = "http://iiif.io/api/image/3/context.json";
 const FILE_CONTEXT: &str = "http://sipi.io/api/file/3/context.json";
@@ -219,6 +219,49 @@ pub fn generic_knora_json(id: &str, mime: &str, file_size: u64, sidecar: &Sideca
     Value::Object(root)
 }
 
+/// Whether a permission requires the IIIF Authentication service block (and a
+/// 401 response). `allow` / `restrict` / `deny` do not.
+#[must_use]
+pub fn is_auth_type(permission: SipiPermType) -> bool {
+    matches!(
+        permission,
+        SipiPermType::Login | SipiPermType::Clickthrough | SipiPermType::Kiosk | SipiPermType::External
+    )
+}
+
+/// Build the IIIF Auth API v1 `service` object for an auth-type info.json
+/// (`SipiHttpServer.cpp:607-658`). Requires `cookieUrl` (and `tokenUrl`); a
+/// missing required key → `Err(())` (the C++ 500). The remaining kv pairs pass
+/// through except the structural keys. `logoutUrl` is optional.
+pub fn auth_service(permission: SipiPermType, kv: &[(String, String)]) -> Result<Value, ()> {
+    let get = |key: &str| kv.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str());
+    let profile = match permission {
+        SipiPermType::Login => "http://iiif.io/api/auth/1/login",
+        SipiPermType::Clickthrough => "http://iiif.io/api/auth/1/clickthrough",
+        SipiPermType::Kiosk => "http://iiif.io/api/auth/1/kiosk",
+        SipiPermType::External => "http://iiif.io/api/auth/1/external",
+        _ => return Err(()),
+    };
+    let cookie_url = get("cookieUrl").ok_or(())?;
+    let token_url = get("tokenUrl").ok_or(())?;
+
+    let mut service = Map::new();
+    service.insert("@context".into(), json!("http://iiif.io/api/auth/1/context.json"));
+    service.insert("@id".into(), json!(cookie_url));
+    service.insert("profile".into(), json!(profile));
+    for (k, v) in kv {
+        if !matches!(k.as_str(), "cookieUrl" | "tokenUrl" | "logoutUrl" | "infile") {
+            service.insert(k.clone(), json!(v));
+        }
+    }
+    let mut sub = vec![json!({ "@id": token_url, "profile": "http://iiif.io/api/auth/1/token" })];
+    if let Some(logout) = get("logoutUrl") {
+        sub.push(json!({ "@id": logout, "profile": "http://iiif.io/api/auth/1/logout" }));
+    }
+    service.insert("service".into(), json!(sub));
+    Ok(Value::Object(service))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -290,5 +333,31 @@ mod tests {
         assert_eq!(v["@context"], FILE_CONTEXT);
         assert_eq!(v["width"], 512);
         assert_eq!(v["internalMimeType"], "image/jp2");
+    }
+
+    #[test]
+    fn auth_service_block_for_login() {
+        let kv = vec![
+            ("cookieUrl".to_string(), "https://auth/cookie".to_string()),
+            ("tokenUrl".to_string(), "https://auth/token".to_string()),
+            ("logoutUrl".to_string(), "https://auth/logout".to_string()),
+            ("infile".to_string(), "/srv/x.jp2".to_string()),
+        ];
+        let svc = auth_service(SipiPermType::Login, &kv).expect("login service");
+        assert_eq!(svc["@context"], "http://iiif.io/api/auth/1/context.json");
+        assert_eq!(svc["@id"], "https://auth/cookie");
+        assert_eq!(svc["profile"], "http://iiif.io/api/auth/1/login");
+        // infile/cookieUrl/tokenUrl/logoutUrl are structural, not passed through.
+        assert!(svc.get("infile").is_none());
+        let sub = svc["service"].as_array().unwrap();
+        assert_eq!(sub[0]["profile"], "http://iiif.io/api/auth/1/token");
+        assert_eq!(sub[1]["profile"], "http://iiif.io/api/auth/1/logout");
+    }
+
+    #[test]
+    fn auth_service_missing_cookie_url_errors() {
+        assert!(auth_service(SipiPermType::Login, &[]).is_err());
+        assert!(!is_auth_type(SipiPermType::Allow));
+        assert!(is_auth_type(SipiPermType::Kiosk));
     }
 }
