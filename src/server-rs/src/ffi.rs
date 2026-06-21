@@ -11,6 +11,7 @@
 //! struct inputs are caller-owned and must outlive the (blocking) call; the
 //! response is emitted only through the [`SipiResponse`] callbacks.
 
+use std::ffi::CString;
 use std::os::raw::{c_char, c_int, c_void};
 
 // ── Response sink callbacks (Rust-owned) ────────────────────────────────────
@@ -66,6 +67,13 @@ extern "C" {
     /// (`convert`/`verify`/`query`/`compare`/`health`) the Rust shell does not
     /// own, plus top-level `--version`/`--help`.
     pub fn sipi_cli_main(argc: c_int, argv: *mut *mut c_char) -> c_int;
+
+    /// Parse the Lua config and install the engine + Lua config from scratch.
+    /// Must run once before any serve call (`engine_context()` hard-fails
+    /// otherwise). `overrides` is the opaque `SipiServerConfig*` (CLI/env
+    /// tweaks); the shell passes null today — the Lua config file is
+    /// authoritative. Returns 0 on success, non-zero on failure.
+    pub fn sipi_init(lua_config_path: *const c_char, overrides: *const c_void) -> c_int;
 }
 
 /// Startup link self-check: forces the C++ engine `cc_library` to link into this
@@ -87,4 +95,22 @@ pub fn link_self_check() -> i32 {
     // `range` is null (no Range header); `resp` outlives the synchronous call.
     // The seam guarantees no exception unwinds across the boundary.
     unsafe { sipi_serve_file(bogus.as_ptr(), std::ptr::null(), &resp) as i32 }
+}
+
+/// Parse the Lua config and install the engine + Lua config (`sipi_init`). Must
+/// run once before serving images. Passes null overrides — the Lua config file
+/// is authoritative. Returns the FFI status code on failure (non-zero).
+pub fn init(config_path: &str) -> Result<(), i32> {
+    let c_path = match CString::new(config_path) {
+        Ok(p) => p,
+        Err(_) => return Err(-1), // interior NUL in the path
+    };
+    // SAFETY: `c_path` is a valid NUL-terminated string outliving the call;
+    // `overrides` is null (no CLI/env overrides); the seam guards exceptions.
+    let code = unsafe { sipi_init(c_path.as_ptr(), std::ptr::null()) };
+    if code == 0 {
+        Ok(())
+    } else {
+        Err(code)
+    }
 }
