@@ -12,7 +12,7 @@
 #include "shttps/lua/LuaServer.h"
 
 namespace shttps {
-extern void sqliteGlobals(lua_State *L, shttps::Connection &conn, void *user_data);
+extern void sqliteGlobals(lua_State *L, shttps::RequestContext &ctx, void *user_data);
 };
 
 #endif// SIPI_LUASQLITE_H

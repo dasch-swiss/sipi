@@ -203,7 +203,7 @@
  *
  */
 
-static void sipiConfGlobals(lua_State *L, shttps::Connection &conn, void *user_data)
+static void sipiConfGlobals(lua_State *L, shttps::RequestContext &ctx, void *user_data)
 {
   auto *conf = (Sipi::SipiConf *)user_data;
 

@@ -7,7 +7,7 @@
 #include <iostream>
 #include <set>
 
-#include "shttps/transport/Connection.h"
+#include "shttps/lua/request_context.h"
 #include "shttps/util/Error.h"
 #include "shttps/util/Parsing.h"
 
@@ -56,14 +56,13 @@ typedef struct
   std::string *filename;
 } SImage;
 
-// Bridges a Lua-bound shttps::Connection to the OutputSink body-write callback
-// (ADR-0006). An shttps throw (OUTPUT_WRITE_FAIL / shttps::Error) must not cross
-// into the codec, so it becomes a non-zero return.
+// Bridges the Lua response sink to the OutputSink body-write callback
+// (ADR-0006). A sink write failure becomes a non-zero return so no exception
+// crosses into the codec's C frames.
 static int lua_conn_write(void *ctx, const uint8_t *data, size_t len)
 {
   try {
-    static_cast<shttps::Connection *>(ctx)->sendAndFlush(data, len);
-    return 0;
+    return static_cast<shttps::ResponseSink *>(ctx)->write(data, len);
   } catch (...) {
     return 1;
   }
@@ -168,8 +167,8 @@ static SImage *pushSImage(lua_State *L, const SImage &simage)
  */
 static int SImage_new(lua_State *L)
 {
-  lua_getglobal(L, shttps::luaconnection);
-  auto *conn = (shttps::Connection *)lua_touserdata(L, -1);
+  lua_getglobal(L, shttps::lua_request_context);
+  auto *ctx = (shttps::RequestContext *)lua_touserdata(L, -1);
   lua_remove(L, -1);// remove from stacks
   int top = lua_gettop(L);
 
@@ -187,7 +186,7 @@ static int SImage_new(lua_State *L)
   std::string imgpath;
 
   if (lua_isinteger(L, 1)) {
-    std::vector<shttps::Connection::UploadedFile> uploads = conn->uploads();
+    const std::vector<shttps::UploadedFile> &uploads = ctx->uploads;
     int tmpfile_id = static_cast<int>(lua_tointeger(L, 1));
     try {
       imgpath = uploads.at(tmpfile_id - 1).tmpname;// In Lua, indexes are 1-based.
@@ -1582,12 +1581,12 @@ static int SImage_write(lua_State *L)
   }
 
   if ((basename == "http") || (basename == "HTTP")) {
-    lua_getglobal(L, shttps::luaconnection);// push onto stack
-    auto *conn = (shttps::Connection *)lua_touserdata(L, -1);// does not change the stack
+    lua_getglobal(L, shttps::lua_request_context);// push onto stack
+    auto *ctx = (shttps::RequestContext *)lua_touserdata(L, -1);// does not change the stack
     lua_remove(L, -1);// remove from stack
     try {
       img->image->write(
-        ftype, CallbackSink{ lua_conn_write, conn }, comp_params.size() > 0 ? &comp_params : nullptr);
+        ftype, CallbackSink{ lua_conn_write, ctx->response }, comp_params.size() > 0 ? &comp_params : nullptr);
     } catch (SipiImageError &err) {
       lua_pop(L, lua_gettop(L));
       lua_pushboolean(L, false);
@@ -1652,12 +1651,12 @@ static int SImage_send(lua_State *L)
     return lua_error(L);
   }
 
-  lua_getglobal(L, shttps::luaconnection);// push onto stack
-  auto *conn = (shttps::Connection *)lua_touserdata(L, -1);// does not change the stack
+  lua_getglobal(L, shttps::lua_request_context);// push onto stack
+  auto *ctx = (shttps::RequestContext *)lua_touserdata(L, -1);// does not change the stack
   lua_remove(L, -1);// remove from stack
 
   try {
-    img->image->write(ftype, CallbackSink{ lua_conn_write, conn });
+    img->image->write(ftype, CallbackSink{ lua_conn_write, ctx->response });
   } catch (SipiImageError &err) {
     lua_pushboolean(L, false);
     lua_pushstring(L, err.to_string().c_str());
@@ -1716,7 +1715,7 @@ static const luaL_Reg SImage_meta[] = { { "__gc", SImage_gc },
 //=========================================================================
 
 
-void sipiGlobals(lua_State *L, shttps::Connection &conn, void *user_data)
+void sipiGlobals(lua_State *L, shttps::RequestContext &ctx, void *user_data)
 {
   auto *server = (SipiHttpServer *)user_data;
 
