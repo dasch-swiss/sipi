@@ -1,22 +1,44 @@
-"""Sipi CLI binary target.
+"""Sipi CLI binary + the CLI app library behind the FFI seam.
 
-`//src/cli:sipi` is the thin `cc_binary` for the sipi executable. Its only
-translation unit is `sipi.cpp` (the program entry point); every other TU
-lives in `//src:sipi_lib`, which this target consumes via `deps`. The
-per-subcommand command bodies live in `//src/cli/commands:commands` —
-that package houses one file per `sipi <verb> <noun>` subcommand
-(`convert_service_file`, `convert_access_file`, `verify`).
+`//src/cli:cli_app` is the `cc_library` that owns the CLI11 app and every
+subcommand body (`server`/`convert`/`verify`/`query`/`compare`/`health`),
+exposed through the `extern "C" sipi_cli_main` entry declared in
+`ffi/sipi_ffi.h`. It lives in its own library — separate from the binary's
+`main` translation unit — so the Rust HTTP shell (strangler-fig Phase C,
+`//src/server-rs`) can link it and call `sipi_cli_main` for the offline
+subcommands without colliding with Rust's own `main`.
+
+`//src/cli:sipi` is the thin `cc_binary` for the sipi executable: its only
+translation unit is `sipi.cpp`, whose `main` just calls `sipi_cli_main`.
 
 System-lib + framework linkopts (`-ldl`, `-lpthread`, `-liconv`,
-`-framework SystemConfiguration`, `-framework CoreFoundation`) are
-declared on `:sipi_lib` so they also propagate to every cc_test under
-`//test/unit/...` — see the linkopts block on `:sipi_lib`. This binary
-keeps only its own binary-specific flag (`--build-id=sha1`).
+`-framework SystemConfiguration`, `-framework CoreFoundation`) are declared on
+`:sipi_lib` so they propagate to every downstream binary and cc_test. This
+binary keeps only its own binary-specific flag (`--build-id=sha1`) and the
+distroless libc++ static-link bracket.
 """
 
-load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "cli_app",
+    srcs = ["cli_app.cpp"],
+    # -fexceptions: sipi_cli_main is an FFI entry; CLI dispatch + the engine
+    # throw, and those must not unwind across the extern "C" boundary.
+    copts = ["-fexceptions"],
+    deps = [
+        "//src:sipi_lib",
+        "//src/cli/commands:commands",
+        # cli_app.cpp registers the SQLite-backed Lua bindings (sqliteGlobals).
+        "//src/shttps/lua_sqlite",
+        # The sipi_cli_main declaration (the extern "C" seam contract).
+        "//src/ffi:sipi_ffi",
+        # cli_app.cpp's `#include <CLI/CLI.hpp>` — the sole CLI11 consumer.
+        "@cli11//:cli11",
+    ],
+)
 
 cc_binary(
     name = "sipi",
@@ -50,16 +72,10 @@ cc_binary(
         ],
         "//conditions:default": [],
     }),
-    # `:glibc23_compat` is propagated transitively via `:sipi_lib`'s
-    # `deps += select(...)`, so this binary doesn't need to declare it.
-    # `//src/cli/commands:commands` provides the per-subcommand bodies;
-    # sipi.cpp's main() function wires them into CLI11.
     deps = [
-        "//src:sipi_lib",
-        "//src/cli/commands:commands",
-        # sipi.cpp registers the SQLite-backed Lua bindings (sqliteGlobals).
-        "//src/shttps/lua_sqlite",
-        # sipi.cpp's `#include <CLI/CLI.hpp>` — the sole CLI11 consumer.
-        "@cli11//:cli11",
+        # The CLI app behind the FFI seam (also pulls //src/ffi:sipi_ffi for
+        # the sipi_cli_main declaration and the system/framework linkopts via
+        # :sipi_lib).
+        ":cli_app",
     ],
 )

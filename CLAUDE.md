@@ -94,7 +94,7 @@ localdev config in one step.
 
 | Component | Path | Purpose |
 |-----------|------|---------|
-| Main Application | `src/cli/sipi.cpp` | Entry point (CLI + server modes), CLI11 arg parsing, Sentry integration |
+| Main Application | `src/cli/cli_app.cpp` | CLI11 arg parsing + subcommand dispatch (CLI + server modes), Sentry integration, behind the `sipi_cli_main` FFI entry; `src/cli/sipi.cpp` is the thin `main` |
 | SipiImage | `src/SipiImage.hpp` | Image processing: TIFF, JP2, PNG, JPEG; metadata (EXIF, IPTC, XMP); ICC profiles |
 | SipiHttpServer | `src/SipiHttpServer.hpp` | HTTP server, IIIF endpoints, caching, Lua scripting integration |
 | IIIF Parser | `include/iiifparser/` | IIIF URL parsing: identifier, region, size, rotation, quality/format |

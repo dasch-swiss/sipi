@@ -162,7 +162,7 @@ Per-request isolated Lua 5.3.5 interpreter with full server access:
 
 ### CLI Mode
 
-Sipi operates in three CLI modes (`src/cli/sipi.cpp`):
+Sipi operates in three CLI modes (`src/cli/cli_app.cpp`):
 
 **File Conversion:** `sipi infile outfile [options]`
 

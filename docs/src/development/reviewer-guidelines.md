@@ -13,7 +13,7 @@ Checklist for human and AI reviewers. Not every item applies to every PR — use
 ## Configuration & Defaults
 
 - [ ] Lua config, CLI args, and env vars all accept the same semantics and produce the same defaults
-- [ ] Defaults are consistent across all entry points (`SipiConf.cpp`, `sipi.cpp` CLI, documentation)
+- [ ] Defaults are consistent across all entry points (`SipiConf.cpp`, `cli_app.cpp` CLI, documentation)
 - [ ] Invalid values produce clear startup errors with guidance on valid values
 - [ ] Deprecated keys: old names accepted with warning, both old+new in same config is a hard error
 
