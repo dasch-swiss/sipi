@@ -6,8 +6,10 @@
 #include "ffi/sipi_ffi.h"
 
 #include <cstdint>
+#include <string>
 #include <utility>
 
+#include "SipiImage.h"// SipiImage::read_shape (sipi_image_dims)
 #include "ffi/engine_context.h"
 #include "ffi/metrics_snapshot.h"
 #include "ffi/preflight.h"
@@ -15,6 +17,7 @@
 #include "ffi/serve_response.h"
 #include "observability/metrics.h"
 #include "shttps/lua/request_context.h"// shttps::RequestContext (the opaque SipiRequestContext)
+#include "shttps/util/Parsing.h"// shttps::Parsing::getBestFileMimetype (sipi_mimetype)
 
 extern "C" {
 
@@ -132,6 +135,59 @@ int sipi_metrics_snapshot(SipiMetricsSnapshot *out)
     out->decode_memory_budget_bytes = gauge(m.decode_memory_budget_bytes);
     out->decode_memory_used_bytes = gauge(m.decode_memory_used_bytes);
 
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
+int sipi_imgroot(int resolved, const char **out)
+{
+  // A pure read of the installed engine context — guard-only (no response sink,
+  // no fallible pre-commit work). engine_context() throws if sipi_init has not
+  // run; the guard turns that into a 500. The returned pointer is into the
+  // process-static EngineContext copy, valid for the process lifetime.
+  return Sipi::ffi::sipi_guard([&] {
+    const auto &eng = Sipi::ffi::engine_context();
+    *out = (resolved != 0 ? eng.resolved_imgroot : eng.imgroot).c_str();
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
+int sipi_prefix_as_path(int *out)
+{
+  return Sipi::ffi::sipi_guard([&] {
+    *out = Sipi::ffi::engine_context().prefix_as_path ? 1 : 0;
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
+int sipi_image_dims(const char *resolved_path, SipiImageDims *out)
+{
+  // Header-only shape read. The Rust edge owns existence + containment (R1/R2)
+  // before calling, so read_shape throwing here is a genuine engine failure →
+  // 500 via the guard (read_shape never returns FAILURE; it throws). Native
+  // shape only: numpages/tile_*/clevels drive info.json sizes[]/tiles[].
+  return Sipi::ffi::sipi_guard([&] {
+    const Sipi::SipiImage probe;
+    const Sipi::SipiImgInfo info = probe.read_shape(resolved_path);
+    out->width = static_cast<std::uint32_t>(info.width);
+    out->height = static_cast<std::uint32_t>(info.height);
+    out->numpages = static_cast<std::uint32_t>(info.numpages);
+    out->tile_width = static_cast<std::uint32_t>(info.tile_width);
+    out->tile_height = static_cast<std::uint32_t>(info.tile_height);
+    out->clevels = static_cast<std::uint32_t>(info.clevels);
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
+int sipi_mimetype(const char *resolved_path, SipiStrFn emit, void *ctx)
+{
+  // One source of truth for MIME mapping: the same libmagic-backed sniff the
+  // /file and info.json paths use. Emitted via a callback so the seam returns no
+  // owned C string. The Rust edge owns existence; a libmagic failure throws →
+  // 500 via the guard.
+  return Sipi::ffi::sipi_guard([&] {
+    const std::string mime = shttps::Parsing::getBestFileMimetype(resolved_path);
+    emit(ctx, mime.c_str());
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
   });
 }

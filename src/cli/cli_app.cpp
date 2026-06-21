@@ -565,6 +565,7 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig * /
       .memory_budget = runtime->memory_budget.get(),
       .imgroot = imgroot,
       .resolved_imgroot = resolved_imgroot,
+      .prefix_as_path = conf.getPrefixAsPath(),
       .jpeg_quality = conf.getJpegQuality(),
       .scaling_quality = to_scaling_quality(conf.getScalingQuality()),
       .max_pixel_limit = conf.getMaxPixelLimit(),

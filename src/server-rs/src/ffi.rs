@@ -11,7 +11,7 @@
 //! struct inputs are caller-owned and must outlive the (blocking) call; the
 //! response is emitted only through the [`SipiResponse`] callbacks.
 
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
 
 // ── Response sink callbacks (Rust-owned) ────────────────────────────────────
@@ -136,6 +136,25 @@ pub struct SipiServeRequest {
     pub is_head: c_int,
 }
 
+/// Native image shape from a header read — mirrors `SipiImageDims` in
+/// `sipi_ffi.h`. `numpages` is 0 for a single-page image; `tile_width`/
+/// `tile_height` are 0 when untiled; `clevels` is the JP2/pyramidal level count.
+/// Enough to assemble info.json's `sizes[]` / `tiles[]` from one probe.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SipiImageDims {
+    pub width: u32,
+    pub height: u32,
+    pub numpages: u32,
+    pub tile_width: u32,
+    pub tile_height: u32,
+    pub clevels: u32,
+}
+
+/// Emits a single string value (mirrors `SipiStrFn`) — the seam returns no owned
+/// C string, so `sipi_mimetype` hands its result back through this callback.
+pub type SipiStrFn = extern "C" fn(ctx: *mut c_void, value: *const c_char);
+
 extern "C" {
     /// IIIF decode→transform→encode→stream; honours the restrict size/watermark.
     /// Returns 0 when the response was emitted via the sink, or an HTTP status
@@ -167,6 +186,24 @@ extern "C" {
     /// tweaks); the shell passes null today — the Lua config file is
     /// authoritative. Returns 0 on success, non-zero on failure.
     pub fn sipi_init(lua_config_path: *const c_char, overrides: *const c_void) -> c_int;
+
+    /// The configured image root (`resolved` = 0 → raw config value for the path
+    /// build; 1 → realpath()-resolved root for the containment check). `*out` is
+    /// set to process-static memory owned by the engine (never freed). Returns 0,
+    /// or 500 if `sipi_init` has not run.
+    pub fn sipi_imgroot(resolved: c_int, out: *mut *const c_char) -> c_int;
+
+    /// The `prefix_as_path` config knob (`*out` = 1/0). Returns 0, or 500 if
+    /// `sipi_init` has not run.
+    pub fn sipi_prefix_as_path(out: *mut c_int) -> c_int;
+
+    /// Header-only image-shape probe (no full decode). `resolved_path` is an
+    /// already-validated absolute path. Returns 0 (and fills `*out`), or 500.
+    pub fn sipi_image_dims(resolved_path: *const c_char, out: *mut SipiImageDims) -> c_int;
+
+    /// The engine's libmagic MIME type for a file, emitted once via `emit`.
+    /// `resolved_path` is an already-validated absolute path. Returns 0, or 500.
+    pub fn sipi_mimetype(resolved_path: *const c_char, emit: SipiStrFn, ctx: *mut c_void) -> c_int;
 }
 
 /// Startup link self-check: forces the C++ engine `cc_library` to link into this
@@ -206,4 +243,82 @@ pub fn init(config_path: &str) -> Result<(), i32> {
     } else {
         Err(code)
     }
+}
+
+/// The configured image root. `resolved = false` → the raw config value (used to
+/// build the request path, parity with the C++ `imgroot()`); `resolved = true`
+/// → the realpath()-resolved root (used for the R2 containment check). Returns
+/// an owned copy — the underlying C string is process-static, but the edge holds
+/// these in its own config so a copy keeps lifetimes simple. `Err` carries the
+/// FFI status (500 if `sipi_init` has not run).
+pub fn imgroot(resolved: bool) -> Result<String, i32> {
+    let mut ptr: *const c_char = std::ptr::null();
+    // SAFETY: `out` is a valid pointer; on success the engine writes a
+    // process-static, NUL-terminated pointer; the seam guards exceptions.
+    let code = unsafe { sipi_imgroot(resolved as c_int, &mut ptr) };
+    if code != 0 {
+        return Err(code);
+    }
+    if ptr.is_null() {
+        return Err(-1);
+    }
+    // SAFETY: `ptr` is a NUL-terminated C string owned by the engine, valid for
+    // the process lifetime; we copy it before returning.
+    Ok(unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned())
+}
+
+/// The `prefix_as_path` config knob: `true` → the IIIF prefix is a path
+/// component under imgroot. `Err` carries the FFI status (500 if uninitialised).
+pub fn prefix_as_path() -> Result<bool, i32> {
+    let mut v: c_int = 0;
+    // SAFETY: `out` is a valid pointer; the seam guards exceptions.
+    let code = unsafe { sipi_prefix_as_path(&mut v) };
+    if code != 0 {
+        return Err(code);
+    }
+    Ok(v != 0)
+}
+
+/// Header-only image shape for a validated path. `Err` carries the FFI status
+/// (500 if the shape cannot be read, or -1 on an interior NUL in the path).
+pub fn image_dims(resolved_path: &str) -> Result<SipiImageDims, i32> {
+    let c_path = CString::new(resolved_path).map_err(|_| -1)?;
+    let mut dims = SipiImageDims::default();
+    // SAFETY: `c_path` outlives the synchronous call; `out` is a valid pointer;
+    // the seam guards exceptions.
+    let code = unsafe { sipi_image_dims(c_path.as_ptr(), &mut dims) };
+    if code != 0 {
+        return Err(code);
+    }
+    Ok(dims)
+}
+
+/// Collects the single emitted MIME string into the `Option<String>` at `ctx`.
+extern "C" fn collect_mime(ctx: *mut c_void, value: *const c_char) {
+    // Mirror the sink callbacks: a Rust panic must not unwind into C++.
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: `ctx` is the `&mut Option<String>` passed to sipi_mimetype.
+        let out = unsafe { &mut *(ctx as *mut Option<String>) };
+        if !value.is_null() {
+            // SAFETY: the engine passes a NUL-terminated C string valid for the call.
+            *out = Some(unsafe { CStr::from_ptr(value) }.to_string_lossy().into_owned());
+        }
+    }));
+}
+
+/// The engine's libmagic MIME type for a validated path (one source of truth
+/// with the serve paths). `Err` carries the FFI status (500), or -1 on an
+/// interior NUL or a missing emit.
+pub fn mimetype(resolved_path: &str) -> Result<String, i32> {
+    let c_path = CString::new(resolved_path).map_err(|_| -1)?;
+    let mut out: Option<String> = None;
+    // SAFETY: `c_path` outlives the synchronous call; `collect_mime` writes into
+    // `out` via the ctx pointer; the seam guards exceptions.
+    let code = unsafe {
+        sipi_mimetype(c_path.as_ptr(), collect_mime, &mut out as *mut Option<String> as *mut c_void)
+    };
+    if code != 0 {
+        return Err(code);
+    }
+    out.ok_or(-1)
 }

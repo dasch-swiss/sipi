@@ -42,8 +42,9 @@ struct EngineContext
   SipiRateLimiter *rate_limiter = nullptr;//!< per-client limiter, or null when off
   SipiMemoryBudget *memory_budget = nullptr;//!< decode memory budget, or null when off
 
-  std::string imgroot;//!< image root (unused once resolved_path is edge-validated)
-  std::string resolved_imgroot;//!< realpath()-resolved image root
+  std::string imgroot;//!< image root: raw config value, for the Rust edge's path build (parity with imgroot())
+  std::string resolved_imgroot;//!< realpath()-resolved image root, for the R2 containment check
+  bool prefix_as_path = true;//!< IIIF prefix is a path component under imgroot (config knob, exposed to the edge)
   int jpeg_quality = 60;//!< JPEG encode quality
   ScalingQuality scaling_quality{};//!< per-format scaling method
   std::size_t max_pixel_limit = 0;//!< max output pixels per request (0 = unlimited)
