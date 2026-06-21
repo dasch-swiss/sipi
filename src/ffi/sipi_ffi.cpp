@@ -5,12 +5,16 @@
 
 #include "ffi/sipi_ffi.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <utility>
 
 #include "SipiImage.h"// SipiImage::read_shape (sipi_image_dims)
 #include "ffi/engine_context.h"
+#include "ffi/lua_config.h"// make_lua_server (sipi_has_preflight)
 #include "ffi/metrics_snapshot.h"
 #include "ffi/preflight.h"
 #include "ffi/serve_image.h"
@@ -18,6 +22,37 @@
 #include "observability/metrics.h"
 #include "shttps/lua/request_context.h"// shttps::RequestContext (the opaque SipiRequestContext)
 #include "shttps/util/Parsing.h"// shttps::Parsing::getBestFileMimetype (sipi_mimetype)
+
+namespace {
+
+// Map an HTTP method string to the Lua-facing enum (request_context.h), matching
+// the transport's Connection::method() → HttpMethod mapping. Unknown → OTHER.
+shttps::HttpMethod parse_http_method(const char *method)
+{
+  const std::string m = (method != nullptr) ? method : "";
+  if (m == "GET") { return shttps::HttpMethod::GET; }
+  if (m == "HEAD") { return shttps::HttpMethod::HEAD; }
+  if (m == "POST") { return shttps::HttpMethod::POST; }
+  if (m == "PUT") { return shttps::HttpMethod::PUT; }
+  if (m == "DELETE") { return shttps::HttpMethod::DELETE; }
+  if (m == "OPTIONS") { return shttps::HttpMethod::OPTIONS; }
+  if (m == "TRACE") { return shttps::HttpMethod::TRACE; }
+  if (m == "CONNECT") { return shttps::HttpMethod::CONNECT; }
+  return shttps::HttpMethod::OTHER;
+}
+
+// Lower-case a header name, matching make_request_context (the Lua hooks look
+// headers up by their lower-cased name, e.g. ctx.headers["cookie"]).
+std::string ascii_lower(const char *s)
+{
+  std::string r = (s != nullptr) ? s : "";
+  std::transform(r.begin(), r.end(), r.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return r;
+}
+
+const char *nz(const char *s) { return (s != nullptr) ? s : ""; }
+
+}// namespace
 
 extern "C" {
 
@@ -188,6 +223,67 @@ int sipi_mimetype(const char *resolved_path, SipiStrFn emit, void *ctx)
   return Sipi::ffi::sipi_guard([&] {
     const std::string mime = shttps::Parsing::getBestFileMimetype(resolved_path);
     emit(ctx, mime.c_str());
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
+SipiRequestContext *sipi_make_request_context(const char *method,
+  const char *client_ip,
+  int client_port,
+  int secure,
+  const char *host,
+  const char *uri,
+  const SipiStrPair *headers,
+  size_t n_headers,
+  const SipiStrPair *cookies,
+  size_t n_cookies)
+{
+  // Returns a pointer, so it can't use sipi_guard (which returns int); a throw
+  // collapses to NULL. The heap RequestContext is owned by the Rust caller and
+  // released via sipi_free_request_context. Fields preflight does not read
+  // (get/post params, uploads, body) stay default-empty (YAGNI); jwt_secret +
+  // response sink are filled by make_lua_server / left null (preflight read-only).
+  try {
+    auto ctx = std::make_unique<shttps::RequestContext>();
+    ctx->method = parse_http_method(method);
+    ctx->client_ip = nz(client_ip);
+    ctx->client_port = client_port;
+    ctx->secure = secure != 0;
+    ctx->host = nz(host);
+    ctx->uri = nz(uri);
+    for (size_t i = 0; i < n_headers; ++i) { ctx->headers[ascii_lower(headers[i].name)] = nz(headers[i].value); }
+    for (size_t i = 0; i < n_cookies; ++i) { ctx->cookies[nz(cookies[i].name)] = nz(cookies[i].value); }
+    return reinterpret_cast<SipiRequestContext *>(ctx.release());
+  } catch (...) {
+    return nullptr;
+  }
+}
+
+void sipi_free_request_context(SipiRequestContext *ctx)
+{
+  delete reinterpret_cast<shttps::RequestContext *>(ctx);
+}
+
+int sipi_has_preflight(int *out)
+{
+  // Build a VM from the engine Lua config (which runs the init script, defining
+  // the hooks) and check whether pre_flight is defined — the Rust analog of the
+  // C++ luaserver.luaFunctionExists gate. Builds a VM, so the shell calls this
+  // once at startup. An empty context suffices (we only inspect the globals).
+  return Sipi::ffi::sipi_guard([&] {
+    shttps::RequestContext ctx;
+    auto vm = Sipi::ffi::make_lua_server(ctx);
+    *out = vm->luaFunctionExists("pre_flight") ? 1 : 0;
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
+int sipi_has_file_preflight(int *out)
+{
+  return Sipi::ffi::sipi_guard([&] {
+    shttps::RequestContext ctx;
+    auto vm = Sipi::ffi::make_lua_server(ctx);
+    *out = vm->luaFunctionExists("file_pre_flight") ? 1 : 0;
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
   });
 }
