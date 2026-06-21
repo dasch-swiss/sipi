@@ -41,7 +41,7 @@ namespace {
 
 }// namespace
 
-std::expected<ServeResponse, SipiStatus> decide_serve_file(const char *resolved_path, const char *range)
+std::expected<ServeResponse, SipiStatus> build_file_response(const char *resolved_path, const char *range)
 {
   // Readability gate — matches the legacy 404 contract.
   if (access(resolved_path, R_OK) != 0) { return std::unexpected(SipiStatus::NotFound); }

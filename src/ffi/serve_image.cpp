@@ -222,7 +222,7 @@ namespace {
 
   // The decoded image + the encode job, captured for the streamed-body tail.
   // produce() runs ONLY the encode (the rarely-failing step): the decode +
-  // transforms already ran in decide_serve_image, before the response committed.
+  // transforms already ran in build_image_response, before the response committed.
   class ImageEncodeProducer : public StreamProducer
   {
   public:
@@ -398,7 +398,7 @@ namespace {
 }// namespace
 
 std::expected<ServeResponse, SipiStatus>
-  decide_serve_image(const SipiServeRequest &req, const EngineContext &eng, const std::function<bool()> &cancelled)
+  build_image_response(const SipiServeRequest &req, const EngineContext &eng, const std::function<bool()> &cancelled)
 {
   const std::string infile = str_or_empty(req.resolved_path);
   const std::string uri = str_or_empty(req.request_uri);

@@ -9,7 +9,7 @@
  * `sipi_serve_image` is a C ABI of shape `(req, resp)` — it has no slot for the
  * cache, rate limiter, memory budget, or the server config knobs the decode
  * pipeline needs. `EngineContext` is that durable engine state, read by
- * `decide_serve_image`. In Phase C `sipi_init` constructs and installs it; in
+ * `build_image_response`. In Phase C `sipi_init` constructs and installs it; in
  * the Phase B parity window the still-living `SipiHttpServer` installs
  * non-owning pointers to the services it already owns via `set_engine_context`.
  * The install call is the only throwaway part — the same shape as the

@@ -14,7 +14,7 @@
  *    length → Content-Length framing, possibly zero-copy `sendfile(2)`),
  *    `EmptyBody`, or `StreamBody` (unknown length → chunked). The engine cannot
  *    emit two bodies; `apply` dispatches the one alternative.
- *  - The serve *decision* is computed by `decide_*` as a pure-of-the-transport
+ *  - The serve *response* is computed by `build_*` as a pure-of-the-transport
  *    value (`std::expected<ServeResponse, SipiStatus>`) — unit-testable without
  *    a socket, and every failure-prone step runs there, *before* the response
  *    is committed, so it returns a clean status code.
@@ -115,17 +115,17 @@ struct ServeResponse
   std::vector<Header> headers;
   Body body;
   /*! Run by `apply` after the body has been delivered (on every path, including
-   *  a producer that aborts). Empty by default; `decide_serve_image` uses it to
+   *  a producer that aborts). Empty by default; `build_image_response` uses it to
    *  unblock a cache file it pinned for a cache-hit `FileBody`. */
   std::function<void()> on_complete;
 };
 
-/*! Decide how to serve a raw `/file` request: validate readability, stat, sniff
+/*! Build the response for a raw `/file` request: validate readability, stat, sniff
  *  MIME, parse + clamp the Range. Pure of the transport (touches no
  *  `SipiResponse` callback) so it is unit-testable in isolation. Returns a
  *  `ServeResponse` or the error status the caller renders. May throw only on a
  *  pathological Range overflow (`std::stoull`); `sipi_guard` catches it. */
-[[nodiscard]] std::expected<ServeResponse, SipiStatus> decide_serve_file(const char *resolved_path, const char *range);
+[[nodiscard]] std::expected<ServeResponse, SipiStatus> build_file_response(const char *resolved_path, const char *range);
 
 /*! The single place that drives the C-ABI response callbacks: set status, add
  *  each header, then deliver the one body. */

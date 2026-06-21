@@ -6,7 +6,7 @@
 /*!
  * The IIIF image pipeline behind the FFI seam (strangler-fig Phase B).
  *
- * `decide_serve_image` is the transport-pure decision for an IIIF image
+ * `build_image_response` builds the transport-pure response for an IIIF image
  * request, the `serve_iiif` decode path carved out of `SipiHttpServer`. It
  * reconstructs the typed IIIF params from the flat `SipiServeRequest`, runs
  * admission (rate-limit / cache / memory-budget), builds the canonical URL, and
@@ -28,13 +28,13 @@
 
 namespace Sipi::ffi {
 
-/*! Decide how to serve an IIIF image request. Reads engine services + config
+/*! Build the response for an IIIF image request. Reads engine services + config
  *  from `eng`. `cancelled` is polled between the decode stages (mirrors the
  *  legacy `peerConnected()` checks) — pass `[]{ return false; }` in tests.
  *  Returns the error status the caller renders, or `SipiStatus::ClientGone`
  *  when the client vanished mid-decode (the caller emits nothing). */
 [[nodiscard]] std::expected<ServeResponse, SipiStatus>
-  decide_serve_image(const SipiServeRequest &req, const EngineContext &eng, const std::function<bool()> &cancelled);
+  build_image_response(const SipiServeRequest &req, const EngineContext &eng, const std::function<bool()> &cancelled);
 
 }// namespace Sipi::ffi
 
