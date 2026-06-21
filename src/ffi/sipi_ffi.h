@@ -182,6 +182,14 @@ typedef enum {
 
 typedef void (*SipiKVFn)(void *ctx, const char *key, const char *value);
 
+/*! A name/value pair, for passing request headers + cookies to the request-context
+ *  builder. Both pointers are caller-owned; the builder deep-copies them. */
+typedef struct
+{
+  const char *name;
+  const char *value;
+} SipiStrPair;
+
 /* ── Opaque handles ─────────────────────────────────────────────────────────
  * CLI/env overrides for `sipi_init` and the engine-counter snapshot for
  * `sipi_metrics_snapshot`. Incomplete here on purpose: the implementing
@@ -260,6 +268,35 @@ SIPI_FFI_NODISCARD int sipi_file_preflight(const char *filepath,
   SipiPermType *type,
   SipiKVFn emit_kv,
   void *kv_ctx);
+
+/*! Build the opaque request context the preflight hooks read (`server.*`) from
+ *  primitive request fields — the Phase C replacement for the transport's
+ *  `make_request_context(Connection&)`. Header names are lowercased to match the
+ *  transport. The JWT secret + the response sink are NOT taken here: the secret
+ *  is injected from the engine Lua config by `make_lua_server`, and preflight is
+ *  read-only (no response sink). Deep-copies `headers`/`cookies`, so the caller's
+ *  arrays need not outlive the call. Returns the context (caller frees it with
+ *  `sipi_free_request_context`) or NULL on allocation failure. */
+SIPI_FFI_NODISCARD SipiRequestContext *sipi_make_request_context(const char *method,
+  const char *client_ip,
+  int client_port,
+  int secure,
+  const char *host,
+  const char *uri,
+  const SipiStrPair *headers,
+  size_t n_headers,
+  const SipiStrPair *cookies,
+  size_t n_cookies);
+
+/*! Free a context returned by `sipi_make_request_context`. NULL is a no-op. */
+void sipi_free_request_context(SipiRequestContext *ctx);
+
+/*! Whether the engine Lua config defines a `pre_flight` / `file_pre_flight` hook
+ *  (`luaFunctionExists`). The Rust shell reads these once at startup to mirror the
+ *  C++ `luaFunctionExists` gate: with no hook it falls back to a default path +
+ *  allow. Builds a VM, so call once and cache. Returns 0, or 500 if uninitialised. */
+SIPI_FFI_NODISCARD int sipi_has_preflight(int *out);
+SIPI_FFI_NODISCARD int sipi_has_file_preflight(int *out);
 
 /*! A configured Lua route. */
 SIPI_FFI_NODISCARD int sipi_run_lua_route(const char *script, const SipiServeRequest *req, const SipiResponse *resp);

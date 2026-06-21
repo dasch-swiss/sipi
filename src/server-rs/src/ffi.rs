@@ -155,6 +155,39 @@ pub struct SipiImageDims {
 /// C string, so `sipi_mimetype` hands its result back through this callback.
 pub type SipiStrFn = extern "C" fn(ctx: *mut c_void, value: *const c_char);
 
+// ── Preflight (auth) ────────────────────────────────────────────────────────
+
+/// Permission type a Lua preflight hook returns (mirrors `SipiPermType`). The
+/// discriminants match the C enum 1:1.
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SipiPermType {
+    Allow = 0,
+    Login = 1,
+    Clickthrough = 2,
+    Kiosk = 3,
+    External = 4,
+    Restrict = 5,
+    Deny = 6,
+}
+
+/// A name/value pair passed to the request-context builder (mirrors `SipiStrPair`).
+#[repr(C)]
+pub struct SipiStrPair {
+    pub name: *const c_char,
+    pub value: *const c_char,
+}
+
+/// The preflight key/value emit callback (mirrors `SipiKVFn`).
+pub type SipiKVFn = extern "C" fn(ctx: *mut c_void, key: *const c_char, value: *const c_char);
+
+/// The opaque request context the preflight hooks read (`= shttps::RequestContext`).
+/// Built by [`sipi_make_request_context`], freed by [`sipi_free_request_context`].
+#[repr(C)]
+pub struct SipiRequestContext {
+    _private: [u8; 0],
+}
+
 extern "C" {
     /// IIIF decode→transform→encode→stream; honours the restrict size/watermark.
     /// Returns 0 when the response was emitted via the sink, or an HTTP status
@@ -204,6 +237,51 @@ extern "C" {
     /// The engine's libmagic MIME type for a file, emitted once via `emit`.
     /// `resolved_path` is an already-validated absolute path. Returns 0, or 500.
     pub fn sipi_mimetype(resolved_path: *const c_char, emit: SipiStrFn, ctx: *mut c_void) -> c_int;
+
+    /// Run the IIIF `pre_flight(prefix, identifier, cookie)` hook against `ctx`.
+    /// Writes the permission to `*type` and emits each kv pair (incl. `infile`)
+    /// via `emit_kv`. Returns 0, or 500 on a Lua/validation failure.
+    pub fn sipi_preflight(
+        prefix: *const c_char,
+        identifier: *const c_char,
+        ctx: *mut SipiRequestContext,
+        ty: *mut SipiPermType,
+        emit_kv: SipiKVFn,
+        kv_ctx: *mut c_void,
+    ) -> c_int;
+
+    /// Run the `/file` `file_pre_flight(filepath, cookie)` hook (narrower
+    /// permission set). Same out-channel contract as [`sipi_preflight`].
+    pub fn sipi_file_preflight(
+        filepath: *const c_char,
+        ctx: *mut SipiRequestContext,
+        ty: *mut SipiPermType,
+        emit_kv: SipiKVFn,
+        kv_ctx: *mut c_void,
+    ) -> c_int;
+
+    /// Build the opaque request context from primitive fields (header names are
+    /// lowercased). Deep-copies the arrays. Returns the context or null.
+    pub fn sipi_make_request_context(
+        method: *const c_char,
+        client_ip: *const c_char,
+        client_port: c_int,
+        secure: c_int,
+        host: *const c_char,
+        uri: *const c_char,
+        headers: *const SipiStrPair,
+        n_headers: usize,
+        cookies: *const SipiStrPair,
+        n_cookies: usize,
+    ) -> *mut SipiRequestContext;
+
+    /// Free a context from [`sipi_make_request_context`]. Null is a no-op.
+    pub fn sipi_free_request_context(ctx: *mut SipiRequestContext);
+
+    /// Whether the engine Lua config defines a `pre_flight` / `file_pre_flight`
+    /// hook. Builds a VM, so call once at startup. Returns 0 (and sets `*out`).
+    pub fn sipi_has_preflight(out: *mut c_int) -> c_int;
+    pub fn sipi_has_file_preflight(out: *mut c_int) -> c_int;
 }
 
 /// Startup link self-check: forces the C++ engine `cc_library` to link into this
@@ -321,4 +399,179 @@ pub fn mimetype(resolved_path: &str) -> Result<String, i32> {
         return Err(code);
     }
     out.ok_or(-1)
+}
+
+// ── Preflight wrappers ──────────────────────────────────────────────────────
+
+/// An owned request context. Frees the underlying `shttps::RequestContext` on
+/// drop, so a preflight call never leaks (the seam contract: Rust owns it).
+pub struct RequestContext {
+    ptr: *mut SipiRequestContext,
+}
+
+impl Drop for RequestContext {
+    fn drop(&mut self) {
+        // SAFETY: `ptr` came from sipi_make_request_context and is freed exactly
+        // once (this Drop); null is a no-op on the C side.
+        unsafe { sipi_free_request_context(self.ptr) }
+    }
+}
+
+/// Build the opaque request context the preflight hooks read, from primitive
+/// request fields. Returns `None` on an interior NUL or an allocation failure.
+pub fn build_request_context(
+    method: &str,
+    client_ip: &str,
+    client_port: i32,
+    secure: bool,
+    host: &str,
+    uri: &str,
+    headers: &[(String, String)],
+    cookies: &[(String, String)],
+) -> Option<RequestContext> {
+    let c_method = CString::new(method).ok()?;
+    let c_client_ip = CString::new(client_ip).ok()?;
+    let c_host = CString::new(host).ok()?;
+    let c_uri = CString::new(uri).ok()?;
+
+    // Own every C string for the duration of the call; the builder deep-copies,
+    // so they only need to outlive the synchronous call. CString heap buffers are
+    // stable across the Vec growth, so the recorded pointers stay valid.
+    let mut owned: Vec<CString> = Vec::with_capacity((headers.len() + cookies.len()) * 2);
+    fn pair(owned: &mut Vec<CString>, k: &str, v: &str) -> Option<SipiStrPair> {
+        let ck = CString::new(k).ok()?;
+        let cv = CString::new(v).ok()?;
+        let p = SipiStrPair { name: ck.as_ptr(), value: cv.as_ptr() };
+        owned.push(ck);
+        owned.push(cv);
+        Some(p)
+    }
+    let mut header_pairs = Vec::with_capacity(headers.len());
+    for (k, v) in headers {
+        header_pairs.push(pair(&mut owned, k, v)?);
+    }
+    let mut cookie_pairs = Vec::with_capacity(cookies.len());
+    for (k, v) in cookies {
+        cookie_pairs.push(pair(&mut owned, k, v)?);
+    }
+
+    // SAFETY: all pointers outlive the synchronous call; the builder deep-copies
+    // and returns an owned handle (or null). The seam guards C++ exceptions.
+    let ptr = unsafe {
+        sipi_make_request_context(
+            c_method.as_ptr(),
+            c_client_ip.as_ptr(),
+            client_port,
+            c_int::from(secure),
+            c_host.as_ptr(),
+            c_uri.as_ptr(),
+            header_pairs.as_ptr(),
+            header_pairs.len(),
+            cookie_pairs.as_ptr(),
+            cookie_pairs.len(),
+        )
+    };
+    if ptr.is_null() {
+        None
+    } else {
+        Some(RequestContext { ptr })
+    }
+}
+
+/// The parsed result of a preflight hook: the permission and the open kv channel
+/// (`infile` plus `watermark` / `size` / auth-service keys).
+pub struct PreflightOutcome {
+    pub permission: SipiPermType,
+    pub kv: Vec<(String, String)>,
+}
+
+impl PreflightOutcome {
+    /// The value of a kv key, if the hook emitted it.
+    #[must_use]
+    pub fn get(&self, key: &str) -> Option<&str> {
+        self.kv.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
+    }
+}
+
+/// Collects emitted kv pairs into the `Vec<(String, String)>` at `ctx`.
+extern "C" fn collect_kv(ctx: *mut c_void, key: *const c_char, value: *const c_char) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: `ctx` is the `&mut Vec<(String, String)>` passed to the call.
+        let kv = unsafe { &mut *(ctx as *mut Vec<(String, String)>) };
+        if !key.is_null() && !value.is_null() {
+            // SAFETY: the engine passes NUL-terminated C strings valid for the call.
+            let k = unsafe { CStr::from_ptr(key) }.to_string_lossy().into_owned();
+            let v = unsafe { CStr::from_ptr(value) }.to_string_lossy().into_owned();
+            kv.push((k, v));
+        }
+    }));
+}
+
+/// Run the IIIF `pre_flight` hook. `Err` carries the FFI status (500), or -1 on
+/// an interior NUL.
+pub fn preflight(prefix: &str, identifier: &str, ctx: &RequestContext) -> Result<PreflightOutcome, i32> {
+    let c_prefix = CString::new(prefix).map_err(|_| -1)?;
+    let c_identifier = CString::new(identifier).map_err(|_| -1)?;
+    let mut permission = SipiPermType::Deny;
+    let mut kv: Vec<(String, String)> = Vec::new();
+    // SAFETY: the C strings + ctx outlive the synchronous call; collect_kv writes
+    // into `kv` via the ctx pointer; the seam guards exceptions.
+    let code = unsafe {
+        sipi_preflight(
+            c_prefix.as_ptr(),
+            c_identifier.as_ptr(),
+            ctx.ptr,
+            &mut permission,
+            collect_kv,
+            &mut kv as *mut Vec<(String, String)> as *mut c_void,
+        )
+    };
+    if code != 0 {
+        return Err(code);
+    }
+    Ok(PreflightOutcome { permission, kv })
+}
+
+/// Run the `/file` `file_pre_flight` hook (narrower permission set).
+pub fn file_preflight(filepath: &str, ctx: &RequestContext) -> Result<PreflightOutcome, i32> {
+    let c_filepath = CString::new(filepath).map_err(|_| -1)?;
+    let mut permission = SipiPermType::Deny;
+    let mut kv: Vec<(String, String)> = Vec::new();
+    // SAFETY: as for `preflight`.
+    let code = unsafe {
+        sipi_file_preflight(
+            c_filepath.as_ptr(),
+            ctx.ptr,
+            &mut permission,
+            collect_kv,
+            &mut kv as *mut Vec<(String, String)> as *mut c_void,
+        )
+    };
+    if code != 0 {
+        return Err(code);
+    }
+    Ok(PreflightOutcome { permission, kv })
+}
+
+/// Whether the engine Lua config defines a `pre_flight` hook (read once at
+/// startup; falling back to a default path + allow when absent).
+pub fn has_preflight() -> Result<bool, i32> {
+    let mut v: c_int = 0;
+    // SAFETY: `out` is a valid pointer; the seam guards exceptions.
+    let code = unsafe { sipi_has_preflight(&mut v) };
+    if code != 0 {
+        return Err(code);
+    }
+    Ok(v != 0)
+}
+
+/// Whether the engine Lua config defines a `file_pre_flight` hook.
+pub fn has_file_preflight() -> Result<bool, i32> {
+    let mut v: c_int = 0;
+    // SAFETY: `out` is a valid pointer; the seam guards exceptions.
+    let code = unsafe { sipi_has_file_preflight(&mut v) };
+    if code != 0 {
+        return Err(code);
+    }
+    Ok(v != 0)
 }
