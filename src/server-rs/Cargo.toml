@@ -22,12 +22,14 @@ path = "src/lib.rs"
 name = "sipi_server"
 path = "src/main.rs"
 
-# Deps are introduced per-task as a real consumer lands (YAGNI). The endpoints
-# follow-up re-adds tower / tower-http (CORS, trace, timeouts) + http / bytes.
+# Deps are introduced per-task as a real consumer lands (YAGNI). Auth/CORS
+# (tower-http) and observability (the OpenTelemetry stack) land with their slices.
 [dependencies]
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
+tower = { version = "0.5", features = ["util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 clap = { version = "4", features = ["derive"] }
 percent-encoding = "2"
+serde_json = "1"

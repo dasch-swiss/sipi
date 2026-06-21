@@ -13,6 +13,9 @@
 
 pub mod ffi;
 pub mod iiif;
+pub mod info;
+pub mod path;
+pub mod routes;
 pub mod sink;
 
 use axum::{http::StatusCode, routing::get, Router};
@@ -21,6 +24,7 @@ use std::ffi::CString;
 use std::net::SocketAddr;
 use std::os::raw::{c_char, c_int};
 use std::process::ExitCode;
+use std::sync::Arc;
 
 /// Default listen port for the additive Rust shell. The real port comes from
 /// the SIPI config once `sipi_init` lands (T4); until then it is overridable via
@@ -151,22 +155,32 @@ fn run_cli(argv: &[String]) -> ExitCode {
     ExitCode::from(code as u8)
 }
 
-/// Build the axum application. Routes grow across T5–T8; T1 ships the
-/// Rust-native endpoints (`/health`, `/favicon.ico`) that never touch the FFI.
-fn app() -> Router {
+/// Build the axum application. `/health` + `/favicon.ico` are Rust-native and
+/// never touch the FFI; every other path is the IIIF catch-all, which classifies,
+/// validates, and drives the engine seam (Slice 1). CORS, concurrency, and OTel
+/// layers wrap this in later slices.
+pub fn app(state: Arc<routes::AppState>) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/favicon.ico", get(favicon))
+        // The bare root has no `*rest` capture, so register it explicitly; the
+        // handler classifies it (→ 400, matching the C++ parser).
+        .route("/", get(routes::iiif).head(routes::iiif))
+        .route("/{*rest}", get(routes::iiif).head(routes::iiif))
+        .with_state(state)
 }
 
 async fn serve(port: Option<u16>) -> std::io::Result<()> {
+    // Read the cached engine config once (image root + prefix_as_path); a
+    // not-ready state (no --config) leaves the serve routes returning 503.
+    let state = Arc::new(routes::AppState::load());
     let port = port
         .or_else(|| std::env::var("SIPI_RS_PORT").ok().and_then(|p| p.parse().ok()))
         .unwrap_or(DEFAULT_PORT);
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!(%addr, "SIPI Rust shell listening");
-    axum::serve(listener, app()).await
+    axum::serve(listener, app(state)).await
 }
 
 /// Rust-native liveness probe — bypasses the engine entirely (DEV-6101).
@@ -186,4 +200,45 @@ fn init_tracing() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     // `try_init` so a second call (e.g. in tests) is a no-op rather than a panic.
     let _ = fmt().with_env_filter(filter).try_init();
+}
+
+#[cfg(test)]
+mod app_tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::Request;
+    use tower::ServiceExt; // `oneshot`
+
+    // No `sipi_init` runs in this test binary, so the engine is uninstalled and
+    // AppState::load() reports not-ready. The engine-free routes still serve; the
+    // serve routes 503. The full serve path (real images via the FFI) is covered
+    // by the manual smoke run and the reqwest e2e suite targeting sipi_server.
+    fn test_app() -> Router {
+        app(Arc::new(routes::AppState::load()))
+    }
+
+    async fn status_of(uri: &str) -> StatusCode {
+        let resp = test_app()
+            .oneshot(Request::get(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        resp.status()
+    }
+
+    #[tokio::test]
+    async fn health_is_rust_native() {
+        assert_eq!(status_of("/health").await, StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn favicon_is_no_content() {
+        assert_eq!(status_of("/favicon.ico").await, StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn serve_routes_503_without_engine() {
+        // The catch-all guards on engine readiness before touching the seam.
+        assert_eq!(status_of("/unit/lena512.jp2/info.json").await, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(status_of("/unit/lena512.jp2/full/max/0/default.jpg").await, StatusCode::SERVICE_UNAVAILABLE);
+    }
 }
