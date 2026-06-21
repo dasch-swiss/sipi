@@ -27,7 +27,10 @@ rust_library(
     srcs = [
         "src/ffi.rs",
         "src/iiif.rs",
+        "src/info.rs",
         "src/lib.rs",
+        "src/path.rs",
+        "src/routes.rs",
         "src/sink.rs",
     ],
     crate_name = "sipi",

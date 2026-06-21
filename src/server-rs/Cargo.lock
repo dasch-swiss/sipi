@@ -601,7 +601,9 @@ dependencies = [
  "axum",
  "clap",
  "percent-encoding",
+ "serde_json",
  "tokio",
+ "tower",
  "tracing",
  "tracing-subscriber",
 ]
