@@ -50,7 +50,100 @@ pub struct SipiResponse {
     pub cancelled: Option<SipiCancelledFn>,
 }
 
+// ── IIIF serve request (consumed by sipi_serve_image) ───────────────────────
+// repr(C) mirrors of the seam structs/enums in `sipi_ffi.h`. The integer enum
+// values match the C++ `iiifparser` enums 1:1 (verified against the header), so
+// the Rust IIIF parser produces them directly.
+
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SipiRegionType {
+    Full = 0,
+    Square = 1,
+    Coords = 2,
+    Percents = 3,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SipiSizeType {
+    Undefined = 0,
+    Full = 1,
+    PixelsXy = 2,
+    PixelsX = 3,
+    PixelsY = 4,
+    Maxdim = 5,
+    Percents = 6,
+    Reduce = 7,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SipiQualityType {
+    Default = 0,
+    Color = 1,
+    Gray = 2,
+    Bitonal = 3,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SipiFormatType {
+    Unsupported = 0,
+    Jpg = 1,
+    Tif = 2,
+    Png = 3,
+    Gif = 4,
+    Jp2 = 5,
+    Pdf = 6,
+    Webp = 7,
+}
+
+/// Flattened IIIF region/size/rotation/quality.format — mirrors `SipiIiifParams`
+/// in `sipi_ffi.h`. `c_int` ⇔ C `int`, `usize` ⇔ C `size_t`, `f32` ⇔ C `float`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct SipiIiifParams {
+    pub region_type: SipiRegionType,
+    pub region: [f32; 4],
+    pub size_type: SipiSizeType,
+    pub size_upscaling: c_int,
+    pub size_percent: f32,
+    pub size_reduce: c_int,
+    pub size_nx: usize,
+    pub size_ny: usize,
+    pub rotation: f32,
+    pub rotation_mirror: c_int,
+    pub quality_type: SipiQualityType,
+    pub format_type: SipiFormatType,
+}
+
+/// The IIIF serve request — mirrors `SipiServeRequest` in `sipi_ffi.h`. All
+/// `*const c_char` fields are caller-owned and must outlive the (synchronous)
+/// `sipi_serve_image` call; null is allowed where the header documents it.
+#[repr(C)]
+pub struct SipiServeRequest {
+    pub resolved_path: *const c_char,
+    pub prefix: *const c_char,
+    pub identifier: *const c_char,
+    pub client_ip: *const c_char,
+    pub params: SipiIiifParams,
+    pub restricted_size: *const c_char,
+    pub watermark_path: *const c_char,
+    pub forwarded_proto: *const c_char,
+    pub forwarded_host: *const c_char,
+    pub request_uri: *const c_char,
+    pub is_head: c_int,
+}
+
 extern "C" {
+    /// IIIF decode→transform→encode→stream; honours the restrict size/watermark.
+    /// Returns 0 when the response was emitted via the sink, or an HTTP status
+    /// code (400/404/500/…) on a pre-commit failure (499 = client gone → no
+    /// response). The engine reads `engine_context()`, so `sipi_init` must have
+    /// run first.
+    pub fn sipi_serve_image(req: *const SipiServeRequest, resp: *const SipiResponse) -> c_int;
+
     /// Raw `/file` passthrough incl. HTTP Range / 206 — no decode.
     /// `resolved_path` is an already-validated absolute path; `range` is the raw
     /// `Range` header value or null. Returns 0 when the response was emitted, or

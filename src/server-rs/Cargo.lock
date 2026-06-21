@@ -602,6 +602,7 @@ dependencies = [
  "bytes",
  "clap",
  "http",
+ "percent-encoding",
  "tokio",
  "tower",
  "tower-http",

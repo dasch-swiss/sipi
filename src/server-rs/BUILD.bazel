@@ -18,7 +18,7 @@ keeps the production socket until the step-5 cutover renames this to the stock
 """
 
 load("@crates_prod//:defs.bzl", "all_crate_deps")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -26,7 +26,9 @@ rust_library(
     name = "sipi",
     srcs = [
         "src/ffi.rs",
+        "src/iiif.rs",
         "src/lib.rs",
+        "src/sink.rs",
     ],
     crate_name = "sipi",
     edition = "2021",
@@ -71,4 +73,14 @@ rust_binary(
     edition = "2021",
     rustc_flags = _CPP_STDLIB_LINK,
     deps = [":sipi"],
+)
+
+# Inline #[cfg(test)] unit tests (the IIIF parser parity tests). Compiles the
+# library crate with --cfg test; needs the C++ stdlib link args because it
+# links the same cc deps as the library.
+rust_test(
+    name = "sipi_unit_test",
+    crate = ":sipi",
+    edition = "2021",
+    rustc_flags = _CPP_STDLIB_LINK,
 )
