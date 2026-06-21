@@ -1,0 +1,43 @@
+"""shttps/lua — the per-request Lua interpreter (LuaServer).
+
+LuaServer drives the Lua VM behind the preflight hook, the configured Lua
+routes, and the init script. Since the request_context decoupling it no longer
+names shttps::Connection: it reads request fields and writes the response
+through the connection-less RequestContext / ResponseSink seam
+(`request_context.h`). It therefore carries no transport dependency and can be
+built below `//src/ffi` — `transport` depends on `lua`, never the reverse.
+
+`strip_include_prefix = "/src"` exposes the headers at the path-prefixed form
+`#include "shttps/lua/LuaServer.h"` / `#include "shttps/lua/request_context.h"`
+(ADR-0003).
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//src:__subpackages__"])
+
+cc_library(
+    name = "lua",
+    srcs = glob(
+        ["*.cpp"],
+        exclude = ["*_test.cpp"],
+    ),
+    hdrs = glob(["*.h"]),
+    strip_include_prefix = "/src",
+    deps = [
+        # Levelled logging primitive (server.log).
+        "//src/logging:logging",
+        # server.jwt bindings (generate/decode).
+        "//src/shttps/jwt",
+        # Generic helpers: Error, Global, Parsing, Hash.
+        "//src/shttps/util",
+        # server.http client (CurlConnection).
+        "@curl",
+        # server.table_to_json / json_to_table.
+        "@jansson//:jansson",
+        # the Lua C API.
+        "@lua",
+        # server.uuid* — r-lyeh's base62 UUID (DSP IRI scheme).
+        "@sole//:sole",
+    ],
+)

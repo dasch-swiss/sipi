@@ -10,11 +10,13 @@ module boundary is a build-graph fact rather than a naming convention:
   - `jwt/`       — JWT verify/sign
   - `lua_sqlite/`— SQLite-backed Lua bindings
 
-`transport` and `lua` are mutually dependent (Server holds a LuaServer;
-LuaServer needs the full Connection type), so they share this package
-(`:shttps_headers` + `:shttps`); util/jwt/lua_sqlite are separate leaf
-packages. util and jwt are leaves; lua_sqlite depends one-directionally
-on `:shttps`.
+This package holds the `transport/` layer (`:shttps_headers` + `:shttps`).
+`lua/` is its own `//src/shttps/lua` package: the request_context decoupling
+severed `LuaServer`'s dependency on `shttps::Connection`, so the edge is now
+one-directional — `transport` depends on `lua` (Server constructs a LuaServer
+per request), never the reverse, which also lets `//src/ffi` link `lua`
+directly. util, jwt, lua, and lua_sqlite are separate packages; util and jwt
+are leaves, lua depends on util + jwt, lua_sqlite depends on lua.
 
 Strict SIPI → shttps one-way dependency direction: only `//src/...` may
 depend on `//src/shttps:shttps`, and shttps declares no `//src/...` deps
@@ -45,31 +47,27 @@ package(default_visibility = [
 ])
 
 # ── //src/shttps:shttps_headers ────────────────────────────────────────────────
-# Header-only surface of the transport + lua modules. Split out so
+# Header-only surface of the transport module. Split out so
 # `//fuzz/handlers:fuzz_subset` can compile its transport-cpp slice with the
 # full include graph available (`#include "Server.h"` chains pull
 # LuaServer.h, ConnectionMetrics.h, etc.) without linking shttps's compiled
 # archive — only the explicitly-listed cpps end up in the fuzz binary.
 #
-# `includes = [".", "transport", "lua"]` + `include_prefix = "shttps"` give
-# three include forms: external consumers reach the headers as
-# `#include "shttps/transport/X.h"` / `#include "shttps/lua/X.h"` (prefix
-# form); same-directory siblings keep working as `#include "X.h"` (the
-# `transport`/`lua` entries put each module dir on the quote path); and the
-# cross-module edges between the two dirs are written in the explicit
-# `shttps/transport/…` / `shttps/lua/…` form. The generic utilities live in
-# `//src/shttps/util`, reached as `#include "shttps/util/X.h"`, so util is a
-# direct dep.
+# `includes = [".", "transport"]` + `include_prefix = "shttps"` give two
+# include forms: external consumers reach the headers as
+# `#include "shttps/transport/X.h"` (prefix form); same-directory siblings keep
+# working as `#include "X.h"` (the `transport` entry puts the module dir on the
+# quote path). Server.h includes `#include "shttps/lua/LuaServer.h"` and
+# `lua.hpp`, so the `//src/shttps/lua` package + `@lua` are deps here to carry
+# those headers to every consumer of this surface.
 cc_library(
     name = "shttps_headers",
     hdrs = glob([
         "transport/*.h",
-        "lua/*.h",
     ]),
     includes = [
         ".",
         "transport",
-        "lua",
     ],
     include_prefix = "shttps",
     deps = [
@@ -77,12 +75,12 @@ cc_library(
         # this package as a shared support library.
         "//src/logging:logging",
         "//src/shttps/util",
-        "@curl",
-        "@jansson//:jansson",
+        # Server.h pulls in shttps/lua/LuaServer.h.
+        "//src/shttps/lua",
+        # Server.h includes lua.hpp directly.
         "@lua",
         "@openssl//:crypto",
         "@openssl//:ssl",
-        "@sqlite3",
         "@zlib",
     ],
 )
@@ -92,29 +90,25 @@ cc_library(
     srcs = glob(
         [
             "transport/*.cpp",
-            "lua/*.cpp",
         ],
         exclude = [
             "transport/Shttp.cpp",  # standalone test driver, not part of the library
             "transport/*_test.cpp",  # co-located unit tests (see :transport_test)
-            "lua/*_test.cpp",
         ],
     ),
     deps = [
         ":shttps_headers",
-        # Generic SIPI-domain utilities; the transport/lua sources here
+        # Generic SIPI-domain utilities; the transport sources here
         # `#include "shttps/util/X.h"`.
         "//src/shttps/util",
-        # JWT verify/sign; LuaServer.cpp's `server.jwt` bindings
-        # `#include "shttps/jwt/jwt.h"`.
-        "//src/shttps/jwt",
-        # sole — r-lyeh's single-header UUID lib; LuaServer.cpp's server.uuid*
-        # Lua bindings (incl. the DSP base62 IRI scheme).
-        "@sole//:sole",
+        # Server constructs a LuaServer per request and registers the
+        # LuaSetGlobalsFunc installers; the Lua runtime is its own package
+        # since the request_context decoupling (transport -> lua, one-way).
+        "//src/shttps/lua",
         # Server.cpp names the pool's worker threads for the Tracy timeline
         # (`tracy::SetThreadName`). Inert unless `--config=tracy`.
         "@tracy//:tracy",
-        # Both are external deps, so neither breaches the SIPI -> shttps one-way rule.
+        # All external/SIPI deps respect the SIPI -> shttps one-way rule.
     ],
 )
 
