@@ -59,6 +59,13 @@ extern "C" {
         range: *const c_char,
         resp: *const SipiResponse,
     ) -> c_int;
+
+    /// Hands argv verbatim to the C++ CLI11 parser (`//src/cli:cli_app`) and
+    /// returns the process exit code — no `exit()`/`abort()` from inside the
+    /// FFI, so the Rust caller owns teardown. Drives the offline subcommands
+    /// (`convert`/`verify`/`query`/`compare`/`health`) the Rust shell does not
+    /// own, plus top-level `--version`/`--help`.
+    pub fn sipi_cli_main(argc: c_int, argv: *mut *mut c_char) -> c_int;
 }
 
 /// Startup link self-check: forces the C++ engine `cc_library` to link into this
