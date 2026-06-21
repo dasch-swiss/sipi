@@ -32,44 +32,61 @@ pub struct SinkState {
     io_error: bool,
 }
 
+// Each callback wraps its body in `catch_unwind` — the Rust-side analog of the
+// C++ `sipi_guard`. The engine calls these synchronously across the C ABI, so a
+// Rust panic must not unwind into C++; on panic the void callbacks swallow and
+// the `c_int` callbacks return a non-zero "failure" sentinel (the engine then
+// aborts the write, and the caller renders a 500). `AssertUnwindSafe` is sound
+// because a panic discards the (then-unused) partial response.
+
 extern "C" fn cb_set_status(ctx: *mut c_void, status: c_int) {
-    // SAFETY: `ctx` is the `&mut SinkState` the sink was built with; the engine
-    // calls this synchronously on the serving thread, so no aliasing race.
-    let state = unsafe { &mut *(ctx as *mut SinkState) };
-    state.status = status as u16;
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: `ctx` is the `&mut SinkState` the sink was built with; the
+        // engine calls this synchronously on the serving thread, no aliasing race.
+        let state = unsafe { &mut *(ctx as *mut SinkState) };
+        state.status = status as u16;
+    }));
 }
 
 extern "C" fn cb_add_header(ctx: *mut c_void, name: *const c_char, value: *const c_char) {
-    let state = unsafe { &mut *(ctx as *mut SinkState) };
-    // SAFETY: the engine passes NUL-terminated C strings valid for the call.
-    let name = unsafe { CStr::from_ptr(name) }.to_string_lossy().into_owned();
-    let value = unsafe { CStr::from_ptr(value) }.to_string_lossy().into_owned();
-    state.headers.push((name, value));
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let state = unsafe { &mut *(ctx as *mut SinkState) };
+        // SAFETY: the engine passes NUL-terminated C strings valid for the call.
+        let name = unsafe { CStr::from_ptr(name) }.to_string_lossy().into_owned();
+        let value = unsafe { CStr::from_ptr(value) }.to_string_lossy().into_owned();
+        state.headers.push((name, value));
+    }));
 }
 
 extern "C" fn cb_write(ctx: *mut c_void, data: *const u8, len: usize) -> c_int {
-    let state = unsafe { &mut *(ctx as *mut SinkState) };
-    if !data.is_null() && len > 0 {
-        // SAFETY: the engine guarantees `data` points at `len` valid bytes.
-        let slice = unsafe { std::slice::from_raw_parts(data, len) };
-        state.body.extend_from_slice(slice);
-    }
-    0
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let state = unsafe { &mut *(ctx as *mut SinkState) };
+        if !data.is_null() && len > 0 {
+            // SAFETY: the engine guarantees `data` points at `len` valid bytes.
+            let slice = unsafe { std::slice::from_raw_parts(data, len) };
+            state.body.extend_from_slice(slice);
+        }
+        0
+    }))
+    .unwrap_or(1)
 }
 
 extern "C" fn cb_send_file(ctx: *mut c_void, path: *const c_char, offset: u64, length: u64) -> c_int {
-    let state = unsafe { &mut *(ctx as *mut SinkState) };
-    let path = unsafe { CStr::from_ptr(path) }.to_string_lossy().into_owned();
-    match read_file_region(&path, offset, length) {
-        Ok(mut bytes) => {
-            state.body.append(&mut bytes);
-            0
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let state = unsafe { &mut *(ctx as *mut SinkState) };
+        let path = unsafe { CStr::from_ptr(path) }.to_string_lossy().into_owned();
+        match read_file_region(&path, offset, length) {
+            Ok(mut bytes) => {
+                state.body.append(&mut bytes);
+                0
+            }
+            Err(_) => {
+                state.io_error = true;
+                1
+            }
         }
-        Err(_) => {
-            state.io_error = true;
-            1
-        }
-    }
+    }))
+    .unwrap_or(1)
 }
 
 extern "C" fn cb_cancelled(_ctx: *mut c_void) -> c_int {

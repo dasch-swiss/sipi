@@ -121,7 +121,7 @@ bazel_dep(name = "curl", version = "8.12.0.bcr.1")
 # (pinned to openssl via `--@curl//:ssl_lib=openssl` in .bazelrc).
 bazel_dep(name = "openssl", version = "3.5.5.bcr.4")
 
-# CLI11 — header-only CLI parser for `src/cli/sipi.cpp` (the only consumer).
+# CLI11 — header-only CLI parser for `src/cli/cli_app.cpp` (the only consumer).
 # Replaces the in-tree single-header copy of 1.8.0 (`include/CLI11.hpp`); BCR is
 # a true drop-in here per ADR-0015 (a CLI parser, no codec/capability concern).
 # Consumed as @cli11//:cli11 with `#include <CLI/CLI.hpp>`.
