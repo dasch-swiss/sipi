@@ -23,13 +23,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "shttps/transport/Connection.h"
 #include "shttps/util/Error.h"
 #include "shttps/util/Global.h"
 #include "LuaServer.h"
 #include "shttps/util/Parsing.h"
-#include "shttps/transport/Server.h"
-#include "shttps/transport/SockStream.h"
 #include "curl/curl.h"
 
 #include "logging/logger.h"
@@ -44,7 +41,7 @@ static const char servertablename[] = "server";
 
 namespace shttps {
 
-char luaconnection[] = "__shttpsconnection";
+char lua_request_context[] = "__shttps_request_context";
 
 /*!
  * Dumps the Lua stack to a string.
@@ -225,13 +222,13 @@ LuaServer::LuaServer()
 /*!
  * Instantiates a Lua server
  */
-LuaServer::LuaServer(Connection &conn)
+LuaServer::LuaServer(RequestContext &ctx)
 {
   if ((L = luaL_newstate()) == nullptr) { throw Error("Couldn't start lua interpreter"); }
 
   lua_atpanic(L, dont_panic);
   luaL_openlibs(L);
-  createGlobals(conn);
+  createGlobals(ctx);
 }
 //=========================================================================
 
@@ -265,13 +262,13 @@ LuaServer::LuaServer(const std::string &luafile, bool iscode)
  *
  * \param[in] luafile A file containing a Lua script or a Lua code chunk
  */
-LuaServer::LuaServer(Connection &conn, const std::string &luafile, bool iscode, const std::string &lua_scriptdir)
+LuaServer::LuaServer(RequestContext &ctx, const std::string &luafile, bool iscode, const std::string &lua_scriptdir)
 {
   if ((L = luaL_newstate()) == nullptr) { throw Error("Couldn't start lua interpreter"); }
 
   lua_atpanic(L, dont_panic);
   luaL_openlibs(L);
-  createGlobals(conn);
+  createGlobals(ctx);
 
   // add the script directory to the standard search path for lua packages
   // this allows for the inclusion of Lua scripts contained in the Lua script directory
@@ -333,17 +330,11 @@ static int lua_setbuffer(lua_State *L)
   }
 
   lua_pop(L, top);
-  lua_getglobal(L, luaconnection);// push onto stack
-  Connection *conn = (Connection *)lua_touserdata(L, -1);// does not change the stack
+  lua_getglobal(L, lua_request_context);// push onto stack
+  RequestContext *ctx = (RequestContext *)lua_touserdata(L, -1);// does not change the stack
   lua_remove(L, -1);// remove from stack
 
-  if ((bufsize > 0) && (incsize > 0)) {
-    conn->setBuffer(bufsize, incsize);
-  } else if (bufsize > 0) {
-    conn->setBuffer(bufsize);
-  } else {
-    conn->setBuffer();
-  }
+  ctx->response->set_buffer(bufsize, incsize);
 
   lua_pushboolean(L, true);
   lua_pushnil(L);
@@ -890,8 +881,8 @@ static int lua_fs_copyfile(lua_State *L)
  */
 static int lua_fs_mvfile(lua_State *L)
 {
-  lua_getglobal(L, shttps::luaconnection);
-  shttps::Connection *conn = (shttps::Connection *)lua_touserdata(L, -1);
+  lua_getglobal(L, shttps::lua_request_context);
+  shttps::RequestContext *ctx = (shttps::RequestContext *)lua_touserdata(L, -1);
   lua_remove(L, -1);// remove from stacks
   int top = lua_gettop(L);
 
@@ -904,7 +895,7 @@ static int lua_fs_mvfile(lua_State *L)
 
   std::string infile;
   if (lua_isinteger(L, 1)) {
-    std::vector<shttps::Connection::UploadedFile> uploads = conn->uploads();
+    const std::vector<shttps::UploadedFile> &uploads = ctx->uploads;
     int tmpfile_id = static_cast<int>(lua_tointeger(L, 1));
     try {
       infile = uploads.at(tmpfile_id - 1).tmpname;// In Lua, indexes are 1-based.
@@ -1072,8 +1063,8 @@ static int lua_base62_to_uuid(lua_State *L)
  */
 static int lua_print(lua_State *L)
 {
-  lua_getglobal(L, luaconnection);// push onto stack
-  Connection *conn = (Connection *)lua_touserdata(L, -1);// does not change the stack
+  lua_getglobal(L, lua_request_context);// push onto stack
+  RequestContext *ctx = (RequestContext *)lua_touserdata(L, -1);// does not change the stack
   lua_remove(L, -1);// remove from stack
   int top = lua_gettop(L);
 
@@ -1082,17 +1073,10 @@ static int lua_print(lua_State *L)
     const char *str = lua_tolstring(L, i, &len);
 
     if (str != nullptr) {
-      try {
-        conn->send(str, len);
-      } catch (int ierr) {
+      if (ctx->response->write(str, len) != 0) {
         lua_settop(L, 0);// clear stack
         lua_pushboolean(L, false);
         lua_pushstring(L, "Sending data to connection failed");
-        return 2;
-      } catch (Error &err) {
-        lua_settop(L, 0);// clear stack
-        lua_pushboolean(L, false);
-        lua_pushstring(L, err.to_string().c_str());
         return 2;
       }
     }
@@ -1107,12 +1091,13 @@ static int lua_print(lua_State *L)
 
 static int lua_require_auth(lua_State *L)
 {
-  lua_getglobal(L, luaconnection);// push onto stack
-  Connection *conn = (Connection *)lua_touserdata(L, -1);// does not change the stack
+  lua_getglobal(L, lua_request_context);// push onto stack
+  RequestContext *ctx = (RequestContext *)lua_touserdata(L, -1);// does not change the stack
   lua_remove(L, -1);// remove from stack
   lua_pushboolean(L, true);
 
-  std::string auth = conn->header("authorization");
+  auto auth_it = ctx->headers.find("authorization");
+  std::string auth = auth_it != ctx->headers.end() ? auth_it->second : std::string();
   lua_createtable(L, 0, 3);// table
 
   if (auth.empty()) {
@@ -1124,7 +1109,7 @@ static int lua_require_auth(lua_State *L)
 
     if ((npos = auth.find(" ")) != std::string::npos) {
       std::string auth_type = auth.substr(0, npos);
-      asciitolower(auth_type);
+      std::transform(auth_type.begin(), auth_type.end(), auth_type.begin(), ::tolower);
 
       if (auth_type == "basic") {
         std::string auth_secret = auth.substr(npos + 1);
@@ -1800,10 +1785,10 @@ static int lua_json_to_table(lua_State *L)
  */
 static int lua_exitserver(lua_State *L)
 {
-  lua_getglobal(L, luaconnection);// push onto stack
-  Connection *conn = (Connection *)lua_touserdata(L, -1);// does not change the stack
+  lua_getglobal(L, lua_request_context);// push onto stack
+  RequestContext *ctx = (RequestContext *)lua_touserdata(L, -1);// does not change the stack
   lua_remove(L, -1);// remove from stack
-  conn->server()->stop();
+  if (ctx->shutdown_hook) { ctx->shutdown_hook(); }
   return 0;
 }
 //=========================================================================
@@ -1814,8 +1799,8 @@ static int lua_exitserver(lua_State *L)
  */
 static int lua_send_header(lua_State *L)
 {
-  lua_getglobal(L, luaconnection);
-  Connection *conn = (Connection *)lua_touserdata(L, -1);
+  lua_getglobal(L, lua_request_context);
+  RequestContext *ctx = (RequestContext *)lua_touserdata(L, -1);
   lua_remove(L, -1);// remove from stack
   int top = lua_gettop(L);
 
@@ -1829,7 +1814,7 @@ static int lua_send_header(lua_State *L)
   const char *hkey = lua_tostring(L, 1);
   const char *hval = lua_tostring(L, 2);
   lua_pop(L, top);
-  conn->header(hkey, hval);
+  ctx->response->add_header(hkey, hval);
   lua_pushboolean(L, true);
   lua_pushnil(L);
   return 2;
@@ -1849,8 +1834,8 @@ static int lua_send_header(lua_State *L)
  */
 static int lua_send_cookie(lua_State *L)
 {
-  lua_getglobal(L, luaconnection);
-  Connection *conn = (Connection *)lua_touserdata(L, -1);
+  lua_getglobal(L, lua_request_context);
+  RequestContext *ctx = (RequestContext *)lua_touserdata(L, -1);
   lua_remove(L, -1);// remove from stack
 
   int top = lua_gettop(L);
@@ -1865,7 +1850,9 @@ static int lua_send_cookie(lua_State *L)
   const char *ckey = lua_tostring(L, 1);
   const char *cval = lua_tostring(L, 2);
 
-  Cookie cookie(ckey, cval);
+  ResponseCookie cookie;
+  cookie.name = ckey;
+  cookie.value = cval;
 
   if (top == 3) {
     if (!lua_istable(L, 3)) {
@@ -1896,35 +1883,36 @@ static int lua_send_cookie(lua_State *L)
         if (optname == "path") {
           if (lua_isstring(L, -1)) {
             std::string path = lua_tostring(L, -1);
-            cookie.path(path);
+            cookie.path = path;
           } else {
             throw std::string("'server.sendCookie(name, value[, options])': path is not string");
           }
         } else if (optname == "domain") {
           if (lua_isstring(L, -1)) {
             std::string domain = lua_tostring(L, -1);
-            cookie.domain(domain);
+            cookie.domain = domain;
           } else {
             throw std::string("'server.sendCookie(name, value[, options])': domain is not string");
           }
         } else if (optname == "expires") {
           if (lua_isinteger(L, -1)) {
             int expires = lua_tointeger(L, -1);
-            cookie.expires(expires);
+            cookie.expires_seconds = expires;
+            cookie.expires_set = true;
           } else {
             throw std::string("'server.sendCookie(name, value[, options])': expires is not integer");
           }
         } else if (optname == "secure") {
           if (lua_isboolean(L, -1)) {
             bool secure = lua_toboolean(L, -1);
-            if (secure) cookie.secure(secure);
+            if (secure) cookie.secure = secure;
           } else {
             throw std::string("'server.sendCookie(name, value[, options])': secure is not boolean");
           }
         } else if (optname == "http_only") {
           if (lua_isboolean(L, -1)) {
             bool http_only = lua_toboolean(L, -1);
-            if (http_only) cookie.httpOnly(http_only);
+            if (http_only) cookie.http_only = http_only;
           } else {
             throw std::string("'server.sendCookie(name, value[, options])': http_only is not boolean");
           }
@@ -1943,7 +1931,7 @@ static int lua_send_cookie(lua_State *L)
   }
 
   lua_settop(L, 0);// clear stack
-  conn->cookies(cookie);
+  ctx->response->add_cookie(cookie);
   lua_pushboolean(L, true);
   lua_pushnil(L);
   return 2;
@@ -1952,8 +1940,8 @@ static int lua_send_cookie(lua_State *L)
 
 static int lua_send_status(lua_State *L)
 {
-  lua_getglobal(L, luaconnection);
-  Connection *conn = (Connection *)lua_touserdata(L, -1);
+  lua_getglobal(L, lua_request_context);
+  RequestContext *ctx = (RequestContext *)lua_touserdata(L, -1);
   lua_remove(L, -1);// remove from stack
 
   int top = lua_gettop(L);
@@ -1964,8 +1952,7 @@ static int lua_send_status(lua_State *L)
     lua_pop(L, 1);
   }
 
-  Connection::StatusCodes status = static_cast<Connection::StatusCodes>(istatus);
-  conn->status(status);
+  ctx->response->set_status(istatus);
   return 0;
 }
 //=========================================================================
@@ -1984,8 +1971,8 @@ static int lua_send_status(lua_State *L)
  */
 static int lua_copytmpfile(lua_State *L)
 {
-  lua_getglobal(L, luaconnection);
-  Connection *conn = (Connection *)lua_touserdata(L, -1);
+  lua_getglobal(L, lua_request_context);
+  RequestContext *ctx = (RequestContext *)lua_touserdata(L, -1);
   lua_remove(L, -1);// remove from stack
   int top = lua_gettop(L);
 
@@ -2003,7 +1990,7 @@ static int lua_copytmpfile(lua_State *L)
     return 2;
   }
 
-  std::vector<Connection::UploadedFile> uploads = conn->uploads();
+  const std::vector<UploadedFile> &uploads = ctx->uploads;
   int tmpfile_id = static_cast<int>(lua_tointeger(L, 1));
   std::string infile;
 
@@ -2070,8 +2057,8 @@ static int lua_copytmpfile(lua_State *L)
 //
 static int lua_generate_jwt(lua_State *L)
 {
-  lua_getglobal(L, luaconnection);
-  Connection *conn = (Connection *)lua_touserdata(L, -1);
+  lua_getglobal(L, lua_request_context);
+  RequestContext *ctx = (RequestContext *)lua_touserdata(L, -1);
   lua_remove(L, -1);// remove from stack
 
   jwt_t *jwt;
@@ -2103,7 +2090,7 @@ static int lua_generate_jwt(lua_State *L)
   }
 
   jwt_set_alg(
-    jwt, JWT_ALG_HS256, (unsigned char *)conn->server()->jwt_secret().c_str(), conn->server()->jwt_secret().size());
+    jwt, JWT_ALG_HS256, (unsigned char *)ctx->jwt_secret.c_str(), ctx->jwt_secret.size());
   jwt_add_grants_json(jwt, jsonstr);
 
   char *token = jwt_encode_str(jwt);
@@ -2118,8 +2105,8 @@ static int lua_generate_jwt(lua_State *L)
 
 static int lua_decode_jwt(lua_State *L)
 {
-  lua_getglobal(L, luaconnection);
-  Connection *conn = (Connection *)lua_touserdata(L, -1);
+  lua_getglobal(L, lua_request_context);
+  RequestContext *ctx = (RequestContext *)lua_touserdata(L, -1);
   lua_remove(L, -1);// remove from stack
 
   int top = lua_gettop(L);
@@ -2145,8 +2132,8 @@ static int lua_decode_jwt(lua_State *L)
 
   if ((err = jwt_decode(&jwt,
          token.c_str(),
-         (unsigned char *)conn->server()->jwt_secret().c_str(),
-         conn->server()->jwt_secret().size()))
+         (unsigned char *)ctx->jwt_secret.c_str(),
+         ctx->jwt_secret.size()))
       != 0) {
     lua_pushboolean(L, false);
     lua_pushstring(L, "'server.decode_jwt(token)': Error in decoding token! (1)");
@@ -2301,8 +2288,8 @@ static int lua_parse_mimetype(lua_State *L)
  */
 static int lua_file_mimetype(lua_State *L)
 {
-  lua_getglobal(L, luaconnection);
-  Connection *conn = (Connection *)lua_touserdata(L, -1);
+  lua_getglobal(L, lua_request_context);
+  RequestContext *ctx = (RequestContext *)lua_touserdata(L, -1);
   lua_remove(L, -1);// remove from stack
   int top = lua_gettop(L);
 
@@ -2315,7 +2302,7 @@ static int lua_file_mimetype(lua_State *L)
 
   std::string path;
   if (lua_isinteger(L, 1)) {
-    std::vector<shttps::Connection::UploadedFile> uploads = conn->uploads();
+    const std::vector<shttps::UploadedFile> &uploads = ctx->uploads;
     int tmpfile_id = static_cast<int>(lua_tointeger(L, 1));
     try {
       path = uploads.at(tmpfile_id - 1).tmpname;// In Lua, indexes are 1-based.
@@ -2357,8 +2344,8 @@ static int lua_file_mimetype(lua_State *L)
  */
 static int lua_file_mimeconsistency(lua_State *L)
 {
-  lua_getglobal(L, luaconnection);
-  Connection *conn = (Connection *)lua_touserdata(L, -1);
+  lua_getglobal(L, lua_request_context);
+  RequestContext *ctx = (RequestContext *)lua_touserdata(L, -1);
   lua_remove(L, -1);// remove from stack
   int top = lua_gettop(L);
 
@@ -2373,7 +2360,7 @@ static int lua_file_mimeconsistency(lua_State *L)
   std::string filename;
   std::string expected_mimetype = "";
   if (lua_isinteger(L, 1)) {
-    std::vector<shttps::Connection::UploadedFile> uploads = conn->uploads();
+    const std::vector<shttps::UploadedFile> &uploads = ctx->uploads;
     int tmpfile_id = static_cast<int>(lua_tointeger(L, 1));
     try {
       path = uploads.at(tmpfile_id - 1).tmpname;// In Lua, indexes are 1-based.
@@ -2444,39 +2431,39 @@ void LuaServer::setLuaPath(const std::string &path)
 /*!
  * This function registers all variables and functions in the server table
  */
-void LuaServer::createGlobals(Connection &conn)
+void LuaServer::createGlobals(RequestContext &ctx)
 {
   lua_createtable(L, 0, 33);// table1
   // lua_newtable(L); // table1
 
-  Connection::HttpMethod method = conn.method();
+  HttpMethod method = ctx.method;
   lua_pushstring(L, "method");// table1 - "index_L1"
   switch (method) {
-  case Connection::OPTIONS:
+  case HttpMethod::OPTIONS:
     lua_pushstring(L, "OPTIONS");
     break;// table1 - "index_L1" - "value_L1"
-  case Connection::GET:
+  case HttpMethod::GET:
     lua_pushstring(L, "GET");
     break;
-  case Connection::HEAD:
+  case HttpMethod::HEAD:
     lua_pushstring(L, "HEAD");
     break;
-  case Connection::POST:
+  case HttpMethod::POST:
     lua_pushstring(L, "POST");
     break;
-  case Connection::PUT:
+  case HttpMethod::PUT:
     lua_pushstring(L, "PUT");
     break;
-  case Connection::DELETE:
+  case HttpMethod::DELETE:
     lua_pushstring(L, "DELETE");
     break;
-  case Connection::TRACE:
+  case HttpMethod::TRACE:
     lua_pushstring(L, "TRACE");
     break;
-  case Connection::CONNECT:
+  case HttpMethod::CONNECT:
     lua_pushstring(L, "CONNECT");
     break;
-  case Connection::OTHER:
+  case HttpMethod::OTHER:
     lua_pushstring(L, "OTHER");
     break;
   }
@@ -2489,31 +2476,29 @@ void LuaServer::createGlobals(Connection &conn)
   lua_rawset(L, -3);// table1
 
   lua_pushstring(L, "client_ip");// table1 - "index_L1"
-  lua_pushstring(L, conn.peer_ip().c_str());// table1 - "index_L1" - "value_L1"
+  lua_pushstring(L, ctx.client_ip.c_str());// table1 - "index_L1" - "value_L1"
   lua_rawset(L, -3);// table1
 
   lua_pushstring(L, "client_port");// table1 - "index_L1"
-  lua_pushinteger(L, conn.peer_port());// table1 - "index_L1" - "value_L1"
+  lua_pushinteger(L, ctx.client_port);// table1 - "index_L1" - "value_L1"
   lua_rawset(L, -3);// table1
 
   lua_pushstring(L, "secure");// table1 - "index_L1"
-  lua_pushboolean(L, conn.secure());// table1 - "index_L1" - "value_L1"
+  lua_pushboolean(L, ctx.secure);// table1 - "index_L1" - "value_L1"
   lua_rawset(L, -3);// table1
 
   lua_pushstring(L, "header");// table1 - "index_L1"
-  std::vector<std::string> headers = conn.header();
-  lua_createtable(L, 0, headers.size());// table1 - "index_L1" - table2
+  lua_createtable(L, 0, ctx.headers.size());// table1 - "index_L1" - table2
 
-  for (unsigned i = 0; i < headers.size(); i++) {
-    lua_pushstring(L, headers[i].c_str());// table1 - "index_L1" - table2 - "index_L2"
-    lua_pushstring(L,
-      conn.header(headers[i]).c_str());// table1 - "index_L1" - table2 - "index_L2" - "value_L2"
+  for (const auto &header : ctx.headers) {
+    lua_pushstring(L, header.first.c_str());// table1 - "index_L1" - table2 - "index_L2"
+    lua_pushstring(L, header.second.c_str());// table1 - "index_L1" - table2 - "index_L2" - "value_L2"
     lua_rawset(L, -3);// table1 - "index_L1" - table2
   }
 
   lua_rawset(L, -3);// table1
 
-  std::unordered_map<std::string, std::string> cookies = conn.cookies();
+  const std::unordered_map<std::string, std::string> &cookies = ctx.cookies;
   lua_pushstring(L, "cookies");// table1 - "index_L1"
   lua_createtable(L, 0, cookies.size());// table1 - "index_L1" - table2
 
@@ -2525,48 +2510,42 @@ void LuaServer::createGlobals(Connection &conn)
 
   lua_rawset(L, -3);// table1
 
-  std::string host = conn.host();
+  const std::string &host = ctx.host;
   lua_pushstring(L, "host");// table1 - "index_L1"
   lua_pushstring(L, host.c_str());// table1 - "index_L1" - "value_L1"
   lua_rawset(L, -3);// table1
 
-  std::string uri = conn.uri();
+  const std::string &uri = ctx.uri;
   lua_pushstring(L, "uri");// table1 - "index_L1"
   lua_pushstring(L, uri.c_str());// table1 - "index_L1" - "value_L1"
   lua_rawset(L, -3);// table1
 
-  std::vector<std::string> get_params = conn.getParams();
-
-  if (get_params.size() > 0) {
+  if (!ctx.get_params.empty()) {
     lua_pushstring(L, "get");// table1 - "index_L1"
-    lua_createtable(L, 0, get_params.size());// table1 - "index_L1" - table2
+    lua_createtable(L, 0, ctx.get_params.size());// table1 - "index_L1" - table2
 
-    for (unsigned i = 0; i < get_params.size(); i++) {
-      (void)lua_pushstring(L, get_params[i].c_str());// table1 - "index_L1" - table2 - "index_L2"
-      (void)lua_pushstring(
-        L, conn.getParams(get_params[i]).c_str());// table1 - "index_L1" - table2 - "index_L2" - "value_L2"
+    for (const auto &param : ctx.get_params) {
+      (void)lua_pushstring(L, param.first.c_str());// table1 - "index_L1" - table2 - "index_L2"
+      (void)lua_pushstring(L, param.second.c_str());// table1 - "index_L1" - table2 - "index_L2" - "value_L2"
       lua_settable(L, -3);// table1 - "index_L1" - table2
     }
 
     lua_settable(L, -3);// table1
   }
 
-  std::vector<std::string> post_params = conn.postParams();
-
-  if (post_params.size() > 0) {
+  if (!ctx.post_params.empty()) {
     lua_pushstring(L, "post");// table1 - "index_L1"
-    lua_createtable(L, 0, post_params.size());// table1 - "index_L1" - table2
+    lua_createtable(L, 0, ctx.post_params.size());// table1 - "index_L1" - table2
 
-    for (unsigned i = 0; i < post_params.size(); i++) {
-      lua_pushstring(L, post_params[i].c_str());// table1 - "index_L1" - table2 - "index_L2"
-      lua_pushstring(
-        L, conn.postParams(post_params[i]).c_str());// table1 - "index_L1" - table2 - "index_L2" - "value_L2"
+    for (const auto &param : ctx.post_params) {
+      lua_pushstring(L, param.first.c_str());// table1 - "index_L1" - table2 - "index_L2"
+      lua_pushstring(L, param.second.c_str());// table1 - "index_L1" - table2 - "index_L2" - "value_L2"
       lua_settable(L, -3);// table1 - "index_L1" - table2
     }
     lua_settable(L, -3);// table1
   }
 
-  std::vector<Connection::UploadedFile> uploads = conn.uploads();
+  const std::vector<UploadedFile> &uploads = ctx.uploads;
 
   if (uploads.size() > 0) {
     lua_pushstring(L, "uploads");// table1 - "index_L1"
@@ -2616,29 +2595,26 @@ void LuaServer::createGlobals(Connection &conn)
     lua_rawset(L, -3);// table1
   }
 
-  std::vector<std::string> request_params = conn.requestParams();
-
-  if (request_params.size() > 0) {
+  if (!ctx.request_params.empty()) {
     lua_pushstring(L, "request");// table1 - "index_L1"
-    lua_createtable(L, 0, request_params.size());// table1 - "index_L1" - table2
+    lua_createtable(L, 0, ctx.request_params.size());// table1 - "index_L1" - table2
 
-    for (unsigned i = 0; i < request_params.size(); i++) {
-      lua_pushstring(L, request_params[i].c_str());// table1 - "index_L1" - table2 - "index_L2"
-      lua_pushstring(
-        L, conn.requestParams(request_params[i]).c_str());// table1 - "index_L1" - table2 - "index_L2" - "value_L2"
+    for (const auto &param : ctx.request_params) {
+      lua_pushstring(L, param.first.c_str());// table1 - "index_L1" - table2 - "index_L2"
+      lua_pushstring(L, param.second.c_str());// table1 - "index_L1" - table2 - "index_L2" - "value_L2"
       lua_rawset(L, -3);// table1 - "index_L1" - table2
     }
 
     lua_rawset(L, -3);// table1
   }
 
-  if (conn.contentLength() > 0) {
+  if (!ctx.content.empty()) {
     lua_pushstring(L, "content");
-    lua_pushlstring(L, conn.content(), conn.contentLength());
+    lua_pushlstring(L, ctx.content.data(), ctx.content.size());
     lua_rawset(L, -3);// table1 - "index_L1" - table2
 
     lua_pushstring(L, "content_type");
-    lua_pushstring(L, conn.contentType().c_str());
+    lua_pushstring(L, ctx.content_type.c_str());
     lua_rawset(L, -3);// table1 - "index_L1" - table2
   }
 
@@ -2785,8 +2761,8 @@ void LuaServer::createGlobals(Connection &conn)
 
   lua_setglobal(L, servertablename);
 
-  lua_pushlightuserdata(L, &conn);
-  lua_setglobal(L, luaconnection);
+  lua_pushlightuserdata(L, &ctx);
+  lua_setglobal(L, lua_request_context);
 }
 //=========================================================================
 
@@ -3067,21 +3043,21 @@ std::vector<LuaRoute> LuaServer::configRoute(const std::string &routetable) cons
       case 0:
         method = lua_tostring(L, -1);
         if (method == "GET") {
-          route.method = Connection::HttpMethod::GET;
+          route.method = HttpMethod::GET;
         } else if (method == "PUT") {
-          route.method = Connection::HttpMethod::PUT;
+          route.method = HttpMethod::PUT;
         } else if (method == "POST") {
-          route.method = Connection::HttpMethod::POST;
+          route.method = HttpMethod::POST;
         } else if (method == "DELETE") {
-          route.method = Connection::HttpMethod::DELETE;
+          route.method = HttpMethod::DELETE;
         } else if (method == "OPTIONS") {
-          route.method = Connection::HttpMethod::OPTIONS;
+          route.method = HttpMethod::OPTIONS;
         } else if (method == "CONNECT") {
-          route.method = Connection::HttpMethod::CONNECT;
+          route.method = HttpMethod::CONNECT;
         } else if (method == "HEAD") {
-          route.method = Connection::HttpMethod::HEAD;
+          route.method = HttpMethod::HEAD;
         } else if (method == "OTHER") {
-          route.method = Connection::HttpMethod::OTHER;
+          route.method = HttpMethod::OTHER;
         } else {
           throw Error(std::string("Unknown HTTP method") + method);
         }

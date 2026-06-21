@@ -47,6 +47,45 @@ static std::mutex debugio;// mutex to protect debugging messages from threads
 
 namespace shttps {
 
+namespace {
+
+// The Lua route table carries the connection-less shttps::HttpMethod; the
+// transport's handler map is keyed by Connection::HttpMethod. These map between
+// the two enums at the boundary (both go away with the transport in Phase C).
+HttpMethod to_request_method(Connection::HttpMethod method)
+{
+  switch (method) {
+  case Connection::OPTIONS: return HttpMethod::OPTIONS;
+  case Connection::GET: return HttpMethod::GET;
+  case Connection::HEAD: return HttpMethod::HEAD;
+  case Connection::POST: return HttpMethod::POST;
+  case Connection::PUT: return HttpMethod::PUT;
+  case Connection::DELETE: return HttpMethod::DELETE;
+  case Connection::TRACE: return HttpMethod::TRACE;
+  case Connection::CONNECT: return HttpMethod::CONNECT;
+  case Connection::OTHER: return HttpMethod::OTHER;
+  }
+  return HttpMethod::OTHER;
+}
+
+Connection::HttpMethod to_connection_method(HttpMethod method)
+{
+  switch (method) {
+  case HttpMethod::OPTIONS: return Connection::OPTIONS;
+  case HttpMethod::GET: return Connection::GET;
+  case HttpMethod::HEAD: return Connection::HEAD;
+  case HttpMethod::POST: return Connection::POST;
+  case HttpMethod::PUT: return Connection::PUT;
+  case HttpMethod::DELETE: return Connection::DELETE;
+  case HttpMethod::TRACE: return Connection::TRACE;
+  case HttpMethod::CONNECT: return Connection::CONNECT;
+  case HttpMethod::OTHER: return Connection::OTHER;
+  }
+  return Connection::OTHER;
+}
+
+}// namespace
+
 /*!
  * Starts a thread just to catch all signals sent to the server process.
  * If it receives SIGINT or SIGTERM, tells the server to stop.
@@ -939,7 +978,7 @@ void Server::run()
   //
   for (auto &route : _lua_routes) {
     route.script = _scriptdir + "/" + route.script;
-    add_route(route.method, route.route, script_handler, &(route.script));
+    add_route(to_connection_method(route.method), route.route, script_handler, &(route.script));
 
     log_info("Added route %s with script %s", route.route.c_str(), route.script.c_str());
   }
@@ -1286,6 +1325,89 @@ void Server::add_route(Connection::HttpMethod method_p,
 //=========================================================================
 
 
+// ── Lua request-context parity glue (transport-only; deleted at the Phase C cutover) ──
+// The Lua runtime no longer takes an shttps::Connection — it drives the
+// connection-less RequestContext / ResponseSink seam. These helpers let the
+// existing C++ transport keep running the Lua VM: the sink forwards back onto the
+// live Connection and the request fields are snapshotted exactly as
+// LuaServer::createGlobals used to read them directly off the Connection.
+namespace {
+
+class ConnectionResponseSink : public ResponseSink
+{
+public:
+  explicit ConnectionResponseSink(Connection &conn) : conn_(conn) {}
+
+  void set_status(int status) override { conn_.status(static_cast<Connection::StatusCodes>(status)); }
+
+  void add_header(const std::string &name, const std::string &value) override { conn_.header(name, value); }
+
+  void add_cookie(const ResponseCookie &c) override
+  {
+    Cookie cookie(c.name, c.value);
+    if (!c.path.empty()) { cookie.path(c.path); }
+    if (!c.domain.empty()) { cookie.domain(c.domain); }
+    if (c.expires_set) { cookie.expires(c.expires_seconds); }
+    cookie.secure(c.secure);
+    cookie.httpOnly(c.http_only);
+    conn_.cookies(cookie);
+  }
+
+  int write(const void *data, std::size_t len) override
+  {
+    try {
+      conn_.send(data, len);
+      return 0;
+    } catch (...) {
+      return 1;
+    }
+  }
+
+  void set_buffer(std::size_t buf_size, std::size_t buf_inc) override
+  {
+    if (buf_size > 0 && buf_inc > 0) {
+      conn_.setBuffer(buf_size, buf_inc);
+    } else if (buf_size > 0) {
+      conn_.setBuffer(buf_size);
+    } else {
+      conn_.setBuffer();
+    }
+  }
+
+private:
+  Connection &conn_;
+};
+
+RequestContext make_request_context(Connection &conn, ResponseSink &sink)
+{
+  RequestContext ctx;
+  ctx.method = to_request_method(conn.method());
+  ctx.client_ip = conn.peer_ip();
+  ctx.client_port = conn.peer_port();
+  ctx.secure = conn.secure();
+  ctx.host = conn.host();
+  ctx.uri = conn.uri();
+  for (const auto &name : conn.header()) { ctx.headers[name] = conn.header(name); }
+  ctx.cookies = conn.cookies();
+  for (const auto &name : conn.getParams()) { ctx.get_params.emplace_back(name, conn.getParams(name)); }
+  for (const auto &name : conn.postParams()) { ctx.post_params.emplace_back(name, conn.postParams(name)); }
+  for (const auto &name : conn.requestParams()) { ctx.request_params.emplace_back(name, conn.requestParams(name)); }
+  for (const auto &upload : conn.uploads()) {
+    ctx.uploads.push_back(
+      UploadedFile{ upload.fieldname, upload.origname, upload.tmpname, upload.mimetype, upload.filesize });
+  }
+  if (conn.contentLength() > 0) {
+    ctx.content.assign(conn.content(), conn.contentLength());
+    ctx.content_type = conn.contentType();
+  }
+  ctx.jwt_secret = conn.server()->jwt_secret();
+  ctx.shutdown_hook = [server = conn.server()] { server->stop(); };
+  ctx.response = &sink;
+  return ctx;
+}
+
+}// namespace
+
 // Starts an instance of the LUA server and selects and hands over to the correct
 // request handler for the incoming request.
 shttps::ThreadStatus Server::process_request(std::istream *ins,
@@ -1327,9 +1449,12 @@ shttps::ThreadStatus Server::process_request(std::istream *ins,
     // includes Lua files in the Lua script directory
     std::string lua_scriptdir = _scriptdir + "/?.lua";
 
-    LuaServer luaserver(conn, _initscript, true, lua_scriptdir);
+    ConnectionResponseSink lua_sink(conn);
+    RequestContext lua_ctx = make_request_context(conn, lua_sink);
 
-    for (auto &global_func : lua_globals) { global_func.func(luaserver.lua(), conn, global_func.func_dataptr); }
+    LuaServer luaserver(lua_ctx, _initscript, true, lua_scriptdir);
+
+    for (auto &global_func : lua_globals) { global_func.func(luaserver.lua(), lua_ctx, global_func.func_dataptr); }
 
     void *hd = nullptr;
 

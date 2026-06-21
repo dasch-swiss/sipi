@@ -17,7 +17,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "shttps/transport/Connection.h"
+#include "shttps/lua/request_context.h"
 #include "shttps/util/Error.h"
 
 #include "lua.hpp"
@@ -40,16 +40,16 @@ typedef struct _LuaValstruct
 
 typedef struct _LuaRoute
 {
-  Connection::HttpMethod method;
+  HttpMethod method;
   std::string route;
   std::string script;
 } LuaRoute;
 
 typedef std::unordered_map<std::string, LuaValstruct> LuaKeyValStore;
 
-typedef void (*LuaSetGlobalsFunc)(lua_State *L, Connection &, void *);
+typedef void (*LuaSetGlobalsFunc)(lua_State *L, RequestContext &, void *);
 
-extern char luaconnection[];
+extern char lua_request_context[];
 
 class LuaServer
 {
@@ -63,11 +63,11 @@ public:
   LuaServer();
 
   /*!
-   * Instantiates a lua interpreter which has access to the HTTP connection
+   * Instantiates a lua interpreter which has access to the HTTP request
    *
-   * \param[in] conn HTTP Connection object
+   * \param[in] ctx Connection-less request/response context
    */
-  explicit LuaServer(Connection &conn);
+  explicit LuaServer(RequestContext &ctx);
 
 
   /*!
@@ -81,12 +81,12 @@ public:
   /*!
    * Instantiates a lua interpreter an executes the given lua script
    *
-   * \param[in] conn HTTP Connection object
+   * \param[in] ctx Connection-less request/response context
    * \param[in] luafile A script containing lua commands
    * \param[in] iscode If true, the string contains lua-code to be executed directly
    * \param[in] lua_scriptdir Pattern to be added to the Lua package.path (directory with Lua scripts)
    */
-  LuaServer(Connection &conn, const std::string &luafile, bool iscode, const std::string &lua_scriptdir);
+  LuaServer(RequestContext &ctx, const std::string &luafile, bool iscode, const std::string &lua_scriptdir);
 
   /*!
    * Copy constructor throws error (not allowed!)
@@ -134,9 +134,9 @@ public:
   /*!
    * Create the global values and functions
    *
-   * \param[in] conn HTTP connection object
+   * \param[in] ctx Connection-less request/response context
    */
-  void createGlobals(Connection &conn);
+  void createGlobals(RequestContext &ctx);
 
 
   std::string configString(std::string table, std::string variable, std::string defval);

@@ -434,7 +434,7 @@ static int Sqlite_new(lua_State *L)
 //=========================================================================
 
 
-void sqliteGlobals(lua_State *L, shttps::Connection &conn, void *user_data)
+void sqliteGlobals(lua_State *L, shttps::RequestContext &ctx, void *user_data)
 {
 
   //
