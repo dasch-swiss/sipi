@@ -255,13 +255,16 @@ http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "ht
 # invokes ffprobe as a subprocess (process boundary), so the LGPL+sipi
 # combination has no viral linking concern.
 #
-# Pinning: the `autobuild-YYYY-MM-DD-HH-MM` tag freezes the build
-# artifacts (immutable on GitHub once published). The `n8.1.1-…-lgpl-8.1`
-# asset name pins to FFmpeg's stable 8.1.1 source tag, not the
-# rolling-master nightly. Bumping means picking a newer
-# `autobuild-…` release that publishes a newer stable-tag asset
-# (look for `n8.X.Y-…-lgpl-8.X.tar.xz`) and refreshing both URLs +
-# both sha256 sums.
+# Pinning: BtbN's retention policy keeps the LAST autobuild of each month
+# for two years; mid-month autobuild releases are pruned after a few weeks
+# (a pruned URL 404s and breaks the fetch — exactly how the prior
+# `autobuild-2026-05-08` mid-month pin died). So always pin a MONTH-END
+# autobuild: `autobuild-2026-05-31-…` is retained until ~2028-05. The
+# `n8.1.1-9-g…-lgpl-8.1` asset is the FFmpeg 8.1 stable branch as of that
+# build (a few commits past the n8.1.1 tag), not the rolling-master
+# nightly. Bumping means picking the last autobuild of a recent completed
+# month, confirming it still carries `…-linux{64,arm64}-lgpl-8.X.tar.xz`
+# assets, and refreshing both URLs + both sha256 sums.
 http_archive(
     name = "ffmpeg_static_linux_amd64",
     build_file_content = """\
@@ -279,9 +282,9 @@ exports_files([
     "bin/ffprobe",
 ])
 """,
-    sha256 = "14cd4d032ac0bf5e85844305049b19949cf8a5f136d7d6c6d07f6037182fa877",
-    strip_prefix = "ffmpeg-n8.1.1-linux64-lgpl-8.1",
-    url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-05-08-13-23/ffmpeg-n8.1.1-linux64-lgpl-8.1.tar.xz",
+    sha256 = "9da613468e319c6444ff93d23f4a3fd16b67e44d4c9da62dc46f1822f2851ccb",
+    strip_prefix = "ffmpeg-n8.1.1-9-g58d4114d36-linux64-lgpl-8.1",
+    url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-05-31-13-22/ffmpeg-n8.1.1-9-g58d4114d36-linux64-lgpl-8.1.tar.xz",
 )
 
 http_archive(
@@ -301,9 +304,9 @@ exports_files([
     "bin/ffprobe",
 ])
 """,
-    sha256 = "47cdca89bcde8ad15fb0896de50450f5cd373f572c2f48cb5e866a0a6437d7f8",
-    strip_prefix = "ffmpeg-n8.1.1-linuxarm64-lgpl-8.1",
-    url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-05-08-13-23/ffmpeg-n8.1.1-linuxarm64-lgpl-8.1.tar.xz",
+    sha256 = "cbc347fb037a45c2d8417d226567c961274c7f43bbd7765ad5a00d4f18aea63c",
+    strip_prefix = "ffmpeg-n8.1.1-9-g58d4114d36-linuxarm64-lgpl-8.1",
+    url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-05-31-13-22/ffmpeg-n8.1.1-9-g58d4114d36-linuxarm64-lgpl-8.1.tar.xz",
 )
 
 # ── Test-only deps ────────────────────────────────────────────────────────
