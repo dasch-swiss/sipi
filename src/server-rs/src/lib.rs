@@ -12,6 +12,8 @@
 //! C++ server, which keeps the production socket until the step-5 cutover.
 
 pub mod ffi;
+pub mod iiif;
+pub mod sink;
 
 use axum::{http::StatusCode, routing::get, Router};
 use clap::Parser;

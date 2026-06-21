@@ -32,3 +32,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 clap = { version = "4", features = ["derive"] }
 http = "1"
 bytes = "1"
+percent-encoding = "2"
