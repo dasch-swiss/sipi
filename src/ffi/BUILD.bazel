@@ -31,13 +31,19 @@ cc_library(
         # engine_context.{h,cpp} holds the engine services/config the pipeline
         # reads; sipi_ffi.cpp is the thin extern "C" surface (incl.
         # sipi_metrics_snapshot, which fills the SipiMetricsSnapshot layout
-        # defined in metrics_snapshot.h).
+        # defined in metrics_snapshot.h). SipiLua.cpp is the SipiImage Lua
+        # bindings (the `sipi.*` globals installer), relocated here from
+        # //src:sipi_lib so the engine-held config VM behind sipi_preflight /
+        # sipi_run_lua_route can install them — it no longer names
+        # SipiHttpServer (the dead `__sipiserver` light-userdata was dropped).
+        "SipiLua.cpp",
         "engine_context.cpp",
         "serve_image.cpp",
         "serve_response.cpp",
         "sipi_ffi.cpp",
     ],
     hdrs = [
+        "SipiLua.h",
         "engine_context.h",
         "metrics_snapshot.h",
         "serve_image.h",
@@ -64,6 +70,14 @@ cc_library(
         # MIME sniff) + shttps::urldecode. Generic SIPI-domain utilities, not the
         # HTTP transport, so this is no SIPI -> shttps-transport coupling.
         "//src/shttps/util",
+        # The connection-less LuaServer + RequestContext the SipiLua `sipi.*`
+        # bindings install into. //src/shttps/lua is transport-free (transport
+        # deps lua, never the reverse), so this is no SIPI -> shttps-transport
+        # coupling — it is exactly the Phase B-L dep the seam needs to reach the
+        # Lua runtime connection-less.
+        "//src/shttps/lua",
+        # The Lua C API the SipiImage bindings call directly (lua_State, luaL_*).
+        "@lua",
     ],
 )
 

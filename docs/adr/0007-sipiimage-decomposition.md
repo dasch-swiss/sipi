@@ -63,7 +63,7 @@ We accept this for five reasons.
 
 - **Approval-test surface unchanged**. Behaviour preservation is intended throughout the decomposition. Approval goldens stay valid.
 
-- **Lua-binding surface ([SipiLua.cpp](../../src/SipiLua.cpp))** — Probe 6 resolves. Potentially the Lua API exposes `image:crop(...)` as method-style calls; if so, the Lua binding layer absorbs the C++-method-to-free-function translation transparently. Probe 6 outcome may add facade methods on `Image` purely for binding convenience.
+- **Lua-binding surface ([SipiLua.cpp](../../src/ffi/SipiLua.cpp))** — Probe 6 resolves. Potentially the Lua API exposes `image:crop(...)` as method-style calls; if so, the Lua binding layer absorbs the C++-method-to-free-function translation transparently. Probe 6 outcome may add facade methods on `Image` purely for binding convenience.
 
 - **Glossary deltas land in [`UBIQUITOUS_LANGUAGE.md`](../../UBIQUITOUS_LANGUAGE.md)** in the batched edit pass: add **Image processing** (umbrella for the free-function module). Sharpen **Image** (the code-level class becomes a narrow value type; domain term stays correct).
 
