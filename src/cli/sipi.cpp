@@ -50,7 +50,7 @@
 #include "SipiIO.h"
 #include "SipiImage.h"
 #include "SipiImageError.h"
-#include "SipiLua.h"
+#include "ffi/SipiLua.h"
 #include "SipiReport.h"
 #include "observability/sentry.h"
 #include "formats/SipiIOTiff.h"
@@ -1201,7 +1201,7 @@ int main(int argc, char *argv[])
       server.luaRoutes(sipiConf.getRoutes());
       server.add_lua_globals_func(sipiConfGlobals, &sipiConf);
       server.add_lua_globals_func(shttps::sqliteGlobals);
-      server.add_lua_globals_func(Sipi::sipiGlobals, &server);
+      server.add_lua_globals_func(Sipi::sipiGlobals);
       server.prefix_as_path(sipiConf.getPrefixAsPath());
       server.dirs_to_exclude(sipiConf.getSubdirExcludes());
       server.scaling_quality(sipiConf.getScalingQuality());

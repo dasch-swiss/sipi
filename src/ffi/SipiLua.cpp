@@ -13,7 +13,6 @@
 
 #include "SipiCache.h"
 #include "SipiFilenameHash.h"
-#include "SipiHttpServer.h"
 #include "SipiImage.h"
 #include "SipiImageError.h"
 #include "SipiLua.h"
@@ -45,8 +44,6 @@ typedef enum {
 } Exiv2DataType;
 
 typedef std::pair<std::string, Exiv2DataType> Exiv2Valinfo;
-
-char sipiserver[] = "__sipiserver";
 
 static const char SIMAGE[] = "SipiImage";
 
@@ -1717,8 +1714,6 @@ static const luaL_Reg SImage_meta[] = { { "__gc", SImage_gc },
 
 void sipiGlobals(lua_State *L, shttps::RequestContext &ctx, void *user_data)
 {
-  auto *server = (SipiHttpServer *)user_data;
-
   lua_newtable(L);// table
   luaL_setfuncs(L, helper_methods, 0);
   lua_setglobal(L, "helper");
@@ -1760,9 +1755,6 @@ void sipiGlobals(lua_State *L, shttps::RequestContext &ctx, void *user_data)
 
   lua_setglobal(L, SIMAGE);
   // stack: empty
-
-  lua_pushlightuserdata(L, server);
-  lua_setglobal(L, sipiserver);
 }
 
 //=========================================================================

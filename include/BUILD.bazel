@@ -1,9 +1,9 @@
 """Sipi public + private headers as a header-only `cc_library`.
 
 The `include/` directory holds the server-side / config headers that are NOT
-owned by a dedicated module: the Lua config surface (`SipiConf.h`,
-`SipiLua.h`), the offline report (`SipiReport.h`), the embedded favicon, the
-generated-config templates, and the ICC profile binaries.
+owned by a dedicated module: the Lua config surface (`SipiConf.h`), the offline
+report (`SipiReport.h`), the embedded favicon, the generated-config templates,
+and the ICC profile binaries.
 
 Per-module packages NOT bundled here (consumers depend on the dedicated
 target directly):
