@@ -92,9 +92,18 @@ fn run_server(server_argv: &[String]) -> ExitCode {
     tracing::info!(seam_status = status, "FFI link self-check: sipi_serve_file(bogus) → status");
     debug_assert_eq!(status, 404, "FFI seam self-check should report 404 for a missing file");
 
-    if let Some(cfg) = &args.config {
-        // sipi_init (T4) will parse this and install the engine + Lua config.
-        tracing::info!(config = %cfg, "server config (parsed by sipi_init in T4)");
+    // Install the engine + Lua config from the Lua config file before serving.
+    // engine_context() hard-fails on any serve call until this runs, so without
+    // --config only the engine-free routes (/health, /favicon.ico) work.
+    match &args.config {
+        Some(cfg) => match ffi::init(cfg) {
+            Ok(()) => tracing::info!(config = %cfg, "engine + Lua config installed"),
+            Err(code) => {
+                tracing::error!(config = %cfg, code, "sipi_init failed");
+                return ExitCode::FAILURE;
+            }
+        },
+        None => tracing::warn!("no --config: engine uninitialised; only /health and /favicon.ico will serve"),
     }
 
     let rt = match tokio::runtime::Runtime::new() {

@@ -7,6 +7,7 @@
  * \brief Implements an IIIF server with many features.
  *
  */
+#include <climits>
 #include <cstdlib>
 #include <dirent.h>
 #include <iostream>
@@ -51,6 +52,7 @@
 #include "SipiImage.h"
 #include "SipiImageError.h"
 #include "ffi/SipiLua.h"
+#include "ffi/engine_context.h"
 #include "ffi/lua_config.h"
 #include "ffi/sipi_ffi.h"
 #include "SipiReport.h"
@@ -422,6 +424,184 @@ void my_terminate_handler()
   sentry_flush(2000);
 
   std::abort();// Triggers SIGABRT → caught by sentry-native inproc backend
+}
+
+namespace {
+/*! Map a config scaling-quality string to a ScalingMethod; unknown/missing → HIGH
+ *  (matching the legacy SipiHttpServer::scaling_quality setter). */
+Sipi::ScalingMethod parse_scaling_method(const std::string &v)
+{
+  if (v == "medium") { return Sipi::ScalingMethod::MEDIUM; }
+  if (v == "low") { return Sipi::ScalingMethod::LOW; }
+  return Sipi::ScalingMethod::HIGH;
+}
+
+/*! Convert SipiConf's `map<string,string>` scaling-quality table into the
+ *  `ScalingQuality` struct EngineContext holds — the conversion the legacy
+ *  SipiHttpServer::scaling_quality(map) setter performs (jk2 ← the "jpk" key). */
+Sipi::ScalingQuality to_scaling_quality(const std::map<std::string, std::string> &m)
+{
+  const auto get = [&](const char *k) -> std::string {
+    const auto it = m.find(k);
+    return it != m.end() ? it->second : std::string();
+  };
+  Sipi::ScalingQuality q;
+  q.jk2 = parse_scaling_method(get("jpk"));
+  q.jpeg = parse_scaling_method(get("jpeg"));
+  q.tiff = parse_scaling_method(get("tiff"));
+  q.png = parse_scaling_method(get("png"));
+  return q;
+}
+
+/*!
+ * Process-wide server runtime installed by `sipi_init` (strangler-fig Phase C).
+ *
+ * The Rust shell, unlike the C++ `SipiHttpServer`, has no server object to own
+ * the engine services, so `sipi_init` parks them here for the process lifetime.
+ * `engine_context()` stores non-owning pointers into this holder, so it must
+ * outlive every serve call — hence file-static. The held `SipiConf` also backs
+ * the `sipiConfGlobals` installer captured in the Lua config (the per-request VM
+ * factory reads it on every preflight / route call).
+ */
+struct ServerRuntime
+{
+  Sipi::SipiConf conf;
+  std::unique_ptr<Sipi::SipiCache> cache;
+  std::unique_ptr<Sipi::SipiRateLimiter> rate_limiter;
+  std::unique_ptr<Sipi::SipiMemoryBudget> memory_budget;
+};
+std::unique_ptr<ServerRuntime> g_server_runtime;
+}// namespace
+
+/*!
+ * Parse the Lua config and install the engine + Lua config from scratch
+ * (strangler-fig Phase C). This is the from-scratch counterpart to the C++
+ * server's parity install (`SipiHttpServer`'s `set_engine_context` +
+ * run_server's `set_lua_config`); the Rust shell calls it once at startup
+ * before serving. Builds the cache / rate limiter / memory budget into
+ * `g_server_runtime`, points `engine_context()` at them, and installs the
+ * engine-held Lua config VM factory. Returns 0 on success or `EXIT_FAILURE`;
+ * never lets a C++ exception cross the boundary.
+ *
+ * `overrides` carries CLI/env tweaks layered on the Lua config. None are wired
+ * yet — the Lua config file is authoritative for the Rust shell — so the type
+ * stays incomplete (declared in `ffi/sipi_ffi.h`) and the pointer is ignored;
+ * fields are added when the shell first needs to override a specific knob.
+ */
+extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig * /*overrides*/)
+{
+  try {
+    if (lua_config_path == nullptr || lua_config_path[0] == '\0') {
+      log_err("sipi_init: a Lua config path is required");
+      return EXIT_FAILURE;
+    }
+
+    // Initialise the codec libraries (curl / Exiv2 / TIFF) the decode pipeline
+    // needs. The Rust server path does not go through sipi_cli_main's
+    // LibraryInitialiser, so sipi_init owns it here; the singleton is idempotent.
+    LibraryInitialiser::instance();
+
+    auto runtime = std::make_unique<ServerRuntime>();
+
+    // Parse the Lua config — the same VM the C++ server path reads via SipiConf.
+    {
+      shttps::LuaServer luacfg(lua_config_path);
+      runtime->conf = Sipi::SipiConf(luacfg);
+    }
+    Sipi::SipiConf &conf = runtime->conf;
+
+    // Engine services, mirroring run_server()'s construction (config-file values;
+    // CLI/env overrides are layered on in a later slice). A null service means
+    // the corresponding feature is disabled, matching the legacy accessors.
+    {
+      const std::string cachedir = conf.getCacheDir();
+      const long long cache_size = conf.getCacheSize();
+      if (cache_size != 0 && !cachedir.empty()) {
+        runtime->cache = std::make_unique<Sipi::SipiCache>(cachedir, cache_size, conf.getCacheNFiles());
+      }
+    }
+    {
+      const Sipi::RateLimitMode mode = Sipi::parse_rate_limit_mode(conf.getRateLimitMode());
+      const std::size_t rl_max = conf.getRateLimitMaxPixels();
+      if (mode != Sipi::RateLimitMode::OFF && rl_max > 0) {
+        runtime->rate_limiter = std::make_unique<Sipi::SipiRateLimiter>(
+          conf.getRateLimitWindow(), rl_max, mode, conf.getRateLimitPixelThreshold());
+      }
+    }
+    {
+      const Sipi::MemoryBudgetMode mode = Sipi::parse_memory_budget_mode(conf.getDecodeMemoryMode());
+      if (mode != Sipi::MemoryBudgetMode::OFF) {
+        std::size_t budget = conf.getMaxDecodeMemory();
+        if (budget == 0) {
+          const std::size_t detected = detect_available_memory();
+          budget = (detected > 0) ? detected * 3 / 4 : (1ULL * 1024 * 1024 * 1024);
+        }
+        runtime->memory_budget = std::make_unique<Sipi::SipiMemoryBudget>(budget, mode);
+        Sipi::observability::Metrics::instance().decode_memory_budget_bytes.Set(static_cast<double>(budget));
+      }
+    }
+
+    // Resolve the image root (realpath) for path-traversal containment (R2),
+    // mirroring SipiHttpServer's resolve at startup.
+    const std::string imgroot = conf.getImgRoot();
+    char resolved[PATH_MAX];
+    if (realpath(imgroot.c_str(), resolved) == nullptr) {
+      log_err("sipi_init: image root '%s' does not resolve", imgroot.c_str());
+      return EXIT_FAILURE;
+    }
+    const std::string resolved_imgroot(resolved);
+
+    // Install the engine context — non-owning pointers into g_server_runtime.
+    Sipi::ffi::set_engine_context(Sipi::ffi::EngineContext{
+      .cache = runtime->cache.get(),
+      .rate_limiter = runtime->rate_limiter.get(),
+      .memory_budget = runtime->memory_budget.get(),
+      .imgroot = imgroot,
+      .resolved_imgroot = resolved_imgroot,
+      .jpeg_quality = conf.getJpegQuality(),
+      .scaling_quality = to_scaling_quality(conf.getScalingQuality()),
+      .max_pixel_limit = conf.getMaxPixelLimit(),
+    });
+
+    // Install the engine-held Lua config (the per-call VM factory behind
+    // sipi_preflight / sipi_run_lua_route). Same init-script source, scriptdir,
+    // JWT secret, and globals installers (in registration order) as run_server's
+    // set_lua_config. The sipiConfGlobals installer captures &conf, which stays
+    // valid: `runtime` is heap-allocated, so its SipiConf address is stable
+    // across the move into g_server_runtime below.
+    {
+      std::ifstream initscript_in(conf.getInitScript());
+      if (initscript_in.fail()) {
+        log_err("sipi_init: initscript \"%s\" not found", conf.getInitScript().c_str());
+        return EXIT_FAILURE;
+      }
+      std::string initscript_src(
+        (std::istreambuf_iterator<char>(initscript_in)), std::istreambuf_iterator<char>());
+      Sipi::ffi::set_lua_config(Sipi::ffi::LuaConfig{
+        .init_script = std::move(initscript_src),
+        .script_dir = conf.getScriptDir(),
+        .jwt_secret = conf.getJwtSecret(),
+        .globals = {
+          { sipiConfGlobals, &conf },
+          { shttps::sqliteGlobals, nullptr },
+          { Sipi::sipiGlobals, nullptr },
+        },
+      });
+    }
+
+    g_server_runtime = std::move(runtime);
+    log_info("sipi_init: engine + Lua config installed (imgroot resolved: %s)", resolved_imgroot.c_str());
+    return EXIT_SUCCESS;
+  } catch (const shttps::Error &e) {
+    log_err("sipi_init failed: %s", e.what());
+    return EXIT_FAILURE;
+  } catch (const std::exception &e) {
+    log_err("sipi_init failed: %s", e.what());
+    return EXIT_FAILURE;
+  } catch (...) {
+    log_err("sipi_init failed: unknown error");
+    return EXIT_FAILURE;
+  }
 }
 
 /*!

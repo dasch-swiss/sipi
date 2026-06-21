@@ -53,8 +53,10 @@ struct EngineContext
  *  startup in the Phase B parity path; superseded by `sipi_init` in Phase C. */
 void set_engine_context(const EngineContext &ctx);
 
-/*! The installed engine context. Returns a default-constructed (all-disabled)
- *  context if `set_engine_context` was never called. */
+/*! The installed engine context. Throws `shttps::Error` if neither
+ *  `set_engine_context` nor `sipi_init` has run — a missing install is a hard
+ *  configuration error, caught by the serve entry's `sipi_guard` (→ 500), not a
+ *  silent all-disabled serve. */
 [[nodiscard]] const EngineContext &engine_context();
 
 }// namespace Sipi::ffi
