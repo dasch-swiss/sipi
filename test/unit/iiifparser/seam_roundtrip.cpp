@@ -5,7 +5,7 @@
 
 // Round-trip tests for the typed constructors + flatten accessors added for the
 // FFI seam (sipi_serve_image). serve_iiif parses an IIIF URL component into the
-// C++ object, flattens it into the flat SipiServeRequest, and decide_serve_image
+// C++ object, flattens it into the flat SipiServeRequest, and build_image_response
 // reconstructs it via the typed constructor. The reconstructed object must be
 // byte-identical to the original under canonical()/get_size()/crop_coords(),
 // because the canonical URL is the cache key and the Link header.

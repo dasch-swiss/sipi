@@ -26,7 +26,7 @@ cc_library(
     name = "sipi_ffi",
     srcs = [
         # serve_response.{h,cpp} is the misuse-resistant C++ layer over the C
-        # ABI (variant body, pure decide_*, single apply driver, sipi_guard);
+        # ABI (variant body, pure build_*, single apply driver, sipi_guard);
         # serve_image.{h,cpp} carves the IIIF decode pipeline behind the seam;
         # engine_context.{h,cpp} holds the engine services/config the pipeline
         # reads; sipi_ffi.cpp is the thin extern "C" surface (incl.
@@ -67,7 +67,7 @@ cc_library(
     ],
 )
 
-# Co-located unit test (ADR-0003) for the pure serve decision — the Range
+# Co-located unit test (ADR-0003) for the pure serve-response builder — the Range
 # parse/clamp + status/header derivation, exercised without a transport.
 cc_test(
     name = "serve_response_test",
@@ -78,7 +78,7 @@ cc_test(
     ],
 )
 
-# Co-located unit test for the transport-pure IIIF decision (decide_serve_image):
+# Co-located unit test for the transport-pure IIIF response builder (build_image_response):
 # body shape (FileBody/StreamBody/EmptyBody) + pre-commit status codes, driven
 # off the lena512.tif fixture. Fixture paths resolve via //test:test_paths,
 # which honours SIPI_WORKSPACE_ROOT.

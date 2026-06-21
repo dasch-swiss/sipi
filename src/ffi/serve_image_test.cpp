@@ -3,8 +3,8 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-// Co-located unit tests (ADR-0003) for the transport-pure IIIF decision,
-// decide_serve_image. Because it takes only (request, engine context, cancel
+// Co-located unit tests (ADR-0003) for the transport-pure IIIF response builder,
+// build_image_response. Because it takes only (request, engine context, cancel
 // predicate) it runs without a socket: the body shape (FileBody / StreamBody /
 // EmptyBody) and the pre-commit status codes are checked directly.
 
@@ -90,18 +90,18 @@ bool has_header(const ServeResponse &r, const std::string &name, const std::stri
 
 }// namespace
 
-TEST(DecideServeImage, MissingFileIsNotFound)
+TEST(BuildImageResponse, MissingFileIsNotFound)
 {
   const std::string path = kImagesDir + "/unit/does_not_exist.tif";
   const auto params = full_params(SIPI_FORMAT_TIF);
   const auto req = make_request(path, params);
 
-  const auto decision = decide_serve_image(req, bare_engine(), kNeverCancelled);
-  ASSERT_FALSE(decision.has_value());
-  EXPECT_EQ(decision.error(), SipiStatus::NotFound);
+  const auto result = build_image_response(req, bare_engine(), kNeverCancelled);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error(), SipiStatus::NotFound);
 }
 
-TEST(DecideServeImage, DirectPassthroughIsFileBody)
+TEST(BuildImageResponse, DirectPassthroughIsFileBody)
 {
   // Same format as the source (TIFF), full region + size, no transform → the
   // engine serves the file directly (sendFile), not a re-encode.
@@ -109,15 +109,15 @@ TEST(DecideServeImage, DirectPassthroughIsFileBody)
   const auto params = full_params(SIPI_FORMAT_TIF);
   const auto req = make_request(path, params);
 
-  const auto decision = decide_serve_image(req, bare_engine(), kNeverCancelled);
-  ASSERT_TRUE(decision.has_value());
-  EXPECT_EQ(decision->http_status, 200);
-  EXPECT_TRUE(std::holds_alternative<FileBody>(decision->body));
-  EXPECT_EQ(std::get<FileBody>(decision->body).path, path);
-  EXPECT_TRUE(has_header(*decision, "Content-Type", "image/tiff"));
+  const auto result = build_image_response(req, bare_engine(), kNeverCancelled);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->http_status, 200);
+  EXPECT_TRUE(std::holds_alternative<FileBody>(result->body));
+  EXPECT_EQ(std::get<FileBody>(result->body).path, path);
+  EXPECT_TRUE(has_header(*result, "Content-Type", "image/tiff"));
 }
 
-TEST(DecideServeImage, FormatConversionIsStreamBody)
+TEST(BuildImageResponse, FormatConversionIsStreamBody)
 {
   // A different output format (PNG) forces a decode + re-encode: the body is a
   // streamed producer, not a file passthrough.
@@ -125,27 +125,27 @@ TEST(DecideServeImage, FormatConversionIsStreamBody)
   const auto params = full_params(SIPI_FORMAT_PNG);
   const auto req = make_request(path, params);
 
-  const auto decision = decide_serve_image(req, bare_engine(), kNeverCancelled);
-  ASSERT_TRUE(decision.has_value());
-  EXPECT_EQ(decision->http_status, 200);
-  EXPECT_TRUE(std::holds_alternative<StreamBody>(decision->body));
-  EXPECT_TRUE(has_header(*decision, "Content-Type", "image/png"));
+  const auto result = build_image_response(req, bare_engine(), kNeverCancelled);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->http_status, 200);
+  EXPECT_TRUE(std::holds_alternative<StreamBody>(result->body));
+  EXPECT_TRUE(has_header(*result, "Content-Type", "image/png"));
 }
 
-TEST(DecideServeImage, HeadRequestIsEmptyBody)
+TEST(BuildImageResponse, HeadRequestIsEmptyBody)
 {
   const std::string path = fixture("/unit/lena512.tif");
   const auto params = full_params(SIPI_FORMAT_PNG);
   const auto req = make_request(path, params, /*is_head=*/1);
 
-  const auto decision = decide_serve_image(req, bare_engine(), kNeverCancelled);
-  ASSERT_TRUE(decision.has_value());
-  EXPECT_EQ(decision->http_status, 200);
-  EXPECT_TRUE(std::holds_alternative<EmptyBody>(decision->body));
-  EXPECT_TRUE(has_header(*decision, "Content-Type", "image/png"));
+  const auto result = build_image_response(req, bare_engine(), kNeverCancelled);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->http_status, 200);
+  EXPECT_TRUE(std::holds_alternative<EmptyBody>(result->body));
+  EXPECT_TRUE(has_header(*result, "Content-Type", "image/png"));
 }
 
-TEST(DecideServeImage, OutputPixelLimitIsBadRequest)
+TEST(BuildImageResponse, OutputPixelLimitIsBadRequest)
 {
   auto eng = bare_engine();
   eng.max_pixel_limit = 1000;// the 512x512 = 262144-pixel output blows the cap
@@ -154,19 +154,19 @@ TEST(DecideServeImage, OutputPixelLimitIsBadRequest)
   const auto params = full_params(SIPI_FORMAT_PNG);
   const auto req = make_request(path, params);
 
-  const auto decision = decide_serve_image(req, eng, kNeverCancelled);
-  ASSERT_FALSE(decision.has_value());
-  EXPECT_EQ(decision.error(), SipiStatus::BadRequest);
+  const auto result = build_image_response(req, eng, kNeverCancelled);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error(), SipiStatus::BadRequest);
 }
 
-TEST(DecideServeImage, ClientGoneBeforeDecode)
+TEST(BuildImageResponse, ClientGoneBeforeDecode)
 {
   const std::string path = fixture("/unit/lena512.tif");
   const auto params = full_params(SIPI_FORMAT_PNG);// decode path (polls cancel)
   const auto req = make_request(path, params);
 
   const auto always_cancelled = std::function<bool()>([] { return true; });
-  const auto decision = decide_serve_image(req, bare_engine(), always_cancelled);
-  ASSERT_FALSE(decision.has_value());
-  EXPECT_EQ(decision.error(), SipiStatus::ClientGone);
+  const auto result = build_image_response(req, bare_engine(), always_cancelled);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error(), SipiStatus::ClientGone);
 }
