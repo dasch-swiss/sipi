@@ -163,10 +163,13 @@ typedef struct
   int is_head; /* 1 = HEAD: emit status + headers, no body, no cache write */
 } SipiServeRequest;
 
-/* ── Preflight (C++ LuaServer pre_flight) ───────────────────────────────────
+/* ── Preflight (C++ LuaServer pre_flight / file_pre_flight) ──────────────────
  * A fixed permission TYPE plus an open key/value channel (infile, watermark,
  * size, cookie_url, token_url, logout_url, service pass-through) — the real
- * preflight returns an unordered_map, not a flat struct. */
+ * preflight returns an unordered_map, not a flat struct. Two hooks, same
+ * shape: the IIIF image preflight (prefix + identifier) and the `/file`
+ * media-serving preflight (a resolved filepath; audio / video / PDF / any
+ * non-IIIF file). */
 typedef enum {
   SIPI_ALLOW = 0,
   SIPI_LOGIN = 1,
@@ -187,6 +190,15 @@ typedef void (*SipiKVFn)(void *ctx, const char *key, const char *value);
 typedef struct SipiServerConfig SipiServerConfig;
 typedef struct SipiMetricsSnapshot SipiMetricsSnapshot;
 
+/* The whole HTTP request the Lua subsystem reads (method/uri/host/secure +
+ * headers, cookies, GET/POST params, uploads, body). Opaque because the Lua
+ * runtime stays C++ behind the seam (it wraps the C++ `shttps::RequestContext`);
+ * the Lua hooks can read ANY request field via `server.*`, so preflight and
+ * configured routes carry the full request, not the narrow IIIF `SipiServeRequest`.
+ * Built by the caller — the transport in the Phase B-L parity path, the Rust
+ * shell (via a builder) in Phase C. */
+typedef struct SipiRequestContext SipiRequestContext;
+
 /* ── Entry points ───────────────────────────────────────────────────────────
  * All return 0 on success / an error code on failure; none let a C++ exception
  * cross the boundary. */
@@ -204,10 +216,24 @@ SIPI_FFI_NODISCARD int sipi_serve_image(const SipiServeRequest *req, const SipiR
  *  so the caller can render its own error response. */
 SIPI_FFI_NODISCARD int sipi_serve_file(const char *resolved_path, const char *range, const SipiResponse *resp);
 
-/*! C++ LuaServer `pre_flight()`: returns a permission type + key/value channel. */
+/*! C++ LuaServer `pre_flight()`: returns a permission type + key/value channel.
+ *  The IIIF image preflight (serve_iiif / info.json). The hook reads the request
+ *  through `ctx` (`server.header` / `server.cookies` / …) and gets prefix +
+ *  identifier + the cookie header as its Lua arguments. Valid permission types:
+ *  allow / login / clickthrough / kiosk / external / restrict / deny. */
 SIPI_FFI_NODISCARD int sipi_preflight(const char *prefix,
   const char *identifier,
-  const char *cookie,
+  SipiRequestContext *ctx,
+  SipiPermType *type,
+  SipiKVFn emit_kv,
+  void *kv_ctx);
+
+/*! C++ LuaServer `file_pre_flight()`: the `/file` media-serving path (audio /
+ *  video / PDF / any non-IIIF file). Same shape as sipi_preflight but takes a
+ *  resolved filepath; narrower valid permission set: allow / login / restrict /
+ *  deny. */
+SIPI_FFI_NODISCARD int sipi_file_preflight(const char *filepath,
+  SipiRequestContext *ctx,
   SipiPermType *type,
   SipiKVFn emit_kv,
   void *kv_ctx);

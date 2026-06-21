@@ -14,8 +14,9 @@ self-sufficiently (ADR-0003), the same shape as `//src/shttps/util`. Siblings
 within the package use the bare quote form (`#include "sipi_ffi.h"`).
 
 The target hosts the C++ side of the seam; its `srcs` grow as the engine is
-carved behind the FFI (today: `sipi_serve_file`, the raw `/file` Range/206
-passthrough).
+carved behind the FFI (today: `sipi_serve_file` / `sipi_serve_image` /
+`sipi_metrics_snapshot` and the Lua preflight `sipi_preflight` /
+`sipi_file_preflight`).
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
@@ -38,6 +39,8 @@ cc_library(
         # SipiHttpServer (the dead `__sipiserver` light-userdata was dropped).
         "SipiLua.cpp",
         "engine_context.cpp",
+        "lua_config.cpp",
+        "preflight.cpp",
         "serve_image.cpp",
         "serve_response.cpp",
         "sipi_ffi.cpp",
@@ -45,6 +48,8 @@ cc_library(
     hdrs = [
         "SipiLua.h",
         "engine_context.h",
+        "lua_config.h",
+        "preflight.h",
         "metrics_snapshot.h",
         "serve_image.h",
         "serve_response.h",
