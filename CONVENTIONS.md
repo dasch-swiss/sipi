@@ -130,7 +130,7 @@ Config flows: CLI args (CLI11) → Lua config file → `SipiConf` struct → `Si
 
 New config options need:
 1. Field in `SipiConf.h` / `SipiConf.cpp` (Lua table read)
-2. CLI option in `src/cli/sipi.cpp` (CLI11)
+2. CLI option in `src/cli/cli_app.cpp` (CLI11)
 3. Accessor in `SipiHttpServer.hpp`
 4. Documentation in `config/sipi.config.lua`
 5. Environment variable override (optional, for Docker)

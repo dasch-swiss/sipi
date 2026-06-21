@@ -36,7 +36,7 @@
 - Rate limiter budget deducted before processing, not after
 
 ### Configuration consistency
-- New config options added to all four surfaces: `SipiConf.h`/`.cpp` (Lua), `sipi.cpp` (CLI11), `SipiHttpServer.hpp` (accessor), and `config/sipi.config.lua` (documentation)
+- New config options added to all four surfaces: `SipiConf.h`/`.cpp` (Lua), `cli_app.cpp` (CLI11), `SipiHttpServer.hpp` (accessor), and `config/sipi.config.lua` (documentation)
 - Defaults identical across all entry points
 - `docs/src/development/reviewer-guidelines.md` summarises this as "Lua / CLI / env" for review-checklist brevity; the four-surface list above is the authoritative one
 - Invalid values produce clear startup errors with guidance on valid values
