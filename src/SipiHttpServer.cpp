@@ -51,7 +51,10 @@
 #include "observability/sentry.h"
 #include "favicon.h"
 #include "ffi/engine_context.h"
+#include "ffi/preflight.h"
 #include "ffi/sipi_ffi.h"
+#include "shttps/lua/request_context.h"
+#include "shttps/transport/connection_request_context.h"
 #include "handlers/iiif_handler.h"
 #include "jansson.h"
 
@@ -351,226 +354,71 @@ static std::string resolve_client_id(Connection &conn_obj)
 
 //=========================================================================
 
+// emit_kv target for the preflight adapters below: fold the seam's open
+// key/value channel (infile + restrict extras: watermark/size/cookieUrl/…) back
+// into the string-keyed map the existing handlers consume.
+static void preflight_collect_kv(void *ctx, const char *key, const char *value)
+{
+  static_cast<std::unordered_map<std::string, std::string> *>(ctx)->insert_or_assign(key, value);
+}
+
 /*!
- * Gets the IIIF prefix, IIIF identifier, and cookie from the HTTP request, and passes them to the Lua pre-flight
- * function (whose name is given by the constant pre_flight_func_name).
+ * Runs the Lua `pre_flight` hook for an IIIF request through the C-ABI seam
+ * (`::sipi_preflight`) and returns the permission + file path (+ any restrict
+ * extras) as the string-keyed map the handlers consume.
  *
- * Returns the return values of the pre-flight function as a std::pair containing a permission string and (optionally) a
- * file path. Throws SipiError if an error occurs.
+ * The Lua VM is built behind the FFI from the engine Lua config, bound to a
+ * RequestContext snapshot of conn_obj (so `server.header` / `server.cookies`
+ * resolve from the real request) — the path the Rust shell drives in Phase C.
+ * The caller still gates on `luaserver.luaFunctionExists(pre_flight)`; only the
+ * execution moved behind the seam. Throws SipiError if the hook fails (the
+ * detail is logged engine-side; only the status crosses the seam).
  *
- * \param conn_obj the server connection.
- * \param luaserver the Lua server that will be used to call the function.
+ * \param conn_obj the server connection (request fields + response sink).
  * \param prefix the IIIF prefix.
  * \param identifier the IIIF identifier.
- * \return Pair of permission string and filepath
+ * \return permission map (type + infile + any restrict extras)
  */
-static std::unordered_map<std::string, std::string> call_iiif_preflight(Connection &conn_obj,
-  shttps::LuaServer &luaserver,
-  const std::string &prefix,
-  const std::string &identifier)
+static std::unordered_map<std::string, std::string>
+  call_iiif_preflight(Connection &conn_obj, const std::string &prefix, const std::string &identifier)
 {
-  // The permission and optional file path that the pre_fight function returns.
   std::unordered_map<std::string, std::string> preflight_info;
-  // std::string permission;
-  // std::string infile;
-
-  // The paramters to be passed to the pre-flight function.
-  std::vector<std::shared_ptr<LuaValstruct>> lvals;
-
-  // The first parameter is the IIIF prefix.
-  std::shared_ptr<LuaValstruct> iiif_prefix_param = std::make_shared<LuaValstruct>();
-  iiif_prefix_param->type = LuaValstruct::STRING_TYPE;
-  iiif_prefix_param->value.s = prefix;
-  lvals.push_back(iiif_prefix_param);
-
-  // The second parameter is the IIIF identifier.
-  std::shared_ptr<LuaValstruct> iiif_identifier_param = std::make_shared<LuaValstruct>();
-  iiif_identifier_param->type = LuaValstruct::STRING_TYPE;
-  iiif_identifier_param->value.s = identifier;
-  lvals.push_back(iiif_identifier_param);
-
-  // The third parameter is the HTTP cookie.
-  std::shared_ptr<LuaValstruct> cookie_param = std::make_shared<LuaValstruct>();
-  std::string cookie = conn_obj.header("cookie");
-  cookie_param->type = LuaValstruct::STRING_TYPE;
-  cookie_param->value.s = cookie;
-  lvals.push_back(cookie_param);
-
-  // Call the pre-flight function.
-  std::vector<std::shared_ptr<LuaValstruct>> rvals = luaserver.executeLuafunction(iiif_preflight_funcname, lvals);
-
-  // If it returned nothing, that's an error.
-  if (rvals.empty()) {
-    std::ostringstream err_msg;
-    err_msg << "Lua function " << iiif_preflight_funcname << " must return at least one value";
-    throw SipiError(err_msg.str());
-  }
-
-  // The first return value is the permission code.
-  auto permission_return_val = rvals.at(0);
-
-  // The permission code can be a string or a table
-  if (permission_return_val->type == LuaValstruct::STRING_TYPE) {
-    preflight_info["type"] = permission_return_val->value.s;
-  } else if (permission_return_val->type == LuaValstruct::TABLE_TYPE) {
-    std::shared_ptr<LuaValstruct> tmpv;
-    try {
-      tmpv = permission_return_val->value.table.at("type");
-    } catch (const std::out_of_range &err) {
-      std::ostringstream err_msg;
-      err_msg << "The permission value returned by Lua function " << iiif_preflight_funcname << " has no type field!";
-      throw SipiError(err_msg.str());
-    }
-    if (tmpv->type != LuaValstruct::STRING_TYPE) { throw SipiError("String value expected!"); }
-    preflight_info["type"] = tmpv->value.s;
-    for (const auto &keyval : permission_return_val->value.table) {
-      if (keyval.first == "type") continue;
-      if (keyval.second->type != LuaValstruct::STRING_TYPE) { throw SipiError("String value expected!"); }
-      preflight_info[keyval.first] = keyval.second->value.s;
-    }
-  } else {
-    std::ostringstream err_msg;
-    err_msg << "The permission value returned by Lua function " << iiif_preflight_funcname << " was not valid";
-    throw SipiError(err_msg.str());
-  }
-
-  //
-  // check if permission type is valid
-  //
-  if ((preflight_info["type"] != "allow") && (preflight_info["type"] != "login")
-      && (preflight_info["type"] != "clickthrough") && (preflight_info["type"] != "kiosk")
-      && (preflight_info["type"] != "external") && (preflight_info["type"] != "restrict")
-      && (preflight_info["type"] != "deny")) {
-    std::ostringstream err_msg;
-    err_msg << "The permission returned by Lua function " << iiif_preflight_funcname
-            << " is not valid: " << preflight_info["type"];
-    throw SipiError(err_msg.str());
-  }
-
-  if (preflight_info["type"] == "deny") {
-    preflight_info["infile"] = "";
-  } else {
-    if (rvals.size() < 2) {
-      std::ostringstream err_msg;
-      err_msg << "Lua function " << iiif_preflight_funcname
-              << " returned other permission than 'deny', but it did not return a file path";
-      throw SipiError(err_msg.str());
-    }
-
-    auto infile_return_val = rvals.at(1);
-
-    // The file path must be a string.
-    if (infile_return_val->type == LuaValstruct::STRING_TYPE) {
-      preflight_info["infile"] = infile_return_val->value.s;
-    } else {
-      std::ostringstream err_msg;
-      err_msg << "The file path returned by Lua function " << iiif_preflight_funcname << " was not a string";
-      throw SipiError(err_msg.str());
-    }
-  }
-
-  // Return the permission code and file path, if any, as a std::pair.
+  SipiPermType perm{};
+  shttps::ConnectionResponseSink sink(conn_obj);
+  shttps::RequestContext ctx = shttps::make_request_context(conn_obj, sink);
+  const int rc = ::sipi_preflight(prefix.c_str(),
+    identifier.c_str(),
+    reinterpret_cast<SipiRequestContext *>(&ctx),
+    &perm,
+    preflight_collect_kv,
+    &preflight_info);
+  if (rc != 0) { throw SipiError("pre_flight failed"); }
+  preflight_info["type"] = Sipi::ffi::perm_type_to_string(perm);
   return preflight_info;
 }
 
 //=========================================================================
 
+/*!
+ * Runs the Lua `file_pre_flight` hook for the `/file` media-serving path
+ * (audio / video / PDF / any non-IIIF file) through `::sipi_file_preflight`.
+ * Same contract as call_iiif_preflight; narrower permission set.
+ *
+ * \param conn_obj the server connection (request fields + response sink).
+ * \param filepath the resolved on-disk file path.
+ * \return permission map (type + infile)
+ */
 static std::unordered_map<std::string, std::string>
-  call_file_preflight(Connection &conn_obj, shttps::LuaServer &luaserver, const std::string &filepath)
+  call_file_preflight(Connection &conn_obj, const std::string &filepath)
 {
-  // The permission and optional file path that the pre_fight function returns.
   std::unordered_map<std::string, std::string> preflight_info;
-  // std::string permission;
-  // std::string infile;
-
-  // The paramters to be passed to the pre-flight function.
-  std::vector<std::shared_ptr<LuaValstruct>> lvals;
-
-  // The first parameter is the filepath.
-  std::shared_ptr<LuaValstruct> file_path_param = std::make_shared<LuaValstruct>();
-  file_path_param->type = LuaValstruct::STRING_TYPE;
-  file_path_param->value.s = filepath;
-  lvals.push_back(file_path_param);
-
-  // The second parameter is the HTTP cookie.
-  std::shared_ptr<LuaValstruct> cookie_param = std::make_shared<LuaValstruct>();
-  std::string cookie = conn_obj.header("cookie");
-  cookie_param->type = LuaValstruct::STRING_TYPE;
-  cookie_param->value.s = cookie;
-  lvals.push_back(cookie_param);
-
-  // Call the pre-flight function.
-  std::vector<std::shared_ptr<LuaValstruct>> rvals = luaserver.executeLuafunction(file_preflight_funcname, lvals);
-
-  // If it returned nothing, that's an error.
-  if (rvals.empty()) {
-    std::ostringstream err_msg;
-    err_msg << "Lua function " << file_preflight_funcname << " must return at least one value";
-    throw SipiError(err_msg.str());
-  }
-
-  // The first return value is the permission code.
-  auto permission_return_val = rvals.at(0);
-
-  // The permission code must be a string or a table.
-  if (permission_return_val->type == LuaValstruct::STRING_TYPE) {
-    preflight_info["type"] = permission_return_val->value.s;
-  } else if (permission_return_val->type == LuaValstruct::TABLE_TYPE) {
-    std::shared_ptr<LuaValstruct> tmpv;
-    try {
-      tmpv = permission_return_val->value.table.at("type");
-    } catch (const std::out_of_range &err) {
-      std::ostringstream err_msg;
-      err_msg << "The permission value returned by Lua function " << file_preflight_funcname << " has no type field!";
-      throw SipiError(err_msg.str());
-    }
-    if (tmpv->type != LuaValstruct::STRING_TYPE) { throw SipiError("String value expected!"); }
-    preflight_info["type"] = tmpv->value.s;
-    for (const auto &keyval : permission_return_val->value.table) {
-      if (keyval.first == "type") continue;
-      if (keyval.second->type != LuaValstruct::STRING_TYPE) { throw SipiError("String value expected!"); }
-      preflight_info[keyval.first] = keyval.second->value.s;
-    }
-  } else {
-    std::ostringstream err_msg;
-    err_msg << "The permission value returned by Lua function " << file_preflight_funcname << " was not valid";
-    throw SipiError(err_msg.str());
-  }
-
-  //
-  // check if permission type is valid
-  //
-  if ((preflight_info["type"] != "allow") && (preflight_info["type"] != "login")
-      && (preflight_info["type"] != "restrict") && (preflight_info["type"] != "deny")) {
-    std::ostringstream err_msg;
-    err_msg << "The permission returned by Lua function " << file_preflight_funcname
-            << " is not valid: " << preflight_info["type"];
-    throw SipiError(err_msg.str());
-  }
-
-  if (preflight_info["type"] == "deny") {
-    preflight_info["infile"] = "";
-  } else {
-    if (rvals.size() < 2) {
-      std::ostringstream err_msg;
-      err_msg << "Lua function " << file_preflight_funcname
-              << " returned other permission than 'deny', but it did not return a file path";
-      throw SipiError(err_msg.str());
-    }
-
-    auto infile_return_val = rvals.at(1);
-
-    // The file path must be a string.
-    if (infile_return_val->type == LuaValstruct::STRING_TYPE) {
-      preflight_info["infile"] = infile_return_val->value.s;
-    } else {
-      std::ostringstream err_msg;
-      err_msg << "The file path returned by Lua function " << file_preflight_funcname << " was not a string";
-      throw SipiError(err_msg.str());
-    }
-  }
-
-  // Return the permission code and file path, if any, as a std::pair.
+  SipiPermType perm{};
+  shttps::ConnectionResponseSink sink(conn_obj);
+  shttps::RequestContext ctx = shttps::make_request_context(conn_obj, sink);
+  const int rc = ::sipi_file_preflight(
+    filepath.c_str(), reinterpret_cast<SipiRequestContext *>(&ctx), &perm, preflight_collect_kv, &preflight_info);
+  if (rc != 0) { throw SipiError("file_pre_flight failed"); }
+  preflight_info["type"] = Sipi::ffi::perm_type_to_string(perm);
   return preflight_info;
 }
 
@@ -617,7 +465,6 @@ static std::unordered_map<std::string, std::string> check_file_access(Connection
   std::unordered_map<std::string, std::string> pre_flight_info;
   if (luaserver.luaFunctionExists(iiif_preflight_funcname)) {
     pre_flight_info = call_iiif_preflight(conn_obj,
-      luaserver,
       urldecode(params[iiif_prefix]),
       sid.getIdentifier());// may throw SipiError
     infile = pre_flight_info["infile"];
@@ -1237,7 +1084,7 @@ static void serve_file_download(Connection &conn_obj,
   if (luaserver.luaFunctionExists(file_preflight_funcname)) {
     std::unordered_map<std::string, std::string> pre_flight_info;
     try {
-      pre_flight_info = call_file_preflight(conn_obj, luaserver, requested_file);
+      pre_flight_info = call_file_preflight(conn_obj, requested_file);
     } catch (SipiError &err) {
       send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
       return;
@@ -1360,7 +1207,7 @@ static void serve_iiif(Connection &conn_obj,
   if (luaserver.luaFunctionExists(iiif_preflight_funcname)) {
     std::unordered_map<std::string, std::string> pre_flight_info;
     try {
-      pre_flight_info = call_iiif_preflight(conn_obj, luaserver, params[iiif_prefix], sid.getIdentifier());
+      pre_flight_info = call_iiif_preflight(conn_obj, params[iiif_prefix], sid.getIdentifier());
     } catch (SipiError &err) {
       send_error(conn_obj, Connection::INTERNAL_SERVER_ERROR, err);
       return;

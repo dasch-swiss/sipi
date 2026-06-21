@@ -10,9 +10,11 @@
 
 #include "ffi/engine_context.h"
 #include "ffi/metrics_snapshot.h"
+#include "ffi/preflight.h"
 #include "ffi/serve_image.h"
 #include "ffi/serve_response.h"
 #include "observability/metrics.h"
+#include "shttps/lua/request_context.h"// shttps::RequestContext (the opaque SipiRequestContext)
 
 extern "C" {
 
@@ -41,6 +43,45 @@ int sipi_serve_image(const SipiServeRequest *req, const SipiResponse *resp)
     auto result = Sipi::ffi::build_image_response(*req, Sipi::ffi::engine_context(), cancelled);
     if (!result) { return static_cast<int>(result.error()); }
     Sipi::ffi::apply(std::move(*result), *resp);
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
+int sipi_preflight(const char *prefix,
+  const char *identifier,
+  SipiRequestContext *ctx,
+  SipiPermType *type,
+  SipiKVFn emit_kv,
+  void *kv_ctx)
+{
+  // Same build/apply/guard shape as the serve entries: build_preflight runs the
+  // Lua hook against the caller's request context and every fallible step (VM
+  // build, execution, result validation) before anything is committed;
+  // apply_preflight is the only code that touches the C output channel (the type
+  // out-param + the kv callback); all under the no-throw guard. The opaque
+  // SipiRequestContext is the C++ shttps::RequestContext the caller built.
+  return Sipi::ffi::sipi_guard([&] {
+    auto &rc = *reinterpret_cast<shttps::RequestContext *>(ctx);
+    auto result = Sipi::ffi::build_preflight(prefix, identifier, rc);
+    if (!result) { return static_cast<int>(result.error()); }
+    Sipi::ffi::apply_preflight(std::move(*result), type, emit_kv, kv_ctx);
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
+int sipi_file_preflight(const char *filepath,
+  SipiRequestContext *ctx,
+  SipiPermType *type,
+  SipiKVFn emit_kv,
+  void *kv_ctx)
+{
+  // The /file media-serving preflight; identical shape to sipi_preflight, runs
+  // the file_pre_flight hook over a resolved filepath.
+  return Sipi::ffi::sipi_guard([&] {
+    auto &rc = *reinterpret_cast<shttps::RequestContext *>(ctx);
+    auto result = Sipi::ffi::build_file_preflight(filepath, rc);
+    if (!result) { return static_cast<int>(result.error()); }
+    Sipi::ffi::apply_preflight(std::move(*result), type, emit_kv, kv_ctx);
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
   });
 }

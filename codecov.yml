@@ -23,7 +23,7 @@ ignore:
   - "config/**"
   - "docs/**"
   - "include/**"
-  - "src/SipiLua.cpp"
+  - "src/ffi/SipiLua.cpp"
 
 parsers:
   gcov:

@@ -36,6 +36,7 @@
 #include "shttps/util/Parsing.h"
 #include "Server.h"
 #include "SockStream.h"
+#include "connection_request_context.h"
 #include "shttps/util/makeunique.h"
 
 // Tracy thread naming. shttps sits below //src/observability in the dependency
@@ -1326,58 +1327,12 @@ void Server::add_route(Connection::HttpMethod method_p,
 
 
 // ── Lua request-context parity glue (transport-only; deleted at the Phase C cutover) ──
-// The Lua runtime no longer takes an shttps::Connection — it drives the
-// connection-less RequestContext / ResponseSink seam. These helpers let the
-// existing C++ transport keep running the Lua VM: the sink forwards back onto the
-// live Connection and the request fields are snapshotted exactly as
-// LuaServer::createGlobals used to read them directly off the Connection.
-namespace {
-
-class ConnectionResponseSink : public ResponseSink
-{
-public:
-  explicit ConnectionResponseSink(Connection &conn) : conn_(conn) {}
-
-  void set_status(int status) override { conn_.status(static_cast<Connection::StatusCodes>(status)); }
-
-  void add_header(const std::string &name, const std::string &value) override { conn_.header(name, value); }
-
-  void add_cookie(const ResponseCookie &c) override
-  {
-    Cookie cookie(c.name, c.value);
-    if (!c.path.empty()) { cookie.path(c.path); }
-    if (!c.domain.empty()) { cookie.domain(c.domain); }
-    if (c.expires_set) { cookie.expires(c.expires_seconds); }
-    cookie.secure(c.secure);
-    cookie.httpOnly(c.http_only);
-    conn_.cookies(cookie);
-  }
-
-  int write(const void *data, std::size_t len) override
-  {
-    try {
-      conn_.send(data, len);
-      return 0;
-    } catch (...) {
-      return 1;
-    }
-  }
-
-  void set_buffer(std::size_t buf_size, std::size_t buf_inc) override
-  {
-    if (buf_size > 0 && buf_inc > 0) {
-      conn_.setBuffer(buf_size, buf_inc);
-    } else if (buf_size > 0) {
-      conn_.setBuffer(buf_size);
-    } else {
-      conn_.setBuffer();
-    }
-  }
-
-private:
-  Connection &conn_;
-};
-
+// ConnectionResponseSink + make_request_context adapt a live Connection to the
+// connection-less RequestContext / ResponseSink seam. They live in
+// connection_request_context.h so this file (the per-request VM) and
+// SipiHttpServer.cpp (the Lua FFI parity adapters) share one snapshot
+// implementation. ConnectionResponseSink is header-defined; make_request_context
+// is defined here because it uses the file-local to_request_method.
 RequestContext make_request_context(Connection &conn, ResponseSink &sink)
 {
   RequestContext ctx;
@@ -1405,8 +1360,6 @@ RequestContext make_request_context(Connection &conn, ResponseSink &sink)
   ctx.response = &sink;
   return ctx;
 }
-
-}// namespace
 
 // Starts an instance of the LUA server and selects and hands over to the correct
 // request handler for the incoming request.

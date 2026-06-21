@@ -51,6 +51,7 @@
 #include "SipiImage.h"
 #include "SipiImageError.h"
 #include "ffi/SipiLua.h"
+#include "ffi/lua_config.h"
 #include "SipiReport.h"
 #include "observability/sentry.h"
 #include "formats/SipiIOTiff.h"
@@ -1295,6 +1296,31 @@ int main(int argc, char *argv[])
       server.queue_timeout(sipiConf.getQueueTimeout());
       server.docroot(sipiConf.getDocRoot());
       server.wwwroute(sipiConf.getWWWRoute());
+
+      // Install the engine-held Lua config the connection-less FFI entries
+      // (sipi_preflight / sipi_run_lua_route) build their per-call VM from. It
+      // mirrors the per-request VM shttps::Server builds: same init-script
+      // source, scriptdir, JWT secret, and globals installers in registration
+      // order. Phase B-L parity install; sipi_init takes it over at the Phase C
+      // cutover (this block and the server both go away then).
+      {
+        std::ifstream initscript_in(sipiConf.getInitScript());
+        if (initscript_in.fail()) {
+          throw shttps::Error("initscript \"" + sipiConf.getInitScript() + "\" not found!");
+        }
+        std::string initscript_src(
+          (std::istreambuf_iterator<char>(initscript_in)), std::istreambuf_iterator<char>());
+        Sipi::ffi::set_lua_config(Sipi::ffi::LuaConfig{
+          .init_script = std::move(initscript_src),
+          .script_dir = sipiConf.getScriptDir(),
+          .jwt_secret = sipiConf.getJwtSecret(),
+          .globals = {
+            { sipiConfGlobals, &sipiConf },
+            { shttps::sqliteGlobals, nullptr },
+            { Sipi::sipiGlobals, nullptr },
+          },
+        });
+      }
 
       // start the server
       log_info("SIPI server starting on port %d...", sipiConf.getPort());
