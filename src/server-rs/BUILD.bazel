@@ -34,6 +34,11 @@ rust_library(
         # The narrow C FFI seam → the transitive C++ image engine. This is the
         # cc_library → rust_binary link (Open Question #1).
         "//src/ffi:sipi_ffi",
+        # The C++ CLI app, for `sipi_cli_main` — the Rust shell hands every
+        # non-`server` argv (offline subcommands, --version) to it verbatim.
+        # Pulls the full //src:sipi_lib transitively (incl. the C++ server,
+        # dead weight in the additive phase, dropped at the step-5 cutover).
+        "//src/cli:cli_app",
     ],
 )
 
