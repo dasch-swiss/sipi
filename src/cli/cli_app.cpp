@@ -517,7 +517,14 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig * /
       const std::string cachedir = conf.getCacheDir();
       const long long cache_size = conf.getCacheSize();
       if (cache_size != 0 && !cachedir.empty()) {
-        runtime->cache = std::make_unique<Sipi::SipiCache>(cachedir, cache_size, conf.getCacheNFiles());
+        // Degrade to no-cache on a bad/unwritable cache dir rather than aborting
+        // startup — parity with SipiHttpServer::cache() (which logs + continues).
+        try {
+          runtime->cache = std::make_unique<Sipi::SipiCache>(cachedir, cache_size, conf.getCacheNFiles());
+        } catch (const shttps::Error &e) {
+          log_warn("sipi_init: caching disabled — %s", e.what());
+          runtime->cache = nullptr;
+        }
       }
     }
     {
@@ -661,9 +668,10 @@ extern "C" int sipi_cli_main(int argc, char **argv)
   // ~LibraryInitialiser calls curl_global_cleanup(). Registered AFTER the
   // static LibraryInitialiser has finished construction, so per
   // [basic.start.term] this handler runs BEFORE ~LibraryInitialiser at exit.
-  // This covers every exit path: subcommand callbacks that call exit(), a
-  // CLI11 parse error that returns from main, and normal return. Without it,
-  // curl teardown races the live sentry-http thread and corrupts the heap.
+  // This covers every exit path: subcommand dispatch returning through
+  // sipi_cli_main, a CLI11 parse error returning the parse-error code, and
+  // normal return. Without it, curl teardown races the live sentry-http thread
+  // and corrupts the heap.
   // (std::abort() from my_terminate_handler bypasses atexit, leaving
   // sentry-native's inproc crash reporting intact.)
   std::atexit([] { Sipi::observability::close_sentry(); });
@@ -1885,11 +1893,24 @@ extern "C" int sipi_cli_main(int argc, char **argv)
     ->check(CLI::Range(1, 65535));
   cmd_health->callback([&]() { sipi_exit_code = Sipi::cli::cmd_health({ optHealthPort }); });
 
-  CLI11_PARSE(sipiopt, argc, argv);
+  // Catch-all around dispatch: a subcommand body (e.g. query/compare's
+  // img.read()/write()) can throw SipiImageError, which is NOT a CLI::Error, so
+  // CLI11_PARSE would let it unwind out of this `extern "C"` entry into the Rust
+  // caller — UB across the FFI (sipi_ffi.h's no-exception contract). Map any
+  // escaped exception to EXIT_FAILURE here, mirroring the engine's sipi_guard.
+  // (CLI11_PARSE's own try/catch still handles CLI::ParseError + returns its code.)
+  try {
+    CLI11_PARSE(sipiopt, argc, argv);
+  } catch (const std::exception &e) {
+    log_err("sipi: unhandled exception: %s", e.what());
+    return EXIT_FAILURE;
+  } catch (...) {
+    log_err("sipi: unhandled non-standard exception");
+    return EXIT_FAILURE;
+  }
 
   // `require_subcommand(1)` means exactly one leaf subcommand callback fired
-  // and recorded its result into sipi_exit_code (or CLI11_PARSE already
-  // returned the parse-error code on bad args). Sentry teardown runs via the
+  // and recorded its result into sipi_exit_code. Sentry teardown runs via the
   // std::atexit(close_sentry) registered above on process exit; the caller
   // (the C++ main, or the Rust shell) owns when that happens.
   return sipi_exit_code;

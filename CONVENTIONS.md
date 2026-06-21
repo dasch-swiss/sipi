@@ -173,7 +173,7 @@ prometheus::Counter &my_counter_total =
 
 shttps-side instrumentation goes through the
 `shttps::ConnectionMetrics` Strategy interface (see
-`shttps/transport/ConnectionMetrics.h`). At startup, `src/cli/sipi.cpp` installs a
+`shttps/transport/ConnectionMetrics.h`). At startup, `src/cli/cli_app.cpp` installs a
 `Sipi::observability::ConnectionMetricsAdapter` (Adapter pattern) that bridges
 shttps events into the `Sipi::observability::Metrics` singleton. **Do not call
 `Sipi::observability::Metrics::instance()` from `shttps/` code** — that

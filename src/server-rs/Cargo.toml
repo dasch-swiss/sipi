@@ -22,14 +22,12 @@ path = "src/lib.rs"
 name = "sipi_server"
 path = "src/main.rs"
 
+# Deps are introduced per-task as a real consumer lands (YAGNI). The endpoints
+# follow-up re-adds tower / tower-http (CORS, trace, timeouts) + http / bytes.
 [dependencies]
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
-tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace", "timeout", "limit"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 clap = { version = "4", features = ["derive"] }
-http = "1"
-bytes = "1"
 percent-encoding = "2"
