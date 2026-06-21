@@ -199,6 +199,29 @@ typedef struct SipiMetricsSnapshot SipiMetricsSnapshot;
  * shell (via a builder) in Phase C. */
 typedef struct SipiRequestContext SipiRequestContext;
 
+/* ── Edge-probe types (Rust-edge path validation + info.json/knora.json) ─────
+ * Read-only helpers the Rust shell needs to build a request the way the C++
+ * server did and to assemble the JSON responses the seam has no serve entry for. */
+
+/*! Native image shape from a header read (NOT a full decode). `numpages` is 0
+ *  for a single-page image; `tile_width`/`tile_height` are 0 when the image is
+ *  untiled; `clevels` is the JP2/pyramidal resolution-level count (0 when none).
+ *  Carries the tiling + level fields so the Rust shell assembles info.json's
+ *  `sizes[]` / `tiles[]` from one probe rather than a second call. */
+typedef struct
+{
+  uint32_t width;
+  uint32_t height;
+  uint32_t numpages;
+  uint32_t tile_width;
+  uint32_t tile_height;
+  uint32_t clevels;
+} SipiImageDims;
+
+/*! Emits a single string value through a caller callback, so the seam returns no
+ *  owned C string (no malloc/free contract across the boundary). */
+typedef void (*SipiStrFn)(void *ctx, const char *value);
+
 /* ── Entry points ───────────────────────────────────────────────────────────
  * All return 0 on success / an error code on failure; none let a C++ exception
  * cross the boundary. */
@@ -247,6 +270,37 @@ SIPI_FFI_NODISCARD int sipi_metrics_snapshot(SipiMetricsSnapshot *out);
 /*! C++ parses the Lua config (full `config.*` surface incl. routes + preflight
  *  hook); `overrides` carries CLI/env overrides only. */
 SIPI_FFI_NODISCARD int sipi_init(const char *lua_config_path, const SipiServerConfig *overrides);
+
+/* ── Edge probes ─────────────────────────────────────────────────────────────
+ * Read-only helpers the Rust shell calls at the request edge. Like
+ * sipi_metrics_snapshot they drive no response sink, so they are sipi_guard-only
+ * (no build/apply split). All require `sipi_init` to have installed the engine. */
+
+/*! The configured image root, for the Rust edge to build + containment-check a
+ *  `resolved_path`. `resolved` = 0 → the raw config value (path build, parity
+ *  with the C++ `imgroot()`); `resolved` = 1 → the realpath()-resolved root (the
+ *  R2 containment check). `*out` points at process-static memory owned by the
+ *  installed engine context — valid for the process lifetime after `sipi_init`,
+ *  never freed by the caller. Returns 0, or 500 if `sipi_init` has not run. */
+SIPI_FFI_NODISCARD int sipi_imgroot(int resolved, const char **out);
+
+/*! The `prefix_as_path` config knob: `*out` = 1 → the IIIF prefix is a path
+ *  component under imgroot (`imgroot/prefix/identifier`); 0 → `imgroot/identifier`.
+ *  Returns 0, or 500 if `sipi_init` has not run. */
+SIPI_FFI_NODISCARD int sipi_prefix_as_path(int *out);
+
+/*! Header-only image-shape probe (`SipiImage::read_shape` — no full decode).
+ *  `resolved_path` is an already-validated absolute path (the Rust edge owns
+ *  existence + containment). Fills `*out` on success. Returns 0, or 500 if the
+ *  shape cannot be read (the edge has already confirmed the file exists, so an
+ *  unreadable image here is an engine-level failure). */
+SIPI_FFI_NODISCARD int sipi_image_dims(const char *resolved_path, SipiImageDims *out);
+
+/*! The engine's libmagic MIME type for a file (the same `getBestFileMimetype`
+ *  the `/file` and info.json paths use — one source of truth for MIME mapping),
+ *  emitted once via `emit`. `resolved_path` is an already-validated absolute
+ *  path. Returns 0 (and calls `emit` once) on success, or 500 on error. */
+SIPI_FFI_NODISCARD int sipi_mimetype(const char *resolved_path, SipiStrFn emit, void *ctx);
 
 /*! Hands argv verbatim to the existing C++ CLI11 parser; returns the process
  *  exit code (no `exit()`/`abort()` from inside the FFI). */

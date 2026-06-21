@@ -113,6 +113,22 @@ cc_test(
     ],
 )
 
+# Co-located unit test for the edge-probe seam entries (sipi_imgroot /
+# sipi_prefix_as_path read the installed engine context; sipi_image_dims /
+# sipi_mimetype read a validated fixture). Fixture paths resolve via
+# //test:test_paths, which honours SIPI_WORKSPACE_ROOT.
+cc_test(
+    name = "seam_probe_test",
+    srcs = ["seam_probe_test.cpp"],
+    data = ["//test/_test_data:images"],
+    env = {"SIPI_WORKSPACE_ROOT": "."},
+    deps = [
+        ":sipi_ffi",
+        "//test:test_paths",
+        "@googletest//:gtest_main",
+    ],
+)
+
 # Co-located unit test for sipi_metrics_snapshot: bump the Metrics singleton
 # counters/gauges, snapshot, assert the struct fields ferry them (counter deltas
 # + the signed -1 cache-size-limit gauge). Deps the observability target directly
