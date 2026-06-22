@@ -28,18 +28,22 @@ use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
-/// Owns the tracer provider so its batch exporter flushes on shutdown. `None`
-/// when no OTLP endpoint is configured (fail-open).
+/// Owns the trace (and, in local dev, log) providers so their batch exporters
+/// flush on shutdown. Each is `None` when not configured (fail-open).
 pub struct Telemetry {
     provider: Option<SdkTracerProvider>,
+    logger_provider: Option<opentelemetry_sdk::logs::SdkLoggerProvider>,
 }
 
 impl Telemetry {
-    /// Flush + shut down the exporter. The flush is blocking I/O, so callers run
+    /// Flush + shut down the exporters. The flush is blocking I/O, so callers run
     /// this off the async runtime (`spawn_blocking`).
     pub fn shutdown(self) {
         if let Some(provider) = self.provider {
             let _ = provider.shutdown();
+        }
+        if let Some(logger_provider) = self.logger_provider {
+            let _ = logger_provider.shutdown();
         }
     }
 }
@@ -66,13 +70,24 @@ pub fn init() -> Telemetry {
         .as_ref()
         .map(|p| tracing_opentelemetry::layer().with_tracer(p.tracer("sipi")));
 
+    // Local-dev only: also export logs over OTLP so they land in a local LGTM
+    // stack. The bridge attaches the active trace context, and a target filter
+    // keeps the OTel SDK's own logs out (no export feedback loop).
+    let logger_provider = build_logger_provider();
+    let logs_layer = logger_provider.as_ref().map(|lp| {
+        use tracing_subscriber::Layer;
+        opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge::new(lp)
+            .with_filter(tracing_subscriber::filter::filter_fn(|meta| !meta.target().starts_with("opentelemetry")))
+    });
+
     let _ = tracing_subscriber::registry()
         .with(filter)
         .with(otel_layer)
+        .with(logs_layer)
         .with(tracing_subscriber::fmt::layer().event_format(SharedJson))
         .try_init();
 
-    Telemetry { provider }
+    Telemetry { provider, logger_provider }
 }
 
 /// Build the OTLP (gRPC-tonic) tracer provider, or `None` when no endpoint is
@@ -89,6 +104,32 @@ fn build_tracer_provider() -> Option<SdkTracerProvider> {
     let resource = opentelemetry_sdk::Resource::builder().with_service_name("sipi").build();
     Some(
         SdkTracerProvider::builder()
+            .with_batch_exporter(exporter)
+            .with_resource(resource)
+            .build(),
+    )
+}
+
+/// Build the OTLP (gRPC-tonic) log-record provider for **local dev only**:
+/// requires `SIPI_OTLP_LOGS` set (truthy) *and* an endpoint. In production logs
+/// are scraped from stdout, so OTLP log export would duplicate them — hence the
+/// explicit opt-in. `None` otherwise.
+fn build_logger_provider() -> Option<opentelemetry_sdk::logs::SdkLoggerProvider> {
+    let enabled = std::env::var("SIPI_OTLP_LOGS").map(|v| !v.is_empty() && v != "0").unwrap_or(false);
+    if !enabled {
+        return None;
+    }
+    std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok()?;
+    let exporter = match opentelemetry_otlp::LogExporter::builder().with_tonic().build() {
+        Ok(exporter) => exporter,
+        Err(e) => {
+            tracing::warn!(error = %e, "OTLP log exporter init failed; log export disabled");
+            return None;
+        }
+    };
+    let resource = opentelemetry_sdk::Resource::builder().with_service_name("sipi").build();
+    Some(
+        opentelemetry_sdk::logs::SdkLoggerProvider::builder()
             .with_batch_exporter(exporter)
             .with_resource(resource)
             .build(),
