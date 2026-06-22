@@ -1,4 +1,4 @@
-"""src/server-rs — the Rust HTTP shell (strangler-fig Phase C; ADR-0013).
+"""src/server-rs — the Rust HTTP shell (strangler-fig rewrite; ADR-0013).
 
 The `sipi` `rust_library` owns the axum + tokio server and statically links the
 C++ image engine through the FFI seam (`//src/ffi:sipi_ffi`, a `cc_library`);
@@ -12,9 +12,9 @@ Dependencies resolve from `@crates_prod` (the production Crate Universe manifest
 in `MODULE.bazel`, distinct from the e2e suite's `@crates`). Repin via:
 `CARGO_BAZEL_REPIN=1 bazelisk fetch @crates_prod//:all`.
 
-Phase C is additive: this binary runs in parallel with `//src/cli:sipi`, which
-keeps the production socket until the step-5 cutover renames this to the stock
-`sipi` entry point.
+The shell is additive: this binary runs in parallel with `//src/cli:sipi`, which
+keeps the production socket until the cutover renames this to the stock `sipi`
+entry point.
 """
 
 load("@crates_prod//:defs.bzl", "all_crate_deps")
@@ -43,9 +43,16 @@ rust_library(
         # The C++ CLI app, for `sipi_cli_main` — the Rust shell hands every
         # non-`server` argv (offline subcommands, --version) to it verbatim.
         # Pulls the full //src:sipi_lib transitively (incl. the C++ server,
-        # dead weight in the additive phase, dropped at the step-5 cutover).
+        # dead weight in the additive phase, dropped at the cutover).
         "//src/cli:cli_app",
     ],
+    # Excluded from the sanitizer build alongside sipi_server / sipi_unit_test
+    # (sanitizer.yml filters `-no-sanitizer`). This library is the actual carrier
+    # of the transitive C++ dep (protobuf/abseil) whose source includes a
+    # <sanitizer/*.h> header the hermetic LLVM toolchain does not ship under
+    # --config=asan; it is a top-level target in the `//src/...` test glob, so it
+    # must be tagged too or the asan unit step still builds it and fails.
+    tags = ["no-sanitizer"],
 )
 
 # The final binary link pulls in the C++ engine archives (via `:sipi`'s
@@ -79,6 +86,12 @@ rust_binary(
     srcs = ["src/main.rs"],
     edition = "2021",
     rustc_flags = _CPP_STDLIB_LINK,
+    # Excluded from the sanitizer build (sanitizer.yml filters `-no-sanitizer`): a
+    # transitive C++ dep (protobuf) includes <sanitizer/asan_interface.h> under
+    # --config=asan, which the hermetic LLVM toolchain does not ship. rustc is not
+    # asan-instrumented by the cc config anyway, and the engine's C++ is sanitized
+    # via //src/cli:sipi. Still built + tested in regular CI/coverage (not `manual`).
+    tags = ["no-sanitizer"],
     deps = [":sipi"],
 )
 
@@ -90,4 +103,5 @@ rust_test(
     crate = ":sipi",
     edition = "2021",
     rustc_flags = _CPP_STDLIB_LINK,
+    tags = ["no-sanitizer"],  # see sipi_server: protobuf won't compile under --config=asan
 )

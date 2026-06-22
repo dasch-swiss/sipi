@@ -134,7 +134,7 @@ jobs:
           nix develop .#llvm-tools --command bash -c "
             export ASAN_SYMBOLIZER_PATH=\$(command -v llvm-symbolizer)
             rc=0
-            just bazel-test-unit --config=asan --config=ubsan $REMOTE $BES || rc=1
+            just bazel-test-unit --config=asan --config=ubsan --build_tag_filters=-no-sanitizer --test_tag_filters=-no-sanitizer $REMOTE $BES || rc=1
             just bazel-test-e2e  --config=asan --config=ubsan $REMOTE $BES || rc=1
             exit \$rc"
 
