@@ -558,6 +558,21 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig * /
     }
     const std::string resolved_imgroot(resolved);
 
+    // Read the init script — the last fallible step — BEFORE any install. The
+    // engine context and Lua config install non-owning pointers into `runtime`;
+    // installing them first and then failing here would leave the file-static
+    // engine pointing into `runtime`, which is freed on this early return.
+    std::string initscript_src;
+    {
+      std::ifstream initscript_in(conf.getInitScript());
+      if (initscript_in.fail()) {
+        log_err("sipi_init: initscript \"%s\" not found", conf.getInitScript().c_str());
+        return EXIT_FAILURE;
+      }
+      initscript_src.assign(
+        (std::istreambuf_iterator<char>(initscript_in)), std::istreambuf_iterator<char>());
+    }
+
     // Install the engine context — non-owning pointers into g_server_runtime.
     Sipi::ffi::set_engine_context(Sipi::ffi::EngineContext{
       .cache = runtime->cache.get(),
@@ -573,30 +588,21 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig * /
     });
 
     // Install the engine-held Lua config (the per-call VM factory behind
-    // sipi_preflight / sipi_run_lua_route). Same init-script source, scriptdir,
-    // JWT secret, and globals installers (in registration order) as run_server's
-    // set_lua_config. The sipiConfGlobals installer captures &conf, which stays
-    // valid: `runtime` is heap-allocated, so its SipiConf address is stable
-    // across the move into g_server_runtime below.
-    {
-      std::ifstream initscript_in(conf.getInitScript());
-      if (initscript_in.fail()) {
-        log_err("sipi_init: initscript \"%s\" not found", conf.getInitScript().c_str());
-        return EXIT_FAILURE;
-      }
-      std::string initscript_src(
-        (std::istreambuf_iterator<char>(initscript_in)), std::istreambuf_iterator<char>());
-      Sipi::ffi::set_lua_config(Sipi::ffi::LuaConfig{
-        .init_script = std::move(initscript_src),
-        .script_dir = conf.getScriptDir(),
-        .jwt_secret = conf.getJwtSecret(),
-        .globals = {
-          { sipiConfGlobals, &conf },
-          { shttps::sqliteGlobals, nullptr },
-          { Sipi::sipiGlobals, nullptr },
-        },
-      });
-    }
+    // sipi_preflight / sipi_run_lua_route). Same scriptdir, JWT secret, and
+    // globals installers (in registration order) as run_server's set_lua_config.
+    // The sipiConfGlobals installer captures &conf, which stays valid: `runtime`
+    // is heap-allocated, so its SipiConf address is stable across the move into
+    // g_server_runtime below.
+    Sipi::ffi::set_lua_config(Sipi::ffi::LuaConfig{
+      .init_script = std::move(initscript_src),
+      .script_dir = conf.getScriptDir(),
+      .jwt_secret = conf.getJwtSecret(),
+      .globals = {
+        { sipiConfGlobals, &conf },
+        { shttps::sqliteGlobals, nullptr },
+        { Sipi::sipiGlobals, nullptr },
+      },
+    });
 
     g_server_runtime = std::move(runtime);
     log_info("sipi_init: engine + Lua config installed (imgroot resolved: %s)", resolved_imgroot.c_str());
