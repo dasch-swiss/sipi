@@ -17,6 +17,7 @@
 use std::fmt::{self, Write as _};
 
 use opentelemetry::trace::{TraceContextExt, TracerProvider as _};
+use opentelemetry::KeyValue;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use tracing::field::{Field, Visit};
 use tracing::{Event, Subscriber};
@@ -90,6 +91,25 @@ pub fn init() -> Telemetry {
     Telemetry { provider, logger_provider }
 }
 
+/// The OTel resource shared by the tracer + logger providers. `service.name` is
+/// the constant `sipi`; `service.version` and `deployment.environment.name` fall
+/// back to the `SIPI_SENTRY_{RELEASE,ENVIRONMENT}` env the deploy already sets for
+/// Sentry, so the three required resource attributes are present even when
+/// `OTEL_RESOURCE_ATTRIBUTES` is not configured (Grafana Application Observability
+/// wants them). `OTEL_RESOURCE_ATTRIBUTES`, if set, still merges via the env
+/// detector `Resource::builder()` runs.
+fn otel_resource() -> opentelemetry_sdk::Resource {
+    let environment = std::env::var("SIPI_SENTRY_ENVIRONMENT")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "development".to_owned());
+    let mut attrs = vec![KeyValue::new("deployment.environment.name", environment)];
+    if let Some(version) = std::env::var("SIPI_SENTRY_RELEASE").ok().filter(|s| !s.is_empty()) {
+        attrs.push(KeyValue::new("service.version", version));
+    }
+    opentelemetry_sdk::Resource::builder().with_service_name("sipi").with_attributes(attrs).build()
+}
+
 /// Build the OTLP (gRPC-tonic) tracer provider, or `None` when no endpoint is
 /// configured. The exporter reads the standard `OTEL_EXPORTER_OTLP_*` env.
 fn build_tracer_provider() -> Option<SdkTracerProvider> {
@@ -101,7 +121,7 @@ fn build_tracer_provider() -> Option<SdkTracerProvider> {
             return None;
         }
     };
-    let resource = opentelemetry_sdk::Resource::builder().with_service_name("sipi").build();
+    let resource = otel_resource();
     Some(
         SdkTracerProvider::builder()
             .with_batch_exporter(exporter)
@@ -127,7 +147,7 @@ fn build_logger_provider() -> Option<opentelemetry_sdk::logs::SdkLoggerProvider>
             return None;
         }
     };
-    let resource = opentelemetry_sdk::Resource::builder().with_service_name("sipi").build();
+    let resource = otel_resource();
     Some(
         opentelemetry_sdk::logs::SdkLoggerProvider::builder()
             .with_batch_exporter(exporter)
