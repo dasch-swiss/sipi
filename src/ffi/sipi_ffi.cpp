@@ -19,6 +19,7 @@
 #include "ffi/preflight.h"
 #include "ffi/serve_image.h"
 #include "ffi/serve_response.h"
+#include "logging/logger.h"// set_log_trace_context (sipi_set_log_trace_context)
 #include "observability/metrics.h"
 #include "shttps/lua/request_context.h"// shttps::RequestContext (the opaque SipiRequestContext)
 #include "shttps/util/Parsing.h"// shttps::Parsing::getBestFileMimetype (sipi_mimetype)
@@ -298,6 +299,16 @@ int sipi_has_file_preflight(int *out)
     *out = vm->luaFunctionExists("file_pre_flight") ? 1 : 0;
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
   });
+}
+
+void sipi_set_log_trace_context(const char *trace_id, const char *span_id)
+{
+  // Void + cannot meaningfully fail; swallow any allocation failure so no C++
+  // exception crosses the boundary (the boundary contract is uniform).
+  try {
+    ::set_log_trace_context(trace_id, span_id);
+  } catch (...) {
+  }
 }
 
 }// extern "C"

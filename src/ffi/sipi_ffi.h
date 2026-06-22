@@ -355,6 +355,14 @@ SIPI_FFI_NODISCARD int sipi_mimetype(const char *resolved_path, SipiStrFn emit, 
  *  exit code (no `exit()`/`abort()` from inside the FFI). */
 SIPI_FFI_NODISCARD int sipi_cli_main(int argc, char **argv);
 
+/*! Stamp the C++ engine's server-mode JSON logs on the CALLING thread with the
+ *  active trace context (W3C lowercase-hex `trace_id` / `span_id`), so engine
+ *  logs correlate to the Rust shell's OpenTelemetry trace. The shell sets it
+ *  before a blocking serve call and clears it after (both NULL). NULL/empty
+ *  clears it; while clear, the keys are omitted. Engine work runs on the calling
+ *  thread, so the thread-local scope is correct. */
+void sipi_set_log_trace_context(const char *trace_id, const char *span_id);
+
 #ifdef __cplusplus
 }
 #endif
