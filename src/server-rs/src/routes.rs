@@ -5,8 +5,9 @@
 //! at the edge with [`crate::path`], runs the Lua preflight hook (auth + path
 //! resolution) through the seam, and dispatches to the engine
 //! (`sipi_serve_image` / `sipi_serve_file`) or assembles JSON with
-//! [`crate::info`]. The blocking FFI calls move onto a `spawn_blocking` pool in
-//! Slice 3.
+//! [`crate::info`]. The blocking FFI calls run on a `spawn_blocking` pool bounded
+//! by a semaphore sized to the configured worker count, so the async runtime
+//! never stalls on the C++ engine.
 
 use std::ffi::CString;
 use std::sync::Arc;
@@ -26,7 +27,8 @@ use crate::sink;
 /// the C++ server branches on, `SipiHttpServer.cpp:568-570,913-914`).
 const IMAGE_MIMES: [&str; 5] = ["image/tiff", "image/jpeg", "image/png", "image/jpx", "image/jp2"];
 
-/// Cached, immutable engine config read once at startup (after `sipi_init`).
+/// Cached engine config (read once at startup, after `sipi_init`) plus the shared
+/// backpressure pool that bounds concurrent engine work.
 #[derive(Clone)]
 pub struct AppState {
     ready: bool,
@@ -35,6 +37,10 @@ pub struct AppState {
     prefix_as_path: bool,
     has_preflight: bool,
     has_file_preflight: bool,
+    /// Permits = the configured worker count: a permit is held for the duration
+    /// of each blocking engine dispatch, reconstructing the shttps
+    /// thread-per-connection bound. Shared (`Arc`) across all requests.
+    pool: Arc<tokio::sync::Semaphore>,
 }
 
 impl AppState {
@@ -42,6 +48,11 @@ impl AppState {
     /// `sipi_init` has not run (no `--config`); the serve routes then 503.
     #[must_use]
     pub fn load() -> Self {
+        // Bound concurrent engine work to the configured worker count (the shttps
+        // thread-per-connection bound, reconstructed). 0/uninitialised → size from
+        // the host parallelism.
+        let permits = ffi::nthreads().ok().filter(|n| *n > 0).map_or_else(default_pool_size, |n| n as usize);
+        let pool = Arc::new(tokio::sync::Semaphore::new(permits));
         match (ffi::imgroot(false), ffi::imgroot(true), ffi::prefix_as_path()) {
             (Ok(imgroot), Ok(resolved_imgroot), Ok(prefix_as_path)) => Self {
                 ready: true,
@@ -52,6 +63,7 @@ impl AppState {
                 // than failing startup — the same effect as "no hook defined".
                 has_preflight: ffi::has_preflight().unwrap_or(false),
                 has_file_preflight: ffi::has_file_preflight().unwrap_or(false),
+                pool,
             },
             _ => Self {
                 ready: false,
@@ -60,9 +72,16 @@ impl AppState {
                 prefix_as_path: true,
                 has_preflight: false,
                 has_file_preflight: false,
+                pool,
             },
         }
     }
+}
+
+/// Pool size when the configured `nthreads` is 0 (auto) or unreadable: the host
+/// parallelism, falling back to 4 when even that is unavailable.
+fn default_pool_size() -> usize {
+    std::thread::available_parallelism().map_or(4, |n| n.get())
 }
 
 /// The resolved access decision: the on-disk file the hook chose, the permission,
@@ -100,24 +119,54 @@ pub async fn iiif(
         return sink::error_response(StatusCode::BAD_REQUEST);
     }
 
+    // Redirect is cheap and engine-free — answer it on the async path.
     if parsed.kind == RequestKind::Redirect {
         return redirect(&headers, &parsed);
     }
 
+    // Everything else drives the blocking C++ engine (the per-call preflight VM,
+    // realpath, decode/encode). Bound concurrency on the pool and run the work on
+    // a blocking thread so the async runtime stays responsive; a full pool sheds
+    // load with 503 + Retry-After (DEV-6100). /health, /favicon, and OPTIONS are
+    // separate routes that never reach here (DEV-6101).
+    let permit = match Arc::clone(&state.pool).try_acquire_owned() {
+        Ok(permit) => permit,
+        Err(_) => return busy_response(),
+    };
+    let task = tokio::task::spawn_blocking(move || {
+        let _permit = permit;// released when the engine work completes
+        dispatch_engine(&state, &parsed, &method, &uri, &headers)
+    });
+    match task.await {
+        Ok(response) => response,
+        // A blocking-task panic should be impossible (the seam guards C++
+        // exceptions; the sink callbacks catch_unwind), but map any escape to a
+        // bare 500 rather than dropping the connection.
+        Err(_) => sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
+/// The blocking engine dispatch, run on a `spawn_blocking` thread under a pool
+/// permit: access resolution (the preflight VM), path validation (realpath), and
+/// the serve call (decode/encode, or raw `/file`). Split out of [`iiif`] so the
+/// async runtime never blocks on the C++ engine. Redirects are handled by the
+/// caller before the pool; file downloads are handled here, ahead of the IIIF
+/// JSON/image kinds.
+fn dispatch_engine(state: &AppState, parsed: &ParsedRequest, method: &Method, uri: &Uri, headers: &HeaderMap) -> Response {
     if parsed.kind == RequestKind::FileDownload {
-        let access = match file_access(&state, &parsed, &method, &uri, &headers) {
+        let access = match file_access(state, parsed, method, uri, headers) {
             Ok(a) => a,
             Err(resp) => return resp,
         };
         return match resolve(&access.infile, &state.resolved_imgroot) {
-            Ok(resolved) => serve_file(&resolved, &parsed, &headers),
+            Ok(resolved) => serve_file(&resolved, parsed, headers),
             Err(resp) => resp,
         };
     }
 
     // IIIF image / info.json / knora.json: resolve infile + permission via the
     // preflight hook (or a default path when no hook is defined).
-    let access = match iiif_access(&state, &parsed, &method, &uri, &headers) {
+    let access = match iiif_access(state, parsed, method, uri, headers) {
         Ok(a) => a,
         Err(resp) => return resp,
     };
@@ -137,11 +186,19 @@ pub async fn iiif(
     };
 
     match parsed.kind {
-        RequestKind::Iiif => serve_image(&resolved, &parsed, &headers, method == Method::HEAD, &access),
-        RequestKind::InfoJson => serve_info_json(&resolved, &parsed, &headers, &access),
-        RequestKind::KnoraJson => serve_knora_json(&resolved, &parsed, &headers),
-        RequestKind::Redirect | RequestKind::FileDownload => unreachable!("handled above"),
+        RequestKind::Iiif => serve_image(&resolved, parsed, headers, *method == Method::HEAD, &access),
+        RequestKind::InfoJson => serve_info_json(&resolved, parsed, headers, &access),
+        RequestKind::KnoraJson => serve_knora_json(&resolved, parsed, headers),
+        RequestKind::Redirect | RequestKind::FileDownload => unreachable!("redirect handled by caller, file above"),
     }
+}
+
+/// Pool-full backpressure: a bare 503 with `Retry-After: 1` (DEV-6100) — no body,
+/// no internal detail. The client should retry shortly.
+fn busy_response() -> Response {
+    let mut response = sink::error_response(StatusCode::SERVICE_UNAVAILABLE);
+    response.headers_mut().insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
+    response
 }
 
 // ── Access resolution (preflight) ───────────────────────────────────────────
@@ -584,5 +641,18 @@ mod tests {
     fn content_disposition_strips_quotes_and_controls() {
         let v = content_disposition("a\"b\nc.tif").unwrap();
         assert_eq!(v.to_str().unwrap(), "inline; filename=\"abc.tif\"");
+    }
+
+    #[test]
+    fn busy_response_is_503_with_retry_after() {
+        // The pool-full backpressure contract (DEV-6100): bare 503 + Retry-After: 1.
+        let resp = busy_response();
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(resp.headers().get(header::RETRY_AFTER).unwrap(), "1");
+    }
+
+    #[test]
+    fn default_pool_size_is_positive() {
+        assert!(default_pool_size() >= 1);
     }
 }
