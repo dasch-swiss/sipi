@@ -326,6 +326,11 @@ SIPI_FFI_NODISCARD int sipi_imgroot(int resolved, const char **out);
  *  Returns 0, or 500 if `sipi_init` has not run. */
 SIPI_FFI_NODISCARD int sipi_prefix_as_path(int *out);
 
+/*! The configured worker-thread count (the Lua config `nthreads`). `*out` = 0
+ *  means the operator left it auto — the Rust shell then sizes its blocking pool
+ *  from the host parallelism. Returns 0, or 500 if `sipi_init` has not run. */
+SIPI_FFI_NODISCARD int sipi_nthreads(int *out);
+
 /*! Header-only image-shape probe (`SipiImage::read_shape` — no full decode).
  *  `resolved_path` is an already-validated absolute path (the Rust edge owns
  *  existence + containment). Fills `*out` on success. Returns 0, or 500 if the

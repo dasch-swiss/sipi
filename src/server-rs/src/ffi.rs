@@ -230,6 +230,10 @@ extern "C" {
     /// `sipi_init` has not run.
     pub fn sipi_prefix_as_path(out: *mut c_int) -> c_int;
 
+    /// The configured worker-thread count (`*out`); 0 = auto. Returns 0, or 500
+    /// if `sipi_init` has not run.
+    pub fn sipi_nthreads(out: *mut c_int) -> c_int;
+
     /// Header-only image-shape probe (no full decode). `resolved_path` is an
     /// already-validated absolute path. Returns 0 (and fills `*out`), or 500.
     pub fn sipi_image_dims(resolved_path: *const c_char, out: *mut SipiImageDims) -> c_int;
@@ -355,6 +359,19 @@ pub fn prefix_as_path() -> Result<bool, i32> {
         return Err(code);
     }
     Ok(v != 0)
+}
+
+/// The configured worker-thread count (the Lua config `nthreads`). `0` means the
+/// operator left it auto — the caller sizes its blocking pool from the host
+/// parallelism. `Err` carries the FFI status (500 if `sipi_init` has not run).
+pub fn nthreads() -> Result<u32, i32> {
+    let mut v: c_int = 0;
+    // SAFETY: `out` is a valid pointer; the seam guards exceptions.
+    let code = unsafe { sipi_nthreads(&mut v) };
+    if code != 0 {
+        return Err(code);
+    }
+    Ok(v.max(0) as u32)
 }
 
 /// Header-only image shape for a validated path. `Err` carries the FFI status
