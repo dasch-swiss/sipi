@@ -470,9 +470,13 @@ lgtm-up:
 run-otel: bazel-build-server
     #!/usr/bin/env bash
     set -euo pipefail
+    # service.version + deployment.environment.name land on the OTel resource via
+    # OTEL_RESOURCE_ATTRIBUTES (Resource::builder() merges the env detector); a
+    # production deploy sets the same vars (the ops-deploy iiif service block).
+    version="$(cat "{{justfile_directory()}}/version.txt")"
     OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 \
     OTEL_SERVICE_NAME=sipi \
-    OTEL_RESOURCE_ATTRIBUTES="service.namespace=sipi,deployment.environment=dev" \
+    OTEL_RESOURCE_ATTRIBUTES="service.namespace=dsp,service.version=${version},deployment.environment.name=dev" \
     SIPI_OTLP_LOGS=1 \
     RUST_LOG="${RUST_LOG:-info}" \
     "{{justfile_directory()}}/bazel-bin/src/server-rs/sipi_server" server \

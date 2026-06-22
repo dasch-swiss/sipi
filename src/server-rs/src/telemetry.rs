@@ -229,7 +229,15 @@ impl Visit for JsonVisitor {
     }
 
     fn record_f64(&mut self, field: &Field, value: f64) {
-        self.push_field(field.name(), &value.to_string());
+        if value.is_finite() {
+            self.push_field(field.name(), &value.to_string());
+        } else {
+            // JSON has no NaN/Infinity literal — quote a non-finite float so it
+            // can never emit a bare token and corrupt the line.
+            let mut quoted = String::new();
+            let _ = write_json_str(&mut FmtString(&mut quoted), &value.to_string());
+            self.push_field(field.name(), &quoted);
+        }
     }
 
     fn record_bool(&mut self, field: &Field, value: bool) {
