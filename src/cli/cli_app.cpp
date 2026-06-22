@@ -569,6 +569,7 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig * /
       .jpeg_quality = conf.getJpegQuality(),
       .scaling_quality = to_scaling_quality(conf.getScalingQuality()),
       .max_pixel_limit = conf.getMaxPixelLimit(),
+      .nthreads = static_cast<int>(conf.getNThreads()),
     });
 
     // Install the engine-held Lua config (the per-call VM factory behind

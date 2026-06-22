@@ -83,6 +83,22 @@ TEST(SeamProbe, PrefixAsPathReflectsConfig)
   EXPECT_EQ(v, 1);
 }
 
+TEST(SeamProbe, NthreadsReflectsConfig)
+{
+  Sipi::ffi::EngineContext eng;// services null (disabled) — the getter doesn't read them
+  eng.nthreads = 7;
+  Sipi::ffi::set_engine_context(eng);
+  int v = -1;
+  ASSERT_EQ(sipi_nthreads(&v), 0);
+  EXPECT_EQ(v, 7);
+
+  // 0 is the auto sentinel the Rust shell resolves against host parallelism.
+  eng.nthreads = 0;
+  Sipi::ffi::set_engine_context(eng);
+  ASSERT_EQ(sipi_nthreads(&v), 0);
+  EXPECT_EQ(v, 0);
+}
+
 TEST(SeamProbe, ImageDimsReadsNativeShape)
 {
   const std::string path = fixture("/unit/lena512.tif");

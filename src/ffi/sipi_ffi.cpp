@@ -195,6 +195,18 @@ int sipi_prefix_as_path(int *out)
   });
 }
 
+int sipi_nthreads(int *out)
+{
+  // Guard-only edge probe — a pure read of the installed engine context, like
+  // sipi_prefix_as_path. 0 means the config left nthreads auto; the Rust shell
+  // resolves that against the host parallelism, so the C++ server's cores-1
+  // auto-detect formula stays out of the seam.
+  return Sipi::ffi::sipi_guard([&] {
+    *out = Sipi::ffi::engine_context().nthreads;
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
 int sipi_image_dims(const char *resolved_path, SipiImageDims *out)
 {
   // Header-only shape read. The Rust edge owns existence + containment (R1/R2)
