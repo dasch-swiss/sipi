@@ -1,4 +1,4 @@
-//! The Rust side of the `SipiResponse` sink (strangler-fig Phase C).
+//! The Rust side of the `SipiResponse` sink (strangler-fig rewrite).
 //!
 //! The C++ engine emits the whole response through the [`crate::ffi::SipiResponse`]
 //! callbacks **during** a synchronous `sipi_serve_*` call: `set_status` once
@@ -151,13 +151,17 @@ fn stream_file_region(body_tx: &mpsc::Sender<Bytes>, path: &str, offset: u64, le
         return 1;
     }
     let mut remaining = length;
-    let mut buf = vec![0u8; FILE_CHUNK];
     while remaining > 0 {
         let want = remaining.min(FILE_CHUNK as u64) as usize;
-        match f.read(&mut buf[..want]) {
+        // A fresh buffer per chunk so `Bytes::from` takes ownership without a
+        // second copy. (A reused scratch buffer would force `copy_from_slice`,
+        // copying every byte twice on this bandwidth-bound path.)
+        let mut chunk = vec![0u8; want];
+        match f.read(&mut chunk) {
             Ok(0) => return 1, // file shorter than the declared length
             Ok(n) => {
-                if body_tx.blocking_send(Bytes::copy_from_slice(&buf[..n])).is_err() {
+                chunk.truncate(n);
+                if body_tx.blocking_send(Bytes::from(chunk)).is_err() {
                     return 1; // client gone
                 }
                 remaining -= n as u64;
@@ -247,7 +251,7 @@ fn map_status_u16(status: u16) -> StatusCode {
     StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
 }
 
-/// A bare status response with no body and no internal detail (DEV-6062).
+/// A bare status response with no body and no internal detail.
 pub fn error_response(status: StatusCode) -> Response {
     Response::builder()
         .status(status)
