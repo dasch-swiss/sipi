@@ -194,14 +194,30 @@ fn run_cli(argv: &[String]) -> ExitCode {
 /// layers wrap this.
 pub fn app(state: Arc<routes::AppState>) -> Router {
     use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
-    Router::new()
+    let mut router = Router::new()
         // The bare root has no `*rest` capture, so register it explicitly; the
         // handler classifies it (→ 400, matching the C++ parser). OPTIONS is the
         // CORS preflight (engine-independent). These routes are traced: a span
         // named by the route template (low cardinality), continuing
         // the W3C traceparent; OtelInResponseLayer echoes it into the response.
         .route("/", get(routes::iiif).head(routes::iiif).options(routes::cors_preflight))
-        .route("/{*rest}", get(routes::iiif).head(routes::iiif).options(routes::cors_preflight))
+        .route("/{*rest}", get(routes::iiif).head(routes::iiif).options(routes::cors_preflight));
+
+    // Configured Lua routes (the script_handler analogue), registered before the
+    // OTel layer so they are traced too. axum/matchit prioritises a static route
+    // over the IIIF `/{*rest}` catch-all; a `<route>/{*rest}` variant reproduces
+    // the C++ longest-prefix match (a route at /api/upload also serves subpaths).
+    for entry in &state.routes {
+        if let Some(method_router) = routes::lua_route_method_router(Arc::clone(&state), entry) {
+            router = router.route(&entry.route, method_router.clone());
+            if entry.route.as_str() != "/" {
+                let prefix = format!("{}/{{*rest}}", entry.route.trim_end_matches('/'));
+                router = router.route(&prefix, method_router);
+            }
+        }
+    }
+
+    router
         .layer(OtelInResponseLayer)
         .layer(OtelAxumLayer::default())
         // Registered after the layers so liveness / asset probes never enter the

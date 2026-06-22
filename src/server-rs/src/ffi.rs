@@ -155,6 +155,10 @@ pub struct SipiImageDims {
 /// C string, so `sipi_mimetype` hands its result back through this callback.
 pub type SipiStrFn = extern "C" fn(ctx: *mut c_void, value: *const c_char);
 
+/// Emits one configured Lua route — method/route/script — (mirrors `SipiRouteFn`).
+pub type SipiRouteFn =
+    extern "C" fn(ctx: *mut c_void, method: *const c_char, route: *const c_char, script: *const c_char);
+
 // ── Preflight (auth) ────────────────────────────────────────────────────────
 
 /// Permission type a Lua preflight hook returns (mirrors `SipiPermType`). The
@@ -233,6 +237,53 @@ extern "C" {
     /// The configured worker-thread count (`*out`); 0 = auto. Returns 0, or 500
     /// if `sipi_init` has not run.
     pub fn sipi_nthreads(out: *mut c_int) -> c_int;
+
+    /// The configured max POST body size in bytes (`*out`); 0 = unlimited.
+    /// Returns 0, or 500 if `sipi_init` has not run.
+    pub fn sipi_max_post_size(out: *mut usize) -> c_int;
+
+    /// Enumerate the configured Lua routes (method/route/script) installed by
+    /// `sipi_init`, one `emit` call per route. Returns 0, or 500 if `sipi_init`
+    /// has not run.
+    pub fn sipi_routes(emit: SipiRouteFn, ctx: *mut c_void) -> c_int;
+
+    /// Run a configured Lua route's script against `ctx`, emitting its response
+    /// through `resp` (the streaming sink). Returns 0 once emitted, or an HTTP
+    /// status (404/500) on a pre-body failure.
+    pub fn sipi_run_lua_route(
+        script: *const c_char,
+        ctx: *mut SipiRequestContext,
+        resp: *const SipiResponse,
+    ) -> c_int;
+
+    /// Attach the POST body + content type to a context (deep-copied). `data` may
+    /// be null with `len` 0.
+    pub fn sipi_request_context_set_body(
+        ctx: *mut SipiRequestContext,
+        content_type: *const c_char,
+        data: *const u8,
+        len: usize,
+    );
+
+    /// Append one parsed multipart upload (`server.uploads`). `tmpname` is the
+    /// on-disk path of the spooled part; it must exist for the route call.
+    pub fn sipi_request_context_add_upload(
+        ctx: *mut SipiRequestContext,
+        fieldname: *const c_char,
+        origname: *const c_char,
+        tmpname: *const c_char,
+        mimetype: *const c_char,
+        filesize: u64,
+    );
+
+    /// Append a GET (`kind` = 0) or POST (`kind` = 1) form parameter; both also
+    /// feed `server.request`.
+    pub fn sipi_request_context_add_param(
+        ctx: *mut SipiRequestContext,
+        kind: c_int,
+        name: *const c_char,
+        value: *const c_char,
+    );
 
     /// Header-only image-shape probe (no full decode). `resolved_path` is an
     /// already-validated absolute path. Returns 0 (and fills `*out`), or 500.
@@ -414,6 +465,59 @@ pub fn nthreads() -> Result<u32, i32> {
     Ok(v.max(0) as u32)
 }
 
+/// The configured max POST body size in bytes (`max_post_size`). `0` means
+/// unlimited — the shell then imposes no Lua-route body cap. `Err` carries the
+/// FFI status (500 if `sipi_init` has not run).
+pub fn max_post_size() -> Result<usize, i32> {
+    let mut v: usize = 0;
+    // SAFETY: `out` is a valid pointer; the seam guards exceptions.
+    let code = unsafe { sipi_max_post_size(&mut v) };
+    if code != 0 {
+        return Err(code);
+    }
+    Ok(v)
+}
+
+/// One configured Lua route: HTTP method, the route prefix, and the resolved
+/// script path (already composed against scriptdir by the engine).
+#[derive(Clone)]
+pub struct RouteEntry {
+    pub method: String,
+    pub route: String,
+    pub script: String,
+}
+
+/// Collects emitted routes into the `Vec<RouteEntry>` at `ctx`.
+extern "C" fn collect_route(ctx: *mut c_void, method: *const c_char, route: *const c_char, script: *const c_char) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: `ctx` is the `&mut Vec<RouteEntry>` passed to sipi_routes.
+        let out = unsafe { &mut *(ctx as *mut Vec<RouteEntry>) };
+        if method.is_null() || route.is_null() || script.is_null() {
+            return;
+        }
+        // SAFETY: the engine passes NUL-terminated C strings valid for the call.
+        out.push(RouteEntry {
+            method: unsafe { CStr::from_ptr(method) }.to_string_lossy().into_owned(),
+            route: unsafe { CStr::from_ptr(route) }.to_string_lossy().into_owned(),
+            script: unsafe { CStr::from_ptr(script) }.to_string_lossy().into_owned(),
+        });
+    }));
+}
+
+/// The configured Lua routes installed by `sipi_init` (read once at startup; the
+/// shell registers an axum route per entry). `Err` carries the FFI status (500 if
+/// `sipi_init` has not run).
+pub fn routes() -> Result<Vec<RouteEntry>, i32> {
+    let mut out: Vec<RouteEntry> = Vec::new();
+    // SAFETY: `collect_route` writes into `out` via the ctx pointer; the seam
+    // guards exceptions.
+    let code = unsafe { sipi_routes(collect_route, &mut out as *mut Vec<RouteEntry> as *mut c_void) };
+    if code != 0 {
+        return Err(code);
+    }
+    Ok(out)
+}
+
 /// Header-only image shape for a validated path. `Err` carries the FFI status
 /// (500 if the shape cannot be read, or -1 on an interior NUL in the path).
 pub fn image_dims(resolved_path: &str) -> Result<SipiImageDims, i32> {
@@ -464,6 +568,46 @@ pub fn mimetype(resolved_path: &str) -> Result<String, i32> {
 /// drop, so a preflight call never leaks (the seam contract: Rust owns it).
 pub struct RequestContext {
     ptr: *mut SipiRequestContext,
+}
+
+impl RequestContext {
+    /// The raw context pointer, for passing to [`sipi_run_lua_route`]. Valid for
+    /// the lifetime of this `RequestContext`.
+    #[must_use]
+    pub fn as_ptr(&self) -> *mut SipiRequestContext {
+        self.ptr
+    }
+
+    /// Attach the POST body + content type (`server.content` / `content_type`).
+    /// Binary-safe (the body is passed as raw bytes, not a C string).
+    pub fn set_body(&self, content_type: &str, data: &[u8]) {
+        let ct = CString::new(content_type).unwrap_or_default();
+        // SAFETY: `ct` and `data` outlive the synchronous call; the builder
+        // deep-copies; the seam guards exceptions.
+        unsafe { sipi_request_context_set_body(self.ptr, ct.as_ptr(), data.as_ptr(), data.len()) };
+    }
+
+    /// Append one parsed multipart upload (`server.uploads`). A field with an
+    /// interior NUL in any string is skipped (such fields cannot reach Lua).
+    pub fn add_upload(&self, fieldname: &str, origname: &str, tmpname: &str, mimetype: &str, filesize: u64) {
+        let (Ok(f), Ok(o), Ok(t), Ok(m)) =
+            (CString::new(fieldname), CString::new(origname), CString::new(tmpname), CString::new(mimetype))
+        else {
+            return;
+        };
+        // SAFETY: the C strings outlive the synchronous call; deep-copied; guarded.
+        unsafe { sipi_request_context_add_upload(self.ptr, f.as_ptr(), o.as_ptr(), t.as_ptr(), m.as_ptr(), filesize) };
+    }
+
+    /// Append a GET (`kind` = 0) or POST (`kind` = 1) form parameter (`server.get`
+    /// / `server.post`; both visible through `server.request`).
+    pub fn add_param(&self, kind: i32, name: &str, value: &str) {
+        let (Ok(n), Ok(v)) = (CString::new(name), CString::new(value)) else {
+            return;
+        };
+        // SAFETY: the C strings outlive the synchronous call; deep-copied; guarded.
+        unsafe { sipi_request_context_add_param(self.ptr, kind, n.as_ptr(), v.as_ptr()) };
+    }
 }
 
 impl Drop for RequestContext {
