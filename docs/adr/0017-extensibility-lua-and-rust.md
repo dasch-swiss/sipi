@@ -37,6 +37,15 @@ trait-ified — it stays config.
   cutover implements it (Rust owns route dispatch once the transport's
   `script_handler` is deleted); it is not a throwaway bridge. The Phase T Rust
   route trait runs in parallel as an alternative.
+- **Server-side upload is a retained SIPI capability, served as a Lua route.**
+  Multipart upload (`POST`, today the `/api/upload` Lua route) stays a SIPI
+  capability through `sipi_run_lua_route` — it is **not** hardcoded into the Rust
+  shell, and removing it is not a SIPI decision. A deployment that routes ingest
+  elsewhere (e.g. DSP, which uses dsp-ingest and disallows upload over SIPI)
+  simply does not configure the route; that is the operator's config choice, not
+  a capability SIPI drops. This resolves the strangler plan's open question on
+  multipart upload (retain vs cede): SIPI retains it as a Lua route; whether a
+  given deployment enables it is configuration.
 - **The seam carries the full request as an opaque `RequestContext`** (not a
   narrowed struct), so any `server.*` field a Lua script might read stays
   resolvable — load-bearing for the no-forced-migration guarantee for existing
