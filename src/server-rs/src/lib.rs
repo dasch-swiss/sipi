@@ -17,6 +17,7 @@ pub mod info;
 pub mod path;
 pub mod routes;
 pub mod sink;
+pub mod telemetry;
 
 use axum::{http::StatusCode, routing::get, Router};
 use clap::Parser;
@@ -62,8 +63,6 @@ struct ServerArgs {
 /// other argv (offline subcommands, `--version`, `--help`) is handed to the C++
 /// CLI via [`ffi::sipi_cli_main`]. Returns the process exit code.
 pub fn run() -> ExitCode {
-    init_tracing();
-
     let argv: Vec<String> = std::env::args().collect();
     // The verb is the first non-flag token after argv[0].
     let verb_idx = argv
@@ -83,6 +82,8 @@ pub fn run() -> ExitCode {
 }
 
 /// Parse the `server` flags and run the axum server. Blocks until shutdown.
+/// Telemetry init lives in [`server_main`] (inside the runtime) because the OTLP
+/// batch exporter needs a tokio runtime.
 fn run_server(server_argv: &[String]) -> ExitCode {
     let args = match ServerArgs::try_parse_from(server_argv) {
         Ok(args) => args,
@@ -94,9 +95,29 @@ fn run_server(server_argv: &[String]) -> ExitCode {
         }
     };
 
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(e) => {
+            eprintln!("failed to build tokio runtime: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    rt.block_on(server_main(args))
+}
+
+/// The async server lifecycle inside the tokio runtime: install telemetry, prove
+/// the FFI seam, install the engine + Lua config, serve, then flush telemetry on
+/// the way out.
+async fn server_main(args: ServerArgs) -> ExitCode {
+    // Telemetry first, so the startup logs + the FFI self-check are captured.
+    // Fail-open: no OTEL_EXPORTER_OTLP_ENDPOINT → no exporter, so local dev needs
+    // no collector. Inside the runtime because the OTLP batch exporter needs it.
+    let otel = telemetry::init();
+
     // Prove the C++ engine links into this binary and the seam round-trips
-    // before we accept traffic (Open Question #1: cc_library → rust_binary under
-    // hermetic LLVM/libc++). 404 is the expected status for a missing file.
+    // before we accept traffic (cc_library → rust_binary under hermetic
+    // LLVM/libc++). 404 is the expected status for a missing file.
     let status = ffi::link_self_check();
     tracing::info!(seam_status = status, "FFI link self-check: sipi_serve_file(bogus) → status");
     debug_assert_eq!(status, 404, "FFI seam self-check should report 404 for a missing file");
@@ -109,22 +130,21 @@ fn run_server(server_argv: &[String]) -> ExitCode {
             Ok(()) => tracing::info!(config = %cfg, "engine + Lua config installed"),
             Err(code) => {
                 tracing::error!(config = %cfg, code, "sipi_init failed");
+                flush_telemetry(otel).await;
                 return ExitCode::FAILURE;
             }
         },
         None => tracing::warn!("no --config: engine uninitialised; only /health and /favicon.ico will serve"),
     }
 
-    let rt = match tokio::runtime::Runtime::new() {
-        Ok(rt) => rt,
-        Err(e) => {
-            tracing::error!(error = %e, "failed to build tokio runtime");
-            return ExitCode::FAILURE;
-        }
-    };
-
     let drain_timeout = Duration::from_secs(args.drain_timeout.unwrap_or(30));
-    match rt.block_on(serve(args.serverport, drain_timeout)) {
+    let result = serve(args.serverport, drain_timeout).await;
+
+    // Flush pending spans before the guard drops; the OTLP export is blocking
+    // I/O, so do it off the async runtime.
+    flush_telemetry(otel).await;
+
+    match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             tracing::error!(error = %e, "server terminated with error");
@@ -133,8 +153,19 @@ fn run_server(server_argv: &[String]) -> ExitCode {
     }
 }
 
+/// Flush + shut down the OTel exporter off the async runtime — the flush
+/// performs blocking I/O (the documented current-thread-shutdown deadlock is
+/// avoided by running it on a blocking thread).
+async fn flush_telemetry(otel: telemetry::Telemetry) {
+    let _ = tokio::task::spawn_blocking(move || otel.shutdown()).await;
+}
+
 /// Hand the full argv to the C++ CLI (`sipi_cli_main`) and return its exit code.
 fn run_cli(argv: &[String]) -> ExitCode {
+    // The offline CLI is C++-driven (it owns its logger); a minimal fmt
+    // subscriber covers the rare Rust-side message (e.g. an argv NUL byte).
+    init_tracing();
+
     // Marshal argv into a C `char**`. `sipi_cli_main` is synchronous and does
     // not retain the pointers, so the CStrings only need to outlive the call.
     let c_args: Vec<CString> = match argv
@@ -164,14 +195,21 @@ fn run_cli(argv: &[String]) -> ExitCode {
 /// validates, and drives the engine seam (Slice 1). CORS, concurrency, and OTel
 /// layers wrap this in later slices.
 pub fn app(state: Arc<routes::AppState>) -> Router {
+    use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
     Router::new()
-        .route("/health", get(health))
-        .route("/favicon.ico", get(favicon))
         // The bare root has no `*rest` capture, so register it explicitly; the
         // handler classifies it (→ 400, matching the C++ parser). OPTIONS is the
-        // CORS preflight (engine-independent).
+        // CORS preflight (engine-independent). These routes are traced: a span
+        // named by the route template (low cardinality — DEV-6292), continuing
+        // the W3C traceparent; OtelInResponseLayer echoes it into the response.
         .route("/", get(routes::iiif).head(routes::iiif).options(routes::cors_preflight))
         .route("/{*rest}", get(routes::iiif).head(routes::iiif).options(routes::cors_preflight))
+        .layer(OtelInResponseLayer)
+        .layer(OtelAxumLayer::default())
+        // Registered after the layers so liveness / asset probes never enter the
+        // trace pipeline (DEV-6101) — they also bypass the engine pool.
+        .route("/health", get(health))
+        .route("/favicon.ico", get(favicon))
         .with_state(state)
 }
 
