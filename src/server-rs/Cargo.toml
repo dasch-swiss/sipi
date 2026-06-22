@@ -1,4 +1,4 @@
-# Production Rust HTTP shell for SIPI (strangler-fig Phase C; ADR-0013).
+# Production Rust HTTP shell for SIPI (strangler-fig rewrite; ADR-0013).
 #
 # This is the `sipi` library crate (lib.rs — the axum+tokio server that
 # statically links the C++ image engine via //src/ffi:sipi_ffi) plus a thin
@@ -24,7 +24,7 @@ path = "src/main.rs"
 
 [dependencies]
 axum = "0.8"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"] }
 tokio-stream = "0.1"
 tower = { version = "0.5", features = ["util"] }
 tracing = "0.1"
