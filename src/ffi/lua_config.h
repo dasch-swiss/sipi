@@ -52,6 +52,7 @@ struct LuaConfig
   std::string script_dir;//!< Lua package.path base (the `/?.lua` suffix is added by the factory)
   std::string jwt_secret;//!< server.generate_jwt / server.decode_jwt secret
   std::vector<LuaGlobalsInstaller> globals;//!< config.* / db / sipi.* installers, applied in order
+  std::vector<shttps::LuaRoute> routes;//!< configured Lua routes (method/route/script), enumerated by sipi_routes
 };
 
 /*! Install the engine Lua config (copied into a file-static). Called once at

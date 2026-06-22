@@ -230,6 +230,11 @@ typedef struct
  *  owned C string (no malloc/free contract across the boundary). */
 typedef void (*SipiStrFn)(void *ctx, const char *value);
 
+/*! Emits one configured Lua route — its HTTP method ("GET"/"POST"/…), the route
+ *  prefix, and the script path — through a caller callback, so the seam returns
+ *  no owned array. The Rust shell registers an axum route per emitted entry. */
+typedef void (*SipiRouteFn)(void *ctx, const char *method, const char *route, const char *script);
+
 /* ── Entry points ───────────────────────────────────────────────────────────
  * All return 0 on success / an error code on failure; none let a C++ exception
  * cross the boundary. */
@@ -291,6 +296,42 @@ SIPI_FFI_NODISCARD SipiRequestContext *sipi_make_request_context(const char *met
 /*! Free a context returned by `sipi_make_request_context`. NULL is a no-op. */
 void sipi_free_request_context(SipiRequestContext *ctx);
 
+/* ── Request-context body / uploads / params (configured Lua routes) ──────────
+ * sipi_make_request_context builds the read-only view preflight needs (method,
+ * headers, cookies, …). A configured Lua route additionally reads the POST body,
+ * the parsed multipart uploads, and the GET/POST form params via `server.*`, so
+ * the Rust shell attaches them to the context with these mutators after building
+ * it, before `sipi_run_lua_route`. Each deep-copies its inputs; NULL pointers
+ * collapse to empty. No-ops that cannot fail (a throw is swallowed). */
+
+/*! Attach the request body (`server.content`) and its content type
+ *  (`server.content_type`). `data` may be NULL with `len` 0. */
+void sipi_request_context_set_body(SipiRequestContext *ctx,
+  const char *content_type,
+  const uint8_t *data,
+  size_t len);
+
+/*! Append one parsed multipart upload (`server.uploads`, `server.copyTmpfile`,
+ *  `SipiImage.new(index)`). `tmpname` is the on-disk path of the spooled part —
+ *  the engine opens it directly, so it must exist for the route call. */
+void sipi_request_context_add_upload(SipiRequestContext *ctx,
+  const char *fieldname,
+  const char *origname,
+  const char *tmpname,
+  const char *mimetype,
+  uint64_t filesize);
+
+/*! Append a GET (`kind` = 0 → `server.get`) or POST (`kind` = 1 → `server.post`)
+ *  form parameter. Each is also visible through `server.request` (the merged
+ *  view), matching the transport's get/post/request split. */
+void sipi_request_context_add_param(SipiRequestContext *ctx, int kind, const char *name, const char *value);
+
+/*! Enumerate the configured Lua routes (method/route/script) installed by
+ *  `sipi_init`, one `emit` call per route in config order. The Rust shell calls
+ *  this once at startup and registers an axum route per entry, preserving the
+ *  C++ longest-prefix precedence. Returns 0, or 500 if `sipi_init` has not run. */
+SIPI_FFI_NODISCARD int sipi_routes(SipiRouteFn emit, void *ctx);
+
 /*! Whether the engine Lua config defines a `pre_flight` / `file_pre_flight` hook
  *  (`luaFunctionExists`). The Rust shell reads these once at startup to mirror the
  *  C++ `luaFunctionExists` gate: with no hook it falls back to a default path +
@@ -337,6 +378,11 @@ SIPI_FFI_NODISCARD int sipi_prefix_as_path(int *out);
  *  means the operator left it auto — the Rust shell then sizes its blocking pool
  *  from the host parallelism. Returns 0, or 500 if `sipi_init` has not run. */
 SIPI_FFI_NODISCARD int sipi_nthreads(int *out);
+
+/*! The configured max POST body size in bytes (the Lua config `max_post_size`).
+ *  The Rust shell caps Lua-route request bodies at this size (oversized → 413).
+ *  `*out` = 0 means unlimited. Returns 0, or 500 if `sipi_init` has not run. */
+SIPI_FFI_NODISCARD int sipi_max_post_size(size_t *out);
 
 /*! Header-only image-shape probe (`SipiImage::read_shape` — no full decode).
  *  `resolved_path` is an already-validated absolute path (the Rust edge owns

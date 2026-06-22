@@ -585,6 +585,7 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig * /
       .scaling_quality = to_scaling_quality(conf.getScalingQuality()),
       .max_pixel_limit = conf.getMaxPixelLimit(),
       .nthreads = static_cast<int>(conf.getNThreads()),
+      .max_post_size = conf.getMaxPostSize(),
     });
 
     // Install the engine-held Lua config (the per-call VM factory behind
@@ -602,6 +603,7 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig * /
         { shttps::sqliteGlobals, nullptr },
         { Sipi::sipiGlobals, nullptr },
       },
+      .routes = conf.getRoutes(),
     });
 
     g_server_runtime = std::move(runtime);
