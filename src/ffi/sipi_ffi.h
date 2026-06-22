@@ -298,8 +298,15 @@ void sipi_free_request_context(SipiRequestContext *ctx);
 SIPI_FFI_NODISCARD int sipi_has_preflight(int *out);
 SIPI_FFI_NODISCARD int sipi_has_file_preflight(int *out);
 
-/*! A configured Lua route. */
-SIPI_FFI_NODISCARD int sipi_run_lua_route(const char *script, const SipiServeRequest *req, const SipiResponse *resp);
+/*! Run a configured Lua route (the C++ `script_handler` analogue): execute the
+ *  route's script in the engine-config VM and emit its response (`server.print` /
+ *  `sendStatus` / `sendHeader` / `sendCookie`) through `resp`. Takes the FULL
+ *  request as the opaque `SipiRequestContext` — a route reads arbitrary request
+ *  data via `server.*`, so it carries the whole request, not the narrow IIIF
+ *  `SipiServeRequest`. Defined at the cutover, when the Rust shell owns route
+ *  dispatch and the transport's `script_handler` is deleted; the upload routes
+ *  additionally depend on multipart `uploads` reaching the context. */
+SIPI_FFI_NODISCARD int sipi_run_lua_route(const char *script, SipiRequestContext *ctx, const SipiResponse *resp);
 
 /*! Engine counters → Rust OTel meter (NOT Prometheus). */
 SIPI_FFI_NODISCARD int sipi_metrics_snapshot(SipiMetricsSnapshot *out);
