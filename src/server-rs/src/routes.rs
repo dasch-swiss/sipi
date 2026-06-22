@@ -10,12 +10,16 @@
 //! never stalls on the C++ engine.
 
 use std::ffi::CString;
+use std::io::Write;
 use std::sync::Arc;
 
-use axum::body::Body;
-use axum::extract::{OriginalUri, State};
+use axum::body::{to_bytes, Body};
+use axum::extract::{DefaultBodyLimit, FromRequest, Multipart, OriginalUri, Request, State};
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode, Uri};
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
+use axum::routing::{on, MethodFilter, MethodRouter};
+use percent_encoding::percent_decode_str;
+use tempfile::NamedTempFile;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::ffi::{self, PreflightOutcome, SipiPermType, SipiResponse, SipiServeRequest};
@@ -42,6 +46,12 @@ pub struct AppState {
     /// of each blocking engine dispatch, reconstructing the shttps
     /// thread-per-connection bound. Shared (`Arc`) across all requests.
     pool: Arc<tokio::sync::Semaphore>,
+    /// Configured Lua routes (method/route/script), registered as axum routes by
+    /// [`crate::app`]. Empty when the engine is uninstalled.
+    pub routes: Vec<ffi::RouteEntry>,
+    /// Max POST body size in bytes; 0 = unlimited. The Lua-route handler rejects
+    /// oversized bodies (413), reconstructing the transport's `Connection` cap.
+    max_post_size: usize,
 }
 
 impl AppState {
@@ -65,6 +75,8 @@ impl AppState {
                 has_preflight: ffi::has_preflight().unwrap_or(false),
                 has_file_preflight: ffi::has_file_preflight().unwrap_or(false),
                 pool,
+                routes: ffi::routes().unwrap_or_default(),
+                max_post_size: ffi::max_post_size().unwrap_or(0),
             },
             _ => Self {
                 ready: false,
@@ -74,6 +86,8 @@ impl AppState {
                 has_preflight: false,
                 has_file_preflight: false,
                 pool,
+                routes: Vec::new(),
+                max_post_size: 0,
             },
         }
     }
@@ -426,6 +440,250 @@ pub async fn cors_preflight(headers: HeaderMap) -> Response {
         builder = builder.header(header::ACCESS_CONTROL_ALLOW_HEADERS, req_headers);
     }
     builder.body(Body::empty()).unwrap_or_else(|_| sink::error_response(StatusCode::INTERNAL_SERVER_ERROR))
+}
+
+// ── Configured Lua routes ────────────────────────────────────────────────────
+
+/// One parsed multipart file upload, spooled to a temp file (`server.uploads`).
+/// The `NamedTempFile` handle is held alongside until the route call returns, so
+/// the on-disk file the engine opens by `tmpname` survives the call and is then
+/// auto-deleted.
+struct UploadPart {
+    fieldname: String,
+    origname: String,
+    tmpname: String,
+    mime: String,
+    size: u64,
+}
+
+/// Map an HTTP method name to the axum `MethodFilter` (the config's verbs).
+fn method_filter(method: &str) -> Option<MethodFilter> {
+    match method {
+        "GET" => Some(MethodFilter::GET),
+        "HEAD" => Some(MethodFilter::HEAD),
+        "POST" => Some(MethodFilter::POST),
+        "PUT" => Some(MethodFilter::PUT),
+        "DELETE" => Some(MethodFilter::DELETE),
+        "OPTIONS" => Some(MethodFilter::OPTIONS),
+        _ => None,
+    }
+}
+
+/// Build the axum `MethodRouter` for one configured Lua route: the route's method
+/// dispatches to [`serve_lua_route`] with the route's script captured, capped at
+/// the configured POST size (the transport's `Connection` body limit). Returns
+/// `None` for an unsupported method verb.
+#[must_use]
+pub fn lua_route_method_router(state: Arc<AppState>, entry: &ffi::RouteEntry) -> Option<MethodRouter<Arc<AppState>>> {
+    let filter = method_filter(&entry.method)?;
+    let script = entry.script.clone();
+    let max_post = state.max_post_size;
+    let handler = on(filter, move |req: Request| {
+        let state = Arc::clone(&state);
+        let script = script.clone();
+        async move { serve_lua_route(state, script, req).await }
+    });
+    // Cap the request body at max_post_size (oversized → 413), or lift axum's
+    // default 2 MiB cap when the config leaves it unlimited.
+    Some(if max_post > 0 { handler.layer(DefaultBodyLimit::max(max_post)) } else { handler.layer(DefaultBodyLimit::disable()) })
+}
+
+/// Serve a configured Lua route: snapshot the request, spool any multipart
+/// uploads to temp files, build the request context, and run the route's script
+/// through `sipi_run_lua_route` on the blocking pool. The route's own Lua sets
+/// the response status/headers/body (no shell-injected CORS — unlike the IIIF
+/// paths, the script owns its headers).
+async fn serve_lua_route(state: Arc<AppState>, script: String, req: Request) -> Response {
+    let method = req.method().clone();
+    let uri = req.uri().clone();
+    let headers = req.headers().clone();
+    let content_type = header_str(&headers, header::CONTENT_TYPE.as_str()).unwrap_or_default();
+
+    // Request fields, owned so they can move onto the blocking thread.
+    let (_scheme, host) = forwarded(&headers);
+    let client_ip = client_ip(&headers);
+    let header_vec: Vec<(String, String)> = headers
+        .iter()
+        .filter_map(|(n, v)| v.to_str().ok().map(|v| (n.as_str().to_owned(), v.to_owned())))
+        .collect();
+    let cookies = parse_cookies(&headers);
+    let get_params = uri.query().map(parse_form_encoded).unwrap_or_default();
+
+    // Body: multipart → spooled uploads; urlencoded → POST params; else raw bytes.
+    // The DefaultBodyLimit layer caps multipart; to_bytes caps the raw path.
+    let mut uploads: Vec<UploadPart> = Vec::new();
+    let mut tempfiles: Vec<NamedTempFile> = Vec::new();
+    let mut post_params: Vec<(String, String)> = Vec::new();
+    let mut body: Vec<u8> = Vec::new();
+
+    if content_type.starts_with("multipart/form-data") {
+        let mut multipart = match Multipart::from_request(req, &()).await {
+            Ok(m) => m,
+            // 413 (over the body cap) or 400 (malformed) — the rejection's own status.
+            Err(rej) => return rej.into_response(),
+        };
+        loop {
+            match multipart.next_field().await {
+                Ok(Some(field)) => {
+                    let fieldname = field.name().unwrap_or_default().to_owned();
+                    let origname = field.file_name().unwrap_or_default().to_owned();
+                    let mime = field.content_type().unwrap_or_default().to_owned();
+                    let data = match field.bytes().await {
+                        Ok(b) => b,
+                        Err(rej) => return rej.into_response(),
+                    };
+                    if origname.is_empty() {
+                        // A non-file field is a POST form parameter (server.post).
+                        post_params.push((fieldname, String::from_utf8_lossy(&data).into_owned()));
+                    } else {
+                        let Ok(mut tf) = NamedTempFile::new() else {
+                            return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR);
+                        };
+                        if tf.write_all(&data).and_then(|()| tf.flush()).is_err() {
+                            return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR);
+                        }
+                        let tmpname = tf.path().to_string_lossy().into_owned();
+                        let size = data.len() as u64;
+                        uploads.push(UploadPart { fieldname, origname, tmpname, mime, size });
+                        tempfiles.push(tf);
+                    }
+                }
+                Ok(None) => break,
+                Err(rej) => return rej.into_response(),
+            }
+        }
+    } else if has_request_body(&method) {
+        let limit = if state.max_post_size == 0 { usize::MAX } else { state.max_post_size };
+        let bytes = match to_bytes(req.into_body(), limit).await {
+            Ok(b) => b,
+            Err(_) => return sink::error_response(StatusCode::PAYLOAD_TOO_LARGE),
+        };
+        if content_type.starts_with("application/x-www-form-urlencoded") {
+            post_params = parse_form_encoded(std::str::from_utf8(&bytes).unwrap_or_default());
+        }
+        body = bytes.to_vec();
+    }
+
+    // Bound concurrency on the engine pool, then run the (blocking) Lua VM off the
+    // async runtime. A full pool sheds load with 503 + Retry-After.
+    let permit = match Arc::clone(&state.pool).try_acquire_owned() {
+        Ok(permit) => permit,
+        Err(_) => return busy_response(),
+    };
+    let (outcome_tx, outcome_rx) = oneshot::channel::<Outcome>();
+    let (body_tx, body_rx) = mpsc::channel::<axum::body::Bytes>(sink::BODY_CHANNEL_CAP);
+    let request_span = tracing::Span::current();
+    let method_str = method.as_str().to_owned();
+    let uri_path = uri.path().to_owned();
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        let _entered = request_span.enter();
+        // Temp files outlive the route call: the engine opens them by path during
+        // executeChunk, and they are deleted when this Vec drops (after the call).
+        let _tempfiles = tempfiles;
+        run_lua_route_blocking(
+            &script,
+            LuaRequest {
+                method: &method_str,
+                client_ip: &client_ip,
+                host: &host,
+                uri_path: &uri_path,
+                headers: &header_vec,
+                cookies: &cookies,
+                get_params: &get_params,
+                post_params: &post_params,
+                content_type: &content_type,
+                body: &body,
+                uploads: &uploads,
+            },
+            outcome_tx,
+            body_tx,
+        );
+    });
+    match outcome_rx.await {
+        Ok(Outcome::Complete(response)) => response,
+        Ok(Outcome::StreamHead { status, headers: head }) => sink::stream_response(status, head, body_rx),
+        Err(_) => sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
+/// The owned, borrow-only view of a request handed to the blocking Lua dispatch.
+struct LuaRequest<'a> {
+    method: &'a str,
+    client_ip: &'a str,
+    host: &'a str,
+    uri_path: &'a str,
+    headers: &'a [(String, String)],
+    cookies: &'a [(String, String)],
+    get_params: &'a [(String, String)],
+    post_params: &'a [(String, String)],
+    content_type: &'a str,
+    body: &'a [u8],
+    uploads: &'a [UploadPart],
+}
+
+/// Build the request context (full request: body, uploads, params) and run the
+/// route's script through `sipi_run_lua_route` against the streaming sink. Runs
+/// on a `spawn_blocking` thread (the Lua VM + any decode/encode is blocking).
+fn run_lua_route_blocking(
+    script: &str,
+    req: LuaRequest,
+    outcome_tx: oneshot::Sender<Outcome>,
+    body_tx: mpsc::Sender<axum::body::Bytes>,
+) {
+    let span = tracing::info_span!("sipi.lua_route", route_script = %script);
+    let _enter = span.enter();
+    let _trace = crate::telemetry::current_trace_context().map(|(t, s)| ffi::LogTraceScope::set(&t, &s));
+
+    // secure = false: SIPI runs plain HTTP behind Traefik (matches conn.secure()).
+    let Some(ctx) = ffi::build_request_context(req.method, req.client_ip, 0, false, req.host, req.uri_path, req.headers, req.cookies)
+    else {
+        return complete(outcome_tx, sink::error_response(StatusCode::BAD_REQUEST));
+    };
+    if !req.body.is_empty() || !req.content_type.is_empty() {
+        ctx.set_body(req.content_type, req.body);
+    }
+    for (k, v) in req.get_params {
+        ctx.add_param(0, k, v);
+    }
+    for (k, v) in req.post_params {
+        ctx.add_param(1, k, v);
+    }
+    for u in req.uploads {
+        ctx.add_upload(&u.fieldname, &u.origname, &u.tmpname, &u.mime, u.size);
+    }
+
+    let Ok(c_script) = CString::new(script) else {
+        return complete(outcome_tx, sink::error_response(StatusCode::INTERNAL_SERVER_ERROR));
+    };
+    // SAFETY: `c_script` + `ctx` outlive the synchronous call; the seam guards C++
+    // exceptions (→ status code, never an unwind into Rust).
+    sink::serve_streaming(outcome_tx, body_tx, |resp: &SipiResponse| unsafe {
+        ffi::sipi_run_lua_route(c_script.as_ptr(), ctx.as_ptr(), resp)
+    });
+}
+
+/// Whether an HTTP method carries a request body the Lua route should read.
+fn has_request_body(method: &Method) -> bool {
+    matches!(*method, Method::POST | Method::PUT | Method::PATCH | Method::DELETE)
+}
+
+/// Parse `application/x-www-form-urlencoded` (or a query string) into name/value
+/// pairs: split on `&`, then `=`, `+` → space, then percent-decode each side.
+fn parse_form_encoded(s: &str) -> Vec<(String, String)> {
+    s.split('&')
+        .filter(|kv| !kv.is_empty())
+        .map(|kv| {
+            let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
+            (form_decode(k), form_decode(v))
+        })
+        .collect()
+}
+
+/// Decode one urlencoded component (`+` → space, then `%XX`).
+fn form_decode(s: &str) -> String {
+    let plus_decoded = s.replace('+', " ");
+    percent_decode_str(&plus_decoded).decode_utf8_lossy().into_owned()
 }
 
 fn serve_info_json(resolved: &str, parsed: &ParsedRequest, headers: &HeaderMap, access: &Access) -> Response {
