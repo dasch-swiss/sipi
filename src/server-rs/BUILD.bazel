@@ -56,10 +56,13 @@ rust_library(
 # that reference them (trailing position is required for static-archive ordering
 # on Linux). Linux statically links the libc++ runtime + unwinder, matching
 # `//src/cli:sipi`'s distroless link surface (no libc++.so.1 in base-debian12).
+# macOS needs only `-lc++`: libc++abi's symbols are re-exported by the system
+# `libc++.dylib`, so an explicit `-lc++abi` is redundant and would resolve
+# against the system ABI library rather than the hermetic toolchain's — matching
+# `//src/cli:sipi`, which links no explicit stdlib flag on macOS.
 _CPP_STDLIB_LINK = select({
     "@platforms//os:macos": [
         "-Clink-arg=-lc++",
-        "-Clink-arg=-lc++abi",
     ],
     "@platforms//os:linux": [
         "-Clink-arg=-Wl,-Bstatic",
