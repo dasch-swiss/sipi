@@ -349,7 +349,14 @@ Sipi looks for these scripts in the directory specified by `scriptdir`
 in its configuration file. The first route that matches the beginning of
 the requested URL path will be used.
 
-  
+> **Do not pass secrets in query strings.** When tracing is enabled, the
+> request URL — **including its query string** — is recorded on the exported
+> span (the OpenTelemetry HTTP semantic conventions capture `url.query`). A
+> custom route or preflight script that reads a token, password, or other
+> secret from a query-string parameter will leak it into your traces. Carry
+> secrets in a `Cookie` or `Authorization` header (the `pre_flight` examples
+> above use a cookie), never in the URL.
+
 ## IIIF Authentication API 1.0 in SIPI
 The `pre_flight` function is also responsible for activating the IIIF Auth API. In order to do so, the pre_flight script
 returns a table that contains all necessary information. For details about the IIIF Authentication API 1.0 see the
