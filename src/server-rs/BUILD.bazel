@@ -32,6 +32,7 @@ rust_library(
         "src/path.rs",
         "src/routes.rs",
         "src/sink.rs",
+        "src/telemetry.rs",
     ],
     crate_name = "sipi",
     edition = "2021",
