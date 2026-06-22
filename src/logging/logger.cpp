@@ -32,10 +32,33 @@ LogLevel get_log_level() { return g_log_level; }
 void set_json_mode(bool enabled) { g_json_mode.store(enabled, std::memory_order_relaxed); }
 bool is_json_mode() { return g_json_mode.load(std::memory_order_relaxed); }
 
+// W3C trace/span ids are fixed-width lowercase hex. Validating the pair at this
+// FFI boundary lets log_vsformat splice them into the JSON line without escaping
+// and rejects (clears) any malformed value — boundary validation, so the safety
+// never depends on a caller's discipline.
+static bool is_lower_hex(const std::string &s, std::size_t len)
+{
+  if (s.size() != len) return false;
+  for (const char c : s) {
+    if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+  }
+  return true;
+}
+
 void set_log_trace_context(const char *trace_id, const char *span_id)
 {
-  g_trace_id = (trace_id != nullptr) ? trace_id : "";
-  g_span_id = (span_id != nullptr) ? span_id : "";
+  const std::string t = (trace_id != nullptr) ? trace_id : "";
+  const std::string s = (span_id != nullptr) ? span_id : "";
+  // Accept only a valid (trace_id, span_id) hex pair; anything else — including
+  // the NULL/empty clear — clears both, so log_vsformat emits the keys only when
+  // both ids are present and safe to append raw.
+  if (is_lower_hex(t, 32) && is_lower_hex(s, 16)) {
+    g_trace_id = t;
+    g_span_id = s;
+  } else {
+    g_trace_id.clear();
+    g_span_id.clear();
+  }
 }
 
 std::string escape_json_str(const std::string &s)
