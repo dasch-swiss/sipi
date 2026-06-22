@@ -203,7 +203,13 @@ fn dispatch_engine(
     // context stamps the C++ engine's log lines (the child span_id, so engine
     // logs nest under this step), cleared when the scope ends so a reused
     // blocking thread can't leak a stale id to the next request.
-    let span = tracing::info_span!("sipi.serve", kind = ?parsed.kind, identifier = %parsed.identifier);
+    let span = tracing::info_span!(
+        "sipi.serve",
+        kind = ?parsed.kind,
+        identifier = %parsed.identifier,
+        otel.status_code = tracing::field::Empty,
+        error.type = tracing::field::Empty,
+    );
     let _enter = span.enter();
     let _trace = crate::telemetry::current_trace_context().map(|(t, s)| ffi::LogTraceScope::set(&t, &s));
 
@@ -249,8 +255,16 @@ fn dispatch_engine(
 }
 
 /// Deliver a complete (non-streaming) response — JSON, redirect, or an error —
-/// on the outcome channel, consuming the sender.
+/// on the outcome channel, consuming the sender. On a 4xx/5xx, mark the engine
+/// span errored so Grafana can correlate failures (the outer OtelAxumLayer span
+/// carries the HTTP status separately; `error.type` carries the status code).
 fn complete(outcome_tx: oneshot::Sender<Outcome>, response: Response) {
+    let status = response.status();
+    if status.is_client_error() || status.is_server_error() {
+        let span = tracing::Span::current();
+        span.record("otel.status_code", "ERROR");
+        span.record("error.type", status.as_str());
+    }
     let _ = outcome_tx.send(Outcome::Complete(response));
 }
 
@@ -330,7 +344,7 @@ fn serve_image(
     body_tx: mpsc::Sender<axum::body::Bytes>,
 ) {
     let params = parsed.params.expect("an Iiif request always carries parsed params");
-    let (_scheme, host) = forwarded(headers);
+    let (scheme, host) = forwarded(headers);
 
     // Every C string must outlive the synchronous sipi_serve_image call.
     let (c_resolved, c_prefix, c_identifier) =
@@ -340,6 +354,7 @@ fn serve_image(
         };
     let c_client_ip = CString::new(client_ip(headers)).unwrap_or_default();
     let c_host = CString::new(host).unwrap_or_default();
+    let c_scheme = CString::new(scheme).unwrap_or_default();
     let c_uri = CString::new(parsed_request_uri(parsed)).unwrap_or_default();
     // restrict size + watermark from the preflight kv (NULL when not restricted).
     let c_size = (access.permission == SipiPermType::Restrict)
@@ -357,10 +372,9 @@ fn serve_image(
         params,
         restricted_size: c_size.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
         watermark_path: c_watermark.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
-        // The engine hardcodes http:// in its canonical Link header today and
-        // ignores forwarded_proto; the Rust-built info/knora/redirect ids honour
-        // X-Forwarded-Proto. Honouring it in the engine is a separate follow-up.
-        forwarded_proto: std::ptr::null(),
+        // The engine honours X-Forwarded-Proto for the canonical Link header
+        // (SIPI serves plain HTTP behind Traefik); the cache key stays scheme-free.
+        forwarded_proto: c_scheme.as_ptr(),
         forwarded_host: c_host.as_ptr(),
         request_uri: c_uri.as_ptr(),
         is_head: i32::from(is_head),
