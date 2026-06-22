@@ -21,10 +21,12 @@ pub mod sink;
 use axum::{http::StatusCode, routing::get, Router};
 use clap::Parser;
 use std::ffi::CString;
+use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::os::raw::{c_char, c_int};
 use std::process::ExitCode;
 use std::sync::Arc;
+use std::time::Duration;
 
 /// Default listen port for the additive Rust shell. The real port comes from
 /// the SIPI config once `sipi_init` lands (T4); until then it is overridable via
@@ -50,7 +52,8 @@ struct ServerArgs {
     /// Traefik, so this is unused — DEV-6035).
     #[arg(long)]
     sslport: Option<u16>,
-    /// Graceful-drain timeout in seconds (wired in T9).
+    /// Graceful-drain deadline in seconds (default 30): on SIGTERM/Ctrl-C,
+    /// in-flight requests get this long to finish before a forced shutdown.
     #[arg(long = "drain-timeout")]
     drain_timeout: Option<u64>,
 }
@@ -120,7 +123,8 @@ fn run_server(server_argv: &[String]) -> ExitCode {
         }
     };
 
-    match rt.block_on(serve(args.serverport)) {
+    let drain_timeout = Duration::from_secs(args.drain_timeout.unwrap_or(30));
+    match rt.block_on(serve(args.serverport, drain_timeout)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             tracing::error!(error = %e, "server terminated with error");
@@ -171,7 +175,7 @@ pub fn app(state: Arc<routes::AppState>) -> Router {
         .with_state(state)
 }
 
-async fn serve(port: Option<u16>) -> std::io::Result<()> {
+async fn serve(port: Option<u16>, drain_timeout: Duration) -> std::io::Result<()> {
     // Read the cached engine config once (image root + prefix_as_path); a
     // not-ready state (no --config) leaves the serve routes returning 503.
     let state = Arc::new(routes::AppState::load());
@@ -181,7 +185,66 @@ async fn serve(port: Option<u16>) -> std::io::Result<()> {
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!(%addr, "SIPI Rust shell listening");
-    axum::serve(listener, app(state)).await
+
+    // Graceful shutdown (DEV-5927): a SIGTERM/Ctrl-C stops accepting new
+    // connections and lets in-flight requests finish, bounded by drain_timeout —
+    // past the deadline the remaining requests are abandoned and the process
+    // exits. A watch latches the signal so axum's drain and the deadline both
+    // observe it from the single signal listener (a notify could be missed).
+    let (drain_tx, drain_rx) = tokio::sync::watch::channel(false);
+    let graceful = {
+        let mut rx = drain_rx;
+        async move {
+            let _ = rx.wait_for(|started| *started).await;
+        }
+    };
+    // `with_graceful_shutdown` yields an `IntoFuture`, not a `Future`; resolve it
+    // so the select arm can poll `&mut server`.
+    let server = axum::serve(listener, app(state)).with_graceful_shutdown(graceful).into_future();
+    tokio::pin!(server);
+
+    tokio::select! {
+        res = &mut server => res,
+        () = async {
+            shutdown_signal().await;
+            let _ = drain_tx.send(true);// begin draining in-flight requests
+            tokio::time::sleep(drain_timeout).await;
+        } => {
+            tracing::warn!(
+                drain_timeout_s = drain_timeout.as_secs(),
+                "drain deadline exceeded; abandoning in-flight requests"
+            );
+            Ok(())
+        }
+    }
+}
+
+/// Resolve when the process is asked to stop: a Unix `SIGTERM` (the container
+/// stop signal) or `Ctrl-C` (`SIGINT`). On non-Unix only `Ctrl-C` is wired.
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "failed to install SIGTERM handler");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        () = ctrl_c => {},
+        () = terminate => {},
+    }
+    tracing::info!("shutdown signal received; draining");
 }
 
 /// Rust-native liveness probe — bypasses the engine entirely (DEV-6101).
