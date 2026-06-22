@@ -45,6 +45,11 @@ default:
 bazel-build *FLAGS='':
     bazel build --stamp //src/cli:sipi {{FLAGS}}
 
+# Build the Rust HTTP shell (strangler-fig Phase C). Additive — the C++ server
+# still owns the production socket until the cutover; this is for local testing.
+bazel-build-server *FLAGS='':
+    bazel build --stamp //src/server-rs:sipi_server {{FLAGS}}
+
 # Build + run the full test pyramid (unit + approval + e2e) under
 # fastbuild — no coverage instrumentation. CI's linux-arm64 and
 # darwin-arm64 matrix entries use this path; only linux-amd64 (which
@@ -450,6 +455,28 @@ run: bazel-build
     set -euo pipefail
     SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/cli/sipi}"
     "$SIPI_BIN" server --config={{justfile_directory()}}/config/sipi.localdev-config.lua
+
+# Start a local LGTM observability stack (Grafana on :3000, OTLP gRPC :4317 /
+# HTTP :4318) to test the Rust shell's traces + logs end to end. Open
+# http://localhost:3000 (admin/admin) → Explore → Tempo/Loki. Run `just run-otel`
+# in another terminal to point SIPI at it. Ctrl-C stops + removes the container.
+lgtm-up:
+    docker run --rm --name sipi-lgtm -p 3000:3000 -p 4317:4317 -p 4318:4318 grafana/otel-lgtm
+
+# Run the Rust shell against the local LGTM stack (run `just lgtm-up` first).
+# Exports traces over OTLP and — via SIPI_OTLP_LOGS — also ships logs to the
+# local Loki (production scrapes stdout instead, so OTLP log export is dev-only).
+# C++ engine logs still print to stdout here; their trace_id correlates in Tempo.
+run-otel: bazel-build-server
+    #!/usr/bin/env bash
+    set -euo pipefail
+    OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 \
+    OTEL_SERVICE_NAME=sipi \
+    OTEL_RESOURCE_ATTRIBUTES="service.namespace=sipi,deployment.environment=dev" \
+    SIPI_OTLP_LOGS=1 \
+    RUST_LOG="${RUST_LOG:-info}" \
+    "{{justfile_directory()}}/bazel-bin/src/server-rs/sipi_server" server \
+        --config="{{justfile_directory()}}/config/sipi.localdev-config.lua" --serverport 1024
 
 # Run sipi under Valgrind.
 valgrind: bazel-build
