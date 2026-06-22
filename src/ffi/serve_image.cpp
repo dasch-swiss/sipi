@@ -103,6 +103,7 @@ namespace {
   // the engine-facing seam rather than the soon-deleted HTTP server.
   std::pair<std::string, std::string> build_canonical_url(size_t tmp_w,
     size_t tmp_h,
+    const std::string &scheme,
     const std::string &host,
     const std::string &prefix,
     const std::string &identifier,
@@ -203,7 +204,8 @@ namespace {
     if (pagenum > 0) { fullid += "@" + std::to_string(pagenum); }
     (void)snprintf(canonical_header,
       canonical_header_len,
-      "<http://%s/%s/%s/%s/%s/%s/default.%s/%s>;rel=\"canonical\"",
+      "<%s://%s/%s/%s/%s/%s/%s/default.%s/%s>;rel=\"canonical\"",
+      scheme.c_str(),
       host.c_str(),
       prefix.c_str(),
       fullid.c_str(),
@@ -512,12 +514,17 @@ std::expected<ServeResponse, SipiStatus>
     metrics.rate_limit_clients_tracked.Set(static_cast<double>(eng.rate_limiter->tracked_clients()));
   }
 
-  // Canonical URL (Link header + cache key).
+  // Canonical URL (Link header + cache key). The Link header honours
+  // X-Forwarded-Proto (SIPI serves plain HTTP behind Traefik); the cache key
+  // stays scheme-free so an http and an https request share one cache entry.
   const std::string cannonical_watermark = watermark.empty() ? "0" : "1";
+  const char *forwarded_proto = req.forwarded_proto;
+  const std::string scheme =
+    (forwarded_proto != nullptr && *forwarded_proto != '\0') ? std::string(forwarded_proto) : std::string("http");
   std::pair<std::string, std::string> canonical_info;
   try {
     canonical_info = build_canonical_url(
-      img_w, img_h, str_or_empty(req.forwarded_host), str_or_empty(req.prefix), sid.getIdentifier(),
+      img_w, img_h, scheme, str_or_empty(req.forwarded_host), str_or_empty(req.prefix), sid.getIdentifier(),
       region, size, rotation, quality_format, sid.getPage(), cannonical_watermark);
   } catch (Sipi::SipiError &) {
     return std::unexpected(SipiStatus::BadRequest);
