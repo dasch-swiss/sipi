@@ -10,19 +10,19 @@
 //! never stalls on the C++ engine.
 
 use std::ffi::CString;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::{OriginalUri, State};
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use axum::response::Response;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::ffi::{self, PreflightOutcome, SipiPermType, SipiResponse, SipiServeRequest};
 use crate::iiif::{self, ParsedRequest, RequestKind};
 use crate::info::{self, Sidecar};
 use crate::path::{self, Resolved};
-use crate::sink;
+use crate::sink::{self, Outcome};
 
 /// Image MIME types that take the IIIF / image-dimension code path (the same set
 /// the C++ server branches on, `SipiHttpServer.cpp:568-570,913-914`).
@@ -134,39 +134,52 @@ pub async fn iiif(
         Ok(permit) => permit,
         Err(_) => return busy_response(),
     };
-    // A client disconnect (or a tower timeout) drops this handler future; the
-    // guard then flips the cancel flag so the orphaned spawn_blocking task aborts
-    // its decode instead of running to completion for a response nobody reads.
-    let cancel = Arc::new(AtomicBool::new(false));
-    let _cancel_guard = CancelOnDrop(Arc::clone(&cancel));
+    // Shell-set headers on the streamed (success) response, captured before the
+    // request is moved onto the blocking thread: the CORS Origin echo (image +
+    // /file; DEV-6061, never with credentials) and, for a /file Range request,
+    // the identifier-derived Content-Disposition (SipiHttpServer.cpp:1120-1129).
+    let cors_origin = header_str(&headers, "origin").and_then(|o| HeaderValue::from_str(&o).ok());
+    let content_disp = (parsed.kind == RequestKind::FileDownload && headers.contains_key(header::RANGE))
+        .then(|| content_disposition(&parsed.identifier))
+        .flatten();
+
+    // The engine commits the head (status + headers) on the oneshot, then streams
+    // body chunks on the bounded mpsc as it produces them. A slow client
+    // back-pressures the engine thread; a disconnect drops the receiver, which
+    // the engine's cancelled() poll and a failed body send both observe, aborting
+    // the work. The pool permit is held for the whole dispatch — released when the
+    // blocking task ends (after the last chunk), reconstructing the shttps bound.
+    let (outcome_tx, outcome_rx) = oneshot::channel::<Outcome>();
+    let (body_tx, body_rx) = mpsc::channel::<axum::body::Bytes>(sink::BODY_CHANNEL_CAP);
     // Carry the request span (created by OtelAxumLayer) onto the blocking thread
     // so the engine's coarse span nests under it and its trace context is what
     // stamps the C++ engine logs.
     let request_span = tracing::Span::current();
-    let task = tokio::task::spawn_blocking(move || {
-        let _permit = permit;// released when the engine work completes
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit; // released when the engine work (decode/encode/stream) completes
         let _entered = request_span.enter();
-        dispatch_engine(&state, &parsed, &method, &uri, &headers, cancel)
+        dispatch_engine(&state, &parsed, &method, &uri, &headers, outcome_tx, body_tx);
     });
-    match task.await {
-        Ok(response) => response,
-        // A blocking-task panic should be impossible (the seam guards C++
-        // exceptions; the sink callbacks catch_unwind), but map any escape to a
-        // bare 500 rather than dropping the connection.
+    match outcome_rx.await {
+        // JSON / redirect / error / HEAD: a complete response, returned as built.
+        Ok(Outcome::Complete(response)) => response,
+        // Image / file: stream the body as the engine produces it, adding the
+        // shell-set CORS + Content-Disposition headers to the committed head.
+        Ok(Outcome::StreamHead { status, headers: head }) => {
+            let mut response = sink::stream_response(status, head, body_rx);
+            if let Some(origin) = cors_origin {
+                response.headers_mut().insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+            }
+            if let Some(cd) = content_disp {
+                if response.status().is_success() {
+                    response.headers_mut().insert(header::CONTENT_DISPOSITION, cd);
+                }
+            }
+            response
+        }
+        // The blocking task dropped the sender without sending — a panic the
+        // sink's catch_unwind somehow escaped — maps to a bare 500.
         Err(_) => sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
-    }
-}
-
-/// Flips its cancel flag when dropped. Held in the async handler across the
-/// blocking dispatch: if the client disconnects (axum drops the handler future)
-/// the flag flips, and the orphaned spawn_blocking task observes it via the
-/// engine's `cancelled()` poll — aborting the decode and unlinking any partial
-/// cache rather than finishing work nobody will read.
-struct CancelOnDrop(Arc<AtomicBool>);
-
-impl Drop for CancelOnDrop {
-    fn drop(&mut self) {
-        self.0.store(true, Ordering::Relaxed);
     }
 }
 
@@ -182,8 +195,9 @@ fn dispatch_engine(
     method: &Method,
     uri: &Uri,
     headers: &HeaderMap,
-    cancel: Arc<AtomicBool>,
-) -> Response {
+    outcome_tx: oneshot::Sender<Outcome>,
+    body_tx: mpsc::Sender<axum::body::Bytes>,
+) {
     // A coarse engine span under the request span. Low-cardinality name; the
     // identifier rides as an attribute (never in the name — DEV-6292). Its trace
     // context stamps the C++ engine's log lines (the child span_id, so engine
@@ -194,21 +208,20 @@ fn dispatch_engine(
     let _trace = crate::telemetry::current_trace_context().map(|(t, s)| ffi::LogTraceScope::set(&t, &s));
 
     if parsed.kind == RequestKind::FileDownload {
-        let access = match file_access(state, parsed, method, uri, headers) {
-            Ok(a) => a,
-            Err(resp) => return resp,
-        };
-        return match resolve(&access.infile, &state.resolved_imgroot) {
-            Ok(resolved) => serve_file(&resolved, parsed, headers, &cancel),
-            Err(resp) => resp,
-        };
+        match file_access(state, parsed, method, uri, headers)
+            .and_then(|access| resolve(&access.infile, &state.resolved_imgroot))
+        {
+            Ok(resolved) => serve_file(&resolved, headers, outcome_tx, body_tx),
+            Err(resp) => complete(outcome_tx, resp),
+        }
+        return;
     }
 
     // IIIF image / info.json / knora.json: resolve infile + permission via the
     // preflight hook (or a default path when no hook is defined).
     let access = match iiif_access(state, parsed, method, uri, headers) {
         Ok(a) => a,
-        Err(resp) => return resp,
+        Err(resp) => return complete(outcome_tx, resp),
     };
 
     // The IIIF image serve enforces auth itself (401 for any non-allow/restrict);
@@ -217,20 +230,28 @@ fn dispatch_engine(
     if parsed.kind == RequestKind::Iiif
         && !matches!(access.permission, SipiPermType::Allow | SipiPermType::Restrict)
     {
-        return sink::error_response(StatusCode::UNAUTHORIZED);
+        return complete(outcome_tx, sink::error_response(StatusCode::UNAUTHORIZED));
     }
 
     let resolved = match resolve(&access.infile, &state.resolved_imgroot) {
         Ok(r) => r,
-        Err(resp) => return resp,
+        Err(resp) => return complete(outcome_tx, resp),
     };
 
     match parsed.kind {
-        RequestKind::Iiif => serve_image(&resolved, parsed, headers, *method == Method::HEAD, &access, &cancel),
-        RequestKind::InfoJson => serve_info_json(&resolved, parsed, headers, &access),
-        RequestKind::KnoraJson => serve_knora_json(&resolved, parsed, headers),
+        RequestKind::Iiif => {
+            serve_image(&resolved, parsed, headers, *method == Method::HEAD, &access, outcome_tx, body_tx);
+        }
+        RequestKind::InfoJson => complete(outcome_tx, serve_info_json(&resolved, parsed, headers, &access)),
+        RequestKind::KnoraJson => complete(outcome_tx, serve_knora_json(&resolved, parsed, headers)),
         RequestKind::Redirect | RequestKind::FileDownload => unreachable!("redirect handled by caller, file above"),
     }
+}
+
+/// Deliver a complete (non-streaming) response — JSON, redirect, or an error —
+/// on the outcome channel, consuming the sender.
+fn complete(outcome_tx: oneshot::Sender<Outcome>, response: Response) {
+    let _ = outcome_tx.send(Outcome::Complete(response));
 }
 
 /// Pool-full backpressure: a bare 503 with `Retry-After: 1` (DEV-6100) — no body,
@@ -305,8 +326,9 @@ fn serve_image(
     headers: &HeaderMap,
     is_head: bool,
     access: &Access,
-    cancel: &Arc<AtomicBool>,
-) -> Response {
+    outcome_tx: oneshot::Sender<Outcome>,
+    body_tx: mpsc::Sender<axum::body::Bytes>,
+) {
     let params = parsed.params.expect("an Iiif request always carries parsed params");
     let (_scheme, host) = forwarded(headers);
 
@@ -314,7 +336,7 @@ fn serve_image(
     let (c_resolved, c_prefix, c_identifier) =
         match (CString::new(resolved), CString::new(parsed.prefix.as_str()), CString::new(parsed.identifier.as_str())) {
             (Ok(a), Ok(b), Ok(c)) => (a, b, c),
-            _ => return sink::error_response(StatusCode::BAD_REQUEST),
+            _ => return complete(outcome_tx, sink::error_response(StatusCode::BAD_REQUEST)),
         };
     let c_client_ip = CString::new(client_ip(headers)).unwrap_or_default();
     let c_host = CString::new(host).unwrap_or_default();
@@ -345,38 +367,32 @@ fn serve_image(
     };
 
     // SAFETY: every pointer in `req` outlives this synchronous call; the seam
-    // guards C++ exceptions (→ status code, never an unwind into Rust).
-    let (code, sink_state) =
-        sink::serve_buffered(Arc::clone(cancel), |resp: &SipiResponse| unsafe { ffi::sipi_serve_image(&req, resp) });
-    let mut response = finish_serve(code, sink_state);
-    apply_origin_cors(&mut response, headers);
-    response
+    // guards C++ exceptions (→ status code, never an unwind into Rust). The
+    // streamed head's CORS header is added by the caller (`iiif`).
+    sink::serve_streaming(outcome_tx, body_tx, |resp: &SipiResponse| unsafe { ffi::sipi_serve_image(&req, resp) });
 }
 
-/// Raw `/file` passthrough via `sipi_serve_file` (Range/206). Content-Disposition
-/// is set caller-side, only on a Range request (`SipiHttpServer.cpp:1120-1129`).
-fn serve_file(resolved: &str, parsed: &ParsedRequest, headers: &HeaderMap, cancel: &Arc<AtomicBool>) -> Response {
+/// Raw `/file` passthrough via `sipi_serve_file` (Range/206). The CORS echo and,
+/// on a Range request, the identifier-derived Content-Disposition are added to
+/// the streamed head by the caller (`iiif`, `SipiHttpServer.cpp:1120-1129`).
+fn serve_file(
+    resolved: &str,
+    headers: &HeaderMap,
+    outcome_tx: oneshot::Sender<Outcome>,
+    body_tx: mpsc::Sender<axum::body::Bytes>,
+) {
     let c_resolved = match CString::new(resolved) {
         Ok(c) => c,
-        Err(_) => return sink::error_response(StatusCode::BAD_REQUEST),
+        Err(_) => return complete(outcome_tx, sink::error_response(StatusCode::BAD_REQUEST)),
     };
     let range = header_str(headers, header::RANGE.as_str());
     let c_range = range.as_deref().and_then(|r| CString::new(r).ok());
     let range_ptr = c_range.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
 
     // SAFETY: `c_resolved`/`c_range` outlive the synchronous call; the seam guards.
-    let (code, sink_state) = sink::serve_buffered(Arc::clone(cancel), |resp: &SipiResponse| unsafe {
+    sink::serve_streaming(outcome_tx, body_tx, |resp: &SipiResponse| unsafe {
         ffi::sipi_serve_file(c_resolved.as_ptr(), range_ptr, resp)
     });
-    let mut response = finish_serve(code, sink_state);
-
-    if range.is_some() && response.status().is_success() {
-        if let Some(value) = content_disposition(&parsed.identifier) {
-            response.headers_mut().insert(header::CONTENT_DISPOSITION, value);
-        }
-    }
-    apply_origin_cors(&mut response, headers);
-    response
 }
 
 /// CORS preflight (`OPTIONS`): echo the Origin (no credentials — DEV-6061),
@@ -396,15 +412,6 @@ pub async fn cors_preflight(headers: HeaderMap) -> Response {
         builder = builder.header(header::ACCESS_CONTROL_ALLOW_HEADERS, req_headers);
     }
     builder.body(Body::empty()).unwrap_or_else(|_| sink::error_response(StatusCode::INTERNAL_SERVER_ERROR))
-}
-
-/// Echo the request `Origin` into `Access-Control-Allow-Origin` (when present)
-/// for engine-served image / `/file` responses. DEV-6061: never paired with
-/// `Access-Control-Allow-Credentials: true` (the C++ transport's reflection bug).
-fn apply_origin_cors(response: &mut Response, headers: &HeaderMap) {
-    if let Some(origin) = header_str(headers, "origin").and_then(|o| HeaderValue::from_str(&o).ok()) {
-        response.headers_mut().insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
-    }
 }
 
 fn serve_info_json(resolved: &str, parsed: &ParsedRequest, headers: &HeaderMap, access: &Access) -> Response {
@@ -539,16 +546,6 @@ fn parse_cookies(headers: &HeaderMap) -> Vec<(String, String)> {
 
 fn access_kv_cstring(access: &Access, key: &str) -> Option<CString> {
     access.kv.iter().find(|(k, _)| k == key).and_then(|(_, v)| CString::new(v.as_str()).ok())
-}
-
-/// Render the engine's buffered response, mapping its status code.
-fn finish_serve(code: i32, sink_state: sink::SinkState) -> Response {
-    if code == 0 {
-        sink::into_response(sink_state)
-    } else {
-        let status = StatusCode::from_u16(code as u16).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-        sink::error_response(status)
-    }
 }
 
 /// Serialise a JSON value with the IIIF headers the C++ server sets: a CORS

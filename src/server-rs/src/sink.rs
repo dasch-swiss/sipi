@@ -6,56 +6,90 @@
 //! (a known-length file region) or repeated `write` (an unknown-length stream)
 //! — and `cancelled` is polled between stages.
 //!
-//! The sink **buffers** the response: the callbacks accumulate status + headers +
-//! body into a [`SinkState`], and the caller builds an axum [`Response`] after the
-//! serve call returns. This holds the encoded image in memory; true streaming (so
-//! large responses don't buffer) is a later refinement. Decode memory is already
-//! bounded by the engine's memory budget (installed by `sipi_init`).
+//! The sink **streams**. The engine runs on a `spawn_blocking` thread; the
+//! response head (status + headers) is handed to the async handler through a
+//! oneshot the moment the engine commits it, then body chunks flow over a
+//! bounded mpsc channel as they are produced — neither the encoded image nor a
+//! `/file` region is ever fully buffered. A slow client back-pressures the engine
+//! thread (the bounded channel blocks the blocking [`cb_write`]); a disconnected
+//! client drops the receiver, which [`cb_cancelled`] observes (and a body send
+//! then fails), so the engine aborts instead of finishing work nobody reads.
+//! Body-less responses (HEAD / errors) are delivered whole via [`Outcome::Complete`].
 
-use axum::body::Body;
+use axum::body::{Body, Bytes};
+use axum::http::response::Builder;
 use axum::http::{HeaderName, HeaderValue, StatusCode};
 use axum::response::Response;
 use std::ffi::CStr;
 use std::io::{Read, Seek, SeekFrom};
 use std::os::raw::{c_char, c_int, c_void};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use tokio::sync::{mpsc, oneshot};
+use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::StreamExt;
 
 use crate::ffi::SipiResponse;
 
-/// Accumulates the response the engine emits through the sink callbacks.
-#[derive(Default)]
-pub struct SinkState {
+/// Body-chunk channel capacity: bounds in-flight memory to `CAP × chunk` and
+/// back-pressures the engine thread when the client drains slowly.
+pub const BODY_CHANNEL_CAP: usize = 16;
+
+/// Read size for the `send_file` body mode (the `/file` region is streamed, not
+/// read into memory).
+const FILE_CHUNK: usize = 64 * 1024;
+
+/// What the blocking engine dispatch hands back to the async handler.
+pub enum Outcome {
+    /// A fully-formed response (JSON, redirect, error, or an empty/HEAD body).
+    Complete(Response),
+    /// The committed head of a streaming body; chunks follow on the body channel.
+    StreamHead { status: u16, headers: Vec<(String, String)> },
+}
+
+/// Accumulates the head and bridges the engine's body callbacks to the async
+/// handler's channels. Lives (boxed) on the blocking thread for the duration of
+/// one `sipi_serve_*` call.
+struct StreamSink {
     status: u16,
     headers: Vec<(String, String)>,
-    body: Vec<u8>,
-    /// A `send_file` read failed — the caller should treat the response as a 500
-    /// (the engine already committed status/headers, but the body is incomplete).
-    io_error: bool,
-    /// Flipped by the async handler's cancel guard on client disconnect / timeout;
-    /// the engine polls it via [`cb_cancelled`] between pipeline stages and aborts.
-    cancel: Arc<AtomicBool>,
+    /// Sends the head exactly once — taken on the first body callback, or in
+    /// [`serve_streaming`]'s tail for a body-less response.
+    outcome_tx: Option<oneshot::Sender<Outcome>>,
+    body_tx: mpsc::Sender<Bytes>,
+    head_sent: bool,
+}
+
+impl StreamSink {
+    /// Hand the committed head to the async handler so it can start the body
+    /// stream. Idempotent — only the first body callback delivers it.
+    fn send_head(&mut self) {
+        if self.head_sent {
+            return;
+        }
+        self.head_sent = true;
+        if let Some(tx) = self.outcome_tx.take() {
+            let _ = tx.send(Outcome::StreamHead { status: self.status, headers: std::mem::take(&mut self.headers) });
+        }
+    }
 }
 
 // Each callback wraps its body in `catch_unwind` — the Rust-side analog of the
-// C++ `sipi_guard`. The engine calls these synchronously across the C ABI, so a
-// Rust panic must not unwind into C++; on panic the void callbacks swallow and
-// the `c_int` callbacks return a non-zero "failure" sentinel (the engine then
-// aborts the write, and the caller renders a 500). `AssertUnwindSafe` is sound
-// because a panic discards the (then-unused) partial response.
+// C++ `sipi_guard`. The engine calls these synchronously on the blocking thread,
+// so a Rust panic must not unwind into C++; on panic the void callbacks swallow
+// and the `c_int` callbacks return a non-zero "failure" sentinel (the engine then
+// aborts the write). `AssertUnwindSafe` is sound: a panic abandons the response.
 
 extern "C" fn cb_set_status(ctx: *mut c_void, status: c_int) {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        // SAFETY: `ctx` is the `&mut SinkState` the sink was built with; the
+        // SAFETY: `ctx` is the `&mut StreamSink` the sink was built with; the
         // engine calls this synchronously on the serving thread, no aliasing race.
-        let state = unsafe { &mut *(ctx as *mut SinkState) };
+        let state = unsafe { &mut *(ctx as *mut StreamSink) };
         state.status = status as u16;
     }));
 }
 
 extern "C" fn cb_add_header(ctx: *mut c_void, name: *const c_char, value: *const c_char) {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let state = unsafe { &mut *(ctx as *mut SinkState) };
+        let state = unsafe { &mut *(ctx as *mut StreamSink) };
         // SAFETY: the engine passes NUL-terminated C strings valid for the call.
         let name = unsafe { CStr::from_ptr(name) }.to_string_lossy().into_owned();
         let value = unsafe { CStr::from_ptr(value) }.to_string_lossy().into_owned();
@@ -65,72 +99,96 @@ extern "C" fn cb_add_header(ctx: *mut c_void, name: *const c_char, value: *const
 
 extern "C" fn cb_write(ctx: *mut c_void, data: *const u8, len: usize) -> c_int {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let state = unsafe { &mut *(ctx as *mut SinkState) };
-        if !data.is_null() && len > 0 {
-            // SAFETY: the engine guarantees `data` points at `len` valid bytes.
-            let slice = unsafe { std::slice::from_raw_parts(data, len) };
-            state.body.extend_from_slice(slice);
+        let state = unsafe { &mut *(ctx as *mut StreamSink) };
+        state.send_head();
+        if data.is_null() || len == 0 {
+            return 0;
         }
-        0
+        // SAFETY: the engine guarantees `data` points at `len` valid bytes.
+        let chunk = Bytes::copy_from_slice(unsafe { std::slice::from_raw_parts(data, len) });
+        // blocking_send back-pressures a slow client; Err = the receiver is gone
+        // (client disconnected) → tell the engine to abort + unlink partial cache.
+        match state.body_tx.blocking_send(chunk) {
+            Ok(()) => 0,
+            Err(_) => 1,
+        }
     }))
     .unwrap_or(1)
 }
 
 extern "C" fn cb_send_file(ctx: *mut c_void, path: *const c_char, offset: u64, length: u64) -> c_int {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let state = unsafe { &mut *(ctx as *mut SinkState) };
+        let state = unsafe { &mut *(ctx as *mut StreamSink) };
+        state.send_head();
+        // SAFETY: the engine passes a NUL-terminated C string valid for the call.
         let path = unsafe { CStr::from_ptr(path) }.to_string_lossy().into_owned();
-        match read_file_region(&path, offset, length) {
-            Ok(mut bytes) => {
-                state.body.append(&mut bytes);
-                0
-            }
-            Err(_) => {
-                state.io_error = true;
-                1
-            }
-        }
+        stream_file_region(&state.body_tx, &path, offset, length)
     }))
     .unwrap_or(1)
 }
 
 extern "C" fn cb_cancelled(ctx: *mut c_void) -> c_int {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        // SAFETY: `ctx` is the `&mut SinkState` the sink was built with; the engine
-        // polls this synchronously on the serving thread, no aliasing race.
-        let state = unsafe { &mut *(ctx as *mut SinkState) };
-        // 1 = the client is gone / the request timed out → the engine aborts and
-        // unlinks any partial cache file. Relaxed: a best-effort signal carrying
-        // no associated data, observed within a stage or two of the flip.
-        c_int::from(state.cancel.load(Ordering::Relaxed))
+        // SAFETY: as above. The client is "gone" once the body receiver is
+        // dropped — the handler future was cancelled (disconnect during decode,
+        // before the head) or the streamed response body was dropped (disconnect
+        // mid-encode). A best-effort signal the engine polls between stages.
+        let state = unsafe { &mut *(ctx as *mut StreamSink) };
+        c_int::from(state.body_tx.is_closed())
     }))
     .unwrap_or(0)
 }
 
-fn read_file_region(path: &str, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
-    let mut f = std::fs::File::open(path)?;
-    if offset > 0 {
-        f.seek(SeekFrom::Start(offset))?;
+/// Stream a `[offset, offset+length)` file region to the body channel in chunks,
+/// without buffering the whole region. Returns 1 on a read error or a gone client
+/// (the committed head can't be unsaid, so the body simply truncates — matching
+/// the C++ transport, which drops the connection on a mid-send failure).
+fn stream_file_region(body_tx: &mpsc::Sender<Bytes>, path: &str, offset: u64, length: u64) -> c_int {
+    let Ok(mut f) = std::fs::File::open(path) else {
+        return 1;
+    };
+    if offset > 0 && f.seek(SeekFrom::Start(offset)).is_err() {
+        return 1;
     }
-    let mut buf = vec![0u8; length as usize];
-    f.read_exact(&mut buf)?;
-    Ok(buf)
+    let mut remaining = length;
+    let mut buf = vec![0u8; FILE_CHUNK];
+    while remaining > 0 {
+        let want = remaining.min(FILE_CHUNK as u64) as usize;
+        match f.read(&mut buf[..want]) {
+            Ok(0) => return 1, // file shorter than the declared length
+            Ok(n) => {
+                if body_tx.blocking_send(Bytes::copy_from_slice(&buf[..n])).is_err() {
+                    return 1; // client gone
+                }
+                remaining -= n as u64;
+            }
+            Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(_) => return 1,
+        }
+    }
+    0
 }
 
-/// Run a `sipi_serve_*` call against a buffering sink and return the engine's
-/// status code plus the accumulated [`SinkState`]. The closure receives the
-/// `SipiResponse` to hand to the FFI entry. The call must be **synchronous** —
-/// the sink's `ctx` aliases `state` only for the duration of `call`. `cancel` is
-/// the shared flag the engine polls via `cancelled()`; the caller flips it on
-/// client disconnect / timeout to abort the serve.
-pub fn serve_buffered<F>(cancel: Arc<AtomicBool>, call: F) -> (i32, SinkState)
+/// Drive a `sipi_serve_*` call against a streaming sink, **synchronously** on the
+/// caller's (blocking) thread. The head is delivered on `outcome_tx` — as a
+/// [`Outcome::StreamHead`] the instant the engine commits it (body chunks then
+/// flow on `body_tx`), or, for a body-less response (HEAD / pre-commit failure),
+/// as a [`Outcome::Complete`] in the tail. `body_tx` is dropped on return,
+/// closing the stream.
+pub fn serve_streaming<F>(outcome_tx: oneshot::Sender<Outcome>, body_tx: mpsc::Sender<Bytes>, call: F)
 where
     F: FnOnce(&SipiResponse) -> i32,
 {
-    // Box keeps the SinkState address stable for the raw `ctx` pointer.
-    let mut state = Box::new(SinkState { cancel, ..Default::default() });
+    // Box keeps the StreamSink address stable for the raw `ctx` pointer.
+    let mut sink = Box::new(StreamSink {
+        status: 0,
+        headers: Vec::new(),
+        outcome_tx: Some(outcome_tx),
+        body_tx,
+        head_sent: false,
+    });
     let resp = SipiResponse {
-        ctx: &mut *state as *mut SinkState as *mut c_void,
+        ctx: &mut *sink as *mut StreamSink as *mut c_void,
         set_status: Some(cb_set_status),
         add_header: Some(cb_add_header),
         write: Some(cb_write),
@@ -138,29 +196,55 @@ where
         cancelled: Some(cb_cancelled),
     };
     let code = call(&resp);
-    (code, *state)
+    // No body callback fired (HEAD / EmptyBody, or a pre-commit failure that
+    // returned a status before `apply`) → the head was never sent; deliver a
+    // complete response now.
+    if !sink.head_sent {
+        if let Some(tx) = sink.outcome_tx.take() {
+            let outcome = if code == 0 {
+                Outcome::Complete(head_response(sink.status, &sink.headers))
+            } else {
+                Outcome::Complete(error_response(map_status(code)))
+            };
+            let _ = tx.send(outcome);
+        }
+    }
 }
 
-/// Build an axum [`Response`] from a buffered [`SinkState`] (after a serve call
-/// that returned 0). A `send_file` read error or an unset status maps to 500.
-pub fn into_response(state: SinkState) -> Response {
-    if state.io_error {
-        return error_response(StatusCode::INTERNAL_SERVER_ERROR);
-    }
-    let status = StatusCode::from_u16(state.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-    let mut builder = Response::builder().status(status);
-    for (name, value) in &state.headers {
+/// Build the streaming axum [`Response`] from an [`Outcome::StreamHead`] and the
+/// body channel: chunks stream to the client as the engine produces them.
+pub fn stream_response(status: u16, headers: Vec<(String, String)>, body_rx: mpsc::Receiver<Bytes>) -> Response {
+    let body = Body::from_stream(ReceiverStream::new(body_rx).map(Ok::<Bytes, std::io::Error>));
+    apply_headers(Response::builder().status(map_status_u16(status)), &headers)
+        .body(body)
+        .unwrap_or_else(|_| error_response(StatusCode::INTERNAL_SERVER_ERROR))
+}
+
+/// A body-less response (HEAD / 0-length) carrying the engine's status + headers.
+fn head_response(status: u16, headers: &[(String, String)]) -> Response {
+    apply_headers(Response::builder().status(map_status_u16(status)), headers)
+        .body(Body::empty())
+        .unwrap_or_else(|_| error_response(StatusCode::INTERNAL_SERVER_ERROR))
+}
+
+fn apply_headers(mut builder: Builder, headers: &[(String, String)]) -> Builder {
+    for (name, value) in headers {
         match (HeaderName::from_bytes(name.as_bytes()), HeaderValue::from_str(value)) {
             (Ok(n), Ok(v)) => builder = builder.header(n, v),
-            // A header the engine emitted that http rejects (control chars etc.)
-            // is dropped rather than failing the whole response; the engine
-            // already sanitises header values at the boundary.
+            // A header http rejects (control chars etc.) is dropped rather than
+            // failing the whole response; the engine sanitises at the boundary.
             _ => tracing::warn!(header = %name, "dropping malformed response header"),
         }
     }
     builder
-        .body(Body::from(state.body))
-        .unwrap_or_else(|_| error_response(StatusCode::INTERNAL_SERVER_ERROR))
+}
+
+fn map_status(code: i32) -> StatusCode {
+    StatusCode::from_u16(u16::try_from(code).unwrap_or(500)).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+fn map_status_u16(status: u16) -> StatusCode {
+    StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 /// A bare status response with no body and no internal detail (DEV-6062).
