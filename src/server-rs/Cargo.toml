@@ -23,7 +23,9 @@ name = "sipi_server"
 path = "src/main.rs"
 
 [dependencies]
-axum = "0.8"
+# multipart: the configured Lua upload route reads server.uploads, so the shell
+# parses multipart/form-data into temp files before driving sipi_run_lua_route.
+axum = { version = "0.8", features = ["multipart"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"] }
 tokio-stream = "0.1"
 tower = { version = "0.5", features = ["util"] }
@@ -32,6 +34,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 clap = { version = "4", features = ["derive"] }
 percent-encoding = "2"
 serde_json = "1"
+# Spool each multipart upload to a temp file the C++ engine opens by path; the
+# handle is held until the Lua route finishes, then auto-deleted on drop.
+tempfile = "3"
 
 # Observability — the OpenTelemetry/OTLP stack, matching the dsp-repository
 # Rust/axum precedent (gRPC-tonic → the Alloy collector on :4317). The helper
