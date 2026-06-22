@@ -1,5 +1,5 @@
 /*
- * Copyright © 2016 - 2024 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform
+ * Copyright © 2016 - 2026 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
@@ -454,7 +454,7 @@ Sipi::ScalingQuality to_scaling_quality(const std::map<std::string, std::string>
 }
 
 /*!
- * Process-wide server runtime installed by `sipi_init` (strangler-fig Phase C).
+ * Process-wide server runtime installed by `sipi_init` (strangler-fig rewrite).
  *
  * The Rust shell, unlike the C++ `SipiHttpServer`, has no server object to own
  * the engine services, so `sipi_init` parks them here for the process lifetime.
@@ -475,7 +475,7 @@ std::unique_ptr<ServerRuntime> g_server_runtime;
 
 /*!
  * Parse the Lua config and install the engine + Lua config from scratch
- * (strangler-fig Phase C). This is the from-scratch counterpart to the C++
+ * (strangler-fig rewrite). This is the from-scratch counterpart to the C++
  * server's parity install (`SipiHttpServer`'s `set_engine_context` +
  * run_server's `set_lua_config`); the Rust shell calls it once at startup
  * before serving. Builds the cache / rate limiter / memory budget into
@@ -624,7 +624,7 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig * /
  *
  * Owns the CLI11 app and every subcommand (`server`, `convert`, `verify`,
  * `query`, `compare`, `health`). Lives in `//src/cli:cli_app` so the Rust
- * shell (Phase C) can link it and call `sipi_cli_main` without colliding with
+ * shell can link it and call `sipi_cli_main` without colliding with
  * the binary's own `main`. Returns the exit code rather than calling `exit()`
  * — the caller (the C++ `main`, or the Rust shell) owns process teardown.
  *
@@ -695,7 +695,7 @@ extern "C" int sipi_cli_main(int argc, char **argv)
   int sipi_exit_code = EXIT_SUCCESS;
 
   //
-  // Option storage variables (Phase 11.4 — DEV-6540).
+  // Option storage variables.
   //
   // Storage declarations live at the top of main so the helper lambdas
   // (attach_*_opts) and the body lambdas (run_query, run_compare,
@@ -809,7 +809,7 @@ extern "C" int sipi_cli_main(int argc, char **argv)
   sipiopt.add_option("--sentry-environment", optSipiSentryEnvironment)->envname("SIPI_SENTRY_ENVIRONMENT");
 
   //
-  // Phase 11.3 — body lambdas (DEV-6540).
+  // Body lambdas, each capturing the option storage.
   //
   // Each CLI mode's body is captured in a named lambda over the option
   // storage. The subcommand callbacks below invoke them and record the result
@@ -825,8 +825,8 @@ extern "C" int sipi_cli_main(int argc, char **argv)
 
   //
   // Convert body. The `src` parameter points at the invoking subcommand
-  // (cmd_convert today; once Phase 12.2 lands, cmd_convert_access will
-  // call this body via the access-file command). `user_set` queries
+  // (cmd_convert today; a future access-file command will call this
+  // body too). `user_set` queries
   // the subcommand's own option group to detect whether each flag was
   // explicitly set by the operator.
   //
@@ -1164,7 +1164,7 @@ extern "C" int sipi_cli_main(int argc, char **argv)
       }
 
       size_t l = optMaxPostSize.length();
-      char c = optMaxPostSize[l - 1];
+      char c = l > 0 ? optMaxPostSize[l - 1] : '\0';
       tsize_t maxpost_size;
       if (c == 'M') {
         maxpost_size = stoll(optMaxPostSize.substr(0, l - 1)) * 1024 * 1024;
@@ -1509,7 +1509,7 @@ extern "C" int sipi_cli_main(int argc, char **argv)
       // (sipi_preflight / sipi_run_lua_route) build their per-call VM from. It
       // mirrors the per-request VM shttps::Server builds: same init-script
       // source, scriptdir, JWT secret, and globals installers in registration
-      // order. Phase B-L parity install; sipi_init takes it over at the Phase C
+      // order. This is the parity install; sipi_init takes it over at the
       // cutover (this block and the server both go away then).
       {
         std::ifstream initscript_in(sipiConf.getInitScript());
@@ -1541,7 +1541,7 @@ extern "C" int sipi_cli_main(int argc, char **argv)
   };
 
   //
-  // Subcommand surface (Phases 11.1-11.4 — DEV-6540).
+  // Subcommand surface.
   //
   // Two tiers per ADR-0010:
   //   - generic verbs: `convert <in> <out>`, `verify <file>`, `query`,
@@ -1566,8 +1566,7 @@ extern "C" int sipi_cli_main(int argc, char **argv)
   // group isn't attached to — the option-availability matrix is
   // enforced by which subcommands each helper is invoked on, below.
   // All groups bind to the legacy storage variables so the
-  // if-else body chain (still active until Phase 11.4) keeps reading
-  // them transparently.
+  // if-else body chain keeps reading them transparently.
   auto attach_generic_transform_opts = [&](CLI::App *cmd) {
     cmd->add_option("-r,--region", optRegion, "Select region of interest, where x y w h are integer values.")
       ->expected(4);
@@ -1598,12 +1597,11 @@ extern "C" int sipi_cli_main(int argc, char **argv)
       "Emit a structured JSON report (success or error) to stdout instead of human-readable messages.");
   };
 
-  // ----- Format-specific options (Phase 11.4) ---------------------------
+  // ----- Format-specific options ---------------------------------------
   // J2K + pyramidal-TIFF tuning knobs from `kdu_compress`. Attached only
   // to `convert` since that is the verb that can produce JP2 or pyramidal
-  // TIFF outputs. `convert service-file` deliberately omits these — the
-  // `convert service-file` command (Phase 12.1) bakes in good
-  // baseline defaults, not operator-controlled.
+  // TIFF outputs. `convert service-file` deliberately omits these — that
+  // command bakes in good baseline defaults, not operator-controlled.
   auto attach_j2k_opts = [&](CLI::App *cmd) {
     cmd->add_option("--Sprofile", j2k_Sprofile,
       "Restricted profile to which the code-stream conforms [Default: PART2].")
@@ -1631,7 +1629,7 @@ extern "C" int sipi_cli_main(int argc, char **argv)
       "TIFF: store in Pyramidal TIFF format [Default: no].");
   };
 
-  // ----- Server options (Phase 11.4) ------------------------------------
+  // ----- Server options -------------------------------------------------
   // All ~40 server options live on the `server` subcommand. Sentry env
   // settings remain on `sipiopt` (top-level) so they apply to every
   // subcommand invocation.
