@@ -29,4 +29,14 @@ LogLevel get_log_level();
 void set_json_mode(bool enabled);
 bool is_json_mode();
 
+/*!
+ * Stamp this thread's server-mode JSON log lines with the active distributed
+ * trace context (W3C lowercase-hex `trace_id` / `span_id`), so the C++ engine's
+ * logs correlate to the Rust shell's OpenTelemetry trace. The Rust shell sets it
+ * before each blocking FFI call and clears it after (both pointers NULL) — engine
+ * work runs on the same thread, so a thread-local is the right scope. NULL or
+ * empty clears it; while clear, the `trace_id`/`span_id` keys are omitted.
+ */
+void set_log_trace_context(const char *trace_id, const char *span_id);
+
 #endif

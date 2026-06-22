@@ -18,6 +18,12 @@ static bool g_cli_mode = false;
 // formally data-race-free per the C++ memory model.
 static std::atomic<bool> g_json_mode{ false };
 static LogLevel g_log_level = LL_INFO;
+// The active distributed-trace context for the current thread, set by the Rust
+// shell across the FFI before each blocking serve call and cleared after. Each
+// engine worker runs on one thread for the whole call, so thread-local exactly
+// scopes the context; empty means "no active trace" (the keys are then omitted).
+static thread_local std::string g_trace_id;
+static thread_local std::string g_span_id;
 
 void set_cli_mode(bool cli) { g_cli_mode = cli; }
 bool is_cli_mode() { return g_cli_mode; }
@@ -25,6 +31,12 @@ void set_log_level(LogLevel level) { g_log_level = level; }
 LogLevel get_log_level() { return g_log_level; }
 void set_json_mode(bool enabled) { g_json_mode.store(enabled, std::memory_order_relaxed); }
 bool is_json_mode() { return g_json_mode.load(std::memory_order_relaxed); }
+
+void set_log_trace_context(const char *trace_id, const char *span_id)
+{
+  g_trace_id = (trace_id != nullptr) ? trace_id : "";
+  g_span_id = (span_id != nullptr) ? span_id : "";
+}
 
 std::string escape_json_str(const std::string &s)
 {
@@ -120,7 +132,14 @@ std::string format(const char *message, ...)
 std::string log_vsformat(LogLevel ll, const char *message, va_list args)
 {
   std::string f = vformat(message, args);
-  return format("{\"level\": \"%s\", \"message\": \"%s\"}\n", LogLevelToString(ll), escape_json_str(f).c_str());
+  std::string line = format("{\"level\": \"%s\", \"message\": \"%s\"", LogLevelToString(ll), escape_json_str(f).c_str());
+  // Correlate with the Rust shell's trace when one is active on this thread; the
+  // ids are W3C lowercase hex, the same keys the Rust formatter emits.
+  if (!g_trace_id.empty()) {
+    line += format(", \"trace_id\": \"%s\", \"span_id\": \"%s\"", g_trace_id.c_str(), g_span_id.c_str());
+  }
+  line += "}\n";
+  return line;
 }
 
 std::string log_sformat(LogLevel ll, const char *message, ...)

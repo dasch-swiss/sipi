@@ -139,8 +139,13 @@ pub async fn iiif(
     // its decode instead of running to completion for a response nobody reads.
     let cancel = Arc::new(AtomicBool::new(false));
     let _cancel_guard = CancelOnDrop(Arc::clone(&cancel));
+    // Carry the request span (created by OtelAxumLayer) onto the blocking thread
+    // so the engine's coarse span nests under it and its trace context is what
+    // stamps the C++ engine logs.
+    let request_span = tracing::Span::current();
     let task = tokio::task::spawn_blocking(move || {
         let _permit = permit;// released when the engine work completes
+        let _entered = request_span.enter();
         dispatch_engine(&state, &parsed, &method, &uri, &headers, cancel)
     });
     match task.await {
@@ -179,6 +184,15 @@ fn dispatch_engine(
     headers: &HeaderMap,
     cancel: Arc<AtomicBool>,
 ) -> Response {
+    // A coarse engine span under the request span. Low-cardinality name; the
+    // identifier rides as an attribute (never in the name — DEV-6292). Its trace
+    // context stamps the C++ engine's log lines (the child span_id, so engine
+    // logs nest under this step), cleared when the scope ends so a reused
+    // blocking thread can't leak a stale id to the next request.
+    let span = tracing::info_span!("sipi.serve", kind = ?parsed.kind, identifier = %parsed.identifier);
+    let _enter = span.enter();
+    let _trace = crate::telemetry::current_trace_context().map(|(t, s)| ffi::LogTraceScope::set(&t, &s));
+
     if parsed.kind == RequestKind::FileDownload {
         let access = match file_access(state, parsed, method, uri, headers) {
             Ok(a) => a,

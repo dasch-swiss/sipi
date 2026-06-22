@@ -286,6 +286,46 @@ extern "C" {
     /// hook. Builds a VM, so call once at startup. Returns 0 (and sets `*out`).
     pub fn sipi_has_preflight(out: *mut c_int) -> c_int;
     pub fn sipi_has_file_preflight(out: *mut c_int) -> c_int;
+
+    /// Stamp the C++ engine's server-mode JSON logs on the calling thread with
+    /// the active trace context (lowercase-hex `trace_id`/`span_id`); both NULL
+    /// clears it. See `sipi_ffi.h`.
+    pub fn sipi_set_log_trace_context(trace_id: *const c_char, span_id: *const c_char);
+}
+
+/// Stamps the C++ engine's logs (on the current thread) with a trace context for
+/// the guard's lifetime, clearing on drop. Held across a blocking FFI serve call
+/// so the engine's log lines carry the active `trace_id`/`span_id` and correlate
+/// with the Rust trace; cleared on drop so a reused `spawn_blocking` thread never
+/// leaks a stale id onto the next request.
+pub struct LogTraceScope {
+    active: bool,
+}
+
+impl LogTraceScope {
+    /// Set the current thread's engine-log trace context (hex ids from the active
+    /// OTel span). Returns a guard that clears it on drop.
+    #[must_use]
+    pub fn set(trace_id: &str, span_id: &str) -> Self {
+        match (CString::new(trace_id), CString::new(span_id)) {
+            (Ok(t), Ok(s)) => {
+                // SAFETY: both are valid NUL-terminated strings for the call; the
+                // engine copies them into a thread-local; the seam guards exceptions.
+                unsafe { sipi_set_log_trace_context(t.as_ptr(), s.as_ptr()) };
+                Self { active: true }
+            }
+            _ => Self { active: false },
+        }
+    }
+}
+
+impl Drop for LogTraceScope {
+    fn drop(&mut self) {
+        if self.active {
+            // SAFETY: NULL clears the thread-local; the seam guards exceptions.
+            unsafe { sipi_set_log_trace_context(std::ptr::null(), std::ptr::null()) };
+        }
+    }
 }
 
 /// Startup link self-check: forces the C++ engine `cc_library` to link into this
