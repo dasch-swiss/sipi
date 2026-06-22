@@ -17,6 +17,7 @@
 #include "ffi/lua_config.h"// make_lua_server (sipi_has_preflight)
 #include "ffi/metrics_snapshot.h"
 #include "ffi/preflight.h"
+#include "ffi/run_lua_route.h"
 #include "ffi/serve_image.h"
 #include "ffi/serve_response.h"
 #include "logging/logger.h"// set_log_trace_context (sipi_set_log_trace_context)
@@ -40,6 +41,33 @@ shttps::HttpMethod parse_http_method(const char *method)
   if (m == "TRACE") { return shttps::HttpMethod::TRACE; }
   if (m == "CONNECT") { return shttps::HttpMethod::CONNECT; }
   return shttps::HttpMethod::OTHER;
+}
+
+// The canonical method name for a Lua-route enum value, the inverse of
+// parse_http_method — the string the Rust shell registers an axum route under.
+const char *http_method_name(shttps::HttpMethod m)
+{
+  switch (m) {
+  case shttps::HttpMethod::OPTIONS:
+    return "OPTIONS";
+  case shttps::HttpMethod::GET:
+    return "GET";
+  case shttps::HttpMethod::HEAD:
+    return "HEAD";
+  case shttps::HttpMethod::POST:
+    return "POST";
+  case shttps::HttpMethod::PUT:
+    return "PUT";
+  case shttps::HttpMethod::DELETE:
+    return "DELETE";
+  case shttps::HttpMethod::TRACE:
+    return "TRACE";
+  case shttps::HttpMethod::CONNECT:
+    return "CONNECT";
+  case shttps::HttpMethod::OTHER:
+    return "OTHER";
+  }
+  return "OTHER";// unreachable; the enum is exhaustively handled above
 }
 
 // Lower-case a header name, matching make_request_context (the Lua hooks look
@@ -122,6 +150,19 @@ int sipi_file_preflight(const char *filepath,
     if (!result) { return static_cast<int>(result.error()); }
     Sipi::ffi::apply_preflight(std::move(*result), type, emit_kv, kv_ctx);
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
+int sipi_run_lua_route(const char *script, SipiRequestContext *ctx, const SipiResponse *resp)
+{
+  // The Lua route writes its whole response (status/headers/body) through the
+  // sink during execution, so unlike the serve entries there is no build/apply
+  // split — run_lua_route drives the FfiResponseSink directly. Only the no-throw
+  // guard applies; a Lua error before any byte is written becomes a clean status,
+  // after it the already-committed stream truncates (parity with the transport).
+  return Sipi::ffi::sipi_guard([&] {
+    auto &rc = *reinterpret_cast<shttps::RequestContext *>(ctx);
+    return Sipi::ffi::run_lua_route(script, rc, *resp);
   });
 }
 
@@ -208,6 +249,16 @@ int sipi_nthreads(int *out)
   });
 }
 
+int sipi_max_post_size(size_t *out)
+{
+  // Guard-only edge probe — a pure read of the installed engine context, like
+  // sipi_nthreads. 0 means the config left POST size unlimited.
+  return Sipi::ffi::sipi_guard([&] {
+    *out = Sipi::ffi::engine_context().max_post_size;
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
 int sipi_image_dims(const char *resolved_path, SipiImageDims *out)
 {
   // Header-only shape read. The Rust edge owns existence + containment (R1/R2)
@@ -275,6 +326,75 @@ SipiRequestContext *sipi_make_request_context(const char *method,
 void sipi_free_request_context(SipiRequestContext *ctx)
 {
   delete reinterpret_cast<shttps::RequestContext *>(ctx);
+}
+
+void sipi_request_context_set_body(SipiRequestContext *ctx, const char *content_type, const uint8_t *data, size_t len)
+{
+  // Void + can only fail on allocation; swallow so no C++ exception crosses the
+  // boundary (the uniform boundary contract).
+  try {
+    auto &rc = *reinterpret_cast<shttps::RequestContext *>(ctx);
+    rc.content_type = nz(content_type);
+    if (data != nullptr && len > 0) {
+      rc.content.assign(reinterpret_cast<const char *>(data), len);
+    } else {
+      rc.content.clear();
+    }
+  } catch (...) {
+  }
+}
+
+void sipi_request_context_add_upload(SipiRequestContext *ctx,
+  const char *fieldname,
+  const char *origname,
+  const char *tmpname,
+  const char *mimetype,
+  uint64_t filesize)
+{
+  try {
+    auto &rc = *reinterpret_cast<shttps::RequestContext *>(ctx);
+    rc.uploads.push_back(shttps::UploadedFile{
+      .fieldname = nz(fieldname),
+      .origname = nz(origname),
+      .tmpname = nz(tmpname),
+      .mimetype = nz(mimetype),
+      .filesize = static_cast<std::size_t>(filesize),
+    });
+  } catch (...) {
+  }
+}
+
+void sipi_request_context_add_param(SipiRequestContext *ctx, int kind, const char *name, const char *value)
+{
+  // GET (kind 0) → server.get, POST (kind 1) → server.post; both also feed
+  // server.request (the merged view), matching make_request_context's split.
+  try {
+    auto &rc = *reinterpret_cast<shttps::RequestContext *>(ctx);
+    auto pair = std::make_pair(std::string{ nz(name) }, std::string{ nz(value) });
+    if (kind == 1) {
+      rc.post_params.push_back(pair);
+    } else {
+      rc.get_params.push_back(pair);
+    }
+    rc.request_params.push_back(std::move(pair));
+  } catch (...) {
+  }
+}
+
+int sipi_routes(SipiRouteFn emit, void *ctx)
+{
+  // A pure read of the engine-held Lua config — guard-only (no response sink, no
+  // fallible pre-commit work). The Rust shell calls this once at startup. The
+  // script path is composed against scriptdir exactly as the transport did
+  // (`_scriptdir + "/" + route.script`), so the emitted path resolves the same.
+  return Sipi::ffi::sipi_guard([&] {
+    const auto &cfg = Sipi::ffi::lua_config();
+    for (const auto &route : cfg.routes) {
+      const std::string script = cfg.script_dir + "/" + route.script;
+      emit(ctx, http_method_name(route.method), route.route.c_str(), script.c_str());
+    }
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
 }
 
 int sipi_has_preflight(int *out)

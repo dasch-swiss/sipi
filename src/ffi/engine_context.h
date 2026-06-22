@@ -49,6 +49,7 @@ struct EngineContext
   ScalingQuality scaling_quality{};//!< per-format scaling method
   std::size_t max_pixel_limit = 0;//!< max output pixels per request (0 = unlimited)
   int nthreads = 0;//!< configured worker-thread count; 0 = auto (the shell sizes its pool from host parallelism)
+  std::size_t max_post_size = 0;//!< max POST body size in bytes (the Rust shell caps Lua-route uploads); 0 = unlimited
 };
 
 /*! Install the engine context (copied into a file-static). Called once at server
