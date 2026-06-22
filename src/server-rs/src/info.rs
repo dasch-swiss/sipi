@@ -1,4 +1,4 @@
-//! IIIF `info.json` + SIPI `knora.json` assembly (strangler-fig Phase C).
+//! IIIF `info.json` + SIPI `knora.json` assembly (strangler-fig rewrite).
 //!
 //! The seam has no serve entry for these JSON responses — the Rust shell builds
 //! them from the edge-probe results (`sipi_image_dims` / `sipi_mimetype`), a
@@ -73,7 +73,7 @@ fn size_pyramid(width: u32, height: u32, clevels: u32) -> Vec<Value> {
 }
 
 /// IIIF `info.json` for an image (`SipiHttpServer.cpp:576-764`). The auth-service
-/// block (preflight-driven) is added by the handler in Slice 2.
+/// block (preflight-driven) is added by the handler.
 #[must_use]
 pub fn image_info_json(id: &str, dims: &SipiImageDims) -> Value {
     let mut root = Map::new();

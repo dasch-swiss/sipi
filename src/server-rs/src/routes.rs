@@ -1,4 +1,4 @@
-//! The IIIF request router (strangler-fig Phase C).
+//! The IIIF request router (strangler-fig rewrite).
 //!
 //! Replaces the C++ `iiif_handler` dispatch (`SipiHttpServer.cpp:1326`): a
 //! catch-all axum handler classifies the path with [`crate::iiif`], validates it
@@ -94,8 +94,8 @@ struct Access {
 }
 
 /// The catch-all IIIF handler (`GET|HEAD /…`). Classifies, validates, runs
-/// preflight, and dispatches. Never leaks an internal path in an error body
-/// (DEV-6062): every failure renders a bare status via [`sink::error_response`].
+/// preflight, and dispatches. Never leaks an internal path in an error body:
+/// every failure renders a bare status via [`sink::error_response`].
 pub async fn iiif(
     State(state): State<Arc<AppState>>,
     method: Method,
@@ -128,15 +128,15 @@ pub async fn iiif(
     // Everything else drives the blocking C++ engine (the per-call preflight VM,
     // realpath, decode/encode). Bound concurrency on the pool and run the work on
     // a blocking thread so the async runtime stays responsive; a full pool sheds
-    // load with 503 + Retry-After (DEV-6100). /health, /favicon, and OPTIONS are
-    // separate routes that never reach here (DEV-6101).
+    // load with 503 + Retry-After. /health, /favicon, and OPTIONS are
+    // separate routes that never reach here.
     let permit = match Arc::clone(&state.pool).try_acquire_owned() {
         Ok(permit) => permit,
         Err(_) => return busy_response(),
     };
     // Shell-set headers on the streamed (success) response, captured before the
     // request is moved onto the blocking thread: the CORS Origin echo (image +
-    // /file; DEV-6061, never with credentials) and, for a /file Range request,
+    // /file; never with credentials) and, for a /file Range request,
     // the identifier-derived Content-Disposition (SipiHttpServer.cpp:1120-1129).
     let cors_origin = header_str(&headers, "origin").and_then(|o| HeaderValue::from_str(&o).ok());
     let content_disp = (parsed.kind == RequestKind::FileDownload && headers.contains_key(header::RANGE))
@@ -199,7 +199,7 @@ fn dispatch_engine(
     body_tx: mpsc::Sender<axum::body::Bytes>,
 ) {
     // A coarse engine span under the request span. Low-cardinality name; the
-    // identifier rides as an attribute (never in the name — DEV-6292). Its trace
+    // identifier rides as an attribute (never in the name). Its trace
     // context stamps the C++ engine's log lines (the child span_id, so engine
     // logs nest under this step), cleared when the scope ends so a reused
     // blocking thread can't leak a stale id to the next request.
@@ -268,7 +268,7 @@ fn complete(outcome_tx: oneshot::Sender<Outcome>, response: Response) {
     let _ = outcome_tx.send(Outcome::Complete(response));
 }
 
-/// Pool-full backpressure: a bare 503 with `Retry-After: 1` (DEV-6100) — no body,
+/// Pool-full backpressure: a bare 503 with `Retry-After: 1` — no body,
 /// no internal detail. The client should retry shortly.
 fn busy_response() -> Response {
     let mut response = sink::error_response(StatusCode::SERVICE_UNAVAILABLE);
@@ -409,7 +409,7 @@ fn serve_file(
     });
 }
 
-/// CORS preflight (`OPTIONS`): echo the Origin (no credentials — DEV-6061),
+/// CORS preflight (`OPTIONS`): echo the Origin (no credentials),
 /// advertise the served methods, and echo the requested headers
 /// (`SipiHttpServer`/`Connection.cpp:411-416`, minus the credential reflection).
 /// Engine-independent, so it serves without the readiness gate.
@@ -619,6 +619,12 @@ fn canonical_id(scheme: &str, host: &str, prefix: &str, identifier: &str) -> Str
 }
 
 /// The rate-limit client IP: the rightmost `X-Forwarded-For` value, else empty.
+///
+/// SECURITY: this trusts `X-Forwarded-For`, which is sound only when SIPI sits
+/// behind a reverse proxy (Traefik) that overwrites the header with the real
+/// peer. The shell must never be directly reachable by clients — a directly
+/// connected client could forge `X-Forwarded-For` on every request to mint
+/// unlimited rate-limit buckets and defeat the per-client limiter.
 fn client_ip(headers: &HeaderMap) -> String {
     header_str(headers, "x-forwarded-for")
         .and_then(|v| v.rsplit(',').next().map(|s| s.trim().to_owned()))
@@ -705,7 +711,7 @@ mod tests {
 
     #[test]
     fn busy_response_is_503_with_retry_after() {
-        // The pool-full backpressure contract (DEV-6100): bare 503 + Retry-After: 1.
+        // The pool-full backpressure contract: bare 503 + Retry-After: 1.
         let resp = busy_response();
         assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(resp.headers().get(header::RETRY_AFTER).unwrap(), "1");
