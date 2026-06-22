@@ -10,6 +10,7 @@
 //! never stalls on the C++ engine.
 
 use std::ffi::CString;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -133,9 +134,14 @@ pub async fn iiif(
         Ok(permit) => permit,
         Err(_) => return busy_response(),
     };
+    // A client disconnect (or a tower timeout) drops this handler future; the
+    // guard then flips the cancel flag so the orphaned spawn_blocking task aborts
+    // its decode instead of running to completion for a response nobody reads.
+    let cancel = Arc::new(AtomicBool::new(false));
+    let _cancel_guard = CancelOnDrop(Arc::clone(&cancel));
     let task = tokio::task::spawn_blocking(move || {
         let _permit = permit;// released when the engine work completes
-        dispatch_engine(&state, &parsed, &method, &uri, &headers)
+        dispatch_engine(&state, &parsed, &method, &uri, &headers, cancel)
     });
     match task.await {
         Ok(response) => response,
@@ -146,20 +152,40 @@ pub async fn iiif(
     }
 }
 
+/// Flips its cancel flag when dropped. Held in the async handler across the
+/// blocking dispatch: if the client disconnects (axum drops the handler future)
+/// the flag flips, and the orphaned spawn_blocking task observes it via the
+/// engine's `cancelled()` poll — aborting the decode and unlinking any partial
+/// cache rather than finishing work nobody will read.
+struct CancelOnDrop(Arc<AtomicBool>);
+
+impl Drop for CancelOnDrop {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+}
+
 /// The blocking engine dispatch, run on a `spawn_blocking` thread under a pool
 /// permit: access resolution (the preflight VM), path validation (realpath), and
 /// the serve call (decode/encode, or raw `/file`). Split out of [`iiif`] so the
 /// async runtime never blocks on the C++ engine. Redirects are handled by the
 /// caller before the pool; file downloads are handled here, ahead of the IIIF
 /// JSON/image kinds.
-fn dispatch_engine(state: &AppState, parsed: &ParsedRequest, method: &Method, uri: &Uri, headers: &HeaderMap) -> Response {
+fn dispatch_engine(
+    state: &AppState,
+    parsed: &ParsedRequest,
+    method: &Method,
+    uri: &Uri,
+    headers: &HeaderMap,
+    cancel: Arc<AtomicBool>,
+) -> Response {
     if parsed.kind == RequestKind::FileDownload {
         let access = match file_access(state, parsed, method, uri, headers) {
             Ok(a) => a,
             Err(resp) => return resp,
         };
         return match resolve(&access.infile, &state.resolved_imgroot) {
-            Ok(resolved) => serve_file(&resolved, parsed, headers),
+            Ok(resolved) => serve_file(&resolved, parsed, headers, &cancel),
             Err(resp) => resp,
         };
     }
@@ -186,7 +212,7 @@ fn dispatch_engine(state: &AppState, parsed: &ParsedRequest, method: &Method, ur
     };
 
     match parsed.kind {
-        RequestKind::Iiif => serve_image(&resolved, parsed, headers, *method == Method::HEAD, &access),
+        RequestKind::Iiif => serve_image(&resolved, parsed, headers, *method == Method::HEAD, &access, &cancel),
         RequestKind::InfoJson => serve_info_json(&resolved, parsed, headers, &access),
         RequestKind::KnoraJson => serve_knora_json(&resolved, parsed, headers),
         RequestKind::Redirect | RequestKind::FileDownload => unreachable!("redirect handled by caller, file above"),
@@ -259,7 +285,14 @@ fn resolve(infile: &str, resolved_root: &str) -> Result<String, Response> {
 
 /// IIIF image via `sipi_serve_image`, honouring a `restrict` decision's
 /// `size`/`watermark` from the preflight kv channel.
-fn serve_image(resolved: &str, parsed: &ParsedRequest, headers: &HeaderMap, is_head: bool, access: &Access) -> Response {
+fn serve_image(
+    resolved: &str,
+    parsed: &ParsedRequest,
+    headers: &HeaderMap,
+    is_head: bool,
+    access: &Access,
+    cancel: &Arc<AtomicBool>,
+) -> Response {
     let params = parsed.params.expect("an Iiif request always carries parsed params");
     let (_scheme, host) = forwarded(headers);
 
@@ -299,7 +332,8 @@ fn serve_image(resolved: &str, parsed: &ParsedRequest, headers: &HeaderMap, is_h
 
     // SAFETY: every pointer in `req` outlives this synchronous call; the seam
     // guards C++ exceptions (→ status code, never an unwind into Rust).
-    let (code, sink_state) = sink::serve_buffered(|resp: &SipiResponse| unsafe { ffi::sipi_serve_image(&req, resp) });
+    let (code, sink_state) =
+        sink::serve_buffered(Arc::clone(cancel), |resp: &SipiResponse| unsafe { ffi::sipi_serve_image(&req, resp) });
     let mut response = finish_serve(code, sink_state);
     apply_origin_cors(&mut response, headers);
     response
@@ -307,7 +341,7 @@ fn serve_image(resolved: &str, parsed: &ParsedRequest, headers: &HeaderMap, is_h
 
 /// Raw `/file` passthrough via `sipi_serve_file` (Range/206). Content-Disposition
 /// is set caller-side, only on a Range request (`SipiHttpServer.cpp:1120-1129`).
-fn serve_file(resolved: &str, parsed: &ParsedRequest, headers: &HeaderMap) -> Response {
+fn serve_file(resolved: &str, parsed: &ParsedRequest, headers: &HeaderMap, cancel: &Arc<AtomicBool>) -> Response {
     let c_resolved = match CString::new(resolved) {
         Ok(c) => c,
         Err(_) => return sink::error_response(StatusCode::BAD_REQUEST),
@@ -317,8 +351,9 @@ fn serve_file(resolved: &str, parsed: &ParsedRequest, headers: &HeaderMap) -> Re
     let range_ptr = c_range.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
 
     // SAFETY: `c_resolved`/`c_range` outlive the synchronous call; the seam guards.
-    let (code, sink_state) =
-        sink::serve_buffered(|resp: &SipiResponse| unsafe { ffi::sipi_serve_file(c_resolved.as_ptr(), range_ptr, resp) });
+    let (code, sink_state) = sink::serve_buffered(Arc::clone(cancel), |resp: &SipiResponse| unsafe {
+        ffi::sipi_serve_file(c_resolved.as_ptr(), range_ptr, resp)
+    });
     let mut response = finish_serve(code, sink_state);
 
     if range.is_some() && response.status().is_success() {
