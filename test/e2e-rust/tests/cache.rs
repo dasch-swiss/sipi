@@ -206,6 +206,39 @@ fn cache_metrics() {
 }
 
 #[test]
+fn head_does_not_warm_cache() {
+    // DEV-6660: a HEAD request must not write a cache entry. On an isolated
+    // server (so the global hit counter is uncontended), HEAD an uncached image,
+    // then GET the same url — the GET must be a cache MISS. If the HEAD had warmed
+    // the cache, the GET would register a hit instead.
+    let srv = start_server_with_cache_config("20M", 8);
+    let url = format!("{}/unit/lena512.jp2/full/max/0/default.jpg", srv.base_url);
+
+    // HEAD the (uncached) image — serves headers, must write no cache.
+    let resp = client().head(&url).send().expect("HEAD image failed");
+    assert_eq!(resp.status().as_u16(), 200);
+    let _ = resp.bytes();
+    let hits_after_head = get_metrics(&srv.base_url)
+        .get("sipi_cache_hits_total")
+        .copied()
+        .unwrap_or(0.0);
+
+    // GET the same url — must be a cache miss (the HEAD wrote nothing).
+    let resp = client().get(&url).send().expect("GET image failed");
+    assert_eq!(resp.status().as_u16(), 200);
+    let _ = resp.bytes();
+    let hits_after_get = get_metrics(&srv.base_url)
+        .get("sipi_cache_hits_total")
+        .copied()
+        .unwrap_or(0.0);
+
+    assert_eq!(
+        hits_after_get, hits_after_head,
+        "the GET after a HEAD must be a cache miss — a HEAD must not warm the cache (DEV-6660)"
+    );
+}
+
+#[test]
 fn cache_hit_avoids_decode() {
     let srv = server();
 
