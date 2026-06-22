@@ -12,7 +12,7 @@ Read these before reasoning about names, boundaries, or architectural decisions:
 
 - [`UBIQUITOUS_LANGUAGE.md`](UBIQUITOUS_LANGUAGE.md) — canonical SIPI glossary. Defines Image vs Bitstream, the IIIF pipeline terms (Region / Size / Rotation / Quality / Format / Decode level / Canonical URL / Cache key), Preservation metadata, the three Lua entry points, the seven Permission types, and more. Use these terms in code comments, commit messages, and PR descriptions; aliases listed there are *avoid*.
 - [`CONTEXT.md`](CONTEXT.md) — SIPI is the IIIF subdomain implementation of the **Access Area** bounded context in the wider [`dsp-repository`](https://github.com/dasch-swiss/dsp-repository) system. Defines the Published Language inherited from Access Area (**Preservation File** / **Service File** / **Access File**) and points at the SIPI-local glossary. [`src/shttps/README.md`](src/shttps/README.md) documents the internal HTTP-framework module and its four-type seam API.
-- [`docs/adr/`](docs/adr/) — architectural decision records. Start with [`0013-shttps-as-internal-module.md`](docs/adr/0013-shttps-as-internal-module.md).
+- [`docs/adr/`](docs/adr/) — architectural decision records. Start with [`0013-shttps-as-internal-module.md`](docs/adr/0013-shttps-as-internal-module.md) (the strangler-fig seam) and [`0017-extensibility-lua-and-rust.md`](docs/adr/0017-extensibility-lua-and-rust.md) (Lua and Rust extensions are both first-class, permanently).
 
 ## Build System and Common Commands
 
@@ -34,6 +34,7 @@ For full build instructions, see [`docs/src/development/building.md`](docs/src/d
 just bazel-build                 # bazel build --stamp //src/cli:sipi
 just bazel-build -c opt          # production-shape build (matches Docker image)
 just bazel-build --config=asan   # ASan+UBSan; same flag form for ad-hoc variants
+just bazel-build-server          # bazel build //src/server-rs:sipi_server (the Phase C Rust shell)
 
 # Tests
 just bazel-test-unit             # bazel test //test/unit/...  (12 components)
