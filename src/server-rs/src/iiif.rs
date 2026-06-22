@@ -1,15 +1,14 @@
-//! IIIF Image API 3.0 URL parser (strangler-fig Phase C; ADR-0013).
+//! IIIF Image API 3.0 URL parser (strangler-fig rewrite; ADR-0013).
 //!
 //! A Rust port of the C++ `iiifparser` (`SipiRegion` / `SipiSize` /
 //! `SipiRotation` / `SipiQualityFormat`) + `handlers::iiif_handler::parse_iiif_uri`.
 //! It classifies a request URI and, for an IIIF image request, parses the
 //! region/size/rotation/quality.format into the flattened [`SipiIiifParams`] the
-//! engine's `sipi_serve_image` consumes. This is the D+ "IIIF parser → Rust"
-//! slice, pulled into Phase C so the Rust shell owns IIIF parsing (the seam has
-//! no parser entry).
+//! engine's `sipi_serve_image` consumes. The Rust shell owns IIIF parsing (the
+//! seam has no parser entry).
 //!
 //! Parity is gated by the unit tests below + the e2e suite (`proptest_iiif_uri`,
-//! `iiif_compliance`) once it runs against the Rust binary (T11).
+//! `iiif_compliance`) once it runs against the Rust binary.
 
 use crate::ffi::{SipiFormatType, SipiIiifParams, SipiQualityType, SipiRegionType, SipiSizeType};
 

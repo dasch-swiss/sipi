@@ -1,5 +1,5 @@
 //! Image-root path construction + traversal validation at the request edge
-//! (strangler-fig Phase C). The FFI trusts the `resolved_path` it is handed —
+//! (strangler-fig rewrite). The FFI trusts the `resolved_path` it is handed —
 //! "validation owned by the Rust edge" (`sipi_ffi.h`) — so the shell reproduces
 //! the C++ server's two-stage check before any serve call:
 //!

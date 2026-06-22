@@ -1,7 +1,7 @@
 //! Rust bindings for the narrow C FFI seam (`src/ffi/sipi_ffi.h`).
 //!
 //! Hand-written rather than bindgen-generated: the seam is a small, locked
-//! `extern "C"` contract (strangler-fig Phase B; ADR-0013), so mirroring it by
+//! `extern "C"` contract (strangler-fig rewrite; ADR-0013), so mirroring it by
 //! hand keeps the Bazel graph free of a bindgen build step and keeps the Rust
 //! types readable. Each declaration here tracks `sipi_ffi.h` 1:1 — when the
 //! header changes, this file changes in lock-step.

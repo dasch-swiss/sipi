@@ -1,4 +1,4 @@
-//! SIPI Rust HTTP shell (strangler-fig Phase C; ADR-0013).
+//! SIPI Rust HTTP shell (strangler-fig rewrite; ADR-0013).
 //!
 //! This crate is the `sipi` **library**: it owns the axum + tokio server,
 //! routing, the FFI wiring to the C++ image engine, config, and observability,
@@ -8,8 +8,8 @@
 //! dependency (decision #9): a downstream crate can own `main`, depend on
 //! `sipi`, and inject its own behaviour.
 //!
-//! Phase C is built additively — this shell runs in parallel with the existing
-//! C++ server, which keeps the production socket until the step-5 cutover.
+//! The shell is built additively: it runs in parallel with the existing C++
+//! server, which keeps the production socket until the cutover.
 
 pub mod ffi;
 pub mod iiif;
@@ -29,28 +29,26 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
 
-/// Default listen port for the additive Rust shell. The real port comes from
-/// the SIPI config once `sipi_init` lands (T4); until then it is overridable via
-/// `--serverport` or `SIPI_RS_PORT` so the parallel shell never collides with
-/// the C++ server.
+/// Default listen port for the additive Rust shell. The real port will come
+/// from the SIPI config; until then it is overridable via `--serverport` or
+/// `SIPI_RS_PORT` so the parallel shell never collides with the C++ server.
 const DEFAULT_PORT: u16 = 1024;
 
 /// Server-mode flags. `server` is the only subcommand the Rust shell owns;
 /// every other argv is handed to the C++ CLI (`sipi_cli_main`) verbatim. Only
-/// the flags the shell consumes today are declared; `--config` is parsed and
-/// will be threaded into `sipi_init` (T4). The flag set matches what the e2e
-/// harness passes (`server --config … --serverport … --sslport … --drain-timeout …`).
+/// the flags the shell consumes today are declared. The flag set matches what
+/// the e2e harness passes (`server --config … --serverport … --sslport … --drain-timeout …`).
 #[derive(Parser, Debug)]
 #[command(name = "sipi server")]
 struct ServerArgs {
-    /// Path to the SIPI Lua config (consumed by sipi_init — T4).
+    /// Path to the SIPI Lua config (installed by `sipi_init` before serving).
     #[arg(long)]
     config: Option<String>,
     /// HTTP listen port.
     #[arg(long)]
     serverport: Option<u16>,
     /// TLS port (accepted for harness/CLI parity; SIPI serves plain HTTP behind
-    /// Traefik, so this is unused — DEV-6035).
+    /// Traefik, so this is unused).
     #[arg(long)]
     sslport: Option<u16>,
     /// Graceful-drain deadline in seconds (default 30): on SIGTERM/Ctrl-C,
@@ -192,22 +190,22 @@ fn run_cli(argv: &[String]) -> ExitCode {
 
 /// Build the axum application. `/health` + `/favicon.ico` are Rust-native and
 /// never touch the FFI; every other path is the IIIF catch-all, which classifies,
-/// validates, and drives the engine seam (Slice 1). CORS, concurrency, and OTel
-/// layers wrap this in later slices.
+/// validates, and drives the engine seam. The CORS, concurrency, and OTel
+/// layers wrap this.
 pub fn app(state: Arc<routes::AppState>) -> Router {
     use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
     Router::new()
         // The bare root has no `*rest` capture, so register it explicitly; the
         // handler classifies it (→ 400, matching the C++ parser). OPTIONS is the
         // CORS preflight (engine-independent). These routes are traced: a span
-        // named by the route template (low cardinality — DEV-6292), continuing
+        // named by the route template (low cardinality), continuing
         // the W3C traceparent; OtelInResponseLayer echoes it into the response.
         .route("/", get(routes::iiif).head(routes::iiif).options(routes::cors_preflight))
         .route("/{*rest}", get(routes::iiif).head(routes::iiif).options(routes::cors_preflight))
         .layer(OtelInResponseLayer)
         .layer(OtelAxumLayer::default())
         // Registered after the layers so liveness / asset probes never enter the
-        // trace pipeline (DEV-6101) — they also bypass the engine pool.
+        // trace pipeline — they also bypass the engine pool.
         .route("/health", get(health))
         .route("/favicon.ico", get(favicon))
         .with_state(state)
@@ -224,7 +222,7 @@ async fn serve(port: Option<u16>, drain_timeout: Duration) -> std::io::Result<()
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!(%addr, "SIPI Rust shell listening");
 
-    // Graceful shutdown (DEV-5927): a SIGTERM/Ctrl-C stops accepting new
+    // Graceful shutdown: a SIGTERM/Ctrl-C stops accepting new
     // connections and lets in-flight requests finish, bounded by drain_timeout —
     // past the deadline the remaining requests are abandoned and the process
     // exits. A watch latches the signal so axum's drain and the deadline both
@@ -285,7 +283,7 @@ async fn shutdown_signal() {
     tracing::info!("shutdown signal received; draining");
 }
 
-/// Rust-native liveness probe — bypasses the engine entirely (DEV-6101).
+/// Rust-native liveness probe — bypasses the engine entirely.
 async fn health() -> &'static str {
     "OK\n"
 }
@@ -295,8 +293,8 @@ async fn favicon() -> StatusCode {
     StatusCode::NO_CONTENT
 }
 
-/// Structured logging. Honours `RUST_LOG`; defaults to `info`. JSON formatting
-/// and OTLP export land in T10.
+/// Minimal structured logging for the CLI path. Honours `RUST_LOG`; defaults to
+/// `info`. The server path installs the full JSON + OTLP stack via [`telemetry::init`].
 fn init_tracing() {
     use tracing_subscriber::{fmt, EnvFilter};
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));

@@ -5,14 +5,14 @@
 
 /*!
  * The narrow C FFI seam between the Rust HTTP shell and the C++ image engine
- * (strangler-fig Phase B; ADR-0013).
+ * (strangler-fig rewrite; ADR-0013).
  *
  * This header is the **durable interface** of the rewrite: the Rust shell
- * (Phase C) drives the C++ engine through exactly these functions, and the
- * engine reaches the response only through the `SipiResponse` callbacks — never
- * a `shttps` type. It is plain C (no C++ in the surface) so it is consumable
- * both by the C++ implementation in `sipi_ffi.cpp` and, in Phase C, by Rust via
- * bindgen.
+ * drives the C++ engine through exactly these functions, and the engine reaches
+ * the response only through the `SipiResponse` callbacks — never a `shttps`
+ * type. It is plain C (no C++ in the surface) so it is consumable both by the
+ * C++ implementation in `sipi_ffi.cpp` and by the Rust shell, which mirrors it
+ * with hand-written bindings in `src/server-rs/src/ffi.rs`.
  *
  * **Streamed, not a result struct.** A real SIPI response carries a dynamic
  * status, a variable header set (Content-Range/206, Content-Disposition,
@@ -23,7 +23,7 @@
  *
  * **No C++ exception crosses this boundary.** Every `sipi_*` entry wraps its
  * body in a catch-all and returns a status code; a throw unwinding through
- * `extern "C"` into Rust is UB (FFI contracts, Phase B).
+ * `extern "C"` into Rust is UB.
  *
  * The full entry-point set is declared here as one locked contract; the
  * definitions in `sipi_ffi.cpp` grow as the engine is carved behind the seam.
@@ -41,9 +41,9 @@ extern "C" {
 #define SIPI_FFI_NODISCARD
 #endif
 
-/* ── Response sink callbacks (Rust-owned in Phase C) ────────────────────────
+/* ── Response sink callbacks (Rust-owned) ──────────────────────────────────
  * The engine emits the whole response through these. `ctx` is the opaque
- * Rust-owned (or, in the Phase B parity path, C++-Connection-owned) cookie. */
+ * Rust-owned (or, in the C++ parity path, Connection-owned) cookie. */
 
 /*! Body bytes, forward-only, for an **unknown-length** body (e.g. the image
  *  encoder, whose output size isn't known until encoding finishes — the
@@ -203,8 +203,8 @@ typedef struct SipiMetricsSnapshot SipiMetricsSnapshot;
  * runtime stays C++ behind the seam (it wraps the C++ `shttps::RequestContext`);
  * the Lua hooks can read ANY request field via `server.*`, so preflight and
  * configured routes carry the full request, not the narrow IIIF `SipiServeRequest`.
- * Built by the caller — the transport in the Phase B-L parity path, the Rust
- * shell (via a builder) in Phase C. */
+ * Built by the caller — the transport in the C++ parity path, or the Rust
+ * shell via a builder. */
 typedef struct SipiRequestContext SipiRequestContext;
 
 /* ── Edge-probe types (Rust-edge path validation + info.json/knora.json) ─────
@@ -270,7 +270,7 @@ SIPI_FFI_NODISCARD int sipi_file_preflight(const char *filepath,
   void *kv_ctx);
 
 /*! Build the opaque request context the preflight hooks read (`server.*`) from
- *  primitive request fields — the Phase C replacement for the transport's
+ *  primitive request fields — the Rust shell's replacement for the transport's
  *  `make_request_context(Connection&)`. Header names are lowercased to match the
  *  transport. The JWT secret + the response sink are NOT taken here: the secret
  *  is injected from the engine Lua config by `make_lua_server`, and preflight is

@@ -45,7 +45,7 @@ default:
 bazel-build *FLAGS='':
     bazel build --stamp //src/cli:sipi {{FLAGS}}
 
-# Build the Rust HTTP shell (strangler-fig Phase C). Additive — the C++ server
+# Build the Rust HTTP shell (strangler-fig rewrite). Additive — the C++ server
 # still owns the production socket until the cutover; this is for local testing.
 bazel-build-server *FLAGS='':
     bazel build --stamp //src/server-rs:sipi_server {{FLAGS}}
