@@ -6,11 +6,11 @@
 //! (a known-length file region) or repeated `write` (an unknown-length stream)
 //! — and `cancelled` is polled between stages.
 //!
-//! T5 **buffers** the response: the callbacks accumulate status + headers + body
-//! into a [`SinkState`], and the caller builds an axum [`Response`] after the
-//! serve call returns. This holds the encoded image in memory; true streaming
-//! (so large responses don't buffer) is a later refinement (T9). Decode memory
-//! is already bounded by the engine's memory budget (installed by `sipi_init`).
+//! The sink **buffers** the response: the callbacks accumulate status + headers +
+//! body into a [`SinkState`], and the caller builds an axum [`Response`] after the
+//! serve call returns. This holds the encoded image in memory; true streaming (so
+//! large responses don't buffer) is a later refinement. Decode memory is already
+//! bounded by the engine's memory budget (installed by `sipi_init`).
 
 use axum::body::Body;
 use axum::http::{HeaderName, HeaderValue, StatusCode};
@@ -18,6 +18,8 @@ use axum::response::Response;
 use std::ffi::CStr;
 use std::io::{Read, Seek, SeekFrom};
 use std::os::raw::{c_char, c_int, c_void};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use crate::ffi::SipiResponse;
 
@@ -30,6 +32,9 @@ pub struct SinkState {
     /// A `send_file` read failed — the caller should treat the response as a 500
     /// (the engine already committed status/headers, but the body is incomplete).
     io_error: bool,
+    /// Flipped by the async handler's cancel guard on client disconnect / timeout;
+    /// the engine polls it via [`cb_cancelled`] between pipeline stages and aborts.
+    cancel: Arc<AtomicBool>,
 }
 
 // Each callback wraps its body in `catch_unwind` — the Rust-side analog of the
@@ -89,10 +94,17 @@ extern "C" fn cb_send_file(ctx: *mut c_void, path: *const c_char, offset: u64, l
     .unwrap_or(1)
 }
 
-extern "C" fn cb_cancelled(_ctx: *mut c_void) -> c_int {
-    // T9 wires client-disconnect / timeout detection here. Until then a serve
-    // never reports cancellation.
-    0
+extern "C" fn cb_cancelled(ctx: *mut c_void) -> c_int {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: `ctx` is the `&mut SinkState` the sink was built with; the engine
+        // polls this synchronously on the serving thread, no aliasing race.
+        let state = unsafe { &mut *(ctx as *mut SinkState) };
+        // 1 = the client is gone / the request timed out → the engine aborts and
+        // unlinks any partial cache file. Relaxed: a best-effort signal carrying
+        // no associated data, observed within a stage or two of the flip.
+        c_int::from(state.cancel.load(Ordering::Relaxed))
+    }))
+    .unwrap_or(0)
 }
 
 fn read_file_region(path: &str, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
@@ -108,13 +120,15 @@ fn read_file_region(path: &str, offset: u64, length: u64) -> std::io::Result<Vec
 /// Run a `sipi_serve_*` call against a buffering sink and return the engine's
 /// status code plus the accumulated [`SinkState`]. The closure receives the
 /// `SipiResponse` to hand to the FFI entry. The call must be **synchronous** —
-/// the sink's `ctx` aliases `state` only for the duration of `call`.
-pub fn serve_buffered<F>(call: F) -> (i32, SinkState)
+/// the sink's `ctx` aliases `state` only for the duration of `call`. `cancel` is
+/// the shared flag the engine polls via `cancelled()`; the caller flips it on
+/// client disconnect / timeout to abort the serve.
+pub fn serve_buffered<F>(cancel: Arc<AtomicBool>, call: F) -> (i32, SinkState)
 where
     F: FnOnce(&SipiResponse) -> i32,
 {
     // Box keeps the SinkState address stable for the raw `ctx` pointer.
-    let mut state = Box::new(SinkState::default());
+    let mut state = Box::new(SinkState { cancel, ..Default::default() });
     let resp = SipiResponse {
         ctx: &mut *state as *mut SinkState as *mut c_void,
         set_status: Some(cb_set_status),
