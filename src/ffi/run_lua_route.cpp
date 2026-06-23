@@ -72,6 +72,13 @@ int run_lua_route(const char *script_path, shttps::RequestContext &rc, const Sip
   const std::string ext = (dot != std::string::npos) ? path.substr(dot + 1) : std::string{};
 
   std::ifstream inf(path);
+  if (!inf.is_open()) {
+    // access(R_OK) passed above, so an open failure here means the script was
+    // removed between the check and the open (TOCTOU). Fail like not-readable
+    // rather than running an empty chunk and returning an empty 200.
+    log_err("sipi_run_lua_route: script '%s' became unreadable after the access() check", path.c_str());
+    return 404;
+  }
   std::stringstream sstr;
   sstr << inf.rdbuf();
   const std::string code = sstr.str();
