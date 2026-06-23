@@ -19,6 +19,7 @@ pub mod routes;
 pub mod sink;
 pub mod telemetry;
 
+use axum::response::{IntoResponse, Response};
 use axum::{http::StatusCode, routing::get, Router};
 use clap::Parser;
 use std::ffi::CString;
@@ -26,13 +27,17 @@ use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::os::raw::{c_char, c_int};
 use std::process::ExitCode;
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 
 /// Default listen port for the additive Rust shell. The real port will come
 /// from the SIPI config; until then it is overridable via `--serverport` or
 /// `SIPI_RS_PORT` so the parallel shell never collides with the C++ server.
 const DEFAULT_PORT: u16 = 1024;
+
+/// Process start time, for the `/health` uptime field. Set once at server
+/// startup; the handler reads `elapsed()`.
+static START: OnceLock<Instant> = OnceLock::new();
 
 /// Server-mode flags. `server` is the only subcommand the Rust shell owns;
 /// every other argv is handed to the C++ CLI (`sipi_cli_main`) verbatim. Only
@@ -108,6 +113,9 @@ fn run_server(server_argv: &[String]) -> ExitCode {
 /// the FFI seam, install the engine + Lua config, serve, then flush telemetry on
 /// the way out.
 async fn server_main(args: ServerArgs) -> ExitCode {
+    // Stamp the process start for /health uptime before anything else.
+    let _ = START.set(Instant::now());
+
     // Telemetry first, so the startup logs + the FFI self-check are captured.
     // Fail-open: no OTEL_EXPORTER_OTLP_ENDPOINT → no exporter, so local dev needs
     // no collector. Inside the runtime because the OTLP batch exporter needs it.
@@ -299,9 +307,18 @@ async fn shutdown_signal() {
     tracing::info!("shutdown signal received; draining");
 }
 
-/// Rust-native liveness probe — bypasses the engine entirely.
-async fn health() -> &'static str {
-    "OK\n"
+/// Rust-native liveness probe — bypasses the engine entirely. Mirrors the C++
+/// health_handler's body: `{status, version, uptime_seconds}` as JSON. The
+/// version is the deployed release (`SIPI_SENTRY_RELEASE`, the same source as the
+/// OTel `service.version`), falling back to the crate version in local runs.
+async fn health() -> Response {
+    let uptime = START.get().map_or(0, |s| s.elapsed().as_secs());
+    let version = std::env::var("SIPI_SENTRY_RELEASE")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_owned());
+    let body = serde_json::json!({ "status": "ok", "version": version, "uptime_seconds": uptime }).to_string();
+    ([(axum::http::header::CONTENT_TYPE, "application/json")], body).into_response()
 }
 
 /// Rust-native favicon — 204 No Content (SIPI ships no favicon).
