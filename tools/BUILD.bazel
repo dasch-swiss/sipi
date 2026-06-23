@@ -3,6 +3,20 @@
 # the path directly — but exposing it via `exports_files` lets a future
 # `genrule` test it under Bazel sandbox if needed.
 
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
 exports_files([
     "workspace_status.sh",
 ])
+
+# Hermetic `xxd -i` replacement: converts a binary file into a C array
+# (`unsigned char <symbol>[] = {…}; unsigned int <symbol>_len = N;`). The
+# ICC-profile and magic-database genrules invoke it instead of the host `xxd`,
+# so they build on lean RBE images that ship no xxd. Built in exec config
+# automatically when referenced via `genrule(tools=…)` or `attr.label(cfg="exec")`.
+rust_binary(
+    name = "bin2c",
+    srcs = ["bin2c.rs"],
+    edition = "2021",
+    visibility = ["//visibility:public"],
+)

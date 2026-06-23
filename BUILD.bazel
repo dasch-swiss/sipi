@@ -1,15 +1,9 @@
 # Workspace-root BUILD file. Hosts only labels needed at the root namespace
-# (the ICC-header generator script consumed by per-package genrules; the
-# LSan suppressions filegroup consumed by Rust e2e tests; the runtime
+# (the LSan suppressions filegroup consumed by Rust e2e tests; the runtime
 # fixtures consumed by Rust e2e tests as `SIPI_REPO_ROOT`).
 # Package-level rules live in their respective directories.
 
 load("@aspect_bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
-
-exports_files(
-    ["generate_icc_header.sh"],
-    visibility = ["//visibility:public"],
-)
 
 # LeakSanitizer suppressions consumed by Rust e2e tests under
 # `--config=asan`. Each `rust_test` data-deps this filegroup and the
