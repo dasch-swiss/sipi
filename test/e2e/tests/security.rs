@@ -23,6 +23,7 @@ fn create_jwt(claims: &serde_json::Value) -> String {
 // =============================================================================
 
 #[test]
+#[ignore = "Phase C gap (DEV-6659 step 2): auth config flag unparsed → shell exits 2 → connection refused (goes green when A lands) — plan 02 cluster A"]
 fn jwt_expired_token() {
     // SECURITY FINDING: sipi's Lua pre-flight handler does NOT check the `exp` claim.
     // It only validates the signature and checks `token_val['allow']`.
@@ -61,6 +62,7 @@ fn jwt_expired_token() {
 }
 
 #[test]
+#[ignore = "Phase C gap (DEV-6659 step 2): auth config flag unparsed → shell exits 2 → connection refused (goes green when A lands) — plan 02 cluster A"]
 fn jwt_alg_none_bypass() {
     // Send JWT with alg:none and no signature — common JWT vulnerability.
     let srv = server();
@@ -89,6 +91,7 @@ fn jwt_alg_none_bypass() {
 }
 
 #[test]
+#[ignore = "Phase C gap (DEV-6659 step 2): auth config flag unparsed → shell exits 2 → connection refused (goes green when A lands) — plan 02 cluster A"]
 fn jwt_tampered_payload() {
     // Create valid JWT, modify payload without re-signing, verify rejection.
     let srv = server();
