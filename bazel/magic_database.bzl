@@ -6,37 +6,19 @@ two symbols `shttps/util/Parsing.cpp` consumes via
 ship with the magic database in-binary and don't need an external
 `magic.mgc` on disk.
 
-The C-array conversion is `xxd -i`-style — the same wire format the
-existing `generate_icc_header.sh` produces. Inlining it here makes the
-rule self-contained and removes the host-tool dependency on `xxd`'s
-flag-set quirks (Toybox xxd on macOS doesn't accept the
-output-as-positional-arg form that GNU xxd does); we drive `xxd` via
-stdin/stdout, which is identical across all supported flavours.
+The C-array conversion runs the hermetic `//tools:bin2c` tool rather than
+the host `xxd`, so the rule builds identically on macOS, Linux CI, and lean
+RBE images that ship no xxd.
 """
 
 def _magic_mgc_header_impl(ctx):
     mgc = ctx.file.mgc
-
     output = ctx.actions.declare_file(ctx.attr.out)
-    ctx.actions.run_shell(
+    ctx.actions.run(
+        executable = ctx.executable.bin2c,
         inputs = [mgc],
         outputs = [output],
-        command = """
-            set -euo pipefail
-            tmpdir=$(mktemp -d)
-            trap 'rm -rf "$tmpdir"' EXIT
-            # `xxd -i` infers the C-array name from the input filename, so
-            # stage the file as plain `magic.mgc` rather than passing the
-            # sandbox-relative path. Reading via stdin avoids xxd flavour
-            # differences (Toybox vs GNU) in how positional args map to
-            # output streams.
-            cp "{mgc}" "$tmpdir/magic.mgc"
-            (cd "$tmpdir" && xxd -i magic.mgc) > {out}
-        """.format(
-            mgc = mgc.path,
-            out = output.path,
-        ),
-        use_default_shell_env = True,
+        arguments = [mgc.path, output.path, "magic_mgc"],
         mnemonic = "MagicMgcHeader",
         progress_message = "Generating embedded magic database header %s" % output.short_path,
     )
@@ -54,6 +36,12 @@ magic_mgc_header = rule(
         "out": attr.string(
             mandatory = True,
             doc = "Output filename (e.g. `generated/magic_mgc.h`). Resolved relative to the package.",
+        ),
+        "bin2c": attr.label(
+            default = "//tools:bin2c",
+            executable = True,
+            cfg = "exec",
+            doc = "The `xxd -i` replacement that emits the C array.",
         ),
     },
 )

@@ -123,32 +123,20 @@ expand_template(
 )
 
 # ── generated/<profile>_icc.h ──────────────────────────────────────────────
-# `xxd -i`-style C arrays embedding the binary ICC profiles. Mirrors
-# `CMakeLists.txt`'s ICC `add_custom_command` chain. Each genrule copies the
-# binary to a working file with the right name (so `xxd -i`'s array-name
-# inference matches what `src/metadata/Icc.cpp` references), runs the
-# converter, then drops the temp.
+# C arrays embedding the binary ICC profiles, mirroring `CMakeLists.txt`'s ICC
+# `add_custom_command` chain. Each genrule runs the hermetic `//tools:bin2c`
+# tool (an `xxd -i` replacement) directly on the profile, passing the C-array
+# symbol name explicitly so `src/metadata/Icc.cpp` resolves it.
 [
     genrule(
         name = profile + "_icc_h",
-        srcs = [
-            "//include:ICC-Profiles/" + src,
-            "//:generate_icc_header.sh",
-        ],
+        srcs = ["//include:ICC-Profiles/" + src],
         outs = ["generated/" + profile + "_icc.h"],
-        cmd = """
-            set -euo pipefail
-            tmpdir=$$(mktemp -d)
-            script=$$(realpath $(execpath //:generate_icc_header.sh))
-            cp $(execpath //include:ICC-Profiles/{src}) $$tmpdir/{src}
-            (cd $$tmpdir && "$$script" {src} {profile}_icc.h {array})
-            mv $$tmpdir/{profile}_icc.h $(OUTS)
-            rm -rf $$tmpdir
-        """.format(
+        cmd = "$(execpath //tools:bin2c) $(execpath //include:ICC-Profiles/{src}) $(OUTS) {array}".format(
             src = src,
-            profile = profile,
             array = array,
         ),
+        tools = ["//tools:bin2c"],
     )
     for (profile, src, array) in [
         ("AdobeRGB1998", "AdobeRGB1998.icc", "AdobeRGB1998_icc"),
