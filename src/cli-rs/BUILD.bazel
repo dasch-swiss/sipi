@@ -46,14 +46,26 @@ _CPP_STDLIB_LINK = select({
     "//conditions:default": [],
 })
 
+_SRCS = [
+    "src/commands/health.rs",
+    "src/commands/mod.rs",
+    "src/commands/server/mod.rs",
+    "src/ffi.rs",
+    "src/main.rs",
+]
+
+_DEPS = [
+    # The `sipi` server library (the `server` verb → sipi::run). Carries the
+    # C++ image engine via //src/ffi:sipi_ffi.
+    "//src/server-rs:lib",
+    # The C++ CLI app behind the FFI seam — provides `sipi_cli_main` (offline
+    # verbs) + the system/framework linkopts via //src:sipi_lib.
+    "//src/cli:cli_app",
+]
+
 rust_binary(
     name = "sipi",
-    srcs = [
-        "src/commands/mod.rs",
-        "src/commands/server/mod.rs",
-        "src/ffi.rs",
-        "src/main.rs",
-    ],
+    srcs = _SRCS,
     crate_name = "sipi_cli",
     edition = "2021",
     rustc_flags = _CPP_STDLIB_LINK,
@@ -61,12 +73,5 @@ rust_binary(
     # the transitive C++ dep (protobuf) includes <sanitizer/asan_interface.h>
     # under --config=asan, which the hermetic LLVM toolchain does not ship.
     tags = ["no-sanitizer"],
-    deps = all_crate_deps(normal = True) + [
-        # The `sipi` server library (the `server` verb → sipi::run). Carries the
-        # C++ image engine via //src/ffi:sipi_ffi.
-        "//src/server-rs:lib",
-        # The C++ CLI app behind the FFI seam — provides `sipi_cli_main` (offline
-        # verbs) + the system/framework linkopts via //src:sipi_lib.
-        "//src/cli:cli_app",
-    ],
+    deps = all_crate_deps(normal = True) + _DEPS,
 )

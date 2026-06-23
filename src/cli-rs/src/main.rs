@@ -2,9 +2,10 @@
 //!
 //! `cli-rs` owns `main` and the verb dispatch; all server behaviour lives in the
 //! `sipi` library (`//src/server-rs`). The `server` verb runs the axum shell;
-//! every other argv (offline subcommands, `--version`, `--help`) is handed to
-//! the C++ CLI (`sipi_cli_main`) verbatim. A downstream crate can replace this
-//! binary with its own `main` while reusing the `sipi` library.
+//! `health` is a Rust-native loopback probe (no FFI); every other argv (offline
+//! subcommands, `--version`, `--help`) is handed to the C++ CLI (`sipi_cli_main`)
+//! verbatim. A downstream crate can replace this binary with its own `main`
+//! while reusing the `sipi` library.
 
 mod commands;
 mod ffi;
@@ -24,9 +25,11 @@ fn main() -> ExitCode {
         .map(|(i, _)| i);
 
     match verb_idx {
-        // `server` → the Rust shell. Pass the slice from "server" onward; clap
-        // treats argv[idx] ("server") as the binary name and skips it.
+        // `server` → the Rust shell. Pass the slice from the verb onward; clap
+        // treats argv[idx] ("server"/"health") as the binary name and skips it.
         Some(idx) if argv[idx] == "server" => commands::server::run(&argv[idx..]),
+        // `health` → the Rust-native loopback probe (no FFI, no engine).
+        Some(idx) if argv[idx] == "health" => commands::health::run(&argv[idx..]),
         // Everything else → the C++ CLI, verbatim.
         _ => run_cli(&argv),
     }
