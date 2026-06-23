@@ -109,13 +109,17 @@ def sipi_e2e_test(
         # only a couple of tests consume it but the cost is trivial and
         # makes adding new `assert_*_snapshot!()` calls a no-op wiring-wise.
         data = [
-            "//src/cli:sipi",
+            "//src/server-rs:sipi_server",
             "//:test_fixtures",
             "//:lsan_suppressions",
             ":snapshots",
         ] + extra_data,
         env = {
-            "SIPI_BIN": "$(rootpath //src/cli:sipi)",
+            # The Rust shell is the binary under test (the Phase C cutover): it
+            # serves `server` natively and forwards every offline subcommand to
+            # the C++ CLI via sipi_cli_main, so it covers both the server and CLI
+            # e2e suites. The C++ `//src/cli:sipi` server is retired at the delete.
+            "SIPI_BIN": "$(rootpath //src/server-rs:sipi_server)",
             # Points at the `copy_to_directory` output that materialises
             # `version.txt`, `test/_test_data/`, `config/`, `scripts/`,
             # `server/` as real files (no symlinks). Required so sipi's
