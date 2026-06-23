@@ -167,7 +167,7 @@ bazel test //test/e2e:server --test_output=streamed   # see live output
 ```
 
 The full suite resolves the sipi binary via `$SIPI_BIN`, defaulting
-to `bazel-bin/src/cli/sipi`. Override `SIPI_BIN` to point at a
+to `bazel-bin/src/cli-rs/sipi`. Override `SIPI_BIN` to point at a
 sanitized build (`bazel build --config=asan`) when investigating
 ASan findings.
 
