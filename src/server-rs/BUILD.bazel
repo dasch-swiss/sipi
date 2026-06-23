@@ -1,30 +1,35 @@
-"""src/server-rs — the Rust HTTP shell (strangler-fig rewrite; ADR-0013).
+"""src/server-rs — the `sipi` HTTP-server library (strangler-fig rewrite; ADR-0013).
 
-The `sipi` `rust_library` owns the axum + tokio server and statically links the
-C++ image engine through the FFI seam (`//src/ffi:sipi_ffi`, a `cc_library`);
-the `sipi_server` `rust_binary` is the thin default entry point (decision #9).
-This is the first Rust → C++ link in the graph — `rules_rust` threads the
-seam's `CcInfo` (and the engine's transitive linkopts: `-ldl`/`-lpthread` on
-Linux, the iconv + CoreFoundation/SystemConfiguration frameworks on macOS)
-through to the final binary link.
+The `sipi` `rust_library` (`//src/server-rs:lib`, crate `sipi`) owns the axum +
+tokio server and statically links the C++ image engine through the FFI seam
+(`//src/ffi:sipi_ffi`, a `cc_library`). The default `sipi` binary that wraps it
+lives in `//src/cli-rs` (decision #9) — this package is library-only.
+
+This is the first Rust → C++ link in the graph: `rules_rust` threads the seam's
+`CcInfo` (and the engine's transitive linkopts: `-ldl`/`-lpthread` on Linux, the
+iconv + CoreFoundation/SystemConfiguration frameworks on macOS) through to the
+final binary link, which happens in `//src/cli-rs`. `//src/ffi:sipi_ffi` pulls
+`//src:engine`, so the library carries the engine on its own — it no longer
+depends on the C++ CLI (`//src/cli:cli_app`); `//src/cli-rs` adds that for
+`sipi_cli_main`.
 
 Dependencies resolve from `@crates_prod` (the production Crate Universe manifest
-in `MODULE.bazel`, distinct from the e2e suite's `@crates`). Repin via:
+set in `MODULE.bazel`, distinct from the e2e suite's `@crates`). Repin via:
 `CARGO_BAZEL_REPIN=1 bazelisk fetch @crates_prod//:all`.
 
-The shell is additive: this binary runs in parallel with `//src/cli:sipi`, which
-keeps the production socket until the cutover renames this to the stock `sipi`
-entry point.
+The shell is additive: it runs in parallel with `//src/cli:sipi`, which keeps
+the production socket until the cutover.
 """
 
 load("@crates_prod//:defs.bzl", "all_crate_deps")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 rust_library(
-    name = "sipi",
+    name = "lib",
     srcs = [
+        "src/config.rs",
         "src/ffi.rs",
         "src/iiif.rs",
         "src/info.rs",
@@ -38,35 +43,29 @@ rust_library(
     edition = "2021",
     deps = all_crate_deps(normal = True) + [
         # The narrow C FFI seam → the transitive C++ image engine. This is the
-        # cc_library → rust_binary link (Open Question #1).
+        # cc_library → rust link (Open Question #1). //src/ffi:sipi_ffi pulls
+        # //src:engine, so the library carries the engine without depending on
+        # the C++ CLI.
         "//src/ffi:sipi_ffi",
-        # The C++ CLI app, for `sipi_cli_main` — the Rust shell hands every
-        # non-`server` argv (offline subcommands, --version) to it verbatim.
-        # Pulls the full //src:sipi_lib transitively (incl. the C++ server,
-        # dead weight in the additive phase, dropped at the cutover).
-        "//src/cli:cli_app",
     ],
-    # Excluded from the sanitizer build alongside sipi_server / sipi_unit_test
-    # (sanitizer.yml filters `-no-sanitizer`). This library is the actual carrier
-    # of the transitive C++ dep (protobuf/abseil) whose source includes a
-    # <sanitizer/*.h> header the hermetic LLVM toolchain does not ship under
-    # --config=asan; it is a top-level target in the `//src/...` test glob, so it
-    # must be tagged too or the asan unit step still builds it and fails.
+    # Excluded from the sanitizer build (sanitizer.yml filters `-no-sanitizer`):
+    # this library is the carrier of the transitive C++ dep (protobuf/abseil)
+    # whose source includes a <sanitizer/*.h> header the hermetic LLVM toolchain
+    # does not ship under --config=asan. It is a top-level target in the
+    # `//src/...` test glob, so it must be tagged or the asan unit step still
+    # builds it and fails.
     tags = ["no-sanitizer"],
 )
 
-# The final binary link pulls in the C++ engine archives (via `:sipi`'s
-# `//src/ffi:sipi_ffi` dep) but rustc drives the link with the C linker driver,
-# which does NOT auto-link the C++ standard library the way the `clang++` driver
-# does for `//src/cli:sipi`. We append `-lc++` / `-lc++abi` as trailing
-# `-Clink-arg`s so they resolve the engine's libc++ symbols AFTER the archives
-# that reference them (trailing position is required for static-archive ordering
-# on Linux). Linux statically links the libc++ runtime + unwinder, matching
-# `//src/cli:sipi`'s distroless link surface (no libc++.so.1 in base-debian12).
-# macOS needs only `-lc++`: libc++abi's symbols are re-exported by the system
-# `libc++.dylib`, so an explicit `-lc++abi` is redundant and would resolve
-# against the system ABI library rather than the hermetic toolchain's — matching
-# `//src/cli:sipi`, which links no explicit stdlib flag on macOS.
+# The C++ stdlib link bracket — needed by any target that performs the FINAL
+# link of the C++ engine archives under rustc's C linker driver (which, unlike
+# the `clang++` driver, does not auto-link libc++). The library is not linked on
+# its own (it produces an rlib), but the unit test below is; the production
+# binary applies the same flags in //src/cli-rs. macOS needs only `-lc++`
+# (libc++abi's symbols are re-exported by the system `libc++.dylib`); Linux
+# statically links the libc++ runtime + unwinder to match `//src/cli:sipi`'s
+# distroless link surface (no libc++.so.1 in base-debian12). Trailing position
+# is required for static-archive ordering on Linux.
 _CPP_STDLIB_LINK = select({
     "@platforms//os:macos": [
         "-Clink-arg=-lc++",
@@ -81,27 +80,13 @@ _CPP_STDLIB_LINK = select({
     "//conditions:default": [],
 })
 
-rust_binary(
-    name = "sipi_server",
-    srcs = ["src/main.rs"],
-    edition = "2021",
-    rustc_flags = _CPP_STDLIB_LINK,
-    # Excluded from the sanitizer build (sanitizer.yml filters `-no-sanitizer`): a
-    # transitive C++ dep (protobuf) includes <sanitizer/asan_interface.h> under
-    # --config=asan, which the hermetic LLVM toolchain does not ship. rustc is not
-    # asan-instrumented by the cc config anyway, and the engine's C++ is sanitized
-    # via //src/cli:sipi. Still built + tested in regular CI/coverage (not `manual`).
-    tags = ["no-sanitizer"],
-    deps = [":sipi"],
-)
-
 # Inline #[cfg(test)] unit tests (the IIIF parser parity tests). Compiles the
 # library crate with --cfg test; needs the C++ stdlib link args because it
 # links the same cc deps as the library.
 rust_test(
     name = "sipi_unit_test",
-    crate = ":sipi",
+    crate = ":lib",
     edition = "2021",
     rustc_flags = _CPP_STDLIB_LINK,
-    tags = ["no-sanitizer"],  # see sipi_server: protobuf won't compile under --config=asan
+    tags = ["no-sanitizer"],  # see :lib — protobuf won't compile under --config=asan
 )

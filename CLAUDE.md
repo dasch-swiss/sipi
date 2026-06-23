@@ -34,7 +34,7 @@ For full build instructions, see [`docs/src/development/building.md`](docs/src/d
 just bazel-build                 # bazel build --stamp //src/cli:sipi
 just bazel-build -c opt          # production-shape build (matches Docker image)
 just bazel-build --config=asan   # ASan+UBSan; same flag form for ad-hoc variants
-just bazel-build-server          # bazel build //src/server-rs:sipi_server (the Phase C Rust shell)
+just bazel-build-server          # bazel build //src/cli-rs:sipi (the Phase C Rust shell binary; wraps //src/server-rs:lib)
 
 # Tests
 just bazel-test-unit             # bazel test //test/unit/...  (12 components)

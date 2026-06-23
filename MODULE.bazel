@@ -497,15 +497,29 @@ crate.from_cargo(
     manifests = ["//test/e2e:Cargo.toml"],
 )
 
-# Production Crate Universe manifest for the Rust HTTP shell (strangler-fig
+# Production Crate Universe manifest for the `sipi` server library (strangler-fig
 # Phase C; //src/server-rs). Kept separate from the e2e `crates` above so the
-# production dependency graph (axum/tokio/tower/tracing/clap) is independent of
-# the test-only graph (reqwest/insta/proptest/jsonwebtoken). Repin via:
+# production dependency graph (axum/tokio/tower/tracing) is independent of the
+# test-only graph (reqwest/insta/proptest/jsonwebtoken). Repin via:
 #   CARGO_BAZEL_REPIN=1 bazelisk fetch @crates_prod//:all
 crate.from_cargo(
     name = "crates_prod",
     cargo_lockfile = "//src/server-rs:Cargo.lock",
     manifests = ["//src/server-rs:Cargo.toml"],
+)
+
+# Crate Universe manifest for the default `sipi` binary (//src/cli-rs). A
+# separate repo from `crates_prod` (rather than a second manifest on it) because
+# crate_universe's `all_crate_deps()` resolves a target's deps by its in-repo
+# package path, which a multi-manifest splice mangles into a synthetic-workspace
+# path. This mirrors the existing `crates` (e2e) vs `crates_prod` (server) split.
+# The //src/cli-rs → //src/server-rs:lib edge is a Bazel `deps` edge only — no
+# Cargo path dep — so neither graph resolves it. Repin via:
+#   CARGO_BAZEL_REPIN=1 bazelisk fetch @crates_cli//:all
+crate.from_cargo(
+    name = "crates_cli",
+    cargo_lockfile = "//src/cli-rs:Cargo.lock",
+    manifests = ["//src/cli-rs:Cargo.toml"],
 )
 
 # `aws-lc-sys` is intentionally NOT in the dep graph — its cmake-based
@@ -517,6 +531,7 @@ crate.from_cargo(
 # JWT verification, `rust_crypto` covers both via `rsa` + `p256`/`p384`.
 use_repo(crate, "crates")
 use_repo(crate, "crates_prod")
+use_repo(crate, "crates_cli")
 
 # ── Kakadu (proprietary, GitHub-release-gated) ─────────────────────────────
 # Custom repository_rule mirroring today's Nix FOD auth UX 1:1 — shells out

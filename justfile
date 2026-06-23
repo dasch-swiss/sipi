@@ -48,7 +48,7 @@ bazel-build *FLAGS='':
 # Build the Rust HTTP shell (strangler-fig rewrite). Additive — the C++ server
 # still owns the production socket until the cutover; this is for local testing.
 bazel-build-server *FLAGS='':
-    bazel build --stamp //src/server-rs:sipi_server {{FLAGS}}
+    bazel build --stamp //src/cli-rs:sipi {{FLAGS}}
 
 # Build + run the full test pyramid (unit + approval + e2e) under
 # fastbuild — no coverage instrumentation. CI's linux-arm64 and
@@ -479,7 +479,7 @@ run-otel: bazel-build-server
     OTEL_RESOURCE_ATTRIBUTES="service.namespace=dsp,service.version=${version},deployment.environment.name=dev" \
     SIPI_OTLP_LOGS=1 \
     RUST_LOG="${RUST_LOG:-info}" \
-    "{{justfile_directory()}}/bazel-bin/src/server-rs/sipi_server" server \
+    "{{justfile_directory()}}/bazel-bin/src/cli-rs/sipi" server \
         --config="{{justfile_directory()}}/config/sipi.localdev-config.lua" --serverport 1024
 
 # Run sipi under Valgrind.

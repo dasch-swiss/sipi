@@ -1,11 +1,13 @@
-# Production Rust HTTP shell for SIPI (strangler-fig rewrite; ADR-0013).
+# Production Rust HTTP shell for SIPI — the `sipi` library (strangler-fig
+# rewrite; ADR-0013).
 #
 # This is the `sipi` library crate (lib.rs — the axum+tokio server that
-# statically links the C++ image engine via //src/ffi:sipi_ffi) plus a thin
-# default binary (main.rs → sipi::run()). Resolved into `@crates_prod` by
-# `crate.from_cargo` in MODULE.bazel — a separate manifest from the e2e suite's
-# `@crates` (//test/e2e). Bazel builds the first-party crate; Cargo only
-# resolves the dependency graph into Cargo.lock.
+# statically links the C++ image engine via //src/ffi:sipi_ffi). The default
+# `sipi` binary that wraps it lives in //src/cli-rs (decision #9). Both
+# first-party manifests resolve into `@crates_prod` via `crate.from_cargo` in
+# MODULE.bazel — a separate graph from the e2e suite's `@crates` (//test/e2e).
+# Bazel builds the first-party crates; Cargo only resolves the dependency graph
+# into Cargo.lock.
 #
 # Repin via:  CARGO_BAZEL_REPIN=1 bazelisk fetch @crates_prod//:all
 [package]
@@ -18,10 +20,6 @@ publish = false
 name = "sipi"
 path = "src/lib.rs"
 
-[[bin]]
-name = "sipi_server"
-path = "src/main.rs"
-
 [dependencies]
 # multipart: the configured Lua upload route reads server.uploads, so the shell
 # parses multipart/form-data into temp files before driving sipi_run_lua_route.
@@ -31,7 +29,6 @@ tokio-stream = "0.1"
 tower = { version = "0.5", features = ["util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-clap = { version = "4", features = ["derive"] }
 percent-encoding = "2"
 serde_json = "1"
 # Spool each multipart upload to a temp file the C++ engine opens by path; the

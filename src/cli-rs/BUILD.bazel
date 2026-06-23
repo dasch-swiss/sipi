@@ -1,0 +1,72 @@
+"""src/cli-rs — the default `sipi` binary (strangler-fig entrypoint; decision #9).
+
+`//src/cli-rs:sipi` is the stock binary that wraps the `sipi` library
+(`//src/server-rs:lib`): it owns `main` + the verb dispatch (`server` →
+`sipi::run`; every other argv → `sipi_cli_main`). It performs the FINAL link of
+the C++ image engine — pulled transitively through `//src/server-rs:lib`'s
+`//src/ffi:sipi_ffi` dep — plus the C++ CLI app (`//src/cli:cli_app`) for
+`sipi_cli_main`. The engine is linked once (Bazel dedups the shared archives).
+
+`cli-rs` binds only the `sipi_cli_main` C-ABI symbol (`src/ffi.rs`); the server
+seam stays in `//src/server-rs`. Dependencies resolve from `@crates_cli` (its
+own Crate Universe manifest in `MODULE.bazel`, separate from `//src/server-rs`'s
+`@crates_prod`). Repin via: `CARGO_BAZEL_REPIN=1 bazelisk fetch @crates_cli//:all`.
+
+Additive: this binary runs in parallel with `//src/cli:sipi` (the C++ server),
+which keeps the production socket until the cutover renames this to the stock
+`sipi` entry point and switches the Docker entrypoint.
+"""
+
+load("@crates_cli//:defs.bzl", "all_crate_deps")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+# The final binary link pulls in the C++ engine archives (via
+# //src/server-rs:lib → //src/ffi:sipi_ffi) and the C++ CLI app, but rustc
+# drives the link with the C linker driver, which does NOT auto-link the C++
+# standard library the way the `clang++` driver does for //src/cli:sipi. We
+# append `-lc++` / `-lc++abi` as trailing `-Clink-arg`s so they resolve the
+# engine's libc++ symbols AFTER the archives that reference them (trailing
+# position is required for static-archive ordering on Linux). Linux statically
+# links the libc++ runtime + unwinder, matching //src/cli:sipi's distroless link
+# surface (no libc++.so.1 in base-debian12). macOS needs only `-lc++`:
+# libc++abi's symbols are re-exported by the system `libc++.dylib`.
+_CPP_STDLIB_LINK = select({
+    "@platforms//os:macos": [
+        "-Clink-arg=-lc++",
+    ],
+    "@platforms//os:linux": [
+        "-Clink-arg=-Wl,-Bstatic",
+        "-Clink-arg=-lc++",
+        "-Clink-arg=-lc++abi",
+        "-Clink-arg=-lunwind",
+        "-Clink-arg=-Wl,-Bdynamic",
+    ],
+    "//conditions:default": [],
+})
+
+rust_binary(
+    name = "sipi",
+    srcs = [
+        "src/commands/mod.rs",
+        "src/commands/server/mod.rs",
+        "src/ffi.rs",
+        "src/main.rs",
+    ],
+    crate_name = "sipi_cli",
+    edition = "2021",
+    rustc_flags = _CPP_STDLIB_LINK,
+    # Excluded from the sanitizer build (sanitizer.yml filters `-no-sanitizer`):
+    # the transitive C++ dep (protobuf) includes <sanitizer/asan_interface.h>
+    # under --config=asan, which the hermetic LLVM toolchain does not ship.
+    tags = ["no-sanitizer"],
+    deps = all_crate_deps(normal = True) + [
+        # The `sipi` server library (the `server` verb → sipi::run). Carries the
+        # C++ image engine via //src/ffi:sipi_ffi.
+        "//src/server-rs:lib",
+        # The C++ CLI app behind the FFI seam — provides `sipi_cli_main` (offline
+        # verbs) + the system/framework linkopts via //src:sipi_lib.
+        "//src/cli:cli_app",
+    ],
+)
