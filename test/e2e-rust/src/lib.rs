@@ -148,9 +148,9 @@ impl SipiServer {
         let stdout = child.stdout.take().expect("stdout captured");
         let stdout_buf = Arc::new(Mutex::new(String::new()));
         let stdout_buf_clone = Arc::clone(&stdout_buf);
-        let ready_signal_ssl = "Server listening on SSL port";
-        let ready_signal_http = "Server listening on HTTP port";
-        let ready_signal_no_ssl = "SSL port";// "SSL port N bind failed" also indicates startup complete
+        // The Rust shell (the cutover binary) logs this once it binds the listener;
+        // it serves plain HTTP behind Traefik, so there is no SSL-port line.
+        let ready_signal = "SIPI Rust shell listening";
         let (tx, rx) = std::sync::mpsc::channel();
 
         std::thread::spawn(move || {
@@ -166,8 +166,8 @@ impl SipiServer {
                                 captured.drain(..drain);
                             }
                         }
-                        // Detect readiness: SSL port listening, HTTP-only fallback, or SSL bind failure
-                        if l.contains(ready_signal_ssl) || l.contains(ready_signal_no_ssl) {
+                        // Detect readiness: the Rust shell's listen log line.
+                        if l.contains(ready_signal) {
                             let _ = tx.send(());
                         }
                     }
@@ -215,7 +215,9 @@ impl SipiServer {
         }
 
         // The readiness log is emitted before the event loop starts accepting
-        // connections. Probe /metrics to confirm the server is actually processing.
+        // connections. Probe /health (Rust-native, engine-independent) to confirm
+        // the server is actually processing — the Rust shell is OTLP-only, so it
+        // exposes no /metrics scrape, and /health is served by both transports.
         let base_url = format!("http://127.0.0.1:{}", http_port);
         let probe_client = reqwest::blocking::Client::builder()
             .danger_accept_invalid_certs(true)
@@ -228,7 +230,7 @@ impl SipiServer {
         let mut probe_count = 0u32;
         while start.elapsed() < timeout {
             probe_count += 1;
-            match probe_client.get(format!("{}/metrics", base_url)).send() {
+            match probe_client.get(format!("{}/health", base_url)).send() {
                 Ok(resp) if resp.status().is_success() => {
                     http_ready = true;
                     eprintln!(
