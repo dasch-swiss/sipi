@@ -45,13 +45,17 @@ fn graceful_shutdown_completes_inflight_request() {
             );
         }
         Err(e) => {
-            // Connection reset is acceptable if the drain timeout was very short
-            // or the request hadn't been dispatched yet
-            let err_str = format!("{}", e);
+            // The in-flight request is force-closed when the drain deadline
+            // (`--drain-timeout 2`) elapses before the JP2 decode finishes —
+            // the drain contract working as designed, and the common case under
+            // ASan's slower decode. reqwest surfaces that force-close as a
+            // transport error whose Display is "error sending request for url …"
+            // (the connection detail lives in the nested source, not the
+            // top-level string), so match the typed predicates rather than
+            // substring-scanning the message.
             assert!(
-                err_str.contains("connection") || err_str.contains("reset") || err_str.contains("closed"),
-                "unexpected error during graceful shutdown: {}",
-                e
+                e.is_request() || e.is_connect() || e.is_timeout() || e.is_body(),
+                "unexpected error during graceful shutdown: {e}"
             );
         }
     }
