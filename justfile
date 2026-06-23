@@ -58,7 +58,7 @@ bazel-build-server *FLAGS='':
 # flakiness risk on the high-load e2e targets) for arches that don't
 # upload anyway.
 bazel-test *FLAGS='':
-    bazel test --stamp //src/... //test/unit/... //test/approval/... //test/e2e-rust/... {{FLAGS}}
+    bazel test --stamp //src/... //test/unit/... //test/approval/... //test/e2e/... {{FLAGS}}
 
 # Build + run all tests (unit + approval + e2e) under coverage
 # instrumentation; emit combined lcov at
@@ -96,7 +96,7 @@ bazel-coverage *FLAGS='':
         --test_env=COVERAGE_GCOV_PATH \
         --test_env=LLVM_COV \
         --stamp \
-        //src/... //test/unit/... //test/approval/... //test/e2e-rust/... {{FLAGS}}
+        //src/... //test/unit/... //test/approval/... //test/e2e/... {{FLAGS}}
 
 # Run every GoogleTest unit-test target — both the legacy
 # `//test/unit/<x>/` directories AND any per-module ADR-0003 co-located
@@ -126,7 +126,7 @@ bazel-test-approval:
 # the `:sipi_version_h` action's cache key depends on `STABLE_*` values,
 # so the stamp adds at most one re-link per workspace_status change.
 bazel-test-e2e *FLAGS='':
-    bazel test --stamp --verbose_failures {{FLAGS}} //test/e2e-rust:all_e2e
+    bazel test --stamp --verbose_failures {{FLAGS}} //test/e2e:all_e2e
 
 # Run the Docker smoke test against the Bazel-built OCI image. The image
 # tarball is produced by `//src:image_load` and consumed via the test's
@@ -138,7 +138,7 @@ bazel-test-e2e *FLAGS='':
 # the sipi binary inside the container is already covered by
 # `bazel-test-e2e --config=asan` above.
 bazel-test-smoke *FLAGS='':
-    bazel test --stamp --verbose_failures {{FLAGS}} //test/e2e-rust:docker_smoke
+    bazel test --stamp --verbose_failures {{FLAGS}} //test/e2e:docker_smoke
 
 # Sanitized build: Debug + ASan + UBSan via Bazel
 # `--config=asan --config=ubsan`. The resulting binary at

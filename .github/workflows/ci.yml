@@ -186,7 +186,7 @@ jobs:
       #
       # `bazel-test-smoke` is one Bazel invocation that:
       #   1. Builds //src:image as a transitive `data` dep of
-      #      //test/e2e-rust:docker_smoke.
+      #      //test/e2e:docker_smoke.
       #   2. Runs the smoke test, whose startup code does
       #      `docker load -i $SIPI_IMAGE_TAR` — the image lands in the
       #      local Docker daemon as `daschswiss/sipi:latest` (matching

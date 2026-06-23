@@ -460,7 +460,7 @@ use_repo(
 # ── Rust toolchain + Crate Universe ─────────────────────────────────────────
 #
 # `rules_rust` produces one `rust_test` target per `tests/<name>.rs` file
-# under `//test/e2e-rust:`, mirroring Cargo's "one binary per `[[test]]`"
+# under `//test/e2e:`, mirroring Cargo's "one binary per `[[test]]`"
 # semantics.
 #
 # **Registration ordering is load-bearing.** `cargo_build_script` rules
@@ -476,7 +476,7 @@ rust.toolchain(
     edition = "2021",
     # 1.88+ required: transitive `time-macros` crate uses
     # `proc_macro_span` (stabilised in 1.88). Edition 2024 (1.85+) is
-    # also required by the transitive `pxfm` crate. `test/e2e-rust/
+    # also required by the transitive `pxfm` crate. `test/e2e/
     # Cargo.toml` itself stays on edition 2021 — the transitive bumps
     # are invisible to first-party code.
     versions = ["1.89.0"],
@@ -493,8 +493,8 @@ register_toolchains("@rust_toolchains//:all")
 crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 crate.from_cargo(
     name = "crates",
-    cargo_lockfile = "//test/e2e-rust:Cargo.lock",
-    manifests = ["//test/e2e-rust:Cargo.toml"],
+    cargo_lockfile = "//test/e2e:Cargo.lock",
+    manifests = ["//test/e2e:Cargo.toml"],
 )
 
 # Production Crate Universe manifest for the Rust HTTP shell (strangler-fig
@@ -510,7 +510,7 @@ crate.from_cargo(
 
 # `aws-lc-sys` is intentionally NOT in the dep graph — its cmake-based
 # build script panics inside Bazel actions ("rust_wrapper.h is not a
-# directory"). `test/e2e-rust/Cargo.toml` uses `jsonwebtoken`'s
+# directory"). `test/e2e/Cargo.toml` uses `jsonwebtoken`'s
 # `rust_crypto` (pure-Rust) backend instead. The only `tests/`
 # consumer is `security.rs`, which uses HS256 — a symmetric algorithm
 # not affected by the backend choice. If a future test needs RSA/ECDSA

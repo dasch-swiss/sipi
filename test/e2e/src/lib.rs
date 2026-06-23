@@ -381,7 +381,7 @@ pub fn repo_root() -> PathBuf {
                 PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                     .parent()
                     .and_then(|p| p.parent())
-                    .expect("e2e-rust should be two levels below repo root")
+                    .expect("e2e should be two levels below repo root")
                     .to_path_buf()
             };
             let canon = raw.canonicalize().unwrap_or_else(|_| raw.clone());

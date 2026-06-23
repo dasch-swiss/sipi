@@ -100,7 +100,7 @@ decision tree, IIIF coverage matrix, feature inventory), see
 Unit + approval tests use [GoogleTest](https://github.com/google/googletest)
 (approval tests additionally use [ApprovalTests.cpp](https://github.com/approvals/ApprovalTests.cpp)).
 End-to-end and HTTP-contract tests are written in Rust and live under
-`test/e2e-rust/`.
+`test/e2e/`.
 
 All tests build under Bazel:
 
@@ -147,12 +147,12 @@ bazel test //test/unit/iiifparser:iiifparser_test --test_output=streamed
 When adding a new unit test, declare a matching `cc_test` target in
 `test/unit/<mod>/BUILD.bazel`. CI runs `just bazel-coverage` —
 which exercises every `cc_test` under `//test/unit/...` plus
-`//test/approval/...` and `//test/e2e-rust/...` in a single pass —
+`//test/approval/...` and `//test/e2e/...` in a single pass —
 so a missing `cc_test` target = no CI coverage.
 
 ### Rust end-to-end tests
 
-Rust e2e tests live in `test/e2e-rust/` and use `reqwest` for HTTP,
+Rust e2e tests live in `test/e2e/` and use `reqwest` for HTTP,
 `serde_json` for JSON validation, and `insta` for golden snapshots.
 They cover IIIF compliance, server behaviour, and upload
 functionality.
@@ -162,8 +162,8 @@ Run via Bazel — `rules_rust` produces one `rust_test` target per
 
 ```bash
 just bazel-test-e2e                                  # full suite (CI canonical)
-bazel test //test/e2e-rust:server                    # single target, inner-loop
-bazel test //test/e2e-rust:server --test_output=streamed   # see live output
+bazel test //test/e2e:server                    # single target, inner-loop
+bazel test //test/e2e:server --test_output=streamed   # see live output
 ```
 
 The full suite resolves the sipi binary via `$SIPI_BIN`, defaulting
@@ -178,7 +178,7 @@ ASan findings.
 
 ### Smoke tests
 
-Smoke tests live in `test/e2e-rust/tests/docker_smoke.rs` and run
+Smoke tests live in `test/e2e/tests/docker_smoke.rs` and run
 against a built Docker image. They verify basic server functionality
 after a Docker build:
 

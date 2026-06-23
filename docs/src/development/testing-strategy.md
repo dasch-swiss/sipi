@@ -322,7 +322,7 @@ Behavior that *is* HTTP-observable belongs in Rust e2e — not in C++ unit tests
 
 | Framework | Location | When to use |
 |---|---|---|
-| `insta` (Rust) | `test/e2e-rust/tests/snapshots/` | info.json structure, HTTP headers, response metadata |
+| `insta` (Rust) | `test/e2e/tests/snapshots/` | info.json structure, HTTP headers, response metadata |
 | ApprovalTests (C++) | `test/approval/` | Image-conversion metadata fingerprints; byte-exact encoder output baselines |
 
 **ApprovalTests scope:** New C++ approval suites are admissible only for byte-exact encoder-output gating against dependency migrations (e.g. libtiff, libjpeg, kakadu, lcms2 version bumps) and for metadata fingerprints that have no Rust-side equivalent. Functional behaviour belongs in Layer 3 (Rust e2e), not here.
@@ -346,7 +346,7 @@ Behavior that *is* HTTP-observable belongs in Rust e2e — not in C++ unit tests
 
 | Sublayer | Framework | Location | When to use |
 |---|---|---|---|
-| All HTTP contracts | Rust (`reqwest`) | `test/e2e-rust/tests/` | Status/header smokes, multi-step workflows, response body inspection, uploads, golden snapshots |
+| All HTTP contracts | Rust (`reqwest`) | `test/e2e/tests/` | Status/header smokes, multi-step workflows, response body inspection, uploads, golden snapshots |
 
 **What belongs here:**
 
@@ -574,7 +574,7 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | Video metadata extensions | :white_check_mark: | `server.rs` | |
 | Small-file range requests | :white_check_mark: | `range_requests.rs` | 7 tests |
 | Cache hit/miss verification | :x: GAP | — | No tests verify cache metrics or behavior |
-| CLI mode (file conversion) | :white_check_mark: | `test/e2e-rust/tests/cli.rs` | `sipi convert <in> <out>` covered |
+| CLI mode (file conversion) | :white_check_mark: | `test/e2e/tests/cli.rs` | `sipi convert <in> <out>` covered |
 | Prometheus metrics endpoint | :x: GAP | — | No tests for `/metrics` |
 | SSL/TLS endpoints | :x: GAP | — | No Rust tests for HTTPS |
 | Large-file range requests (10MB+) | :x: GAP | — | Python-only |
@@ -777,7 +777,7 @@ insta::assert_json_snapshot!(info_json, {
 | C++ approval tests (CI) | `just nix-build` (`.#dev` checkPhase) | PR CI | ApprovalTests via ctest; `SOURCE_DATE_EPOCH=946684800` injected by CMake |
 | C++ approval tests (Bazel) | `just bazel-test-approval` | local + CI | `bazel test //test/approval:approvaltests`; env injection via `BUILD.bazel`. CI runs them via `just bazel-coverage`. |
 | Rust e2e tests (CI) | `just nix-test-e2e` | PR CI | Pre-built binaries from `.#e2e-tests` (crane); reads `$SIPI_BIN` |
-| Rust e2e tests (inner-loop) | `bazel test //test/e2e-rust:<name>` | local | Same hermetic toolchain as CI |
+| Rust e2e tests (inner-loop) | `bazel test //test/e2e:<name>` | local | Same hermetic toolchain as CI |
 | Docker smoke (CI) | `just bazel-test-smoke` | PR + tag CI | Bazel-built OCI tarball, `docker load`ed by the test |
 | Hurl contract tests | *(retired)* | — | Folded into Rust e2e (`tests/http_contracts.rs` + `iiif_compliance.rs`) |
 | Python e2e tests | *(retired)* | — | Replaced by Rust e2e tests |
@@ -861,7 +861,7 @@ Python e2e tests (`test/e2e/`) have been retired. The following per-function par
 
 | File | Notes |
 |---|---|
-| `conftest.py` | Test manager, fixtures, nginx control — replaced by `test/e2e-rust/tests/common/` |
+| `conftest.py` | Test manager, fixtures, nginx control — replaced by `test/e2e/tests/common/` |
 | `config.ini` | Python test config — replaced by Rust test harness |
 | `nginx/` | Nginx reverse proxy for SSL testing — Rust tests use direct HTTPS |
 | `requirements.txt` | Not present (deps managed by Nix/pip) |
@@ -879,7 +879,7 @@ The `insta` golden baselines are critical — they capture exact C++ server beha
 
 ## Flaky Test Handling
 
-Some e2e tests are inherently racy — for example, a test that uploads a file and immediately GETs the converted result may fail if the server hasn't flushed to disk yet. Rather than retrying at the CI job level, handle flakiness at the **test level** using the `retry_flaky()` helper from the test harness (`test/e2e-rust/src/lib.rs`):
+Some e2e tests are inherently racy — for example, a test that uploads a file and immediately GETs the converted result may fail if the server hasn't flushed to disk yet. Rather than retrying at the CI job level, handle flakiness at the **test level** using the `retry_flaky()` helper from the test harness (`test/e2e/src/lib.rs`):
 
 ```rust
 use sipi_e2e::retry_flaky;

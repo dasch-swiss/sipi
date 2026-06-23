@@ -25,7 +25,7 @@
 # in one action graph; sipi is a shared dep, compiled once and reused.
 #
 # `LSAN_OPTIONS` (leak suppressions) is set per-e2e-test by
-# `test/e2e-rust/sipi_e2e_test.bzl` (data-deps `//:lsan_suppressions`).
+# `test/e2e/sipi_e2e_test.bzl` (data-deps `//:lsan_suppressions`).
 # `ASAN_OPTIONS log_path` is set by `.bazelrc`'s `test:asan` block to
 # `$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e`, surfaced by Bazel under
 # `bazel-testlogs/**/test.outputs/asan-e2e.<pid>` for every layer.

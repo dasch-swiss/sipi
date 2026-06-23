@@ -31,7 +31,7 @@ What the macro injects:
                                  under `test_data_dir()`.
       - `INSTA_WORKSPACE_ROOT`   `.` (runfiles workspace root). `insta`
                                  looks under
-                                 `./test/e2e-rust/tests/snapshots/`
+                                 `./test/e2e/tests/snapshots/`
                                  where the `:snapshots` data dep
                                  materialises goldens.
       - `LSAN_OPTIONS`           `suppressions=$(rootpath //:lsan_suppressions)`.
@@ -133,11 +133,11 @@ def sipi_e2e_test(
             # `insta` writes/reads snapshots under
             # `<INSTA_WORKSPACE_ROOT>/<package_dir>/tests/snapshots/`.
             # `:snapshots` data dep materialises the goldens at
-            # `<runfiles_workspace_root>/test/e2e-rust/tests/snapshots/`,
+            # `<runfiles_workspace_root>/test/e2e/tests/snapshots/`,
             # so pointing INSTA_WORKSPACE_ROOT at the runfiles
             # workspace root (`.`, matching the `SIPI_WORKSPACE_ROOT`
             # convention from the C++ unit tests) lets insta resolve
-            # them under `./test/e2e-rust/tests/snapshots/<n>.snap`.
+            # them under `./test/e2e/tests/snapshots/<n>.snap`.
             "INSTA_WORKSPACE_ROOT": ".",
             "LSAN_OPTIONS": "suppressions=$(rootpath //:lsan_suppressions)",
         } | extra_env,

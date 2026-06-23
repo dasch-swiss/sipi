@@ -322,10 +322,10 @@ test --test_output=errors
 # single source of truth. (sanitizer.yml still passes latency/iiif_compliance/
 # resource_limits inline for the ASan run; the duplicate same-value entries are
 # harmless and can be dropped once that PR lands.)
-test --flaky_test_attempts=//test/e2e-rust:latency@3
-test --flaky_test_attempts=//test/e2e-rust:iiif_compliance@3
-test --flaky_test_attempts=//test/e2e-rust:resource_limits@3
-test --flaky_test_attempts=//test/e2e-rust:memory_budget@3
+test --flaky_test_attempts=//test/e2e:latency@3
+test --flaky_test_attempts=//test/e2e:iiif_compliance@3
+test --flaky_test_attempts=//test/e2e:resource_limits@3
+test --flaky_test_attempts=//test/e2e:memory_budget@3
 
 # ── Remote cache ────────────────────────────────────────────────────────────
 # DEV-6517: gRPC remote cache via bazel-remote on Cloud Run, backed by GCS.

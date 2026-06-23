@@ -154,8 +154,8 @@ For test framework details (how to run tests, directory layout, adding tests), s
 
 - **Unit tests** (`test/unit/`): GoogleTest — `just bazel-test-unit` (or via `bazel-coverage` in CI)
 - **Approval tests** (`test/approval/`): snapshot-based regression — `just bazel-test-approval` (or via `bazel-coverage` in CI). `SOURCE_DATE_EPOCH=946684800` and `SIPI_WORKSPACE_ROOT="."` are injected by `test/approval/BUILD.bazel`.
-- **E2E tests** (`test/e2e-rust/`): Rust (reqwest + `rules_rust`'s hermetic rustc). Run via `just bazel-test-e2e`, or a single target with `bazel test //test/e2e-rust:<name> --test_output=streamed`.
-- **Smoke tests** (`test/e2e-rust/tests/docker_smoke.rs`): against Docker image. Run via `just bazel-test-smoke` — the `:docker_smoke` rust_test consumes the OCI tarball from `//src:image_load` and `docker load`s it before probing endpoints.
+- **E2E tests** (`test/e2e/`): Rust (reqwest + `rules_rust`'s hermetic rustc). Run via `just bazel-test-e2e`, or a single target with `bazel test //test/e2e:<name> --test_output=streamed`.
+- **Smoke tests** (`test/e2e/tests/docker_smoke.rs`): against Docker image. Run via `just bazel-test-smoke` — the `:docker_smoke` rust_test consumes the OCI tarball from `//src:image_load` and `docker load`s it before probing endpoints.
 
 Run a single unit-test target with `bazel test //test/unit/<component>:<component>_test --test_output=streamed`.
 
