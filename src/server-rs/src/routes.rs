@@ -524,26 +524,44 @@ async fn serve_lua_route(state: Arc<AppState>, script: String, req: Request) -> 
         };
         loop {
             match multipart.next_field().await {
-                Ok(Some(field)) => {
+                Ok(Some(mut field)) => {
                     let fieldname = field.name().unwrap_or_default().to_owned();
                     let origname = field.file_name().unwrap_or_default().to_owned();
                     let mime = field.content_type().unwrap_or_default().to_owned();
-                    let data = match field.bytes().await {
-                        Ok(b) => b,
-                        Err(rej) => return rej.into_response(),
-                    };
                     if origname.is_empty() {
-                        // A non-file field is a POST form parameter (server.post).
+                        // A non-file field is a POST form parameter (server.post) —
+                        // small, so buffer it in memory.
+                        let data = match field.bytes().await {
+                            Ok(b) => b,
+                            Err(rej) => return rej.into_response(),
+                        };
                         post_params.push((fieldname, String::from_utf8_lossy(&data).into_owned()));
                     } else {
+                        // A file part: stream chunks straight to the temp file so a
+                        // single upload never buffers fully in memory. The whole-request
+                        // size is still bounded by the DefaultBodyLimit layer when
+                        // max_post_size > 0 (unlimited matches the C++ transport, which
+                        // also spools uploads to disk rather than holding them in RAM).
                         let Ok(mut tf) = NamedTempFile::new() else {
                             return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR);
                         };
-                        if tf.write_all(&data).and_then(|()| tf.flush()).is_err() {
+                        let mut size: u64 = 0;
+                        loop {
+                            match field.chunk().await {
+                                Ok(Some(chunk)) => {
+                                    if tf.write_all(&chunk).is_err() {
+                                        return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR);
+                                    }
+                                    size += chunk.len() as u64;
+                                }
+                                Ok(None) => break,
+                                Err(rej) => return rej.into_response(),
+                            }
+                        }
+                        if tf.flush().is_err() {
                             return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR);
                         }
                         let tmpname = tf.path().to_string_lossy().into_owned();
-                        let size = data.len() as u64;
                         uploads.push(UploadPart { fieldname, origname, tmpname, mime, size });
                         tempfiles.push(tf);
                     }
@@ -631,7 +649,10 @@ fn run_lua_route_blocking(
     outcome_tx: oneshot::Sender<Outcome>,
     body_tx: mpsc::Sender<axum::body::Bytes>,
 ) {
-    let span = tracing::info_span!("sipi.lua_route", route_script = %script);
+    // Log only the basename — the full resolved path leaks the server's
+    // filesystem layout to the OTel backend, and the basename identifies the route.
+    let script_name = std::path::Path::new(script).file_name().and_then(|n| n.to_str()).unwrap_or(script);
+    let span = tracing::info_span!("sipi.lua_route", route_script = %script_name);
     let _enter = span.enter();
     let _trace = crate::telemetry::current_trace_context().map(|(t, s)| ffi::LogTraceScope::set(&t, &s));
 
