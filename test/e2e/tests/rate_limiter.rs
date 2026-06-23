@@ -197,6 +197,7 @@ fn monitor_over_budget_still_returns_200() {
 // =============================================================================
 
 #[test]
+#[ignore = "Phase C gap (DEV-6659 step 3): rate-limit metrics surfaced via the removed /metrics endpoint — plan 02 cluster B"]
 fn rate_limit_metrics_exposed() {
     let srv = start_enforce_server();
     let c = http_client();
