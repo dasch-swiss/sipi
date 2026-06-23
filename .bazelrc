@@ -324,9 +324,7 @@ test --test_output=errors
 # target) and matches the target label as a regex; a no-op for invocations that
 # don't include the target. Living in `.bazelrc` (not a per-workflow flag)
 # means ci.yml, sanitizer.yml, and local `just bazel-test` all inherit it —
-# single source of truth. (sanitizer.yml still passes latency/iiif_compliance/
-# resource_limits inline for the ASan run; the duplicate same-value entries are
-# harmless and can be dropped once that PR lands.)
+# single source of truth (sanitizer.yml carries no inline retry flags of its own).
 test --flaky_test_attempts=//test/e2e:latency@3
 test --flaky_test_attempts=//test/e2e:iiif_compliance@3
 test --flaky_test_attempts=//test/e2e:resource_limits@3

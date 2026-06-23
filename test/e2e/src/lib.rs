@@ -462,7 +462,7 @@ fn copy_dir_recursive_writable(src: &Path, dst: &Path) -> std::io::Result<()> {
 ///
 /// Test harness resolution prefers `$SIPI_BIN` (set by
 /// `just bazel-test-e2e` and the Bazel `rust_test` env to
-/// `$(rootpath //src:sipi)`); this fallback only fires when
+/// `$(rootpath //src/cli-rs:sipi)`); this fallback only fires when
 /// `SIPI_BIN` is unset (cmake inner-loop dev shell path).
 pub fn find_sipi_bin() -> PathBuf {
     repo_root().join("build").join("sipi")

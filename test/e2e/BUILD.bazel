@@ -28,7 +28,7 @@ Layout:
 
 Runtime contracts (set per-target by `sipi_e2e_test()` or below):
 
-  * `SIPI_BIN`         `$(rootpath //src/cli:sipi)`; `SipiServer`
+  * `SIPI_BIN`         `$(rootpath //src/cli-rs:sipi)`; `SipiServer`
                        canonicalises to absolute before spawning.
   * `SIPI_REPO_ROOT`   `$(rootpath //:test_fixtures)`. The materialised
                        tree is the host of the in-source layout under
