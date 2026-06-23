@@ -299,6 +299,10 @@ cc_library(
         "@platforms//os:linux": [
             "-ldl",
             "-lpthread",
+            # ELF/GNU-ld eager binding (full RELRO); keyed on the TARGET os
+            # (not the host-keyed `build:linux`) so a Linux→darwin cross-compile
+            # doesn't pass `-z` to ld64.lld, which rejects it.
+            "-Wl,-z,now",
         ],
         "@platforms//os:macos": [
             "-liconv",
@@ -410,6 +414,10 @@ cc_library(
         "@platforms//os:linux": [
             "-ldl",
             "-lpthread",
+            # ELF/GNU-ld eager binding (full RELRO); keyed on the TARGET os
+            # (not the host-keyed `build:linux`) so a Linux→darwin cross-compile
+            # doesn't pass `-z` to ld64.lld, which rejects it.
+            "-Wl,-z,now",
         ],
         # System frameworks/libs required by transitive deps:
         #   * `-liconv` — exiv2's convert.cpp uses iconv() on macOS for

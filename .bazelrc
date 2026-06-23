@@ -105,10 +105,12 @@ build --copt=-D_FORTIFY_SOURCE=2
 # contains the string "libmagic".
 build --per_file_copt=libmagic@-U_FORTIFY_SOURCE
 
-# Linux-only: stack-clash-protection is a clang-on-Linux feature (warns on
-# darwin); `-Wl,-z,now` is ELF/GNU-ld syntax not understood by ld64.
+# Linux-only: stack-clash-protection is a clang-on-Linux feature (warns
+# harmlessly on a darwin cross-compile). Its companion `-Wl,-z,now` linkopt
+# lives in //src:sipi_lib's (and :engine's) target-keyed linkopts select
+# instead: a linkopt must key on the TARGET os, not the host, or a Linux-host
+# cross-compile to darwin hands `-z` to ld64.lld, which rejects it.
 build:linux --copt=-fstack-clash-protection
-build:linux --linkopt=-Wl,-z,now
 
 # ── macOS ──────────────────────────────────────────────────────────────────
 # Pin the deployment target so Bazel-built binaries are portable across macOS
