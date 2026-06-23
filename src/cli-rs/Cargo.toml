@@ -1,0 +1,23 @@
+# The default `sipi` binary — the strangler-fig entrypoint (decision #9).
+#
+# `cli-rs` owns `main` and the thin verb dispatch: the `server` verb runs the
+# `sipi` library's axum shell (//src/server-rs:lib) and every other argv is
+# handed to the C++ CLI (`sipi_cli_main`, //src/cli:cli_app) verbatim. It
+# depends on //src/server-rs via Bazel only (no Cargo path dep), so
+# crate_universe resolves just the third-party graph below. The manifest backs
+# the @crates_cli repo in MODULE.bazel (separate from //src/server-rs's
+# @crates_prod).
+#
+# Repin via:  CARGO_BAZEL_REPIN=1 bazelisk fetch @crates_cli//:all
+[package]
+name = "sipi-cli"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "sipi"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }

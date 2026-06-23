@@ -210,13 +210,6 @@ extern "C" {
         resp: *const SipiResponse,
     ) -> c_int;
 
-    /// Hands argv verbatim to the C++ CLI11 parser (`//src/cli:cli_app`) and
-    /// returns the process exit code — no `exit()`/`abort()` from inside the
-    /// FFI, so the Rust caller owns teardown. Drives the offline subcommands
-    /// (`convert`/`verify`/`query`/`compare`/`health`) the Rust shell does not
-    /// own, plus top-level `--version`/`--help`.
-    pub fn sipi_cli_main(argc: c_int, argv: *mut *mut c_char) -> c_int;
-
     /// Parse the Lua config and install the engine + Lua config from scratch.
     /// Must run once before any serve call (`engine_context()` hard-fails
     /// otherwise). `overrides` is the opaque `SipiServerConfig*` (CLI/env

@@ -3,14 +3,16 @@
 //! This crate is the `sipi` **library**: it owns the axum + tokio server,
 //! routing, the FFI wiring to the C++ image engine, config, and observability,
 //! and it statically links the engine via `//src/ffi:sipi_ffi`. The default
-//! `sipi_server` binary (`main.rs`) is a thin entry point that calls
-//! [`run`]. Shipping as lib + thin bin is what lets SIPI be consumed as a
+//! `sipi` binary lives in the sibling `cli-rs` crate (`//src/cli-rs:sipi`): it
+//! owns `main`, parses the CLI, and calls [`run`] for the `server` verb.
+//! Shipping the server as a library is what lets SIPI be consumed as a
 //! dependency (decision #9): a downstream crate can own `main`, depend on
 //! `sipi`, and inject its own behaviour.
 //!
 //! The shell is built additively: it runs in parallel with the existing C++
 //! server, which keeps the production socket until the cutover.
 
+pub mod config;
 pub mod ffi;
 pub mod iiif;
 pub mod info;
@@ -19,13 +21,12 @@ pub mod routes;
 pub mod sink;
 pub mod telemetry;
 
+pub use config::ServerOverrides;
+
 use axum::response::{IntoResponse, Response};
 use axum::{http::StatusCode, routing::get, Router};
-use clap::Parser;
-use std::ffi::CString;
 use std::future::IntoFuture;
 use std::net::SocketAddr;
-use std::os::raw::{c_char, c_int};
 use std::process::ExitCode;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
@@ -39,65 +40,14 @@ const DEFAULT_PORT: u16 = 1024;
 /// startup; the handler reads `elapsed()`.
 static START: OnceLock<Instant> = OnceLock::new();
 
-/// Server-mode flags. `server` is the only subcommand the Rust shell owns;
-/// every other argv is handed to the C++ CLI (`sipi_cli_main`) verbatim. Only
-/// the flags the shell consumes today are declared. The flag set matches what
-/// the e2e harness passes (`server --config … --serverport … --sslport … --drain-timeout …`).
-#[derive(Parser, Debug)]
-#[command(name = "sipi server")]
-struct ServerArgs {
-    /// Path to the SIPI Lua config (installed by `sipi_init` before serving).
-    #[arg(long)]
-    config: Option<String>,
-    /// HTTP listen port.
-    #[arg(long)]
-    serverport: Option<u16>,
-    /// TLS port (accepted for harness/CLI parity; SIPI serves plain HTTP behind
-    /// Traefik, so this is unused).
-    #[arg(long)]
-    sslport: Option<u16>,
-    /// Graceful-drain deadline in seconds (default 30): on SIGTERM/Ctrl-C,
-    /// in-flight requests get this long to finish before a forced shutdown.
-    #[arg(long = "drain-timeout")]
-    drain_timeout: Option<u64>,
-}
-
-/// Run SIPI. Rust owns `main`: the `server` verb runs the axum shell; every
-/// other argv (offline subcommands, `--version`, `--help`) is handed to the C++
-/// CLI via [`ffi::sipi_cli_main`]. Returns the process exit code.
-pub fn run() -> ExitCode {
-    let argv: Vec<String> = std::env::args().collect();
-    // The verb is the first non-flag token after argv[0].
-    let verb_idx = argv
-        .iter()
-        .enumerate()
-        .skip(1)
-        .find(|(_, a)| !a.starts_with('-'))
-        .map(|(i, _)| i);
-
-    match verb_idx {
-        // `server` → the Rust shell. Pass the slice from "server" onward; clap
-        // treats argv[idx] ("server") as the binary name and skips it.
-        Some(idx) if argv[idx] == "server" => run_server(&argv[idx..]),
-        // Everything else → the C++ CLI, verbatim.
-        _ => run_cli(&argv),
-    }
-}
-
-/// Parse the `server` flags and run the axum server. Blocks until shutdown.
-/// Telemetry init lives in [`server_main`] (inside the runtime) because the OTLP
-/// batch exporter needs a tokio runtime.
-fn run_server(server_argv: &[String]) -> ExitCode {
-    let args = match ServerArgs::try_parse_from(server_argv) {
-        Ok(args) => args,
-        Err(e) => {
-            // clap renders the usage/error; exit code 2 is the conventional
-            // usage-error code (we never call clap's process-exiting `.exit()`).
-            let _ = e.print();
-            return ExitCode::from(2);
-        }
-    };
-
+/// Run the SIPI axum server. The `cli-rs` binary parses the `server` verb's
+/// flags and calls this; a downstream crate can call it directly (decision #9).
+/// `config` is the bootstrap Lua config path (it selects the base config the
+/// `overrides` layer onto); `drain_timeout` is the Rust-owned graceful-drain
+/// deadline in seconds (default 30). Blocks until shutdown; returns the process
+/// exit code. Telemetry init lives in [`server_main`] (inside the runtime)
+/// because the OTLP batch exporter needs a tokio runtime.
+pub fn run(config: Option<String>, overrides: ServerOverrides, drain_timeout: Option<u64>) -> ExitCode {
     let rt = match tokio::runtime::Runtime::new() {
         Ok(rt) => rt,
         Err(e) => {
@@ -106,13 +56,17 @@ fn run_server(server_argv: &[String]) -> ExitCode {
         }
     };
 
-    rt.block_on(server_main(args))
+    rt.block_on(server_main(config, overrides, drain_timeout))
 }
 
 /// The async server lifecycle inside the tokio runtime: install telemetry, prove
 /// the FFI seam, install the engine + Lua config, serve, then flush telemetry on
 /// the way out.
-async fn server_main(args: ServerArgs) -> ExitCode {
+async fn server_main(
+    config: Option<String>,
+    overrides: ServerOverrides,
+    drain_timeout: Option<u64>,
+) -> ExitCode {
     // Stamp the process start for /health uptime before anything else.
     let _ = START.set(Instant::now());
 
@@ -131,7 +85,7 @@ async fn server_main(args: ServerArgs) -> ExitCode {
     // Install the engine + Lua config from the Lua config file before serving.
     // engine_context() hard-fails on any serve call until this runs, so without
     // --config only the engine-free routes (/health, /favicon.ico) work.
-    match &args.config {
+    match &config {
         Some(cfg) => match ffi::init(cfg) {
             Ok(()) => tracing::info!(config = %cfg, "engine + Lua config installed"),
             Err(code) => {
@@ -143,8 +97,8 @@ async fn server_main(args: ServerArgs) -> ExitCode {
         None => tracing::warn!("no --config: engine uninitialised; only /health and /favicon.ico will serve"),
     }
 
-    let drain_timeout = Duration::from_secs(args.drain_timeout.unwrap_or(30));
-    let result = serve(args.serverport, drain_timeout).await;
+    let drain_deadline = Duration::from_secs(drain_timeout.unwrap_or(30));
+    let result = serve(overrides.serverport, drain_deadline).await;
 
     // Flush pending spans before the guard drops; the OTLP export is blocking
     // I/O, so do it off the async runtime.
@@ -164,36 +118,6 @@ async fn server_main(args: ServerArgs) -> ExitCode {
 /// avoided by running it on a blocking thread).
 async fn flush_telemetry(otel: telemetry::Telemetry) {
     let _ = tokio::task::spawn_blocking(move || otel.shutdown()).await;
-}
-
-/// Hand the full argv to the C++ CLI (`sipi_cli_main`) and return its exit code.
-fn run_cli(argv: &[String]) -> ExitCode {
-    // The offline CLI is C++-driven (it owns its logger); a minimal fmt
-    // subscriber covers the rare Rust-side message (e.g. an argv NUL byte).
-    init_tracing();
-
-    // Marshal argv into a C `char**`. `sipi_cli_main` is synchronous and does
-    // not retain the pointers, so the CStrings only need to outlive the call.
-    let c_args: Vec<CString> = match argv
-        .iter()
-        .map(|a| CString::new(a.as_str()))
-        .collect::<Result<_, _>>()
-    {
-        Ok(v) => v,
-        Err(_) => {
-            tracing::error!("argument contains an interior NUL byte");
-            return ExitCode::FAILURE;
-        }
-    };
-    let mut c_ptrs: Vec<*mut c_char> = c_args.iter().map(|c| c.as_ptr() as *mut c_char).collect();
-
-    // SAFETY: `c_ptrs` is a valid argv-shaped array of `argc` NUL-terminated
-    // strings that outlive the synchronous call; the seam guarantees no C++
-    // exception unwinds across the boundary (it returns a status code).
-    let code = unsafe { ffi::sipi_cli_main(c_ptrs.len() as c_int, c_ptrs.as_mut_ptr()) };
-    // Process exit codes are a single byte; CLI11/command codes (0/1/105/106)
-    // all fit.
-    ExitCode::from(code as u8)
 }
 
 /// Build the axum application. `/health` + `/favicon.ico` are Rust-native and
@@ -326,15 +250,6 @@ async fn favicon() -> StatusCode {
     StatusCode::NO_CONTENT
 }
 
-/// Minimal structured logging for the CLI path. Honours `RUST_LOG`; defaults to
-/// `info`. The server path installs the full JSON + OTLP stack via [`telemetry::init`].
-fn init_tracing() {
-    use tracing_subscriber::{fmt, EnvFilter};
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    // `try_init` so a second call (e.g. in tests) is a no-op rather than a panic.
-    let _ = fmt().with_env_filter(filter).try_init();
-}
-
 #[cfg(test)]
 mod app_tests {
     use super::*;
@@ -345,7 +260,7 @@ mod app_tests {
     // No `sipi_init` runs in this test binary, so the engine is uninstalled and
     // AppState::load() reports not-ready. The engine-free routes still serve; the
     // serve routes 503. The full serve path (real images via the FFI) is covered
-    // by the manual smoke run and the reqwest e2e suite targeting sipi_server.
+    // by the manual smoke run and the reqwest e2e suite targeting //src/cli-rs:sipi.
     fn test_app() -> Router {
         app(Arc::new(routes::AppState::load()))
     }
