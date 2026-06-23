@@ -38,7 +38,7 @@ updates:
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "cargo"
-    directory: "/test/e2e-rust"
+    directory: "/test/e2e"
     schedule:
       interval: "weekly"
     commit-message:

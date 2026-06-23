@@ -19,7 +19,7 @@ Layout:
                        from the macro's defaults.
   * `:all_e2e`         `test_suite` aggregating the 21 non-docker
                        targets. `just bazel-test-e2e` wraps `bazel
-                       test //test/e2e-rust:all_e2e`.
+                       test //test/e2e:all_e2e`.
   * `:sipi_image_tar`  `filegroup` extracting the OCI tarball produced
                        by `//src:image_load` (rules_oci 2.x's
                        `tarball` output group). Consumed by
@@ -210,7 +210,7 @@ rust_test(
 
 # ── Aggregator ─────────────────────────────────────────────────────────────
 #
-# `bazel test //test/e2e-rust:all_e2e` runs all non-docker tests in one
+# `bazel test //test/e2e:all_e2e` runs all non-docker tests in one
 # shot. `docker_smoke` is intentionally omitted — it has its own
 # `requires-docker` runtime constraint and CI invokes it separately
 # after the OCI image is built.

@@ -4,7 +4,7 @@
 # statically links the C++ image engine via //src/ffi:sipi_ffi) plus a thin
 # default binary (main.rs → sipi::run()). Resolved into `@crates_prod` by
 # `crate.from_cargo` in MODULE.bazel — a separate manifest from the e2e suite's
-# `@crates` (//test/e2e-rust). Bazel builds the first-party crate; Cargo only
+# `@crates` (//test/e2e). Bazel builds the first-party crate; Cargo only
 # resolves the dependency graph into Cargo.lock.
 #
 # Repin via:  CARGO_BAZEL_REPIN=1 bazelisk fetch @crates_prod//:all

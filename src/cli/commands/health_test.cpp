@@ -7,7 +7,7 @@
 // Health subcommand unit tests.
 //
 // The OK path (server returns 200 → exit 0) is covered end-to-end by the Rust
-// e2e suite (`test/e2e-rust/tests/health.rs`) and the Docker smoke test, both
+// e2e suite (`test/e2e/tests/health.rs`) and the Docker smoke test, both
 // of which have a live server to probe. Here we cover the NOK path
 // hermetically: with nothing listening on the target port, `cmd_health` must
 // return EXIT_FAILURE.

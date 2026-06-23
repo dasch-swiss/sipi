@@ -123,7 +123,7 @@ groups:
 | Target | Description |
 |--------|-------------|
 | `bazel-build [*FLAGS]` | `bazel build --stamp //src/cli:sipi` (fastbuild; pass `-c opt`/`--config=asan` etc.) |
-| `bazel-test [*FLAGS]` | `bazel test //test/unit/... //test/approval/... //test/e2e-rust/...` (no coverage) |
+| `bazel-test [*FLAGS]` | `bazel test //test/unit/... //test/approval/... //test/e2e/...` (no coverage) |
 | `bazel-coverage [*FLAGS]` | Same target set, instrumented; emits combined lcov for Codecov |
 | `bazel-test-unit` | `bazel test //test/unit/...` |
 | `bazel-test-approval` | `bazel test //test/approval:approvaltests` |
