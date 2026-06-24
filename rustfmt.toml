@@ -1,0 +1,10 @@
+# Canonical rustfmt config for the SIPI Rust crates (server-rs, cli-rs, test/e2e).
+#
+# Stable options only, so `rustfmt --check` passes under the pinned stable
+# toolchain the rules_rust rustfmt aspect uses (`just bazel-rustfmt-check`, wired
+# into CI). Run `just bazel-rustfmt` to apply. Keep this minimal: pin the edition
+# (so rustfmt needs no --edition flag) and a couple of explicit defaults that
+# matter for cross-platform determinism; everything else is rustfmt's default.
+edition = "2021"
+max_width = 100
+newline_style = "Unix"
