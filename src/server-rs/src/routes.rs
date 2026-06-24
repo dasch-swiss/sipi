@@ -814,19 +814,19 @@ fn build_ctx(method: &Method, uri: &Uri, headers: &HeaderMap) -> Option<ffi::Req
 }
 
 /// Parse the `Cookie` header into name/value pairs (the parsed map the Lua
-/// `server.cookies` binding reads).
+/// `server.cookies` binding reads) via the `cookie` crate's RFC 6265 splitter.
+///
+/// DIFFERENTIAL-VERIFY: this feeds the Lua `server.cookies` binding, so its
+/// output must match the C++ shttps cookie parser. Confirm parity via the
+/// differential harness once it lands (plan 02 §7, step 4).
 fn parse_cookies(headers: &HeaderMap) -> Vec<(String, String)> {
-    header_str(headers, header::COOKIE.as_str())
-        .map(|raw| {
-            raw.split(';')
-                .filter_map(|kv| {
-                    let kv = kv.trim();
-                    let eq = kv.find('=')?;
-                    Some((kv[..eq].trim().to_owned(), kv[eq + 1..].trim().to_owned()))
-                })
-                .collect()
-        })
-        .unwrap_or_default()
+    let Some(raw) = header_str(headers, header::COOKIE.as_str()) else {
+        return Vec::new();
+    };
+    cookie::Cookie::split_parse(raw.as_str())
+        .filter_map(Result::ok)
+        .map(|c| (c.name().to_owned(), c.value().to_owned()))
+        .collect()
 }
 
 fn access_kv_cstring(access: &Access, key: &str) -> Option<CString> {
