@@ -90,8 +90,11 @@ SipiConf::SipiConf(shttps::LuaServer &luacfg)
       + "'. Use '-1' (unlimited), '0' (disabled), or a positive value like '200M'.");
   }
 
-  // --- cache_nfiles ---
-  cache_n_files = luacfg.configInteger("sipi", "cache_nfiles", 200);
+  // --- cache_nfiles --- (negative is meaningless; clamp to 0 = unlimited,
+  // matching the other numeric knobs; the CLI path rejects a negative outright)
+  long long parsed_nfiles = luacfg.configInteger("sipi", "cache_nfiles", 200);
+  if (parsed_nfiles < 0) parsed_nfiles = 0;
+  cache_n_files = static_cast<size_t>(parsed_nfiles);
 
   // --- cache_hysteresis: warn if present, no longer supported ---
   // Use sentinel default -1.0 to detect if the key is explicitly set

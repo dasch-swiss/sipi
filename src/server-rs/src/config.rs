@@ -55,8 +55,9 @@ pub struct ServerOverrides {
     pub cache_dir: Option<String>,
     /// Raw size string ("200M"); the engine parses the suffix.
     pub cache_size: Option<String>,
-    /// Signed: 0 = unlimited, negatives wrap — mirrors the C++ CLI exactly.
-    pub cache_nfiles: Option<i32>,
+    /// 0 = unlimited; a negative is rejected at the CLI (clap `u32` + the C++
+    /// `unsigned` var), so there is no signed→unsigned wrap.
+    pub cache_nfiles: Option<u32>,
 
     // Rate limiting
     pub rate_limit_max_pixels: Option<u64>,
@@ -130,7 +131,7 @@ pub(crate) struct SipiServerConfig {
     // 4-byte scalar values (presence via the has_ flags below)
     pub serverport: i32,
     pub maxtmpage: i32,
-    pub cache_nfiles: i32, // signed: 0 = unlimited, negatives wrap — cli_app parity
+    pub cache_nfiles: u32, // 0 = unlimited; a negative is rejected at the CLI (no wrap)
     pub subdirlevels: i32,
     pub pathprefix: i32, // prefix_as_path, bool carried as 0/1
     pub rate_limit_window: u32,
