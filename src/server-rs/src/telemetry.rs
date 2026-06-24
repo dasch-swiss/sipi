@@ -187,10 +187,8 @@ where
         event.record(&mut visitor);
 
         write!(writer, "{{\"level\":\"{}\"", meta.level())?;
-        write!(writer, ",\"message\":")?;
-        write_json_str(&mut writer, &visitor.message)?;
-        write!(writer, ",\"target\":")?;
-        write_json_str(&mut writer, meta.target())?;
+        write!(writer, ",\"message\":{}", json_string(&visitor.message))?;
+        write!(writer, ",\"target\":{}", json_string(meta.target()))?;
         // Rust-only structured fields ride along as extra keys (the research
         // confirms Alloy ignores keys it isn't configured for); the C++ side has
         // no equivalent, which is fine — only the core keys must match.
@@ -224,9 +222,7 @@ impl Visit for JsonVisitor {
             self.message = rendered;
         } else {
             // Debug renderings aren't valid JSON values, so quote + escape them.
-            let mut quoted = String::new();
-            let _ = write_json_str(&mut FmtString(&mut quoted), &rendered);
-            self.push_field(field.name(), &quoted);
+            self.push_field(field.name(), &json_string(&rendered));
         }
     }
 
@@ -234,9 +230,7 @@ impl Visit for JsonVisitor {
         if field.name() == "message" {
             self.message = value.to_owned();
         } else {
-            let mut quoted = String::new();
-            let _ = write_json_str(&mut FmtString(&mut quoted), value);
-            self.push_field(field.name(), &quoted);
+            self.push_field(field.name(), &json_string(value));
         }
     }
 
@@ -254,9 +248,7 @@ impl Visit for JsonVisitor {
         } else {
             // JSON has no NaN/Infinity literal — quote a non-finite float so it
             // can never emit a bare token and corrupt the line.
-            let mut quoted = String::new();
-            let _ = write_json_str(&mut FmtString(&mut quoted), &value.to_string());
-            self.push_field(field.name(), &quoted);
+            self.push_field(field.name(), &json_string(&value.to_string()));
         }
     }
 
@@ -265,51 +257,23 @@ impl Visit for JsonVisitor {
     }
 }
 
-/// Write a JSON-escaped, double-quoted string. Escapes the JSON-mandatory set
-/// (`"`, `\`, control chars) so a message with quotes/newlines stays valid.
-fn write_json_str<W: fmt::Write>(w: &mut W, s: &str) -> fmt::Result {
-    w.write_char('"')?;
-    for c in s.chars() {
-        match c {
-            '"' => w.write_str("\\\"")?,
-            '\\' => w.write_str("\\\\")?,
-            '\n' => w.write_str("\\n")?,
-            '\r' => w.write_str("\\r")?,
-            '\t' => w.write_str("\\t")?,
-            c if (c as u32) < 0x20 => write!(w, "\\u{:04x}", c as u32)?,
-            c => w.write_char(c)?,
-        }
-    }
-    w.write_char('"')
-}
-
-/// Adapts a `&mut String` to `fmt::Write` for [`write_json_str`] (the formatter's
-/// `Writer` and a plain `String` don't share a trait object).
-struct FmtString<'a>(&'a mut String);
-
-impl fmt::Write for FmtString<'_> {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        self.0.push_str(s);
-        Ok(())
-    }
+/// JSON-encode a string as a quoted, escaped JSON value (`"…"`) via serde_json,
+/// so a message with quotes/newlines/control chars can't break out of its string
+/// (log injection). Infallible for `&str`; falls back to an empty JSON string.
+fn json_string(s: &str) -> String {
+    serde_json::to_string(s).unwrap_or_else(|_| String::from("\"\""))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn esc(s: &str) -> String {
-        let mut out = String::new();
-        write_json_str(&mut FmtString(&mut out), s).expect("string writer never fails");
-        out
-    }
-
     #[test]
-    fn json_str_escapes_quotes_newlines_and_controls() {
+    fn json_string_escapes_quotes_newlines_and_controls() {
         // A log message must never break out of its JSON string (log injection).
-        assert_eq!(esc("ok"), "\"ok\"");
-        assert_eq!(esc("a\"b"), "\"a\\\"b\"");
-        assert_eq!(esc("a\nb\tc\\d"), "\"a\\nb\\tc\\\\d\"");
-        assert_eq!(esc("x\u{0001}y"), "\"x\\u0001y\"");
+        assert_eq!(json_string("ok"), "\"ok\"");
+        assert_eq!(json_string("a\"b"), "\"a\\\"b\"");
+        assert_eq!(json_string("a\nb\tc\\d"), "\"a\\nb\\tc\\\\d\"");
+        assert_eq!(json_string("x\u{0001}y"), "\"x\\u0001y\"");
     }
 }
