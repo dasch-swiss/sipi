@@ -196,6 +196,13 @@ typedef struct
  * translation unit owns the layout, so the seam commits no field set it does
  * not need. */
 typedef struct SipiServerConfig SipiServerConfig;
+/* When SipiServerConfig is made concrete (the CLI/env override channel, plan 02
+ * §7.5 M4), its field layout must match the Rust `#[repr(C)]` in
+ * src/server-rs/src/config.rs exactly — field order, the `has_` scalar flags,
+ * pointer widths, and padding — or it is silent UB on drift. Guard it here with
+ * `static_assert(sizeof(SipiServerConfig) == ...)` + `offsetof` checks, paired
+ * with a Rust `size_of`/offset test against this header. Not bindgen: the seam
+ * is small and hand-mirrored on purpose (see src/server-rs/src/ffi.rs). */
 typedef struct SipiMetricsSnapshot SipiMetricsSnapshot;
 
 /* The whole HTTP request the Lua subsystem reads (method/uri/host/secure +

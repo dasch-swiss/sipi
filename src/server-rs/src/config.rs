@@ -8,7 +8,11 @@
 //! Today it carries only the listen port — the one flag the shell consumes. It
 //! grows one `Option` per forwarded flag as the full CLI-override path lands
 //! (plan 02 §7.5, M3/M4), at which point it is converted to the `#[repr(C)]`
-//! `SipiServerConfig` and forwarded through `sipi_init`. `--drain-timeout` is
+//! `SipiServerConfig` and forwarded through `sipi_init`. When that `#[repr(C)]`
+//! struct is added here, its layout must match `sipi_ffi.h`'s `SipiServerConfig`
+//! exactly; guard it with a `size_of`/offset test against the header (not
+//! bindgen) and pair it with the C++ `static_assert` — the two definitions are
+//! lock-step. `--drain-timeout` is
 //! deliberately *not* here: it is a Rust-owned serve knob, not a config
 //! override, so it stays a direct [`crate::run`] argument.
 
