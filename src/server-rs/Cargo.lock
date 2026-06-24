@@ -1341,6 +1341,7 @@ version = "0.0.0"
 dependencies = [
  "axum",
  "axum-tracing-opentelemetry",
+ "form_urlencoded",
  "init-tracing-opentelemetry",
  "opentelemetry",
  "opentelemetry-appender-tracing",

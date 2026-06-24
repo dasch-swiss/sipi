@@ -18,7 +18,6 @@ use axum::extract::{DefaultBodyLimit, FromRequest, Multipart, OriginalUri, Reque
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{on, MethodFilter, MethodRouter};
-use percent_encoding::percent_decode_str;
 use tempfile::NamedTempFile;
 use tokio::sync::{mpsc, oneshot};
 
@@ -690,21 +689,14 @@ fn has_request_body(method: &Method) -> bool {
 }
 
 /// Parse `application/x-www-form-urlencoded` (or a query string) into name/value
-/// pairs: split on `&`, then `=`, `+` → space, then percent-decode each side.
+/// pairs via the `form_urlencoded` crate (WHATWG semantics: `&`-split, `=`-split,
+/// `+` → space, percent-decode; empty pairs skipped).
+///
+/// DIFFERENTIAL-VERIFY: this feeds the Lua `server.get`/`server.post` bindings,
+/// so its output must match the C++ shttps query/POST parser. Confirm parity via
+/// the differential harness once it lands (plan 02 §7, step 4).
 fn parse_form_encoded(s: &str) -> Vec<(String, String)> {
-    s.split('&')
-        .filter(|kv| !kv.is_empty())
-        .map(|kv| {
-            let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
-            (form_decode(k), form_decode(v))
-        })
-        .collect()
-}
-
-/// Decode one urlencoded component (`+` → space, then `%XX`).
-fn form_decode(s: &str) -> String {
-    let plus_decoded = s.replace('+', " ");
-    percent_decode_str(&plus_decoded).decode_utf8_lossy().into_owned()
+    form_urlencoded::parse(s.as_bytes()).into_owned().collect()
 }
 
 fn serve_info_json(resolved: &str, parsed: &ParsedRequest, headers: &HeaderMap, access: &Access) -> Response {

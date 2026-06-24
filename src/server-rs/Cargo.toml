@@ -30,6 +30,7 @@ tower = { version = "0.5", features = ["util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 percent-encoding = "2"
+form_urlencoded = "1"
 serde_json = "1"
 # Spool each multipart upload to a temp file the C++ engine opens by path; the
 # handle is held until the Lua route finishes, then auto-deleted on drop.
