@@ -86,7 +86,7 @@ async fn server_main(
     // engine_context() hard-fails on any serve call until this runs, so without
     // --config only the engine-free routes (/health, /favicon.ico) work.
     match &config {
-        Some(cfg) => match ffi::init(cfg) {
+        Some(cfg) => match ffi::init(cfg, &overrides) {
             Ok(()) => tracing::info!(config = %cfg, "engine + Lua config installed"),
             Err(code) => {
                 tracing::error!(config = %cfg, code, "sipi_init failed");
