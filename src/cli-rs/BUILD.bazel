@@ -18,7 +18,7 @@ which keeps the production socket until the cutover renames this to the stock
 """
 
 load("@crates_cli//:defs.bzl", "all_crate_deps")
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -49,6 +49,8 @@ _CPP_STDLIB_LINK = select({
 _SRCS = [
     "src/commands/health.rs",
     "src/commands/mod.rs",
+    "src/commands/server/args/mod.rs",
+    "src/commands/server/args/network.rs",
     "src/commands/server/mod.rs",
     "src/ffi.rs",
     "src/main.rs",
@@ -74,4 +76,17 @@ rust_binary(
     # under --config=asan, which the hermetic LLVM toolchain does not ship.
     tags = ["no-sanitizer"],
     deps = all_crate_deps(normal = True) + _DEPS,
+)
+
+# Inline #[cfg(test)] unit tests — the clap `server` arg-parsing pins (e.g. that
+# no overridable flag carries a clap `default_value`, which would silently
+# clobber the Lua config). Compiles the binary crate with --cfg test; it
+# performs the same final link of the C++ engine archives as the binary, so it
+# needs the C++ stdlib link bracket and the same `no-sanitizer` exclusion.
+rust_test(
+    name = "sipi_unit_test",
+    crate = ":sipi",
+    edition = "2021",
+    rustc_flags = _CPP_STDLIB_LINK,
+    tags = ["no-sanitizer"],
 )
