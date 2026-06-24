@@ -197,14 +197,8 @@ impl SipiServer {
                     std::thread::sleep(Duration::from_millis(100));
                 }
                 if TcpStream::connect(format!("127.0.0.1:{}", http_port)).is_err() {
-                    let captured_stderr = stderr_buf
-                        .lock()
-                        .map(|s| s.clone())
-                        .unwrap_or_default();
-                    let captured_stdout = stdout_buf
-                        .lock()
-                        .map(|s| s.clone())
-                        .unwrap_or_default();
+                    let captured_stderr = stderr_buf.lock().map(|s| s.clone()).unwrap_or_default();
+                    let captured_stdout = stdout_buf.lock().map(|s| s.clone()).unwrap_or_default();
                     child.kill().ok();
                     panic!(
                         "Sipi failed to start within {:?} on port {}\nstdout:\n{}\nstderr:\n{}",
@@ -249,14 +243,8 @@ impl SipiServer {
             }
             // Check if child is still alive
             if let Ok(Some(status)) = child.try_wait() {
-                let captured_stdout = stdout_buf
-                    .lock()
-                    .map(|s| s.clone())
-                    .unwrap_or_default();
-                let captured_stderr = stderr_buf
-                    .lock()
-                    .map(|s| s.clone())
-                    .unwrap_or_default();
+                let captured_stdout = stdout_buf.lock().map(|s| s.clone()).unwrap_or_default();
+                let captured_stderr = stderr_buf.lock().map(|s| s.clone()).unwrap_or_default();
                 panic!(
                     "Sipi process exited unexpectedly with {} after {} probes\n\
                      last probe error: {}\nstdout:\n{}\nstderr:\n{}",
@@ -267,14 +255,8 @@ impl SipiServer {
         }
 
         if !http_ready {
-            let captured_stdout = stdout_buf
-                .lock()
-                .map(|s| s.clone())
-                .unwrap_or_default();
-            let captured_stderr = stderr_buf
-                .lock()
-                .map(|s| s.clone())
-                .unwrap_or_default();
+            let captured_stdout = stdout_buf.lock().map(|s| s.clone()).unwrap_or_default();
+            let captured_stderr = stderr_buf.lock().map(|s| s.clone()).unwrap_or_default();
             child.kill().ok();
             panic!(
                 "Sipi started but never served HTTP on port {} within {:?}\n\
@@ -485,8 +467,8 @@ pub fn find_sipi_bin() -> PathBuf {
 /// derived `PathBuf::from(&sipi_bin)` arithmetic in
 /// `SipiServer::start_with_args`).
 pub fn sipi_bin_path() -> String {
-    let raw = std::env::var("SIPI_BIN")
-        .unwrap_or_else(|_| find_sipi_bin().to_string_lossy().to_string());
+    let raw =
+        std::env::var("SIPI_BIN").unwrap_or_else(|_| find_sipi_bin().to_string_lossy().to_string());
     std::path::Path::new(&raw)
         .canonicalize()
         .map(|p| p.to_string_lossy().into_owned())
@@ -567,4 +549,3 @@ pub fn http_client() -> reqwest::blocking::Client {
         .build()
         .expect("Failed to build HTTP client")
 }
-

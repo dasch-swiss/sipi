@@ -58,7 +58,11 @@ fn enforce_tile_request_within_budget_succeeds() {
         .send()
         .expect("tile request should succeed");
 
-    assert_eq!(resp.status().as_u16(), 200, "tile within budget should return 200");
+    assert_eq!(
+        resp.status().as_u16(),
+        200,
+        "tile within budget should return 200"
+    );
 }
 
 #[test]

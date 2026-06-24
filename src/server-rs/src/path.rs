@@ -21,7 +21,11 @@
 /// segment was not fully decoded. Port of the C++ `contains_traversal`.
 #[must_use]
 pub fn contains_traversal(decoded: &str) -> bool {
-    if decoded == ".." || decoded.starts_with("../") || decoded.ends_with("/..") || decoded.contains("/../") {
+    if decoded == ".."
+        || decoded.starts_with("../")
+        || decoded.ends_with("/..")
+        || decoded.contains("/../")
+    {
         return true;
     }
     let lower = decoded.to_ascii_lowercase();
@@ -44,7 +48,12 @@ pub fn is_within(resolved: &str, resolved_root: &str) -> bool {
 /// `prefix_as_path` and the prefix is non-empty, else `imgroot/identifier`.
 /// `prefix` and `identifier` are the already-URL-decoded parser outputs.
 #[must_use]
-pub fn build_request_path(imgroot: &str, prefix: &str, identifier: &str, prefix_as_path: bool) -> String {
+pub fn build_request_path(
+    imgroot: &str,
+    prefix: &str,
+    identifier: &str,
+    prefix_as_path: bool,
+) -> String {
     if prefix_as_path && !prefix.is_empty() {
         format!("{imgroot}/{prefix}/{identifier}")
     } else {
@@ -89,7 +98,14 @@ mod tests {
 
     #[test]
     fn traversal_literal_components() {
-        for s in ["..", "../x", "x/..", "a/../b", "../../etc/passwd", "foo/../../bar"] {
+        for s in [
+            "..",
+            "../x",
+            "x/..",
+            "a/../b",
+            "../../etc/passwd",
+            "foo/../../bar",
+        ] {
             assert!(contains_traversal(s), "should reject: {s}");
         }
     }
@@ -104,7 +120,13 @@ mod tests {
 
     #[test]
     fn traversal_allows_legitimate_identifiers() {
-        for s in ["lena512.tif", "iiif/2/image.jpx", "3KtDiJm4XxY-1PUUCffsF4S.jpx", "a.b.c", "..hidden"] {
+        for s in [
+            "lena512.tif",
+            "iiif/2/image.jpx",
+            "3KtDiJm4XxY-1PUUCffsF4S.jpx",
+            "a.b.c",
+            "..hidden",
+        ] {
             assert!(!contains_traversal(s), "should allow: {s}");
         }
     }
@@ -124,14 +146,23 @@ mod tests {
 
     #[test]
     fn path_build_prefix_modes() {
-        assert_eq!(build_request_path("/img", "iiif/2", "a.tif", true), "/img/iiif/2/a.tif");
-        assert_eq!(build_request_path("/img", "iiif/2", "a.tif", false), "/img/a.tif");
+        assert_eq!(
+            build_request_path("/img", "iiif/2", "a.tif", true),
+            "/img/iiif/2/a.tif"
+        );
+        assert_eq!(
+            build_request_path("/img", "iiif/2", "a.tif", false),
+            "/img/a.tif"
+        );
         // Empty prefix never produces a double slash.
         assert_eq!(build_request_path("/img", "", "a.tif", true), "/img/a.tif");
     }
 
     #[test]
     fn validate_missing_is_not_found() {
-        assert_eq!(validate_resolved_path("/no/such/file/here.tif", "/no/such"), Resolved::NotFound);
+        assert_eq!(
+            validate_resolved_path("/no/such/file/here.tif", "/no/such"),
+            Resolved::NotFound
+        );
     }
 }

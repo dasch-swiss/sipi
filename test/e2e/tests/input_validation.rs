@@ -110,7 +110,8 @@ fn null_byte_in_iiif_url_returns_400() {
     let mut stream = TcpStream::connect(&addr).expect("TCP connect failed");
     stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
 
-    let request = "GET /unit/lena512%00.jp2/full/max/0/default.jpg HTTP/1.1\r\nHost: localhost\r\n\r\n";
+    let request =
+        "GET /unit/lena512%00.jp2/full/max/0/default.jpg HTTP/1.1\r\nHost: localhost\r\n\r\n";
     stream.write_all(request.as_bytes()).expect("write failed");
 
     let mut response = String::new();
@@ -131,7 +132,8 @@ fn null_byte_server_stays_healthy() {
     let addr = format!("127.0.0.1:{}", srv.http_port);
     if let Ok(mut stream) = TcpStream::connect(&addr) {
         stream.set_read_timeout(Some(Duration::from_secs(2))).ok();
-        let request = "GET /unit/test%00evil/full/max/0/default.jpg HTTP/1.1\r\nHost: localhost\r\n\r\n";
+        let request =
+            "GET /unit/test%00evil/full/max/0/default.jpg HTTP/1.1\r\nHost: localhost\r\n\r\n";
         let _ = stream.write_all(request.as_bytes());
         let mut buf = [0u8; 1024];
         let _ = stream.read(&mut buf);

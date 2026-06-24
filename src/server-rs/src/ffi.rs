@@ -158,8 +158,12 @@ pub struct SipiImageDims {
 pub type SipiStrFn = extern "C" fn(ctx: *mut c_void, value: *const c_char);
 
 /// Emits one configured Lua route — method/route/script — (mirrors `SipiRouteFn`).
-pub type SipiRouteFn =
-    extern "C" fn(ctx: *mut c_void, method: *const c_char, route: *const c_char, script: *const c_char);
+pub type SipiRouteFn = extern "C" fn(
+    ctx: *mut c_void,
+    method: *const c_char,
+    route: *const c_char,
+    script: *const c_char,
+);
 
 // ── Preflight (auth) ────────────────────────────────────────────────────────
 
@@ -442,7 +446,9 @@ pub fn imgroot(resolved: bool) -> Result<String, i32> {
     }
     // SAFETY: `ptr` is a NUL-terminated C string owned by the engine, valid for
     // the process lifetime; we copy it before returning.
-    Ok(unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned())
+    Ok(unsafe { CStr::from_ptr(ptr) }
+        .to_string_lossy()
+        .into_owned())
 }
 
 /// The `prefix_as_path` config knob: `true` → the IIIF prefix is a path
@@ -493,7 +499,12 @@ pub struct RouteEntry {
 }
 
 /// Collects emitted routes into the `Vec<RouteEntry>` at `ctx`.
-extern "C" fn collect_route(ctx: *mut c_void, method: *const c_char, route: *const c_char, script: *const c_char) {
+extern "C" fn collect_route(
+    ctx: *mut c_void,
+    method: *const c_char,
+    route: *const c_char,
+    script: *const c_char,
+) {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         // SAFETY: `ctx` is the `&mut Vec<RouteEntry>` passed to sipi_routes.
         let out = unsafe { &mut *(ctx as *mut Vec<RouteEntry>) };
@@ -502,9 +513,15 @@ extern "C" fn collect_route(ctx: *mut c_void, method: *const c_char, route: *con
         }
         // SAFETY: the engine passes NUL-terminated C strings valid for the call.
         out.push(RouteEntry {
-            method: unsafe { CStr::from_ptr(method) }.to_string_lossy().into_owned(),
-            route: unsafe { CStr::from_ptr(route) }.to_string_lossy().into_owned(),
-            script: unsafe { CStr::from_ptr(script) }.to_string_lossy().into_owned(),
+            method: unsafe { CStr::from_ptr(method) }
+                .to_string_lossy()
+                .into_owned(),
+            route: unsafe { CStr::from_ptr(route) }
+                .to_string_lossy()
+                .into_owned(),
+            script: unsafe { CStr::from_ptr(script) }
+                .to_string_lossy()
+                .into_owned(),
         });
     }));
 }
@@ -516,7 +533,12 @@ pub fn routes() -> Result<Vec<RouteEntry>, i32> {
     let mut out: Vec<RouteEntry> = Vec::new();
     // SAFETY: `collect_route` writes into `out` via the ctx pointer; the seam
     // guards exceptions.
-    let code = unsafe { sipi_routes(collect_route, &mut out as *mut Vec<RouteEntry> as *mut c_void) };
+    let code = unsafe {
+        sipi_routes(
+            collect_route,
+            &mut out as *mut Vec<RouteEntry> as *mut c_void,
+        )
+    };
     if code != 0 {
         return Err(code);
     }
@@ -545,7 +567,11 @@ extern "C" fn collect_mime(ctx: *mut c_void, value: *const c_char) {
         let out = unsafe { &mut *(ctx as *mut Option<String>) };
         if !value.is_null() {
             // SAFETY: the engine passes a NUL-terminated C string valid for the call.
-            *out = Some(unsafe { CStr::from_ptr(value) }.to_string_lossy().into_owned());
+            *out = Some(
+                unsafe { CStr::from_ptr(value) }
+                    .to_string_lossy()
+                    .into_owned(),
+            );
         }
     }));
 }
@@ -559,7 +585,11 @@ pub fn mimetype(resolved_path: &str) -> Result<String, i32> {
     // SAFETY: `c_path` outlives the synchronous call; `collect_mime` writes into
     // `out` via the ctx pointer; the seam guards exceptions.
     let code = unsafe {
-        sipi_mimetype(c_path.as_ptr(), collect_mime, &mut out as *mut Option<String> as *mut c_void)
+        sipi_mimetype(
+            c_path.as_ptr(),
+            collect_mime,
+            &mut out as *mut Option<String> as *mut c_void,
+        )
     };
     if code != 0 {
         return Err(code);
@@ -594,14 +624,33 @@ impl RequestContext {
 
     /// Append one parsed multipart upload (`server.uploads`). A field with an
     /// interior NUL in any string is skipped (such fields cannot reach Lua).
-    pub fn add_upload(&self, fieldname: &str, origname: &str, tmpname: &str, mimetype: &str, filesize: u64) {
-        let (Ok(f), Ok(o), Ok(t), Ok(m)) =
-            (CString::new(fieldname), CString::new(origname), CString::new(tmpname), CString::new(mimetype))
-        else {
+    pub fn add_upload(
+        &self,
+        fieldname: &str,
+        origname: &str,
+        tmpname: &str,
+        mimetype: &str,
+        filesize: u64,
+    ) {
+        let (Ok(f), Ok(o), Ok(t), Ok(m)) = (
+            CString::new(fieldname),
+            CString::new(origname),
+            CString::new(tmpname),
+            CString::new(mimetype),
+        ) else {
             return;
         };
         // SAFETY: the C strings outlive the synchronous call; deep-copied; guarded.
-        unsafe { sipi_request_context_add_upload(self.ptr, f.as_ptr(), o.as_ptr(), t.as_ptr(), m.as_ptr(), filesize) };
+        unsafe {
+            sipi_request_context_add_upload(
+                self.ptr,
+                f.as_ptr(),
+                o.as_ptr(),
+                t.as_ptr(),
+                m.as_ptr(),
+                filesize,
+            )
+        };
     }
 
     /// Append a GET (`kind` = 0) or POST (`kind` = 1) form parameter (`server.get`
@@ -647,7 +696,10 @@ pub fn build_request_context(
     fn pair(owned: &mut Vec<CString>, k: &str, v: &str) -> Option<SipiStrPair> {
         let ck = CString::new(k).ok()?;
         let cv = CString::new(v).ok()?;
-        let p = SipiStrPair { name: ck.as_ptr(), value: cv.as_ptr() };
+        let p = SipiStrPair {
+            name: ck.as_ptr(),
+            value: cv.as_ptr(),
+        };
         owned.push(ck);
         owned.push(cv);
         Some(p)
@@ -695,7 +747,10 @@ impl PreflightOutcome {
     /// The value of a kv key, if the hook emitted it.
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&str> {
-        self.kv.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
+        self.kv
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
     }
 }
 
@@ -706,8 +761,12 @@ extern "C" fn collect_kv(ctx: *mut c_void, key: *const c_char, value: *const c_c
         let kv = unsafe { &mut *(ctx as *mut Vec<(String, String)>) };
         if !key.is_null() && !value.is_null() {
             // SAFETY: the engine passes NUL-terminated C strings valid for the call.
-            let k = unsafe { CStr::from_ptr(key) }.to_string_lossy().into_owned();
-            let v = unsafe { CStr::from_ptr(value) }.to_string_lossy().into_owned();
+            let k = unsafe { CStr::from_ptr(key) }
+                .to_string_lossy()
+                .into_owned();
+            let v = unsafe { CStr::from_ptr(value) }
+                .to_string_lossy()
+                .into_owned();
             kv.push((k, v));
         }
     }));
@@ -715,7 +774,11 @@ extern "C" fn collect_kv(ctx: *mut c_void, key: *const c_char, value: *const c_c
 
 /// Run the IIIF `pre_flight` hook. `Err` carries the FFI status (500), or -1 on
 /// an interior NUL.
-pub fn preflight(prefix: &str, identifier: &str, ctx: &RequestContext) -> Result<PreflightOutcome, i32> {
+pub fn preflight(
+    prefix: &str,
+    identifier: &str,
+    ctx: &RequestContext,
+) -> Result<PreflightOutcome, i32> {
     let c_prefix = CString::new(prefix).map_err(|_| -1)?;
     let c_identifier = CString::new(identifier).map_err(|_| -1)?;
     let mut permission = SipiPermType::Deny;

@@ -87,7 +87,10 @@ pub fn image_info_json(id: &str, dims: &SipiImageDims) -> Value {
     if dims.numpages > 0 {
         root.insert("numpages".into(), json!(dims.numpages));
     }
-    root.insert("sizes".into(), json!(size_pyramid(dims.width, dims.height, dims.clevels)));
+    root.insert(
+        "sizes".into(),
+        json!(size_pyramid(dims.width, dims.height, dims.clevels)),
+    );
     if dims.tile_width > 0 && dims.tile_height > 0 {
         let cnt = if dims.clevels > 0 { dims.clevels } else { 5 };
         let scale_factors: Vec<u32> = (1..cnt).collect();
@@ -97,7 +100,10 @@ pub fn image_info_json(id: &str, dims: &SipiImageDims) -> Value {
         );
     }
     root.insert("extraFormats".into(), json!(["tif", "jp2"]));
-    root.insert("preferredFormats".into(), json!(["jpg", "tif", "jp2", "png"]));
+    root.insert(
+        "preferredFormats".into(),
+        json!(["jpg", "tif", "jp2", "png"]),
+    );
     root.insert("extraFeatures".into(), json!(EXTRA_FEATURES));
     Value::Object(root)
 }
@@ -189,7 +195,11 @@ pub fn video_knora_json(id: &str, mime: &str, file_size: u64, sidecar: &Sidecar)
     let mut root = knora_base(id, sidecar);
     root.insert("internalMimeType".into(), json!(mime));
     root.insert("fileSize".into(), json!(file_size));
-    if let Some(name) = sidecar.original_filename.as_deref().filter(|s| !s.is_empty()) {
+    if let Some(name) = sidecar
+        .original_filename
+        .as_deref()
+        .filter(|s| !s.is_empty())
+    {
         root.insert("originalFilename".into(), json!(name));
     }
     for (key, value) in [
@@ -225,7 +235,10 @@ pub fn generic_knora_json(id: &str, mime: &str, file_size: u64, sidecar: &Sideca
 pub fn is_auth_type(permission: SipiPermType) -> bool {
     matches!(
         permission,
-        SipiPermType::Login | SipiPermType::Clickthrough | SipiPermType::Kiosk | SipiPermType::External
+        SipiPermType::Login
+            | SipiPermType::Clickthrough
+            | SipiPermType::Kiosk
+            | SipiPermType::External
     )
 }
 
@@ -246,11 +259,17 @@ pub fn auth_service(permission: SipiPermType, kv: &[(String, String)]) -> Result
     let token_url = get("tokenUrl").ok_or(())?;
 
     let mut service = Map::new();
-    service.insert("@context".into(), json!("http://iiif.io/api/auth/1/context.json"));
+    service.insert(
+        "@context".into(),
+        json!("http://iiif.io/api/auth/1/context.json"),
+    );
     service.insert("@id".into(), json!(cookie_url));
     service.insert("profile".into(), json!(profile));
     for (k, v) in kv {
-        if !matches!(k.as_str(), "cookieUrl" | "tokenUrl" | "logoutUrl" | "infile") {
+        if !matches!(
+            k.as_str(),
+            "cookieUrl" | "tokenUrl" | "logoutUrl" | "infile"
+        ) {
             service.insert(k.clone(), json!(v));
         }
     }
@@ -267,7 +286,14 @@ mod tests {
     use super::*;
 
     fn dims(width: u32, height: u32, tile: u32, clevels: u32) -> SipiImageDims {
-        SipiImageDims { width, height, numpages: 0, tile_width: tile, tile_height: tile, clevels }
+        SipiImageDims {
+            width,
+            height,
+            numpages: 0,
+            tile_width: tile,
+            tile_height: tile,
+            clevels,
+        }
     }
 
     #[test]
@@ -280,7 +306,10 @@ mod tests {
         assert_eq!(v["profile"], "level2");
         assert_eq!(v["width"], 512);
         assert_eq!(v["height"], 512);
-        assert_eq!(v["sizes"], json!([{ "width": 256, "height": 256 }, { "width": 128, "height": 128 }]));
+        assert_eq!(
+            v["sizes"],
+            json!([{ "width": 256, "height": 256 }, { "width": 128, "height": 128 }])
+        );
         assert_eq!(v["tiles"][0]["width"], 512);
         assert_eq!(v["tiles"][0]["scaleFactors"], json!([1, 2, 3, 4, 5, 6, 7]));
         assert_eq!(v["extraFeatures"].as_array().unwrap().len(), 17);
@@ -318,7 +347,8 @@ mod tests {
 
     #[test]
     fn video_knora_json_from_sidecar() {
-        let s = Sidecar::parse(r#"{"originalFilename":"Dummy.mp4","fps":30,"width":320,"height":240}"#);
+        let s =
+            Sidecar::parse(r#"{"originalFilename":"Dummy.mp4","fps":30,"width":320,"height":240}"#);
         let v = video_knora_json("http://h/v.mp4", "video/mp4", 999, &s);
         assert_eq!(v["internalMimeType"], "video/mp4");
         assert_eq!(v["fileSize"], 999);
@@ -329,7 +359,12 @@ mod tests {
 
     #[test]
     fn image_knora_json_required_fields() {
-        let v = image_knora_json("http://h/i.jp2", "image/jp2", &dims(512, 512, 512, 8), &Sidecar::default());
+        let v = image_knora_json(
+            "http://h/i.jp2",
+            "image/jp2",
+            &dims(512, 512, 512, 8),
+            &Sidecar::default(),
+        );
         assert_eq!(v["@context"], FILE_CONTEXT);
         assert_eq!(v["width"], 512);
         assert_eq!(v["internalMimeType"], "image/jp2");

@@ -355,7 +355,10 @@ fn cli_convert_quality_succeeds_and_emits_jpeg() {
         "`convert --quality 80` must succeed; stderr:\n{}",
         String::from_utf8_lossy(&result.stderr)
     );
-    assert!(output.exists(), "quality conversion should emit an output file");
+    assert!(
+        output.exists(),
+        "quality conversion should emit an output file"
+    );
 
     // Valid JPEG: SOI marker 0xFFD8 followed by 0xFF.
     let bytes = std::fs::read(&output).expect("read output jpeg");

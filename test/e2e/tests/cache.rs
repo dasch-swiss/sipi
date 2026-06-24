@@ -347,18 +347,12 @@ fn cache_returns_consistent_results() {
     );
 
     // First request — cache miss (image conversion happens)
-    let resp1 = client()
-        .get(&url)
-        .send()
-        .expect("first GET failed");
+    let resp1 = client().get(&url).send().expect("first GET failed");
     assert_eq!(resp1.status().as_u16(), 200);
     let bytes1 = resp1.bytes().expect("read body 1").to_vec();
 
     // Second request — cache hit (served from cache)
-    let resp2 = client()
-        .get(&url)
-        .send()
-        .expect("second GET failed");
+    let resp2 = client().get(&url).send().expect("second GET failed");
     assert_eq!(resp2.status().as_u16(), 200);
     let bytes2 = resp2.bytes().expect("read body 2").to_vec();
 

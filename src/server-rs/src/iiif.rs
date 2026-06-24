@@ -77,7 +77,11 @@ fn is_valid_region(s: &str) -> bool {
                 None => return false,
             };
         }
-        rest = match if is_pct { consume_posfloat(rest) } else { consume_posint(rest) } {
+        rest = match if is_pct {
+            consume_posfloat(rest)
+        } else {
+            consume_posint(rest)
+        } {
             Some(r) => r,
             None => return false,
         };
@@ -152,7 +156,9 @@ fn parse_region(s: &str) -> Result<(SipiRegionType, [f32; 4]), ParseError> {
     };
     let nums: Vec<&str> = body.split(',').collect();
     if nums.len() != 4 {
-        return Err(ParseError(format!("IIIF Error reading Region parameter \"{s}\"")));
+        return Err(ParseError(format!(
+            "IIIF Error reading Region parameter \"{s}\""
+        )));
     }
     let mut coords = [0.0f32; 4];
     for (i, n) in nums.iter().enumerate() {
@@ -244,7 +250,9 @@ fn parse_size(s: &str) -> Result<SizeParts, ParseError> {
         }
         let ny = parse_dim(height_str)?;
         if ny == 0 {
-            return Err(ParseError(format!("IIIF size height cannot be zero: \"{s}\"")));
+            return Err(ParseError(format!(
+                "IIIF size height cannot be zero: \"{s}\""
+            )));
         }
         parts.ty = SipiSizeType::PixelsY;
         parts.ny = ny;
@@ -252,7 +260,9 @@ fn parse_size(s: &str) -> Result<SizeParts, ParseError> {
         // "w,"
         let nx = parse_dim(width_str)?;
         if nx == 0 {
-            return Err(ParseError(format!("IIIF size width cannot be zero: \"{s}\"")));
+            return Err(ParseError(format!(
+                "IIIF size width cannot be zero: \"{s}\""
+            )));
         }
         parts.ty = SipiSizeType::PixelsX;
         parts.nx = nx;
@@ -263,7 +273,11 @@ fn parse_size(s: &str) -> Result<SizeParts, ParseError> {
         if nx == 0 || ny == 0 {
             return Err(ParseError(format!("IIIF size cannot be zero: \"{s}\"")));
         }
-        parts.ty = if exclamation { SipiSizeType::Maxdim } else { SipiSizeType::PixelsXy };
+        parts.ty = if exclamation {
+            SipiSizeType::Maxdim
+        } else {
+            SipiSizeType::PixelsXy
+        };
         parts.nx = nx;
         parts.ny = ny;
     }
@@ -292,15 +306,21 @@ fn parse_quality_format(s: &str) -> Result<(SipiQualityType, SipiFormatType), Pa
     if s.is_empty() {
         return Ok((SipiQualityType::Default, SipiFormatType::Jpg));
     }
-    let dot = s
-        .find('.')
-        .ok_or_else(|| ParseError(format!("IIIF Error reading Quality+Format parameter \"{s}\" !")))?;
+    let dot = s.find('.').ok_or_else(|| {
+        ParseError(format!(
+            "IIIF Error reading Quality+Format parameter \"{s}\" !"
+        ))
+    })?;
     let quality = match &s[..dot] {
         "default" => SipiQualityType::Default,
         "color" => SipiQualityType::Color,
         "gray" => SipiQualityType::Gray,
         "bitonal" => SipiQualityType::Bitonal,
-        q => return Err(ParseError(format!("IIIF Error reading Quality parameter \"{q}\" !"))),
+        q => {
+            return Err(ParseError(format!(
+                "IIIF Error reading Quality parameter \"{q}\" !"
+            )))
+        }
     };
     let format = match &s[dot + 1..] {
         "jpg" => SipiFormatType::Jpg,
@@ -316,7 +336,12 @@ fn parse_quality_format(s: &str) -> Result<(SipiQualityType, SipiFormatType), Pa
 }
 
 /// Build the flattened `SipiIiifParams` from the four IIIF path segments.
-fn parse_iiif_params(region: &str, size: &str, rotation: &str, qualform: &str) -> Result<SipiIiifParams, ParseError> {
+fn parse_iiif_params(
+    region: &str,
+    size: &str,
+    rotation: &str,
+    qualform: &str,
+) -> Result<SipiIiifParams, ParseError> {
     let (region_type, region) = parse_region(region)?;
     let sz = parse_size(size)?;
     let (mirror, angle) = parse_rotation(rotation)?;
@@ -421,8 +446,14 @@ pub fn parse_request(uri: &str) -> Result<ParsedRequest, ParseError> {
             } else {
                 return Err(malformed());
             };
-            let params = parse_iiif_params(&parts[n - 4], &parts[n - 3], &parts[n - 2], &parts[n - 1])?;
-            Ok(ParsedRequest { kind: RequestKind::Iiif, prefix, identifier: parts[n - 5].clone(), params: Some(params) })
+            let params =
+                parse_iiif_params(&parts[n - 4], &parts[n - 3], &parts[n - 2], &parts[n - 1])?;
+            Ok(ParsedRequest {
+                kind: RequestKind::Iiif,
+                prefix,
+                identifier: parts[n - 5].clone(),
+                params: Some(params),
+            })
         } else if body == "info" && ext == "json" {
             let prefix = if n >= 3 {
                 parts[..n - 2].join("/")
@@ -431,7 +462,12 @@ pub fn parse_request(uri: &str) -> Result<ParsedRequest, ParseError> {
             } else {
                 return Err(malformed());
             };
-            Ok(ParsedRequest { kind: RequestKind::InfoJson, prefix, identifier: parts[n - 2].clone(), params: None })
+            Ok(ParsedRequest {
+                kind: RequestKind::InfoJson,
+                prefix,
+                identifier: parts[n - 2].clone(),
+                params: None,
+            })
         } else if body == "knora" && ext == "json" {
             let prefix = if n >= 3 {
                 parts[..n - 2].join("/")
@@ -440,7 +476,12 @@ pub fn parse_request(uri: &str) -> Result<ParsedRequest, ParseError> {
             } else {
                 return Err(malformed());
             };
-            Ok(ParsedRequest { kind: RequestKind::KnoraJson, prefix, identifier: parts[n - 2].clone(), params: None })
+            Ok(ParsedRequest {
+                kind: RequestKind::KnoraJson,
+                prefix,
+                identifier: parts[n - 2].clone(),
+                params: None,
+            })
         } else {
             // A dotted last segment that is neither a valid IIIF tail nor
             // info/knora.json. If it *looks* like an IIIF request, it is
@@ -450,10 +491,17 @@ pub fn parse_request(uri: &str) -> Result<ParsedRequest, ParseError> {
                 return Err(malformed());
             }
             if rotation_ok && size_ok && region_ok {
-                return Err(ParseError(format!("IIIF url not correctly formatted: Error in quality: \"{last}\"!")));
+                return Err(ParseError(format!(
+                    "IIIF url not correctly formatted: Error in quality: \"{last}\"!"
+                )));
             }
             let prefix = build_prefix_strict(&parts[..n - 1])?;
-            Ok(ParsedRequest { kind: RequestKind::Redirect, prefix, identifier: last.clone(), params: None })
+            Ok(ParsedRequest {
+                kind: RequestKind::Redirect,
+                prefix,
+                identifier: last.clone(),
+                params: None,
+            })
         }
     } else if last == "file" {
         // `…/{id}/file` — raw file download.
@@ -464,15 +512,27 @@ pub fn parse_request(uri: &str) -> Result<ParsedRequest, ParseError> {
         } else {
             return Err(malformed());
         };
-        Ok(ParsedRequest { kind: RequestKind::FileDownload, prefix, identifier: parts[n - 2].clone(), params: None })
+        Ok(ParsedRequest {
+            kind: RequestKind::FileDownload,
+            prefix,
+            identifier: parts[n - 2].clone(),
+            params: None,
+        })
     } else {
         // A bare (dot-less) last segment. Same reject-vs-redirect rule: if the
         // other three IIIF parts are valid it is a malformed IIIF request.
         if rotation_ok && size_ok && region_ok {
-            return Err(ParseError(format!("IIIF url not correctly formatted: Error in quality: \"{last}\"!")));
+            return Err(ParseError(format!(
+                "IIIF url not correctly formatted: Error in quality: \"{last}\"!"
+            )));
         }
         let prefix = build_prefix_strict(&parts[..n - 1])?;
-        Ok(ParsedRequest { kind: RequestKind::Redirect, prefix, identifier: last.clone(), params: None })
+        Ok(ParsedRequest {
+            kind: RequestKind::Redirect,
+            prefix,
+            identifier: last.clone(),
+            params: None,
+        })
     }
 }
 
@@ -488,7 +548,11 @@ mod tests {
         parse_request(uri).unwrap_or_else(|e| panic!("{uri} should parse: {}", e.0))
     }
     fn iiif_form(uri: &str) {
-        assert_eq!(parse_request(uri).map(|r| r.kind), Ok(RequestKind::Iiif), "form rejected: {uri}");
+        assert_eq!(
+            parse_request(uri).map(|r| r.kind),
+            Ok(RequestKind::Iiif),
+            "form rejected: {uri}"
+        );
     }
     fn rejected(uri: &str) {
         assert!(parse_request(uri).is_err(), "must be rejected: {uri}");
@@ -524,10 +588,22 @@ mod tests {
             ("/prefix/12345", "prefix", "12345"),
             ("/collections/item123", "collections", "item123"),
             ("/iiif/v2/abcd1234", "iiif/v2", "abcd1234"),
-            ("/iiif/3/4/uniqueImageIdentifier", "iiif/3/4", "uniqueImageIdentifier"),
+            (
+                "/iiif/3/4/uniqueImageIdentifier",
+                "iiif/3/4",
+                "uniqueImageIdentifier",
+            ),
             ("/prefix/path/to/image", "prefix/path/to", "image"),
-            ("/iiif/3/special%2Fchars%3Fhere", "iiif/3", "special/chars?here"),
-            ("/0812/3KtDiJm4XxY-1PUUCffsF4S.jpx", "0812", "3KtDiJm4XxY-1PUUCffsF4S.jpx"),
+            (
+                "/iiif/3/special%2Fchars%3Fhere",
+                "iiif/3",
+                "special/chars?here",
+            ),
+            (
+                "/0812/3KtDiJm4XxY-1PUUCffsF4S.jpx",
+                "0812",
+                "3KtDiJm4XxY-1PUUCffsF4S.jpx",
+            ),
         ];
         for (uri, prefix, id) in cases {
             let r = ok(uri);
@@ -558,24 +634,42 @@ mod tests {
 
     #[test]
     fn region_forms_accepted() {
-        for region in ["full", "square", "0,0,100,100", "10,20,300,400", "pct:25.5,25.5,50.0,50.0", "pct:0,0,100,100"] {
+        for region in [
+            "full",
+            "square",
+            "0,0,100,100",
+            "10,20,300,400",
+            "pct:25.5,25.5,50.0,50.0",
+            "pct:0,0,100,100",
+        ] {
             iiif_form(&format!("/p/img.jp2/{region}/max/0/default.jpg"));
         }
     }
 
     #[test]
     fn size_forms_accepted() {
-        for size in ["max", "pct:50", "pct:50.5", "100,", ",100", "100,100", "!100,100"] {
+        for size in [
+            "max", "pct:50", "pct:50.5", "100,", ",100", "100,100", "!100,100",
+        ] {
             iiif_form(&format!("/p/img.jp2/full/{size}/0/default.jpg"));
         }
-        for size in ["^max", "^pct:150", "^200,", "^,200", "^200,200", "^!200,200"] {
+        for size in [
+            "^max",
+            "^pct:150",
+            "^200,",
+            "^,200",
+            "^200,200",
+            "^!200,200",
+        ] {
             iiif_form(&format!("/p/img.jp2/full/{size}/0/default.jpg"));
         }
     }
 
     #[test]
     fn rotation_forms_accepted() {
-        for rot in ["0", "90", "180", "270", "45.5", "359.999", "!90", "!180", "!0.5"] {
+        for rot in [
+            "0", "90", "180", "270", "45.5", "359.999", "!90", "!180", "!0.5",
+        ] {
             iiif_form(&format!("/p/img.jp2/full/max/{rot}/default.jpg"));
         }
     }
@@ -620,7 +714,15 @@ mod tests {
 
     #[test]
     fn reject_malformed_region() {
-        for r in ["1,2,3", "1,2,3,4,5", "pct:1,2,3", "pct:1,2,3,4,5", "abc", "pct:", ",,,"] {
+        for r in [
+            "1,2,3",
+            "1,2,3,4,5",
+            "pct:1,2,3",
+            "pct:1,2,3,4,5",
+            "abc",
+            "pct:",
+            ",,,",
+        ] {
             rejected(&format!("/p/img.jp2/{r}/max/0/default.jpg"));
         }
     }
@@ -629,13 +731,22 @@ mod tests {
     fn info_knora_file_classification() {
         let info = ok("/p/img.jp2/info.json");
         assert_eq!(info.kind, RequestKind::InfoJson);
-        assert_eq!((info.prefix.as_str(), info.identifier.as_str()), ("p", "img.jp2"));
+        assert_eq!(
+            (info.prefix.as_str(), info.identifier.as_str()),
+            ("p", "img.jp2")
+        );
         let knora = ok("/p/img.jp2/knora.json");
         assert_eq!(knora.kind, RequestKind::KnoraJson);
-        assert_eq!((knora.prefix.as_str(), knora.identifier.as_str()), ("p", "img.jp2"));
+        assert_eq!(
+            (knora.prefix.as_str(), knora.identifier.as_str()),
+            ("p", "img.jp2")
+        );
         let file = ok("/p/img.jp2/file");
         assert_eq!(file.kind, RequestKind::FileDownload);
-        assert_eq!((file.prefix.as_str(), file.identifier.as_str()), ("p", "img.jp2"));
+        assert_eq!(
+            (file.prefix.as_str(), file.identifier.as_str()),
+            ("p", "img.jp2")
+        );
     }
 
     #[test]
@@ -681,9 +792,18 @@ mod tests {
 
     #[test]
     fn quality_format_param_values() {
-        assert_eq!(parse_quality_format("default.jpg").unwrap(), (SipiQualityType::Default, SipiFormatType::Jpg));
-        assert_eq!(parse_quality_format("gray.png").unwrap(), (SipiQualityType::Gray, SipiFormatType::Png));
-        assert_eq!(parse_quality_format("color.jp2").unwrap(), (SipiQualityType::Color, SipiFormatType::Jp2));
+        assert_eq!(
+            parse_quality_format("default.jpg").unwrap(),
+            (SipiQualityType::Default, SipiFormatType::Jpg)
+        );
+        assert_eq!(
+            parse_quality_format("gray.png").unwrap(),
+            (SipiQualityType::Gray, SipiFormatType::Png)
+        );
+        assert_eq!(
+            parse_quality_format("color.jp2").unwrap(),
+            (SipiQualityType::Color, SipiFormatType::Jp2)
+        );
     }
 
     #[test]
@@ -695,6 +815,9 @@ mod tests {
         assert_eq!(p.size_upscaling, 1);
         assert_eq!(p.rotation_mirror, 1);
         assert_eq!(p.rotation, 90.0);
-        assert_eq!((p.quality_type, p.format_type), (SipiQualityType::Color, SipiFormatType::Png));
+        assert_eq!(
+            (p.quality_type, p.format_type),
+            (SipiQualityType::Color, SipiFormatType::Png)
+        );
     }
 }

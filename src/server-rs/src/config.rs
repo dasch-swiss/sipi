@@ -295,7 +295,10 @@ mod layout {
         assert_eq!(offset_of!(SipiServerConfig, subdirexcludes_len), 160);
         assert_eq!(offset_of!(SipiServerConfig, max_pixel_limit), 168);
         assert_eq!(offset_of!(SipiServerConfig, rate_limit_max_pixels), 176);
-        assert_eq!(offset_of!(SipiServerConfig, rate_limit_pixel_threshold), 184);
+        assert_eq!(
+            offset_of!(SipiServerConfig, rate_limit_pixel_threshold),
+            184
+        );
         assert_eq!(offset_of!(SipiServerConfig, serverport), 192);
         assert_eq!(offset_of!(SipiServerConfig, maxtmpage), 196);
         assert_eq!(offset_of!(SipiServerConfig, cache_nfiles), 200);
@@ -310,6 +313,9 @@ mod layout {
         assert_eq!(offset_of!(SipiServerConfig, has_rate_limit_window), 236);
         assert_eq!(offset_of!(SipiServerConfig, has_max_pixel_limit), 240);
         assert_eq!(offset_of!(SipiServerConfig, has_rate_limit_max_pixels), 244);
-        assert_eq!(offset_of!(SipiServerConfig, has_rate_limit_pixel_threshold), 248);
+        assert_eq!(
+            offset_of!(SipiServerConfig, has_rate_limit_pixel_threshold),
+            248
+        );
     }
 }

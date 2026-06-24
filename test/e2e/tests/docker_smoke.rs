@@ -52,8 +52,7 @@ fn image_tag() -> &'static str {
                 String::from_utf8_lossy(&load.stderr)
             );
         }
-        std::env::var("SIPI_IMAGE_TAG")
-            .unwrap_or_else(|_| DEFAULT_IMAGE_TAG.to_string())
+        std::env::var("SIPI_IMAGE_TAG").unwrap_or_else(|_| DEFAULT_IMAGE_TAG.to_string())
     })
     .as_str()
 }
@@ -69,9 +68,9 @@ impl DockerContainer {
         // Bind-mount paths must be absolute for the Docker daemon. Under
         // Bazel runfiles `repo_root()` returns "." (relative to the test
         // action's cwd), so canonicalise before formatting the bind specs.
-        let root_abs = root
-            .canonicalize()
-            .unwrap_or_else(|e| panic!("repo_root canonicalize failed: {} ({})", root.display(), e));
+        let root_abs = root.canonicalize().unwrap_or_else(|e| {
+            panic!("repo_root canonicalize failed: {} ({})", root.display(), e)
+        });
 
         // Fail fast if a bind-mount source is missing. Under Bazel
         // runfiles a misconfigured `:test_fixtures` produces an empty
@@ -81,7 +80,10 @@ impl DockerContainer {
         // post-mortem. The required files are verified explicitly.
         let required = [
             ("config/sipi.config.lua", "config layer"),
-            ("test/_test_data/images/unit/lena512.jp2", "test images layer"),
+            (
+                "test/_test_data/images/unit/lena512.jp2",
+                "test images layer",
+            ),
             ("scripts/send_response.lua", "scripts layer"),
             ("server/test.html", "server layer"),
         ];
@@ -105,18 +107,31 @@ impl DockerContainer {
         // through `docker load`).
         let output = Command::new("docker")
             .args([
-                "run", "-d",
-                "-v", &format!("{}:/sipi/config", root_abs.join("config").display()),
-                "-v", &format!("{}:/sipi/images", root_abs.join("test/_test_data/images").display()),
-                "-v", &format!("{}:/sipi/scripts", root_abs.join("scripts").display()),
-                "-v", &format!("{}:/sipi/server", root_abs.join("server").display()),
-                "-p", "0:1024",
+                "run",
+                "-d",
+                "-v",
+                &format!("{}:/sipi/config", root_abs.join("config").display()),
+                "-v",
+                &format!(
+                    "{}:/sipi/images",
+                    root_abs.join("test/_test_data/images").display()
+                ),
+                "-v",
+                &format!("{}:/sipi/scripts", root_abs.join("scripts").display()),
+                "-v",
+                &format!("{}:/sipi/server", root_abs.join("server").display()),
+                "-p",
+                "0:1024",
                 image_tag(),
             ])
             .output()
             .expect("docker run failed");
 
-        assert!(output.status.success(), "docker run failed: {}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "docker run failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
 
         // Get the mapped port for 1024. `docker port <id> 1024/tcp` may
@@ -207,9 +222,7 @@ impl Drop for DockerContainer {
         // post-mortem'd via `docker logs`. Force-remove the container
         // here on the happy path. `rm -f` covers both running and
         // already-stopped containers.
-        let _ = Command::new("docker")
-            .args(["rm", "-f", &self.id])
-            .output();
+        let _ = Command::new("docker").args(["rm", "-f", &self.id]).output();
     }
 }
 
@@ -230,13 +243,20 @@ fn docker_image_serves_iiif_image() {
     let c = smoke_client();
 
     let resp = c
-        .get(format!("{}/unit/lena512.jp2/full/max/0/default.jpg", container.base_url()))
+        .get(format!(
+            "{}/unit/lena512.jp2/full/max/0/default.jpg",
+            container.base_url()
+        ))
         .send()
         .expect("IIIF image request failed");
 
     assert_eq!(resp.status().as_u16(), 200, "IIIF image should return 200");
     let body = resp.bytes().expect("read body");
-    assert!(body.len() > 1000, "response should contain image data (got {} bytes)", body.len());
+    assert!(
+        body.len() > 1000,
+        "response should contain image data (got {} bytes)",
+        body.len()
+    );
 }
 
 #[test]
@@ -267,7 +287,10 @@ fn docker_image_health_endpoint() {
     let body: serde_json::Value = resp.json().expect("health should return JSON");
     assert_eq!(body["status"], "ok");
     assert!(body["version"].is_string(), "version should be present");
-    assert!(body["uptime_seconds"].is_number(), "uptime_seconds should be present");
+    assert!(
+        body["uptime_seconds"].is_number(),
+        "uptime_seconds should be present"
+    );
 }
 
 // The `sipi health` subcommand run *inside* the container — the exact command
@@ -282,5 +305,8 @@ fn docker_image_health_subcommand() {
         .args(["exec", &container.id, "/sbin/sipi", "health"])
         .status()
         .expect("docker exec sipi health failed");
-    assert!(status.success(), "in-container `sipi health` should exit 0 against a healthy server");
+    assert!(
+        status.success(),
+        "in-container `sipi health` should exit 0 against a healthy server"
+    );
 }

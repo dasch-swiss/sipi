@@ -1351,7 +1351,12 @@ fn metadata_iiif_pipeline() {
 
 /// Helper: create a truncated copy of a file, request it via IIIF, verify the
 /// server returns an error status (not crash), and stays healthy afterward.
-fn assert_corrupt_image_handled(filename: &str, source: &str, truncate_bytes: usize, iiif_format: &str) {
+fn assert_corrupt_image_handled(
+    filename: &str,
+    source: &str,
+    truncate_bytes: usize,
+    iiif_format: &str,
+) {
     let test_data = sipi_e2e::test_data_dir();
     let corrupt_path = test_data.join(format!("images/unit/{}", filename));
 
@@ -1391,7 +1396,8 @@ fn assert_corrupt_image_handled(filename: &str, source: &str, truncate_bytes: us
             assert!(
                 status >= 400,
                 "corrupt {} should return error status, got {}",
-                filename, status
+                filename,
+                status
             );
         }
         Err(e) => {
@@ -1435,12 +1441,7 @@ fn assert_corrupt_image_handled(filename: &str, source: &str, truncate_bytes: us
 fn corrupt_image_handling() {
     // Truncated JP2 — Kakadu's kdu_error handler calls exit(), bypassing
     // both C++ exceptions and our catch-all. Separate Kakadu-specific fix needed.
-    assert_corrupt_image_handled(
-        "corrupt_test.jp2",
-        "images/unit/lena512.jp2",
-        100,
-        "jpg",
-    );
+    assert_corrupt_image_handled("corrupt_test.jp2", "images/unit/lena512.jp2", 100, "jpg");
 }
 
 #[test]
@@ -1457,12 +1458,7 @@ fn corrupt_jpeg_handling() {
 #[test]
 fn corrupt_png_handling() {
     // Truncated PNG — exercises setjmp(png_jmpbuf) in PNG read path + server catch-all.
-    assert_corrupt_image_handled(
-        "corrupt_test.png",
-        "images/unit/mario.png",
-        100,
-        "jpg",
-    );
+    assert_corrupt_image_handled("corrupt_test.png", "images/unit/mario.png", 100, "jpg");
 }
 
 #[test]
