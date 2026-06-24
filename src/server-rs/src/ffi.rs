@@ -14,7 +14,7 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
 
-use crate::config::SipiServerConfig;
+use crate::config::{OverridesHolder, ServerOverrides, SipiServerConfig};
 
 // ── Response sink callbacks (Rust-owned) ────────────────────────────────────
 // `Option<extern "C" fn ...>` is the FFI-safe nullable function pointer: `None`
@@ -217,7 +217,10 @@ extern "C" {
     /// otherwise). `overrides` is the `SipiServerConfig*` CLI/env override
     /// channel the engine layers over the Lua config (null = no overrides).
     /// Returns 0 on success, non-zero on failure.
-    pub fn sipi_init(
+    ///
+    /// `pub(crate)` (unlike the sibling bindings): it names the crate-private
+    /// `SipiServerConfig`, so wider visibility would trip `private_interfaces`.
+    pub(crate) fn sipi_init(
         lua_config_path: *const c_char,
         overrides: *const SipiServerConfig,
     ) -> c_int;
@@ -399,16 +402,20 @@ pub fn link_self_check() -> i32 {
 }
 
 /// Parse the Lua config and install the engine + Lua config (`sipi_init`). Must
-/// run once before serving images. Passes null overrides — the Lua config file
-/// is authoritative. Returns the FFI status code on failure (non-zero).
-pub fn init(config_path: &str) -> Result<(), i32> {
+/// run once before serving images. `overrides` carries the parsed CLI/env flags
+/// the engine layers over the loaded config. Returns the FFI status code on
+/// failure (non-zero).
+pub fn init(config_path: &str, overrides: &ServerOverrides) -> Result<(), i32> {
     let c_path = match CString::new(config_path) {
         Ok(p) => p,
         Err(_) => return Err(-1), // interior NUL in the path
     };
-    // SAFETY: `c_path` is a valid NUL-terminated string outliving the call;
-    // `overrides` is null (no CLI/env overrides); the seam guards exceptions.
-    let code = unsafe { sipi_init(c_path.as_ptr(), std::ptr::null()) };
+    let holder = OverridesHolder::new(overrides);
+    // SAFETY: `c_path` and `holder` both outlive this synchronous call; the
+    // engine deep-copies every present override during sipi_init, so none of the
+    // holder's pointers escape; the seam guards exceptions. `holder` is a local
+    // consumed inline, so it is not moved between `as_ptr()` and the call.
+    let code = unsafe { sipi_init(c_path.as_ptr(), holder.as_ptr()) };
     if code == 0 {
         Ok(())
     } else {
