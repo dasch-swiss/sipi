@@ -483,12 +483,12 @@ std::unique_ptr<ServerRuntime> g_server_runtime;
  * engine-held Lua config VM factory. Returns 0 on success or `EXIT_FAILURE`;
  * never lets a C++ exception cross the boundary.
  *
- * `overrides` carries CLI/env tweaks layered on the Lua config. None are wired
- * yet — the Lua config file is authoritative for the Rust shell — so the type
- * stays incomplete (declared in `ffi/sipi_ffi.h`) and the pointer is ignored;
- * fields are added when the shell first needs to override a specific knob.
+ * `overrides` carries the CLI/env flags the Rust shell parsed (or null = none).
+ * Present overrides are layered onto the Lua-parsed SipiConf below, before the
+ * engine services read it. Only engine-behaviour flags are forwarded; transport
+ * flags the Rust shell owns (TLS, keep-alive, concurrency) are not in the struct.
  */
-extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig * /*overrides*/)
+extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *overrides)
 {
   try {
     if (lua_config_path == nullptr || lua_config_path[0] == '\0') {
@@ -510,8 +510,57 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig * /
     }
     Sipi::SipiConf &conf = runtime->conf;
 
-    // Engine services, mirroring run_server()'s construction (config-file values;
-    // CLI/env overrides are layered on in a later slice). A null service means
+    // CLI/env overrides (plan 02 §7.5 M4): layer the present overrides onto the
+    // Lua-parsed SipiConf BEFORE the cache / rate-limiter / memory-budget
+    // services below are built from `conf`, so an override reaches the engine.
+    // Setter names are SipiConf's verbatim (incl. the `setPasswort` typo). Sized
+    // strings (cache_size/maxpost/max_decode_memory) carry the raw "300M" text;
+    // parseSizeString does the suffix expansion engine-side. cache_nfiles stays
+    // signed and is passed straight through (0 = unlimited, negatives wrap),
+    // mirroring run_server's `setCacheNFiles(int)` exactly.
+    if (overrides != nullptr) {
+      const SipiServerConfig &o = *overrides;
+      // Strings (null = absent).
+      if (o.imgroot != nullptr) conf.setImgRoot(o.imgroot);
+      if (o.scriptdir != nullptr) conf.setScriptDir(o.scriptdir);
+      if (o.initscript != nullptr) conf.setInitScript(o.initscript);
+      if (o.tmpdir != nullptr) conf.setTmpDir(o.tmpdir);
+      if (o.jwtkey != nullptr) conf.setJwtSecret(o.jwtkey);
+      if (o.adminuser != nullptr) conf.setAdminUser(o.adminuser);
+      if (o.adminpasswd != nullptr) conf.setPasswort(o.adminpasswd);// `setPasswort` is the real (typo'd) setter
+      if (o.cache_dir != nullptr) conf.setCacheDir(o.cache_dir);
+      if (o.cache_size != nullptr) conf.setCacheSize(Sipi::parseSizeString(o.cache_size));
+      if (o.maxpost != nullptr) conf.setMaxPostSize(static_cast<size_t>(Sipi::parseSizeString(o.maxpost)));
+      if (o.max_decode_memory != nullptr)
+        conf.setMaxDecodeMemory(static_cast<size_t>(Sipi::parseSizeString(o.max_decode_memory)));
+      if (o.decode_memory_mode != nullptr) conf.setDecodeMemoryMode(o.decode_memory_mode);
+      if (o.rate_limit_mode != nullptr) conf.setRateLimitMode(o.rate_limit_mode);
+      if (o.thumbsize != nullptr) conf.setThumbSize(o.thumbsize);
+      if (o.knorapath != nullptr) conf.setKnoraPath(o.knorapath);
+      if (o.knoraport != nullptr) conf.setKnoraPort(o.knoraport);
+      if (o.docroot != nullptr) conf.setDocRoot(o.docroot);
+      if (o.wwwroute != nullptr) conf.setWWWRoute(o.wwwroute);
+      if (o.loglevel != nullptr) conf.setLogLevel(o.loglevel);
+      if (o.subdirexcludes != nullptr && o.subdirexcludes_len > 0) {
+        std::vector<std::string> excludes;
+        excludes.reserve(o.subdirexcludes_len);
+        for (size_t i = 0; i < o.subdirexcludes_len; ++i) excludes.emplace_back(o.subdirexcludes[i]);
+        conf.setSubdirExcludes(excludes);
+      }
+      // Scalars (presence flag — 0 is a valid value, so gate on has_).
+      if (o.has_serverport) conf.setPort(o.serverport);
+      if (o.has_maxtmpage) conf.setMaxTempFileAge(o.maxtmpage);
+      if (o.has_cache_nfiles) conf.setCacheNFiles(o.cache_nfiles);
+      if (o.has_subdirlevels) conf.setSubdirLevels(o.subdirlevels);
+      if (o.has_pathprefix) conf.setPrefixAsPath(o.pathprefix != 0);
+      if (o.has_rate_limit_window) conf.setRateLimitWindow(o.rate_limit_window);
+      if (o.has_max_pixel_limit) conf.setMaxPixelLimit(o.max_pixel_limit);
+      if (o.has_rate_limit_max_pixels) conf.setRateLimitMaxPixels(o.rate_limit_max_pixels);
+      if (o.has_rate_limit_pixel_threshold) conf.setRateLimitPixelThreshold(o.rate_limit_pixel_threshold);
+    }
+
+    // Engine services, mirroring run_server()'s construction (config values, with
+    // the CLI/env overrides above already applied). A null service means
     // the corresponding feature is disabled, matching the legacy accessors.
     {
       const std::string cachedir = conf.getCacheDir();
