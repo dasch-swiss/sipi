@@ -515,9 +515,12 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
     // services below are built from `conf`, so an override reaches the engine.
     // Setter names are SipiConf's verbatim (incl. the `setPasswort` typo). Sized
     // strings (cache_size/maxpost/max_decode_memory) carry the raw "300M" text;
-    // parseSizeString does the suffix expansion engine-side. cache_nfiles stays
-    // signed and is passed straight through (0 = unlimited, negatives wrap),
-    // mirroring run_server's `setCacheNFiles(int)` exactly.
+    // parseSizeString expands the suffix engine-side. A negative maxpost /
+    // max-decode-memory clamps to 0 (matching the SipiConf ctor + run_server) so
+    // it cannot become SIZE_MAX and skip the budget auto-detect; cache_size keeps
+    // -1 as its valid "unlimited" sentinel. cache_nfiles is passed straight
+    // through as a signed value (0 = unlimited, negatives wrap) — the CLI11
+    // int -> setCacheNFiles(size_t) path run_server uses, preserved for parity.
     if (overrides != nullptr) {
       const SipiServerConfig &o = *overrides;
       // Strings (null = absent).
@@ -530,9 +533,14 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
       if (o.adminpasswd != nullptr) conf.setPasswort(o.adminpasswd);// `setPasswort` is the real (typo'd) setter
       if (o.cache_dir != nullptr) conf.setCacheDir(o.cache_dir);
       if (o.cache_size != nullptr) conf.setCacheSize(Sipi::parseSizeString(o.cache_size));
-      if (o.maxpost != nullptr) conf.setMaxPostSize(static_cast<size_t>(Sipi::parseSizeString(o.maxpost)));
-      if (o.max_decode_memory != nullptr)
-        conf.setMaxDecodeMemory(static_cast<size_t>(Sipi::parseSizeString(o.max_decode_memory)));
+      if (o.maxpost != nullptr) {
+        const long long v = Sipi::parseSizeString(o.maxpost);
+        conf.setMaxPostSize(v > 0 ? static_cast<size_t>(v) : 0);// <=0 -> 0 (unlimited)
+      }
+      if (o.max_decode_memory != nullptr) {
+        const long long v = Sipi::parseSizeString(o.max_decode_memory);
+        conf.setMaxDecodeMemory(v > 0 ? static_cast<size_t>(v) : 0);// <=0 -> 0 (auto-detect 75% RAM)
+      }
       if (o.decode_memory_mode != nullptr) conf.setDecodeMemoryMode(o.decode_memory_mode);
       if (o.rate_limit_mode != nullptr) conf.setRateLimitMode(o.rate_limit_mode);
       if (o.thumbsize != nullptr) conf.setThumbSize(o.thumbsize);
