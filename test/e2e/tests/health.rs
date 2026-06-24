@@ -14,14 +14,29 @@ fn health_returns_200_with_json() {
 
     assert_eq!(resp.status().as_u16(), 200);
 
-    let ct = resp.headers().get("Content-Type").unwrap().to_str().unwrap();
-    assert!(ct.contains("application/json"), "Content-Type should be JSON, got: {}", ct);
+    let ct = resp
+        .headers()
+        .get("Content-Type")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(
+        ct.contains("application/json"),
+        "Content-Type should be JSON, got: {}",
+        ct
+    );
 
     let body: serde_json::Value = resp.json().expect("health should return JSON");
     assert_eq!(body["status"], "ok");
     assert!(body["version"].is_string(), "version should be a string");
-    assert!(body["uptime_seconds"].is_number(), "uptime_seconds should be a number");
-    assert!(body["uptime_seconds"].as_u64().unwrap() >= 0, "uptime should be non-negative");
+    assert!(
+        body["uptime_seconds"].is_number(),
+        "uptime_seconds should be a number"
+    );
+    assert!(
+        body["uptime_seconds"].as_u64().unwrap() >= 0,
+        "uptime should be non-negative"
+    );
 }
 
 #[test]
@@ -35,7 +50,11 @@ fn health_responds_quickly() {
     let elapsed = start.elapsed();
 
     assert_eq!(resp.status().as_u16(), 200);
-    assert!(elapsed.as_millis() < 100, "health should respond within 100ms, took {}ms", elapsed.as_millis());
+    assert!(
+        elapsed.as_millis() < 100,
+        "health should respond within 100ms, took {}ms",
+        elapsed.as_millis()
+    );
 }
 
 // `sipi health` against a live server returns exit 0 (healthy). The `--port`
@@ -47,7 +66,10 @@ fn health_subcommand_exits_zero_when_healthy() {
         .args(["health", "--port", &srv.http_port.to_string()])
         .status()
         .expect("failed to run sipi health");
-    assert!(status.success(), "sipi health should exit 0 against a healthy server");
+    assert!(
+        status.success(),
+        "sipi health should exit 0 against a healthy server"
+    );
 }
 
 // `sipi health` with nothing listening returns exit 1 (unhealthy). Port 1 is
@@ -58,5 +80,9 @@ fn health_subcommand_exits_one_when_no_server() {
         .args(["health", "--port", "1"])
         .status()
         .expect("failed to run sipi health");
-    assert_eq!(status.code(), Some(1), "sipi health should exit 1 when nothing is listening");
+    assert_eq!(
+        status.code(),
+        Some(1),
+        "sipi health should exit 1 when nothing is listening"
+    );
 }

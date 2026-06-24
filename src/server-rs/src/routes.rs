@@ -29,7 +29,13 @@ use crate::sink::{self, Outcome};
 
 /// Image MIME types that take the IIIF / image-dimension code path (the same set
 /// the C++ server branches on, `SipiHttpServer.cpp:568-570,913-914`).
-const IMAGE_MIMES: [&str; 5] = ["image/tiff", "image/jpeg", "image/png", "image/jpx", "image/jp2"];
+const IMAGE_MIMES: [&str; 5] = [
+    "image/tiff",
+    "image/jpeg",
+    "image/png",
+    "image/jpx",
+    "image/jp2",
+];
 
 /// Cached engine config (read once at startup, after `sipi_init`) plus the shared
 /// backpressure pool that bounds concurrent engine work.
@@ -61,9 +67,16 @@ impl AppState {
         // Bound concurrent engine work to the configured worker count (the shttps
         // thread-per-connection bound, reconstructed). 0/uninitialised → size from
         // the host parallelism.
-        let permits = ffi::nthreads().ok().filter(|n| *n > 0).map_or_else(default_pool_size, |n| n as usize);
+        let permits = ffi::nthreads()
+            .ok()
+            .filter(|n| *n > 0)
+            .map_or_else(default_pool_size, |n| n as usize);
         let pool = Arc::new(tokio::sync::Semaphore::new(permits));
-        match (ffi::imgroot(false), ffi::imgroot(true), ffi::prefix_as_path()) {
+        match (
+            ffi::imgroot(false),
+            ffi::imgroot(true),
+            ffi::prefix_as_path(),
+        ) {
             (Ok(imgroot), Ok(resolved_imgroot), Ok(prefix_as_path)) => Self {
                 ready: true,
                 imgroot,
@@ -152,9 +165,10 @@ pub async fn iiif(
     // /file; never with credentials) and, for a /file Range request,
     // the identifier-derived Content-Disposition (SipiHttpServer.cpp:1120-1129).
     let cors_origin = header_str(&headers, "origin").and_then(|o| HeaderValue::from_str(&o).ok());
-    let content_disp = (parsed.kind == RequestKind::FileDownload && headers.contains_key(header::RANGE))
-        .then(|| content_disposition(&parsed.identifier))
-        .flatten();
+    let content_disp = (parsed.kind == RequestKind::FileDownload
+        && headers.contains_key(header::RANGE))
+    .then(|| content_disposition(&parsed.identifier))
+    .flatten();
 
     // The engine commits the head (status + headers) on the oneshot, then streams
     // body chunks on the bounded mpsc as it produces them. A slow client
@@ -171,21 +185,30 @@ pub async fn iiif(
     tokio::task::spawn_blocking(move || {
         let _permit = permit; // released when the engine work (decode/encode/stream) completes
         let _entered = request_span.enter();
-        dispatch_engine(&state, &parsed, &method, &uri, &headers, outcome_tx, body_tx);
+        dispatch_engine(
+            &state, &parsed, &method, &uri, &headers, outcome_tx, body_tx,
+        );
     });
     match outcome_rx.await {
         // JSON / redirect / error / HEAD: a complete response, returned as built.
         Ok(Outcome::Complete(response)) => response,
         // Image / file: stream the body as the engine produces it, adding the
         // shell-set CORS + Content-Disposition headers to the committed head.
-        Ok(Outcome::StreamHead { status, headers: head }) => {
+        Ok(Outcome::StreamHead {
+            status,
+            headers: head,
+        }) => {
             let mut response = sink::stream_response(status, head, body_rx);
             if let Some(origin) = cors_origin {
-                response.headers_mut().insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+                response
+                    .headers_mut()
+                    .insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
             }
             if let Some(cd) = content_disp {
                 if response.status().is_success() {
-                    response.headers_mut().insert(header::CONTENT_DISPOSITION, cd);
+                    response
+                        .headers_mut()
+                        .insert(header::CONTENT_DISPOSITION, cd);
                 }
             }
             response
@@ -224,7 +247,8 @@ fn dispatch_engine(
         error.type = tracing::field::Empty,
     );
     let _enter = span.enter();
-    let _trace = crate::telemetry::current_trace_context().map(|(t, s)| ffi::LogTraceScope::set(&t, &s));
+    let _trace =
+        crate::telemetry::current_trace_context().map(|(t, s)| ffi::LogTraceScope::set(&t, &s));
 
     if parsed.kind == RequestKind::FileDownload {
         match file_access(state, parsed, method, uri, headers)
@@ -247,7 +271,10 @@ fn dispatch_engine(
     // info.json renders the auth-service block at 401; knora.json does not gate
     // (it relies on the file being accessible) — matching the C++ handlers.
     if parsed.kind == RequestKind::Iiif
-        && !matches!(access.permission, SipiPermType::Allow | SipiPermType::Restrict)
+        && !matches!(
+            access.permission,
+            SipiPermType::Allow | SipiPermType::Restrict
+        )
     {
         return complete(outcome_tx, sink::error_response(StatusCode::UNAUTHORIZED));
     }
@@ -259,11 +286,26 @@ fn dispatch_engine(
 
     match parsed.kind {
         RequestKind::Iiif => {
-            serve_image(&resolved, parsed, headers, *method == Method::HEAD, &access, outcome_tx, body_tx);
+            serve_image(
+                &resolved,
+                parsed,
+                headers,
+                *method == Method::HEAD,
+                &access,
+                outcome_tx,
+                body_tx,
+            );
         }
-        RequestKind::InfoJson => complete(outcome_tx, serve_info_json(&resolved, parsed, headers, &access)),
-        RequestKind::KnoraJson => complete(outcome_tx, serve_knora_json(&resolved, parsed, headers)),
-        RequestKind::Redirect | RequestKind::FileDownload => unreachable!("redirect handled by caller, file above"),
+        RequestKind::InfoJson => complete(
+            outcome_tx,
+            serve_info_json(&resolved, parsed, headers, &access),
+        ),
+        RequestKind::KnoraJson => {
+            complete(outcome_tx, serve_knora_json(&resolved, parsed, headers))
+        }
+        RequestKind::Redirect | RequestKind::FileDownload => {
+            unreachable!("redirect handled by caller, file above")
+        }
     }
 }
 
@@ -285,7 +327,9 @@ fn complete(outcome_tx: oneshot::Sender<Outcome>, response: Response) {
 /// no internal detail. The client should retry shortly.
 fn busy_response() -> Response {
     let mut response = sink::error_response(StatusCode::SERVICE_UNAVAILABLE);
-    response.headers_mut().insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
+    response
+        .headers_mut()
+        .insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
     response
 }
 
@@ -295,15 +339,27 @@ fn busy_response() -> Response {
 /// `pre_flight` hook when one is defined (it returns the infile), else build the
 /// default `imgroot/prefix/identifier` path with `allow`
 /// (`SipiHttpServer.cpp:465-478`).
-fn iiif_access(state: &AppState, parsed: &ParsedRequest, method: &Method, uri: &Uri, headers: &HeaderMap) -> Result<Access, Response> {
+fn iiif_access(
+    state: &AppState,
+    parsed: &ParsedRequest,
+    method: &Method,
+    uri: &Uri,
+    headers: &HeaderMap,
+) -> Result<Access, Response> {
     if state.has_preflight {
-        let ctx = build_ctx(method, uri, headers).ok_or_else(|| sink::error_response(StatusCode::BAD_REQUEST))?;
+        let ctx = build_ctx(method, uri, headers)
+            .ok_or_else(|| sink::error_response(StatusCode::BAD_REQUEST))?;
         let outcome = ffi::preflight(&parsed.prefix, &parsed.identifier, &ctx)
             .map_err(|_| sink::error_response(StatusCode::INTERNAL_SERVER_ERROR))?;
         Ok(access_from(outcome))
     } else {
         Ok(Access {
-            infile: path::build_request_path(&state.imgroot, &parsed.prefix, &parsed.identifier, state.prefix_as_path),
+            infile: path::build_request_path(
+                &state.imgroot,
+                &parsed.prefix,
+                &parsed.identifier,
+                state.prefix_as_path,
+            ),
             permission: SipiPermType::Allow,
             kv: Vec::new(),
         })
@@ -313,14 +369,30 @@ fn iiif_access(state: &AppState, parsed: &ParsedRequest, method: &Method, uri: &
 /// Resolve the infile + permission for a `/file` download: build the path, then
 /// run `file_pre_flight` on it when defined (`SipiHttpServer.cpp:1078-1100`).
 /// A non-allow/restrict permission is rejected here (401).
-fn file_access(state: &AppState, parsed: &ParsedRequest, method: &Method, uri: &Uri, headers: &HeaderMap) -> Result<Access, Response> {
-    let built = path::build_request_path(&state.imgroot, &parsed.prefix, &parsed.identifier, state.prefix_as_path);
+fn file_access(
+    state: &AppState,
+    parsed: &ParsedRequest,
+    method: &Method,
+    uri: &Uri,
+    headers: &HeaderMap,
+) -> Result<Access, Response> {
+    let built = path::build_request_path(
+        &state.imgroot,
+        &parsed.prefix,
+        &parsed.identifier,
+        state.prefix_as_path,
+    );
     if !state.has_file_preflight {
-        return Ok(Access { infile: built, permission: SipiPermType::Allow, kv: Vec::new() });
+        return Ok(Access {
+            infile: built,
+            permission: SipiPermType::Allow,
+            kv: Vec::new(),
+        });
     }
-    let ctx = build_ctx(method, uri, headers).ok_or_else(|| sink::error_response(StatusCode::BAD_REQUEST))?;
-    let outcome =
-        ffi::file_preflight(&built, &ctx).map_err(|_| sink::error_response(StatusCode::INTERNAL_SERVER_ERROR))?;
+    let ctx = build_ctx(method, uri, headers)
+        .ok_or_else(|| sink::error_response(StatusCode::BAD_REQUEST))?;
+    let outcome = ffi::file_preflight(&built, &ctx)
+        .map_err(|_| sink::error_response(StatusCode::INTERNAL_SERVER_ERROR))?;
     match outcome.permission {
         SipiPermType::Allow | SipiPermType::Restrict => Ok(access_from(outcome)),
         _ => Err(sink::error_response(StatusCode::UNAUTHORIZED)),
@@ -331,7 +403,11 @@ fn file_access(state: &AppState, parsed: &ParsedRequest, method: &Method, uri: &
 /// (empty for `deny`, which then fails R2 → 404, matching the C++ `access()`).
 fn access_from(outcome: PreflightOutcome) -> Access {
     let infile = outcome.get("infile").unwrap_or_default().to_owned();
-    Access { infile, permission: outcome.permission, kv: outcome.kv }
+    Access {
+        infile,
+        permission: outcome.permission,
+        kv: outcome.kv,
+    }
 }
 
 /// R2: realpath + image-root containment. Maps to a bare error response.
@@ -356,15 +432,20 @@ fn serve_image(
     outcome_tx: oneshot::Sender<Outcome>,
     body_tx: mpsc::Sender<axum::body::Bytes>,
 ) {
-    let params = parsed.params.expect("an Iiif request always carries parsed params");
+    let params = parsed
+        .params
+        .expect("an Iiif request always carries parsed params");
     let (scheme, host) = forwarded(headers);
 
     // Every C string must outlive the synchronous sipi_serve_image call.
-    let (c_resolved, c_prefix, c_identifier) =
-        match (CString::new(resolved), CString::new(parsed.prefix.as_str()), CString::new(parsed.identifier.as_str())) {
-            (Ok(a), Ok(b), Ok(c)) => (a, b, c),
-            _ => return complete(outcome_tx, sink::error_response(StatusCode::BAD_REQUEST)),
-        };
+    let (c_resolved, c_prefix, c_identifier) = match (
+        CString::new(resolved),
+        CString::new(parsed.prefix.as_str()),
+        CString::new(parsed.identifier.as_str()),
+    ) {
+        (Ok(a), Ok(b), Ok(c)) => (a, b, c),
+        _ => return complete(outcome_tx, sink::error_response(StatusCode::BAD_REQUEST)),
+    };
     let c_client_ip = CString::new(client_ip(headers)).unwrap_or_default();
     let c_host = CString::new(host).unwrap_or_default();
     let c_scheme = CString::new(scheme).unwrap_or_default();
@@ -384,7 +465,9 @@ fn serve_image(
         client_ip: c_client_ip.as_ptr(),
         params,
         restricted_size: c_size.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
-        watermark_path: c_watermark.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+        watermark_path: c_watermark
+            .as_ref()
+            .map_or(std::ptr::null(), |c| c.as_ptr()),
         // The engine honours X-Forwarded-Proto for the canonical Link header
         // (SIPI serves plain HTTP behind Traefik); the cache key stays scheme-free.
         forwarded_proto: c_scheme.as_ptr(),
@@ -396,7 +479,9 @@ fn serve_image(
     // SAFETY: every pointer in `req` outlives this synchronous call; the seam
     // guards C++ exceptions (→ status code, never an unwind into Rust). The
     // streamed head's CORS header is added by the caller (`iiif`).
-    sink::serve_streaming(outcome_tx, body_tx, |resp: &SipiResponse| unsafe { ffi::sipi_serve_image(&req, resp) });
+    sink::serve_streaming(outcome_tx, body_tx, |resp: &SipiResponse| unsafe {
+        ffi::sipi_serve_image(&req, resp)
+    });
 }
 
 /// Raw `/file` passthrough via `sipi_serve_file` (Range/206). The CORS echo and,
@@ -430,15 +515,19 @@ pub async fn cors_preflight(headers: HeaderMap) -> Response {
     let mut builder = Response::builder()
         .status(StatusCode::NO_CONTENT)
         .header(header::ACCESS_CONTROL_ALLOW_METHODS, "GET, HEAD, OPTIONS");
-    if let Some(origin) = header_str(&headers, "origin").and_then(|o| HeaderValue::from_str(&o).ok()) {
+    if let Some(origin) =
+        header_str(&headers, "origin").and_then(|o| HeaderValue::from_str(&o).ok())
+    {
         builder = builder.header(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
     }
-    if let Some(req_headers) =
-        header_str(&headers, "access-control-request-headers").and_then(|h| HeaderValue::from_str(&h).ok())
+    if let Some(req_headers) = header_str(&headers, "access-control-request-headers")
+        .and_then(|h| HeaderValue::from_str(&h).ok())
     {
         builder = builder.header(header::ACCESS_CONTROL_ALLOW_HEADERS, req_headers);
     }
-    builder.body(Body::empty()).unwrap_or_else(|_| sink::error_response(StatusCode::INTERNAL_SERVER_ERROR))
+    builder
+        .body(Body::empty())
+        .unwrap_or_else(|_| sink::error_response(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 // ── Configured Lua routes ────────────────────────────────────────────────────
@@ -473,7 +562,10 @@ fn method_filter(method: &str) -> Option<MethodFilter> {
 /// the configured POST size (the transport's `Connection` body limit). Returns
 /// `None` for an unsupported method verb.
 #[must_use]
-pub fn lua_route_method_router(state: Arc<AppState>, entry: &ffi::RouteEntry) -> Option<MethodRouter<Arc<AppState>>> {
+pub fn lua_route_method_router(
+    state: Arc<AppState>,
+    entry: &ffi::RouteEntry,
+) -> Option<MethodRouter<Arc<AppState>>> {
     let filter = method_filter(&entry.method)?;
     let script = entry.script.clone();
     let max_post = state.max_post_size;
@@ -484,7 +576,11 @@ pub fn lua_route_method_router(state: Arc<AppState>, entry: &ffi::RouteEntry) ->
     });
     // Cap the request body at max_post_size (oversized → 413), or lift axum's
     // default 2 MiB cap when the config leaves it unlimited.
-    Some(if max_post > 0 { handler.layer(DefaultBodyLimit::max(max_post)) } else { handler.layer(DefaultBodyLimit::disable()) })
+    Some(if max_post > 0 {
+        handler.layer(DefaultBodyLimit::max(max_post))
+    } else {
+        handler.layer(DefaultBodyLimit::disable())
+    })
 }
 
 /// Serve a configured Lua route: snapshot the request, spool any multipart
@@ -503,7 +599,11 @@ async fn serve_lua_route(state: Arc<AppState>, script: String, req: Request) -> 
     let client_ip = client_ip(&headers);
     let header_vec: Vec<(String, String)> = headers
         .iter()
-        .filter_map(|(n, v)| v.to_str().ok().map(|v| (n.as_str().to_owned(), v.to_owned())))
+        .filter_map(|(n, v)| {
+            v.to_str()
+                .ok()
+                .map(|v| (n.as_str().to_owned(), v.to_owned()))
+        })
         .collect();
     let cookies = parse_cookies(&headers);
     let get_params = uri.query().map(parse_form_encoded).unwrap_or_default();
@@ -549,7 +649,9 @@ async fn serve_lua_route(state: Arc<AppState>, script: String, req: Request) -> 
                             match field.chunk().await {
                                 Ok(Some(chunk)) => {
                                     if tf.write_all(&chunk).is_err() {
-                                        return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR);
+                                        return sink::error_response(
+                                            StatusCode::INTERNAL_SERVER_ERROR,
+                                        );
                                     }
                                     size += chunk.len() as u64;
                                 }
@@ -561,7 +663,13 @@ async fn serve_lua_route(state: Arc<AppState>, script: String, req: Request) -> 
                             return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR);
                         }
                         let tmpname = tf.path().to_string_lossy().into_owned();
-                        uploads.push(UploadPart { fieldname, origname, tmpname, mime, size });
+                        uploads.push(UploadPart {
+                            fieldname,
+                            origname,
+                            tmpname,
+                            mime,
+                            size,
+                        });
                         tempfiles.push(tf);
                     }
                 }
@@ -570,7 +678,11 @@ async fn serve_lua_route(state: Arc<AppState>, script: String, req: Request) -> 
             }
         }
     } else if has_request_body(&method) {
-        let limit = if state.max_post_size == 0 { usize::MAX } else { state.max_post_size };
+        let limit = if state.max_post_size == 0 {
+            usize::MAX
+        } else {
+            state.max_post_size
+        };
         let bytes = match to_bytes(req.into_body(), limit).await {
             Ok(b) => b,
             Err(_) => return sink::error_response(StatusCode::PAYLOAD_TOO_LARGE),
@@ -619,7 +731,10 @@ async fn serve_lua_route(state: Arc<AppState>, script: String, req: Request) -> 
     });
     match outcome_rx.await {
         Ok(Outcome::Complete(response)) => response,
-        Ok(Outcome::StreamHead { status, headers: head }) => sink::stream_response(status, head, body_rx),
+        Ok(Outcome::StreamHead {
+            status,
+            headers: head,
+        }) => sink::stream_response(status, head, body_rx),
         Err(_) => sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
@@ -650,14 +765,26 @@ fn run_lua_route_blocking(
 ) {
     // Log only the basename — the full resolved path leaks the server's
     // filesystem layout to the OTel backend, and the basename identifies the route.
-    let script_name = std::path::Path::new(script).file_name().and_then(|n| n.to_str()).unwrap_or(script);
+    let script_name = std::path::Path::new(script)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(script);
     let span = tracing::info_span!("sipi.lua_route", route_script = %script_name);
     let _enter = span.enter();
-    let _trace = crate::telemetry::current_trace_context().map(|(t, s)| ffi::LogTraceScope::set(&t, &s));
+    let _trace =
+        crate::telemetry::current_trace_context().map(|(t, s)| ffi::LogTraceScope::set(&t, &s));
 
     // secure = false: SIPI runs plain HTTP behind Traefik (matches conn.secure()).
-    let Some(ctx) = ffi::build_request_context(req.method, req.client_ip, 0, false, req.host, req.uri_path, req.headers, req.cookies)
-    else {
+    let Some(ctx) = ffi::build_request_context(
+        req.method,
+        req.client_ip,
+        0,
+        false,
+        req.host,
+        req.uri_path,
+        req.headers,
+        req.cookies,
+    ) else {
         return complete(outcome_tx, sink::error_response(StatusCode::BAD_REQUEST));
     };
     if !req.body.is_empty() || !req.content_type.is_empty() {
@@ -674,7 +801,10 @@ fn run_lua_route_blocking(
     }
 
     let Ok(c_script) = CString::new(script) else {
-        return complete(outcome_tx, sink::error_response(StatusCode::INTERNAL_SERVER_ERROR));
+        return complete(
+            outcome_tx,
+            sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
+        );
     };
     // SAFETY: `c_script` + `ctx` outlive the synchronous call; the seam guards C++
     // exceptions (→ status code, never an unwind into Rust).
@@ -685,7 +815,10 @@ fn run_lua_route_blocking(
 
 /// Whether an HTTP method carries a request body the Lua route should read.
 fn has_request_body(method: &Method) -> bool {
-    matches!(*method, Method::POST | Method::PUT | Method::PATCH | Method::DELETE)
+    matches!(
+        *method,
+        Method::POST | Method::PUT | Method::PATCH | Method::DELETE
+    )
 }
 
 /// Parse `application/x-www-form-urlencoded` (or a query string) into name/value
@@ -699,7 +832,12 @@ fn parse_form_encoded(s: &str) -> Vec<(String, String)> {
     form_urlencoded::parse(s.as_bytes()).into_owned().collect()
 }
 
-fn serve_info_json(resolved: &str, parsed: &ParsedRequest, headers: &HeaderMap, access: &Access) -> Response {
+fn serve_info_json(
+    resolved: &str,
+    parsed: &ParsedRequest,
+    headers: &HeaderMap,
+    access: &Access,
+) -> Response {
     let (scheme, host) = forwarded(headers);
     let id = canonical_id(&scheme, &host, &parsed.prefix, &parsed.identifier);
 
@@ -781,7 +919,10 @@ fn redirect(headers: &HeaderMap, parsed: &ParsedRequest) -> Response {
     let target = if parsed.prefix.is_empty() {
         format!("{scheme}://{host}/{}/info.json", parsed.identifier)
     } else {
-        format!("{scheme}://{host}/{}/{}/info.json", parsed.prefix, parsed.identifier)
+        format!(
+            "{scheme}://{host}/{}/{}/info.json",
+            parsed.prefix, parsed.identifier
+        )
     };
     match HeaderValue::from_str(&target) {
         Ok(location) => {
@@ -790,7 +931,9 @@ fn redirect(headers: &HeaderMap, parsed: &ParsedRequest) -> Response {
                 .body(Body::from(format!("Redirect to {target}")))
                 .unwrap_or_else(|_| sink::error_response(StatusCode::INTERNAL_SERVER_ERROR));
             response.headers_mut().insert(header::LOCATION, location);
-            response.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("text/plain"));
+            response
+                .headers_mut()
+                .insert(header::CONTENT_TYPE, HeaderValue::from_static("text/plain"));
             response
         }
         // A Location with control chars (CRLF injection) is rejected, not emitted.
@@ -806,11 +949,24 @@ fn redirect(headers: &HeaderMap, parsed: &ParsedRequest) -> Response {
 fn build_ctx(method: &Method, uri: &Uri, headers: &HeaderMap) -> Option<ffi::RequestContext> {
     let header_vec: Vec<(String, String)> = headers
         .iter()
-        .filter_map(|(n, v)| v.to_str().ok().map(|v| (n.as_str().to_owned(), v.to_owned())))
+        .filter_map(|(n, v)| {
+            v.to_str()
+                .ok()
+                .map(|v| (n.as_str().to_owned(), v.to_owned()))
+        })
         .collect();
     let cookies = parse_cookies(headers);
     let (_scheme, host) = forwarded(headers);
-    ffi::build_request_context(method.as_str(), &client_ip(headers), 0, false, &host, uri.path(), &header_vec, &cookies)
+    ffi::build_request_context(
+        method.as_str(),
+        &client_ip(headers),
+        0,
+        false,
+        &host,
+        uri.path(),
+        &header_vec,
+        &cookies,
+    )
 }
 
 /// Parse the `Cookie` header into name/value pairs (the parsed map the Lua
@@ -830,7 +986,11 @@ fn parse_cookies(headers: &HeaderMap) -> Vec<(String, String)> {
 }
 
 fn access_kv_cstring(access: &Access, key: &str) -> Option<CString> {
-    access.kv.iter().find(|(k, _)| k == key).and_then(|(_, v)| CString::new(v.as_str()).ok())
+    access
+        .kv
+        .iter()
+        .find(|(k, _)| k == key)
+        .and_then(|(_, v)| CString::new(v.as_str()).ok())
 }
 
 /// Serialise a JSON value with the IIIF headers the C++ server sets: a CORS
@@ -850,10 +1010,14 @@ fn json_response(
         builder = builder.header(header::ACCESS_CONTROL_ALLOW_ORIGIN, acao);
     }
 
-    let wants_ldjson = header_str(headers, header::ACCEPT.as_str()).as_deref() == Some("application/ld+json");
+    let wants_ldjson =
+        header_str(headers, header::ACCEPT.as_str()).as_deref() == Some("application/ld+json");
     match (link_context, wants_ldjson) {
         (Some(ctx), true) => {
-            builder = builder.header(header::CONTENT_TYPE, format!("application/ld+json;profile=\"{ctx}\""));
+            builder = builder.header(
+                header::CONTENT_TYPE,
+                format!("application/ld+json;profile=\"{ctx}\""),
+            );
         }
         (Some(ctx), false) => {
             builder = builder.header(header::CONTENT_TYPE, "application/json").header(
@@ -865,15 +1029,21 @@ fn json_response(
             builder = builder.header(header::CONTENT_TYPE, "application/json");
         }
     }
-    builder.body(Body::from(body)).unwrap_or_else(|_| sink::error_response(StatusCode::INTERNAL_SERVER_ERROR))
+    builder
+        .body(Body::from(body))
+        .unwrap_or_else(|_| sink::error_response(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 /// Synthesise the request scheme + host from the forwarded headers (SIPI runs
 /// plain HTTP behind Traefik, so the real scheme is in `X-Forwarded-Proto`). Host
 /// falls back from `X-Forwarded-Host` to `Host`.
 fn forwarded(headers: &HeaderMap) -> (String, String) {
-    let scheme =
-        if header_str(headers, "x-forwarded-proto").as_deref() == Some("https") { "https" } else { "http" }.to_owned();
+    let scheme = if header_str(headers, "x-forwarded-proto").as_deref() == Some("https") {
+        "https"
+    } else {
+        "http"
+    }
+    .to_owned();
     let host = header_str(headers, "x-forwarded-host")
         .or_else(|| header_str(headers, header::HOST.as_str()))
         .unwrap_or_default();
@@ -912,7 +1082,10 @@ fn parsed_request_uri(parsed: &ParsedRequest) -> String {
 
 /// `inline; filename="…"` from the identifier, control-chars + quotes stripped.
 fn content_disposition(identifier: &str) -> Option<HeaderValue> {
-    let safe: String = identifier.chars().filter(|c| !c.is_control() && *c != '"').collect();
+    let safe: String = identifier
+        .chars()
+        .filter(|c| !c.is_control() && *c != '"')
+        .collect();
     HeaderValue::from_str(&format!("inline; filename=\"{safe}\"")).ok()
 }
 
@@ -922,12 +1095,17 @@ fn read_sidecar(infile: &str) -> Sidecar {
         Some(pos) => format!("{}.info", &infile[..pos]),
         None => format!("{infile}.info"),
     };
-    std::fs::read_to_string(sidecar_path).map(|t| Sidecar::parse(&t)).unwrap_or_default()
+    std::fs::read_to_string(sidecar_path)
+        .map(|t| Sidecar::parse(&t))
+        .unwrap_or_default()
 }
 
 /// First value of a header as an owned `String`, if present and valid UTF-8.
 fn header_str(headers: &HeaderMap, name: &str) -> Option<String> {
-    headers.get(name).and_then(|v| v.to_str().ok()).map(str::to_owned)
+    headers
+        .get(name)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned)
 }
 
 #[cfg(test)]
@@ -937,7 +1115,10 @@ mod tests {
     fn headers(pairs: &[(&str, &str)]) -> HeaderMap {
         let mut h = HeaderMap::new();
         for (k, v) in pairs {
-            h.insert(axum::http::HeaderName::from_bytes(k.as_bytes()).unwrap(), HeaderValue::from_str(v).unwrap());
+            h.insert(
+                axum::http::HeaderName::from_bytes(k.as_bytes()).unwrap(),
+                HeaderValue::from_str(v).unwrap(),
+            );
         }
         h
     }
@@ -950,13 +1131,19 @@ mod tests {
 
     #[test]
     fn forwarded_defaults_http_and_prefers_forwarded_host() {
-        let h = headers(&[("host", "internal:1024"), ("x-forwarded-host", "iiif.example.org")]);
+        let h = headers(&[
+            ("host", "internal:1024"),
+            ("x-forwarded-host", "iiif.example.org"),
+        ]);
         assert_eq!(forwarded(&h), ("http".into(), "iiif.example.org".into()));
     }
 
     #[test]
     fn canonical_id_with_and_without_prefix() {
-        assert_eq!(canonical_id("https", "h", "iiif/2", "a.jp2"), "https://h/iiif/2/a.jp2");
+        assert_eq!(
+            canonical_id("https", "h", "iiif/2", "a.jp2"),
+            "https://h/iiif/2/a.jp2"
+        );
         assert_eq!(canonical_id("http", "h", "", "a.jp2"), "http://h/a.jp2");
     }
 
@@ -971,7 +1158,13 @@ mod tests {
     fn parse_cookies_splits_pairs() {
         let h = headers(&[("cookie", "sid=abc; theme=dark; lone")]);
         let c = parse_cookies(&h);
-        assert_eq!(c, vec![("sid".to_owned(), "abc".to_owned()), ("theme".to_owned(), "dark".to_owned())]);
+        assert_eq!(
+            c,
+            vec![
+                ("sid".to_owned(), "abc".to_owned()),
+                ("theme".to_owned(), "dark".to_owned())
+            ]
+        );
     }
 
     #[test]

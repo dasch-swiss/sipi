@@ -56,7 +56,12 @@ fn upload_tiff_converts_to_jp2() {
         .multipart(form)
         .send()
         .expect("upload failed");
-    assert_eq!(resp.status().as_u16(), 200, "upload returned {}", resp.status());
+    assert_eq!(
+        resp.status().as_u16(),
+        200,
+        "upload returned {}",
+        resp.status()
+    );
     let json: serde_json::Value = resp.json().expect("upload response not JSON");
 
     let filename = json["filename"].as_str().expect("no filename in response");

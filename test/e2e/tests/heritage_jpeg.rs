@@ -13,7 +13,10 @@ use common::{client, server};
 fn heritage_jpeg_o_full_default_jpg() {
     // Full IIIF pipeline read + conversion for the -o variant.
     let srv = server();
-    let url = format!("{}/jpeg/35-2421d-o.jpg/full/max/0/default.jpg", srv.base_url);
+    let url = format!(
+        "{}/jpeg/35-2421d-o.jpg/full/max/0/default.jpg",
+        srv.base_url
+    );
     let resp = client()
         .get(&url)
         .send()

@@ -223,11 +223,11 @@ fn transform_pipeline_memory() {
     // this fails and Bazel re-runs the whole test
     // (`--flaky_test_attempts` for this target in `.bazelrc`) — the single
     // retry mechanism for the suite.
-    let health_url = format!(
-        "{}/unit/lena512.jp2/full/max/0/default.jpg",
-        srv.base_url
-    );
-    let resp = c.get(&health_url).send().expect("health check request failed");
+    let health_url = format!("{}/unit/lena512.jp2/full/max/0/default.jpg", srv.base_url);
+    let resp = c
+        .get(&health_url)
+        .send()
+        .expect("health check request failed");
     assert_eq!(
         resp.status().as_u16(),
         200,
@@ -300,15 +300,9 @@ routes = {}
     // config write.
     let config_path = cache_tmp.path().join("sipi.pixel-limit-test.lua");
     std::fs::write(&config_path, config_content).expect("write pixel limit config");
-    let config_arg = config_path
-        .to_str()
-        .expect("config path is valid utf-8");
+    let config_arg = config_path.to_str().expect("config path is valid utf-8");
 
-    let srv = SipiServer::start_with_args(
-        config_arg,
-        &test_data,
-        &["--cache-dir", &cache_arg],
-    );
+    let srv = SipiServer::start_with_args(config_arg, &test_data, &["--cache-dir", &cache_arg]);
     let c = http_client();
 
     // Request full-size image (512x512 = 262144 pixels, exceeds 10000 limit)

@@ -77,8 +77,11 @@ pub fn init() -> Telemetry {
     let logger_provider = build_logger_provider();
     let logs_layer = logger_provider.as_ref().map(|lp| {
         use tracing_subscriber::Layer;
-        opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge::new(lp)
-            .with_filter(tracing_subscriber::filter::filter_fn(|meta| !meta.target().starts_with("opentelemetry")))
+        opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge::new(lp).with_filter(
+            tracing_subscriber::filter::filter_fn(|meta| {
+                !meta.target().starts_with("opentelemetry")
+            }),
+        )
     });
 
     let _ = tracing_subscriber::registry()
@@ -88,7 +91,10 @@ pub fn init() -> Telemetry {
         .with(tracing_subscriber::fmt::layer().event_format(SharedJson))
         .try_init();
 
-    Telemetry { provider, logger_provider }
+    Telemetry {
+        provider,
+        logger_provider,
+    }
 }
 
 /// The OTel resource shared by the tracer + logger providers. `service.name` is
@@ -104,17 +110,26 @@ fn otel_resource() -> opentelemetry_sdk::Resource {
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "development".to_owned());
     let mut attrs = vec![KeyValue::new("deployment.environment.name", environment)];
-    if let Some(version) = std::env::var("SIPI_SENTRY_RELEASE").ok().filter(|s| !s.is_empty()) {
+    if let Some(version) = std::env::var("SIPI_SENTRY_RELEASE")
+        .ok()
+        .filter(|s| !s.is_empty())
+    {
         attrs.push(KeyValue::new("service.version", version));
     }
-    opentelemetry_sdk::Resource::builder().with_service_name("sipi").with_attributes(attrs).build()
+    opentelemetry_sdk::Resource::builder()
+        .with_service_name("sipi")
+        .with_attributes(attrs)
+        .build()
 }
 
 /// Build the OTLP (gRPC-tonic) tracer provider, or `None` when no endpoint is
 /// configured. The exporter reads the standard `OTEL_EXPORTER_OTLP_*` env.
 fn build_tracer_provider() -> Option<SdkTracerProvider> {
     std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok()?;
-    let exporter = match opentelemetry_otlp::SpanExporter::builder().with_tonic().build() {
+    let exporter = match opentelemetry_otlp::SpanExporter::builder()
+        .with_tonic()
+        .build()
+    {
         Ok(exporter) => exporter,
         Err(e) => {
             tracing::warn!(error = %e, "OTLP span exporter init failed; trace export disabled");
@@ -135,12 +150,17 @@ fn build_tracer_provider() -> Option<SdkTracerProvider> {
 /// are scraped from stdout, so OTLP log export would duplicate them — hence the
 /// explicit opt-in. `None` otherwise.
 fn build_logger_provider() -> Option<opentelemetry_sdk::logs::SdkLoggerProvider> {
-    let enabled = std::env::var("SIPI_OTLP_LOGS").map(|v| !v.is_empty() && v != "0").unwrap_or(false);
+    let enabled = std::env::var("SIPI_OTLP_LOGS")
+        .map(|v| !v.is_empty() && v != "0")
+        .unwrap_or(false);
     if !enabled {
         return None;
     }
     std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok()?;
-    let exporter = match opentelemetry_otlp::LogExporter::builder().with_tonic().build() {
+    let exporter = match opentelemetry_otlp::LogExporter::builder()
+        .with_tonic()
+        .build()
+    {
         Ok(exporter) => exporter,
         Err(e) => {
             tracing::warn!(error = %e, "OTLP log exporter init failed; log export disabled");
@@ -180,7 +200,12 @@ where
     S: Subscriber + for<'a> LookupSpan<'a>,
     N: for<'a> FormatFields<'a> + 'static,
 {
-    fn format_event(&self, _ctx: &FmtContext<'_, S, N>, mut writer: Writer<'_>, event: &Event<'_>) -> fmt::Result {
+    fn format_event(
+        &self,
+        _ctx: &FmtContext<'_, S, N>,
+        mut writer: Writer<'_>,
+        event: &Event<'_>,
+    ) -> fmt::Result {
         let meta = event.metadata();
 
         let mut visitor = JsonVisitor::default();
@@ -194,7 +219,10 @@ where
         // no equivalent, which is fine — only the core keys must match.
         writer.write_str(&visitor.extra)?;
         if let Some((trace_id, span_id)) = current_trace_context() {
-            write!(writer, ",\"trace_id\":\"{trace_id}\",\"span_id\":\"{span_id}\"")?;
+            write!(
+                writer,
+                ",\"trace_id\":\"{trace_id}\",\"span_id\":\"{span_id}\""
+            )?;
         }
         writeln!(writer, "}}")
     }

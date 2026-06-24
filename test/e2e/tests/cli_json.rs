@@ -21,8 +21,7 @@ fn tmp_path(name: &str) -> PathBuf {
 /// document to stdout with `status: "ok"` and a populated `image` object.
 #[test]
 fn cli_json_output_success_contains_metadata() {
-    let input = test_data_dir()
-        .join("images/unit/MaoriFigure.jpg");
+    let input = test_data_dir().join("images/unit/MaoriFigure.jpg");
     if !input.exists() {
         eprintln!("Skipping F1 — MaoriFigure.jpg not found");
         return;
@@ -125,8 +124,7 @@ fn cli_json_output_error_contains_image_context() {
 /// stderr routing actually works.
 #[test]
 fn cli_json_output_stdout_is_single_json_doc() {
-    let input = test_data_dir()
-        .join("images/jpeg/malformed_xmp.jpg");
+    let input = test_data_dir().join("images/jpeg/malformed_xmp.jpg");
     if !input.exists() {
         eprintln!("Skipping F3 — malformed_xmp.jpg fixture not found");
         return;
@@ -157,8 +155,12 @@ fn cli_json_output_stdout_is_single_json_doc() {
     // assert that the iterator is empty (no second document, only trailing
     // whitespace).
     let mut stream = serde_json::Deserializer::from_str(stdout_trimmed).into_iter::<Value>();
-    let first = stream.next().expect("at least one JSON document")
-        .unwrap_or_else(|e| panic!("stdout must be a single JSON document: {e}\nstdout: {stdout_trimmed:?}"));
+    let first = stream
+        .next()
+        .expect("at least one JSON document")
+        .unwrap_or_else(|e| {
+            panic!("stdout must be a single JSON document: {e}\nstdout: {stdout_trimmed:?}")
+        });
     assert!(first.is_object(), "stdout must be a JSON object");
     let trailing = stdout_trimmed[stream.byte_offset()..].trim();
     assert!(
@@ -170,7 +172,7 @@ fn cli_json_output_stdout_is_single_json_doc() {
     // trigger a `log_warn` path; verify the warning landed on stderr (not
     // stdout) — stdout was already asserted to contain only the JSON doc.
     let stderr = String::from_utf8_lossy(&result.stderr);
-    let _ = stderr;// documented but not hard-asserted (different libjpeg configs may take different paths)
+    let _ = stderr; // documented but not hard-asserted (different libjpeg configs may take different paths)
 
     let _ = std::fs::remove_file(&output);
 }

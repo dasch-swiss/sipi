@@ -47,7 +47,11 @@ static START: OnceLock<Instant> = OnceLock::new();
 /// deadline in seconds (default 30). Blocks until shutdown; returns the process
 /// exit code. Telemetry init lives in [`server_main`] (inside the runtime)
 /// because the OTLP batch exporter needs a tokio runtime.
-pub fn run(config: Option<String>, overrides: ServerOverrides, drain_timeout: Option<u64>) -> ExitCode {
+pub fn run(
+    config: Option<String>,
+    overrides: ServerOverrides,
+    drain_timeout: Option<u64>,
+) -> ExitCode {
     let rt = match tokio::runtime::Runtime::new() {
         Ok(rt) => rt,
         Err(e) => {
@@ -79,8 +83,14 @@ async fn server_main(
     // before we accept traffic (cc_library → rust_binary under hermetic
     // LLVM/libc++). 404 is the expected status for a missing file.
     let status = ffi::link_self_check();
-    tracing::info!(seam_status = status, "FFI link self-check: sipi_serve_file(bogus) → status");
-    debug_assert_eq!(status, 404, "FFI seam self-check should report 404 for a missing file");
+    tracing::info!(
+        seam_status = status,
+        "FFI link self-check: sipi_serve_file(bogus) → status"
+    );
+    debug_assert_eq!(
+        status, 404,
+        "FFI seam self-check should report 404 for a missing file"
+    );
 
     // Install the engine + Lua config from the Lua config file before serving.
     // engine_context() hard-fails on any serve call until this runs, so without
@@ -94,7 +104,9 @@ async fn server_main(
                 return ExitCode::FAILURE;
             }
         },
-        None => tracing::warn!("no --config: engine uninitialised; only /health and /favicon.ico will serve"),
+        None => tracing::warn!(
+            "no --config: engine uninitialised; only /health and /favicon.ico will serve"
+        ),
     }
 
     let drain_deadline = Duration::from_secs(drain_timeout.unwrap_or(30));
@@ -132,8 +144,18 @@ pub fn app(state: Arc<routes::AppState>) -> Router {
         // CORS preflight (engine-independent). These routes are traced: a span
         // named by the route template (low cardinality), continuing
         // the W3C traceparent; OtelInResponseLayer echoes it into the response.
-        .route("/", get(routes::iiif).head(routes::iiif).options(routes::cors_preflight))
-        .route("/{*rest}", get(routes::iiif).head(routes::iiif).options(routes::cors_preflight));
+        .route(
+            "/",
+            get(routes::iiif)
+                .head(routes::iiif)
+                .options(routes::cors_preflight),
+        )
+        .route(
+            "/{*rest}",
+            get(routes::iiif)
+                .head(routes::iiif)
+                .options(routes::cors_preflight),
+        );
 
     // Configured Lua routes (the script_handler analogue), registered before the
     // OTel layer so they are traced too. axum/matchit prioritises a static route
@@ -164,7 +186,11 @@ async fn serve(port: Option<u16>, drain_timeout: Duration) -> std::io::Result<()
     // not-ready state (no --config) leaves the serve routes returning 503.
     let state = Arc::new(routes::AppState::load());
     let port = port
-        .or_else(|| std::env::var("SIPI_RS_PORT").ok().and_then(|p| p.parse().ok()))
+        .or_else(|| {
+            std::env::var("SIPI_RS_PORT")
+                .ok()
+                .and_then(|p| p.parse().ok())
+        })
         .unwrap_or(DEFAULT_PORT);
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -184,7 +210,9 @@ async fn serve(port: Option<u16>, drain_timeout: Duration) -> std::io::Result<()
     };
     // `with_graceful_shutdown` yields an `IntoFuture`, not a `Future`; resolve it
     // so the select arm can poll `&mut server`.
-    let server = axum::serve(listener, app(state)).with_graceful_shutdown(graceful).into_future();
+    let server = axum::serve(listener, app(state))
+        .with_graceful_shutdown(graceful)
+        .into_future();
     tokio::pin!(server);
 
     tokio::select! {
@@ -241,8 +269,13 @@ async fn health() -> Response {
         .ok()
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_owned());
-    let body = serde_json::json!({ "status": "ok", "version": version, "uptime_seconds": uptime }).to_string();
-    ([(axum::http::header::CONTENT_TYPE, "application/json")], body).into_response()
+    let body = serde_json::json!({ "status": "ok", "version": version, "uptime_seconds": uptime })
+        .to_string();
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        body,
+    )
+        .into_response()
 }
 
 /// Rust-native favicon — 204 No Content (SIPI ships no favicon).
@@ -286,7 +319,13 @@ mod app_tests {
     #[tokio::test]
     async fn serve_routes_503_without_engine() {
         // The catch-all guards on engine readiness before touching the seam.
-        assert_eq!(status_of("/unit/lena512.jp2/info.json").await, StatusCode::SERVICE_UNAVAILABLE);
-        assert_eq!(status_of("/unit/lena512.jp2/full/max/0/default.jpg").await, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            status_of("/unit/lena512.jp2/info.json").await,
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+        assert_eq!(
+            status_of("/unit/lena512.jp2/full/max/0/default.jpg").await,
+            StatusCode::SERVICE_UNAVAILABLE
+        );
     }
 }

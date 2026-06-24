@@ -42,7 +42,10 @@ pub enum Outcome {
     /// A fully-formed response (JSON, redirect, error, or an empty/HEAD body).
     Complete(Response),
     /// The committed head of a streaming body; chunks follow on the body channel.
-    StreamHead { status: u16, headers: Vec<(String, String)> },
+    StreamHead {
+        status: u16,
+        headers: Vec<(String, String)>,
+    },
 }
 
 /// Accumulates the head and bridges the engine's body callbacks to the async
@@ -67,7 +70,10 @@ impl StreamSink {
         }
         self.head_sent = true;
         if let Some(tx) = self.outcome_tx.take() {
-            let _ = tx.send(Outcome::StreamHead { status: self.status, headers: std::mem::take(&mut self.headers) });
+            let _ = tx.send(Outcome::StreamHead {
+                status: self.status,
+                headers: std::mem::take(&mut self.headers),
+            });
         }
     }
 }
@@ -91,8 +97,12 @@ extern "C" fn cb_add_header(ctx: *mut c_void, name: *const c_char, value: *const
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let state = unsafe { &mut *(ctx as *mut StreamSink) };
         // SAFETY: the engine passes NUL-terminated C strings valid for the call.
-        let name = unsafe { CStr::from_ptr(name) }.to_string_lossy().into_owned();
-        let value = unsafe { CStr::from_ptr(value) }.to_string_lossy().into_owned();
+        let name = unsafe { CStr::from_ptr(name) }
+            .to_string_lossy()
+            .into_owned();
+        let value = unsafe { CStr::from_ptr(value) }
+            .to_string_lossy()
+            .into_owned();
         state.headers.push((name, value));
     }));
 }
@@ -116,12 +126,19 @@ extern "C" fn cb_write(ctx: *mut c_void, data: *const u8, len: usize) -> c_int {
     .unwrap_or(1)
 }
 
-extern "C" fn cb_send_file(ctx: *mut c_void, path: *const c_char, offset: u64, length: u64) -> c_int {
+extern "C" fn cb_send_file(
+    ctx: *mut c_void,
+    path: *const c_char,
+    offset: u64,
+    length: u64,
+) -> c_int {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let state = unsafe { &mut *(ctx as *mut StreamSink) };
         state.send_head();
         // SAFETY: the engine passes a NUL-terminated C string valid for the call.
-        let path = unsafe { CStr::from_ptr(path) }.to_string_lossy().into_owned();
+        let path = unsafe { CStr::from_ptr(path) }
+            .to_string_lossy()
+            .into_owned();
         stream_file_region(&state.body_tx, &path, offset, length)
     }))
     .unwrap_or(1)
@@ -143,7 +160,12 @@ extern "C" fn cb_cancelled(ctx: *mut c_void) -> c_int {
 /// without buffering the whole region. Returns 1 on a read error or a gone client
 /// (the committed head can't be unsaid, so the body simply truncates — matching
 /// the C++ transport, which drops the connection on a mid-send failure).
-fn stream_file_region(body_tx: &mpsc::Sender<Bytes>, path: &str, offset: u64, length: u64) -> c_int {
+fn stream_file_region(
+    body_tx: &mpsc::Sender<Bytes>,
+    path: &str,
+    offset: u64,
+    length: u64,
+) -> c_int {
     let Ok(mut f) = std::fs::File::open(path) else {
         return 1;
     };
@@ -179,8 +201,11 @@ fn stream_file_region(body_tx: &mpsc::Sender<Bytes>, path: &str, offset: u64, le
 /// flow on `body_tx`), or, for a body-less response (HEAD / pre-commit failure),
 /// as a [`Outcome::Complete`] in the tail. `body_tx` is dropped on return,
 /// closing the stream.
-pub fn serve_streaming<F>(outcome_tx: oneshot::Sender<Outcome>, body_tx: mpsc::Sender<Bytes>, call: F)
-where
+pub fn serve_streaming<F>(
+    outcome_tx: oneshot::Sender<Outcome>,
+    body_tx: mpsc::Sender<Bytes>,
+    call: F,
+) where
     F: FnOnce(&SipiResponse) -> i32,
 {
     // Box keeps the StreamSink address stable for the raw `ctx` pointer.
@@ -217,7 +242,11 @@ where
 
 /// Build the streaming axum [`Response`] from an [`Outcome::StreamHead`] and the
 /// body channel: chunks stream to the client as the engine produces them.
-pub fn stream_response(status: u16, headers: Vec<(String, String)>, body_rx: mpsc::Receiver<Bytes>) -> Response {
+pub fn stream_response(
+    status: u16,
+    headers: Vec<(String, String)>,
+    body_rx: mpsc::Receiver<Bytes>,
+) -> Response {
     let body = Body::from_stream(ReceiverStream::new(body_rx).map(Ok::<Bytes, std::io::Error>));
     apply_headers(Response::builder().status(map_status_u16(status)), &headers)
         .body(body)
@@ -233,7 +262,10 @@ fn head_response(status: u16, headers: &[(String, String)]) -> Response {
 
 fn apply_headers(mut builder: Builder, headers: &[(String, String)]) -> Builder {
     for (name, value) in headers {
-        match (HeaderName::from_bytes(name.as_bytes()), HeaderValue::from_str(value)) {
+        match (
+            HeaderName::from_bytes(name.as_bytes()),
+            HeaderValue::from_str(value),
+        ) {
             (Ok(n), Ok(v)) => builder = builder.header(n, v),
             // A header http rejects (control chars etc.) is dropped rather than
             // failing the whole response; the engine sanitises at the boundary.
@@ -244,7 +276,8 @@ fn apply_headers(mut builder: Builder, headers: &[(String, String)]) -> Builder 
 }
 
 fn map_status(code: i32) -> StatusCode {
-    StatusCode::from_u16(u16::try_from(code).unwrap_or(500)).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+    StatusCode::from_u16(u16::try_from(code).unwrap_or(500))
+        .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 fn map_status_u16(status: u16) -> StatusCode {

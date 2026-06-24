@@ -46,6 +46,11 @@ pub struct PathArgs {
     #[arg(long, env = "SIPI_SUBDIRLEVELS", value_name = "N")]
     pub subdirlevels: Option<i32>,
     /// Directories excluded from subdir calculations.
-    #[arg(long, env = "SIPI_SUBDIREXCLUDES", value_name = "DIR", value_delimiter = ',')]
+    #[arg(
+        long,
+        env = "SIPI_SUBDIREXCLUDES",
+        value_name = "DIR",
+        value_delimiter = ','
+    )]
     pub subdirexcludes: Option<Vec<String>>,
 }
