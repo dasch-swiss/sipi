@@ -307,7 +307,7 @@ test --test_output=errors
 # Retry the timing-sensitive e2e tests up to 3x — the single retry mechanism
 # for the suite (replaces the bespoke Rust `retry_flaky` helper / inline poll
 # loops, removed in favour of Bazel's native `--flaky_test_attempts`). These
-# five assert on server-side timing the test can't pin down deterministically:
+# six assert on server-side timing the test can't pin down deterministically:
 #   - latency / iiif_compliance / resource_limits: connection / cache budgets a
 #     loaded CI runner (observed on linux-arm64) blows on a single attempt —
 #     surfacing as a transient `hyper::Error(IncompleteMessage)`.
@@ -319,6 +319,9 @@ test --test_output=errors
 #     `try_acquire_owned`); the deterministic 503 cases in `server` are
 #     `#[ignore]`'d (plan 02 §8.1, DEV-6659), so only this transient residue
 #     remains here. Root cause to revisit in the cluster-A concurrency work.
+#   - upload: concurrent_file_uploads' post-burst responsiveness probe 503s when
+#     the upload burst's permits have not yet been released (same engine-pool
+#     semaphore; passes 3/3 in isolation, sheds only under parallel-suite load).
 # A genuinely broken test still fails all 3 attempts, so this masks flakes, not
 # regressions. `--flaky_test_attempts` is `accumulate_value` (one entry per
 # target) and matches the target label as a regex; a no-op for invocations that
@@ -330,6 +333,7 @@ test --flaky_test_attempts=//test/e2e:iiif_compliance@3
 test --flaky_test_attempts=//test/e2e:resource_limits@3
 test --flaky_test_attempts=//test/e2e:memory_budget@3
 test --flaky_test_attempts=//test/e2e:server@3
+test --flaky_test_attempts=//test/e2e:upload@3
 
 # ── Remote cache ────────────────────────────────────────────────────────────
 # DEV-6517: gRPC remote cache via bazel-remote on Cloud Run, backed by GCS.
