@@ -5,9 +5,9 @@
 //! `From<&ServerArgs> for ServerOverrides` mapping — the binary knows the CLI
 //! shape, the `sipi` library takes the Rust-native overrides bag (decision #9).
 //!
-//! Only the listen port is wired into `ServerOverrides` today; the full
-//! CLI→config override channel lands in M3–M4 (plan 02 §7.5). Until then an
-//! unrecognised flag is a clap usage error (exit 2).
+//! Every forwarded `server` flag maps into `ServerOverrides`; the override
+//! channel into the engine (the `repr(C)` struct + the `sipi_init` apply block)
+//! lands in the remaining M4 slices (plan 02 §7.5).
 
 mod args;
 
@@ -18,11 +18,41 @@ use std::process::ExitCode;
 
 impl From<&ServerArgs> for ServerOverrides {
     fn from(args: &ServerArgs) -> Self {
-        // `sslport` parses for CLI/harness parity but is inert (TLS at Traefik),
-        // so it is not an override. `serverport` is the one override the shell
-        // consumes today.
+        // Engine-behaviour flags forward; transport flags the Rust shell owns
+        // (sslport/sslcert/sslkey, keepalive, max-waiting/queue-timeout,
+        // hostname, nthreads, logfile) parse for CLI parity but are never
+        // forwarded. The deprecated cache aliases (--cachedir/--cachesize/
+        // --cachenfiles) land in M5; this maps the canonical names only.
         ServerOverrides {
             serverport: args.network.serverport,
+            imgroot: args.paths.imgroot.clone(),
+            scriptdir: args.paths.scriptdir.clone(),
+            initscript: args.paths.initscript.clone(),
+            tmpdir: args.paths.tmpdir.clone(),
+            maxtmpage: args.paths.maxtmpage,
+            docroot: args.paths.docroot.clone(),
+            wwwroute: args.paths.wwwroute.clone(),
+            pathprefix: args.paths.pathprefix,
+            subdirlevels: args.paths.subdirlevels,
+            subdirexcludes: args.paths.subdirexcludes.clone(),
+            jwtkey: args.tls_auth.jwtkey.clone(),
+            adminuser: args.tls_auth.adminuser.clone(),
+            adminpasswd: args.tls_auth.adminpasswd.clone(),
+            cache_dir: args.cache.cache_dir.clone(),
+            cache_size: args.cache.cache_size.clone(),
+            cache_nfiles: args.cache.cache_nfiles,
+            rate_limit_max_pixels: args.rate_limit.rate_limit_max_pixels,
+            rate_limit_window: args.rate_limit.rate_limit_window,
+            rate_limit_mode: args.rate_limit.rate_limit_mode.clone(),
+            rate_limit_pixel_threshold: args.rate_limit.rate_limit_pixel_threshold,
+            max_decode_memory: args.limits.max_decode_memory.clone(),
+            decode_memory_mode: args.limits.decode_memory_mode.clone(),
+            max_pixel_limit: args.limits.max_pixel_limit,
+            maxpost: args.limits.maxpost.clone(),
+            thumbsize: args.limits.thumbsize.clone(),
+            knorapath: args.knora.knorapath.clone(),
+            knoraport: args.knora.knoraport.clone(),
+            loglevel: args.logging.loglevel.clone(),
         }
     }
 }
