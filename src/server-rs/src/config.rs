@@ -5,25 +5,79 @@
 //! hands it to [`crate::run`]; the library never parses argv itself (decision #9
 //! — the library is reusable, the binary owns the CLI).
 //!
-//! Today it carries only the listen port — the one flag the shell consumes. It
-//! grows one `Option` per forwarded flag as the full CLI-override path lands
-//! (plan 02 §7.5, M3/M4), at which point it is converted to the `#[repr(C)]`
-//! `SipiServerConfig` and forwarded through `sipi_init`. When that `#[repr(C)]`
-//! struct is added here, its layout must match `sipi_ffi.h`'s `SipiServerConfig`
-//! exactly; guard it with a `size_of`/offset test against the header (not
-//! bindgen) and pair it with the C++ `static_assert` — the two definitions are
-//! lock-step. `--drain-timeout` is
-//! deliberately *not* here: it is a Rust-owned serve knob, not a config
-//! override, so it stays a direct [`crate::run`] argument.
+//! It carries one `Option` per forwarded `server` flag; `None` means the flag
+//! was set by neither CLI nor env, so the loaded Lua config value wins (the
+//! Rust analog of the C++ `user_set` gate; precedence `config < env < CLI`).
+//! [`OverridesHolder`] converts it to the `#[repr(C)]` [`SipiServerConfig`] and
+//! forwards it through `sipi_init`, which layers the present overrides onto the
+//! parsed Lua config before the engine builds its services. The `#[repr(C)]`
+//! layout is lock-step with `sipi_ffi.h`'s `SipiServerConfig` — guarded by the
+//! `layout` test below paired with the header's `static_assert`s (not bindgen).
+//!
+//! `--drain-timeout` is deliberately *not* here: it is a Rust-owned serve knob,
+//! not a config override, so it stays a direct [`crate::run`] argument.
 
 use std::os::raw::{c_char, c_int};
 
-/// CLI/env flag overrides layered over the loaded Lua config.
+/// CLI/env flag overrides layered over the loaded Lua config — one `Option` per
+/// forwarded `server` flag (`None` = neither CLI nor env set it → the Lua config
+/// wins).
+///
+/// Only engine-behaviour flags are forwarded. Transport flags the Rust shell
+/// owns (`--sslport`/`--sslcert`/`--sslkey`, `--keepalive`,
+/// `--max-waiting`/`--queue-timeout`, `--hostname`) parse for CLI parity but are
+/// never forwarded, so they are absent here.
 #[derive(Debug, Default, Clone)]
 pub struct ServerOverrides {
     /// HTTP listen port (`--serverport` / `SIPI_SERVERPORT`). `None` → fall back
     /// to `SIPI_RS_PORT` (dev/test) then the default port.
     pub serverport: Option<u16>,
+
+    // Paths
+    pub imgroot: Option<String>,
+    pub scriptdir: Option<String>,
+    pub initscript: Option<String>,
+    pub tmpdir: Option<String>,
+    pub maxtmpage: Option<i32>,
+    pub docroot: Option<String>,
+    pub wwwroute: Option<String>,
+    pub pathprefix: Option<bool>,
+    pub subdirlevels: Option<i32>,
+    pub subdirexcludes: Option<Vec<String>>,
+
+    // Auth (TLS terminates at Traefik; only the auth knobs forward)
+    pub jwtkey: Option<String>,
+    pub adminuser: Option<String>,
+    pub adminpasswd: Option<String>,
+
+    // Cache
+    pub cache_dir: Option<String>,
+    /// Raw size string ("200M"); the engine parses the suffix.
+    pub cache_size: Option<String>,
+    /// Signed: 0 = unlimited, negatives wrap — mirrors the C++ CLI exactly.
+    pub cache_nfiles: Option<i32>,
+
+    // Rate limiting
+    pub rate_limit_max_pixels: Option<u64>,
+    pub rate_limit_window: Option<u32>,
+    pub rate_limit_mode: Option<String>,
+    pub rate_limit_pixel_threshold: Option<u64>,
+
+    // Limits
+    /// Raw size string; the engine parses the suffix.
+    pub max_decode_memory: Option<String>,
+    pub decode_memory_mode: Option<String>,
+    pub max_pixel_limit: Option<u64>,
+    /// Raw size string ("300M"); the engine parses the suffix.
+    pub maxpost: Option<String>,
+    pub thumbsize: Option<String>,
+
+    // Knora
+    pub knorapath: Option<String>,
+    pub knoraport: Option<String>,
+
+    // Logging
+    pub loglevel: Option<String>,
 }
 
 /// The CLI/env override channel passed to `sipi_init` — hand-mirrored from
