@@ -157,6 +157,16 @@ jobs:
       # the `--remote_cache` + `--experimental_remote_downloader` +
       # `--credential_helper` flag string in $REMOTE only when the
       # secret is present (fork PRs run cold).
+      # Rust formatting gate. Platform-independent, so it runs once (on
+      # linux-amd64) and fails fast before the build. GH_TOKEN is needed because
+      # analyzing the Rust crates pulls in the engine's dep graph (the Kakadu
+      # repository fetch); no compile happens — the rustfmt aspect is source-only.
+      - name: Check Rust formatting
+        if: matrix.arch == 'amd64'
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+        run: nix develop --command bash -c "just bazel-rustfmt-check"
+
       - name: Build + run all tests
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}

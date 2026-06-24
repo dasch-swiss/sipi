@@ -46,6 +46,11 @@ just bazel-test-smoke            # Docker smoke test (OCI tarball loaded by the 
 just bazel-coverage              # unit + approval + e2e under instrumentation; lcov
                                  # at bazel-out/_coverage/_coverage_report.dat
 
+# Rust formatting + rust-analyzer
+just bazel-rustfmt               # format the Rust crates per rustfmt.toml (rules_rust runner)
+just bazel-rustfmt-check         # CI gate: rustfmt --check via the rules_rust rustfmt aspect
+just bazel-rust-project          # (re)generate rust-project.json for rust-analyzer (git-ignored)
+
 # Run / debug
 just run                         # run sipi with the localdev config
 just valgrind                    # run sipi under Valgrind
