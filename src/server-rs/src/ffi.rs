@@ -14,6 +14,8 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
 
+use crate::config::SipiServerConfig;
+
 // ── Response sink callbacks (Rust-owned) ────────────────────────────────────
 // `Option<extern "C" fn ...>` is the FFI-safe nullable function pointer: `None`
 // is a null pointer on the C side, matching a sink that does not implement a
@@ -212,10 +214,13 @@ extern "C" {
 
     /// Parse the Lua config and install the engine + Lua config from scratch.
     /// Must run once before any serve call (`engine_context()` hard-fails
-    /// otherwise). `overrides` is the opaque `SipiServerConfig*` (CLI/env
-    /// tweaks); the shell passes null today — the Lua config file is
-    /// authoritative. Returns 0 on success, non-zero on failure.
-    pub fn sipi_init(lua_config_path: *const c_char, overrides: *const c_void) -> c_int;
+    /// otherwise). `overrides` is the `SipiServerConfig*` CLI/env override
+    /// channel the engine layers over the Lua config (null = no overrides).
+    /// Returns 0 on success, non-zero on failure.
+    pub fn sipi_init(
+        lua_config_path: *const c_char,
+        overrides: *const SipiServerConfig,
+    ) -> c_int;
 
     /// The configured image root (`resolved` = 0 → raw config value for the path
     /// build; 1 → realpath()-resolved root for the containment check). `*out` is
