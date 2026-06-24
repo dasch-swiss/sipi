@@ -114,6 +114,23 @@ bazel-test-unit *FLAGS='':
 bazel-test-approval:
     bazel test //test/approval:approvaltests
 
+# Format the first-party Rust crates in place per the repo rustfmt.toml
+# (the rules_rust rustfmt runner formats every `rust_*` target in the workspace).
+bazel-rustfmt *FLAGS='':
+    bazel run @rules_rust//:rustfmt {{FLAGS}}
+
+# Check Rust formatting — the CI gate. The rules_rust rustfmt aspect runs
+# `rustfmt --check` over every first-party Rust target and fails on any file
+# that is not rustfmt-clean; run `just bazel-rustfmt` to fix.
+bazel-rustfmt-check *FLAGS='':
+    bazel build //src/server-rs/... //src/cli-rs/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect --output_groups=rustfmt_checks {{FLAGS}}
+
+# (Re)generate rust-project.json so rust-analyzer understands the Bazel crate
+# graph (cargo can't see the rules_rust targets). The file is git-ignored — it
+# holds machine-absolute paths. Re-run after adding/moving a Rust target or dep.
+bazel-rust-project:
+    bazel run @rules_rust//tools/rust_analyzer:gen_rust_project
+
 # Run all Rust e2e `rust_test` targets against the Bazel-built `:sipi`
 # binary. Pass extra Bazel flags positionally: e.g. `--config=asan` for
 # the sanitiser run, `--test_output=streamed` for live stdout,
