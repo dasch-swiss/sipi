@@ -236,7 +236,6 @@ fn transform_pipeline_memory() {
 }
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 2): CLI flags (--cache-dir/--max-pixel-limit) unparsed → shell exits 2 at startup — plan 02 cluster A"]
 fn pixel_limit_rejects_oversized_request() {
     // Start a server with a low max_pixel_limit (10000 = ~100x100)
     // and verify that a 512x512 request (262144 pixels) is rejected.
