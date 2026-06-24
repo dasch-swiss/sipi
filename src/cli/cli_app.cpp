@@ -518,9 +518,9 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
     // parseSizeString expands the suffix engine-side. A negative maxpost /
     // max-decode-memory clamps to 0 (matching the SipiConf ctor + run_server) so
     // it cannot become SIZE_MAX and skip the budget auto-detect; cache_size keeps
-    // -1 as its valid "unlimited" sentinel. cache_nfiles is passed straight
-    // through as a signed value (0 = unlimited, negatives wrap) — the CLI11
-    // int -> setCacheNFiles(size_t) path run_server uses, preserved for parity.
+    // -1 as its valid "unlimited" sentinel. cache_nfiles is `unsigned` (0 =
+    // unlimited; a negative is rejected by CLI11 on both binaries / by clap u32),
+    // so it forwards straight to setCacheNFiles(size_t) with no signed wrap.
     if (overrides != nullptr) {
       const SipiServerConfig &o = *overrides;
       // Strings (null = absent).
@@ -832,7 +832,7 @@ extern "C" int sipi_cli_main(int argc, char **argv)
   std::string optInitscript = "./config/sipi.init.lua";
   std::string optCachedir = "./cache";
   std::string optCacheSize = "200M";
-  int optCacheNFiles = 200;
+  unsigned optCacheNFiles = 200;// unsigned: CLI11 rejects a negative (no signed→size_t wrap)
   double optCacheHysteresisIgnored = 0.0;
   size_t optMaxPixelLimit = 0;
   size_t optRateLimitMaxPixels = 0;
@@ -1697,8 +1697,11 @@ extern "C" int sipi_cli_main(int argc, char **argv)
       ->envname("SIPI_CONFIGFILE")
       ->check(CLI::ExistingFile);
     cmd->add_option("--serverport", optServerport, "Port of SIPI web server.")
-      ->envname("SIPI_SERVERPORT");
-    cmd->add_option("--sslport", optSSLport, "SSL-port of the SIPI server.")->envname("SIPI_SSLPORT");
+      ->envname("SIPI_SERVERPORT")
+      ->check(CLI::Range(1, 65535));
+    cmd->add_option("--sslport", optSSLport, "SSL-port of the SIPI server.")
+      ->envname("SIPI_SSLPORT")
+      ->check(CLI::Range(1, 65535));
     cmd->add_option("--hostname", optHostname, "Hostname to use for HTTP server.")
       ->envname("SIPI_HOSTNAME");
     cmd->add_option("--keepalive", optKeepAlive, "Number of seconds for the keep-alive option of HTTP 1.1.")

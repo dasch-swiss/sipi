@@ -11,11 +11,11 @@ use clap::Args;
 #[derive(Args, Debug)]
 #[command(next_help_heading = "Network")]
 pub struct NetworkArgs {
-    /// HTTP listen port.
-    #[arg(long, env = "SIPI_SERVERPORT", value_name = "PORT")]
+    /// HTTP listen port (1–65535).
+    #[arg(long, env = "SIPI_SERVERPORT", value_name = "PORT", value_parser = clap::value_parser!(u16).range(1..=65535))]
     pub serverport: Option<u16>,
-    /// TLS port (parse-only: SIPI serves plain HTTP behind Traefik — §5 #3).
-    #[arg(long, env = "SIPI_SSLPORT", value_name = "PORT")]
+    /// TLS port 1–65535 (parse-only: SIPI serves plain HTTP behind Traefik — §5 #3).
+    #[arg(long, env = "SIPI_SSLPORT", value_name = "PORT", value_parser = clap::value_parser!(u16).range(1..=65535))]
     pub sslport: Option<u16>,
     /// Server hostname (parse-only: the shell derives the external host from
     /// `X-Forwarded-Host`).

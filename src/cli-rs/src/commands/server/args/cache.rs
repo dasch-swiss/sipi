@@ -19,7 +19,8 @@ pub struct CacheArgs {
     /// parses the suffix).
     #[arg(long, env = "SIPI_CACHE_SIZE", value_name = "SIZE")]
     pub cache_size: Option<String>,
-    /// Max number of cached files (0 = no limit).
+    /// Max number of cached files (0 = no limit). Unsigned: a negative is
+    /// rejected (matches the C++ CLI; no signed→unsigned wrap).
     #[arg(long, env = "SIPI_CACHE_NFILES", value_name = "N")]
-    pub cache_nfiles: Option<i32>,
+    pub cache_nfiles: Option<u32>,
 }

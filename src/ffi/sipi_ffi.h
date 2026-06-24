@@ -240,7 +240,7 @@ typedef struct SipiServerConfig
   /* 4-byte scalar values (presence via the has_ flags below) */
   int32_t serverport;
   int32_t maxtmpage;
-  int32_t cache_nfiles;           /* signed: 0 = unlimited, negatives wrap — cli_app parity */
+  uint32_t cache_nfiles;          /* 0 = unlimited; a negative is rejected at the CLI (no wrap) */
   int32_t subdirlevels;
   int32_t pathprefix;             /* prefix_as_path, bool carried as 0/1 */
   uint32_t rate_limit_window;
