@@ -33,10 +33,12 @@ pub fn run(server_argv: &[String]) -> ExitCode {
     let args = match ServerArgs::try_parse_from(server_argv) {
         Ok(args) => args,
         Err(e) => {
-            // clap renders the usage/error; exit code 2 is the conventional
-            // usage-error code (we never call clap's process-exiting `.exit()`).
+            // clap renders help/version to stdout and usage errors to stderr;
+            // mirror its own exit codes — 0 for `--help`/`--version`, 2 for a
+            // usage error — instead of forcing 2 (the C++ oracle exits 0 on
+            // `server --help`). We never call clap's process-exiting `.exit()`.
             let _ = e.print();
-            return ExitCode::from(2);
+            return ExitCode::from(e.exit_code() as u8);
         }
     };
 
