@@ -35,6 +35,12 @@ form_urlencoded = "1"
 # split + per-cookie parse); no extra features (raw name/value, no signing).
 cookie = "0.18"
 serde_json = "1"
+# TOML config: `--config` accepts a `.toml` base alongside `.lua`, parsed
+# Rust-side and layered through the server-override channel. `parse` feature
+# only (config reading, no serializer); serde `derive` builds the sectioned
+# config schema.
+serde = { version = "1", features = ["derive"] }
+toml = { version = "0.8", default-features = false, features = ["parse"] }
 # Spool each multipart upload to a temp file the C++ engine opens by path; the
 # handle is held until the Lua route finishes, then auto-deleted on drop.
 tempfile = "3"
