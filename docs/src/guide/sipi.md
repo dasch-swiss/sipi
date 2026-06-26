@@ -151,7 +151,9 @@ the following JPEG2000 specific options. For a in detail description of these op
 
 ### Using SIPI as IIIF Media Server
 In order to use SIPI as IIIF media server, some setup work has to be done. The *configuration* of SIPI can be done
-using a configuration file (that is written in LUA) and/or using environment variables, and/or command line options.
+using a configuration file (written in Lua or, equivalently, in TOML — see
+[Configuration file format](running.md#configuration-file-format-lua-or-toml)) and/or using environment variables,
+and/or command line options.
 
 The priority is as follows: *`configuration file parameters` are overwritten by `environment variables` are overwritten
 by `command line options`*.
