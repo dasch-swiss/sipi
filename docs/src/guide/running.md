@@ -40,6 +40,96 @@ sipi compare file1.tif file2.jpg
 sipi server --config config/sipi.config.lua
 ```
 
+### Configuration file format (`.lua` or `.toml`)
+
+`--config` accepts either a Lua file (`.lua`) or a TOML file (`.toml`),
+dispatched on the extension. The Lua file is parsed by the engine's Lua VM
+(SIPI's historical format); a TOML file is parsed directly by the server and
+needs no Lua VM in the config path. Route *scripts* are always Lua — TOML
+replaces the config *file*, not the scripting.
+
+> **TOML config is experimental.** It is the first of the native (Rust/TOML)
+> alternatives SIPI is introducing for everything Lua is used for today (see
+> [ADR-0017](https://github.com/dasch-swiss/sipi/blob/main/docs/adr/0017-extensibility-lua-and-rust.md)).
+> The schema may change without the usual compatibility guarantees until it is
+> validated in production; the server logs a warning on startup when a `.toml`
+> config is loaded. The Lua config path stays fully supported. Once the native
+> alternatives stabilize, Lua will be marked deprecated.
+
+A TOML config groups keys into sections that mirror the `server` flag groups,
+with idiomatic snake_case names:
+
+```toml
+[network]
+port = 1024
+
+[paths]
+img_root = "/sipi/images"   # required
+script_dir = "/sipi/scripts"
+init_script = "/sipi/config/sipi.init.lua"
+
+[cache]
+dir = "/sipi/cache"
+size = "200M"               # "0" disables the cache
+
+[image]
+jpeg_quality = 60
+scaling_quality = { jpeg = "high", tiff = "high", png = "high", j2k = "high" }
+
+[tls_auth]
+jwt_secret = "…"
+
+[[routes]]
+method = "POST"
+route = "/api/upload"
+script = "upload.lua"       # resolved against [paths].script_dir
+```
+
+Precedence is `config file < environment variable < command-line flag`, the same
+as for a Lua config: a CLI flag (or its `SIPI_*` env var) overrides the matching
+TOML key. `img_root` is required (an empty image root has nothing to resolve);
+routes with a relative `script` require `[paths].script_dir`. Unknown keys are
+rejected (a typo is a startup error, not a silently-ignored value), so transport
+knobs the Rust server does not own — TLS (`ssl_*`), `hostname`, `keep_alive`,
+thread count, and `logfile` — have no TOML key and are reported as unsupported.
+
+The TOML key for each Lua config key:
+
+| TOML key | Lua config key |
+|----------|----------------|
+| `[network] port` | `port` |
+| `[paths] img_root` | `imgroot` |
+| `[paths] script_dir` | `scriptdir` |
+| `[paths] init_script` | `initscript` |
+| `[paths] tmp_dir` | `tmpdir` |
+| `[paths] max_temp_file_age` | `max_temp_file_age` |
+| `[paths] doc_root` | `fileserver.docroot` |
+| `[paths] www_route` | `fileserver.wwwroute` |
+| `[paths] prefix_as_path` | `prefix_as_path` |
+| `[paths] subdir_levels` | `subdir_levels` |
+| `[paths] subdir_excludes` | `subdir_excludes` |
+| `[cache] dir` | `cache_dir` |
+| `[cache] size` | `cache_size` |
+| `[cache] n_files` | `cache_nfiles` |
+| `[limits] max_decode_memory` | `max_decode_memory` |
+| `[limits] decode_memory_mode` | `decode_memory_mode` |
+| `[limits] max_pixel_limit` | `max_pixel_limit` |
+| `[limits] max_post_size` | `max_post_size` |
+| `[limits] thumb_size` | `thumb_size` |
+| `[image] jpeg_quality` | `jpeg_quality` |
+| `[image] scaling_quality.{jpeg,tiff,png,j2k}` | `scaling_quality.{…}` (the `j2k` entry is accepted but currently has no effect — the engine reads that slot under a legacy key) |
+| `[rate_limit] max_pixels` | `rate_limit_max_pixels` |
+| `[rate_limit] window` | `rate_limit_window` |
+| `[rate_limit] mode` | `rate_limit_mode` |
+| `[rate_limit] pixel_threshold` | `rate_limit_pixel_threshold` |
+| `[tls_auth] jwt_secret` | `jwt_secret` |
+| `[tls_auth] admin_user` | `admin.user` |
+| `[tls_auth] admin_password` | `admin.password` |
+| `[knora] path` | `knora_path` |
+| `[knora] port` | `knora_port` |
+| `[logging] level` | `loglevel` |
+| `[[routes]]` (`method`/`route`/`script`) | `routes` |
+
 ## Health Check
 
 `sipi health` is a self-contained liveness probe. It performs an HTTP `GET` on
@@ -182,7 +272,7 @@ These options are accepted by the `server` subcommand. Usage:
 
 | Flag | Short | Env Var | Default | Description |
 |------|-------|---------|---------|-------------|
-| `--config <file>` | `-c` | `SIPI_CONFIGFILE` | | Lua configuration file for server mode |
+| `--config <file>` | `-c` | `SIPI_CONFIGFILE` | | Server config file — Lua (`.lua`) or TOML (`.toml`); see [Configuration file format](#configuration-file-format-lua-or-toml) |
 | `--serverport <n>` | | `SIPI_SERVERPORT` | `80` | HTTP port |
 | `--sslport <n>` | | `SIPI_SSLPORT` | `443` | HTTPS port |
 | `--hostname <name>` | | `SIPI_HOSTNAME` | `localhost` | Public DNS hostname |
