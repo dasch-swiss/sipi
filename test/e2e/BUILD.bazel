@@ -134,6 +134,8 @@ sipi_e2e_test(name = "shutdown", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "smoke", deps = _e2e_test_deps)
 
+sipi_e2e_test(name = "toml_config", deps = _e2e_test_deps)
+
 sipi_e2e_test(name = "upload", deps = _e2e_test_deps)
 
 # ── Docker smoke test ──────────────────────────────────────────────────────
@@ -239,6 +241,7 @@ test_suite(
         ":server",
         ":shutdown",
         ":smoke",
+        ":toml_config",
         ":upload",
     ],
     visibility = ["//visibility:public"],
