@@ -1,0 +1,2 @@
+-- Minimal init script for the TOML/Lua config-parity e2e fixture. The parity
+-- route uses only the built-in `server` table, so no globals are defined here.

@@ -1,0 +1,29 @@
+# TOML half of the TOML/Lua config-parity e2e fixture, equivalent to
+# sipi.toml-parity-test.lua. The `toml_config` e2e test starts a server with each
+# and asserts identical served behaviour (info.json, an image request, and the
+# configured route). Sections mirror the `server` clap argument groups.
+[network]
+port = 1024
+
+[paths]
+img_root = "./images"
+script_dir = "./scripts"
+init_script = "./scripts/parity.init.lua"
+prefix_as_path = true
+
+[cache]
+size = "0"
+
+[limits]
+thumb_size = "!128,128"
+
+[image]
+jpeg_quality = 60
+
+[logging]
+level = "INFO"
+
+[[routes]]
+method = "GET"
+route = "/parity"
+script = "parity_route.lua"
