@@ -62,8 +62,13 @@ pub struct AppState {
 impl AppState {
     /// Read the cached config from the engine. Returns a not-ready state when
     /// `sipi_init` has not run (no `--config`); the serve routes then 503.
+    ///
+    /// `configured_routes` is `Some` for a TOML config (the shell parsed the
+    /// `[[routes]]` table Rust-side and composed each script path); `None` for a
+    /// Lua config, where the routes are read back from the engine via
+    /// [`ffi::routes`] after `sipi_init` installed them.
     #[must_use]
-    pub fn load() -> Self {
+    pub fn load(configured_routes: Option<Vec<ffi::RouteEntry>>) -> Self {
         // Bound concurrent engine work to the configured worker count (the shttps
         // thread-per-connection bound, reconstructed). 0/uninitialised → size from
         // the host parallelism.
@@ -87,7 +92,9 @@ impl AppState {
                 has_preflight: ffi::has_preflight().unwrap_or(false),
                 has_file_preflight: ffi::has_file_preflight().unwrap_or(false),
                 pool,
-                routes: ffi::routes().unwrap_or_default(),
+                // TOML config supplies routes directly; a Lua config has them
+                // read back from the engine via the seam.
+                routes: configured_routes.unwrap_or_else(|| ffi::routes().unwrap_or_default()),
                 max_post_size: ffi::max_post_size().unwrap_or(0),
             },
             _ => Self {

@@ -491,10 +491,10 @@ std::unique_ptr<ServerRuntime> g_server_runtime;
 extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *overrides)
 {
   try {
-    if (lua_config_path == nullptr || lua_config_path[0] == '\0') {
-      log_err("sipi_init: a Lua config path is required");
-      return EXIT_FAILURE;
-    }
+    // A null/empty config path selects the Lua-less init path: a TOML config,
+    // parsed Rust-side, supplies every value through `overrides`. Otherwise the
+    // Lua config is the base the overrides layer onto.
+    const bool has_lua_config = (lua_config_path != nullptr && lua_config_path[0] != '\0');
 
     // Initialise the codec libraries (curl / Exiv2 / TIFF) the decode pipeline
     // needs. The Rust server path does not go through sipi_cli_main's
@@ -504,7 +504,10 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
     auto runtime = std::make_unique<ServerRuntime>();
 
     // Parse the Lua config — the same VM the C++ server path reads via SipiConf.
-    {
+    // Skipped on the Lua-less path: `runtime->conf` stays default-constructed (an
+    // all-defaults config via SipiConf's in-class initializers) and the overrides
+    // below supply imgroot / scriptdir / etc.
+    if (has_lua_config) {
       shttps::LuaServer luacfg(lua_config_path);
       runtime->conf = Sipi::SipiConf(luacfg);
     }
@@ -549,6 +552,20 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
       if (o.docroot != nullptr) conf.setDocRoot(o.docroot);
       if (o.wwwroute != nullptr) conf.setWWWRoute(o.wwwroute);
       if (o.loglevel != nullptr) conf.setLogLevel(o.loglevel);
+      // Scaling-quality per codec (TOML-config-only — no CLI flag). Merge the
+      // present codecs onto the base map so a partial override keeps the others.
+      // The "j2k" key is stored as the config writes it; to_scaling_quality reads
+      // it under "jpk" (a legacy engine quirk), so j2k scaling falls to the
+      // default on both the Lua and TOML paths alike — parity, not a new bug.
+      if (o.scaling_quality_jpeg != nullptr || o.scaling_quality_tiff != nullptr
+          || o.scaling_quality_png != nullptr || o.scaling_quality_j2k != nullptr) {
+        std::map<std::string, std::string> sq = conf.getScalingQuality();
+        if (o.scaling_quality_jpeg != nullptr) sq["jpeg"] = o.scaling_quality_jpeg;
+        if (o.scaling_quality_tiff != nullptr) sq["tiff"] = o.scaling_quality_tiff;
+        if (o.scaling_quality_png != nullptr) sq["png"] = o.scaling_quality_png;
+        if (o.scaling_quality_j2k != nullptr) sq["j2k"] = o.scaling_quality_j2k;
+        conf.setScalingQuality(sq);
+      }
       if (o.subdirexcludes != nullptr && o.subdirexcludes_len > 0) {
         std::vector<std::string> excludes;
         excludes.reserve(o.subdirexcludes_len);
@@ -565,6 +582,7 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
       if (o.has_max_pixel_limit) conf.setMaxPixelLimit(o.max_pixel_limit);
       if (o.has_rate_limit_max_pixels) conf.setRateLimitMaxPixels(o.rate_limit_max_pixels);
       if (o.has_rate_limit_pixel_threshold) conf.setRateLimitPixelThreshold(o.rate_limit_pixel_threshold);
+      if (o.has_jpeg_quality) conf.setJpegQuality(o.jpeg_quality);
     }
 
     // Engine services, mirroring run_server()'s construction (config values, with
@@ -620,7 +638,7 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
     // installing them first and then failing here would leave the file-static
     // engine pointing into `runtime`, which is freed on this early return.
     std::string initscript_src;
-    {
+    if (!conf.getInitScript().empty()) {
       std::ifstream initscript_in(conf.getInitScript());
       if (initscript_in.fail()) {
         log_err("sipi_init: initscript \"%s\" not found", conf.getInitScript().c_str());
@@ -629,6 +647,9 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
       initscript_src.assign(
         (std::istreambuf_iterator<char>(initscript_in)), std::istreambuf_iterator<char>());
     }
+    // else (Lua-less / TOML, no initscript set): leave initscript_src empty —
+    // set_lua_config accepts it and the sipiGlobals installers still register the
+    // `server` Lua table, so configured route scripts run.
 
     // Install the engine context — non-owning pointers into g_server_runtime.
     Sipi::ffi::set_engine_context(Sipi::ffi::EngineContext{
