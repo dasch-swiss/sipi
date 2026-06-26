@@ -13,6 +13,7 @@
 //! server, which keeps the production socket until the cutover.
 
 pub mod config;
+pub mod config_file;
 pub mod ffi;
 pub mod iiif;
 pub mod info;
@@ -42,8 +43,9 @@ static START: OnceLock<Instant> = OnceLock::new();
 
 /// Run the SIPI axum server. The `cli-rs` binary parses the `server` verb's
 /// flags and calls this; a downstream crate can call it directly (decision #9).
-/// `config` is the bootstrap Lua config path (it selects the base config the
-/// `overrides` layer onto); `drain_timeout` is the Rust-owned graceful-drain
+/// `config` is the bootstrap config file path — `.lua` (engine Lua VM) or `.toml`
+/// (parsed Rust-side); it selects the base config the `overrides` layer onto.
+/// `drain_timeout` is the Rust-owned graceful-drain
 /// deadline in seconds (default 30). Blocks until shutdown; returns the process
 /// exit code. Telemetry init lives in [`server_main`] (inside the runtime)
 /// because the OTLP batch exporter needs a tokio runtime.
@@ -92,25 +94,66 @@ async fn server_main(
         "FFI seam self-check should report 404 for a missing file"
     );
 
-    // Install the engine + Lua config from the Lua config file before serving.
-    // engine_context() hard-fails on any serve call until this runs, so without
-    // --config only the engine-free routes (/health, /favicon.ico) work.
-    match &config {
-        Some(cfg) => match ffi::init(cfg, &overrides) {
-            Ok(()) => tracing::info!(config = %cfg, "engine + Lua config installed"),
-            Err(code) => {
-                tracing::error!(config = %cfg, code, "sipi_init failed");
-                flush_telemetry(otel).await;
-                return ExitCode::FAILURE;
+    // Install the engine + config before serving. engine_context() hard-fails on
+    // any serve call until this runs, so without --config only the engine-free
+    // routes (/health, /favicon.ico) work. A `.toml` config is parsed Rust-side
+    // into the override channel (Lua-less init; routes are sourced here); a `.lua`
+    // path (or none) uses the engine's Lua VM as before. `effective` is the
+    // overrides after the TOML base + CLI/env merge, used for the listen port.
+    let (effective, configured_routes): (ServerOverrides, Option<Vec<ffi::RouteEntry>>) =
+        match config.as_deref() {
+            Some(cfg) if cfg.ends_with(".toml") => {
+                // Experimental (ADR-0017): the native config format may change
+                // until it is validated in production.
+                tracing::warn!(
+                    "TOML config support is experimental; the schema may change \
+                     until it is validated in production"
+                );
+                let parsed = match config_file::Config::load(cfg) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::error!(config = %cfg, error = %e, "invalid TOML config");
+                        flush_telemetry(otel).await;
+                        return ExitCode::FAILURE;
+                    }
+                };
+                let (effective, routes) = match parsed.resolve(overrides) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        tracing::error!(config = %cfg, error = %e, "invalid TOML config");
+                        flush_telemetry(otel).await;
+                        return ExitCode::FAILURE;
+                    }
+                };
+                // Lua-less init: an empty path makes the engine default-construct
+                // its config; these overrides then supply every value.
+                if let Err(code) = ffi::init("", &effective) {
+                    tracing::error!(config = %cfg, code, "sipi_init failed");
+                    flush_telemetry(otel).await;
+                    return ExitCode::FAILURE;
+                }
+                tracing::info!(config = %cfg, "engine installed (TOML config, Lua-less)");
+                (effective, Some(routes))
             }
-        },
-        None => tracing::warn!(
-            "no --config: engine uninitialised; only /health and /favicon.ico will serve"
-        ),
-    }
+            Some(cfg) => {
+                if let Err(code) = ffi::init(cfg, &overrides) {
+                    tracing::error!(config = %cfg, code, "sipi_init failed");
+                    flush_telemetry(otel).await;
+                    return ExitCode::FAILURE;
+                }
+                tracing::info!(config = %cfg, "engine + Lua config installed");
+                (overrides, None)
+            }
+            None => {
+                tracing::warn!(
+                    "no --config: engine uninitialised; only /health and /favicon.ico will serve"
+                );
+                (overrides, None)
+            }
+        };
 
     let drain_deadline = Duration::from_secs(drain_timeout.unwrap_or(30));
-    let result = serve(overrides.serverport, drain_deadline).await;
+    let result = serve(effective.serverport, drain_deadline, configured_routes).await;
 
     // Flush pending spans before the guard drops; the OTLP export is blocking
     // I/O, so do it off the async runtime.
@@ -181,10 +224,16 @@ pub fn app(state: Arc<routes::AppState>) -> Router {
         .with_state(state)
 }
 
-async fn serve(port: Option<u16>, drain_timeout: Duration) -> std::io::Result<()> {
+async fn serve(
+    port: Option<u16>,
+    drain_timeout: Duration,
+    configured_routes: Option<Vec<ffi::RouteEntry>>,
+) -> std::io::Result<()> {
     // Read the cached engine config once (image root + prefix_as_path); a
     // not-ready state (no --config) leaves the serve routes returning 503.
-    let state = Arc::new(routes::AppState::load());
+    // `configured_routes` is `Some` for a TOML config (routes sourced Rust-side),
+    // `None` for a Lua config (routes read back from the engine via the seam).
+    let state = Arc::new(routes::AppState::load(configured_routes));
     let port = port
         .or_else(|| {
             std::env::var("SIPI_RS_PORT")
@@ -295,7 +344,7 @@ mod app_tests {
     // serve routes 503. The full serve path (real images via the FFI) is covered
     // by the manual smoke run and the reqwest e2e suite targeting //src/cli-rs:sipi.
     fn test_app() -> Router {
-        app(Arc::new(routes::AppState::load()))
+        app(Arc::new(routes::AppState::load(None)))
     }
 
     async fn status_of(uri: &str) -> StatusCode {

@@ -27,7 +27,16 @@ long long parseSizeString(const std::string &str)
   }
 }
 
-SipiConf::SipiConf() {}
+SipiConf::SipiConf()
+{
+  // A default-constructed config backs the Lua-less (TOML) init path. Mirror the
+  // Lua ctor's scaling-quality defaults here so an omitted [image].scaling_quality
+  // behaves identically on the Lua and TOML paths (the scalar defaults come from
+  // the in-class member initializers in SipiConf.h). Without this, an empty map
+  // makes to_scaling_quality() fall every codec to HIGH — diverging from Lua's
+  // jpeg=MEDIUM default.
+  scaling_quality = { { "jpeg", "medium" }, { "tiff", "high" }, { "png", "high" }, { "j2k", "high" } };
+}
 
 SipiConf::SipiConf(shttps::LuaServer &luacfg)
 {

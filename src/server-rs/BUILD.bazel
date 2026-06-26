@@ -30,6 +30,7 @@ rust_library(
     name = "lib",
     srcs = [
         "src/config.rs",
+        "src/config_file.rs",
         "src/ffi.rs",
         "src/iiif.rs",
         "src/info.rs",

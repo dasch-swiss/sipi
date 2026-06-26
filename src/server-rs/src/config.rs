@@ -17,7 +17,7 @@
 //! `--drain-timeout` is deliberately *not* here: it is a Rust-owned serve knob,
 //! not a config override, so it stays a direct [`crate::run`] argument.
 
-use std::ffi::CString;
+use std::ffi::{CString, NulError};
 use std::os::raw::{c_char, c_int};
 
 /// CLI/env flag overrides layered over the loaded Lua config — one `Option` per
@@ -80,6 +80,74 @@ pub struct ServerOverrides {
 
     // Logging
     pub loglevel: Option<String>,
+
+    // Image quality — TOML-config-only (no CLI flag; the oracle has none either).
+    pub jpeg_quality: Option<i32>,
+    pub scaling_quality: ScalingQuality,
+}
+
+/// Per-codec scaling-quality overrides ("high"|"medium"|"low"); `None` = engine
+/// default. TOML-config-only — there is no CLI flag for these.
+///
+/// The engine reads the j2k slot under a legacy `"jpk"` map key (a pre-existing
+/// quirk), so `j2k` currently has no effect on either the Lua or TOML path; it is
+/// kept for schema completeness and parity with the Lua `scaling_quality` table.
+#[derive(Debug, Default, Clone)]
+pub struct ScalingQuality {
+    pub jpeg: Option<String>,
+    pub tiff: Option<String>,
+    pub png: Option<String>,
+    pub j2k: Option<String>,
+}
+
+impl ServerOverrides {
+    /// Layer `self` (higher precedence — CLI/env) over `base` (lower — a TOML
+    /// config): per field, keep `self`'s value when set, else fall back to
+    /// `base`. With clap's own `CLI > env`, this realises `config < env < CLI`
+    /// with a TOML base, matching the Lua-config precedence.
+    #[must_use]
+    pub fn layered_over(self, base: ServerOverrides) -> ServerOverrides {
+        ServerOverrides {
+            serverport: self.serverport.or(base.serverport),
+            imgroot: self.imgroot.or(base.imgroot),
+            scriptdir: self.scriptdir.or(base.scriptdir),
+            initscript: self.initscript.or(base.initscript),
+            tmpdir: self.tmpdir.or(base.tmpdir),
+            maxtmpage: self.maxtmpage.or(base.maxtmpage),
+            docroot: self.docroot.or(base.docroot),
+            wwwroute: self.wwwroute.or(base.wwwroute),
+            pathprefix: self.pathprefix.or(base.pathprefix),
+            subdirlevels: self.subdirlevels.or(base.subdirlevels),
+            subdirexcludes: self.subdirexcludes.or(base.subdirexcludes),
+            jwtkey: self.jwtkey.or(base.jwtkey),
+            adminuser: self.adminuser.or(base.adminuser),
+            adminpasswd: self.adminpasswd.or(base.adminpasswd),
+            cache_dir: self.cache_dir.or(base.cache_dir),
+            cache_size: self.cache_size.or(base.cache_size),
+            cache_nfiles: self.cache_nfiles.or(base.cache_nfiles),
+            rate_limit_max_pixels: self.rate_limit_max_pixels.or(base.rate_limit_max_pixels),
+            rate_limit_window: self.rate_limit_window.or(base.rate_limit_window),
+            rate_limit_mode: self.rate_limit_mode.or(base.rate_limit_mode),
+            rate_limit_pixel_threshold: self
+                .rate_limit_pixel_threshold
+                .or(base.rate_limit_pixel_threshold),
+            max_decode_memory: self.max_decode_memory.or(base.max_decode_memory),
+            decode_memory_mode: self.decode_memory_mode.or(base.decode_memory_mode),
+            max_pixel_limit: self.max_pixel_limit.or(base.max_pixel_limit),
+            maxpost: self.maxpost.or(base.maxpost),
+            thumbsize: self.thumbsize.or(base.thumbsize),
+            knorapath: self.knorapath.or(base.knorapath),
+            knoraport: self.knoraport.or(base.knoraport),
+            loglevel: self.loglevel.or(base.loglevel),
+            jpeg_quality: self.jpeg_quality.or(base.jpeg_quality),
+            scaling_quality: ScalingQuality {
+                jpeg: self.scaling_quality.jpeg.or(base.scaling_quality.jpeg),
+                tiff: self.scaling_quality.tiff.or(base.scaling_quality.tiff),
+                png: self.scaling_quality.png.or(base.scaling_quality.png),
+                j2k: self.scaling_quality.j2k.or(base.scaling_quality.j2k),
+            },
+        }
+    }
 }
 
 /// The CLI/env override channel passed to `sipi_init` — hand-mirrored from
@@ -121,6 +189,12 @@ pub(crate) struct SipiServerConfig {
     pub docroot: *const c_char,
     pub wwwroute: *const c_char,
     pub loglevel: *const c_char,
+    // 8-byte: image scaling-quality per codec (null = engine default). TOML-only
+    // (no CLI flag — the oracle has none either).
+    pub scaling_quality_jpeg: *const c_char,
+    pub scaling_quality_tiff: *const c_char,
+    pub scaling_quality_png: *const c_char,
+    pub scaling_quality_j2k: *const c_char,
     // 8-byte: the subdir-exclude array + its length (null/0 = absent)
     pub subdirexcludes: *const *const c_char,
     pub subdirexcludes_len: usize,
@@ -135,6 +209,7 @@ pub(crate) struct SipiServerConfig {
     pub subdirlevels: i32,
     pub pathprefix: i32, // prefix_as_path, bool carried as 0/1
     pub rate_limit_window: u32,
+    pub jpeg_quality: i32, // JPEG output quality (1-100); TOML-only
     // 4-byte presence flags (non-zero = present)
     pub has_serverport: c_int,
     pub has_maxtmpage: c_int,
@@ -145,6 +220,7 @@ pub(crate) struct SipiServerConfig {
     pub has_max_pixel_limit: c_int,
     pub has_rate_limit_max_pixels: c_int,
     pub has_rate_limit_pixel_threshold: c_int,
+    pub has_jpeg_quality: c_int,
 }
 
 /// Owns the C storage backing a [`SipiServerConfig`] so its pointers stay valid
@@ -157,6 +233,11 @@ pub(crate) struct SipiServerConfig {
 /// struct moves, so the holder itself is safe to move; only [`Self::as_ptr`]'s
 /// result is move-sensitive (it borrows `self.cfg`), and it is consumed inline
 /// by the immediately-following `sipi_init` call.
+///
+/// Construction is fallible: a string value containing an interior NUL byte
+/// cannot become a `CString`. Argv/env inputs are NUL-free (the OS forbids it),
+/// but a TOML config string can carry one, so [`Self::new`] returns the error
+/// instead of panicking — the caller surfaces it as a startup failure.
 pub(crate) struct OverridesHolder {
     _strings: Vec<CString>,
     _subdir_strings: Vec<CString>,
@@ -165,7 +246,7 @@ pub(crate) struct OverridesHolder {
 }
 
 impl OverridesHolder {
-    pub fn new(o: &ServerOverrides) -> Self {
+    pub fn new(o: &ServerOverrides) -> Result<Self, NulError> {
         let mut strings: Vec<CString> = Vec::new();
         let mut subdir_strings: Vec<CString> = Vec::new();
         let mut subdir_ptrs: Vec<*const c_char> = Vec::new();
@@ -173,7 +254,7 @@ impl OverridesHolder {
         let (subdirexcludes, subdirexcludes_len) = match &o.subdirexcludes {
             Some(list) if !list.is_empty() => {
                 for s in list {
-                    let c = CString::new(s.as_str()).expect("argv/env strings are NUL-free");
+                    let c = CString::new(s.as_str())?;
                     subdir_ptrs.push(c.as_ptr());
                     subdir_strings.push(c);
                 }
@@ -185,25 +266,29 @@ impl OverridesHolder {
         };
 
         let cfg = SipiServerConfig {
-            imgroot: intern_cstr(&mut strings, &o.imgroot),
-            scriptdir: intern_cstr(&mut strings, &o.scriptdir),
-            initscript: intern_cstr(&mut strings, &o.initscript),
-            tmpdir: intern_cstr(&mut strings, &o.tmpdir),
-            jwtkey: intern_cstr(&mut strings, &o.jwtkey),
-            adminuser: intern_cstr(&mut strings, &o.adminuser),
-            adminpasswd: intern_cstr(&mut strings, &o.adminpasswd),
-            cache_dir: intern_cstr(&mut strings, &o.cache_dir),
-            cache_size: intern_cstr(&mut strings, &o.cache_size),
-            maxpost: intern_cstr(&mut strings, &o.maxpost),
-            max_decode_memory: intern_cstr(&mut strings, &o.max_decode_memory),
-            decode_memory_mode: intern_cstr(&mut strings, &o.decode_memory_mode),
-            rate_limit_mode: intern_cstr(&mut strings, &o.rate_limit_mode),
-            thumbsize: intern_cstr(&mut strings, &o.thumbsize),
-            knorapath: intern_cstr(&mut strings, &o.knorapath),
-            knoraport: intern_cstr(&mut strings, &o.knoraport),
-            docroot: intern_cstr(&mut strings, &o.docroot),
-            wwwroute: intern_cstr(&mut strings, &o.wwwroute),
-            loglevel: intern_cstr(&mut strings, &o.loglevel),
+            imgroot: intern_cstr(&mut strings, &o.imgroot)?,
+            scriptdir: intern_cstr(&mut strings, &o.scriptdir)?,
+            initscript: intern_cstr(&mut strings, &o.initscript)?,
+            tmpdir: intern_cstr(&mut strings, &o.tmpdir)?,
+            jwtkey: intern_cstr(&mut strings, &o.jwtkey)?,
+            adminuser: intern_cstr(&mut strings, &o.adminuser)?,
+            adminpasswd: intern_cstr(&mut strings, &o.adminpasswd)?,
+            cache_dir: intern_cstr(&mut strings, &o.cache_dir)?,
+            cache_size: intern_cstr(&mut strings, &o.cache_size)?,
+            maxpost: intern_cstr(&mut strings, &o.maxpost)?,
+            max_decode_memory: intern_cstr(&mut strings, &o.max_decode_memory)?,
+            decode_memory_mode: intern_cstr(&mut strings, &o.decode_memory_mode)?,
+            rate_limit_mode: intern_cstr(&mut strings, &o.rate_limit_mode)?,
+            thumbsize: intern_cstr(&mut strings, &o.thumbsize)?,
+            knorapath: intern_cstr(&mut strings, &o.knorapath)?,
+            knoraport: intern_cstr(&mut strings, &o.knoraport)?,
+            docroot: intern_cstr(&mut strings, &o.docroot)?,
+            wwwroute: intern_cstr(&mut strings, &o.wwwroute)?,
+            loglevel: intern_cstr(&mut strings, &o.loglevel)?,
+            scaling_quality_jpeg: intern_cstr(&mut strings, &o.scaling_quality.jpeg)?,
+            scaling_quality_tiff: intern_cstr(&mut strings, &o.scaling_quality.tiff)?,
+            scaling_quality_png: intern_cstr(&mut strings, &o.scaling_quality.png)?,
+            scaling_quality_j2k: intern_cstr(&mut strings, &o.scaling_quality.j2k)?,
             subdirexcludes,
             subdirexcludes_len,
             max_pixel_limit: o.max_pixel_limit.unwrap_or(0),
@@ -215,6 +300,7 @@ impl OverridesHolder {
             subdirlevels: o.subdirlevels.unwrap_or(0),
             pathprefix: o.pathprefix.map(i32::from).unwrap_or(0),
             rate_limit_window: o.rate_limit_window.unwrap_or(0),
+            jpeg_quality: o.jpeg_quality.unwrap_or(0),
             has_serverport: o.serverport.is_some() as c_int,
             has_maxtmpage: o.maxtmpage.is_some() as c_int,
             has_cache_nfiles: o.cache_nfiles.is_some() as c_int,
@@ -224,14 +310,15 @@ impl OverridesHolder {
             has_max_pixel_limit: o.max_pixel_limit.is_some() as c_int,
             has_rate_limit_max_pixels: o.rate_limit_max_pixels.is_some() as c_int,
             has_rate_limit_pixel_threshold: o.rate_limit_pixel_threshold.is_some() as c_int,
+            has_jpeg_quality: o.jpeg_quality.is_some() as c_int,
         };
 
-        Self {
+        Ok(Self {
             _strings: strings,
             _subdir_strings: subdir_strings,
             _subdir_ptrs: subdir_ptrs,
             cfg,
-        }
+        })
     }
 
     /// Pointer to the `SipiServerConfig` for `sipi_init`. Valid only while `self`
@@ -244,16 +331,17 @@ impl OverridesHolder {
 /// Push `s` (when present) into `strings` as a `CString` and return a pointer to
 /// its buffer, or null when absent. The buffer keeps a stable address even if
 /// `strings` later reallocates (the `CString` allocation does not move when the
-/// `Vec`'s element slots do).
-fn intern_cstr(strings: &mut Vec<CString>, s: &Option<String>) -> *const c_char {
+/// `Vec`'s element slots do). Returns `Err` when the value has an interior NUL
+/// byte (possible from a TOML config string; argv/env are NUL-free).
+fn intern_cstr(strings: &mut Vec<CString>, s: &Option<String>) -> Result<*const c_char, NulError> {
     match s {
         Some(v) => {
-            let c = CString::new(v.as_str()).expect("argv/env strings are NUL-free");
+            let c = CString::new(v.as_str())?;
             let p = c.as_ptr();
             strings.push(c);
-            p
+            Ok(p)
         }
-        None => std::ptr::null(),
+        None => Ok(std::ptr::null()),
     }
 }
 
@@ -270,7 +358,7 @@ mod layout {
     fn repr_c_matches_sipi_ffi_h() {
         assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
         assert_eq!(align_of::<SipiServerConfig>(), 8);
-        assert_eq!(size_of::<SipiServerConfig>(), 256);
+        assert_eq!(size_of::<SipiServerConfig>(), 296);
 
         assert_eq!(offset_of!(SipiServerConfig, imgroot), 0);
         assert_eq!(offset_of!(SipiServerConfig, scriptdir), 8);
@@ -291,31 +379,63 @@ mod layout {
         assert_eq!(offset_of!(SipiServerConfig, docroot), 128);
         assert_eq!(offset_of!(SipiServerConfig, wwwroute), 136);
         assert_eq!(offset_of!(SipiServerConfig, loglevel), 144);
-        assert_eq!(offset_of!(SipiServerConfig, subdirexcludes), 152);
-        assert_eq!(offset_of!(SipiServerConfig, subdirexcludes_len), 160);
-        assert_eq!(offset_of!(SipiServerConfig, max_pixel_limit), 168);
-        assert_eq!(offset_of!(SipiServerConfig, rate_limit_max_pixels), 176);
+        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_jpeg), 152);
+        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_tiff), 160);
+        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_png), 168);
+        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_j2k), 176);
+        assert_eq!(offset_of!(SipiServerConfig, subdirexcludes), 184);
+        assert_eq!(offset_of!(SipiServerConfig, subdirexcludes_len), 192);
+        assert_eq!(offset_of!(SipiServerConfig, max_pixel_limit), 200);
+        assert_eq!(offset_of!(SipiServerConfig, rate_limit_max_pixels), 208);
         assert_eq!(
             offset_of!(SipiServerConfig, rate_limit_pixel_threshold),
-            184
+            216
         );
-        assert_eq!(offset_of!(SipiServerConfig, serverport), 192);
-        assert_eq!(offset_of!(SipiServerConfig, maxtmpage), 196);
-        assert_eq!(offset_of!(SipiServerConfig, cache_nfiles), 200);
-        assert_eq!(offset_of!(SipiServerConfig, subdirlevels), 204);
-        assert_eq!(offset_of!(SipiServerConfig, pathprefix), 208);
-        assert_eq!(offset_of!(SipiServerConfig, rate_limit_window), 212);
-        assert_eq!(offset_of!(SipiServerConfig, has_serverport), 216);
-        assert_eq!(offset_of!(SipiServerConfig, has_maxtmpage), 220);
-        assert_eq!(offset_of!(SipiServerConfig, has_cache_nfiles), 224);
-        assert_eq!(offset_of!(SipiServerConfig, has_subdirlevels), 228);
-        assert_eq!(offset_of!(SipiServerConfig, has_pathprefix), 232);
-        assert_eq!(offset_of!(SipiServerConfig, has_rate_limit_window), 236);
-        assert_eq!(offset_of!(SipiServerConfig, has_max_pixel_limit), 240);
-        assert_eq!(offset_of!(SipiServerConfig, has_rate_limit_max_pixels), 244);
+        assert_eq!(offset_of!(SipiServerConfig, serverport), 224);
+        assert_eq!(offset_of!(SipiServerConfig, maxtmpage), 228);
+        assert_eq!(offset_of!(SipiServerConfig, cache_nfiles), 232);
+        assert_eq!(offset_of!(SipiServerConfig, subdirlevels), 236);
+        assert_eq!(offset_of!(SipiServerConfig, pathprefix), 240);
+        assert_eq!(offset_of!(SipiServerConfig, rate_limit_window), 244);
+        assert_eq!(offset_of!(SipiServerConfig, jpeg_quality), 248);
+        assert_eq!(offset_of!(SipiServerConfig, has_serverport), 252);
+        assert_eq!(offset_of!(SipiServerConfig, has_maxtmpage), 256);
+        assert_eq!(offset_of!(SipiServerConfig, has_cache_nfiles), 260);
+        assert_eq!(offset_of!(SipiServerConfig, has_subdirlevels), 264);
+        assert_eq!(offset_of!(SipiServerConfig, has_pathprefix), 268);
+        assert_eq!(offset_of!(SipiServerConfig, has_rate_limit_window), 272);
+        assert_eq!(offset_of!(SipiServerConfig, has_max_pixel_limit), 276);
+        assert_eq!(offset_of!(SipiServerConfig, has_rate_limit_max_pixels), 280);
         assert_eq!(
             offset_of!(SipiServerConfig, has_rate_limit_pixel_threshold),
-            248
+            284
         );
+        assert_eq!(offset_of!(SipiServerConfig, has_jpeg_quality), 288);
+    }
+}
+
+#[cfg(test)]
+mod overrides_tests {
+    use super::{OverridesHolder, ServerOverrides};
+
+    #[test]
+    fn new_rejects_interior_nul() {
+        // A TOML config string can carry an interior NUL; it must surface as an
+        // error, not panic in CString::new.
+        let o = ServerOverrides {
+            imgroot: Some("/img\0root".to_string()),
+            ..Default::default()
+        };
+        assert!(OverridesHolder::new(&o).is_err());
+    }
+
+    #[test]
+    fn new_accepts_nul_free_strings() {
+        let o = ServerOverrides {
+            imgroot: Some("/images".to_string()),
+            scriptdir: Some("/scripts".to_string()),
+            ..Default::default()
+        };
+        assert!(OverridesHolder::new(&o).is_ok());
     }
 }

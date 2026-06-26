@@ -32,26 +32,29 @@ class SipiConf
 private:
   std::string userid_str;
   std::string hostname;
-  int port;//<! port number for server
+  // In-class initializers below carry the same defaults the Lua ctor applies, so
+  // a default-constructed SipiConf (the base for the Lua-less / TOML `sipi_init`
+  // path) is a valid all-defaults config rather than indeterminate.
+  int port{ 3333 };//<! port number for server
   int ssl_port = -1;
   std::string ssl_certificate;
   std::string ssl_key;
 
   std::string img_root;//<! path to root of image repository
-  int max_temp_file_age;
+  int max_temp_file_age{ 86400 };
   int subdir_levels = -1;
   std::vector<std::string> subdir_excludes;
-  bool prefix_as_path;//<! Use IIIF-prefix as part of path or ignore it...
-  int jpeg_quality;
+  bool prefix_as_path{ true };//<! Use IIIF-prefix as part of path or ignore it...
+  int jpeg_quality{ 80 };
   std::map<std::string, std::string> scaling_quality;
   std::string init_script;
   std::string cache_dir;
-  long long cache_size;
-  int keep_alive;
+  long long cache_size{ 200LL * 1024 * 1024 };// 200M (the Lua-config default)
+  int keep_alive{ 20 };
   std::string thumb_size;
-  size_t cache_n_files;
-  size_t n_threads;
-  size_t max_post_size;
+  size_t cache_n_files{ 200 };
+  size_t n_threads{ 0 };     // 0 = auto-detect from CPU cores
+  size_t max_post_size{ 0 }; // 0 = unlimited
   std::string tmp_dir;
   std::string scriptdir;
   std::vector<shttps::LuaRoute> routes;

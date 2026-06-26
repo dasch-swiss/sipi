@@ -414,7 +414,10 @@ pub fn init(config_path: &str, overrides: &ServerOverrides) -> Result<(), i32> {
         Ok(p) => p,
         Err(_) => return Err(-1), // interior NUL in the path
     };
-    let holder = OverridesHolder::new(overrides);
+    let holder = match OverridesHolder::new(overrides) {
+        Ok(h) => h,
+        Err(_) => return Err(-1), // interior NUL in a config string value
+    };
     // SAFETY: `c_path` and `holder` both outlive this synchronous call; the
     // engine deep-copies every present override during sipi_init, so none of the
     // holder's pointers escape; the seam guards exceptions. `holder` is a local

@@ -53,6 +53,10 @@ impl From<&ServerArgs> for ServerOverrides {
             knorapath: args.knora.knorapath.clone(),
             knoraport: args.knora.knoraport.clone(),
             loglevel: args.logging.loglevel.clone(),
+            // jpeg_quality + scaling_quality are TOML-config-only (no CLI flag —
+            // the oracle has none either), so the clap path never sets them.
+            jpeg_quality: None,
+            scaling_quality: Default::default(),
         }
     }
 }
