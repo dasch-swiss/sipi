@@ -72,10 +72,18 @@ jobs:
         with:
           use-flakehub: "false"  # GHA cache backend only; FlakeHub requires a paid plan we're not on.
 
-      # Cache via bazel-remote on Cloud Run (gRPC). See ci.yml for the
-      # full topology. Credentials are supplied by a Bazel credential
-      # helper (`tools/bazel-cred-helper.sh`) which reads
-      # $BAZEL_CACHE_PASSWORD from the workflow env.
+      # Remote cache + executor via the bazel-rbe composite action (NativeLink
+      # :50051 + bazel-remote :50052, mTLS — see ci.yml for the topology).
+      # amd64-only, so the action's default target-platform
+      # (//platforms:linux_x86_64) needs no override.
+      - name: Set up Remote Build Execution (mTLS + flags)
+        id: rbe
+        uses: ./.github/actions/bazel-rbe
+        with:
+          endpoint: ${{ vars.BAZEL_RBE_ENDPOINT }}
+          ca-cert: ${{ secrets.BAZEL_RBE_CA_CERT }}
+          client-cert: ${{ secrets.BAZEL_RBE_CLIENT_CERT }}
+          client-key: ${{ secrets.BAZEL_RBE_CLIENT_KEY }}
 
       - name: Find last successful fuzz run
         id: last-run
@@ -99,24 +107,12 @@ jobs:
       - name: Build fuzz target
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
-          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
-        # `nix develop --command` mirrors `sanitizer.yml`'s wrapper — it
-        # activates the dev shell so bazelisk + `gh` (used by the kakadu
-        # repository_rule) are on PATH.
-        run: |
-          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
-            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
-            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
-          else
-            REMOTE=""
-          fi
-          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
-            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
-          else
-            BES=""
-          fi
-          nix develop --command bash -c "just bazel-build-fuzz $REMOTE $BES"
+        # `nix develop --command` activates the dev shell so bazelisk + `gh` (the
+        # kakadu repository_rule) are on PATH. `--remote_download_toplevel`
+        # overrides the .bazelrc BwoB default so the fuzz binary is materialised
+        # locally — the separate `bazel run` in "Run fuzzer" (which carries no
+        # remote flags) then finds it instead of rebuilding on the runner.
+        run: nix develop --command bash -c "just bazel-build-fuzz ${{ steps.rbe.outputs.flags }} --remote_download_toplevel"
 
       - name: Prepare live corpus (merge previous-run findings)
         run: |

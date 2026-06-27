@@ -1,0 +1,99 @@
+name: bazel-rbe
+description: >
+  Set up mTLS material for the self-hosted NativeLink RBE VM and emit the Bazel
+  flag string: remote cache + executor (NativeLink, :50051) plus the bazel-remote
+  http_archive download cache (:50052). Both endpoints present a cert signed by
+  the same NativeLink CA, so one --tls_certificate validates both — no CA bundle.
+  Tests are forced local (--strategy=TestRunner=local) so compiles cross-compile
+  on the x86_64 worker while target-arch test binaries run on the native runner.
+
+inputs:
+  endpoint:
+    description: NativeLink RE-API endpoint, e.g. grpcs://<ip>:50051. The bazel-remote downloader endpoint is derived as :50052 on the same host.
+    required: true
+  ca-cert:
+    description: NativeLink server CA (PEM). Bazel verifies both services' server certs against it.
+    required: true
+  client-cert:
+    description: mTLS client cert (PEM) — the CI identity.
+    required: true
+  client-key:
+    description: mTLS client key (PEM).
+    required: true
+  target-platform:
+    description: "Bazel target platform for this runner (e.g. //platforms:linux_aarch64). Compiles cross-build for it on the x86_64 worker; tests run locally on the runner."
+    default: "//platforms:linux_x86_64"
+
+outputs:
+  flags:
+    description: Bazel flag string to pass to a `just bazel-*` recipe. Empty when mTLS material is absent (fork PR → cold build).
+    value: ${{ steps.build.outputs.flags }}
+
+runs:
+  using: composite
+  steps:
+    - id: build
+      shell: bash
+      env:
+        RBE_ENDPOINT: ${{ inputs.endpoint }}
+        RBE_CA_CERT: ${{ inputs.ca-cert }}
+        RBE_CLIENT_CERT: ${{ inputs.client-cert }}
+        RBE_CLIENT_KEY: ${{ inputs.client-key }}
+        RBE_TARGET_PLATFORM: ${{ inputs.target-platform }}
+      run: |
+        set -euo pipefail
+        # Fork PRs / missing secrets → emit empty flags so the build runs cold
+        # (same gating idiom the workflow uses for docker/login-action).
+        if [ -z "${RBE_ENDPOINT:-}" ] || [ -z "${RBE_CLIENT_KEY:-}" ]; then
+          echo "bazel-rbe: endpoint/mTLS material absent (fork PR?) — cold build." >&2
+          echo "flags=" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        # Cert material lives OUTSIDE the checkout so it can never be picked up as
+        # a Bazel action input/output.
+        CERT_DIR="$RUNNER_TEMP/.nl"
+        mkdir -p "$CERT_DIR"
+        printf '%s' "$RBE_CA_CERT"     > "$CERT_DIR/ca.crt"
+        printf '%s' "$RBE_CLIENT_CERT" > "$CERT_DIR/client.crt"
+        printf '%s' "$RBE_CLIENT_KEY"  > "$CERT_DIR/client.key"
+        chmod 600 "$CERT_DIR/client.key"
+        # bazel-remote shares the host; derive its endpoint by swapping the port.
+        DOWNLOADER="${RBE_ENDPOINT%:*}:50052"
+        FLAGS="--remote_cache=$RBE_ENDPOINT --remote_instance_name=main"
+        FLAGS="$FLAGS --tls_certificate=$CERT_DIR/ca.crt --tls_client_certificate=$CERT_DIR/client.crt --tls_client_key=$CERT_DIR/client.key"
+        FLAGS="$FLAGS --experimental_remote_downloader=$DOWNLOADER --experimental_remote_downloader_local_fallback"
+        FLAGS="$FLAGS --noremote_cache_compression --remote_upload_local_results=true --experimental_remote_cache_eviction_retries=5"
+        # Client fan-out: how many actions each leg keeps in flight to the worker.
+        # Bazel's default is the runner's core count (~4), far too low for remote
+        # execution where actions run on the worker, not locally — it starves the
+        # VM. 32 is the trial-proven value (64 overwhelmed the single worker on a
+        # cold cache); start here and bump toward 40 once the worker pool scales.
+        FLAGS="$FLAGS --jobs=32"
+        # Cross-compile on the x86_64 worker, run tests on the native runner:
+        #   --extra_execution_platforms pins the EXEC platform to the worker (x86_64) so
+        #     exec-config build tools resolve to x86_64, not the runner's arch (that
+        #     mismatch ships an arm64/darwin tool to the x86_64 worker → it can't run).
+        #   --platforms sets the TARGET arch this runner builds for.
+        #   --strategy=TestRunner=local runs the cross-built test binary on the runner.
+        FLAGS="$FLAGS --remote_executor=$RBE_ENDPOINT --remote_default_exec_properties=cpu_arch=x86_64"
+        # Exec platforms: the x86_64 worker FIRST (compiles/exec tools prefer it), plus
+        # the target platform so Bazel's test toolchain can resolve an exec platform
+        # matching the target arch and run tests on the native runner. For cross legs the
+        # target arch's exec toolchains don't match x86_64-only rules, so compiles still
+        # land on the worker; only the test toolchain picks the target-arch platform.
+        if [ "$RBE_TARGET_PLATFORM" = "//platforms:linux_x86_64" ]; then
+          EXEC_PLATFORMS="//platforms:linux_x86_64"
+        else
+          EXEC_PLATFORMS="//platforms:linux_x86_64,$RBE_TARGET_PLATFORM"
+        fi
+        FLAGS="$FLAGS --extra_execution_platforms=$EXEC_PLATFORMS --platforms=$RBE_TARGET_PLATFORM"
+        FLAGS="$FLAGS --strategy=TestRunner=local"
+        if [ "$RBE_TARGET_PLATFORM" != "//platforms:linux_x86_64" ]; then
+          # Cross legs (arm64/darwin runner → x86_64 worker): pin the host config to
+          # x86_64 so rules_rust exec-config tools (process_wrapper, build scripts,
+          # proc-macros) build for the worker, not the local host (rules_rust #327).
+          # And disable local fallback — a fallback to the arm64/darwin host would run
+          # x86_64 exec tools there and crash. (amd64 keeps .bazelrc's graceful fallback.)
+          FLAGS="$FLAGS --host_platform=//platforms:linux_x86_64 --noremote_local_fallback"
+        fi
+        echo "flags=$FLAGS" >> "$GITHUB_OUTPUT"

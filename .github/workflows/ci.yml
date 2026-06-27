@@ -45,12 +45,15 @@ jobs:
           - platform: linux-amd64
             arch: amd64
             runs-on: ubuntu-24.04
+            bazel-platform: "//platforms:linux_x86_64"
           - platform: linux-arm64
             arch: arm64
             runs-on: ubuntu-24.04-arm
+            bazel-platform: "//platforms:linux_aarch64"
           - platform: darwin-arm64
             arch: arm64
             runs-on: macos-14
+            bazel-platform: "//platforms:darwin_aarch64"
     steps:
       - uses: actions/checkout@v6
         with:
@@ -115,76 +118,49 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      # CACHE STRATEGY:
+      # REMOTE BUILD EXECUTION:
       #
-      # bazel-remote on Cloud Run (us-central1, scale-to-zero) fronts
-      # gs://dasch-bazel-cache and serves the gRPC Remote Cache + Remote
-      # Asset APIs. One bucket backs three Bazel cache layers from the
-      # same endpoint: AC, CAS (--remote_cache), and http_archive
-      # tarballs (--experimental_remote_downloader).
+      # The self-hosted NativeLink VM (infra/nativelink/) is the single Bazel
+      # backend. It serves the Remote Cache + Remote Execution (:50051, mTLS) and
+      # co-runs bazel-remote (:50052) as the http_archive download cache
+      # (--experimental_remote_downloader). Both endpoints present a cert signed by
+      # the same NativeLink CA, so one --tls_certificate validates both — no proxy,
+      # no CA bundle, no GCS.
       #
-      # Access is gated by HTTP Basic Auth inside bazel-remote (Cloud
-      # Run IAM is bypassed because Bazel's gRPC client doesn't speak
-      # Cloud Run OIDC). Credentials are supplied by a Bazel credential
-      # helper (`tools/bazel-cred-helper.sh`), which reads
-      # `$BAZEL_CACHE_PASSWORD` from the workflow env and emits an
-      # `Authorization: Basic <b64>` gRPC metadata header on demand.
-      # This sidesteps two failure modes of the simpler approaches:
-      # (1) inline URI credentials (grpcs://user:pass@host) trip Cloud
-      # Run's GFE which rejects :authority headers that contain user:
-      # pass@host; (2) --remote_header=Authorization=Basic <b64> loses
-      # its embedded space when `just`'s {{FLAGS}} substitution
-      # re-tokenises the recipe args.
+      # The `bazel-rbe` composite action writes the mTLS material (org secrets
+      # BAZEL_RBE_*) outside the checkout and emits the Bazel flag string. Compiles
+      # fan out to the x86_64 worker — cross-compiling the arm64/darwin legs — while
+      # tests run on the native runner (--strategy=TestRunner=local). A down VM
+      # degrades to a local build (--remote_local_fallback, the .bazelrc default).
+      # Fork PRs get empty flags (no secrets) and build cold.
       #
-      # Skipped on fork PRs (secrets unavailable). Those builds run cold
-      # without the remote cache — same gating idiom as docker/login-action.
-      #
-      # No `bazel-contrib/setup-bazel` action: every Bazel invocation
-      # goes through `nix develop --command`, where the dev shell
-      # provides `bazelisk` from nixpkgs (which reads `.bazelversion`
-      # like any other bazelisk install). Bazelisk's Bazel-binary cache
-      # under `~/.cache/bazelisk` re-fills on every cold runner; the
-      # ~10-30s download is negligible against the multi-minute build.
-
-      # Build sipi + run the full test suite (unit + approval + e2e)
-      # under fastbuild on every platform. Coverage instrumentation has
-      # moved to `.github/workflows/coverage.yml` (post-merge to main,
-      # linux-amd64).
-      #
-      # `nix develop --command` activates the dev shell so `gh`
-      # (the gh_release_archive repository_rule, for the Kakadu fetch)
-      # is on PATH. The `if [ -n "$BAZEL_CACHE_PASSWORD" ]` block builds
-      # the `--remote_cache` + `--experimental_remote_downloader` +
-      # `--credential_helper` flag string in $REMOTE only when the
-      # secret is present (fork PRs run cold).
+      # Every Bazel invocation goes through `nix develop --command`, where the dev
+      # shell provides `bazelisk` (reads `.bazelversion`) + `gh` (the
+      # gh_release_archive repository_rule for the Kakadu fetch).
       # Rust formatting gate. Platform-independent, so it runs once (on
       # linux-amd64) and fails fast before the build. GH_TOKEN is needed because
       # analyzing the Rust crates pulls in the engine's dep graph (the Kakadu
       # repository fetch); no compile happens — the rustfmt aspect is source-only.
+      - name: Set up Remote Build Execution (mTLS + flags)
+        id: rbe
+        uses: ./.github/actions/bazel-rbe
+        with:
+          endpoint: ${{ vars.BAZEL_RBE_ENDPOINT }}
+          ca-cert: ${{ secrets.BAZEL_RBE_CA_CERT }}
+          client-cert: ${{ secrets.BAZEL_RBE_CLIENT_CERT }}
+          client-key: ${{ secrets.BAZEL_RBE_CLIENT_KEY }}
+          target-platform: ${{ matrix.bazel-platform }}
+
       - name: Check Rust formatting
         if: matrix.arch == 'amd64'
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: nix develop --command bash -c "just bazel-rustfmt-check"
+        run: nix develop --command bash -c "just bazel-rustfmt-check ${{ steps.rbe.outputs.flags }}"
 
       - name: Build + run all tests
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
-          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
-        run: |
-          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
-            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
-            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
-          else
-            REMOTE=""
-          fi
-          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
-            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
-          else
-            BES=""
-          fi
-          nix develop --command bash -c "just bazel-test $REMOTE $BES"
+        run: nix develop --command bash -c "just bazel-test ${{ steps.rbe.outputs.flags }}"
 
       # Drift guard: the differential corpus must keep covering the e2e
       # surface. Pure shell (grep), so it runs before the heavy gate and fails
@@ -204,21 +180,7 @@ jobs:
         if: matrix.arch == 'amd64'
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
-          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
-        run: |
-          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
-            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
-            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
-          else
-            REMOTE=""
-          fi
-          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
-            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
-          else
-            BES=""
-          fi
-          nix develop --command bash -c "just bazel-test-differential $REMOTE $BES"
+        run: nix develop --command bash -c "just bazel-test-differential ${{ steps.rbe.outputs.flags }}"
 
       # Docker steps run on Linux only because they `docker load` the image
       # into a local Linux Docker daemon (absent on the macOS runner) — not
@@ -239,25 +201,11 @@ jobs:
       #
       # Docker Scout reads `local://daschswiss/sipi:latest` left in the
       # daemon by step 2 — no separate build/load step needed.
-      - name: Run Docker smoke tests (builds + loads image as side effect)
+      - name: Run Docker smoke tests (builds + loads image, then smoke-tests)
         if: runner.os == 'Linux'
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
-          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
-        run: |
-          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
-            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
-            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
-          else
-            REMOTE=""
-          fi
-          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
-            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
-          else
-            BES=""
-          fi
-          nix develop --command bash -c "just bazel-test-smoke $REMOTE $BES"
+        run: nix develop --command bash -c "just bazel-test-smoke ${{ steps.rbe.outputs.flags }}"
 
       - name: Docker Scout — compare to production
         if: runner.os == 'Linux' && github.event_name == 'pull_request'
