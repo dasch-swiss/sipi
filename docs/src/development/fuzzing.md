@@ -119,7 +119,7 @@ For anything beyond duration + seed corpus, invoke the fuzzer binary directly (t
 
 ## CI Integration
 
-> **Auto-trigger currently disabled.** Under hermetic-llvm 0.8.8 the
+> **Auto-trigger currently disabled.** Under hermetic-llvm 0.8.10 the
 > minimal prebuilt ships no libFuzzer runtime, so the fuzz workflow's
 > nightly auto-trigger is carved out; only `workflow_dispatch` is kept.
 > Re-arm condition and rationale are tracked in

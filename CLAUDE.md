@@ -32,7 +32,7 @@ For full build instructions, see [`docs/src/development/building.md`](docs/src/d
 ```bash
 # Build sipi (fastbuild — fast incremental for inner-loop edits)
 just bazel-build                 # bazel build --stamp //src/cli:sipi
-just bazel-build -c opt          # production-shape build (matches Docker image)
+just bazel-build --config=release  # production build (-c opt + hardening; matches Docker image)
 just bazel-build --config=asan   # ASan+UBSan; same flag form for ad-hoc variants
 just bazel-build-server          # bazel build //src/cli-rs:sipi (the Phase C Rust shell binary; wraps //src/server-rs:lib)
 
@@ -191,6 +191,14 @@ Follow [`docs/src/development/cpp-style-guide.md`](docs/src/development/cpp-styl
 - **const correctness:** Apply `const` everywhere it is valid
 - **Legacy code:** When modifying existing code, apply modernization opportunistically (see style guide Section 4)
 
+## Infrastructure boundary
+
+**All infrastructure changes are operator-only. Claude Code has read-only access to infrastructure; the maintainer applies every change. No exceptions.**
+
+- NEVER run `tofu apply` / `tofu destroy` / `tofu import` / state edits, or any command that mutates deployed cloud infrastructure or its state — the NativeLink VM, GCS buckets, IAM, Cloud Run, firewall, secrets, or anything under `infra/`. This includes SSH-and-mutate (a `gcloud compute ssh … --command` that installs/restarts/writes), `gcloud` create/update/delete, `kubectl apply`, and remote `docker` mutations.
+- Read-only analysis IS allowed and expected: `tofu plan`/`validate`, `gcloud … describe/list`, `gcloud logging read`, and read-only SSH diagnostics (probing service status, reading logs/configs).
+- Workflow: diagnose, read state, and propose the exact change (the file diff and/or the precise command/apply plan). The maintainer applies it. Verify afterwards read-only. Editing the `infra/` source files in the repo is fine; *deploying* them is not.
+
 ## Scope discipline
 
 Rules for what to build (not how). Follow unless the user explicitly asks to override.
@@ -204,11 +212,12 @@ These are not style preferences — they are contract with the maintainer. Code 
 
 ## Development Notes
 
-**Compiler Requirements:** C++23. Bazel selects a hermetic LLVM 22.1.7 toolchain via the BCR `llvm` (hermetic-llvm) module pinned at 0.8.8; the host compiler does not need to be Clang. libc++ is the default stdlib and a single toolchain serves all platforms including the fuzz platforms. See [`docs/adr/0014-toolchain-provider-swap.md`](docs/adr/0014-toolchain-provider-swap.md).
+**Compiler Requirements:** C++23. Bazel selects a hermetic LLVM 22.1.7 toolchain via the BCR `llvm` (hermetic-llvm) module pinned at 0.8.10; the host compiler does not need to be Clang. libc++ is the default stdlib and a single toolchain serves all platforms including the fuzz platforms. See [`docs/adr/0014-toolchain-provider-swap.md`](docs/adr/0014-toolchain-provider-swap.md).
 
 **Build configurations:**
 - `bazel build //src/cli:sipi` — fastbuild (`-O0 -g`, fast incremental)
-- `bazel build -c opt //src/cli:sipi` — production (`-O3 -DNDEBUG`)
+- `bazel build -c opt //src/cli:sipi` — optimized (`-O3 -DNDEBUG`)
+- `bazel build --config=release //src/cli:sipi` — production: `-c opt` + `_FORTIFY_SOURCE=2` hardening; what the Docker image ships
 - `bazel build -c dbg //src/cli:sipi` — Debug (`-O0 -g`)
 - `bazel build --config=asan --config=ubsan //src/cli:sipi` — sanitizers
 - `bazel build --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz` — libFuzzer harness
