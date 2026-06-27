@@ -157,6 +157,22 @@ bazel-test-e2e *FLAGS='':
 bazel-test-smoke *FLAGS='':
     bazel test --stamp --verbose_failures {{FLAGS}} //test/e2e:docker_smoke
 
+# Run the differential parity gate: spawns the Rust shell (subject) and the
+# retained C++ server (reference, via `$SIPI_BIN_REF`) and diffs their
+# responses across the plan §5 allowlist. `manual`-tagged so it stays out of
+# `:all_e2e` and `bazel-coverage`'s `//test/e2e/...` wildcard — run it
+# explicitly here. The two-binary spawn is `exclusive`/`local` with
+# `--test-threads=1` (set by the test macro). CI runs it as a dedicated
+# linux-amd64 step.
+bazel-test-differential *FLAGS='':
+    bazel test --stamp --verbose_failures {{FLAGS}} //test/e2e:differential
+
+# Drift guard: assert the differential corpus still covers the e2e surface
+# (pins the e2e #[test] count; trips when a test is added/removed so the
+# corpus is reviewed). Pure shell — no Bazel/Nix needed.
+differential-coverage-check:
+    bash tools/differential_coverage_check.sh
+
 # Sanitized build: Debug + ASan + UBSan via Bazel
 # `--config=asan --config=ubsan`. The resulting binary at
 # `bazel-bin/src/cli/sipi` is what `sanitizer.yml`'s e2e step consumes

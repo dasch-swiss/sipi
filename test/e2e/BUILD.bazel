@@ -9,17 +9,24 @@ Layout:
   * `:sipi_e2e`        `rust_library` exposing the shared helpers
                        (`SipiServer`, `repo_root`, `http_client`, …)
                        consumed by every test binary.
-  * 21 × `rust_test`   one target per non-docker `tests/<name>.rs`,
+  * 24 × `rust_test`   one target per non-docker `tests/<name>.rs`,
                        defined via `sipi_e2e_test()` (see
                        `sipi_e2e_test.bzl`). The macro injects the
                        shared `data`/`env`/`args`/`tags` so the
                        contracts can't drift across targets.
+  * `:differential`    a 25th `sipi_e2e_test()` target that also spawns
+                       the C++ oracle (`SIPI_BIN_REF`) and diffs it
+                       against the Rust shell. `manual`-tagged, so it is
+                       kept OUT of `:all_e2e` and the `//test/e2e/...`
+                       coverage wildcard; run via
+                       `just bazel-test-differential`.
   * `:docker_smoke`    inline `rust_test` — its data shape (OCI image
                        tarball) and tags (`requires-docker`) diverge
                        from the macro's defaults.
-  * `:all_e2e`         `test_suite` aggregating the 21 non-docker
-                       targets. `just bazel-test-e2e` wraps `bazel
-                       test //test/e2e:all_e2e`.
+  * `:all_e2e`         `test_suite` aggregating the 24 non-docker
+                       targets (not `:differential` / `:docker_smoke`).
+                       `just bazel-test-e2e` wraps `bazel test
+                       //test/e2e:all_e2e`.
   * `:sipi_image_tar`  `filegroup` extracting the OCI tarball produced
                        by `//src:image_load` (rules_oci 2.x's
                        `tarball` output group). Consumed by
@@ -69,7 +76,10 @@ filegroup(
 # `normal` set only.
 rust_library(
     name = "sipi_e2e",
-    srcs = ["src/lib.rs"],
+    srcs = [
+        "src/diff.rs",
+        "src/lib.rs",
+    ],
     edition = "2021",
     visibility = ["//visibility:public"],
     deps = all_crate_deps(normal = True),
@@ -137,6 +147,31 @@ sipi_e2e_test(name = "smoke", deps = _e2e_test_deps)
 sipi_e2e_test(name = "toml_config", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "upload", deps = _e2e_test_deps)
+
+# ── Differential parity gate ────────────────────────────────────────────────
+#
+# Spawns BOTH binaries — the Rust shell under test (`SIPI_BIN`, the macro
+# default) and the retained C++ server as a live oracle (`SIPI_BIN_REF`) — and
+# diffs their responses across the §5 allowlist. Differs from the macro
+# targets in two ways:
+#
+#   1. It pulls a SECOND binary, `//src/cli:sipi`, into `data` and points
+#      `$SIPI_BIN_REF` at it. Only this target carries the oracle; every other
+#      e2e target stays single-binary.
+#   2. `manual` keeps it out of `//test/e2e/...` wildcard expansion, so the
+#      `:all_e2e` matrix step and `bazel-coverage` skip it. CI runs it as its
+#      own step (linux-amd64, like the rustfmt gate) via
+#      `just bazel-test-differential`; the heavy two-binary spawn is
+#      `exclusive`/`local` from the macro.
+#
+# See plan 02 §7 (harness) / §8 (differential.rs placement).
+sipi_e2e_test(
+    name = "differential",
+    deps = _e2e_test_deps,
+    extra_data = ["//src/cli:sipi"],
+    extra_env = {"SIPI_BIN_REF": "$(rootpath //src/cli:sipi)"},
+    extra_tags = ["manual"],
+)
 
 # ── Docker smoke test ──────────────────────────────────────────────────────
 #
