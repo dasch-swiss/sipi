@@ -214,6 +214,19 @@ pub fn app(state: Arc<routes::AppState>) -> Router {
         }
     }
 
+    // The `/server` docroot fileserver (the C++ file_handler analogue): static
+    // files with Range/206 + `.lua`/`.elua` execution. Registered before the OTel
+    // layer (traced) and the IIIF catch-all; only when a docroot + wwwroute are
+    // configured. axum/matchit prioritises the static `<wwwroute>` prefix over the
+    // `/{*rest}` catch-all, and the `<wwwroute>/{*rest}` variant serves subpaths.
+    if let Some(method_router) = routes::docroot_method_router(Arc::clone(&state)) {
+        let www = state.wwwroute.trim_end_matches('/');
+        if !www.is_empty() {
+            router = router.route(&format!("{www}/{{*rest}}"), method_router.clone());
+            router = router.route(www, method_router);
+        }
+    }
+
     router
         .layer(OtelInResponseLayer)
         .layer(OtelAxumLayer::default())

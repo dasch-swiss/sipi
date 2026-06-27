@@ -57,6 +57,12 @@ pub struct AppState {
     /// Max POST body size in bytes; 0 = unlimited. The Lua-route handler rejects
     /// oversized bodies (413), reconstructing the transport's `Connection` cap.
     max_post_size: usize,
+    /// The `/server` docroot fileserver root (raw config value; the handler
+    /// canonicalises it per request). Empty = no fileserver configured.
+    docroot: String,
+    /// The URL prefix the docroot fileserver is mounted at (e.g. "/server"). Read
+    /// by [`crate::app`] to register the static route. Empty = fileserver off.
+    pub wwwroute: String,
 }
 
 impl AppState {
@@ -96,6 +102,10 @@ impl AppState {
                 // read back from the engine via the seam.
                 routes: configured_routes.unwrap_or_else(|| ffi::routes().unwrap_or_default()),
                 max_post_size: ffi::max_post_size().unwrap_or(0),
+                // The fileserver docroot/wwwroute (empty when not configured →
+                // no static route registered, parity with the C++ file_handler gate).
+                docroot: ffi::docroot().unwrap_or_default(),
+                wwwroute: ffi::wwwroute().unwrap_or_default(),
             },
             _ => Self {
                 ready: false,
@@ -107,6 +117,8 @@ impl AppState {
                 pool,
                 routes: Vec::new(),
                 max_post_size: 0,
+                docroot: String::new(),
+                wwwroute: String::new(),
             },
         }
     }
@@ -519,15 +531,21 @@ fn serve_file(
 /// (`SipiHttpServer`/`Connection.cpp:411-416`, minus the credential reflection).
 /// Engine-independent, so it serves without the readiness gate.
 pub async fn cors_preflight(headers: HeaderMap) -> Response {
+    cors_preflight_response(&headers)
+}
+
+/// The CORS-preflight response (`OPTIONS`): `204` + the served methods + the
+/// echoed Origin + the requested headers. Shared by the [`cors_preflight`]
+/// handler and the docroot fileserver's OPTIONS path.
+fn cors_preflight_response(headers: &HeaderMap) -> Response {
     let mut builder = Response::builder()
         .status(StatusCode::NO_CONTENT)
         .header(header::ACCESS_CONTROL_ALLOW_METHODS, "GET, HEAD, OPTIONS");
-    if let Some(origin) =
-        header_str(&headers, "origin").and_then(|o| HeaderValue::from_str(&o).ok())
+    if let Some(origin) = header_str(headers, "origin").and_then(|o| HeaderValue::from_str(&o).ok())
     {
         builder = builder.header(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
     }
-    if let Some(req_headers) = header_str(&headers, "access-control-request-headers")
+    if let Some(req_headers) = header_str(headers, "access-control-request-headers")
         .and_then(|h| HeaderValue::from_str(&h).ok())
     {
         builder = builder.header(header::ACCESS_CONTROL_ALLOW_HEADERS, req_headers);
@@ -579,7 +597,9 @@ pub fn lua_route_method_router(
     let handler = on(filter, move |req: Request| {
         let state = Arc::clone(&state);
         let script = script.clone();
-        async move { serve_lua_route(state, script, req).await }
+        // A configured route never injects `server.docroot` (docroot = None),
+        // matching the C++ `script_handler` (only `file_handler` injects it).
+        async move { serve_lua_script(state, script, None, req).await }
     });
     // Cap the request body at max_post_size (oversized → 413), or lift axum's
     // default 2 MiB cap when the config leaves it unlimited.
@@ -590,12 +610,18 @@ pub fn lua_route_method_router(
     })
 }
 
-/// Serve a configured Lua route: snapshot the request, spool any multipart
-/// uploads to temp files, build the request context, and run the route's script
-/// through `sipi_run_lua_route` on the blocking pool. The route's own Lua sets
-/// the response status/headers/body (no shell-injected CORS — unlike the IIIF
-/// paths, the script owns its headers).
-async fn serve_lua_route(state: Arc<AppState>, script: String, req: Request) -> Response {
+/// Run a Lua script against the request: snapshot it, spool any multipart uploads
+/// to temp files, build the request context, and run the script through
+/// `sipi_run_lua_route` on the blocking pool. The script's own Lua sets the
+/// response status/headers/body (no shell-injected CORS — the script owns its
+/// headers). Shared by configured Lua routes (`docroot = None`) and docroot
+/// `.lua`/`.elua` scripts (`docroot = Some`, injecting `server.docroot`).
+async fn serve_lua_script(
+    state: Arc<AppState>,
+    script: String,
+    docroot: Option<String>,
+    req: Request,
+) -> Response {
     let method = req.method().clone();
     let uri = req.uri().clone();
     let headers = req.headers().clone();
@@ -719,6 +745,7 @@ async fn serve_lua_route(state: Arc<AppState>, script: String, req: Request) -> 
         let _tempfiles = tempfiles;
         run_lua_route_blocking(
             &script,
+            docroot.as_deref(),
             LuaRequest {
                 method: &method_str,
                 client_ip: &client_ip,
@@ -766,6 +793,7 @@ struct LuaRequest<'a> {
 /// on a `spawn_blocking` thread (the Lua VM + any decode/encode is blocking).
 fn run_lua_route_blocking(
     script: &str,
+    docroot: Option<&str>,
     req: LuaRequest,
     outcome_tx: oneshot::Sender<Outcome>,
     body_tx: mpsc::Sender<axum::body::Bytes>,
@@ -794,6 +822,11 @@ fn run_lua_route_blocking(
     ) else {
         return complete(outcome_tx, sink::error_response(StatusCode::BAD_REQUEST));
     };
+    // A docroot script reads `server.docroot` (the C++ file_handler injects it,
+    // Server.cpp:310); configured routes pass None and leave it unset.
+    if let Some(dr) = docroot {
+        ctx.set_docroot(dr);
+    }
     if !req.body.is_empty() || !req.content_type.is_empty() {
         ctx.set_body(req.content_type, req.body);
     }
@@ -818,6 +851,424 @@ fn run_lua_route_blocking(
     sink::serve_streaming(outcome_tx, body_tx, |resp: &SipiResponse| unsafe {
         ffi::sipi_run_lua_route(c_script.as_ptr(), ctx.as_ptr(), resp)
     });
+}
+
+// ── /server docroot fileserver ───────────────────────────────────────────────
+
+/// Build the `MethodRouter` for the `/server` docroot fileserver, or `None` when
+/// no docroot+wwwroute is configured (parity with the C++ file_handler gate,
+/// `SipiHttpServer.cpp:1466`). GET/HEAD/POST serve a static file (Range/206 +
+/// MIME) or run a docroot `.lua`/`.elua` script; OPTIONS is the CORS preflight.
+/// [`crate::app`] registers it at the wwwroute prefix.
+#[must_use]
+pub fn docroot_method_router(state: Arc<AppState>) -> Option<MethodRouter<Arc<AppState>>> {
+    if state.docroot.is_empty() || state.wwwroute.is_empty() {
+        return None;
+    }
+    let max_post = state.max_post_size;
+    // Capture state in the closure (the `serve_lua_route` pattern) rather than a
+    // `State` extractor: mixing `State` with the consuming `Request` extractor in
+    // a free fn trips axum's handler-marker inference. OPTIONS is folded into the
+    // one handler (dispatched inside `serve_docroot`) so the method router is a
+    // single closure — chaining `.options()` here would under-constrain the
+    // state-type inference.
+    let handler = on(
+        MethodFilter::GET
+            .or(MethodFilter::HEAD)
+            .or(MethodFilter::POST)
+            .or(MethodFilter::OPTIONS),
+        move |req: Request| {
+            let state = Arc::clone(&state);
+            async move { serve_docroot(state, req).await }
+        },
+    );
+    // Cap docroot `.lua`/`.elua` POST bodies at the configured size (static GETs
+    // ignore it); an unlimited config lifts axum's default 2 MiB cap.
+    Some(if max_post > 0 {
+        handler.layer(DefaultBodyLimit::max(max_post))
+    } else {
+        handler.layer(DefaultBodyLimit::disable())
+    })
+}
+
+/// The `/server` docroot handler (the C++ `shttps::file_handler` analogue,
+/// `Server.cpp:292`): serve a static file (Range/206 + MIME) or execute a docroot
+/// `.lua`/`.elua` script with `server.docroot` injected. The path is
+/// containment-validated against the realpath'd docroot before any open — the C++
+/// handler had no traversal guard; the Rust shell adds R1/R2 (plan 02 §6 C). An
+/// interior NUL / control char in the decoded path → 400 (the null-byte guard the
+/// IIIF catch-all applies, R7).
+async fn serve_docroot(state: Arc<AppState>, req: Request) -> Response {
+    // OPTIONS is the CORS preflight (engine-independent), folded into this handler
+    // so the method router stays a single closure.
+    if req.method() == Method::OPTIONS {
+        return cors_preflight_response(req.headers());
+    }
+    // Strip the wwwroute prefix, then percent-decode the remainder to the on-disk
+    // suffix (C++: `uri.substr(route.len())`, then `docroot + uri`).
+    let www = state.wwwroute.trim_end_matches('/');
+    let Some(suffix_enc) = req.uri().path().strip_prefix(www) else {
+        return sink::error_response(StatusCode::NOT_FOUND);
+    };
+    let Some(suffix) = decode_path_suffix(suffix_enc) else {
+        return sink::error_response(StatusCode::BAD_REQUEST);
+    };
+    // R1: traversal components in the decoded suffix → 400.
+    if path::contains_traversal(suffix.trim_start_matches('/')) {
+        return sink::error_response(StatusCode::BAD_REQUEST);
+    }
+    // A request to the bare wwwroute maps to the docroot dir, not a file → 404
+    // (C++ stat → not a regular file).
+    if suffix.is_empty() || suffix == "/" {
+        return sink::error_response(StatusCode::NOT_FOUND);
+    }
+    let suffix = if suffix.starts_with('/') {
+        suffix
+    } else {
+        format!("/{suffix}")
+    };
+
+    // infile = raw docroot + suffix (parity with the C++ `docroot + uri`): the
+    // Content-Disposition path (206) and the canonicalisation input.
+    let infile = format!("{}{}", state.docroot, suffix);
+    let docroot = state.docroot.clone();
+    let ext = extension_of(&suffix);
+
+    // Path resolution (realpath), the MIME sniff (libmagic — it reloads its DB and
+    // reads the file each call), and the docroot VM are all blocking, so they run
+    // off the async executor — the same discipline the IIIF path applies via
+    // `dispatch_engine`. Static serving needs no engine pool permit (no decode).
+    if matches!(ext.as_deref(), Some("lua" | "elua")) {
+        // Resolve + contain off-executor, then dispatch through the Lua-route seam
+        // (server.docroot injected); serve_lua_script runs the VM on the pool.
+        let infile2 = infile.clone();
+        let docroot2 = docroot.clone();
+        let resolved =
+            match tokio::task::spawn_blocking(move || resolve_docroot_file(&docroot2, &infile2))
+                .await
+            {
+                Ok(Ok(p)) => p,
+                Ok(Err(status)) => return sink::error_response(status),
+                Err(_) => return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
+            };
+        return serve_lua_script(state, resolved, Some(docroot), req).await;
+    }
+
+    let is_head = req.method() == Method::HEAD;
+    // Echo the Origin (no credentials), matching the IIIF success paths; the
+    // credentialed CORS contract is pinned in plan 02 step 6. Validated downstream
+    // (`apply_headers` / `head_only` drop a header `http` rejects).
+    let origin = header_str(req.headers(), "origin");
+    let range = header_str(req.headers(), header::RANGE.as_str());
+    let outcome = tokio::task::spawn_blocking(move || {
+        serve_static_blocking(
+            &docroot,
+            &infile,
+            ext.as_deref(),
+            is_head,
+            range.as_deref(),
+            origin.as_deref(),
+        )
+    })
+    .await
+    .unwrap_or(StaticOutcome::Err(StatusCode::INTERNAL_SERVER_ERROR));
+    match outcome {
+        StaticOutcome::Stream {
+            status,
+            headers,
+            path,
+            offset,
+            length,
+        } => stream_region(status, headers, path, offset, length),
+        StaticOutcome::Head { status, headers } => head_only(status, &headers),
+        StaticOutcome::Err(status) => sink::error_response(status),
+    }
+}
+
+/// The blocking outcome of resolving + describing a static docroot file, built
+/// off the async executor (it does realpath + stat + libmagic). `serve_docroot`
+/// turns it into a `Response` on the executor, so the streaming body channel is
+/// created in the runtime context.
+enum StaticOutcome {
+    /// Stream `[offset, offset+length)` of `path` with the built headers.
+    Stream {
+        status: StatusCode,
+        headers: Vec<(String, String)>,
+        path: String,
+        offset: u64,
+        length: u64,
+    },
+    /// A HEAD response: the headers, no body.
+    Head {
+        status: StatusCode,
+        headers: Vec<(String, String)>,
+    },
+    /// An error status (404 / 400 / 500).
+    Err(StatusCode),
+}
+
+/// Resolve a docroot file off the executor: canonicalise the docroot (it may be
+/// created after startup, unlike imgroot), realpath + contain the file, and check
+/// it is a regular file. Missing → 404 (parity with the C++ access() check),
+/// escape → 400 (the Rust-added traversal guard), directory/device → 404.
+fn resolve_docroot_file(docroot: &str, infile: &str) -> Result<String, StatusCode> {
+    let canon_root = std::fs::canonicalize(docroot).map_err(|_| StatusCode::NOT_FOUND)?;
+    let resolved = match path::validate_resolved_path(infile, &canon_root.to_string_lossy()) {
+        Resolved::Ok(p) => p,
+        Resolved::NotFound => return Err(StatusCode::NOT_FOUND),
+        Resolved::Traversal => return Err(StatusCode::BAD_REQUEST),
+    };
+    match std::fs::metadata(&resolved) {
+        Ok(m) if m.is_file() => Ok(resolved),
+        _ => Err(StatusCode::NOT_FOUND),
+    }
+}
+
+/// Resolve + describe a static docroot file (off the executor). `.html` (when the
+/// sniff is `text/html`) / `.js` / `.css` get a hardcoded Content-Type and the
+/// full file with no Range (parity with `Server.cpp:357-365`); everything else
+/// sniffs the MIME via the engine and supports Range/206.
+fn serve_static_blocking(
+    docroot: &str,
+    infile: &str,
+    ext: Option<&str>,
+    is_head: bool,
+    range: Option<&str>,
+    origin: Option<&str>,
+) -> StaticOutcome {
+    let resolved = match resolve_docroot_file(docroot, infile) {
+        Ok(p) => p,
+        Err(status) => return StaticOutcome::Err(status),
+    };
+
+    // `.js` / `.css`: a hardcoded type, no sniff (the C++ branches don't sniff).
+    let special = match ext {
+        Some("js") => Some("application/javascript; charset=utf-8"),
+        Some("css") => Some("text/css; charset=utf-8"),
+        _ => None,
+    };
+    if let Some(ct) = special {
+        return static_special(&resolved, ct, is_head, origin);
+    }
+    // `.html` and binary need the sniffed MIME; the `.html` hardcoded type is used
+    // only when the sniff is `text/html` (parity with `Server.cpp:357`).
+    let mime = match ffi::mimetype(&resolved) {
+        Ok(m) => m,
+        Err(_) => return StaticOutcome::Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+    if ext == Some("html") && mime == "text/html" {
+        return static_special(&resolved, "text/html; charset=utf-8", is_head, origin);
+    }
+    static_binary(&resolved, infile, &mime, range, is_head, origin)
+}
+
+/// Branch A (`.html`/`.js`/`.css`): a full-file 200 with only Content-Type — no
+/// Range, Cache-Control, or Last-Modified (the C++ html/js/css branches,
+/// `Server.cpp:357-365`).
+fn static_special(
+    resolved: &str,
+    content_type: &str,
+    is_head: bool,
+    origin: Option<&str>,
+) -> StaticOutcome {
+    let Ok(meta) = std::fs::metadata(resolved) else {
+        return StaticOutcome::Err(StatusCode::NOT_FOUND);
+    };
+    let mut headers = vec![(header::CONTENT_TYPE.to_string(), content_type.to_owned())];
+    push_cors(&mut headers, origin);
+    if is_head {
+        StaticOutcome::Head {
+            status: StatusCode::OK,
+            headers,
+        }
+    } else {
+        StaticOutcome::Stream {
+            status: StatusCode::OK,
+            headers,
+            path: resolved.to_owned(),
+            offset: 0,
+            length: meta.len(),
+        }
+    }
+}
+
+/// Branch B (binary/media): full caching headers + Range/206 (the C++
+/// file_handler else-branch, `Server.cpp:444-502`). Content-Length is left to
+/// hyper, which streams chunked — the differential ignores framing (§5 #6).
+fn static_binary(
+    resolved: &str,
+    infile: &str,
+    mime: &str,
+    range: Option<&str>,
+    is_head: bool,
+    origin: Option<&str>,
+) -> StaticOutcome {
+    let Ok(meta) = std::fs::metadata(resolved) else {
+        return StaticOutcome::Err(StatusCode::NOT_FOUND);
+    };
+    let fsize = meta.len();
+    let mut headers = vec![
+        (header::CONTENT_TYPE.to_string(), mime.to_owned()),
+        (
+            header::CACHE_CONTROL.to_string(),
+            "public, must-revalidate, max-age=0".to_owned(),
+        ),
+        (header::PRAGMA.to_string(), "no-cache".to_owned()),
+        (header::ACCEPT_RANGES.to_string(), "bytes".to_owned()),
+    ];
+    if let Ok(mtime) = meta.modified() {
+        headers.push((
+            header::LAST_MODIFIED.to_string(),
+            httpdate::fmt_http_date(mtime),
+        ));
+    }
+    push_cors(&mut headers, origin);
+
+    match range {
+        Some(raw) => {
+            let Some((start, end)) = parse_byte_range(raw, fsize) else {
+                // Malformed / inverted range / start past EOF → 500 (parity with
+                // the C++ throw → file_handler catch, `Server.cpp:486`/`507`).
+                return StaticOutcome::Err(StatusCode::INTERNAL_SERVER_ERROR);
+            };
+            headers.push((
+                header::CONTENT_RANGE.to_string(),
+                format!("bytes {start}-{end}/{fsize}"),
+            ));
+            // The full infile path is leaked here, replicated for strict parity
+            // with the oracle (`Server.cpp:498`); hardening is deferred (§6 C).
+            headers.push((
+                header::CONTENT_DISPOSITION.to_string(),
+                format!("inline; filename={infile}"),
+            ));
+            // `end >= start` is guaranteed by parse_byte_range, so `end - start + 1`
+            // cannot underflow.
+            if is_head {
+                StaticOutcome::Head {
+                    status: StatusCode::PARTIAL_CONTENT,
+                    headers,
+                }
+            } else {
+                StaticOutcome::Stream {
+                    status: StatusCode::PARTIAL_CONTENT,
+                    headers,
+                    path: resolved.to_owned(),
+                    offset: start,
+                    length: end - start + 1,
+                }
+            }
+        }
+        None => {
+            if is_head {
+                StaticOutcome::Head {
+                    status: StatusCode::OK,
+                    headers,
+                }
+            } else {
+                StaticOutcome::Stream {
+                    status: StatusCode::OK,
+                    headers,
+                    path: resolved.to_owned(),
+                    offset: 0,
+                    length: fsize,
+                }
+            }
+        }
+    }
+}
+
+/// Percent-decode a URL path suffix to an on-disk path fragment. `None` (→ the
+/// caller 400s) on invalid UTF-8 or an interior NUL / control char (the null-byte
+/// + header-injection guard the IIIF catch-all also applies).
+fn decode_path_suffix(enc: &str) -> Option<String> {
+    let decoded = percent_encoding::percent_decode_str(enc)
+        .decode_utf8()
+        .ok()?;
+    // `is_ascii_control` covers 0x00–0x1F and 0x7F, so the NUL-byte guard the IIIF
+    // catch-all applies is subsumed here.
+    if decoded.bytes().any(|b| b.is_ascii_control()) {
+        return None;
+    }
+    Some(decoded.into_owned())
+}
+
+/// The lowercased filename extension (after the last `.` in the last path
+/// component), or `None` — drives the static-vs-Lua dispatch.
+fn extension_of(path: &str) -> Option<String> {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    name.rfind('.').map(|i| name[i + 1..].to_ascii_lowercase())
+}
+
+/// Parse a single `bytes=start-end` Range value (the C++ regex
+/// `bytes=\s*(\d+)-(\d*)`): `start` is required, `end` defaults to EOF when
+/// omitted and is clamped to the file. `None` (→ the caller 500s) on a malformed
+/// range, `start >= fsize`, or an inverted range (`end < start`) — matching the
+/// C++ throw, and guaranteeing the caller's `end - start + 1` cannot underflow.
+fn parse_byte_range(raw: &str, fsize: u64) -> Option<(u64, u64)> {
+    let body = raw.trim().strip_prefix("bytes=")?;
+    let (s, e) = body.trim_start().split_once('-')?;
+    let start = leading_u64(s.trim_start())?;
+    let end = leading_u64(e.trim_start()).unwrap_or_else(|| fsize.saturating_sub(1));
+    if start >= fsize {
+        return None;
+    }
+    let end = end.min(fsize - 1);
+    if end < start {
+        return None;
+    }
+    Some((start, end))
+}
+
+/// Leading ASCII digits of `s` parsed as a `u64`, or `None` when there is no
+/// leading digit (mirrors the C++ Range regex's `\d+` / `\d*` groups).
+fn leading_u64(s: &str) -> Option<u64> {
+    let digits: String = s.chars().take_while(|c| c.is_ascii_digit()).collect();
+    digits.parse().ok()
+}
+
+/// Append the CORS `Access-Control-Allow-Origin` echo when an Origin was present.
+/// The raw value is validated downstream (`apply_headers` / `head_only` drop a
+/// header `http` rejects), so a control-char Origin can't inject a header.
+fn push_cors(headers: &mut Vec<(String, String)>, origin: Option<&str>) {
+    if let Some(o) = origin {
+        headers.push((
+            header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string(),
+            o.to_owned(),
+        ));
+    }
+}
+
+/// A head-only response (HEAD) carrying the static-serve headers, no body.
+fn head_only(status: StatusCode, headers: &[(String, String)]) -> Response {
+    let mut builder = Response::builder().status(status);
+    for (name, value) in headers {
+        if let (Ok(n), Ok(v)) = (
+            axum::http::HeaderName::from_bytes(name.as_bytes()),
+            HeaderValue::from_str(value),
+        ) {
+            builder = builder.header(n, v);
+        }
+    }
+    builder
+        .body(Body::empty())
+        .unwrap_or_else(|_| sink::error_response(StatusCode::INTERNAL_SERVER_ERROR))
+}
+
+/// Stream a `[offset, offset+length)` file region as the response body, reusing
+/// the sink's bounded-memory blocking reader (no engine pool permit — static
+/// serving does no FFI). The blocking `std::fs` read runs on `spawn_blocking`.
+fn stream_region(
+    status: StatusCode,
+    headers: Vec<(String, String)>,
+    path: String,
+    offset: u64,
+    length: u64,
+) -> Response {
+    let (body_tx, body_rx) = mpsc::channel::<axum::body::Bytes>(sink::BODY_CHANNEL_CAP);
+    tokio::task::spawn_blocking(move || {
+        let _ = sink::stream_file_region(&body_tx, &path, offset, length);
+    });
+    sink::stream_response(status.as_u16(), headers, body_rx)
 }
 
 /// Whether an HTTP method carries a request body the Lua route should read.
@@ -1191,5 +1642,74 @@ mod tests {
     #[test]
     fn default_pool_size_is_positive() {
         assert!(default_pool_size() >= 1);
+    }
+
+    // ── /server docroot fileserver pure helpers ──────────────────────────────
+
+    #[test]
+    fn parse_byte_range_well_formed() {
+        assert_eq!(parse_byte_range("bytes=0-99", 1000), Some((0, 99)));
+        assert_eq!(parse_byte_range("bytes=200-299", 1000), Some((200, 299)));
+        assert_eq!(parse_byte_range("bytes=999-999", 1000), Some((999, 999)));
+    }
+
+    #[test]
+    fn parse_byte_range_open_ended_defaults_to_eof() {
+        assert_eq!(parse_byte_range("bytes=0-", 1000), Some((0, 999)));
+        assert_eq!(parse_byte_range("bytes=500-", 1000), Some((500, 999)));
+    }
+
+    #[test]
+    fn parse_byte_range_clamps_end_to_eof() {
+        // end beyond the file is clamped to fsize-1 (RFC 7233 §2.1).
+        assert_eq!(parse_byte_range("bytes=0-99999", 1000), Some((0, 999)));
+    }
+
+    #[test]
+    fn parse_byte_range_rejects_inverted_and_out_of_bounds() {
+        // Inverted range (end < start) → None, so the caller 500s instead of
+        // underflowing `end - start + 1` (the adversarial-review finding).
+        assert_eq!(parse_byte_range("bytes=100-50", 1000), None);
+        assert_eq!(parse_byte_range("bytes=999-0", 1000), None);
+        // start at/after EOF → None (C++ sendFile throws → 500).
+        assert_eq!(parse_byte_range("bytes=1000-1000", 1000), None);
+        assert_eq!(parse_byte_range("bytes=5000-6000", 1000), None);
+    }
+
+    #[test]
+    fn parse_byte_range_rejects_malformed() {
+        assert_eq!(parse_byte_range("0-99", 1000), None); // no `bytes=`
+        assert_eq!(parse_byte_range("bytes=-500", 1000), None); // suffix range unsupported
+        assert_eq!(parse_byte_range("bytes=abc", 1000), None); // no `-`
+    }
+
+    #[test]
+    fn leading_u64_parses_leading_digits_only() {
+        assert_eq!(leading_u64("123"), Some(123));
+        assert_eq!(leading_u64("123abc"), Some(123));
+        assert_eq!(leading_u64(""), None);
+        assert_eq!(leading_u64("abc"), None);
+    }
+
+    #[test]
+    fn extension_of_lowercases_last_component_suffix() {
+        assert_eq!(extension_of("/foo.HTML").as_deref(), Some("html"));
+        assert_eq!(extension_of("/a/b/c.LUA").as_deref(), Some("lua"));
+        assert_eq!(extension_of("/dir.with.dot/file").as_deref(), None);
+        assert_eq!(extension_of("/no-extension").as_deref(), None);
+    }
+
+    #[test]
+    fn decode_path_suffix_rejects_null_and_control() {
+        assert_eq!(decode_path_suffix("/test%00.html"), None);
+        assert_eq!(decode_path_suffix("/a%0db"), None); // CR
+        assert_eq!(
+            decode_path_suffix("/sub/file.bin").as_deref(),
+            Some("/sub/file.bin")
+        );
+        assert_eq!(
+            decode_path_suffix("/a%20b.bin").as_deref(),
+            Some("/a b.bin") // %20 → space (a valid path char)
+        );
     }
 }
