@@ -41,6 +41,7 @@ just bazel-test-unit             # bazel test //test/unit/...  (12 components)
 just bazel-test-approval         # bazel test //test/approval:approvaltests
 just bazel-test-e2e              # Rust e2e tests via rules_rust
 just bazel-test-smoke            # Docker smoke test (OCI tarball loaded by the test)
+just bazel-test-differential     # differential parity gate vs the C++ oracle (manual; spawns both binaries)
 
 # Coverage (canonical CI build — what ci.yml invokes on every PR)
 just bazel-coverage              # unit + approval + e2e under instrumentation; lcov
@@ -161,6 +162,7 @@ For test framework details (how to run tests, directory layout, adding tests), s
 - **Approval tests** (`test/approval/`): snapshot-based regression — `just bazel-test-approval` (or via `bazel-coverage` in CI). `SOURCE_DATE_EPOCH=946684800` and `SIPI_WORKSPACE_ROOT="."` are injected by `test/approval/BUILD.bazel`.
 - **E2E tests** (`test/e2e/`): Rust (reqwest + `rules_rust`'s hermetic rustc). Run via `just bazel-test-e2e`, or a single target with `bazel test //test/e2e:<name> --test_output=streamed`.
 - **Smoke tests** (`test/e2e/tests/docker_smoke.rs`): against Docker image. Run via `just bazel-test-smoke` — the `:docker_smoke` rust_test consumes the OCI tarball from `//src:image_load` and `docker load`s it before probing endpoints.
+- **Differential parity** (`test/e2e/tests/differential.rs`): THE strangler parity gate — replays a deduped corpus of every replayable e2e request against both the Rust shell (subject, `$SIPI_BIN`) and the retained C++ server (reference, `$SIPI_BIN_REF`) and asserts they agree modulo the §5 allowlist; intentional/known divergences are per-`Case` `gap`s. Run via `just bazel-test-differential` — `manual`-tagged, so it stays out of `:all_e2e` and coverage; CI runs it as a dedicated linux-amd64 step. `just differential-coverage-check` guards the corpus against drift as e2e tests are added.
 
 Run a single unit-test target with `bazel test //test/unit/<component>:<component>_test --test_output=streamed`.
 
