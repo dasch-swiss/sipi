@@ -164,7 +164,7 @@ sipi_e2e_test(name = "upload", deps = _e2e_test_deps)
 #      `:all_e2e` matrix step and `bazel-coverage` skip it. CI runs it as its
 #      own step (linux-amd64, like the rustfmt gate) via
 #      `just bazel-test-differential`; the heavy two-binary spawn is
-#      `exclusive`/`local` from the macro.
+#      `exclusive` + `no-sandbox` from the macro.
 #
 # See plan 02 §7 (harness) / §8 (differential.rs placement).
 sipi_e2e_test(
@@ -237,9 +237,15 @@ rust_test(
     args = ["--test-threads=1"],
     tags = [
         "exclusive",
-        # See `sipi_e2e_test.bzl` for the macOS-sandbox rationale; the
-        # smoke target also needs daemon access so `local` is required.
-        "local",
+        # `no-sandbox`, NOT `local`: the smoke test must reach the Docker
+        # daemon socket and host network, which the sandbox blocks. `local`
+        # would also escape the sandbox but additionally force this target's
+        # COMPILE onto the runner, breaking RBE cross-compilation (the
+        # x86_64 exec-config process_wrapper can't run on an arm64/darwin
+        # runner). Test execution stays on the runner via CI's
+        # `--strategy=TestRunner=local`. See `sipi_e2e_test.bzl` for the
+        # shared sandbox rationale.
+        "no-sandbox",
         "requires-docker",
         "requires-network",
     ],
