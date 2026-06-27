@@ -120,6 +120,7 @@ struct RequestContext
   std::string content;//!< request body (POST)
   std::string content_type;
   std::string jwt_secret;//!< secret for server.generate_jwt / server.decode_jwt
+  std::string docroot;//!< `server.docroot` for a docroot `.lua`/`.elua` script (empty = not injected, as for configured routes)
 
   // --- response sink (caller-owned; must outlive the Lua run) ---
   ResponseSink *response = nullptr;

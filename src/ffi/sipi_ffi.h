@@ -452,6 +452,13 @@ void sipi_request_context_add_upload(SipiRequestContext *ctx,
  *  view), matching the transport's get/post/request split. */
 void sipi_request_context_add_param(SipiRequestContext *ctx, int kind, const char *name, const char *value);
 
+/*! Set `server.docroot` for a docroot `.lua`/`.elua` script — the transport's
+ *  file_handler injects it (`Server.cpp:310`) before executing a docroot script,
+ *  so the Rust shell sets it here before `sipi_run_lua_route` for docroot scripts.
+ *  A configured route leaves it unset, so `server.docroot` stays absent there
+ *  (parity with the transport's `script_handler`). NULL/empty = not injected. */
+void sipi_request_context_set_docroot(SipiRequestContext *ctx, const char *docroot);
+
 /*! Enumerate the configured Lua routes (method/route/script) installed by
  *  `sipi_init`, one `emit` call per route in config order. The Rust shell calls
  *  this once at startup and registers an axum route per entry, preserving the
@@ -494,6 +501,21 @@ SIPI_FFI_NODISCARD int sipi_init(const char *lua_config_path, const SipiServerCo
  *  installed engine context — valid for the process lifetime after `sipi_init`,
  *  never freed by the caller. Returns 0, or 500 if `sipi_init` has not run. */
 SIPI_FFI_NODISCARD int sipi_imgroot(int resolved, const char **out);
+
+/*! The `/server` fileserver docroot (the Lua config `fileserver.docroot`), the
+ *  raw config value — the Rust edge canonicalises it per request for the
+ *  containment check (the docroot dir may be created after startup, unlike the
+ *  image root). `*out` is empty when no fileserver is configured. Points at
+ *  process-static engine memory; never freed by the caller. Returns 0, or 500 if
+ *  `sipi_init` has not run. */
+SIPI_FFI_NODISCARD int sipi_docroot(const char **out);
+
+/*! The URL prefix the docroot fileserver is mounted at (the Lua config
+ *  `fileserver.wwwroute`, e.g. "/server"). `*out` is empty when no fileserver is
+ *  configured; the Rust shell registers the static route only when both docroot
+ *  and wwwroute are non-empty (parity with `SipiHttpServer`'s file_handler gate).
+ *  Returns 0, or 500 if `sipi_init` has not run. */
+SIPI_FFI_NODISCARD int sipi_wwwroute(const char **out);
 
 /*! The `prefix_as_path` config knob: `*out` = 1 → the IIIF prefix is a path
  *  component under imgroot (`imgroot/prefix/identifier`); 0 → `imgroot/identifier`.

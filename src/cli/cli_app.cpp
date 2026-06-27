@@ -658,6 +658,8 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
       .memory_budget = runtime->memory_budget.get(),
       .imgroot = imgroot,
       .resolved_imgroot = resolved_imgroot,
+      .docroot = conf.getDocRoot(),
+      .wwwroute = conf.getWWWRoute(),
       .prefix_as_path = conf.getPrefixAsPath(),
       .jpeg_quality = conf.getJpegQuality(),
       .scaling_quality = to_scaling_quality(conf.getScalingQuality()),

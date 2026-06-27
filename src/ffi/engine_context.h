@@ -44,6 +44,8 @@ struct EngineContext
 
   std::string imgroot;//!< image root: raw config value, for the Rust edge's path build (parity with imgroot())
   std::string resolved_imgroot;//!< realpath()-resolved image root, for the R2 containment check
+  std::string docroot;//!< `/server` fileserver docroot: raw config value (the Rust edge canonicalises per request); empty = fileserver off
+  std::string wwwroute;//!< URL prefix the docroot fileserver is mounted at (e.g. "/server"); empty = fileserver off
   bool prefix_as_path = true;//!< IIIF prefix is a path component under imgroot (config knob, exposed to the edge)
   int jpeg_quality = 60;//!< JPEG encode quality
   ScalingQuality scaling_quality{};//!< per-format scaling method

@@ -235,6 +235,16 @@ extern "C" {
     /// or 500 if `sipi_init` has not run.
     pub fn sipi_imgroot(resolved: c_int, out: *mut *const c_char) -> c_int;
 
+    /// The `/server` fileserver docroot (raw config value; the edge canonicalises
+    /// per request). `*out` is empty when no fileserver is configured. `*out` is
+    /// process-static engine memory. Returns 0, or 500 if `sipi_init` has not run.
+    pub fn sipi_docroot(out: *mut *const c_char) -> c_int;
+
+    /// The URL prefix the docroot fileserver is mounted at (e.g. "/server").
+    /// `*out` is empty when no fileserver is configured. Returns 0, or 500 if
+    /// `sipi_init` has not run.
+    pub fn sipi_wwwroute(out: *mut *const c_char) -> c_int;
+
     /// The `prefix_as_path` config knob (`*out` = 1/0). Returns 0, or 500 if
     /// `sipi_init` has not run.
     pub fn sipi_prefix_as_path(out: *mut c_int) -> c_int;
@@ -289,6 +299,11 @@ extern "C" {
         name: *const c_char,
         value: *const c_char,
     );
+
+    /// Set `server.docroot` for a docroot `.lua`/`.elua` script (injected into the
+    /// VM by `run_lua_route`). NULL/empty = not injected (configured routes leave
+    /// it unset, matching the C++ `script_handler`).
+    pub fn sipi_request_context_set_docroot(ctx: *mut SipiRequestContext, docroot: *const c_char);
 
     /// Header-only image-shape probe (no full decode). `resolved_path` is an
     /// already-validated absolute path. Returns 0 (and fills `*out`), or 500.
@@ -441,6 +456,40 @@ pub fn imgroot(resolved: bool) -> Result<String, i32> {
     // SAFETY: `out` is a valid pointer; on success the engine writes a
     // process-static, NUL-terminated pointer; the seam guards exceptions.
     let code = unsafe { sipi_imgroot(resolved as c_int, &mut ptr) };
+    if code != 0 {
+        return Err(code);
+    }
+    if ptr.is_null() {
+        return Err(-1);
+    }
+    // SAFETY: `ptr` is a NUL-terminated C string owned by the engine, valid for
+    // the process lifetime; we copy it before returning.
+    Ok(unsafe { CStr::from_ptr(ptr) }
+        .to_string_lossy()
+        .into_owned())
+}
+
+/// The `/server` fileserver docroot (raw config value). Empty when no fileserver
+/// is configured; the shell then registers no static route. The edge canonicalises
+/// it per request for the containment check. `Err` carries the FFI status (500 if
+/// `sipi_init` has not run, -1 on a null pointer).
+pub fn docroot() -> Result<String, i32> {
+    cstr_getter(|out| unsafe { sipi_docroot(out) })
+}
+
+/// The URL prefix the docroot fileserver is mounted at (e.g. "/server"). Empty
+/// when no fileserver is configured. `Err` carries the FFI status (500 if
+/// `sipi_init` has not run, -1 on a null pointer).
+pub fn wwwroute() -> Result<String, i32> {
+    cstr_getter(|out| unsafe { sipi_wwwroute(out) })
+}
+
+/// Shared body of the `*const c_char`-out getters (docroot/wwwroute): run the FFI
+/// call into a local out-pointer, then copy the process-static C string to an
+/// owned `String`. `Err` carries the FFI status, or -1 on a null pointer.
+fn cstr_getter(call: impl FnOnce(*mut *const c_char) -> c_int) -> Result<String, i32> {
+    let mut ptr: *const c_char = std::ptr::null();
+    let code = call(&mut ptr);
     if code != 0 {
         return Err(code);
     }
@@ -664,6 +713,16 @@ impl RequestContext {
         };
         // SAFETY: the C strings outlive the synchronous call; deep-copied; guarded.
         unsafe { sipi_request_context_add_param(self.ptr, kind, n.as_ptr(), v.as_ptr()) };
+    }
+
+    /// Set `server.docroot` for a docroot `.lua`/`.elua` script. An interior NUL
+    /// is dropped (the field then stays unset, as for a configured route).
+    pub fn set_docroot(&self, docroot: &str) {
+        let Ok(d) = CString::new(docroot) else {
+            return;
+        };
+        // SAFETY: `d` outlives the synchronous call; the engine deep-copies; guarded.
+        unsafe { sipi_request_context_set_docroot(self.ptr, d.as_ptr()) };
     }
 }
 
