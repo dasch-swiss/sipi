@@ -229,6 +229,26 @@ int sipi_imgroot(int resolved, const char **out)
   });
 }
 
+int sipi_docroot(const char **out)
+{
+  // Guard-only edge probe — a pure read of the installed engine context, like
+  // sipi_imgroot. The raw config value (the Rust edge canonicalises per request);
+  // empty when no fileserver is configured. Points at the process-static
+  // EngineContext copy, valid for the process lifetime.
+  return Sipi::ffi::sipi_guard([&] {
+    *out = Sipi::ffi::engine_context().docroot.c_str();
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
+int sipi_wwwroute(const char **out)
+{
+  return Sipi::ffi::sipi_guard([&] {
+    *out = Sipi::ffi::engine_context().wwwroute.c_str();
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
 int sipi_prefix_as_path(int *out)
 {
   return Sipi::ffi::sipi_guard([&] {
@@ -377,6 +397,17 @@ void sipi_request_context_add_param(SipiRequestContext *ctx, int kind, const cha
       rc.get_params.push_back(pair);
     }
     rc.request_params.push_back(std::move(pair));
+  } catch (...) {
+  }
+}
+
+void sipi_request_context_set_docroot(SipiRequestContext *ctx, const char *docroot)
+{
+  // server.docroot for a docroot .lua/.elua script (run_lua_route injects it into
+  // the VM when set). Void + can only fail on allocation; swallow so no C++
+  // exception crosses the boundary (the uniform boundary contract).
+  try {
+    reinterpret_cast<shttps::RequestContext *>(ctx)->docroot = nz(docroot);
   } catch (...) {
   }
 }

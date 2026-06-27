@@ -90,6 +90,12 @@ int run_lua_route(const char *script_path, shttps::RequestContext &rc, const Sip
   rc.response = &sink;
   std::unique_ptr<LuaServer> vm = make_lua_server(rc);
 
+  // A docroot `.lua`/`.elua` script reads `server.docroot` (the transport's
+  // file_handler injects it at Server.cpp:310); a configured route does not, so
+  // the field is empty for those and the entry is omitted — preserving the
+  // configured-route surface while giving docroot scripts full parity.
+  if (!rc.docroot.empty()) { vm->add_servertableentry("docroot", rc.docroot); }
+
   sink.set_status(DEFAULT_STATUS);
 
   if (ext == "lua") {
