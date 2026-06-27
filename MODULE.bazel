@@ -158,7 +158,26 @@ single_version_override(
 # decouples from host Nix/Xcode tooling. The toolchain-extension wiring
 # (LLVM version, exec/target platforms) lives below.
 # See docs/adr/0014-toolchain-provider-swap.md.
-bazel_dep(name = "llvm", version = "0.8.8")
+bazel_dep(name = "llvm", version = "0.8.10")
+
+# hermetic-llvm hands the Linux kernel + glibc system headers to compile actions
+# as a bare source-directory artifact via two paths: the toolchain cc_args
+# (target-config compiles) and the kernel_headers / gnu_libc_headers cc_library
+# `hdrs = ["include"]` consumed by @llvm-project's libcxx/libcxxabi/libunwind
+# (the exec-config "stage0" runtime compiles, which get no kernel-header cc_args).
+# Remote execution must expand a source directory into each action's Merkle input
+# tree; the include/ subtree is dropped, giving `'linux/limits.h' file not found`
+# on the toolchain-bootstrap [for tool] compiles -- deterministic once the action
+# cache is cold, masked by warm cache hits. A Bazel-side input-declaration issue,
+# not a backend bug. The patch (1) globs the headers_directory targets into
+# discrete File artifacts (cc_args path) and (2) makes the module-map generator
+# emit one umbrella per directory, plus (3) globs the cc_library hdrs into
+# individual files (implementation_deps path). Drop if/when fixed upstream.
+single_version_override(
+    module_name = "llvm",
+    patch_strip = 1,
+    patches = ["//bazel/patches:hermetic_llvm_headers_glob.patch"],
+)
 
 # ── Container image rules ─────────────────────────────────────────────────
 # `rules_oci` builds the OCI image. The image is assembled per-arch by
@@ -480,6 +499,18 @@ rust.toolchain(
     # Cargo.toml` itself stays on edition 2021 — the transitive bumps
     # are invisible to first-party code.
     versions = ["1.89.0"],
+    # Cross-compile targets. The arm64/darwin CI legs run on native runners but
+    # compile on the x86_64 RBE worker, so rules_rust must register a toolchain
+    # with exec=x86_64-linux for each of these targets. Without them, no toolchain
+    # satisfies the Rust toolchain type on the x86_64 exec platform for an
+    # aarch64 target, so the exec-config tools (process_wrapper, build scripts,
+    # proc-macros) fall through to the local host platform (wrong arch) and crash
+    # on the worker. See RBE-HANDOFF.md. Local/native builds ignore these unless
+    # `--platforms` targets them.
+    extra_target_triples = [
+        "aarch64-unknown-linux-gnu",
+        "aarch64-apple-darwin",
+    ],
 )
 use_repo(rust, "rust_toolchains")
 

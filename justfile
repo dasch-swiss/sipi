@@ -145,16 +145,20 @@ bazel-rust-project:
 bazel-test-e2e *FLAGS='':
     bazel test --stamp --verbose_failures {{FLAGS}} //test/e2e:all_e2e
 
-# Run the Docker smoke test against the Bazel-built OCI image. The image
-# tarball is produced by `//src:image_load` and consumed via the test's
-# runfiles (`SIPI_IMAGE_TAR` env), so no separate `bazel run
-# //src:image_load` step is needed — Bazel materialises the tarball as
-# a `data` dep of `:docker_smoke`.
+# Run the Docker smoke test against the Bazel-built OCI image.
 #
-# `--config=asan` does not apply: the test client is uninstrumented and
-# the sipi binary inside the container is already covered by
-# `bazel-test-e2e --config=asan` above.
+# `bazel run //src:image_load` loads the image into the local daemon as
+# `daschswiss/sipi:latest` (its `oci_load` repo_tag) explicitly, BEFORE the
+# test — not as a side-effect of it. On a warm cache `:docker_smoke` is a cache
+# hit and never executes its own `docker load`, yet downstream CI steps (Docker
+# Scout) still need the image present in the daemon. `bazel run` also
+# materialises the tarball under the `.bazelrc` default `--remote_download_minimal`,
+# which a cached test would leave absent.
+#
+# `--config=asan` does not apply: the test client is uninstrumented and the sipi
+# binary inside the container is already covered by `bazel-test-e2e --config=asan`.
 bazel-test-smoke *FLAGS='':
+    bazel run --stamp --verbose_failures {{FLAGS}} //src:image_load
     bazel test --stamp --verbose_failures {{FLAGS}} //test/e2e:docker_smoke
 
 # Run the differential parity gate: spawns the Rust shell (subject) and the
@@ -234,7 +238,13 @@ bazel-build-fuzz *FLAGS='':
     #!/usr/bin/env bash
     set -euo pipefail
     PLATFORM=$(just _fuzz-platform)
-    bazel build --config=fuzz --platforms="$PLATFORM" --verbose_failures {{FLAGS}} //fuzz/handlers:iiif_handler_uri_parser_fuzz
+    # `--platforms` is placed AFTER {{FLAGS}} so the fuzz platform wins: the
+    # bazel-rbe composite action emits `--platforms=//platforms:linux_x86_64` in
+    # the flag string, but the fuzz target is only compatible with
+    # `//tools/fuzz:<host>_fuzz` (it carries the `fuzz_enabled` constraint). The
+    # action's remote cache + executor flags still apply, so the build runs on
+    # the worker; only the target platform is overridden back to the fuzz one.
+    bazel build --config=fuzz --verbose_failures {{FLAGS}} --platforms="$PLATFORM" //fuzz/handlers:iiif_handler_uri_parser_fuzz
     echo "Fuzzer at: $(pwd)/bazel-bin/fuzz/handlers/iiif_handler_uri_parser_fuzz"
 
 # Run the libFuzzer harness against a live corpus (read+write) for a bounded
@@ -376,15 +386,21 @@ bench-compare before after *FLAGS='':
 # without it, tags resolve to `0.0.0-unstamped-${arch}` and `publish.yml`'s
 # version-based downstream steps (Sentry release naming, Scout
 # environment recording) silently break.
+#
+# `--config=release` is the production build: `-c opt` codegen (-O3 -DNDEBUG) +
+# `_FORTIFY_SOURCE=2` hardening (both inert at the default fastbuild `-O0`; see
+# .bazelrc). The push and debug-extract recipes below carry `--config=release`
+# too — they must agree, or the pushed image / Sentry debug symbols won't match
+# the smoke-tested binary.
 bazel-docker-build-amd64 *FLAGS='':
-    bazel run --stamp --platforms=//bazel/platforms:linux_amd64 --verbose_failures {{FLAGS}} //src:image_load
+    bazel run --config=release --stamp --platforms=//platforms:linux_x86_64 --verbose_failures {{FLAGS}} //src:image_load
 
 bazel-docker-build-arm64 *FLAGS='':
-    bazel run --stamp --platforms=//bazel/platforms:linux_arm64 --verbose_failures {{FLAGS}} //src:image_load
+    bazel run --config=release --stamp --platforms=//platforms:linux_aarch64 --verbose_failures {{FLAGS}} //src:image_load
 
 # Cross-build the Linux OCI image for `arch` (amd64|arm64) WITHOUT loading it
 # into a Docker daemon. Builds `//src:image` under
-# `--platforms=//bazel/platforms:linux_${arch}` so a host of any OS (e.g. a
+# `--platforms=//platforms:linux_x86_64` / `:linux_aarch64` so a host of any OS (e.g. a
 # macOS dev box, where there is no Linux Docker daemon so `bazel-docker-build-*`
 # cannot `docker load`) can prove every native dep cross-compiles through the
 # relocatable hermetic clang toolchain. Cross-compilation is not currently
@@ -395,8 +411,8 @@ bazel-cross-build-image arch *FLAGS='':
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{arch}}" in
-        amd64) PLATFORM=//bazel/platforms:linux_amd64 ;;
-        arm64) PLATFORM=//bazel/platforms:linux_arm64 ;;
+        amd64) PLATFORM=//platforms:linux_x86_64 ;;
+        arm64) PLATFORM=//platforms:linux_aarch64 ;;
         *)
             echo "ERROR: unknown arch '{{arch}}' (expected: amd64, arm64)" >&2
             exit 1
@@ -410,10 +426,10 @@ bazel-cross-build-image arch *FLAGS='':
 # coordinator job (`bazel-docker-publish-manifest` below) reads these
 # digests off the registry to assemble the multi-arch manifest.
 bazel-docker-push-amd64 *FLAGS='':
-    bazel run --stamp --platforms=//bazel/platforms:linux_amd64 --verbose_failures {{FLAGS}} //src:image_push_amd64
+    bazel run --config=release --stamp --platforms=//platforms:linux_x86_64 --verbose_failures {{FLAGS}} //src:image_push_amd64
 
 bazel-docker-push-arm64 *FLAGS='':
-    bazel run --stamp --platforms=//bazel/platforms:linux_arm64 --verbose_failures {{FLAGS}} //src:image_push_arm64
+    bazel run --config=release --stamp --platforms=//platforms:linux_aarch64 --verbose_failures {{FLAGS}} //src:image_push_arm64
 
 # Assemble the multi-arch manifest at `daschswiss/sipi:v<version>` from
 # the two per-arch digests already pushed by `bazel-docker-push-*`.
@@ -454,8 +470,8 @@ bazel-docker-extract-debug arch *FLAGS='':
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{arch}}" in
-        amd64) PLATFORM=//bazel/platforms:linux_amd64 ;;
-        arm64) PLATFORM=//bazel/platforms:linux_arm64 ;;
+        amd64) PLATFORM=//platforms:linux_x86_64 ;;
+        arm64) PLATFORM=//platforms:linux_aarch64 ;;
         *)
             echo "ERROR: unknown arch '{{arch}}' (expected: amd64, arm64)" >&2
             exit 1
@@ -466,7 +482,7 @@ bazel-docker-extract-debug arch *FLAGS='':
     # `.debug` file. The tarball layout is `lib/debug/.build-id/<xx>/<yy>.debug`;
     # the filename is the build-id with the leading two hex chars removed
     # and `.debug` appended.
-    bazel build --stamp --platforms="$PLATFORM" --verbose_failures {{FLAGS}} //src:sipi_debug_layout
+    bazel build --config=release --stamp --platforms="$PLATFORM" --verbose_failures {{FLAGS}} //src:sipi_debug_layout
 
     # Find the single `.debug` file inside the tar. The tarball is
     # deterministic by construction, so this glob always resolves
@@ -570,10 +586,12 @@ docs-install-requirements:
 #####################################
 # Infra (OpenTofu) — out-of-band, NOT part of the Bazel build graph
 #
-# Manages the `bazel-cache-proxy` Cloud Run service. Needs `gcloud auth`
-# and the dev shell (`opentofu` is in flake.nix). The TF state bucket is
-# bootstrapped separately (see infra/bootstrap). Details and the one-time
-# import sequence: docs/src/development/ci.md.
+# Two modules, both needing `gcloud auth` + the dev shell (`opentofu` is in
+# flake.nix), state in gs://dasch-tf-state (see infra/bootstrap):
+#   * bazel-cache-proxy (Cloud Run cache) — tf-plan / tf-apply
+#   * NativeLink RBE demonstrator (GCE VM) — tf-plan-nl / tf-apply-nl
+# bazel-cache details + the one-time import sequence: docs/src/development/ci.md.
+# NativeLink bootstrap (incl. the mTLS cert step): infra/nativelink/README.md.
 #####################################
 
 # Show planned changes to the bazel-cache-proxy deployment.
@@ -583,6 +601,15 @@ tf-plan *FLAGS='':
 # Apply the bazel-cache-proxy deployment (rolls a new Cloud Run revision).
 tf-apply *FLAGS='':
     tofu -chdir=infra/bazel-cache apply {{FLAGS}}
+
+# Show planned changes to the NativeLink RBE demonstrator (infra/nativelink).
+tf-plan-nl *FLAGS='':
+    tofu -chdir=infra/nativelink plan {{FLAGS}}
+
+# Apply the NativeLink RBE demonstrator. After the first apply, run the cert
+# bootstrap in infra/nativelink/README.md before the VM serves traffic.
+tf-apply-nl *FLAGS='':
+    tofu -chdir=infra/nativelink apply {{FLAGS}}
 
 #####################################
 # Utilities
