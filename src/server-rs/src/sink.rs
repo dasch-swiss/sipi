@@ -160,7 +160,11 @@ extern "C" fn cb_cancelled(ctx: *mut c_void) -> c_int {
 /// without buffering the whole region. Returns 1 on a read error or a gone client
 /// (the committed head can't be unsaid, so the body simply truncates — matching
 /// the C++ transport, which drops the connection on a mid-send failure).
-fn stream_file_region(
+///
+/// `pub(crate)` so the `/server` docroot fileserver streams static files through
+/// the same bounded-memory path the engine `send_file` callback uses (run it on a
+/// `spawn_blocking` thread — the reads are blocking `std::fs`).
+pub(crate) fn stream_file_region(
     body_tx: &mpsc::Sender<Bytes>,
     path: &str,
     offset: u64,
