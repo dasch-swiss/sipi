@@ -9,7 +9,7 @@ Layout:
   * `:sipi_e2e`        `rust_library` exposing the shared helpers
                        (`SipiServer`, `repo_root`, `http_client`, …)
                        consumed by every test binary.
-  * 24 × `rust_test`   one target per non-docker `tests/<name>.rs`,
+  * 25 × `rust_test`   one target per non-docker `tests/<name>.rs`,
                        defined via `sipi_e2e_test()` (see
                        `sipi_e2e_test.bzl`). The macro injects the
                        shared `data`/`env`/`args`/`tags` so the
@@ -23,7 +23,7 @@ Layout:
   * `:docker_smoke`    inline `rust_test` — its data shape (OCI image
                        tarball) and tags (`requires-docker`) diverge
                        from the macro's defaults.
-  * `:all_e2e`         `test_suite` aggregating the 24 non-docker
+  * `:all_e2e`         `test_suite` aggregating the 25 non-docker
                        targets (not `:differential` / `:docker_smoke`).
                        `just bazel-test-e2e` wraps `bazel test
                        //test/e2e:all_e2e`.
@@ -111,6 +111,8 @@ sipi_e2e_test(name = "cli_json", deps = _e2e_test_deps)
 sipi_e2e_test(name = "config", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "connection", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "docroot_scripts", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "health", deps = _e2e_test_deps)
 
@@ -260,6 +262,7 @@ test_suite(
         ":cli_json",
         ":config",
         ":connection",
+        ":docroot_scripts",
         ":health",
         ":heritage_jpeg",
         ":http_contracts",
