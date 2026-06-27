@@ -99,7 +99,7 @@ jobs:
         run: nix develop .#llvm-tools --command bash -c "just bazel-coverage ${{ steps.rbe.outputs.flags }}"
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v6.0.1
+        uses: codecov/codecov-action@v6.0.2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: dasch-swiss/sipi
