@@ -37,6 +37,13 @@ enum Allow {
     /// `SipiVersion`) and the uptime counter differ by design (§5 #2,
     /// observability). Mask both; the `status: ok` shape still asserts.
     Health,
+    /// The docroot fileserver's `Last-Modified`: the Rust shell formats it
+    /// RFC-1123-correct (`…GMT`, via `httpdate`), while the C++ `file_handler`
+    /// uses `strftime("%Z", gmtime)`, whose zone label is platform-dependent
+    /// (`UTC` on macOS, `GMT` on Linux) and non-RFC. The instant matches; only
+    /// the label differs (the shared C++ engine `/file` path is unaffected, so
+    /// this is scoped to the pure-Rust static handler). Mask the header.
+    DocrootStatic,
 }
 
 impl Allow {
@@ -47,6 +54,7 @@ impl Allow {
             Allow::Health => DiffAllowlist::default_transport()
                 .masking_json("/version")
                 .masking_json("/uptime_seconds"),
+            Allow::DocrootStatic => DiffAllowlist::default_transport().ignoring("last-modified"),
         }
     }
 }
@@ -187,7 +195,38 @@ const CASES: &[Case] = &[
     Case { name: "returns_404_for_missing_file", method: Method::GET, path: "/file-should-be-missing-123", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "head_request_returns_headers", method: Method::HEAD, path: "/unit/lena512.jp2/info.json", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "health_returns_200_with_json", method: Method::GET, path: "/health", headers: &[], allow: Allow::Health, gap: None },
+    // /server docroot fileserver (plan 02 step 5). Fixtures are materialised by
+    // `differential_corpus_parity` before the loop; both binaries serve the same
+    // on-disk file, so size / mtime / content (→ Content-Range / Last-Modified /
+    // body) match. The binary branch carries Content-Type / Cache-Control /
+    // Pragma / Accept-Ranges / Last-Modified; the 206 branch adds Content-Range +
+    // the (replicated) full-path Content-Disposition; `.html` is the hardcoded
+    // text/html branch.
+    Case { name: "docroot_static_full", method: Method::GET, path: "/server/parity_probe.bin", headers: &[], allow: Allow::DocrootStatic, gap: None },
+    Case { name: "docroot_static_range_first_bytes", method: Method::GET, path: "/server/parity_probe.bin", headers: &[("Range", "bytes=0-99")], allow: Allow::DocrootStatic, gap: None },
+    Case { name: "docroot_static_open_ended_range", method: Method::GET, path: "/server/parity_probe.bin", headers: &[("Range", "bytes=500-")], allow: Allow::DocrootStatic, gap: None },
+    Case { name: "docroot_static_head", method: Method::HEAD, path: "/server/parity_probe.bin", headers: &[], allow: Allow::DocrootStatic, gap: Some("Rust supports HEAD on the docroot fileserver (file headers, no body); C++ registers the file_handler for GET+POST only, so HEAD falls through to the IIIF handler → 303 redirect. Rust's HEAD support is the more correct behaviour.") },
+    Case { name: "docroot_static_html", method: Method::GET, path: "/server/parity_probe.html", headers: &[], allow: Allow::Default, gap: None },
+    Case { name: "docroot_missing_file_404", method: Method::GET, path: "/server/no-such-docroot-file.bin", headers: &[], allow: Allow::Default, gap: None },
 ];
+
+/// Materialise the docroot fixtures the `/server` cases replay (created at
+/// runtime, not committed, mirroring `range_requests.rs`'s `TestFile`). Both
+/// binaries serve from `test_data_dir/server` with the same on-disk file.
+fn write_docroot_fixtures() {
+    let server_dir = sipi_e2e::test_data_dir().join("server");
+    std::fs::create_dir_all(&server_dir).expect("create docroot dir");
+    std::fs::write(
+        server_dir.join("parity_probe.bin"),
+        b"0123456789".repeat(100),
+    )
+    .expect("write parity_probe.bin");
+    std::fs::write(
+        server_dir.join("parity_probe.html"),
+        b"<!DOCTYPE html><html><head><title>parity</title></head><body><h1>parity probe</h1></body></html>",
+    )
+    .expect("write parity_probe.html");
+}
 
 /// Shared subject+reference pair — the corpus is read-only GETs, so one pair
 /// is reused (each `start_pair` spawns two processes). `--test-threads=1`
@@ -208,6 +247,7 @@ fn pair() -> &'static (SipiServer, SipiServer) {
 /// complete parity picture. `gap` cases are skipped and logged.
 #[test]
 fn differential_corpus_parity() {
+    write_docroot_fixtures();
     let (subject, reference) = pair();
     let mut failures: Vec<String> = Vec::new();
     let mut skipped: Vec<(&str, &str)> = Vec::new();
