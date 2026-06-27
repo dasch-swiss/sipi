@@ -779,6 +779,8 @@ insta::assert_json_snapshot!(info_json, {
 | Rust e2e tests (CI) | `just nix-test-e2e` | PR CI | Pre-built binaries from `.#e2e-tests` (crane); reads `$SIPI_BIN` |
 | Rust e2e tests (inner-loop) | `bazel test //test/e2e:<name>` | local | Same hermetic toolchain as CI |
 | Docker smoke (CI) | `just bazel-test-smoke` | PR + tag CI | Bazel-built OCI tarball, `docker load`ed by the test |
+| Differential parity (CI) | `just bazel-test-differential` | PR CI (linux-amd64) | THE strangler parity gate: full deduped e2e request corpus, Rust shell (subject) vs C++ oracle (`SIPI_BIN_REF`); dedicated step, `manual`-tagged (out of `:all_e2e`/coverage) |
+| Differential drift guard | `just differential-coverage-check` | PR CI (linux-amd64) | Pins the e2e `#[test]` count so the differential corpus can't silently lag (pure shell) |
 | Hurl contract tests | *(retired)* | — | Folded into Rust e2e (`tests/http_contracts.rs` + `iiif_compliance.rs`) |
 | Python e2e tests | *(retired)* | — | Replaced by Rust e2e tests |
 | Fuzz testing | `.github/workflows/fuzz.yml` | Nightly | libFuzzer corpus growth |

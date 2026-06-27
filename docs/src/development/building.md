@@ -129,6 +129,8 @@ groups:
 | `bazel-test-approval` | `bazel test //test/approval:approvaltests` |
 | `bazel-test-e2e [*FLAGS]` | All Rust e2e `rust_test` targets |
 | `bazel-test-smoke [*FLAGS]` | Docker smoke test (consumes Bazel-built image tarball) |
+| `bazel-test-differential [*FLAGS]` | Differential parity gate: full e2e corpus, Rust shell vs C++ oracle; `manual`-tagged; dedicated linux-amd64 CI step |
+| `differential-coverage-check` | Drift guard: assert the differential corpus still covers the e2e surface (pure shell) |
 | `bazel-build-sanitized [*FLAGS]` | `bazel build --config=asan --config=ubsan //src/cli:sipi` |
 | `bazel-build-fuzz [*FLAGS]` | libFuzzer harness (linux-x86_64 in CI, darwin-aarch64 local) |
 | `bazel-run-fuzz corpus duration [seed]` | Run libFuzzer harness against a corpus |
