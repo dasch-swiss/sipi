@@ -77,13 +77,18 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      # Cache strategy mirrors ci.yml — same bazel-remote endpoint on
-      # Cloud Run fronting gs://dasch-bazel-cache. Auth via the credential
-      # helper (`tools/bazel-cred-helper.sh`), gated on
-      # `$BAZEL_CACHE_PASSWORD`. See `.github/workflows/ci.yml` and
-      # `docs/src/development/ci.md` for the full topology. Bazelisk
-      # itself comes from the `.#llvm-tools` dev shell (nixpkgs); no
-      # runner-level Bazel install needed.
+      # Remote cache + executor via the bazel-rbe composite action (NativeLink
+      # :50051 + bazel-remote :50052, mTLS — see ci.yml for the topology).
+      # amd64-only, so the action's default target-platform
+      # (//platforms:linux_x86_64) needs no override.
+      - name: Set up Remote Build Execution (mTLS + flags)
+        id: rbe
+        uses: ./.github/actions/bazel-rbe
+        with:
+          endpoint: ${{ vars.BAZEL_RBE_ENDPOINT }}
+          ca-cert: ${{ secrets.BAZEL_RBE_CA_CERT }}
+          client-cert: ${{ secrets.BAZEL_RBE_CLIENT_CERT }}
+          client-key: ${{ secrets.BAZEL_RBE_CLIENT_KEY }}
 
       # `nix develop .#llvm-tools` is the meaningful difference vs ci.yml:
       # adds llvm-cov / llvm-profdata to PATH so `just bazel-coverage`'s
@@ -91,21 +96,7 @@ jobs:
       - name: Build + run all tests under coverage
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
-          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
-        run: |
-          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
-            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
-            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
-          else
-            REMOTE=""
-          fi
-          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
-            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
-          else
-            BES=""
-          fi
-          nix develop .#llvm-tools --command bash -c "just bazel-coverage $REMOTE $BES"
+        run: nix develop .#llvm-tools --command bash -c "just bazel-coverage ${{ steps.rbe.outputs.flags }}"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6.0.1

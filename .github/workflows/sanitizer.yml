@@ -84,11 +84,19 @@ jobs:
         with:
           use-flakehub: "false"  # GHA cache backend only; FlakeHub requires a paid plan we're not on.
 
-      # Cache via bazel-remote on Cloud Run (gRPC). See ci.yml for the
-      # full topology. Credentials are supplied by a Bazel credential
-      # helper (`tools/bazel-cred-helper.sh`) which reads
-      # $BAZEL_CACHE_PASSWORD from the workflow env. Skipped on fork
-      # PRs (env var empty → no cache).
+      # Remote cache + executor via the bazel-rbe composite action (NativeLink
+      # :50051 + bazel-remote :50052, mTLS — see ci.yml for the topology).
+      # amd64-only, so the action's default target-platform
+      # (//platforms:linux_x86_64) needs no override.
+      - name: Set up Remote Build Execution (mTLS + flags)
+        id: rbe
+        uses: ./.github/actions/bazel-rbe
+        with:
+          endpoint: ${{ vars.BAZEL_RBE_ENDPOINT }}
+          ca-cert: ${{ secrets.BAZEL_RBE_CA_CERT }}
+          client-cert: ${{ secrets.BAZEL_RBE_CLIENT_CERT }}
+          client-key: ${{ secrets.BAZEL_RBE_CLIENT_KEY }}
+
       # `nix develop .#llvm-tools` extends the default dev shell with
       # `llvmPackages_19.llvm`, which ships `llvm-symbolizer`. ASan/LSan
       # need the symbolizer to resolve `(/nix/store/.../sipi+0xOFFSET)`
@@ -113,29 +121,14 @@ jobs:
         # inline here. `rc` collects failures across both layers so one failing
         # layer doesn't mask another and the step still fails the gate.
         #
-        # The `if [ -n "$BAZEL_CACHE_PASSWORD" ]` blocks inject the remote-cache
-        # + BES flags when the secret is present; fork PRs run cold.
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-          BAZEL_CACHE_PASSWORD: ${{ secrets.BAZEL_CACHE_PASSWORD }}
-          BUILDBUDDY_ORG_API_KEY: ${{ secrets.BUILDBUDDY_ORG_API_KEY }}
         run: |
-          if [ -n "$BAZEL_CACHE_PASSWORD" ]; then
-            CACHE_HOST=bazel-cache-proxy-pbjdzenira-uc.a.run.app
-            REMOTE="--remote_cache=grpcs://$CACHE_HOST:443 --experimental_remote_downloader=grpcs://$CACHE_HOST:443 --experimental_remote_downloader_local_fallback --credential_helper=$CACHE_HOST=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh --remote_upload_local_results=true"
-          else
-            REMOTE=""
-          fi
-          if [ -n "$BUILDBUDDY_ORG_API_KEY" ]; then
-            BES="--bes_backend=grpcs://dasch.buildbuddy.io --bes_results_url=https://dasch.buildbuddy.io/invocation/ --bes_header=x-buildbuddy-api-key=$BUILDBUDDY_ORG_API_KEY --build_metadata=ROLE=CI"
-          else
-            BES=""
-          fi
           nix develop .#llvm-tools --command bash -c "
             export ASAN_SYMBOLIZER_PATH=\$(command -v llvm-symbolizer)
             rc=0
-            just bazel-test-unit --config=asan --config=ubsan --build_tag_filters=-no-sanitizer --test_tag_filters=-no-sanitizer $REMOTE $BES || rc=1
-            just bazel-test-e2e  --config=asan --config=ubsan $REMOTE $BES || rc=1
+            just bazel-test-unit --config=asan --config=ubsan --build_tag_filters=-no-sanitizer --test_tag_filters=-no-sanitizer ${{ steps.rbe.outputs.flags }} || rc=1
+            just bazel-test-e2e  --config=asan --config=ubsan ${{ steps.rbe.outputs.flags }} || rc=1
             exit \$rc"
 
       - name: Check for sanitizer findings
