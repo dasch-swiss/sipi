@@ -586,21 +586,12 @@ docs-install-requirements:
 #####################################
 # Infra (OpenTofu) — out-of-band, NOT part of the Bazel build graph
 #
-# Two modules, both needing `gcloud auth` + the dev shell (`opentofu` is in
-# flake.nix), state in gs://dasch-tf-state (see infra/bootstrap):
-#   * bazel-cache-proxy (Cloud Run cache) — tf-plan / tf-apply
-#   * NativeLink RBE demonstrator (GCE VM) — tf-plan-nl / tf-apply-nl
-# bazel-cache details + the one-time import sequence: docs/src/development/ci.md.
-# NativeLink bootstrap (incl. the mTLS cert step): infra/nativelink/README.md.
+# The NativeLink RBE backend (GCE VM: remote cache + executor + a co-located
+# bazel-remote download cache) is provisioned here. Needs `gcloud auth` + the
+# dev shell (`opentofu` is in flake.nix); state in gs://dasch-tf-state (see
+# infra/bootstrap). NativeLink bootstrap (incl. the mTLS cert step):
+# infra/nativelink/README.md.
 #####################################
-
-# Show planned changes to the bazel-cache-proxy deployment.
-tf-plan *FLAGS='':
-    tofu -chdir=infra/bazel-cache plan {{FLAGS}}
-
-# Apply the bazel-cache-proxy deployment (rolls a new Cloud Run revision).
-tf-apply *FLAGS='':
-    tofu -chdir=infra/bazel-cache apply {{FLAGS}}
 
 # Show planned changes to the NativeLink RBE demonstrator (infra/nativelink).
 tf-plan-nl *FLAGS='':
