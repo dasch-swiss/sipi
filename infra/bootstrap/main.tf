@@ -4,7 +4,7 @@ locals {
 }
 
 # Shared Terraform remote-state bucket for DaSCH infrastructure configs
-# (infra/bazel-cache, and any future per-service config). `prevent_destroy`
+# (infra/nativelink, and any future per-service config). `prevent_destroy`
 # guards against `tofu destroy` wiping the state store itself.
 resource "google_storage_bucket" "tf_state" {
   name     = "dasch-tf-state"

@@ -38,7 +38,7 @@
             go-containerregistry
             just
 
-            # OpenTofu — drives infra/ (Cloud Run bazel-cache-proxy + TF state
+            # OpenTofu — drives infra/ (NativeLink RBE backend + TF state
             # bucket). Dev-shell-only: infra deploys are out-of-band ops, not
             # part of the Bazel build graph.
             opentofu

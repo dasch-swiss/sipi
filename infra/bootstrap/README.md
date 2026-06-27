@@ -28,7 +28,7 @@ After that, normal `tofu plan` / `tofu apply` runs against the GCS backend.
 
 ## More
 
-The wider cache topology, rationale, and runbooks live in
-[`docs/src/development/ci.md`](../../docs/src/development/ci.md) ("Cache
-strategy"). The service this state backs is in
-[`infra/bazel-cache`](../bazel-cache).
+The RBE topology, rationale, and runbooks live in
+[`docs/src/development/rbe.md`](../../docs/src/development/rbe.md) and
+[`infra/nativelink/RUNBOOK.md`](../nativelink/RUNBOOK.md). The service this
+state backs is in [`infra/nativelink`](../nativelink).
