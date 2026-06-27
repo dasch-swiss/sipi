@@ -26,7 +26,7 @@ BUILD.bazel that declares its `cc_library`/`cc_binary`/`cc_test`/
 `oci_image`/`rust_test` targets and visibility rules.
 
 **Hermetic toolchain.** The BCR `llvm` (hermetic-llvm) module, pinned
-at 0.8.8, registers a single constraint-based LLVM 22.1.7 toolchain
+at 0.8.10, registers a single constraint-based LLVM 22.1.7 toolchain
 that every cc action runs under — it serves all platforms, including
 the `//tools/fuzz:*` fuzz platforms. libc++ is the default stdlib.
 The bundle ships per-target glibc (~2.28) + libc++ + compiler-rt on
@@ -76,7 +76,7 @@ Every CI step invokes one of these recipes — there are no inline
 ```bash
 # Build sipi (fastbuild — fast incremental for inner-loop edits)
 just bazel-build                 # bazel build --stamp //src/cli:sipi
-just bazel-build -c opt          # production-shape build (matches Docker image)
+just bazel-build --config=release  # production build: -c opt + hardening (matches Docker image)
 just bazel-build --config=asan   # ASan+UBSan; same flag form for ad-hoc variants
 
 # Tests
@@ -108,7 +108,8 @@ Defined in `.bazelrc`. Each flag composes with `bazel build` /
 
 | Flag | Effect |
 |---|---|
-| `-c opt` | `-O3 -DNDEBUG`. Production shape; matches the Docker image. |
+| `-c opt` | `-O3 -DNDEBUG`. Optimized codegen (the Docker image adds hardening — use `--config=release`). |
+| `--config=release` | `-c opt` + `_FORTIFY_SOURCE=2` hardening. The production build; what the Docker image ships. |
 | `-c dbg` | `-O0 -g`. Full debug symbols; what `bazel-build-sanitized` consumes. |
 | `--config=asan` | AddressSanitizer + DWARF inline; consults `.lsan_suppressions.txt` at e2e time. |
 | `--config=ubsan` | UndefinedBehaviorSanitizer. Composes with `--config=asan`. |
