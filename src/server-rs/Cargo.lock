@@ -1381,6 +1381,7 @@ dependencies = [
  "axum-tracing-opentelemetry",
  "cookie",
  "form_urlencoded",
+ "httpdate",
  "init-tracing-opentelemetry",
  "opentelemetry",
  "opentelemetry-appender-tracing",

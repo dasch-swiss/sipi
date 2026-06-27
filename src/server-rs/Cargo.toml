@@ -44,6 +44,11 @@ toml = { version = "0.8", default-features = false, features = ["parse"] }
 # Spool each multipart upload to a temp file the C++ engine opens by path; the
 # handle is held until the Lua route finishes, then auto-deleted on drop.
 tempfile = "3"
+# RFC 1123 (IMF-fixdate) formatting for the `/server` fileserver's Last-Modified
+# header — byte-identical to the C++ transport's strftime("%a, %d %b %Y %H:%M:%S
+# %Z", gmtime) so the differential parity gate matches. Already in the lock (via
+# hyper); promoted to a direct dep.
+httpdate = "1"
 
 # Observability — the OpenTelemetry/OTLP stack, matching the dsp-repository
 # Rust/axum precedent (gRPC-tonic → the Alloy collector on :4317). The helper
