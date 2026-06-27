@@ -53,15 +53,23 @@ What the macro injects:
                                  preventing port collisions between
                                  test binaries that all spin up sipi
                                  on `11024 + (PID % 16384)`.
-      - `local`                  Forces local-spawn (skips sandboxing).
-                                 Required because macOS Bazel's
-                                 sandbox interferes with `realpath()`
-                                 resolution against the materialised
-                                 `:test_fixtures` tree — sipi's
-                                 path-traversal guard
+      - `no-sandbox`             Skips the sandbox for this target's actions.
+                                 Required because macOS Bazel's sandbox
+                                 interferes with `realpath()` resolution
+                                 against the materialised `:test_fixtures`
+                                 tree — sipi's path-traversal guard
                                  (`SipiHttpServer.cpp:validate_resolved_path`)
                                  then rejects every IIIF request with
                                  "Invalid IIIF identifier".
+                                 NOT `local`: `local` additionally force-runs
+                                 the test's COMPILE on the local host, which
+                                 breaks RBE cross-compilation (x86_64 exec
+                                 tools can't run on an arm64/darwin runner).
+                                 Local test EXECUTION is ensured separately by
+                                 CI's `--strategy=TestRunner=local` (and is the
+                                 default with no remote executor), so
+                                 `no-sandbox` covers the sandbox need without
+                                 pinning the compile.
 
 The macro DOES cover the `differential` parity target through
 `extra_data` / `extra_env`: that target adds the retained C++ server
@@ -100,7 +108,7 @@ def sipi_e2e_test(
         when a test reads a file outside `:test_fixtures` add it here.
       extra_env: additional env vars (merged on top of the shared dict).
       extra_tags: additional Bazel tags (merged on top of `["exclusive",
-        "local"]`).
+        "no-sandbox"]`).
     """
     rust_test(
         name = name,
@@ -151,5 +159,5 @@ def sipi_e2e_test(
             "LSAN_OPTIONS": "suppressions=$(rootpath //:lsan_suppressions)",
         } | extra_env,
         args = ["--test-threads=1"],
-        tags = ["exclusive", "local"] + extra_tags,
+        tags = ["exclusive", "no-sandbox"] + extra_tags,
     )
