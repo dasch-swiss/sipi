@@ -82,28 +82,24 @@ build:linux --dynamic_mode=off
 # per-config overrides further down ensure those compile lines do NOT
 # carry the new hardening flags.
 build --copt=-fstack-protector-strong
-# Bazel's unix-toolchain `opt` feature injects `-D_FORTIFY_SOURCE=1` ahead of
-# user copts; redefining straight to 2 trips `-Wmacro-redefined` in every
-# `-c opt` TU — a warning for our code, a hard error for deps that compile
-# with `-Werror` (google_benchmark broke first, via `just bench`). The
-# canonical idiom is undef-then-define.
-build --copt=-U_FORTIFY_SOURCE
-build --copt=-D_FORTIFY_SOURCE=2
-
-# Target build of libmagic 5.47 hits the same glibc fortify-header
-# conflict that breaks host config. Undef FORTIFY for libmagic source
-# files only; stack-protector is fine — the conflict is fortify-specific.
-# This is the per-dep narrowing escape hatch the DEV-6282 plan called out:
-# narrow per-dep rather than rolling back hardening globally.
+# `_FORTIFY_SOURCE=2` lives in `--config=release` (just below), NOT the global
+# `build` config: it requires optimization, so at the default fastbuild `-O0` it
+# does nothing but emit a glibc `#warning` on every TU (huge CI log spam).
+# Release-only keeps dev / fastbuild / CI builds quiet.
 #
-# Substring `libmagic` (no anchor / regex escapes) is used deliberately —
-# Bazel's `.bazelrc` parser treats `\+` in anchored forms like
-# `^external/libmagic\+/...$` as a literal that fails to match the source
-# path (verified via aquery), while the same anchored form works when
-# passed via shell-quoted command-line `--per_file_copt='…'`. The
-# substring is unambiguous: no other source path in the build graph
-# contains the string "libmagic".
-build --per_file_copt=libmagic@-U_FORTIFY_SOURCE
+# ── Release (production) build config ────────────────────────────────────────
+# `--config=release` IS the production build — the Docker image recipes
+# (`just bazel-docker-build/push-*`, `bazel-docker-extract-debug`) use it:
+# `-c opt` codegen + `_FORTIFY_SOURCE=2` hardening. The hermetic-llvm toolchain's
+# opt feature injects `-D_FORTIFY_SOURCE=1`; we undef then redefine to 2
+# (undef-then-define avoids `-Wmacro-redefined`). libmagic 5.47 conflicts with the
+# fortified glibc headers, so undo FORTIFY for its TUs only (substring match — no
+# other source path contains "libmagic"; an anchored `^external/libmagic\+/…$`
+# form fails to match in `.bazelrc`, verified via aquery).
+build:release --compilation_mode=opt
+build:release --copt=-U_FORTIFY_SOURCE
+build:release --copt=-D_FORTIFY_SOURCE=2
+build:release --per_file_copt=libmagic@-U_FORTIFY_SOURCE
 
 # Linux-only: stack-clash-protection is a clang-on-Linux feature (warns
 # harmlessly on a darwin cross-compile). Its companion `-Wl,-z,now` linkopt
@@ -335,39 +331,30 @@ test --flaky_test_attempts=//test/e2e:memory_budget@3
 test --flaky_test_attempts=//test/e2e:server@3
 test --flaky_test_attempts=//test/e2e:upload@3
 
-# ── Remote cache ────────────────────────────────────────────────────────────
-# DEV-6517: gRPC remote cache via bazel-remote on Cloud Run, backed by GCS.
-# The URL and a pointer to the credential helper are constructed in each
-# CI workflow step:
-#   --remote_cache=grpcs://<host>:443
-#   --experimental_remote_downloader=grpcs://<host>:443
-#   --credential_helper=$GITHUB_WORKSPACE/tools/bazel-cred-helper.sh
-# Bazel does NOT do shell env-var expansion in .bazelrc, so these flags
-# live in the workflow env, not here. The credential helper reads
-# $BAZEL_CACHE_PASSWORD from the Bazel subprocess env and emits an
-# `Authorization: Basic <b64>` gRPC metadata header on demand.
-# Credentials cannot live in the URL (Cloud Run's GFE rejects gRPC
-# :authority headers that contain user:pass@host) nor in --remote_header
-# directly (the embedded space loses arg boundary through `just`'s
-# {{FLAGS}} textual substitution).
-#
-# The flags below are cache-backend-agnostic and safe-no-op when no remote
-# cache is configured (i.e. local dev runs without --remote_cache=…):
-#   --remote_cache_compression: zstd-compress action outputs over the wire;
-#     cuts egress 2-4x for compile/link outputs.
-#   --remote_download_minimal: only fetch outputs of explicitly-built
-#     targets; intermediate action outputs stay in CAS.
-#   --remote_local_fallback: if the cache is unreachable, build locally
-#     instead of failing — a Cloud Run outage degrades wall-clock, never
-#     breaks CI.
-#   --remote_timeout=30s: per-request budget; allows for occasional
-#     Cloud Run cold-start without falling through to local fallback.
-#   --remote_max_connections=100: raises gRPC parallelism ceiling for fast
+# ── Remote build execution (NativeLink VM) ──────────────────────────────────
+# The self-hosted NativeLink VM is the Bazel backend: Remote Cache + Remote
+# Execution (:50051, mTLS) plus a co-located bazel-remote (:50052) as the
+# http_archive download cache. The connection + mTLS flags are built by the
+# `bazel-rbe` composite action and injected per CI step (Bazel does NOT expand
+# env vars in .bazelrc, so they live in the workflow, not here):
+#   --remote_cache / --remote_executor=grpcs://<vm>:50051
+#   --experimental_remote_downloader=grpcs://<vm>:50052
+#   --tls_certificate / --tls_client_certificate / --tls_client_key
+# Local dev never sets those, so the tuning flags below are safe no-ops without a
+# remote configured.
+#   --remote_download_minimal: only fetch outputs of explicitly-built targets;
+#     intermediate action outputs stay in the CAS (build-without-the-bytes).
+#   --remote_local_fallback: if the VM is unreachable, build locally instead of
+#     failing — a VM outage degrades wall-clock, never breaks CI.
+#   --remote_timeout=600s: per-request budget sized for cold native-dep compiles
+#     on the worker (far longer than a cache-only round-trip).
+#   --remote_max_connections=100: raises the gRPC parallelism ceiling for fast
 #     bulk lookup at build-graph evaluation time.
-build --remote_cache_compression
+# No --remote_cache_compression: NativeLink v1.5.2 does not advertise wire
+# compression, so enabling it fails the capabilities query.
 build --remote_download_minimal
 build --remote_local_fallback
-build --remote_timeout=30s
+build --remote_timeout=600s
 build --remote_max_connections=100
 
 # ── Build Event Service (BuildBuddy) ───────────────────────────────────────

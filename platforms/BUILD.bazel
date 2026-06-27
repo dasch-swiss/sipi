@@ -13,6 +13,14 @@ platform(
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
     ],
+    # The NativeLink RBE worker is x86_64-linux. When the arm64/darwin CI legs
+    # cross-compile here (exec = this platform), the scheduler matches the worker
+    # on this property. Mirrors --remote_default_exec_properties=cpu_arch=x86_64 in
+    # CI; keep minimal (don't add OSFamily unless the worker advertises it, or the
+    # scheduler reports "no matching worker"). Inert for local/non-remote builds.
+    exec_properties = {
+        "cpu_arch": "x86_64",
+    },
 )
 
 platform(
