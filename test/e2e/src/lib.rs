@@ -8,6 +8,9 @@ use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+pub mod diff;
+pub use diff::{diff_get, diff_request, BodyMatch, DiffAllowlist, DiffResult, HeaderDiff};
+
 /// Atomic port counter to avoid conflicts when tests run in parallel.
 /// Start well above privileged ports (macOS restricts ports below 1024).
 /// The base offset is derived from the PID so back-to-back test
@@ -31,6 +34,43 @@ pub fn allocate_ports() -> (u16, u16) {
     (http, ssl)
 }
 
+/// Which binary a `SipiServer` instance wraps. Internal to the harness —
+/// callers select a binary through `start_with_args` (subject) or
+/// `start_pair` (subject + reference), never by naming a `ServerKind`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ServerKind {
+    /// The Rust shell under test — `//src/cli-rs:sipi`, resolved from `$SIPI_BIN`.
+    Subject,
+    /// The retained C++ server used as a differential oracle —
+    /// `//src/cli:sipi`, resolved from `$SIPI_BIN_REF`.
+    Reference,
+}
+
+impl ServerKind {
+    /// The log line each binary emits once its HTTP listener is bound, used
+    /// as a fast readiness hint. The startup poll falls back to a TCP /
+    /// `/health` probe if it never appears (suppressed by log level, or
+    /// written to a stream we don't match), so this is an optimization, not
+    /// a hard requirement.
+    fn ready_signal(self) -> &'static str {
+        match self {
+            // server-rs logs this once `sipi::run` binds the axum listener.
+            ServerKind::Subject => "SIPI Rust shell listening",
+            // shttps `Server::run` logs "Server listening on HTTP port %d".
+            ServerKind::Reference => "Server listening on HTTP port",
+        }
+    }
+
+    /// Short label for `[test-harness]` diagnostics so two interleaved
+    /// spawns are distinguishable.
+    fn label(self) -> &'static str {
+        match self {
+            ServerKind::Subject => "subject(rust)",
+            ServerKind::Reference => "reference(c++)",
+        }
+    }
+}
+
 /// Manages a sipi server process for testing.
 pub struct SipiServer {
     child: Child,
@@ -41,15 +81,59 @@ pub struct SipiServer {
 }
 
 impl SipiServer {
-    /// Start a sipi server with the given config file and extra CLI arguments.
+    /// Start the Rust shell (the subject under test) with the given config
+    /// file and extra CLI arguments.
     ///
-    /// `config` — path to the Lua config file, relative to `working_dir`.
+    /// `config` — path to the config file, relative to `working_dir`.
     /// `working_dir` — the directory sipi should run in (where config/, scripts/, images/ are).
     /// `extra_args` — additional CLI arguments appended after standard ones.
-    ///                 CLI args override Lua config values (CLI11 precedence).
+    ///                 CLI args override config values (CLI precedence).
     pub fn start_with_args(config: &str, working_dir: &Path, extra_args: &[&str]) -> Self {
-        let sipi_bin = sipi_bin_path();
+        Self::spawn(
+            sipi_bin_path(),
+            ServerKind::Subject,
+            config,
+            working_dir,
+            extra_args,
+        )
+    }
 
+    /// Start the Rust shell (subject) and the C++ oracle (reference) on
+    /// separate port pairs from the same config, for differential testing.
+    /// The subject resolves from `$SIPI_BIN`, the reference from
+    /// `$SIPI_BIN_REF` (set only by the `//test/e2e:differential` target).
+    /// Spawned sequentially so the two binaries' startup logs don't interleave.
+    pub fn start_pair(
+        config: &str,
+        working_dir: &Path,
+        extra_args: &[&str],
+    ) -> (SipiServer, SipiServer) {
+        let subject = Self::spawn(
+            sipi_bin_path(),
+            ServerKind::Subject,
+            config,
+            working_dir,
+            extra_args,
+        );
+        let reference = Self::spawn(
+            sipi_oracle_bin_path(),
+            ServerKind::Reference,
+            config,
+            working_dir,
+            extra_args,
+        );
+        (subject, reference)
+    }
+
+    /// Spawn one sipi process of `kind` from the resolved `bin`, wait until
+    /// it serves `/health`, and return the handle.
+    fn spawn(
+        bin: String,
+        kind: ServerKind,
+        config: &str,
+        working_dir: &Path,
+        extra_args: &[&str],
+    ) -> Self {
         let (http_port, ssl_port) = allocate_ports();
 
         // If a stale sipi from a previous test run is still holding these
@@ -60,8 +144,9 @@ impl SipiServer {
         kill_process_on_port(ssl_port);
 
         eprintln!(
-            "[test-harness] Starting sipi: bin={} config={} ports={}/{} cwd={} extra_args={:?}",
-            sipi_bin,
+            "[test-harness] Starting {} sipi: bin={} config={} ports={}/{} cwd={} extra_args={:?}",
+            kind.label(),
+            bin,
             config,
             http_port,
             ssl_port,
@@ -73,16 +158,22 @@ impl SipiServer {
         // (default is 30s). With `stop()`'s 5s deadline, this leaves a 2.5×
         // margin even under ASan's runtime overhead, so SIGKILL never fires
         // on a still-draining server. Placed before `extra_args` so an
-        // individual test can still override it (CLI11 last-wins).
-        let mut cmd = Command::new(&sipi_bin);
+        // individual test can still override it (last-wins).
+        let mut cmd = Command::new(&bin);
         cmd.arg("server")
             .arg("--config")
             .arg(config)
             .arg("--serverport")
-            .arg(http_port.to_string())
-            .arg("--sslport")
-            .arg(ssl_port.to_string())
-            .arg("--drain-timeout")
+            .arg(http_port.to_string());
+        // The Rust shell parses `--sslport` but serves plain HTTP behind
+        // Traefik. The C++ oracle would bind a real SSL listener, so the
+        // reference is spawned HTTP-only: with `--config` its `ssl_port`
+        // defaults to -1 and the SSL block is skipped when `--sslport` is
+        // absent. The resulting TLS difference is an allowlisted divergence.
+        if matches!(kind, ServerKind::Subject) {
+            cmd.arg("--sslport").arg(ssl_port.to_string());
+        }
+        cmd.arg("--drain-timeout")
             .arg("2")
             .args(extra_args)
             .current_dir(working_dir)
@@ -100,11 +191,10 @@ impl SipiServer {
         // changes cwd to test/_test_data/, gcda files would land there instead of
         // in build/. GCOV_PREFIX redirects them to the build dir.
         //
-        // Derive `build_dir` from the *actually-resolved* sipi binary, not from
-        // `find_sipi_bin()` (the cmake-inner-loop default). When `$SIPI_BIN`
-        // points outside `repo_root/build` (static-musl CI, sanitizer CI, or
-        // any custom binary), `find_sipi_bin()` would compute the wrong dir.
-        let build_dir = PathBuf::from(&sipi_bin)
+        // Derive `build_dir` from the *actually-resolved* sipi binary so a
+        // `$SIPI_BIN`/`$SIPI_BIN_REF` outside `repo_root/build` (static-musl CI,
+        // sanitizer CI, or any custom binary) still computes the right dir.
+        let build_dir = PathBuf::from(&bin)
             .parent()
             .expect("sipi binary should be in a build directory")
             .to_path_buf();
@@ -114,104 +204,78 @@ impl SipiServer {
         }
 
         let mut child = cmd.spawn().unwrap_or_else(|e| {
-            panic!("Failed to start sipi at {}: {}", sipi_bin, e);
+            panic!("Failed to start {} sipi at {}: {}", kind.label(), bin, e);
         });
-        let child_pid = child.id();
-        eprintln!("[test-harness] Spawned sipi PID={}", child_pid);
+        eprintln!(
+            "[test-harness] Spawned {} sipi PID={}",
+            kind.label(),
+            child.id()
+        );
 
-        // Drain stderr in a background thread to prevent pipe buffer from filling.
-        let stderr = child.stderr.take().expect("stderr captured");
-        let stderr_buf = Arc::new(Mutex::new(String::new()));
-        let stderr_buf_clone = Arc::clone(&stderr_buf);
-        std::thread::spawn(move || {
-            let mut reader = BufReader::new(stderr);
-            let mut buf = String::new();
-            loop {
-                buf.clear();
-                match reader.read_line(&mut buf) {
-                    Ok(0) | Err(_) => break,
-                    Ok(_) => {
-                        if let Ok(mut captured) = stderr_buf_clone.lock() {
-                            captured.push_str(&buf);
-                            if captured.len() > 65536 {
-                                let drain = captured.len() - 32768;
-                                captured.drain(..drain);
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        // Drain stdout in a background thread. Capture content for diagnostics
-        // AND watch for the readiness signal.
-        let stdout = child.stdout.take().expect("stdout captured");
-        let stdout_buf = Arc::new(Mutex::new(String::new()));
-        let stdout_buf_clone = Arc::clone(&stdout_buf);
-        // The Rust shell (the cutover binary) logs this once it binds the listener;
-        // it serves plain HTTP behind Traefik, so there is no SSL-port line.
-        let ready_signal = "SIPI Rust shell listening";
+        // Drain both child streams on background threads (prevents pipe-buffer
+        // backpressure) and feed the readiness channel on the listen-log line.
+        // Watching both streams keeps readiness independent of which sink a
+        // given binary logs to.
+        let ready_signal = kind.ready_signal();
         let (tx, rx) = std::sync::mpsc::channel();
+        let stderr_buf = spawn_log_drain(
+            child.stderr.take().expect("stderr captured"),
+            ready_signal,
+            tx.clone(),
+        );
+        let stdout_buf = spawn_log_drain(
+            child.stdout.take().expect("stdout captured"),
+            ready_signal,
+            tx,
+        );
 
-        std::thread::spawn(move || {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                match line {
-                    Ok(l) => {
-                        if let Ok(mut captured) = stdout_buf_clone.lock() {
-                            captured.push_str(&l);
-                            captured.push('\n');
-                            if captured.len() > 65536 {
-                                let drain = captured.len() - 32768;
-                                captured.drain(..drain);
-                            }
-                        }
-                        // Detect readiness: the Rust shell's listen log line.
-                        if l.contains(ready_signal) {
-                            let _ = tx.send(());
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
-        });
-
-        // Wait for ready signal or TCP connectivity
+        // Wait for readiness: the listen-log signal (fast hint) or a successful
+        // TCP connect. Polling both avoids a 30s stall when the signal is
+        // suppressed or lands on a stream we don't match (the C++ oracle's log
+        // sink is configurable).
         let timeout = Duration::from_secs(30);
         let start = Instant::now();
-
-        match rx.recv_timeout(timeout) {
-            Ok(()) => {
+        let mut connected = false;
+        while start.elapsed() < timeout {
+            if rx.try_recv().is_ok() {
                 eprintln!(
-                    "[test-harness] Readiness signal received after {:?}",
+                    "[test-harness] {} readiness signal after {:?}",
+                    kind.label(),
                     start.elapsed()
                 );
+                connected = true;
+                break;
             }
-            Err(_) => {
-                // Fallback: poll TCP
-                eprintln!("[test-harness] No readiness signal, falling back to TCP probe");
-                while start.elapsed() < timeout {
-                    if TcpStream::connect(format!("127.0.0.1:{}", http_port)).is_ok() {
-                        break;
-                    }
-                    std::thread::sleep(Duration::from_millis(100));
-                }
-                if TcpStream::connect(format!("127.0.0.1:{}", http_port)).is_err() {
-                    let captured_stderr = stderr_buf.lock().map(|s| s.clone()).unwrap_or_default();
-                    let captured_stdout = stdout_buf.lock().map(|s| s.clone()).unwrap_or_default();
-                    child.kill().ok();
-                    panic!(
-                        "Sipi failed to start within {:?} on port {}\nstdout:\n{}\nstderr:\n{}",
-                        timeout, http_port, captured_stdout, captured_stderr
-                    );
-                }
+            if TcpStream::connect(format!("127.0.0.1:{}", http_port)).is_ok() {
+                connected = true;
+                break;
             }
+            if let Ok(Some(status)) = child.try_wait() {
+                panic!(
+                    "{} sipi exited with {} during startup\nstdout:\n{}\nstderr:\n{}",
+                    kind.label(),
+                    status,
+                    dump(&stdout_buf),
+                    dump(&stderr_buf)
+                );
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        if !connected {
+            child.kill().ok();
+            panic!(
+                "{} sipi failed to start within {:?} on port {}\nstdout:\n{}\nstderr:\n{}",
+                kind.label(),
+                timeout,
+                http_port,
+                dump(&stdout_buf),
+                dump(&stderr_buf)
+            );
         }
 
-        // The readiness log is emitted before the event loop starts accepting
-        // connections. Probe /health (Rust-native, engine-independent) to confirm
-        // the server is actually processing — the Rust shell is OTLP-only, so it
-        // exposes no /metrics scrape, and /health is served by both transports.
+        // The listen log / TCP-accept precedes the event loop actually
+        // processing requests. Probe /health (Rust-native, engine-independent,
+        // served by both transports) to confirm the server is serving.
         let base_url = format!("http://127.0.0.1:{}", http_port);
         let probe_client = reqwest::blocking::Client::builder()
             .danger_accept_invalid_certs(true)
@@ -228,7 +292,8 @@ impl SipiServer {
                 Ok(resp) if resp.status().is_success() => {
                     http_ready = true;
                     eprintln!(
-                        "[test-harness] HTTP ready after {} probes, {:?} total",
+                        "[test-harness] {} HTTP ready after {} probes, {:?} total",
+                        kind.label(),
                         probe_count,
                         start.elapsed()
                     );
@@ -241,27 +306,33 @@ impl SipiServer {
                     last_probe_err = format!("{}", e);
                 }
             }
-            // Check if child is still alive
             if let Ok(Some(status)) = child.try_wait() {
-                let captured_stdout = stdout_buf.lock().map(|s| s.clone()).unwrap_or_default();
-                let captured_stderr = stderr_buf.lock().map(|s| s.clone()).unwrap_or_default();
                 panic!(
-                    "Sipi process exited unexpectedly with {} after {} probes\n\
+                    "{} sipi exited with {} after {} /health probes\n\
                      last probe error: {}\nstdout:\n{}\nstderr:\n{}",
-                    status, probe_count, last_probe_err, captured_stdout, captured_stderr
+                    kind.label(),
+                    status,
+                    probe_count,
+                    last_probe_err,
+                    dump(&stdout_buf),
+                    dump(&stderr_buf)
                 );
             }
             std::thread::sleep(Duration::from_millis(50));
         }
 
         if !http_ready {
-            let captured_stdout = stdout_buf.lock().map(|s| s.clone()).unwrap_or_default();
-            let captured_stderr = stderr_buf.lock().map(|s| s.clone()).unwrap_or_default();
             child.kill().ok();
             panic!(
-                "Sipi started but never served HTTP on port {} within {:?}\n\
+                "{} sipi started but never served HTTP on port {} within {:?}\n\
                  probes attempted: {}, last error: {}\nstdout:\n{}\nstderr:\n{}",
-                http_port, timeout, probe_count, last_probe_err, captured_stdout, captured_stderr
+                kind.label(),
+                http_port,
+                timeout,
+                probe_count,
+                last_probe_err,
+                dump(&stdout_buf),
+                dump(&stderr_buf)
             );
         }
 
@@ -323,6 +394,41 @@ impl Drop for SipiServer {
     fn drop(&mut self) {
         self.stop();
     }
+}
+
+/// Drain a child stream on a background thread: capture lines for
+/// diagnostics (ring-capped at 64 KiB → 32 KiB) and signal `tx` on the
+/// first line containing `ready_signal`. Returns the shared capture buffer.
+fn spawn_log_drain(
+    stream: impl std::io::Read + Send + 'static,
+    ready_signal: &'static str,
+    tx: std::sync::mpsc::Sender<()>,
+) -> Arc<Mutex<String>> {
+    let buf = Arc::new(Mutex::new(String::new()));
+    let buf_clone = Arc::clone(&buf);
+    std::thread::spawn(move || {
+        let reader = BufReader::new(stream);
+        for line in reader.lines() {
+            let Ok(l) = line else { break };
+            if let Ok(mut captured) = buf_clone.lock() {
+                captured.push_str(&l);
+                captured.push('\n');
+                if captured.len() > 65536 {
+                    let drain = captured.len() - 32768;
+                    captured.drain(..drain);
+                }
+            }
+            if l.contains(ready_signal) {
+                let _ = tx.send(());
+            }
+        }
+    });
+    buf
+}
+
+/// Snapshot a capture buffer for inclusion in a panic message.
+fn dump(buf: &Arc<Mutex<String>>) -> String {
+    buf.lock().map(|s| s.clone()).unwrap_or_default()
 }
 
 /// Path to the sipi repository root.
@@ -450,13 +556,12 @@ pub fn find_sipi_bin() -> PathBuf {
     repo_root().join("build").join("sipi")
 }
 
-/// Resolve the sipi binary path for spawning. Reads `SIPI_BIN` (or falls
-/// back to `find_sipi_bin()`) and canonicalises the result to an
-/// absolute path.
+/// Resolve a sipi binary path from `env_var`, falling back to `fallback`,
+/// and canonicalise the result to an absolute path.
 ///
 /// Why canonicalise: callers spawn sipi via `Command::new(&path).
 /// current_dir(working_dir)`, and Rust resolves the binary path AFTER
-/// applying `current_dir`. A relative `SIPI_BIN` like `src/sipi`
+/// applying `current_dir`. A relative path like `src/sipi`
 /// (Bazel `$(rootpath …)` output) would be looked up under
 /// `working_dir/src/sipi` — wrong. The canonicalisation runs in the
 /// parent's cwd, which under Bazel `rust_test` is the runfiles
@@ -464,11 +569,9 @@ pub fn find_sipi_bin() -> PathBuf {
 ///
 /// Returns the binary path as a String (kept as String rather than
 /// PathBuf so callers can pass it straight to `Command::new` or to
-/// derived `PathBuf::from(&sipi_bin)` arithmetic in
-/// `SipiServer::start_with_args`).
-pub fn sipi_bin_path() -> String {
-    let raw =
-        std::env::var("SIPI_BIN").unwrap_or_else(|_| find_sipi_bin().to_string_lossy().to_string());
+/// derived `PathBuf::from(&bin)` arithmetic in `SipiServer::spawn`).
+pub fn sipi_bin_path_from(env_var: &str, fallback: PathBuf) -> String {
+    let raw = std::env::var(env_var).unwrap_or_else(|_| fallback.to_string_lossy().to_string());
     std::path::Path::new(&raw)
         .canonicalize()
         .map(|p| p.to_string_lossy().into_owned())
@@ -476,6 +579,24 @@ pub fn sipi_bin_path() -> String {
         // doesn't exist yet) so the downstream `Command::spawn` panic
         // surfaces the original user input rather than swallowing it.
         .unwrap_or(raw)
+}
+
+/// The Rust shell under test (`//src/cli-rs:sipi`), from `$SIPI_BIN` or the
+/// cmake inner-loop fallback (`<repo>/build/sipi`).
+pub fn sipi_bin_path() -> String {
+    sipi_bin_path_from("SIPI_BIN", find_sipi_bin())
+}
+
+/// The C++ oracle (`//src/cli:sipi`) for the differential harness, from
+/// `$SIPI_BIN_REF`. Set only by the `//test/e2e:differential` Bazel target;
+/// under `cargo test` it is unset and the fallback path won't exist, so
+/// `start_pair` panics at spawn with a clear message — the differential
+/// suite is Bazel-only.
+pub fn sipi_oracle_bin_path() -> String {
+    sipi_bin_path_from(
+        "SIPI_BIN_REF",
+        repo_root().join("build").join("sipi-oracle"),
+    )
 }
 
 /// Path to the test data directory.

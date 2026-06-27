@@ -63,6 +63,15 @@ What the macro injects:
                                  then rejects every IIIF request with
                                  "Invalid IIIF identifier".
 
+The macro DOES cover the `differential` parity target through
+`extra_data` / `extra_env`: that target adds the retained C++ server
+`//src/cli:sipi` to `data` and sets `SIPI_BIN_REF` to its runfiles path,
+so `SipiServer::start_pair` can spawn the reference oracle alongside the
+`SIPI_BIN` subject. It is `manual`-tagged (kept out of `:all_e2e` and the
+`//test/e2e/...` coverage wildcard) and run via
+`just bazel-test-differential` as a dedicated CI step (linux-amd64) and
+locally.
+
 The macro deliberately does NOT cover `docker_smoke` — that target has
 its own data shape (the OCI image tarball, `:sipi_image_tar`) and own
 env (`SIPI_IMAGE_TAR`, `SIPI_IMAGE_TAG`). Defining it inline is clearer
