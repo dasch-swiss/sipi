@@ -1,0 +1,213 @@
+// NativeLink single-node RBE config: CAS + Action Cache + Scheduler + one local
+// Worker in a single process. Rendered by infra/nativelink/main.tf (templatefile,
+// no template vars) and delivered to the VM via the `nativelink-config`
+// instance-metadata attribute; startup.sh writes it to /etc/nativelink.
+//
+// Store topology (this is the part that matters for correctness under CONCURRENT
+// builds, and for durability):
+//   CAS_MAIN_STORE          authoritative CAS = fast_slow { fast: filesystem hot tier
+//                           on the pd-ssd; slow: filesystem on the larger pd-standard
+//                           disk (/mnt/slow) }. Served to clients (cas / execution /
+//                           bytestream) AND used as the worker's slow tier. The SSD is
+//                           only a hot cache; /mnt/slow is the source of truth, so an
+//                           SSD-tier eviction is always re-fetchable from the slow disk.
+//   AC_MAIN_STORE           action cache, same shape (SSD hot + /mnt/slow slow) so
+//                           action-result hits survive an SSD-tier eviction too.
+//   WORKER_FAST_SLOW_STORE  the worker's input store. fast = a SEPARATE worker-local
+//                           filesystem tier it hardlinks action inputs from; slow =
+//                           ref_store -> CAS_MAIN_STORE (so a worker fast miss falls
+//                           through SSD-hot -> /mnt/slow).
+//
+// Why this shape: NativeLink's worker contract (nativelink-config cas_server.rs:850 —
+// the cas_fast_slow_store slow tier "must eventually resolve to the same store the
+// scheduler/client uses") REQUIRES the worker slow tier to resolve to the authoritative
+// CAS so an evicted fast blob is RE-FETCHED before hardlinking. Our earlier config got
+// this wrong in two coupled ways: (1) one store backed BOTH the CAS service and the
+// worker, so client upload pressure evicted blobs the worker was mid-hardlink on;
+// (2) the slow tier was `noop`, so an evicted blob was unrecoverable -> hardlink ENOENT
+// -> worker panic under two concurrent cold builds. Separating the worker tier AND
+// giving every store a real slow tier both fix it. Mirrors the reference
+// deployment-examples/docker-compose/worker-shared-cas.json5 (worker fast + ref_store
+// slow) and local-storage-cas.json5 (CAS over a durable backend).
+//
+// Slow tier = a local filesystem on a second block device, NOT object storage. A GCS
+// slow tier was tried and 429'd: many concurrent actions write the SAME hot blob (e.g.
+// the empty action stderr) to one GCS object, which caps writes at ~1/sec, and the
+// fast_slow store makes the slow write mandatory -> the action failed. A local
+// filesystem has no per-object write-rate limit, so that failure class is gone. The
+// fast(SSD) <-> slow(/mnt/slow) transfer is a STREAMED COPY across mounts, never a
+// hardlink (the only hardlink is worker.fast <-> work_directory, both on /mnt/ssd), so
+// the slow tier living on a separate device is fine. Size is bounded by eviction_policy
+// (LRU), not a bucket lifecycle. Distributed prod swaps the worker slow tier's
+// ref_store for grpc -> a CAS VM (which itself can keep a durable backend); see
+// RBE-HANDOFF.md.
+//
+// Pinned to the NativeLink v1.5.2 config schema (the version startup.sh builds).
+{
+  stores: [
+    {
+      name: "CAS_MAIN_STORE",
+      // Authoritative CAS + the worker's slow tier (via ref_store below). SSD hot tier
+      // (50 GB) in front of the durable /mnt/slow tier. A hot-tier eviction is re-fetched
+      // from /mnt/slow, never the worker hardlink ENOENT the old noop tier caused.
+      fast_slow: {
+        fast: {
+          filesystem: {
+            content_path: "/mnt/ssd/cas/content",
+            temp_path: "/mnt/ssd/cas/temp",
+            eviction_policy: {
+              max_bytes: 50000000000, // 50 GB SSD hot tier
+              evict_bytes: 5000000000, // 10% low-watermark: batch-evict, no thrash at the cap
+            },
+          },
+        },
+        slow: {
+          filesystem: {
+            content_path: "/mnt/slow/cas/content",
+            temp_path: "/mnt/slow/cas/temp",
+            eviction_policy: {
+              max_bytes: 800000000000, // 800 GB of the 1 TB pd-standard disk (CAS 800 + AC 50 + bazel-remote 50 + headroom < capacity)
+              evict_bytes: 80000000000, // 10% low-watermark
+            },
+          },
+        },
+      },
+    },
+    {
+      name: "AC_MAIN_STORE",
+      // Action cache: small SSD hot tier + a slice of the same /mnt/slow disk so warm-build
+      // action-result hits survive an SSD-tier eviction.
+      fast_slow: {
+        fast: {
+          filesystem: {
+            content_path: "/mnt/ssd/ac/content",
+            temp_path: "/mnt/ssd/ac/temp",
+            eviction_policy: {
+              max_bytes: 5000000000, // 5 GB
+              evict_bytes: 500000000, // 10%
+            },
+          },
+        },
+        slow: {
+          filesystem: {
+            content_path: "/mnt/slow/ac/content",
+            temp_path: "/mnt/slow/ac/temp",
+            eviction_policy: {
+              max_bytes: 50000000000, // 50 GB on /mnt/slow (action-result protos are small)
+              evict_bytes: 5000000000, // 10%
+            },
+          },
+        },
+      },
+    },
+    {
+      name: "WORKER_FAST_SLOW_STORE",
+      // The worker's cas_fast_slow_store. fast = worker-LOCAL filesystem tier the worker
+      // hardlinks inputs from (its OWN LRU, so client uploads can't evict a blob this
+      // worker is materializing); slow = ref_store -> CAS_MAIN_STORE so an evicted fast
+      // blob falls through SSD-hot -> /mnt/slow rather than failing. The fast content_path MUST
+      // share a filesystem with work_directory (hardlink requirement). fast_direction:
+      // "get" = action outputs go to slow (the CAS); fast is populated on read. Mirrors
+      // the reference worker.json5 / worker-shared-cas.json5.
+      fast_slow: {
+        fast: {
+          filesystem: {
+            content_path: "/mnt/ssd/worker/content",
+            temp_path: "/mnt/ssd/worker/temp",
+            eviction_policy: {
+              max_bytes: 50000000000, // 50 GB: toolchain tree(s) + concurrent action working set
+              evict_bytes: 5000000000, // 10%
+            },
+          },
+        },
+        fast_direction: "get",
+        slow: {
+          ref_store: { name: "CAS_MAIN_STORE" },
+        },
+      },
+    },
+  ],
+
+  schedulers: [
+    {
+      name: "MAIN_SCHEDULER",
+      simple: {
+        // One worker. A single symmetric `cpu_arch` (exact match) is the whole
+        // contract: CI sends --remote_default_exec_properties=cpu_arch=x86_64,
+        // the worker advertises x86_64 → every action matches, including the
+        // arm64/darwin CROSS-compiles (their EXEC platform is still x86_64).
+        // Do NOT add OSFamily/container-image here: with `exact` match the
+        // scheduler would then require the worker to advertise identical values
+        // and silently report "no worker" on any mismatch.
+        supported_platform_properties: {
+          cpu_arch: "exact",
+        },
+      },
+    },
+  ],
+
+  workers: [
+    {
+      local: {
+        worker_api_endpoint: { uri: "grpc://127.0.0.1:50061" },
+        cas_fast_slow_store: "WORKER_FAST_SLOW_STORE",
+        upload_action_result: { ac_store: "AC_MAIN_STORE" },
+        // Concurrency cap. With the slow-tier fix the eviction race is gone, so this is
+        // now only a throughput / RAM knob, NOT a crash guard. 48 ~= 3x the 16 vCPUs for
+        // an I/O-bound build; raise/lower from observed behavior. 0 = unlimited.
+        max_inflight_tasks: 48,
+        // Same filesystem as the worker fast content_path above (hardlink requirement).
+        work_directory: "/mnt/ssd/work",
+        platform_properties: {
+          cpu_arch: { values: ["x86_64"] },
+        },
+      },
+    },
+  ],
+
+  servers: [
+    {
+      name: "public",
+      // mTLS-gated RE-API. A remote executor runs arbitrary submitted code, so
+      // the client_ca_file requirement is the security boundary: only holders of
+      // a CA-signed client cert can submit cache or execution requests.
+      listener: {
+        http: {
+          socket_address: "0.0.0.0:50051",
+          tls: {
+            cert_file: "/etc/nativelink/tls/server.crt",
+            key_file: "/etc/nativelink/tls/server.key",
+            client_ca_file: "/etc/nativelink/tls/clients-ca.crt",
+          },
+        },
+      },
+      services: {
+        // All client-facing services use the authoritative CAS_MAIN_STORE; the worker's
+        // fast tier is internal to the worker (cas_fast_slow_store above), not served.
+        cas: [{ instance_name: "main", cas_store: "CAS_MAIN_STORE" }],
+        ac: [{ instance_name: "main", ac_store: "AC_MAIN_STORE" }],
+        execution: [{ instance_name: "main", cas_store: "CAS_MAIN_STORE", scheduler: "MAIN_SCHEDULER" }],
+        capabilities: [{ instance_name: "main", remote_execution: { scheduler: "MAIN_SCHEDULER" } }],
+        bytestream: [{ instance_name: "main", cas_store: "CAS_MAIN_STORE" }],
+      },
+    },
+    {
+      name: "private",
+      // worker_api carries a higher permission set than the client RE-API, so it
+      // MUST be isolated on its own port (NativeLink security note). Bound to
+      // localhost — the worker is in-process — and never opened in the firewall.
+      listener: { http: { socket_address: "127.0.0.1:50061" } },
+      services: {
+        worker_api: { scheduler: "MAIN_SCHEDULER" },
+        admin: {},
+        health: {},
+      },
+    },
+  ],
+
+  global: {
+    // Kept below the systemd LimitNOFILE=65536 ceiling, with headroom for the
+    // many concurrent CAS blob + work-directory FDs at peak parallelism.
+    max_open_files: 49152,
+  },
+}
