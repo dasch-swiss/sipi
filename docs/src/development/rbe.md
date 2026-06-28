@@ -45,6 +45,30 @@ an upstream is reachable from the VM warms it for good; no manual step is requir
 limitation: when the VM cannot reach an upstream the runner CAN reach, a green
 local-fallback build does not write back to the download cache.
 
+### Why a separate bazel-remote, not just NativeLink
+
+NativeLink *does* implement the Remote Asset API (`FetchServer` / `PushServer`,
+`build.bazel.remote.asset.v1`), so the obvious question is why we don't point
+`--experimental_remote_downloader` at `:50051` and drop bazel-remote. The reason is
+*how* each implements `FetchBlob`:
+
+- **NativeLink's Fetch is push-then-serve.** `fetch_blob` (nativelink-service
+  `fetch_server.rs`) hashes the URI + qualifiers to a digest, does a single store
+  lookup, and on a miss returns `NotFound` — it never contacts the upstream. It only
+  serves assets that were *explicitly pushed* into its `fetch_store` first. (Its only
+  `reqwest` HTTP client backs the GCS store, not URL fetching.)
+- **bazel-remote's Fetch is a transparent proxy.** On a miss it fetches the URL
+  itself, verifies the `sha256` qualifier, stores the blob, and serves it thereafter.
+
+`--experimental_remote_downloader` relies on the proxy behavior — it expects the
+endpoint to transparently mirror `http_archive` tarballs on first use. Replacing
+bazel-remote with NativeLink's FetchServer would mean building a separate warming
+pipeline that fetches every external dependency and pushes it (blob + asset mapping)
+into NativeLink ahead of the build, i.e. reimplementing bazel-remote's proxy logic.
+So the two services are not redundant: NativeLink caches and runs *build actions*
+(AC/CAS + executor); bazel-remote transparently mirrors *source downloads*. (Verified
+against NativeLink v1.5.2 — revisit if a later release adds proxy-fetch-on-miss.)
+
 ### GitHub Actions wiring
 
 The `.github/actions/bazel-rbe` composite action encapsulates all RBE wiring:

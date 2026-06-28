@@ -208,6 +208,11 @@ systemctl enable nativelink.service
 systemctl restart --no-block nativelink.service
 
 # --- 4c. bazel-remote systemd unit (download cache) --------------------------
+# Why a separate service and not NativeLink's own Remote Asset API: NativeLink's
+# Fetch is push-then-serve (returns NotFound on a miss, never contacts the
+# upstream), whereas --experimental_remote_downloader needs proxy-fetch-on-miss,
+# which bazel-remote provides. See docs/src/development/rbe.md ("Why a separate
+# bazel-remote, not just NativeLink").
 # Reuses NativeLink's mTLS material: the server cert's IP SAN is the VM's static
 # IP, so it's valid on :50052 too; --tls_ca_file enforces mTLS with the same
 # client CA (one client cert authenticates to both :50051 and :50052). Its own
