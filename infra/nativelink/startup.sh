@@ -242,14 +242,19 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=full
-# Whitelist the mount POINT, not the /bazel-remote subdir: under ProtectSystem=full,
-# a ReadWritePaths that targets a subdirectory of a separate mount (/mnt/slow is its
-# own disk) does not actually grant write — file creation there returns EPERM, so
-# every CAS Put silently fails and the download cache stores nothing. The nativelink
-# unit whitelists /mnt/slow itself and writes fine; match that.
+# Whitelist the mount point (consistent with the nativelink unit; the narrower
+# /mnt/slow/bazel-remote subdir would work too).
 ReadWritePaths=/mnt/slow
 ProtectControlGroups=true
-RestrictSUIDSGID=true
+# RestrictSUIDSGID is intentionally NOT set here (it IS set on the nativelink unit
+# below). bazel-remote v2.6.1 creates its CAS temp files with the setgid bit
+# (utils/tempfile/tempfile.go: `wipMode = FinalMode | os.ModeSetgid`, a leftover
+# incomplete-file marker). RestrictSUIDSGID installs a seccomp filter that returns
+# EPERM on any openat(O_CREAT) whose mode carries setgid — so it breaks EVERY cache
+# write ("failed to Put … operation not permitted") and the download cache stores
+# nothing. Upstream deleted the setgid code after v2.6.1 (commit a95bc52); restore
+# this line once we pin a bazel-remote release that includes that fix. nativelink
+# is unaffected — it writes files with plain 0664.
 CapabilityBoundingSet=
 AmbientCapabilities=
 
