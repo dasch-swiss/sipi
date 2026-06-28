@@ -238,7 +238,12 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=full
-ReadWritePaths=/mnt/slow/bazel-remote
+# Whitelist the mount POINT, not the /bazel-remote subdir: under ProtectSystem=full,
+# a ReadWritePaths that targets a subdirectory of a separate mount (/mnt/slow is its
+# own disk) does not actually grant write — file creation there returns EPERM, so
+# every CAS Put silently fails and the download cache stores nothing. The nativelink
+# unit whitelists /mnt/slow itself and writes fine; match that.
+ReadWritePaths=/mnt/slow
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 CapabilityBoundingSet=
