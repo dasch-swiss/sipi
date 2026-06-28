@@ -199,9 +199,13 @@ NLUNIT
 
 systemctl daemon-reload
 systemctl enable nativelink.service
-# --no-block: the blocking cert-fetch ExecStartPre runs in the background while
-# this script finishes. Only start if not already active (idempotent re-runs).
-systemctl is-active --quiet nativelink.service || systemctl start --no-block nativelink.service
+# restart, NOT `is-active || start`: on every boot the enabled service
+# auto-starts early from the unit file as it existed at boot time, which is
+# BEFORE this script rewrites it — so a plain `start` is a no-op and unit changes
+# from this run never reach the running process. `restart` forces the
+# freshly-written unit to take effect. --no-block so the blocking cert-fetch
+# ExecStartPre runs in the background instead of hanging this script.
+systemctl restart --no-block nativelink.service
 
 # --- 4c. bazel-remote systemd unit (download cache) --------------------------
 # Reuses NativeLink's mTLS material: the server cert's IP SAN is the VM's static
@@ -255,7 +259,11 @@ BRUNIT
 
 systemctl daemon-reload
 systemctl enable bazel-remote.service
-systemctl is-active --quiet bazel-remote.service || systemctl start --no-block bazel-remote.service
+# restart (see the nativelink unit above): forces the freshly-written unit to
+# take effect even when the enabled service already auto-started early in boot
+# from the previous on-disk unit. --no-block so the cert-wait ExecStartPre
+# doesn't hang this script.
+systemctl restart --no-block bazel-remote.service
 
 # --- 5. Cloud Ops Agent (guest metrics + systemd journal → Cloud Mon/Logging) -
 # Makes the VM observable without SSH: host metrics (memory, per-filesystem disk %)
