@@ -58,7 +58,7 @@ httpdate = "1"
 # (low cardinality) and continues the W3C traceparent. All otel crates move in
 # lockstep — bump them together.
 opentelemetry = { version = "0.31", features = ["metrics"] }
-opentelemetry_sdk = { version = "0.31", features = ["rt-tokio", "metrics", "logs"] }
+opentelemetry_sdk = { version = "0.32", features = ["rt-tokio", "metrics", "logs"] }
 opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic", "trace", "metrics", "logs"] }
 opentelemetry-appender-tracing = "0.31"
 tracing-opentelemetry = "0.32"
