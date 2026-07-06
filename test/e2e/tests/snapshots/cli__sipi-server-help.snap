@@ -1,0 +1,66 @@
+---
+source: tests/cli.rs
+expression: stdout
+---
+Usage: server [OPTIONS]
+
+Options:
+  -c, --config <FILE>  Path to the SIPI Lua config (installed by `sipi_init` before serving). Also accepts the C++ oracle's `-c` short form [env: SIPI_CONFIGFILE=]
+  -h, --help           Print help
+
+Network:
+      --serverport <PORT>  HTTP listen port (1–65535) [env: SIPI_SERVERPORT=]
+      --sslport <PORT>     TLS port 1–65535 (parse-only: SIPI serves plain HTTP behind Traefik — §5 #3) [env: SIPI_SSLPORT=]
+      --hostname <HOST>    Server hostname (parse-only: the shell derives the external host from `X-Forwarded-Host`) [env: SIPI_HOSTNAME=]
+      --keepalive <SECS>   HTTP/1.1 keep-alive timeout in seconds (parse-only: tokio is async, so the knob is unread — §3 P2) [env: SIPI_KEEPALIVE=]
+
+Concurrency:
+  -t, --nthreads <N>          Worker thread count (0 = auto-detect from CPU cores; parse-only — sizes the engine-work semaphore only from the Lua/TOML config, not the CLI). Also accepts the C++ oracle's `-t` short form [env: SIPI_NTHREADS=]
+      --max-waiting <N>       Max waiting connections before 503 (parse-only: semaphore model) [env: SIPI_MAX_WAITING=]
+      --queue-timeout <SECS>  Max seconds a request waits in queue before 503 (parse-only) [env: SIPI_QUEUE_TIMEOUT=]
+
+Limits:
+      --maxpost <SIZE>             Max POST body size, e.g. "300M" (engine parses the suffix) [env: SIPI_MAXPOSTSIZE=]
+      --max-pixel-limit <PIXELS>   Max output pixels (width × height) per IIIF request (0 = unlimited) [env: SIPI_MAX_PIXEL_LIMIT=]
+      --max-decode-memory <SIZE>   Max concurrent decode-memory budget, e.g. "2G" (0 = auto; engine parses the suffix) [env: SIPI_MAX_DECODE_MEMORY=]
+      --decode-memory-mode <MODE>  Decode-memory mode: off, monitor, enforce (engine validates) [env: SIPI_DECODE_MEMORY_MODE=]
+      --thumbsize <SIZE>           Thumbnail size used within Lua, e.g. "!128,128" [env: SIPI_THUMBSIZE=]
+
+Paths:
+      --imgroot <DIR>         Root directory containing the images [env: SIPI_IMGROOT=]
+      --docroot <DIR>         Document root for the static fileserver [env: SIPI_DOCROOT=]
+      --wwwroute <ROUTE>      URL route for the static fileserver [env: SIPI_WWWROUTE=]
+      --scriptdir <DIR>       Directory containing the Lua route scripts [env: SIPI_SCRIPTDIR=]
+      --tmpdir <DIR>          Temporary directory (uploads etc.) [env: SIPI_TMPDIR=]
+      --maxtmpage <SECS>      Max age in seconds of temp files before deletion [env: SIPI_MAXTMPAGE=]
+      --initscript <FILE>     Path to the Lua init script [env: SIPI_INITSCRIPT=]
+      --pathprefix [<BOOL>]   IIIF prefix is part of the image path (deprecated; no effect on the Rust path — §3 P3) [env: SIPI_PATHPREFIX=] [possible values: true, false]
+      --subdirlevels <N>      Number of subdir levels (deprecated; no effect on the Rust path) [env: SIPI_SUBDIRLEVELS=]
+      --subdirexcludes <DIR>  Directories excluded from subdir calculations [env: SIPI_SUBDIREXCLUDES=]
+
+Cache:
+      --cache-dir <DIR>    Cache directory [env: SIPI_CACHE_DIR=]
+      --cache-size <SIZE>  Cache size: "-1" (unlimited), "0" (disabled), or e.g. "200M" (engine parses the suffix) [env: SIPI_CACHE_SIZE=]
+      --cache-nfiles <N>   Max number of cached files (0 = no limit). Unsigned: a negative is rejected (matches the C++ CLI; no signed→unsigned wrap) [env: SIPI_CACHE_NFILES=]
+
+Rate limiting:
+      --rate-limit-max-pixels <PIXELS>       Max output pixels per client per window (0 = disabled) [env: SIPI_RATE_LIMIT_MAX_PIXELS=]
+      --rate-limit-window <SECS>             Sliding window in seconds [env: SIPI_RATE_LIMIT_WINDOW=]
+      --rate-limit-mode <MODE>               Rate-limit mode: off, monitor, enforce (engine validates) [env: SIPI_RATE_LIMIT_MODE=]
+      --rate-limit-pixel-threshold <PIXELS>  Requests below this pixel count are free [env: SIPI_RATE_LIMIT_PIXEL_THRESHOLD=]
+
+TLS & Auth:
+      --sslcert <FILE>        Path to the SSL certificate (parse-only: TLS at Traefik) [env: SIPI_SSLCERTIFICATE=]
+      --sslkey <FILE>         Path to the SSL key (parse-only: TLS at Traefik) [env: SIPI_SSLKEY=]
+      --jwtkey <SECRET>       Secret for generating JWTs (exactly 42 characters) [env: SIPI_JWTKEY=]
+      --adminuser <USER>      SIPI admin username [env: SIPI_ADMINUSER=]
+      --adminpasswd <PASSWD>  Admin password [env: SIPI_ADMINPASSWD=]
+
+Knora:
+      --knorapath <HOST>  Knora server host [env: SIPI_KNORAPATH=]
+      --knoraport <PORT>  Knora server port (a string in the engine config) [env: SIPI_KNORAPORT=]
+
+Logging:
+      --logfile <NAME>        Logfile name (NYI in the engine) [env: SIPI_LOGFILE=]
+      --loglevel <LEVEL>      Logging level: DEBUG, INFO, WARNING, ERR, CRIT, ALERT, EMERG [env: SIPI_LOGLEVEL=]
+      --drain-timeout <SECS>  Graceful-drain deadline in seconds (default 30): on SIGTERM/Ctrl-C, in-flight requests get this long to finish before a forced shutdown [env: SIPI_DRAIN_TIMEOUT=]

@@ -1,3 +1,4 @@
+use insta::assert_snapshot;
 use sipi_e2e::{repo_root, sipi_bin_path, test_data_dir};
 use std::path::PathBuf;
 use std::process::Command;
@@ -401,4 +402,45 @@ fn cli_convert_quality_actually_affects_output() {
 
     let _ = std::fs::remove_file(&low);
     let _ = std::fs::remove_file(&high);
+}
+
+// =============================================================================
+// `sipi server --help` snapshot (plan 02 §7.5 M8).
+//
+// `ServerArgs` composes its ~40 flags from nine `#[command(flatten)]` groups
+// (Network/Concurrency/Limits/Paths/Cache/Rate limiting/TLS & Auth/Knora/
+// Logging); clap renders each group under its own `next_help_heading` in
+// declaration order. This snapshot locks that heading order (and the full
+// rendered surface) against silent drift from a reordered/renamed group.
+// `term_width = 0` (`args/mod.rs`) fixes the wrap width so the snapshot is
+// stable across CI and local terminal widths.
+//
+// The spawn strips every `SIPI_` var from the child env: clap renders each
+// bound var's *value* in its `[env: NAME=value]` annotation, so a `SIPI_*` var
+// set in the caller's shell (e.g. a dev's `SIPI_LOGLEVEL`) would corrupt the
+// capture. A prefix strip (not a full `env_clear`, which would also drop the
+// loader/runfiles vars the binary needs to start) covers every clap-bound flag.
+// =============================================================================
+
+#[test]
+fn sipi_server_help_heading_order() {
+    let mut cmd = Command::new(sipi_bin_path());
+    cmd.args(["server", "--help"]);
+    for (key, _) in std::env::vars() {
+        if key.starts_with("SIPI_") {
+            cmd.env_remove(key);
+        }
+    }
+    let result = cmd
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to run sipi server --help: {}", e));
+
+    assert!(
+        result.status.success(),
+        "sipi server --help exited non-zero: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    assert_snapshot!("sipi-server-help", stdout);
 }
