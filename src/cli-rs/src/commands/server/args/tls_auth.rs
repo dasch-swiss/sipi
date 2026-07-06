@@ -3,8 +3,11 @@
 //! `sslcert` / `sslkey` are parse-only: TLS terminates at Traefik and the shell
 //! serves plain HTTP (plan 02 §5 #3). `--adminuser` binds the correct
 //! `SIPI_ADMINUSER` env var; the C++ oracle binds the misspelled
-//! `SIPI_ADMIINUSER` (`cli_app.cpp`) — a latent typo nobody can intentionally
-//! rely on. The documented typo-divergence test lands in M5 (plan 02 §7.5).
+//! `SIPI_ADMIINUSER` (`cli_app.cpp:1822`) — a latent typo nobody can
+//! intentionally rely on. The documented typo-divergence is pinned by
+//! `test/e2e/tests/differential.rs::adminuser_env_name_documented_divergence`
+//! (plan 02 §7.5 M6): a parse-level `--help` grep, since no behavioural probe
+//! exists.
 
 use clap::Args;
 
