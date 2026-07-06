@@ -306,3 +306,40 @@ fn differential_corpus_parity() {
         failures.join("\n\n")
     );
 }
+
+/// Plan 02 §7.5 M6 pin: the C++ oracle binds `--adminuser` to the misspelled
+/// `SIPI_ADMIINUSER` env var (`cli_app.cpp:1822`, a latent typo nobody can
+/// intentionally rely on); the Rust shell binds the correct `SIPI_ADMINUSER`.
+/// This is a documented divergence, not a bug to fix — no e2e config wires an
+/// admin endpoint, so there is no behavioural probe, only this parse-level
+/// `--help` pin on each binary's own env-name rendering.
+#[test]
+fn adminuser_env_name_documented_divergence() {
+    let subject = std::process::Command::new(sipi_e2e::sipi_bin_path())
+        .args(["server", "--help"])
+        .output()
+        .expect("run the Rust shell's `server --help`");
+    assert!(subject.status.success());
+    let subject_help = String::from_utf8_lossy(&subject.stdout);
+    assert!(
+        subject_help.contains("SIPI_ADMINUSER"),
+        "Rust shell must bind the correctly-spelled SIPI_ADMINUSER:\n{subject_help}"
+    );
+    assert!(
+        !subject_help.contains("SIPI_ADMIINUSER"),
+        "Rust shell must not replicate the C++ oracle's env-name typo:\n{subject_help}"
+    );
+
+    let reference = std::process::Command::new(sipi_e2e::sipi_oracle_bin_path())
+        .args(["server", "--help"])
+        .output()
+        .expect("run the C++ oracle's `server --help`");
+    assert!(reference.status.success());
+    let reference_help = String::from_utf8_lossy(&reference.stdout);
+    assert!(
+        reference_help.contains("SIPI_ADMIINUSER"),
+        "C++ oracle should still carry its documented env-name typo \
+         (cli_app.cpp:1822) — if this fails, the typo was fixed upstream and \
+         this divergence pin (plan 02 §7.5 M6) should be revisited:\n{reference_help}"
+    );
+}

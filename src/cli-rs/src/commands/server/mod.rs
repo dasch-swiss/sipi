@@ -7,7 +7,7 @@
 //!
 //! Every forwarded `server` flag maps into `ServerOverrides`; the override
 //! channel into the engine (the `repr(C)` struct + the `sipi_init` apply block)
-//! lands in the remaining M4 slices (plan 02 §7.5).
+//! lives in `server-rs/config.rs` (plan 02 §7.5).
 
 mod args;
 
@@ -21,8 +21,12 @@ impl From<&ServerArgs> for ServerOverrides {
         // Engine-behaviour flags forward; transport flags the Rust shell owns
         // (sslport/sslcert/sslkey, keepalive, max-waiting/queue-timeout,
         // hostname, nthreads, logfile) parse for CLI parity but are never
-        // forwarded. The deprecated cache aliases (--cachedir/--cachesize/
-        // --cachenfiles) land in M5; this maps the canonical names only.
+        // forwarded (plan 02 §7.5 forward/parse-only split). The deprecated
+        // cache aliases (--cachedir/--cachesize/--cachenfiles) collapse onto
+        // their canonical field here — canonical wins if both are somehow set
+        // (matches the C++ oracle's last-write-wins on the shared `optCache*`
+        // variable closely enough: neither binary's precedence between the two
+        // spellings is a contract anyone can rely on).
         ServerOverrides {
             serverport: args.network.serverport,
             imgroot: args.paths.imgroot.clone(),
@@ -38,9 +42,17 @@ impl From<&ServerArgs> for ServerOverrides {
             jwtkey: args.tls_auth.jwtkey.clone(),
             adminuser: args.tls_auth.adminuser.clone(),
             adminpasswd: args.tls_auth.adminpasswd.clone(),
-            cache_dir: args.cache.cache_dir.clone(),
-            cache_size: args.cache.cache_size.clone(),
-            cache_nfiles: args.cache.cache_nfiles,
+            cache_dir: args
+                .cache
+                .cache_dir
+                .clone()
+                .or_else(|| args.cache.cachedir.clone()),
+            cache_size: args
+                .cache
+                .cache_size
+                .clone()
+                .or_else(|| args.cache.cachesize.clone()),
+            cache_nfiles: args.cache.cache_nfiles.or(args.cache.cachenfiles),
             rate_limit_max_pixels: args.rate_limit.rate_limit_max_pixels,
             rate_limit_window: args.rate_limit.rate_limit_window,
             rate_limit_mode: args.rate_limit.rate_limit_mode.clone(),
