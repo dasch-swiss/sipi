@@ -22,6 +22,11 @@
 //!   layer onto; it is not itself an override.
 //! - `drain_timeout` is a Rust-owned serve knob (the graceful-drain deadline),
 //!   not a config override, so it is handed straight to `sipi::run`.
+//!
+//! `term_width = 0` pins `--help`'s wrapping to clap's fixed default rather
+//! than the invoking terminal's width, so the heading-order snapshot in
+//! `test/e2e/tests/cli.rs::sipi_server_help_heading_order` is stable across
+//! CI and local dev (plan 02 §7.5 M8).
 
 mod cache;
 mod concurrency;
@@ -46,7 +51,7 @@ pub use tls_auth::TlsAuthArgs;
 use clap::Parser;
 
 #[derive(Parser, Debug)]
-#[command(name = "sipi server")]
+#[command(name = "sipi server", term_width = 0)]
 pub struct ServerArgs {
     /// Path to the SIPI Lua config (installed by `sipi_init` before serving).
     /// Also accepts the C++ oracle's `-c` short form.
