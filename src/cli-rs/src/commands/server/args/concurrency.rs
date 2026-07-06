@@ -1,17 +1,24 @@
 //! Concurrency flags (the "Concurrency" `--help` heading).
 //!
-//! `max_waiting` and `queue_timeout` are parse-only: the Rust shell uses a
-//! semaphore concurrency model (shed-load → 503) rather than the C++
-//! thread-per-connection socket queue, so the queue knobs are unread
-//! (plan 02 §5 #4 / §7.5 forward/parse-only split).
+//! `nthreads`, `max_waiting`, and `queue_timeout` are all parse-only (plan 02
+//! §7.5 forward/parse-only split, M7-resolved): the Rust shell bounds
+//! concurrent engine work with a tokio semaphore (shed-load → 503) sized from
+//! the Lua/TOML config's `nthreads` key (`server-rs/routes.rs`'s
+//! `ffi::nthreads()`), not from a CLI/env override — thread count is one of
+//! the "transport knobs the shell does not own", grouped with TLS/hostname/
+//! keep-alive/logfile in the M5 TOML schema (`server-rs/config_file.rs`), and
+//! the CLI stays consistent with that. `max_waiting`/`queue_timeout` are
+//! unread for a different reason: the semaphore model has no queue to size
+//! (§5 #4).
 
 use clap::Args;
 
 #[derive(Args, Debug)]
 #[command(next_help_heading = "Concurrency")]
 pub struct ConcurrencyArgs {
-    /// Worker thread count (0 = auto-detect from CPU cores). Also accepts the
-    /// C++ oracle's `-t` short form.
+    /// Worker thread count (0 = auto-detect from CPU cores; parse-only — sizes
+    /// the engine-work semaphore only from the Lua/TOML config, not the CLI).
+    /// Also accepts the C++ oracle's `-t` short form.
     #[arg(long, short = 't', env = "SIPI_NTHREADS", value_name = "N")]
     pub nthreads: Option<u32>,
     /// Max waiting connections before 503 (parse-only: semaphore model).

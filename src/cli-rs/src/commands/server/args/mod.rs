@@ -10,10 +10,12 @@
 //! no longer exits 2), with each overridable flag an `Option<T>` carrying its
 //! `SIPI_*` env var — NO `default_value`, so an unset flag stays `None` and
 //! falls through to the loaded Lua config (the Rust analog of the C++
-//! `user_set` gate; precedence `config < env < CLI`, plan 02 §7.5). The flags
-//! are **unwired**: only `serverport` is forwarded into `ServerOverrides`
-//! today; the override channel into the engine (the `repr(C)` struct + the
-//! `sipi_init` apply block) lands in M4.
+//! `user_set` gate; precedence `config < env < CLI`, plan 02 §7.5). Every
+//! engine-behaviour flag forwards into `ServerOverrides` (see `mod.rs`'s
+//! `From<&ServerArgs>`); the transport flags the Rust shell owns
+//! (`sslport`/`sslcert`/`sslkey`, `keepalive`, `max-waiting`/`queue-timeout`,
+//! `hostname`, `nthreads`, `logfile`) parse for CLI/oracle parity but stay
+//! unforwarded, doc-commented per group.
 //!
 //! Two fields stay top-level rather than in a group:
 //! - `config` is bootstrap — it *selects* the base Lua config the overrides
