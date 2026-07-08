@@ -95,6 +95,7 @@ impl SipiServer {
             config,
             working_dir,
             extra_args,
+            &[],
         )
     }
 
@@ -108,12 +109,25 @@ impl SipiServer {
         working_dir: &Path,
         extra_args: &[&str],
     ) -> (SipiServer, SipiServer) {
+        Self::start_pair_env(config, working_dir, extra_args, &[])
+    }
+
+    /// Like [`Self::start_pair`], additionally setting `extra_env` in both
+    /// spawned processes' environment (e.g. to probe a `SIPI_*` env binding
+    /// per plan 02 §7.7).
+    pub fn start_pair_env(
+        config: &str,
+        working_dir: &Path,
+        extra_args: &[&str],
+        extra_env: &[(&str, &str)],
+    ) -> (SipiServer, SipiServer) {
         let subject = Self::spawn(
             sipi_bin_path(),
             ServerKind::Subject,
             config,
             working_dir,
             extra_args,
+            extra_env,
         );
         let reference = Self::spawn(
             sipi_oracle_bin_path(),
@@ -121,6 +135,36 @@ impl SipiServer {
             config,
             working_dir,
             extra_args,
+            extra_env,
+        );
+        (subject, reference)
+    }
+
+    /// Like [`Self::start_pair`], but the subject and reference get
+    /// DIFFERENT `extra_args` (e.g. each its own isolated `--cache-dir` so
+    /// two independent `SipiCache` instances never race on a shared
+    /// `.sipicache` index file — plan 02 §7.7's `cache-nfiles` probe).
+    pub fn start_pair_split(
+        config: &str,
+        working_dir: &Path,
+        subject_extra_args: &[&str],
+        reference_extra_args: &[&str],
+    ) -> (SipiServer, SipiServer) {
+        let subject = Self::spawn(
+            sipi_bin_path(),
+            ServerKind::Subject,
+            config,
+            working_dir,
+            subject_extra_args,
+            &[],
+        );
+        let reference = Self::spawn(
+            sipi_oracle_bin_path(),
+            ServerKind::Reference,
+            config,
+            working_dir,
+            reference_extra_args,
+            &[],
         );
         (subject, reference)
     }
@@ -133,6 +177,7 @@ impl SipiServer {
         config: &str,
         working_dir: &Path,
         extra_args: &[&str],
+        extra_env: &[(&str, &str)],
     ) -> Self {
         let (http_port, ssl_port) = allocate_ports();
 
@@ -144,14 +189,15 @@ impl SipiServer {
         kill_process_on_port(ssl_port);
 
         eprintln!(
-            "[test-harness] Starting {} sipi: bin={} config={} ports={}/{} cwd={} extra_args={:?}",
+            "[test-harness] Starting {} sipi: bin={} config={} ports={}/{} cwd={} extra_args={:?} extra_env={:?}",
             kind.label(),
             bin,
             config,
             http_port,
             ssl_port,
             working_dir.display(),
-            extra_args
+            extra_args,
+            extra_env
         );
 
         // `--drain-timeout 2` keeps every test's sipi shutdown bounded to ~2s
@@ -176,6 +222,7 @@ impl SipiServer {
         cmd.arg("--drain-timeout")
             .arg("2")
             .args(extra_args)
+            .envs(extra_env.iter().copied())
             .current_dir(working_dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());

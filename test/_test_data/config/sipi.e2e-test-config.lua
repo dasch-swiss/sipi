@@ -267,6 +267,11 @@ routes = {
     },
     {
         method = 'GET',
+        route = '/config_echo',
+        script = 'config_echo.lua'
+    },
+    {
+        method = 'GET',
         route = '/test_knora_session_cookie',
         script = 'test_knora_session_cookie.lua'
     },

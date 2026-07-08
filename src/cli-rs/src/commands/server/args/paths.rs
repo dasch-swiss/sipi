@@ -1,8 +1,11 @@
 //! Filesystem path + path-resolution flags (the "Paths" `--help` heading).
 //!
-//! `pathprefix` and `subdirlevels` are deprecated and have no effect on the
-//! Rust serve path (plan 02 §3 P3); they parse for oracle parity. `pathprefix`
-//! is flag-shaped on the C++ side (a bare `--pathprefix` means "true"), so it
+//! `subdirlevels` is deprecated and has no effect on the Rust serve path (plan
+//! 02 §3 P3); it parses for oracle parity. `pathprefix` DOES have an effect —
+//! `routes.rs` reads `prefix_as_path` off the engine context to decide whether
+//! the IIIF prefix is a path component under imgroot (plan 02 §7.7, the
+//! previously-untested `prefix_as_path = false` branch). `pathprefix` is
+//! flag-shaped on the C++ side (a bare `--pathprefix` means "true"), so it
 //! takes an optional value here (`--pathprefix` → true, `--pathprefix=false` →
 //! false, absent → fall through to the config).
 
@@ -32,8 +35,9 @@ pub struct PathArgs {
     /// Path to the Lua init script.
     #[arg(long, env = "SIPI_INITSCRIPT", value_name = "FILE")]
     pub initscript: Option<String>,
-    /// IIIF prefix is part of the image path (deprecated; no effect on the Rust
-    /// path — §3 P3).
+    /// IIIF prefix is part of the image path (deprecated on the C++ oracle;
+    /// still honoured on the Rust serve path via `routes.rs`'s
+    /// `prefix_as_path`).
     #[arg(
         long,
         env = "SIPI_PATHPREFIX",
