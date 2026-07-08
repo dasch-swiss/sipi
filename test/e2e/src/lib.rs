@@ -760,3 +760,28 @@ pub fn http_client() -> reqwest::blocking::Client {
         .build()
         .expect("Failed to build HTTP client")
 }
+
+/// Poll `dir`'s file count until `stop` is satisfied or 2s elapses (a cache
+/// write may lag a hair behind the HTTP response, plan 02 §7.7's
+/// `cache-nfiles` row note), returning the last sampled count either way.
+/// SipiCache writes flat `cache_XXXXXXXXXX` files directly under `dir` (no
+/// subdirectories) and only writes its `.sipicache` index at shutdown, so a
+/// plain top-level file count is an accurate on-disk proxy for cache state
+/// while the server is running.
+pub fn poll_cache_file_count(dir: &Path, stop: impl Fn(usize) -> bool) -> usize {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        let count = std::fs::read_dir(dir)
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .filter(|e| e.path().is_file())
+                    .count()
+            })
+            .unwrap_or(0);
+        if stop(count) || Instant::now() >= deadline {
+            return count;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
