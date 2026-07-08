@@ -100,60 +100,73 @@ async fn server_main(
     // into the override channel (Lua-less init; routes are sourced here); a `.lua`
     // path (or none) uses the engine's Lua VM as before. `effective` is the
     // overrides after the TOML base + CLI/env merge, used for the listen port.
-    let (effective, configured_routes): (ServerOverrides, Option<Vec<ffi::RouteEntry>>) =
-        match config.as_deref() {
-            Some(cfg) if cfg.ends_with(".toml") => {
-                // Experimental (ADR-0017): the native config format may change
-                // until it is validated in production.
-                tracing::warn!(
-                    "TOML config support is experimental; the schema may change \
-                     until it is validated in production"
-                );
-                let parsed = match config_file::Config::load(cfg) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        tracing::error!(config = %cfg, error = %e, "invalid TOML config");
-                        flush_telemetry(otel).await;
-                        return ExitCode::FAILURE;
-                    }
-                };
-                let (effective, routes) = match parsed.resolve(overrides) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        tracing::error!(config = %cfg, error = %e, "invalid TOML config");
-                        flush_telemetry(otel).await;
-                        return ExitCode::FAILURE;
-                    }
-                };
-                // Lua-less init: an empty path makes the engine default-construct
-                // its config; these overrides then supply every value.
-                if let Err(code) = ffi::init("", &effective) {
-                    tracing::error!(config = %cfg, code, "sipi_init failed");
+    // `lua_config_port` is the Lua config's `sipi.port` (plan 02 §6 R3) — set
+    // only on the Lua-config branch, where it is not otherwise reachable: the
+    // TOML branch already folds `[network].port` into `effective.serverport`
+    // via `resolve()`, and the no-config branch has no config to read.
+    let (effective, configured_routes, lua_config_port): (
+        ServerOverrides,
+        Option<Vec<ffi::RouteEntry>>,
+        Option<u16>,
+    ) = match config.as_deref() {
+        Some(cfg) if cfg.ends_with(".toml") => {
+            // Experimental (ADR-0017): the native config format may change
+            // until it is validated in production.
+            tracing::warn!(
+                "TOML config support is experimental; the schema may change \
+                 until it is validated in production"
+            );
+            let parsed = match config_file::Config::load(cfg) {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::error!(config = %cfg, error = %e, "invalid TOML config");
                     flush_telemetry(otel).await;
                     return ExitCode::FAILURE;
                 }
-                tracing::info!(config = %cfg, "engine installed (TOML config, Lua-less)");
-                (effective, Some(routes))
-            }
-            Some(cfg) => {
-                if let Err(code) = ffi::init(cfg, &overrides) {
-                    tracing::error!(config = %cfg, code, "sipi_init failed");
+            };
+            let (effective, routes) = match parsed.resolve(overrides) {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::error!(config = %cfg, error = %e, "invalid TOML config");
                     flush_telemetry(otel).await;
                     return ExitCode::FAILURE;
                 }
-                tracing::info!(config = %cfg, "engine + Lua config installed");
-                (overrides, None)
+            };
+            // Lua-less init: an empty path makes the engine default-construct
+            // its config; these overrides then supply every value.
+            if let Err(code) = ffi::init("", &effective) {
+                tracing::error!(config = %cfg, code, "sipi_init failed");
+                flush_telemetry(otel).await;
+                return ExitCode::FAILURE;
             }
-            None => {
-                tracing::warn!(
-                    "no --config: engine uninitialised; only /health and /favicon.ico will serve"
-                );
-                (overrides, None)
+            tracing::info!(config = %cfg, "engine installed (TOML config, Lua-less)");
+            (effective, Some(routes), None)
+        }
+        Some(cfg) => {
+            if let Err(code) = ffi::init(cfg, &overrides) {
+                tracing::error!(config = %cfg, code, "sipi_init failed");
+                flush_telemetry(otel).await;
+                return ExitCode::FAILURE;
             }
-        };
+            tracing::info!(config = %cfg, "engine + Lua config installed");
+            (overrides, None, ffi::port().ok())
+        }
+        None => {
+            tracing::warn!(
+                "no --config: engine uninitialised; only /health and /favicon.ico will serve"
+            );
+            (overrides, None, None)
+        }
+    };
 
     let drain_deadline = Duration::from_secs(drain_timeout.unwrap_or(30));
-    let result = serve(effective.serverport, drain_deadline, configured_routes).await;
+    let result = serve(
+        effective.serverport,
+        lua_config_port,
+        drain_deadline,
+        configured_routes,
+    )
+    .await;
 
     // Flush pending spans before the guard drops; the OTLP export is blocking
     // I/O, so do it off the async runtime.
@@ -239,6 +252,7 @@ pub fn app(state: Arc<routes::AppState>) -> Router {
 
 async fn serve(
     port: Option<u16>,
+    lua_config_port: Option<u16>,
     drain_timeout: Duration,
     configured_routes: Option<Vec<ffi::RouteEntry>>,
 ) -> std::io::Result<()> {
@@ -247,12 +261,17 @@ async fn serve(
     // `configured_routes` is `Some` for a TOML config (routes sourced Rust-side),
     // `None` for a Lua config (routes read back from the engine via the seam).
     let state = Arc::new(routes::AppState::load(configured_routes));
-    let port = port
-        .or_else(|| {
-            std::env::var("SIPI_RS_PORT")
-                .ok()
-                .and_then(|p| p.parse().ok())
-        })
+    // Precedence (plan 02 §6 R3): `SIPI_RS_PORT` (dev/test-only — lets the e2e
+    // harness spawn parallel shells without a `--serverport`) beats
+    // `--serverport`/`SIPI_SERVERPORT` (`port`, clap's own `CLI > env`), which
+    // beats the Lua config's `sipi.port` (`lua_config_port`, absent for a TOML
+    // config — already folded into `port` via `resolve()` — and for no config),
+    // which beats the hardcoded default.
+    let port = std::env::var("SIPI_RS_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .or(port)
+        .or(lua_config_port)
         .unwrap_or(DEFAULT_PORT);
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;

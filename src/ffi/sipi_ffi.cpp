@@ -279,6 +279,17 @@ int sipi_max_post_size(size_t *out)
   });
 }
 
+int sipi_port(int *out)
+{
+  // Guard-only edge probe — a pure read of the installed engine context, like
+  // sipi_nthreads. The Rust edge uses this only as a fallback below
+  // --serverport/SIPI_SERVERPORT/SIPI_RS_PORT (plan 02 §6 R3).
+  return Sipi::ffi::sipi_guard([&] {
+    *out = Sipi::ffi::engine_context().port;
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
 int sipi_image_dims(const char *resolved_path, SipiImageDims *out)
 {
   // Header-only shape read. The Rust edge owns existence + containment (R1/R2)
