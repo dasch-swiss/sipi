@@ -19,10 +19,11 @@
 //!
 //! Bazel-only (needs `$SIPI_BIN_REF`); run via `just bazel-test-differential`.
 
+use std::net::TcpStream;
 use std::sync::OnceLock;
 
 use reqwest::Method;
-use sipi_e2e::{diff_request, DiffAllowlist, SipiServer};
+use sipi_e2e::{diff_get, diff_request, DiffAllowlist, SipiServer};
 
 /// Per-case allowlist profile.
 #[derive(Clone, Copy)]
@@ -341,5 +342,964 @@ fn adminuser_env_name_documented_divergence() {
         "C++ oracle should still carry its documented env-name typo \
          (cli_app.cpp:1822) — if this fails, the typo was fixed upstream and \
          this divergence pin (plan 02 §7.5 M6) should be revisited:\n{reference_help}"
+    );
+}
+
+// =============================================================================
+// §7.7 flag→probe matrix (plan 02 step 2, A1). Each fn below spins up its own
+// `start_pair`/`start_pair_env`/`start_with_args` — unlike the shared corpus
+// above (one config for every `Case`), a flag probe needs the flag under
+// test to vary per spawn. See plan 02 §7.7 for the P/R/A probe-class
+// definitions, the mechanics, and the out-of-scope list.
+// =============================================================================
+
+/// Every probe below that enables real caching runs CONCURRENTLY with the
+/// corpus's shared `pair()` (a `OnceLock`, alive for the whole test-binary
+/// run under the mandated `--test-threads=1`) — both would otherwise default
+/// to `config/sipi.e2e-test-config.lua`'s `cache_dir = './cache'`. Two
+/// `SipiCache` instances validating/writing the same `.sipicache` index
+/// concurrently is a real race (the same hazard `resource_limits.rs`'s
+/// `pixel_limit_rejects_oversized_request` isolates against with its own
+/// `--cache-dir`). Probes below that don't care about caching instead pass
+/// `--cache-size 0` (disables `SipiCache` construction entirely, sidestepping
+/// the hazard with no tempdir needed); this helper is only for the few that
+/// specifically want a *working* cache under a non-default `--cache-size`.
+fn isolated_cache_dir() -> (tempfile::TempDir, String) {
+    let dir = tempfile::tempdir().expect("isolated cache dir");
+    let path = dir.path().to_str().expect("utf-8 path").to_owned();
+    (dir, path)
+}
+
+// ---- Bad-value set ---------------------------------------------------------
+
+/// Assert both binaries refuse to start under `extra_args`. Only the exit
+/// status is checked (nonzero) — NOT the error text or exact code, which
+/// differ by design (clap vs CLI11; plan 02 §7.7's bad-value-set note).
+fn assert_both_reject_at_startup(extra_args: &[&str]) {
+    for (label, bin) in [
+        ("subject(rust)", sipi_e2e::sipi_bin_path()),
+        ("reference(c++)", sipi_e2e::sipi_oracle_bin_path()),
+    ] {
+        let status = std::process::Command::new(&bin)
+            .arg("server")
+            .arg("--config")
+            .arg("config/sipi.e2e-test-config.lua")
+            .args(extra_args)
+            .current_dir(sipi_e2e::test_data_dir())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap_or_else(|e| panic!("failed to spawn {label} with {extra_args:?}: {e}"));
+        assert!(
+            !status.success(),
+            "{label} should reject {extra_args:?} at startup (exited 0)"
+        );
+    }
+}
+
+#[test]
+fn bad_serverport_zero_rejected_by_both() {
+    assert_both_reject_at_startup(&["--serverport", "0"]);
+}
+
+#[test]
+fn bad_serverport_out_of_range_rejected_by_both() {
+    assert_both_reject_at_startup(&["--serverport", "70000"]);
+}
+
+#[test]
+fn bad_cache_nfiles_negative_rejected_by_both() {
+    assert_both_reject_at_startup(&["--cache-nfiles", "-1"]);
+}
+
+// ---- Ordering pins ----------------------------------------------------------
+
+/// §7.7: `--serverport` (CLI) beats `SIPI_SERVERPORT` (env) — "free" per the
+/// plan: every `start_pair` spawn already passes `--serverport` explicitly,
+/// so setting `SIPI_SERVERPORT` to a different free port and confirming both
+/// binaries still listen on the CLI-allocated port (not the env one) is a
+/// zero-extra-spawn proof that CLI beats env, on both binaries.
+#[test]
+fn serverport_cli_beats_env_on_both() {
+    let (decoy_http, _decoy_ssl) = sipi_e2e::allocate_ports();
+    let (subject, reference) = SipiServer::start_pair_env(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &["--cache-size", "0"],
+        &[("SIPI_SERVERPORT", &decoy_http.to_string())],
+    );
+    // `start_pair_env` already had to bind subject.http_port /
+    // reference.http_port for its readiness probe to succeed — had env won,
+    // both would be listening on `decoy_http` instead and that probe would
+    // have timed out. Confirm the decoy is free as a stronger, explicit check.
+    assert!(
+        TcpStream::connect(("127.0.0.1", decoy_http)).is_err(),
+        "SIPI_SERVERPORT={decoy_http} must NOT be where either binary listens \
+         (CLI --serverport must win)"
+    );
+    drop(subject);
+    drop(reference);
+}
+
+/// §7.7: the `--cache-dir` / `SIPI_CACHE_DIR` precedence pin — the ONE flag
+/// this plan pins the full `config < env < CLI` order on. A throwaway Lua
+/// config sets a baseline `cache_dir`; three pair-spawns request the same
+/// derivative and assert it lands under the expected tier's directory on
+/// BOTH binaries: config-only, +env (beats config), +env+CLI (beats env).
+#[test]
+fn cache_dir_precedence_config_env_cli() {
+    let base = tempfile::tempdir().expect("tempdir");
+    let config_tier_dir = base.path().join("config-tier");
+    let env_tier_dir = base.path().join("env-tier");
+    let cli_tier_dir = base.path().join("cli-tier");
+
+    let config_content = format!(
+        r#"sipi = {{
+    port = 1024,
+    nthreads = 2,
+    jpeg_quality = 60,
+    scaling_quality = {{ jpeg = "medium", tiff = "high", png = "high", j2k = "high" }},
+    keep_alive = 5,
+    max_post_size = '300M',
+    imgroot = './images',
+    prefix_as_path = true,
+    subdir_levels = 0,
+    subdir_excludes = {{ "tmp", "thumb" }},
+    cache_dir = '{config_dir}',
+    cache_size = '20M',
+    cache_nfiles = 8,
+    scriptdir = './scripts',
+    thumb_size = '!128,128',
+    tmpdir = '/tmp',
+    max_temp_file_age = 86400,
+    knora_path = 'localhost',
+    knora_port = '3434',
+    logfile = "sipi.log",
+    loglevel = "DEBUG"
+}}
+admin = {{ user = 'admin', password = 'Sipi-Admin' }}
+routes = {{}}
+"#,
+        config_dir = config_tier_dir.display(),
+    );
+    let config_path = base.path().join("sipi.cache-precedence-test.lua");
+    std::fs::write(&config_path, &config_content).expect("write precedence config");
+    let config_arg = config_path.to_str().expect("utf-8 path");
+
+    let derivative = "/unit/lena512.jp2/0,0,64,64/max/0/default.jpg";
+
+    // Tier 1: config only — neither CLI nor env overrides cache_dir.
+    {
+        let (subject, reference) =
+            SipiServer::start_pair(config_arg, &sipi_e2e::test_data_dir(), &[]);
+        diff_get(&subject, &reference, derivative).assert_parity();
+        assert_cache_populated(&config_tier_dir, "config-only");
+    }
+
+    // Tier 2: env beats config.
+    {
+        let (subject, reference) = SipiServer::start_pair_env(
+            config_arg,
+            &sipi_e2e::test_data_dir(),
+            &[],
+            &[("SIPI_CACHE_DIR", env_tier_dir.to_str().unwrap())],
+        );
+        diff_get(&subject, &reference, derivative).assert_parity();
+        assert_cache_populated(&env_tier_dir, "env-over-config");
+    }
+
+    // Tier 3: CLI beats env.
+    {
+        let (subject, reference) = SipiServer::start_pair_env(
+            config_arg,
+            &sipi_e2e::test_data_dir(),
+            &["--cache-dir", cli_tier_dir.to_str().unwrap()],
+            &[("SIPI_CACHE_DIR", env_tier_dir.to_str().unwrap())],
+        );
+        diff_get(&subject, &reference, derivative).assert_parity();
+        assert_cache_populated(&cli_tier_dir, "cli-over-env");
+    }
+}
+
+/// At least one file exists under `dir` within a short settle window (the
+/// cache write may lag a hair behind the HTTP response, §7.7's
+/// `cache-nfiles` row note).
+fn assert_cache_populated(dir: &std::path::Path, label: &str) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        let populated = std::fs::read_dir(dir)
+            .map(|entries| entries.filter_map(Result::ok).any(|e| e.path().is_file()))
+            .unwrap_or(false);
+        if populated {
+            return;
+        }
+        if std::time::Instant::now() >= deadline {
+            panic!(
+                "[{label}] expected cache file(s) under {} within 2s",
+                dir.display()
+            );
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
+// ---- P-class per-flag honour probes -----------------------------------------
+
+/// §7.7: `--maxpost` — tightens the existing loose `upload_size_enforcement`
+/// assertion (`status == 413 || status >= 400`) to `413` OR a connection
+/// reset (the same two outcomes `upload_size_enforcement` already treats as
+/// equally valid enforcement — sending a body larger than `max_post_size`
+/// can trip the transport before the response is even readable) on both
+/// binaries, then confirms `--maxpost 0` means unlimited (the same body, now
+/// cleanly accepted) on both. Uses a real fixture (`unit/lena512.tif`, the
+/// exact file `upload_tiff_converts_to_jp2` proves converts cleanly) rather
+/// than a synthetic byte blob, so the "accepted" case can't fail on invalid
+/// image data instead of the size cap.
+#[test]
+fn maxpost_flag_honoured_on_both() {
+    let payload = std::fs::read(sipi_e2e::test_data_dir().join("images/unit/lena512.tif"))
+        .expect("read lena512.tif fixture");
+    assert!(
+        payload.len() > 1024,
+        "fixture must exceed the 1K cap under test"
+    );
+
+    let post_body = |srv: &SipiServer| -> Result<reqwest::blocking::Response, reqwest::Error> {
+        let form = reqwest::blocking::multipart::Form::new().part(
+            "file",
+            reqwest::blocking::multipart::Part::bytes(payload.clone())
+                .file_name("lena512.tif")
+                .mime_str("image/tiff")
+                .expect("valid mime"),
+        );
+        sipi_e2e::http_client()
+            .post(format!("{}/api/upload", srv.base_url))
+            .multipart(form)
+            .send()
+    };
+
+    // Tier: --maxpost 1K -> 413, or the connection resets mid-body (both
+    // equally valid enforcement — see doc comment above), on both binaries.
+    {
+        let (subject, reference) = SipiServer::start_pair(
+            "config/sipi.e2e-test-config.lua",
+            &sipi_e2e::test_data_dir(),
+            &["--cache-size", "0", "--maxpost", "1K"],
+        );
+        for (label, srv) in [("subject", &subject), ("reference", &reference)] {
+            match post_body(srv) {
+                Ok(resp) => assert_eq!(
+                    resp.status().as_u16(),
+                    413,
+                    "[{label}] --maxpost 1K should reject the oversized fixture with 413"
+                ),
+                Err(e) => assert!(
+                    e.is_body() || e.is_request() || e.is_connect(),
+                    "[{label}] expected a clean 413 or a connection-level failure, got: {e}"
+                ),
+            }
+        }
+    }
+
+    // Tier: --maxpost 0 -> unlimited, same fixture cleanly accepted (200).
+    {
+        let (subject, reference) = SipiServer::start_pair(
+            "config/sipi.e2e-test-config.lua",
+            &sipi_e2e::test_data_dir(),
+            &["--cache-size", "0", "--maxpost", "0"],
+        );
+        for (label, srv) in [("subject", &subject), ("reference", &reference)] {
+            assert_eq!(
+                post_body(srv)
+                    .unwrap_or_else(|e| panic!("[{label}] upload request failed: {e}"))
+                    .status()
+                    .as_u16(),
+                200,
+                "[{label}] --maxpost 0 (unlimited) should accept the same fixture"
+            );
+        }
+    }
+}
+
+/// §7.7: `--max-pixel-limit` — a full-resolution request (512×512 =
+/// 262,144px) exceeds a 10,000px limit (4xx on both); an explicit `100,100`
+/// (10,000px) output size stays within it (200 on both). NOTE: the pixel-
+/// limit pre-check (`serve_image.cpp`'s output pixel-count guard) sizes
+/// against the SOURCE image for a `max`/`full` SIZE spec — region cropping
+/// happens in a later step it doesn't see — so a pixel-coordinate region
+/// like `0,0,64,64/max` is checked against the full 512×512, not the 64×64
+/// crop, and would still be rejected. An explicit `<W>,<H>` SIZE spec (the
+/// same pattern `resource_limits.rs::pixel_limit_rejects_oversized_request`
+/// already relies on) is what's actually pixel-limited to the requested
+/// output.
+#[test]
+fn max_pixel_limit_flag_honoured_on_both() {
+    let (subject, reference) = SipiServer::start_pair(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &["--cache-size", "0", "--max-pixel-limit", "10000"],
+    );
+
+    let over = diff_get(
+        &subject,
+        &reference,
+        "/unit/lena512.jp2/full/max/0/default.jpg",
+    );
+    over.assert_parity();
+    assert!(
+        over.subject_status.is_client_error(),
+        "512x512 (262144px) should exceed a 10000px limit with a 4xx, got {}",
+        over.subject_status
+    );
+
+    let within = diff_get(
+        &subject,
+        &reference,
+        "/unit/lena512.jp2/full/100,100/0/default.jpg",
+    );
+    within.assert_parity();
+    assert_eq!(within.subject_status.as_u16(), 200);
+}
+
+/// §7.7 joint probe: `--max-decode-memory` + `--decode-memory-mode`. NOTE:
+/// the plan's suggested "1M" budget is too generous for the lena512 fixture
+/// (~768KB decode buffer per `memory_budget.rs`) — empirically it returns
+/// 200 on both in enforce mode, which would prove nothing. Using "100" bytes
+/// instead (the value `memory_budget.rs`'s own enforce tests rely on for
+/// reliable rejection) actually exercises the flag.
+#[test]
+fn decode_memory_budget_flags_honoured_on_both() {
+    let path = "/unit/lena512.jp2/full/max/0/default.jpg";
+
+    let (subject, reference) = SipiServer::start_pair(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &[
+            "--cache-size",
+            "0",
+            "--max-decode-memory",
+            "100",
+            "--decode-memory-mode",
+            "enforce",
+        ],
+    );
+    let enforced = diff_get(&subject, &reference, path);
+    enforced.assert_parity();
+    assert_eq!(enforced.subject_status.as_u16(), 503);
+    drop((subject, reference));
+
+    let (subject, reference) = SipiServer::start_pair(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &[
+            "--cache-size",
+            "0",
+            "--max-decode-memory",
+            "100",
+            "--decode-memory-mode",
+            "monitor",
+        ],
+    );
+    let monitored = diff_get(&subject, &reference, path);
+    monitored.assert_parity();
+    assert_eq!(monitored.subject_status.as_u16(), 200);
+}
+
+/// §7.7: `--imgroot` — an alt root containing a fixture at a fresh identifier
+/// (not served by the default imgroot) proves the override is actually used,
+/// not silently ignored (a 404-vs-404 "parity" would otherwise pass without
+/// proving anything).
+#[test]
+fn imgroot_flag_honoured_on_both() {
+    let alt_root = tempfile::tempdir().expect("alt imgroot tempdir");
+    std::fs::create_dir_all(alt_root.path().join("unit")).expect("create alt unit dir");
+    std::fs::copy(
+        sipi_e2e::test_data_dir().join("images/bilevel/bilevel_lzw_miniswhite.tif"),
+        alt_root.path().join("unit").join("imgroot-probe.tif"),
+    )
+    .expect("stage alt-imgroot fixture");
+
+    let (subject, reference) = SipiServer::start_pair(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &[
+            "--cache-size",
+            "0",
+            "--imgroot",
+            alt_root.path().to_str().expect("utf-8 path"),
+        ],
+    );
+    let diff = diff_get(&subject, &reference, "/unit/imgroot-probe.tif/info.json");
+    diff.assert_parity();
+    assert_eq!(
+        diff.subject_status.as_u16(),
+        200,
+        "the alt-imgroot fixture must actually be served (not silently falling back to the default imgroot)"
+    );
+}
+
+/// §7.7: `--scriptdir` — an alt scriptdir shadows an already-configured
+/// route's script with one returning a distinguishable marker. No `require`
+/// in the marker script: overriding `--scriptdir` replaces the Lua `require`
+/// path too (`LuaServer::setLuaPath`), so a helper like `send_response.lua`
+/// (which lives in the DEFAULT scriptdir) would not resolve — the bare
+/// `server.*` API is used instead. For the same reason, `--initscript` is
+/// ALSO overridden to a no-op: the shared config's default initscript
+/// (`sipi.init-knora.lua`) does `require "get_knora_session"`, which every
+/// new Lua VM re-executes (incl. the ones behind the `/health` readiness
+/// probe on the C++ oracle), and that require would no longer resolve once
+/// `--scriptdir` points elsewhere — confirmed empirically (the oracle failed
+/// to ever become ready, spamming "module 'get_knora_session' not found"
+/// until the spawn timeout).
+#[test]
+fn scriptdir_flag_honoured_on_both() {
+    let alt_scriptdir = tempfile::tempdir().expect("alt scriptdir tempdir");
+    std::fs::write(
+        alt_scriptdir.path().join("test_mediatype.lua"),
+        "server.sendHeader(\"Content-Type\", \"application/json\")\n\
+         server.sendStatus(200)\n\
+         server.print('{\"marker\":\"scriptdir-override\"}')\n",
+    )
+    .expect("write alt script");
+    let noop_initscript = alt_scriptdir.path().join("noop_init.lua");
+    std::fs::write(&noop_initscript, "-- no-op init script (scriptdir probe)\n")
+        .expect("write noop initscript");
+
+    let (subject, reference) = SipiServer::start_pair(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &[
+            "--cache-size",
+            "0",
+            "--scriptdir",
+            alt_scriptdir.path().to_str().expect("utf-8 path"),
+            "--initscript",
+            noop_initscript.to_str().expect("utf-8 path"),
+        ],
+    );
+    diff_get(&subject, &reference, "/test_mediatype").assert_parity();
+
+    let body: serde_json::Value = sipi_e2e::http_client()
+        .get(format!("{}/test_mediatype", subject.base_url))
+        .send()
+        .expect("test_mediatype request")
+        .json()
+        .expect("test_mediatype JSON");
+    assert_eq!(
+        body["marker"], "scriptdir-override",
+        "the alt scriptdir's script must run instead of the configured default"
+    );
+}
+
+/// §7.7: `--docroot` — an alt docroot's `marker.html` must be served at the
+/// configured `wwwroute` (`/server`, unchanged) on both binaries.
+#[test]
+fn docroot_flag_honoured_on_both() {
+    let alt_docroot = tempfile::tempdir().expect("alt docroot tempdir");
+    std::fs::write(
+        alt_docroot.path().join("marker.html"),
+        b"<html>docroot-override-marker</html>",
+    )
+    .expect("write alt docroot fixture");
+
+    let (subject, reference) = SipiServer::start_pair(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &[
+            "--cache-size",
+            "0",
+            "--docroot",
+            alt_docroot.path().to_str().expect("utf-8 path"),
+        ],
+    );
+    let diff = diff_get(&subject, &reference, "/server/marker.html");
+    diff.assert_parity();
+    assert_eq!(diff.subject_status.as_u16(), 200);
+}
+
+/// §7.7: `--wwwroute` — moves the docroot fileserver's URL mount point. The
+/// new mount point serves the (unmodified default) docroot's fixture; the
+/// old mount point's miss status may legitimately differ between binaries
+/// (falls through to the IIIF catch-all differently) — assert per-binary,
+/// don't diff it, per the table's note.
+#[test]
+fn wwwroute_flag_honoured_on_both() {
+    write_docroot_fixtures();
+    let (subject, reference) = SipiServer::start_pair(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &["--cache-size", "0", "--wwwroute", "/altroute"],
+    );
+    let diff = diff_get(&subject, &reference, "/altroute/parity_probe.html");
+    diff.assert_parity();
+    assert_eq!(diff.subject_status.as_u16(), 200);
+
+    let c = sipi_e2e::http_client();
+    for (label, srv) in [("subject", &subject), ("reference", &reference)] {
+        let missed = c
+            .get(format!("{}/server/parity_probe.html", srv.base_url))
+            .send()
+            .unwrap_or_else(|e| panic!("{label} old-mount request failed: {e}"));
+        assert_ne!(
+            missed.status().as_u16(),
+            200,
+            "[{label}] the old /server mount should no longer serve the docroot once --wwwroute moves it"
+        );
+    }
+}
+
+/// §7.7: `--pathprefix` — the never-tested `prefix_as_path = false` branch
+/// (plan 02 §3 P2). An alt imgroot holds the fixture at its ROOT (no `unit/`
+/// subdir). With the prefix stripped (`--pathprefix=false`), the resolved
+/// path drops "unit" -> `<alt>/<file>` exists -> 200 on both. With the
+/// prefix kept (bare `--pathprefix`, forcing true), the resolved path keeps
+/// "unit" -> `<alt>/unit/<file>` does not exist -> 404 on both.
+///
+/// Also confirmed empirically: the C++ CLI11 arm DOES accept
+/// `--pathprefix=false` (both binaries start cleanly with it), so no
+/// config-driven fallback is needed for the false case.
+#[test]
+fn pathprefix_flag_honoured_on_both() {
+    let alt_root = tempfile::tempdir().expect("alt imgroot tempdir");
+    std::fs::copy(
+        sipi_e2e::test_data_dir().join("images/unit/lena512.jp2"),
+        alt_root.path().join("pathprefix-probe.jp2"),
+    )
+    .expect("stage alt-imgroot fixture at the root (no unit/ subdir)");
+    let alt_root_str = alt_root.path().to_str().expect("utf-8 path");
+
+    {
+        let (subject, reference) = SipiServer::start_pair(
+            "config/sipi.e2e-test-config.lua",
+            &sipi_e2e::test_data_dir(),
+            &[
+                "--cache-size",
+                "0",
+                "--imgroot",
+                alt_root_str,
+                "--pathprefix=false",
+            ],
+        );
+        let diff = diff_get(&subject, &reference, "/unit/pathprefix-probe.jp2/info.json");
+        diff.assert_parity();
+        assert_eq!(diff.subject_status.as_u16(), 200);
+    }
+    {
+        let (subject, reference) = SipiServer::start_pair(
+            "config/sipi.e2e-test-config.lua",
+            &sipi_e2e::test_data_dir(),
+            &[
+                "--cache-size",
+                "0",
+                "--imgroot",
+                alt_root_str,
+                "--pathprefix",
+            ],
+        );
+        let diff = diff_get(&subject, &reference, "/unit/pathprefix-probe.jp2/info.json");
+        diff.assert_parity();
+        assert_eq!(diff.subject_status.as_u16(), 404);
+    }
+}
+
+/// §7.7: `--cache-nfiles 1` bounds the cache directory to ≤1 file after two
+/// distinct derivatives, on both binaries. Subject and reference get their
+/// OWN isolated `--cache-dir` (via `start_pair_split`) rather than sharing
+/// one — two independent `SipiCache` instances racing on the same
+/// `.sipicache` index would make the file count meaningless.
+#[test]
+fn cache_nfiles_flag_honoured_on_both() {
+    let subject_cache = tempfile::tempdir().expect("subject cache dir");
+    let reference_cache = tempfile::tempdir().expect("reference cache dir");
+    let subject_cache_str = subject_cache
+        .path()
+        .to_str()
+        .expect("utf-8 path")
+        .to_owned();
+    let reference_cache_str = reference_cache
+        .path()
+        .to_str()
+        .expect("utf-8 path")
+        .to_owned();
+
+    let (subject, reference) = SipiServer::start_pair_split(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &["--cache-nfiles", "1", "--cache-dir", &subject_cache_str],
+        &["--cache-nfiles", "1", "--cache-dir", &reference_cache_str],
+    );
+
+    let c = sipi_e2e::http_client();
+    for path in [
+        "/unit/lena512.jp2/0,0,64,64/max/0/default.jpg",
+        "/unit/lena512.jp2/0,0,128,128/max/0/default.jpg",
+    ] {
+        assert_eq!(
+            c.get(format!("{}{path}", subject.base_url))
+                .send()
+                .unwrap()
+                .status()
+                .as_u16(),
+            200
+        );
+        assert_eq!(
+            c.get(format!("{}{path}", reference.base_url))
+                .send()
+                .unwrap()
+                .status()
+                .as_u16(),
+            200
+        );
+    }
+
+    for (label, dir) in [
+        ("subject", subject_cache.path()),
+        ("reference", reference_cache.path()),
+    ] {
+        let count = count_files_with_retry(dir);
+        assert!(
+            count <= 1,
+            "[{label}] --cache-nfiles 1 should bound the cache directory to \u{2264}1 file, found {count}"
+        );
+    }
+}
+
+fn count_files_with_retry(dir: &std::path::Path) -> usize {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        let count = std::fs::read_dir(dir)
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .filter(|e| e.path().is_file())
+                    .count()
+            })
+            .unwrap_or(0);
+        if count <= 1 || std::time::Instant::now() >= deadline {
+            return count;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
+/// §7.7 joint probe: the four `--rate-limit-*` flags together. `Retry-After`
+/// presence only is asserted — the exact seconds-remaining is
+/// timing-dependent and deliberately unpinned (§3 P3).
+#[test]
+fn rate_limit_flags_honoured_on_both() {
+    let (subject, reference) = SipiServer::start_pair(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &[
+            "--cache-size",
+            "0",
+            "--rate-limit-mode",
+            "enforce",
+            "--rate-limit-max-pixels",
+            "300000", // just above one 512x512 request's 262144px
+            "--rate-limit-window",
+            "60",
+            "--rate-limit-pixel-threshold",
+            "0",
+        ],
+    );
+    let path = "/unit/lena512.jp2/full/max/0/default.jpg";
+    let c = sipi_e2e::http_client();
+
+    for (label, srv) in [("subject", &subject), ("reference", &reference)] {
+        let first = c
+            .get(format!("{}{path}", srv.base_url))
+            .send()
+            .expect("first request");
+        assert_eq!(
+            first.status().as_u16(),
+            200,
+            "[{label}] first request within budget"
+        );
+
+        let second = c
+            .get(format!("{}{path}", srv.base_url))
+            .send()
+            .expect("second request");
+        assert_eq!(
+            second.status().as_u16(),
+            429,
+            "[{label}] second request exceeds budget"
+        );
+        assert!(
+            second.headers().contains_key("retry-after"),
+            "[{label}] 429 should include a Retry-After header"
+        );
+    }
+}
+
+// ---- P-conditional probes ----------------------------------------------------
+
+/// §7.7 P-conditional: `--thumbsize`/`--knorapath`/`--knoraport` have no
+/// direct HTTP-visible effect, but `sipiConfGlobals` (`cli_app.cpp`) exposes
+/// them to every Lua VM as `config.thumb_size`/`config.knora_path`/
+/// `config.knora_port` — the shared `/config_echo` route
+/// (`test/_test_data/scripts/config_echo.lua`) echoes them as JSON.
+#[test]
+fn config_echo_flags_honoured_on_both() {
+    let (subject, reference) = SipiServer::start_pair(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &[
+            "--cache-size",
+            "0",
+            "--thumbsize",
+            "!256,256",
+            "--knorapath",
+            "example.org",
+            "--knoraport",
+            "9999",
+        ],
+    );
+    diff_get(&subject, &reference, "/config_echo").assert_parity();
+
+    // `diff_get` alone would also pass if BOTH binaries silently ignored the
+    // overrides (agreeing on the unmodified default) — confirm the override
+    // actually took by checking the subject's own echoed values.
+    let body: serde_json::Value = sipi_e2e::http_client()
+        .get(format!("{}/config_echo", subject.base_url))
+        .send()
+        .expect("config_echo request")
+        .json()
+        .expect("config_echo JSON");
+    assert_eq!(body["thumb_size"], "!256,256");
+    assert_eq!(body["knora_path"], "example.org");
+    assert_eq!(body["knora_port"], "9999");
+}
+
+// ---- R-class: positive path only ----------------------------------------------
+
+/// §7.7: `--jwtkey` — positive path ONLY. A valid, non-expired token signed
+/// by the alt secret must be accepted on each binary. The negative path
+/// (invalid/expired/malformed tokens) crashes the subject today — the
+/// preflight response-sink DoS, DEV-6670 — and lands at step 11; do not add
+/// it here (the §7.7 trap).
+#[test]
+fn jwtkey_flag_honoured_positive_path_only() {
+    const ALT_SECRET: &str = "alt-jwt-secret-for-plan-02-step-2-probe";
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system clock")
+        .as_secs();
+    let claims = serde_json::json!({ "allow": true, "iat": now, "exp": now + 3600 });
+    let token = jsonwebtoken::encode(
+        &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256),
+        &claims,
+        &jsonwebtoken::EncodingKey::from_secret(ALT_SECRET.as_bytes()),
+    )
+    .expect("encode alt-secret JWT");
+
+    let (subject, reference) = SipiServer::start_pair(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &["--cache-size", "0", "--jwtkey", ALT_SECRET],
+    );
+    let c = sipi_e2e::http_client();
+    for (label, srv) in [("subject", &subject), ("reference", &reference)] {
+        let resp = c
+            .get(format!(
+                "{}/auth/lena512.jp2/full/max/0/default.jpg",
+                srv.base_url
+            ))
+            .header("Authorization", format!("Bearer {token}"))
+            .send()
+            .unwrap_or_else(|e| panic!("[{label}] request failed: {e}"));
+        assert_eq!(
+            resp.status().as_u16(),
+            200,
+            "[{label}] a valid token signed by the --jwtkey alt secret should be accepted"
+        );
+    }
+}
+
+// ---- A-batch: acceptance-only flags --------------------------------------------
+
+/// §7.7 A-batch: every acceptance-only flag safe to share between both
+/// binaries, set to a harmless non-default all at once, plus a baseline
+/// probe. These flags either have no HTTP-visible effect worth a dedicated
+/// probe (no admin endpoint in the e2e config; `--logfile` NYI in the
+/// engine; syslog-vs-JSON `--loglevel` output is noise, §5 #2) or model
+/// concurrency differently between the two transports
+/// (hostname/keepalive/max-waiting/queue-timeout — XFH-derived / tokio-async
+/// / semaphore, §5 #6/#9; `--nthreads` — M7-resolved parse-only). `SIPI_*`
+/// env bindings are covered separately by `a_batch_env_flags_accepted_on_both`.
+#[test]
+fn a_batch_paired_flags_accepted_on_both() {
+    let (_cache, cache_dir) = isolated_cache_dir();
+    let (subject, reference) = SipiServer::start_pair(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &[
+            "--cache-dir",
+            &cache_dir,
+            "--hostname",
+            "sipi-a-batch-probe.example.org",
+            "--keepalive",
+            "7",
+            "--max-waiting",
+            "3",
+            "--queue-timeout",
+            "9",
+            "--nthreads",
+            "3",
+            "--adminuser",
+            "a-batch-admin",
+            "--adminpasswd",
+            "a-batch-password",
+            "--cache-size",
+            "5M",
+            "--loglevel",
+            "INFO",
+            "--logfile",
+            "sipi-a-batch-probe.log",
+        ],
+    );
+    diff_get(&subject, &reference, "/unit/lena512.jp2/info.json").assert_parity();
+}
+
+/// §7.7 A-batch, env variant: the same flags via their `SIPI_*` env bindings
+/// instead of CLI flags — this is what would catch an `ADMIINUSER`-class
+/// env-name typo on a newly added A-class flag. (The C++ oracle's documented
+/// `SIPI_ADMIINUSER` typo, M6, means `SIPI_ADMINUSER` here is a no-op on the
+/// reference — harmless, since no admin endpoint is configured to observe it
+/// either way.)
+#[test]
+fn a_batch_env_flags_accepted_on_both() {
+    let (_cache, cache_dir) = isolated_cache_dir();
+    let (subject, reference) = SipiServer::start_pair_env(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &["--cache-dir", &cache_dir],
+        &[
+            ("SIPI_HOSTNAME", "sipi-a-batch-env-probe.example.org"),
+            ("SIPI_KEEPALIVE", "7"),
+            ("SIPI_MAX_WAITING", "3"),
+            ("SIPI_QUEUE_TIMEOUT", "9"),
+            ("SIPI_NTHREADS", "3"),
+            ("SIPI_ADMINUSER", "a-batch-admin"),
+            ("SIPI_ADMINPASSWD", "a-batch-password"),
+            ("SIPI_CACHE_SIZE", "5M"),
+            ("SIPI_LOGLEVEL", "INFO"),
+            ("SIPI_LOGFILE", "sipi-a-batch-env-probe.log"),
+        ],
+    );
+    diff_get(&subject, &reference, "/unit/lena512.jp2/info.json").assert_parity();
+}
+
+/// §7.7 A-batch, subject-only: flags either dead-transport on the Rust shell
+/// (`--sslcert`/`--sslkey` — TLS terminates at Traefik; `--sslport` is
+/// already added automatically by `start_with_args`) or unsafe to probe
+/// against the C++ oracle (`--subdirlevels`/`--subdirexcludes` — the
+/// oracle's OWN `run_server()` command handler migrates the imgroot's
+/// on-disk layout at startup when these change, `cli_app.cpp:1419-1452`;
+/// `sipi_init`, which only the Rust shell calls, has no such migration, so
+/// this is safe on the subject).
+#[test]
+fn a_batch_subject_only_flags_accepted() {
+    let subject = SipiServer::start_with_args(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &[
+            "--cache-size",
+            "0",
+            "--sslcert",
+            "./certificate/certificate.pem",
+            "--sslkey",
+            "./certificate/key.pem",
+            "--subdirlevels",
+            "1",
+            "--subdirexcludes",
+            "tmp,thumb",
+        ],
+    );
+    let resp = sipi_e2e::http_client()
+        .get(format!("{}/unit/lena512.jp2/info.json", subject.base_url))
+        .send()
+        .expect("baseline probe");
+    assert_eq!(resp.status().as_u16(), 200);
+}
+
+/// §6 R3: the Rust shell falls back to the Lua config's `sipi.port` when
+/// neither `--serverport`/`SIPI_SERVERPORT` nor the dev/test `SIPI_RS_PORT`
+/// selects one. Single-binary (subject-only) — this is an internal
+/// precedence chain in `server-rs::serve()`, not a flag to compare against
+/// the C++ oracle (the oracle has always read its own config's `port`
+/// natively via `run_server()`, unaffected by this fix). `SipiServer::spawn`
+/// always injects `--serverport`, so this uses a raw spawn instead,
+/// mirroring `adminuser_env_name_documented_divergence`'s pattern.
+#[test]
+fn r3_lua_config_port_is_listener_fallback() {
+    const PORT: u16 = 19876;
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let cache_dir = tmp.path().join("cache");
+    let config_content = format!(
+        r#"sipi = {{
+    port = {PORT},
+    nthreads = 2,
+    jpeg_quality = 60,
+    scaling_quality = {{ jpeg = "medium", tiff = "high", png = "high", j2k = "high" }},
+    keep_alive = 5,
+    max_post_size = '300M',
+    imgroot = './images',
+    prefix_as_path = true,
+    subdir_levels = 0,
+    subdir_excludes = {{ "tmp", "thumb" }},
+    cache_dir = '{cache_dir}',
+    cache_size = '5M',
+    cache_nfiles = 8,
+    scriptdir = './scripts',
+    thumb_size = '!128,128',
+    tmpdir = '/tmp',
+    max_temp_file_age = 86400,
+    knora_path = 'localhost',
+    knora_port = '3434',
+    logfile = "sipi.log",
+    loglevel = "DEBUG"
+}}
+admin = {{ user = 'admin', password = 'Sipi-Admin' }}
+routes = {{}}
+"#,
+        cache_dir = cache_dir.display(),
+    );
+    let config_path = tmp.path().join("sipi.r3-port-test.lua");
+    std::fs::write(&config_path, &config_content).expect("write config");
+
+    let mut child = std::process::Command::new(sipi_e2e::sipi_bin_path())
+        .arg("server")
+        .arg("--config")
+        .arg(&config_path)
+        .current_dir(sipi_e2e::test_data_dir())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("spawn subject without --serverport");
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut ready = false;
+    while std::time::Instant::now() < deadline {
+        if sipi_e2e::http_client()
+            .get(format!("http://127.0.0.1:{PORT}/health"))
+            .send()
+            .map(|r| r.status().is_success())
+            .unwrap_or(false)
+        {
+            ready = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+
+    child.kill().ok();
+    child.wait().ok();
+
+    assert!(
+        ready,
+        "the Rust shell must listen on the Lua config's `port` ({PORT}) when no \
+         --serverport/SIPI_SERVERPORT/SIPI_RS_PORT overrides it"
     );
 }
