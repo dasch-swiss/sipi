@@ -364,6 +364,12 @@ fn adminuser_env_name_documented_divergence() {
 /// `--cache-size 0` (disables `SipiCache` construction entirely, sidestepping
 /// the hazard with no tempdir needed); this helper is only for the few that
 /// specifically want a *working* cache under a non-default `--cache-size`.
+///
+/// Its callers (the A-batches) still point subject and reference at the SAME
+/// isolated directory — only isolated from the long-lived shared `pair()`,
+/// not from each other. That is deliberately bounded: those tests assert
+/// response parity, never cache-directory contents, so two processes racing
+/// on `.sipicache` there can't produce a false pass.
 fn isolated_cache_dir() -> (tempfile::TempDir, String) {
     let dir = tempfile::tempdir().expect("isolated cache dir");
     let path = dir.path().to_str().expect("utf-8 path").to_owned();
@@ -375,6 +381,13 @@ fn isolated_cache_dir() -> (tempfile::TempDir, String) {
 /// Assert both binaries refuse to start under `extra_args`. Only the exit
 /// status is checked (nonzero) — NOT the error text or exact code, which
 /// differ by design (clap vs CLI11; plan 02 §7.7's bad-value-set note).
+///
+/// Exempt from the cache-isolation convention used elsewhere in this file
+/// (no `--cache-size 0` / isolated `--cache-dir`): every bad value here is
+/// rejected during CLI/env argument validation, before `sipi_init` — and
+/// therefore before any `SipiCache` — ever runs (confirmed empirically: both
+/// binaries exit within milliseconds, never touching the shared config's
+/// `cache_dir`).
 fn assert_both_reject_at_startup(extra_args: &[&str]) {
     for (label, bin) in [
         ("subject(rust)", sipi_e2e::sipi_bin_path()),
@@ -446,6 +459,15 @@ fn serverport_cli_beats_env_on_both() {
 /// config sets a baseline `cache_dir`; three pair-spawns request the same
 /// derivative and assert it lands under the expected tier's directory on
 /// BOTH binaries: config-only, +env (beats config), +env+CLI (beats env).
+///
+/// Unlike every other probe in this file, subject and reference here
+/// deliberately point at the SAME directory per tier — the whole point is
+/// proving both binaries resolve the identical override to the identical
+/// path, which two different directories couldn't show. This is the one
+/// place two live `SipiCache` instances share a directory; the risk is
+/// bounded (a couple of small requests per tier, then the pair is dropped)
+/// and the assertion only checks "is anything there", not an exact count,
+/// so interleaved writes from both processes can't produce a false pass.
 #[test]
 fn cache_dir_precedence_config_env_cli() {
     let base = tempfile::tempdir().expect("tempdir");
@@ -525,19 +547,30 @@ routes = {{}}
 /// cache write may lag a hair behind the HTTP response, §7.7's
 /// `cache-nfiles` row note).
 fn assert_cache_populated(dir: &std::path::Path, label: &str) {
+    let count = poll_cache_file_count(dir, |c| c > 0);
+    assert!(
+        count > 0,
+        "[{label}] expected cache file(s) under {} within 2s",
+        dir.display()
+    );
+}
+
+/// Poll `dir`'s file count until `stop` is satisfied or 2s elapses (a cache
+/// write may lag a hair behind the HTTP response, §7.7's `cache-nfiles` row
+/// note), returning the last sampled count either way.
+fn poll_cache_file_count(dir: &std::path::Path, stop: impl Fn(usize) -> bool) -> usize {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
     loop {
-        let populated = std::fs::read_dir(dir)
-            .map(|entries| entries.filter_map(Result::ok).any(|e| e.path().is_file()))
-            .unwrap_or(false);
-        if populated {
-            return;
-        }
-        if std::time::Instant::now() >= deadline {
-            panic!(
-                "[{label}] expected cache file(s) under {} within 2s",
-                dir.display()
-            );
+        let count = std::fs::read_dir(dir)
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .filter(|e| e.path().is_file())
+                    .count()
+            })
+            .unwrap_or(0);
+        if stop(count) || std::time::Instant::now() >= deadline {
+            return count;
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
@@ -956,29 +989,11 @@ fn cache_nfiles_flag_honoured_on_both() {
         ("subject", subject_cache.path()),
         ("reference", reference_cache.path()),
     ] {
-        let count = count_files_with_retry(dir);
+        let count = poll_cache_file_count(dir, |c| c <= 1);
         assert!(
             count <= 1,
             "[{label}] --cache-nfiles 1 should bound the cache directory to \u{2264}1 file, found {count}"
         );
-    }
-}
-
-fn count_files_with_retry(dir: &std::path::Path) -> usize {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-    loop {
-        let count = std::fs::read_dir(dir)
-            .map(|entries| {
-                entries
-                    .filter_map(Result::ok)
-                    .filter(|e| e.path().is_file())
-                    .count()
-            })
-            .unwrap_or(0);
-        if count <= 1 || std::time::Instant::now() >= deadline {
-            return count;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
 
@@ -1234,12 +1249,15 @@ fn a_batch_subject_only_flags_accepted() {
 /// mirroring `adminuser_env_name_documented_divergence`'s pattern.
 #[test]
 fn r3_lua_config_port_is_listener_fallback() {
-    const PORT: u16 = 19876;
+    // Draws from the same PID-offset counter every other spawn in this file
+    // uses, so this literal-port raw spawn can't collide with a concurrently
+    // running test binary the way a hardcoded port could.
+    let (port, _) = sipi_e2e::allocate_ports();
     let tmp = tempfile::tempdir().expect("tempdir");
     let cache_dir = tmp.path().join("cache");
     let config_content = format!(
         r#"sipi = {{
-    port = {PORT},
+    port = {port},
     nthreads = 2,
     jpeg_quality = 60,
     scaling_quality = {{ jpeg = "medium", tiff = "high", png = "high", j2k = "high" }},
@@ -1283,7 +1301,7 @@ routes = {{}}
     let mut ready = false;
     while std::time::Instant::now() < deadline {
         if sipi_e2e::http_client()
-            .get(format!("http://127.0.0.1:{PORT}/health"))
+            .get(format!("http://127.0.0.1:{port}/health"))
             .send()
             .map(|r| r.status().is_success())
             .unwrap_or(false)
@@ -1299,7 +1317,62 @@ routes = {{}}
 
     assert!(
         ready,
-        "the Rust shell must listen on the Lua config's `port` ({PORT}) when no \
+        "the Rust shell must listen on the Lua config's `port` ({port}) when no \
          --serverport/SIPI_SERVERPORT/SIPI_RS_PORT overrides it"
+    );
+}
+
+/// §6 R3, the actual precedence INVERSION: `SIPI_RS_PORT` now wins even over
+/// an explicit `--serverport`, not just the implicit Lua-config fallback
+/// above. Raw spawn, not `SipiServer` (which always injects `--serverport`
+/// itself and polls readiness against that same port — it cannot express
+/// "give an explicit --serverport, then watch something ELSE win").
+#[test]
+fn sipi_rs_port_beats_explicit_serverport() {
+    let (explicit_port, _) = sipi_e2e::allocate_ports();
+    let (winning_port, _) = sipi_e2e::allocate_ports();
+
+    let mut child = std::process::Command::new(sipi_e2e::sipi_bin_path())
+        .arg("server")
+        .arg("--config")
+        .arg("config/sipi.e2e-test-config.lua")
+        .arg("--serverport")
+        .arg(explicit_port.to_string())
+        .arg("--cache-size")
+        .arg("0")
+        .env("SIPI_RS_PORT", winning_port.to_string())
+        .current_dir(sipi_e2e::test_data_dir())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("spawn subject");
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut ready = false;
+    while std::time::Instant::now() < deadline {
+        if sipi_e2e::http_client()
+            .get(format!("http://127.0.0.1:{winning_port}/health"))
+            .send()
+            .map(|r| r.status().is_success())
+            .unwrap_or(false)
+        {
+            ready = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let explicit_port_free = TcpStream::connect(("127.0.0.1", explicit_port)).is_err();
+
+    child.kill().ok();
+    child.wait().ok();
+
+    assert!(
+        ready,
+        "SIPI_RS_PORT ({winning_port}) must win even over an explicit --serverport ({explicit_port})"
+    );
+    assert!(
+        explicit_port_free,
+        "the explicit --serverport ({explicit_port}) must NOT be where the shell \
+         listens once SIPI_RS_PORT wins"
     );
 }

@@ -32,9 +32,12 @@ use std::process::ExitCode;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
-/// Default listen port for the additive Rust shell. The real port will come
-/// from the SIPI config; until then it is overridable via `--serverport` or
-/// `SIPI_RS_PORT` so the parallel shell never collides with the C++ server.
+/// Last-resort listen port: used only when NONE of `SIPI_RS_PORT`,
+/// `--serverport`/`SIPI_SERVERPORT`, and (for a Lua config) the config's own
+/// `sipi.port` selected one. A Lua config that omits `port` entirely falls to
+/// `SipiConf`'s own in-class default (3333, `SipiConf.h`) one tier before this
+/// — that tier is never 1024, so an operator relying on this constant should
+/// set `port` explicitly (as every known config does; plan 02 §6 R3).
 const DEFAULT_PORT: u16 = 1024;
 
 /// Process start time, for the `/health` uptime field. Set once at server

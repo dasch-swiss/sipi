@@ -31,7 +31,11 @@ use std::os::raw::{c_char, c_int};
 #[derive(Debug, Default, Clone)]
 pub struct ServerOverrides {
     /// HTTP listen port (`--serverport` / `SIPI_SERVERPORT`). `None` → fall back
-    /// to `SIPI_RS_PORT` (dev/test) then the default port.
+    /// to the Lua config's `sipi.port` (Lua config only), then the hardcoded
+    /// default. `serve()`'s actual resolution order (`lib.rs`) is
+    /// `SIPI_RS_PORT` (dev/test) > this field > Lua config port > default —
+    /// `SIPI_RS_PORT` is checked first, ahead of this field, not after it
+    /// (plan 02 §6 R3).
     pub serverport: Option<u16>,
 
     // Paths
