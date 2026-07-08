@@ -163,7 +163,10 @@ fn head_does_not_warm_cache() {
     let resp = client().head(&url).send().expect("HEAD image failed");
     assert_eq!(resp.status().as_u16(), 200);
     let _ = resp.bytes();
-    let after_head = poll_cache_file_count(&cache_dir, |_| true);
+    // Poll the full window rather than snapshotting instantly: a buggy HEAD
+    // write could lag behind the response, and an instant 0 wouldn't rule
+    // that out. `|c| c > 0` still returns immediately if the bug fires.
+    let after_head = poll_cache_file_count(&cache_dir, |c| c > 0);
     assert_eq!(after_head, 0, "a HEAD must not warm the cache (DEV-6660)");
 
     let resp = client().get(&url).send().expect("GET image failed");
@@ -198,11 +201,14 @@ fn cache_hit_avoids_decode() {
         "a cache miss should write exactly one new cache file"
     );
 
-    // Second request — cache hit, writes no additional file.
+    // Second request — cache hit, writes no additional file. Poll the full
+    // window rather than snapshotting instantly, so a spurious re-decode
+    // write has time to surface; `|c| c > after_miss` still returns
+    // immediately if it does.
     let resp = client().get(&url).send().expect("GET image (hit) failed");
     assert_eq!(resp.status().as_u16(), 200);
     let _ = resp.bytes();
-    let after_hit = poll_cache_file_count(&cache_dir, |_| true);
+    let after_hit = poll_cache_file_count(&cache_dir, |c| c > after_miss);
     assert_eq!(
         after_hit, after_miss,
         "a cache hit should not write another cache file (avoids re-decode)"
