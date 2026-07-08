@@ -89,13 +89,56 @@ impl SipiServer {
     /// `extra_args` — additional CLI arguments appended after standard ones.
     ///                 CLI args override config values (CLI precedence).
     pub fn start_with_args(config: &str, working_dir: &Path, extra_args: &[&str]) -> Self {
+        Self::start_env(config, working_dir, extra_args, &[])
+    }
+
+    /// Like [`Self::start_with_args`], additionally setting `extra_env` in
+    /// the spawned process's environment.
+    pub fn start_env(
+        config: &str,
+        working_dir: &Path,
+        extra_args: &[&str],
+        extra_env: &[(&str, &str)],
+    ) -> Self {
         Self::spawn(
             sipi_bin_path(),
             ServerKind::Subject,
             config,
             working_dir,
             extra_args,
-            &[],
+            extra_env,
+        )
+    }
+
+    /// Start ONLY the C++ oracle (reference) — the reference-side counterpart
+    /// to [`Self::start_with_args`]. Use when a probe needs subject and
+    /// reference to access shared state (e.g. a `--cache-dir`) SEQUENTIALLY
+    /// rather than concurrently, to avoid two live `SipiCache` instances
+    /// racing on the same `.sipicache` index file (confirmed on CI to be a
+    /// real crash, not just a benign duplicate write — plan 02 §7.7).
+    pub fn start_reference_with_args(
+        config: &str,
+        working_dir: &Path,
+        extra_args: &[&str],
+    ) -> Self {
+        Self::start_reference_env(config, working_dir, extra_args, &[])
+    }
+
+    /// Like [`Self::start_reference_with_args`], additionally setting
+    /// `extra_env` in the spawned process's environment.
+    pub fn start_reference_env(
+        config: &str,
+        working_dir: &Path,
+        extra_args: &[&str],
+        extra_env: &[(&str, &str)],
+    ) -> Self {
+        Self::spawn(
+            sipi_oracle_bin_path(),
+            ServerKind::Reference,
+            config,
+            working_dir,
+            extra_args,
+            extra_env,
         )
     }
 
