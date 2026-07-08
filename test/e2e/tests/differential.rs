@@ -23,7 +23,7 @@ use std::net::TcpStream;
 use std::sync::OnceLock;
 
 use reqwest::Method;
-use sipi_e2e::{diff_get, diff_request, DiffAllowlist, SipiServer};
+use sipi_e2e::{diff_get, diff_request, poll_cache_file_count, DiffAllowlist, SipiServer};
 
 /// Per-case allowlist profile.
 #[derive(Clone, Copy)]
@@ -597,27 +597,6 @@ fn assert_cache_populated(dir: &std::path::Path, label: &str) {
         "[{label}] expected cache file(s) under {} within 2s",
         dir.display()
     );
-}
-
-/// Poll `dir`'s file count until `stop` is satisfied or 2s elapses (a cache
-/// write may lag a hair behind the HTTP response, §7.7's `cache-nfiles` row
-/// note), returning the last sampled count either way.
-fn poll_cache_file_count(dir: &std::path::Path, stop: impl Fn(usize) -> bool) -> usize {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-    loop {
-        let count = std::fs::read_dir(dir)
-            .map(|entries| {
-                entries
-                    .filter_map(Result::ok)
-                    .filter(|e| e.path().is_file())
-                    .count()
-            })
-            .unwrap_or(0);
-        if stop(count) || std::time::Instant::now() >= deadline {
-            return count;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
 }
 
 // ---- P-class per-flag honour probes -----------------------------------------

@@ -1,8 +1,8 @@
 mod common;
 
 use common::client;
-use sipi_e2e::{http_client, test_data_dir, SipiServer};
-use std::collections::HashMap;
+use sipi_e2e::{http_client, poll_cache_file_count, test_data_dir, SipiServer};
+use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::thread;
 use std::time::Duration;
@@ -30,49 +30,14 @@ fn server() -> &'static SipiServer {
     })
 }
 
-/// Parse Prometheus text format into a map of metric name → value.
-/// Only handles simple metrics (no histograms/summaries).
-fn parse_metrics(body: &str) -> HashMap<String, f64> {
-    let mut map = HashMap::new();
-    for line in body.lines() {
-        if line.starts_with('#') || line.trim().is_empty() {
-            continue;
-        }
-        // Format: metric_name value
-        // or: metric_name{labels} value
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() >= 2 {
-            let name = if let Some(brace) = parts[0].find('{') {
-                &parts[0][..brace]
-            } else {
-                parts[0]
-            };
-            if let Ok(val) = parts[1].parse::<f64>() {
-                map.insert(name.to_string(), val);
-            }
-        }
-    }
-    map
-}
-
-/// Fetch metrics from the server and parse them.
-fn get_metrics(base_url: &str) -> HashMap<String, f64> {
-    let resp = client()
-        .get(format!("{}/metrics", base_url))
-        .send()
-        .expect("GET /metrics failed");
-    assert_eq!(resp.status().as_u16(), 200);
-    let body = resp.text().expect("read metrics body");
-    parse_metrics(&body)
-}
-
 /// Counter for unique cache directories across custom server instances.
 static CACHE_DIR_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
 /// Start a server with a custom config generated from the given overrides.
 /// Each custom server gets its own isolated cache directory to avoid
-/// interfering with the shared server or other custom servers.
-fn start_server_with_cache_config(cache_size: &str, cache_nfiles: u32) -> SipiServer {
+/// interfering with the shared server or other custom servers. Returns the
+/// server plus its cache directory, so callers can assert on-disk cache state.
+fn start_server_with_cache_config(cache_size: &str, cache_nfiles: u32) -> (SipiServer, PathBuf) {
     let test_data = test_data_dir();
     let cache_id = CACHE_DIR_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let cache_dir_name = format!("cache_test_{}", cache_id);
@@ -145,10 +110,11 @@ routes = {{
         .join(format!("sipi.cache-test-{}.lua", cache_id));
     std::fs::write(&config_path, &config_content).expect("write custom config");
 
-    SipiServer::start(
+    let srv = SipiServer::start(
         &format!("config/sipi.cache-test-{}.lua", cache_id),
         &test_data,
-    )
+    );
+    (srv, cache_dir)
 }
 
 // =============================================================================
@@ -156,148 +122,97 @@ routes = {{
 // =============================================================================
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 3): asserts cache behaviour via the removed /metrics endpoint (GET /metrics 404s) — repin on on-disk file count — plan 02 cluster B"]
 fn cache_metrics() {
+    // DEV-6659 step 3: repinned on the on-disk file count under `cache_dir`
+    // (the /metrics endpoint is gone). Uses the `.png` variant of an
+    // otherwise-shared derivative so the delta is unambiguous regardless of
+    // what other tests sharing this server have already cached.
     let srv = server();
+    let cache_dir = test_data_dir().join("cache");
+    let before = poll_cache_file_count(&cache_dir, |_| true);
 
-    // Get initial metrics
-    let before = get_metrics(&srv.base_url);
-    let hits_before = before.get("sipi_cache_hits_total").copied().unwrap_or(0.0);
-    let misses_before = before
-        .get("sipi_cache_misses_total")
-        .copied()
-        .unwrap_or(0.0);
-
-    // Make a request that should be a cache miss (first request for this path)
     let resp = client()
         .get(format!(
-            "{}/unit/lena512.jp2/full/max/0/default.jpg",
+            "{}/unit/lena512.jp2/full/max/0/default.png",
             srv.base_url
         ))
         .send()
         .expect("GET image failed");
     assert_eq!(resp.status().as_u16(), 200);
-    // Consume the body to complete the request
     let _ = resp.bytes();
 
-    // Check metrics changed
-    let after = get_metrics(&srv.base_url);
-    let hits_after = after.get("sipi_cache_hits_total").copied().unwrap_or(0.0);
-    let misses_after = after.get("sipi_cache_misses_total").copied().unwrap_or(0.0);
-
-    // Either hits or misses should have increased
-    let total_before = hits_before + misses_before;
-    let total_after = hits_after + misses_after;
+    let after = poll_cache_file_count(&cache_dir, |c| c > before);
     assert!(
-        total_after > total_before,
-        "cache counters should increase after image request: before={}, after={}",
-        total_before,
-        total_after
-    );
-
-    // Verify cache gauge metrics exist
-    assert!(
-        after.contains_key("sipi_cache_size_bytes"),
-        "sipi_cache_size_bytes metric should exist"
-    );
-    assert!(
-        after.contains_key("sipi_cache_files"),
-        "sipi_cache_files metric should exist"
+        after > before,
+        "a fresh derivative request should write a new cache file: before={}, after={}",
+        before,
+        after
     );
 }
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 3): asserts cache behaviour via the removed /metrics endpoint (GET /metrics 404s) — repin on on-disk file count — plan 02 cluster B"]
 fn head_does_not_warm_cache() {
-    // DEV-6660: a HEAD request must not write a cache entry. On an isolated
-    // server (so the global hit counter is uncontended), HEAD an uncached image,
-    // then GET the same url — the GET must be a cache MISS. If the HEAD had warmed
-    // the cache, the GET would register a hit instead.
-    let srv = start_server_with_cache_config("20M", 8);
+    // DEV-6659 step 3 / DEV-6660: a HEAD request must not write a cache
+    // entry. HEAD an uncached image (must write nothing), then GET the same
+    // url (must be the cache miss that writes the one cache file). If the
+    // HEAD had warmed the cache, no file would appear until the GET writes
+    // it, so the count sequence 0 -> 0 -> 1 is exactly the contract.
+    let (srv, cache_dir) = start_server_with_cache_config("20M", 8);
     let url = format!("{}/unit/lena512.jp2/full/max/0/default.jpg", srv.base_url);
 
-    // HEAD the (uncached) image — serves headers, must write no cache.
     let resp = client().head(&url).send().expect("HEAD image failed");
     assert_eq!(resp.status().as_u16(), 200);
     let _ = resp.bytes();
-    let hits_after_head = get_metrics(&srv.base_url)
-        .get("sipi_cache_hits_total")
-        .copied()
-        .unwrap_or(0.0);
+    let after_head = poll_cache_file_count(&cache_dir, |_| true);
+    assert_eq!(after_head, 0, "a HEAD must not warm the cache (DEV-6660)");
 
-    // GET the same url — must be a cache miss (the HEAD wrote nothing).
     let resp = client().get(&url).send().expect("GET image failed");
     assert_eq!(resp.status().as_u16(), 200);
     let _ = resp.bytes();
-    let hits_after_get = get_metrics(&srv.base_url)
-        .get("sipi_cache_hits_total")
-        .copied()
-        .unwrap_or(0.0);
-
+    let after_get = poll_cache_file_count(&cache_dir, |c| c > 0);
     assert_eq!(
-        hits_after_get, hits_after_head,
-        "the GET after a HEAD must be a cache miss — a HEAD must not warm the cache (DEV-6660)"
+        after_get, 1,
+        "the GET after a HEAD must be the cache miss that writes the file — a HEAD must not warm the cache (DEV-6660)"
     );
 }
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 3): asserts cache behaviour via the removed /metrics endpoint (GET /metrics 404s) — repin on on-disk file count — plan 02 cluster B"]
 fn cache_hit_avoids_decode() {
+    // DEV-6659 step 3: repinned on the on-disk file count. A cache miss
+    // writes exactly one new file; a subsequent hit for the same params
+    // must not write another (proving it was served from the cache file,
+    // not re-decoded).
     let srv = server();
+    let cache_dir = test_data_dir().join("cache");
+    let url = format!("{}/unit/lena512.jp2/full/200,/0/default.jpg", srv.base_url);
+    let before = poll_cache_file_count(&cache_dir, |_| true);
 
-    // First request — cache miss
-    let resp = client()
-        .get(format!(
-            "{}/unit/lena512.jp2/full/200,/0/default.jpg",
-            srv.base_url
-        ))
-        .send()
-        .expect("GET image (miss) failed");
+    // First request — cache miss, writes one file.
+    let resp = client().get(&url).send().expect("GET image (miss) failed");
     assert_eq!(resp.status().as_u16(), 200);
     let _ = resp.bytes();
-
-    let after_miss = get_metrics(&srv.base_url);
-    let misses = after_miss
-        .get("sipi_cache_misses_total")
-        .copied()
-        .unwrap_or(0.0);
-
-    // Second request — should be a cache hit
-    let resp = client()
-        .get(format!(
-            "{}/unit/lena512.jp2/full/200,/0/default.jpg",
-            srv.base_url
-        ))
-        .send()
-        .expect("GET image (hit) failed");
-    assert_eq!(resp.status().as_u16(), 200);
-    let _ = resp.bytes();
-
-    let after_hit = get_metrics(&srv.base_url);
-    let hits = after_hit
-        .get("sipi_cache_hits_total")
-        .copied()
-        .unwrap_or(0.0);
-    let misses_after = after_hit
-        .get("sipi_cache_misses_total")
-        .copied()
-        .unwrap_or(0.0);
-
-    // Hits should have increased, misses should not
-    assert!(
-        hits > 0.0,
-        "cache_hits_total should be > 0 after second request"
-    );
+    let after_miss = poll_cache_file_count(&cache_dir, |c| c > before);
     assert_eq!(
-        misses_after, misses,
-        "cache_misses_total should not increase on cache hit"
+        after_miss,
+        before + 1,
+        "a cache miss should write exactly one new cache file"
+    );
+
+    // Second request — cache hit, writes no additional file.
+    let resp = client().get(&url).send().expect("GET image (hit) failed");
+    assert_eq!(resp.status().as_u16(), 200);
+    let _ = resp.bytes();
+    let after_hit = poll_cache_file_count(&cache_dir, |_| true);
+    assert_eq!(
+        after_hit, after_miss,
+        "a cache hit should not write another cache file (avoids re-decode)"
     );
 }
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 3): asserts cache behaviour via the removed /metrics endpoint (GET /metrics 404s) — repin on on-disk file count — plan 02 cluster B"]
 fn cache_key_isolation() {
     let srv = server();
+    let cache_dir = test_data_dir().join("cache");
 
     // Request the same image with different IIIF parameters.
     // Use parameters that produce visibly different outputs (lena512 is 512x512 square,
@@ -328,11 +243,12 @@ fn cache_key_isolation() {
         "full/max and cropped region should produce different images"
     );
 
-    // Check cache files metric increased
-    let metrics = get_metrics(&srv.base_url);
-    let cache_files = metrics.get("sipi_cache_files").copied().unwrap_or(0.0);
+    // DEV-6659 step 3: repinned on the on-disk file count. Absolute (not a
+    // delta), matching the original `cache_files >= 3.0` gauge check — files
+    // written by other tests sharing this cache dir only strengthen it.
+    let cache_files = poll_cache_file_count(&cache_dir, |c| c >= 3);
     assert!(
-        cache_files >= 3.0,
+        cache_files >= 3,
         "cache should contain at least 3 files for 3 different params, got {}",
         cache_files
     );
@@ -408,9 +324,8 @@ fn watermark_cache_separation() {
 // =============================================================================
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 3): asserts cache behaviour via the removed /metrics endpoint (GET /metrics 404s) — repin on on-disk file count — plan 02 cluster B"]
 fn cache_disabled_mode() {
-    let srv = start_server_with_cache_config("0", 0);
+    let (srv, cache_dir) = start_server_with_cache_config("0", 0);
 
     // Make a request
     let resp = client()
@@ -423,20 +338,18 @@ fn cache_disabled_mode() {
     assert_eq!(resp.status().as_u16(), 200);
     let _ = resp.bytes();
 
-    // Check metrics show cache is disabled (0 cache files)
-    let metrics = get_metrics(&srv.base_url);
-    let cache_files = metrics.get("sipi_cache_files").copied().unwrap_or(-1.0);
+    // DEV-6659 step 3: repinned on the on-disk file count (no /metrics).
+    let cache_files = poll_cache_file_count(&cache_dir, |_| true);
     assert_eq!(
-        cache_files, 0.0,
-        "cache_files should be 0 when cache is disabled"
+        cache_files, 0,
+        "no cache files should be written when the cache is disabled"
     );
 }
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 3): asserts cache behaviour via the removed /metrics endpoint (GET /metrics 404s) — repin on on-disk file count — plan 02 cluster B"]
 fn cache_lru_purge_correctness() {
     // Start with a very small cache: 1M size, 5 files
-    let srv = start_server_with_cache_config("1M", 5);
+    let (srv, cache_dir) = start_server_with_cache_config("1M", 5);
 
     // Request more images than cache_nfiles allows to trigger eviction
     let paths = [
@@ -461,33 +374,22 @@ fn cache_lru_purge_correctness() {
         thread::sleep(Duration::from_millis(50));
     }
 
-    let metrics = get_metrics(&srv.base_url);
-    let cache_files = metrics.get("sipi_cache_files").copied().unwrap_or(0.0);
-    let evictions = metrics
-        .get("sipi_cache_evictions_total")
-        .copied()
-        .unwrap_or(0.0);
-
-    // Cache files should be at or below the limit (purge to ~80% = 4)
+    // DEV-6659 step 3: repinned on the on-disk file count (no /metrics, so
+    // eviction *count* isn't directly observable). Requesting 8 distinct
+    // derivatives against a 5-file cap while staying at-or-below the cap is
+    // itself proof eviction ran — without it, the count would sit at 8.
+    let cache_files = poll_cache_file_count(&cache_dir, |c| c <= 5);
     assert!(
-        cache_files <= 5.0,
-        "cache_files ({}) should not exceed cache_nfiles limit (5)",
+        cache_files <= 5,
+        "cache_files ({}) should not exceed cache_nfiles limit (5) — eviction should have purged older entries",
         cache_files
-    );
-
-    // Evictions should have occurred since we requested more than the limit
-    assert!(
-        evictions > 0.0,
-        "cache_evictions_total should be > 0 after exceeding cache limit, got {}",
-        evictions
     );
 }
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 3): asserts cache behaviour via the removed /metrics endpoint (GET /metrics 404s) — repin on on-disk file count — plan 02 cluster B"]
 fn cache_nfiles_limit() {
     // Start with cache_nfiles=3
-    let srv = start_server_with_cache_config("20M", 3);
+    let (srv, cache_dir) = start_server_with_cache_config("20M", 3);
 
     let paths = [
         "/unit/lena512.jp2/full/max/0/default.jpg",
@@ -507,11 +409,10 @@ fn cache_nfiles_limit() {
         thread::sleep(Duration::from_millis(50));
     }
 
-    let metrics = get_metrics(&srv.base_url);
-    let cache_files = metrics.get("sipi_cache_files").copied().unwrap_or(0.0);
-
+    // DEV-6659 step 3: repinned on the on-disk file count (no /metrics).
+    let cache_files = poll_cache_file_count(&cache_dir, |c| c <= 3);
     assert!(
-        cache_files <= 3.0,
+        cache_files <= 3,
         "cache_files ({}) should never exceed cache_nfiles limit (3)",
         cache_files
     );
@@ -520,7 +421,7 @@ fn cache_nfiles_limit() {
 #[test]
 fn cache_eviction_during_read() {
     // Start with very small cache to force eviction
-    let srv = start_server_with_cache_config("1M", 3);
+    let (srv, _cache_dir) = start_server_with_cache_config("1M", 3);
 
     // Populate cache with one image
     let resp = client()

@@ -488,44 +488,6 @@ fn knora_json_csv_file() {
 // =============================================================================
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 3): /metrics removed in the Rust shell (OTLP replaces the Prometheus scrape) — plan 02 cluster B"]
-fn prometheus_metrics() {
-    let srv = server();
-    let resp = client()
-        .get(format!("{}/metrics", srv.base_url))
-        .send()
-        .expect("GET /metrics failed");
-
-    assert_eq!(resp.status().as_u16(), 200);
-
-    let body = resp.text().expect("read metrics body");
-
-    // Verify Prometheus text format
-    assert!(
-        body.contains("# TYPE") || body.contains("# HELP"),
-        "/metrics should return Prometheus text format"
-    );
-
-    // Verify key cache gauges exist
-    assert!(
-        body.contains("sipi_cache_hits_total"),
-        "should contain sipi_cache_hits_total"
-    );
-    assert!(
-        body.contains("sipi_cache_misses_total"),
-        "should contain sipi_cache_misses_total"
-    );
-    assert!(
-        body.contains("sipi_cache_size_bytes"),
-        "should contain sipi_cache_size_bytes"
-    );
-    assert!(
-        body.contains("sipi_cache_files"),
-        "should contain sipi_cache_files"
-    );
-}
-
-#[test]
 #[ignore = "Phase C gap (DEV-6659 step 8): Rust shell serves plain HTTP only (TLS terminates at Traefik); HTTPS listener dropped — plan 02 cluster J"]
 fn ssl_endpoints() {
     let srv = server();
