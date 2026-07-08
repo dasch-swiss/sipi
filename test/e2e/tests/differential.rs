@@ -456,18 +456,20 @@ fn serverport_cli_beats_env_on_both() {
 
 /// §7.7: the `--cache-dir` / `SIPI_CACHE_DIR` precedence pin — the ONE flag
 /// this plan pins the full `config < env < CLI` order on. A throwaway Lua
-/// config sets a baseline `cache_dir`; three pair-spawns request the same
-/// derivative and assert it lands under the expected tier's directory on
-/// BOTH binaries: config-only, +env (beats config), +env+CLI (beats env).
+/// config sets a baseline `cache_dir`; three tiers (via `assert_tier`)
+/// request the same derivative and assert it lands under the expected
+/// tier's directory on BOTH binaries: config-only, +env (beats config),
+/// +env+CLI (beats env).
 ///
 /// Unlike every other probe in this file, subject and reference here
 /// deliberately point at the SAME directory per tier — the whole point is
 /// proving both binaries resolve the identical override to the identical
-/// path, which two different directories couldn't show. This is the one
-/// place two live `SipiCache` instances share a directory; the risk is
-/// bounded (a couple of small requests per tier, then the pair is dropped)
-/// and the assertion only checks "is anything there", not an exact count,
-/// so interleaved writes from both processes can't produce a false pass.
+/// path, which two different directories couldn't show. Originally run as a
+/// concurrent `start_pair` (like everywhere else); that crashed the C++
+/// oracle with `std::bad_alloc` on linux-amd64 CI (two live `SipiCache`
+/// instances racing on the same `.sipicache` index — a real crash, not a
+/// benign duplicate write). `assert_tier` now runs subject and reference
+/// SEQUENTIALLY against the shared directory instead.
 #[test]
 fn cache_dir_precedence_config_env_cli() {
     let base = tempfile::tempdir().expect("tempdir");
@@ -475,6 +477,15 @@ fn cache_dir_precedence_config_env_cli() {
     let env_tier_dir = base.path().join("env-tier");
     let cli_tier_dir = base.path().join("cli-tier");
 
+    // Matches the full field set every OTHER differential-tested Lua config
+    // in this suite carries (`sipi.e2e-test-config.lua`,
+    // `resource_limits.rs`'s pixel-limit template, `cache.rs`'s template).
+    // A trimmed config omitting `initscript`/`ssl_*`/`jwt_secret`/
+    // `fileserver` crashed the C++ oracle with `std::bad_alloc` on
+    // linux-amd64 CI only, the one time subject and reference also raced on
+    // this same `cache_dir` concurrently (see `assert_tier` below, which
+    // removes that race) — the two are not confirmed independent causes, but
+    // matching the proven config shape costs nothing, so both are fixed.
     let config_content = format!(
         r#"sipi = {{
     port = 1024,
@@ -487,6 +498,7 @@ fn cache_dir_precedence_config_env_cli() {
     prefix_as_path = true,
     subdir_levels = 0,
     subdir_excludes = {{ "tmp", "thumb" }},
+    initscript = './config/sipi.init-knora.lua',
     cache_dir = '{config_dir}',
     cache_size = '20M',
     cache_nfiles = 8,
@@ -496,10 +508,15 @@ fn cache_dir_precedence_config_env_cli() {
     max_temp_file_age = 86400,
     knora_path = 'localhost',
     knora_port = '3434',
+    ssl_port = 1025,
+    ssl_certificate = './certificate/certificate.pem',
+    ssl_key = './certificate/key.pem',
+    jwt_secret = 'UP 4888, nice 4-8-4 steam engine',
     logfile = "sipi.log",
     loglevel = "DEBUG"
 }}
 admin = {{ user = 'admin', password = 'Sipi-Admin' }}
+fileserver = {{ docroot = './server', wwwroute = '/server' }}
 routes = {{}}
 "#,
         config_dir = config_tier_dir.display(),
@@ -508,39 +525,66 @@ routes = {{}}
     std::fs::write(&config_path, &config_content).expect("write precedence config");
     let config_arg = config_path.to_str().expect("utf-8 path");
 
+    // Each tier runs subject then reference SEQUENTIALLY (never concurrently)
+    // against the same directory: two live `SipiCache` instances racing on
+    // the same `.sipicache` index crashed the C++ oracle with `std::bad_alloc`
+    // on linux-amd64 CI when this test ran them as a `start_pair` (both
+    // processes alive at once). `assert_tier` fully stops one binary
+    // (`Drop` blocks until the process exits) before starting the other.
+    assert_tier(config_arg, &[], &[], &config_tier_dir, "config-only");
+    assert_tier(
+        config_arg,
+        &[],
+        &[("SIPI_CACHE_DIR", env_tier_dir.to_str().unwrap())],
+        &env_tier_dir,
+        "env-over-config",
+    );
+    assert_tier(
+        config_arg,
+        &["--cache-dir", cli_tier_dir.to_str().unwrap()],
+        &[("SIPI_CACHE_DIR", env_tier_dir.to_str().unwrap())],
+        &cli_tier_dir,
+        "cli-over-env",
+    );
+}
+
+/// Run `derivative` against subject, then (after subject fully stops)
+/// against reference, and assert both got 200 and `expected_dir` ended up
+/// populated.
+fn assert_tier(
+    config_arg: &str,
+    extra_args: &[&str],
+    extra_env: &[(&str, &str)],
+    expected_dir: &std::path::Path,
+    label: &str,
+) {
     let derivative = "/unit/lena512.jp2/0,0,64,64/max/0/default.jpg";
+    let working_dir = sipi_e2e::test_data_dir();
+    let c = sipi_e2e::http_client();
 
-    // Tier 1: config only — neither CLI nor env overrides cache_dir.
     {
-        let (subject, reference) =
-            SipiServer::start_pair(config_arg, &sipi_e2e::test_data_dir(), &[]);
-        diff_get(&subject, &reference, derivative).assert_parity();
-        assert_cache_populated(&config_tier_dir, "config-only");
+        let subject = SipiServer::start_env(config_arg, &working_dir, extra_args, extra_env);
+        let status = c
+            .get(format!("{}{derivative}", subject.base_url))
+            .send()
+            .unwrap_or_else(|e| panic!("[{label}] subject request failed: {e}"))
+            .status()
+            .as_u16();
+        assert_eq!(status, 200, "[{label}] subject request");
+    }
+    {
+        let reference =
+            SipiServer::start_reference_env(config_arg, &working_dir, extra_args, extra_env);
+        let status = c
+            .get(format!("{}{derivative}", reference.base_url))
+            .send()
+            .unwrap_or_else(|e| panic!("[{label}] reference request failed: {e}"))
+            .status()
+            .as_u16();
+        assert_eq!(status, 200, "[{label}] reference request");
     }
 
-    // Tier 2: env beats config.
-    {
-        let (subject, reference) = SipiServer::start_pair_env(
-            config_arg,
-            &sipi_e2e::test_data_dir(),
-            &[],
-            &[("SIPI_CACHE_DIR", env_tier_dir.to_str().unwrap())],
-        );
-        diff_get(&subject, &reference, derivative).assert_parity();
-        assert_cache_populated(&env_tier_dir, "env-over-config");
-    }
-
-    // Tier 3: CLI beats env.
-    {
-        let (subject, reference) = SipiServer::start_pair_env(
-            config_arg,
-            &sipi_e2e::test_data_dir(),
-            &["--cache-dir", cli_tier_dir.to_str().unwrap()],
-            &[("SIPI_CACHE_DIR", env_tier_dir.to_str().unwrap())],
-        );
-        diff_get(&subject, &reference, derivative).assert_parity();
-        assert_cache_populated(&cli_tier_dir, "cli-over-env");
-    }
+    assert_cache_populated(expected_dir, label);
 }
 
 /// At least one file exists under `dir` within a short settle window (the
