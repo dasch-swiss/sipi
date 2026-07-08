@@ -257,6 +257,11 @@ extern "C" {
     /// Returns 0, or 500 if `sipi_init` has not run.
     pub fn sipi_max_post_size(out: *mut usize) -> c_int;
 
+    /// The configured HTTP listen port (the Lua config `sipi.port`); a
+    /// fallback below `--serverport`/`SIPI_SERVERPORT`/`SIPI_RS_PORT` (plan 02
+    /// §6 R3). Returns 0, or 500 if `sipi_init` has not run.
+    pub fn sipi_port(out: *mut c_int) -> c_int;
+
     /// Enumerate the configured Lua routes (method/route/script) installed by
     /// `sipi_init`, one `emit` call per route. Returns 0, or 500 if `sipi_init`
     /// has not run.
@@ -539,6 +544,19 @@ pub fn max_post_size() -> Result<usize, i32> {
         return Err(code);
     }
     Ok(v)
+}
+
+/// The configured HTTP listen port (the Lua config `sipi.port`). Used only as
+/// a fallback below `--serverport`/`SIPI_SERVERPORT`/`SIPI_RS_PORT` (plan 02
+/// §6 R3). `Err` carries the FFI status (500 if `sipi_init` has not run).
+pub fn port() -> Result<u16, i32> {
+    let mut v: c_int = 0;
+    // SAFETY: `out` is a valid pointer; the seam guards exceptions.
+    let code = unsafe { sipi_port(&mut v) };
+    if code != 0 {
+        return Err(code);
+    }
+    Ok(v.clamp(0, i32::from(u16::MAX)) as u16)
 }
 
 /// One configured Lua route: HTTP method, the route prefix, and the resolved

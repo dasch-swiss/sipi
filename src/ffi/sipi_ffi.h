@@ -532,6 +532,12 @@ SIPI_FFI_NODISCARD int sipi_nthreads(int *out);
  *  `*out` = 0 means unlimited. Returns 0, or 500 if `sipi_init` has not run. */
 SIPI_FFI_NODISCARD int sipi_max_post_size(size_t *out);
 
+/*! The configured HTTP listen port (the Lua config `sipi.port`). The Rust edge
+ *  falls back to this only when neither `--serverport`/`SIPI_SERVERPORT` nor
+ *  the dev/test `SIPI_RS_PORT` selected a port (plan 02 §6 R3). Returns 0, or
+ *  500 if `sipi_init` has not run. */
+SIPI_FFI_NODISCARD int sipi_port(int *out);
+
 /*! Header-only image-shape probe (`SipiImage::read_shape` — no full decode).
  *  `resolved_path` is an already-validated absolute path (the Rust edge owns
  *  existence + containment). Fills `*out` on success. Returns 0, or 500 if the

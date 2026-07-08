@@ -51,6 +51,7 @@ struct EngineContext
   ScalingQuality scaling_quality{};//!< per-format scaling method
   std::size_t max_pixel_limit = 0;//!< max output pixels per request (0 = unlimited)
   int nthreads = 0;//!< configured worker-thread count; 0 = auto (the shell sizes its pool from host parallelism)
+  int port = 3333;//!< configured HTTP listen port (the Lua config `sipi.port`); a fallback for the Rust edge's listener bind when no `--serverport`/`SIPI_SERVERPORT`/`SIPI_RS_PORT` selected one (plan 02 §6 R3)
   std::size_t max_post_size = 0;//!< max POST body size in bytes (the Rust shell caps Lua-route uploads); 0 = unlimited
 };
 
