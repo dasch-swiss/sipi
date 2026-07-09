@@ -1,5 +1,13 @@
 # Main CI workflow for pull requests.
 #
+# A fast `lint` gate runs first on a single linux-amd64 runner: the
+# platform-independent checks — shttps→sipi boundary, differential-coverage
+# drift guard, Rust formatting (`bazel-rustfmt-check`), and clippy
+# (`bazel-clippy-check`, whose `undocumented_unsafe_blocks` lint is the fast
+# unsafe check). The `test` matrix `needs:` it, so a formatting / clippy /
+# boundary failure fails fast on one runner before the 3-arch build+test fleet
+# spins up.
+#
 # Test matrix runs on all three supported platforms (linux-x86_64,
 # linux-aarch64, darwin-aarch64) and executes `just bazel-test`
 # (fastbuild, no instrumentation; unit + approval + e2e). Linux entries
@@ -27,7 +35,63 @@ permissions:
   contents: read
 
 jobs:
+  # Fast, platform-independent pre-gate. Runs once on linux-amd64; the `test`
+  # matrix `needs:` it, so these checks fail fast on one runner before the
+  # 3-arch fleet spins up. The two pure-shell checks run before the Nix
+  # bootstrap so a trivial failure trips in seconds; the Rust gates then reuse
+  # the RBE remote cache. No LFS pull — none of these checks read test images.
+  lint:
+    name: lint
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    concurrency:
+      group: ${{ github.workflow }}-lint-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          lfs: false
+      - name: Enforce shttps→sipi boundary
+        run: bash scripts/shttps-context-check.sh
+      # Drift guard: the differential corpus must keep covering the e2e surface.
+      # Pure shell (grep), so it runs before the Nix bootstrap and fails fast if
+      # an e2e test was added/removed without updating the corpus.
+      - name: Check differential coverage (drift guard)
+        run: bash tools/differential_coverage_check.sh
+      - uses: DeterminateSystems/determinate-nix-action@v3
+        with:
+          # See the `test` job: keep GH_TOKEN in `nix develop`'s environment so
+          # the gh_release_archive Kakadu fetch can authenticate.
+          extra-conf: |
+            extra-experimental-features = configurable-impure-env
+      - uses: DeterminateSystems/magic-nix-cache-action@v13
+        with:
+          use-flakehub: "false"
+      # Remote cache + mTLS + the GH_TOKEN-backed Kakadu fetch that analyzing the
+      # Rust crate graph needs. Same composite action the `test` job uses; the
+      # gate builds for linux-amd64 only.
+      - name: Set up Remote Build Execution (mTLS + flags)
+        id: rbe
+        uses: ./.github/actions/bazel-rbe
+        with:
+          endpoint: ${{ vars.BAZEL_RBE_ENDPOINT }}
+          ca-cert: ${{ secrets.BAZEL_RBE_CA_CERT }}
+          client-cert: ${{ secrets.BAZEL_RBE_CLIENT_CERT }}
+          client-key: ${{ secrets.BAZEL_RBE_CLIENT_KEY }}
+          target-platform: "//platforms:linux_x86_64"
+      - name: Check Rust formatting
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+        run: nix develop --command bash -c "just bazel-rustfmt-check ${{ steps.rbe.outputs.flags }}"
+      - name: Run clippy
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+        run: nix develop --command bash -c "just bazel-clippy-check ${{ steps.rbe.outputs.flags }}"
+
   test:
+    needs: lint
     runs-on: ${{ matrix.runs-on }}
     name: test / ${{ matrix.platform }}
     permissions:
@@ -65,8 +129,6 @@ jobs:
           path: .git/lfs
           key: lfs-${{ hashFiles('.gitattributes') }}
           restore-keys: lfs-
-      - name: Enforce shttps→sipi boundary
-        run: bash scripts/shttps-context-check.sh
       - name: pull LFS objects
         run: |
           git lfs install
@@ -139,10 +201,9 @@ jobs:
       # Every Bazel invocation goes through `nix develop --command`, where the dev
       # shell provides `bazelisk` (reads `.bazelversion`) + `gh` (the
       # gh_release_archive repository_rule for the Kakadu fetch).
-      # Rust formatting gate. Platform-independent, so it runs once (on
-      # linux-amd64) and fails fast before the build. GH_TOKEN is needed because
-      # analyzing the Rust crates pulls in the engine's dep graph (the Kakadu
-      # repository fetch); no compile happens — the rustfmt aspect is source-only.
+      #
+      # Rust formatting + clippy are not here — they run once in the `lint` gate
+      # that this job `needs:`.
       - name: Set up Remote Build Execution (mTLS + flags)
         id: rbe
         uses: ./.github/actions/bazel-rbe
@@ -154,23 +215,10 @@ jobs:
           client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
           target-platform: ${{ matrix.bazel-platform }}
 
-      - name: Check Rust formatting
-        if: matrix.arch == 'amd64'
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: nix develop --command bash -c "just bazel-rustfmt-check ${{ steps.rbe.outputs.flags }}"
-
       - name: Build + run all tests
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: nix develop --command bash -c "just bazel-test ${{ steps.rbe.outputs.flags }}"
-
-      # Drift guard: the differential corpus must keep covering the e2e
-      # surface. Pure shell (grep), so it runs before the heavy gate and fails
-      # fast if an e2e test was added/removed without updating the corpus.
-      - name: Check differential coverage (drift guard)
-        if: matrix.arch == 'amd64'
-        run: bash tools/differential_coverage_check.sh
 
       # The differential parity gate (Rust shell vs the retained C++ oracle)
       # is `manual`-tagged, so the `just bazel-test` wildcard above and

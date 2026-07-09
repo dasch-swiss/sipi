@@ -12,6 +12,11 @@
 //! The shell is built additively: it runs in parallel with the existing C++
 //! server, which keeps the production socket until the cutover.
 
+// Fast unsafe check (CI `lint` gate): every `unsafe {}` block must carry a
+// `// SAFETY:` comment. `allow`-by-default (clippy `restriction` group), so it
+// is enabled here explicitly; CI's `-Dwarnings` promotes it to a hard error.
+#![warn(clippy::undocumented_unsafe_blocks)]
+
 pub mod config;
 pub mod config_file;
 pub mod ffi;
