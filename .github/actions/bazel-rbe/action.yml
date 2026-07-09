@@ -1,15 +1,19 @@
 name: bazel-rbe
 description: >
-  Set up mTLS material for the self-hosted NativeLink RBE VM and emit the Bazel
-  flag string: remote cache + executor (NativeLink, :50051) plus the bazel-remote
-  http_archive download cache (:50052). Both endpoints present a cert signed by
-  the same NativeLink CA, so one --tls_certificate validates both — no CA bundle.
-  Tests are forced local (--strategy=TestRunner=local) so compiles cross-compile
-  on the x86_64 worker while target-arch test binaries run on the native runner.
+  Set up mTLS material for the self-hosted RBE backend and emit the Bazel flag
+  string: remote cache + executor (the runner endpoint) plus the bazel-remote
+  http_archive download cache (the cache endpoint). Both endpoints present a
+  cert signed by the same CA, so one --tls_certificate validates both — no CA
+  bundle. Tests are forced local (--strategy=TestRunner=local) so compiles
+  cross-compile on the x86_64 worker while target-arch test binaries run on
+  the native runner.
 
 inputs:
-  endpoint:
-    description: NativeLink RE-API endpoint, e.g. grpcs://<ip>:50051. The bazel-remote downloader endpoint is derived as :50052 on the same host.
+  runner-endpoint:
+    description: RE-API endpoint, e.g. grpcs://<host>:50051 — serves the remote cache (AC+CAS) and the remote executor.
+    required: true
+  cache-endpoint:
+    description: bazel-remote download cache endpoint, e.g. grpcs://<host>:50052 — serves `--experimental_remote_downloader`.
     required: true
   ca-cert:
     description: NativeLink server CA (PEM). Bazel verifies both services' server certs against it.
@@ -35,7 +39,8 @@ runs:
     - id: build
       shell: bash
       env:
-        RBE_ENDPOINT: ${{ inputs.endpoint }}
+        RBE_RUNNER_ENDPOINT: ${{ inputs.runner-endpoint }}
+        RBE_CACHE_ENDPOINT: ${{ inputs.cache-endpoint }}
         RBE_CA_CERT: ${{ inputs.ca-cert }}
         RBE_CLIENT_CERT: ${{ inputs.client-cert }}
         RBE_CLIENT_KEY: ${{ inputs.client-key }}
@@ -44,7 +49,7 @@ runs:
         set -euo pipefail
         # Fork PRs / missing secrets → emit empty flags so the build runs cold
         # (same gating idiom the workflow uses for docker/login-action).
-        if [ -z "${RBE_ENDPOINT:-}" ] || [ -z "${RBE_CLIENT_KEY:-}" ]; then
+        if [ -z "${RBE_RUNNER_ENDPOINT:-}" ] || [ -z "${RBE_CACHE_ENDPOINT:-}" ] || [ -z "${RBE_CLIENT_KEY:-}" ]; then
           echo "bazel-rbe: endpoint/mTLS material absent (fork PR?) — cold build." >&2
           echo "flags=" >> "$GITHUB_OUTPUT"
           exit 0
@@ -57,25 +62,27 @@ runs:
         printf '%s' "$RBE_CLIENT_CERT" > "$CERT_DIR/client.crt"
         printf '%s' "$RBE_CLIENT_KEY"  > "$CERT_DIR/client.key"
         chmod 600 "$CERT_DIR/client.key"
-        # bazel-remote shares the host; derive its endpoint by swapping the port.
-        DOWNLOADER="${RBE_ENDPOINT%:*}:50052"
-        FLAGS="--remote_cache=$RBE_ENDPOINT --remote_instance_name=main"
+        FLAGS="--remote_cache=$RBE_RUNNER_ENDPOINT --remote_instance_name=main"
         FLAGS="$FLAGS --tls_certificate=$CERT_DIR/ca.crt --tls_client_certificate=$CERT_DIR/client.crt --tls_client_key=$CERT_DIR/client.key"
-        FLAGS="$FLAGS --experimental_remote_downloader=$DOWNLOADER --experimental_remote_downloader_local_fallback"
+        FLAGS="$FLAGS --experimental_remote_downloader=$RBE_CACHE_ENDPOINT --experimental_remote_downloader_local_fallback"
         FLAGS="$FLAGS --noremote_cache_compression --remote_upload_local_results=true --experimental_remote_cache_eviction_retries=5"
         # Client fan-out: how many actions each leg keeps in flight to the worker.
         # Bazel's default is the runner's core count (~4), far too low for remote
         # execution where actions run on the worker, not locally — it starves the
-        # VM. 32 is the trial-proven value (64 overwhelmed the single worker on a
-        # cold cache); start here and bump toward 40 once the worker pool scales.
-        FLAGS="$FLAGS --jobs=32"
+        # backend. 32 was the trial-proven value on the old 16-core GCP VM (64
+        # overwhelmed it on a cold cache — the bottleneck was CAS I/O, not CPU, so
+        # that ceiling does not simply scale with core count). The backend moved to
+        # a 250-core / 512 GB box on our own infra; 128 is a first-cut bump (3
+        # concurrent legs x 128 ~= 2x the old failing worst-case of 3x64) pending
+        # real validation — watch cold-cache CI runs for UNAVAILABLE and retune.
+        FLAGS="$FLAGS --jobs=128"
         # Cross-compile on the x86_64 worker, run tests on the native runner:
         #   --extra_execution_platforms pins the EXEC platform to the worker (x86_64) so
         #     exec-config build tools resolve to x86_64, not the runner's arch (that
         #     mismatch ships an arm64/darwin tool to the x86_64 worker → it can't run).
         #   --platforms sets the TARGET arch this runner builds for.
         #   --strategy=TestRunner=local runs the cross-built test binary on the runner.
-        FLAGS="$FLAGS --remote_executor=$RBE_ENDPOINT --remote_default_exec_properties=cpu_arch=x86_64"
+        FLAGS="$FLAGS --remote_executor=$RBE_RUNNER_ENDPOINT --remote_default_exec_properties=cpu_arch=x86_64"
         # Exec platforms: the x86_64 worker FIRST (compiles/exec tools prefer it), plus
         # the target platform so Bazel's test toolchain can resolve an exec platform
         # matching the target arch and run tests on the native runner. For cross legs the

@@ -84,18 +84,19 @@ jobs:
         with:
           use-flakehub: "false"  # GHA cache backend only; FlakeHub requires a paid plan we're not on.
 
-      # Remote cache + executor via the bazel-rbe composite action (NativeLink
-      # :50051 + bazel-remote :50052, mTLS — see ci.yml for the topology).
-      # amd64-only, so the action's default target-platform
-      # (//platforms:linux_x86_64) needs no override.
+      # Remote cache + executor via the bazel-rbe composite action (runner +
+      # cache endpoints, mTLS — see ci.yml for the topology). amd64-only, so
+      # the action's default target-platform (//platforms:linux_x86_64) needs
+      # no override.
       - name: Set up Remote Build Execution (mTLS + flags)
         id: rbe
         uses: ./.github/actions/bazel-rbe
         with:
-          endpoint: ${{ vars.BAZEL_RBE_ENDPOINT }}
-          ca-cert: ${{ secrets.BAZEL_RBE_CA_CERT }}
-          client-cert: ${{ secrets.BAZEL_RBE_CLIENT_CERT }}
-          client-key: ${{ secrets.BAZEL_RBE_CLIENT_KEY }}
+          runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
+          cache-endpoint: ${{ vars.REMOTEBUILD_CACHE_ENDPOINT }}
+          ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
+          client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
+          client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
 
       # `nix develop .#llvm-tools` extends the default dev shell with
       # `llvmPackages_19.llvm`, which ships `llvm-symbolizer`. ASan/LSan

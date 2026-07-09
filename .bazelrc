@@ -348,14 +348,16 @@ test --flaky_test_attempts=//test/e2e:upload@3
 #     failing — a VM outage degrades wall-clock, never breaks CI.
 #   --remote_timeout=600s: per-request budget sized for cold native-dep compiles
 #     on the worker (far longer than a cache-only round-trip).
-#   --remote_max_connections=100: raises the gRPC parallelism ceiling for fast
-#     bulk lookup at build-graph evaluation time.
+#   --remote_max_connections=200: raises the gRPC parallelism ceiling for fast
+#     bulk lookup at build-graph evaluation time. Doubled alongside the
+#     composite action's --jobs bump (32->128) so the connection pool doesn't
+#     throttle before the backend's own capacity does.
 # No --remote_cache_compression: NativeLink v1.5.2 does not advertise wire
 # compression, so enabling it fails the capabilities query.
 build --remote_download_minimal
 build --remote_local_fallback
 build --remote_timeout=600s
-build --remote_max_connections=100
+build --remote_max_connections=200
 
 # BCR curl ships with three configurable TLS backends (boringssl default,
 # mbedtls, openssl) selected via a `string_flag`. Pin to `openssl` so the

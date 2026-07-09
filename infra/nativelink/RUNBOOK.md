@@ -57,10 +57,11 @@ Known demonstrator limitations that must be closed before production:
 
 | Name | Kind | Content |
 |------|------|---------|
-| `BAZEL_RBE_ENDPOINT` | variable | `grpcs://35.202.252.136:50051` |
-| `BAZEL_RBE_CA_CERT` | secret | Server CA certificate (Bazel verifies the server against it) |
-| `BAZEL_RBE_CLIENT_CERT` | secret | Client certificate (CI identity) |
-| `BAZEL_RBE_CLIENT_KEY` | secret | Client private key |
+| `REMOTEBUILD_RUNNER_ENDPOINT` | variable | `grpcs://35.202.252.136:50051` |
+| `REMOTEBUILD_CACHE_ENDPOINT` | variable | `grpcs://35.202.252.136:50052` |
+| `REMOTEBUILD_CA_CERT` | secret | Server CA certificate (Bazel verifies the server against it) |
+| `REMOTEBUILD_CLIENT_CERT` | secret | Client certificate (CI identity) |
+| `REMOTEBUILD_CLIENT_KEY` | secret | Client private key |
 
 Scoped with `--visibility selected --repos sipi`. The client cert grants remote execution
 access — do NOT expand to `all`.
@@ -241,11 +242,13 @@ gcloud secrets versions add nativelink-clients-ca-crt --project "$P" --data-file
 
 # Upload CI-side secrets (org-level, scoped to sipi repo)
 ORG=dasch-swiss
-gh variable set BAZEL_RBE_ENDPOINT \
+gh variable set REMOTEBUILD_RUNNER_ENDPOINT \
   --org "$ORG" --visibility selected --repos sipi --body "grpcs://$IP:50051"
-gh secret set BAZEL_RBE_CA_CERT     --org "$ORG" --visibility selected --repos sipi < server-ca.crt
-gh secret set BAZEL_RBE_CLIENT_CERT --org "$ORG" --visibility selected --repos sipi < client.crt
-gh secret set BAZEL_RBE_CLIENT_KEY  --org "$ORG" --visibility selected --repos sipi < client.key
+gh variable set REMOTEBUILD_CACHE_ENDPOINT \
+  --org "$ORG" --visibility selected --repos sipi --body "grpcs://$IP:50052"
+gh secret set REMOTEBUILD_CA_CERT     --org "$ORG" --visibility selected --repos sipi < server-ca.crt
+gh secret set REMOTEBUILD_CLIENT_CERT --org "$ORG" --visibility selected --repos sipi < client.crt
+gh secret set REMOTEBUILD_CLIENT_KEY  --org "$ORG" --visibility selected --repos sipi < client.key
 ```
 
 Within ~30 seconds of the Secret Manager upload, NativeLink comes up. Verify:
@@ -462,5 +465,5 @@ production scale:
   concurrent builds safe, not CI-side serialization).
 
 No CI changes are required to move from single-VM to distributed: the endpoint
-(`BAZEL_RBE_ENDPOINT`) stays the same; the scheduler routes actions to whichever worker is
-available.
+(`REMOTEBUILD_RUNNER_ENDPOINT`) stays the same; the scheduler routes actions to whichever
+worker is available.
