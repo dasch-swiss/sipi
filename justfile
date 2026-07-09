@@ -584,25 +584,6 @@ docs-install-requirements:
     pip3 install -r docs/requirements.txt
 
 #####################################
-# Infra (OpenTofu) — out-of-band, NOT part of the Bazel build graph
-#
-# The NativeLink RBE backend (GCE VM: remote cache + executor + a co-located
-# bazel-remote download cache) is provisioned here. Needs `gcloud auth` + the
-# dev shell (`opentofu` is in flake.nix); state in gs://dasch-tf-state (see
-# infra/bootstrap). NativeLink bootstrap (incl. the mTLS cert step):
-# infra/nativelink/README.md.
-#####################################
-
-# Show planned changes to the NativeLink RBE demonstrator (infra/nativelink).
-tf-plan-nl *FLAGS='':
-    tofu -chdir=infra/nativelink plan {{FLAGS}}
-
-# Apply the NativeLink RBE demonstrator. After the first apply, run the cert
-# bootstrap in infra/nativelink/README.md before the VM serves traffic.
-tf-apply-nl *FLAGS='':
-    tofu -chdir=infra/nativelink apply {{FLAGS}}
-
-#####################################
 # Utilities
 #####################################
 
