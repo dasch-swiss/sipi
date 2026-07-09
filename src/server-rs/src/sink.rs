@@ -95,20 +95,24 @@ extern "C" fn cb_set_status(ctx: *mut c_void, status: c_int) {
 
 extern "C" fn cb_add_header(ctx: *mut c_void, name: *const c_char, value: *const c_char) {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: `ctx` is the `&mut StreamSink` the sink was built with; the
+        // engine calls this synchronously on the serving thread, no aliasing race.
         let state = unsafe { &mut *(ctx as *mut StreamSink) };
         // SAFETY: the engine passes NUL-terminated C strings valid for the call.
-        let name = unsafe { CStr::from_ptr(name) }
-            .to_string_lossy()
-            .into_owned();
-        let value = unsafe { CStr::from_ptr(value) }
-            .to_string_lossy()
-            .into_owned();
+        let (name, value) = unsafe {
+            (
+                CStr::from_ptr(name).to_string_lossy().into_owned(),
+                CStr::from_ptr(value).to_string_lossy().into_owned(),
+            )
+        };
         state.headers.push((name, value));
     }));
 }
 
 extern "C" fn cb_write(ctx: *mut c_void, data: *const u8, len: usize) -> c_int {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: `ctx` is the `&mut StreamSink` the sink was built with; the
+        // engine calls this synchronously on the serving thread, no aliasing race.
         let state = unsafe { &mut *(ctx as *mut StreamSink) };
         state.send_head();
         if data.is_null() || len == 0 {
@@ -133,6 +137,8 @@ extern "C" fn cb_send_file(
     length: u64,
 ) -> c_int {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: `ctx` is the `&mut StreamSink` the sink was built with; the
+        // engine calls this synchronously on the serving thread, no aliasing race.
         let state = unsafe { &mut *(ctx as *mut StreamSink) };
         state.send_head();
         // SAFETY: the engine passes a NUL-terminated C string valid for the call.
