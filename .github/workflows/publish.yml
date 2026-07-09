@@ -57,18 +57,19 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      # Remote cache + executor via the bazel-rbe composite action (NativeLink
-      # :50051 + bazel-remote :50052, mTLS). Per-arch target-platform so each leg
+      # Remote cache + executor via the bazel-rbe composite action (runner +
+      # cache endpoints, mTLS). Per-arch target-platform so each leg
       # cross-compiles its release image on the x86_64 worker. publish.yml only
       # runs on `v*` tag pushes — no fork-PR gating needed.
       - name: Set up Remote Build Execution (mTLS + flags)
         id: rbe
         uses: ./.github/actions/bazel-rbe
         with:
-          endpoint: ${{ vars.BAZEL_RBE_ENDPOINT }}
-          ca-cert: ${{ secrets.BAZEL_RBE_CA_CERT }}
-          client-cert: ${{ secrets.BAZEL_RBE_CLIENT_CERT }}
-          client-key: ${{ secrets.BAZEL_RBE_CLIENT_KEY }}
+          runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
+          cache-endpoint: ${{ vars.REMOTEBUILD_CACHE_ENDPOINT }}
+          ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
+          client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
+          client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
           target-platform: ${{ matrix.bazel-platform }}
       - name: Build Docker image (Bazel rules_oci)
         # See ci.yml for the `nix develop --command` rationale (`gh` on PATH
@@ -149,10 +150,11 @@ jobs:
         id: rbe
         uses: ./.github/actions/bazel-rbe
         with:
-          endpoint: ${{ vars.BAZEL_RBE_ENDPOINT }}
-          ca-cert: ${{ secrets.BAZEL_RBE_CA_CERT }}
-          client-cert: ${{ secrets.BAZEL_RBE_CLIENT_CERT }}
-          client-key: ${{ secrets.BAZEL_RBE_CLIENT_KEY }}
+          runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
+          cache-endpoint: ${{ vars.REMOTEBUILD_CACHE_ENDPOINT }}
+          ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
+          client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
+          client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
           target-platform: ${{ matrix.bazel-platform }}
       - name: Build Docker image (Bazel rules_oci) + sipi-debug
         # Binary version + OCI image tag come from version.txt, which

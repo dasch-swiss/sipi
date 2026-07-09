@@ -120,19 +120,20 @@ jobs:
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       # REMOTE BUILD EXECUTION:
       #
-      # The self-hosted NativeLink VM (infra/nativelink/) is the single Bazel
-      # backend. It serves the Remote Cache + Remote Execution (:50051, mTLS) and
-      # co-runs bazel-remote (:50052) as the http_archive download cache
-      # (--experimental_remote_downloader). Both endpoints present a cert signed by
-      # the same NativeLink CA, so one --tls_certificate validates both — no proxy,
-      # no CA bundle, no GCS.
+      # The self-hosted RBE backend (infra/nativelink/) is the single Bazel
+      # backend. It serves the Remote Cache + Remote Execution (the runner
+      # endpoint, mTLS) and a bazel-remote download cache (the cache endpoint) for
+      # http_archive (--experimental_remote_downloader). Both endpoints present a
+      # cert signed by the same CA, so one --tls_certificate validates both — no
+      # proxy, no CA bundle, no GCS.
       #
-      # The `bazel-rbe` composite action writes the mTLS material (org secrets
-      # BAZEL_RBE_*) outside the checkout and emits the Bazel flag string. Compiles
-      # fan out to the x86_64 worker — cross-compiling the arm64/darwin legs — while
-      # tests run on the native runner (--strategy=TestRunner=local). A down VM
-      # degrades to a local build (--remote_local_fallback, the .bazelrc default).
-      # Fork PRs get empty flags (no secrets) and build cold.
+      # The `bazel-rbe` composite action writes the mTLS material (org secrets +
+      # variables REMOTEBUILD_*) outside the checkout and emits the Bazel flag
+      # string. Compiles fan out to the x86_64 worker — cross-compiling the
+      # arm64/darwin legs — while tests run on the native runner
+      # (--strategy=TestRunner=local). A down backend degrades to a local build
+      # (--remote_local_fallback, the .bazelrc default). Fork PRs get empty flags
+      # (no secrets) and build cold.
       #
       # Every Bazel invocation goes through `nix develop --command`, where the dev
       # shell provides `bazelisk` (reads `.bazelversion`) + `gh` (the
@@ -145,10 +146,11 @@ jobs:
         id: rbe
         uses: ./.github/actions/bazel-rbe
         with:
-          endpoint: ${{ vars.BAZEL_RBE_ENDPOINT }}
-          ca-cert: ${{ secrets.BAZEL_RBE_CA_CERT }}
-          client-cert: ${{ secrets.BAZEL_RBE_CLIENT_CERT }}
-          client-key: ${{ secrets.BAZEL_RBE_CLIENT_KEY }}
+          runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
+          cache-endpoint: ${{ vars.REMOTEBUILD_CACHE_ENDPOINT }}
+          ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
+          client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
+          client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
           target-platform: ${{ matrix.bazel-platform }}
 
       - name: Check Rust formatting

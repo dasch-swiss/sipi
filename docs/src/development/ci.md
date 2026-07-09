@@ -126,8 +126,8 @@ Gate model:
 CI builds run on a self-hosted **NativeLink Remote Build Execution** backend: a
 single x86_64 worker that cross-compiles all three target arches
 (`linux-amd64`, `linux-aarch64`, `darwin-aarch64`), fronting a remote cache
-(AC + CAS, `:50051`, mTLS) and a co-located `bazel-remote` download cache
-(`:50052`) for `http_archive` source tarballs. The connection, mTLS, and
+(AC + CAS, `:50051`, mTLS) and a `bazel-remote` download cache (`:50052`) for
+`http_archive` source tarballs. The connection, mTLS, and
 cross-compile flags are assembled by the
 [`bazel-rbe`](../../../.github/actions/bazel-rbe) composite action and injected
 per workflow step — Bazel does not expand env vars in `.bazelrc`, so they live

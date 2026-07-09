@@ -73,12 +73,13 @@ against NativeLink v1.5.2 — revisit if a later release adds proxy-fetch-on-mis
 
 The `.github/actions/bazel-rbe` composite action encapsulates all RBE wiring:
 
-1. It reads the org-level secrets `BAZEL_RBE_CA_CERT`, `BAZEL_RBE_CLIENT_CERT`,
-   `BAZEL_RBE_CLIENT_KEY` and the variable `BAZEL_RBE_ENDPOINT`.
+1. It reads the org-level secrets `REMOTEBUILD_CA_CERT`, `REMOTEBUILD_CLIENT_CERT`,
+   `REMOTEBUILD_CLIENT_KEY` and the variables `REMOTEBUILD_RUNNER_ENDPOINT` (the
+   NativeLink RE-API, `:50051`) and `REMOTEBUILD_CACHE_ENDPOINT` (the bazel-remote
+   download cache, `:50052`).
 2. It writes the mTLS material outside the workspace checkout (`$RUNNER_TEMP/.nl/`)
    so cert files can never enter a Bazel action's input set.
-3. It derives the bazel-remote endpoint by replacing the NativeLink port (`:50051`)
-   with `:50052` on the same host.
+3. It reads the two endpoints independently — they need not share a host.
 4. It emits a `flags` output — a single Bazel flag string — that every subsequent
    `just bazel-*` invocation appends verbatim.
 
@@ -316,6 +317,14 @@ cores has the most impact.
    caused `UNAVAILABLE` across all legs on a cold cache (the build is I/O-bound; more
    client fan-out piles up CAS pressure without adding CPU). The documented scaling path
    is a worker pool, not a higher `--jobs` value.
+
+   **Update:** the backend moved from the 16-vCPU GCP demonstrator to a 250-core / 512 GB
+   box on our own infra. `--jobs` was raised to 128 (and `--remote_max_connections` to 200
+   in `.bazelrc`) as a first-cut bump, not yet re-measured — the CAS-I/O ceiling above was
+   never actually a function of core count, so this assumes (unverified) that the new
+   box's disk/network throughput scaled along with its CPU count. Re-run the
+   [Performance](#performance) measurements above on the new backend and revise this
+   section once real numbers exist.
 
 ### Warm-cache action distribution
 

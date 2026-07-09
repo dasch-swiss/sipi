@@ -77,18 +77,19 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      # Remote cache + executor via the bazel-rbe composite action (NativeLink
-      # :50051 + bazel-remote :50052, mTLS — see ci.yml for the topology).
-      # amd64-only, so the action's default target-platform
-      # (//platforms:linux_x86_64) needs no override.
+      # Remote cache + executor via the bazel-rbe composite action (runner +
+      # cache endpoints, mTLS — see ci.yml for the topology). amd64-only, so
+      # the action's default target-platform (//platforms:linux_x86_64) needs
+      # no override.
       - name: Set up Remote Build Execution (mTLS + flags)
         id: rbe
         uses: ./.github/actions/bazel-rbe
         with:
-          endpoint: ${{ vars.BAZEL_RBE_ENDPOINT }}
-          ca-cert: ${{ secrets.BAZEL_RBE_CA_CERT }}
-          client-cert: ${{ secrets.BAZEL_RBE_CLIENT_CERT }}
-          client-key: ${{ secrets.BAZEL_RBE_CLIENT_KEY }}
+          runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
+          cache-endpoint: ${{ vars.REMOTEBUILD_CACHE_ENDPOINT }}
+          ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
+          client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
+          client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
 
       # `nix develop .#llvm-tools` is the meaningful difference vs ci.yml:
       # adds llvm-cov / llvm-profdata to PATH so `just bazel-coverage`'s
