@@ -274,7 +274,7 @@ fn dispatch_engine(
             .and_then(|access| resolve(&access.infile, &state.resolved_imgroot))
         {
             Ok(resolved) => serve_file(&resolved, headers, outcome_tx, body_tx),
-            Err(resp) => complete(outcome_tx, resp),
+            Err(resp) => complete(outcome_tx, *resp),
         }
         return;
     }
@@ -283,7 +283,7 @@ fn dispatch_engine(
     // preflight hook (or a default path when no hook is defined).
     let access = match iiif_access(state, parsed, method, uri, headers) {
         Ok(a) => a,
-        Err(resp) => return complete(outcome_tx, resp),
+        Err(resp) => return complete(outcome_tx, *resp),
     };
 
     // The IIIF image serve enforces auth itself (401 for any non-allow/restrict);
@@ -300,7 +300,7 @@ fn dispatch_engine(
 
     let resolved = match resolve(&access.infile, &state.resolved_imgroot) {
         Ok(r) => r,
-        Err(resp) => return complete(outcome_tx, resp),
+        Err(resp) => return complete(outcome_tx, *resp),
     };
 
     match parsed.kind {
@@ -364,12 +364,12 @@ fn iiif_access(
     method: &Method,
     uri: &Uri,
     headers: &HeaderMap,
-) -> Result<Access, Response> {
+) -> Result<Access, Box<Response>> {
     if state.has_preflight {
         let ctx = build_ctx(method, uri, headers)
-            .ok_or_else(|| sink::error_response(StatusCode::BAD_REQUEST))?;
+            .ok_or_else(|| Box::new(sink::error_response(StatusCode::BAD_REQUEST)))?;
         let outcome = ffi::preflight(&parsed.prefix, &parsed.identifier, &ctx)
-            .map_err(|_| sink::error_response(StatusCode::INTERNAL_SERVER_ERROR))?;
+            .map_err(|_| Box::new(sink::error_response(StatusCode::INTERNAL_SERVER_ERROR)))?;
         Ok(access_from(outcome))
     } else {
         Ok(Access {
@@ -394,7 +394,7 @@ fn file_access(
     method: &Method,
     uri: &Uri,
     headers: &HeaderMap,
-) -> Result<Access, Response> {
+) -> Result<Access, Box<Response>> {
     let built = path::build_request_path(
         &state.imgroot,
         &parsed.prefix,
@@ -409,12 +409,12 @@ fn file_access(
         });
     }
     let ctx = build_ctx(method, uri, headers)
-        .ok_or_else(|| sink::error_response(StatusCode::BAD_REQUEST))?;
+        .ok_or_else(|| Box::new(sink::error_response(StatusCode::BAD_REQUEST)))?;
     let outcome = ffi::file_preflight(&built, &ctx)
-        .map_err(|_| sink::error_response(StatusCode::INTERNAL_SERVER_ERROR))?;
+        .map_err(|_| Box::new(sink::error_response(StatusCode::INTERNAL_SERVER_ERROR)))?;
     match outcome.permission {
         SipiPermType::Allow | SipiPermType::Restrict => Ok(access_from(outcome)),
-        _ => Err(sink::error_response(StatusCode::UNAUTHORIZED)),
+        _ => Err(Box::new(sink::error_response(StatusCode::UNAUTHORIZED))),
     }
 }
 
@@ -430,11 +430,11 @@ fn access_from(outcome: PreflightOutcome) -> Access {
 }
 
 /// R2: realpath + image-root containment. Maps to a bare error response.
-fn resolve(infile: &str, resolved_root: &str) -> Result<String, Response> {
+fn resolve(infile: &str, resolved_root: &str) -> Result<String, Box<Response>> {
     match path::validate_resolved_path(infile, resolved_root) {
         Resolved::Ok(p) => Ok(p),
-        Resolved::NotFound => Err(sink::error_response(StatusCode::NOT_FOUND)),
-        Resolved::Traversal => Err(sink::error_response(StatusCode::BAD_REQUEST)),
+        Resolved::NotFound => Err(Box::new(sink::error_response(StatusCode::NOT_FOUND))),
+        Resolved::Traversal => Err(Box::new(sink::error_response(StatusCode::BAD_REQUEST))),
     }
 }
 
@@ -810,16 +810,16 @@ fn run_lua_route_blocking(
         crate::telemetry::current_trace_context().map(|(t, s)| ffi::LogTraceScope::set(&t, &s));
 
     // secure = false: SIPI runs plain HTTP behind Traefik (matches conn.secure()).
-    let Some(ctx) = ffi::build_request_context(
-        req.method,
-        req.client_ip,
-        0,
-        false,
-        req.host,
-        req.uri_path,
-        req.headers,
-        req.cookies,
-    ) else {
+    let Some(ctx) = ffi::build_request_context(ffi::RequestFields {
+        method: req.method,
+        client_ip: req.client_ip,
+        client_port: 0,
+        secure: false,
+        host: req.host,
+        uri: req.uri_path,
+        headers: req.headers,
+        cookies: req.cookies,
+    }) else {
         return complete(outcome_tx, sink::error_response(StatusCode::BAD_REQUEST));
     };
     // A docroot script reads `server.docroot` (the C++ file_handler injects it,
@@ -1321,14 +1321,14 @@ fn serve_info_json(
     // An auth-type permission adds the IIIF Auth service block at status 401.
     let status = if info::is_auth_type(access.permission) {
         match info::auth_service(access.permission, &access.kv) {
-            Ok(service) => {
+            Some(service) => {
                 if let Some(obj) = value.as_object_mut() {
                     obj.insert("service".into(), serde_json::json!([service]));
                 }
                 StatusCode::UNAUTHORIZED
             }
             // Missing cookieUrl/tokenUrl in the hook result → 500 (parity).
-            Err(()) => return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
+            None => return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
         }
     } else {
         StatusCode::OK
@@ -1415,16 +1415,16 @@ fn build_ctx(method: &Method, uri: &Uri, headers: &HeaderMap) -> Option<ffi::Req
         .collect();
     let cookies = parse_cookies(headers);
     let (_scheme, host) = forwarded(headers);
-    ffi::build_request_context(
-        method.as_str(),
-        &client_ip(headers),
-        0,
-        false,
-        &host,
-        uri.path(),
-        &header_vec,
-        &cookies,
-    )
+    ffi::build_request_context(ffi::RequestFields {
+        method: method.as_str(),
+        client_ip: &client_ip(headers),
+        client_port: 0,
+        secure: false,
+        host: &host,
+        uri: uri.path(),
+        headers: &header_vec,
+        cookies: &cookies,
+    })
 }
 
 /// Parse the `Cookie` header into name/value pairs (the parsed map the Lua

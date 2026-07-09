@@ -58,7 +58,7 @@ fn size_pyramid(width: u32, height: u32, clevels: u32) -> Vec<Value> {
     let cnt = if clevels > 0 { clevels } else { 5 };
     let reduce = |dim: u32, level: u32| -> u32 {
         let sf = 1u64 << level;
-        ((u64::from(dim) + sf - 1) / sf) as u32
+        u64::from(dim).div_ceil(sf) as u32
     };
     let mut sizes = Vec::new();
     for i in 1..cnt {
@@ -244,19 +244,19 @@ pub fn is_auth_type(permission: SipiPermType) -> bool {
 
 /// Build the IIIF Auth API v1 `service` object for an auth-type info.json
 /// (`SipiHttpServer.cpp:607-658`). Requires `cookieUrl` (and `tokenUrl`); a
-/// missing required key → `Err(())` (the C++ 500). The remaining kv pairs pass
+/// missing required key → `None` (the C++ 500). The remaining kv pairs pass
 /// through except the structural keys. `logoutUrl` is optional.
-pub fn auth_service(permission: SipiPermType, kv: &[(String, String)]) -> Result<Value, ()> {
+pub fn auth_service(permission: SipiPermType, kv: &[(String, String)]) -> Option<Value> {
     let get = |key: &str| kv.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str());
     let profile = match permission {
         SipiPermType::Login => "http://iiif.io/api/auth/1/login",
         SipiPermType::Clickthrough => "http://iiif.io/api/auth/1/clickthrough",
         SipiPermType::Kiosk => "http://iiif.io/api/auth/1/kiosk",
         SipiPermType::External => "http://iiif.io/api/auth/1/external",
-        _ => return Err(()),
+        _ => return None,
     };
-    let cookie_url = get("cookieUrl").ok_or(())?;
-    let token_url = get("tokenUrl").ok_or(())?;
+    let cookie_url = get("cookieUrl")?;
+    let token_url = get("tokenUrl")?;
 
     let mut service = Map::new();
     service.insert(
@@ -278,7 +278,7 @@ pub fn auth_service(permission: SipiPermType, kv: &[(String, String)]) -> Result
         sub.push(json!({ "@id": logout, "profile": "http://iiif.io/api/auth/1/logout" }));
     }
     service.insert("service".into(), json!(sub));
-    Ok(Value::Object(service))
+    Some(Value::Object(service))
 }
 
 #[cfg(test)]
@@ -322,7 +322,7 @@ mod tests {
         let v = image_info_json("http://h/id", &dims(1000, 800, 0, 0));
         assert!(v.get("tiles").is_none());
         // clevels=0 → fallback 5: levels 1..5 → 500,250,125(<128 stops at h=100<128? 800/8=100)
-        assert!(v["sizes"].as_array().unwrap().len() >= 1);
+        assert!(!v["sizes"].as_array().unwrap().is_empty());
     }
 
     #[test]
@@ -391,7 +391,7 @@ mod tests {
 
     #[test]
     fn auth_service_missing_cookie_url_errors() {
-        assert!(auth_service(SipiPermType::Login, &[]).is_err());
+        assert!(auth_service(SipiPermType::Login, &[]).is_none());
         assert!(!is_auth_type(SipiPermType::Allow));
         assert!(is_auth_type(SipiPermType::Kiosk));
     }

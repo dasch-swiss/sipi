@@ -479,14 +479,20 @@ pub fn imgroot(resolved: bool) -> Result<String, i32> {
 /// it per request for the containment check. `Err` carries the FFI status (500 if
 /// `sipi_init` has not run, -1 on a null pointer).
 pub fn docroot() -> Result<String, i32> {
-    cstr_getter(|out| unsafe { sipi_docroot(out) })
+    cstr_getter(|out| {
+        // SAFETY: `out` is the local out-pointer `cstr_getter` supplies; the seam guards exceptions.
+        unsafe { sipi_docroot(out) }
+    })
 }
 
 /// The URL prefix the docroot fileserver is mounted at (e.g. "/server"). Empty
 /// when no fileserver is configured. `Err` carries the FFI status (500 if
 /// `sipi_init` has not run, -1 on a null pointer).
 pub fn wwwroute() -> Result<String, i32> {
-    cstr_getter(|out| unsafe { sipi_wwwroute(out) })
+    cstr_getter(|out| {
+        // SAFETY: `out` is the local out-pointer `cstr_getter` supplies; the seam guards exceptions.
+        unsafe { sipi_wwwroute(out) }
+    })
 }
 
 /// Shared body of the `*const c_char`-out getters (docroot/wwwroute): run the FFI
@@ -582,16 +588,17 @@ extern "C" fn collect_route(
             return;
         }
         // SAFETY: the engine passes NUL-terminated C strings valid for the call.
+        let (method, route, script) = unsafe {
+            (
+                CStr::from_ptr(method).to_string_lossy().into_owned(),
+                CStr::from_ptr(route).to_string_lossy().into_owned(),
+                CStr::from_ptr(script).to_string_lossy().into_owned(),
+            )
+        };
         out.push(RouteEntry {
-            method: unsafe { CStr::from_ptr(method) }
-                .to_string_lossy()
-                .into_owned(),
-            route: unsafe { CStr::from_ptr(route) }
-                .to_string_lossy()
-                .into_owned(),
-            script: unsafe { CStr::from_ptr(script) }
-                .to_string_lossy()
-                .into_owned(),
+            method,
+            route,
+            script,
         });
     }));
 }
@@ -752,27 +759,32 @@ impl Drop for RequestContext {
     }
 }
 
+/// The primitive request fields the preflight hooks read, grouped for the
+/// [`build_request_context`] FFI builder.
+pub struct RequestFields<'a> {
+    pub method: &'a str,
+    pub client_ip: &'a str,
+    pub client_port: i32,
+    pub secure: bool,
+    pub host: &'a str,
+    pub uri: &'a str,
+    pub headers: &'a [(String, String)],
+    pub cookies: &'a [(String, String)],
+}
+
 /// Build the opaque request context the preflight hooks read, from primitive
 /// request fields. Returns `None` on an interior NUL or an allocation failure.
-pub fn build_request_context(
-    method: &str,
-    client_ip: &str,
-    client_port: i32,
-    secure: bool,
-    host: &str,
-    uri: &str,
-    headers: &[(String, String)],
-    cookies: &[(String, String)],
-) -> Option<RequestContext> {
-    let c_method = CString::new(method).ok()?;
-    let c_client_ip = CString::new(client_ip).ok()?;
-    let c_host = CString::new(host).ok()?;
-    let c_uri = CString::new(uri).ok()?;
+pub fn build_request_context(fields: RequestFields) -> Option<RequestContext> {
+    let c_method = CString::new(fields.method).ok()?;
+    let c_client_ip = CString::new(fields.client_ip).ok()?;
+    let c_host = CString::new(fields.host).ok()?;
+    let c_uri = CString::new(fields.uri).ok()?;
 
     // Own every C string for the duration of the call; the builder deep-copies,
     // so they only need to outlive the synchronous call. CString heap buffers are
     // stable across the Vec growth, so the recorded pointers stay valid.
-    let mut owned: Vec<CString> = Vec::with_capacity((headers.len() + cookies.len()) * 2);
+    let mut owned: Vec<CString> =
+        Vec::with_capacity((fields.headers.len() + fields.cookies.len()) * 2);
     fn pair(owned: &mut Vec<CString>, k: &str, v: &str) -> Option<SipiStrPair> {
         let ck = CString::new(k).ok()?;
         let cv = CString::new(v).ok()?;
@@ -784,12 +796,12 @@ pub fn build_request_context(
         owned.push(cv);
         Some(p)
     }
-    let mut header_pairs = Vec::with_capacity(headers.len());
-    for (k, v) in headers {
+    let mut header_pairs = Vec::with_capacity(fields.headers.len());
+    for (k, v) in fields.headers {
         header_pairs.push(pair(&mut owned, k, v)?);
     }
-    let mut cookie_pairs = Vec::with_capacity(cookies.len());
-    for (k, v) in cookies {
+    let mut cookie_pairs = Vec::with_capacity(fields.cookies.len());
+    for (k, v) in fields.cookies {
         cookie_pairs.push(pair(&mut owned, k, v)?);
     }
 
@@ -799,8 +811,8 @@ pub fn build_request_context(
         sipi_make_request_context(
             c_method.as_ptr(),
             c_client_ip.as_ptr(),
-            client_port,
-            c_int::from(secure),
+            fields.client_port,
+            c_int::from(fields.secure),
             c_host.as_ptr(),
             c_uri.as_ptr(),
             header_pairs.as_ptr(),
@@ -841,12 +853,12 @@ extern "C" fn collect_kv(ctx: *mut c_void, key: *const c_char, value: *const c_c
         let kv = unsafe { &mut *(ctx as *mut Vec<(String, String)>) };
         if !key.is_null() && !value.is_null() {
             // SAFETY: the engine passes NUL-terminated C strings valid for the call.
-            let k = unsafe { CStr::from_ptr(key) }
-                .to_string_lossy()
-                .into_owned();
-            let v = unsafe { CStr::from_ptr(value) }
-                .to_string_lossy()
-                .into_owned();
+            let (k, v) = unsafe {
+                (
+                    CStr::from_ptr(key).to_string_lossy().into_owned(),
+                    CStr::from_ptr(value).to_string_lossy().into_owned(),
+                )
+            };
             kv.push((k, v));
         }
     }));
