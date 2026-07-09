@@ -120,7 +120,8 @@ jobs:
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       # REMOTE BUILD EXECUTION:
       #
-      # The self-hosted RBE backend (infra/nativelink/) is the single Bazel
+      # The self-hosted RBE backend (dasch-remotebuild-prod-01, defined in the
+      # ops-tf + ops-infra repos) is the single Bazel
       # backend. It serves the Remote Cache + Remote Execution (the runner
       # endpoint, mTLS) and a bazel-remote download cache (the cache endpoint) for
       # http_archive (--experimental_remote_downloader). Both endpoints present a

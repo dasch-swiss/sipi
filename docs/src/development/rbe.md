@@ -4,8 +4,12 @@ This page documents SIPI's Remote Build Execution (RBE) setup: its purpose, how 
 cross-compilation pattern works, the key correctness fix in the hermetic-llvm toolchain,
 measured performance characteristics, and how CI wires everything together.
 
-For deployment, VM sizing, store configuration, and operations runbooks, see
-[`infra/nativelink/README.md`](../../../infra/nativelink/README.md).
+The backend (`dasch-remotebuild-prod-01`) is DaSCH-hosted and defined outside
+this repo: the libvirt VM in [`ops-tf`](https://github.com/dasch-swiss/ops-tf)
+(`live/virt-03/prod/vms/`), the NativeLink/bazel-remote service configuration
+in [`ops-infra`](https://github.com/dasch-swiss/ops-infra)
+(`OS/ansible/roles/dasch.nativelink`, including its README and store-topology
+notes).
 
 ## Why SIPI uses RBE
 
@@ -372,5 +376,7 @@ same composite action so all Bazel invocations benefit from the shared remote ca
   and `rust.toolchain(extra_target_triples = ...)` (cross toolchain registration)
 - `platforms/BUILD.bazel` — `//platforms:linux_x86_64` exec properties
 - `test/e2e/sipi_e2e_test.bzl` and `test/e2e/BUILD.bazel` — `no-sandbox` tag on e2e tests
-- [`infra/nativelink/`](../../../infra/nativelink) — OpenTofu IaC, NativeLink store
-  configuration, startup script, and operations runbook
+- [`ops-tf`](https://github.com/dasch-swiss/ops-tf) (`live/virt-03/prod/vms/`) and
+  [`ops-infra`](https://github.com/dasch-swiss/ops-infra)
+  (`OS/ansible/roles/dasch.nativelink`) — VM provisioning and NativeLink store
+  configuration / operations (private repos)

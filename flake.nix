@@ -38,11 +38,6 @@
             go-containerregistry
             just
 
-            # OpenTofu — drives infra/ (NativeLink RBE backend + TF state
-            # bucket). Dev-shell-only: infra deploys are out-of-band ops, not
-            # part of the Bazel build graph.
-            opentofu
-
             # jpylyzer — JP2 conformance validator (Phase 15.11). Runs against
             # regenerated JP2 goldens to confirm the SIPI UUID box reads as an
             # informational `Unknown UUID` and the file otherwise passes
