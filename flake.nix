@@ -43,6 +43,13 @@
             # informational `Unknown UUID` and the file otherwise passes
             # ISO/IEC 15444-1 conformance.
             python3Packages.jpylyzer
+
+            # cargo-machete — the CI `lint` job's unused-dependency gate. Its
+            # default mode is pure static analysis (parses each `Cargo.toml` and
+            # greps the sources); it does NOT invoke cargo, so it adds no Rust
+            # toolchain to the shell and cannot skew against the hermetic rustc
+            # (see the note below on why Rust tooling is otherwise excluded).
+            cargo-machete
           ];
           # Rust toolchain is intentionally NOT in commonPackages — `rules_rust`
           # in `MODULE.bazel` pins a hermetic rustc (1.89.0). E2E + smoke

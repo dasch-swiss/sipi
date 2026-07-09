@@ -69,6 +69,12 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@v13
         with:
           use-flakehub: "false"
+      # cargo-machete is pure static analysis (parses each Cargo.toml + greps the
+      # sources); it needs neither Bazel nor the RBE backend, so it runs before
+      # the RBE setup and fails fast (seconds) on an unused dependency, ahead of
+      # the slow clippy build.
+      - name: Check for unused Rust dependencies
+        run: nix develop --command bash -c "just machete"
       # Remote cache + mTLS + the GH_TOKEN-backed Kakadu fetch that analyzing the
       # Rust crate graph needs. Same composite action the `test` job uses; the
       # gate builds for linux-amd64 only.
