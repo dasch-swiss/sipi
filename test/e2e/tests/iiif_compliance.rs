@@ -1360,7 +1360,8 @@ fn assert_corrupt_image_handled(
     let test_data = sipi_e2e::test_data_dir();
     let corrupt_path = test_data.join(format!("images/unit/{}", filename));
 
-    let real_data = std::fs::read(test_data.join(source)).expect(&format!("read {}", source));
+    let real_data =
+        std::fs::read(test_data.join(source)).unwrap_or_else(|e| panic!("read {source}: {e}"));
     assert!(
         real_data.len() > truncate_bytes,
         "{} is smaller than {} bytes",

@@ -428,7 +428,7 @@ fn sort_scalar_arrays(value: &mut Value) {
                 sort_scalar_arrays(item);
             }
             if all_scalar {
-                items.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+                items.sort_by_key(|a| a.to_string());
             }
         }
         Value::Object(map) => {

@@ -34,8 +34,8 @@ fn health_returns_200_with_json() {
         "uptime_seconds should be a number"
     );
     assert!(
-        body["uptime_seconds"].as_u64().unwrap() >= 0,
-        "uptime should be non-negative"
+        body["uptime_seconds"].as_u64().is_some(),
+        "uptime should be a non-negative integer"
     );
 }
 
