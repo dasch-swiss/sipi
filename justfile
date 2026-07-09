@@ -134,6 +134,15 @@ bazel-rustfmt-check *FLAGS='':
 bazel-clippy-check *FLAGS='':
     bazel build //src/server-rs/... //src/cli-rs/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect --output_groups=clippy_checks --@rules_rust//rust/settings:clippy_flags=-Dwarnings {{FLAGS}}
 
+# Check for unused Rust dependencies across the three crate manifests
+# (server-rs / cli-rs / e2e). Pure static analysis: parses each `Cargo.toml`
+# and greps the sources — no cargo, no Bazel, no network (default mode does not
+# shell out to `cargo metadata`). Not a `bazel-*` recipe because it never
+# invokes Bazel. Runs in CI's `lint` job alongside rustfmt + clippy; it fails
+# the build (exit 1) on any unused dependency.
+machete:
+    cargo-machete src/server-rs src/cli-rs test/e2e
+
 # (Re)generate rust-project.json so rust-analyzer understands the Bazel crate
 # graph (cargo can't see the rules_rust targets). The file is git-ignored — it
 # holds machine-absolute paths. Re-run after adding/moving a Rust target or dep.
