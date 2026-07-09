@@ -7,6 +7,11 @@
 //! verbatim. A downstream crate can replace this binary with its own `main`
 //! while reusing the `sipi` library.
 
+// Fast unsafe check (CI `lint` gate): every `unsafe {}` block must carry a
+// `// SAFETY:` comment. `allow`-by-default (clippy `restriction` group), so it
+// is enabled here explicitly; CI's `-Dwarnings` promotes it to a hard error.
+#![warn(clippy::undocumented_unsafe_blocks)]
+
 mod commands;
 mod ffi;
 

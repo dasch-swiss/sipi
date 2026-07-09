@@ -125,6 +125,15 @@ bazel-rustfmt *FLAGS='':
 bazel-rustfmt-check *FLAGS='':
     bazel build //src/server-rs/... //src/cli-rs/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect --output_groups=rustfmt_checks {{FLAGS}}
 
+# Run clippy — the CI lint gate. The rules_rust clippy aspect runs
+# `clippy-driver` over every first-party Rust target; `-Dwarnings` promotes
+# every clippy/rustc warning to an error so the gate fails on any finding. The
+# `clippy::undocumented_unsafe_blocks` lint (enabled at each crate root) is the
+# fast unsafe check: it requires a `// SAFETY:` comment on every `unsafe {}`
+# block. Runs in CI's `lint` job alongside `bazel-rustfmt-check`.
+bazel-clippy-check *FLAGS='':
+    bazel build //src/server-rs/... //src/cli-rs/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect --output_groups=clippy_checks --@rules_rust//rust/settings:clippy_flags=-Dwarnings {{FLAGS}}
+
 # (Re)generate rust-project.json so rust-analyzer understands the Bazel crate
 # graph (cargo can't see the rules_rust targets). The file is git-ignored — it
 # holds machine-absolute paths. Re-run after adding/moving a Rust target or dep.
