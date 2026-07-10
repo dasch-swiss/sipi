@@ -140,7 +140,10 @@ struct Access {
 
 /// The catch-all IIIF handler (`GET|HEAD /…`). Classifies, validates, runs
 /// preflight, and dispatches. Never leaks an internal path in an error body:
-/// every failure renders a bare status via [`sink::error_response`].
+/// every failure this code renders is a bare status via [`sink::error_response`]
+/// — the one exception is a `pre_flight` hook that answers the request itself
+/// (`preflight_direct_response`), whose body is whatever the script wrote, by
+/// the script's own choice, same as the C++ oracle's live connection sink.
 pub async fn iiif(
     State(state): State<Arc<AppState>>,
     method: Method,
@@ -373,9 +376,14 @@ fn iiif_access(
     if state.has_preflight {
         let ctx = build_ctx(method, uri, headers)
             .ok_or_else(|| Box::new(sink::error_response(StatusCode::BAD_REQUEST)))?;
-        let outcome = ffi::preflight(&parsed.prefix, &parsed.identifier, &ctx)
+        let result = ffi::preflight(&parsed.prefix, &parsed.identifier, &ctx)
             .map_err(|_| Box::new(sink::error_response(StatusCode::INTERNAL_SERVER_ERROR)))?;
-        Ok(access_from(outcome))
+        if let Some(dr) = result.direct_response {
+            return Err(Box::new(preflight_direct_response(dr)));
+        }
+        Ok(access_from(result.outcome.expect(
+            "a preflight Ok result always carries a direct response or an outcome",
+        )))
     } else {
         Ok(Access {
             infile: path::build_request_path(
@@ -415,12 +423,25 @@ fn file_access(
     }
     let ctx = build_ctx(method, uri, headers)
         .ok_or_else(|| Box::new(sink::error_response(StatusCode::BAD_REQUEST)))?;
-    let outcome = ffi::file_preflight(&built, &ctx)
+    let result = ffi::file_preflight(&built, &ctx)
         .map_err(|_| Box::new(sink::error_response(StatusCode::INTERNAL_SERVER_ERROR)))?;
+    if let Some(dr) = result.direct_response {
+        return Err(Box::new(preflight_direct_response(dr)));
+    }
+    let outcome = result
+        .outcome
+        .expect("a preflight Ok result always carries a direct response or an outcome");
     match outcome.permission {
         SipiPermType::Allow | SipiPermType::Restrict => Ok(access_from(outcome)),
         _ => Err(Box::new(sink::error_response(StatusCode::UNAUTHORIZED))),
     }
+}
+
+/// Render a hook-emitted direct response (see [`ffi::DirectResponse`]) as the
+/// final HTTP response, verbatim — the hook chose to answer the request
+/// itself, so neither caller falls through to its own permission dispatch.
+fn preflight_direct_response(dr: ffi::DirectResponse) -> Response {
+    sink::direct_response(dr.status, dr.headers, dr.body)
 }
 
 /// Fold a [`PreflightOutcome`] into an [`Access`], taking the hook's `infile`

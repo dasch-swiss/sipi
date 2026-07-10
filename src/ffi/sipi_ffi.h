@@ -388,32 +388,45 @@ SIPI_FFI_NODISCARD int sipi_serve_file(const char *resolved_path, const char *ra
  *  The IIIF image preflight (serve_iiif / info.json). The hook reads the request
  *  through `ctx` (`server.header` / `server.cookies` / …) and gets prefix +
  *  identifier + the cookie header as its Lua arguments. Valid permission types:
- *  allow / login / clickthrough / kiosk / external / restrict / deny. */
+ *  allow / login / clickthrough / kiosk / external / restrict / deny.
+ *
+ *  `resp`, if non-NULL, is wired as `ctx`'s response sink for the duration of
+ *  the call: some `pre_flight` scripts emit a response directly
+ *  (`server.sendStatus`/`sendHeader`/`server.print`) instead of, or alongside,
+ *  returning a permission — e.g. an auth script that fails to decode a bearer
+ *  token and sends its own 500 before returning. Without a sink, that write
+ *  dereferences `ctx->response == NULL`. Pass NULL only when `ctx->response`
+ *  is already set by the caller (the C++ transport's own live connection
+ *  sink) — a non-NULL `resp` here always wins and overwrites it. */
 SIPI_FFI_NODISCARD int sipi_preflight(const char *prefix,
   const char *identifier,
   SipiRequestContext *ctx,
   SipiPermType *type,
   SipiKVFn emit_kv,
-  void *kv_ctx);
+  void *kv_ctx,
+  const SipiResponse *resp);
 
 /*! C++ LuaServer `file_pre_flight()`: the `/file` media-serving path (audio /
  *  video / PDF / any non-IIIF file). Same shape as sipi_preflight but takes a
  *  resolved filepath; narrower valid permission set: allow / login / restrict /
- *  deny. */
+ *  deny. `resp` is the same optional response-sink channel as `sipi_preflight`. */
 SIPI_FFI_NODISCARD int sipi_file_preflight(const char *filepath,
   SipiRequestContext *ctx,
   SipiPermType *type,
   SipiKVFn emit_kv,
-  void *kv_ctx);
+  void *kv_ctx,
+  const SipiResponse *resp);
 
 /*! Build the opaque request context the preflight hooks read (`server.*`) from
  *  primitive request fields — the Rust shell's replacement for the transport's
  *  `make_request_context(Connection&)`. Header names are lowercased to match the
- *  transport. The JWT secret + the response sink are NOT taken here: the secret
- *  is injected from the engine Lua config by `make_lua_server`, and preflight is
- *  read-only (no response sink). Deep-copies `headers`/`cookies`, so the caller's
- *  arrays need not outlive the call. Returns the context (caller frees it with
- *  `sipi_free_request_context`) or NULL on allocation failure. */
+ *  transport. The JWT secret is NOT taken here: it is injected from the engine
+ *  Lua config by `make_lua_server`. The response sink is likewise not taken
+ *  here — it is wired per-call via `sipi_preflight`/`sipi_file_preflight`'s
+ *  `resp` parameter, not stored on the context itself. Deep-copies
+ *  `headers`/`cookies`, so the caller's arrays need not outlive the call.
+ *  Returns the context (caller frees it with `sipi_free_request_context`) or
+ *  NULL on allocation failure. */
 SIPI_FFI_NODISCARD SipiRequestContext *sipi_make_request_context(const char *method,
   const char *client_ip,
   int client_port,

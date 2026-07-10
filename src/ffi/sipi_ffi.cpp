@@ -9,6 +9,7 @@
 #include <cctype>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -17,6 +18,7 @@
 #include "ffi/lua_config.h"// make_lua_server (sipi_has_preflight)
 #include "ffi/metrics_snapshot.h"
 #include "ffi/preflight.h"
+#include "ffi/response_sink.h"// FfiResponseSink (sipi_preflight / sipi_file_preflight)
 #include "ffi/run_lua_route.h"
 #include "ffi/serve_image.h"
 #include "ffi/serve_response.h"
@@ -119,7 +121,8 @@ int sipi_preflight(const char *prefix,
   SipiRequestContext *ctx,
   SipiPermType *type,
   SipiKVFn emit_kv,
-  void *kv_ctx)
+  void *kv_ctx,
+  const SipiResponse *resp)
 {
   // Same build/apply/guard shape as the serve entries: build_preflight runs the
   // Lua hook against the caller's request context and every fallible step (VM
@@ -127,8 +130,18 @@ int sipi_preflight(const char *prefix,
   // apply_preflight is the only code that touches the C output channel (the type
   // out-param + the kv callback); all under the no-throw guard. The opaque
   // SipiRequestContext is the C++ shttps::RequestContext the caller built.
+  //
+  // A non-NULL resp wires ctx.response for the call's duration, scoped to this
+  // stack frame so the reference FfiResponseSink holds never outlives it: a
+  // pre_flight script that emits a response directly (server.sendStatus/
+  // sendHeader/print) writes through it instead of dereferencing a NULL sink.
   return Sipi::ffi::sipi_guard([&] {
     auto &rc = *reinterpret_cast<shttps::RequestContext *>(ctx);
+    std::optional<Sipi::ffi::FfiResponseSink> sink;
+    if (resp != nullptr) {
+      sink.emplace(*resp);
+      rc.response = &*sink;
+    }
     auto result = Sipi::ffi::build_preflight(prefix, identifier, rc);
     if (!result) { return static_cast<int>(result.error()); }
     Sipi::ffi::apply_preflight(std::move(*result), type, emit_kv, kv_ctx);
@@ -140,12 +153,19 @@ int sipi_file_preflight(const char *filepath,
   SipiRequestContext *ctx,
   SipiPermType *type,
   SipiKVFn emit_kv,
-  void *kv_ctx)
+  void *kv_ctx,
+  const SipiResponse *resp)
 {
-  // The /file media-serving preflight; identical shape to sipi_preflight, runs
-  // the file_pre_flight hook over a resolved filepath.
+  // The /file media-serving preflight; identical shape to sipi_preflight
+  // (including the resp-wiring above), runs the file_pre_flight hook over a
+  // resolved filepath.
   return Sipi::ffi::sipi_guard([&] {
     auto &rc = *reinterpret_cast<shttps::RequestContext *>(ctx);
+    std::optional<Sipi::ffi::FfiResponseSink> sink;
+    if (resp != nullptr) {
+      sink.emplace(*resp);
+      rc.response = &*sink;
+    }
     auto result = Sipi::ffi::build_file_preflight(filepath, rc);
     if (!result) { return static_cast<int>(result.error()); }
     Sipi::ffi::apply_preflight(std::move(*result), type, emit_kv, kv_ctx);

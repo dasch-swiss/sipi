@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 pub mod diff;
 pub use diff::{diff_get, diff_request, BodyMatch, DiffAllowlist, DiffResult, HeaderDiff};
+pub mod jwt;
 
 /// Atomic port counter to avoid conflicts when tests run in parallel.
 /// Start well above privileged ports (macOS restricts ports below 1024).

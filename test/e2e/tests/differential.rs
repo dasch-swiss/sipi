@@ -30,7 +30,7 @@ use std::net::TcpStream;
 use std::sync::OnceLock;
 
 use reqwest::{Method, StatusCode};
-use sipi_e2e::{diff_get, diff_request, poll_cache_file_count, DiffAllowlist, SipiServer};
+use sipi_e2e::{diff_get, diff_request, jwt, poll_cache_file_count, DiffAllowlist, SipiServer};
 
 /// Per-case allowlist profile.
 #[derive(Clone, Copy)]
@@ -243,9 +243,10 @@ const CASES: &[Case] = &[
     Case { name: "iiif_auth_api", method: Method::GET, path: "/auth/lena512.jp2/info.json", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "temp_directory_cleanup", method: Method::GET, path: "/test_clean_temp_dir", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "cache_returns_consistent_results", method: Method::GET, path: "/unit/lena512.jp2/pct:5,5,90,90/100,/0/default.jpg", headers: &[], allow: Allow::Default, gap: None },
-    Case { name: "jwt_expired_token", method: Method::GET, path: "/auth/lena512.jp2/full/max/0/default.jpg", headers: &[("Authorization", "Bearer <HS256-JWT allow:true exp:past>")], allow: Allow::Default, gap: Some("cluster F: read-only preflight crashes on a Bearer token (response-sink DoS, DEV-6670) — plan 02 §8.1") },
-    Case { name: "jwt_alg_none_bypass", method: Method::GET, path: "/auth/lena512.jp2/full/max/0/default.jpg", headers: &[("Authorization", "Bearer <alg:none JWT allow:true no-signature>")], allow: Allow::Default, gap: Some("cluster F: read-only preflight crashes on a Bearer token (response-sink DoS, DEV-6670) — plan 02 §8.1") },
-    Case { name: "jwt_tampered_payload", method: Method::GET, path: "/auth/lena512.jp2/full/max/0/default.jpg", headers: &[("Authorization", "Bearer <HS256-signed allow:false token with payload swapped to allow:true>")], allow: Allow::Default, gap: Some("cluster F: read-only preflight crashes on a Bearer token (response-sink DoS, DEV-6670) — plan 02 §8.1") },
+    // JWT parity (expired/alg:none/tampered) is NOT expressible as a static
+    // Case: each needs a runtime-crafted signed token, and Case.headers is
+    // &'static. See the dedicated jwt_*_parity tests below instead — they
+    // build real tokens and assert parity via diff_request directly.
     Case { name: "crlf_header_injection", method: Method::GET, path: "/unit/lena512%0d%0aX-Injected:%20evil/full/max/0/default.jpg", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "error_no_path_disclosure", method: Method::GET, path: "/unit/nonexistent-file-for-path-test.jp2/full/max/0/default.jpg", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "decompression_bomb_rejection", method: Method::GET, path: "/unit/lena512.jp2/full/^100000,100000/0/default.jpg", headers: &[], allow: Allow::Default, gap: None },
@@ -371,6 +372,86 @@ fn differential_corpus_parity() {
         failures.len(),
         failures.join("\n\n")
     );
+}
+
+// ---- JWT parity (real tokens, not expressible as static `Case`s) -----------
+
+const JWT_SECRET: &str = "UP 4888, nice 4-8-4 steam engine";
+
+/// A malformed/rejected bearer token must produce the SAME status on both
+/// binaries: the preflight response-sink fix (`ffi::DirectResponse`) makes
+/// the subject survive these instead of crashing (DEV-6670), and both sides
+/// reach the identical `pre_flight`-returned-invalid-permission 500 path
+/// (`server.decode_jwt` fails → `server.sendStatus(500)` → `return false`).
+/// Headers/body are not asserted (§5 #5: a shared error status's body is an
+/// intentional divergence — bare on the subject, a text message on the
+/// reference), only the shared status.
+fn assert_jwt_status_parity(bearer_token: &str, expected_status: StatusCode) {
+    let (subject, reference) = pair();
+    let diff = diff_request(
+        subject,
+        reference,
+        Method::GET,
+        "/auth/lena512.jp2/full/max/0/default.jpg",
+        &[("Authorization", &format!("Bearer {bearer_token}"))],
+        None,
+        &DiffAllowlist::default_transport(),
+    );
+    assert_eq!(
+        diff.subject_status,
+        expected_status,
+        "subject status: {:?}",
+        diff.divergences()
+    );
+    assert_eq!(
+        diff.reference_status,
+        expected_status,
+        "reference status: {:?}",
+        diff.divergences()
+    );
+    assert!(diff.is_parity(), "{}", diff.divergences().join("\n"));
+}
+
+/// An expired-but-validly-signed token: `server.decode_jwt` only checks the
+/// signature (no `exp` check in the Lua handler — a documented, shared
+/// behaviour, not something this test tries to fix), so both binaries accept
+/// it and serve the image.
+#[test]
+fn jwt_expired_token_parity() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let claims = serde_json::json!({ "allow": true, "exp": now - 3600, "iat": now - 7200 });
+    let token = jwt::create_jwt(&claims, JWT_SECRET);
+    assert_jwt_status_parity(&token, StatusCode::OK);
+}
+
+/// `alg:none`, unsigned — the classic signature-bypass attempt. Both sides
+/// reject it (`decode_jwt` fails to verify a signature-less token) at parity.
+#[test]
+fn jwt_alg_none_bypass_parity() {
+    let token = jwt::alg_none_token(r#"{"allow":true}"#);
+    assert_jwt_status_parity(&token, StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+/// A validly-signed token whose payload is swapped post-signing (`allow:
+/// false` → `allow: true`) without re-signing. Both sides reject it at parity.
+#[test]
+fn jwt_tampered_payload_parity() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let valid = jwt::create_jwt(
+        &serde_json::json!({ "allow": false, "exp": now + 3600 }),
+        JWT_SECRET,
+    );
+    let tampered = jwt::tamper_payload(
+        &valid,
+        &serde_json::to_string(&serde_json::json!({ "allow": true, "exp": now + 3600 })).unwrap(),
+    );
+    assert_jwt_status_parity(&tampered, StatusCode::INTERNAL_SERVER_ERROR);
 }
 
 /// Plan 02 §7.5 M6 pin: the C++ oracle binds `--adminuser` to the misspelled
@@ -1506,4 +1587,56 @@ fn env_var_absent_yields_clean_500() {
         .send()
         .expect("GET /env_echo failed");
     assert_eq!(resp.status().as_u16(), 500);
+}
+
+/// The literal preflight-based version of the two tests above, now that the
+/// response-sink fix lands: `env_preflight`'s `pre_flight` hook (config
+/// `sipi.init-knora.lua`) reads the same env var directly, proving the
+/// property through the real preflight code path rather than the `/env_echo`
+/// route proxy.
+#[test]
+fn env_var_reaches_lua_vm_via_preflight_when_set() {
+    let srv = SipiServer::start_env(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &["--cache-size", "0"],
+        &[("KNORA_WEBAPI_KNORA_API_EXTERNAL_HOST", "example.test")],
+    );
+    let resp = sipi_e2e::http_client()
+        .get(format!(
+            "{}/env_preflight/lena512.jp2/full/max/0/default.jpg",
+            srv.base_url
+        ))
+        .send()
+        .expect("GET via env_preflight failed");
+    assert_eq!(resp.status().as_u16(), 200);
+}
+
+/// The unset case through the real preflight path: before the response-sink
+/// fix, `server.sendStatus(500)` inside `pre_flight` null-deref-crashed the
+/// process (DEV-6670). It must now render a clean 500 and leave the server
+/// serving subsequent requests.
+#[test]
+fn env_var_absent_yields_clean_500_via_preflight() {
+    let srv = SipiServer::start_env(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &["--cache-size", "0"],
+        &[],
+    );
+    let resp = sipi_e2e::http_client()
+        .get(format!(
+            "{}/env_preflight/lena512.jp2/full/max/0/default.jpg",
+            srv.base_url
+        ))
+        .send()
+        .expect("GET via env_preflight failed");
+    assert_eq!(resp.status().as_u16(), 500);
+    let health = sipi_e2e::http_client()
+        .get(format!("{}/health", srv.base_url))
+        .send()
+        .expect(
+            "GET /health failed after a preflight-emitted 500 — the server should still be alive",
+        );
+    assert_eq!(health.status().as_u16(), 200);
 }

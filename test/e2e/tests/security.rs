@@ -1,9 +1,8 @@
 mod common;
 
-use base64::Engine;
 use common::{client, server};
-use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use serde_json::json;
+use sipi_e2e::jwt::{alg_none_token, create_jwt, tamper_payload};
 use sipi_e2e::{http_client, test_data_dir, SipiServer};
 use std::io::{Read as _, Write as _};
 use std::net::TcpStream;
@@ -11,19 +10,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const JWT_SECRET: &str = "UP 4888, nice 4-8-4 steam engine";
 
-/// Create a valid JWT with the given claims using HS256.
-fn create_jwt(claims: &serde_json::Value) -> String {
-    let header = Header::new(Algorithm::HS256);
-    let key = EncodingKey::from_secret(JWT_SECRET.as_bytes());
-    encode(&header, claims, &key).expect("JWT encode failed")
-}
-
 // =============================================================================
 // JWT Security Tests (using the 'auth' prefix which checks JWT tokens)
 // =============================================================================
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 7, cluster F): the /auth JWT preflight crashes the process on a malformed/alg:none token — the shell starts fine under the e2e config (no override flag, so M4 does not apply); was mis-tagged cluster A. Re-enable with the JWT-auth (cluster F) work."]
 fn jwt_expired_token() {
     // SECURITY FINDING: sipi's Lua pre-flight handler does NOT check the `exp` claim.
     // It only validates the signature and checks `token_val['allow']`.
@@ -40,7 +31,7 @@ fn jwt_expired_token() {
         "exp": now - 3600,  // expired 1 hour ago
         "iat": now - 7200,
     });
-    let token = create_jwt(&claims);
+    let token = create_jwt(&claims, JWT_SECRET);
 
     let resp = client()
         .get(format!(
@@ -62,16 +53,11 @@ fn jwt_expired_token() {
 }
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 7, cluster F): the /auth JWT preflight crashes the process on a malformed/alg:none token — the shell starts fine under the e2e config (no override flag, so M4 does not apply); was mis-tagged cluster A. Re-enable with the JWT-auth (cluster F) work."]
 fn jwt_alg_none_bypass() {
     // Send JWT with alg:none and no signature — common JWT vulnerability.
     let srv = server();
 
-    // Manually craft a JWT with alg: none
-    let b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD;
-    let header = b64.encode(r#"{"alg":"none","typ":"JWT"}"#);
-    let payload = b64.encode(r#"{"allow":true}"#);
-    let token = format!("{}..{}", header, payload); // empty signature
+    let token = alg_none_token(r#"{"allow":true}"#);
 
     let resp = client()
         .get(format!(
@@ -91,7 +77,6 @@ fn jwt_alg_none_bypass() {
 }
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 7, cluster F): the /auth JWT preflight crashes the process on a malformed/alg:none token — the shell starts fine under the e2e config (no override flag, so M4 does not apply); was mis-tagged cluster A. Re-enable with the JWT-auth (cluster F) work."]
 fn jwt_tampered_payload() {
     // Create valid JWT, modify payload without re-signing, verify rejection.
     let srv = server();
@@ -104,21 +89,16 @@ fn jwt_tampered_payload() {
         "allow": false,
         "exp": now + 3600,
     });
-    let valid_token = create_jwt(&claims);
+    let valid_token = create_jwt(&claims, JWT_SECRET);
 
-    // Split the token and replace payload with "allow: true"
-    let parts: Vec<&str> = valid_token.split('.').collect();
-    assert_eq!(parts.len(), 3, "JWT should have 3 parts");
-
-    let b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD;
-    let tampered_payload = b64.encode(
-        serde_json::to_string(&json!({
+    let tampered_token = tamper_payload(
+        &valid_token,
+        &serde_json::to_string(&json!({
             "allow": true,
             "exp": now + 3600,
         }))
         .unwrap(),
     );
-    let tampered_token = format!("{}.{}.{}", parts[0], tampered_payload, parts[2]);
 
     let resp = client()
         .get(format!(

@@ -78,6 +78,7 @@ rust_library(
     name = "sipi_e2e",
     srcs = [
         "src/diff.rs",
+        "src/jwt.rs",
         "src/lib.rs",
     ],
     edition = "2021",
