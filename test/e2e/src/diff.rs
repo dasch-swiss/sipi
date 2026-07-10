@@ -53,6 +53,16 @@ pub struct DiffAllowlist {
     /// comparison — for fields that legitimately differ (e.g. a deferred
     /// knora sidecar field) without suppressing the whole body.
     json_masks: Vec<String>,
+    /// A pinned status pairing that is an accepted divergence rather than a
+    /// failure: `Some((subject, reference))` means "the subject returning
+    /// `subject` while the reference returns `reference` is the known,
+    /// intentional contract for this request — assert that pairing exactly,
+    /// don't silently skip it." Any other status pairing (including the two
+    /// matching) still fails. Headers and body are not compared when the
+    /// statuses differ (pinned or not) — a status mismatch always means the
+    /// two responses are different shapes (redirect vs. rejection vs. data),
+    /// so there is nothing meaningful left to diff.
+    expected_status: Option<(StatusCode, StatusCode)>,
 }
 
 impl DiffAllowlist {
@@ -61,6 +71,7 @@ impl DiffAllowlist {
         Self {
             ignore_headers: ALWAYS_IGNORE.iter().map(|h| h.to_string()).collect(),
             json_masks: Vec::new(),
+            expected_status: None,
         }
     }
 
@@ -77,6 +88,19 @@ impl DiffAllowlist {
     #[must_use]
     pub fn masking_json(mut self, pointer: &str) -> Self {
         self.json_masks.push(pointer.to_string());
+        self
+    }
+
+    /// Pin an intentional status-code divergence: the subject is expected to
+    /// return `subject` while the reference returns `reference` for this
+    /// request. Use this instead of a bare `gap: Some(...)` skip when the
+    /// divergence is understood and stable — it turns a blind skip into an
+    /// assertion that fails the moment either side's status changes (headers
+    /// and body are not compared, since a status mismatch means the two
+    /// responses are different shapes with nothing meaningful to diff).
+    #[must_use]
+    pub fn expect_status_divergence(mut self, subject: StatusCode, reference: StatusCode) -> Self {
+        self.expected_status = Some((subject, reference));
         self
     }
 
@@ -118,14 +142,24 @@ pub struct DiffResult {
     pub path: String,
     pub subject_status: StatusCode,
     pub reference_status: StatusCode,
+    /// The allowlist's pinned status pairing, if any — see
+    /// [`DiffAllowlist::expect_status_divergence`].
+    pub expected_status: Option<(StatusCode, StatusCode)>,
     pub header_diffs: Vec<HeaderDiff>,
     pub body_match: BodyMatch,
 }
 
 impl DiffResult {
+    /// True when the two statuses agree, or match a pinned expected
+    /// divergence exactly.
+    fn status_ok(&self) -> bool {
+        self.subject_status == self.reference_status
+            || self.expected_status == Some((self.subject_status, self.reference_status))
+    }
+
     /// True when subject and reference agree modulo the allowlist.
     pub fn is_parity(&self) -> bool {
-        self.subject_status == self.reference_status
+        self.status_ok()
             && self.header_diffs.is_empty()
             && matches!(self.body_match, BodyMatch::Match | BodyMatch::Skipped)
     }
@@ -133,11 +167,17 @@ impl DiffResult {
     /// Human-readable description of every divergence (empty when parity).
     pub fn divergences(&self) -> Vec<String> {
         let mut out = Vec::new();
-        if self.subject_status != self.reference_status {
-            out.push(format!(
-                "status: subject={} reference={}",
-                self.subject_status, self.reference_status
-            ));
+        if !self.status_ok() {
+            match self.expected_status {
+                Some((es, er)) => out.push(format!(
+                    "status: subject={} reference={} (pinned divergence expected subject={es} reference={er})",
+                    self.subject_status, self.reference_status
+                )),
+                None => out.push(format!(
+                    "status: subject={} reference={}",
+                    self.subject_status, self.reference_status
+                )),
+            }
         }
         for d in &self.header_diffs {
             out.push(format!(
@@ -228,10 +268,10 @@ pub fn diff_request(
     let r = send(&client, reference, &method, path, headers, body);
 
     let status_match = s.status == r.status;
-    // §5 #5: on a shared error status the Rust shell sends a bare status
-    // (empty body, no content-type) while the C++ `send_error` echoes a
+    // On a shared error status the Rust shell sends a bare status (empty
+    // body, no content-type) while the C++ `send_error` echoes a
     // `Bad Request: <msg>` text/plain body. That divergence is intentional
-    // (the no-internal-path-leak guarantee holds on both — DEV-6062), so the
+    // (the no-internal-path-leak guarantee holds on both, DEV-6062), so the
     // harness asserts only the status and framing headers on errors, not the
     // error body or its content-type.
     let shared_error = status_match && (s.status.is_client_error() || s.status.is_server_error());
@@ -241,7 +281,19 @@ pub fn diff_request(
     } else {
         allow.clone()
     };
-    let header_diffs = diff_headers(&s.headers, &r.headers, subject, reference, &effective);
+    // A status mismatch (whether an unpinned regression or a pinned
+    // `expect_status_divergence`) always means the two responses are
+    // different shapes entirely — a redirect vs. a rejection vs. a data
+    // response never share a meaningful header set (confirmed empirically:
+    // Content-Type, Location, Cache-Control, and Content-Length all differ
+    // in every observed case). Comparing headers there is noise, not
+    // signal, so skip both header and body comparison and let the status
+    // line alone carry the pass/fail verdict.
+    let header_diffs = if status_match {
+        diff_headers(&s.headers, &r.headers, subject, reference, &effective)
+    } else {
+        Vec::new()
+    };
     let body_match = if status_match && !shared_error {
         compare_bodies(&s, &r, subject, reference, &effective)
     } else {
@@ -253,6 +305,7 @@ pub fn diff_request(
         path: path.to_string(),
         subject_status: s.status,
         reference_status: r.status,
+        expected_status: allow.expected_status,
         header_diffs,
         body_match,
     }

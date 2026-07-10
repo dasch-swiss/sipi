@@ -14,15 +14,22 @@
 //! test is either represented here or annotated non-replayable.
 //!
 //! A `Case` with `gap: Some(reason)` is a known divergence or crash-risk
-//! skipped today; `gap: None` is asserted at parity. Shrinking the set of
-//! `Some` entries is the measurable definition of cutover progress.
+//! skipped today — no request is even sent. `gap: None` is asserted at
+//! parity: the two servers must return the same status, headers, and body,
+//! *unless* the case's `Allow` profile pins an accepted status divergence via
+//! `DiffAllowlist::expect_status_divergence` (e.g. `CrlfRejectVsRedirect`) — in
+//! which case the exact status pairing is asserted instead (a real request
+//! goes to both servers every run) while headers/body are not compared (a
+//! status mismatch always means a differently-shaped response). Shrinking the
+//! set of `Some` entries, and converting pinned divergences from a blind skip
+//! into an asserted pairing, are both measures of cutover progress.
 //!
 //! Bazel-only (needs `$SIPI_BIN_REF`); run via `just bazel-test-differential`.
 
 use std::net::TcpStream;
 use std::sync::OnceLock;
 
-use reqwest::Method;
+use reqwest::{Method, StatusCode};
 use sipi_e2e::{diff_get, diff_request, poll_cache_file_count, DiffAllowlist, SipiServer};
 
 /// Per-case allowlist profile.
@@ -56,6 +63,35 @@ enum Allow {
     /// credentialed CORS). Ignore the stray ACAC (§5 #11); everything else,
     /// including `ACAO:*`, asserts at parity.
     InfoJsonStrayAcac,
+    /// A bare-identifier redirect whose `{id}` contains CR/LF: the shell
+    /// rejects it (400, header-injection guard) while the oracle strips the
+    /// CR/LF and issues the 303. Both block the injection; only the shell's
+    /// stricter contract differs. Pinned, not a blind skip — headers/body
+    /// are not comparable across a reject vs. a redirect (confirmed
+    /// empirically: the two responses share no header beyond transport
+    /// framing).
+    CrlfRejectVsRedirect,
+    /// `HEAD` on the docroot static fileserver: the shell serves file headers
+    /// (no body); the oracle's `file_handler` is GET+POST only, so HEAD falls
+    /// through to the IIIF catch-all and 303s to `info.json`. The shell's HEAD
+    /// support is the more correct behaviour — pinned as intentional.
+    DocrootHeadVsRedirect,
+    /// `knora.json` for a missing source file: the shell returns 404 (the
+    /// correct status for an absent resource); the oracle throws internally
+    /// and surfaces 500. Pinned as intentional (404 is the better contract).
+    KnoraJsonMissingSourceStatus,
+    /// `/metrics`: the shell has no such route — the request falls through to
+    /// the IIIF catch-all, which treats the single path segment as a bare
+    /// identifier and 303-redirects to (a nonexistent) `/metrics/info.json`.
+    /// The oracle still serves the Prometheus scrape (200). Permanent
+    /// divergence: OTLP replaces `/metrics` on the shell.
+    MetricsRemoved,
+    /// `%252F` in an identifier: the oracle double-decodes (`%252F → %2F →
+    /// /`) and serves the file (200); the shell decodes once, so the path
+    /// separator never materialises and the identifier is not found (404).
+    /// The shell's single-decode is the safer contract — no double-decoded
+    /// traversal foot-gun. Pinned as intentional (DEV-6700).
+    DoubleDecodeRejected,
 }
 
 impl Allow {
@@ -70,6 +106,16 @@ impl Allow {
             Allow::InfoJsonStrayAcac => {
                 DiffAllowlist::default_transport().ignoring("access-control-allow-credentials")
             }
+            Allow::CrlfRejectVsRedirect => DiffAllowlist::default_transport()
+                .expect_status_divergence(StatusCode::BAD_REQUEST, StatusCode::SEE_OTHER),
+            Allow::DocrootHeadVsRedirect => DiffAllowlist::default_transport()
+                .expect_status_divergence(StatusCode::OK, StatusCode::SEE_OTHER),
+            Allow::KnoraJsonMissingSourceStatus => DiffAllowlist::default_transport()
+                .expect_status_divergence(StatusCode::NOT_FOUND, StatusCode::INTERNAL_SERVER_ERROR),
+            Allow::MetricsRemoved => DiffAllowlist::default_transport()
+                .expect_status_divergence(StatusCode::SEE_OTHER, StatusCode::OK),
+            Allow::DoubleDecodeRejected => DiffAllowlist::default_transport()
+                .expect_status_divergence(StatusCode::NOT_FOUND, StatusCode::OK),
         }
     }
 }
@@ -99,7 +145,7 @@ const CASES: &[Case] = &[
     Case { name: "cors_knora_json_with_origin", method: Method::GET, path: "/unit/test.csv/knora.json", headers: &[("Origin", "https://example.org")], allow: Allow::Default, gap: None },
     Case { name: "base_uri_redirect", method: Method::GET, path: "/unit/lena512.jp2", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "base_uri_redirect_x_forwarded_proto", method: Method::GET, path: "/unit/lena512.jp2", headers: &[("X-Forwarded-Proto", "https")], allow: Allow::Default, gap: None },
-    Case { name: "base_uri_redirect_crlf", method: Method::GET, path: "/unit/lena512%0d%0aX-Injected:%20evil", headers: &[], allow: Allow::Default, gap: Some("§5 #10 intentional: a bare-identifier 303 whose id contains CR/LF — the Rust shell rejects it (400, header-injection guard) while C++ strips the CR/LF and sends the 303. Rust's 400 is the contract; the harness has no status-override, so this is pinned as a documented gap (same shape as knora_json_nonexistent_file) — plan 02 §5 #10.") },
+    Case { name: "base_uri_redirect_crlf", method: Method::GET, path: "/unit/lena512%0d%0aX-Injected:%20evil", headers: &[], allow: Allow::CrlfRejectVsRedirect, gap: None },
     Case { name: "jsonld_media_type_with_accept", method: Method::GET, path: "/unit/lena512.jp2/info.json", headers: &[("Accept", "application/ld+json")], allow: Allow::Default, gap: None },
     Case { name: "region_square", method: Method::GET, path: "/unit/lena512.jp2/square/max/0/default.jpg", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "region_percent", method: Method::GET, path: "/unit/lena512.jp2/pct:10,10,50,50/max/0/default.jpg", headers: &[], allow: Allow::Default, gap: None },
@@ -160,7 +206,7 @@ const CASES: &[Case] = &[
     Case { name: "path_traversal_rejected_variant_1", method: Method::GET, path: "/unit/%2E%2E%2F%2E%2E%2Fetc%2Fpasswd/full/max/0/default.jpg", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "path_traversal_rejected_variant_2", method: Method::GET, path: "/unit/..%2F..%2Fetc%2Fpasswd/full/max/0/default.jpg", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "metadata_iiif_pipeline", method: Method::GET, path: "/unit/lena512.jp2/0,0,256,256/128,128/0/default.jpg", headers: &[], allow: Allow::Default, gap: None },
-    Case { name: "double_encoded_url", method: Method::GET, path: "/unit%252Flena512.jp2/full/max/0/default.jpg", headers: &[], allow: Allow::Default, gap: Some("intentional (FINDING, DEV-6700): C++ double-decodes %252F → serves the file (200); the Rust shell decodes once → 404. Rust's single-decode is the safer contract (no double-decoded path separators). Move to the §5 allowlist once confirmed (DEV-6700).") },
+    Case { name: "double_encoded_url", method: Method::GET, path: "/unit%252Flena512.jp2/full/max/0/default.jpg", headers: &[], allow: Allow::DoubleDecodeRejected, gap: None },
     Case { name: "cmyk_through_iiif_pipeline", method: Method::GET, path: "/unit/cmyk.tif/full/max/0/default.jpg", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "cielab_through_iiif_pipeline", method: Method::GET, path: "/unit/cielab.tif/full/max/0/default.jpg", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "progressive_jpeg_input_full_max", method: Method::GET, path: "/unit/MaoriFigure.jpg/full/max/0/default.jpg", headers: &[], allow: Allow::Default, gap: None },
@@ -181,9 +227,9 @@ const CASES: &[Case] = &[
     Case { name: "lua_read_write", method: Method::GET, path: "/read_write_lua", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "video_knora_json_x_forwarded_proto", method: Method::GET, path: "/unit/8pdET49BfoJ-EeRcIbgcLch.mp4/knora.json", headers: &[("X-Forwarded-Proto", "https")], allow: Allow::Xfp, gap: None },
     Case { name: "knora_json_image_required_fields", method: Method::GET, path: "/unit/lena512.jp2/knora.json", headers: &[], allow: Allow::Default, gap: None },
-    Case { name: "knora_json_nonexistent_file", method: Method::GET, path: "/unit/no-such-file.jp2/knora.json", headers: &[], allow: Allow::Default, gap: Some("intentional: missing knora.json source → Rust 404, C++ 500 (the e2e test accepts either; 404 is the more correct status).") },
+    Case { name: "knora_json_nonexistent_file", method: Method::GET, path: "/unit/no-such-file.jp2/knora.json", headers: &[], allow: Allow::KnoraJsonMissingSourceStatus, gap: None },
     Case { name: "knora_json_csv_file", method: Method::GET, path: "/unit/test.csv/knora.json", headers: &[], allow: Allow::Default, gap: None },
-    Case { name: "prometheus_metrics", method: Method::GET, path: "/metrics", headers: &[], allow: Allow::Default, gap: Some("§5 #1 intentional: /metrics is removed in the Rust shell (OTLP replaces the Prometheus scrape) — C++ serves 200, Rust has no route. Permanent divergence.") },
+    Case { name: "prometheus_metrics", method: Method::GET, path: "/metrics", headers: &[], allow: Allow::MetricsRemoved, gap: None },
     Case { name: "restricted_image_reduction", method: Method::GET, path: "/test_restrict/lena512.jp2/full/max/0/default.jpg", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "lua_route_error_handling", method: Method::GET, path: "/test_lua_error", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "lua_image_crop_verify", method: Method::GET, path: "/test_image_ops?op=crop&param=0,0,256,256&file=unit/lena512.jp2", headers: &[], allow: Allow::Default, gap: None },
@@ -225,7 +271,7 @@ const CASES: &[Case] = &[
     Case { name: "docroot_static_full", method: Method::GET, path: "/server/parity_probe.bin", headers: &[], allow: Allow::DocrootStatic, gap: None },
     Case { name: "docroot_static_range_first_bytes", method: Method::GET, path: "/server/parity_probe.bin", headers: &[("Range", "bytes=0-99")], allow: Allow::DocrootStatic, gap: None },
     Case { name: "docroot_static_open_ended_range", method: Method::GET, path: "/server/parity_probe.bin", headers: &[("Range", "bytes=500-")], allow: Allow::DocrootStatic, gap: None },
-    Case { name: "docroot_static_head", method: Method::HEAD, path: "/server/parity_probe.bin", headers: &[], allow: Allow::DocrootStatic, gap: Some("Rust supports HEAD on the docroot fileserver (file headers, no body); C++ registers the file_handler for GET+POST only, so HEAD falls through to the IIIF handler → 303 redirect. Rust's HEAD support is the more correct behaviour.") },
+    Case { name: "docroot_static_head", method: Method::HEAD, path: "/server/parity_probe.bin", headers: &[], allow: Allow::DocrootHeadVsRedirect, gap: None },
     Case { name: "docroot_static_html", method: Method::GET, path: "/server/parity_probe.html", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "docroot_missing_file_404", method: Method::GET, path: "/server/no-such-docroot-file.bin", headers: &[], allow: Allow::Default, gap: None },
 ];
