@@ -73,7 +73,6 @@ fn upload_tiff_converts_to_jp2() {
 }
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 7): knora.json sidecar originalMimeType/originalFilename deferred on the image path — plan 02 cluster D"]
 fn upload_tiff_knora_json() {
     let srv = server();
     let file = test_image_path("unit/lena512.tif");
@@ -97,7 +96,6 @@ fn upload_tiff_knora_json() {
 }
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 7): knora.json sidecar originalMimeType/originalFilename deferred on the image path — plan 02 cluster D"]
 fn upload_jpeg_with_comment_block() {
     let srv = server();
     let file = test_image_path("unit/HasCommentBlock.JPG");
@@ -155,7 +153,6 @@ fn upload_odd_file() {
 // =============================================================================
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 7): knora.json sidecar originalMimeType/originalFilename deferred on the image path — plan 02 cluster D"]
 fn metadata_preservation_upload() {
     // Upload image with EXIF metadata (img_exif_gps.jpg has GPS EXIF data),
     // retrieve via knora.json, verify metadata fields are preserved.
@@ -223,7 +220,6 @@ fn metadata_format_conversion() {
 }
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 7): knora.json sidecar originalMimeType/originalFilename deferred on the image path — plan 02 cluster D"]
 fn metadata_essentials_roundtrip() {
     // Verify SipiEssentials (original filename, mimetype, data checksum)
     // survive upload→store→retrieve cycle via knora.json fields.
@@ -269,7 +265,6 @@ fn metadata_essentials_roundtrip() {
 }
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 7): knora.json sidecar originalMimeType/originalFilename deferred on the image path — plan 02 cluster D"]
 fn upload_4bit_palette_png() {
     // Upload the palette PNG (mario.png is a palette-based PNG).
     let srv = server();

@@ -290,12 +290,16 @@ int sipi_port(int *out)
   });
 }
 
-int sipi_image_dims(const char *resolved_path, SipiImageDims *out)
+int sipi_image_dims(const char *resolved_path, SipiImageDims *out, SipiEssentialsFn emit, void *ctx)
 {
   // Header-only shape read. The Rust edge owns existence + containment (R1/R2)
   // before calling, so read_shape throwing here is a genuine engine failure →
   // 500 via the guard (read_shape never returns FAILURE; it throws). Native
   // shape only: numpages/tile_*/clevels drive info.json sizes[]/tiles[].
+  // One read_shape() call also carries the Essentials identity (origmimetype/
+  // origname) when the file has one — emitted through the optional `emit`
+  // callback (NULL when the caller, e.g. info.json, doesn't need it), so a
+  // caller that wants both the shape and the identity pays for a single read.
   return Sipi::ffi::sipi_guard([&] {
     const Sipi::SipiImage probe;
     const Sipi::SipiImgInfo info = probe.read_shape(resolved_path);
@@ -305,6 +309,9 @@ int sipi_image_dims(const char *resolved_path, SipiImageDims *out)
     out->tile_width = static_cast<std::uint32_t>(info.tile_width);
     out->tile_height = static_cast<std::uint32_t>(info.tile_height);
     out->clevels = static_cast<std::uint32_t>(info.clevels);
+    if (emit != nullptr && info.success == Sipi::SipiImgInfo::ALL) {
+      emit(ctx, info.origmimetype.c_str(), info.origname.c_str());
+    }
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
   });
 }

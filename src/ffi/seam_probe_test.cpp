@@ -6,8 +6,9 @@
 // Co-located unit tests (ADR-0003) for the edge-probe seam entries the Rust
 // shell calls at the request boundary: sipi_imgroot / sipi_prefix_as_path (read
 // the installed engine context) and sipi_image_dims / sipi_mimetype (read a
-// validated file). All are sipi_guard-only — no response sink — so they run
-// without a transport.
+// validated file — sipi_image_dims also optionally emits the Essentials
+// identity from the same read). All are sipi_guard-only — no response sink —
+// so they run without a transport.
 
 #include "gtest/gtest.h"
 
@@ -45,6 +46,24 @@ void install_engine(bool prefix_as_path)
 
 // SipiStrFn that copies the emitted value into a std::string (the ctx).
 void collect_str(void *ctx, const char *value) { *static_cast<std::string *>(ctx) = value; }
+
+// The two-string result sipi_image_dims' optional essentials callback may
+// fire into.
+struct Essentials
+{
+  bool fired = false;
+  std::string mimetype;
+  std::string filename;
+};
+
+// SipiEssentialsFn that records whether it fired, plus both strings (the ctx).
+void collect_essentials(void *ctx, const char *orig_mimetype, const char *orig_filename)
+{
+  auto *out = static_cast<Essentials *>(ctx);
+  out->fired = true;
+  out->mimetype = orig_mimetype;
+  out->filename = orig_filename;
+}
 
 }// namespace
 
@@ -103,7 +122,7 @@ TEST(SeamProbe, ImageDimsReadsNativeShape)
 {
   const std::string path = fixture("/unit/lena512.tif");
   SipiImageDims dims{};
-  ASSERT_EQ(sipi_image_dims(path.c_str(), &dims), 0);
+  ASSERT_EQ(sipi_image_dims(path.c_str(), &dims, nullptr, nullptr), 0);
   EXPECT_EQ(dims.width, 512u);
   EXPECT_EQ(dims.height, 512u);
 }
@@ -114,7 +133,7 @@ TEST(SeamProbe, ImageDimsOnNonImageIsError)
   // a non-zero (500) status, never a crash or a bogus 0×0 success.
   const std::string path = fixture("/unit/test.csv");
   SipiImageDims dims{};
-  EXPECT_NE(sipi_image_dims(path.c_str(), &dims), 0);
+  EXPECT_NE(sipi_image_dims(path.c_str(), &dims, nullptr, nullptr), 0);
 }
 
 TEST(SeamProbe, MimetypeMatchesEngineLibmagic)
@@ -128,4 +147,37 @@ TEST(SeamProbe, MimetypeMatchesEngineLibmagic)
   std::string csv_mime;
   ASSERT_EQ(sipi_mimetype(csv.c_str(), collect_str, &csv_mime), 0);
   EXPECT_FALSE(csv_mime.empty());
+}
+
+TEST(SeamProbe, ImageDimsEssentialsFiresOnFileWithPacket)
+{
+  // lena512.jp2 carries a legacy pipe-delimited Essentials packet:
+  // SIPI:lena512.tif|image/tiff|sha256|...
+  const std::string path = fixture("/unit/lena512.jp2");
+  SipiImageDims dims{};
+  Essentials out;
+  ASSERT_EQ(sipi_image_dims(path.c_str(), &dims, collect_essentials, &out), 0);
+  EXPECT_TRUE(out.fired);
+  EXPECT_EQ(out.mimetype, "image/tiff");
+  EXPECT_EQ(out.filename, "lena512.tif");
+}
+
+TEST(SeamProbe, ImageDimsEssentialsDoesNotFireWithoutPacket)
+{
+  // lena512.tif is a plain source fixture — no embedded Essentials packet, so
+  // the callback must not fire (not an error: 0 either way).
+  const std::string path = fixture("/unit/lena512.tif");
+  SipiImageDims dims{};
+  Essentials out;
+  ASSERT_EQ(sipi_image_dims(path.c_str(), &dims, collect_essentials, &out), 0);
+  EXPECT_FALSE(out.fired);
+}
+
+TEST(SeamProbe, ImageDimsEssentialsOnNonImageIsError)
+{
+  const std::string path = fixture("/unit/test.csv");
+  SipiImageDims dims{};
+  Essentials out;
+  EXPECT_NE(sipi_image_dims(path.c_str(), &dims, collect_essentials, &out), 0);
+  EXPECT_FALSE(out.fired);
 }

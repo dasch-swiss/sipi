@@ -583,14 +583,14 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | XMP preservation through IIIF pipeline | :x: GAP | — | No test verifies XMP survives transforms |
 | ICC profile preservation/conversion | :x: GAP | — | C++ unit tests exist but no HTTP-level test |
 | IPTC metadata preservation | :x: GAP | — | No e2e test |
-| Essentials round-trip | :x: GAP | — | Custom metadata not tested via HTTP |
+| Essentials round-trip | :white_check_mark: | `upload.rs` | `metadata_essentials_roundtrip` |
 | CLI conversion metadata fidelity | :x: GAP | — | Untested |
 | MIME consistency check (`/api/mimetest`) | :x: GAP | — | Python-only |
 | Thumbnail generation (`/make_thumbnail`) | :x: GAP | — | Python-only |
 | Convert from binaries (`/convert_from_binaries`) | :x: GAP | — | Python-only |
 | Temp directory cleanup | :x: GAP | — | Python-only |
 | Restricted image size reduction | :x: GAP | — | Python tests only |
-| 4-bit palette PNG upload | :x: GAP | — | Python-only |
+| 4-bit palette PNG upload | :white_check_mark: | `upload.rs` | `upload_4bit_palette_png` |
 | Cache API routes (`/api/cache`) | :x: GAP | — | No tests |
 | Favicon endpoint | :x: GAP | — | Handler exists, no tests |
 | Memory safety (ASan/LSan) | :x: GAP | — | Only fuzz harness uses sanitizers |
@@ -668,12 +668,12 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | CORS | 5 | 0 | 100% |
 | HTTP behavior | 10 | 3 (304, operation order, fractional pct) | 77% |
 | Identifiers | 2 | 3 (non-ASCII, ARK/URN, bug) | 40% |
-| Sipi extensions | 19 | 76 | 20% |
-| **Total** | **96** | **92** | **51%** |
+| Sipi extensions | 28 | 72 | 28% |
+| **Total** | **105** | **88** | **54%** |
 
 **Key gap categories:**
 
-- **Metadata** (6 gaps): EXIF, XMP, ICC, IPTC, Essentials, CLI metadata — silent drift risk
+- **Metadata** (5 gaps): EXIF, XMP, ICC, IPTC, CLI metadata — silent drift risk
 - **Error handling** (6 gaps): corrupt images, Lua errors, empty uploads, config, double-encoding, long URLs — crash/hang risk
 - **Security** (7 gaps): JWT, decompression bombs, upload limits, CRLF injection, cache poisoning, info disclosure, slowloris
 - **Configuration** (6 gaps): parseSizeString, deprecated keys, CLI overrides, jwt_secret, invalid Lua, nonexistent paths

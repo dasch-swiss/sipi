@@ -361,6 +361,12 @@ typedef void (*SipiStrFn)(void *ctx, const char *value);
  *  no owned array. The Rust shell registers an axum route per emitted entry. */
 typedef void (*SipiRouteFn)(void *ctx, const char *method, const char *route, const char *script);
 
+/*! Emits an image's Essentials-packet identity — its original mimetype and
+ *  original filename — through a caller callback, so the seam returns no
+ *  owned strings. Called at most once, from sipi_image_dims: both strings are
+ *  known together or not at all. */
+typedef void (*SipiEssentialsFn)(void *ctx, const char *orig_mimetype, const char *orig_filename);
+
 /* ── Entry points ───────────────────────────────────────────────────────────
  * All return 0 on success / an error code on failure; none let a C++ exception
  * cross the boundary. */
@@ -538,12 +544,23 @@ SIPI_FFI_NODISCARD int sipi_max_post_size(size_t *out);
  *  500 if `sipi_init` has not run. */
 SIPI_FFI_NODISCARD int sipi_port(int *out);
 
-/*! Header-only image-shape probe (`SipiImage::read_shape` — no full decode).
+/*! Header-only image-shape probe (`SipiImage::read_shape` — no full decode;
+ *  one read_shape() call serves both the native shape AND the Essentials
+ *  identity, since both come from the same underlying engine read).
  *  `resolved_path` is an already-validated absolute path (the Rust edge owns
- *  existence + containment). Fills `*out` on success. Returns 0, or 500 if the
- *  shape cannot be read (the edge has already confirmed the file exists, so an
- *  unreadable image here is an engine-level failure). */
-SIPI_FFI_NODISCARD int sipi_image_dims(const char *resolved_path, SipiImageDims *out);
+ *  existence + containment). Fills `*out` on success. `emit`/`ctx` are
+ *  OPTIONAL (NULL `emit` = caller doesn't want the identity, matching the
+ *  seam's "NULL = absent" idiom) — when non-NULL, `emit` fires exactly once,
+ *  with BOTH the original mimetype and filename, iff the file carries a
+ *  parseable Essentials packet; it fires zero times otherwise (a plain
+ *  JPEG/PNG, or a TIFF/JP2 without a packet, has no original-file identity to
+ *  report — this is not an error). Returns 0, or 500 if the shape cannot be
+ *  read (the edge has already confirmed the file exists, so an unreadable
+ *  image here is an engine-level failure). */
+SIPI_FFI_NODISCARD int sipi_image_dims(const char *resolved_path,
+  SipiImageDims *out,
+  SipiEssentialsFn emit,
+  void *ctx);
 
 /*! The engine's libmagic MIME type for a file (the same `getBestFileMimetype`
  *  the `/file` and info.json paths use — one source of truth for MIME mapping),
