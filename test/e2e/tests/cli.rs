@@ -444,3 +444,191 @@ fn sipi_server_help_heading_order() {
     let stdout = String::from_utf8_lossy(&result.stdout);
     assert_snapshot!("sipi-server-help", stdout);
 }
+
+// =============================================================================
+// The offline verbs beyond `convert`/`--version`: `query`, `compare`, `verify`,
+// and `convert`'s `-w/--watermark`. All delegate to the C++ CLI (`sipi_cli_main`)
+// on both binaries, so this is plain e2e coverage, not differential-relevant.
+// =============================================================================
+
+fn sipi_run(args: &[&str]) -> std::process::Output {
+    Command::new(sipi_bin_path())
+        .args(args)
+        .current_dir(test_data_dir())
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to run sipi {:?}: {}", args, e))
+}
+
+#[test]
+fn cli_query_dumps_image_info() {
+    // `sipi query <file>` streams SipiImage::operator<<, a fixed-field text
+    // dump (SipiImage.cpp) — not a --json contract. lena512 is a known 512x512
+    // fixture (see info_json_dimensions_match_lena512 in iiif_compliance.rs).
+    let result = sipi_run(&["query", "images/unit/lena512.tif"]);
+    assert!(
+        result.status.success(),
+        "sipi query must succeed; stderr:\n{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    assert!(
+        stdout.contains("SipiImage with the following parameters"),
+        "expected the SipiImage dump header, got:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("nx    = 512") && stdout.contains("ny    = 512"),
+        "expected nx/ny = 512 for the lena512 fixture, got:\n{stdout}"
+    );
+}
+
+#[test]
+fn cli_compare_identical_files_reports_match() {
+    // Comparing a file against itself: img1 == img2, exit 0 ("Files identical!").
+    let result = sipi_run(&[
+        "compare",
+        "images/unit/lena512.tif",
+        "images/unit/lena512.tif",
+    ]);
+    assert!(
+        result.status.success(),
+        "comparing a file to itself must succeed; stderr:\n{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
+#[test]
+fn cli_compare_differing_files_reports_mismatch() {
+    // Two genuinely different images: run_compare returns -1 (truncates to a
+    // non-zero exit code on the wire) and writes diff.tif — assert only the
+    // non-zero contract, not the platform-specific truncated value.
+    let result = sipi_run(&[
+        "compare",
+        "images/unit/lena512.tif",
+        "images/unit/mario.tif",
+    ]);
+    assert!(
+        !result.status.success(),
+        "comparing two different images must NOT report success"
+    );
+}
+
+#[test]
+fn cli_verify_pipeline_service_and_access_files() {
+    // The ADR-0009 Service -> Access pipeline through the CLI, end to end:
+    // a plain source has neither `verify` mode's precondition met until it
+    // passes through `convert service-file` (which stamps an Essentials
+    // packet) and then `convert access-file` (which requires one on input
+    // and drops it on output). Exercises 4 previously-untested subcommands
+    // together rather than in isolation, since each verify mode's precondition
+    // is exactly what the matching convert mode produces.
+    let service = tmp_path("sipi_cli_verify_service.jp2");
+    let access = tmp_path("sipi_cli_verify_access.jpg");
+    let _ = std::fs::remove_file(&service);
+    let _ = std::fs::remove_file(&access);
+
+    let r1 = sipi_run(&[
+        "convert",
+        "service-file",
+        "images/unit/lena512.tif",
+        service.to_str().unwrap(),
+    ]);
+    assert!(
+        r1.status.success(),
+        "convert service-file must succeed; stderr:\n{}",
+        String::from_utf8_lossy(&r1.stderr)
+    );
+
+    let r2 = sipi_run(&["verify", "service-file", service.to_str().unwrap()]);
+    assert!(
+        r2.status.success(),
+        "verify service-file must accept its own convert service-file output; stderr:\n{}",
+        String::from_utf8_lossy(&r2.stderr)
+    );
+
+    let r3 = sipi_run(&[
+        "convert",
+        "access-file",
+        service.to_str().unwrap(),
+        access.to_str().unwrap(),
+    ]);
+    assert!(
+        r3.status.success(),
+        "convert access-file must succeed on a Service File input; stderr:\n{}",
+        String::from_utf8_lossy(&r3.stderr)
+    );
+
+    let r4 = sipi_run(&["verify", "access-file", access.to_str().unwrap()]);
+    assert!(
+        r4.status.success(),
+        "verify access-file must accept its own convert access-file output; stderr:\n{}",
+        String::from_utf8_lossy(&r4.stderr)
+    );
+
+    // Cross-checks: an Access File must fail verify service-file (no
+    // Essentials) and a Service File must fail verify access-file (carries one).
+    let r5 = sipi_run(&["verify", "service-file", access.to_str().unwrap()]);
+    assert!(
+        !r5.status.success(),
+        "verify service-file must reject an Access File (no Essentials packet)"
+    );
+    let r6 = sipi_run(&["verify", "access-file", service.to_str().unwrap()]);
+    assert!(
+        !r6.status.success(),
+        "verify access-file must reject a Service File (carries an Essentials packet)"
+    );
+
+    let _ = std::fs::remove_file(&service);
+    let _ = std::fs::remove_file(&access);
+}
+
+#[test]
+fn cli_convert_watermark_changes_output_bytes() {
+    // `-w/--watermark` on the bare `convert` verb (attach_generic_transform_opts,
+    // cli_app.cpp) is implemented but had no e2e coverage. Compare a plain
+    // convert against a watermarked one of the same input/format: the bytes
+    // must differ, and the watermarked output must still be a valid JPEG.
+    let input = test_data_dir().join("images/unit/lena512.tif");
+    let watermark = test_data_dir().join("images/unit/watermark_correct.tif");
+    let plain = tmp_path("sipi_cli_watermark_plain.jpg");
+    let watermarked = tmp_path("sipi_cli_watermark_applied.jpg");
+    let _ = std::fs::remove_file(&plain);
+    let _ = std::fs::remove_file(&watermarked);
+
+    let r_plain = sipi_convert(input.to_str().unwrap(), plain.to_str().unwrap(), "jpg");
+    assert!(
+        r_plain.status.success(),
+        "plain convert must succeed; stderr:\n{}",
+        String::from_utf8_lossy(&r_plain.stderr)
+    );
+
+    let r_wm = Command::new(sipi_bin_path())
+        .arg("convert")
+        .arg("--watermark")
+        .arg(watermark.to_str().unwrap())
+        .arg("--format")
+        .arg("jpg")
+        .arg(input.to_str().unwrap())
+        .arg(watermarked.to_str().unwrap())
+        .current_dir(test_data_dir())
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to run sipi CLI: {}", e));
+    assert!(
+        r_wm.status.success(),
+        "watermarked convert must succeed; stderr:\n{}",
+        String::from_utf8_lossy(&r_wm.stderr)
+    );
+
+    let plain_bytes = std::fs::read(&plain).expect("read plain output");
+    let wm_bytes = std::fs::read(&watermarked).expect("read watermarked output");
+    assert!(
+        wm_bytes.len() > 2 && wm_bytes[0] == 0xFF && wm_bytes[1] == 0xD8,
+        "watermarked output should be a valid JPEG"
+    );
+    assert_ne!(
+        plain_bytes, wm_bytes,
+        "a watermarked convert must produce different bytes than a plain convert"
+    );
+
+    let _ = std::fs::remove_file(&plain);
+    let _ = std::fs::remove_file(&watermarked);
+}
