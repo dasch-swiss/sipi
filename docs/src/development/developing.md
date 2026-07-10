@@ -267,33 +267,9 @@ Kakadu is special: it is fetched via a custom `gh_release_archive`
 repository_rule (`bazel/gh_release.bzl`) that shells out to
 `gh release download`. See [Kakadu setup](kakadu.md).
 
-## Commit message schema
+## Commit and PR conventions
 
-We use [Conventional Commits](https://www.conventionalcommits.org/).
-These prefixes drive [release-please](ci.md#release-automation-release-please)
-to automatically determine SemVer bumps and generate changelogs —
-**using the correct prefix is required, not optional**.
-
-    type(scope): subject
-    body
-
-Types:
-
-- `feat` — new feature (SemVer minor)
-- `fix` — bug fix (SemVer patch)
-- `docs` — documentation changes
-- `style` — formatting, no code change
-- `refactor` — refactoring production code
-- `test` — adding or refactoring tests
-- `build` — changes to build system or dependencies
-- `chore` — miscellaneous maintenance
-- `ci` — continuous integration changes
-- `perf` — performance improvements
-
-Breaking changes are indicated with `!`:
-
-    feat!: remove deprecated API endpoint
-
-Example:
-
-    feat(HTTP server): support more authentication methods
+The commit message schema (Conventional Commit types, the scope
+vocabulary, and what `fix:` means), the rebase/one-commit-per-PR git
+workflow, and the PR description format all live in a single source:
+[`commit-conventions.md`](commit-conventions.md).

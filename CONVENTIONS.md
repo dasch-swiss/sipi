@@ -80,6 +80,44 @@ The codebase has mixed naming styles. For new code, prefer the C++23 style guide
 
 ## Module Layout
 
+### Canonical modules (commit-scope vocabulary)
+
+These are SIPI's modules. Each name is also the canonical [commit
+scope](docs/src/development/commit-conventions.md#scopes). A module is a
+unit of responsibility, not necessarily a directory yet — the migration
+to per-module co-located directories is tracked by
+[ADR-0003](docs/adr/0003-module-co-located-source-and-tests.md).
+
+| Module (scope) | Path | Responsibility |
+|---|---|---|
+| `image` | `src/SipiImage.*`, `include/SipiImage.hpp` | Image read/write pipeline; orchestrates decode → process → encode |
+| `formats` | `src/formats/`, `include/formats/` | Per-format codecs: TIFF, JP2 (Kakadu), PNG, JPEG |
+| `metadata` | `src/metadata/` | EXIF, IPTC, XMP, ICC profile handling |
+| `iiifparser` | `src/iiifparser/`, `include/iiifparser/` | IIIF URL parsing (identifier, region, size, rotation, quality, format) |
+| `handlers` | `src/handlers/` | HTTP request handlers |
+| `shttps` | `src/shttps/` | Internal HTTP framework (threading, TLS, connection pooling, JWT) |
+| `cache` | `include/SipiCache.h` | File-based LRU cache with dual-limit eviction |
+| `memory-budget` | `include/SipiMemoryBudget.h` | Lock-free decode memory budget |
+| `observability` | `src/observability/` | Prometheus metrics, tracing |
+| `logging` | `src/logging/` | Structured logging |
+| `cli` | `src/cli/` | C++ CLI app, arg parsing, subcommand dispatch |
+| `ffi` | `src/ffi/` | Rust↔C++ FFI seam and Lua bindings |
+| `lua` | `scripts/`, `config/*.lua` | Lua route/preflight scripts and config |
+| `server-rs` | `src/server-rs/` | Rust server shell (strangler-fig subject) |
+| `cli-rs` | `src/cli-rs/` | Rust CLI shell |
+
+The C++ `SipiHttpServer` orchestration (`src/SipiHttpServer.*`) is being
+strangled by `server-rs`; new server work lands under `server-rs`, and
+route/handler changes use `handlers` or `shttps`.
+
+Beyond modules, commits use **test-layer scopes** (`e2e`, `approval`) and
+**cross-cutting scopes** (`deps`, `bazel`, `ci`, `nix`, `docker`). If none
+of the enumerated scopes genuinely fits a change, ask the maintainer
+before inventing a new one. The full scope rules live in
+[commit-conventions.md § Scopes](docs/src/development/commit-conventions.md#scopes).
+
+### Directory layouts
+
 The codebase has two coexisting layouts:
 
 - **Historical (current default):** `src/<mod>/Foo.cpp` paired with

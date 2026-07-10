@@ -24,13 +24,14 @@ to determine the SemVer bump and generate the changelog.
 | `fix:` | patch bump | Bug Fixes |
 | `feat!:` / `fix!:` | major bump | Breaking Changes |
 | `perf:` | patch bump | Performance Improvements |
+| `revert:` | patch bump | Reverts |
 | `docs:`, `style:`, `refactor:`, `test:`, `build:`, `ci:`, `chore:` | no bump | hidden |
 
 !!! warning "Correct commit prefixes are critical"
     A commit without a valid Conventional Commit prefix will be invisible to
     release-please — it won't trigger a release or appear in the changelog.
-    See [Commit Message Schema](developing.md#commit-message-schema) for the
-    full format specification.
+    See [Commit and PR Conventions](commit-conventions.md) for the full
+    commit message schema, scope vocabulary, and what `fix:` means.
 
 ## Pull request CI
 
