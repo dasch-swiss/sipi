@@ -42,6 +42,9 @@ rust_library(
     ],
     crate_name = "sipi",
     edition = "2021",
+    # Embedded at compile time by `favicon()` via `include_bytes!` — the exact
+    # bytes of the C++ oracle's `favicon_ico` (include/favicon.h).
+    compile_data = ["src/favicon.ico"],
     deps = all_crate_deps(normal = True) + [
         # The narrow C FFI seam → the transitive C++ image engine. This is the
         # cc_library → rust link (Open Question #1). //src/ffi:sipi_ffi pulls

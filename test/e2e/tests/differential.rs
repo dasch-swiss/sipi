@@ -30,9 +30,13 @@ use sipi_e2e::{diff_get, diff_request, poll_cache_file_count, DiffAllowlist, Sip
 enum Allow {
     /// Transport framing only (plan 02 §5 always-ignore).
     Default,
-    /// `X-Forwarded-Proto` present: the Rust shell derives the canonical scheme
-    /// from XFP while the C++ transport hardcodes `http://` (§5 #9, intentional).
-    /// Mask the host-bearing `id` so that scheme divergence is tolerated.
+    /// A forwarded header (`X-Forwarded-Proto`/`-Host`) present: on the canonical
+    /// info/knora URL the Rust shell derives the scheme from XFP and the host from
+    /// XFH, while the C++ *image* path hardcodes `http://` and every path uses the
+    /// raw `Host` (§5 #9, intentional). Mask the host-bearing `id` so both the
+    /// scheme and host divergences are tolerated; everything else still asserts.
+    /// (The 303 redirect scheme is NOT in scope here — both honour XFP there, so
+    /// `base_uri_redirect_x_forwarded_proto` asserts it at parity.)
     Xfp,
     /// `/health`: the version string (Rust `CARGO_PKG_VERSION` vs C++
     /// `SipiVersion`) and the uptime counter differ by design (§5 #2,
@@ -45,6 +49,13 @@ enum Allow {
     /// the label differs (the shared C++ engine `/file` path is unaffected, so
     /// this is scoped to the pure-Rust static handler). Mask the header.
     DocrootStatic,
+    /// info.json with an `Origin`: the oracle leaves a stray `Access-Control-
+    /// Allow-Credentials: true` (from its transport-level CORS) on top of the
+    /// handler's `ACAO:*` — an illegal-but-harmless pairing browsers ignore. The
+    /// shell emits `ACAO:*` with no credentials (info.json is public, no
+    /// credentialed CORS). Ignore the stray ACAC (§5 #11); everything else,
+    /// including `ACAO:*`, asserts at parity.
+    InfoJsonStrayAcac,
 }
 
 impl Allow {
@@ -56,6 +67,9 @@ impl Allow {
                 .masking_json("/version")
                 .masking_json("/uptime_seconds"),
             Allow::DocrootStatic => DiffAllowlist::default_transport().ignoring("last-modified"),
+            Allow::InfoJsonStrayAcac => {
+                DiffAllowlist::default_transport().ignoring("access-control-allow-credentials")
+            }
         }
     }
 }
@@ -78,10 +92,14 @@ struct Case {
 const CASES: &[Case] = &[
     Case { name: "info_json_has_required_fields", method: Method::GET, path: "/unit/lena512.jp2/info.json", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "info_json_x_forwarded_proto_https", method: Method::GET, path: "/unit/lena512.jp2/info.json", headers: &[("X-Forwarded-Proto", "https")], allow: Allow::Xfp, gap: None },
-    Case { name: "cors_info_json_with_origin", method: Method::GET, path: "/unit/lena512.jp2/info.json", headers: &[("Origin", "https://example.org")], allow: Allow::Default, gap: None },
+    Case { name: "info_json_x_forwarded_host", method: Method::GET, path: "/unit/lena512.jp2/info.json", headers: &[("X-Forwarded-Host", "iiif.example.org")], allow: Allow::Xfp, gap: None },
+    Case { name: "cors_info_json_with_origin", method: Method::GET, path: "/unit/lena512.jp2/info.json", headers: &[("Origin", "https://example.org")], allow: Allow::InfoJsonStrayAcac, gap: None },
     Case { name: "cors_image_with_origin", method: Method::GET, path: "/unit/lena512.jp2/full/max/0/default.jpg", headers: &[("Origin", "https://example.org")], allow: Allow::Default, gap: None },
     Case { name: "cors_image_without_origin", method: Method::GET, path: "/unit/lena512.jp2/full/max/0/default.jpg", headers: &[], allow: Allow::Default, gap: None },
+    Case { name: "cors_knora_json_with_origin", method: Method::GET, path: "/unit/test.csv/knora.json", headers: &[("Origin", "https://example.org")], allow: Allow::Default, gap: None },
     Case { name: "base_uri_redirect", method: Method::GET, path: "/unit/lena512.jp2", headers: &[], allow: Allow::Default, gap: None },
+    Case { name: "base_uri_redirect_x_forwarded_proto", method: Method::GET, path: "/unit/lena512.jp2", headers: &[("X-Forwarded-Proto", "https")], allow: Allow::Default, gap: None },
+    Case { name: "base_uri_redirect_crlf", method: Method::GET, path: "/unit/lena512%0d%0aX-Injected:%20evil", headers: &[], allow: Allow::Default, gap: Some("§5 #10 intentional: a bare-identifier 303 whose id contains CR/LF — the Rust shell rejects it (400, header-injection guard) while C++ strips the CR/LF and sends the 303. Rust's 400 is the contract; the harness has no status-override, so this is pinned as a documented gap (same shape as knora_json_nonexistent_file) — plan 02 §5 #10.") },
     Case { name: "jsonld_media_type_with_accept", method: Method::GET, path: "/unit/lena512.jp2/info.json", headers: &[("Accept", "application/ld+json")], allow: Allow::Default, gap: None },
     Case { name: "region_square", method: Method::GET, path: "/unit/lena512.jp2/square/max/0/default.jpg", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "region_percent", method: Method::GET, path: "/unit/lena512.jp2/pct:10,10,50,50/max/0/default.jpg", headers: &[], allow: Allow::Default, gap: None },
@@ -159,7 +177,7 @@ const CASES: &[Case] = &[
     Case { name: "lua_mimetype_func", method: Method::GET, path: "/test_mimetype_func", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "lua_knora_session_cookie", method: Method::GET, path: "/test_knora_session_cookie", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "lua_orientation", method: Method::GET, path: "/test_orientation", headers: &[], allow: Allow::Default, gap: None },
-    Case { name: "lua_exif_gps", method: Method::GET, path: "/test_exif_gps", headers: &[], allow: Allow::Default, gap: Some("BUG (Rust shell, DEV-6699): emits a duplicate content-type (application/json + text/html) on this Lua-route response where C++ sends only application/json. Un-gap when fixed.") },
+    Case { name: "lua_exif_gps", method: Method::GET, path: "/test_exif_gps", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "lua_read_write", method: Method::GET, path: "/read_write_lua", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "video_knora_json_x_forwarded_proto", method: Method::GET, path: "/unit/8pdET49BfoJ-EeRcIbgcLch.mp4/knora.json", headers: &[("X-Forwarded-Proto", "https")], allow: Allow::Xfp, gap: None },
     Case { name: "knora_json_image_required_fields", method: Method::GET, path: "/unit/lena512.jp2/knora.json", headers: &[], allow: Allow::Default, gap: Some("cluster D (DEV-6659 step 7): info.rs defers originalFilename/originalMimeType on the image knora.json path (the video path emits them) — plan 02 §3 cluster D") },
@@ -196,6 +214,7 @@ const CASES: &[Case] = &[
     Case { name: "returns_404_for_missing_file", method: Method::GET, path: "/file-should-be-missing-123", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "head_request_returns_headers", method: Method::HEAD, path: "/unit/lena512.jp2/info.json", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "health_returns_200_with_json", method: Method::GET, path: "/health", headers: &[], allow: Allow::Health, gap: None },
+    Case { name: "favicon", method: Method::GET, path: "/favicon.ico", headers: &[], allow: Allow::Default, gap: None },
     // /server docroot fileserver (plan 02 step 5). Fixtures are materialised by
     // `differential_corpus_parity` before the loop; both binaries serve the same
     // on-disk file, so size / mtime / content (→ Content-Range / Last-Modified /

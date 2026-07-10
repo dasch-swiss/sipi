@@ -180,9 +180,9 @@ pub async fn iiif(
         Err(_) => return busy_response(),
     };
     // Shell-set headers on the streamed (success) response, captured before the
-    // request is moved onto the blocking thread: the CORS Origin echo (image +
-    // /file; never with credentials) and, for a /file Range request,
-    // the identifier-derived Content-Disposition (SipiHttpServer.cpp:1120-1129).
+    // request is moved onto the blocking thread: the CORS Origin echo + credentials
+    // (image + /file; Connection.cpp:390-395) and, for a /file Range request, the
+    // identifier-derived Content-Disposition (SipiHttpServer.cpp:1120-1129).
     let cors_origin = header_str(&headers, "origin").and_then(|o| HeaderValue::from_str(&o).ok());
     let content_disp = (parsed.kind == RequestKind::FileDownload
         && headers.contains_key(header::RANGE))
@@ -219,9 +219,14 @@ pub async fn iiif(
         }) => {
             let mut response = sink::stream_response(status, head, body_rx);
             if let Some(origin) = cors_origin {
-                response
-                    .headers_mut()
-                    .insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+                let h = response.headers_mut();
+                h.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+                // Cookie auth: without credentials the browser withholds the
+                // DSP/Knora session cookie cross-origin (Connection.cpp:394).
+                h.insert(
+                    header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
+                    HeaderValue::from_static("true"),
+                );
             }
             if let Some(cd) = content_disp {
                 if response.status().is_success() {
@@ -526,24 +531,29 @@ fn serve_file(
     });
 }
 
-/// CORS preflight (`OPTIONS`): echo the Origin (no credentials),
-/// advertise the served methods, and echo the requested headers
-/// (`SipiHttpServer`/`Connection.cpp:411-416`, minus the credential reflection).
+/// CORS preflight (`OPTIONS`): echo the Origin + credentials, advertise the
+/// served methods (matching the oracle's `GET, POST, PUT, DELETE`), and echo the
+/// requested headers (`Connection.cpp:411-416`).
 /// Engine-independent, so it serves without the readiness gate.
 pub async fn cors_preflight(headers: HeaderMap) -> Response {
     cors_preflight_response(&headers)
 }
 
 /// The CORS-preflight response (`OPTIONS`): `204` + the served methods + the
-/// echoed Origin + the requested headers. Shared by the [`cors_preflight`]
-/// handler and the docroot fileserver's OPTIONS path.
+/// echoed Origin + credentials + the requested headers. Shared by the
+/// [`cors_preflight`] handler and the docroot fileserver's OPTIONS path.
+/// (The oracle answers 200 by transport default; the 204-vs-200 shape is an
+/// allowlisted differential divergence — §6 H.)
 fn cors_preflight_response(headers: &HeaderMap) -> Response {
-    let mut builder = Response::builder()
-        .status(StatusCode::NO_CONTENT)
-        .header(header::ACCESS_CONTROL_ALLOW_METHODS, "GET, HEAD, OPTIONS");
+    let mut builder = Response::builder().status(StatusCode::NO_CONTENT).header(
+        header::ACCESS_CONTROL_ALLOW_METHODS,
+        "GET, POST, PUT, DELETE",
+    );
     if let Some(origin) = header_str(headers, "origin").and_then(|o| HeaderValue::from_str(&o).ok())
     {
-        builder = builder.header(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+        builder = builder
+            .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin)
+            .header(header::ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
     }
     if let Some(req_headers) = header_str(headers, "access-control-request-headers")
         .and_then(|h| HeaderValue::from_str(&h).ok())
@@ -1454,7 +1464,9 @@ fn access_kv_cstring(access: &Access, key: &str) -> Option<CString> {
 /// Serialise a JSON value with the IIIF headers the C++ server sets: a CORS
 /// `Access-Control-Allow-Origin` (`acao`: `*` for info.json, Origin-echo-else-`*`
 /// for knora.json) and either `application/ld+json` (when the client `Accept`s
-/// it) or `application/json` + a `Link` to the JSON-LD context.
+/// it) or `application/json` + a `Link` to the JSON-LD context. A concretely
+/// echoed origin also carries `Access-Control-Allow-Credentials: true` (cookie
+/// auth); `*` (public info.json) does not — CORS forbids the pairing.
 fn json_response(
     status: StatusCode,
     value: &serde_json::Value,
@@ -1464,8 +1476,16 @@ fn json_response(
 ) -> Response {
     let body = serde_json::to_vec(value).unwrap_or_default();
     let mut builder = Response::builder().status(status);
-    if let Ok(acao) = HeaderValue::from_str(acao) {
-        builder = builder.header(header::ACCESS_CONTROL_ALLOW_ORIGIN, acao);
+    if let Ok(acao_value) = HeaderValue::from_str(acao) {
+        builder = builder.header(header::ACCESS_CONTROL_ALLOW_ORIGIN, acao_value);
+        // A concrete echoed origin (knora.json with an Origin) also needs
+        // credentials so the browser accepts the cookie-authenticated
+        // cross-origin response (Connection.cpp:393-394 sets it whenever an
+        // Origin is present). `*` (public info.json) must not pair with
+        // credentials — CORS forbids it — so it is intentionally excluded.
+        if acao != "*" {
+            builder = builder.header(header::ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
+        }
     }
 
     let wants_ldjson =
@@ -1538,13 +1558,42 @@ fn parsed_request_uri(parsed: &ParsedRequest) -> String {
     }
 }
 
-/// `inline; filename="…"` from the identifier, control-chars + quotes stripped.
+/// `Content-Disposition` for a `/file` download, mirroring the C++ oracle
+/// (`SipiHttpServer.cpp:1120-1129`): strip CR/LF/NUL/control/DEL bytes (R8,
+/// preserving bytes ≥ 0x80), then either an RFC 2616 quoted `filename="…"` for an
+/// ASCII name, or the RFC 6266 `filename*=UTF-8''…` percent-encoded form for a
+/// non-ASCII one. Operates on the already-URL-decoded identifier.
 fn content_disposition(identifier: &str) -> Option<HeaderValue> {
-    let safe: String = identifier
-        .chars()
-        .filter(|c| !c.is_control() && *c != '"')
+    // R8: drop CR/LF/NUL, other controls (< 0x20) and DEL (0x7F); bytes ≥ 0x80
+    // survive so a non-ASCII name routes to the RFC 6266 branch.
+    let safe: Vec<u8> = identifier
+        .bytes()
+        .filter(|&b| b >= 0x20 && b != 0x7F)
         .collect();
-    HeaderValue::from_str(&format!("inline; filename=\"{safe}\"")).ok()
+    let value = if safe.iter().all(|&b| b < 0x7F) {
+        // ASCII printable → RFC 2616 quoted-string, escaping '"' and '\'.
+        let mut quoted = String::with_capacity(safe.len());
+        for &b in &safe {
+            if b == b'"' || b == b'\\' {
+                quoted.push('\\');
+            }
+            quoted.push(b as char);
+        }
+        format!("inline; filename=\"{quoted}\"")
+    } else {
+        // Non-ASCII → RFC 6266, percent-encoding every byte except the RFC 3986
+        // unreserved set (uppercase hex, matching the oracle).
+        let mut enc = String::with_capacity(safe.len() * 3);
+        for &b in &safe {
+            if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
+                enc.push(b as char);
+            } else {
+                enc.push_str(&format!("%{b:02X}"));
+            }
+        }
+        format!("inline; filename*=UTF-8''{enc}")
+    };
+    HeaderValue::from_str(&value).ok()
 }
 
 /// Read + parse the `[path-sans-ext].info` sidecar; missing/invalid → empty.
@@ -1597,6 +1646,85 @@ mod tests {
     }
 
     #[test]
+    fn cors_preflight_echoes_origin_credentials_and_methods() {
+        // Cookie auth: with an Origin, the preflight echoes it + credentials and
+        // advertises the oracle's method list (Connection.cpp:414).
+        let resp = cors_preflight_response(&headers(&[
+            ("origin", "https://example.org"),
+            ("access-control-request-headers", "authorization"),
+        ]));
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        let h = resp.headers();
+        assert_eq!(
+            h.get(header::ACCESS_CONTROL_ALLOW_METHODS).unwrap(),
+            "GET, POST, PUT, DELETE"
+        );
+        assert_eq!(
+            h.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).unwrap(),
+            "https://example.org"
+        );
+        assert_eq!(
+            h.get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS).unwrap(),
+            "true"
+        );
+        assert_eq!(
+            h.get(header::ACCESS_CONTROL_ALLOW_HEADERS).unwrap(),
+            "authorization"
+        );
+    }
+
+    #[test]
+    fn cors_preflight_without_origin_omits_origin_and_credentials() {
+        // No Origin → no credentialed CORS, but the method list still advertises.
+        let resp = cors_preflight_response(&headers(&[]));
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        let h = resp.headers();
+        assert_eq!(
+            h.get(header::ACCESS_CONTROL_ALLOW_METHODS).unwrap(),
+            "GET, POST, PUT, DELETE"
+        );
+        assert!(h.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
+        assert!(h.get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS).is_none());
+    }
+
+    #[test]
+    fn json_response_sets_credentials_only_for_echoed_origin() {
+        let value = serde_json::json!({ "ok": true });
+        // A concrete echoed origin (knora.json with an Origin) → ACAO + credentials.
+        let resp = json_response(
+            StatusCode::OK,
+            &value,
+            &headers(&[]),
+            None,
+            "https://example.org",
+        );
+        assert_eq!(
+            resp.headers()
+                .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .unwrap(),
+            "https://example.org"
+        );
+        assert_eq!(
+            resp.headers()
+                .get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS)
+                .unwrap(),
+            "true"
+        );
+        // Public `*` (info.json) → ACAO but never credentials (CORS forbids it).
+        let resp = json_response(StatusCode::OK, &value, &headers(&[]), None, "*");
+        assert_eq!(
+            resp.headers()
+                .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .unwrap(),
+            "*"
+        );
+        assert!(resp
+            .headers()
+            .get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS)
+            .is_none());
+    }
+
+    #[test]
     fn canonical_id_with_and_without_prefix() {
         assert_eq!(
             canonical_id("https", "h", "iiif/2", "a.jp2"),
@@ -1626,9 +1754,22 @@ mod tests {
     }
 
     #[test]
-    fn content_disposition_strips_quotes_and_controls() {
+    fn content_disposition_escapes_quotes_and_strips_controls() {
+        // Controls (here `\n`) are stripped (R8); a `"` is backslash-escaped, not
+        // stripped — matching the C++ oracle's escape_quoted_string.
         let v = content_disposition("a\"b\nc.tif").unwrap();
-        assert_eq!(v.to_str().unwrap(), "inline; filename=\"abc.tif\"");
+        assert_eq!(v.to_str().unwrap(), "inline; filename=\"a\\\"bc.tif\"");
+    }
+
+    #[test]
+    fn content_disposition_non_ascii_uses_rfc6266() {
+        // A non-ASCII name routes to `filename*=UTF-8''` with percent-encoded
+        // UTF-8 bytes (uppercase hex), matching SipiHttpServer.cpp:1127.
+        let v = content_disposition("café.tif").unwrap();
+        assert_eq!(
+            v.to_str().unwrap(),
+            "inline; filename*=UTF-8''caf%C3%A9.tif"
+        );
     }
 
     #[test]
