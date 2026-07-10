@@ -85,6 +85,21 @@ function pre_flight(prefix, identifier, cookie)
         return {type = 'restrict', size = config.thumb_size, watermark = config.imgroot .. '/unit/watermark_correct.tif'}, actual_filepath
     end
 
+    -- Test-only prefix mirroring the production pattern that failed to
+    -- decode a bearer token below: a pre_flight hook that emits a response
+    -- directly (server.sendStatus) instead of, or before, returning a
+    -- permission. Exercises the real preflight response-sink path (not the
+    -- /env_echo route proxy) for env-var propagation into the Lua VM.
+    if prefix == "env_preflight" then
+        local host = os.getenv("KNORA_WEBAPI_KNORA_API_EXTERNAL_HOST")
+        if host then
+            return 'allow', config.imgroot .. '/unit/' .. identifier
+        else
+            server.sendStatus(500)
+            return false
+        end
+    end
+
     if prefix == "knora" then
 
         knora_cookie_header = nil

@@ -270,6 +270,15 @@ fn head_response(status: u16, headers: &[(String, String)]) -> Response {
         .unwrap_or_else(|_| error_response(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
+/// A response a `pre_flight`/`file_pre_flight` hook wrote directly to its
+/// sink (see [`crate::ffi::DirectResponse`]) — rendered as the final HTTP
+/// response, verbatim, in place of the caller's normal permission dispatch.
+pub fn direct_response(status: u16, headers: Vec<(String, String)>, body: Vec<u8>) -> Response {
+    apply_headers(Response::builder().status(map_status_u16(status)), &headers)
+        .body(Body::from(body))
+        .unwrap_or_else(|_| error_response(StatusCode::INTERNAL_SERVER_ERROR))
+}
+
 fn apply_headers(mut builder: Builder, headers: &[(String, String)]) -> Builder {
     // Last-write-wins per header name, mirroring the C++ transport's `header_out`
     // map (Connection.cpp:1194 — even Set-Cookie is keyed there): a route that

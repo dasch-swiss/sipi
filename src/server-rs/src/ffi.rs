@@ -336,7 +336,11 @@ extern "C" {
 
     /// Run the IIIF `pre_flight(prefix, identifier, cookie)` hook against `ctx`.
     /// Writes the permission to `*type` and emits each kv pair (incl. `infile`)
-    /// via `emit_kv`. Returns 0, or 500 on a Lua/validation failure.
+    /// via `emit_kv`. Returns 0, or 500 on a Lua/validation failure. `resp`, if
+    /// non-null, is wired as the hook's response sink for the call — some
+    /// `pre_flight` scripts emit a response directly (`server.sendStatus`/
+    /// `sendHeader`/`server.print`) instead of, or alongside, returning a
+    /// permission; without a sink that write null-derefs.
     pub fn sipi_preflight(
         prefix: *const c_char,
         identifier: *const c_char,
@@ -344,16 +348,19 @@ extern "C" {
         ty: *mut SipiPermType,
         emit_kv: SipiKVFn,
         kv_ctx: *mut c_void,
+        resp: *const SipiResponse,
     ) -> c_int;
 
     /// Run the `/file` `file_pre_flight(filepath, cookie)` hook (narrower
-    /// permission set). Same out-channel contract as [`sipi_preflight`].
+    /// permission set). Same out-channel contract as [`sipi_preflight`],
+    /// including the `resp` sink.
     pub fn sipi_file_preflight(
         filepath: *const c_char,
         ctx: *mut SipiRequestContext,
         ty: *mut SipiPermType,
         emit_kv: SipiKVFn,
         kv_ctx: *mut c_void,
+        resp: *const SipiResponse,
     ) -> c_int;
 
     /// Build the opaque request context from primitive fields (header names are
@@ -954,19 +961,120 @@ extern "C" fn collect_kv(ctx: *mut c_void, key: *const c_char, value: *const c_c
     }));
 }
 
-/// Run the IIIF `pre_flight` hook. `Err` carries the FFI status (500), or -1 on
-/// an interior NUL.
+/// A response a `pre_flight`/`file_pre_flight` hook wrote directly to its
+/// response sink (`server.sendStatus`/`sendHeader`/`server.print`) instead of,
+/// or alongside, returning a permission decision. `status == 0` (the initial
+/// value) means the hook never touched the sink — the normal case, where the
+/// caller dispatches on the returned permission as before. Captured
+/// synchronously into plain fields, not the streaming machinery in `sink.rs`:
+/// a preflight response is a script's own error/redirect page, never the
+/// multi-megabyte body the image/file serve paths stream.
+#[derive(Default)]
+struct PreflightCapture {
+    status: u16,
+    headers: Vec<(String, String)>,
+    body: Vec<u8>,
+}
+
+impl PreflightCapture {
+    /// The `SipiResponse` wired into `sipi_preflight`/`sipi_file_preflight`'s
+    /// `resp` parameter, writing into `self` via its `ctx` pointer.
+    fn as_sipi_response(&mut self) -> SipiResponse {
+        SipiResponse {
+            ctx: self as *mut PreflightCapture as *mut c_void,
+            set_status: Some(pf_set_status),
+            add_header: Some(pf_add_header),
+            write: Some(pf_write),
+            send_file: None,
+            cancelled: None,
+        }
+    }
+
+    /// `Some` iff the hook actually wrote to the sink.
+    fn into_direct_response(self) -> Option<DirectResponse> {
+        (self.status != 0).then_some(DirectResponse {
+            status: self.status,
+            headers: self.headers,
+            body: self.body,
+        })
+    }
+}
+
+extern "C" fn pf_set_status(ctx: *mut c_void, status: c_int) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: `ctx` is the `&mut PreflightCapture` the sink was built with;
+        // the engine calls this synchronously within the `sipi_preflight` call.
+        let cap = unsafe { &mut *(ctx as *mut PreflightCapture) };
+        cap.status = status as u16;
+    }));
+}
+
+extern "C" fn pf_add_header(ctx: *mut c_void, name: *const c_char, value: *const c_char) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: as for `pf_set_status`.
+        let cap = unsafe { &mut *(ctx as *mut PreflightCapture) };
+        // SAFETY: the engine passes NUL-terminated C strings valid for the call.
+        let (name, value) = unsafe {
+            (
+                CStr::from_ptr(name).to_string_lossy().into_owned(),
+                CStr::from_ptr(value).to_string_lossy().into_owned(),
+            )
+        };
+        cap.headers.push((name, value));
+    }));
+}
+
+extern "C" fn pf_write(ctx: *mut c_void, data: *const u8, len: usize) -> c_int {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: as for `pf_set_status`.
+        let cap = unsafe { &mut *(ctx as *mut PreflightCapture) };
+        if !data.is_null() && len > 0 {
+            // SAFETY: the engine guarantees `data` points at `len` valid bytes.
+            cap.body
+                .extend_from_slice(unsafe { std::slice::from_raw_parts(data, len) });
+        }
+        0
+    }))
+    .unwrap_or(1)
+}
+
+/// A response the hook emitted directly — see [`PreflightCapture`]. The
+/// caller must render this as the final HTTP response instead of dispatching
+/// on a permission: the hook chose to answer the request itself.
+pub struct DirectResponse {
+    pub status: u16,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
+}
+
+/// Everything a preflight call can produce: a direct response (the hook
+/// answered itself), a normal permission outcome, or both absent only when
+/// the underlying call errored with nothing to relay (see [`preflight`]).
+pub struct PreflightResult {
+    pub direct_response: Option<DirectResponse>,
+    pub outcome: Option<PreflightOutcome>,
+}
+
+/// Run the IIIF `pre_flight` hook. `Err` carries the FFI status, or -1 on an
+/// interior NUL — only when the hook neither returned a valid permission nor
+/// wrote a direct response (a genuine failure with nothing to relay). A hook
+/// that fails validation but *did* write a response (e.g. an auth script that
+/// sends its own 500 before `return false`) still resolves `Ok`, with
+/// `outcome: None` and `direct_response: Some(..)`.
 pub fn preflight(
     prefix: &str,
     identifier: &str,
     ctx: &RequestContext,
-) -> Result<PreflightOutcome, i32> {
+) -> Result<PreflightResult, i32> {
     let c_prefix = CString::new(prefix).map_err(|_| -1)?;
     let c_identifier = CString::new(identifier).map_err(|_| -1)?;
     let mut permission = SipiPermType::Deny;
     let mut kv: Vec<(String, String)> = Vec::new();
-    // SAFETY: the C strings + ctx outlive the synchronous call; collect_kv writes
-    // into `kv` via the ctx pointer; the seam guards exceptions.
+    let mut capture = PreflightCapture::default();
+    let resp = capture.as_sipi_response();
+    // SAFETY: the C strings + ctx + resp outlive the synchronous call;
+    // collect_kv/pf_* write into `kv`/`capture` via their ctx pointers; the
+    // seam guards exceptions.
     let code = unsafe {
         sipi_preflight(
             c_prefix.as_ptr(),
@@ -975,19 +1083,33 @@ pub fn preflight(
             &mut permission,
             collect_kv,
             &mut kv as *mut Vec<(String, String)> as *mut c_void,
+            &resp,
         )
     };
+    let direct_response = capture.into_direct_response();
     if code != 0 {
-        return Err(code);
+        return match direct_response {
+            Some(dr) => Ok(PreflightResult {
+                direct_response: Some(dr),
+                outcome: None,
+            }),
+            None => Err(code),
+        };
     }
-    Ok(PreflightOutcome { permission, kv })
+    Ok(PreflightResult {
+        direct_response,
+        outcome: Some(PreflightOutcome { permission, kv }),
+    })
 }
 
-/// Run the `/file` `file_pre_flight` hook (narrower permission set).
-pub fn file_preflight(filepath: &str, ctx: &RequestContext) -> Result<PreflightOutcome, i32> {
+/// Run the `/file` `file_pre_flight` hook (narrower permission set). Same
+/// direct-response contract as [`preflight`].
+pub fn file_preflight(filepath: &str, ctx: &RequestContext) -> Result<PreflightResult, i32> {
     let c_filepath = CString::new(filepath).map_err(|_| -1)?;
     let mut permission = SipiPermType::Deny;
     let mut kv: Vec<(String, String)> = Vec::new();
+    let mut capture = PreflightCapture::default();
+    let resp = capture.as_sipi_response();
     // SAFETY: as for `preflight`.
     let code = unsafe {
         sipi_file_preflight(
@@ -996,12 +1118,23 @@ pub fn file_preflight(filepath: &str, ctx: &RequestContext) -> Result<PreflightO
             &mut permission,
             collect_kv,
             &mut kv as *mut Vec<(String, String)> as *mut c_void,
+            &resp,
         )
     };
+    let direct_response = capture.into_direct_response();
     if code != 0 {
-        return Err(code);
+        return match direct_response {
+            Some(dr) => Ok(PreflightResult {
+                direct_response: Some(dr),
+                outcome: None,
+            }),
+            None => Err(code),
+        };
     }
-    Ok(PreflightOutcome { permission, kv })
+    Ok(PreflightResult {
+        direct_response,
+        outcome: Some(PreflightOutcome { permission, kv }),
+    })
 }
 
 /// Whether the engine Lua config defines a `pre_flight` hook (read once at

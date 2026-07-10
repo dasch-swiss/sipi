@@ -386,12 +386,15 @@ static std::unordered_map<std::string, std::string>
   SipiPermType perm{};
   shttps::ConnectionResponseSink sink(conn_obj);
   shttps::RequestContext ctx = shttps::make_request_context(conn_obj, sink);
+  // resp is NULL: ctx.response is already the live ConnectionResponseSink built
+  // above, so sipi_preflight leaves it untouched rather than overwriting it.
   const int rc = ::sipi_preflight(prefix.c_str(),
     identifier.c_str(),
     reinterpret_cast<SipiRequestContext *>(&ctx),
     &perm,
     preflight_collect_kv,
-    &preflight_info);
+    &preflight_info,
+    nullptr);
   if (rc != 0) { throw SipiError("pre_flight failed"); }
   preflight_info["type"] = Sipi::ffi::perm_type_to_string(perm);
   return preflight_info;
@@ -415,8 +418,14 @@ static std::unordered_map<std::string, std::string>
   SipiPermType perm{};
   shttps::ConnectionResponseSink sink(conn_obj);
   shttps::RequestContext ctx = shttps::make_request_context(conn_obj, sink);
-  const int rc = ::sipi_file_preflight(
-    filepath.c_str(), reinterpret_cast<SipiRequestContext *>(&ctx), &perm, preflight_collect_kv, &preflight_info);
+  // resp is NULL: ctx.response is already the live ConnectionResponseSink built
+  // above, so sipi_file_preflight leaves it untouched rather than overwriting it.
+  const int rc = ::sipi_file_preflight(filepath.c_str(),
+    reinterpret_cast<SipiRequestContext *>(&ctx),
+    &perm,
+    preflight_collect_kv,
+    &preflight_info,
+    nullptr);
   if (rc != 0) { throw SipiError("file_pre_flight failed"); }
   preflight_info["type"] = Sipi::ffi::perm_type_to_string(perm);
   return preflight_info;

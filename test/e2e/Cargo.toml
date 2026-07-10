@@ -12,8 +12,8 @@ insta = { version = "1.47", features = ["json", "redactions"] }
 nix = { version = "0.29", features = ["signal", "process"] }
 # `rust_crypto` backend (pure-Rust). The default `aws_lc_rs` backend
 # pulls `aws-lc-sys`, whose cmake-based build script panics inside
-# Bazel actions ("rust_wrapper.h is not a directory"). The only
-# `tests/` consumer is `security.rs`, which uses HS256 (HMAC) — a
+# Bazel actions ("rust_wrapper.h is not a directory"). `src/jwt.rs` and
+# its consumers (`security.rs`, `differential.rs`) use HS256 (HMAC) — a
 # symmetric algorithm where backend choice doesn't matter.
 jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
 base64 = "0.22"
