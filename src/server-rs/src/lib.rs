@@ -30,7 +30,7 @@ pub mod telemetry;
 pub use config::ServerOverrides;
 
 use axum::response::{IntoResponse, Response};
-use axum::{http::StatusCode, routing::get, Router};
+use axum::{routing::get, Router};
 use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::process::ExitCode;
@@ -367,16 +367,21 @@ async fn health() -> Response {
         .into_response()
 }
 
-/// Rust-native favicon — 204 No Content (SIPI ships no favicon).
-async fn favicon() -> StatusCode {
-    StatusCode::NO_CONTENT
+/// Rust-native favicon — 200 + `image/x-icon`, byte-identical to the C++ oracle
+/// (the `favicon_ico` array in `include/favicon.h`, served by
+/// `SipiHttpServer.cpp:1406-1411`).
+async fn favicon() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "image/x-icon")],
+        include_bytes!("favicon.ico").as_slice(),
+    )
 }
 
 #[cfg(test)]
 mod app_tests {
     use super::*;
     use axum::body::Body;
-    use axum::http::Request;
+    use axum::http::{Request, StatusCode};
     use tower::ServiceExt; // `oneshot`
 
     // No `sipi_init` runs in this test binary, so the engine is uninstalled and
@@ -401,8 +406,22 @@ mod app_tests {
     }
 
     #[tokio::test]
-    async fn favicon_is_no_content() {
-        assert_eq!(status_of("/favicon.ico").await, StatusCode::NO_CONTENT);
+    async fn favicon_is_served_as_icon() {
+        let resp = test_app()
+            .oneshot(Request::get("/favicon.ico").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            resp.headers()
+                .get(axum::http::header::CONTENT_TYPE)
+                .unwrap(),
+            "image/x-icon"
+        );
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(body.len(), 1406, "favicon must match the C++ oracle bytes");
     }
 
     #[tokio::test]

@@ -18,13 +18,17 @@ use serde_json::Value;
 
 use crate::SipiServer;
 
-/// Header names (lowercase) excluded from every comparison: pure
-/// transport framing plus the two structural subject/reference
-/// asymmetries (the Rust shell always emits `traceparent` and never
-/// `access-control-allow-credentials`; the C++ transport is the mirror).
-/// `content-length` is framing too — image responses stream chunked on
-/// both sides, so it is absent there and present on buffered JSON. See
-/// plan 02 §5 "always-ignore".
+/// Header names (lowercase) excluded from every comparison: pure transport
+/// framing plus `traceparent` (the Rust shell always emits it; the C++ transport
+/// never does). `content-length` is framing too — image responses stream chunked
+/// on both sides, so it is absent there and present on buffered JSON. See plan 02
+/// §5 "always-ignore".
+///
+/// `access-control-allow-credentials` is deliberately NOT ignored: the shell now
+/// sets it on the image/file/preflight routes (cluster H) and the gate asserts it
+/// at parity, so a regression that drops it and silently breaks cookie auth is
+/// caught. info.json's stray oracle `ACAC:true` (over its `ACAO:*`) is the one
+/// exception — a per-case ignore (§5 #11), not a blanket one.
 const ALWAYS_IGNORE: &[&str] = &[
     "date",
     "server",
@@ -33,7 +37,6 @@ const ALWAYS_IGNORE: &[&str] = &[
     "transfer-encoding",
     "content-length",
     "traceparent",
-    "access-control-allow-credentials",
 ];
 
 /// Tolerance for the image byte-length band (jp2 / undecodable bodies).

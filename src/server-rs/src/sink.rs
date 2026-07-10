@@ -271,15 +271,27 @@ fn head_response(status: u16, headers: &[(String, String)]) -> Response {
 }
 
 fn apply_headers(mut builder: Builder, headers: &[(String, String)]) -> Builder {
-    for (name, value) in headers {
-        match (
-            HeaderName::from_bytes(name.as_bytes()),
-            HeaderValue::from_str(value),
-        ) {
-            (Ok(n), Ok(v)) => builder = builder.header(n, v),
-            // A header http rejects (control chars etc.) is dropped rather than
-            // failing the whole response; the engine sanitises at the boundary.
-            _ => tracing::warn!(header = %name, "dropping malformed response header"),
+    // Last-write-wins per header name, mirroring the C++ transport's `header_out`
+    // map (Connection.cpp:1194 — even Set-Cookie is keyed there): a route that
+    // sets the same header twice — e.g. a Lua script that sends `Content-Type:
+    // text/html` and then `application/json` via `send_response.lua` — must emit a
+    // single value, not both. `HeaderMap::insert` replaces any prior value under
+    // that name, giving the map semantics natively (unlike `Builder::header`,
+    // which appends).
+    if let Some(map) = builder.headers_mut() {
+        for (name, value) in headers {
+            match (
+                HeaderName::from_bytes(name.as_bytes()),
+                HeaderValue::from_str(value),
+            ) {
+                (Ok(n), Ok(v)) => {
+                    map.insert(n, v);
+                }
+                // A header http rejects (control chars etc.) is dropped rather
+                // than failing the whole response; the engine sanitises at the
+                // boundary.
+                _ => tracing::warn!(header = %name, "dropping malformed response header"),
+            }
         }
     }
     builder
