@@ -1,6 +1,6 @@
 # Testing Strategy
 
-<!-- last_reviewed: 2026-03-11 -->
+<!-- last_reviewed: 2026-07-10 -->
 
 This document defines the authoritative testing strategy for sipi. It maps the IIIF Image API 3.0 specification, sipi's extensions (Lua scripting, cache, CLI, knora integration), and Rust migration readiness onto a concrete testing pyramid. Use this document to determine **where** a new test should live, **what** layer it belongs to, and **how** to assess coverage.
 
@@ -99,8 +99,8 @@ File-based LRU cache with dual-limit eviction (`SipiCache.h`, `src/SipiCache.cpp
 | **Crash recovery** | Serialized index on disk; rebuild from directory scan if index missing |
 | **Concurrent access** | Mutex-protected; `blocked_files` map prevents reads during writes |
 | **Canonical key** | Full IIIF URL (with watermark flag) as cache key |
-| **Metrics** | hits, misses, evictions, skips, size, file count (Prometheus) |
-| **API endpoints** | `GET /api/cache` (list files), `DELETE /api/cache` (purge/delete specific) |
+| **Metrics** | hits, misses, evictions, skips, size, file count (Prometheus — C++ oracle only, see below) |
+| **API endpoints** | `GET /api/cache` (list files), `DELETE /api/cache` (purge/delete specific) — C++ oracle only; the Lua `cache` table bindings and the route are both absent on the Rust shell |
 | **Cache metadata** | Image dimensions, tile info, pyramid levels, MIME type, checksum per entry |
 
 ### Lua Scripting System
@@ -211,7 +211,7 @@ Lua-based configuration (`SipiConf.h`, `src/SipiConf.cpp`):
 
 ### Prometheus Metrics
 
-Metrics endpoint at `GET /metrics` (`src/observability/metrics.h`, `src/observability/metrics.cpp`):
+Metrics endpoint at `GET /metrics` (`src/observability/metrics.h`, `src/observability/metrics.cpp`). **C++ oracle only** — the Rust shell (`src/server-rs`) does not register this route; OTLP replaces it there. Test accordingly: cache observability on the Rust shell goes through on-disk cache-dir file counts (`cache.rs`), not this endpoint.
 
 | Metric | Type | Description |
 |---|---|---|
@@ -229,7 +229,6 @@ Metrics endpoint at `GET /metrics` (`src/observability/metrics.h`, `src/observab
 - Multipart form-data file upload via POST
 - Format conversion on upload (e.g., TIFF → JP2) via Lua routes
 - knora.json sidecar generation with checksums, MIME type, original filename, dimensions
-- Admin-protected upload route (`/admin/upload` via `admin_upload.lua`)
 - Essentials metadata embedded during ingest
 
 ### Security Features
@@ -248,7 +247,7 @@ Metrics endpoint at `GET /metrics` (`src/observability/metrics.h`, `src/observab
 | Feature | Details |
 |---|---|
 | **Knora/DSP** | Session cookie validation, knora.json sidecar, configurable API path/port |
-| **API endpoints** | `/metrics` (Prometheus) |
+| **API endpoints** | `/metrics` (Prometheus) — C++ oracle only, not on the Rust shell |
 | **File access** | Raw file download via `/prefix/identifier/file` with `file_pre_flight` auth |
 | **Sentry** | Error reporting via `SIPI_SENTRY_DSN`, `SIPI_SENTRY_ENVIRONMENT`, `SIPI_SENTRY_RELEASE` |
 
@@ -455,7 +454,7 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | Region + size combination | :white_check_mark: | `size_after_region` | |
 | Region + rotation combination | :white_check_mark: | `rotation_after_region` | |
 | Region crop (specific) | :white_check_mark: | `iiif_region_crop` | |
-| Region dimension verification | :x: GAP | — | Need to verify output dimensions match requested region |
+| Region dimension verification | :white_check_mark: | `region_dimension_verification` | decodes output, asserts pixel dims match the requested region |
 
 ### Size (Section 4.2)
 
@@ -470,12 +469,12 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | `^` upscaling | :white_check_mark: | `size_upscaling` | |
 | No upscale beyond original | :white_check_mark: | `size_no_upscale_beyond_original` | |
 | Invalid syntax → error | :white_check_mark: | `size_invalid_syntax` | |
-| Output dimension verification | :x: GAP | — | Need to decode image and verify actual pixel dimensions |
-| `^max` upscale to limits | :x: GAP | — | Not tested |
-| `^,h` (height-only upscale) | :x: GAP | — | Not tested |
-| `^w,h` (exact with upscale) | :x: GAP | — | Not tested |
-| `^!w,h` (confined upscale) | :x: GAP | — | Not tested |
-| `^pct:n` (upscale percent) | :x: GAP | — | Not tested |
+| Output dimension verification | :white_check_mark: | `size_dimension_verification` | decodes output, asserts actual pixel dimensions |
+| `^max` upscale to limits | :white_check_mark: | `size_upscale_max` | |
+| `^,h` (height-only upscale) | :white_check_mark: | `size_upscale_height` | |
+| `^w,h` (exact with upscale) | :white_check_mark: | `size_upscale_exact` | |
+| `^!w,h` (confined upscale) | :white_check_mark: | `size_upscale_confined` | |
+| `^pct:n` (upscale percent) | :white_check_mark: | `size_upscale_percent` | |
 
 ### Rotation (Section 4.3)
 
@@ -489,7 +488,7 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | `!0` (mirror only) | :white_check_mark: | `mirror_rotation` | |
 | `!180` (mirror + rotate) | :white_check_mark: | `mirror_plus_180` | |
 | Invalid → error | :white_check_mark: | `rotation_invalid` | |
-| Rotation output verification | :x: GAP | — | Need to verify actual rotation applied (image dimensions swap for 90/270) |
+| Rotation output verification | :white_check_mark: | `rotation_dimension_verification` | decodes output, asserts dimensions swap for 90° |
 
 ### Quality (Section 4.4)
 
@@ -500,7 +499,7 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | `gray` | :white_check_mark: | `quality_gray` | |
 | `bitonal` | :white_check_mark: | `quality_bitonal` | |
 | Invalid → error | :white_check_mark: | `quality_invalid` | |
-| `extraQualities` in info.json | :x: GAP | — | Sipi supports color/gray/bitonal but may not emit extraQualities |
+| `extraQualities` in info.json | :white_check_mark: | `extra_qualities_in_info_json` | asserts array shape when present; absence documented, not failed |
 
 ### Format (Section 4.5)
 
@@ -536,9 +535,9 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | Empty identifier → error | :white_check_mark: | `invalid_iiif_url_empty_identifier` | |
 | HEAD returns headers | :white_check_mark: | `head_request_returns_headers` | |
 | Missing file → 404 | :white_check_mark: | `returns_404_for_missing_file` | |
-| HTTP 304 conditional requests | :x: GAP | — | Sipi sends Last-Modified/Cache-Control but If-Modified-Since not tested |
-| Operation ordering (Region→Size→Rot→Qual→Fmt) | :x: GAP | — | No test verifies transformation order is correct |
-| Fractional percent regions (e.g. pct:0.5,...) | :x: GAP | — | Only integer percent tested |
+| HTTP 304 conditional requests | :white_check_mark: | `conditional_request_304` | If-Modified-Since round-trip |
+| Operation ordering (Region→Size→Rot→Qual→Fmt) | :white_check_mark: | `operation_ordering` | |
+| Fractional percent regions (e.g. pct:0.5,...) | :white_check_mark: | `fractional_percent_region` | |
 
 ### Identifier (Section 3)
 
@@ -547,10 +546,12 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | Encoded slash `%2F` | :white_check_mark: | `id_escaped_slash_decoded` | |
 | Encoded `#` (`%23`) | :x: IGNORED | `id_escaped` | known sipi bug; test ignored pending fix |
 | Subdirectory identifier | :white_check_mark: | via server tests | |
-| Non-ASCII identifiers | :x: GAP | — | Not tested |
-| ARK/URN identifiers | :x: GAP | — | Not tested (may not apply) |
+| Non-ASCII identifiers | :white_check_mark: | `id_non_ascii` | |
+| ARK/URN identifiers | :x: GAP | — | Not tested (may not apply — sipi identifiers are opaque path segments, not a namespaced scheme) |
 
 ## Sipi Extension Coverage Matrix
+
+Two Rust-shell features the C++-era gap list assumed are permanently **removed**, not gaps: the Prometheus `/metrics` scrape (OTLP replaces it) and the Lua `/api/cache` admin endpoint (the route is unregistered and the Lua `cache` table bindings were never carried over). SSL/TLS is likewise **N/A** — TLS terminates at Traefik in front of the shell; `sslcert`/`sslkey` parse but are inert. `admin_upload.lua` / `/admin/upload` never existed in this repo.
 
 | Feature | Status | Test Location | Notes |
 |---|---|---|---|
@@ -565,125 +566,124 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | Lua orientation endpoint | :white_check_mark: | `server.rs` | |
 | Lua exif_gps endpoint | :white_check_mark: | `server.rs` | |
 | Lua read_write endpoint | :white_check_mark: | `server.rs` | |
-| SQLite API | :white_check_mark: | `server.rs` | |
-| Missing sidecar handling | :white_check_mark: | `server.rs` | |
-| Concurrent request handling | :white_check_mark: | `server.rs` | |
+| SQLite API | :white_check_mark: | `server.rs::sqlite_api` | |
+| Missing sidecar handling | :white_check_mark: | `server.rs::missing_sidecar_handled_gracefully` | |
+| Concurrent request handling | :white_check_mark: | `server.rs::concurrent_requests` | |
 | File access allowed/denied | :white_check_mark: | `server.rs` | |
-| Knora.json validation | :white_check_mark: | `server.rs` | |
+| Knora.json validation | :white_check_mark: | `server.rs::knora_json_image_required_fields`, `knora_json_image_dimensions` | |
 | Upload edge cases | :white_check_mark: | `upload.rs` | |
-| Video metadata extensions | :white_check_mark: | `server.rs` | |
+| Video metadata extensions | :white_check_mark: | `server.rs::video_knora_json_checksums` | |
 | Small-file range requests | :white_check_mark: | `range_requests.rs` | 7 tests |
-| Cache hit/miss verification | :x: GAP | — | No tests verify cache metrics or behavior |
+| Large-file range requests (10MB+) | :white_check_mark: | `range_requests.rs` | 8 tests |
+| Cache hit/miss verification | :white_check_mark: | `cache.rs::cache_hit_avoids_decode`, `head_does_not_warm_cache` | observed via on-disk cache-dir file count, not `/metrics` (removed) |
 | CLI mode (file conversion) | :white_check_mark: | `test/e2e/tests/cli.rs` | `sipi convert <in> <out>` covered |
-| Prometheus metrics endpoint | :x: GAP | — | No tests for `/metrics` |
-| SSL/TLS endpoints | :x: GAP | — | No Rust tests for HTTPS |
-| Large-file range requests (10MB+) | :x: GAP | — | Python-only |
-| Image dimension verification | :x: GAP | — | Tests check status codes but not actual output dimensions |
-| EXIF preservation through IIIF pipeline | :x: GAP | — | No test verifies EXIF survives transforms |
-| XMP preservation through IIIF pipeline | :x: GAP | — | No test verifies XMP survives transforms |
-| ICC profile preservation/conversion | :x: GAP | — | C++ unit tests exist but no HTTP-level test |
-| IPTC metadata preservation | :x: GAP | — | No e2e test |
-| Essentials round-trip | :white_check_mark: | `upload.rs` | `metadata_essentials_roundtrip` |
-| CLI conversion metadata fidelity | :x: GAP | — | Untested |
-| MIME consistency check (`/api/mimetest`) | :x: GAP | — | Python-only |
-| Thumbnail generation (`/make_thumbnail`) | :x: GAP | — | Python-only |
-| Convert from binaries (`/convert_from_binaries`) | :x: GAP | — | Python-only |
-| Temp directory cleanup | :x: GAP | — | Python-only |
-| Restricted image size reduction | :x: GAP | — | Python tests only |
+| Prometheus metrics endpoint | N/A — removed | — | OTLP replaces it on the Rust shell; C++-oracle-only, gapped intentionally in the differential corpus |
+| SSL/TLS endpoints | N/A — removed | — | TLS terminates at Traefik; the Rust shell serves plain HTTP only, flags parse-only |
+| Image dimension verification | :white_check_mark: | `iiif_compliance.rs::region_dimension_verification`, `size_dimension_verification`, `rotation_dimension_verification` | decodes output and asserts actual pixel dimensions |
+| EXIF preservation through IIIF pipeline | :white_check_mark: | `iiif_compliance.rs::metadata_iiif_pipeline`; `server.rs::lua_exif_gps` | HTTP-level; deep tag-by-tag EXIF diffing remains a gap (no exiv2 binding in the Rust test crate) |
+| XMP preservation through IIIF pipeline | :x: GAP | — | Only a negative/malformed-XMP fixture (`cli_json.rs`); no positive XMP round-trip-through-pipeline test |
+| ICC profile preservation/conversion | :x: GAP | — | C++ unit tests exist but no HTTP-level round-trip test |
+| IPTC metadata preservation | :white_check_mark: | `heritage_jpeg.rs` | resilient parse of heritage APP13/IPTC; no positive field-value round-trip assertion |
+| Essentials round-trip | :white_check_mark: | `upload.rs::metadata_essentials_roundtrip` | |
+| CLI conversion metadata fidelity | :white_check_mark: | `cli.rs::cli_metadata_fidelity` | |
+| MIME consistency check (`/api/mimetest`) | :white_check_mark: | `server.rs::mime_consistency` | all 6 cases ported |
+| Thumbnail generation (`/make_thumbnail`) | :white_check_mark: | `server.rs::thumbnail_generation`, `thumbnail_convert_from_file` | |
+| Convert from binaries (`/convert_from_binaries`) | :white_check_mark: | `server.rs::image_conversion_from_binaries` | |
+| Temp directory cleanup | :white_check_mark: | `server.rs::temp_directory_cleanup` | |
+| Restricted image size reduction | :white_check_mark: | `server.rs::restricted_image_reduction` | |
 | 4-bit palette PNG upload | :white_check_mark: | `upload.rs` | `upload_4bit_palette_png` |
-| Cache API routes (`/api/cache`) | :x: GAP | — | No tests |
-| Favicon endpoint | :x: GAP | — | Handler exists, no tests |
-| Memory safety (ASan/LSan) | :x: GAP | — | Only fuzz harness uses sanitizers |
-| Thread safety (TSan) | :x: GAP | — | Untested for data races |
-| Performance regression detection | :x: GAP | — | No latency thresholds or load testing |
-| Corrupt/truncated image handling | :x: GAP | — | Should return 500, not crash |
-| Lua route handler errors | :x: GAP | — | Should return 500 gracefully |
-| Zero-byte / empty file upload | :x: GAP | — | Should fail gracefully |
-| Invalid server config startup | :x: GAP | — | No test for invalid config |
-| Double-encoded URL handling | :x: GAP | — | `%252F` behavior untested |
-| Extremely long URL / header | :x: GAP | — | Partially covered by fuzz |
-| JWT validation edge cases | :x: GAP | — | Expired, `alg:none`, tampered tokens |
-| Image decompression bomb | :x: GAP | — | No pixel limit on decode |
-| Upload size enforcement | :x: GAP | — | `max_post_size` enforced but untested |
-| CRLF header injection | :x: GAP | — | No sanitization test |
-| Cache key collision | :x: GAP | — | No isolation test |
-| Error message information disclosure | :x: GAP | — | May leak filesystem paths |
-| Slowloris / connection exhaustion | :x: GAP | — | No resilience test |
-| `parseSizeString` edge cases | :x: GAP | — | Zero tests for this function |
-| Deprecated config key migration | :x: GAP | — | Migration logic untested |
-| CLI argument overrides | :x: GAP | — | Never tested |
-| Empty jwt_secret behavior | :x: GAP | — | May silently disable auth |
-| Invalid Lua config syntax | :x: GAP | — | Should fail cleanly |
-| Config with nonexistent paths | :x: GAP | — | Untested startup behavior |
-| SImage Lua API coverage | :x: GAP | — | 12 methods tested only via black-box HTTP |
-| Lua JWT round-trip | :x: GAP | — | Generate + decode correctness |
-| Lua UUID round-trip | :x: GAP | — | base62 conversion correctness |
-| Lua `server.http` outbound | :x: GAP | — | Error handling for unreachable hosts |
-| Lua error propagation to HTTP | :x: GAP | — | C++ exception → 500 propagation |
-| HTTP keep-alive | :x: GAP | — | No multi-request connection test |
-| Chunked transfer encoding | :x: GAP | — | `ChunkReader` never tested |
-| Connection: close header | :x: GAP | — | Server behavior untested |
-| Thread pool exhaustion | :x: GAP | — | Queuing/rejection behavior unknown |
-| Graceful shutdown | :x: GAP | — | SIGTERM handler untested |
-| Multi-page TIFF `@page` e2e | :x: GAP | — | Parser works, e2e untested |
-| CMYK→sRGB through IIIF pipeline | :x: GAP | — | Unit-tested, not HTTP-level |
-| CIELab through IIIF pipeline | :x: GAP | — | Unit-tested, not HTTP-level |
-| 16-bit depth through IIIF pipeline | :x: GAP | — | Unit-tested, not HTTP-level |
-| Progressive JPEG handling | :x: GAP | — | Common in web content, untested |
-| TIFF with JPEG compression | :x: GAP | — | Known bug (YCrCb autoconvert) |
-| 1-bit TIFF (bi-level) | :white_check_mark: | unit + rust-e2e | MINISWHITE and MINISBLACK, LZW and uncompressed |
+| Cache API routes (`/api/cache`) | N/A — removed | — | route unregistered, Lua `cache` table bindings absent from `src/` |
+| Favicon endpoint | :white_check_mark: | `differential.rs::favicon` | |
+| Memory safety (ASan/LSan) | :white_check_mark: | `sanitizer.yml` CI | e2e suite against an ASan+UBSan-instrumented binary; unit-test sanitizer coverage still pending (see Cross-Cutting section below) |
+| Thread safety (TSan) | :x: GAP | — | Untested for data races; future optional nightly variant |
+| Performance regression detection | :white_check_mark: | `latency.rs` | smoke thresholds only (info.json / cache-miss / cache-hit); load-baseline tier intentionally deferred to staging (see Cross-Cutting section) |
+| Corrupt/truncated image handling | :white_check_mark: | `iiif_compliance.rs::corrupt_image_handling`, `corrupt_jpeg_handling`, `corrupt_png_handling` | |
+| Lua route handler errors | :white_check_mark: | `differential.rs::lua_route_error_handling` | |
+| Zero-byte / empty file upload | :white_check_mark: | `upload.rs::empty_file_upload` | |
+| Invalid server config startup | :white_check_mark: | `config.rs::invalid_config_startup` | |
+| Double-encoded URL handling | :white_check_mark: | `differential.rs::double_encoded_url` | `%252F`: intentional divergence (Rust single-decodes, DEV-6700) |
+| Extremely long URL / header | :x: GAP | — | Partially covered by fuzz only |
+| JWT validation edge cases | :x: GAP (blocked) | `security.rs::jwt_expired_token`, `jwt_alg_none_bypass`, `jwt_tampered_payload` | tests written and `#[ignore]`'d — a Bearer token to an `/auth`-prefixed image null-deref-crashes the Rust preflight response sink (DEV-6670); re-enables once fixed |
+| Image decompression bomb | :white_check_mark: | `security.rs::decompression_bomb_rejection`; `differential.rs::decompression_bomb_rejection` | |
+| Upload size enforcement | :white_check_mark: | `upload.rs::upload_size_enforcement` | |
+| CRLF header injection | :white_check_mark: | `security.rs::crlf_header_injection`; `input_validation.rs::crlf_in_identifier_no_header_injection` | |
+| Cache key collision | :white_check_mark: | `cache.rs::cache_key_isolation` | |
+| Error message information disclosure | :white_check_mark: | `security.rs::error_no_path_disclosure`; `input_validation.rs::path_traversal_no_content_leaked` | |
+| Slowloris / connection exhaustion | :white_check_mark: (ignored) | `security.rs::slowloris_resilience` | `#[ignore]`'d for CI timing flakiness, not a coverage gap |
+| `parseSizeString` edge cases | :white_check_mark: | `config.rs::parse_size_string_edge_cases` | |
+| Deprecated config key migration | :white_check_mark: | `config.rs::config_deprecated_key_migration` | |
+| CLI argument overrides | :white_check_mark: | `config.rs::config_cli_overrides` | |
+| Empty jwt_secret behavior | :white_check_mark: | `security.rs::config_empty_jwt_secret` | |
+| Invalid Lua config syntax | :white_check_mark: | `config.rs::invalid_config_startup` | |
+| Config with nonexistent paths | :white_check_mark: | `config.rs::config_nonexistent_paths` | |
+| SImage Lua API coverage | :x: GAP | — | Methods tested only via black-box HTTP, not a direct Lua-API unit harness |
+| Lua JWT round-trip | :white_check_mark: | `differential.rs::lua_jwt_round_trip`; `server.rs::lua_jwt_round_trip` | |
+| Lua UUID round-trip | :white_check_mark: | `server.rs::lua_uuid_round_trip` (single-server only — non-deterministic body excludes it from the differential corpus) | |
+| Lua `server.http` outbound | :white_check_mark: | `server.rs::lua_http_client_error_handling` (single-server only — same non-determinism reason) | |
+| Lua error propagation to HTTP | :white_check_mark: | `differential.rs::lua_route_error_handling` | |
+| HTTP keep-alive | :white_check_mark: | `connection.rs::http_keep_alive` | |
+| Chunked transfer encoding | :white_check_mark: | `connection.rs::chunked_transfer_upload` | |
+| Connection: close header | :white_check_mark: | `connection.rs::connection_close_header` | |
+| Thread pool exhaustion | :x: GAP | — | 503 load-shedding exists (semaphore-backed pool) but has no dedicated saturation test; masked today by `flaky_test_attempts` on suite-load bursts |
+| Graceful shutdown | :white_check_mark: | `connection.rs::graceful_shutdown`; `shutdown.rs` (×3) | |
+| Multi-page TIFF `@page` e2e | :x: GAP (documented) | `iiif_compliance.rs::multipage_tiff_page_selection` | `#[ignore]`'d — page selection may not be implemented; test documents current behavior |
+| CMYK→sRGB through IIIF pipeline | :white_check_mark: | `iiif_compliance.rs::cmyk_through_iiif_pipeline`; `differential.rs::cmyk_through_iiif_pipeline` | |
+| CIELab through IIIF pipeline | :white_check_mark: | `iiif_compliance.rs::cielab_through_iiif_pipeline`; `differential.rs::cielab_through_iiif_pipeline` | |
+| 16-bit depth through IIIF pipeline | :white_check_mark: | `iiif_compliance.rs::bit16_through_iiif_pipeline` | |
+| Progressive JPEG handling | :white_check_mark: | `iiif_compliance.rs::progressive_jpeg_input`; `differential.rs::progressive_jpeg_input_*` | |
+| TIFF with JPEG compression | :white_check_mark: | `iiif_compliance.rs::tiff_jpeg_compression_input` | documents current (non-crashing) behavior for the known scanline-order edge case |
+| 1-bit TIFF (bi-level) | :white_check_mark: | unit + rust-e2e (`bilevel_tiff.rs`) | MINISWHITE and MINISBLACK, LZW and uncompressed |
 | JPEG YCCK colorspace | :white_check_mark: | unit | Was throw; now decoded via CMYK path |
 | JPEG CMYK with APP14 (Photoshop) — inverted before ICC | :white_check_mark: | unit | regression test |
 | JPEG CMYK without APP14 (raw) — not inverted | :white_check_mark: | unit | regression test (negative case) |
-| JPEG with APP13 before APP1 + non-ASCII IPTC | :white_check_mark: | unit | heritage collection regression |
-| CLI `--json` output contract | :white_check_mark: | unit + rust-e2e | success + error payloads, single-document stdout |
-| Watermark application via HTTP | :x: GAP | — | Unit-tested, not e2e |
-| Restrict + watermark combined | :x: GAP | — | Untested combination |
-| Watermark cache key separation | :x: GAP | — | Separate entries untested |
-| CLI watermark mode | :x: GAP | — | Untested |
-| Concurrent cache writes (same key) | :x: GAP | — | `blocked_files` mutex untested |
-| Cache eviction during active reads | :x: GAP | — | Potential read error |
-| Concurrent file uploads | :x: GAP | — | Potential race conditions |
+| JPEG with APP13 before APP1 + non-ASCII IPTC | :white_check_mark: | unit + `heritage_jpeg.rs` | heritage collection regression |
+| CLI `--json` output contract | :white_check_mark: | unit + rust-e2e (`cli_json.rs`) | success + error payloads, single-document stdout |
+| CLI `query` / `compare` / `verify` subcommands | :x: GAP | — | Implemented in the delegated C++ CLI (`cli_app.cpp`); not exercised by any e2e test |
+| Watermark application via HTTP | :white_check_mark: | `server.rs::watermark_applied_via_http`; `differential.rs::watermark_applied_via_http_watermarked` | |
+| Restrict + watermark combined | :white_check_mark: | `server.rs::restrict_plus_watermark`; `differential.rs::restrict_plus_watermark` | |
+| Watermark cache key separation | :white_check_mark: | `cache.rs::watermark_cache_separation` | |
+| CLI watermark mode | :x: GAP | — | `-w/--watermark` on `sipi convert` is implemented, not exercised by any e2e test |
+| Concurrent cache writes (same key) | :white_check_mark: | `cache.rs::cache_returns_consistent_results` | |
+| Cache eviction during active reads | :white_check_mark: | `cache.rs::cache_eviction_during_read` | |
+| Concurrent file uploads | :white_check_mark: | `upload.rs::concurrent_file_uploads` | |
 | Lua state thread isolation | :x: GAP | — | Shared global table untested |
-| Cache disabled mode (`cache_size=0`) | :x: GAP | — | Untested |
-| Cache LRU purge under size limit | :x: GAP | — | Completely untested |
-| Cache nfiles limit enforcement | :x: GAP | — | Count-based eviction untested |
-| Keep-alive timeout enforcement | :x: GAP | — | Idle connection termination untested |
-| Sustained load memory growth | :x: GAP | — | **Production issue:** no pixel limit |
-| Concurrent large image decode memory | :x: GAP | — | Peak RSS untested |
-| Image decode memory accounting | :x: GAP | — | No aggregate limit |
-| Intermediate buffer accumulation | :x: GAP | — | ~2x per transform step |
-| Cache as memory pressure relief | :x: GAP | — | Hit path avoids decode — untested |
+| Cache disabled mode (`cache_size=0`) | :white_check_mark: | `cache.rs::cache_disabled_mode` | |
+| Cache LRU purge under size limit | :white_check_mark: | `cache.rs::cache_lru_purge_correctness` | |
+| Cache nfiles limit enforcement | :white_check_mark: | `cache.rs::cache_nfiles_limit` | |
+| Keep-alive timeout enforcement | :white_check_mark: | `connection.rs::keepalive_timeout_enforcement` | |
+| Sustained load memory growth | :white_check_mark: | `resource_limits.rs::sustained_load_memory_growth` | |
+| Concurrent large image decode memory | :white_check_mark: | `resource_limits.rs::concurrent_large_image_decode` | |
+| Image decode memory accounting | :white_check_mark: | `memory_budget.rs` (enforce/monitor/off modes, ×6) | |
+| Intermediate buffer accumulation | :white_check_mark: | `resource_limits.rs::transform_pipeline_memory` | |
+| Cache as memory pressure relief | :white_check_mark: | `cache.rs::cache_hit_avoids_decode` | |
 
 ## Gap Summary
 
 | Category | Covered | Gaps | Coverage |
 |---|---|---|---|
 | Info.json fields | 22 | 1 (profile Link — sipi bug) | 96% |
-| Region parameters | 11 | 1 (dimension verify) | 92% |
-| Size parameters | 9 | 6 (dimension verify, ^max, ^,h, ^w,h, ^!w,h, ^pct) | 60% |
-| Rotation parameters | 8 | 1 (dimension verify) | 89% |
-| Quality parameters | 5 | 1 (extraQualities field) | 83% |
+| Region parameters | 12 | 0 | 100% |
+| Size parameters | 15 | 0 | 100% |
+| Rotation parameters | 9 | 0 | 100% |
+| Quality parameters | 6 | 0 | 100% |
 | Format parameters | 5 | 0 | 100% |
 | CORS | 5 | 0 | 100% |
-| HTTP behavior | 10 | 3 (304, operation order, fractional pct) | 77% |
-| Identifiers | 2 | 3 (non-ASCII, ARK/URN, bug) | 40% |
-| Sipi extensions | 28 | 72 | 28% |
-| **Total** | **105** | **88** | **54%** |
+| HTTP behavior | 13 | 0 | 100% |
+| Identifiers | 3 | 2 (ARK/URN, `%23`-escape bug) | 60% |
+| Sipi extensions | 87 | 11 | 89% |
+| **Total** | **177** | **14** | **93%** |
 
-**Key gap categories:**
+*(Three additional Sipi-extension rows — Prometheus `/metrics`, `/api/cache`, SSL/TLS — are excluded from this count entirely: they are removed-on-the-Rust-shell features, not gaps. See the N/A note above the extension matrix.)*
 
-- **Metadata** (5 gaps): EXIF, XMP, ICC, IPTC, CLI metadata — silent drift risk
-- **Error handling** (6 gaps): corrupt images, Lua errors, empty uploads, config, double-encoding, long URLs — crash/hang risk
-- **Security** (7 gaps): JWT, decompression bombs, upload limits, CRLF injection, cache poisoning, info disclosure, slowloris
-- **Configuration** (6 gaps): parseSizeString, deprecated keys, CLI overrides, jwt_secret, invalid Lua, nonexistent paths
-- **Lua API** (5 gaps): SImage methods, JWT round-trip, UUID round-trip, HTTP client, error propagation
-- **Connection handling** (5 gaps): keep-alive, chunked, Connection: close, thread pool, graceful shutdown
-- **Format edge cases** (5 gaps): CMYK/CIELab/16-bit through IIIF, progressive JPEG, TIFF-JPEG. *Previously listed 1-bit TIFF and YCCK-JPEG; both resolved.*
-- **Concurrency** (4 gaps): cache writes, eviction during read, parallel uploads, Lua state isolation
-- **Resource limits** (4 gaps): cache disabled, LRU purge, nfiles limit, keep-alive timeout
-- **Memory/OOM** (5 gaps): sustained load, concurrent decode, accounting, buffers, cache relief — **active production issue**
-- **Watermark** (4 gaps): HTTP-level, restrict+watermark, cache separation, CLI
+**Key remaining gap categories** (11 rows, all in Sipi extensions):
+
+- **Deep metadata survival** (2 gaps): positive XMP round-trip, ICC profile HTTP-level round-trip — EXIF/IPTC now covered
+- **JWT edge cases** (1 gap, **blocking**): the differential-harness tests exist but the Rust preflight response sink null-derefs on any Bearer token (DEV-6670) — the single highest-value remaining fix
+- **CLI coverage** (2 gaps): `query`/`compare`/`verify` subcommands and `-w/--watermark` are implemented in the delegated C++ CLI but unexercised by any e2e test
+- **Concurrency edge cases** (2 gaps): Lua-VM thread isolation, thread-pool-exhaustion saturation test
+- **Hardening depth** (2 gaps): TSan (nightly-future), extremely long URL/header (fuzz-only today)
+- **Test-harness depth** (1 gap): a direct SImage Lua-API unit harness (vs. black-box HTTP coverage)
+- **Documented, not missing** (1 row): multi-page TIFF `@page` — `#[ignore]`'d pending a real page-selection implementation, not an untested behavior
 
 ## Cross-Cutting: Memory Safety (Sanitizer Builds)
 
