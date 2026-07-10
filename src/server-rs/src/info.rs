@@ -12,7 +12,7 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::ffi::{SipiImageDims, SipiPermType};
+use crate::ffi::{ImageEssentials, SipiImageDims, SipiPermType};
 
 const IMAGE_CONTEXT: &str = "http://iiif.io/api/image/3/context.json";
 const FILE_CONTEXT: &str = "http://sipi.io/api/file/3/context.json";
@@ -172,11 +172,20 @@ fn knora_base(id: &str, sidecar: &Sidecar) -> Map<String, Value> {
 }
 
 /// `knora.json` for an image (`SipiHttpServer.cpp:913-944`). `originalMimeType` /
-/// `originalFilename` (only present when `read_shape` reports an Essentials
-/// packet, `success == ALL`) are deferred — `sipi_image_dims` does not surface
-/// the packet metadata; the e2e requires only the fields below.
+/// `originalFilename` come from the image's embedded Essentials packet
+/// (`essentials`, via `sipi_image_essentials`) — present together iff
+/// `read_shape` reports one (`success == ALL`), absent together otherwise (a
+/// plain JPEG/PNG or a packet-less TIFF/JP2). Unlike the video/generic paths,
+/// these do NOT come from the `.info` sidecar — the C++ oracle sources image
+/// identity from the embedded packet only.
 #[must_use]
-pub fn image_knora_json(id: &str, mime: &str, dims: &SipiImageDims, sidecar: &Sidecar) -> Value {
+pub fn image_knora_json(
+    id: &str,
+    mime: &str,
+    dims: &SipiImageDims,
+    sidecar: &Sidecar,
+    essentials: Option<&ImageEssentials>,
+) -> Value {
     let mut root = knora_base(id, sidecar);
     root.insert("width".into(), json!(dims.width));
     root.insert("height".into(), json!(dims.height));
@@ -184,6 +193,10 @@ pub fn image_knora_json(id: &str, mime: &str, dims: &SipiImageDims, sidecar: &Si
         root.insert("numpages".into(), json!(dims.numpages));
     }
     root.insert("internalMimeType".into(), json!(mime));
+    if let Some(e) = essentials {
+        root.insert("originalMimeType".into(), json!(e.original_mimetype));
+        root.insert("originalFilename".into(), json!(e.original_filename));
+    }
     Value::Object(root)
 }
 
@@ -364,10 +377,31 @@ mod tests {
             "image/jp2",
             &dims(512, 512, 512, 8),
             &Sidecar::default(),
+            None,
         );
         assert_eq!(v["@context"], FILE_CONTEXT);
         assert_eq!(v["width"], 512);
         assert_eq!(v["internalMimeType"], "image/jp2");
+        // No Essentials packet → neither identity field is emitted.
+        assert!(v.get("originalMimeType").is_none());
+        assert!(v.get("originalFilename").is_none());
+    }
+
+    #[test]
+    fn image_knora_json_with_essentials() {
+        let essentials = ImageEssentials {
+            original_mimetype: "image/tiff".to_string(),
+            original_filename: "lena512.tif".to_string(),
+        };
+        let v = image_knora_json(
+            "http://h/i.jp2",
+            "image/jp2",
+            &dims(512, 512, 512, 8),
+            &Sidecar::default(),
+            Some(&essentials),
+        );
+        assert_eq!(v["originalMimeType"], "image/tiff");
+        assert_eq!(v["originalFilename"], "lena512.tif");
     }
 
     #[test]

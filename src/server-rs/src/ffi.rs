@@ -165,6 +165,12 @@ pub type SipiRouteFn = extern "C" fn(
     script: *const c_char,
 );
 
+/// Emits an image's Essentials-packet identity — original mimetype + original
+/// filename — together (mirrors `SipiEssentialsFn`). Called at most once: both
+/// strings are known together or not at all.
+pub type SipiEssentialsFn =
+    extern "C" fn(ctx: *mut c_void, orig_mimetype: *const c_char, orig_filename: *const c_char);
+
 // ── Preflight (auth) ────────────────────────────────────────────────────────
 
 /// Permission type a Lua preflight hook returns (mirrors `SipiPermType`). The
@@ -310,9 +316,19 @@ extern "C" {
     /// it unset, matching the C++ `script_handler`).
     pub fn sipi_request_context_set_docroot(ctx: *mut SipiRequestContext, docroot: *const c_char);
 
-    /// Header-only image-shape probe (no full decode). `resolved_path` is an
-    /// already-validated absolute path. Returns 0 (and fills `*out`), or 500.
-    pub fn sipi_image_dims(resolved_path: *const c_char, out: *mut SipiImageDims) -> c_int;
+    /// Header-only image-shape probe (no full decode) — also optionally emits
+    /// the Essentials identity from the SAME read via `emit`/`ctx` (`None` =
+    /// caller doesn't want it, e.g. info.json). When `emit` is present, it
+    /// fires exactly once, with both strings, iff the file carries a
+    /// parseable Essentials packet; zero times otherwise (not an error).
+    /// `resolved_path` is an already-validated absolute path. Returns 0 (and
+    /// fills `*out`), or 500.
+    pub fn sipi_image_dims(
+        resolved_path: *const c_char,
+        out: *mut SipiImageDims,
+        emit: Option<SipiEssentialsFn>,
+        ctx: *mut c_void,
+    ) -> c_int;
 
     /// The engine's libmagic MIME type for a file, emitted once via `emit`.
     /// `resolved_path` is an already-validated absolute path. Returns 0, or 500.
@@ -622,14 +638,18 @@ pub fn routes() -> Result<Vec<RouteEntry>, i32> {
     Ok(out)
 }
 
-/// Header-only image shape for a validated path. `Err` carries the FFI status
-/// (500 if the shape cannot be read, or -1 on an interior NUL in the path).
+/// Header-only image shape for a validated path (no Essentials identity —
+/// the info.json path doesn't need it, so this passes no callback and costs
+/// exactly one `read_shape()`; see [`image_dims_and_essentials`] for the
+/// knora.json path, which wants both from a single call). `Err` carries the
+/// FFI status (500 if the shape cannot be read, or -1 on an interior NUL in
+/// the path).
 pub fn image_dims(resolved_path: &str) -> Result<SipiImageDims, i32> {
     let c_path = CString::new(resolved_path).map_err(|_| -1)?;
     let mut dims = SipiImageDims::default();
     // SAFETY: `c_path` outlives the synchronous call; `out` is a valid pointer;
     // the seam guards exceptions.
-    let code = unsafe { sipi_image_dims(c_path.as_ptr(), &mut dims) };
+    let code = unsafe { sipi_image_dims(c_path.as_ptr(), &mut dims, None, std::ptr::null_mut()) };
     if code != 0 {
         return Err(code);
     }
@@ -672,6 +692,76 @@ pub fn mimetype(resolved_path: &str) -> Result<String, i32> {
         return Err(code);
     }
     out.ok_or(-1)
+}
+
+/// An image's original-file identity, read from its embedded Essentials
+/// packet: the client-declared mimetype and filename at upload time. Both
+/// fields are known together or not at all — see
+/// [`image_dims_and_essentials`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImageEssentials {
+    pub original_mimetype: String,
+    pub original_filename: String,
+}
+
+/// Collects the jointly-emitted essentials strings into the
+/// `Option<ImageEssentials>` at `ctx`. Fires at most once; a null pointer on
+/// either string (should not happen — the probe emits both or neither) skips
+/// the write rather than panicking.
+extern "C" fn collect_essentials(
+    ctx: *mut c_void,
+    orig_mimetype: *const c_char,
+    orig_filename: *const c_char,
+) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: `ctx` is the `&mut Option<ImageEssentials>` passed to
+        // sipi_image_dims.
+        let out = unsafe { &mut *(ctx as *mut Option<ImageEssentials>) };
+        if orig_mimetype.is_null() || orig_filename.is_null() {
+            return;
+        }
+        // SAFETY: the engine passes NUL-terminated C strings valid for the call.
+        let (original_mimetype, original_filename) = unsafe {
+            (
+                CStr::from_ptr(orig_mimetype).to_string_lossy().into_owned(),
+                CStr::from_ptr(orig_filename).to_string_lossy().into_owned(),
+            )
+        };
+        *out = Some(ImageEssentials {
+            original_mimetype,
+            original_filename,
+        });
+    }));
+}
+
+/// Header-only image shape AND original-file identity, for a validated path,
+/// from a SINGLE `read_shape()` call (the knora.json path wants both; see
+/// [`image_dims`] for the info.json path, which wants only the shape and so
+/// pays for no essentials work). The identity is `None` when the file carries
+/// no Essentials packet (a plain JPEG/PNG, or a packet-less TIFF/JP2 — not an
+/// error). `Err` carries the FFI status (500 if the shape cannot be read), or
+/// -1 on an interior NUL in the path.
+pub fn image_dims_and_essentials(
+    resolved_path: &str,
+) -> Result<(SipiImageDims, Option<ImageEssentials>), i32> {
+    let c_path = CString::new(resolved_path).map_err(|_| -1)?;
+    let mut dims = SipiImageDims::default();
+    let mut essentials: Option<ImageEssentials> = None;
+    // SAFETY: `c_path` outlives the synchronous call; `out` is a valid
+    // pointer; `collect_essentials` writes into `essentials` via the ctx
+    // pointer; the seam guards exceptions.
+    let code = unsafe {
+        sipi_image_dims(
+            c_path.as_ptr(),
+            &mut dims,
+            Some(collect_essentials),
+            &mut essentials as *mut Option<ImageEssentials> as *mut c_void,
+        )
+    };
+    if code != 0 {
+        return Err(code);
+    }
+    Ok((dims, essentials))
 }
 
 // ── Preflight wrappers ──────────────────────────────────────────────────────

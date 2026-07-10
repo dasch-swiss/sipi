@@ -180,7 +180,7 @@ const CASES: &[Case] = &[
     Case { name: "lua_exif_gps", method: Method::GET, path: "/test_exif_gps", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "lua_read_write", method: Method::GET, path: "/read_write_lua", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "video_knora_json_x_forwarded_proto", method: Method::GET, path: "/unit/8pdET49BfoJ-EeRcIbgcLch.mp4/knora.json", headers: &[("X-Forwarded-Proto", "https")], allow: Allow::Xfp, gap: None },
-    Case { name: "knora_json_image_required_fields", method: Method::GET, path: "/unit/lena512.jp2/knora.json", headers: &[], allow: Allow::Default, gap: Some("cluster D (DEV-6659 step 7): info.rs defers originalFilename/originalMimeType on the image knora.json path (the video path emits them) — plan 02 §3 cluster D") },
+    Case { name: "knora_json_image_required_fields", method: Method::GET, path: "/unit/lena512.jp2/knora.json", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "knora_json_nonexistent_file", method: Method::GET, path: "/unit/no-such-file.jp2/knora.json", headers: &[], allow: Allow::Default, gap: Some("intentional: missing knora.json source → Rust 404, C++ 500 (the e2e test accepts either; 404 is the more correct status).") },
     Case { name: "knora_json_csv_file", method: Method::GET, path: "/unit/test.csv/knora.json", headers: &[], allow: Allow::Default, gap: None },
     Case { name: "prometheus_metrics", method: Method::GET, path: "/metrics", headers: &[], allow: Allow::Default, gap: Some("§5 #1 intentional: /metrics is removed in the Rust shell (OTLP replaces the Prometheus scrape) — C++ serves 200, Rust has no route. Permanent divergence.") },
@@ -1417,4 +1417,47 @@ fn sipi_rs_port_beats_explicit_serverport() {
         "the explicit --serverport ({explicit_port}) must NOT be where the shell \
          listens once SIPI_RS_PORT wins"
     );
+}
+
+// ---- Env-var propagation (Lua os.getenv under the Rust binary) -------------
+
+/// The Lua VM under the Rust shell still sees process environment variables —
+/// no accidental env-scrubbing/sandboxing. Exercised through a plain Lua
+/// ROUTE (`/env_echo`, real response sink) rather than a preflight hook: a
+/// preflight's response sink is null today, so a preflight-based version of
+/// this test would crash the subject on the unset case below. Subject-only.
+#[test]
+fn env_var_reaches_lua_vm_when_set() {
+    let srv = SipiServer::start_env(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &["--cache-size", "0"],
+        &[("KNORA_WEBAPI_KNORA_API_EXTERNAL_HOST", "example.test")],
+    );
+    let resp = sipi_e2e::http_client()
+        .get(format!("{}/env_echo", srv.base_url))
+        .send()
+        .expect("GET /env_echo failed");
+    assert_eq!(resp.status().as_u16(), 200);
+    let body: serde_json::Value = resp.json().expect("env_echo response not JSON");
+    assert_eq!(body["host"], "example.test");
+}
+
+/// The unset case: no accidental fallback/panic when the var is absent —
+/// os.getenv returns nil and the script's own contract (send_error(500))
+/// takes effect cleanly. Not `--jwtkey`-style — this is a route, so an
+/// explicit 500 response is safe to construct (unlike preflight).
+#[test]
+fn env_var_absent_yields_clean_500() {
+    let srv = SipiServer::start_env(
+        "config/sipi.e2e-test-config.lua",
+        &sipi_e2e::test_data_dir(),
+        &["--cache-size", "0"],
+        &[],
+    );
+    let resp = sipi_e2e::http_client()
+        .get(format!("{}/env_echo", srv.base_url))
+        .send()
+        .expect("GET /env_echo failed");
+    assert_eq!(resp.status().as_u16(), 500);
 }

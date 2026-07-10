@@ -1359,10 +1359,11 @@ fn serve_knora_json(resolved: &str, parsed: &ParsedRequest, headers: &HeaderMap)
     let sidecar = read_sidecar(resolved);
 
     let value = if IMAGE_MIMES.contains(&mime.as_str()) {
-        match ffi::image_dims(resolved) {
-            Ok(dims) => info::image_knora_json(&id, &mime, &dims, &sidecar),
+        let (dims, essentials) = match ffi::image_dims_and_essentials(resolved) {
+            Ok(result) => result,
             Err(_) => return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
-        }
+        };
+        info::image_knora_json(&id, &mime, &dims, &sidecar, essentials.as_ref())
     } else {
         let size = match std::fs::metadata(resolved) {
             Ok(m) => m.len(),
