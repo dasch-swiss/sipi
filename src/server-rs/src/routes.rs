@@ -159,6 +159,18 @@ pub async fn iiif(
         Err(_) => return sink::error_response(StatusCode::BAD_REQUEST),
     };
 
+    // R7: an interior NUL in the decoded identifier/prefix is rejected outright
+    // (matches the docroot guard's R7, `decode_path_suffix`; the C++ oracle's
+    // own null-byte guard, `Connection.cpp:359-373`, is also NUL-only). NUL
+    // only — not the full control-char set: this path has no independent CRLF
+    // guard (unlike `redirect()`, whose `HeaderValue::from_str` already rejects
+    // CRLF regardless of this check), and the C++ oracle doesn't reject CRLF
+    // here either — broadening this check would reject an identifier the
+    // oracle still serves, a new, unpinned divergence.
+    if parsed.identifier.contains('\0') || parsed.prefix.contains('\0') {
+        return sink::error_response(StatusCode::BAD_REQUEST);
+    }
+
     // R1: string-level traversal check on the decoded identifier (and prefix when
     // it is a path component), before any path construction or preflight.
     if path::contains_traversal(&parsed.identifier)
@@ -927,8 +939,10 @@ pub fn docroot_method_router(state: Arc<AppState>) -> Option<MethodRouter<Arc<Ap
 /// `.lua`/`.elua` script with `server.docroot` injected. The path is
 /// containment-validated against the realpath'd docroot before any open — the C++
 /// handler had no traversal guard; the Rust shell adds R1/R2 (plan 02 §6 C). An
-/// interior NUL / control char in the decoded path → 400 (the null-byte guard the
-/// IIIF catch-all applies, R7).
+/// interior NUL or other control char in the decoded path → 400 (this handler's
+/// own guard, `decode_path_suffix`, R7 — strictly wider than the IIIF
+/// catch-all's own R7, which rejects NUL only; see that check's comment for
+/// why).
 async fn serve_docroot(state: Arc<AppState>, req: Request) -> Response {
     // OPTIONS is the CORS preflight (engine-independent), folded into this handler
     // so the method router stays a single closure.
@@ -1209,14 +1223,14 @@ fn static_binary(
 }
 
 /// Percent-decode a URL path suffix to an on-disk path fragment. `None` (→ the
-/// caller 400s) on invalid UTF-8 or an interior NUL / control char (the null-byte
-/// + header-injection guard the IIIF catch-all also applies).
+/// caller 400s) on invalid UTF-8 or an interior NUL / control char — a strictly
+/// wider guard than the IIIF catch-all's own R7 (NUL only; see its comment).
 fn decode_path_suffix(enc: &str) -> Option<String> {
     let decoded = percent_encoding::percent_decode_str(enc)
         .decode_utf8()
         .ok()?;
-    // `is_ascii_control` covers 0x00–0x1F and 0x7F, so the NUL-byte guard the IIIF
-    // catch-all applies is subsumed here.
+    // `is_ascii_control` covers 0x00–0x1F and 0x7F, so the IIIF catch-all's
+    // NUL-only R7 check is subsumed here (this guard is strictly wider).
     if decoded.bytes().any(|b| b.is_ascii_control()) {
         return None;
     }
