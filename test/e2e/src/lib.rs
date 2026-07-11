@@ -76,9 +76,7 @@ impl ServerKind {
 pub struct SipiServer {
     child: Child,
     pub http_port: u16,
-    pub ssl_port: u16,
     pub base_url: String,
-    pub ssl_base_url: String,
 }
 
 impl SipiServer {
@@ -430,9 +428,7 @@ impl SipiServer {
         SipiServer {
             child,
             http_port,
-            ssl_port,
             base_url,
-            ssl_base_url: format!("https://127.0.0.1:{}", ssl_port),
         }
     }
 
