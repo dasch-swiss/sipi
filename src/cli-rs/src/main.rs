@@ -72,9 +72,15 @@ fn main() -> ExitCode {
     // health` runs on a short interval in prod and must never fork a fresh
     // reporter child of its own; CLI `convert` crash coverage is deliberately
     // out of scope here (it never reaches Rust code — see the module doc).
+    // Also gated on `is_enabled()`: `Hub::current().client()` returns `Some`
+    // even for a disabled (no-DSN) client — without this filter, every local
+    // dev / DSN-less test run of `server` would still fork a reporter child
+    // and install process-wide crash-signal handlers for a client that drops
+    // everything on flush.
     let _minidump_guard = if verb == Some("server") {
         sentry::Hub::current()
             .client()
+            .filter(|client| client.is_enabled())
             .and_then(|client| sentry_rust_minidump::init(&client).ok())
     } else {
         None

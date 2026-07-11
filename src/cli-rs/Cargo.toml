@@ -26,7 +26,7 @@ clap = { version = "4", features = ["derive", "env"] }
 # http://127.0.0.1/health, so the HTTPS stack would be dead weight.
 ureq = { version = "3", default-features = false }
 
-# Crash & error reporting (DEV-6659 Item 3) — `main` owns the sentry client +
+# Crash & error reporting (DEV-6659) — `main` owns the sentry client +
 # native-crash (minidump) reporter for every verb, so both live here rather
 # than in `//src/server-rs`. Same `rustls-no-provider` + explicit `ring`
 # recipe as `server-rs/Cargo.toml` — see that file's comment for why the plain

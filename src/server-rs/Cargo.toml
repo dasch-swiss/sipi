@@ -65,7 +65,7 @@ tracing-opentelemetry = "0.32"
 axum-tracing-opentelemetry = "0.33"
 init-tracing-opentelemetry = { version = "0.36", features = ["otlp", "metrics", "tracing_subscriber_ext"] }
 
-# Crash & error reporting (DEV-6659 Item 3) — replaces C++ sentry-native.
+# Crash & error reporting (DEV-6659) — replaces C++ sentry-native.
 # `rustls-no-provider` (not `rustls`): sentry's `reqwest` transport resolves to
 # reqwest 0.13.x, whose plain `rustls` feature unconditionally forces the
 # aws-lc-rs crypto provider (`__rustls-aws-lc-rs`) — and aws-lc-sys's cmake

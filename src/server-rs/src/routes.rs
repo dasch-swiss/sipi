@@ -534,7 +534,7 @@ fn serve_image(
         // A handled decode/convert/write error is reported as a side-channel
         // (never part of the response); `report_ctx` reuses `c_uri` — the
         // request URI already lives on the request, so it isn't duplicated
-        // into the flat `SipiImageError` struct.
+        // into the flat `SipiImageErrorReport` struct.
         report_error: Some(ffi::report_image_error),
         report_ctx: c_uri.as_ptr() as *mut std::ffi::c_void,
     };

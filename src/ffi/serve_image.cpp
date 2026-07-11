@@ -408,6 +408,12 @@ namespace {
     std::string canonical_;
     std::string request_uri_;
     SipiImgInfo info_;
+    // Safe to hold past construction only because `produce()` runs
+    // synchronously within the same `sipi_serve_image` call that constructed
+    // this producer (the Rust caller is blocked on that call the whole time,
+    // per the seam's synchronous contract) — so `report_ctx_` (the Rust-owned
+    // request-URI C string, per routes.rs) is still alive whenever `produce()`
+    // reads it. Never retain either past this object's lifetime.
     SipiReportErrorFn report_error_;
     void *report_ctx_;
   };

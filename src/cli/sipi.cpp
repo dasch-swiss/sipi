@@ -8,10 +8,12 @@
  *
  * The CLI11 app and every subcommand body live in `//src/cli:cli_app` behind
  * the `sipi_cli_main` FFI entry (`ffi/sipi_ffi.h`). Keeping `main` in its own
- * translation unit lets the Rust HTTP shell (strangler-fig Phase C) link
- * `cli_app` and call `sipi_cli_main` without colliding with this `main`. The
- * `sipi_cli_main` entry owns process-global init (Sentry, library init) and
- * dispatch, and returns the exit code rather than calling `exit()`.
+ * translation unit lets the Rust HTTP shell (ADR-0013) link `cli_app` and
+ * call `sipi_cli_main` without colliding with this `main`. The `sipi_cli_main`
+ * entry owns process-global init (library init) and dispatch, and returns the
+ * exit code rather than calling `exit()`. This binary (the differential-test
+ * oracle) has no Sentry integration of its own — that lives in the Rust
+ * shell's `main` (`cli-rs/src/main.rs`).
  */
 #include "ffi/sipi_ffi.h"
 

@@ -837,7 +837,7 @@ pub extern "C" fn report_image_error(ctx: *mut c_void, err: *const SipiImageErro
 
         let mut tags = sentry::protocol::Map::new();
         tags.insert("sipi.mode".to_owned(), "server".to_owned());
-        tags.insert("sipi.phase".to_owned(), phase.clone());
+        tags.insert("sipi.phase".to_owned(), phase);
         if let Some(v) = &output_format {
             tags.insert("sipi.output_format".to_owned(), v.clone());
         }

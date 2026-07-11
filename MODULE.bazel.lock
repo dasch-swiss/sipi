@@ -729,9 +729,9 @@
           "FILE:@@//test/e2e/Cargo.lock 7d23b483b4a43419c4c489de884c940d9f74ae3abc9b73d7aae3058882a95aed",
           "FILE:@@//test/e2e/Cargo.toml d3530244f3551c9b35474343da6c6527aa406f1675bc0fb5333c990b6b5fb2bf",
           "FILE:@@//src/server-rs/Cargo.lock 48bbafd00e7ef08637cfe6d728bf7be9944ddeab99354f5cfa1c47edcd9f4a4c",
-          "FILE:@@//src/server-rs/Cargo.toml ab803adbd0d0bde4301d42fd7de50c0590c1137edf321e9c7b6a1ec870de73de",
+          "FILE:@@//src/server-rs/Cargo.toml 55b7b19e5f63d634bee783bab49e59662caad9dc49ee92a453d6c38ebdfcae69",
           "FILE:@@//src/cli-rs/Cargo.lock 7dc7a64cc707d0574118c582fbd7bdfbf72375f5610049a8818cd03435045b2c",
-          "FILE:@@//src/cli-rs/Cargo.toml 9c3c83e133766106fac441c4787a8c231cc5b031c9d774957bba10f92db05f1a"
+          "FILE:@@//src/cli-rs/Cargo.toml 9af198364a55b45dfc38afe6226ae8d90423be8ed36b8ed0e521f2fe4acecf5f"
         ],
         "generatedRepoSpecs": {
           "crates": {
