@@ -101,8 +101,15 @@ fn path_traversal_mixed_case_encoded() {
 // Null Byte Injection Tests (R5-R7)
 // =============================================================================
 
+// This is a single-server pin only — there is no `differential.rs` `Case` for
+// it. The C++ oracle rejects a `%00` identifier at the transport layer
+// (`Connection.cpp`) by flushing a plaintext body before the status-line/header
+// block is written, so its response is not valid HTTP framing for this input
+// (a real HTTP client, e.g. curl or reqwest, cannot parse a status out of it —
+// only a raw byte reader doing a substring search, as below, "sees" 400). That
+// quirk lives in `src/shttps/transport/`, which is deleted wholesale at the end
+// of the cutover (DEV-6659), so it is not worth new cross-binary test machinery.
 #[test]
-#[ignore = "Phase C gap (DEV-6659 step 8): null byte on the redirect path returns 500 not 400 (Rust lacks the pre-parse substring guard) — plan 02 cluster G"]
 fn null_byte_in_iiif_url_returns_400() {
     let srv = server();
     // Use raw TCP since null byte in URL causes HTTP client issues
