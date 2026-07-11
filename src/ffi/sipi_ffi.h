@@ -148,6 +148,60 @@ typedef struct
   SipiFormatType format_type;
 } SipiIiifParams;
 
+/*! Flat, engine-populated context for a handled (non-fatal) image error —
+ *  a decode/convert/write failure the engine catches internally. Reported as
+ *  a side-channel via `SipiReportErrorFn`; never affects the `SipiStatus`
+ *  returned to the caller (every entry point still returns a clean status
+ *  code — this is purely additional context for observability). Every
+ *  field is only valid for the duration of the `report_error` call; the
+ *  callback must copy anything it needs to keep. Any string field may be
+ *  NULL, and any numeric field may be 0, when not known for the phase that
+ *  failed (e.g. width/height are unset if the image was never successfully
+ *  read). All fields are naturally 8-byte aligned (pointers and `uint64_t`
+ *  only), so there is no interior padding to reason about. */
+typedef struct
+{
+  const char *phase; /* "read" / "convert" / "write" */
+  const char *message; /* the caught exception's message */
+  const char *input_file;
+  const char *output_format;
+  const char *colorspace;
+  const char *icc_profile_type;
+  const char *orientation;
+  uint64_t width;
+  uint64_t height;
+  uint64_t channels;
+  uint64_t bps;
+  uint64_t file_size_bytes;
+} SipiImageErrorReport;
+
+/*! Reports a handled image error's context as a side-channel (Sentry, via
+ *  the Rust shell) — never a response. `err` is only valid for the call's
+ *  duration. `ctx` is the caller-supplied opaque data from `SipiServeRequest`
+ *  (`report_ctx`) — the Rust edge uses it to carry the request URI, since
+ *  that already lives on the request and isn't part of the flat struct. */
+typedef void (*SipiReportErrorFn)(void *ctx, const SipiImageErrorReport *err);
+
+#ifdef __cplusplus
+/* Lock-step layout guard — paired with the Rust offset/size_of test in
+ * src/server-rs/src/ffi.rs. All fields are 8-byte-wide (pointers / uint64_t),
+ * so there is no packing subtlety, but the guard still catches an accidental
+ * field reorder or insertion on either side. LP64 on every supported target. */
+static_assert(sizeof(SipiImageErrorReport) == 96, "SipiImageErrorReport size drifted from src/server-rs/src/ffi.rs");
+static_assert(offsetof(SipiImageErrorReport, phase) == 0, "SipiImageErrorReport layout drift");
+static_assert(offsetof(SipiImageErrorReport, message) == 8, "SipiImageErrorReport layout drift");
+static_assert(offsetof(SipiImageErrorReport, input_file) == 16, "SipiImageErrorReport layout drift");
+static_assert(offsetof(SipiImageErrorReport, output_format) == 24, "SipiImageErrorReport layout drift");
+static_assert(offsetof(SipiImageErrorReport, colorspace) == 32, "SipiImageErrorReport layout drift");
+static_assert(offsetof(SipiImageErrorReport, icc_profile_type) == 40, "SipiImageErrorReport layout drift");
+static_assert(offsetof(SipiImageErrorReport, orientation) == 48, "SipiImageErrorReport layout drift");
+static_assert(offsetof(SipiImageErrorReport, width) == 56, "SipiImageErrorReport layout drift");
+static_assert(offsetof(SipiImageErrorReport, height) == 64, "SipiImageErrorReport layout drift");
+static_assert(offsetof(SipiImageErrorReport, channels) == 72, "SipiImageErrorReport layout drift");
+static_assert(offsetof(SipiImageErrorReport, bps) == 80, "SipiImageErrorReport layout drift");
+static_assert(offsetof(SipiImageErrorReport, file_size_bytes) == 88, "SipiImageErrorReport layout drift");
+#endif
+
 typedef struct
 {
   const char *resolved_path; /* image-root-validated absolute path (validation owned by the Rust edge) */
@@ -161,6 +215,8 @@ typedef struct
   const char *forwarded_host; /* X-Forwarded-Host  → canonical-URL `id` (host for the canonical URL) */
   const char *request_uri; /* raw request URI — error/log context only (Sentry), or NULL */
   int is_head; /* 1 = HEAD: emit status + headers, no body, no cache write */
+  SipiReportErrorFn report_error; /* handled-error side-channel report, or NULL = not wanted */
+  void *report_ctx; /* opaque data passed to report_error (the Rust edge: the request URI) */
 } SipiServeRequest;
 
 /* ── Preflight (C++ LuaServer pre_flight / file_pre_flight) ──────────────────

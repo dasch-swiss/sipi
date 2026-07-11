@@ -531,6 +531,12 @@ fn serve_image(
         forwarded_host: c_host.as_ptr(),
         request_uri: c_uri.as_ptr(),
         is_head: i32::from(is_head),
+        // A handled decode/convert/write error is reported as a side-channel
+        // (never part of the response); `report_ctx` reuses `c_uri` — the
+        // request URI already lives on the request, so it isn't duplicated
+        // into the flat `SipiImageError` struct.
+        report_error: Some(ffi::report_image_error),
+        report_ctx: c_uri.as_ptr() as *mut std::ffi::c_void,
     };
 
     // SAFETY: every pointer in `req` outlives this synchronous call; the seam

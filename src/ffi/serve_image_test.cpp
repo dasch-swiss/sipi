@@ -88,6 +88,25 @@ bool has_header(const ServeResponse &r, const std::string &name, const std::stri
   return false;
 }
 
+// Collects a reported SipiImageErrorReport's fields, copying the strings —
+// the struct's fields are only valid for the report_error call's duration.
+struct ReportedError
+{
+  bool fired = false;
+  std::string phase;
+  std::string message;
+  std::string input_file;
+};
+
+void collect_report(void *ctx, const SipiImageErrorReport *err)
+{
+  auto *out = static_cast<ReportedError *>(ctx);
+  out->fired = true;
+  out->phase = err->phase != nullptr ? err->phase : "";
+  out->message = err->message != nullptr ? err->message : "";
+  out->input_file = err->input_file != nullptr ? err->input_file : "";
+}
+
 }// namespace
 
 TEST(BuildImageResponse, MissingFileIsNotFound)
@@ -169,4 +188,39 @@ TEST(BuildImageResponse, ClientGoneBeforeDecode)
   const auto result = build_image_response(req, bare_engine(), always_cancelled);
   ASSERT_FALSE(result.has_value());
   EXPECT_EQ(result.error(), SipiStatus::ClientGone);
+}
+
+TEST(BuildImageResponse, ReportErrorFiresOnReadFailure)
+{
+  // test.csv exists but is not a recognised image format — read_shape()
+  // throws before any decode is attempted, exercising the seam's earliest
+  // report_error call site.
+  const std::string path = fixture("/unit/test.csv");
+  const auto params = full_params(SIPI_FORMAT_TIF);
+  auto req = make_request(path, params);
+  ReportedError out;
+  req.report_error = collect_report;
+  req.report_ctx = &out;
+
+  const auto result = build_image_response(req, bare_engine(), kNeverCancelled);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error(), SipiStatus::InternalError);
+  EXPECT_TRUE(out.fired);
+  EXPECT_EQ(out.phase, "read");
+  EXPECT_FALSE(out.message.empty());
+  EXPECT_EQ(out.input_file, path);
+}
+
+TEST(BuildImageResponse, ReportErrorNullCallbackIsSafeNoOp)
+{
+  // Same failing request as above, but report_error is left null (make_request's
+  // SipiServeRequest{} default) — the seam's "NULL = absent" idiom must not
+  // crash or otherwise change the returned status.
+  const std::string path = fixture("/unit/test.csv");
+  const auto params = full_params(SIPI_FORMAT_TIF);
+  const auto req = make_request(path, params);
+
+  const auto result = build_image_response(req, bare_engine(), kNeverCancelled);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error(), SipiStatus::InternalError);
 }
