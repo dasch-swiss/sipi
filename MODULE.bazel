@@ -117,8 +117,9 @@ bazel_dep(name = "curl", version = "8.12.0.bcr.1")
 
 # OpenSSL 3.x is consumed via @openssl//:ssl + @openssl//:crypto by
 # src/shttps/jwt/jwt.c (EVP_PKEY_get_int_param / OSSL_PKEY_PARAM_BITS),
-# the rest of shttps, sentry's crash uploader, and curl's TLS backend
-# (pinned to openssl via `--@curl//:ssl_lib=openssl` in .bazelrc).
+# the rest of shttps, and curl's TLS backend (pinned to openssl via
+# `--@curl//:ssl_lib=openssl` in .bazelrc). Crash reporting is Rust-owned
+# (DEV-6659) and uses its own rustls-based transport, not this OpenSSL.
 bazel_dep(name = "openssl", version = "3.5.5.bcr.4")
 
 # CLI11 — header-only CLI parser for `src/cli/cli_app.cpp` (the only consumer).
@@ -634,14 +635,6 @@ http_archive(
     sha256 = "d873d34ad8b9b4cea010631f1a6228d2087475e4dc5e763eb81acc23d9d45a51",
     strip_prefix = "lcms2-2.16",
     url = "https://github.com/mm2/Little-CMS/releases/download/lcms2.16/lcms2-2.16.tar.gz",
-)
-
-http_archive(
-    name = "sentry",
-    build_file = "//bazel:sentry.BUILD.bazel",
-    sha256 = "657391465eb6236d6e3f3eec1d25434178783328f1f0a744c99c9b049c6225e1",
-    strip_prefix = "sentry-native-0.9.0",
-    url = "https://github.com/getsentry/sentry-native/archive/refs/tags/0.9.0.tar.gz",
 )
 
 http_archive(

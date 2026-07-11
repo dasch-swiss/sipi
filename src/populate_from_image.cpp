@@ -8,16 +8,26 @@
 // dereferences `Sipi::SipiImage`, currently owned by sipi_lib. Co-locating
 // in observability/ would force a //src/observability → //src:sipi_lib edge,
 // closing a cycle (sipi_lib already depends on observability for the rest of
-// the surface — Metrics, ConnectionMetricsAdapter, capture_image_error, …).
-// Move back into observability/sentry.cpp once SipiImage moves to its own
-// package per DEV-6388 / DEV-6395.
+// the surface — Metrics, ConnectionMetricsAdapter, …). Move back into
+// observability/ once SipiImage moves to its own package per DEV-6388 / DEV-6395.
 
-#include "observability/sentry.h"
+#include "populate_from_image.h"
+
+#include <sys/stat.h>
 
 #include "SipiImage.h"
 #include "metadata/icc.h"
 
 namespace Sipi::observability {
+
+size_t get_file_size(const std::string &path)
+{
+  struct stat st{};
+  if (stat(path.c_str(), &st) == 0) {
+    return static_cast<size_t>(st.st_size);
+  }
+  return 0;
+}
 
 namespace {
 

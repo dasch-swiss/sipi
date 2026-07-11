@@ -31,7 +31,7 @@
 #include "logging/logger.h"
 #include "metadata/icc.h"
 #include "observability/metrics.h"
-#include "observability/sentry.h"
+#include "populate_from_image.h"
 #include "shttps/util/Parsing.h"
 #include "shttps/util/UrlDecode.h"
 
@@ -347,7 +347,6 @@ namespace {
       ImageContext sentry_ctx;
       sentry_ctx.input_file = infile_;
       sentry_ctx.file_size_bytes = get_file_size(infile_);
-      sentry_ctx.request_uri = request_uri_;
       sentry_ctx.output_format = format_type_to_string(format_);
       populate_from_image(sentry_ctx, img_);
       report_image_error(report_error_, report_ctx_, message, "write", sentry_ctx);
@@ -469,7 +468,6 @@ std::expected<ServeResponse, SipiStatus>
     ImageContext sentry_ctx;
     sentry_ctx.input_file = infile;
     sentry_ctx.file_size_bytes = get_file_size(infile);
-    sentry_ctx.request_uri = uri;
     report_image_error(req.report_error, req.report_ctx, err.to_string(), "read", sentry_ctx);
     return std::unexpected(SipiStatus::InternalError);
   }
@@ -667,14 +665,12 @@ std::expected<ServeResponse, SipiStatus>
     ImageContext sentry_ctx;
     sentry_ctx.input_file = infile;
     sentry_ctx.file_size_bytes = get_file_size(infile);
-    sentry_ctx.request_uri = uri;
     report_image_error(req.report_error, req.report_ctx, "std::bad_alloc during image read", "read", sentry_ctx);
     return std::unexpected(SipiStatus::InternalError);
   } catch (const SipiImageError &err) {
     ImageContext sentry_ctx;
     sentry_ctx.input_file = infile;
     sentry_ctx.file_size_bytes = get_file_size(infile);
-    sentry_ctx.request_uri = uri;
     populate_from_image(sentry_ctx, img);
     report_image_error(req.report_error, req.report_ctx, err.to_string(), "read", sentry_ctx);
     return std::unexpected(SipiStatus::InternalError);
@@ -696,7 +692,6 @@ std::expected<ServeResponse, SipiStatus>
       ImageContext sentry_ctx;
       sentry_ctx.input_file = infile;
       sentry_ctx.file_size_bytes = get_file_size(infile);
-      sentry_ctx.request_uri = uri;
       populate_from_image(sentry_ctx, img);
       report_image_error(req.report_error, req.report_ctx, err.to_string(), "convert", sentry_ctx);
       return std::unexpected(SipiStatus::InternalError);
@@ -734,7 +729,6 @@ std::expected<ServeResponse, SipiStatus>
       ImageContext sentry_ctx;
       sentry_ctx.input_file = infile;
       sentry_ctx.file_size_bytes = get_file_size(infile);
-      sentry_ctx.request_uri = uri;
       populate_from_image(sentry_ctx, img);
       report_image_error(req.report_error, req.report_ctx, err.to_string(), "convert", sentry_ctx);
       return std::unexpected(SipiStatus::InternalError);
@@ -742,7 +736,6 @@ std::expected<ServeResponse, SipiStatus>
       ImageContext sentry_ctx;
       sentry_ctx.input_file = infile;
       sentry_ctx.file_size_bytes = get_file_size(infile);
-      sentry_ctx.request_uri = uri;
       populate_from_image(sentry_ctx, img);
       report_image_error(req.report_error, req.report_ctx, err.what(), "convert", sentry_ctx);
       return std::unexpected(SipiStatus::InternalError);

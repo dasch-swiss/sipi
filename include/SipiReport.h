@@ -10,18 +10,17 @@
 #include <ostream>
 #include <string>
 
-#include "observability/sentry.h"
+#include "populate_from_image.h"
 
 namespace Sipi {
 
 /*!
- * Emit a structured JSON report mirroring the Sentry ImageContext to the given
- * output stream. Used by the `--json` CLI flag so that environments without a
- * Sentry DSN still get the full diagnostic payload.
+ * Emit a structured JSON report mirroring an ImageContext to the given
+ * output stream. Used by the `--json` CLI flag to give a full diagnostic
+ * payload independent of any telemetry backend.
  *
  * The produced document is a single JSON object terminated by a trailing
- * newline. The schema matches the ImageContext struct in observability/sentry.h, minus
- * `request_uri` (reserved for future server-side use).
+ * newline. The schema matches the ImageContext struct in populate_from_image.h.
  *
  * On success (no error_message / no phase): `status == "ok"` and the `image`
  * object is populated from the ImageContext.
