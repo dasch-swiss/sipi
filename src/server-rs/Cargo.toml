@@ -64,3 +64,20 @@ opentelemetry-appender-tracing = "0.31"
 tracing-opentelemetry = "0.32"
 axum-tracing-opentelemetry = "0.33"
 init-tracing-opentelemetry = { version = "0.36", features = ["otlp", "metrics", "tracing_subscriber_ext"] }
+
+# Crash & error reporting (DEV-6659 Item 3) — replaces C++ sentry-native.
+# `rustls-no-provider` (not `rustls`): sentry's `reqwest` transport resolves to
+# reqwest 0.13.x, whose plain `rustls` feature unconditionally forces the
+# aws-lc-rs crypto provider (`__rustls-aws-lc-rs`) — and aws-lc-sys's cmake
+# build script panics inside Bazel actions (banned in MODULE.bazel). The
+# `rustls-no-provider` feature pulls in TLS support without forcing a
+# provider; the explicit direct `rustls` dep below (default-features = false,
+# `ring` only) is what actually keeps aws_lc_rs out, since Cargo feature
+# unification is additive and every other rustls consumer in this graph
+# (sentry, reqwest, hyper-rustls) already declares default-features = false.
+# The caller must call rustls::crypto::ring::default_provider().install_default()
+# once at startup — no default provider auto-installs with these features.
+sentry = { version = "0.48", default-features = false, features = ["backtrace", "contexts", "debug-images", "panic", "release-health", "reqwest", "rustls-no-provider"] }
+sentry-tracing = "0.48"
+sentry-rust-minidump = { version = "0.16", features = ["ipc"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }

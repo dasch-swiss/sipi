@@ -84,11 +84,16 @@ pub fn init() -> Telemetry {
         )
     });
 
+    // One tracing pipeline feeds both OTLP and Sentry (breadcrumbs + captured
+    // `tracing::error!`/`warn!` events); `sentry::init` (in `main`, before the
+    // tokio runtime starts) sets the Hub this layer reports into, so ordering
+    // here doesn't matter — the layer just taps whatever Hub is current.
     let _ = tracing_subscriber::registry()
         .with(filter)
         .with(otel_layer)
         .with(logs_layer)
         .with(tracing_subscriber::fmt::layer().event_format(SharedJson))
+        .with(sentry_tracing::layer())
         .try_init();
 
     Telemetry {
@@ -105,21 +110,39 @@ pub fn init() -> Telemetry {
 /// wants them). `OTEL_RESOURCE_ATTRIBUTES`, if set, still merges via the env
 /// detector `Resource::builder()` runs.
 fn otel_resource() -> opentelemetry_sdk::Resource {
-    let environment = std::env::var("SIPI_SENTRY_ENVIRONMENT")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "development".to_owned());
-    let mut attrs = vec![KeyValue::new("deployment.environment.name", environment)];
-    if let Some(version) = std::env::var("SIPI_SENTRY_RELEASE")
-        .ok()
-        .filter(|s| !s.is_empty())
-    {
+    let mut attrs = vec![KeyValue::new(
+        "deployment.environment.name",
+        deployment_environment(),
+    )];
+    if let Some(version) = service_version() {
         attrs.push(KeyValue::new("service.version", version));
     }
     opentelemetry_sdk::Resource::builder()
         .with_service_name("sipi")
         .with_attributes(attrs)
         .build()
+}
+
+/// `SIPI_SENTRY_ENVIRONMENT`, defaulting to `development` — shared by the OTel
+/// resource above and Sentry's `environment` (`main.rs`), so both observability
+/// backends agree on which deploy environment produced an event.
+pub fn deployment_environment() -> String {
+    std::env::var("SIPI_SENTRY_ENVIRONMENT")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "development".to_owned())
+}
+
+/// `SIPI_SENTRY_RELEASE`, or `None` if unset/empty — shared by the OTel
+/// resource above and Sentry's `release` (`main.rs`). There is no Rust-side
+/// build-stamp equivalent to the C++ `BUILD_SCM_TAG` (no `build.rs`/workspace-
+/// status wiring for the Rust binaries today), so both observability backends
+/// fall back to the same deploy-provided env var rather than disagreeing on
+/// two different sources.
+pub fn service_version() -> Option<String> {
+    std::env::var("SIPI_SENTRY_RELEASE")
+        .ok()
+        .filter(|s| !s.is_empty())
 }
 
 /// Build the OTLP (gRPC-tonic) tracer provider, or `None` when no endpoint is

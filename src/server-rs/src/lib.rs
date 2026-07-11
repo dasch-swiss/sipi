@@ -354,10 +354,8 @@ async fn shutdown_signal() {
 /// OTel `service.version`), falling back to the crate version in local runs.
 async fn health() -> Response {
     let uptime = START.get().map_or(0, |s| s.elapsed().as_secs());
-    let version = std::env::var("SIPI_SENTRY_RELEASE")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_owned());
+    let version =
+        telemetry::service_version().unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_owned());
     let body = serde_json::json!({ "status": "ok", "version": version, "uptime_seconds": uptime })
         .to_string();
     (
