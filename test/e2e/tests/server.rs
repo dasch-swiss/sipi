@@ -477,25 +477,14 @@ fn knora_json_csv_file() {
 // Phase 3: Sipi Extension Gap Tests
 // =============================================================================
 
-#[test]
-#[ignore = "Phase C gap (DEV-6659 step 8): Rust shell serves plain HTTP only (TLS terminates at Traefik); HTTPS listener dropped — plan 02 cluster J"]
-fn ssl_endpoints() {
-    let srv = server();
-    let resp = client()
-        .get(format!("{}/unit/lena512.jp2/info.json", srv.ssl_base_url))
-        .send()
-        .expect("GET HTTPS info.json failed");
-
-    assert_eq!(resp.status().as_u16(), 200);
-
-    let json: serde_json::Value = resp.json().expect("invalid JSON");
-    let id = json["id"].as_str().expect("id must be string");
-    assert!(
-        id.starts_with("https://"),
-        "info.json id should use https:// scheme over SSL, got: {}",
-        id
-    );
-}
+// A live-TLS request (e.g. a former `ssl_endpoints` test) is deliberately not
+// covered here: the Rust shell serves plain HTTP only (TLS terminates at
+// Traefik), so it can never bind a real TLS socket. The scheme contract such a
+// test would have checked is already asserted without one:
+// `info_json_x_forwarded_proto_https` (iiif_compliance.rs) drives info.json
+// over plain HTTP with `X-Forwarded-Proto: https` and asserts the same `id`
+// scheme; the differential harness covers the same XFP-derived scheme/host on
+// info/knora and the 303 redirect scheme at full parity (DEV-6659).
 
 #[test]
 fn mime_consistency() {
