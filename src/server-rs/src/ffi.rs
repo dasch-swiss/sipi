@@ -807,7 +807,7 @@ pub fn image_dims_and_essentials(
 /// always a side-channel, never a body). `ctx` is the request-URI C string
 /// the Rust edge passes as `report_ctx` — not part of the flat struct, since
 /// the edge already holds it for `SipiServeRequest::request_uri`.
-pub extern "C" fn report_image_error(ctx: *mut c_void, err: *const SipiImageErrorReport) {
+pub(crate) extern "C" fn report_image_error(ctx: *mut c_void, err: *const SipiImageErrorReport) {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if err.is_null() {
             return;
@@ -815,9 +815,9 @@ pub extern "C" fn report_image_error(ctx: *mut c_void, err: *const SipiImageErro
         // SAFETY: the engine passes a valid pointer, valid for this call.
         let err = unsafe { &*err };
 
-        // SAFETY: every string field is either null or a NUL-terminated C
-        // string valid for this call, per the seam contract.
         let field = |p: *const c_char| -> Option<String> {
+            // SAFETY: every string field is either null or a NUL-terminated
+            // C string valid for this call, per the seam contract.
             (!p.is_null()).then(|| unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned())
         };
         let phase = field(err.phase).unwrap_or_default();
@@ -827,9 +827,9 @@ pub extern "C" fn report_image_error(ctx: *mut c_void, err: *const SipiImageErro
         let colorspace = field(err.colorspace);
         let icc_profile_type = field(err.icc_profile_type);
         let orientation = field(err.orientation);
-        // SAFETY: `ctx` is either null or the request-URI C string the Rust
-        // edge passed as `report_ctx`, valid for this call.
         let request_uri = (!ctx.is_null()).then(|| {
+            // SAFETY: `ctx` is either null or the request-URI C string the
+            // Rust edge passed as `report_ctx`, valid for this call.
             unsafe { CStr::from_ptr(ctx as *const c_char) }
                 .to_string_lossy()
                 .into_owned()
