@@ -10,15 +10,27 @@ use std::process::Command;
 fn sipi_convert(input: &str, output: &str, format: &str) -> std::process::Output {
     let sipi_bin = sipi_bin_path();
 
-    Command::new(&sipi_bin)
+    // TEMP DIAGNOSTIC (DEV-6659 CI investigation, remove before merge): drop
+    // ASAN_OPTIONS' log_path override so any sanitizer report lands in this
+    // process's captured stderr instead of a log file under
+    // TEST_UNDECLARED_OUTPUTS_DIR, and print the raw exit status alongside it.
+    let result = Command::new(&sipi_bin)
         .arg("convert")
         .arg(input)
         .arg(output)
         .arg("--format")
         .arg(format)
+        .env("ASAN_OPTIONS", "detect_leaks=1:halt_on_error=0")
         .current_dir(test_data_dir())
         .output()
-        .unwrap_or_else(|e| panic!("Failed to run sipi CLI: {}", e))
+        .unwrap_or_else(|e| panic!("Failed to run sipi CLI: {}", e));
+    eprintln!(
+        "TEMP DIAGNOSTIC sipi_convert({input}, {output}, {format}): status={:?}\nstdout={}\nstderr={}",
+        result.status,
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    result
 }
 
 fn tmp_path(name: &str) -> PathBuf {
@@ -386,11 +398,22 @@ fn sipi_server_help_heading_order() {
 // =============================================================================
 
 fn sipi_run(args: &[&str]) -> std::process::Output {
-    Command::new(sipi_bin_path())
+    // TEMP DIAGNOSTIC (DEV-6659 CI investigation, remove before merge): drop
+    // ASAN_OPTIONS' log_path override so any sanitizer report lands in this
+    // process's captured stderr, and print the raw exit status alongside it.
+    let result = Command::new(sipi_bin_path())
         .args(args)
+        .env("ASAN_OPTIONS", "detect_leaks=1:halt_on_error=0")
         .current_dir(test_data_dir())
         .output()
-        .unwrap_or_else(|e| panic!("Failed to run sipi {:?}: {}", args, e))
+        .unwrap_or_else(|e| panic!("Failed to run sipi {:?}: {}", args, e));
+    eprintln!(
+        "TEMP DIAGNOSTIC sipi_run({args:?}): status={:?}\nstdout={}\nstderr={}",
+        result.status,
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    result
 }
 
 #[test]
