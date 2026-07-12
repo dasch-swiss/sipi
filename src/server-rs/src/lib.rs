@@ -62,7 +62,24 @@ pub fn run(
     overrides: ServerOverrides,
     drain_timeout: Option<u64>,
 ) -> ExitCode {
-    let rt = match tokio::runtime::Runtime::new() {
+    // Under ASan (this binary links the sanitizer runtime via the C++ engine,
+    // so its pthread interceptors apply process-wide, not just to
+    // instrumented code) tokio's own multi-threaded scheduler trips the same
+    // "Joining already joined thread" abort as Kakadu's worker-thread pool
+    // (see SipiIOJ2k.cpp) — this time at Runtime::drop() teardown, after
+    // serve() has already returned Ok. `ASAN_OPTIONS` is set only by the
+    // asan-instrumented test/CI runs (never in dev or production), so its
+    // presence is a reliable, test-only signal to fall back to a
+    // single-threaded runtime and sidestep tokio's own worker-thread join.
+    let asan_build = std::env::var_os("ASAN_OPTIONS").is_some();
+    let rt = if asan_build {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+    } else {
+        tokio::runtime::Runtime::new()
+    };
+    let rt = match rt {
         Ok(rt) => rt,
         Err(e) => {
             eprintln!("failed to build tokio runtime: {e}");
@@ -175,15 +192,10 @@ async fn server_main(
         configured_routes,
     )
     .await;
-    // TEMP DIAGNOSTIC (DEV-6659 CI investigation, remove before merge):
-    // bypass the tracing subscriber entirely (in case it's implicated) to
-    // confirm what serve() actually returned before flush_telemetry runs.
-    eprintln!("TEMP DIAGNOSTIC serve() returned: {result:?}");
 
     // Flush pending spans before the guard drops; the OTLP export is blocking
     // I/O, so do it off the async runtime.
     flush_telemetry(otel).await;
-    eprintln!("TEMP DIAGNOSTIC flush_telemetry completed");
 
     match result {
         Ok(()) => ExitCode::SUCCESS,

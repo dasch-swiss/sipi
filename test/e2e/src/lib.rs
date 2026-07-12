@@ -250,14 +250,6 @@ impl SipiServer {
         // on a still-draining server. Placed before `extra_args` so an
         // individual test can still override it (last-wins).
         let mut cmd = Command::new(&bin);
-        // TEMP DIAGNOSTIC (DEV-6659 CI investigation, revert before merge):
-        // drop ASAN_OPTIONS' log_path override (set by .bazelrc's test:asan
-        // block) so any sanitizer report lands in this process's captured
-        // stdout/stderr (surfaced via captured_output()) instead of a log
-        // file under TEST_UNDECLARED_OUTPUTS_DIR, which the sanitizer.yml
-        // upload step found empty for the 3 failing shutdown/health/
-        // input_validation targets.
-        cmd.env("ASAN_OPTIONS", "detect_leaks=1:halt_on_error=0");
         cmd.arg("server")
             .arg("--config")
             .arg(config)
