@@ -905,11 +905,15 @@ void SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const SipiCompress
 
   if ((num_threads = kdu_get_num_processors()) < 2) num_threads = 0;
 #if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
-  // TEMP DIAGNOSTIC (DEV-6659 CI investigation, revert before merge unless
-  // confirmed as the real fix): force single-threaded Kakadu encode under
-  // ASan, to test whether Kakadu's own worker-thread pool is the source of
-  // the "Joining already joined thread" abort seen only on the Rust shell
-  // binary after Phase 4 dropped sentry-native from its link.
+  // Kakadu's own worker-thread pool (kdu_thread_env::create/add_thread,
+  // below) trips ASan's "Joining already joined thread" abort when this
+  // engine is linked into a binary with a different thread-creation history
+  // early in process life (confirmed: reproduces only when linked into the
+  // Rust shell, not the C++ CLI, which shares this exact encoder). This
+  // looks like ASan's thread-registry slot IDs being reused across an
+  // earlier, unrelated thread and one of Kakadu's own worker threads, not a
+  // real double-join in Kakadu. Single-threaded encode sidesteps it; ASan
+  // builds never ship, so the throughput cost is test-only.
   num_threads = 0;
 #endif
 
