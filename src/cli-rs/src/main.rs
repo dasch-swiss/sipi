@@ -63,24 +63,22 @@ fn main() -> ExitCode {
     let verb = verb_idx.map(|idx| argv[idx].as_str());
 
     // Sentry client — panics + handled events, uniformly for every verb
-    // (`server`, `health`, and the offline verbs behind `sipi_cli_main`).
-    // Held for the life of `main`: `ClientInitGuard`'s `Drop` blocks to flush
-    // any pending events before the process exits.
+    // (`server`, `health`, and the offline verbs behind `sipi_cli_main`) once
+    // a DSN is configured (`None` otherwise — see `init_sentry`). Held for
+    // the life of `main`: `ClientInitGuard`'s `Drop` blocks to flush any
+    // pending events before the process exits.
     let _sentry_guard = init_sentry();
 
     // Native-crash (minidump) reporting — `server` only (DEV-6659). `sipi
     // health` runs on a short interval in prod and must never fork a fresh
     // reporter child of its own; CLI `convert` crash coverage is deliberately
     // out of scope here (it never reaches Rust code — see the module doc).
-    // Also gated on `is_enabled()`: `Hub::current().client()` returns `Some`
-    // even for a disabled (no-DSN) client — without this filter, every local
-    // dev / DSN-less test run of `server` would still fork a reporter child
-    // and install process-wide crash-signal handlers for a client that drops
-    // everything on flush.
+    // `Hub::current().client()` is `Some` only when `init_sentry` actually
+    // called `sentry::init` (a valid DSN was configured) — a DSN-less run
+    // never forks a reporter child or installs crash-signal handlers.
     let _minidump_guard = if verb == Some("server") {
         sentry::Hub::current()
             .client()
-            .filter(|client| client.is_enabled())
             .and_then(|client| sentry_rust_minidump::init(&client).ok())
     } else {
         None
@@ -97,13 +95,18 @@ fn main() -> ExitCode {
     }
 }
 
-/// `SIPI_SENTRY_DSN` empty/unset ⇒ a disabled (no-op) client — mirrors the C++
-/// oracle's `init_sentry` early-return on an empty DSN. `release`/`environment`
-/// share their source with the OTel resource attributes (`sipi::telemetry`),
-/// so both observability backends agree. `traces_sample_rate: 0.0` — Sentry
-/// owns crashes/panics/errors here, OTLP owns traces; a nonzero rate would
-/// duplicate transactions across both backends.
-fn init_sentry() -> sentry::ClientInitGuard {
+/// `SIPI_SENTRY_DSN` empty/unset/unparseable ⇒ `None`, and `sentry::init` is
+/// never called at all — mirrors the C++ oracle's `init_sentry` early-return
+/// on an empty DSN, but goes one step further: constructing a disabled client
+/// still exercises `sentry`'s init-time machinery (integrations, its
+/// `reqwest`-backed transport factory) for no observable benefit, since a
+/// disabled client's panic hook already just chains through to the previous
+/// (default) hook. `release`/`environment` share their source with the OTel
+/// resource attributes (`sipi::telemetry`), so both observability backends
+/// agree. `traces_sample_rate: 0.0` — Sentry owns crashes/panics/errors here,
+/// OTLP owns traces; a nonzero rate would duplicate transactions across both
+/// backends.
+fn init_sentry() -> Option<sentry::ClientInitGuard> {
     let dsn = std::env::var("SIPI_SENTRY_DSN")
         .ok()
         .filter(|s| !s.is_empty())
@@ -113,15 +116,15 @@ fn init_sentry() -> sentry::ClientInitGuard {
                 eprintln!("sipi: SIPI_SENTRY_DSN is not a valid Sentry DSN ({e}); Sentry disabled");
                 None
             }
-        });
-    sentry::init(sentry::ClientOptions {
-        dsn,
+        })?;
+    Some(sentry::init(sentry::ClientOptions {
+        dsn: Some(dsn),
         release: sipi::telemetry::service_version().map(Into::into),
         environment: Some(sipi::telemetry::deployment_environment().into()),
         attach_stacktrace: true,
         traces_sample_rate: 0.0,
         ..Default::default()
-    })
+    }))
 }
 
 /// Hand the full argv to the C++ CLI (`sipi_cli_main`) and return its exit code.
