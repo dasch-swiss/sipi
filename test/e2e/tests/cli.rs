@@ -217,6 +217,9 @@ fn cli_version_flag() {
 
     let result = Command::new(&sipi_bin)
         .arg("--version")
+        // Diagnostic override: drop `log_path` so an ASan/LSan report (if any)
+        // prints to this captured stderr instead of a test.outputs file.
+        .env("ASAN_OPTIONS", "detect_leaks=1:halt_on_error=0")
         .output()
         .unwrap_or_else(|e| panic!("Failed to run sipi --version: {}", e));
 
