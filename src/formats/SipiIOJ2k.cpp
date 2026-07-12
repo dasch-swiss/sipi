@@ -904,6 +904,14 @@ void SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const SipiCompress
   kdu_membroker membroker;
 
   if ((num_threads = kdu_get_num_processors()) < 2) num_threads = 0;
+#if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
+  // TEMP DIAGNOSTIC (DEV-6659 CI investigation, revert before merge unless
+  // confirmed as the real fix): force single-threaded Kakadu encode under
+  // ASan, to test whether Kakadu's own worker-thread pool is the source of
+  // the "Joining already joined thread" abort seen only on the Rust shell
+  // binary after Phase 4 dropped sentry-native from its link.
+  num_threads = 0;
+#endif
 
   // Declared outside the try so the catch below can read `http->client_aborted`
   // to distinguish client aborts from genuine Kakadu failures. sink_stream
