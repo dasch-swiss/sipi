@@ -175,10 +175,15 @@ async fn server_main(
         configured_routes,
     )
     .await;
+    // TEMP DIAGNOSTIC (DEV-6659 CI investigation, remove before merge):
+    // bypass the tracing subscriber entirely (in case it's implicated) to
+    // confirm what serve() actually returned before flush_telemetry runs.
+    eprintln!("TEMP DIAGNOSTIC serve() returned: {result:?}");
 
     // Flush pending spans before the guard drops; the OTLP export is blocking
     // I/O, so do it off the async runtime.
     flush_telemetry(otel).await;
+    eprintln!("TEMP DIAGNOSTIC flush_telemetry completed");
 
     match result {
         Ok(()) => ExitCode::SUCCESS,
