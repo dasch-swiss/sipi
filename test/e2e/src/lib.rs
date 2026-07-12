@@ -77,6 +77,8 @@ pub struct SipiServer {
     child: Child,
     pub http_port: u16,
     pub base_url: String,
+    stdout_buf: Arc<Mutex<String>>,
+    stderr_buf: Arc<Mutex<String>>,
 }
 
 impl SipiServer {
@@ -429,7 +431,18 @@ impl SipiServer {
             child,
             http_port,
             base_url,
+            stdout_buf,
+            stderr_buf,
         }
+    }
+
+    /// The server's captured stdout/stderr so far (accumulated on a
+    /// background drain thread since the process was spawned). Useful for
+    /// diagnosing a failure detected after startup (e.g. an unexpected exit
+    /// code post-shutdown), where the log lines explaining it never reach
+    /// the test's own captured output.
+    pub fn captured_output(&self) -> (String, String) {
+        (dump(&self.stdout_buf), dump(&self.stderr_buf))
     }
 
     /// Start a sipi server with the given config file (no extra args).
