@@ -105,7 +105,18 @@ sipi_e2e_test(name = "bilevel_tiff", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "cache", deps = _e2e_test_deps)
 
-sipi_e2e_test(name = "cli", deps = _e2e_test_deps)
+sipi_e2e_test(
+    name = "cli",
+    deps = _e2e_test_deps,
+    # TEMP DIAGNOSTIC (DEV-6659 CI investigation, revert before merge): point
+    # SIPI_BIN at the retained C++ oracle instead of the Rust shell, to
+    # isolate whether the asan-ubsan "Joining already joined thread" abort on
+    # TIFF->JP2 (Kakadu) encode needs the Rust sentry/rustls/ring stack, or
+    # is purely a consequence of Phase 4 dropping sentry-native (and its
+    # OpenSSL/curl linkage) from the shared C++ engine both binaries link.
+    extra_data = ["//src/cli:sipi"],
+    extra_env = {"SIPI_BIN": "$(rootpath //src/cli:sipi)"},
+)
 
 sipi_e2e_test(name = "cli_json", deps = _e2e_test_deps)
 
