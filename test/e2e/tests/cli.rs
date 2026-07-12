@@ -222,8 +222,10 @@ fn cli_version_flag() {
 
     assert!(
         result.status.success(),
-        "sipi --version exited non-zero: {}",
-        String::from_utf8_lossy(&result.stderr)
+        "sipi --version exited non-zero: {} (status: {:?}, stdout: {})",
+        String::from_utf8_lossy(&result.stderr),
+        result.status,
+        String::from_utf8_lossy(&result.stdout)
     );
 
     let expected_version = std::fs::read_to_string(repo_root().join("version.txt"))
