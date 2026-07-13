@@ -230,6 +230,17 @@ bool SipiIOJ2k::read(SipiImage *img,
 
   int num_threads;
   if ((num_threads = kdu_get_num_processors()) < 2) num_threads = 0;
+#if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
+  // Same false-positive as the write path below (see its comment): Kakadu's
+  // worker-thread pool trips ASan's thread-registry bookkeeping. Here the
+  // abort doesn't fire synchronously during the decode that created the
+  // pool — it was traced to a shared, long-lived server going down between
+  // two later, unrelated requests, with a cluster of Kakadu decode-path
+  // UBSan findings (the only substantive activity logged) immediately
+  // preceding it. Single-threaded decode sidesteps it; ASan builds never
+  // ship, so the throughput cost is test-only.
+  num_threads = 0;
+#endif
 
   // Custom messaging services
   kdu_customize_warnings(&kdu_sipi_warn);
