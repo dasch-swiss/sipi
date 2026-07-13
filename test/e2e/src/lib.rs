@@ -77,6 +77,8 @@ pub struct SipiServer {
     child: Child,
     pub http_port: u16,
     pub base_url: String,
+    stdout_buf: Arc<Mutex<String>>,
+    stderr_buf: Arc<Mutex<String>>,
 }
 
 impl SipiServer {
@@ -248,6 +250,23 @@ impl SipiServer {
         // on a still-draining server. Placed before `extra_args` so an
         // individual test can still override it (last-wins).
         let mut cmd = Command::new(&bin);
+        // `.bazelrc`'s `test:asan` sets ASAN_OPTIONS' `log_path` to a file
+        // under `$TEST_UNDECLARED_OUTPUTS_DIR`, inherited here by default —
+        // a sanitizer report for a spawned server then lands in a file this
+        // harness never reads, so a crashed server surfaces only as
+        // "Connection refused" with no indication why. Drop `log_path` for
+        // the spawned process specifically, routing any report into this
+        // process's own stdout/stderr pipes instead, where `captured_output`
+        // (used by every test that asserts on server exit/liveness) can see
+        // it. A no-op when ASAN_OPTIONS isn't set (non-sanitizer builds).
+        if let Ok(asan_options) = std::env::var("ASAN_OPTIONS") {
+            let without_log_path = asan_options
+                .split(':')
+                .filter(|opt| !opt.starts_with("log_path="))
+                .collect::<Vec<_>>()
+                .join(":");
+            cmd.env("ASAN_OPTIONS", without_log_path);
+        }
         cmd.arg("server")
             .arg("--config")
             .arg(config)
@@ -429,7 +448,18 @@ impl SipiServer {
             child,
             http_port,
             base_url,
+            stdout_buf,
+            stderr_buf,
         }
+    }
+
+    /// The server's captured stdout/stderr so far (accumulated on a
+    /// background drain thread since the process was spawned). Useful for
+    /// diagnosing a failure detected after startup (e.g. an unexpected exit
+    /// code post-shutdown), where the log lines explaining it never reach
+    /// the test's own captured output.
+    pub fn captured_output(&self) -> (String, String) {
+        (dump(&self.stdout_buf), dump(&self.stderr_buf))
     }
 
     /// Start a sipi server with the given config file (no extra args).

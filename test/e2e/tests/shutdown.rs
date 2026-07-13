@@ -84,10 +84,13 @@ fn server_exits_cleanly_after_sigterm() {
         match srv.try_wait() {
             Ok(Some(status)) => {
                 // Server should exit cleanly (0) or via signal
+                let (stdout, stderr) = srv.captured_output();
                 assert!(
                     status.success() || status.code().is_none(), // None = killed by signal
-                    "server should exit cleanly, got: {:?}",
-                    status
+                    "server should exit cleanly, got: {:?}\nstdout:\n{}\nstderr:\n{}",
+                    status,
+                    stdout,
+                    stderr
                 );
                 return;
             }
