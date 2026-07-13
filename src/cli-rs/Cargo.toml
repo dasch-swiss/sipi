@@ -21,10 +21,6 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive", "env"] }
-# Loopback liveness probe for the `health` verb. TLS off (default-features =
-# false drops rustls + gzip): it only ever does a plaintext GET to
-# http://127.0.0.1/health, so the HTTPS stack would be dead weight.
-ureq = { version = "3", default-features = false }
 
 # Crash & error reporting (DEV-6659) — `main` owns the sentry client +
 # native-crash (minidump) reporter for every verb, so both live here rather
@@ -35,10 +31,3 @@ ureq = { version = "3", default-features = false }
 sentry = { version = "0.48", default-features = false, features = ["backtrace", "contexts", "debug-images", "panic", "release-health", "reqwest", "rustls-no-provider"] }
 sentry-rust-minidump = { version = "0.16", features = ["ipc"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
-
-# `_exit` (async-signal-safe process exit, skipping atexit/static-dtor/Drop
-# teardown) — used only under ASan (`commands/health.rs`) to sidestep a
-# teardown-time false-positive pthread-join abort, same technique as
-# `server-rs`'s `server_main`. Already resolved transitively via `sentry`'s
-# dependency graph; promoted to a direct dep.
-libc = "0.2"

@@ -2152,11 +2152,9 @@ name = "sipi-cli"
 version = "0.0.0"
 dependencies = [
  "clap",
- "libc",
  "rustls",
  "sentry",
  "sentry-rust-minidump",
- "ureq",
 ]
 
 [[package]]
