@@ -180,12 +180,38 @@ async fn server_main(
     // I/O, so do it off the async runtime.
     flush_telemetry(otel).await;
 
-    match result {
-        Ok(()) => ExitCode::SUCCESS,
+    let code = match &result {
+        Ok(()) => 0,
         Err(e) => {
             tracing::error!(error = %e, "server terminated with error");
-            ExitCode::FAILURE
+            1
         }
+    };
+
+    // Under ASan (this binary links the sanitizer runtime via the C++ engine,
+    // so its pthread interceptors apply process-wide, not just to
+    // instrumented code), tearing down the tokio runtime and the process's
+    // other persistent thread pools (e.g. the blocking pool behind
+    // `flush_telemetry`'s `spawn_blocking`) trips the same "Joining already
+    // joined thread" abort as Kakadu's own worker-thread pool (see
+    // `SipiIOJ2k.cpp`) — this time during teardown, after `serve()` has
+    // already returned and telemetry has already flushed. Exiting via
+    // `_exit` skips atexit handlers, C++ static destructors, and Rust drops
+    // entirely, so no teardown-time join runs; the same tradeoff
+    // `cli_app.cpp`'s `--version` fast-path already makes for the C++ CLI.
+    // `ASAN_OPTIONS` is set only by the asan-instrumented test/CI config
+    // (`.bazelrc`'s `test:asan`), never in dev or production.
+    if std::env::var_os("ASAN_OPTIONS").is_some() {
+        // SAFETY: `_exit` is async-signal-safe and always valid to call; the
+        // server has already produced its result and flushed telemetry, so
+        // skipping further teardown loses no state.
+        unsafe { libc::_exit(code) };
+    }
+
+    if code == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }
 
@@ -354,10 +380,8 @@ async fn shutdown_signal() {
 /// OTel `service.version`), falling back to the crate version in local runs.
 async fn health() -> Response {
     let uptime = START.get().map_or(0, |s| s.elapsed().as_secs());
-    let version = std::env::var("SIPI_SENTRY_RELEASE")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_owned());
+    let version =
+        telemetry::service_version().unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_owned());
     let body = serde_json::json!({ "status": "ok", "version": version, "uptime_seconds": uptime })
         .to_string();
     (

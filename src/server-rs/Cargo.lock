@@ -2275,6 +2275,7 @@ dependencies = [
  "form_urlencoded",
  "httpdate",
  "init-tracing-opentelemetry",
+ "libc",
  "opentelemetry",
  "opentelemetry-appender-tracing",
  "opentelemetry-otlp",
