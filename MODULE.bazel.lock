@@ -709,7 +709,7 @@
           "ENV:CARGO_BAZEL_GENERATOR_SHA256 \\0",
           "ENV:CARGO_BAZEL_GENERATOR_URL \\0",
           "ENV:CARGO_BAZEL_ISOLATED \\0",
-          "ENV:CARGO_BAZEL_REPIN 1",
+          "ENV:CARGO_BAZEL_REPIN \\0",
           "ENV:CARGO_BAZEL_REPIN_ONLY \\0",
           "ENV:CARGO_BAZEL_TIMEOUT \\0",
           "ENV:REPIN \\0",
@@ -730,7 +730,7 @@
           "FILE:@@//test/e2e/Cargo.toml d3530244f3551c9b35474343da6c6527aa406f1675bc0fb5333c990b6b5fb2bf",
           "FILE:@@//src/server-rs/Cargo.lock 8e20583c92307239e763b32f3cca24f7efeac6829d9c145bb12aca04ee9bc034",
           "FILE:@@//src/server-rs/Cargo.toml 2d1a3b58e402c5fbb3ffdb75ad66a64f26b4e10a57ac5ab8ea8cd1603aafc922",
-          "FILE:@@//src/cli-rs/Cargo.lock 7dc7a64cc707d0574118c582fbd7bdfbf72375f5610049a8818cd03435045b2c",
+          "FILE:@@//src/cli-rs/Cargo.lock 125149e5349b16cfa634a6beb8f74dd3dcb57102123d2b30ebb332d3f57c470b",
           "FILE:@@//src/cli-rs/Cargo.toml 758477a0b4326c485deeaca294e32511cf6aeebcf8f860c4787325c95d2374bf"
         ],
         "generatedRepoSpecs": {
