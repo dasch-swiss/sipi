@@ -1,9 +1,24 @@
 mod common;
 
 use common::{client, server};
+use sipi_e2e::SipiServer;
 use std::io::{Read as _, Write as _};
 use std::net::TcpStream;
 use std::time::Duration;
+
+// If the shared server has died between tests, surface its captured
+// stdout/stderr in the connect failure instead of a bare "Connection
+// refused" — that's the only way to see why a shared, long-lived server
+// went away mid-run (no explicit shutdown is ever sent to it here).
+fn connect(srv: &SipiServer, addr: &str) -> TcpStream {
+    match TcpStream::connect(addr) {
+        Ok(stream) => stream,
+        Err(e) => {
+            let (stdout, stderr) = srv.captured_output();
+            panic!("TCP connect failed: {e}\nserver stdout:\n{stdout}\nserver stderr:\n{stderr}");
+        }
+    }
+}
 
 // =============================================================================
 // Path Traversal Tests (R1-R4)
@@ -14,7 +29,7 @@ fn path_traversal_encoded_dotdot_returns_400() {
     let srv = server();
     // Use raw TCP to send %2e%2e without client-side URL normalization
     let addr = format!("127.0.0.1:{}", srv.http_port);
-    let mut stream = TcpStream::connect(&addr).expect("TCP connect failed");
+    let mut stream = connect(srv, &addr);
     stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
 
     let request = "GET /unit/%2e%2e/%2e%2e/etc/passwd/full/max/0/default.jpg HTTP/1.1\r\nHost: localhost\r\n\r\n";
@@ -34,7 +49,7 @@ fn path_traversal_encoded_dotdot_returns_400() {
 fn path_traversal_double_encoded_returns_400() {
     let srv = server();
     let addr = format!("127.0.0.1:{}", srv.http_port);
-    let mut stream = TcpStream::connect(&addr).expect("TCP connect failed");
+    let mut stream = connect(srv, &addr);
     stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
 
     let request = "GET /unit/%252e%252e/%252e%252e/etc/passwd/full/max/0/default.jpg HTTP/1.1\r\nHost: localhost\r\n\r\n";
@@ -54,7 +69,7 @@ fn path_traversal_double_encoded_returns_400() {
 fn path_traversal_no_content_leaked() {
     let srv = server();
     let addr = format!("127.0.0.1:{}", srv.http_port);
-    let mut stream = TcpStream::connect(&addr).expect("TCP connect failed");
+    let mut stream = connect(srv, &addr);
     stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
 
     let request = "GET /unit/%2e%2e/%2e%2e/etc/passwd/full/max/0/default.jpg HTTP/1.1\r\nHost: localhost\r\n\r\n";
@@ -80,7 +95,7 @@ fn path_traversal_no_content_leaked() {
 fn path_traversal_mixed_case_encoded() {
     let srv = server();
     let addr = format!("127.0.0.1:{}", srv.http_port);
-    let mut stream = TcpStream::connect(&addr).expect("TCP connect failed");
+    let mut stream = connect(srv, &addr);
     stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
 
     // Mixed case: %2E%2e
@@ -114,7 +129,7 @@ fn null_byte_in_iiif_url_returns_400() {
     let srv = server();
     // Use raw TCP since null byte in URL causes HTTP client issues
     let addr = format!("127.0.0.1:{}", srv.http_port);
-    let mut stream = TcpStream::connect(&addr).expect("TCP connect failed");
+    let mut stream = connect(srv, &addr);
     stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
 
     let request =
@@ -170,7 +185,7 @@ fn null_byte_on_non_iiif_route() {
     let srv = server();
     // R7: null byte check is in the HTTP parsing layer, protects all routes
     let addr = format!("127.0.0.1:{}", srv.http_port);
-    let mut stream = TcpStream::connect(&addr).expect("TCP connect failed");
+    let mut stream = connect(srv, &addr);
     stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
 
     let request = "GET /server/test%00.html HTTP/1.1\r\nHost: localhost\r\n\r\n";
@@ -195,7 +210,7 @@ fn crlf_in_identifier_no_header_injection() {
     let srv = server();
     // Use raw TCP to send CRLF in URL
     let addr = format!("127.0.0.1:{}", srv.http_port);
-    let mut stream = TcpStream::connect(&addr).expect("TCP connect failed");
+    let mut stream = connect(srv, &addr);
     stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
 
     // Null byte will be caught first (%0d%0a doesn't contain %00), so this tests
