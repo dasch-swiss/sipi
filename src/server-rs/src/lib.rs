@@ -192,10 +192,16 @@ async fn server_main(
         configured_routes,
     )
     .await;
+    // TEMP DIAGNOSTIC (DEV-6659 CI investigation, remove before merge):
+    // the single-threaded-runtime fix (see run()) silenced the ASan abort
+    // message entirely (no longer just relocated) but exit code 1 persists —
+    // bypass tracing to see what's actually happening around flush_telemetry.
+    eprintln!("TEMP DIAGNOSTIC serve() returned: {result:?}");
 
     // Flush pending spans before the guard drops; the OTLP export is blocking
     // I/O, so do it off the async runtime.
     flush_telemetry(otel).await;
+    eprintln!("TEMP DIAGNOSTIC flush_telemetry completed");
 
     match result {
         Ok(()) => ExitCode::SUCCESS,
