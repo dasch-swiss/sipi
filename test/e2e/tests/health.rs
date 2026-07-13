@@ -62,13 +62,23 @@ fn health_responds_quickly() {
 #[test]
 fn health_subcommand_exits_zero_when_healthy() {
     let srv = server();
-    let status = Command::new(sipi_bin_path())
-        .args(["health", "--port", &srv.http_port.to_string()])
-        .status()
-        .expect("failed to run sipi health");
+    let mut cmd = Command::new(sipi_bin_path());
+    cmd.args(["health", "--port", &srv.http_port.to_string()]);
+    // Drop ASAN_OPTIONS' log_path (inherited from `.bazelrc`'s `test:asan`)
+    // so a sanitizer report, if any, lands on this process's inherited
+    // stderr — visible below — instead of a file this test never reads.
+    if let Ok(asan_options) = std::env::var("ASAN_OPTIONS") {
+        let without_log_path = asan_options
+            .split(':')
+            .filter(|opt| !opt.starts_with("log_path="))
+            .collect::<Vec<_>>()
+            .join(":");
+        cmd.env("ASAN_OPTIONS", without_log_path);
+    }
+    let status = cmd.status().expect("failed to run sipi health");
     assert!(
         status.success(),
-        "sipi health should exit 0 against a healthy server"
+        "sipi health should exit 0 against a healthy server, got: {status:?}"
     );
 }
 

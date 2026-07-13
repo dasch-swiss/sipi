@@ -21,10 +21,6 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive", "env"] }
-# Loopback liveness probe for the `health` verb. TLS off (default-features =
-# false drops rustls + gzip): it only ever does a plaintext GET to
-# http://127.0.0.1/health, so the HTTPS stack would be dead weight.
-ureq = { version = "3", default-features = false }
 
 # Crash & error reporting (DEV-6659) — `main` owns the sentry client +
 # native-crash (minidump) reporter for every verb, so both live here rather

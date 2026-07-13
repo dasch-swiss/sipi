@@ -2155,7 +2155,6 @@ dependencies = [
  "rustls",
  "sentry",
  "sentry-rust-minidump",
- "ureq",
 ]
 
 [[package]]
