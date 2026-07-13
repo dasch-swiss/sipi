@@ -62,24 +62,7 @@ pub fn run(
     overrides: ServerOverrides,
     drain_timeout: Option<u64>,
 ) -> ExitCode {
-    // Under ASan (this binary links the sanitizer runtime via the C++ engine,
-    // so its pthread interceptors apply process-wide, not just to
-    // instrumented code) tokio's own multi-threaded scheduler trips the same
-    // "Joining already joined thread" abort as Kakadu's worker-thread pool
-    // (see SipiIOJ2k.cpp) — this time at Runtime::drop() teardown, after
-    // serve() has already returned Ok. `ASAN_OPTIONS` is set only by the
-    // asan-instrumented test/CI runs (never in dev or production), so its
-    // presence is a reliable, test-only signal to fall back to a
-    // single-threaded runtime and sidestep tokio's own worker-thread join.
-    let asan_build = std::env::var_os("ASAN_OPTIONS").is_some();
-    let rt = if asan_build {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-    } else {
-        tokio::runtime::Runtime::new()
-    };
-    let rt = match rt {
+    let rt = match tokio::runtime::Runtime::new() {
         Ok(rt) => rt,
         Err(e) => {
             eprintln!("failed to build tokio runtime: {e}");
@@ -192,23 +175,43 @@ async fn server_main(
         configured_routes,
     )
     .await;
-    // TEMP DIAGNOSTIC (DEV-6659 CI investigation, remove before merge):
-    // the single-threaded-runtime fix (see run()) silenced the ASan abort
-    // message entirely (no longer just relocated) but exit code 1 persists —
-    // bypass tracing to see what's actually happening around flush_telemetry.
-    eprintln!("TEMP DIAGNOSTIC serve() returned: {result:?}");
 
     // Flush pending spans before the guard drops; the OTLP export is blocking
     // I/O, so do it off the async runtime.
     flush_telemetry(otel).await;
-    eprintln!("TEMP DIAGNOSTIC flush_telemetry completed");
 
-    match result {
-        Ok(()) => ExitCode::SUCCESS,
+    let code = match &result {
+        Ok(()) => 0,
         Err(e) => {
             tracing::error!(error = %e, "server terminated with error");
-            ExitCode::FAILURE
+            1
         }
+    };
+
+    // Under ASan (this binary links the sanitizer runtime via the C++ engine,
+    // so its pthread interceptors apply process-wide, not just to
+    // instrumented code), tearing down the tokio runtime and the process's
+    // other persistent thread pools (e.g. the blocking pool behind
+    // `flush_telemetry`'s `spawn_blocking`) trips the same "Joining already
+    // joined thread" abort as Kakadu's own worker-thread pool (see
+    // `SipiIOJ2k.cpp`) — this time during teardown, after `serve()` has
+    // already returned and telemetry has already flushed. Exiting via
+    // `_exit` skips atexit handlers, C++ static destructors, and Rust drops
+    // entirely, so no teardown-time join runs; the same tradeoff
+    // `cli_app.cpp`'s `--version` fast-path already makes for the C++ CLI.
+    // `ASAN_OPTIONS` is set only by the asan-instrumented test/CI config
+    // (`.bazelrc`'s `test:asan`), never in dev or production.
+    if std::env::var_os("ASAN_OPTIONS").is_some() {
+        // SAFETY: `_exit` is async-signal-safe and always valid to call; the
+        // server has already produced its result and flushed telemetry, so
+        // skipping further teardown loses no state.
+        unsafe { libc::_exit(code) };
+    }
+
+    if code == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }
 
