@@ -62,7 +62,23 @@ pub fn run(
     overrides: ServerOverrides,
     drain_timeout: Option<u64>,
 ) -> ExitCode {
-    let rt = match tokio::runtime::Runtime::new() {
+    let mut builder = tokio::runtime::Builder::new_multi_thread();
+    builder.enable_all();
+    // Under ASan (this binary links the sanitizer runtime via the C++
+    // engine, so its pthread interceptors apply process-wide), tokio
+    // retiring an idle `spawn_blocking` thread (routes.rs runs every image
+    // decode/encode there) after its keep-alive timeout trips the same
+    // "Joining already joined thread" false-positive abort as Kakadu's own
+    // worker-thread pool (SipiIOJ2k.cpp) — confirmed via a long-lived test
+    // server that died while idle, with no request in flight, well after
+    // its one and only image request. A keep-alive far longer than any
+    // realistic process lifetime means tokio never proactively retires (and
+    // joins) a blocking-pool thread. `ASAN_OPTIONS` is set only by the
+    // asan-instrumented test/CI config, never in dev or production.
+    if std::env::var_os("ASAN_OPTIONS").is_some() {
+        builder.thread_keep_alive(Duration::from_secs(365 * 24 * 3600));
+    }
+    let rt = match builder.build() {
         Ok(rt) => rt,
         Err(e) => {
             eprintln!("failed to build tokio runtime: {e}");
