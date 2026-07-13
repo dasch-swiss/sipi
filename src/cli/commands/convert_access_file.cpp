@@ -21,7 +21,7 @@
 #include "SipiSize.h"
 #include "metadata/essentials.h"
 #include "metadata/icc.h"
-#include "observability/sentry.h"
+#include "populate_from_image.h"
 
 namespace Sipi::cli {
 
@@ -101,7 +101,6 @@ void report_error(const observability::ImageContext &ctx,
   const std::string &message,
   bool json_output)
 {
-  observability::capture_image_error(message, phase, ctx);
   log_err("Error %s image: %s", phase.c_str(), message.c_str());
   if (json_output) { emit_json_report(std::cout, ctx, message, phase); }
 }

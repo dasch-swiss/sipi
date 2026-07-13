@@ -237,13 +237,12 @@ flag forms are gone.
 
 | Flag | Description |
 |------|-------------|
-| `--json` | Emit a single JSON document to `stdout` instead of human-readable output. Accepted by `convert`, `convert access-file`, `query`, and `compare`. Useful for programmatic consumers and for local debugging when no Sentry DSN is configured. |
+| `--json` | Emit a single JSON document to `stdout` instead of human-readable output. Accepted by `convert`, `convert access-file`, `query`, and `compare`. Useful for programmatic consumers and for full diagnostics on failures, which the CLI never reports to Sentry (see [Structured Diagnostics (CLI Mode)](#structured-diagnostics-cli-mode)). |
 
 Use cases:
 
-- **Local debugging with no Sentry DSN** — the primary RDU case. Every
-  `ImageContext` field normally sent to Sentry appears in the JSON
-  document instead.
+- **Local debugging** — the primary RDU case. Every `ImageContext` field
+  appears in the JSON document; CLI failures are never sent to Sentry.
 - **CI pipelines** that need to assert on image properties
   (`jq '.image.bps'`) or on a specific failure mode (`jq '.phase'`).
 - **Scripts** that consume sipi output pipeline-style.
@@ -299,11 +298,10 @@ These options are accepted by the `server` subcommand. Usage:
 
 ### Sentry Error Reporting
 
-| Flag | Env Var | Description |
-|------|---------|-------------|
-| `--sentry-dsn <url>` | `SIPI_SENTRY_DSN` | Sentry DSN for error reporting |
-| `--sentry-release <ver>` | `SIPI_SENTRY_RELEASE` | Sentry release version |
-| `--sentry-environment <env>` | `SIPI_SENTRY_ENVIRONMENT` | Sentry environment name |
+No CLI flags — these are environment-variable only (see [Environment
+Variables](#environment-variables) below): `SIPI_SENTRY_DSN`,
+`SIPI_SENTRY_RELEASE`, `SIPI_SENTRY_ENVIRONMENT`. Read by the Rust shell's
+`main` (`cli-rs/src/main.rs`), which owns Sentry init for every verb.
 
 ### Deprecated Options
 
@@ -346,9 +344,9 @@ flags.
 | `SIPI_JWTKEY` | `--jwtkey` | | JWT secret |
 | `SIPI_JPEGQUALITY` | `--quality` | `60` | JPEG quality |
 | `SIPI_LOGLEVEL` | `--loglevel` | `DEBUG` | Log level |
-| `SIPI_SENTRY_DSN` | `--sentry-dsn` | | Sentry DSN |
-| `SIPI_SENTRY_RELEASE` | `--sentry-release` | | Sentry release |
-| `SIPI_SENTRY_ENVIRONMENT` | `--sentry-environment` | | Sentry environment |
+| `SIPI_SENTRY_DSN` | | | Sentry DSN (no CLI flag) |
+| `SIPI_SENTRY_RELEASE` | | | Sentry release (no CLI flag) |
+| `SIPI_SENTRY_ENVIRONMENT` | | | Sentry environment (no CLI flag) |
 | `SIPI_MAX_DECODE_MEMORY` | `--max-decode-memory` | `0` (auto) | Max concurrent decode memory (`0`=auto 75%, `2G`, `500M`) |
 | `SIPI_DECODE_MEMORY_MODE` | `--decode-memory-mode` | `off` | Memory budget mode: `off`, `monitor`, `enforce` |
 
@@ -391,30 +389,17 @@ Where `<phase>` is one of `reading`, `converting`, or `writing`. Example:
 Error reading image: Unsupported JPEG colorspace JCS_UNKNOWN (file=input.jpg, dimensions=2048x1536, components=4)
 ```
 
-### Sentry Integration (CLI Mode)
+### Structured Diagnostics (CLI Mode)
 
-When the `SIPI_SENTRY_DSN` environment variable is set, CLI conversion failures
-automatically send a Sentry event with rich image context. This allows developers
-to diagnose failures without reproducing them locally.
-
-Each Sentry event includes:
-
-- **Tags** (indexed, searchable, filterable in Sentry):
-    - `sipi.mode` — always `cli` for command-line conversions
-    - `sipi.phase` — `read`, `convert`, or `write`
-    - `sipi.output_format` — the target format (e.g., `jpx`, `jpg`, `tif`, `png`)
-    - `sipi.colorspace` — the image's photometric interpretation
-    - `sipi.bps` — bits per sample
-
-- **Context** ("Image" context with structured data):
-    - `input_file`, `output_file` — file paths
-    - `width`, `height` — image dimensions (if read successfully)
-    - `channels` — number of color channels
-    - `bps` — bits per sample
-    - `colorspace` — photometric interpretation
-    - `icc_profile_type` — ICC profile type (e.g., sRGB, AdobeRGB, CMYK)
-    - `orientation` — EXIF orientation
-    - `file_size_bytes` — input file size
+CLI conversion failures are not sent to Sentry — only a crash (a panic in the
+Rust shell) is. A handled read/convert/write failure logs to stderr and,
+with `--json`, emits the full structured document described in
+[Structured JSON output (CLI)](#structured-json-output-cli) above: the same
+image-context fields (`input_file`, `output_file`, `width`, `height`,
+`channels`, `bps`, `colorspace`, `icc_profile_type`, `orientation`,
+`file_size_bytes`) plus the failing `phase` (`read`, `convert`, or `write`)
+and the error message. This is the diagnostic surface for CLI failures —
+`--json` gets you full context regardless of whether `SIPI_SENTRY_DSN` is set.
 
 ### Common Failure Causes
 
@@ -435,9 +420,10 @@ If you call SIPI CLI from another service (e.g., a Java service):
    exists or is valid.
 2. **Parse stderr** (optional). The first line of stderr contains a human-readable
    error message with the failure phase and details.
-3. **Set `SIPI_SENTRY_DSN`** to get full diagnostics server-side. Use the Sentry
-   tags `sipi.phase`, `sipi.colorspace`, `sipi.bps`, and `sipi.output_format` to
-   build alerts and filters for specific failure patterns.
+3. **Pass `--json`** to get full diagnostics without reproducing the failure —
+   the document's `phase`, `colorspace`, `bps`, and `output_format` fields
+   identify the failure pattern (see [Structured Diagnostics (CLI
+   Mode)](#structured-diagnostics-cli-mode) above).
 
 ## Configuration Files
 

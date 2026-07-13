@@ -80,9 +80,14 @@ impl StreamSink {
 
 // Each callback wraps its body in `catch_unwind` — the Rust-side analog of the
 // C++ `sipi_guard`. The engine calls these synchronously on the blocking thread,
-// so a Rust panic must not unwind into C++; on panic the void callbacks swallow
-// and the `c_int` callbacks return a non-zero "failure" sentinel (the engine then
-// aborts the write). `AssertUnwindSafe` is sound: a panic abandons the response.
+// so a Rust panic must not unwind into C++; on panic the void callbacks stop
+// here and the `c_int` callbacks return a non-zero "failure" sentinel (the
+// engine then aborts the write). The panic is not silent: `sentry`'s panic
+// integration (installed once in `cli-rs/main.rs::init_sentry`) hooks
+// `std::panic::set_hook` and reports the panic to Sentry before unwinding
+// reaches this `catch_unwind` — this boundary only stops the unwind from
+// crossing into C++, it does not decide whether the panic is observed.
+// `AssertUnwindSafe` is sound: a panic abandons the response.
 
 extern "C" fn cb_set_status(ctx: *mut c_void, status: c_int) {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

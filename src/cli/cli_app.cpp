@@ -26,7 +26,6 @@
 
 #include <curl/curl.h>
 #include <jansson.h>
-#include <sentry.h>
 
 #include "shttps/lua/LuaServer.h"
 #include "shttps/lua_sqlite/LuaSqlite.h"
@@ -42,7 +41,6 @@
 #include "cli/commands/verify.h"
 #include "SipiConf.h"
 #include "observability/connection_metrics_adapter.h"
-#include "observability/sentry_init.h"
 #include "SipiFilenameHash.h"
 #include "SipiHttpServer.h"
 #include "SipiMemoryBudget.h"
@@ -56,7 +54,7 @@
 #include "ffi/lua_config.h"
 #include "ffi/sipi_ffi.h"
 #include "SipiReport.h"
-#include "observability/sentry.h"
+#include "populate_from_image.h"
 #include "formats/SipiIOTiff.h"
 
 #include "generated/SipiVersion.h"
@@ -393,39 +391,6 @@ private:
   }
 };
 
-/*!
- * Handle any unhandled exceptions.
- *
- * This function is called when an unhandled exception is thrown. It sends the exception
- * message to Sentry as a fatal event, then aborts the program. The subsequent SIGABRT
- * is caught by sentry-native's inproc backend, which produces a proper crash event
- * with symbolicated stack traces.
- *
- * NOTE: This intentionally produces TWO Sentry events per unhandled exception:
- * 1. A message event (from here) carrying the exception text
- * 2. A crash event (from inproc SIGABRT handler) with the symbolicated stack trace
- * Sentry groups these separately, which is useful: the message event identifies
- * the exception, while the crash event provides the full native stack trace.
- */
-void my_terminate_handler()
-{
-  std::string msg;
-  try {
-    // Rethrow the current exception to identify it
-    throw;
-  } catch (const std::exception &e) {
-    msg = "Unhandled exception caught: " + std::string(e.what());
-  } catch (...) {
-    msg = "Unhandled unknown exception caught";
-  }
-
-  sentry_capture_event(sentry_value_new_message_event(SENTRY_LEVEL_FATAL, "my_terminate_handler", msg.c_str()));
-  log_err("%s", msg.c_str());
-  sentry_flush(2000);
-
-  std::abort();// Triggers SIGABRT → caught by sentry-native inproc backend
-}
-
 namespace {
 /*! Map a config scaling-quality string to a ScalingMethod; unknown/missing → HIGH
  *  (matching the legacy SipiHttpServer::scaling_quality setter). */
@@ -727,22 +692,6 @@ extern "C" int sipi_cli_main(int argc, char **argv)
     }
   }
 
-  // Set top-level exception handler. Unhandled C++ exceptions are sent to Sentry
-  // as message events, then std::abort() is called. The resulting SIGABRT is caught
-  // by sentry-native's inproc backend, which produces a proper crash event with
-  // symbolicated stack traces.
-  // Note: SIGSEGV/SIGABRT signal handlers are installed automatically by sentry_init()
-  // when using the inproc backend — no manual signal() calls needed.
-  std::set_terminate(my_terminate_handler);
-
-  // Read SIPI_SENTRY_* env vars and initialize sentry-native.
-  Sipi::observability::SentryConfig sentry_cfg;
-  if (const char *p = getenv("SIPI_SENTRY_DSN"); p != nullptr) { sentry_cfg.dsn = p; }
-  if (const char *p = getenv("SIPI_SENTRY_RELEASE"); p != nullptr) { sentry_cfg.release = p; }
-  if (const char *p = getenv("SIPI_SENTRY_ENVIRONMENT"); p != nullptr) { sentry_cfg.environment = p; }
-  Sipi::observability::init_sentry(sentry_cfg);
-
-
   //
   // first we initialize the libraries that sipi uses
   //
@@ -753,19 +702,6 @@ extern "C" int sipi_cli_main(int argc, char **argv)
     log_err("Library initialization failed: %s", e.to_string().c_str());
     return EXIT_FAILURE;
   }
-
-  // Shut down sentry's background transport thread (joined/drained by
-  // sentry_close()) before static destructors run — in particular before
-  // ~LibraryInitialiser calls curl_global_cleanup(). Registered AFTER the
-  // static LibraryInitialiser has finished construction, so per
-  // [basic.start.term] this handler runs BEFORE ~LibraryInitialiser at exit.
-  // This covers every exit path: subcommand dispatch returning through
-  // sipi_cli_main, a CLI11 parse error returning the parse-error code, and
-  // normal return. Without it, curl teardown races the live sentry-http thread
-  // and corrupts the heap.
-  // (std::abort() from my_terminate_handler bypasses atexit, leaving
-  // sentry-native's inproc crash reporting intact.)
-  std::atexit([] { Sipi::observability::close_sentry(); });
 
   CLI::App sipiopt("SIPI is an IIIF image server and image format converter.");
   sipiopt.require_subcommand(1);
@@ -880,17 +816,6 @@ extern "C" int sipi_cli_main(int argc, char **argv)
     { "INFO", LL_INFO }, { "NOTICE", LL_NOTICE }, { "WARNING", LL_WARNING },
     { "ERR", LL_ERR }, { "CRIT", LL_CRIT }, { "ALERT", LL_ALERT }, { "EMERG", LL_EMERG } };
 
-  // Sentry env-driven settings remain on `sipiopt` (top-level) so they
-  // apply uniformly across every subcommand. CLI11 reads them from the
-  // SIPI_SENTRY_* environment variables; no command-line override path
-  // is needed.
-  std::string optSipiSentryDsn;
-  sipiopt.add_option("--sentry-dsn", optSipiSentryDsn)->envname("SIPI_SENTRY_DSN");
-  std::string optSipiSentryRelease;
-  sipiopt.add_option("--sentry-release", optSipiSentryRelease)->envname("SIPI_SENTRY_RELEASE");
-  std::string optSipiSentryEnvironment;
-  sipiopt.add_option("--sentry-environment", optSipiSentryEnvironment)->envname("SIPI_SENTRY_ENVIRONMENT");
-
   //
   // Body lambdas, each capturing the option storage.
   //
@@ -996,7 +921,7 @@ extern "C" int sipi_cli_main(int argc, char **argv)
     }
 
     //
-    // Prepare Sentry context for error reporting
+    // Prepare the image context for the --json report / log messages
     //
     Sipi::observability::ImageContext sentry_ctx;
     sentry_ctx.input_file = optInFile;
@@ -1016,13 +941,11 @@ extern "C" int sipi_cli_main(int argc, char **argv)
       }
     } catch (const Sipi::SipiImageError &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
-      Sipi::observability::capture_image_error(err.what(), "read", sentry_ctx);
       log_err("Error reading image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "read" }); }
       return EXIT_FAILURE;
     } catch (const std::exception &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
-      Sipi::observability::capture_image_error(err.what(), "read", sentry_ctx);
       log_err("Error reading image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "read" }); }
       return EXIT_FAILURE;
@@ -1080,13 +1003,11 @@ extern "C" int sipi_cli_main(int argc, char **argv)
       if (user_set("--watermark")) { img.add_watermark(optWatermark); }
     } catch (const Sipi::SipiImageError &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
-      Sipi::observability::capture_image_error(err.what(), "convert", sentry_ctx);
       log_err("Error processing image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "convert" }); }
       return EXIT_FAILURE;
     } catch (const std::exception &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
-      Sipi::observability::capture_image_error(err.what(), "convert", sentry_ctx);
       log_err("Error processing image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "convert" }); }
       return EXIT_FAILURE;
@@ -1127,13 +1048,11 @@ extern "C" int sipi_cli_main(int argc, char **argv)
       img.write(format, optOutFile, &comp_params);
     } catch (const Sipi::SipiImageError &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
-      Sipi::observability::capture_image_error(err.what(), "write", sentry_ctx);
       log_err("Error writing image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "write" }); }
       return EXIT_FAILURE;
     } catch (const std::exception &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
-      Sipi::observability::capture_image_error(err.what(), "write", sentry_ctx);
       log_err("Error writing image: %s", err.what());
       if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "write" }); }
       return EXIT_FAILURE;
@@ -1454,10 +1373,6 @@ extern "C" int sipi_cli_main(int argc, char **argv)
       }
       SipiFilenameHash::setLevels(sipiConf.getSubdirLevels());
 
-      if (!optSipiSentryDsn.empty()) log_info("SIPI_SENTRY_DSN: %s", optSipiSentryDsn.c_str());
-      if (!optSipiSentryEnvironment.empty()) log_info("SIPI_SENTRY_ENVRONMENT: %s", optSipiSentryEnvironment.c_str());
-      if (!optSipiSentryRelease.empty()) log_info("SIPI_SENTRY_Release: %s", optSipiSentryRelease.c_str());
-
       // Create object SipiHttpServer
       auto nthreads = sipiConf.getNThreads();
       if (nthreads < 1) {
@@ -1713,9 +1628,7 @@ extern "C" int sipi_cli_main(int argc, char **argv)
   };
 
   // ----- Server options -------------------------------------------------
-  // All ~40 server options live on the `server` subcommand. Sentry env
-  // settings remain on `sipiopt` (top-level) so they apply to every
-  // subcommand invocation.
+  // All ~40 server options live on the `server` subcommand.
   auto attach_server_opts = [&](CLI::App *cmd) {
     cmd->add_option("-c,--config", optConfigfile, "Configuration file for web server.")
       ->envname("SIPI_CONFIGFILE")
@@ -2002,8 +1915,6 @@ extern "C" int sipi_cli_main(int argc, char **argv)
   }
 
   // `require_subcommand(1)` means exactly one leaf subcommand callback fired
-  // and recorded its result into sipi_exit_code. Sentry teardown runs via the
-  // std::atexit(close_sentry) registered above on process exit; the caller
-  // (the C++ main, or the Rust shell) owns when that happens.
+  // and recorded its result into sipi_exit_code.
   return sipi_exit_code;
 }

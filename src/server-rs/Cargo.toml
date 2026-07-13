@@ -64,3 +64,18 @@ opentelemetry-appender-tracing = "0.31"
 tracing-opentelemetry = "0.32"
 axum-tracing-opentelemetry = "0.33"
 init-tracing-opentelemetry = { version = "0.36", features = ["otlp", "metrics", "tracing_subscriber_ext"] }
+
+# Crash & error reporting (DEV-6659) — replaces C++ sentry-native. Only the
+# `sentry` client itself (event capture + `sentry-tracing`'s subscriber layer)
+# is used from this crate; the minidump reporter and the crypto-provider
+# install both live in `cli-rs` (the binary crate that owns `main` and
+# installs the provider once, process-wide, before any of this runs).
+# `rustls-no-provider` (not `rustls`): sentry's `reqwest` transport resolves to
+# reqwest 0.13.x, whose plain `rustls` feature unconditionally forces the
+# aws-lc-rs crypto provider (`__rustls-aws-lc-rs`) — and aws-lc-sys's cmake
+# build script panics inside Bazel actions (banned in MODULE.bazel).
+# `rustls-no-provider` pulls in TLS support without forcing a provider; see
+# `cli-rs/Cargo.toml` for the direct `ring`-only `rustls` dep that keeps
+# `aws_lc_rs` out of the resolved graph.
+sentry = { version = "0.48", default-features = false, features = ["backtrace", "contexts", "debug-images", "panic", "release-health", "reqwest", "rustls-no-provider"] }
+sentry-tracing = "0.48"

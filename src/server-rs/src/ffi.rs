@@ -120,6 +120,33 @@ pub struct SipiIiifParams {
     pub format_type: SipiFormatType,
 }
 
+/// Flat, engine-populated context for a handled (non-fatal) image error —
+/// mirrors `SipiImageErrorReport` in `sipi_ffi.h`. Every field is only valid for the
+/// duration of the `report_error` call — copy anything that needs to outlive
+/// it. All fields are 8-byte-wide (pointers / `u64`), so there is no interior
+/// padding to reason about; the ABI is still guarded below against an
+/// accidental field reorder or insertion.
+#[repr(C)]
+pub struct SipiImageErrorReport {
+    pub phase: *const c_char,
+    pub message: *const c_char,
+    pub input_file: *const c_char,
+    pub output_format: *const c_char,
+    pub colorspace: *const c_char,
+    pub icc_profile_type: *const c_char,
+    pub orientation: *const c_char,
+    pub width: u64,
+    pub height: u64,
+    pub channels: u64,
+    pub bps: u64,
+    pub file_size_bytes: u64,
+}
+
+/// Reports a handled image error's context as a side-channel (mirrors
+/// `SipiReportErrorFn`) — never a response. `ctx` is the opaque data from
+/// `SipiServeRequest::report_ctx`.
+pub type SipiReportErrorFn = extern "C" fn(ctx: *mut c_void, err: *const SipiImageErrorReport);
+
 /// The IIIF serve request — mirrors `SipiServeRequest` in `sipi_ffi.h`. All
 /// `*const c_char` fields are caller-owned and must outlive the (synchronous)
 /// `sipi_serve_image` call; null is allowed where the header documents it.
@@ -136,6 +163,8 @@ pub struct SipiServeRequest {
     pub forwarded_host: *const c_char,
     pub request_uri: *const c_char,
     pub is_head: c_int,
+    pub report_error: Option<SipiReportErrorFn>,
+    pub report_ctx: *mut c_void,
 }
 
 /// Native image shape from a header read — mirrors `SipiImageDims` in
@@ -771,6 +800,106 @@ pub fn image_dims_and_essentials(
     Ok((dims, essentials))
 }
 
+/// Builds a `sentry::Event` from a reported handled-error context and
+/// captures it — mirrors the shape the C++ oracle's `capture_image_error`
+/// (sentry-native) used to send directly; the engine now links no Sentry SDK
+/// and reports this context across the seam instead (decision #8: a report is
+/// always a side-channel, never a body). `ctx` is the request-URI C string
+/// the Rust edge passes as `report_ctx` — not part of the flat struct, since
+/// the edge already holds it for `SipiServeRequest::request_uri`.
+pub(crate) extern "C" fn report_image_error(ctx: *mut c_void, err: *const SipiImageErrorReport) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if err.is_null() {
+            return;
+        }
+        // SAFETY: the engine passes a valid pointer, valid for this call.
+        let err = unsafe { &*err };
+
+        let field = |p: *const c_char| -> Option<String> {
+            // SAFETY: every string field is either null or a NUL-terminated
+            // C string valid for this call, per the seam contract.
+            (!p.is_null()).then(|| unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned())
+        };
+        let phase = field(err.phase).unwrap_or_default();
+        let message = field(err.message);
+        let input_file = field(err.input_file);
+        let output_format = field(err.output_format);
+        let colorspace = field(err.colorspace);
+        let icc_profile_type = field(err.icc_profile_type);
+        let orientation = field(err.orientation);
+        let request_uri = (!ctx.is_null()).then(|| {
+            // SAFETY: `ctx` is either null or the request-URI C string the
+            // Rust edge passed as `report_ctx`, valid for this call.
+            unsafe { CStr::from_ptr(ctx as *const c_char) }
+                .to_string_lossy()
+                .into_owned()
+        });
+
+        let mut tags = sentry::protocol::Map::new();
+        tags.insert("sipi.mode".to_owned(), "server".to_owned());
+        tags.insert("sipi.phase".to_owned(), phase);
+        if let Some(v) = &output_format {
+            tags.insert("sipi.output_format".to_owned(), v.clone());
+        }
+        if let Some(v) = &colorspace {
+            tags.insert("sipi.colorspace".to_owned(), v.clone());
+        }
+        if err.bps > 0 {
+            tags.insert("sipi.bps".to_owned(), err.bps.to_string());
+        }
+        if let Some(v) = &request_uri {
+            tags.insert("sipi.request_uri".to_owned(), v.clone());
+        }
+
+        let mut image_data = sentry::protocol::Map::new();
+        if let Some(v) = input_file {
+            image_data.insert("input_file".to_owned(), v.into());
+        }
+        if let Some(v) = &output_format {
+            image_data.insert("output_format".to_owned(), v.clone().into());
+        }
+        if err.width > 0 || err.height > 0 {
+            image_data.insert("width".to_owned(), err.width.into());
+            image_data.insert("height".to_owned(), err.height.into());
+        }
+        if err.channels > 0 {
+            image_data.insert("channels".to_owned(), err.channels.into());
+        }
+        if err.bps > 0 {
+            image_data.insert("bps".to_owned(), err.bps.into());
+        }
+        if let Some(v) = colorspace {
+            image_data.insert("colorspace".to_owned(), v.into());
+        }
+        if let Some(v) = icc_profile_type {
+            image_data.insert("icc_profile_type".to_owned(), v.into());
+        }
+        if let Some(v) = orientation {
+            image_data.insert("orientation".to_owned(), v.into());
+        }
+        if err.file_size_bytes > 0 {
+            image_data.insert("file_size_bytes".to_owned(), err.file_size_bytes.into());
+        }
+        if let Some(v) = request_uri {
+            image_data.insert("request_uri".to_owned(), v.into());
+        }
+
+        let mut contexts = sentry::protocol::Map::new();
+        contexts.insert(
+            "Image".to_owned(),
+            sentry::protocol::Context::Other(image_data),
+        );
+
+        sentry::capture_event(sentry::protocol::Event {
+            level: sentry::Level::Error,
+            message,
+            tags,
+            contexts,
+            ..Default::default()
+        });
+    }));
+}
+
 // ── Preflight wrappers ──────────────────────────────────────────────────────
 
 /// An owned request context. Frees the underlying `shttps::RequestContext` on
@@ -1158,4 +1287,34 @@ pub fn has_file_preflight() -> Result<bool, i32> {
         return Err(code);
     }
     Ok(v != 0)
+}
+
+// Lock-step layout guard — paired with the C++ static_assert/offsetof block in
+// sipi_ffi.h. All fields are 8-byte-wide (pointers / u64), so there is no
+// packing subtlety, but the guard still catches an accidental field reorder
+// or insertion on either side. LP64 on every supported target.
+#[cfg(test)]
+mod image_error_layout {
+    use super::SipiImageErrorReport;
+    use std::mem::{align_of, offset_of, size_of};
+
+    #[test]
+    fn repr_c_matches_sipi_ffi_h() {
+        assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
+        assert_eq!(align_of::<SipiImageErrorReport>(), 8);
+        assert_eq!(size_of::<SipiImageErrorReport>(), 96);
+
+        assert_eq!(offset_of!(SipiImageErrorReport, phase), 0);
+        assert_eq!(offset_of!(SipiImageErrorReport, message), 8);
+        assert_eq!(offset_of!(SipiImageErrorReport, input_file), 16);
+        assert_eq!(offset_of!(SipiImageErrorReport, output_format), 24);
+        assert_eq!(offset_of!(SipiImageErrorReport, colorspace), 32);
+        assert_eq!(offset_of!(SipiImageErrorReport, icc_profile_type), 40);
+        assert_eq!(offset_of!(SipiImageErrorReport, orientation), 48);
+        assert_eq!(offset_of!(SipiImageErrorReport, width), 56);
+        assert_eq!(offset_of!(SipiImageErrorReport, height), 64);
+        assert_eq!(offset_of!(SipiImageErrorReport, channels), 72);
+        assert_eq!(offset_of!(SipiImageErrorReport, bps), 80);
+        assert_eq!(offset_of!(SipiImageErrorReport, file_size_bytes), 88);
+    }
 }

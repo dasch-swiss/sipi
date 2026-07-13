@@ -101,7 +101,7 @@ localdev config in one step.
 
 | Component | Path | Purpose |
 |-----------|------|---------|
-| Main Application | `src/cli/cli_app.cpp` | CLI11 arg parsing + subcommand dispatch (CLI + server modes), Sentry integration, behind the `sipi_cli_main` FFI entry; `src/cli/sipi.cpp` is the thin `main` |
+| Main Application | `src/cli/cli_app.cpp` | CLI11 arg parsing + subcommand dispatch (CLI + server modes), behind the `sipi_cli_main` FFI entry; `src/cli-rs/src/main.rs` owns `main` and Sentry init |
 | SipiImage | `src/SipiImage.hpp` | Image processing: TIFF, JP2, PNG, JPEG; metadata (EXIF, IPTC, XMP); ICC profiles |
 | SipiHttpServer | `src/SipiHttpServer.hpp` | HTTP server, IIIF endpoints, caching, Lua scripting integration |
 | IIIF Parser | `include/iiifparser/` | IIIF URL parsing: identifier, region, size, rotation, quality/format |
@@ -137,7 +137,7 @@ hand-written native `cc_library` over an `http_archive`/release fetch
 BCR drop-ins: libpng, libjpeg_turbo, libwebp, libdeflate, zlib, bzip2, xz, zstd,
 sqlite3, libexpat, libmagic, Lua, curl, OpenSSL, prometheus-cpp (core only),
 protobuf. Native `cc_library`: libtiff (codecs re-enabled + JBIG via jbigkit),
-exiv2, lcms2, jansson, sentry-native, jbigkit, and Kakadu (requires license).
+exiv2, lcms2, jansson, jbigkit, and Kakadu (requires license).
 
 **System Dependencies:** Threads (pthread), iconv (macOS only).
 
@@ -222,4 +222,4 @@ These are not style preferences — they are contract with the maintainer. Code 
 - `bazel build --config=asan --config=ubsan //src/cli:sipi` — sanitizers
 - `bazel build --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz` — libFuzzer harness
 
-**Error Reporting:** Optional Sentry integration via `SIPI_SENTRY_DSN`, `SIPI_SENTRY_ENVIRONMENT`, `SIPI_SENTRY_RELEASE` environment variables.
+**Error Reporting:** Optional Sentry integration (Rust `sentry` crate, `cli-rs/src/main.rs`) via `SIPI_SENTRY_DSN`, `SIPI_SENTRY_ENVIRONMENT`, `SIPI_SENTRY_RELEASE` environment variables — panics and handled image errors for every verb, plus an out-of-process minidump reporter for native crashes on `server` (see [`docs/adr/0018-minidump-crash-memory-accepted-risk.md`](docs/adr/0018-minidump-crash-memory-accepted-risk.md)).

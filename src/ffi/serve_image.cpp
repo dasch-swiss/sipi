@@ -31,21 +31,49 @@
 #include "logging/logger.h"
 #include "metadata/icc.h"
 #include "observability/metrics.h"
-#include "observability/sentry.h"
+#include "populate_from_image.h"
 #include "shttps/util/Parsing.h"
 #include "shttps/util/UrlDecode.h"
 
 namespace Sipi::ffi {
 namespace {
 
-  using observability::capture_image_error;
   using observability::get_file_size;
   using observability::ImageContext;
   using observability::Metrics;
   using observability::populate_from_image;
-  using observability::SipiMode;
 
   constexpr const char *kCacheControl = "must-revalidate, post-check=0, pre-check=0";
+
+  // Flattens a handled image error into the seam's SipiImageErrorReport and
+  // reports it through `report_error` iff non-null — the seam's "NULL =
+  // absent" idiom (the C++ oracle's own server, `SipiHttpServer.cpp`, passes
+  // no callback and stays on its own log-only path). Never affects the
+  // caller's SipiStatus: this is purely the side-channel decision #8
+  // requires. Named *Report*, not *Error*, to avoid colliding with the
+  // `Sipi::SipiImageError` exception type this same file catches.
+  void report_image_error(SipiReportErrorFn report_error,
+    void *report_ctx,
+    const std::string &message,
+    const std::string &phase,
+    const ImageContext &ctx)
+  {
+    if (report_error == nullptr) { return; }
+    SipiImageErrorReport err{};
+    err.phase = phase.c_str();
+    err.message = message.c_str();
+    err.input_file = ctx.input_file.c_str();
+    err.output_format = ctx.output_format.c_str();
+    err.colorspace = ctx.colorspace.c_str();
+    err.icc_profile_type = ctx.icc_profile_type.c_str();
+    err.orientation = ctx.orientation.c_str();
+    err.width = ctx.width;
+    err.height = ctx.height;
+    err.channels = ctx.channels;
+    err.bps = ctx.bps;
+    err.file_size_bytes = ctx.file_size_bytes;
+    report_error(report_ctx, &err);
+  }
 
   // The Content-Type for an emitted IIIF format (matches the legacy switch).
   const char *content_type_for(SipiQualityFormat::FormatType fmt)
@@ -237,10 +265,12 @@ namespace {
       std::string canonical,
       std::string request_uri,
       SipiImgInfo info,
-      std::optional<MemoryBudgetGuard> budget_guard)
+      std::optional<MemoryBudgetGuard> budget_guard,
+      SipiReportErrorFn report_error,
+      void *report_ctx)
       : budget_guard_(std::move(budget_guard)), img_(std::move(img)), format_(format), jpeg_quality_(jpeg_quality),
         cache_(cache), cachefile_(std::move(cachefile)), infile_(std::move(infile)), canonical_(std::move(canonical)),
-        request_uri_(std::move(request_uri)), info_(info)
+        request_uri_(std::move(request_uri)), info_(info), report_error_(report_error), report_ctx_(report_ctx)
     {}
 
     int produce(const StreamSink &sink) override
@@ -317,10 +347,9 @@ namespace {
       ImageContext sentry_ctx;
       sentry_ctx.input_file = infile_;
       sentry_ctx.file_size_bytes = get_file_size(infile_);
-      sentry_ctx.request_uri = request_uri_;
       sentry_ctx.output_format = format_type_to_string(format_);
       populate_from_image(sentry_ctx, img_);
-      capture_image_error(message, "write", sentry_ctx, SipiMode::Server);
+      report_image_error(report_error_, report_ctx_, message, "write", sentry_ctx);
     }
 
     // Commit the cache file iff it is intact (DEV-6660): the FilePath leaf is
@@ -379,6 +408,14 @@ namespace {
     std::string canonical_;
     std::string request_uri_;
     SipiImgInfo info_;
+    // Safe to hold past construction only because `produce()` runs
+    // synchronously within the same `sipi_serve_image` call that constructed
+    // this producer (the Rust caller is blocked on that call the whole time,
+    // per the seam's synchronous contract) — so `report_ctx_` (the Rust-owned
+    // request-URI C string, per routes.rs) is still alive whenever `produce()`
+    // reads it. Never retain either past this object's lifetime.
+    SipiReportErrorFn report_error_;
+    void *report_ctx_;
   };
 
   std::string str_or_empty(const char *s) { return s != nullptr ? std::string(s) : std::string(); }
@@ -437,8 +474,7 @@ std::expected<ServeResponse, SipiStatus>
     ImageContext sentry_ctx;
     sentry_ctx.input_file = infile;
     sentry_ctx.file_size_bytes = get_file_size(infile);
-    sentry_ctx.request_uri = uri;
-    capture_image_error(err.to_string(), "read", sentry_ctx, SipiMode::Server);
+    report_image_error(req.report_error, req.report_ctx, err.to_string(), "read", sentry_ctx);
     return std::unexpected(SipiStatus::InternalError);
   }
   if (info.success == SipiImgInfo::FAILURE) { return std::unexpected(SipiStatus::InternalError); }
@@ -635,16 +671,14 @@ std::expected<ServeResponse, SipiStatus>
     ImageContext sentry_ctx;
     sentry_ctx.input_file = infile;
     sentry_ctx.file_size_bytes = get_file_size(infile);
-    sentry_ctx.request_uri = uri;
-    capture_image_error("std::bad_alloc during image read", "read", sentry_ctx, SipiMode::Server);
+    report_image_error(req.report_error, req.report_ctx, "std::bad_alloc during image read", "read", sentry_ctx);
     return std::unexpected(SipiStatus::InternalError);
   } catch (const SipiImageError &err) {
     ImageContext sentry_ctx;
     sentry_ctx.input_file = infile;
     sentry_ctx.file_size_bytes = get_file_size(infile);
-    sentry_ctx.request_uri = uri;
     populate_from_image(sentry_ctx, img);
-    capture_image_error(err.to_string(), "read", sentry_ctx, SipiMode::Server);
+    report_image_error(req.report_error, req.report_ctx, err.to_string(), "read", sentry_ctx);
     return std::unexpected(SipiStatus::InternalError);
   } catch (const SipiSizeError &) {
     return std::unexpected(SipiStatus::BadRequest);
@@ -664,9 +698,8 @@ std::expected<ServeResponse, SipiStatus>
       ImageContext sentry_ctx;
       sentry_ctx.input_file = infile;
       sentry_ctx.file_size_bytes = get_file_size(infile);
-      sentry_ctx.request_uri = uri;
       populate_from_image(sentry_ctx, img);
-      capture_image_error(err.to_string(), "convert", sentry_ctx, SipiMode::Server);
+      report_image_error(req.report_error, req.report_ctx, err.to_string(), "convert", sentry_ctx);
       return std::unexpected(SipiStatus::InternalError);
     }
   }
@@ -702,17 +735,15 @@ std::expected<ServeResponse, SipiStatus>
       ImageContext sentry_ctx;
       sentry_ctx.input_file = infile;
       sentry_ctx.file_size_bytes = get_file_size(infile);
-      sentry_ctx.request_uri = uri;
       populate_from_image(sentry_ctx, img);
-      capture_image_error(err.to_string(), "convert", sentry_ctx, SipiMode::Server);
+      report_image_error(req.report_error, req.report_ctx, err.to_string(), "convert", sentry_ctx);
       return std::unexpected(SipiStatus::InternalError);
     } catch (std::exception &err) {
       ImageContext sentry_ctx;
       sentry_ctx.input_file = infile;
       sentry_ctx.file_size_bytes = get_file_size(infile);
-      sentry_ctx.request_uri = uri;
       populate_from_image(sentry_ctx, img);
-      capture_image_error(err.what(), "convert", sentry_ctx, SipiMode::Server);
+      report_image_error(req.report_error, req.report_ctx, err.what(), "convert", sentry_ctx);
       return std::unexpected(SipiStatus::InternalError);
     }
     log_info("GET %s: adding watermark", uri.c_str());
@@ -746,7 +777,9 @@ std::expected<ServeResponse, SipiStatus>
     canonical,
     uri,
     info,
-    std::move(budget_guard)) };
+    std::move(budget_guard),
+    req.report_error,
+    req.report_ctx) };
   return out;
 }
 

@@ -183,7 +183,12 @@ impl std::fmt::Display for ConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ConfigError::Io(e) => write!(f, "reading config: {e}"),
-            ConfigError::Parse(e) => write!(f, "parsing TOML: {e}"),
+            // `.message()`, not `{e}`: `toml::de::Error`'s Display echoes the
+            // offending source line verbatim (e.g. `1 | jwt_secret = "..."`) —
+            // this error reaches `tracing::error!` in lib.rs, which
+            // `sentry_tracing::layer()` forwards to Sentry. `.message()` is the
+            // description alone, with no source-text echo.
+            ConfigError::Parse(e) => write!(f, "parsing TOML: {}", e.message()),
             ConfigError::MissingImgRoot => {
                 write!(f, "no image root: set [paths].img_root (or pass --imgroot)")
             }

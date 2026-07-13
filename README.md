@@ -108,9 +108,10 @@ Further variables can be set to configure the Sentry client:
 - `SIPI_SENTRY_ENVIRONMENT`: The environment in which the application is running. Defaults to `development`.
 - `SIPI_SENTRY_RELEASE`: The release version number of the application.
 
-Sentry captures two categories of events:
-- **Fatal crashes** (SIGSEGV, SIGABRT) — captured in both server and CLI modes.
-- **Image processing failures** (CLI mode) — when a CLI conversion fails, a Sentry event is sent with rich image context (dimensions, colorspace, channels, bits/sample, ICC profile type, file paths). Events are tagged with `sipi.phase`, `sipi.colorspace`, `sipi.bps`, and `sipi.output_format` for filtering and alerting.
+Sentry is initialized once, in the Rust shell's `main`, and captures:
+- **Panics** — for every verb (`server`, `health`, and the offline CLI subcommands).
+- **Native crashes** (e.g. SIGSEGV in a codec) — `server` only, via an out-of-process minidump reporter. See [docs/adr/0018-minidump-crash-memory-accepted-risk.md](docs/adr/0018-minidump-crash-memory-accepted-risk.md) for what a minidump can contain.
+- **Image processing failures** (`server` only) — a handled read/convert/write error is reported with rich image context (dimensions, colorspace, channels, bits/sample, ICC profile type, file paths), tagged with `sipi.phase`, `sipi.colorspace`, `sipi.bps`, and `sipi.output_format`. CLI conversion failures are not sent to Sentry — pass `--json` for the same diagnostic detail instead.
 
 See [docs/src/running.md](docs/src/running.md) for full details on CLI exit codes, error output format, and integration guidance for calling services.
 

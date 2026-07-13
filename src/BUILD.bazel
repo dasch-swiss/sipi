@@ -270,6 +270,7 @@ cc_library(
         "SipiMemoryBudget.h",
         "SipiPeakMemory.h",
         "SipiRateLimiter.h",
+        "populate_from_image.h",
         "formats/SipiIOJ2k.h",
         "formats/SipiIOJpeg.h",
         "formats/SipiIOPng.h",
@@ -334,7 +335,6 @@ cc_library(
         "@xz//:lzma",
         "@libmagic//:lib",
         "@jansson//:jansson",
-        "@sentry//:sentry",
         "@prometheus-cpp//core",
         "@curl",
         "@openssl//:crypto",
@@ -407,7 +407,7 @@ cc_library(
         # `-ldl` — Lua's package loader uses dlopen/dlclose/dlsym/dladdr
         # for runtime .so loading. On macOS those live in libSystem; on
         # Linux they're in libdl, which the toolchain doesn't auto-link.
-        # `-lpthread` — exiv2 + sentry call pthread_* directly. Modern
+        # `-lpthread` — exiv2 calls pthread_* directly. Modern
         # glibc folds pthread into libc, but ld.lld doesn't follow the
         # -pthread driver flag through to the underlying linker line, so
         # we spell the lib out.
@@ -456,7 +456,6 @@ cc_library(
         "@lua",
         "@jansson//:jansson",
         "@sqlite3",
-        "@sentry//:sentry",
         "@prometheus-cpp//core",
         "@curl",
         "@openssl//:crypto",
@@ -943,7 +942,9 @@ oci_image(
         "LC_ALL": "C.UTF-8",
         # distroless_base ships ca-certificates at this canonical Debian
         # path; sipi's curl-built libcurl reads SSL_CERT_FILE for outbound
-        # HTTPS (e.g. JWT issuer keys, Sentry).
+        # HTTPS (e.g. JWT issuer keys). Sentry's own HTTPS transport is the
+        # Rust `sentry` crate (rustls + rustls-platform-verifier, DEV-6659) —
+        # it reads the OS cert store directly, not this env var.
         "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
         "TZ": "Europe/Zurich",
         # distroless_base's tzdata installs zoneinfo under /usr/share/

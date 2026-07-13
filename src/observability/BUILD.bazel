@@ -1,20 +1,19 @@
 """src/observability/ — operational telemetry surface (Y+8L per DEV-6353).
 
 First per-probe Bazel package promotion. Houses SIPI's Prometheus metrics
-(`Sipi::observability::Metrics`), the shttps connection-metrics adapter
-(`ConnectionMetricsAdapter`), Sentry error capture (`capture_image_error`,
-`ImageContext`), and Sentry-native init (`init_sentry`/`close_sentry`).
+(`Sipi::observability::Metrics`) and the shttps connection-metrics adapter
+(`ConnectionMetricsAdapter`). Crash/error reporting (Sentry) is Rust-owned
+(DEV-6659) — the engine links no Sentry SDK; handled image errors cross the
+FFI seam as `SipiImageErrorReport` (see `//src/ffi:sipi_ffi`), flattened from
+`Sipi::observability::ImageContext` (`//src:populate_from_image.h`, not this
+package — it dereferences `SipiImage`, which this package doesn't depend on).
 
 Co-locates the unit test (`connection_metrics_adapter_test.cpp` +
 `test_main.cpp`) per ADR-0003 — moved from `test/unit/sipiconnectionmetrics/`.
 
 `layering_check` and `parse_headers` are **deferred** until SipiImage moves
-into its own package (DEV-6388 / DEV-6395). Today, `sentry.cpp` includes
-`SipiImage.h` through src/.'s permissive include path; with strict layering
-enabled that include would require an explicit dep on whichever target
-eventually owns SipiImage. Same disposition as `//src/shttps:shttps`
-(see shttps/BUILD.bazel comment about Logger.h rehome): the feature
-flips on globally in DEV-6353 once every per-module promotion has landed.
+into its own package (DEV-6388 / DEV-6395) — see the shttps/BUILD.bazel
+comment about Logger.h rehome for the same disposition on a sibling package.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
@@ -33,8 +32,6 @@ cc_library(
     srcs = [
         "connection_metrics_adapter.cpp",
         "metrics.cpp",
-        "sentry.cpp",
-        "sentry_init.cpp",
     ],
     hdrs = [
         "connection_metrics_adapter.h",
@@ -43,19 +40,14 @@ cc_library(
         # propagates the (inert-unless-`--config=tracy`) profiler to every
         # //src:sipi_lib TU that `#include "observability/profiling.h"`.
         "profiling.h",
-        "sentry.h",
-        "sentry_init.h",
     ],
     # No `includes` directive needed: cross-module consumers use the
     # path-prefixed form (`#include "observability/metrics.h"`) which is
     # resolved via a consumer's own `includes = ["."]` (typically via
     # //src:sipi_lib). Siblings inside this package use the quote-form
     # (`#include "metrics.h"`) which searches the current source's
-    # directory automatically. Crucially, we do not add `.` here — that
-    # would expose `sentry.h` to angle-form `<sentry.h>` lookups via
-    # `-isystem` and mask sentry-native's API header.
+    # directory automatically.
     deps = [
-        "@sentry//:sentry",
         "//include:headers",
         "//src/shttps:shttps",
         "//src:sipi_generated_hdrs",
