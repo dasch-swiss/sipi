@@ -32,7 +32,25 @@ pub fn run(health_argv: &[String]) -> ExitCode {
         }
     };
 
-    if probe(args.port) {
+    let healthy = probe(args.port);
+
+    // Under ASan (this binary statically links the sanitizer runtime via the
+    // C++ engine, so its pthread interceptors apply process-wide), tearing
+    // down `ureq`'s connection machinery at process exit trips the same
+    // "Joining already joined thread" false-positive abort documented in
+    // `sipi::server_main` (server-rs/src/lib.rs) and `SipiIOJ2k.cpp`'s Kakadu
+    // fix — only on the healthy path, which does a full HTTP round-trip
+    // (the no-server path fails instantly on connection-refused, before
+    // `ureq` sets up anything to join). `_exit` skips that teardown
+    // entirely; `probe` has already produced its result, so nothing is lost.
+    // `ASAN_OPTIONS` is set only by the asan-instrumented test/CI config,
+    // never in dev or production.
+    if std::env::var_os("ASAN_OPTIONS").is_some() {
+        // SAFETY: `_exit` is async-signal-safe and always valid to call.
+        unsafe { libc::_exit(i32::from(!healthy)) };
+    }
+
+    if healthy {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE

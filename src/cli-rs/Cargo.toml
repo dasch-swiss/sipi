@@ -35,3 +35,10 @@ ureq = { version = "3", default-features = false }
 sentry = { version = "0.48", default-features = false, features = ["backtrace", "contexts", "debug-images", "panic", "release-health", "reqwest", "rustls-no-provider"] }
 sentry-rust-minidump = { version = "0.16", features = ["ipc"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+
+# `_exit` (async-signal-safe process exit, skipping atexit/static-dtor/Drop
+# teardown) — used only under ASan (`commands/health.rs`) to sidestep a
+# teardown-time false-positive pthread-join abort, same technique as
+# `server-rs`'s `server_main`. Already resolved transitively via `sentry`'s
+# dependency graph; promoted to a direct dep.
+libc = "0.2"
