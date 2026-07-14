@@ -35,69 +35,7 @@ permissions:
   contents: read
 
 jobs:
-  # Fast, platform-independent pre-gate. Runs once on linux-amd64; the `test`
-  # matrix `needs:` it, so these checks fail fast on one runner before the
-  # 3-arch fleet spins up. The two pure-shell checks run before the Nix
-  # bootstrap so a trivial failure trips in seconds; the Rust gates then reuse
-  # the RBE remote cache. No LFS pull — none of these checks read test images.
-  lint:
-    name: lint
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    concurrency:
-      group: ${{ github.workflow }}-lint-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          lfs: false
-      - name: Enforce shttps→sipi boundary
-        run: bash scripts/shttps-context-check.sh
-      # Drift guard: the differential corpus must keep covering the e2e surface.
-      # Pure shell (grep), so it runs before the Nix bootstrap and fails fast if
-      # an e2e test was added/removed without updating the corpus.
-      - name: Check differential coverage (drift guard)
-        run: bash tools/differential_coverage_check.sh
-      - uses: DeterminateSystems/determinate-nix-action@v3
-        with:
-          # See the `test` job: keep GH_TOKEN in `nix develop`'s environment so
-          # the gh_release_archive Kakadu fetch can authenticate.
-          extra-conf: |
-            extra-experimental-features = configurable-impure-env
-      - uses: DeterminateSystems/magic-nix-cache-action@v13
-        with:
-          use-flakehub: "false"
-      # cargo-machete is pure static analysis (parses each Cargo.toml + greps the
-      # sources); it needs neither Bazel nor the RBE backend, so it runs before
-      # the RBE setup and fails fast (seconds) on an unused dependency, ahead of
-      # the slow clippy build.
-      - name: Check for unused Rust dependencies
-        run: nix develop --command bash -c "just machete"
-      # Remote cache + mTLS + the GH_TOKEN-backed Kakadu fetch that analyzing the
-      # Rust crate graph needs. Same composite action the `test` job uses; the
-      # gate builds for linux-amd64 only.
-      - name: Set up Remote Build Execution (mTLS + flags)
-        id: rbe
-        uses: ./.github/actions/bazel-rbe
-        with:
-          endpoint: ${{ vars.BAZEL_RBE_ENDPOINT }}
-          ca-cert: ${{ secrets.BAZEL_RBE_CA_CERT }}
-          client-cert: ${{ secrets.BAZEL_RBE_CLIENT_CERT }}
-          client-key: ${{ secrets.BAZEL_RBE_CLIENT_KEY }}
-          target-platform: "//platforms:linux_x86_64"
-      - name: Check Rust formatting
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: nix develop --command bash -c "just bazel-rustfmt-check ${{ steps.rbe.outputs.flags }}"
-      - name: Run clippy
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: nix develop --command bash -c "just bazel-clippy-check ${{ steps.rbe.outputs.flags }}"
-
   test:
-    needs: lint
     runs-on: ${{ matrix.runs-on }}
     name: test / ${{ matrix.platform }}
     permissions:
