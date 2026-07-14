@@ -720,7 +720,7 @@ expand_template(
 # "incompatible target" message rather than a confusing failure.
 genrule(
     name = "sipi_debug_split",
-    srcs = ["//src/cli:sipi"],
+    srcs = ["//src/cli-rs:sipi"],
     outs = [
         "_dbg/sipi.stripped",
         "_dbg/sipi.debug",
@@ -730,7 +730,7 @@ genrule(
 set -euo pipefail
 OBJCOPY=$(execpath //bazel:llvm-objcopy)
 READELF=$(execpath //bazel:llvm-readelf)
-BIN=$(execpath //src/cli:sipi)
+BIN=$(execpath //src/cli-rs:sipi)
 
 # Build-id is encoded in `.note.gnu.build-id`; llvm-readelf -n prints
 # something like:
@@ -747,10 +747,9 @@ echo "$$BUILD_ID" > $(execpath _dbg/sipi_build_id.txt)
 # embeds the .debug filename + CRC32, both finalised once stripping
 # is done).
 #
-# The output is in a `_dbg/` subdir so the stripped artifact's basename
-# stays `sipi.stripped` (matching the implicit `<binary>.stripped` output
-# Bazel generates for cc_binary, just at a different path) without
-# colliding with the cc_binary's own implicit-output declaration.
+# The output is in a `_dbg/` subdir purely to namespace these three
+# genrule outputs away from the `//src/cli-rs:sipi` binary's own output
+# names; the basenames (`sipi.stripped`, `sipi.debug`) stay conventional.
 "$$OBJCOPY" --only-keep-debug "$$BIN" $(execpath _dbg/sipi.debug)
 cp "$$BIN" $(execpath _dbg/sipi.stripped)
 "$$OBJCOPY" --strip-debug --strip-unneeded $(execpath _dbg/sipi.stripped)
@@ -820,15 +819,18 @@ tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \\
 # `docker run --entrypoint ffprobe daschswiss/sipi …` (video metadata).
 # Per-arch layer selection is via `select()` on the host CPU below.
 
-# Sipi binary at /sbin/sipi. Linux-only because the binary itself is
-# Linux ELF (cc_binary //src/cli:sipi target_compatible_with linux for the
-# image-build path; on darwin :sipi is Mach-O and not consumed here).
+# Sipi binary at /sbin/sipi — the Rust `cli-rs` shell (the deployed
+# entrypoint; the C++ //src/cli:sipi transport is retained in-tree only as
+# the differential oracle, DEV-6659). Kept at /sbin/sipi so the entrypoint
+# and the `sipi health` Docker HEALTHCHECK are unchanged. Linux-only because
+# the binary itself is Linux ELF; on darwin :sipi is Mach-O and not consumed
+# here.
 tar(
     name = "sipi_bin_layer",
-    srcs = ["//src/cli:sipi"],
+    srcs = ["//src/cli-rs:sipi"],
     mtree = [
         "./sbin type=dir mode=0755 time=0",
-        "./sbin/sipi type=file mode=0755 time=0 content=$(execpath //src/cli:sipi)",
+        "./sbin/sipi type=file mode=0755 time=0 content=$(execpath //src/cli-rs:sipi)",
     ],
     target_compatible_with = ["@platforms//os:linux"],
 )
