@@ -37,6 +37,16 @@ _CPP_STDLIB_LINK = select({
         "-Clink-arg=-lc++",
     ],
     "@platforms//os:linux": [
+        # Content-addressed build-id, mirroring //src/cli:sipi's linkopt.
+        # `//src:sipi_debug_split` reads this from `.note.gnu.build-id` to
+        # split stripped binary + `.debug` and lay the debug file out under
+        # `lib/debug/.build-id/<xx>/<yy>.debug` for `sentry-cli debug-files
+        # upload`. `=sha1` derives the id from the binary's content hash
+        # (not a wall-clock random), so identical inputs ↔ identical build-id
+        # — the gate for byte-reproducible OCI tarballs. Without it the split
+        # genrule errors ("no Build ID"). ELF-only: ld64 on macOS rejects
+        # `--build-id` (macOS uses dSYM bundles, out of scope here).
+        "-Clink-arg=-Wl,--build-id=sha1",
         "-Clink-arg=-Wl,-Bstatic",
         "-Clink-arg=-lc++",
         "-Clink-arg=-lc++abi",
