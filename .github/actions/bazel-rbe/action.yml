@@ -75,7 +75,7 @@ runs:
         # a 250-core / 512 GB box on our own infra; 128 is a first-cut bump (3
         # concurrent legs x 128 ~= 2x the old failing worst-case of 3x64) pending
         # real validation — watch cold-cache CI runs for UNAVAILABLE and retune.
-        FLAGS="$FLAGS --jobs=128"
+        FLAGS="$FLAGS --jobs=32"
         # Cross-compile on the x86_64 worker, run tests on the native runner:
         #   --extra_execution_platforms pins the EXEC platform to the worker (x86_64) so
         #     exec-config build tools resolve to x86_64, not the runner's arch (that
