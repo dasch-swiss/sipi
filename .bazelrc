@@ -101,6 +101,32 @@ build:release --copt=-U_FORTIFY_SOURCE
 build:release --copt=-D_FORTIFY_SOURCE=2
 build:release --per_file_copt=libmagic@-U_FORTIFY_SOURCE
 
+# Debug info for crash symbolication (DEV-6659). `-c opt` emits no DWARF on
+# its own, so a stripped-minidump crash resolved to bare addresses / at best
+# function names from `.symtab`. Line tables (C++ `-gline-tables-only` + Rust
+# `-Cdebuginfo=1`) make the release binary carry the address→file:line DWARF a
+# crash backtrace needs; `//src:sipi_debug_split` splits it out with
+# `--only-keep-debug` into the `.debug` uploaded to Sentry and ships the
+# stripped binary in the image (`:sipi_bin_layer`), so the DWARF lives only in
+# the uploaded symbols, never in the shipped binary. Line-tables-only (not full
+# `-g`) keeps the `.debug` and the release link an order of magnitude smaller
+# while preserving file:line frames; it omits inlined-frame expansion + locals,
+# which a stack symbolication does not need. Restores the file:line the
+# pre-Bazel (Nix `separateDebugInfo`) build had.
+build:release --copt=-gline-tables-only
+# Emit Rust line tables (`debuginfo=1`) AND override rules_rust's opt-mode
+# `-Cstrip=debuginfo`, which otherwise strips the DWARF (both Rust's and the
+# linked-in C++ engine's) out of the final rust_binary link — Bazel's
+# `--strip=never` does NOT reach the rustc link. rustc `-C` options are
+# last-wins and these are appended after the rule defaults, so `strip=none`
+# wins; `:sipi_debug_split` then has DWARF to extract and re-strips the
+# shipped binary itself. (Repeating the flag overrides, so both go in one
+# comma-separated value.)
+build:release --@rules_rust//rust/settings:extra_rustc_flags=-Cdebuginfo=1,-Cstrip=none
+# --strip=never keeps DWARF through the C++ (clang-driven) link of //src/cli:sipi
+# for the same reason (that path DOES honour Bazel --strip).
+build:release --strip=never
+
 # Linux-only: stack-clash-protection is a clang-on-Linux feature (warns
 # harmlessly on a darwin cross-compile). Its companion `-Wl,-z,now` linkopt
 # lives in //src:sipi_lib's (and :engine's) target-keyed linkopts select

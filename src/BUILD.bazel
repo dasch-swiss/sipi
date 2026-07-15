@@ -819,18 +819,22 @@ tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \\
 # `docker run --entrypoint ffprobe daschswiss/sipi …` (video metadata).
 # Per-arch layer selection is via `select()` on the host CPU below.
 
-# Sipi binary at /sbin/sipi — the Rust `cli-rs` shell (the deployed
-# entrypoint; the C++ //src/cli:sipi transport is retained in-tree only as
-# the differential oracle, DEV-6659). Kept at /sbin/sipi so the entrypoint
-# and the `sipi health` Docker HEALTHCHECK are unchanged. Linux-only because
-# the binary itself is Linux ELF; on darwin :sipi is Mach-O and not consumed
-# here.
+# Sipi binary at /sbin/sipi — the STRIPPED Rust `cli-rs` shell. Ships the
+# `:sipi_debug_split` stripped output (not the raw `//src/cli-rs:sipi`), so
+# the DWARF built under `--config=release` lives only in the `.debug`
+# uploaded to Sentry (`:sipi_debug_layout`), never in the shipped image; the
+# stripped binary keeps its `.note.gnu.build-id` + an embedded debuglink so
+# Sentry matches crash minidumps back to those symbols. cli-rs is the
+# deployed entrypoint; the C++ //src/cli:sipi transport stays in-tree only as
+# the differential oracle (DEV-6659). Kept at /sbin/sipi so the entrypoint +
+# `sipi health` HEALTHCHECK are unchanged. Linux-only (the binary is Linux
+# ELF; on darwin :sipi is Mach-O and not consumed here).
 tar(
     name = "sipi_bin_layer",
-    srcs = ["//src/cli-rs:sipi"],
+    srcs = [":_dbg/sipi.stripped"],
     mtree = [
         "./sbin type=dir mode=0755 time=0",
-        "./sbin/sipi type=file mode=0755 time=0 content=$(execpath //src/cli-rs:sipi)",
+        "./sbin/sipi type=file mode=0755 time=0 content=$(execpath :_dbg/sipi.stripped)",
     ],
     target_compatible_with = ["@platforms//os:linux"],
 )
