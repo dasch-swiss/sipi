@@ -11,6 +11,7 @@
 
 use std::ffi::CString;
 use std::io::Write;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use axum::body::{to_bytes, Body};
@@ -51,6 +52,10 @@ pub struct AppState {
     /// of each blocking engine dispatch, reconstructing the shttps
     /// thread-per-connection bound. Shared (`Arc`) across all requests.
     pool: Arc<tokio::sync::Semaphore>,
+    /// The total permit count the pool was sized to (an observable-gauge
+    /// baseline: `permits - available_permits()` = engine work in flight).
+    /// Fixed after startup; `Semaphore` exposes only the live available count.
+    permits: usize,
     /// Configured Lua routes (method/route/script), registered as axum routes by
     /// [`crate::app`]. Empty when the engine is uninstalled.
     pub routes: Vec<ffi::RouteEntry>,
@@ -98,6 +103,7 @@ impl AppState {
                 has_preflight: ffi::has_preflight().unwrap_or(false),
                 has_file_preflight: ffi::has_file_preflight().unwrap_or(false),
                 pool,
+                permits,
                 // TOML config supplies routes directly; a Lua config has them
                 // read back from the engine via the seam.
                 routes: configured_routes.unwrap_or_else(|| ffi::routes().unwrap_or_default()),
@@ -115,6 +121,7 @@ impl AppState {
                 has_preflight: false,
                 has_file_preflight: false,
                 pool,
+                permits,
                 routes: Vec::new(),
                 max_post_size: 0,
                 docroot: String::new(),
@@ -122,6 +129,27 @@ impl AppState {
             },
         }
     }
+
+    /// Register the OTel observable instruments for the engine + pool metrics
+    /// against the global meter (a no-op when no meter provider is installed, so
+    /// it is safe to call unconditionally). Hands the metrics module the shared
+    /// pool + its total-permit count for the concurrency gauges.
+    pub(crate) fn register_metrics(&self) {
+        crate::metrics::register(Arc::clone(&self.pool), self.permits);
+    }
+}
+
+/// Cumulative 503 load-shed count: incremented every time the engine pool is
+/// saturated and a request is shed ([`busy_response`]). Read by the OTel bridge
+/// ([`crate::metrics`]) as an observable counter — the Rust-shell analog of the
+/// C++ transport's `rejected_connections_total` (dead under the shell). A plain
+/// atomic (not an OTel sync counter) so the shed path holds no meter handle and
+/// the count is correct regardless of whether metrics export is enabled.
+static LOAD_SHED_TOTAL: AtomicU64 = AtomicU64::new(0);
+
+/// The cumulative 503 load-shed count for the OTel observable counter.
+pub(crate) fn load_shed_total() -> u64 {
+    LOAD_SHED_TOTAL.load(Ordering::Relaxed)
 }
 
 /// Pool size when the configured `nthreads` is 0 (auto) or unreadable: the host
@@ -365,6 +393,7 @@ fn complete(outcome_tx: oneshot::Sender<Outcome>, response: Response) {
 /// Pool-full backpressure: a bare 503 with `Retry-After: 1` — no body,
 /// no internal detail. The client should retry shortly.
 fn busy_response() -> Response {
+    LOAD_SHED_TOTAL.fetch_add(1, Ordering::Relaxed);
     let mut response = sink::error_response(StatusCode::SERVICE_UNAVAILABLE);
     response
         .headers_mut()

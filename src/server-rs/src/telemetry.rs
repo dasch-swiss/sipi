@@ -29,10 +29,11 @@ use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
-/// Owns the trace (and, in local dev, log) providers so their batch exporters
+/// Owns the trace, metric, and (in local dev) log providers so their exporters
 /// flush on shutdown. Each is `None` when not configured (fail-open).
 pub struct Telemetry {
     provider: Option<SdkTracerProvider>,
+    meter_provider: Option<opentelemetry_sdk::metrics::SdkMeterProvider>,
     logger_provider: Option<opentelemetry_sdk::logs::SdkLoggerProvider>,
 }
 
@@ -42,6 +43,9 @@ impl Telemetry {
     pub fn shutdown(self) {
         if let Some(provider) = self.provider {
             let _ = provider.shutdown();
+        }
+        if let Some(meter_provider) = self.meter_provider {
+            let _ = meter_provider.shutdown();
         }
         if let Some(logger_provider) = self.logger_provider {
             let _ = logger_provider.shutdown();
@@ -71,6 +75,15 @@ pub fn init() -> Telemetry {
         .as_ref()
         .map(|p| tracing_opentelemetry::layer().with_tracer(p.tracer("sipi")));
 
+    // The metric meter provider (same fail-open endpoint gate). Set it as the
+    // global provider so `crate::metrics::register` (called later, once the
+    // engine pool exists) binds its observable instruments to it. The instrument
+    // callbacks then export the engine + pool metrics on the reader interval.
+    let meter_provider = build_meter_provider();
+    if let Some(mp) = meter_provider.as_ref() {
+        global::set_meter_provider(mp.clone());
+    }
+
     // Local-dev only: also export logs over OTLP so they land in a local LGTM
     // stack. The bridge attaches the active trace context, and a target filter
     // keeps the OTel SDK's own logs out (no export feedback loop).
@@ -98,6 +111,7 @@ pub fn init() -> Telemetry {
 
     Telemetry {
         provider,
+        meter_provider,
         logger_provider,
     }
 }
@@ -163,6 +177,32 @@ fn build_tracer_provider() -> Option<SdkTracerProvider> {
     Some(
         SdkTracerProvider::builder()
             .with_batch_exporter(exporter)
+            .with_resource(resource)
+            .build(),
+    )
+}
+
+/// Build the OTLP (gRPC-tonic) meter provider, or `None` when no endpoint is
+/// configured. Mirrors [`build_tracer_provider`]: the exporter reads the
+/// standard `OTEL_EXPORTER_OTLP_*` env, and `with_periodic_exporter` installs a
+/// periodic reader (60s default) that invokes the observable callbacks and
+/// pushes each collection over OTLP.
+fn build_meter_provider() -> Option<opentelemetry_sdk::metrics::SdkMeterProvider> {
+    std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok()?;
+    let exporter = match opentelemetry_otlp::MetricExporter::builder()
+        .with_tonic()
+        .build()
+    {
+        Ok(exporter) => exporter,
+        Err(e) => {
+            tracing::warn!(error = %e, "OTLP metric exporter init failed; metric export disabled");
+            return None;
+        }
+    };
+    let resource = otel_resource();
+    Some(
+        opentelemetry_sdk::metrics::SdkMeterProvider::builder()
+            .with_periodic_exporter(exporter)
             .with_resource(resource)
             .build(),
     )

@@ -22,6 +22,7 @@ pub mod config_file;
 pub mod ffi;
 pub mod iiif;
 pub mod info;
+pub mod metrics;
 pub mod path;
 pub mod routes;
 pub mod sink;
@@ -311,6 +312,10 @@ async fn serve(
     // `configured_routes` is `Some` for a TOML config (routes sourced Rust-side),
     // `None` for a Lua config (routes read back from the engine via the seam).
     let state = Arc::new(routes::AppState::load(configured_routes));
+    // Bind the OTel observable instruments now that the engine pool exists (the
+    // concurrency gauges read its permits). A no-op when no meter provider was
+    // installed (no OTLP endpoint), so it is safe to call unconditionally.
+    state.register_metrics();
     // Precedence (plan 02 §6 R3): `SIPI_RS_PORT` (dev/test-only — lets the e2e
     // harness spawn parallel shells without a `--serverport`) beats
     // `--serverport`/`SIPI_SERVERPORT` (`port`, clap's own `CLI > env`), which
