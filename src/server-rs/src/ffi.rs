@@ -147,6 +147,47 @@ pub struct SipiImageErrorReport {
 /// `SipiServeRequest::report_ctx`.
 pub type SipiReportErrorFn = extern "C" fn(ctx: *mut c_void, err: *const SipiImageErrorReport);
 
+/// Flat snapshot of the engine metrics singleton — mirrors `SipiMetricsSnapshot`
+/// in `src/ffi/metrics_snapshot.h`. Monotonic counters are `u64`; gauges are
+/// `i64` (signed: `cache_size_limit_bytes` is `-1` when unlimited). Every field
+/// is 8 bytes wide, so there is no interior padding; the ABI is guarded below
+/// against an accidental field reorder or insertion. The OTel meter bridge
+/// (`crate::metrics`) reads this each collection.
+///
+/// Two counters are populated only by the retained C++ transport's connection
+/// adapter, never on the FFI serve path, so they stay zero under the Rust shell
+/// and the bridge does not expose them: `rejected_connections_total` (its Rust
+/// analog is `sipi.pool.load_shed`) and `waiting_connections` (the semaphore
+/// sheds immediately rather than queuing).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SipiMetricsSnapshot {
+    pub cache_hits_total: u64,
+    pub cache_misses_total: u64,
+    pub cache_evictions_total: u64,
+    pub cache_skips_total: u64,
+    pub image_too_large_total: u64,
+    pub client_disconnected_total: u64,
+    pub memory_alloc_failures_total: u64,
+    pub rejected_connections_total: u64,
+    pub rate_limit_allowed_total: u64,
+    pub rate_limit_rejected_total: u64,
+    pub rate_limit_shadow_rejected_total: u64,
+    pub rate_limit_near_limit_total: u64,
+    pub decode_memory_acquired_total: u64,
+    pub decode_memory_rejected_total: u64,
+    pub decode_memory_shadow_rejected_total: u64,
+    pub decode_memory_near_limit_total: u64,
+    pub waiting_connections: i64,
+    pub cache_size_bytes: i64,
+    pub cache_files: i64,
+    pub cache_size_limit_bytes: i64,
+    pub cache_files_limit: i64,
+    pub rate_limit_clients_tracked: i64,
+    pub decode_memory_budget_bytes: i64,
+    pub decode_memory_used_bytes: i64,
+}
+
 /// The IIIF serve request — mirrors `SipiServeRequest` in `sipi_ffi.h`. All
 /// `*const c_char` fields are caller-owned and must outlive the (synchronous)
 /// `sipi_serve_image` call; null is allowed where the header documents it.
@@ -296,6 +337,12 @@ extern "C" {
     /// fallback below `--serverport`/`SIPI_SERVERPORT`/`SIPI_RS_PORT` (plan 02
     /// §6 R3). Returns 0, or 500 if `sipi_init` has not run.
     pub fn sipi_port(out: *mut c_int) -> c_int;
+
+    /// Snapshot the engine metrics singleton (cache / rate-limiter /
+    /// decode-memory / admission counters + gauges) into `out`, a caller-owned
+    /// buffer. A pure `sipi_guard`-only read — no response sink, no fallible
+    /// pre-commit step. Returns 0, or non-zero on an internal error.
+    pub fn sipi_metrics_snapshot(out: *mut SipiMetricsSnapshot) -> c_int;
 
     /// Enumerate the configured Lua routes (method/route/script) installed by
     /// `sipi_init`, one `emit` call per route. Returns 0, or 500 if `sipi_init`
@@ -615,6 +662,21 @@ pub fn port() -> Result<u16, i32> {
         return Err(code);
     }
     Ok(v.clamp(0, i32::from(u16::MAX)) as u16)
+}
+
+/// Read the engine metrics singleton into a flat snapshot for the OTel meter.
+/// Returns `None` on an internal FFI error — the caller then observes nothing
+/// this collection cycle (fail-safe, never a panic on the collection thread).
+#[must_use]
+pub fn metrics_snapshot() -> Option<SipiMetricsSnapshot> {
+    let mut snap = SipiMetricsSnapshot::default();
+    // SAFETY: `out` is a valid, writable pointer; the seam guards exceptions.
+    let code = unsafe { sipi_metrics_snapshot(&mut snap) };
+    if code == 0 {
+        Some(snap)
+    } else {
+        None
+    }
 }
 
 /// One configured Lua route: HTTP method, the route prefix, and the resolved
@@ -1316,5 +1378,89 @@ mod image_error_layout {
         assert_eq!(offset_of!(SipiImageErrorReport, channels), 72);
         assert_eq!(offset_of!(SipiImageErrorReport, bps), 80);
         assert_eq!(offset_of!(SipiImageErrorReport, file_size_bytes), 88);
+    }
+}
+
+// Lock-step layout guard — paired with the C++ static_assert/offsetof block in
+// src/ffi/metrics_snapshot.h. Every field is 8 bytes wide (u64 / i64), so there
+// is no packing subtlety, but the guard still catches an accidental field
+// reorder or insertion on either side. LP64 on every supported target.
+#[cfg(test)]
+mod metrics_snapshot_layout {
+    use super::SipiMetricsSnapshot;
+    use std::mem::{align_of, offset_of, size_of};
+
+    #[test]
+    fn repr_c_matches_metrics_snapshot_h() {
+        assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
+        assert_eq!(align_of::<SipiMetricsSnapshot>(), 8);
+        assert_eq!(size_of::<SipiMetricsSnapshot>(), 192);
+
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_hits_total), 0);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_misses_total), 8);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_evictions_total), 16);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_skips_total), 24);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, image_too_large_total), 32);
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, client_disconnected_total),
+            40
+        );
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, memory_alloc_failures_total),
+            48
+        );
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, rejected_connections_total),
+            56
+        );
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, rate_limit_allowed_total),
+            64
+        );
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, rate_limit_rejected_total),
+            72
+        );
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, rate_limit_shadow_rejected_total),
+            80
+        );
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, rate_limit_near_limit_total),
+            88
+        );
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, decode_memory_acquired_total),
+            96
+        );
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, decode_memory_rejected_total),
+            104
+        );
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, decode_memory_shadow_rejected_total),
+            112
+        );
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, decode_memory_near_limit_total),
+            120
+        );
+        assert_eq!(offset_of!(SipiMetricsSnapshot, waiting_connections), 128);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_bytes), 136);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files), 144);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_limit_bytes), 152);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files_limit), 160);
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, rate_limit_clients_tracked),
+            168
+        );
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, decode_memory_budget_bytes),
+            176
+        );
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, decode_memory_used_bytes),
+            184
+        );
     }
 }

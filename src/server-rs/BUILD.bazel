@@ -35,6 +35,7 @@ rust_library(
         "src/iiif.rs",
         "src/info.rs",
         "src/lib.rs",
+        "src/metrics.rs",
         "src/path.rs",
         "src/routes.rs",
         "src/sink.rs",
