@@ -57,6 +57,15 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
+      # Persist Bazel's repository cache (--repository_cache in .bazelrc) across
+      # runs: external archives + bzlmod registry files download from upstream
+      # only when MODULE.bazel.lock changes.
+      - name: Restore Bazel repository cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/bazel-repo
+          key: bazel-repo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('MODULE.bazel.lock') }}
+          restore-keys: bazel-repo-${{ runner.os }}-${{ runner.arch }}-
       # Remote cache + executor via the bazel-rbe composite action (runner +
       # cache endpoints, mTLS). Per-arch target-platform so each leg
       # cross-compiles its release image on the x86_64 worker. publish.yml only
@@ -66,7 +75,6 @@ jobs:
         uses: ./.github/actions/bazel-rbe
         with:
           runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
-          cache-endpoint: ${{ vars.REMOTEBUILD_CACHE_ENDPOINT }}
           ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
           client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
           client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
@@ -142,6 +150,15 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
+      # Persist Bazel's repository cache (--repository_cache in .bazelrc) across
+      # runs: external archives + bzlmod registry files download from upstream
+      # only when MODULE.bazel.lock changes.
+      - name: Restore Bazel repository cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/bazel-repo
+          key: bazel-repo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('MODULE.bazel.lock') }}
+          restore-keys: bazel-repo-${{ runner.os }}-${{ runner.arch }}-
       # Remote cache + executor via the bazel-rbe composite action. The
       # validate-docker job warmed the cache; this job should hit it for
       # ~100% of compile actions when the source tree is unchanged between
@@ -151,7 +168,6 @@ jobs:
         uses: ./.github/actions/bazel-rbe
         with:
           runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
-          cache-endpoint: ${{ vars.REMOTEBUILD_CACHE_ENDPOINT }}
           ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
           client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
           client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
