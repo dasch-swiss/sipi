@@ -82,10 +82,11 @@ jobs:
         id: rbe
         uses: ./.github/actions/bazel-rbe
         with:
-          endpoint: ${{ vars.BAZEL_RBE_ENDPOINT }}
-          ca-cert: ${{ secrets.BAZEL_RBE_CA_CERT }}
-          client-cert: ${{ secrets.BAZEL_RBE_CLIENT_CERT }}
-          client-key: ${{ secrets.BAZEL_RBE_CLIENT_KEY }}
+          runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
+          cache-endpoint: ${{ vars.REMOTEBUILD_CACHE_ENDPOINT }}
+          ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
+          client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
+          client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
           target-platform: "//platforms:linux_x86_64"
       - name: Check Rust formatting
         env:
