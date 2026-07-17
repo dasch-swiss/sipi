@@ -24,6 +24,12 @@ static LogLevel g_log_level = LL_INFO;
 // scopes the context; empty means "no active trace" (the keys are then omitted).
 static thread_local std::string g_trace_id;
 static thread_local std::string g_span_id;
+// The W3C `traceparent` this thread injects on outbound Lua HTTP calls, so a
+// downstream service continues the trace. Set by the Rust shell from the active
+// span before a preflight/route FFI call and cleared after; empty means "do not
+// inject". Distinct from the log ids above: propagation needs the full header
+// (incl. the sampling flag), log lines need only the raw ids.
+static thread_local std::string g_outbound_traceparent;
 
 void set_cli_mode(bool cli) { g_cli_mode = cli; }
 bool is_cli_mode() { return g_cli_mode; }
@@ -60,6 +66,33 @@ void set_log_trace_context(const char *trace_id, const char *span_id)
     g_span_id.clear();
   }
 }
+
+// A W3C `traceparent` is `<version>-<trace-id>-<parent-id>-<flags>` with fixed
+// widths — version 2 hex, trace-id 32 hex, parent-id 16 hex, flags 2 hex, dashes
+// at positions 2/35/52 (55 chars total). Validating the whole shape at this FFI
+// boundary lets CurlConnection splice it into an outbound header without escaping
+// and makes header injection impossible: any CR/LF or non-hex byte fails.
+static bool is_w3c_traceparent(const std::string &tp)
+{
+  if (tp.size() != 55) return false;
+  if (tp[2] != '-' || tp[35] != '-' || tp[52] != '-') return false;
+  return is_lower_hex(tp.substr(0, 2), 2)     // version
+         && is_lower_hex(tp.substr(3, 32), 32)// trace-id
+         && is_lower_hex(tp.substr(36, 16), 16)// parent-id
+         && is_lower_hex(tp.substr(53, 2), 2);// flags
+}
+
+void set_outbound_traceparent(const char *traceparent)
+{
+  const std::string tp = (traceparent != nullptr) ? traceparent : "";
+  if (is_w3c_traceparent(tp)) {
+    g_outbound_traceparent = tp;
+  } else {
+    g_outbound_traceparent.clear();
+  }
+}
+
+std::string get_outbound_traceparent() { return g_outbound_traceparent; }
 
 std::string escape_json_str(const std::string &s)
 {

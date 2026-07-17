@@ -50,6 +50,7 @@ cmake-build-relwithdebinfo-nix-develop/
 test/_test_data/cache/
 test/_test_data/cache_test_*/
 test/_test_data/config/sipi.cache-test-*.lua
+test/_test_data/config/sipi.tracing-test.lua
 
 #ignore ICC headers
 *_icc.h

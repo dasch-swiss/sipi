@@ -20,7 +20,7 @@ cd "$(dirname "$0")/.."
 # Baseline: #[test] + #[tokio::test] across test/e2e/tests/*.rs EXCLUDING the
 # differential corpus file itself. Bump this (with a corpus update) whenever an
 # e2e test is added or removed.
-EXPECTED_E2E_TESTS=273
+EXPECTED_E2E_TESTS=274
 
 # Count via awk on a concatenated stream with literal `[ \t]` + exact string
 # compare — deterministic across awk/grep implementations. (Earlier a

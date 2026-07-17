@@ -649,6 +649,15 @@ SIPI_FFI_NODISCARD int sipi_cli_main(int argc, char **argv);
  *  thread, so the thread-local scope is correct. */
 void sipi_set_log_trace_context(const char *trace_id, const char *span_id);
 
+/*! Stamp the CALLING thread's outbound-HTTP trace-propagation context: the W3C
+ *  `traceparent` the Lua `server.http` client injects on outbound requests so a
+ *  downstream service (dsp-api) continues the Rust shell's trace. The shell sets
+ *  it from the active span before a preflight/route call and clears it after
+ *  (NULL). NULL/empty/malformed clears it (nothing is injected). Thread-local,
+ *  like `sipi_set_log_trace_context`; kept separate because propagation needs
+ *  the full formatted header (incl. the sampling flag). */
+void sipi_set_outbound_traceparent(const char *traceparent);
+
 #ifdef __cplusplus
 }
 #endif

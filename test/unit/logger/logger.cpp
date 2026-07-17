@@ -413,3 +413,50 @@ TEST_F(LoggerTest, LogFormatRespectsFiltering)
   auto out = capture_stdout([]() { log_format(LL_INFO, "should be filtered"); });
   EXPECT_TRUE(out.empty()) << "log_format should respect level filtering";
 }
+
+// ================================================================
+// Outbound traceparent (distributed-trace propagation) tests
+// ================================================================
+//
+// The Rust shell stamps the outbound `traceparent` here; the Lua HTTP client
+// reads it back and injects it on outbound requests. The setter validates the
+// W3C shape at this FFI boundary, so a malformed or injected value can never
+// reach a header. These run on the test thread; each clears the thread-local
+// when done.
+
+static const char *const kValidTraceparent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
+
+TEST_F(LoggerTest, OutboundTraceparentValidRoundTrips)
+{
+  set_outbound_traceparent(kValidTraceparent);
+  EXPECT_EQ(get_outbound_traceparent(), std::string(kValidTraceparent));
+  set_outbound_traceparent(nullptr);
+}
+
+TEST_F(LoggerTest, OutboundTraceparentNullClears)
+{
+  set_outbound_traceparent(kValidTraceparent);
+  set_outbound_traceparent(nullptr);
+  EXPECT_TRUE(get_outbound_traceparent().empty());
+}
+
+TEST_F(LoggerTest, OutboundTraceparentRejectsMalformed)
+{
+  const char *bad[] = {
+    "",// empty
+    "not-a-traceparent",
+    "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331",// missing flags
+    "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-1",// 1-char flags
+    "00_0af7651916cd43dd8448eb211c80319c_b7ad6b7169203331_01",// wrong separators
+    "00-0AF7651916CD43DD8448EB211C80319C-b7ad6b7169203331-01",// uppercase hex
+    "00-0af7651916cd43dd8448eb211c80319g-b7ad6b7169203331-01",// non-hex 'g'
+    "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01\r\nEvil: 1",// CRLF injection
+  };
+  for (const char *v : bad) {
+    // Start from a known-good value; a rejected set must CLEAR it, never keep it.
+    set_outbound_traceparent(kValidTraceparent);
+    set_outbound_traceparent(v);
+    EXPECT_TRUE(get_outbound_traceparent().empty()) << "should reject: " << v;
+  }
+  set_outbound_traceparent(nullptr);
+}

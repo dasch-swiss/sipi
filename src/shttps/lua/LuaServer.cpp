@@ -1272,8 +1272,26 @@ public:
 
       struct curl_slist *chunk = nullptr;
 
+      bool has_traceparent = false;
       for (const auto &header : requestHeaders) {
         std::string headerStr = header.first + ": " + header.second;
+        chunk = curl_slist_append(chunk, headerStr.c_str());
+        if (!has_traceparent) {
+          std::string name = header.first;
+          std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+          });
+          if (name == "traceparent") { has_traceparent = true; }
+        }
+      }
+
+      // Continue the caller's distributed trace: inject the W3C `traceparent`
+      // the Rust shell stamped for this thread (from the active span), unless the
+      // script set its own. Empty when no trace is active — and in the C++ CLI,
+      // which never sets it — so this is a no-op off the Rust server path.
+      const std::string traceparent = get_outbound_traceparent();
+      if (!traceparent.empty() && !has_traceparent) {
+        const std::string headerStr = "traceparent: " + traceparent;
         chunk = curl_slist_append(chunk, headerStr.c_str());
       }
 

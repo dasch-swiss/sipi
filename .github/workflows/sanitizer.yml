@@ -129,7 +129,7 @@ jobs:
             export ASAN_SYMBOLIZER_PATH=\$(command -v llvm-symbolizer)
             rc=0
             just bazel-test-unit --config=asan --config=ubsan --build_tag_filters=-no-sanitizer --test_tag_filters=-no-sanitizer ${{ steps.rbe.outputs.flags }} || rc=1
-            just bazel-test-e2e  --config=asan --config=ubsan ${{ steps.rbe.outputs.flags }} || rc=1
+            just bazel-test-e2e  --config=asan --config=ubsan --test_tag_filters=-no-sanitizer ${{ steps.rbe.outputs.flags }} || rc=1
             exit \$rc"
 
       - name: Check for sanitizer findings

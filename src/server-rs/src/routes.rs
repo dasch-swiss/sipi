@@ -417,8 +417,18 @@ fn iiif_access(
     if state.has_preflight {
         let ctx = build_ctx(method, uri, headers)
             .ok_or_else(|| Box::new(sink::error_response(StatusCode::BAD_REQUEST)))?;
-        let result = ffi::preflight(&parsed.prefix, &parsed.identifier, &ctx)
-            .map_err(|_| Box::new(sink::error_response(StatusCode::INTERNAL_SERVER_ERROR)))?;
+        // Run the hook under a `sipi.preflight` span and stamp the outbound
+        // `traceparent` from it, so the hook's dsp-api call nests under this span.
+        // (Engine log lines stay correlated to the parent `sipi.serve` span — the
+        // scopes clear on drop rather than restore, so re-stamping the log context
+        // here would need a save/restore stack; same trace either way.)
+        let result = {
+            let _span = tracing::info_span!("sipi.preflight").entered();
+            let _tp =
+                crate::telemetry::current_traceparent().map(|tp| ffi::OutboundTraceScope::set(&tp));
+            ffi::preflight(&parsed.prefix, &parsed.identifier, &ctx)
+        }
+        .map_err(|_| Box::new(sink::error_response(StatusCode::INTERNAL_SERVER_ERROR)))?;
         if let Some(dr) = result.direct_response {
             return Err(Box::new(preflight_direct_response(dr)));
         }
@@ -464,8 +474,17 @@ fn file_access(
     }
     let ctx = build_ctx(method, uri, headers)
         .ok_or_else(|| Box::new(sink::error_response(StatusCode::BAD_REQUEST)))?;
-    let result = ffi::file_preflight(&built, &ctx)
-        .map_err(|_| Box::new(sink::error_response(StatusCode::INTERNAL_SERVER_ERROR)))?;
+    // Run the hook under a `sipi.file_preflight` span and stamp the outbound
+    // `traceparent` from it, so the hook's dsp-api call nests under this span.
+    // (Engine log lines stay correlated to the parent `sipi.serve` span — see the
+    // note in `iiif_access`.)
+    let result = {
+        let _span = tracing::info_span!("sipi.file_preflight").entered();
+        let _tp =
+            crate::telemetry::current_traceparent().map(|tp| ffi::OutboundTraceScope::set(&tp));
+        ffi::file_preflight(&built, &ctx)
+    }
+    .map_err(|_| Box::new(sink::error_response(StatusCode::INTERNAL_SERVER_ERROR)))?;
     if let Some(dr) = result.direct_response {
         return Err(Box::new(preflight_direct_response(dr)));
     }
@@ -886,6 +905,9 @@ fn run_lua_route_blocking(
     let _enter = span.enter();
     let _trace =
         crate::telemetry::current_trace_context().map(|(t, s)| ffi::LogTraceScope::set(&t, &s));
+    // Any `server.http` the route makes carries this span's `traceparent`, so a
+    // downstream service continues the trace.
+    let _tp = crate::telemetry::current_traceparent().map(|tp| ffi::OutboundTraceScope::set(&tp));
 
     // secure = false: SIPI runs plain HTTP behind Traefik (matches conn.secure()).
     let Some(ctx) = ffi::build_request_context(ffi::RequestFields {
