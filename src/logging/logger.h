@@ -39,4 +39,23 @@ bool is_json_mode();
  */
 void set_log_trace_context(const char *trace_id, const char *span_id);
 
+/*!
+ * Stamp this thread's outbound-HTTP trace-propagation context: the W3C
+ * `traceparent` the Lua `server.http` client (`CurlConnection`) injects on
+ * outbound requests so a downstream service (dsp-api) continues this trace. The
+ * Rust shell sets it — from the active OpenTelemetry span — before a preflight /
+ * route FFI call and clears it after; engine work runs on the same thread, so a
+ * thread-local is the right scope. NULL / empty / malformed clears it (nothing
+ * is injected). Kept separate from `set_log_trace_context` because propagation
+ * needs the full formatted header incl. the sampling flag, while log lines carry
+ * only the raw trace/span ids.
+ */
+void set_outbound_traceparent(const char *traceparent);
+
+/*!
+ * The W3C `traceparent` set for this thread, or empty when none is active. Read
+ * by the Lua HTTP client to inject the header on outbound requests.
+ */
+std::string get_outbound_traceparent();
+
 #endif

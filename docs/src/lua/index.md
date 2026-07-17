@@ -975,6 +975,12 @@ Performs an HTTP request using curl. Currently implements only GET requests. Par
 
 Authentication is not yet supported.
 
+When SIPI is handling a request under an active distributed trace, `server.http`
+automatically adds a W3C `traceparent` header to the outbound request so the
+downstream service continues the same trace (e.g. a `pre_flight` authorization
+call to dsp-api). If the `header` table already contains a `traceparent`, that
+value is kept and no header is injected.
+
 The result is a table:
 
     result = {

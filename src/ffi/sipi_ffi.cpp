@@ -500,4 +500,14 @@ void sipi_set_log_trace_context(const char *trace_id, const char *span_id)
   }
 }
 
+void sipi_set_outbound_traceparent(const char *traceparent)
+{
+  // Void + cannot meaningfully fail; swallow any allocation failure so no C++
+  // exception crosses the boundary (the boundary contract is uniform).
+  try {
+    ::set_outbound_traceparent(traceparent);
+  } catch (...) {
+  }
+}
+
 }// extern "C"

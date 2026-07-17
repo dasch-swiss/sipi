@@ -239,19 +239,38 @@ fn build_logger_provider() -> Option<opentelemetry_sdk::logs::SdkLoggerProvider>
     )
 }
 
+/// The active span's OTel context, or `None` when there is no valid active span.
+/// The shared extraction behind [`current_trace_context`] + [`current_traceparent`].
+fn active_span_context() -> Option<opentelemetry::trace::SpanContext> {
+    let cx = tracing::Span::current().context();
+    let sc = cx.span().span_context().clone();
+    sc.is_valid().then_some(sc)
+}
+
 /// The current span's trace context as lowercase-hex `(trace_id, span_id)`, or
 /// `None` when there is no valid active span (so the keys are omitted rather than
 /// emitted empty). Used both by the log formatter and the cross-seam stamping.
 #[must_use]
 pub fn current_trace_context() -> Option<(String, String)> {
-    let cx = tracing::Span::current().context();
-    let span = cx.span();
-    let sc = span.span_context();
-    if sc.is_valid() {
-        Some((sc.trace_id().to_string(), sc.span_id().to_string()))
-    } else {
-        None
-    }
+    active_span_context().map(|sc| (sc.trace_id().to_string(), sc.span_id().to_string()))
+}
+
+/// The active span's context as a W3C `traceparent` header value
+/// (`00-{trace_id}-{span_id}-{flags}`), or `None` when there is no valid active
+/// span (so nothing is propagated). Used to stamp the engine's outbound Lua HTTP
+/// calls (the preflight's dsp-api request) across the seam, so the downstream
+/// service continues this trace. The flag byte is the real sampling decision
+/// from the span context, so a downstream sampler honours it.
+#[must_use]
+pub fn current_traceparent() -> Option<String> {
+    active_span_context().map(|sc| {
+        format!(
+            "00-{}-{}-{:02x}",
+            sc.trace_id(),
+            sc.span_id(),
+            sc.trace_flags().to_u8()
+        )
+    })
 }
 
 /// Custom event formatter producing the shared `{level, message, target,

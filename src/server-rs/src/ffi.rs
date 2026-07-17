@@ -466,6 +466,11 @@ extern "C" {
     /// the active trace context (lowercase-hex `trace_id`/`span_id`); both NULL
     /// clears it. See `sipi_ffi.h`.
     pub fn sipi_set_log_trace_context(trace_id: *const c_char, span_id: *const c_char);
+
+    /// Stamp the calling thread's outbound `traceparent` — the W3C header the
+    /// engine's Lua `server.http` client injects on outbound requests so a
+    /// downstream service continues this trace. NULL clears it. See `sipi_ffi.h`.
+    pub fn sipi_set_outbound_traceparent(traceparent: *const c_char);
 }
 
 /// Stamps the C++ engine's logs (on the current thread) with a trace context for
@@ -499,6 +504,49 @@ impl Drop for LogTraceScope {
         if self.active {
             // SAFETY: NULL clears the thread-local; the seam guards exceptions.
             unsafe { sipi_set_log_trace_context(std::ptr::null(), std::ptr::null()) };
+        }
+    }
+}
+
+/// Stamps the C++ engine's outbound Lua HTTP calls (on the current thread) with a
+/// W3C `traceparent` for the guard's lifetime, clearing on drop. Held around a
+/// preflight/route FFI call so the engine's `server.http` request to dsp-api
+/// carries the active trace context and dsp-api continues the trace; cleared on
+/// drop so a reused `spawn_blocking` thread never leaks a stale traceparent onto
+/// the next request.
+///
+/// **Not nestable:** `Drop` clears the thread-local, it does not restore a prior
+/// value. Only one scope may be live per thread at a time — the preflight,
+/// file-preflight, and lua-route call sites are mutually exclusive, so this holds
+/// by construction. A future nested use would need a save/restore stack instead.
+pub struct OutboundTraceScope {
+    active: bool,
+}
+
+impl OutboundTraceScope {
+    /// Set the current thread's outbound `traceparent` (from the active OTel
+    /// span, via [`crate::telemetry::current_traceparent`]). Returns a guard that
+    /// clears it on drop.
+    #[must_use]
+    pub fn set(traceparent: &str) -> Self {
+        match CString::new(traceparent) {
+            Ok(tp) => {
+                // SAFETY: valid NUL-terminated string for the call; the engine
+                // validates + copies it into a thread-local; the seam guards
+                // exceptions.
+                unsafe { sipi_set_outbound_traceparent(tp.as_ptr()) };
+                Self { active: true }
+            }
+            Err(_) => Self { active: false },
+        }
+    }
+}
+
+impl Drop for OutboundTraceScope {
+    fn drop(&mut self) {
+        if self.active {
+            // SAFETY: NULL clears the thread-local; the seam guards exceptions.
+            unsafe { sipi_set_outbound_traceparent(std::ptr::null()) };
         }
     }
 }
