@@ -16,7 +16,7 @@ wastes effort.
 |------|--------------------|-------|---------------|----------|
 | **Prometheus + Grafana** | *How does the service behave for real users — latency/cache/throughput distribution, in aggregate, over time? Is it trending worse?* | All requests, aggregated | **Production**, always-on | Negligible |
 | **Sentry** | *What broke, with what stack and context?* | Individual errors | Production | Negligible |
-| **OpenTelemetry tracing** *(not yet wired in Sipi)* | *For this one slow request, which stage ate the time?* | Per-request span tree | Production / staging | Low |
+| **OpenTelemetry tracing** | *For this one slow request, which stage ate the time?* | Per-request span tree | Production / staging | Low |
 | **Tracy** *(this doc)* | *Where in the code does the time go for this workload — per function, lock, allocation, thread, at ns resolution?* | One workload, deep | **Local dev**, opt-in | High while the GUI is connected |
 | **`just bench`** ([Benchmarking](benchmarking.md)) | *Did my specific change make this operation measurably faster?* | One isolated op | Local dev | Measurement harness |
 | **`just valgrind`** | *Is there a memory error or leak?* | Correctness, not speed | Local dev | Very high |
@@ -25,9 +25,12 @@ A note on the production stack, because the three pieces are often conflated:
 **OpenTelemetry** is the instrumentation *standard* (how telemetry is emitted),
 **Prometheus** is the aggregate *metrics store* (the counters/gauges/histograms
 behind `GET /metrics`), and **Grafana** is the *visualization* layer on top.
-Sipi's production observability today is **Prometheus metrics + Sentry**; OTel
-tracing would be the per-request complement if and when it is added. None of them
-tell you which C++ function consumed the milliseconds — that is Tracy's job.
+Sipi's Rust server emits **OpenTelemetry traces + OTLP metrics** (with Sentry for
+errors): per-request spans via `OtelAxumLayer`, W3C `traceparent` continuation
+in and out (incl. propagation to dsp-api on the Lua preflight's outbound call),
+and the engine counters bridged to OTLP. The retained C++ server still exposes
+the aggregate Prometheus `GET /metrics` scrape until the strangler cutover. None
+of them tell you which C++ function consumed the milliseconds — that is Tracy's job.
 
 ## The loop
 

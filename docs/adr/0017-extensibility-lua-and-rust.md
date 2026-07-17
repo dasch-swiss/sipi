@@ -78,10 +78,11 @@ Config is a separate, declarative concern (**TOML**), not scripting.
 - **TOML config is the declarative config surface** (serde + toml). It is config,
   not the extension mechanism, and is independent of the scripting-language
   question.
-- **The script → dsp-api distributed-tracing gap is independent of the language
-  choice.** Whatever the script language, the script's outbound call to dsp-api
-  goes through a host HTTP binding; connecting it to the trace requires the host
-  to inject `traceparent` across the seam. The language choice does not affect it.
+- **The script → dsp-api distributed-tracing gap is closed host-side, so it is
+  independent of the language choice.** The host injects a W3C `traceparent`
+  across the seam onto the script's outbound call (implemented for the Lua path),
+  so a downstream service continues the trace. Because it is host-side, a future
+  scripting language inherits it unchanged.
 - **A pure-Rust Lua runtime (mlua) is low priority.** If a different scripting
   language replaces Lua, reimplementing Lua in mlua is moot; while Lua persists,
   mlua only removes the C++ `LuaServer` dependency. Not a priority either way.
