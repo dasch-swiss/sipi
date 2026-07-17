@@ -2,101 +2,88 @@
 status: accepted
 ---
 
-# Extensibility: native-first (Rust + TOML), Lua deprecated once native alternatives stabilize
+# Extensibility: runtime scripting for request-shaping (no compile-time toolchain), TOML for config
 
-> **Amended 2026-06-26.** The original decision (below, 2026-06-22) was that Lua
-> and Rust would be *permanently* coexisting first-class paths and SIPI would
-> never deprecate Lua. That is superseded by the staged native-first plan in the
-> Decision section: introduce a native alternative to every Lua use, mark it
-> experimental until prod-validated, stabilize, then deprecate Lua. The original
-> rationale is retained as the *constraint on how* Lua is deprecated (only behind
-> a stable native replacement), not as a permanence commitment.
+## Context
 
 SIPI is a **general-purpose IIIF server**. Its request-shaping policy — the
-`pre_flight` / `file_pre_flight` auth hooks and configured custom routes — has
-historically been written in Lua, executed by the C++ `LuaServer`. The strangler
-rewrite ([ADR-0013](0013-shttps-as-internal-module.md)) moves the HTTP shell to
-Rust over the C++ image engine via a narrow C FFI seam, which raises the
-question: does Lua stay, and how does a Rust-first user extend SIPI without it?
+`pre_flight` / `file_pre_flight` auth hooks and configured custom routes — is
+written as scripts, executed by an embedded runtime. The strangler rewrite
+([ADR-0013](0013-shttps-as-internal-module.md)) moves the HTTP shell to Rust over
+the C++ image engine via a narrow C FFI seam, which raises the question of how
+extensions are written going forward: a compile-time Rust extension point (a
+trait linked into the binary), or a runtime-loaded script.
+
+Two facts decide it:
+
+1. **Only DaSCH can compile SIPI.** Kakadu (the JP2 codec) is license-gated, so
+   no third party can build SIPI from source. A compile-time extension mechanism
+   has no external audience — the only party who could compile an implementation
+   is the maintainer — and even internally it forces a full rebuild + redeploy of
+   a slow, licensed binary for every policy change.
+2. **A non-technical user must be able to extend SIPI without a toolchain.**
+   Changing request-shaping should not require a compiler, a build environment,
+   or a link step. It should be editing a script the running server loads.
 
 ## Decision
 
-SIPI is moving to **native (Rust + TOML) extensibility as the primary path**. We
-introduce a native alternative to **everything Lua is used for today** — config,
-the `pre_flight` / `file_pre_flight` auth hooks, and custom routes — and will
-deprecate Lua once those alternatives are stable. Because the native surfaces are
-new and *will* change, the migration is **staged, one surface at a time**:
+**Request-shaping extensions (auth hooks, custom routes) are authored as
+runtime-loaded scripts, requiring no compilation or toolchain from the author.**
+Config is a separate, declarative concern (**TOML**), not scripting.
 
-1. **Introduce** a native alternative alongside the existing Lua path — TOML
-   config beside Lua config; a Rust `pre_flight` / `file_pre_flight` trait beside
-   the Lua hooks; Rust route handlers beside Lua routes (Phase T).
-2. **Mark it experimental.** The native surface (the TOML schema, the trait
-   signatures) is **not yet API-stable and may change without the usual
-   compatibility guarantees** until it is validated in production.
-3. **Validate in production, then stabilize** — once a native alternative has
-   proven itself in real deployments, drop the experimental designation and
-   commit to its stability.
-4. **Deprecate Lua for that surface** — but only once a stable, prod-proven
-   native replacement exists, so no user is pushed off Lua before there is
-   somewhere stable to go.
+- **Lua is the current scripting implementation** and is fully supported. The
+  seam carries the full request as an opaque `RequestContext`, so scripts have
+  every `server.*` field available. Existing Lua scripts run unchanged.
+- **A more approachable scripting language may succeed Lua.** The selection
+  criterion is the goal above: a non-technical user can write and change an
+  extension **without a compilation/toolchain setup**, by editing a script the
+  server loads at runtime. **Roc (roc-lang) is the leading candidate** — its
+  platform/application split (a Rust/Zig/C "platform" host exposes effects; the
+  "application" is the user's code) maps cleanly onto "SIPI host exposes
+  `http`/`respond`/… effects + auth logic as the script." **Roc is a candidate,
+  not a commitment:** its maturity and compilation/distribution story must be
+  checked against the no-toolchain goal; if it does not meet that bar, another
+  approachable scripting language is chosen instead.
+- **LLM-assisted authoring is assumed.** Authors write these scripts with LLM
+  support, so the language need not be maximally familiar; a clean host-effect
+  boundary, safety, and ergonomics matter more than a large existing user base.
+  This **widens** the candidate set but does **not** relax the no-toolchain
+  constraint — LLM help with authoring is not a substitute for the extension
+  being runtime-loaded.
 
-While a native alternative is experimental, **both paths coexist and Lua stays
-fully functional**: the Rust trait's default implementation wraps the Lua FFI,
-and the seam carries the full request as an opaque `RequestContext`, so existing
-Lua scripts run unchanged. There is **no forced migration during the experimental
-phase**. The end state is **Rust/TOML-native primary with Lua deprecated** — a
-multi-year arc, executed surface by surface.
+## What we reject
 
-This **supersedes the original decision in this ADR** (2026-06-22) that Lua and
-Rust were "two coexisting, permanently first-class" paths with Lua never
-deprecated. That decision's rationale — SIPI is a general-purpose server, the
-choice is the operator's, no user is forced to migrate — is **retained as the
-constraint on *how* Lua is deprecated** (gradually, surface by surface, only
-behind a stable native replacement), not as a commitment that Lua is permanent.
-
-**Experimental native surfaces today** (subject to change until prod-validated):
-
-- **TOML config** — `--config *.toml` (M5). The schema may change.
-- **Rust `pre_flight` / `file_pre_flight` and route traits** — Phase T. The trait
-  signatures may change.
+- **A compile-time Rust extension point** (a `pre_flight` / route trait linked
+  into the binary) as the user-facing extension mechanism, and the
+  **SIPI-as-library** end-state that goes with it. It fails both drivers above:
+  no external party can compile it, and it forces a rebuild/redeploy for every
+  change. A Rust trait may still exist *internally* as a detail of how the host
+  dispatches to scripts, but it is not how users extend SIPI.
+- **Forced migration off Lua.** No user is moved off Lua before a stable,
+  prod-proven replacement exists, with a documented migration path.
 
 ## Consequences
 
-- **`sipi_run_lua_route` is the Lua-route serving path for the transition.** The
-  Phase C cutover implements it (Rust owns route dispatch once the transport's
-  `script_handler` is deleted); it is not a throwaway bridge — it serves Lua
-  routes for as long as Lua is supported. The Phase T Rust route trait runs in
-  parallel as the experimental native alternative; `sipi_run_lua_route` is
-  retired only once Lua routes are deprecated behind a stabilized route trait.
-- **Server-side upload is a retained SIPI capability, served as a Lua route.**
-  Multipart upload (`POST`, today the `/api/upload` Lua route) stays a SIPI
-  capability through `sipi_run_lua_route` — it is **not** hardcoded into the Rust
-  shell, and removing it is not a SIPI decision. A deployment that routes ingest
-  elsewhere (e.g. DSP, which uses dsp-ingest and disallows upload over SIPI)
-  simply does not configure the route; that is the operator's config choice, not
-  a capability SIPI drops. This resolves the strangler plan's open question on
-  multipart upload (retain vs cede): SIPI retains it as a Lua route; whether a
-  given deployment enables it is configuration.
+- **`sipi_run_lua_route` is the Lua-route serving path** for as long as Lua is
+  the scripting language. A successor scripting language adds its own serving path
+  beside it (or replaces it) under the no-forced-migration constraint.
+- **Server-side upload is a SIPI capability served as a Lua route** (the
+  `/api/upload` route), not hardcoded into the Rust shell. A deployment that
+  routes ingest elsewhere simply does not configure the route (e.g. DSP uses
+  dsp-ingest). Whether a deployment enables it is configuration, not a capability
+  SIPI drops.
 - **The seam carries the full request as an opaque `RequestContext`** (not a
-  narrowed struct), so any `server.*` field a Lua script might read stays
-  resolvable — load-bearing for the no-forced-migration guarantee for existing
-  Lua users.
-- **The D+ Lua → mlua rewrite is lower priority.** Reimplementing the Lua
-  runtime in pure-Rust mlua only removes the C++ `LuaServer` dependency; it is
-  not required for the native extension story, which the trait + TOML config
-  deliver without it. Since the end state deprecates Lua, the C++ Lua runtime is
-  transitional; mlua matters only if the Lua deprecation tail runs long enough to
-  want a pure-Rust Lua in the interim. Lower priority either way.
-- **Docs mark the native alternatives experimental + state the long-term plan.**
-  Each native surface (TOML config, the Phase T traits) is documented as
-  experimental — may change until prod-validated — with a pointer to this ADR's
-  lifecycle. Lua is documented as supported-but-on-the-path-to-deprecation, not
-  removed.
-- **`PreflightDecision` is modelled as a clean value type** (a permission-type
-  enum + an open key/value map), so the C++ `build_preflight` return and the
-  future Rust trait return are a 1:1 port — no seam change is needed to add the
-  trait later.
+  narrowed struct), so any field a script might read stays resolvable — the same
+  shape a successor scripting host would consume.
+- **TOML config is the declarative config surface** (serde + toml). It is config,
+  not the extension mechanism, and is independent of the scripting-language
+  question.
+- **The script → dsp-api distributed-tracing gap is independent of the language
+  choice.** Whatever the script language, the script's outbound call to dsp-api
+  goes through a host HTTP binding; connecting it to the trace requires the host
+  to inject `traceparent` across the seam. The language choice does not affect it.
+- **A pure-Rust Lua runtime (mlua) is low priority.** If a different scripting
+  language replaces Lua, reimplementing Lua in mlua is moot; while Lua persists,
+  mlua only removes the C++ `LuaServer` dependency. Not a priority either way.
 
-Refines decision #9 of the strangler plan; extends ADR-0013. The as-built trait
-API (`trait PreFlight`, `trait RouteHandler`, `ServerConfig::with_preflight`) is
-specified and amended into this record when Phase T lands.
+Refines decision #9 of the strangler plan; extends [ADR-0013](0013-shttps-as-internal-module.md).
