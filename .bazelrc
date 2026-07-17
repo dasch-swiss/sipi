@@ -359,15 +359,19 @@ test --flaky_test_attempts=//test/e2e:upload@3
 
 # ── Remote build execution (NativeLink VM) ──────────────────────────────────
 # The self-hosted NativeLink VM is the Bazel backend: Remote Cache + Remote
-# Execution (:50051, mTLS) plus a co-located bazel-remote (:50052) as the
-# http_archive download cache. The connection + mTLS flags are built by the
+# Execution (:50051, mTLS). The connection + mTLS flags are built by the
 # `bazel-rbe` composite action and injected per CI step (Bazel does NOT expand
 # env vars in .bazelrc, so they live in the workflow, not here):
 #   --remote_cache / --remote_executor=grpcs://<vm>:50051
-#   --experimental_remote_downloader=grpcs://<vm>:50052
 #   --tls_certificate / --tls_client_certificate / --tls_client_key
-# Local dev never sets those, so the tuning flags below are safe no-ops without a
-# remote configured.
+# No --experimental_remote_downloader: Bazel fetches the FetchBlob digest's
+# bytes from the --remote_cache CAS (GrpcRemoteDownloader.java hands the
+# digest to the remoteCacheClient), so a gRPC downloader is only usable when
+# it shares a CAS with the remote cache; NativeLink has no fetch-on-miss
+# asset service. External archives are cached by --repository_cache below +
+# a per-runner actions/cache step in CI.
+# Local dev never sets the connection flags, so the tuning flags below are
+# safe no-ops without a remote configured.
 #   --remote_download_minimal: only fetch outputs of explicitly-built targets;
 #     intermediate action outputs stay in the CAS (build-without-the-bytes).
 #   --remote_local_fallback: if the VM is unreachable, build locally instead of
@@ -384,6 +388,13 @@ build --remote_download_minimal
 build --remote_local_fallback
 build --remote_timeout=600s
 build --remote_max_connections=200
+
+# Content-addressed cache of external downloads (http_archive tarballs, bzlmod
+# registry files). Bazel's default repository cache lives under the
+# output_user_root; pinning an explicit stable path lets CI persist it across
+# runs via actions/cache (keyed on MODULE.bazel.lock) and gives local dev one
+# shared location across workspaces.
+common --repository_cache=~/.cache/bazel-repo
 
 # BCR curl ships with three configurable TLS backends (boringssl default,
 # mbedtls, openssl) selected via a `string_flag`. Pin to `openssl` so the

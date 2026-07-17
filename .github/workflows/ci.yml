@@ -75,6 +75,15 @@ jobs:
       # the slow clippy build.
       - name: Check for unused Rust dependencies
         run: nix develop --command bash -c "just machete"
+      # Persist Bazel's repository cache (--repository_cache in .bazelrc) across
+      # runs: external archives + bzlmod registry files download from upstream
+      # only when MODULE.bazel.lock changes.
+      - name: Restore Bazel repository cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/bazel-repo
+          key: bazel-repo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('MODULE.bazel.lock') }}
+          restore-keys: bazel-repo-${{ runner.os }}-${{ runner.arch }}-
       # Remote cache + mTLS + the GH_TOKEN-backed Kakadu fetch that analyzing the
       # Rust crate graph needs. Same composite action the `test` job uses; the
       # gate builds for linux-amd64 only.
@@ -83,7 +92,6 @@ jobs:
         uses: ./.github/actions/bazel-rbe
         with:
           runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
-          cache-endpoint: ${{ vars.REMOTEBUILD_CACHE_ENDPOINT }}
           ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
           client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
           client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
@@ -187,15 +195,25 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
+      # Persist Bazel's repository cache (--repository_cache in .bazelrc) across
+      # runs: external archives + bzlmod registry files download from upstream
+      # only when MODULE.bazel.lock changes.
+      - name: Restore Bazel repository cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/bazel-repo
+          key: bazel-repo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('MODULE.bazel.lock') }}
+          restore-keys: bazel-repo-${{ runner.os }}-${{ runner.arch }}-
       # REMOTE BUILD EXECUTION:
       #
       # The self-hosted RBE backend (dasch-remotebuild-prod-01, defined in the
       # ops-tf + ops-infra repos) is the single Bazel
       # backend. It serves the Remote Cache + Remote Execution (the runner
-      # endpoint, mTLS) and a bazel-remote download cache (the cache endpoint) for
-      # http_archive (--experimental_remote_downloader). Both endpoints present a
-      # cert signed by the same CA, so one --tls_certificate validates both — no
-      # proxy, no CA bundle, no GCS.
+      # endpoint, mTLS). http_archive downloads are cached client-side via
+      # --repository_cache (.bazelrc) + the actions/cache step, not via a gRPC
+      # remote downloader — Bazel downloads FetchBlob digests from the
+      # --remote_cache CAS, so a downloader is only usable when it shares a
+      # CAS with the remote cache.
       #
       # The `bazel-rbe` composite action writes the mTLS material (org secrets +
       # variables REMOTEBUILD_*) outside the checkout and emits the Bazel flag
@@ -216,7 +234,6 @@ jobs:
         uses: ./.github/actions/bazel-rbe
         with:
           runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
-          cache-endpoint: ${{ vars.REMOTEBUILD_CACHE_ENDPOINT }}
           ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
           client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
           client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
