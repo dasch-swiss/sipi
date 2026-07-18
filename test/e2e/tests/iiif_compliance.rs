@@ -920,13 +920,10 @@ fn unsupported_formats_rejected() {
 // --- Phase 8: Identifier and Error Handling Tests ---
 
 #[test]
-#[ignore] // sipi returns 500 for filenames containing # — compliance gap
 fn id_escaped() {
-    // test#image.jp2 is a symlink to lena512.jp2 (created in Phase 1)
-    // %23 is the URL encoding of #
-    // TODO: sipi returns 500 when trying to serve files with # in the
-    // name. The IIIF spec requires escaped characters to work
-    // (id_escaped test).
+    // test#image.jp2 is a symlink to lena512.jp2; %23 is the URL-encoding of #.
+    // A percent-escaped # in the identifier must resolve to the on-disk file
+    // (IIIF Image API 3.0 identifier escaping).
     let srv = server();
     let resp = client()
         .get(format!(
