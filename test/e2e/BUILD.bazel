@@ -1,8 +1,8 @@
 """Rust e2e + Docker smoke test suite.
 
-`rules_rust` + Crate Universe (`crate.from_cargo` in `MODULE.bazel`)
-build one `rust_test` target per `tests/<name>.rs`, mirroring Cargo's
-"one binary per `[[test]]`" semantics.
+`rules_rust` + Crate Universe (the single `@crates` `crate.from_specs`
+hub in `MODULE.bazel`) build one `rust_test` target per `tests/<name>.rs`,
+mirroring Cargo's "one binary per `[[test]]`" semantics.
 
 Layout:
 
@@ -51,9 +51,23 @@ Runtime contracts (set per-target by `sipi_e2e_test()` or below):
                        Active only under `--config=asan`.
 """
 
-load("@crates//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load(":sipi_e2e_test.bzl", "sipi_e2e_test")
+
+# The e2e suite's direct third-party deps (from the single `@crates` from_specs
+# hub in `MODULE.bazel`). The shared `:sipi_e2e` library sees only these; the
+# test binaries additionally get `@crates//:tempfile` (a dev-only dep) below.
+_E2E_LIB_DEPS = [
+    "@crates//:base64",
+    "@crates//:image",
+    "@crates//:insta",
+    "@crates//:jsonwebtoken",
+    "@crates//:nix",
+    "@crates//:proptest",
+    "@crates//:rand",
+    "@crates//:reqwest",
+    "@crates//:serde_json",
+]
 
 package(default_visibility = ["//visibility:private"])
 
@@ -71,9 +85,8 @@ filegroup(
 
 # Shared library — `src/lib.rs` exposes `SipiServer`, `repo_root`,
 # `http_client`, port allocation helpers, etc. The integration tests
-# all `use sipi_e2e::…`. `[dev-dependencies]` are not visible to a
-# library, only `[dependencies]`, so we ask `all_crate_deps()` for the
-# `normal` set only.
+# all `use sipi_e2e::…`. It gets the non-dev deps only; `tempfile` is
+# added to the test binaries below.
 rust_library(
     name = "sipi_e2e",
     srcs = [
@@ -83,7 +96,7 @@ rust_library(
     ],
     edition = "2021",
     visibility = ["//visibility:public"],
-    deps = all_crate_deps(normal = True),
+    deps = _E2E_LIB_DEPS,
 )
 
 # ── Non-docker e2e tests ────────────────────────────────────────────────────
@@ -93,13 +106,8 @@ rust_library(
 #   2. Add `sipi_e2e_test(name = "<name>", deps = _e2e_test_deps)` here.
 #   3. Add `":<name>"` to the `:all_e2e` test_suite below.
 #
-# Both `[dependencies]` and `[dev-dependencies]` are visible to
-# integration tests; `all_crate_deps()` queries the Cargo.toml in this
-# package and returns the union when both flags are set.
-_e2e_test_deps = all_crate_deps(
-    normal = True,
-    normal_dev = True,
-)
+# Integration tests see the non-dev deps plus the dev-only `tempfile`.
+_e2e_test_deps = _E2E_LIB_DEPS + ["@crates//:tempfile"]
 
 sipi_e2e_test(name = "bilevel_tiff", deps = _e2e_test_deps)
 

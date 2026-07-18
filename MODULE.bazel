@@ -496,9 +496,9 @@ rust.toolchain(
     edition = "2021",
     # 1.88+ required: transitive `time-macros` crate uses
     # `proc_macro_span` (stabilised in 1.88). Edition 2024 (1.85+) is
-    # also required by the transitive `pxfm` crate. `test/e2e/
-    # Cargo.toml` itself stays on edition 2021 — the transitive bumps
-    # are invisible to first-party code.
+    # also required by the transitive `pxfm` crate. First-party crates
+    # stay on edition 2021 (set per `rust_*` target in their BUILD
+    # files) — the transitive bumps are invisible to first-party code.
     versions = ["1.89.0"],
     # Cross-compile targets. The arm64/darwin CI legs run on native runners but
     # compile on the x86_64 RBE worker, so rules_rust must register a toolchain
@@ -517,53 +517,73 @@ use_repo(rust, "rust_toolchains")
 
 register_toolchains("@rust_toolchains//:all")
 
-# `crate.from_cargo` is lazy resolution from `Cargo.lock` — the canonical
-# default since rules_rust 0.59. `crates_vendor` (vendored sources in-tree)
-# is reserved for offline CI scenarios that don't apply here.
+# Third-party Rust crates via crate_universe `from_specs` — direct deps declared
+# here (no `Cargo.toml`). A single `@crates` hub serves all three first-party
+# crates (//src/server-rs, //src/cli-rs, //test/e2e); each BUILD file references
+# the subset it needs as `@crates//:<crate>` labels.
+#
+# Trade-off of one shared hub: prod and test deps resolve into one graph (they
+# feature-unify on repin) and the prod/test dep boundary is BUILD-file
+# discipline, not separate-repo enforcement — a deliberate trade for one fewer
+# manifest set to maintain. The `crate.spec()` list and the per-target
+# `@crates//:` labels are hand-synced (there is no `all_crate_deps()` wiring or
+# `cargo-machete` gate): a spec no target references lingers rather than failing
+# a build, so prune unused entries on sight.
+#
+# `aws-lc-sys` must stay OUT of the graph — its cmake build script panics inside
+# Bazel actions ("rust_wrapper.h is not a directory"). The TLS stack is pinned to
+# `ring`: the `sentry` crates use `rustls-no-provider`, `rustls` is `ring`-only,
+# and `jsonwebtoken` uses the pure-Rust `rust_crypto` backend (HS256 in the e2e
+# suite; `rust_crypto` also covers RSA/ECDSA via `rsa` + `p256`/`p384` if needed).
 #
 # Repin via:  CARGO_BAZEL_REPIN=1 bazelisk fetch @crates//:all
 crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
-crate.from_cargo(
-    name = "crates",
-    cargo_lockfile = "//test/e2e:Cargo.lock",
-    manifests = ["//test/e2e:Cargo.toml"],
-)
 
-# Production Crate Universe manifest for the `sipi` server library (strangler-fig
-# Phase C; //src/server-rs). Kept separate from the e2e `crates` above so the
-# production dependency graph (axum/tokio/tower/tracing) is independent of the
-# test-only graph (reqwest/insta/proptest/jsonwebtoken). Repin via:
-#   CARGO_BAZEL_REPIN=1 bazelisk fetch @crates_prod//:all
-crate.from_cargo(
-    name = "crates_prod",
-    cargo_lockfile = "//src/server-rs:Cargo.lock",
-    manifests = ["//src/server-rs:Cargo.toml"],
-)
+# //src/server-rs — the `sipi` server library
+crate.spec(package = "axum", version = "0.8", features = ["multipart"])
+crate.spec(package = "tokio", version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"])
+crate.spec(package = "tokio-stream", version = "0.1")
+crate.spec(package = "tower", version = "0.5", features = ["util"])
+crate.spec(package = "tracing", version = "0.1")
+crate.spec(package = "tracing-subscriber", version = "0.3", features = ["env-filter", "json"])
+crate.spec(package = "percent-encoding", version = "2")
+crate.spec(package = "form_urlencoded", version = "1")
+crate.spec(package = "cookie", version = "0.18")
+crate.spec(package = "serde_json", version = "1")
+crate.spec(package = "serde", version = "1", features = ["derive"])
+crate.spec(package = "toml", version = "0.8", default_features = False, features = ["parse"])
+crate.spec(package = "tempfile", version = "3")
+crate.spec(package = "httpdate", version = "1")
+# The opentelemetry* crates move in lockstep — bump them together on any OTel
+# upgrade (their inter-crate APIs are version-matched: 0.31 core/sdk/otlp/
+# appender, 0.32 tracing, 0.33 axum, 0.36 init).
+crate.spec(package = "opentelemetry", version = "0.31", features = ["metrics"])
+crate.spec(package = "opentelemetry_sdk", version = "0.31", features = ["rt-tokio", "metrics", "logs"])
+crate.spec(package = "opentelemetry-otlp", version = "0.31", features = ["grpc-tonic", "trace", "metrics", "logs"])
+crate.spec(package = "opentelemetry-appender-tracing", version = "0.31")
+crate.spec(package = "tracing-opentelemetry", version = "0.32")
+crate.spec(package = "axum-tracing-opentelemetry", version = "0.33")
+crate.spec(package = "init-tracing-opentelemetry", version = "0.36", features = ["otlp", "metrics", "tracing_subscriber_ext"])
+crate.spec(package = "sentry", version = "0.48", default_features = False, features = ["backtrace", "contexts", "debug-images", "panic", "release-health", "reqwest", "rustls-no-provider"])
+crate.spec(package = "sentry-tracing", version = "0.48")
+crate.spec(package = "libc", version = "0.2")
 
-# Crate Universe manifest for the default `sipi` binary (//src/cli-rs). A
-# separate repo from `crates_prod` (rather than a second manifest on it) because
-# crate_universe's `all_crate_deps()` resolves a target's deps by its in-repo
-# package path, which a multi-manifest splice mangles into a synthetic-workspace
-# path. This mirrors the existing `crates` (e2e) vs `crates_prod` (server) split.
-# The //src/cli-rs → //src/server-rs:lib edge is a Bazel `deps` edge only — no
-# Cargo path dep — so neither graph resolves it. Repin via:
-#   CARGO_BAZEL_REPIN=1 bazelisk fetch @crates_cli//:all
-crate.from_cargo(
-    name = "crates_cli",
-    cargo_lockfile = "//src/cli-rs:Cargo.lock",
-    manifests = ["//src/cli-rs:Cargo.toml"],
-)
+# //src/cli-rs — the `sipi` binary (beyond the shared `sentry`)
+crate.spec(package = "clap", version = "4", features = ["derive", "env"])
+crate.spec(package = "sentry-rust-minidump", version = "0.16", features = ["ipc"])
+crate.spec(package = "rustls", version = "0.23", default_features = False, features = ["ring", "std", "tls12", "logging"])
 
-# `aws-lc-sys` is intentionally NOT in the dep graph — its cmake-based
-# build script panics inside Bazel actions ("rust_wrapper.h is not a
-# directory"). `test/e2e/Cargo.toml` uses `jsonwebtoken`'s
-# `rust_crypto` (pure-Rust) backend instead. The only `tests/`
-# consumer is `security.rs`, which uses HS256 — a symmetric algorithm
-# not affected by the backend choice. If a future test needs RSA/ECDSA
-# JWT verification, `rust_crypto` covers both via `rsa` + `p256`/`p384`.
+# //test/e2e — the e2e suite (beyond the shared serde_json/tempfile)
+crate.spec(package = "reqwest", version = "0.12", default_features = False, features = ["blocking", "json", "multipart", "rustls-tls"])
+crate.spec(package = "image", version = "0.25", default_features = False, features = ["jpeg", "png", "tiff"])
+crate.spec(package = "insta", version = "1.47", features = ["json", "redactions"])
+crate.spec(package = "nix", version = "0.29", features = ["signal", "process"])
+crate.spec(package = "jsonwebtoken", version = "10", default_features = False, features = ["rust_crypto"])
+crate.spec(package = "base64", version = "0.22")
+crate.spec(package = "proptest", version = "1")
+crate.spec(package = "rand", version = "0.9")
+crate.from_specs()
 use_repo(crate, "crates")
-use_repo(crate, "crates_prod")
-use_repo(crate, "crates_cli")
 
 # ── Kakadu (proprietary, GitHub-release-gated) ─────────────────────────────
 # Custom repository_rule mirroring today's Nix FOD auth UX 1:1 — shells out

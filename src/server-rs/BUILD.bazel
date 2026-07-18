@@ -13,15 +13,15 @@ final binary link, which happens in `//src/cli-rs`. `//src/ffi:sipi_ffi` pulls
 depends on the C++ CLI (`//src/cli:cli_app`); `//src/cli-rs` adds that for
 `sipi_cli_main`.
 
-Dependencies resolve from `@crates_prod` (the production Crate Universe manifest
-set in `MODULE.bazel`, distinct from the e2e suite's `@crates`). Repin via:
-`CARGO_BAZEL_REPIN=1 bazelisk fetch @crates_prod//:all`.
+Dependencies resolve from the single `@crates` crate_universe `from_specs` hub
+(direct deps declared in `MODULE.bazel`, no `Cargo.toml`); this library
+references the subset it needs as `@crates//:<crate>` labels. Repin via:
+`CARGO_BAZEL_REPIN=1 bazelisk fetch @crates//:all`.
 
 The shell is additive: it runs in parallel with `//src/cli:sipi`, which keeps
 the production socket until the cutover.
 """
 
-load("@crates_prod//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -46,7 +46,31 @@ rust_library(
     # Embedded at compile time by `favicon()` via `include_bytes!` — the exact
     # bytes of the C++ oracle's `favicon_ico` (include/favicon.h).
     compile_data = ["src/favicon.ico"],
-    deps = all_crate_deps(normal = True) + [
+    deps = [
+        "@crates//:axum",
+        "@crates//:axum-tracing-opentelemetry",
+        "@crates//:cookie",
+        "@crates//:form_urlencoded",
+        "@crates//:httpdate",
+        "@crates//:init-tracing-opentelemetry",
+        "@crates//:libc",
+        "@crates//:opentelemetry",
+        "@crates//:opentelemetry-appender-tracing",
+        "@crates//:opentelemetry-otlp",
+        "@crates//:opentelemetry_sdk",
+        "@crates//:percent-encoding",
+        "@crates//:sentry",
+        "@crates//:sentry-tracing",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:tempfile",
+        "@crates//:tokio",
+        "@crates//:tokio-stream",
+        "@crates//:toml",
+        "@crates//:tower",
+        "@crates//:tracing",
+        "@crates//:tracing-opentelemetry",
+        "@crates//:tracing-subscriber",
         # The narrow C FFI seam → the transitive C++ image engine. This is the
         # cc_library → rust link (Open Question #1). //src/ffi:sipi_ffi pulls
         # //src:engine, so the library carries the engine without depending on
