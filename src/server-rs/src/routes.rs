@@ -356,6 +356,10 @@ fn dispatch_engine(
             serve_image(
                 &resolved,
                 parsed,
+                // Raw, percent-encoded request path (matches the C++ oracle's
+                // `req.request_uri`, SipiHttpServer.cpp:1302) — log/report context
+                // only; never re-parsed by the engine.
+                uri.path(),
                 headers,
                 *method == Method::HEAD,
                 &access,
@@ -528,9 +532,13 @@ fn resolve(infile: &str, resolved_root: &str) -> Result<String, Box<Response>> {
 
 /// IIIF image via `sipi_serve_image`, honouring a `restrict` decision's
 /// `size`/`watermark` from the preflight kv channel.
+// Single-caller engine-dispatch glue; the arguments are the distinct FFI inputs,
+// not a bundle worth a struct.
+#[allow(clippy::too_many_arguments)]
 fn serve_image(
     resolved: &str,
     parsed: &ParsedRequest,
+    request_uri: &str,
     headers: &HeaderMap,
     is_head: bool,
     access: &Access,
@@ -554,7 +562,7 @@ fn serve_image(
     let c_client_ip = CString::new(client_ip(headers)).unwrap_or_default();
     let c_host = CString::new(host).unwrap_or_default();
     let c_scheme = CString::new(scheme).unwrap_or_default();
-    let c_uri = CString::new(parsed_request_uri(parsed)).unwrap_or_default();
+    let c_uri = CString::new(request_uri).unwrap_or_default();
     // restrict size + watermark from the preflight kv (NULL when not restricted).
     let c_size = (access.permission == SipiPermType::Restrict)
         .then(|| access_kv_cstring(access, "size"))
@@ -1641,14 +1649,6 @@ fn client_ip(headers: &HeaderMap) -> String {
     header_str(headers, "x-forwarded-for")
         .and_then(|v| v.rsplit(',').next().map(|s| s.trim().to_owned()))
         .unwrap_or_default()
-}
-
-fn parsed_request_uri(parsed: &ParsedRequest) -> String {
-    if parsed.prefix.is_empty() {
-        format!("/{}", parsed.identifier)
-    } else {
-        format!("/{}/{}", parsed.prefix, parsed.identifier)
-    }
 }
 
 /// `Content-Disposition` for a `/file` download, mirroring the C++ oracle
