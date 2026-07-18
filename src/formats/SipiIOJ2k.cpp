@@ -251,8 +251,19 @@ bool SipiIOJ2k::read(SipiImage *img,
   jp2_ultimate_src.open(filepath.c_str());
 
   bool essentials_from_uuid_box = false;
-  if (jpx_in.open(&jp2_ultimate_src, true)
-      < 0) {// if < 0, not compatible with JP2 or JPX.  Try opening as a raw code-stream.
+  // A corrupt JP2/JPX box structure makes jpx_in.open raise a Kakadu error
+  // (thrown as a kdu_exception by KduSipiError::flush) rather than returning
+  // < 0; convert it to a SipiImageError instead of letting a bare int unwind
+  // past the FFI seam.
+  int jpx_open_result;
+  try {
+    jpx_open_result = jpx_in.open(&jp2_ultimate_src, true);
+  } catch (kdu_exception&) {
+    jp2_ultimate_src.close();
+    throw SipiImageError(
+      "Cannot read JPEG2000 file \"" + filepath + "\": corrupt JP2/JPX structure");
+  }
+  if (jpx_open_result < 0) {// if < 0, not compatible with JP2 or JPX. Try opening as a raw code-stream.
     jp2_ultimate_src.close();
     file_in.open(filepath.c_str());
     input = &file_in;
@@ -314,19 +325,47 @@ bool SipiIOJ2k::read(SipiImage *img,
     }
 
     int stream_id = 0;
-    jpx_stream = jpx_in.access_codestream(stream_id);
-    input = jpx_stream.open_stream();
-    palette = jpx_stream.access_palette();
+    // A truncated/corrupt JP2 container reaches here with no usable codestream;
+    // Kakadu raises an error (thrown as a kdu_exception) from access_codestream /
+    // open_stream. Convert it to a SipiImageError after closing the sources, so
+    // the failure is an enriched, leak-free error rather than a bare catch-all.
+    try {
+      jpx_stream = jpx_in.access_codestream(stream_id);
+      input = jpx_stream.open_stream();
+      palette = jpx_stream.access_palette();
+    } catch (kdu_exception&) {
+      // input is live only if open_stream() returned before the throw; the
+      // codestream is not created yet. jp2_ultimate_src is released by its
+      // destructor on unwind, as on the normal path (which closes only
+      // input + jpx_in).
+      if (input != nullptr) input->close();
+      jpx_in.close();
+      throw SipiImageError(
+        "Cannot read JPEG2000 file \"" + filepath + "\": no usable codestream in JP2/JPX container");
+    }
   }
 
   kdu_core::kdu_codestream codestream;
-  codestream.create(input);
-  // codestream.set_fussy(); // Set the parsing error tolerance.
-  codestream.set_fast();// No errors expected in input
-
-  //
-  // get the
-  int maximal_reduce = codestream.get_min_dwt_levels();
+  // Corrupt or truncated input makes create()/header parsing raise a Kakadu
+  // error, which KduSipiError::flush throws as a kdu_exception. Convert it to a
+  // SipiImageError (as the JPEG/PNG handlers do) after tearing down the
+  // codestream + source, so the engine reports an enriched error rather than a
+  // bare catch-all, and no source is leaked on the failure path.
+  int maximal_reduce;
+  try {
+    codestream.create(input);
+    // codestream.set_fussy(); // Set the parsing error tolerance.
+    codestream.set_fast();// No errors expected in input
+    maximal_reduce = codestream.get_min_dwt_levels();
+  } catch (kdu_exception&) {
+    // create() can throw before the codestream exists; input is already set by
+    // the branch above. Otherwise the same teardown as the ROI/normal paths.
+    if (codestream.exists()) codestream.destroy();
+    input->close();
+    jpx_in.close();
+    throw SipiImageError(
+      "Cannot read JPEG2000 file \"" + filepath + "\": corrupt or truncated codestream");
+  }
 
   //
   // Legacy codestream-comment fallback. Only consulted when the SIPI UUID
@@ -562,7 +601,17 @@ bool SipiIOJ2k::read(SipiImage *img,
   // In order to retrieve a 16-Bit image, use kdu_uin16 *buffer and the apropriate signature of the pull_stripe method
   //
   kdu_supp::kdu_stripe_decompressor decompressor;
-  decompressor.start(codestream);
+  try {
+    decompressor.start(codestream);
+  } catch (kdu_exception&) {
+    // codestream + input are both live here (create() already succeeded);
+    // unconditional teardown, matching the ROI-error and normal-exit paths.
+    codestream.destroy();
+    input->close();
+    jpx_in.close();
+    throw SipiImageError(
+      "Cannot read JPEG2000 file \"" + filepath + "\": corrupt codestream (decompressor start failed)");
+  }
   // TODO: check image for number of components and make this dynamic
   int stripe_heights[5] = {
     dims.size.y, dims.size.y, dims.size.y, dims.size.y, dims.size.y

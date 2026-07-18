@@ -1436,10 +1436,10 @@ fn assert_corrupt_image_handled(
 }
 
 #[test]
-#[ignore = "Kakadu calls exit() on corrupt JP2 — not catchable by C++ exception handler"]
 fn corrupt_image_handling() {
-    // Truncated JP2 — Kakadu's kdu_error handler calls exit(), bypassing
-    // both C++ exceptions and our catch-all. Separate Kakadu-specific fix needed.
+    // Truncated JP2 — Kakadu's error handler throws (SipiIOJ2k's KduSipiError),
+    // the read path converts it to a SipiImageError, and the server returns a
+    // clean error and stays up (same graceful-degradation contract as JPEG/PNG).
     assert_corrupt_image_handled("corrupt_test.jp2", "images/unit/lena512.jp2", 100, "jpg");
 }
 
