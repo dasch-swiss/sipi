@@ -572,7 +572,11 @@ std::expected<ServeResponse, SipiStatus>
   auto base_headers = [&] {
     std::vector<Header> h;
     h.emplace_back("Cache-Control", kCacheControl);
-    h.emplace_back("Link", canonical_header);
+    // IIIF Image API 3.0 profileLinkHeader (advertised in info.json's extraFeatures):
+    // fold the profile Link into the canonical Link's value (one header) — the Rust
+    // response sink is last-write-wins per header name, so two separate "Link"
+    // entries would drop one.
+    h.emplace_back("Link", canonical_header + R"(, <http://iiif.io/api/image/3/level2.json>;rel="profile")");
     if (content_type != nullptr) { h.emplace_back("Content-Type", content_type); }
     return h;
   };
