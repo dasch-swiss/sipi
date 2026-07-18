@@ -42,9 +42,22 @@ fn health_returns_200_with_json() {
 #[test]
 fn health_responds_quickly() {
     let srv = server();
+    let url = format!("{}/health", srv.base_url);
+
+    // Warm up the shared blocking client first: its very first request pays a
+    // one-time cost (spinning up reqwest's internal async runtime + opening the
+    // connection) that is the client's, not the server's. Timing that would
+    // measure the test harness, not /health — and it drifts with the reqwest/
+    // hyper/tokio versions. Time a second, warm request over the pooled
+    // keep-alive connection so this asserts the server's actual response time.
+    client()
+        .get(url.as_str())
+        .send()
+        .expect("health warm-up request failed");
+
     let start = std::time::Instant::now();
     let resp = client()
-        .get(format!("{}/health", srv.base_url))
+        .get(url.as_str())
         .send()
         .expect("health request failed");
     let elapsed = start.elapsed();

@@ -8,16 +8,16 @@ the C++ image engine — pulled transitively through `//src/server-rs:lib`'s
 `sipi_cli_main`. The engine is linked once (Bazel dedups the shared archives).
 
 `cli-rs` binds only the `sipi_cli_main` C-ABI symbol (`src/ffi.rs`); the server
-seam stays in `//src/server-rs`. Dependencies resolve from `@crates_cli` (its
-own Crate Universe manifest in `MODULE.bazel`, separate from `//src/server-rs`'s
-`@crates_prod`). Repin via: `CARGO_BAZEL_REPIN=1 bazelisk fetch @crates_cli//:all`.
+seam stays in `//src/server-rs`. Dependencies resolve from the single `@crates`
+crate_universe `from_specs` hub (direct deps in `MODULE.bazel`, no `Cargo.toml`)
+as `@crates//:<crate>` labels. Repin via:
+`CARGO_BAZEL_REPIN=1 bazelisk fetch @crates//:all`.
 
 Additive: this binary runs in parallel with `//src/cli:sipi` (the C++ server),
 which keeps the production socket until the cutover renames this to the stock
 `sipi` entry point and switches the Docker entrypoint.
 """
 
-load("@crates_cli//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -93,7 +93,12 @@ rust_binary(
     # the transitive C++ dep (protobuf) includes <sanitizer/asan_interface.h>
     # under --config=asan, which the hermetic LLVM toolchain does not ship.
     tags = ["no-sanitizer"],
-    deps = all_crate_deps(normal = True) + _DEPS,
+    deps = [
+        "@crates//:clap",
+        "@crates//:rustls",
+        "@crates//:sentry",
+        "@crates//:sentry-rust-minidump",
+    ] + _DEPS,
 )
 
 # Inline #[cfg(test)] unit tests — the clap `server` arg-parsing pins (e.g. that
