@@ -432,7 +432,7 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | Content-Type with Accept: ld+json | :white_check_mark: | `jsonld_media_type_with_accept` | |
 | Link header on default request | :white_check_mark: | `jsonld_default_has_link_header` | |
 | Canonical Link header | :white_check_mark: | `canonical_link_header` | |
-| Profile Link header | :x: IGNORED | `profile_link_header` | known sipi bug; test ignored pending fix |
+| Profile Link header | :white_check_mark: | `profile_link_header` | emitted on image responses (DEV-6733) |
 | X-Forwarded-Proto HTTPS rewrite | :white_check_mark: | `info_json_x_forwarded_proto_https` | |
 | Required fields structural check | :white_check_mark: | `info_json_has_required_fields` | |
 | Structural: sizes array exists | :white_check_mark: | `info_json_has_sizes_array` | |
@@ -544,7 +544,7 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | Requirement | Status | Test | Notes |
 |---|---|---|---|
 | Encoded slash `%2F` | :white_check_mark: | `id_escaped_slash_decoded` | |
-| Encoded `#` (`%23`) | :x: IGNORED | `id_escaped` | known sipi bug; test ignored pending fix |
+| Encoded `#` (`%23`) | :white_check_mark: | `id_escaped` | resolves to the on-disk `#` file (DEV-6732) |
 | Subdirectory identifier | :white_check_mark: | via server tests | |
 | Non-ASCII identifiers | :white_check_mark: | `id_non_ascii` | |
 | ARK/URN identifiers | :x: GAP | — | Not tested (may not apply — sipi identifiers are opaque path segments, not a namespaced scheme) |
@@ -597,7 +597,7 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 | Memory safety (ASan/LSan) | :white_check_mark: | `sanitizer.yml` CI | e2e suite against an ASan+UBSan-instrumented binary; unit-test sanitizer coverage still pending (see Cross-Cutting section below) |
 | Thread safety (TSan) | :x: GAP | — | Untested for data races; future optional nightly variant |
 | Performance regression detection | :white_check_mark: | `latency.rs` | smoke thresholds only (info.json / cache-miss / cache-hit); load-baseline tier intentionally deferred to staging (see Cross-Cutting section) |
-| Corrupt/truncated image handling | :warning: partial | `iiif_compliance.rs::corrupt_jpeg_handling`, `corrupt_png_handling` covered; `corrupt_image_handling` (truncated JP2) `#[ignore]`'d | Kakadu's `kdu_error` handler calls `exit()` on a corrupt JP2 — bypasses all C++ exception handling, so the process terminates rather than returning an error response; a real, unresolved robustness gap, not just an untested case |
+| Corrupt/truncated image handling | :white_check_mark: | `iiif_compliance.rs::corrupt_jpeg_handling`, `corrupt_png_handling`, `corrupt_image_handling` (truncated JP2) | JP2 decode converts Kakadu's thrown error into a `SipiImageError` (like JPEG/PNG); the server returns a clean error and stays up (DEV-6731) |
 | Lua route handler errors | :white_check_mark: | `differential.rs::lua_route_error_handling` | |
 | Zero-byte / empty file upload | :white_check_mark: | `upload.rs::empty_file_upload` | |
 | Invalid server config startup | :white_check_mark: | `config.rs::invalid_config_startup` | |
@@ -661,7 +661,7 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 
 | Category | Covered | Gaps | Coverage |
 |---|---|---|---|
-| Info.json fields | 22 | 1 (profile Link — sipi bug) | 96% |
+| Info.json fields | 23 | 0 | 100% |
 | Region parameters | 12 | 0 | 100% |
 | Size parameters | 15 | 0 | 100% |
 | Rotation parameters | 9 | 0 | 100% |
@@ -669,16 +669,15 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 | Format parameters | 5 | 0 | 100% |
 | CORS | 5 | 0 | 100% |
 | HTTP behavior | 13 | 0 | 100% |
-| Identifiers | 3 | 2 (ARK/URN, `%23`-escape bug) | 60% |
-| Sipi extensions | 90 | 8 | 92% |
-| **Total** | **180** | **11** | **94%** |
+| Identifiers | 4 | 1 (ARK/URN) | 80% |
+| Sipi extensions | 91 | 7 | 93% |
+| **Total** | **183** | **8** | **96%** |
 
 *(Three additional Sipi-extension rows — Prometheus `/metrics`, `/api/cache`, SSL/TLS — are excluded from this count entirely: they are removed-on-the-Rust-shell features, not gaps. See the N/A note above the extension matrix.)*
 
-**Key remaining gap categories** (8 rows, all in Sipi extensions):
+**Key remaining gap categories** (7 rows, all in Sipi extensions):
 
 - **Deep metadata survival** (2 gaps): positive XMP round-trip, ICC profile HTTP-level round-trip — EXIF/IPTC now covered
-- **Corrupt-input robustness** (1 gap, **real bug, not just untested**): Kakadu's `kdu_error` handler calls `exit()` on a truncated JP2, bypassing all C++ exception handling — the process terminates instead of returning an error response. `corrupt_image_handling` documents this via `#[ignore]`; JPEG/PNG corrupt-input handling is fine
 - **Concurrency edge cases** (1 gap): thread-pool-exhaustion saturation test (`concurrent_requests`/`lua_state_thread_isolation` are written and correct, just `#[ignore]`'d for the unrelated 503-shedding reason above — not gaps)
 - **Hardening depth** (2 gaps): TSan (nightly-future), extremely long URL/header (fuzz-only today)
 - **Test-harness depth** (1 gap): a direct SImage Lua-API unit harness (vs. black-box HTTP coverage)
