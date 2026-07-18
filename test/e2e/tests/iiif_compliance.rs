@@ -633,17 +633,18 @@ fn canonical_link_header() {
 }
 
 #[test]
-#[ignore] // sipi claims profileLinkHeader in extraFeatures but doesn't emit the header
 fn profile_link_header() {
-    // TODO: sipi lists profileLinkHeader in extraFeatures
-    // (SipiHttpServer.cpp:827) but no code emits
-    // Link: <...level2.json>;rel="profile"
-    // This test should pass once the compliance gap is fixed.
+    // IIIF Image API 3.0 places the profileLinkHeader on image responses (the
+    // feature is advertised in info.json's extraFeatures). The canonical and
+    // profile links are folded into a single Link header value.
     let srv = server();
     let resp = client()
-        .get(format!("{}/unit/lena512.jp2/info.json", srv.base_url))
+        .get(format!(
+            "{}/unit/lena512.jp2/full/max/0/default.jpg",
+            srv.base_url
+        ))
         .send()
-        .expect("GET info.json failed");
+        .expect("GET image failed");
 
     assert_eq!(resp.status().as_u16(), 200);
 
@@ -655,7 +656,7 @@ fn profile_link_header() {
         .unwrap();
     assert!(
         link.contains("http://iiif.io/api/image/3/level2.json") && link.contains("rel=\"profile\""),
-        "Link header should contain profile link, got: {}",
+        "image Link header should contain the profile link, got: {}",
         link
     );
 }
