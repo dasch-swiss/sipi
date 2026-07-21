@@ -3,11 +3,11 @@
 //! The clap surface lives in [`args`] (assembled from per-domain flatten
 //! groups); this module owns the verb handler and the
 //! `From<&ServerArgs> for ServerOverrides` mapping — the binary knows the CLI
-//! shape, the `sipi` library takes the Rust-native overrides bag (decision #9).
+//! shape, the `sipi` library takes the Rust-native overrides bag.
 //!
 //! Every forwarded `server` flag maps into `ServerOverrides`; the override
 //! channel into the engine (the `repr(C)` struct + the `sipi_init` apply block)
-//! lives in `server-rs/config.rs` (plan 02 §7.5).
+//! lives in `server-rs/config.rs`.
 
 mod args;
 
@@ -21,7 +21,7 @@ impl From<&ServerArgs> for ServerOverrides {
         // Engine-behaviour flags forward; transport flags the Rust shell owns
         // (sslport/sslcert/sslkey, keepalive, max-waiting/queue-timeout,
         // hostname, nthreads, logfile) parse for CLI parity but are never
-        // forwarded (plan 02 §7.5 forward/parse-only split). The deprecated
+        // forwarded (the forward/parse-only split). The deprecated
         // cache aliases (--cachedir/--cachesize/--cachenfiles) collapse onto
         // their canonical field here — canonical wins if both are somehow set
         // (matches the C++ oracle's last-write-wins on the shared `optCache*`

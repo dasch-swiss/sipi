@@ -33,7 +33,7 @@
 permissions:
   contents: read
 
-# Re-armed under hermetic-llvm (DEV-6563 Phase 12). `--config=asan` /
+# Re-armed under hermetic-llvm (DEV-6563). `--config=asan` /
 # `--config=ubsan` now set `--@llvm//config:{asan,ubsan}=true`, which makes the
 # toolchain build + link the compiler-rt ASan/UBSan runtimes from source and put
 # the sanitizer headers on the include path — the missing-runtime blocker

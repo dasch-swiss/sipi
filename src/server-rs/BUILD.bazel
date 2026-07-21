@@ -3,7 +3,7 @@
 The `sipi` `rust_library` (`//src/server-rs:lib`, crate `sipi`) owns the axum +
 tokio server and statically links the C++ image engine through the FFI seam
 (`//src/ffi:sipi_ffi`, a `cc_library`). The default `sipi` binary that wraps it
-lives in `//src/cli-rs` (decision #9) — this package is library-only.
+lives in `//src/cli-rs` — this package is library-only.
 
 This is the first Rust → C++ link in the graph: `rules_rust` threads the seam's
 `CcInfo` (and the engine's transitive linkopts: `-ldl`/`-lpthread` on Linux, the

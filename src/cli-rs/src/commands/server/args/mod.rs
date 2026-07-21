@@ -3,14 +3,14 @@
 //! [`ServerArgs`] is the clap `Parser`; each `#[derive(Args)]` group is
 //! flattened in so `--help` renders sectioned and a reader finds every flag by
 //! domain. Group structs are crate-internal — only `ServerArgs` is the public
-//! surface (decision #9: the binary owns the CLI, the `sipi` library takes a
+//! surface (the binary owns the CLI, the `sipi` library takes a
 //! Rust-native `ServerOverrides`).
 //!
 //! The full ~40-flag server surface parses here (so e.g. `server --imgroot X`
 //! no longer exits 2), with each overridable flag an `Option<T>` carrying its
 //! `SIPI_*` env var — NO `default_value`, so an unset flag stays `None` and
 //! falls through to the loaded Lua config (the Rust analog of the C++
-//! `user_set` gate; precedence `config < env < CLI`, plan 02 §7.5). Every
+//! `user_set` gate; precedence `config < env < CLI`). Every
 //! engine-behaviour flag forwards into `ServerOverrides` (see `mod.rs`'s
 //! `From<&ServerArgs>`); the transport flags the Rust shell owns
 //! (`sslport`/`sslcert`/`sslkey`, `keepalive`, `max-waiting`/`queue-timeout`,
@@ -26,7 +26,7 @@
 //! `term_width = 0` pins `--help`'s wrapping to clap's fixed default rather
 //! than the invoking terminal's width, so the heading-order snapshot in
 //! `test/e2e/tests/cli.rs::sipi_server_help_heading_order` is stable across
-//! CI and local dev (plan 02 §7.5 M8).
+//! CI and local dev.
 
 mod cache;
 mod concurrency;
@@ -89,8 +89,8 @@ mod tests {
     use clap::Parser;
 
     /// Every override-bearing field must parse to `None` when neither CLI nor
-    /// env provides it, so it falls through to the loaded Lua config (plan 02
-    /// §7.5). A `default_value` on any overridable field would silently clobber
+    /// env provides it, so it falls through to the loaded Lua config.
+    /// A `default_value` on any overridable field would silently clobber
     /// the config value — this pins one representative field per group against
     /// that regression, plus the two non-trivial parse configs (`pathprefix`'s
     /// optional-value flag and `subdirexcludes`'s delimited list), where the

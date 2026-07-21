@@ -1,6 +1,6 @@
 //! Distributed-trace propagation: the Lua preflight's outbound HTTP call to
 //! dsp-api must carry a W3C `traceparent` in SIPI's trace, so dsp-api continues
-//! the trace instead of starting a disconnected root (DEV-6104 §4).
+//! the trace instead of starting a disconnected root (DEV-6104).
 //!
 //! The `knora` `pre_flight` (`config/sipi.init-knora-test.lua`) issues
 //! `server.http("GET", "http://<knora_path>:<knora_port>/v1/files/<id>", …)`.

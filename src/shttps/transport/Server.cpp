@@ -52,7 +52,7 @@ namespace {
 
 // The Lua route table carries the connection-less shttps::HttpMethod; the
 // transport's handler map is keyed by Connection::HttpMethod. These map between
-// the two enums at the boundary (both go away with the transport in Phase C).
+// the two enums at the boundary (both go away with the transport).
 HttpMethod to_request_method(Connection::HttpMethod method)
 {
   switch (method) {
@@ -1326,7 +1326,7 @@ void Server::add_route(Connection::HttpMethod method_p,
 //=========================================================================
 
 
-// ── Lua request-context parity glue (transport-only; deleted at the Phase C cutover) ──
+// ── Lua request-context parity glue (transport-only; deleted at the cutover) ──
 // ConnectionResponseSink + make_request_context adapt a live Connection to the
 // connection-less RequestContext / ResponseSink seam. They live in
 // connection_request_context.h so this file (the per-request VM) and

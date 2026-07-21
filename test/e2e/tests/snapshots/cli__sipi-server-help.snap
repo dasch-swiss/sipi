@@ -10,9 +10,9 @@ Options:
 
 Network:
       --serverport <PORT>  HTTP listen port (1–65535) [env: SIPI_SERVERPORT=]
-      --sslport <PORT>     TLS port 1–65535 (parse-only: SIPI serves plain HTTP behind Traefik — §5 #3) [env: SIPI_SSLPORT=]
+      --sslport <PORT>     TLS port 1–65535 (parse-only: SIPI serves plain HTTP behind Traefik) [env: SIPI_SSLPORT=]
       --hostname <HOST>    Server hostname (parse-only: the shell derives the external host from `X-Forwarded-Host`) [env: SIPI_HOSTNAME=]
-      --keepalive <SECS>   HTTP/1.1 keep-alive timeout in seconds (parse-only: tokio is async, so the knob is unread — §3 P2) [env: SIPI_KEEPALIVE=]
+      --keepalive <SECS>   HTTP/1.1 keep-alive timeout in seconds (parse-only: tokio is async, so the knob is unread) [env: SIPI_KEEPALIVE=]
 
 Concurrency:
   -t, --nthreads <N>          Worker thread count (0 = auto-detect from CPU cores; parse-only — sizes the engine-work semaphore only from the Lua/TOML config, not the CLI). Also accepts the C++ oracle's `-t` short form [env: SIPI_NTHREADS=]

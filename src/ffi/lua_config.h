@@ -17,10 +17,10 @@
  * `make_lua_server` rebuilds, connection-less, exactly the per-request VM
  * `Server::process_request` constructs: the init script runs (installing
  * `server.*` and defining the preflight hooks), then the remaining globals are
- * applied. In Phase C `sipi_init` constructs and installs the `LuaConfig`; in the
- * Phase B-L parity window the still-living server installs it via
- * `set_lua_config` — the same throwaway-installer shape as `set_engine_context`,
- * gone with the server at the cutover.
+ * applied. Eventually `sipi_init` constructs and installs the `LuaConfig`;
+ * while the C++ transport still owns the socket, the still-living server
+ * installs it via `set_lua_config` — the same throwaway-installer shape as
+ * `set_engine_context`, gone with the server at the cutover.
  */
 #ifndef SIPI_FFI_LUA_CONFIG_H
 #define SIPI_FFI_LUA_CONFIG_H
@@ -56,8 +56,8 @@ struct LuaConfig
 };
 
 /*! Install the engine Lua config (copied into a file-static). Called once at
- *  server startup in the Phase B-L parity path; superseded by `sipi_init` in
- *  Phase C. */
+ *  server startup on the current transport path; superseded once `sipi_init`
+ *  takes over. */
 void set_lua_config(LuaConfig cfg);
 
 /*! The installed Lua config. Returns a default-constructed (empty) config if

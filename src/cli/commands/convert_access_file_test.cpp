@@ -4,7 +4,7 @@
  * AGPL-3.0-or-later
  */
 
-// Access File command unit tests (DEV-6537 Phase 12.6).
+// Access File command unit tests (DEV-6537).
 //
 // Exercises the command behind `sipi convert access-file <in> <out>`:
 //

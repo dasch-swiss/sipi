@@ -38,7 +38,7 @@
             go-containerregistry
             just
 
-            # jpylyzer — JP2 conformance validator (Phase 15.11). Runs against
+            # jpylyzer — JP2 conformance validator. Runs against
             # regenerated JP2 goldens to confirm the SIPI UUID box reads as an
             # informational `Unknown UUID` and the file otherwise passes
             # ISO/IEC 15444-1 conformance.

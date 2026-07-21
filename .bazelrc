@@ -189,7 +189,7 @@ common --repo_env=ANDROID_HOME=
 # `dontStrip = true` + `separateDebugInfo = false`.
 #
 # **Instrumentation via the toolchain's `--@llvm//config:{asan,ubsan}`
-# flags** (DEV-6563 Phase 12). Setting `--@llvm//config:asan=true` makes
+# flags** (DEV-6563). Setting `--@llvm//config:asan=true` makes
 # the hermetic-llvm toolchain (a) add `-fsanitize=address` to every
 # target compile + link, (b) put the compiler-rt `sanitizer/*.h` headers
 # on the include path (abseil's `dynamic_annotations.h` includes
@@ -264,7 +264,7 @@ build:ubsan --@llvm//config:ubsan=true
 # toolchain (libc++) serves both the normal and the fuzz build.
 #
 # Instrumentation + runtimes come from the toolchain's own sanitizer
-# flags — same mechanism as `build:asan` above (DEV-6563 Phase 13):
+# flags — same mechanism as `build:asan` above (DEV-6563):
 #   * `--@llvm//config:fuzzer=true` — `-fsanitize=fuzzer` on every target
 #     compile (libFuzzer coverage: trace-pc-guard / trace-cmp / …) and
 #     link, and builds + links the compiler-rt **libFuzzer runtime** from
@@ -339,8 +339,8 @@ test --test_output=errors
 #   - server: lua_test_functions / lua_uuid_round_trip intermittently 503 under
 #     suite-load bursts when the engine-pool semaphore sheds (routes.rs
 #     `try_acquire_owned`); the deterministic 503 cases in `server` are
-#     `#[ignore]`'d (plan 02 §8.1, DEV-6659), so only this transient residue
-#     remains here. Root cause to revisit in the cluster-A concurrency work.
+#     `#[ignore]`'d (DEV-6659), so only this transient residue
+#     remains here. Root cause to revisit in future concurrency work.
 #   - upload: concurrent_file_uploads' post-burst responsiveness probe 503s when
 #     the upload burst's permits have not yet been released (same engine-pool
 #     semaphore; passes 3/3 in isolation, sheds only under parallel-suite load).

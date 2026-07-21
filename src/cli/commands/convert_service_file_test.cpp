@@ -4,7 +4,7 @@
  * AGPL-3.0-or-later
  */
 
-// Service File command unit tests (DEV-6537 Phase 12.5).
+// Service File command unit tests (DEV-6537).
 //
 // Exercises the command behind `sipi convert service-file <in> <out>`:
 // reads a synthetic source, applies the command's transformations, and

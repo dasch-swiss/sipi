@@ -2,8 +2,8 @@
 //!
 //! [`ServerOverrides`] is the Rust-native bag of `server`-verb flags that layer
 //! over the loaded Lua config. `cli-rs` builds it from the parsed clap args and
-//! hands it to [`crate::run`]; the library never parses argv itself (decision #9
-//! — the library is reusable, the binary owns the CLI).
+//! hands it to [`crate::run`]; the library never parses argv itself
+//! (the library is reusable, the binary owns the CLI).
 //!
 //! It carries one `Option` per forwarded `server` flag; `None` means the flag
 //! was set by neither CLI nor env, so the loaded Lua config value wins (the
@@ -34,8 +34,7 @@ pub struct ServerOverrides {
     /// to the Lua config's `sipi.port` (Lua config only), then the hardcoded
     /// default. `serve()`'s actual resolution order (`lib.rs`) is
     /// `SIPI_RS_PORT` (dev/test) > this field > Lua config port > default —
-    /// `SIPI_RS_PORT` is checked first, ahead of this field, not after it
-    /// (plan 02 §6 R3).
+    /// `SIPI_RS_PORT` is checked first, ahead of this field, not after it.
     pub serverport: Option<u16>,
 
     // Paths

@@ -598,7 +598,7 @@ bool SipiIOJpeg::read(SipiImage *img,
       if (pos != nullptr) {
         // Wrap in try/catch so malformed EXIF from legacy Photoshop files
         // (e.g. APP13-before-APP1 with non-ASCII IPTC) does not abort the
-        // whole read. See Phase 5.3 of the image-format-support plan.
+        // whole read.
         try {
           img->exif = std::make_shared<Exif>(pos + 6, marker->data_length - (pos - marker->data) - 6);
           uint16_t ori;
@@ -656,7 +656,6 @@ bool SipiIOJpeg::read(SipiImage *img,
       // PHOTOSHOP MARKER....
       // Wrapped in try/catch so a malformed IPTC / EXIF / XMP inside the
       // Photoshop resource block does not prevent the image from being read.
-      // See Phase 5.3 of the image-format-support plan.
       // TODO(SipiReport-style-guide): refactor Iptc / Exif / Xmp
       // constructors to return std::expected<T, E> and delete this try/catch.
       if (strncmp("Photoshop 3.0", (char *)marker->data, 14) == 0) {
@@ -721,7 +720,7 @@ bool SipiIOJpeg::read(SipiImage *img,
   }
   case JCS_YCCK: {
     // libjpeg-turbo decodes YCCK internally to CMYK; the post-read
-    // inversion handling in Phase 5.2 is shared with the CMYK path.
+    // inversion handling is shared with the CMYK path.
     img->photo = PhotometricInterpretation::SEPARATED;
     break;
   }
@@ -1292,7 +1291,7 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
   // Essentials packet. The legacy `Essentials es = img->essential_metadata()`
   // declaration above (line 1226) still feeds the ICC fallback branch
   // (lines 1228-1261) but the COM marker emission has been removed
-  // (Phase 6.5 / DEV-6379).
+  // (DEV-6379).
 
   row_stride = img->nx * img->nc;
 

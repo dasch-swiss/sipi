@@ -1,9 +1,9 @@
 //! Filesystem path + path-resolution flags (the "Paths" `--help` heading).
 //!
-//! `subdirlevels` is deprecated and has no effect on the Rust serve path (plan
-//! 02 §3 P3); it parses for oracle parity. `pathprefix` DOES have an effect —
+//! `subdirlevels` is deprecated and has no effect on the Rust serve path;
+//! it parses for oracle parity. `pathprefix` DOES have an effect —
 //! `routes.rs` reads `prefix_as_path` off the engine context to decide whether
-//! the IIIF prefix is a path component under imgroot (plan 02 §7.7, the
+//! the IIIF prefix is a path component under imgroot (the
 //! previously-untested `prefix_as_path = false` branch). `pathprefix` is
 //! flag-shaped on the C++ side (a bare `--pathprefix` means "true"), so it
 //! takes an optional value here (`--pathprefix` → true, `--pathprefix=false` →

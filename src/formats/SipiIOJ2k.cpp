@@ -134,7 +134,7 @@ static kdu_core::kdu_byte
 //
 // Documented in `docs/adr/0005-essentials-packet-versioned-binary-serialization.md`
 // and `UBIQUITOUS_LANGUAGE.md`. jpylyzer reports unknown UUIDs as
-// informational, so this carrier is preservation-validator-safe (Phase 15.11).
+// informational, so this carrier is preservation-validator-safe.
 static kdu_core::kdu_byte sipi_essentials_uuid[] = { 0x7B, 0x28, 0xA6, 0x46, 0xB9, 0xC3, 0x4F, 0xB2, 0x90, 0x0B, 0xB6,
   0x85, 0x5D, 0xF2, 0x38, 0x82 };
 // static kdu_core::kdu_byte geojp2_uuid[] = {0xB1, 0x4B, 0xF8, 0xBD, 0x08, 0x3D, 0x4B, 0x43, 0xA5, 0xAE, 0x8C, 0xD7,
@@ -760,8 +760,8 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
     // Walk top-level UUID boxes for the SIPI Essentials carrier (ADR-0005 /
     // DEV-6410). Same scan loop as the main reader at the top of this file;
     // the codestream-comment fallback below covers pre-rollout files. When the
-    // packet's image-shape fields are populated (Phase 12 command), the
-    // fast path returns directly from here without calling codestream.create().
+    // packet's image-shape fields are populated, the fast path returns
+    // directly from here without calling codestream.create().
     jp2_input_box box;
     if (box.open(&jp2_ultimate_src)) {
       do {
@@ -779,7 +779,7 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
               info.origname = f.origname;
               info.success = SipiImgInfo::ALL;
               essentials_from_uuid_box = true;
-              // Fast path (ADR-0004 / Phase 9.1): if BOTH img_w and img_h are
+              // Fast path (ADR-0004): if BOTH img_w and img_h are
               // non-zero, populate every shape field from the packet and skip
               // codestream creation entirely. Partial population (one but not
               // the other) → fall through to slow path.
@@ -861,7 +861,7 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
     }
   }
 
-  // Slow-path outcome classification (ADR-0004 / Phase 13). Reached when
+  // Slow-path outcome classification (ADR-0004). Reached when
   // either no SIPI UUID box was found, or one was found but did not
   // populate both img_w and img_h. Precedence: parse failure > partial >
   // fallback (legacy carrier) > miss.

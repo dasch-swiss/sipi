@@ -595,7 +595,7 @@ void SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompress
   // Essentials packet. The legacy `Essentials es = img->essential_metadata()`
   // declaration above (line 548) still feeds the ICC fallback branch
   // (lines 549-564) but the iTXt SIPI-chunk emission has been removed
-  // (Phase 6.6 / DEV-6379).
+  // (DEV-6379).
 
   if (chunk_ptr.num() > 0) { png_set_text(png_ptr, info_ptr, chunk_ptr.ptr(), chunk_ptr.num()); }
 

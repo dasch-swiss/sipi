@@ -22,8 +22,8 @@ namespace {
   using shttps::RequestContext;
 
   // Deliberate FFI-boundary normalization: the seam's char* inputs are
-  // contractually non-null, but this is a C ABI surface (Phase C feeds it from
-  // Rust), so a null collapses to an empty Lua arg rather than UB.
+  // contractually non-null, but this is a C ABI surface (fed from the Rust
+  // shell), so a null collapses to an empty Lua arg rather than UB.
   std::shared_ptr<LuaValstruct> string_param(const char *s)
   {
     auto v = std::make_shared<LuaValstruct>();

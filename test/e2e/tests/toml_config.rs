@@ -1,4 +1,4 @@
-//! `--config` accepts a `.toml` file as well as `.lua` (M5). This proves a TOML
+//! `--config` accepts a `.toml` file as well as `.lua`. This proves a TOML
 //! config serves identically to the equivalent Lua config: the same info.json,
 //! the same image response, and a configured `[[routes]]` entry dispatching like
 //! a Lua-config route. The matched fixtures are

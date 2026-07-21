@@ -49,8 +49,8 @@ Sipi::SipiImage readFixture(const std::string &path)
 // -------------------------------------------------------------------------
 
 /*! R6 — both heritage JPEG variants must read successfully after the
- *  Phase 4 fix. The exact root cause is captured during Phase 4
- *  diagnosis using `--json`; regardless of that cause, the contract is
+ *  fix. The exact root cause is captured during diagnosis using
+ *  `--json`; regardless of that cause, the contract is
  *  "sipi reads these images without throwing". We use a parameterized
  *  test so both siblings (-o and -r) share the same contract. */
 class Jpeg_35_2421d_Reads : public ::testing::TestWithParam<std::string>
@@ -93,12 +93,12 @@ INSTANTIATE_TEST_SUITE_P(Heritage,
 
 /*! R8 — a JPEG whose metadata fails to parse must still return a usable
  *  image. Today, an exception during IPTC / EXIF / XMP parsing aborts the
- *  entire read. Phase 5.3 wraps each metadata block in a try/catch and
+ *  entire read. The fix wraps each metadata block in a try/catch and
  *  downgrades parse failures to warnings.
  *
  *  We use `malformed_xmp.jpg` — a valid JPEG envelope with a deliberately
  *  corrupted XMP packet — to exercise the XMP-specific path. After the
- *  Phase 5.3 fix the image decodes; the warning is routed to stderr. */
+ *  fix the image decodes; the warning is routed to stderr. */
 TEST(JpegFormatRegression, JpegCorruptXmpStillReadsImage)
 {
   Sipi::SipiImage img;
@@ -113,8 +113,8 @@ TEST(JpegFormatRegression, JpegCorruptXmpStillReadsImage)
  *  throws `"Unsupported JPEG colorspace JCS_YCCK"`.
  *
  *  Pillow cannot directly produce a YCCK JPEG from a single call, so this
- *  test is marked DISABLED until a YCCK fixture is provided. Phase 5.1
- *  enables YCCK → SEPARATED mapping. Once a fixture is available, rename
+ *  test is marked DISABLED until a YCCK fixture is provided. YCCK →
+ *  SEPARATED mapping is enabled. Once a fixture is available, rename
  *  the test to remove the `DISABLED_` prefix. */
 TEST(JpegFormatRegression, DISABLED_JpegYcckColorspaceReads)
 {
@@ -131,7 +131,7 @@ TEST(JpegFormatRegression, DISABLED_JpegYcckColorspaceReads)
  *  Today there is no APP14 detection and the values are wrong.
  *
  *  This test pins the "read succeeds" contract; the colour-correctness
- *  assertion lives in a follow-up approval test once Phase 5.2 lands. */
+ *  assertion lives in a follow-up approval test. */
 TEST(JpegFormatRegression, JpegCmykPhotoshopApp14Inversion)
 {
   Sipi::SipiImage img;
@@ -141,10 +141,10 @@ TEST(JpegFormatRegression, JpegCmykPhotoshopApp14Inversion)
 }
 
 /*! R10 — a raw CMYK JPEG with no APP14 marker must **not** be inverted.
- *  This is the negative case that pins the branch logic added in Phase 5.2
- *  so the inversion fix does not over-apply to files that do not need it.
+ *  This is the negative case that pins the branch logic added for the
+ *  inversion fix so it does not over-apply to files that do not need it.
  *  This test is expected to pass on `main` (no inversion happens) — the
- *  purpose is to guard against regressions once Phase 5.2 introduces the
+ *  purpose is to guard against regressions in the
  *  APP14-aware inversion path. */
 TEST(JpegFormatRegression, JpegCmykRawNoApp14NotInverted)
 {

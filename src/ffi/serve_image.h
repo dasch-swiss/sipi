@@ -4,7 +4,7 @@
  */
 
 /*!
- * The IIIF image pipeline behind the FFI seam (strangler-fig Phase B).
+ * The IIIF image pipeline behind the FFI seam (strangler-fig).
  *
  * `build_image_response` builds the transport-pure response for an IIIF image
  * request, the `serve_iiif` decode path carved out of `SipiHttpServer`. It

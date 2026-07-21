@@ -339,7 +339,7 @@ fn cli_convert_quality_actually_affects_output() {
 }
 
 // =============================================================================
-// `sipi server --help` snapshot (plan 02 §7.5 M8).
+// `sipi server --help` snapshot.
 //
 // `ServerArgs` composes its ~40 flags from nine `#[command(flatten)]` groups
 // (Network/Concurrency/Limits/Paths/Cache/Rate limiting/TLS & Auth/Knora/

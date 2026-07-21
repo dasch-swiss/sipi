@@ -69,7 +69,7 @@ symbols visible on Linux that strict `-std=c++23` hides (e.g. `strerror_r`,
   `./configure`/`make` and cannot target another platform. With every dep
   compiled by the relocatable hermetic toolchain, `bazel build
   --platforms=//bazel/platforms:linux_amd64 //src:image` can build the Linux OCI
-  image from a Mac (Phase 10).
+  image from a Mac (the cross-compile work).
 - **ASan/UBSan + fuzz.** foreign_cc's global-instrument-breaks-CMake-probes
   failure mode is gone (no foreign_cc probes left to break under global
   instrument); the native deps also now flow through sanitizer/coverage

@@ -6,7 +6,7 @@
 //! `sipi` binary lives in the sibling `cli-rs` crate (`//src/cli-rs:sipi`): it
 //! owns `main`, parses the CLI, and calls [`run`] for the `server` verb.
 //! Shipping the server as a library is what lets SIPI be consumed as a
-//! dependency (decision #9): a downstream crate can own `main`, depend on
+//! dependency: a downstream crate can own `main`, depend on
 //! `sipi`, and inject its own behaviour.
 //!
 //! The shell is built additively: it runs in parallel with the existing C++
@@ -43,7 +43,7 @@ use std::time::{Duration, Instant};
 /// `sipi.port` selected one. A Lua config that omits `port` entirely falls to
 /// `SipiConf`'s own in-class default (3333, `SipiConf.h`) one tier before this
 /// — that tier is never 1024, so an operator relying on this constant should
-/// set `port` explicitly (as every known config does; plan 02 §6 R3).
+/// set `port` explicitly (as every known config does).
 const DEFAULT_PORT: u16 = 1024;
 
 /// Process start time, for the `/health` uptime field. Set once at server
@@ -51,7 +51,7 @@ const DEFAULT_PORT: u16 = 1024;
 static START: OnceLock<Instant> = OnceLock::new();
 
 /// Run the SIPI axum server. The `cli-rs` binary parses the `server` verb's
-/// flags and calls this; a downstream crate can call it directly (decision #9).
+/// flags and calls this; a downstream crate can call it directly.
 /// `config` is the bootstrap config file path — `.lua` (engine Lua VM) or `.toml`
 /// (parsed Rust-side); it selects the base config the `overrides` layer onto.
 /// `drain_timeout` is the Rust-owned graceful-drain
@@ -125,7 +125,7 @@ async fn server_main(
     // into the override channel (Lua-less init; routes are sourced here); a `.lua`
     // path (or none) uses the engine's Lua VM as before. `effective` is the
     // overrides after the TOML base + CLI/env merge, used for the listen port.
-    // `lua_config_port` is the Lua config's `sipi.port` (plan 02 §6 R3) — set
+    // `lua_config_port` is the Lua config's `sipi.port` — set
     // only on the Lua-config branch, where it is not otherwise reachable: the
     // TOML branch already folds `[network].port` into `effective.serverport`
     // via `resolve()`, and the no-config branch has no config to read.
@@ -316,7 +316,7 @@ async fn serve(
     // concurrency gauges read its permits). A no-op when no meter provider was
     // installed (no OTLP endpoint), so it is safe to call unconditionally.
     state.register_metrics();
-    // Precedence (plan 02 §6 R3): `SIPI_RS_PORT` (dev/test-only — lets the e2e
+    // Precedence: `SIPI_RS_PORT` (dev/test-only — lets the e2e
     // harness spawn parallel shells without a `--serverport`) beats
     // `--serverport`/`SIPI_SERVERPORT` (`port`, clap's own `CLI > env`), which
     // beats the Lua config's `sipi.port` (`lua_config_port`, absent for a TOML

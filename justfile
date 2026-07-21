@@ -172,7 +172,7 @@ bazel-test-smoke *FLAGS='':
 
 # Run the differential parity gate: spawns the Rust shell (subject) and the
 # retained C++ server (reference, via `$SIPI_BIN_REF`) and diffs their
-# responses across the plan §5 allowlist. `manual`-tagged so it stays out of
+# responses across the divergence allowlist. `manual`-tagged so it stays out of
 # `:all_e2e` and `bazel-coverage`'s `//test/e2e/...` wildcard — run it
 # explicitly here. The two-binary spawn is `exclusive`/`local` with
 # `--test-threads=1` (set by the test macro). CI runs it as a dedicated

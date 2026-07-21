@@ -37,7 +37,7 @@ We accept this for five reasons.
 
 - **Keep `byte *pixels`; replace only ownership semantics** — rejected. Manual `new[]`/`delete[]` ownership requires explicit deep-copy ctor, move ctor, move-assignment, and dtor; ~100 lines of mechanical code that vanishes with `vector<byte>`. The maintenance cost is permanent.
 
-- **Use `std::unique_ptr<byte[]>` instead of `std::vector<byte>`** — kept as fallback. `vector` is preferred for inherent size-tracking (consistency check vs. claimed dimensions); `unique_ptr<byte[]>` is the second-best if benchmarking shows any regression. The audit PR (step 1) decides empirically.
+- **Use `std::unique_ptr<byte[]>` instead of `std::vector<byte>`** — kept as fallback. `vector` is preferred for inherent size-tracking (consistency check vs. claimed dimensions); `unique_ptr<byte[]>` is the second-best if benchmarking shows any regression, decided empirically.
 
 - **Defer the decomposition to the Rust rewrite itself** — rejected. The strangler-fig migration is incremental; each Rust-rewritten module needs to interoperate with still-C++ surrounding modules through stable shims. Decomposing now reduces the size of the eventual Rust translation unit and the shim surface.
 

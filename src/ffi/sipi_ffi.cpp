@@ -303,7 +303,7 @@ int sipi_port(int *out)
 {
   // Guard-only edge probe — a pure read of the installed engine context, like
   // sipi_nthreads. The Rust edge uses this only as a fallback below
-  // --serverport/SIPI_SERVERPORT/SIPI_RS_PORT (plan 02 §6 R3).
+  // --serverport/SIPI_SERVERPORT/SIPI_RS_PORT.
   return Sipi::ffi::sipi_guard([&] {
     *out = Sipi::ffi::engine_context().port;
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);

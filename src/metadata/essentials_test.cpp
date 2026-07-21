@@ -3,8 +3,8 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-// Unit tests for the public `Sipi::Essentials` factory surface (Phase 5 /
-// DEV-6410). Two concerns covered here:
+// Unit tests for the public `Sipi::Essentials` factory surface (DEV-6410).
+// Two concerns covered here:
 //
 //   1. `parse(span)` — public protobuf entry point: adapter from
 //      `internal::CodecParseError` to `Sipi::ParseError` must lift each of
@@ -13,9 +13,9 @@
 //
 //   2. `parse_legacy(string_view)` — equivalence against a frozen
 //      pipe-delimited baseline. Hex `data_chksum` must round-trip to
-//      raw bytes via `from_hex` / `to_hex` so the post-Phase-5 type flip
-//      doesn't break legacy reads (the legacy reader path is retained
-//      indefinitely per DEV-6398 scope).
+//      raw bytes via `from_hex` / `to_hex` so the `data_chksum` type flip
+//      (DEV-6410) doesn't break legacy reads (the legacy reader path is
+//      retained indefinitely per DEV-6398 scope).
 
 #include <gtest/gtest.h>
 
@@ -175,7 +175,7 @@ TEST(EssentialsParse, MissingCoreFieldsReturnsMissingCore)
 
 // --- parse_legacy(string_view) ---------------------------------------------
 
-// The frozen pipe-delimited baseline. Pre-Phase 5 emissions look exactly like
+// The frozen pipe-delimited baseline. Legacy emissions look exactly like
 // this (the legacy `serialize()` body, unchanged). The hex `data_chksum`
 // "0123456789abcdef" decodes to bytes {0x01, 0x23, 0x45, 0x67, 0x89, 0xab,
 // 0xcd, 0xef}. Hex case is preserved on the input side; both lower and upper

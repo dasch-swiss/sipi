@@ -313,7 +313,7 @@ public:
   /*!
    * Hash the current pixel buffer with the requested digest algorithm and
    * return the raw digest bytes (NOT hex). Used by the `convert service-file`
-   * command (Phase 12.1 — DEV-6540) to
+   * command (DEV-6540) to
    * populate `EssentialsFields::data_chksum` over the **post-transformation**
    * pixel buffer, and by the corruption-tripwire branch in `readSource`
    * (which compares against the on-disk `data_chksum` from an existing
@@ -356,7 +356,7 @@ public:
    * `data_chksum` field as a corruption tripwire (ADR-0010): on mismatch, an
    * ERROR is logged and reading continues. No Essentials packet is *created*
    * during read; packet creation is intentional output gated by the
-   * `convert service-file` subcommand (Phase 12 / DEV-6540).
+   * `convert service-file` subcommand (DEV-6540).
    *
    * \param[in] filepath A string containing the path to the source image file
    * \param[in] region Optional region of interest — the image will be cropped
@@ -368,7 +368,7 @@ public:
 
   /*!
    * Overload accepting an `origname` hint. Until the `convert service-file`
-   * command lands (Phase 12, DEV-6540), `origname` is consumed by the
+   * command lands (DEV-6540), `origname` is consumed by the
    * command — not by readSource itself — so this overload behaves
    * identically to the 3-arg form. Kept for the existing Lua-side call site.
    */

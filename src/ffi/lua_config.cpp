@@ -9,8 +9,8 @@
 
 namespace Sipi::ffi {
 namespace {
-  // Process-wide engine Lua config. Set once at startup (Phase B-L: by the
-  // server; Phase C: by sipi_init) and only read thereafter, so the per-call VM
+  // Process-wide engine Lua config. Set once at startup (currently by the
+  // server; later by sipi_init) and only read thereafter, so the per-call VM
   // factory needs no synchronization on the config itself. (Each call still gets
   // its own LuaServer — the Lua VM is never shared across threads.)
   LuaConfig g_lua_config;

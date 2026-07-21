@@ -19,7 +19,7 @@
 permissions:
   contents: read
 
-# Re-armed under hermetic-llvm (DEV-6563 Phase 13). `--config=fuzz` sets
+# Re-armed under hermetic-llvm (DEV-6563). `--config=fuzz` sets
 # `--@llvm//config:{fuzzer,asan}=true`, so the toolchain builds + links the
 # compiler-rt libFuzzer + ASan runtimes from source — the missing-runtime
 # blocker ADR-0014 carved this gate out for. foreign_cc=0 (ADR-0015) removed

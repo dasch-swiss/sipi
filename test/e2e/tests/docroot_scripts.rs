@@ -1,8 +1,8 @@
 //! Docroot `.lua`/`.elua` execution through the `/server` fileserver.
 //!
 //! The fileserver runs docroot scripts through the existing `sipi_run_lua_route`
-//! seam (no new FFI) and injects `server.docroot` into the VM (plan 02 §6 C,
-//! Option 2 — the C++ `file_handler` does this at `Server.cpp:310`). The e2e
+//! seam (no new FFI) and injects `server.docroot` into the VM — the C++
+//! `file_handler` does this at `Server.cpp:310`. The e2e
 //! config sets `fileserver.docroot = './server'`, so a script that reads
 //! `server.docroot` must see `./server`.
 

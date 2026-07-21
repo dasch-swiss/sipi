@@ -246,7 +246,7 @@ typedef struct
   const char *value;
 } SipiStrPair;
 
-/* ── CLI/env override channel (concrete; plan 02 §7.5 M4) ────────────────────
+/* ── CLI/env override channel (concrete) ──────────────────────────────────────
  * The CLI/env overrides `sipi_init` layers on top of the Lua-parsed SipiConf,
  * before the cache / rate-limiter / memory-budget services are built from it.
  * Hand-mirrored by the Rust `#[repr(C)] SipiServerConfig` in
@@ -609,7 +609,7 @@ SIPI_FFI_NODISCARD int sipi_max_post_size(size_t *out);
 
 /*! The configured HTTP listen port (the Lua config `sipi.port`). The Rust edge
  *  falls back to this only when neither `--serverport`/`SIPI_SERVERPORT` nor
- *  the dev/test `SIPI_RS_PORT` selected a port (plan 02 §6 R3). Returns 0, or
+ *  the dev/test `SIPI_RS_PORT` selected a port. Returns 0, or
  *  500 if `sipi_init` has not run. */
 SIPI_FFI_NODISCARD int sipi_port(int *out);
 

@@ -360,7 +360,7 @@ static void preflight_collect_kv(void *ctx, const char *key, const char *value)
  *
  * The Lua VM is built behind the FFI from the engine Lua config, bound to a
  * RequestContext snapshot of conn_obj (so `server.header` / `server.cookies`
- * resolve from the real request) — the path the Rust shell drives in Phase C.
+ * resolve from the real request) — the path the Rust shell drives.
  * The caller still gates on `luaserver.luaFunctionExists(pre_flight)`; only the
  * execution moved behind the seam. Throws SipiError if the hook fails (the
  * detail is logged engine-side; only the status crosses the seam).
@@ -664,9 +664,9 @@ static void serve_info_json_file(Connection &conn_obj,
     int numpages = 0;
 
     // Image shape used to come from `cache->getSize()` keyed on the original
-    // filepath; that parasitic memoization was deleted in Phase 10 / DEV-6538
-    // because `read_shape`'s Phase 9 fast path now hits the same packet (ADR-0004
-    // / DEV-6379). Always go through the format handler.
+    // filepath; that parasitic memoization was deleted (DEV-6538) because
+    // `read_shape`'s fast path now hits the same packet (ADR-0004 / DEV-6379).
+    // Always go through the format handler.
     Sipi::SipiImage tmpimg;
     Sipi::SipiImgInfo info;
     try {
@@ -993,9 +993,9 @@ static void serve_knora_json_file(Connection &conn_obj,
  * \param prefix_as_path
  * \param params
  */
-// ── Connection → SipiResponse adapter (strangler Phase B parity glue) ───────
+// ── Connection → SipiResponse adapter (strangler parity glue; while the C++ transport still owns the socket) ───
 // Presents a live shttps::Connection as the C-ABI response sink the FFI core
-// (src/ffi/sipi_ffi.h) drives. Temporary: at the Phase C cutover the Rust shell
+// (src/ffi/sipi_ffi.h) drives. Temporary: at the cutover the Rust shell
 // supplies SipiResponse directly and Connection is deleted, so this stays a
 // file-local helper rather than a durable abstraction. The ctx is a small
 // struct (not the bare Connection) so conn_write can track that
@@ -1113,7 +1113,7 @@ static void serve_file_download(Connection &conn_obj,
 
   // The raw byte passthrough (stat, MIME, Range/206 parsing) lives behind the
   // FFI core (sipi_serve_file), which delegates byte delivery back to the
-  // transport via send_file. The Rust shell drives the same seam in Phase C.
+  // transport via send_file. The Rust shell drives the same seam.
   // Content-Disposition derives from the IIIF identifier (an edge/input concern
   // with R8/R9 sanitization), so it stays caller-side and is set only on a Range
   // request — matching the legacy 206 path.
@@ -1198,8 +1198,8 @@ static void serve_iiif(Connection &conn_obj,
   }
 
   // Preflight (Lua) — resolves the on-disk file and any restrict size/watermark.
-  // Stays inline in the C++ server (the Lua FFI is Phase B-L); only the decode
-  // pipeline moves behind sipi_serve_image.
+  // Stays inline in the C++ server (the Lua preflight call hasn't moved behind
+  // the FFI seam yet); only the decode pipeline moves behind sipi_serve_image.
   std::string infile;// path to the input file on the server
   std::string watermark;// watermark file path, or empty
   std::string restricted_size_str;// restrict downscale spec, or empty
@@ -1258,7 +1258,7 @@ static void serve_iiif(Connection &conn_obj,
   if (validated.status == PathValidation::OK) { infile = validated.resolved_path; }
 
   // Flatten the parsed params into the typed FFI seam (the enum values mirror
-  // the iiifparser enums 1:1, decision #7). The decode/transform/encode pipeline,
+  // the iiifparser enums 1:1). The decode/transform/encode pipeline,
   // admission (cache/rate-limit/budget), and canonical-URL building all live
   // behind sipi_serve_image now.
   ::SipiIiifParams p{};
@@ -1472,8 +1472,8 @@ void SipiHttpServer::run()
   user_data(this);
 
   // Install the engine context the FFI image pipeline (sipi_serve_image) reads.
-  // Phase B parity: this server owns cache/rate-limiter/memory-budget, so it
-  // hands the FFI non-owning pointers + the config knobs. At the Phase C cutover
+  // While this server still owns cache/rate-limiter/memory-budget, it hands
+  // the FFI non-owning pointers + the config knobs. At the cutover
   // sipi_init takes over and this install (and SipiHttpServer) go away.
   Sipi::ffi::set_engine_context(Sipi::ffi::EngineContext{
     .cache = _cache.get(),

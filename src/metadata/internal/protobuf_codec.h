@@ -23,7 +23,7 @@
 // future `optimize_for` change or `.proto` reshape doesn't ripple through the
 // codebase.
 //
-// Phase 5 (DEV-6410) wires the public `Sipi::Essentials::parse` /
+// DEV-6410 wires the public `Sipi::Essentials::parse` /
 // `parse_legacy` factories on top of this codec.
 
 namespace Sipi::metadata::internal {

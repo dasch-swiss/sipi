@@ -4,7 +4,7 @@
  * AGPL-3.0-or-later
  */
 
-// Codec-coverage proof for the native libtiff cc_library (DEV-6563, Phase 6).
+// Codec-coverage proof for the native libtiff cc_library (DEV-6563).
 //
 // Stock BCR libtiff ships JPEG / LZMA / ZSTD / WebP-in-TIFF DISABLED; the
 // vendored ext/tiff rule re-enables them (plus JBIG, a capability add) via the

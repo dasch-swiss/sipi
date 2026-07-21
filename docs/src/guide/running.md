@@ -309,7 +309,7 @@ Variables](#environment-variables) below): `SIPI_SENTRY_DSN`,
 |------|-------------|
 | `--subdirlevels <n>` | Number of subdirectory levels (deprecated) |
 | `--subdirexcludes <dirs>` | Directories excluded from subdir calculations |
-| `--pathprefix` | Treat IIIF prefix as file path (deprecated) |
+| `--pathprefix[=BOOL]` | Treat the IIIF URL prefix as a subdirectory under imgroot, i.e. `<imgroot>/<prefix>/<id>` (default: true; bare flag means true) |
 
 ## Environment Variables
 
