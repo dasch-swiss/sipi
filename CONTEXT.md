@@ -24,11 +24,11 @@ Prefer the glossary's canonical terms over the variant spellings in older code.
 
 `src/shttps/` is an internal HTTP-framework module — multithreaded HTTP/HTTPS server, route registration, per-request embedded Lua scripting, JWT helpers. It is **not** a peer bounded context. SIPI subclasses `shttps::Server` (`Sipi::SipiHttpServer`), registers `shttps::RequestHandler`s (`iiif_handler`, `file_handler`), and runs SIPI's three Lua entry points inside the request-scoped `shttps::LuaServer`.
 
-Module API surface (the four seam types — load-bearing across the planned Rust replacement): `Server`, `Connection`, `RequestHandler`, `LuaServer`. Full module documentation in [`src/shttps/README.md`](./src/shttps/README.md).
+Module API surface (the four seam types — the documented strangler seam, ADR-0013): `Server`, `Connection`, `RequestHandler`, `LuaServer`. Full module documentation in [`src/shttps/README.md`](./src/shttps/README.md).
 
 **Dependency direction:** strictly SIPI → shttps. shttps depends on the rest of `src/` only through `//src/logging:logging` — a generic levelled-logging primitive (not domain code), visibility-allowlisted as a shared support library. Enforcement: Bazel `visibility` plus `scripts/shttps-context-check.sh` (CI gate); broader Bazel `--features=layering_check` rollout tracked under DEV-6353.
 
-**Rust replacement plan:** shttps is the first slice of a planned Rust rewrite of the whole of SIPI. See [ADR-0013](docs/adr/0013-shttps-as-internal-module.md).
+**Rust shell + retained oracle:** the HTTP server is the Rust shell (`//src/cli-rs:sipi` over the `//src/server-rs:lib` library), which drives the C++ image engine through the FFI seam. The C++ `shttps` transport + `SipiHttpServer` are retained in-tree as the differential-parity oracle — the reference binary the Rust shell is diffed against — and are removed after deploy. See [ADR-0013](docs/adr/0013-shttps-as-internal-module.md).
 
 ### Cross-module naming gotchas (kept verbatim from prior docs)
 
@@ -38,4 +38,4 @@ Module API surface (the four seam types — load-bearing across the planned Rust
 
 ## Pending modularization
 
-`src/shttps/` contains a handful of utilities that are SIPI domain concerns or generic helpers rather than HTTP-framework code — `shttps::Hash` / `HashType` (used by `Essentials::pixel_checksum`), `shttps::Parsing` (URL decoding, mime-type magic, header parsing helpers), `shttps::Error` (base class of `SipiError`), `shttps::Global`, `shttps::makeunique`. They are now grouped in the `shttps/util/` sub-package (a `--strict_deps`-clean leaf), but still live under `shttps/` for historical reasons. Re-homing them fully SIPI-side is on the backlog as **consistency cleanup** (no longer a Rust-port precondition per ADR-0013 — the whole codebase is going to Rust regardless, so the destination on the C++ side does not affect the Rust shape).
+`src/shttps/` contains a handful of utilities that are SIPI domain concerns or generic helpers rather than HTTP-framework code — `shttps::Hash` / `HashType` (used by `Essentials::pixel_checksum`), `shttps::Parsing` (URL decoding, mime-type magic, header parsing helpers), `shttps::Error` (base class of `SipiError`), `shttps::Global`, `shttps::makeunique`. They are now grouped in the `shttps/util/` sub-package (a `--strict_deps`-clean leaf), but still live under `shttps/` for historical reasons. Re-homing them fully SIPI-side is on the backlog as **consistency cleanup** (a C++-side cleanup only, per ADR-0013 — their location does not affect the Rust shell, which reaches the engine through the FFI seam).

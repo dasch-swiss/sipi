@@ -138,7 +138,7 @@ fn info_json_content_type_default() {
     );
 }
 
-// --- Phase 2: info.json Complete Validation ---
+// --- info.json Complete Validation ---
 
 /// Helper to fetch and parse info.json for lena512.jp2.
 fn fetch_info_json() -> Value {
@@ -377,7 +377,7 @@ fn info_json_x_forwarded_proto_https() {
     );
 }
 
-// --- Phase 3: HTTP Feature Tests ---
+// --- HTTP Feature Tests ---
 
 #[test]
 fn cors_info_json_without_origin() {
@@ -679,7 +679,7 @@ fn full_iiif_url_returns_image() {
     );
 }
 
-// --- Phase 4: Region Tests ---
+// --- Region Tests ---
 
 #[test]
 fn region_square() {
@@ -721,7 +721,7 @@ fn region_invalid_syntax() {
     assert_iiif_status("/unit/lena512.jp2/invalid/max/0/default.jpg", 400);
 }
 
-// --- Phase 5: Size Tests ---
+// --- Size Tests ---
 
 #[test]
 fn size_by_width() {
@@ -768,7 +768,7 @@ fn size_invalid_syntax() {
     assert_iiif_status("/unit/lena512.jp2/full/invalid/0/default.jpg", 400);
 }
 
-// --- Phase 6: Rotation Tests ---
+// --- Rotation Tests ---
 
 #[test]
 fn mirror_rotation() {
@@ -805,7 +805,7 @@ fn rotation_invalid() {
     assert_iiif_status("/unit/lena512.jp2/full/max/abc/default.jpg", 400);
 }
 
-// --- Phase 7: Quality and Format Tests ---
+// --- Quality and Format Tests ---
 
 #[test]
 fn quality_gray() {
@@ -918,7 +918,7 @@ fn unsupported_formats_rejected() {
     }
 }
 
-// --- Phase 8: Identifier and Error Handling Tests ---
+// --- Identifier and Error Handling Tests ---
 
 #[test]
 fn id_escaped() {
@@ -980,7 +980,7 @@ fn invalid_iiif_url_empty_identifier() {
     assert_iiif_status("/unit//lena512.jp2", 400);
 }
 
-// --- Phase 2 (Plan): Close IIIF Spec Gaps ---
+// --- Close IIIF Spec Gaps ---
 
 /// Fetch an IIIF image and decode its pixel dimensions.
 fn fetch_image_dimensions(path: &str) -> (u32, u32) {
@@ -1252,7 +1252,7 @@ fn id_non_ascii() {
 // IIIF spec says zero-width regions SHOULD return 400.
 // Current sipi behavior returns 200 with a degenerate image.
 // This is documented as non-compliance rather than a test change,
-// since changing server behavior is out of scope for this plan.
+// since changing server behavior is out of scope here.
 // See: testing-strategy.md gap matrix, Region section.
 
 // --- Tests moved from server.rs (IIIF-related) ---
@@ -1310,7 +1310,7 @@ fn path_traversal_rejected() {
     }
 }
 
-// --- Phase 3: IIIF Pipeline Tests ---
+// --- IIIF Pipeline Tests ---
 
 #[test]
 fn metadata_iiif_pipeline() {

@@ -9,9 +9,10 @@
  * `sipi_serve_image` is a C ABI of shape `(req, resp)` — it has no slot for the
  * cache, rate limiter, memory budget, or the server config knobs the decode
  * pipeline needs. `EngineContext` is that durable engine state, read by
- * `build_image_response`. In Phase C `sipi_init` constructs and installs it; in
- * the Phase B parity window the still-living `SipiHttpServer` installs
- * non-owning pointers to the services it already owns via `set_engine_context`.
+ * `build_image_response`. Eventually `sipi_init` constructs and installs it;
+ * while the C++ transport still owns the socket, the still-living
+ * `SipiHttpServer` installs non-owning pointers to the services it already
+ * owns via `set_engine_context`.
  * The install call is the only throwaway part — the same shape as the
  * `Connection`→`SipiResponse` adapter that drives `sipi_serve_file` today — and
  * goes away with `SipiHttpServer` at the cutover.
@@ -51,12 +52,12 @@ struct EngineContext
   ScalingQuality scaling_quality{};//!< per-format scaling method
   std::size_t max_pixel_limit = 0;//!< max output pixels per request (0 = unlimited)
   int nthreads = 0;//!< configured worker-thread count; 0 = auto (the shell sizes its pool from host parallelism)
-  int port = 3333;//!< configured HTTP listen port (the Lua config `sipi.port`); a fallback for the Rust edge's listener bind when no `--serverport`/`SIPI_SERVERPORT`/`SIPI_RS_PORT` selected one (plan 02 §6 R3)
+  int port = 3333;//!< configured HTTP listen port (the Lua config `sipi.port`); a fallback for the Rust edge's listener bind when no `--serverport`/`SIPI_SERVERPORT`/`SIPI_RS_PORT` selected one
   std::size_t max_post_size = 0;//!< max POST body size in bytes (the Rust shell caps Lua-route uploads); 0 = unlimited
 };
 
 /*! Install the engine context (copied into a file-static). Called once at server
- *  startup in the Phase B parity path; superseded by `sipi_init` in Phase C. */
+ *  startup on the current transport path; superseded once `sipi_init` takes over. */
 void set_engine_context(const EngineContext &ctx);
 
 /*! The installed engine context. Throws `shttps::Error` if neither

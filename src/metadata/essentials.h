@@ -26,7 +26,7 @@ namespace Sipi {
  * Wire format: protobuf (`src/metadata/essentials.proto`) for new emissions
  * (Service Files); the legacy pipe-delimited form is parsed indefinitely via
  * `Essentials::parse_legacy`. Image-shape fields back the `read_shape` fast
- * path per ADR-0004 (DEV-6379 consumes them in Phase 9).
+ * path per ADR-0004 (DEV-6379 consumes them).
  */
 struct EssentialsFields
 {
@@ -82,7 +82,7 @@ enum class ParseError {
  *     `Essentials::parse(span)`.
  *   * **pipe-delimited legacy** — retained indefinitely for reading legacy
  *     packets per DEV-6398 scope. Parsed via `Essentials::parse_legacy`;
- *     the legacy writer was contracted in Phase 14 (DEV-6537 / DEV-6410)
+ *     the legacy writer was contracted (DEV-6537 / DEV-6410)
  *     since all writers now emit the protobuf form.
  */
 class Essentials
@@ -139,9 +139,9 @@ public:
   /*!
    * Hex-encode raw bytes using lowercase digits. The format-handler tripwire
    * branch in `SipiImage::readSource` compares `shttps::Hash::hash()` (hex
-   * string) against `data_chksum` (raw bytes) via this helper. Phase 12
-   * introduces `compute_pixel_hash` returning raw bytes and folds the
-   * comparison back to raw-vs-raw; this helper goes away with it.
+   * string) against `data_chksum` (raw bytes) via this helper. A planned
+   * `compute_pixel_hash` returning raw bytes will fold the comparison
+   * back to raw-vs-raw; this helper goes away with it.
    */
   [[nodiscard]] static std::string to_hex(std::span<const std::byte> bytes);
 

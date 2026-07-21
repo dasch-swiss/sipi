@@ -60,7 +60,7 @@ Rationale:
   should confirm which Sentry instance (self-hosted vs. Sentry.io SaaS) receives
   these events, since that materially changes the data-residency exposure this
   decision accepts on. This ADR does not resolve that question — flagged as an
-  open operational item at deploy time (step 14 in the crash-reporting cutover
-  plan, or an ops-deploy conversation), not resolved here.
+  open operational item at deploy time (or an ops-deploy conversation), not
+  resolved here.
 - If a crash minidump ever needs FADP/GDPR breach-notification treatment, this
   ADR is the record of what was known and accepted at cutover time.

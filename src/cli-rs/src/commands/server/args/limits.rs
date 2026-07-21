@@ -2,7 +2,7 @@
 //!
 //! `maxpost` and `max_decode_memory` are sized strings (e.g. "300M", "2G") —
 //! they carry the raw string across the seam and the engine parses the suffix
-//! (plan 02 §7.5: don't pre-parse Rust-side, the size grammar lives in C++).
+//! (don't pre-parse Rust-side, the size grammar lives in C++).
 
 use clap::Args;
 

@@ -1,4 +1,4 @@
-// CLI option-availability matrix tests (DEV-6537 Phase 12.8).
+// CLI option-availability matrix tests (DEV-6537).
 //
 // The D5 option-availability matrix gates which flags are accepted on
 // each subcommand at CLI11 parse time. `sipi.cpp` enforces it by which
@@ -19,7 +19,7 @@
 // Accepted combinations are smoke-tested (exit 0) but their actual
 // transformations are validated in the per-subcommand unit tests, not here.
 //
-// Phase 12.7 follow-up: `verify preservation-file` is also a CLI-only stub
+// `verify preservation-file` is also a CLI-only stub
 // (no command function), so its "awaits ADR-0012" exit lives here too.
 
 use sipi_e2e::{sipi_bin_path, test_data_dir};

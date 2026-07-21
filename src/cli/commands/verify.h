@@ -11,7 +11,7 @@
 namespace Sipi::cli {
 
 /*!
- * Verify mode (DEV-6537 / DEV-6540 Phase 12.3).
+ * Verify mode (DEV-6537 / DEV-6540).
  *
  * Per ADR-0009 / ADR-0010 the verify surface is tiered:
  *
@@ -51,8 +51,7 @@ struct VerifyArgs
  * On a `ServiceFile` pixel-hash mismatch the command also emits
  * `log_err(...)` so the operator gets the diagnostic immediately
  * (a future change can wire this through the
- * `sipi_essentials_hash_mismatch_total{format}` Prometheus counter
- * once Phase 13 lands).
+ * `sipi_essentials_hash_mismatch_total{format}` Prometheus counter).
  */
 [[nodiscard]] int cmd_verify(const VerifyArgs &args);
 

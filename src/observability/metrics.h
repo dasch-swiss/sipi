@@ -72,7 +72,7 @@ public:
   // Histograms
   prometheus::Histogram &request_duration_seconds;
 
-  // read_shape fast path (ADR-0004 / DEV-6537 Phase 13).
+  // read_shape fast path (ADR-0004 / DEV-6537).
   // Labels: format = {jp2, tiff}; outcome = {hit, miss, partial, fallback}.
   //   - hit:      Essentials packet parsed; img_w & img_h populated;
   //               fast path returned shape from packet.
@@ -93,7 +93,7 @@ public:
   prometheus::Counter &read_shape_fast_path_tiff_fallback;
 
   // Essentials hash-mismatch corruption tripwire (ADR-0010 /
-  // DEV-6537 Phase 13). Incremented from:
+  // DEV-6537). Incremented from:
   //   - `SipiImage::readSource` when the source carries an
   //     Essentials packet and the recomputed pixel hash doesn't
   //     match `data_chksum` (soft signal — log + continue).
@@ -125,7 +125,7 @@ enum class ReadShapeFastPathOutcome {
  * Format labels recognised by the Essentials counters. `Other`
  * exists as a safety valve for any path that funnels into the
  * tripwire from a non-carrier format (which should not happen
- * post-Phase 6, but is included for defence-in-depth observability).
+ * in practice, but is included for defence-in-depth observability).
  */
 enum class EssentialsFormat {
   Jp2,

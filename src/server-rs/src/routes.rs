@@ -638,7 +638,7 @@ pub async fn cors_preflight(headers: HeaderMap) -> Response {
 /// echoed Origin + credentials + the requested headers. Shared by the
 /// [`cors_preflight`] handler and the docroot fileserver's OPTIONS path.
 /// (The oracle answers 200 by transport default; the 204-vs-200 shape is an
-/// allowlisted differential divergence — §6 H.)
+/// allowlisted differential divergence (CORS credentials contract).)
 fn cors_preflight_response(headers: &HeaderMap) -> Response {
     let mut builder = Response::builder().status(StatusCode::NO_CONTENT).header(
         header::ACCESS_CONTROL_ALLOW_METHODS,
@@ -1003,7 +1003,7 @@ pub fn docroot_method_router(state: Arc<AppState>) -> Option<MethodRouter<Arc<Ap
 /// `Server.cpp:292`): serve a static file (Range/206 + MIME) or execute a docroot
 /// `.lua`/`.elua` script with `server.docroot` injected. The path is
 /// containment-validated against the realpath'd docroot before any open — the C++
-/// handler had no traversal guard; the Rust shell adds R1/R2 (plan 02 §6 C). An
+/// handler had no traversal guard; the Rust shell adds R1/R2. An
 /// interior NUL or other control char in the decoded path → 400 (this handler's
 /// own guard, `decode_path_suffix`, R7 — strictly wider than the IIIF
 /// catch-all's own R7, which rejects NUL only; see that check's comment for
@@ -1065,9 +1065,9 @@ async fn serve_docroot(state: Arc<AppState>, req: Request) -> Response {
     }
 
     let is_head = req.method() == Method::HEAD;
-    // Echo the Origin (no credentials), matching the IIIF success paths; the
-    // credentialed CORS contract is pinned in plan 02 step 6. Validated downstream
-    // (`apply_headers` / `head_only` drop a header `http` rejects).
+    // Echo the Origin (no credentials), matching the IIIF success paths.
+    // Validated downstream (`apply_headers` / `head_only` drop a header `http`
+    // rejects).
     let origin = header_str(req.headers(), "origin");
     let range = header_str(req.headers(), header::RANGE.as_str());
     let outcome = tokio::task::spawn_blocking(move || {
@@ -1204,7 +1204,7 @@ fn static_special(
 
 /// Branch B (binary/media): full caching headers + Range/206 (the C++
 /// file_handler else-branch, `Server.cpp:444-502`). Content-Length is left to
-/// hyper, which streams chunked — the differential ignores framing (§5 #6).
+/// hyper, which streams chunked — the differential harness ignores transport framing.
 fn static_binary(
     resolved: &str,
     infile: &str,
@@ -1246,7 +1246,7 @@ fn static_binary(
                 format!("bytes {start}-{end}/{fsize}"),
             ));
             // The full infile path is leaked here, replicated for strict parity
-            // with the oracle (`Server.cpp:498`); hardening is deferred (§6 C).
+            // with the oracle (`Server.cpp:498`); hardening is deferred.
             headers.push((
                 header::CONTENT_DISPOSITION.to_string(),
                 format!("inline; filename={infile}"),
@@ -1395,7 +1395,7 @@ fn has_request_body(method: &Method) -> bool {
 ///
 /// DIFFERENTIAL-VERIFY: this feeds the Lua `server.get`/`server.post` bindings,
 /// so its output must match the C++ shttps query/POST parser. Confirm parity via
-/// the differential harness once it lands (plan 02 §7, step 4).
+/// the differential harness.
 fn parse_form_encoded(s: &str) -> Vec<(String, String)> {
     form_urlencoded::parse(s.as_bytes()).into_owned().collect()
 }
@@ -1543,7 +1543,7 @@ fn build_ctx(method: &Method, uri: &Uri, headers: &HeaderMap) -> Option<ffi::Req
 ///
 /// DIFFERENTIAL-VERIFY: this feeds the Lua `server.cookies` binding, so its
 /// output must match the C++ shttps cookie parser. Confirm parity via the
-/// differential harness once it lands (plan 02 §7, step 4).
+/// differential harness.
 fn parse_cookies(headers: &HeaderMap) -> Vec<(String, String)> {
     let Some(raw) = header_str(headers, header::COOKIE.as_str()) else {
         return Vec::new();

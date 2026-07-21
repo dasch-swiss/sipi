@@ -5,7 +5,7 @@
 //! nor allowlisted is a parity failure — that is the regression net (it
 //! catches, e.g., someone silently dropping a CORS header).
 //!
-//! See plan 02 §7 (harness design) and §5 (the divergence allowlist).
+//! See [`DiffAllowlist`] below for the divergence allowlist.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::time::Duration;
@@ -21,14 +21,14 @@ use crate::SipiServer;
 /// Header names (lowercase) excluded from every comparison: pure transport
 /// framing plus `traceparent` (the Rust shell always emits it; the C++ transport
 /// never does). `content-length` is framing too — image responses stream chunked
-/// on both sides, so it is absent there and present on buffered JSON. See plan 02
-/// §5 "always-ignore".
+/// on both sides, so it is absent there and present on buffered JSON. See
+/// `ALWAYS_IGNORE` below.
 ///
 /// `access-control-allow-credentials` is deliberately NOT ignored: the shell now
-/// sets it on the image/file/preflight routes (cluster H) and the gate asserts it
+/// sets it on the image/file/preflight routes and the gate asserts it
 /// at parity, so a regression that drops it and silently breaks cookie auth is
 /// caught. info.json's stray oracle `ACAC:true` (over its `ACAO:*`) is the one
-/// exception — a per-case ignore (§5 #11), not a blanket one.
+/// exception — a per-case ignore, not a blanket one.
 const ALWAYS_IGNORE: &[&str] = &[
     "date",
     "server",
@@ -44,8 +44,8 @@ const LENGTH_BAND: f64 = 0.10;
 
 /// What to ignore when diffing. Start from `default_transport()` and add
 /// per-test exemptions with `ignoring()` (headers) / `masking_json()` (JSON
-/// fields). Every per-test exemption is a documented §5 divergence — keep
-/// the plan-row reference at the call site.
+/// fields). Every per-test exemption is a documented divergence — explain
+/// the reason at the call site.
 #[derive(Clone, Debug)]
 pub struct DiffAllowlist {
     ignore_headers: HashSet<String>,
@@ -66,7 +66,7 @@ pub struct DiffAllowlist {
 }
 
 impl DiffAllowlist {
-    /// The transport-framing always-ignore set (plan 02 §5).
+    /// The transport-framing always-ignore set (see `ALWAYS_IGNORE`).
     pub fn default_transport() -> Self {
         Self {
             ignore_headers: ALWAYS_IGNORE.iter().map(|h| h.to_string()).collect(),
@@ -123,7 +123,7 @@ pub enum BodyMatch {
     /// Differ; the string explains how.
     Mismatch(String),
     /// Not compared — a status mismatch short-circuited the check, or the
-    /// shared status is an error whose body is an allowlisted §5 #5 divergence.
+    /// shared status is an error whose body is an allowlisted divergence.
     Skipped,
 }
 

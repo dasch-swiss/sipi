@@ -52,7 +52,7 @@ fn bilevel_tiff_full_default_jpg() {
 
 #[test]
 fn bilevel_tiff_region_default_jpg() {
-    // ROI extraction — pins the memcpy-offset fix from Phase 2.2.
+    // ROI extraction — pins the memcpy-offset fix.
     assert_iiif_ok("/bilevel/bilevel_roi_test.tif/32,32,64,64/max/0/default.jpg");
 }
 

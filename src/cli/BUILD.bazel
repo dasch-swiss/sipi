@@ -4,7 +4,7 @@
 subcommand body (`server`/`convert`/`verify`/`query`/`compare`/`health`),
 exposed through the `extern "C" sipi_cli_main` entry declared in
 `ffi/sipi_ffi.h`. It lives in its own library — separate from the binary's
-`main` translation unit — so the Rust HTTP shell (strangler-fig Phase C,
+`main` translation unit — so the Rust HTTP shell (strangler-fig,
 `//src/server-rs`) can link it and call `sipi_cli_main` for the offline
 subcommands without colliding with Rust's own `main`.
 

@@ -86,11 +86,11 @@ These rules are documented inline in `essentials.proto` and enforced by reviewer
 4. **`format_version > 1`** → `ParseError::UnknownVersion`. A future writer emits `format_version=2`; today's reader logs once and falls through to the legacy reader if a dual-carrier file exposes one (otherwise returns the error to the caller).
 5. **Missing core fields** (`origname` / `mimetype` / `hash_type` / `data_chksum`) → `ParseError::MissingCore`. Protobuf accepted the bytes but the packet is semantically incomplete.
 
-`Essentials::parse_legacy(std::string_view)` is the **read-only** legacy reader. It retains the permissive pipe-split semantics of the pre-Phase-5 ctor; hex-decodes `data_chksum` into raw bytes; returns an unset `Essentials` (`is_set() == false`) on malformed input. It is **not** removed in Phase 14's Contract step — pre-rollout files must remain readable indefinitely (per the longevity invariant). What Phase 14 removes is the legacy *writer* (the `serialize() → std::string` overload and the `Essentials(const std::string&)` ctor).
+`Essentials::parse_legacy(std::string_view)` is the **read-only** legacy reader. It retains the permissive pipe-split semantics of the legacy ctor; hex-decodes `data_chksum` into raw bytes; returns an unset `Essentials` (`is_set() == false`) on malformed input. It is **not** removed by the Contract step that drops the legacy writer — pre-rollout files must remain readable indefinitely (per the longevity invariant). What is removed is the legacy *writer* (the `serialize() → std::string` overload and the `Essentials(const std::string&)` ctor).
 
 `Essentials::serialize() → std::vector<std::byte>` is the only emitter. Byte-deterministic — protobuf emits fields in field-number order, which is stable across protoc revisions for the same `.proto` schema.
 
-A per-read tripwire log fires on every successful `parse()`: `"Essentials: read format_version=%u (max supported: 1)"`. The format-handler decision-boundary metrics ([Phase 13](https://linear.app/dasch/issue/DEV-6537)) attribute the same event to a Prometheus counter (`sipi_read_shape_fast_path_total{format, outcome}`).
+A per-read tripwire log fires on every successful `parse()`: `"Essentials: read format_version=%u (max supported: 1)"`. The format-handler decision-boundary metrics ([DEV-6537](https://linear.app/dasch/issue/DEV-6537)) attribute the same event to a Prometheus counter (`sipi_read_shape_fast_path_total{format, outcome}`).
 
 ## JP2 carrier — UUID box at slot 4
 
@@ -110,7 +110,7 @@ Per [ADR-0004](./0004-image-shape-ownership.md), the Essentials packet must be r
 
 ## Carrier surface restriction
 
-Per [ADR-0009](./0009-file-taxonomy.md) and Phase 6 of the [DEV-6537](https://linear.app/dasch/issue/DEV-6537) implementation: JPEG, PNG, and plain TIFF outputs **do not** carry an Essentials packet. The writers in `SipiIOJpeg.cpp` / `SipiIOPng.cpp` and the non-pyramidal branch of `SipiIOTiff.cpp` have no Essentials emission path at all. Per [ADR-0010](./0010-file-creation-is-intentional.md), the Service File writers (pyramidal TIFF + JP2) emit the packet only when an in-memory *Essentials packet* is set on the `SipiImage`. The single point of control is the writer gate: `emit_essentials_box = es.is_set()` (JP2) or `pyramid && es.is_set()` (TIFF). The `convert service-file` command is the only path that sets the packet in production; ensuring the in-memory state matches the intended output is the command's responsibility, not a parallel writer flag.
+Per [ADR-0009](./0009-file-taxonomy.md) and the [DEV-6537](https://linear.app/dasch/issue/DEV-6537) implementation: JPEG, PNG, and plain TIFF outputs **do not** carry an Essentials packet. The writers in `SipiIOJpeg.cpp` / `SipiIOPng.cpp` and the non-pyramidal branch of `SipiIOTiff.cpp` have no Essentials emission path at all. Per [ADR-0010](./0010-file-creation-is-intentional.md), the Service File writers (pyramidal TIFF + JP2) emit the packet only when an in-memory *Essentials packet* is set on the `SipiImage`. The single point of control is the writer gate: `emit_essentials_box = es.is_set()` (JP2) or `pyramid && es.is_set()` (TIFF). The `convert service-file` command is the only path that sets the packet in production; ensuring the in-memory state matches the intended output is the command's responsibility, not a parallel writer flag.
 
 ## Considered Options
 
@@ -130,7 +130,7 @@ Per [ADR-0009](./0009-file-taxonomy.md) and Phase 6 of the [DEV-6537](https://li
 
 - **`Essentials::parse(span<const std::byte>)` is the dispatcher**: protobuf parse → ParseError enum on failure, otherwise an `Essentials` populated from the codec adapter. The legacy reader is reachable via the static `parse_legacy(string_view)` factory and is retained indefinitely.
 
-- **`Essentials::serialize() → std::vector<std::byte>`** is the only emitter (Phase 14 contracted the `std::string`-returning overload). The on-disk artefact is *bytes*; the existing API's typing was a mistake corrected by the rewrite.
+- **`Essentials::serialize() → std::vector<std::byte>`** is the only emitter (the Contract step dropped the `std::string`-returning overload). The on-disk artefact is *bytes*; the existing API's typing was a mistake corrected by the rewrite.
 
 - **New build dep**: protobuf + rules_proto, both via BCR. No `rules_foreign_cc` integration, no host-environment configuration. `cc_proto_library` consumed only by `src/metadata/internal/protobuf_codec.cpp` so the `.pb.h` header doesn't leak into client code.
 

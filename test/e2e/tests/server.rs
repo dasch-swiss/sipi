@@ -31,7 +31,7 @@ fn file_access_denied() {
 // --- IIIF /file download: full + HTTP Range/206 ---
 //
 // The `/{prefix}/{id}/file` download path is served by `serve_file_download`,
-// which Phase B routes through the C FFI core `sipi_serve_file` (raw byte
+// which the C++ transport routes through the C FFI core `sipi_serve_file` (raw byte
 // passthrough, Range/206, streamed via the SipiResponse callbacks). These
 // tests are the parity gate for that seam: status, body bytes, and the
 // Range-response headers must match the legacy handler. Self-validating —
@@ -56,8 +56,8 @@ fn iiif_file_download_full() {
         .expect("GET /unit/test.csv/file failed");
     assert_eq!(resp.status().as_u16(), 200);
     // The Rust shell streams the /file body chunked (no Content-Length) — an
-    // intentional transport-framing divergence from the C++ server (plan 02
-    // §5 #6). Assert the delivered bytes, not the framing.
+    // intentional transport-framing divergence from the C++ server. Assert
+    // the delivered bytes, not the framing.
     let body = resp.bytes().expect("read full body").to_vec();
     assert!(!body.is_empty(), "full download should return bytes");
 }
@@ -87,8 +87,9 @@ fn iiif_file_download_range_first_bytes() {
             .and_then(|v| v.to_str().ok()),
         Some("bytes")
     );
-    // The 206 body streams chunked (no Content-Length) — the §5 #6 framing
-    // divergence; assert the delivered range and its headers, not the framing.
+    // The 206 body streams chunked (no Content-Length) — the same
+    // transport-framing divergence; assert the delivered range and its
+    // headers, not the framing.
     assert!(
         resp.headers().contains_key("Content-Disposition"),
         "Range response must carry Content-Disposition (set caller-side from the identifier)"
@@ -258,7 +259,7 @@ fn lua_knora_session_cookie() {
     assert_eq!(resp.status().as_u16(), 200);
 }
 
-// --- Phase 9: Ported from Python test_02_server.py ---
+// --- Ported from Python test_02_server.py ---
 
 #[test]
 fn lua_orientation() {
@@ -307,7 +308,7 @@ fn lua_read_write() {
 }
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659): engine-pool semaphore sheds load → 503 under concurrent bursts (intentional divergence; revisit permit-release in cluster-A concurrency work) — plan 02 §5 #4"]
+#[ignore = "engine-pool semaphore sheds load → 503 under concurrent bursts — an intentional divergence from the C++ oracle; revisit permit-release in future concurrency work (DEV-6659)"]
 fn concurrent_requests() {
     // Python: test_concurrency — verify sipi handles parallel image requests
     let srv = server();
@@ -401,7 +402,7 @@ fn video_knora_json_checksums() {
     );
 }
 
-// --- Phase 11: Lua Scripting Integration ---
+// --- Lua Scripting Integration ---
 
 #[test]
 fn knora_json_image_required_fields() {
@@ -474,7 +475,7 @@ fn knora_json_csv_file() {
 }
 
 // =============================================================================
-// Phase 3: Sipi Extension Gap Tests
+// Sipi Extension Gap Tests
 // =============================================================================
 
 // A live-TLS request (e.g. a former `ssl_endpoints` test) is deliberately not
@@ -1009,7 +1010,7 @@ fn thumbnail_convert_from_file() {
 }
 
 #[test]
-#[ignore = "Phase C gap (DEV-6659): engine-pool semaphore sheds load → 503 under concurrent bursts (intentional divergence; revisit permit-release in cluster-A concurrency work) — plan 02 §5 #4"]
+#[ignore = "engine-pool semaphore sheds load → 503 under concurrent bursts — an intentional divergence from the C++ oracle; revisit permit-release in future concurrency work (DEV-6659)"]
 fn lua_state_thread_isolation() {
     let srv = server();
     let base_url = srv.base_url.clone();

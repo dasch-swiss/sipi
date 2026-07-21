@@ -244,7 +244,7 @@ int cmd_convert_access_file(const ConvertAccessFileArgs &args)
   //
   // Write output. The in-memory Essentials packet was dropped above, so
   // the writer's emit gate (essential_metadata().is_set()) stays closed
-  // and no Essentials carrier is emitted (Phase 7/8 + ADR-0010). XMP /
+  // and no Essentials carrier is emitted (ADR-0010). XMP /
   // IPTC / EXIF / ICC propagate via the standard write paths (ADR-0011).
   //
   SipiCompressionParams params;

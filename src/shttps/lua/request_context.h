@@ -13,7 +13,7 @@
  * bindings read the request fields and write through the sink.
  *
  * The `ResponseSink` is the in-layer adapter to the single response seam (the
- * Phase A `OutputSink` pattern): the FFI seam supplies a `SipiResponse`-backed
+ * `OutputSink` pattern): the FFI seam supplies a `SipiResponse`-backed
  * implementation, the transport supplies a `Connection`-backed one for the
  * parity path. The Lua module therefore names no transport or FFI type, which
  * is what lets `lua/` be built below `//src/ffi` without depending on

@@ -1520,7 +1520,7 @@ SipiImgInfo SipiIOTiff::read_shape(const std::string &filepath)
           info.origmimetype = f.mimetype;
           info.origname = f.origname;
           info.success = SipiImgInfo::ALL;
-          // Fast path (ADR-0004 / Phase 9.2): if BOTH img_w and img_h are
+          // Fast path (ADR-0004): if BOTH img_w and img_h are
           // non-zero, hoist every shape field from the packet over what
           // TIFFGetField returned and skip read_resolutions(). Partial
           // population falls through to the slow path.
@@ -1566,7 +1566,7 @@ SipiImgInfo SipiIOTiff::read_shape(const std::string &filepath)
 
     info.resolutions = read_resolutions(tmp_width, tif.get());
 
-    // Slow-path outcome classification (ADR-0004 / Phase 13). Precedence:
+    // Slow-path outcome classification (ADR-0004). Precedence:
     // parse failure > partial > fallback (legacy carrier) > miss.
     using Outcome = Sipi::observability::ReadShapeFastPathOutcome;
     Outcome outcome = Outcome::Miss;
@@ -1810,7 +1810,7 @@ void SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompres
   // the packet on the SipiImage before write; other write paths leave it
   // unset and don't carry it. The legacy TIFFTAG_SIPIMETA tag is never
   // emitted from this writer anymore; readers retain it via the
-  // Phase 7.4 dual-carrier path. The `Essentials es` declaration above
+  // dual-carrier path. The `Essentials es` declaration above
   // (line 1652) still feeds the ICC fallback at line 1653+.
   //
   const bool pyramid =

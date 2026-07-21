@@ -478,7 +478,7 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
     }
     Sipi::SipiConf &conf = runtime->conf;
 
-    // CLI/env overrides (plan 02 §7.5 M4): layer the present overrides onto the
+    // CLI/env overrides: layer the present overrides onto the
     // Lua-parsed SipiConf BEFORE the cache / rate-limiter / memory-budget
     // services below are built from `conf`, so an override reaches the engine.
     // Setter names are SipiConf's verbatim (incl. the `setPasswort` typo). Sized

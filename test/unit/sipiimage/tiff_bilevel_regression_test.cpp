@@ -86,7 +86,7 @@ TEST(TiffBilevelRegression, Tiff1BitMinisBlackInvertsCorrectly)
  *  the memcpy on SipiIOTiff.cpp:638 uses `nc * i * roi_w` instead of
  *  `nc * (i - roi_y) * roi_w` and writes past the end of `inbuf`. Under ASan
  *  this crashes; without ASan it may silently corrupt heap memory. The
- *  fix from Phase 2.2 (`i - roi_y` offset) makes the ROI read safe. */
+ *  fix (`i - roi_y` offset) makes the ROI read safe. */
 TEST(TiffBilevelRegression, Tiff1BitRoiDoesNotCorruptMemory)
 {
   // 256x192 fixture; crop a band at y=64, h=64 so the memcpy destination

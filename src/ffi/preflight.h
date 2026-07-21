@@ -15,8 +15,8 @@
  * callback). Both are wrapped by `sipi_guard` at the `extern "C"` entry.
  *
  * `PreflightDecision` is a clean value type (a permission enum + an open kv map)
- * so it ports 1:1 to the future Rust `PreFlight` trait return type (decision #9
- * in the plan): the C++ Lua hook is just one producer of it.
+ * so it ports 1:1 to the future Rust `PreFlight` trait return type: the C++
+ * Lua hook is just one producer of it.
  */
 #ifndef SIPI_FFI_PREFLIGHT_H
 #define SIPI_FFI_PREFLIGHT_H
@@ -66,8 +66,9 @@ struct PreflightDecision
 void apply_preflight(PreflightDecision &&decision, SipiPermType *type, SipiKVFn emit_kv, void *kv_ctx);
 
 /*! The Lua-facing permission string for a type (`SIPI_ALLOW` → `"allow"`, …).
- *  Used by the Phase B-L parity adapters in `SipiHttpServer.cpp` to rebuild the
- *  string-keyed `preflight_info` map the existing handlers consume. */
+ *  Used by the parity adapters in `SipiHttpServer.cpp`, on the current
+ *  transport path, to rebuild the string-keyed `preflight_info` map the
+ *  existing handlers consume. */
 [[nodiscard]] const char *perm_type_to_string(SipiPermType type);
 
 }// namespace Sipi::ffi

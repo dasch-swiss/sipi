@@ -10,10 +10,10 @@
 //! [`Config`] is the format-agnostic representation (serde structs); TOML is just
 //! the wire format the loader reads today (`Config::load` → `toml::from_str`) — a
 //! future format is a new loader, not a new schema. The parsed config feeds the
-//! M4 override channel ([`ServerOverrides`]) with an empty Lua path, so the
+//! override channel ([`ServerOverrides`]) with an empty Lua path, so the
 //! engine default-constructs its config and these values layer on top. This lets
-//! SIPI run without a Lua VM in the config path (the library-consumer story,
-//! decision #9); route *scripts* stay `.lua`, executed by the engine as usual.
+//! SIPI run without a Lua VM in the config path (the library-consumer story);
+//! route *scripts* stay `.lua`, executed by the engine as usual.
 //!
 //! The schema mirrors the `server` clap argument groups as sections (`[network]`,
 //! `[paths]`, `[cache]`, …) with idiomatic snake_case keys; the key→Lua-key

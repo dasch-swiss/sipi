@@ -84,8 +84,8 @@ public:
   // The pre-DEV-6537 `SizeRecord` typedef + `sizetable` map cached an image's
   // shape (width / height / tile_w / tile_h / clevels / numpages) keyed on its
   // original path. ADR-0004's `read_shape` fast path now reads the same shape
-  // from the Essentials packet directly (DEV-6379 / Phase 9), so the parasitic
-  // shape memoization is dead weight. Deleted in Phase 10 / DEV-6538.
+  // from the Essentials packet directly (DEV-6379), so the parasitic
+  // shape memoization is dead weight. Deleted (DEV-6538).
 
   /*!
    * This is the prototype function to used as parameter for the method SipiCache::loop

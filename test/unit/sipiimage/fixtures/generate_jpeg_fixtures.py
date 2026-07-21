@@ -13,7 +13,7 @@ Produces three fixtures under test/_test_data/images/jpeg/:
      advertising transform=0 (Photoshop-style "Unknown / CMYK" — libjpeg-turbo
      outputs inverted CMYK that needs re-inversion).
   2. cmyk/cmyk_raw_no_app14.jpg — CMYK baseline **without** APP14 (raw CMYK;
-     no inversion needed). Pinned as the negative test for Phase 5.2.
+     no inversion needed). Pinned as the negative test.
   3. malformed_xmp.jpg — 64x64 RGB JPEG with a deliberately corrupted APP1 XMP
      segment (valid JPEG envelope, XMP packet that fails to parse). Used by the
      F3 feature-contract test to prove that log_warn is routed to stderr under

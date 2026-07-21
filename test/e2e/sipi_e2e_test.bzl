@@ -132,7 +132,7 @@ def sipi_e2e_test(
             ":snapshots",
         ] + extra_data,
         env = {
-            # The Rust shell is the binary under test (the Phase C cutover): it
+            # The Rust shell is the binary under test: it
             # serves `server` natively and forwards every offline subcommand to
             # the C++ CLI via sipi_cli_main, so it covers both the server and CLI
             # e2e suites. The C++ `//src/cli:sipi` server is retired at the delete.

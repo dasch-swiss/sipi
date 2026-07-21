@@ -4,7 +4,7 @@
  * AGPL-3.0-or-later
  */
 
-// 64 KB prefix invariant (DEV-6537 Phase 15.7).
+// 64 KB prefix invariant (DEV-6537).
 //
 // ADR-0004 requires that Service File outputs position their `Essentials`
 // carrier within the first 64 KB of the file so the S3 transition can fetch

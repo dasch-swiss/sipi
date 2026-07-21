@@ -10,8 +10,8 @@
 
 namespace Sipi::ffi {
 namespace {
-  // Process-wide engine state. Set once at startup (Phase B: by SipiHttpServer;
-  // Phase C: by sipi_init) and only read thereafter, so no synchronization is
+  // Process-wide engine state. Set once at startup (currently by SipiHttpServer;
+  // later by sipi_init) and only read thereafter, so no synchronization is
   // needed for the read path the serve functions take.
   EngineContext g_engine;
   bool g_engine_installed = false;

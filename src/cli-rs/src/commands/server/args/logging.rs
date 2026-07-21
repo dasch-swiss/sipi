@@ -1,7 +1,7 @@
 //! Logging flags (the "Logging" `--help` heading).
 //!
-//! On the Rust shell, log routing is `RUST_LOG`/EnvFilter-driven (plan 02 §5
-//! #2). `loglevel` still forwards to the engine's own logger config; `logfile`
+//! On the Rust shell, log routing is `RUST_LOG`/EnvFilter-driven.
+//! `loglevel` still forwards to the engine's own logger config; `logfile`
 //! parses for oracle parity but is not forwarded (NYI in the engine).
 
 use clap::Args;

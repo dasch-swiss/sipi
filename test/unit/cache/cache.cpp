@@ -251,7 +251,7 @@ TEST_F(SipiCacheTest, AddCheckRemove)
 
 
 // -------------------------------------------------------------------
-// (Removed in Phase 10 / DEV-6538): the `cache.getSize()` shape-memo lookup
+// (Removed in DEV-6538): the `cache.getSize()` shape-memo lookup
 // was deleted along with the `sizetable` it backed. `read_shape` now reads
 // the same data from the Essentials packet directly (ADR-0004 / DEV-6379).
 // -------------------------------------------------------------------

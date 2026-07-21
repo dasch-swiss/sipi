@@ -123,7 +123,7 @@ routes = {{
 
 #[test]
 fn cache_metrics() {
-    // DEV-6659 step 3: repinned on the on-disk file count under `cache_dir`
+    // DEV-6659: repinned on the on-disk file count under `cache_dir`
     // (the /metrics endpoint is gone). Uses the `.png` variant of an
     // otherwise-shared derivative so the delta is unambiguous regardless of
     // what other tests sharing this server have already cached.
@@ -152,7 +152,7 @@ fn cache_metrics() {
 
 #[test]
 fn head_does_not_warm_cache() {
-    // DEV-6659 step 3 / DEV-6660: a HEAD request must not write a cache
+    // DEV-6659 / DEV-6660: a HEAD request must not write a cache
     // entry. HEAD an uncached image (must write nothing), then GET the same
     // url (must be the cache miss that writes the one cache file). If the
     // HEAD had warmed the cache, no file would appear until the GET writes
@@ -181,7 +181,7 @@ fn head_does_not_warm_cache() {
 
 #[test]
 fn cache_hit_avoids_decode() {
-    // DEV-6659 step 3: repinned on the on-disk file count. A cache miss
+    // DEV-6659: repinned on the on-disk file count. A cache miss
     // writes exactly one new file; a subsequent hit for the same params
     // must not write another (proving it was served from the cache file,
     // not re-decoded).
@@ -249,7 +249,7 @@ fn cache_key_isolation() {
         "full/max and cropped region should produce different images"
     );
 
-    // DEV-6659 step 3: repinned on the on-disk file count. Absolute (not a
+    // DEV-6659: repinned on the on-disk file count. Absolute (not a
     // delta), matching the original `cache_files >= 3.0` gauge check — files
     // written by other tests sharing this cache dir only strengthen it.
     let cache_files = poll_cache_file_count(&cache_dir, |c| c >= 3);
@@ -344,7 +344,7 @@ fn cache_disabled_mode() {
     assert_eq!(resp.status().as_u16(), 200);
     let _ = resp.bytes();
 
-    // DEV-6659 step 3: repinned on the on-disk file count (no /metrics).
+    // DEV-6659: repinned on the on-disk file count (no /metrics).
     let cache_files = poll_cache_file_count(&cache_dir, |_| true);
     assert_eq!(
         cache_files, 0,
@@ -380,7 +380,7 @@ fn cache_lru_purge_correctness() {
         thread::sleep(Duration::from_millis(50));
     }
 
-    // DEV-6659 step 3: repinned on the on-disk file count (no /metrics, so
+    // DEV-6659: repinned on the on-disk file count (no /metrics, so
     // eviction *count* isn't directly observable). Requesting 8 distinct
     // derivatives against a 5-file cap while staying at-or-below the cap is
     // itself proof eviction ran — without it, the count would sit at 8.
@@ -415,7 +415,7 @@ fn cache_nfiles_limit() {
         thread::sleep(Duration::from_millis(50));
     }
 
-    // DEV-6659 step 3: repinned on the on-disk file count (no /metrics).
+    // DEV-6659: repinned on the on-disk file count (no /metrics).
     let cache_files = poll_cache_file_count(&cache_dir, |c| c <= 3);
     assert!(
         cache_files <= 3,

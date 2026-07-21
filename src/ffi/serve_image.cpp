@@ -49,8 +49,8 @@ namespace {
   // reports it through `report_error` iff non-null — the seam's "NULL =
   // absent" idiom (the C++ oracle's own server, `SipiHttpServer.cpp`, passes
   // no callback and stays on its own log-only path). Never affects the
-  // caller's SipiStatus: this is purely the side-channel decision #8
-  // requires. Named *Report*, not *Error*, to avoid colliding with the
+  // caller's SipiStatus: this is purely a side channel for error reporting.
+  // Named *Report*, not *Error*, to avoid colliding with the
   // `Sipi::SipiImageError` exception type this same file catches.
   void report_image_error(SipiReportErrorFn report_error,
     void *report_ctx,

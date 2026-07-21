@@ -1,15 +1,14 @@
 //! Concurrency flags (the "Concurrency" `--help` heading).
 //!
-//! `nthreads`, `max_waiting`, and `queue_timeout` are all parse-only (plan 02
-//! §7.5 forward/parse-only split, M7-resolved): the Rust shell bounds
-//! concurrent engine work with a tokio semaphore (shed-load → 503) sized from
-//! the Lua/TOML config's `nthreads` key (`server-rs/routes.rs`'s
-//! `ffi::nthreads()`), not from a CLI/env override — thread count is one of
-//! the "transport knobs the shell does not own", grouped with TLS/hostname/
-//! keep-alive/logfile in the M5 TOML schema (`server-rs/config_file.rs`), and
-//! the CLI stays consistent with that. `max_waiting`/`queue_timeout` are
-//! unread for a different reason: the semaphore model has no queue to size
-//! (§5 #4).
+//! `nthreads`, `max_waiting`, and `queue_timeout` are all parse-only: the Rust
+//! shell bounds concurrent engine work with a tokio semaphore (shed-load →
+//! 503) sized from the Lua/TOML config's `nthreads` key
+//! (`server-rs/routes.rs`'s `ffi::nthreads()`), not from a CLI/env override —
+//! thread count is one of the "transport knobs the shell does not own",
+//! grouped with TLS/hostname/keep-alive/logfile in the TOML schema
+//! (`server-rs/config_file.rs`), and the CLI stays consistent with that.
+//! `max_waiting`/`queue_timeout` are unread for a different reason: the
+//! semaphore model has no queue to size.
 
 use clap::Args;
 

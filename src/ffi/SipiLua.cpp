@@ -305,7 +305,7 @@ static int SImage_new(lua_State *L)
     if (!original.empty()) {
       // htype is parsed from Lua but no longer flows through readSource —
       // hash type is decided at write time by the `convert service-file` command
-      // (ADR-0010 / Phase 12 / DEV-6540). Param retained on the Lua-facing API.
+      // (ADR-0010 / DEV-6540). Param retained on the Lua-facing API.
       (void)htype;
       img->image->readSource(imgpath, region, size, original);
     } else {
@@ -1356,7 +1356,7 @@ static int SImage_write(lua_State *L)
   const char *imgpath = lua_tostring(L, 2);
 
   Sipi::SipiCompressionParams comp_params;
-  // Service File stamping params (DEV-6537 Phase 12.1 server-upload wiring).
+  // Service File stamping params (DEV-6537 server-upload wiring).
   // When `file_role = "service-file"` is set in the params table along with
   // `origname` + `mimetype`, this binding builds an `Essentials` packet from
   // the post-transformation pixel buffer (SHA-256 hash) and stamps it on
@@ -1472,7 +1472,7 @@ static int SImage_write(lua_State *L)
         } else if (key == std::string("quality")) {
           comp_params[Sipi::JPEG_QUALITY] = value;
         } else if (key == std::string("file_role")) {
-          // Currently only "service-file" is supported (Phase 12.1).
+          // Currently only "service-file" is supported.
           // "access-file" / "preservation-file" land in later phases.
           if (value != "service-file") {
             lua_pop(L, lua_gettop(L));
@@ -1532,7 +1532,7 @@ static int SImage_write(lua_State *L)
     return lua_error(L);
   }
 
-  // Service File stamping (DEV-6537 Phase 12.1). When the caller requests
+  // Service File stamping (DEV-6537). When the caller requests
   // `file_role = "service-file"`, build the Essentials packet from the
   // post-transformation pixel buffer + supplied origname/mimetype and
   // stamp it on the image. The writer's emit gate is the packet's

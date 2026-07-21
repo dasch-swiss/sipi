@@ -334,8 +334,8 @@ extern "C" {
     pub fn sipi_max_post_size(out: *mut usize) -> c_int;
 
     /// The configured HTTP listen port (the Lua config `sipi.port`); a
-    /// fallback below `--serverport`/`SIPI_SERVERPORT`/`SIPI_RS_PORT` (plan 02
-    /// §6 R3). Returns 0, or 500 if `sipi_init` has not run.
+    /// fallback below `--serverport`/`SIPI_SERVERPORT`/`SIPI_RS_PORT`.
+    /// Returns 0, or 500 if `sipi_init` has not run.
     pub fn sipi_port(out: *mut c_int) -> c_int;
 
     /// Snapshot the engine metrics singleton (cache / rate-limiter /
@@ -700,8 +700,8 @@ pub fn max_post_size() -> Result<usize, i32> {
 }
 
 /// The configured HTTP listen port (the Lua config `sipi.port`). Used only as
-/// a fallback below `--serverport`/`SIPI_SERVERPORT`/`SIPI_RS_PORT` (plan 02
-/// §6 R3). `Err` carries the FFI status (500 if `sipi_init` has not run).
+/// a fallback below `--serverport`/`SIPI_SERVERPORT`/`SIPI_RS_PORT`. `Err`
+/// carries the FFI status (500 if `sipi_init` has not run).
 pub fn port() -> Result<u16, i32> {
     let mut v: c_int = 0;
     // SAFETY: `out` is a valid pointer; the seam guards exceptions.
@@ -913,7 +913,7 @@ pub fn image_dims_and_essentials(
 /// Builds a `sentry::Event` from a reported handled-error context and
 /// captures it — mirrors the shape the C++ oracle's `capture_image_error`
 /// (sentry-native) used to send directly; the engine now links no Sentry SDK
-/// and reports this context across the seam instead (decision #8: a report is
+/// and reports this context across the seam instead (a report is
 /// always a side-channel, never a body). `ctx` is the request-URI C string
 /// the Rust edge passes as `report_ctx` — not part of the flat struct, since
 /// the edge already holds it for `SipiServeRequest::request_uri`.

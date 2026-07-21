@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Drift guard for the differential parity gate (plan 02 §7).
+# Drift guard for the differential parity gate.
 #
 # The gate in `test/e2e/tests/differential.rs` must stay COMPLETE: every
 # replayable e2e behaviour is represented in its corpus, and every behaviour

@@ -1001,10 +1001,10 @@ jobs:
 
 ### Rollout Strategy
 
-1. **Phase 1 — Format gate (Day 1):** Enforce `clang-format` as a hard PR gate. Zero discussion needed — it's mechanical.
-2. **Phase 2 — Linter warnings (Week 1-2):** Run clang-tidy in warning-only mode. Fix automatable issues in bulk using `--fix`.
-3. **Phase 3 — Linter gate (Ongoing):** Promote check groups to `WarningsAsErrors` one category at a time, starting with `bugprone-*` and `performance-*`.
-4. **Phase 4 — Modernization PRs:** Address manual migration items (error handling, ownership) as dedicated refactoring PRs — not mixed into feature work.
+1. **Format gate (Day 1):** Enforce `clang-format` as a hard PR gate. Zero discussion needed — it's mechanical.
+2. **Linter warnings (Week 1-2):** Run clang-tidy in warning-only mode. Fix automatable issues in bulk using `--fix`.
+3. **Linter gate (Ongoing):** Promote check groups to `WarningsAsErrors` one category at a time, starting with `bugprone-*` and `performance-*`.
+4. **Modernization PRs:** Address manual migration items (error handling, ownership) as dedicated refactoring PRs — not mixed into feature work.
 
 ---
 

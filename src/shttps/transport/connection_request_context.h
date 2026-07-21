@@ -13,7 +13,7 @@
  * (`sipi_preflight`, `sipi_run_lua_route`) connection-less — both share this one
  * snapshot implementation so the FFI path sees exactly what the live VM sees.
  *
- * The whole file is deleted at the Phase C cutover, when the Rust shell builds
+ * The whole file is deleted at the cutover, when the Rust shell builds
  * the `RequestContext` directly and the C++ transport goes away.
  */
 #ifndef SHTTPS_TRANSPORT_CONNECTION_REQUEST_CONTEXT_H

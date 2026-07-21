@@ -1,10 +1,10 @@
-"""src/ffi — the narrow C FFI seam (strangler-fig Phase B; ADR-0013).
+"""src/ffi — the narrow C FFI seam (strangler-fig; ADR-0013).
 
 `sipi_ffi.h` is the durable `extern "C"` contract the Rust shell drives the C++
-image engine through (Phase C); the response is streamed through `SipiResponse`
+image engine through; the response is streamed through `SipiResponse`
 callbacks rather than returned in a struct, and no C++ exception crosses the
 boundary. Lives in its own Bazel package so the seam is a build-graph
-invariant and so Phase C's `rust_binary` can link this `cc_library` (via
+invariant and so the `rust_binary` can link this `cc_library` (via
 rules_rust `cc_import`/`deps`) as a defined unit. (It is not dependency-free:
 the `//src/shttps/util` dep below pulls libmagic transitively; as the engine
 slices land behind the FFI the target grows rather than shrinks.)
@@ -81,7 +81,7 @@ cc_library(
         # The connection-less LuaServer + RequestContext the SipiLua `sipi.*`
         # bindings install into. //src/shttps/lua is transport-free (transport
         # deps lua, never the reverse), so this is no SIPI -> shttps-transport
-        # coupling — it is exactly the Phase B-L dep the seam needs to reach the
+        # coupling — it is exactly the dep the seam needs to reach the
         # Lua runtime connection-less.
         "//src/shttps/lua",
         # The Lua C API the SipiImage bindings call directly (lua_State, luaL_*).

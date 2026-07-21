@@ -232,7 +232,7 @@ cc_library(
 # `shttps/util`). The one remaining transitive shttps link edge enters through
 # `:sipi_top` / //src/metadata / //src/observability, a pre-existing layering
 # leak those packages already carry (their BUILD comments note it; tracked
-# under DEV-6353), not a new coupling introduced here. Phase C's `rust_binary`
+# under DEV-6353), not a new coupling introduced here. The `rust_binary`
 # links the engine through //src/ffi:sipi_ffi.
 cc_library(
     name = "engine",

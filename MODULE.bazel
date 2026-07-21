@@ -417,7 +417,7 @@ use_repo(llvm_source, "llvm-raw", "llvm_config", "llvm_zlib", "llvm_zstd")
 # exec host. Omitting `exec(linux-aarch64)` makes Bazel fall back to the
 # autodetected Nix host CC toolchain on the native arm64 runner, which compiles
 # `-stdlib=libc++` but never links the libc++ runtime — a flood of
-# `undefined reference to std::__1::…`. (darwin→linux cross-compile, Phase 3,
+# `undefined reference to std::__1::…`. (darwin→linux cross-compile
 # is a separate path and does not need a linux-aarch64 exec host.)
 #
 # A single registered toolchain serves every platform, INCLUDING the

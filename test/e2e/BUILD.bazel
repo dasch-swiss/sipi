@@ -177,7 +177,7 @@ sipi_e2e_test(name = "upload", deps = _e2e_test_deps)
 #
 # Spawns BOTH binaries — the Rust shell under test (`SIPI_BIN`, the macro
 # default) and the retained C++ server as a live oracle (`SIPI_BIN_REF`) — and
-# diffs their responses across the §5 allowlist. Differs from the macro
+# diffs their responses across the divergence allowlist. Differs from the macro
 # targets in two ways:
 #
 #   1. It pulls a SECOND binary, `//src/cli:sipi`, into `data` and points
@@ -189,7 +189,6 @@ sipi_e2e_test(name = "upload", deps = _e2e_test_deps)
 #      `just bazel-test-differential`; the heavy two-binary spawn is
 #      `exclusive` + `no-sandbox` from the macro.
 #
-# See plan 02 §7 (harness) / §8 (differential.rs placement).
 sipi_e2e_test(
     name = "differential",
     deps = _e2e_test_deps,

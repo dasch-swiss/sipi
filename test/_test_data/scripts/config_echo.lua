@@ -1,6 +1,6 @@
 -- Echoes a handful of `sipiConfGlobals`-installed config values as JSON.
--- Used by the plan 02 §7.7 flag matrix to observe --thumbsize/--knorapath/
--- --knoraport CLI/env overrides, which have no other HTTP-visible effect.
+-- Used to observe --thumbsize/--knorapath/--knoraport CLI/env overrides,
+-- which have no other HTTP-visible effect.
 
 require "send_response"
 

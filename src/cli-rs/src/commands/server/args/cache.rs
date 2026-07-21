@@ -9,7 +9,7 @@
 //! from the canonical long names) and collapsed onto the canonical field in
 //! `commands/server/mod.rs`'s `From<&ServerArgs>` (canonical wins if both are
 //! set). `--cachehysteresis` is intentionally never declared — an unknown flag
-//! rejection is the Rust-side equivalent of the C++ no-op (plan 02 §3 P3).
+//! rejection is the Rust-side equivalent of the C++ no-op.
 
 use clap::Args;
 

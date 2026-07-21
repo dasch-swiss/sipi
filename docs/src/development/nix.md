@@ -73,7 +73,7 @@ Highlights:
   manifest from per-arch digests.
 - **just** — recipe runner.
 - **python3Packages.jpylyzer** — JP2 conformance validator used to
-  verify regenerated JP2 goldens (see ADR-0010 / Phase 15.11).
+  verify regenerated JP2 goldens (see ADR-0010).
 - **llvmPackages_19.llvm** *(coverage shell only)* — `llvm-cov` /
   `llvm-profdata` for `just bazel-coverage`. Bazel's
   `collect_cc_coverage.sh` hard-requires `COVERAGE_GCOV_PATH` and

@@ -4,11 +4,11 @@
  * AGPL-3.0-or-later
  */
 
-// Verify subcommand unit tests (DEV-6537 Phase 12.7).
+// Verify subcommand unit tests (DEV-6537).
 //
 // Three command-level verify modes (the 4th `preservation-file` variant
 // is a CLI-only stub that errors with "awaits ADR-0012" — tested at the
-// CLI subprocess layer in Phase 12.8):
+// CLI subprocess layer):
 //
 //   * `Generic`     — decoder-coverage only (RDU sanity). Corrupted →
 //                      non-zero. Valid → 0.
@@ -113,8 +113,8 @@ TEST(CmdVerify, GenericFailsOnCorruptedJpeg)
   EXPECT_EQ(Sipi::cli::cmd_verify(req), EXIT_FAILURE);
 }
 
-// 12.7 — `verify access-file`: an Access File (no Essentials) passes. The
-// JPG output from the access-file command (Phase 12.6) is the
+// `verify access-file`: an Access File (no Essentials) passes. The
+// JPG output from the access-file command is the
 // canonical happy-path Access File.
 TEST(CmdVerify, AccessFilePassesOnImageWithoutEssentials)
 {

@@ -1,4 +1,4 @@
-//! Thin default entry point for the SIPI Rust shell (decision #9).
+//! Thin default entry point for the SIPI Rust shell.
 //!
 //! `cli-rs` owns `main` and the verb dispatch; all server behaviour lives in the
 //! `sipi` library (`//src/server-rs`). The `server` verb runs the axum shell;

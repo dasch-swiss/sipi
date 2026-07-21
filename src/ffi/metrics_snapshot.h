@@ -5,10 +5,10 @@
 
 /*!
  * Concrete layout for the `SipiMetricsSnapshot` handle forward-declared in
- * `ffi/sipi_ffi.h` (strangler-fig Phase B; ADR-0013).
+ * `ffi/sipi_ffi.h` (strangler-fig; ADR-0013).
  *
  * `sipi_metrics_snapshot` ferries the engine's `Sipi::observability::Metrics`
- * singleton counters/gauges across the seam so the Phase C Rust shell can feed
+ * singleton counters/gauges across the seam so the Rust shell can feed
  * them to an OTel meter (the C++ Prometheus `/metrics` handler stays until the
  * cutover, then retires — OTLP-only). The seam header keeps this struct opaque
  * so the contract commits no field set it doesn't need; this header — owned by

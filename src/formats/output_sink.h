@@ -11,8 +11,8 @@
  * surface. It is deliberately free of any `shttps`/HTTP types: the HTTP socket
  * is reached only through `CallbackSink`'s opaque C-ABI callback, so
  * `src/formats/` carries no dependency on the transport layer. That callback
- * signature (`SipiWriteFn`) is fixed here and reused verbatim by the Phase B/C
- * FFI seam, where the Rust shell supplies the body-write callback.
+ * signature (`SipiWriteFn`) is fixed here and reused verbatim by the FFI seam,
+ * where the Rust shell supplies the body-write callback.
  */
 #ifndef SIPI_FORMATS_OUTPUT_SINK_H
 #define SIPI_FORMATS_OUTPUT_SINK_H
@@ -29,8 +29,8 @@ namespace Sipi {
 
 /*!
  * Opaque body-write callback. Returns 0 on success, non-zero on a write
- * failure (peer gone, socket error). Identical to the Phase B/C FFI
- * `SipiWriteFn`: a pure C-ABI callback so Rust can supply it unchanged.
+ * failure (peer gone, socket error). Identical to the FFI `SipiWriteFn`:
+ * a pure C-ABI callback so Rust can supply it unchanged.
  */
 extern "C" {
 typedef int (*SipiWriteFn)(void *ctx, const uint8_t *data, size_t len);
@@ -47,7 +47,7 @@ struct FilePath
   std::string path;
 };
 
-/*! An opaque C-ABI sink — the HTTP socket today, a Rust-owned sink in Phase C. */
+/*! An opaque C-ABI sink — the HTTP socket today, a Rust-owned sink eventually. */
 struct CallbackSink
 {
   SipiWriteFn write;

@@ -45,7 +45,7 @@ std::string lower_extension(const std::string &path)
 /// or .jp2/.jpx, and an Essentials packet was successfully parsed."
 /// A non-pyramidal TIFF carrying an Essentials packet is already a
 /// misconfiguration we surface via the missing-packet path (the
-/// writer-side gate from Phase 7 / 8 prevents it on output, and the
+/// writer-side gate (ADR-0010) prevents it on output, and the
 /// reader path tolerates it).
 bool is_service_file_extension(const std::string &path)
 {

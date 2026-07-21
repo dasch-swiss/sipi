@@ -150,7 +150,7 @@ std::expected<Essentials, ParseError> Essentials::parse(std::span<const std::byt
 
   // Tripwire log: identifies the on-disk format_version each reader sees,
   // which gives us early warning when a future writer ships >1 ahead of a
-  // reader migration. Format-handler decide-boundary logs are Phase 13.
+  // reader migration. Format-handler decide-boundary logs are a separate concern.
   log_info("Essentials: read format_version=%u (max supported: 1)", codec->format_version);
 
   return Essentials(std::move(f));

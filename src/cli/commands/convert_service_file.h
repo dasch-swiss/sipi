@@ -11,8 +11,8 @@
 namespace Sipi::cli {
 
 /*!
- * Inputs to `sipi convert service-file <in> <out>` (DEV-6537 / DEV-6540
- * Phase 12.1). Each field maps to a CLI option attached to
+ * Inputs to `sipi convert service-file <in> <out>` (DEV-6537 / DEV-6540).
+ * Each field maps to a CLI option attached to
  * `cmd_convert_service` in `sipi.cpp`; this command is the only path that
  * ever produces an Essentials packet per ADR-0010.
  */

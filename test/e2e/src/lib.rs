@@ -116,7 +116,7 @@ impl SipiServer {
     /// reference to access shared state (e.g. a `--cache-dir`) SEQUENTIALLY
     /// rather than concurrently, to avoid two live `SipiCache` instances
     /// racing on the same `.sipicache` index file (confirmed on CI to be a
-    /// real crash, not just a benign duplicate write — plan 02 §7.7).
+    /// real crash, not just a benign duplicate write).
     pub fn start_reference_with_args(
         config: &str,
         working_dir: &Path,
@@ -157,8 +157,7 @@ impl SipiServer {
     }
 
     /// Like [`Self::start_pair`], additionally setting `extra_env` in both
-    /// spawned processes' environment (e.g. to probe a `SIPI_*` env binding
-    /// per plan 02 §7.7).
+    /// spawned processes' environment (e.g. to probe a `SIPI_*` env binding).
     pub fn start_pair_env(
         config: &str,
         working_dir: &Path,
@@ -187,7 +186,7 @@ impl SipiServer {
     /// Like [`Self::start_pair`], but the subject and reference get
     /// DIFFERENT `extra_args` (e.g. each its own isolated `--cache-dir` so
     /// two independent `SipiCache` instances never race on a shared
-    /// `.sipicache` index file — plan 02 §7.7's `cache-nfiles` probe).
+    /// `.sipicache` index file — a `cache-nfiles` probe).
     pub fn start_pair_split(
         config: &str,
         working_dir: &Path,
@@ -789,8 +788,8 @@ pub fn http_client() -> reqwest::blocking::Client {
 }
 
 /// Poll `dir`'s file count until `stop` is satisfied or 2s elapses (a cache
-/// write may lag a hair behind the HTTP response, plan 02 §7.7's
-/// `cache-nfiles` row note), returning the last sampled count either way.
+/// write may lag a hair behind the HTTP response), returning the last
+/// sampled count either way.
 /// SipiCache writes flat `cache_XXXXXXXXXX` files directly under `dir` (no
 /// subdirectories) and only writes its `.sipicache` index at shutdown, so a
 /// plain top-level file count is an accurate on-disk proxy for cache state

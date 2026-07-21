@@ -12,8 +12,7 @@
 namespace Sipi::cli {
 
 /*!
- * Inputs to `sipi convert access-file <in> <out>` (DEV-6537 / DEV-6540
- * Phase 12.2).
+ * Inputs to `sipi convert access-file <in> <out>` (DEV-6537 / DEV-6540).
  *
  * Per ADR-0009 / ADR-0010, an Access File is the end-user-delivery
  * format produced from a Service File. The command's contract:
@@ -85,7 +84,7 @@ struct ConvertAccessFileArgs
  *   4. Apply transformations (orientation, ICC, rotate, mirror,
  *      watermark) per IIIF semantics.
  *   5. Write output with NO `file_role` param — the writer's
- *      Essentials-emission gate stays closed (Phase 8 / ADR-0010).
+ *      Essentials-emission gate stays closed (ADR-0010).
  *
  * Returns the process exit code (EXIT_SUCCESS or EXIT_FAILURE).
  */

@@ -41,7 +41,7 @@ cc_library(
     deps = ["//src:sipi_lib"],
 )
 
-# Co-located unit tests for each subcommand (DEV-6537 Phase 12.5-12.7),
+# Co-located unit tests for each subcommand (DEV-6537),
 # per ADR-0003. The tests exercise `cmd_*` functions directly plus the
 # SipiImage / SipiIOTiff plumbing they call into, so `:sipi_lib` is a
 # direct dep alongside `:commands`.

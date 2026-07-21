@@ -31,7 +31,7 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 package(default_visibility = ["//src:__subpackages__"])
 
 # Essentials packet wire format (ADR-0005 / DEV-6410). `cc_proto_library` is
-# consumed only by `//src/metadata/internal:protobuf_codec` (added in Phase 4);
+# consumed only by `//src/metadata/internal:protobuf_codec`;
 # every other translation unit talks to the codec via the `EssentialsFields`
 # struct in `essentials.h` so `essentials.pb.h` stays out of the public ABI.
 proto_library(
@@ -111,8 +111,8 @@ cc_test(
     ],
 )
 
-# Co-located unit test for the public Essentials factory surface (Phase 5 /
-# DEV-6410). Depends on the internal codec only to author wire bytes for the
+# Co-located unit test for the public Essentials factory surface (DEV-6410).
+# Depends on the internal codec only to author wire bytes for the
 # 5 ParseError variants — production callers go through `Essentials::parse`
 # (protobuf) or `Essentials::parse_legacy` (pipe-delimited).
 cc_test(
