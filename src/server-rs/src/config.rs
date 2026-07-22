@@ -25,9 +25,11 @@ use std::os::raw::{c_char, c_int};
 /// wins).
 ///
 /// Only engine-behaviour flags are forwarded. Transport flags the Rust shell
-/// owns (`--sslport`/`--sslcert`/`--sslkey`, `--keepalive`,
-/// `--max-waiting`/`--queue-timeout`, `--hostname`) parse for CLI parity but are
-/// never forwarded, so they are absent here.
+/// owns (`--sslport`/`--sslcert`/`--sslkey`, `--keepalive`, `--hostname`) parse
+/// for CLI parity but are never forwarded, so they are absent here.
+/// `--max-waiting`/`--queue-timeout` are also absent here, but for the opposite
+/// reason: the shell honors them as Rust-owned serve knobs passed straight to
+/// [`crate::run`] (like `--drain-timeout`), not layered onto the engine config.
 #[derive(Debug, Default, Clone)]
 pub struct ServerOverrides {
     /// HTTP listen port (`--serverport` / `SIPI_SERVERPORT`). `None` → fall back

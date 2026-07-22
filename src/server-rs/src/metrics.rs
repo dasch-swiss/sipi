@@ -14,11 +14,11 @@
 //! Instrument names are OTel-idiomatic (`sipi.cache.hits`), which the standard
 //! OTLP→Prometheus normalization at the collector renders as the existing
 //! dashboard names (`sipi_cache_hits_total`). Two snapshot fields are **not**
-//! bridged — `rejected_connections_total` and `waiting_connections` are written
-//! only by the retained C++ transport's connection adapter, never on the FFI
-//! serve path (see [`crate::ffi::SipiMetricsSnapshot`]). `rejected_connections_total`'s
-//! Rust-shell analog is `sipi.pool.load_shed` below; `waiting_connections` has no
-//! equivalent (the semaphore sheds rather than queues).
+//! bridged — `rejected_connections_total` and `waiting_connections` are never
+//! written on the FFI serve path, so they stay zero (see
+//! [`crate::ffi::SipiMetricsSnapshot`]); the shell exposes its own analogs
+//! instead, `sipi.pool.load_shed` and `sipi.pool.waiting` (the bounded wait queue
+//! in front of the pool), both below.
 //!
 //! opentelemetry 0.31 has no batch-observer API (`register_callback` was
 //! removed), so each instrument carries its own callback and each snapshots the
@@ -57,10 +57,9 @@ pub(crate) fn register(pool: Arc<Semaphore>, permits_total: usize) {
         gauge(&meter, name, description, unit, *extract);
     }
 
-    // ── Rust-shell concurrency metrics (the transport the shell now owns) ────
-    // Engine-pool permits in flight: total − currently-available. The gauge the
-    // dead `waiting_connections` can't provide (the semaphore sheds, never
-    // queues), and the real saturation signal.
+    // ── Engine-pool concurrency metrics ─────────────────────────────────────
+    // Engine-pool permits in flight: total − currently-available — the real
+    // saturation signal.
     meter
         .i64_observable_gauge("sipi.pool.permits_in_use")
         .with_description("Engine-pool permits currently held (blocking engine work in flight)")
@@ -75,12 +74,26 @@ pub(crate) fn register(pool: Arc<Semaphore>, permits_total: usize) {
         .with_description("Engine-pool total permit count (the configured worker count)")
         .with_callback(move |observer| observer.observe(permits_total as i64, &[]))
         .build();
-    // 503 load-shed count — the Rust-shell analog of the transport's dead
-    // `rejected_connections_total`.
+    // 503 load-shed count: every backpressure shed (immediate + queue-timeout).
     meter
         .u64_observable_counter("sipi.pool.load_shed")
         .with_description("Requests shed with 503 because the engine pool was saturated")
         .with_callback(|observer| observer.observe(routes::load_shed_total(), &[]))
+        .build();
+    // Requests currently parked in the wait queue for a permit. With
+    // `permits_in_use` (== permits_total under load) this is the full saturation
+    // picture: a rising `waiting` is sustained overload approaching the shed edge.
+    meter
+        .i64_observable_gauge("sipi.pool.waiting")
+        .with_description("Requests currently waiting for an engine-pool permit")
+        .with_callback(|observer| observer.observe(routes::waiting(), &[]))
+        .build();
+    // Queue-timeout sheds — the subset of `load_shed` that waited past
+    // `queue_timeout` rather than shedding immediately on a full queue.
+    meter
+        .u64_observable_counter("sipi.pool.queue_timeout")
+        .with_description("Requests shed with 503 after waiting past the queue timeout")
+        .with_callback(|observer| observer.observe(routes::queue_timeout_total(), &[]))
         .build();
 }
 

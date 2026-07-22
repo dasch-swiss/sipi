@@ -154,11 +154,10 @@ pub type SipiReportErrorFn = extern "C" fn(ctx: *mut c_void, err: *const SipiIma
 /// against an accidental field reorder or insertion. The OTel meter bridge
 /// (`crate::metrics`) reads this each collection.
 ///
-/// Two counters are populated only by the retained C++ transport's connection
-/// adapter, never on the FFI serve path, so they stay zero under the Rust shell
-/// and the bridge does not expose them: `rejected_connections_total` (its Rust
-/// analog is `sipi.pool.load_shed`) and `waiting_connections` (the semaphore
-/// sheds immediately rather than queuing).
+/// Two counters are never written on the FFI serve path, so they stay zero and
+/// the bridge does not expose them: `rejected_connections_total` and
+/// `waiting_connections`. The shell tracks its own equivalents Rust-side instead
+/// (`sipi.pool.load_shed` and `sipi.pool.waiting` — its bounded wait queue).
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SipiMetricsSnapshot {
@@ -324,10 +323,6 @@ extern "C" {
     /// The `prefix_as_path` config knob (`*out` = 1/0). Returns 0, or 500 if
     /// `sipi_init` has not run.
     pub fn sipi_prefix_as_path(out: *mut c_int) -> c_int;
-
-    /// The configured worker-thread count (`*out`); 0 = auto. Returns 0, or 500
-    /// if `sipi_init` has not run.
-    pub fn sipi_nthreads(out: *mut c_int) -> c_int;
 
     /// The configured max POST body size in bytes (`*out`); 0 = unlimited.
     /// Returns 0, or 500 if `sipi_init` has not run.
@@ -671,19 +666,6 @@ pub fn prefix_as_path() -> Result<bool, i32> {
         return Err(code);
     }
     Ok(v != 0)
-}
-
-/// The configured worker-thread count (the Lua config `nthreads`). `0` means the
-/// operator left it auto — the caller sizes its blocking pool from the host
-/// parallelism. `Err` carries the FFI status (500 if `sipi_init` has not run).
-pub fn nthreads() -> Result<u32, i32> {
-    let mut v: c_int = 0;
-    // SAFETY: `out` is a valid pointer; the seam guards exceptions.
-    let code = unsafe { sipi_nthreads(&mut v) };
-    if code != 0 {
-        return Err(code);
-    }
-    Ok(v.max(0) as u32)
 }
 
 /// The configured max POST body size in bytes (`max_post_size`). `0` means

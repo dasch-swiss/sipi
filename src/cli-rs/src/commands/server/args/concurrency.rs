@@ -1,29 +1,27 @@
 //! Concurrency flags (the "Concurrency" `--help` heading).
 //!
-//! `nthreads`, `max_waiting`, and `queue_timeout` are all parse-only: the Rust
-//! shell bounds concurrent engine work with a tokio semaphore (shed-load →
-//! 503) sized from the Lua/TOML config's `nthreads` key
-//! (`server-rs/routes.rs`'s `ffi::nthreads()`), not from a CLI/env override —
-//! thread count is one of the "transport knobs the shell does not own",
-//! grouped with TLS/hostname/keep-alive/logfile in the TOML schema
-//! (`server-rs/config_file.rs`), and the CLI stays consistent with that.
-//! `max_waiting`/`queue_timeout` are unread for a different reason: the
-//! semaphore model has no queue to size.
+//! All three configure the engine-work pool directly from CLI/env
+//! (`SIPI_NTHREADS`/`SIPI_MAX_WAITING`/`SIPI_QUEUE_TIMEOUT`), handed to
+//! `sipi::run`; the Lua config does not set them. `nthreads` sizes the pool
+//! (0 or unset = auto-detect from CPU cores). `max_waiting` bounds the wait queue
+//! in front of it (default 2×nthreads) and `queue_timeout` bounds how long each
+//! request waits before a 503 (default 5s). See `server-rs/routes.rs`'s
+//! `AppState::load` and `acquire_or_shed`.
 
 use clap::Args;
 
 #[derive(Args, Debug)]
 #[command(next_help_heading = "Concurrency")]
 pub struct ConcurrencyArgs {
-    /// Worker thread count (0 = auto-detect from CPU cores; parse-only — sizes
-    /// the engine-work semaphore only from the Lua/TOML config, not the CLI).
-    /// Also accepts the C++ oracle's `-t` short form.
+    /// Worker thread count that sizes the engine-work pool (0 = auto-detect from
+    /// CPU cores). Also accepts the `-t` short form.
     #[arg(long, short = 't', env = "SIPI_NTHREADS", value_name = "N")]
     pub nthreads: Option<u32>,
-    /// Max waiting connections before 503 (parse-only: semaphore model).
+    /// Max requests queued for a worker before 503 (0 = no queue, shed
+    /// immediately; default 2×nthreads).
     #[arg(long, env = "SIPI_MAX_WAITING", value_name = "N")]
     pub max_waiting: Option<u64>,
-    /// Max seconds a request waits in queue before 503 (parse-only).
+    /// Max seconds a queued request waits for a worker before 503 (default 5).
     #[arg(long, env = "SIPI_QUEUE_TIMEOUT", value_name = "SECS")]
     pub queue_timeout: Option<u32>,
 }

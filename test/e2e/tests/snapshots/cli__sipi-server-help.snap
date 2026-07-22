@@ -15,9 +15,9 @@ Network:
       --keepalive <SECS>   HTTP/1.1 keep-alive timeout in seconds (parse-only: tokio is async, so the knob is unread) [env: SIPI_KEEPALIVE=]
 
 Concurrency:
-  -t, --nthreads <N>          Worker thread count (0 = auto-detect from CPU cores; parse-only — sizes the engine-work semaphore only from the Lua/TOML config, not the CLI). Also accepts the C++ oracle's `-t` short form [env: SIPI_NTHREADS=]
-      --max-waiting <N>       Max waiting connections before 503 (parse-only: semaphore model) [env: SIPI_MAX_WAITING=]
-      --queue-timeout <SECS>  Max seconds a request waits in queue before 503 (parse-only) [env: SIPI_QUEUE_TIMEOUT=]
+  -t, --nthreads <N>          Worker thread count that sizes the engine-work pool (0 = auto-detect from CPU cores). Also accepts the `-t` short form [env: SIPI_NTHREADS=]
+      --max-waiting <N>       Max requests queued for a worker before 503 (0 = no queue, shed immediately; default 2×nthreads) [env: SIPI_MAX_WAITING=]
+      --queue-timeout <SECS>  Max seconds a queued request waits for a worker before 503 (default 5) [env: SIPI_QUEUE_TIMEOUT=]
 
 Limits:
       --maxpost <SIZE>             Max POST body size, e.g. "300M" (engine parses the suffix) [env: SIPI_MAXPOSTSIZE=]
