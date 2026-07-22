@@ -83,6 +83,12 @@ jobs:
         # See ci.yml for the `nix develop --command` rationale (`gh` on PATH
         # for the kakadu fetch).
         run: nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} ${{ steps.rbe.outputs.flags }}"
+      # Exercise the release-only debug-symbol extraction in the validation
+      # stage so it can't silently break at publish time (as it did for
+      # v6.0.0). The artifact is discarded here — publish-docker rebuilds it
+      # for the actual Sentry upload.
+      - name: Extract debug symbols (validation)
+        run: nix develop --command bash -c "just bazel-docker-extract-debug ${{ matrix.arch }} ${{ steps.rbe.outputs.flags }}"
       # `:docker_smoke` rust_test loads the OCI tarball produced by
       # `//src:image_load` and runs the smoke suite against it. The Docker
       # image already loaded by the build step above is left alone.

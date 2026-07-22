@@ -766,25 +766,48 @@ cp "$$BIN" $(execpath _dbg/sipi.stripped)
 # the GNU debuglink convention that lldb/gdb/Sentry's symbolicator
 # follows. The two-character directory is the leading byte of the
 # build-id (hex); the filename is the remaining 38 hex chars + ".debug".
+#
+# The layout path is build-id-derived, so it's only known at build time.
+# `tar()`'s mtree can't be a static literal here — instead this genrule
+# emits the mtree spec (parent dirs + the one file, with the build-id
+# baked into the path), and `:sipi_debug_layout` feeds it to the
+# `tar.bzl` `tar()` rule. That rule uses the hermetic bsdtar toolchain,
+# so the archive is byte-deterministic AND the action runs on any host —
+# a bare `tar` here shelled out to the host's tar (GNU on the RBE Linux
+# workers, BSD on a darwin cross-build), and BSD tar rejects `--sort`.
 genrule(
-    name = "sipi_debug_layout",
+    name = "sipi_debug_mtree",
     srcs = [
         ":_dbg/sipi.debug",
         ":_dbg/sipi_build_id.txt",
     ],
-    outs = ["sipi_debug_layout.tar"],
+    outs = ["sipi_debug_layout.mtree"],
     cmd = """
 set -euo pipefail
 ID=$$(cat $(execpath :_dbg/sipi_build_id.txt))
 PREFIX=$${ID:0:2}
 SUFFIX=$${ID:2}
-mkdir -p out/lib/debug/.build-id/$$PREFIX
-cp $(execpath :_dbg/sipi.debug) out/lib/debug/.build-id/$$PREFIX/$$SUFFIX.debug
-# Deterministic tar — same flags as @tar.bzl uses internally so two
-# builds with identical inputs produce identical bytes.
-tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \\
-    -cf $(OUTS) -C out lib
+{
+    echo "#mtree"
+    echo "./lib type=dir mode=0755 time=0"
+    echo "./lib/debug type=dir mode=0755 time=0"
+    echo "./lib/debug/.build-id type=dir mode=0755 time=0"
+    echo "./lib/debug/.build-id/$$PREFIX type=dir mode=0755 time=0"
+    echo "./lib/debug/.build-id/$$PREFIX/$$SUFFIX.debug type=file mode=0644 time=0 content=$(execpath :_dbg/sipi.debug)"
+} > $@
 """,
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+# `compress = None` keeps the output an uncompressed `sipi_debug_layout.tar`
+# (the recipe + Sentry-upload contract expect that name). `tar()` otherwise
+# defaults to gzip under `-c opt`, which `--config=release` selects, and would
+# emit `sipi_debug_layout.tar.gz`.
+tar(
+    name = "sipi_debug_layout",
+    srcs = [":_dbg/sipi.debug"],
+    mtree = ":sipi_debug_mtree",
+    compress = None,
     target_compatible_with = ["@platforms//os:linux"],
 )
 
