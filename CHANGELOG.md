@@ -1,5 +1,53 @@
 # Changelog
 
+## [6.0.0](https://github.com/dasch-swiss/sipi/compare/v5.0.1...v6.0.0) (2026-07-22)
+
+
+### Features
+
+* **cli-rs:** Parse the full `server` flag surface (unwired) ([29b43c2](https://github.com/dasch-swiss/sipi/commit/29b43c20aaac441461e5f9705a27923756d66b15))
+* **ffi:** Apply CLI/env overrides onto SipiConf in sipi_init ([20f958b](https://github.com/dasch-swiss/sipi/commit/20f958baee213699218e10fed37f5a1326d1febb))
+* **ffi:** Define the concrete SipiServerConfig override struct ([e749716](https://github.com/dasch-swiss/sipi/commit/e749716b4e6638a74dcc8d95bf91182c4ab6fced))
+* **ffi:** Emit the IIIF profile Link header on image responses ([c7d23ca](https://github.com/dasch-swiss/sipi/commit/c7d23cafb97cd5589f3a4e163d130a7d4492a587))
+* Forward the full server CLI/env flag set into ServerOverrides ([2f5dbb1](https://github.com/dasch-swiss/sipi/commit/2f5dbb1bdfbfd1de2dcaf6c26b289376085ee555))
+* Propagate W3C traceparent from Lua outbound calls to dsp-api ([0f7851e](https://github.com/dasch-swiss/sipi/commit/0f7851e194fa635b63933efa4d28ecdc514810b5))
+* Serve the /server docroot fileserver in the Rust shell ([221c94a](https://github.com/dasch-swiss/sipi/commit/221c94a0a68532445767d28c9f2dc52d83407014))
+* **server-rs,cli-rs:** Cut over crash reporting from sentry-native to Rust sentry + minidump ([a44ba04](https://github.com/dasch-swiss/sipi/commit/a44ba047e0efcc93599892a8b7ea41d0335ed931))
+* **server-rs:** Add a sipi_port FFI getter as the listener fallback ([06f4cb8](https://github.com/dasch-swiss/sipi/commit/06f4cb8daf31fd6cca15de28b78ada7a435c1175))
+* **server-rs:** Bridge engine + pool metrics to OTLP observable instruments ([501e439](https://github.com/dasch-swiss/sipi/commit/501e439c5132f6f3647678c7328b2b945d378eec))
+* **server-rs:** Forward overrides through sipi_init via OverridesHolder ([2a68fee](https://github.com/dasch-swiss/sipi/commit/2a68fee2e2e00a444510242c3407fc01017d8351))
+* **server-rs:** Mirror SipiServerConfig as repr(C) + layout test ([a2126d5](https://github.com/dasch-swiss/sipi/commit/a2126d5d47ed43635a58cd68d84966a0ac3fcc72))
+* Support TOML config files for the server (--config *.toml) ([b36d374](https://github.com/dasch-swiss/sipi/commit/b36d374d741d2f02dd98ba90070299f6f5cfb20b))
+
+
+### Bug Fixes
+
+* **ci:** Drop the remote downloader, cache external deps via repository_cache ([95274dc](https://github.com/dasch-swiss/sipi/commit/95274dce84e5d1b011d614e6da01072df6535d39))
+* **ci:** Repair lint job's bazel-rbe inputs so lint actually uses RBE ([dc3035b](https://github.com/dasch-swiss/sipi/commit/dc3035b9867d1050be1d78accfc509a7004f859e))
+* **cli-rs:** Exit 0 on `server --help` / `--version` ([ad25ddd](https://github.com/dasch-swiss/sipi/commit/ad25ddddbdd1b3c293a1a890eaa6739c666ccd98))
+* **cli-rs:** Replace ureq with a raw TCP probe in the health verb ([325ae95](https://github.com/dasch-swiss/sipi/commit/325ae95d2bebd0b7be4541a018d8c93e8a357196))
+* **cli:** Guard the empty --maxpost length underflow ([4db9285](https://github.com/dasch-swiss/sipi/commit/4db928545382e720fbd72d271cad68a44391eb1e))
+* **cli:** Reject negative cache-nfiles + range-check ports (both binaries) ([a39298d](https://github.com/dasch-swiss/sipi/commit/a39298d0e8e2c29bd86a1e260cdb44626e858099))
+* **cli:** Sipi compare per-channel delta uses absolute difference ([f7e397a](https://github.com/dasch-swiss/sipi/commit/f7e397a553531a9f3817f7fcf0b7be36e34ffc69))
+* **cli:** Stringify --quality before storing it in compression params ([5cc59e9](https://github.com/dasch-swiss/sipi/commit/5cc59e95a1f79a6875b9e6b102a6e5d83901ca67))
+* **e2e:** Stop racing subject and reference on a shared cache dir ([563fbd2](https://github.com/dasch-swiss/sipi/commit/563fbd2de56dd1c6ad980676b3c1220a57096c81))
+* **ffi:** Clamp negative max-decode-memory/maxpost overrides to 0 ([ce25eb8](https://github.com/dasch-swiss/sipi/commit/ce25eb8c0308c7e4a33a10c2b39dcf473273d446))
+* **ffi:** Return 404 when a Lua-route script vanishes after the access check ([74dbf48](https://github.com/dasch-swiss/sipi/commit/74dbf48d32262637acdd9fcc6087a1445cd27441))
+* **formats:** Convert corrupt-JP2 Kakadu errors to SipiImageError ([902519d](https://github.com/dasch-swiss/sipi/commit/902519da63b7b62054462acf9cb80bd9a888d0d2))
+* **formats:** Make SipiImage::write reject unknown format keys ([61c9eb5](https://github.com/dasch-swiss/sipi/commit/61c9eb542cbf3f839f27d8f839abdb3137fd930a))
+* **formats:** Single-thread Kakadu JP2 encode under ASan ([a8b1c38](https://github.com/dasch-swiss/sipi/commit/a8b1c386bea3fae74feaa20833d6f94a218ad522))
+* **image:** GetPixel/setPixel use row-major pixel indexing ([8ef46f2](https://github.com/dasch-swiss/sipi/commit/8ef46f2aeccbe615a78a9bd02362b3288373d731))
+* **jpeg:** Deterministic cross-architecture JPEG (integer decode + baseline encode) ([5ba1a05](https://github.com/dasch-swiss/sipi/commit/5ba1a0596972bbd08eefa8cfb51b846e6d21520e))
+* **just:** Bench-compare drops empty FLAGS arg in no-flags invocation ([fe99532](https://github.com/dasch-swiss/sipi/commit/fe995327e9561d3ef43ca456136a75075ee9ec91))
+* **server-rs:** Address adversarial-review findings on the port precedence work ([b200216](https://github.com/dasch-swiss/sipi/commit/b2002167963e3ff43d6cfaa6c6d4f73fee19843a))
+* **server-rs:** Exit via _exit() under ASan to skip teardown-time join abort ([e484f6a](https://github.com/dasch-swiss/sipi/commit/e484f6a3c6ca9291f53b643249689da1a60243b0))
+* **server-rs:** Keep tokio's blocking pool alive under ASan ([137265c](https://github.com/dasch-swiss/sipi/commit/137265c27091423dbb3a7b279fe3f9744ffc03da))
+
+
+### Miscellaneous Chores
+
+* Release 6.0.0 ([51b7cb7](https://github.com/dasch-swiss/sipi/commit/51b7cb74a74f9f6e854ea0f7e9415ccca4c30301))
+
 ## [5.0.1](https://github.com/dasch-swiss/sipi/compare/v5.0.0...v5.0.1) (2026-06-03)
 
 
