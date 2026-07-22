@@ -7,12 +7,22 @@ For the full C++23 style guide, see `docs/src/development/cpp-style-guide.md`.
 For commit and PR conventions, see `docs/src/development/commit-conventions.md`.
 For reviewer guidelines, see `docs/src/development/reviewer-guidelines.md`.
 
+## Production surface vs oracle
+
+The **Rust axum shell** (`src/server-rs` + `src/cli-rs`) is the production server. It drives the C++ **image engine** (`libsipi`, the FFI callee) over the seam in `src/server-rs/src/ffi.rs`. The retained C++ **server** (`src/shttps` + `src/cli`) is **oracle-only**: kept solely as the reference in the differential parity test (`test/e2e/tests/differential.rs`), never deployed.
+
+Consequences for production (Rust) code:
+
+- Comments describe current, working Rust behavior on its own terms. Do **not** frame the Rust shell relative to the C++ server / oracle / transport ("matches the oracle", "the transport's X", "reconstructs shttps' Y"). Referencing the C++ **engine** (the production FFI callee) is fine — that is what the shell calls into.
+- Parity observations belong in the differential test, not in shell code comments.
+- Do not describe roadmap or in-flight history ("not yet wired", "previously", "now uses"); state what the code does today.
+
 ## Stack
 
 - C++23, Clang 15+ / GCC 13+
 - Build orchestrator: Bazel (single source of truth for CI; reproducible action graph)
 - Reproducible dev environment: Nix dev shells (`flake.nix` `devShells` only — no Nix-side build derivations)
-- HTTP framework: custom `shttps/` library (threading, SSL, connection pooling)
+- HTTP framework: Rust axum shell (`src/server-rs`, `src/cli-rs`) — the production server; the retained C++ `shttps/` library is oracle-only (see "Production surface vs oracle")
 - Image formats: libtiff, libpng, libjpeg, libwebp, Kakadu (JPEG 2000)
 - Scripting: Lua (routes, preflight checks, image manipulation)
 
