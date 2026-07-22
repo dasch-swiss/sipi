@@ -491,7 +491,12 @@ bazel-docker-extract-debug arch *FLAGS='':
     # `.debug` file. The tarball layout is `lib/debug/.build-id/<xx>/<yy>.debug`;
     # the filename is the build-id with the leading two hex chars removed
     # and `.debug` appended.
-    bazel build --config=release --stamp --platforms="$PLATFORM" --verbose_failures {{FLAGS}} //src:sipi_debug_layout
+    #
+    # `--remote_download_toplevel` overrides the .bazelrc BwoB default
+    # (`--remote_download_minimal`): the genrule runs on RBE, so without this
+    # the tarball stays in the CAS and the `tar -xf` below can't open it. A
+    # no-op in local dev (no remote configured).
+    bazel build --config=release --stamp --platforms="$PLATFORM" --verbose_failures --remote_download_toplevel {{FLAGS}} //src:sipi_debug_layout
 
     # Find the single `.debug` file inside the tar. The tarball is
     # deterministic by construction, so this glob always resolves

@@ -78,6 +78,9 @@ icc.zip
 # (rules_rust gen_rust_project). Holds machine-absolute Bazel paths — generated
 # per checkout, never committed.
 /rust-project.json
+# Debug-symbol file surfaced by `just bazel-docker-extract-debug <arch>` for
+# the Sentry upload; a large, ephemeral per-arch artifact, never committed.
+/sipi-*.debug
 
 # Git LFS hooks (auto-installed by `git lfs install`; configured via
 # `core.hooksPath = .githooks` in the dev shell). Per-developer state,
