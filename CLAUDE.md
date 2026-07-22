@@ -97,6 +97,8 @@ localdev config in one step.
 
 ## High-Level Architecture
 
+**Production surface vs oracle.** The **Rust axum shell** (`src/server-rs` + `src/cli-rs`, built by `just bazel-build-server`) is the production server. It drives the C++ **image engine** (`libsipi`) over the FFI seam in `src/server-rs/src/ffi.rs`. The retained C++ **server** (`src/shttps` + `src/cli/cli_app.cpp` server mode) is **oracle-only** — kept solely as the reference in the differential parity gate (`test/e2e/tests/differential.rs`), never deployed. In production Rust code, describe current Rust behavior on its own terms; do not frame it relative to the C++ server / oracle / transport (referencing the C++ *engine*, the FFI callee, is fine), and keep parity notes in the differential test, not in shell comments. See [`CONVENTIONS.md` § Production surface vs oracle](CONVENTIONS.md).
+
 ### Core Components
 
 | Component | Path | Purpose |

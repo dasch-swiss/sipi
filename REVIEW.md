@@ -2,6 +2,11 @@
 
 ## Always check
 
+### Production vs oracle
+- The Rust shell (`src/server-rs`, `src/cli-rs`) is the production server; the C++ server (`src/shttps`, `src/cli`) is oracle-only (differential parity, never deployed).
+- Flag new comments in Rust production code that frame it relative to the C++ server / oracle / transport ("matches the oracle", "the transport's X"). Comments should state current Rust behavior. Referencing the C++ **engine** (the FFI callee) is fine; parity notes belong in `test/e2e/tests/differential.rs`.
+- Flag roadmap / in-flight-history comments ("not yet wired", "previously", "now uses") — describe what the code does today.
+
 ### Security (input validation)
 - IIIF identifiers validated for path traversal (`..`, `%2e%2e`, encoded variants) before any filesystem operation
 - File paths resolved via `realpath()` and verified within `imgroot()` before `access()` or `open()`
