@@ -190,6 +190,17 @@ jobs:
         run: nix develop --command bash -c "just bazel-docker-extract-debug ${{ matrix.arch }} ${{ steps.rbe.outputs.flags }}"
       - name: Run Docker smoke tests
         run: nix develop --command bash -c "just bazel-test-smoke ${{ steps.rbe.outputs.flags }}"
+      # `oci_push` runs `jq` as an exec-platform tool. The arm64 image is
+      # cross-built on the x86_64 RBE worker (exec = x86_64), so the push
+      # script bundles the x86_64 `jq`, which can't execute on this arm64
+      # runner. Register binfmt_misc so the kernel runs that x86_64 tool
+      # under qemu emulation — the push is network-bound (crane uploads
+      # layers) with only trivial jq work, so the emulation cost is
+      # negligible and we keep the fast worker cross-build. amd64 runs the
+      # push natively and needs none of this.
+      - name: Enable x86_64 emulation for the cross-built push tooling
+        if: matrix.arch == 'arm64'
+        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
       - name: Push image to Docker Hub
         run: nix develop --command bash -c "just bazel-docker-push-${{ matrix.arch }} ${{ steps.rbe.outputs.flags }}"
 
