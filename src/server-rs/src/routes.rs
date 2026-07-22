@@ -11,8 +11,9 @@
 
 use std::ffi::CString;
 use std::io::Write;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::body::{to_bytes, Body};
 use axum::extract::{DefaultBodyLimit, FromRequest, Multipart, OriginalUri, Request, State};
@@ -20,7 +21,7 @@ use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{on, MethodFilter, MethodRouter};
 use tempfile::NamedTempFile;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, OwnedSemaphorePermit};
 
 use crate::ffi::{self, PreflightOutcome, SipiPermType, SipiResponse, SipiServeRequest};
 use crate::iiif::{self, ParsedRequest, RequestKind};
@@ -56,6 +57,14 @@ pub struct AppState {
     /// baseline: `permits - available_permits()` = engine work in flight).
     /// Fixed after startup; `Semaphore` exposes only the live available count.
     permits: usize,
+    /// How many requests may queue for a permit before the shell sheds
+    /// immediately (`--max-waiting`). A permit that frees admits the oldest
+    /// waiter; beyond this many waiters a new request 503s at once. `0` disables
+    /// queuing entirely (a full pool then sheds immediately).
+    max_waiting: usize,
+    /// How long a queued request waits for a permit before it is shed with 503
+    /// (`--queue-timeout`).
+    queue_timeout: Duration,
     /// Configured Lua routes (method/route/script), registered as axum routes by
     /// [`crate::app`]. Empty when the engine is uninstalled.
     pub routes: Vec<ffi::RouteEntry>,
@@ -78,16 +87,30 @@ impl AppState {
     /// `[[routes]]` table Rust-side and composed each script path); `None` for a
     /// Lua config, where the routes are read back from the engine via
     /// [`ffi::routes`] after `sipi_init` installed them.
+    ///
+    /// `nthreads`/`max_waiting`/`queue_timeout` are the
+    /// `--nthreads`/`--max-waiting`/`--queue-timeout` serve knobs (`None` → the
+    /// defaults below).
     #[must_use]
-    pub fn load(configured_routes: Option<Vec<ffi::RouteEntry>>) -> Self {
-        // Bound concurrent engine work to the configured worker count (the shttps
-        // thread-per-connection bound, reconstructed). 0/uninitialised → size from
-        // the host parallelism.
-        let permits = ffi::nthreads()
-            .ok()
+    pub fn load(
+        configured_routes: Option<Vec<ffi::RouteEntry>>,
+        nthreads: Option<u32>,
+        max_waiting: Option<u64>,
+        queue_timeout: Option<u32>,
+    ) -> Self {
+        // Bound concurrent engine work with a semaphore sized from
+        // `--nthreads`/`SIPI_NTHREADS`; unset (or 0 = auto) sizes it from the host
+        // parallelism.
+        let permits = nthreads
             .filter(|n| *n > 0)
             .map_or_else(default_pool_size, |n| n as usize);
         let pool = Arc::new(tokio::sync::Semaphore::new(permits));
+        // Bounded wait queue in front of the pool: how many requests may park for
+        // a permit and how long each waits before a 503. `max_waiting` defaults to
+        // 2×workers and `queue_timeout` to 5s; `max_waiting == 0` disables queuing
+        // (a full pool then sheds immediately).
+        let max_waiting = max_waiting.map_or_else(|| permits.saturating_mul(2), |n| n as usize);
+        let queue_timeout = Duration::from_secs(u64::from(queue_timeout.unwrap_or(5)));
         match (
             ffi::imgroot(false),
             ffi::imgroot(true),
@@ -104,6 +127,8 @@ impl AppState {
                 has_file_preflight: ffi::has_file_preflight().unwrap_or(false),
                 pool,
                 permits,
+                max_waiting,
+                queue_timeout,
                 // TOML config supplies routes directly; a Lua config has them
                 // read back from the engine via the seam.
                 routes: configured_routes.unwrap_or_else(|| ffi::routes().unwrap_or_default()),
@@ -122,6 +147,8 @@ impl AppState {
                 has_file_preflight: false,
                 pool,
                 permits,
+                max_waiting,
+                queue_timeout,
                 routes: Vec::new(),
                 max_post_size: 0,
                 docroot: String::new(),
@@ -141,8 +168,7 @@ impl AppState {
 
 /// Cumulative 503 load-shed count: incremented every time the engine pool is
 /// saturated and a request is shed ([`busy_response`]). Read by the OTel bridge
-/// ([`crate::metrics`]) as an observable counter — the Rust-shell analog of the
-/// C++ transport's `rejected_connections_total` (dead under the shell). A plain
+/// ([`crate::metrics`]) as the `sipi.pool.load_shed` observable counter. A plain
 /// atomic (not an OTel sync counter) so the shed path holds no meter handle and
 /// the count is correct regardless of whether metrics export is enabled.
 static LOAD_SHED_TOTAL: AtomicU64 = AtomicU64::new(0);
@@ -150,6 +176,83 @@ static LOAD_SHED_TOTAL: AtomicU64 = AtomicU64::new(0);
 /// The cumulative 503 load-shed count for the OTel observable counter.
 pub(crate) fn load_shed_total() -> u64 {
     LOAD_SHED_TOTAL.load(Ordering::Relaxed)
+}
+
+/// Requests currently parked in the wait queue for a pool permit. Read by the
+/// OTel bridge as the `sipi.pool.waiting` gauge; maintained by [`WaitGuard`].
+static WAITING: AtomicUsize = AtomicUsize::new(0);
+
+/// The live wait-queue depth for the OTel observable gauge.
+pub(crate) fn waiting() -> i64 {
+    // The count never exceeds `max_waiting` (a small config value), so the
+    // usize→i64 cast cannot overflow.
+    WAITING.load(Ordering::Relaxed) as i64
+}
+
+/// Cumulative 503s from requests that waited past `queue_timeout` (a subset of
+/// [`LOAD_SHED_TOTAL`], which counts every backpressure shed). Read by the OTel
+/// bridge as the `sipi.pool.queue_timeout` counter.
+static QUEUE_TIMEOUT_TOTAL: AtomicU64 = AtomicU64::new(0);
+
+/// The cumulative queue-timeout shed count for the OTel observable counter.
+pub(crate) fn queue_timeout_total() -> u64 {
+    QUEUE_TIMEOUT_TOTAL.load(Ordering::Relaxed)
+}
+
+/// RAII bump of the [`WAITING`] gauge: incremented while a request is parked for
+/// a permit, decremented on every exit (permit acquired, timeout, or panic).
+struct WaitGuard;
+impl WaitGuard {
+    fn new() -> Self {
+        WAITING.fetch_add(1, Ordering::Relaxed);
+        WaitGuard
+    }
+}
+impl Drop for WaitGuard {
+    fn drop(&mut self) {
+        WAITING.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+/// The admission decision for a request that needs the engine pool.
+enum Admission {
+    /// A permit was acquired (immediately or after waiting); held for the dispatch.
+    Admitted(OwnedSemaphorePermit),
+    /// The pool is full and the wait queue is at capacity (or disabled) — shed now.
+    Shed,
+    /// Parked for a permit but `queue_timeout` elapsed first.
+    TimedOut,
+}
+
+/// Admit a request to the engine pool, or shed it. Fast path: a free permit is
+/// taken without waiting (the common case). Otherwise, if the wait queue has room
+/// (`WAITING < max_waiting`), park for up to `queue_timeout` for a permit; a full
+/// (or disabled, `max_waiting == 0`) queue sheds immediately, and an elapsed wait
+/// sheds as [`Admission::TimedOut`].
+async fn acquire_or_shed(
+    pool: Arc<tokio::sync::Semaphore>,
+    max_waiting: usize,
+    queue_timeout: Duration,
+) -> Admission {
+    if let Ok(permit) = Arc::clone(&pool).try_acquire_owned() {
+        return Admission::Admitted(permit);
+    }
+    // A small overshoot from a racing check-then-park is harmless: the bound is
+    // a soft cap on queue depth, not an invariant.
+    if max_waiting == 0 || WAITING.load(Ordering::Relaxed) >= max_waiting {
+        return Admission::Shed;
+    }
+    let _guard = WaitGuard::new();
+    match tokio::time::timeout(queue_timeout, pool.acquire_owned()).await {
+        Ok(Ok(permit)) => Admission::Admitted(permit),
+        // The semaphore is never closed in normal operation; treat a closed pool
+        // (only reachable on teardown) as a shed rather than a panic.
+        Ok(Err(_)) => Admission::Shed,
+        Err(_) => {
+            QUEUE_TIMEOUT_TOTAL.fetch_add(1, Ordering::Relaxed);
+            Admission::TimedOut
+        }
+    }
 }
 
 /// Pool size when the configured `nthreads` is 0 (auto) or unreadable: the host
@@ -215,12 +318,19 @@ pub async fn iiif(
 
     // Everything else drives the blocking C++ engine (the per-call preflight VM,
     // realpath, decode/encode). Bound concurrency on the pool and run the work on
-    // a blocking thread so the async runtime stays responsive; a full pool sheds
-    // load with 503 + Retry-After. /health, /favicon, and OPTIONS are
-    // separate routes that never reach here.
-    let permit = match Arc::clone(&state.pool).try_acquire_owned() {
-        Ok(permit) => permit,
-        Err(_) => return busy_response(),
+    // a blocking thread so the async runtime stays responsive; when the pool is
+    // full the request queues for up to `queue_timeout`, then sheds with 503 +
+    // Retry-After. /health, /favicon, and OPTIONS are separate routes that never
+    // reach here.
+    let permit = match acquire_or_shed(
+        Arc::clone(&state.pool),
+        state.max_waiting,
+        state.queue_timeout,
+    )
+    .await
+    {
+        Admission::Admitted(permit) => permit,
+        Admission::Shed | Admission::TimedOut => return busy_response(),
     };
     // Shell-set headers on the streamed (success) response, captured before the
     // request is moved onto the blocking thread: the CORS Origin echo + credentials
@@ -832,10 +942,17 @@ async fn serve_lua_script(
     }
 
     // Bound concurrency on the engine pool, then run the (blocking) Lua VM off the
-    // async runtime. A full pool sheds load with 503 + Retry-After.
-    let permit = match Arc::clone(&state.pool).try_acquire_owned() {
-        Ok(permit) => permit,
-        Err(_) => return busy_response(),
+    // async runtime. A full pool queues for up to `queue_timeout`, then sheds with
+    // 503 + Retry-After.
+    let permit = match acquire_or_shed(
+        Arc::clone(&state.pool),
+        state.max_waiting,
+        state.queue_timeout,
+    )
+    .await
+    {
+        Admission::Admitted(permit) => permit,
+        Admission::Shed | Admission::TimedOut => return busy_response(),
     };
     let (outcome_tx, outcome_rx) = oneshot::channel::<Outcome>();
     let (body_tx, body_rx) = mpsc::channel::<axum::body::Bytes>(sink::BODY_CHANNEL_CAP);
@@ -1871,6 +1988,74 @@ mod tests {
         let resp = busy_response();
         assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(resp.headers().get(header::RETRY_AFTER).unwrap(), "1");
+    }
+
+    /// A current-thread runtime with the timer driver, so `acquire_or_shed`'s
+    /// `tokio::time::timeout` works without the `#[tokio::test]` macro.
+    fn timed_rt() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap()
+    }
+
+    #[test]
+    fn acquire_or_shed_admits_when_permit_free() {
+        timed_rt().block_on(async {
+            let pool = Arc::new(tokio::sync::Semaphore::new(2));
+            let admission = acquire_or_shed(Arc::clone(&pool), 4, Duration::from_secs(5)).await;
+            assert!(matches!(admission, Admission::Admitted(_)));
+        });
+    }
+
+    #[test]
+    fn acquire_or_shed_sheds_immediately_when_queue_disabled() {
+        timed_rt().block_on(async {
+            let pool = Arc::new(tokio::sync::Semaphore::new(1));
+            // Exhaust the pool and hold the permit for the whole test.
+            let _held = Arc::clone(&pool).try_acquire_owned().unwrap();
+            // max_waiting == 0 → no queue → shed without waiting.
+            let admission = acquire_or_shed(Arc::clone(&pool), 0, Duration::from_secs(5)).await;
+            assert!(matches!(admission, Admission::Shed));
+        });
+    }
+
+    #[test]
+    fn acquire_or_shed_times_out_when_pool_stays_full() {
+        timed_rt().block_on(async {
+            let pool = Arc::new(tokio::sync::Semaphore::new(1));
+            let _held = Arc::clone(&pool).try_acquire_owned().unwrap();
+            // A generous queue depth so a concurrent test's waiters cannot push us
+            // over max_waiting; the held permit never frees, so we must time out.
+            let admission =
+                acquire_or_shed(Arc::clone(&pool), 1000, Duration::from_millis(50)).await;
+            assert!(matches!(admission, Admission::TimedOut));
+        });
+    }
+
+    #[test]
+    fn acquire_or_shed_sheds_when_wait_queue_full() {
+        timed_rt().block_on(async {
+            let pool = Arc::new(tokio::sync::Semaphore::new(1));
+            let _held = Arc::clone(&pool).try_acquire_owned().unwrap(); // pool empty
+                                                                        // Park one waiter to fill the single queue slot (the permit never
+                                                                        // frees, so it stays parked holding its WaitGuard).
+            let bg = Arc::clone(&pool);
+            tokio::spawn(async move {
+                let _ = acquire_or_shed(bg, 1, Duration::from_secs(60)).await;
+            });
+            // Let the spawned task reach its park point (WaitGuard incremented).
+            for _ in 0..1000 {
+                if waiting() >= 1 {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+            assert!(waiting() >= 1, "background waiter did not park");
+            // Queue full (waiters ≥ max_waiting) → the next request sheds at once.
+            let admission = acquire_or_shed(Arc::clone(&pool), 1, Duration::from_millis(50)).await;
+            assert!(matches!(admission, Admission::Shed));
+        });
     }
 
     #[test]

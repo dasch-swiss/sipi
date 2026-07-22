@@ -308,9 +308,10 @@ fn lua_read_write() {
 }
 
 #[test]
-#[ignore = "engine-pool semaphore sheds load → 503 under concurrent bursts — an intentional divergence from the C++ oracle; revisit permit-release in future concurrency work (DEV-6659)"]
 fn concurrent_requests() {
-    // Python: test_concurrency — verify sipi handles parallel image requests
+    // Python: test_concurrency — verify sipi handles parallel image requests.
+    // The bounded wait queue (default server sets a generous SIPI_MAX_WAITING)
+    // now serves the burst instead of shedding it (was DEV-6659).
     let srv = server();
     let base_url = srv.base_url.clone();
 
@@ -1010,8 +1011,9 @@ fn thumbnail_convert_from_file() {
 }
 
 #[test]
-#[ignore = "engine-pool semaphore sheds load → 503 under concurrent bursts — an intentional divergence from the C++ oracle; revisit permit-release in future concurrency work (DEV-6659)"]
 fn lua_state_thread_isolation() {
+    // The bounded wait queue (default server sets a generous SIPI_MAX_WAITING)
+    // now serves the parallel burst instead of shedding it (was DEV-6659).
     let srv = server();
     let base_url = srv.base_url.clone();
 

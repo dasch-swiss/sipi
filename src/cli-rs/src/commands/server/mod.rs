@@ -18,10 +18,13 @@ use std::process::ExitCode;
 
 impl From<&ServerArgs> for ServerOverrides {
     fn from(args: &ServerArgs) -> Self {
-        // Engine-behaviour flags forward; transport flags the Rust shell owns
-        // (sslport/sslcert/sslkey, keepalive, max-waiting/queue-timeout,
-        // hostname, nthreads, logfile) parse for CLI parity but are never
-        // forwarded (the forward/parse-only split). The deprecated
+        // Engine-behaviour flags forward into this overrides bag; flags the shell
+        // does not act on (sslport/sslcert/sslkey, keepalive, hostname, logfile)
+        // are accepted but not forwarded. `--nthreads`, `--max-waiting`, and
+        // `--queue-timeout` are handled separately: Rust-owned serve knobs handed
+        // straight to `sipi::run` below (like `--drain-timeout`), not layered onto
+        // the engine config. The
+        // deprecated
         // cache aliases (--cachedir/--cachesize/--cachenfiles) collapse onto
         // their canonical field here — canonical wins if both are somehow set
         // (matches the C++ oracle's last-write-wins on the shared `optCache*`
@@ -88,8 +91,16 @@ pub fn run(server_argv: &[String]) -> ExitCode {
         }
     };
 
-    // `--drain-timeout` is a Rust-owned serve knob, not a config override, so it
-    // is handed straight to `sipi::run`.
+    // `--drain-timeout` and the concurrency knobs (`--nthreads`, `--max-waiting`,
+    // `--queue-timeout`) are Rust-owned serve knobs, not config overrides, so they
+    // are handed straight to `sipi::run` rather than layered onto the engine config.
     let overrides = ServerOverrides::from(&args);
-    sipi::run(args.config, overrides, args.drain_timeout)
+    sipi::run(
+        args.config,
+        overrides,
+        args.drain_timeout,
+        args.concurrency.nthreads,
+        args.concurrency.max_waiting,
+        args.concurrency.queue_timeout,
+    )
 }

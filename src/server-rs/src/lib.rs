@@ -54,14 +54,20 @@ static START: OnceLock<Instant> = OnceLock::new();
 /// flags and calls this; a downstream crate can call it directly.
 /// `config` is the bootstrap config file path — `.lua` (engine Lua VM) or `.toml`
 /// (parsed Rust-side); it selects the base config the `overrides` layer onto.
-/// `drain_timeout` is the Rust-owned graceful-drain
-/// deadline in seconds (default 30). Blocks until shutdown; returns the process
-/// exit code. Telemetry init lives in [`server_main`] (inside the runtime)
-/// because the OTLP batch exporter needs a tokio runtime.
+/// `drain_timeout` is the Rust-owned graceful-drain deadline in seconds
+/// (default 30). `nthreads`/`max_waiting`/`queue_timeout` are the Rust-owned
+/// engine-pool knobs (`--nthreads`/`--max-waiting`/`--queue-timeout`): the worker
+/// count that sizes the pool, how many requests may queue for a worker, and how
+/// long each waits, before the shell sheds with 503. Blocks until shutdown;
+/// returns the process exit code. Telemetry init lives in [`server_main`] (inside
+/// the runtime) because the OTLP batch exporter needs a tokio runtime.
 pub fn run(
     config: Option<String>,
     overrides: ServerOverrides,
     drain_timeout: Option<u64>,
+    nthreads: Option<u32>,
+    max_waiting: Option<u64>,
+    queue_timeout: Option<u32>,
 ) -> ExitCode {
     let mut builder = tokio::runtime::Builder::new_multi_thread();
     builder.enable_all();
@@ -87,7 +93,14 @@ pub fn run(
         }
     };
 
-    rt.block_on(server_main(config, overrides, drain_timeout))
+    rt.block_on(server_main(
+        config,
+        overrides,
+        drain_timeout,
+        nthreads,
+        max_waiting,
+        queue_timeout,
+    ))
 }
 
 /// The async server lifecycle inside the tokio runtime: install telemetry, prove
@@ -97,6 +110,9 @@ async fn server_main(
     config: Option<String>,
     overrides: ServerOverrides,
     drain_timeout: Option<u64>,
+    nthreads: Option<u32>,
+    max_waiting: Option<u64>,
+    queue_timeout: Option<u32>,
 ) -> ExitCode {
     // Stamp the process start for /health uptime before anything else.
     let _ = START.set(Instant::now());
@@ -190,6 +206,9 @@ async fn server_main(
         lua_config_port,
         drain_deadline,
         configured_routes,
+        nthreads,
+        max_waiting,
+        queue_timeout,
     )
     .await;
 
@@ -306,12 +325,20 @@ async fn serve(
     lua_config_port: Option<u16>,
     drain_timeout: Duration,
     configured_routes: Option<Vec<ffi::RouteEntry>>,
+    nthreads: Option<u32>,
+    max_waiting: Option<u64>,
+    queue_timeout: Option<u32>,
 ) -> std::io::Result<()> {
     // Read the cached engine config once (image root + prefix_as_path); a
     // not-ready state (no --config) leaves the serve routes returning 503.
     // `configured_routes` is `Some` for a TOML config (routes sourced Rust-side),
     // `None` for a Lua config (routes read back from the engine via the seam).
-    let state = Arc::new(routes::AppState::load(configured_routes));
+    let state = Arc::new(routes::AppState::load(
+        configured_routes,
+        nthreads,
+        max_waiting,
+        queue_timeout,
+    ));
     // Bind the OTel observable instruments now that the engine pool exists (the
     // concurrency gauges read its permits). A no-op when no meter provider was
     // installed (no OTLP endpoint), so it is safe to call unconditionally.
@@ -434,7 +461,7 @@ mod app_tests {
     // serve routes 503. The full serve path (real images via the FFI) is covered
     // by the manual smoke run and the reqwest e2e suite targeting //src/cli-rs:sipi.
     fn test_app() -> Router {
-        app(Arc::new(routes::AppState::load(None)))
+        app(Arc::new(routes::AppState::load(None, None, None, None)))
     }
 
     async fn status_of(uri: &str) -> StatusCode {

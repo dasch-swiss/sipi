@@ -468,9 +468,26 @@ impl SipiServer {
 
     /// Start with the default test config.
     /// Sipi auto-creates the cache directory if missing.
+    ///
+    /// Sizes the engine-pool knobs so the concurrency tests (10 parallel requests)
+    /// are served rather than shed, even under the ASan build's much slower image
+    /// decodes: enough workers to drain the burst (`SIPI_NTHREADS`), a deep queue
+    /// (`SIPI_MAX_WAITING`), and a wait long enough that a queued request is not
+    /// shed before a worker frees (`SIPI_QUEUE_TIMEOUT`, well above the drain time
+    /// and above the 30s client timeout that is the real hang guard). Also
+    /// exercises the concurrency env wiring end-to-end.
     pub fn start_default() -> Self {
         let test_data = test_data_dir();
-        Self::start("config/sipi.e2e-test-config.lua", &test_data)
+        Self::start_env(
+            "config/sipi.e2e-test-config.lua",
+            &test_data,
+            &[],
+            &[
+                ("SIPI_NTHREADS", "8"),
+                ("SIPI_MAX_WAITING", "256"),
+                ("SIPI_QUEUE_TIMEOUT", "60"),
+            ],
+        )
     }
 
     /// Get the OS PID of the server process.
