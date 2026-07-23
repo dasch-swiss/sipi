@@ -61,12 +61,12 @@ void icc_error_logger(cmsContext ContextID, cmsUInt32Number ErrorCode, const cha
 Icc::Icc(const unsigned char *icc_buf, int icc_len)
 {
   cmsSetLogErrorHandler(icc_error_logger);
-  if ((icc_profile = cmsOpenProfileFromMem(icc_buf, icc_len)) == nullptr) {
-    throw SipiError("cmsOpenProfileFromMem failed");
-  }
-  unsigned int len = cmsGetProfileInfoASCII(icc_profile, cmsInfoDescription, cmsNoLanguage, cmsNoCountry, nullptr, 0);
+  icc_profile.reset(cmsOpenProfileFromMem(icc_buf, icc_len));
+  if (icc_profile == nullptr) { throw SipiError("cmsOpenProfileFromMem failed"); }
+  unsigned int len =
+    cmsGetProfileInfoASCII(icc_profile.get(), cmsInfoDescription, cmsNoLanguage, cmsNoCountry, nullptr, 0);
   auto buf = shttps::make_unique<char[]>(len);
-  cmsGetProfileInfoASCII(icc_profile, cmsInfoDescription, cmsNoLanguage, cmsNoCountry, buf.get(), len);
+  cmsGetProfileInfoASCII(icc_profile.get(), cmsInfoDescription, cmsNoLanguage, cmsNoCountry, buf.get(), len);
   if (strcmp(buf.get(), "sRGB IEC61966-2.1") == 0) {
     profile_type = icc_sRGB;
   } else if (strncmp(buf.get(), "AdobeRGB", 8) == 0) {
@@ -81,16 +81,15 @@ Icc::Icc(const Icc &icc_p)
   cmsSetLogErrorHandler(icc_error_logger);
   if (icc_p.icc_profile != nullptr) {
     cmsUInt32Number len = 0;
-    cmsSaveProfileToMem(icc_p.icc_profile, nullptr, &len);
+    cmsSaveProfileToMem(icc_p.icc_profile.get(), nullptr, &len);
     auto buf = shttps::make_unique<char[]>(len);
-    cmsSaveProfileToMem(icc_p.icc_profile, buf.get(), &len);
-    icc_profile = cmsOpenProfileFromMem(buf.get(), len);
+    cmsSaveProfileToMem(icc_p.icc_profile.get(), buf.get(), &len);
+    icc_profile.reset(cmsOpenProfileFromMem(buf.get(), len));
 
     if (icc_profile == nullptr) { throw SipiError("cmsOpenProfileFromMem failed"); }
 
     profile_type = icc_p.profile_type;
   } else {
-    icc_profile = nullptr;
     profile_type = icc_undefined;
   }
 }
@@ -103,9 +102,8 @@ Icc::Icc(cmsHPROFILE &icc_profile_p)
     cmsSaveProfileToMem(icc_profile_p, nullptr, &len);
     auto buf = shttps::make_unique<char[]>(len);
     cmsSaveProfileToMem(icc_profile_p, buf.get(), &len);
-    if ((icc_profile = cmsOpenProfileFromMem(buf.get(), len)) == nullptr) {
-      throw SipiError("cmsOpenProfileFromMem failed");
-    }
+    icc_profile.reset(cmsOpenProfileFromMem(buf.get(), len));
+    if (icc_profile == nullptr) { throw SipiError("cmsOpenProfileFromMem failed"); }
   }
   profile_type = icc_unknown;
 }
@@ -115,19 +113,19 @@ Icc::Icc(PredefinedProfiles predef)
   cmsSetLogErrorHandler(icc_error_logger);
   switch (predef) {
   case icc_undefined: {
-    icc_profile = nullptr;
     profile_type = icc_undefined;
+    break;
   }
   case icc_unknown: {
     throw SipiError("Profile type \"icc_inknown\" not allowed");
   }
   case icc_sRGB: {
-    icc_profile = cmsCreate_sRGBProfile();
+    icc_profile.reset(cmsCreate_sRGBProfile());
     profile_type = icc_sRGB;
     break;
   }
   case icc_AdobeRGB: {
-    icc_profile = cmsOpenProfileFromMem(AdobeRGB1998_icc, AdobeRGB1998_icc_len);
+    icc_profile.reset(cmsOpenProfileFromMem(AdobeRGB1998_icc, AdobeRGB1998_icc_len));
     profile_type = icc_AdobeRGB;
     break;
   }
@@ -135,14 +133,14 @@ Icc::Icc(PredefinedProfiles predef)
     throw SipiError("Profile type \"icc_RGB\" uses other constructor");
   }
   case icc_CMYK_standard: {
-    icc_profile = cmsOpenProfileFromMem(USWebCoatedSWOP_icc, USWebCoatedSWOP_icc_len);
+    icc_profile.reset(cmsOpenProfileFromMem(USWebCoatedSWOP_icc, USWebCoatedSWOP_icc_len));
     profile_type = icc_CMYK_standard;
     break;
   }
   case icc_GRAY_D50: {
     cmsContext context = cmsCreateContext(nullptr, nullptr);
     cmsToneCurve *gamma_2_2 = cmsBuildGamma(context, 2.2);
-    icc_profile = cmsCreateGrayProfileTHR(context, cmsD50_xyY(), gamma_2_2);
+    icc_profile.reset(cmsCreateGrayProfileTHR(context, cmsD50_xyY(), gamma_2_2));
     cmsFreeToneCurve(gamma_2_2);
     cmsDeleteContext(context);
     profile_type = icc_GRAY_D50;
@@ -151,7 +149,7 @@ Icc::Icc(PredefinedProfiles predef)
   case icc_LUM_D65: {
     cmsContext context = cmsCreateContext(nullptr, nullptr);
     cmsToneCurve *gamma_2_4 = cmsBuildGamma(context, 2.4);
-    icc_profile = cmsCreateGrayProfileTHR(context, cmsD50_xyY(), gamma_2_4);
+    icc_profile.reset(cmsCreateGrayProfileTHR(context, cmsD50_xyY(), gamma_2_4));
     cmsFreeToneCurve(gamma_2_4);
     cmsDeleteContext(context);
     profile_type = icc_LUM_D65;
@@ -160,16 +158,14 @@ Icc::Icc(PredefinedProfiles predef)
   case icc_ROMM_GRAY: {
     cmsContext context = cmsCreateContext(nullptr, nullptr);
     cmsToneCurve *gamma_1_8 = cmsBuildGamma(context, 1.8);
-    icc_profile = cmsCreateGrayProfileTHR(context, cmsD50_xyY(), gamma_1_8);
+    icc_profile.reset(cmsCreateGrayProfileTHR(context, cmsD50_xyY(), gamma_1_8));
     cmsFreeToneCurve(gamma_1_8);
     cmsDeleteContext(context);
     profile_type = icc_ROMM_GRAY;
     break;
   }
   case icc_LAB: {
-    cmsContext context = cmsCreateContext(nullptr, nullptr);
-    icc_profile = cmsCreateLab4Profile(NULL);
-    cmsDeleteContext(context);
+    icc_profile.reset(cmsCreateLab4Profile(NULL));
     profile_type = icc_LAB;
     break;
   }
@@ -207,29 +203,18 @@ Icc::Icc(float white_point_p[], float primaries_p[], const unsigned short tfunc[
     tonecurve[2] = cmsBuildTabulatedToneCurve16(context, tfunc_len, tfunc + 2 * tfunc_len);
   }
 
-  icc_profile = cmsCreateRGBProfileTHR(context, &white_point, &primaries, tonecurve);
+  icc_profile.reset(cmsCreateRGBProfileTHR(context, &white_point, &primaries, tonecurve));
   profile_type = icc_RGB;
   cmsFreeToneCurveTriple(tonecurve);
-}
-
-Icc::~Icc()
-{
-  if (icc_profile != nullptr) { cmsCloseProfile(icc_profile); }
+  cmsDeleteContext(context);
 }
 
 Icc &Icc::operator=(const Icc &rhs)
 {
   if (this != &rhs) {
-    if (rhs.icc_profile != nullptr) {
-      unsigned int len = 0;
-      cmsSaveProfileToMem(rhs.icc_profile, nullptr, &len);
-      auto buf = shttps::make_unique<char[]>(len);
-      cmsSaveProfileToMem(rhs.icc_profile, buf.get(), &len);
-      if ((icc_profile = cmsOpenProfileFromMem(buf.get(), len)) == nullptr) {
-        throw SipiError("cmsOpenProfileFromMem failed");
-      }
-    }
-    profile_type = rhs.profile_type;
+    Icc tmp(rhs);
+    std::swap(icc_profile, tmp.icc_profile);
+    std::swap(profile_type, tmp.profile_type);
   }
   return *this;
 }
@@ -239,11 +224,11 @@ std::vector<unsigned char> Icc::iccBytes()
   if (icc_profile == nullptr) return {};
 
   cmsUInt32Number len = 0;
-  if (!cmsSaveProfileToMem(icc_profile, nullptr, &len))
+  if (!cmsSaveProfileToMem(icc_profile.get(), nullptr, &len))
     throw SipiError("cmsSaveProfileToMem failed");
 
   std::vector<unsigned char> data(len);
-  if (!cmsSaveProfileToMem(icc_profile, data.data(), &len))
+  if (!cmsSaveProfileToMem(icc_profile.get(), data.data(), &len))
     throw SipiError("cmsSaveProfileToMem failed");
 
   // ICC normalization for reproducibility — no-op unless SOURCE_DATE_EPOCH
@@ -252,13 +237,13 @@ std::vector<unsigned char> Icc::iccBytes()
   return data;
 }
 
-cmsHPROFILE Icc::getIccProfile() const { return icc_profile; }
+cmsHPROFILE Icc::getIccProfile() const { return icc_profile.get(); }
 
 unsigned int Icc::iccFormatter(int bps) const
 {
   cmsSetLogErrorHandler(icc_error_logger);
   cmsUInt32Number format = (bps == 16) ? BYTES_SH(2) : BYTES_SH(1);
-  cmsColorSpaceSignature csig = cmsGetColorSpace(icc_profile);
+  cmsColorSpaceSignature csig = cmsGetColorSpace(icc_profile.get());
 
   switch (csig) {
   case cmsSigLabData: {
@@ -373,34 +358,34 @@ unsigned int Icc::iccFormatter(int bps, int nc, PhotometricInterpretation photo)
 std::ostream &operator<<(std::ostream &outstr, Icc &rhs)
 {
   unsigned int len =
-    cmsGetProfileInfoASCII(rhs.icc_profile, cmsInfoDescription, cmsNoLanguage, cmsNoCountry, nullptr, 0);
+    cmsGetProfileInfoASCII(rhs.icc_profile.get(), cmsInfoDescription, cmsNoLanguage, cmsNoCountry, nullptr, 0);
   auto buf = shttps::make_unique<char[]>(len);
-  cmsGetProfileInfoASCII(rhs.icc_profile, cmsInfoDescription, cmsNoLanguage, cmsNoCountry, buf.get(), len);
+  cmsGetProfileInfoASCII(rhs.icc_profile.get(), cmsInfoDescription, cmsNoLanguage, cmsNoCountry, buf.get(), len);
   outstr << "ICC-Description   : " << buf.get() << std::endl;
 
-  len = cmsGetProfileInfoASCII(rhs.icc_profile, cmsInfoManufacturer, cmsNoLanguage, cmsNoCountry, nullptr, 0);
+  len = cmsGetProfileInfoASCII(rhs.icc_profile.get(), cmsInfoManufacturer, cmsNoLanguage, cmsNoCountry, nullptr, 0);
   buf = shttps::make_unique<char[]>(len);
-  cmsGetProfileInfoASCII(rhs.icc_profile, cmsInfoManufacturer, cmsNoLanguage, cmsNoCountry, buf.get(), len);
+  cmsGetProfileInfoASCII(rhs.icc_profile.get(), cmsInfoManufacturer, cmsNoLanguage, cmsNoCountry, buf.get(), len);
   outstr << "ICC-Manufacturer  : " << buf.get() << std::endl;
 
-  len = cmsGetProfileInfoASCII(rhs.icc_profile, cmsInfoModel, cmsNoLanguage, cmsNoCountry, nullptr, 0);
+  len = cmsGetProfileInfoASCII(rhs.icc_profile.get(), cmsInfoModel, cmsNoLanguage, cmsNoCountry, nullptr, 0);
   buf = shttps::make_unique<char[]>(len);
-  cmsGetProfileInfoASCII(rhs.icc_profile, cmsInfoModel, cmsNoLanguage, cmsNoCountry, buf.get(), len);
+  cmsGetProfileInfoASCII(rhs.icc_profile.get(), cmsInfoModel, cmsNoLanguage, cmsNoCountry, buf.get(), len);
   outstr << "ICC-Model         : " << buf.get() << std::endl;
 
-  len = cmsGetProfileInfoASCII(rhs.icc_profile, cmsInfoCopyright, cmsNoLanguage, cmsNoCountry, nullptr, 0);
+  len = cmsGetProfileInfoASCII(rhs.icc_profile.get(), cmsInfoCopyright, cmsNoLanguage, cmsNoCountry, nullptr, 0);
   buf = shttps::make_unique<char[]>(len);
-  cmsGetProfileInfoASCII(rhs.icc_profile, cmsInfoCopyright, cmsNoLanguage, cmsNoCountry, buf.get(), len);
+  cmsGetProfileInfoASCII(rhs.icc_profile.get(), cmsInfoCopyright, cmsNoLanguage, cmsNoCountry, buf.get(), len);
   outstr << "ICC-Copyright     : " << buf.get() << std::endl;
 
   struct tm datetime
   {
   };
-  if (cmsGetHeaderCreationDateTime(rhs.icc_profile, &datetime)) {
+  if (cmsGetHeaderCreationDateTime(rhs.icc_profile.get(), &datetime)) {
     outstr << "ICC-Date          : " << asctime(&datetime);
   }
 
-  cmsProfileClassSignature sig = cmsGetDeviceClass(rhs.icc_profile);
+  cmsProfileClassSignature sig = cmsGetDeviceClass(rhs.icc_profile.get());
   outstr << "ICC profile class : ";
   switch (sig) {
   case 0x73636E72:
@@ -429,16 +414,16 @@ std::ostream &operator<<(std::ostream &outstr, Icc &rhs)
   }
   outstr << '\n';
 
-  cmsFloat64Number version = cmsGetProfileVersion(rhs.icc_profile);
+  cmsFloat64Number version = cmsGetProfileVersion(rhs.icc_profile.get());
   outstr << "ICC Version       : " << version << '\n';
 
   outstr << "ICC Matrix shaper : ";
-  if (cmsIsMatrixShaper(rhs.icc_profile)) {
+  if (cmsIsMatrixShaper(rhs.icc_profile.get())) {
     outstr << "yes" << '\n';
   } else {
     outstr << "no" << '\n';
   }
-  cmsColorSpaceSignature csig = cmsGetPCS(rhs.icc_profile);
+  cmsColorSpaceSignature csig = cmsGetPCS(rhs.icc_profile.get());
   outstr << "ICC color space sigature : ";
   switch (csig) {
   case 0x58595A20:
@@ -565,7 +550,7 @@ std::ostream &operator<<(std::ostream &outstr, Icc &rhs)
   }
   outstr << '\n';
 
-  cmsUInt32Number intent = cmsGetHeaderRenderingIntent(rhs.icc_profile);
+  cmsUInt32Number intent = cmsGetHeaderRenderingIntent(rhs.icc_profile.get());
   outstr << "ICC rendering intent : ";
   switch (intent) {
   case 0:

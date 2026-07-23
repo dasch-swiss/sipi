@@ -38,8 +38,7 @@ namespace Sipi {
 class Exif
 {
 private:
-  unsigned char *binaryExif;
-  unsigned int binary_size;
+  std::vector<unsigned char> binaryExif;//!< Cached binary EXIF blob (kept for re-encoding)
   Exiv2::ExifData exifData;//!< Private member variable holding the exiv2 EXIF data
   Exiv2::ByteOrder byteorder;//!< Private member holding the byteorder of the EXIF data
 
@@ -81,9 +80,6 @@ public:
    * \Param[in] len Length of the EXIF buffer
    */
   Exif(const unsigned char *exif, unsigned int len);
-
-
-  ~Exif();
 
   /*!
    * Returns the bytes of the EXIF data as a vector.
