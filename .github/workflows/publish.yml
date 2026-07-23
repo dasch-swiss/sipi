@@ -194,7 +194,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - uses: imjasonh/setup-crane@v0.4
+      - uses: imjasonh/setup-crane@v0.7
       - uses: extractions/setup-just@v3
       # `bazel-docker-publish-manifest` shells out to `crane index append`;
       # no bazel invocation, so no RBE/Bazel setup is needed here.
