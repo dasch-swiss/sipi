@@ -53,46 +53,15 @@ jobs:
         with:
           fetch-depth: 0
           lfs: false
-      - name: restore LFS cache
-        uses: actions/cache@v4
+      - name: Set up CI environment
+        id: setup
+        uses: ./.github/actions/ci-setup
         with:
-          path: .git/lfs
-          key: lfs-${{ hashFiles('.gitattributes') }}
-          restore-keys: lfs-
-      - name: Pull LFS objects
-        run: |
-          git lfs install
-          git lfs fetch --all
-          git lfs checkout
-      - uses: DeterminateSystems/determinate-nix-action@v3
-        with:
-          extra-conf: |
-            extra-experimental-features = configurable-impure-env
-      - uses: DeterminateSystems/magic-nix-cache-action@v13
-        with:
-          use-flakehub: "false"  # GHA cache backend only; FlakeHub requires a paid plan we're not on.
-
-      # Persist Bazel's repository cache (--repository_cache in .bazelrc) across
-      # runs: external archives + bzlmod registry files download from upstream
-      # only when MODULE.bazel.lock changes.
-      - name: Restore Bazel repository cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/bazel-repo
-          key: bazel-repo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('MODULE.bazel.lock') }}
-          restore-keys: bazel-repo-${{ runner.os }}-${{ runner.arch }}-
-      # Remote cache + executor via the bazel-rbe composite action (runner +
-      # cache endpoints, mTLS — see ci.yml for the topology). amd64-only, so
-      # the action's default target-platform (//platforms:linux_x86_64) needs
-      # no override.
-      - name: Set up Remote Build Execution (mTLS + flags)
-        id: rbe
-        uses: ./.github/actions/bazel-rbe
-        with:
-          runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
-          ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
-          client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
-          client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
+          lfs: "true"
+          rbe-runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
+          rbe-ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
+          rbe-client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
+          rbe-client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
 
       - name: Find last successful fuzz run
         id: last-run
@@ -116,12 +85,13 @@ jobs:
       - name: Build fuzz target
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        # `nix develop --command` activates the dev shell so bazelisk + `gh` (the
-        # kakadu repository_rule) are on PATH. `--remote_download_toplevel`
-        # overrides the .bazelrc BwoB default so the fuzz binary is materialised
-        # locally — the separate `bazel run` in "Run fuzzer" (which carries no
-        # remote flags) then finds it instead of rebuilding on the runner.
-        run: nix develop --command bash -c "just bazel-build-fuzz ${{ steps.rbe.outputs.flags }} --remote_download_toplevel"
+        # ci-setup provides bazelisk + just on PATH; `gh` (the kakadu
+        # repository_rule) is preinstalled on GitHub-hosted runners.
+        # `--remote_download_toplevel` overrides the .bazelrc BwoB default so
+        # the fuzz binary is materialised locally — the separate `bazel run`
+        # in "Run fuzzer" (which carries no remote flags) then finds it
+        # instead of rebuilding on the runner.
+        run: just bazel-build-fuzz ${{ steps.setup.outputs.flags }} --remote_download_toplevel
 
       - name: Prepare live corpus (merge previous-run findings)
         run: |
@@ -142,12 +112,11 @@ jobs:
           if [[ ! "$FUZZ_DURATION" =~ ^[0-9]+$ ]]; then echo "Invalid duration: $FUZZ_DURATION"; exit 1; fi
           # `bazel run` re-uses the disk cache populated by the build step
           # so this invocation only forwards args; no rebuild expected.
-          # `nix develop --command` activates the dev shell — same reason
-          # the build step needs it. cwd inside the dev shell is the repo
-          # root, which `bazel run` resolves to `$BUILD_WORKSPACE_DIRECTORY`,
-          # so `fuzz-corpus-live` and `fuzz/handlers/corpus` are workspace-
-          # relative.
-          nix develop --command bash -c "just bazel-run-fuzz fuzz-corpus-live $FUZZ_DURATION fuzz/handlers/corpus" \
+          # `bazel run` resolves cwd to `$BUILD_WORKSPACE_DIRECTORY`, so
+          # corpus paths and crash-file globs (`crash-*` / `oom-*` /
+          # `timeout-*`) match the workspace-relative paths the
+          # artifact-collection steps below expect.
+          just bazel-run-fuzz fuzz-corpus-live $FUZZ_DURATION fuzz/handlers/corpus \
             2>&1 | tee fuzz-output.log
           echo "Corpus now has $(ls fuzz-corpus-live | wc -l) inputs"
 

@@ -47,7 +47,7 @@ Three shells are exposed:
 |---|---|---|
 | `default` | `llvmPackages_19.libcxxStdenv` | Clang + libc++ for non-Bazel tooling (clang-tidy, ad-hoc shell compiles). The Bazel cc actions run under the hermetic LLVM 22.1.7 toolchain, not this stdenv. 99% of work happens here. |
 | `gcc` | `pkgs.gcc14Stdenv` | Diagnostic escape hatch when the LLVM toolchain produces a confusing error. Not used by CI. |
-| `llvm-tools` | `llvmPackages_19.libcxxStdenv` | `default` + `llvmPackages_19.llvm` (host `llvm-cov`, `llvm-profdata`, `llvm-symbolizer`). Used by `coverage.yml` (coverage) and `sanitizer.yml` (ASan/LSan symbolization); local devs running `just bazel-coverage` or sanitizer e2e should enter this shell. |
+| `llvm-tools` | `llvmPackages_19.libcxxStdenv` | `default` + `llvmPackages_19.llvm` (host `llvm-cov`, `llvm-profdata`, `llvm-symbolizer`). For LOCAL coverage/sanitizer runs only — local devs running `just bazel-coverage` or sanitizer e2e should enter this shell. CI resolves the same tools hermetically from the Bazel toolchain (`//bazel:llvm-*` aliases), not from this shell. |
 
 ```bash
 nix develop .#gcc              # GCC + libstdc++ environment

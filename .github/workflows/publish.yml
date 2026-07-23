@@ -35,65 +35,33 @@ jobs:
         with:
           fetch-depth: 0
           lfs: false
-      - name: restore LFS cache
-        uses: actions/cache@v4
+      - name: Set up CI environment
+        id: setup
+        uses: ./.github/actions/ci-setup
         with:
-          path: .git/lfs
-          key: lfs-${{ hashFiles('.gitattributes') }}
-          restore-keys: lfs-
-      - name: pull LFS objects
-        run: |
-          git lfs install
-          git lfs fetch --all
-          git lfs checkout
-      - uses: DeterminateSystems/determinate-nix-action@v3
-        with:
-          extra-conf: |
-            extra-experimental-features = configurable-impure-env
-      - uses: DeterminateSystems/magic-nix-cache-action@v13
-        with:
-          use-flakehub: "false"  # GHA cache backend only; FlakeHub requires a paid plan we're not on.
+          lfs: "true"
+          target-platform: ${{ matrix.bazel-platform }}
+          rbe-runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
+          rbe-ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
+          rbe-client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
+          rbe-client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
       - uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      # Persist Bazel's repository cache (--repository_cache in .bazelrc) across
-      # runs: external archives + bzlmod registry files download from upstream
-      # only when MODULE.bazel.lock changes.
-      - name: Restore Bazel repository cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/bazel-repo
-          key: bazel-repo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('MODULE.bazel.lock') }}
-          restore-keys: bazel-repo-${{ runner.os }}-${{ runner.arch }}-
-      # Remote cache + executor via the bazel-rbe composite action (runner +
-      # cache endpoints, mTLS). Per-arch target-platform so each leg
-      # cross-compiles its release image on the x86_64 worker. publish.yml only
-      # runs on `v*` tag pushes — no fork-PR gating needed.
-      - name: Set up Remote Build Execution (mTLS + flags)
-        id: rbe
-        uses: ./.github/actions/bazel-rbe
-        with:
-          runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
-          ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
-          client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
-          client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
-          target-platform: ${{ matrix.bazel-platform }}
       - name: Build Docker image (Bazel rules_oci)
-        # See ci.yml for the `nix develop --command` rationale (`gh` on PATH
-        # for the kakadu fetch).
-        run: nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} ${{ steps.rbe.outputs.flags }}"
+        run: just bazel-docker-build-${{ matrix.arch }} ${{ steps.setup.outputs.flags }}
       # Exercise the release-only debug-symbol extraction in the validation
       # stage so it can't silently break at publish time (as it did for
       # v6.0.0). The artifact is discarded here — publish-docker rebuilds it
       # for the actual Sentry upload.
       - name: Extract debug symbols (validation)
-        run: nix develop --command bash -c "just bazel-docker-extract-debug ${{ matrix.arch }} ${{ steps.rbe.outputs.flags }}"
+        run: just bazel-docker-extract-debug ${{ matrix.arch }} ${{ steps.setup.outputs.flags }}
       # `:docker_smoke` rust_test loads the OCI tarball produced by
       # `//src:image_load` and runs the smoke suite against it. The Docker
       # image already loaded by the build step above is left alone.
       - name: Run Docker smoke tests
-        run: nix develop --command bash -c "just bazel-test-smoke ${{ steps.rbe.outputs.flags }}"
+        run: just bazel-test-smoke ${{ steps.setup.outputs.flags }}
 
   release-gate:
     runs-on: ubuntu-latest
@@ -133,63 +101,33 @@ jobs:
         with:
           fetch-depth: 0
           lfs: false
-      - name: restore LFS cache
-        uses: actions/cache@v4
+      # This job doesn't run the smoke test and build + extract-debug + push
+      # read no LFS test images, so no LFS pull is needed here.
+      - name: Set up CI environment
+        id: setup
+        uses: ./.github/actions/ci-setup
         with:
-          path: .git/lfs
-          key: lfs-${{ hashFiles('.gitattributes') }}
-          restore-keys: lfs-
-      - name: pull LFS objects
-        run: |
-          git lfs install
-          git lfs fetch --all
-          git lfs checkout
-      - uses: DeterminateSystems/determinate-nix-action@v3
-        with:
-          extra-conf: |
-            extra-experimental-features = configurable-impure-env
-      - uses: DeterminateSystems/magic-nix-cache-action@v13
-        with:
-          use-flakehub: "false"  # GHA cache backend only; FlakeHub requires a paid plan we're not on.
+          lfs: "false"
+          target-platform: ${{ matrix.bazel-platform }}
+          rbe-runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
+          rbe-ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
+          rbe-client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
+          rbe-client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
       - uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-
-      # Persist Bazel's repository cache (--repository_cache in .bazelrc) across
-      # runs: external archives + bzlmod registry files download from upstream
-      # only when MODULE.bazel.lock changes.
-      - name: Restore Bazel repository cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/bazel-repo
-          key: bazel-repo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('MODULE.bazel.lock') }}
-          restore-keys: bazel-repo-${{ runner.os }}-${{ runner.arch }}-
-      # Remote cache + executor via the bazel-rbe composite action. The
-      # validate-docker job warmed the cache; this job should hit it for
-      # ~100% of compile actions when the source tree is unchanged between
-      # the two jobs (release-please tag push).
-      - name: Set up Remote Build Execution (mTLS + flags)
-        id: rbe
-        uses: ./.github/actions/bazel-rbe
-        with:
-          runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
-          ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
-          client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
-          client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
-          target-platform: ${{ matrix.bazel-platform }}
       - name: Build Docker image (Bazel rules_oci) + sipi-debug
         # Binary version + OCI image tag come from version.txt, which
         # release-please updates before cutting the tag — no extra
         # plumbing required to keep them in sync with `${github.ref_name}`.
-        # See ci.yml for the `nix develop --command` rationale.
-        run: nix develop --command bash -c "just bazel-docker-build-${{ matrix.arch }} ${{ steps.rbe.outputs.flags }}"
+        run: just bazel-docker-build-${{ matrix.arch }} ${{ steps.setup.outputs.flags }}
       - name: Extract debug symbols for Sentry upload
         # The genrule depends on `:sipi`, already built and in the
         # remote cache from the build step just above.
-        run: nix develop --command bash -c "just bazel-docker-extract-debug ${{ matrix.arch }} ${{ steps.rbe.outputs.flags }}"
-      - name: Run Docker smoke tests
-        run: nix develop --command bash -c "just bazel-test-smoke ${{ steps.rbe.outputs.flags }}"
+        run: just bazel-docker-extract-debug ${{ matrix.arch }} ${{ steps.setup.outputs.flags }}
+      # The identical commit was already smoke-tested in validate-docker
+      # minutes earlier — no need to repeat it here.
       # `oci_push` runs `jq` as an exec-platform tool. The arm64 image is
       # cross-built on the x86_64 RBE worker (exec = x86_64), so the push
       # script bundles the x86_64 `jq`, which can't execute on this arm64
@@ -202,7 +140,7 @@ jobs:
         if: matrix.arch == 'arm64'
         run: sudo apt-get update && sudo apt-get install -y qemu-user-static
       - name: Push image to Docker Hub
-        run: nix develop --command bash -c "just bazel-docker-push-${{ matrix.arch }} ${{ steps.rbe.outputs.flags }}"
+        run: just bazel-docker-push-${{ matrix.arch }} ${{ steps.setup.outputs.flags }}
 
       - name: Docker Scout — record production
         uses: docker/scout-action@v1
@@ -256,17 +194,15 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - uses: DeterminateSystems/determinate-nix-action@v3
-      - uses: DeterminateSystems/magic-nix-cache-action@v13
-        with:
-          use-flakehub: "false"  # GHA cache backend only; FlakeHub requires a paid plan we're not on.
-      # `bazel-docker-publish-manifest` shells out to `crane index append`,
-      # which only exists inside the dev shell (go-containerregistry).
-      - run: nix develop --command bash -c "just bazel-docker-publish-manifest"
+      - uses: imjasonh/setup-crane@v0.4
+      - uses: extractions/setup-just@v3
+      # `bazel-docker-publish-manifest` shells out to `crane index append`;
+      # no bazel invocation, so no RBE/Bazel setup is needed here.
+      - run: just bazel-docker-publish-manifest
 
   sentry:
     runs-on: ubuntu-latest
-    needs: [manifest]
+    needs: [publish-docker]
     steps:
       - uses: actions/checkout@v6
         with:

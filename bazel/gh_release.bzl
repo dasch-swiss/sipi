@@ -14,7 +14,7 @@ def _gh_release_archive_impl(ctx):
         fail(
             "gh_release_archive: `gh` not found on PATH.\n" +
             "  - Local dev: `gh` is declared in `flake.nix` devShells.\n" +
-            "  - CI: ensure the Bazel job runs inside `nix develop`.",
+            "  - CI: `gh` is preinstalled on GitHub-hosted runners.",
         )
 
     token = ctx.os.environ.get("GH_TOKEN") or ctx.os.environ.get("GITHUB_TOKEN")

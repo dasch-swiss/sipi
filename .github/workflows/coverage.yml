@@ -11,13 +11,10 @@
 # If we ever want per-PR coverage signal back, scope it to PRs that
 # touch `src/` in a separate workflow.
 #
-# Uses the `.#llvm-tools` dev shell, which extends the default shell
-# with `llvmPackages_19.llvm`. Bazel's `tools/test/collect_cc_coverage.sh`
-# hard-requires `COVERAGE_GCOV_PATH` (llvm-profdata) and `LLVM_COV`
-# (llvm-cov) env vars on every test action; the justfile recipe
-# resolves them via `$(command -v llvm-{cov,profdata})`. The default
-# shell deliberately omits these — keeping the everyday `nix develop`
-# closure ~200 MB lighter.
+# `bazel-coverage`'s `llvm-profdata`/`llvm-cov` needs (COVERAGE_GCOV_PATH,
+# LLVM_COV) resolve from the hermetic-toolchain aliases
+# `//bazel:llvm-profdata`/`//bazel:llvm-cov` (see justfile ~lines 84-105) —
+# no host LLVM install required.
 
 name: coverage
 
@@ -45,28 +42,16 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          lfs: false  # don't auto-pull LFS — use cache below
-      - name: restore LFS cache
-        uses: actions/cache@v4
+          lfs: false
+      - name: Set up CI environment
+        id: setup
+        uses: ./.github/actions/ci-setup
         with:
-          path: .git/lfs
-          key: lfs-${{ hashFiles('.gitattributes') }}
-          restore-keys: lfs-
-      - name: pull LFS objects
-        run: |
-          git lfs install
-          git lfs fetch --all
-          git lfs checkout
-      - uses: DeterminateSystems/determinate-nix-action@v3
-        with:
-          # The `gh_release_archive` repository_rule reads GH_TOKEN from the
-          # environment via `gh release download`; configurable-impure-env
-          # keeps Nix's daemon from sanitising it out of `nix develop`.
-          extra-conf: |
-            extra-experimental-features = configurable-impure-env
-      - uses: DeterminateSystems/magic-nix-cache-action@v13
-        with:
-          use-flakehub: "false"  # GHA cache backend only; FlakeHub requires a paid plan we're not on.
+          lfs: "true"
+          rbe-runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
+          rbe-ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
+          rbe-client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
+          rbe-client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
       # Authenticated Docker Hub pulls (rate-limit avoidance) for any
       # base image the build may need. Skipped if secrets missing
       # (e.g. manually dispatched fork).
@@ -77,35 +62,11 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      # Persist Bazel's repository cache (--repository_cache in .bazelrc) across
-      # runs: external archives + bzlmod registry files download from upstream
-      # only when MODULE.bazel.lock changes.
-      - name: Restore Bazel repository cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/bazel-repo
-          key: bazel-repo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('MODULE.bazel.lock') }}
-          restore-keys: bazel-repo-${{ runner.os }}-${{ runner.arch }}-
-      # Remote cache + executor via the bazel-rbe composite action (runner +
-      # cache endpoints, mTLS — see ci.yml for the topology). amd64-only, so
-      # the action's default target-platform (//platforms:linux_x86_64) needs
-      # no override.
-      - name: Set up Remote Build Execution (mTLS + flags)
-        id: rbe
-        uses: ./.github/actions/bazel-rbe
-        with:
-          runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
-          ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
-          client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
-          client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
 
-      # `nix develop .#llvm-tools` is the meaningful difference vs ci.yml:
-      # adds llvm-cov / llvm-profdata to PATH so `just bazel-coverage`'s
-      # `$(command -v llvm-{cov,profdata})` lookups resolve.
       - name: Build + run all tests under coverage
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: nix develop .#llvm-tools --command bash -c "just bazel-coverage ${{ steps.rbe.outputs.flags }}"
+        run: just bazel-coverage ${{ steps.setup.outputs.flags }}
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6.0.1

@@ -594,7 +594,7 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 | 4-bit palette PNG upload | :white_check_mark: | `upload.rs` | `upload_4bit_palette_png` |
 | Cache API routes (`/api/cache`) | N/A — removed | — | route unregistered, Lua `cache` table bindings absent from `src/` |
 | Favicon endpoint | :white_check_mark: | `differential.rs::favicon` | |
-| Memory safety (ASan/LSan) | :white_check_mark: | `sanitizer.yml` CI | e2e suite against an ASan+UBSan-instrumented binary; unit-test sanitizer coverage still pending (see Cross-Cutting section below) |
+| Memory safety (ASan/LSan) | :white_check_mark: | `ci.yml`'s `sanitizer-unit`/`sanitizer-e2e` jobs | unit + e2e suites, each against an ASan+UBSan-instrumented binary (see Cross-Cutting section below) |
 | Thread safety (TSan) | :x: GAP | — | Untested for data races; future optional nightly variant |
 | Performance regression detection | :white_check_mark: | `latency.rs` | smoke thresholds only (info.json / cache-miss / cache-hit); load-baseline tier intentionally deferred to staging (see Cross-Cutting section) |
 | Corrupt/truncated image handling | :white_check_mark: | `iiif_compliance.rs::corrupt_jpeg_handling`, `corrupt_png_handling`, `corrupt_image_handling` (truncated JP2) | JP2 decode converts Kakadu's thrown error into a `SipiImageError` (like JPEG/PNG); the server returns a clean error and stays up (DEV-6731) |
@@ -687,7 +687,7 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 
 Memory leaks and undefined behavior are not a separate pyramid layer but a **build variant** that runs existing tests with compiler instrumentation. This is critical for sipi as a long-running C++ server where leaks accumulate.
 
-**Current state:** ASan+UBSan infrastructure is in place — Bazel `--config=asan` and `--config=ubsan` blocks in `.bazelrc`, `just bazel-build-sanitized` (`bazel build --config=asan --config=ubsan //src/cli:sipi`), and a `sanitizer.yml` CI workflow that exercises the e2e suite against the resulting binary. Known findings to triage on first run:
+**Current state:** ASan+UBSan infrastructure is in place — Bazel `--config=asan` and `--config=ubsan` blocks in `.bazelrc`, `just bazel-build-sanitized` (`bazel build --config=asan --config=ubsan //src/cli:sipi`), and two path-gated jobs in `ci.yml` (`sanitizer-unit`, `sanitizer-e2e`) that exercise the unit and e2e suites respectively against the resulting binary. Known findings to triage on first run:
 
 - **`SipiFilenameHash::operator=` memory leak** — `operator=` allocates `new vector<char>` without deleting the old `hash` pointer. Confirmed by code inspection. Fix: add `delete hash;` before the new allocation, or switch to `std::unique_ptr`.
 - **Potential: `SipiFilenameHash` copy constructor** — also `new`s without freeing, but only leaks if the destination object was previously constructed with a different hash (doesn't happen via typical usage).
@@ -707,11 +707,10 @@ Memory leaks and undefined behavior are not a separate pyramid layer but a **bui
 |-----------|--------|---------|
 | `--config=asan` / `--config=ubsan` in `.bazelrc` | Done | `-fsanitize=address` / `-fsanitize=undefined` plus `-fno-omit-frame-pointer`, `-fno-optimize-sibling-calls`, `--strip=never`, `--compilation_mode=dbg` (DWARF inline so `.lsan_suppressions.txt` symbol-name suppressions match) |
 | `just bazel-build-sanitized` | Done | Wraps `bazel build --config=asan --config=ubsan //src/cli:sipi` |
-| PR CI (`sanitizer.yml`) | Done | Bazel-built binary at `bazel-bin/src/cli/sipi`, e2e suite under `just nix-test-e2e` with ASan log capture; `.lsan_suppressions.txt` consumed by LSan via `LSAN_OPTIONS` |
-| Unit-test sanitizer coverage in CI | Returns when Bazel `cc_test` covers unit tests in CI | The Bazel-built binary covers e2e under sanitizers today; unit-test sanitizer coverage follows once `cc_test` runs in the sanitizer workflow. |
+| PR CI (`ci.yml`'s `sanitizer-unit`/`sanitizer-e2e` jobs) | Done | Bazel-built binary at `bazel-bin/src/cli/sipi`; `sanitizer-unit` runs `just bazel-test-unit`, `sanitizer-e2e` runs `just bazel-test-e2e`, both `--config=asan --config=ubsan`, in parallel; `.lsan_suppressions.txt` consumed by LSan via `LSAN_OPTIONS` |
 | TSan variant | Future | Optional nightly, separate from ASan (can't combine) |
 
-**Strategy:** PR CI runs the e2e suite against an ASan+UBSan-instrumented binary. Unit-test coverage under sanitizers will return when the sanitizer workflow runs Bazel `cc_test` directly. TSan remains a future option.
+**Strategy:** PR CI runs both the unit and e2e suites against an ASan+UBSan-instrumented binary, as two parallel jobs gated on native/build-relevant path changes. TSan remains a future option.
 
 ## Cross-Cutting: Performance Regression Detection
 
