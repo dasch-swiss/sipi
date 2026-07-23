@@ -10,6 +10,7 @@
 #define __sipi_io_tiff_h
 
 #include <string>
+#include <vector>
 
 #include "tiff.h"
 #include "tiffio.h"
@@ -19,7 +20,7 @@
 
 namespace Sipi {
 
-unsigned char *read_watermark(const std::string &wmfile, int &nx, int &ny, int &nc);
+std::vector<unsigned char> read_watermark(const std::string &wmfile, int &nx, int &ny, int &nc);
 
 /*! Class which implements the TIFF-reader/writer */
 class SipiIOTiff : public SipiIO
@@ -66,9 +67,9 @@ private:
    *
    * \param[in] img Reference to SipiImage instance
    * \param[out] sll Scan line lengt
-   * \returns Buffer of 1-bit data (padded to bytes). NOTE: This buffer has to be deleted by the caller!
+   * \returns Buffer of 1-bit data (padded to bytes)
    */
-  unsigned char *cvrt8BitTo1bit(const SipiImage &img, unsigned int &sll);
+  std::vector<unsigned char> cvrt8BitTo1bit(const SipiImage &img, unsigned int &sll);
 
 public:
   virtual ~SipiIOTiff(){};

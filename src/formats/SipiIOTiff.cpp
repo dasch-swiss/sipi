@@ -15,6 +15,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <vector>
 
 #include <cerrno>
 
@@ -194,10 +195,9 @@ static void memTiffUnmapProc(thandle_t handle, tdata_t base, toff_t size) {}
 
 static void memTiffFree(MEMTIFF *memtif)
 {
-  if (memtif->data != nullptr) free(memtif->data);
-  memtif->data = nullptr;
-  if (memtif != nullptr) free(memtif);
-  memtif = nullptr;
+  if (memtif == nullptr) { return; }
+  free(memtif->data);
+  free(memtif);
 }
 /*===========================================================================*/
 }
@@ -327,16 +327,15 @@ static int exiftag_list_len = sizeof(exiftag_list) / sizeof(ExifTag_type);
 
 namespace Sipi {
 
-unsigned char *read_watermark(const std::string &wmfile, int &nx, int &ny, int &nc)
+std::vector<unsigned char> read_watermark(const std::string &wmfile, int &nx, int &ny, int &nc)
 {
-  TIFF *tif;
   int sll;
   unsigned short spp, bps, pmi, pc;
-  byte *wmbuf;
   nx = 0;
   ny = 0;
 
-  if (nullptr == (tif = TIFFOpen(wmfile.c_str(), "r"))) { return nullptr; }
+  std::unique_ptr<TIFF, decltype(&TIFFClose)> tif(TIFFOpen(wmfile.c_str(), "r"), TIFFClose);
+  if (tif == nullptr) { return {}; }
 
   // add EXIF tags to the set of tags that libtiff knows about
   // necessary if we want to set EXIFTAG_DATETIMEORIGINAL, for example
@@ -344,51 +343,44 @@ unsigned char *read_watermark(const std::string &wmfile, int &nx, int &ny, int &
   //_TIFFMergeFields(tif, exif_fields->fields, exif_fields->count);
 
 
-  if (TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &nx) == 0) {
-    TIFFClose(tif);
+  if (TIFFGetField(tif.get(), TIFFTAG_IMAGEWIDTH, &nx) == 0) {
     throw Sipi::SipiImageError("ERROR in read_watermark: TIFFGetField of TIFFTAG_IMAGEWIDTH failed: " + wmfile);
   }
 
-  if (TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &ny) == 0) {
-    TIFFClose(tif);
+  if (TIFFGetField(tif.get(), TIFFTAG_IMAGELENGTH, &ny) == 0) {
     throw Sipi::SipiImageError("ERROR in read_watermark: TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + wmfile);
   }
 
-  TIFF_GET_FIELD(tif, TIFFTAG_SAMPLESPERPIXEL, &spp, 1);
+  TIFF_GET_FIELD(tif.get(), TIFFTAG_SAMPLESPERPIXEL, &spp, 1);
 
-  TIFF_GET_FIELD(tif, TIFFTAG_BITSPERSAMPLE, &bps, 1);
+  TIFF_GET_FIELD(tif.get(), TIFFTAG_BITSPERSAMPLE, &bps, 1);
 
-  if (bps != 8) {
-    TIFFClose(tif);
-    throw Sipi::SipiImageError("ERROR in read_watermark: bps ≠ 8: " + wmfile);
-  }
+  if (bps != 8) { throw Sipi::SipiImageError("ERROR in read_watermark: bps ≠ 8: " + wmfile); }
 
-  TIFF_GET_FIELD(tif, TIFFTAG_PHOTOMETRIC, &pmi, PHOTOMETRIC_MINISBLACK);
-  TIFF_GET_FIELD(tif, TIFFTAG_PLANARCONFIG, &pc, PLANARCONFIG_CONTIG);
+  TIFF_GET_FIELD(tif.get(), TIFFTAG_PHOTOMETRIC, &pmi, PHOTOMETRIC_MINISBLACK);
+  TIFF_GET_FIELD(tif.get(), TIFFTAG_PLANARCONFIG, &pc, PLANARCONFIG_CONTIG);
 
   if (pc != PLANARCONFIG_CONTIG) {
-    TIFFClose(tif);
     throw Sipi::SipiImageError(
       "ERROR in read_watermark: Tag TIFFTAG_PLANARCONFIG is not PLANARCONFIG_CONTIG: " + wmfile);
   }
 
   sll = nx * spp * bps / 8;
 
+  std::vector<unsigned char> wmbuf;
   try {
-    wmbuf = new byte[ny * sll];
+    wmbuf.resize(static_cast<size_t>(ny) * sll);
   } catch (std::bad_alloc &ba) {
     throw Sipi::SipiImageError("ERROR in read_watermark: Could not allocate memory: ");// + ba.what());
   }
 
   for (int i = 0; i < ny; i++) {
-    if (TIFFReadScanline(tif, wmbuf + i * sll, i) == -1) {
-      delete[] wmbuf;
+    if (TIFFReadScanline(tif.get(), wmbuf.data() + i * sll, i) == -1) {
       throw Sipi::SipiImageError(
         "ERROR in read_watermark: TIFFReadScanline failed on scanline " + std::to_string(i) + " in file " + wmfile);
     }
   }
 
-  TIFFClose(tif);
   nc = spp;
 
   return wmbuf;
@@ -581,7 +573,6 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
       line = std::make_unique<T[]>(nx * nc);
       for (uint32_t i = roi_y; i < roi_y + roi_h; ++i) {
         if (TIFFReadScanline(tif, scanline.get(), i, 0) != 1) {
-          TIFFClose(tif);
           throw Sipi::SipiImageError("TIFFReadScanline failed on scanline " + std::to_string(i)
             + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
             + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps));
@@ -616,7 +607,6 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
       for (uint32_t c = 0; c < nc; ++c) {
         for (uint32_t i = roi_y; i < roi_h; ++i) {
           if (TIFFReadScanline(tif, scanline.get(), i, c) == -1) {
-            TIFFClose(tif);
             throw Sipi::SipiImageError("TIFFReadScanline failed on scanline " + std::to_string(i)
               + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
               + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps));
@@ -651,7 +641,6 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
       line = std::make_unique<T[]>(nx * nc);
       for (uint32_t i = 0; i < ny; ++i) {
         if (TIFFReadScanline(tif, scanline.get(), i, 0) != 1) {
-          TIFFClose(tif);
           throw Sipi::SipiImageError("TIFFReadScanline failed on scanline " + std::to_string(i)
             + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
             + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps));
@@ -690,7 +679,6 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
       for (uint32_t c = 0; c < nc; ++c) {
         for (uint32_t i = 0; i < ny; ++i) {
           if (TIFFReadScanline(tif, scanline.get(), i, c) == -1) {
-            TIFFClose(tif);
             throw Sipi::SipiImageError("TIFFReadScanline failed on scanline " + std::to_string(i)
               + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
               + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps));
@@ -811,7 +799,6 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
   for (uint32_t ty = starttile_y; ty < endtile_y; ++ty) {
     for (uint32_t tx = starttile_x; tx < endtile_x; ++tx) {
       if (TIFFReadTile(tif, tilebuf.get(), tx * tile_width, ty * tile_length, 0, 0) < 0) {
-        TIFFClose(tif);
         throw Sipi::SipiImageError("TIFFReadTile failed on tile (" + std::to_string(tx) + ", " + std::to_string(ty) + ")"
           + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
           + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps));
@@ -886,9 +873,10 @@ bool SipiIOTiff::read(SipiImage *img,
   ScalingQuality scaling_quality)
 {
   SIPI_ZONE_N("SipiIOTiff::read");
-  TIFF *tif;
+  std::unique_ptr<TIFF, decltype(&TIFFClose)> tif_guard(TIFFOpen(filepath.c_str(), "r"), TIFFClose);
 
-  if (nullptr != (tif = TIFFOpen(filepath.c_str(), "r"))) {
+  if (tif_guard != nullptr) {
+    TIFF *tif = tif_guard.get();
     TIFFSetErrorHandler(tiffError);
     TIFFSetWarningHandler(tiffWarning);
     TIFFSetField(tif, TIFFTAG_JPEGCOLORMODE, JPEGCOLORMODE_RGB);
@@ -901,13 +889,11 @@ bool SipiIOTiff::read(SipiImage *img,
     (void)TIFFSetWarningHandler(nullptr);
 
     if (TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &(img->nx)) == 0) {
-      TIFFClose(tif);
       std::string msg = "TIFFGetField of TIFFTAG_IMAGEWIDTH failed: " + filepath;
       throw Sipi::SipiImageError(msg);
     }
 
     if (TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &(img->ny)) == 0) {
-      TIFFClose(tif);
       std::string msg = "TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + filepath;
       throw Sipi::SipiImageError(msg);
     }
@@ -942,7 +928,6 @@ bool SipiIOTiff::read(SipiImage *img,
     if (img->photo == PhotometricInterpretation::PALETTE) {
       uint16_t *_rcm = nullptr, *_gcm = nullptr, *_bcm = nullptr;
       if (TIFFGetField(tif, TIFFTAG_COLORMAP, &_rcm, &_gcm, &_bcm) == 0) {
-        TIFFClose(tif);
         std::string msg = "TIFFGetField of TIFFTAG_COLORMAP failed: " + filepath;
         throw Sipi::SipiImageError(msg);
       }
@@ -1262,8 +1247,7 @@ bool SipiIOTiff::read(SipiImage *img,
         "Unsupported bits/sample (" + std::to_string(img->bps) + ") in file " + filepath);
     }
 
-    delete[] img->pixels;// free previous buffer if re-reading into same SipiImage
-    auto *inbuf = new uint8_t[ps * roi_w * roi_h * img->nc];
+    auto inbuf = std::make_unique<uint8_t[]>(ps * roi_w * roi_h * img->nc);
 
     if (img->bps <= 8) {
       std::vector<uint8_t> pixdata;
@@ -1274,7 +1258,7 @@ bool SipiIOTiff::read(SipiImage *img,
 
       img->bps = 8;
 
-      memcpy(inbuf, pixdata.data(), pixdata.size() * img->bps / 8);
+      memcpy(inbuf.get(), pixdata.data(), pixdata.size() * img->bps / 8);
     } else if (img->bps <= 16) {
       std::vector<uint16_t> pixdata;
       if (is_tiled)
@@ -1282,13 +1266,14 @@ bool SipiIOTiff::read(SipiImage *img,
       else
         pixdata = read_standard_data<uint16_t>(tif, roi_x, roi_y, roi_w, roi_h);
       img->bps = 16;
-      memcpy(inbuf, pixdata.data(), pixdata.size() * img->bps / 8);
+      memcpy(inbuf.get(), pixdata.data(), pixdata.size() * img->bps / 8);
     }
 
-    img->pixels = inbuf;
+    delete[] img->pixels;// free previous buffer if re-reading into same SipiImage
+    img->pixels = inbuf.release();
     img->nx = roi_w;
     img->ny = roi_h;
-    TIFFClose(tif);
+    tif_guard.reset();
 
     if (img->photo == PhotometricInterpretation::PALETTE) {
       //
@@ -1300,7 +1285,7 @@ bool SipiIOTiff::read(SipiImage *img,
         if (gcm[i] > cm_max) cm_max = gcm[i];
         if (bcm[i] > cm_max) cm_max = bcm[i];
       }
-      auto *dataptr = new uint8_t[3 * img->nx * img->ny];
+      auto dataptr = std::make_unique<uint8_t[]>(3 * img->nx * img->ny);
       if (cm_max <= 256) {// we have a colomap with entries form 0 - 255
         for (size_t i = 0; i < img->nx * img->ny; i++) {
           dataptr[3 * i] = (uint8_t)rcm[img->pixels[i]];
@@ -1315,8 +1300,7 @@ bool SipiIOTiff::read(SipiImage *img,
         }
       }
       delete[] img->pixels;
-      img->pixels = dataptr;
-      dataptr = nullptr;
+      img->pixels = dataptr.release();
       img->photo = PhotometricInterpretation::RGB;
       img->nc = 3;
     }
@@ -1625,28 +1609,33 @@ void SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompres
   const bool streaming = is_streaming_sink(sink);
   const std::string filepath = streaming ? std::string("<http response>") : std::get<FilePath>(sink).path;
 
-  TIFF *tif;
-  MEMTIFF *memtif = nullptr;
+  // Declared before tif_guard: TIFFClose flushes through the memTiff*Proc
+  // callbacks, so the MEMTIFF must outlive the TIFF handle.
+  std::unique_ptr<MEMTIFF, decltype(&memTiffFree)> memtif_guard(nullptr, &memTiffFree);
+  std::unique_ptr<TIFF, decltype(&TIFFClose)> tif_guard(nullptr, &TIFFClose);
   auto rowsperstrip = (uint32_t)-1;
   if (streaming || (filepath == "stdout:")) {
-    memtif = memTiffOpen();
-    tif = TIFFClientOpen("MEMTIFF",
+    memtif_guard.reset(memTiffOpen());
+    tif_guard.reset(TIFFClientOpen("MEMTIFF",
       "w",
-      (thandle_t)memtif,
+      (thandle_t)memtif_guard.get(),
       memTiffReadProc,
       memTiffWriteProc,
       memTiffSeekProc,
       memTiffCloseProc,
       memTiffSizeProc,
       memTiffMapProc,
-      memTiffUnmapProc);
+      memTiffUnmapProc));
+    if (tif_guard == nullptr) { throw Sipi::SipiImageError("TIFFClientOpen for in-memory TIFF failed!"); }
   } else {
-    if ((tif = TIFFOpen(filepath.c_str(), "w")) == nullptr) {
-      if (memtif != nullptr) memTiffFree(memtif);
+    tif_guard.reset(TIFFOpen(filepath.c_str(), "w"));
+    if (tif_guard == nullptr) {
       std::string msg = "TIFFopen of \"" + filepath + "\" failed!";
       throw Sipi::SipiImageError(msg);
     }
   }
+  TIFF *tif = tif_guard.get();
+  MEMTIFF *memtif = memtif_guard.get();
   TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, static_cast<int>(img->nx));
   TIFFSetField(tif, TIFFTAG_IMAGELENGTH, static_cast<int>(img->ny));
   TIFFSetField(tif, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
@@ -1827,11 +1816,9 @@ void SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompres
   // TIFFCheckpointDirectory(tif);
   if (its_1_bit) {
     unsigned int sll;
-    unsigned char *buf = cvrt8BitTo1bit(*img, sll);
+    std::vector<unsigned char> buf = cvrt8BitTo1bit(*img, sll);
 
-    for (size_t i = 0; i < img->ny; i++) { TIFFWriteScanline(tif, buf + i * sll, (int)i, 0); }
-
-    delete[] buf;
+    for (size_t i = 0; i < img->ny; i++) { TIFFWriteScanline(tif, buf.data() + i * sll, (int)i, 0); }
   } else {
     if (!pyramid) {
       for (size_t i = 0; i < img->ny; i++) {
@@ -1860,7 +1847,8 @@ void SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompres
     TIFFWriteDirectory(tif);
     writeExif(img, tif);
   }
-  TIFFClose(tif);
+  // Close (and thereby flush) the TIFF before consuming the MEMTIFF buffer.
+  tif_guard.reset();
 
   if (memtif != nullptr) {
     if (!streaming && filepath == "stdout:") {
@@ -1877,15 +1865,11 @@ void SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompres
       // equivalent of the old OUTPUT_WRITE_FAIL abort signal.
       SinkStream stream{ sink };
       if (stream.write(memtif->data, memtif->flen) != 0) {
-        memTiffFree(memtif);
         throw Sipi::SipiImageClientAbortError("Client aborted HTTP response during TIFF write");
       }
     } else {
-      memTiffFree(memtif);
       throw Sipi::SipiImageError("Unknown output method: " + filepath + " !");
     }
-
-    memTiffFree(memtif);
   }
 }
 //============================================================================
@@ -2357,7 +2341,7 @@ void SipiIOTiff::separateToContig(SipiImage *img, unsigned int sll)
 // code (img->bps was already 8 by the time those call sites executed).
 //============================================================================
 
-unsigned char *SipiIOTiff::cvrt8BitTo1bit(const SipiImage &img, unsigned int &sll)
+std::vector<unsigned char> SipiIOTiff::cvrt8BitTo1bit(const SipiImage &img, unsigned int &sll)
 {
   static unsigned char mask[8] = { 128, 64, 32, 16, 8, 4, 2, 1 };
 
@@ -2373,21 +2357,21 @@ unsigned char *SipiIOTiff::cvrt8BitTo1bit(const SipiImage &img, unsigned int &sl
   }
 
   sll = (img.nx + 7) / 8;
-  unsigned char *outbuf = new unsigned char[sll * img.ny];
 
   if (img.photo == PhotometricInterpretation::MINISBLACK) {
-    memset(outbuf, 0L, sll * img.ny);
+    std::vector<unsigned char> outbuf(sll * img.ny, 0x00);
     for (y = 0; y < img.ny; y++) {
       for (x = 0; x < img.nx; x++) {
         outbuf[y * sll + (x / 8)] |= (img.pixels[y * img.nx + x] > 128) ? mask[x % 8] : !mask[x % 8];
       }
     }
-  } else {// must be MINISWHITE
-    memset(outbuf, -1L, sll * img.ny);
-    for (y = 0; y < img.ny; y++) {
-      for (x = 0; x < img.nx; x++) {
-        outbuf[y * sll + (x / 8)] |= (img.pixels[y * img.nx + x] > 128) ? !mask[x % 8] : mask[x % 8];
-      }
+    return outbuf;
+  }
+  // must be MINISWHITE
+  std::vector<unsigned char> outbuf(sll * img.ny, 0xff);
+  for (y = 0; y < img.ny; y++) {
+    for (x = 0; x < img.nx; x++) {
+      outbuf[y * sll + (x / 8)] |= (img.pixels[y * img.nx + x] > 128) ? !mask[x % 8] : mask[x % 8];
     }
   }
   return outbuf;
