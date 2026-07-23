@@ -730,8 +730,7 @@ bool SipiIOJpeg::read(SipiImage *img,
   }
   int sll = cinfo.output_components * cinfo.output_width * sizeof(uint8_t);
 
-  delete[] img->pixels;// free previous buffer if re-reading into same SipiImage
-  img->pixels = new byte[img->ny * sll];
+  img->pixels.assign(static_cast<size_t>(img->ny) * sll, 0);
 
   // All libjpeg calls below — errors → longjmp → setjmp handler above
   linbuf = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, sll, 1);

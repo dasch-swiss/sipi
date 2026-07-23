@@ -1247,7 +1247,7 @@ bool SipiIOTiff::read(SipiImage *img,
         "Unsupported bits/sample (" + std::to_string(img->bps) + ") in file " + filepath);
     }
 
-    auto inbuf = std::make_unique<uint8_t[]>(ps * roi_w * roi_h * img->nc);
+    std::vector<uint8_t> inbuf(ps * roi_w * roi_h * img->nc);
 
     if (img->bps <= 8) {
       std::vector<uint8_t> pixdata;
@@ -1258,7 +1258,7 @@ bool SipiIOTiff::read(SipiImage *img,
 
       img->bps = 8;
 
-      memcpy(inbuf.get(), pixdata.data(), pixdata.size() * img->bps / 8);
+      memcpy(inbuf.data(), pixdata.data(), pixdata.size() * img->bps / 8);
     } else if (img->bps <= 16) {
       std::vector<uint16_t> pixdata;
       if (is_tiled)
@@ -1266,11 +1266,10 @@ bool SipiIOTiff::read(SipiImage *img,
       else
         pixdata = read_standard_data<uint16_t>(tif, roi_x, roi_y, roi_w, roi_h);
       img->bps = 16;
-      memcpy(inbuf.get(), pixdata.data(), pixdata.size() * img->bps / 8);
+      memcpy(inbuf.data(), pixdata.data(), pixdata.size() * img->bps / 8);
     }
 
-    delete[] img->pixels;// free previous buffer if re-reading into same SipiImage
-    img->pixels = inbuf.release();
+    img->pixels = std::move(inbuf);
     img->nx = roi_w;
     img->ny = roi_h;
     tif_guard.reset();
@@ -1285,7 +1284,7 @@ bool SipiIOTiff::read(SipiImage *img,
         if (gcm[i] > cm_max) cm_max = gcm[i];
         if (bcm[i] > cm_max) cm_max = bcm[i];
       }
-      auto dataptr = std::make_unique<uint8_t[]>(3 * img->nx * img->ny);
+      std::vector<uint8_t> dataptr(3 * img->nx * img->ny);
       if (cm_max <= 256) {// we have a colomap with entries form 0 - 255
         for (size_t i = 0; i < img->nx * img->ny; i++) {
           dataptr[3 * i] = (uint8_t)rcm[img->pixels[i]];
@@ -1299,8 +1298,7 @@ bool SipiIOTiff::read(SipiImage *img,
           dataptr[3 * i + 2] = (uint8_t)(bcm[img->pixels[i]] >> 8);
         }
       }
-      delete[] img->pixels;
-      img->pixels = dataptr.release();
+      img->pixels = std::move(dataptr);
       img->photo = PhotometricInterpretation::RGB;
       img->nc = 3;
     }
@@ -1352,7 +1350,7 @@ bool SipiIOTiff::read(SipiImage *img,
           }
           img->icc = std::make_shared<Icc>(icc_LAB);
         } else if (img->bps == 16) {
-          auto *data = (unsigned short *)img->pixels;
+          auto *data = (unsigned short *)img->pixels.data();
           for (size_t y = 0; y < img->ny; y++) {
             for (size_t x = 0; x < img->nx; x++) {
               union {
@@ -1434,9 +1432,7 @@ bool SipiIOTiff::read(SipiImage *img,
         }
       }
     }
-    if (force_bps_8) {
-      if (!img->to8bps()) { throw Sipi::SipiImageError("Cannot convert to 8 bits/sample"); }
-    }
+    if (force_bps_8) { img->to8bps(); }
     return true;
   }
   return false;
@@ -1647,12 +1643,12 @@ void SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompres
     its_1_bit = true;
 
     if (img->bps == 8) {
-      byte *scan = img->pixels;
+      const byte *scan = img->pixels.data();
       for (size_t i = 0; i < img->nx * img->ny; i++) {
         if ((scan[i] != 0) && (scan[i] != 255)) { its_1_bit = false; }
       }
     } else if (img->bps == 16) {
-      word *scan = (word *)img->pixels;
+      const word *scan = (const word *)img->pixels.data();
       for (size_t i = 0; i < img->nx * img->ny; i++) {
         if ((scan[i] != 0) && (scan[i] != 65535)) { its_1_bit = false; }
       }
@@ -1684,7 +1680,7 @@ void SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompres
     } else if (img->bps == 16) {
       for (size_t y = 0; y < img->ny; y++) {
         for (size_t x = 0; x < img->nx; x++) {
-          auto *data = (unsigned short *)img->pixels;
+          auto *data = (unsigned short *)img->pixels.data();
           union {
             unsigned short u;
             signed short s;
@@ -1822,7 +1818,7 @@ void SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompres
   } else {
     if (!pyramid) {
       for (size_t i = 0; i < img->ny; i++) {
-        TIFFWriteScanline(tif, img->pixels + i * img->nc * img->nx * (img->bps / 8), (int)i, 0);
+        TIFFWriteScanline(tif, img->pixels.data() + i * img->nc * img->nx * (img->bps / 8), (int)i, 0);
       }
     } else {
       for (int reduce = 0; reduce <= 5; reduce += 1) {
@@ -1935,7 +1931,7 @@ void SipiIOTiff::write_subfile(const SipiImage &img,
   tsize_t tilesize = TIFFTileSize(tif);
 
   // reduce resolution of image: A reduce factor can be given, 0=no scaling, 1=0.5, 2=0.25, 3=0.125,...
-  std::vector<uint8_t> nbuf(img.pixels, img.pixels + img.nx * img.ny * img.nc * img.bps / 8);
+  std::vector<uint8_t> nbuf(img.pixels.data(), img.pixels.data() + img.nx * img.ny * img.nc * img.bps / 8);
 
   if (level > 0) { nbuf = doReduce<uint8_t>(std::move(nbuf), level, img.nx, img.ny, img.nc, nnx, nny); }
 
@@ -2301,8 +2297,9 @@ void SipiIOTiff::separateToContig(SipiImage *img, unsigned int sll)
   // rearrange RRRRRR...GGGGG...BBBBB data  to RGBRGBRGB…RGB
   //
   if (img->bps == 8) {
-    byte *dataptr = img->pixels;
-    auto *tmpptr = new unsigned char[img->nc * img->ny * img->nx];
+    const byte *dataptr = img->pixels.data();
+    std::vector<byte> tmp_v(img->nc * img->ny * img->nx);
+    byte *tmpptr = tmp_v.data();
 
     for (unsigned int k = 0; k < img->nc; k++) {
       for (unsigned int j = 0; j < img->ny; j++) {
@@ -2312,11 +2309,11 @@ void SipiIOTiff::separateToContig(SipiImage *img, unsigned int sll)
       }
     }
 
-    delete[] dataptr;
-    img->pixels = tmpptr;
+    img->pixels = std::move(tmp_v);
   } else if (img->bps == 16) {
-    word *dataptr = (word *)img->pixels;
-    word *tmpptr = new word[img->nc * img->ny * img->nx];
+    const word *dataptr = (const word *)img->pixels.data();
+    std::vector<byte> tmp_v(2 * img->nc * img->ny * img->nx);
+    word *tmpptr = (word *)tmp_v.data();
 
     for (unsigned int k = 0; k < img->nc; k++) {
       for (unsigned int j = 0; j < img->ny; j++) {
@@ -2326,8 +2323,7 @@ void SipiIOTiff::separateToContig(SipiImage *img, unsigned int sll)
       }
     }
 
-    delete[] dataptr;
-    img->pixels = (byte *)tmpptr;
+    img->pixels = std::move(tmp_v);
   } else {
     std::string msg = "Bits per sample not supported: " + std::to_string(-img->bps);
     throw Sipi::SipiImageError(msg);
