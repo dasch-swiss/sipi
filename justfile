@@ -203,6 +203,19 @@ bazel-build-sanitized *FLAGS='':
     bazel build --config=asan --config=ubsan --verbose_failures --stamp {{FLAGS}} //src/cli:sipi
     @echo "Binary at: $(pwd)/bazel-bin/src/cli/sipi"
 
+# Print the absolute path of the hermetic (LLVM 22, version-matched) symbolizer.
+# ASan/LSan need it to resolve `sipi+0xOFFSET` frames, and the name-based
+# suppressions in `.lsan_suppressions.txt` (e.g. `leak:lua*`) can only match
+# once frames are symbolized. Used by the sanitizer CI jobs in ci.yml via
+# `export ASAN_SYMBOLIZER_PATH="$(just asan-symbolizer)"`, and available for
+# local sanitizer runs.
+asan-symbolizer:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bazel build //bazel:llvm-symbolizer 1>&2
+    EXEC_ROOT="$(bazel info execution_root)"
+    echo "$EXEC_ROOT/$(bazel cquery --output=files //bazel:llvm-symbolizer 2>/dev/null)"
+
 # Tracy-instrumented profiling build: `-c opt --config=tracy`. Local dev only,
 # never CI-gated (like `bench` / `valgrind`). `-c opt` so the timeline reflects
 # production codegen; `--config=tracy` (see `.bazelrc`) defines TRACY_ENABLE +

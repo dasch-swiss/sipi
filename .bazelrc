@@ -244,6 +244,11 @@ build:asan --@llvm//config:asan=true
 # every leak in one report rather than needing N reruns.
 test:asan --test_env=ASAN_OPTIONS=detect_leaks=1:halt_on_error=0:log_path=$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e
 
+# The sanitizer runtime needs the symbolizer path inside the test sandbox;
+# passthrough form inherits the client-env value (CI exports it via
+# `just asan-symbolizer`) and is a no-op when unset.
+test:asan --test_env=ASAN_SYMBOLIZER_PATH
+
 # Neutralize production hardening for UBSan — same rationale as `build:asan`.
 build:ubsan --copt=-U_FORTIFY_SOURCE
 build:ubsan --copt=-fno-stack-protector
