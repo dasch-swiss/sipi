@@ -19,7 +19,6 @@
 #include "lcms2.h"
 
 #include "shttps/util/Parsing.h"
-#include "shttps/util/makeunique.h"
 
 #include "logging/logger.h"
 #include "SipiImage.h"
@@ -896,8 +895,8 @@ bool SipiImage::scaleFast(size_t nnx, size_t nny)
     return false;
   }
 
-  auto xlut = shttps::make_unique<size_t[]>(nnx);
-  auto ylut = shttps::make_unique<size_t[]>(nny);
+  auto xlut = std::make_unique<size_t[]>(nnx);
+  auto ylut = std::make_unique<size_t[]>(nny);
 
   for (size_t i = 0; i < nnx; i++) { xlut[i] = (size_t)lround(i * (nx - 1) / (nnx - 1)); }
   for (size_t i = 0; i < nny; i++) { ylut[i] = (size_t)lround(i * (ny - 1) / (nny - 1)); }
@@ -941,8 +940,8 @@ bool SipiImage::scaleMedium(size_t nnx, size_t nny)
     return false;
   }
 
-  auto xlut = shttps::make_unique<double[]>(nnx);
-  auto ylut = shttps::make_unique<double[]>(nny);
+  auto xlut = std::make_unique<double[]>(nnx);
+  auto ylut = std::make_unique<double[]>(nny);
 
   for (size_t i = 0; i < nnx; i++) { xlut[i] = (double)(i * (nx - 1)) / (double)(nnx - 1); }
   for (size_t j = 0; j < nny; j++) { ylut[j] = (double)(j * (ny - 1)) / (double)(nny - 1); }
@@ -1019,8 +1018,8 @@ bool SipiImage::scale(size_t nnx, size_t nny)
     nnny = nny;
   }
 
-  auto xlut = shttps::make_unique<double[]>(nnnx);
-  auto ylut = shttps::make_unique<double[]>(nnny);
+  auto xlut = std::make_unique<double[]>(nnnx);
+  auto ylut = std::make_unique<double[]>(nnny);
 
   for (size_t i = 0; i < nnnx; i++) { xlut[i] = (double)(i * (nx - 1)) / (double)(nnnx - 1); }
   for (size_t j = 0; j < nnny; j++) { ylut[j] = (double)(j * (ny - 1)) / (double)(nnny - 1); }

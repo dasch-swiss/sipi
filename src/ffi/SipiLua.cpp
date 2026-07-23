@@ -296,9 +296,14 @@ static int SImage_new(lua_State *L)
   }
 
   lua_pushboolean(L, true);// result code
+  // Build both payload objects before either raw pointer enters the (Lua
+  // GC-owned) userdata: unique_ptr covers the window in which the second
+  // allocation can throw, then ownership passes to the userdata's __gc.
+  auto simg_image = std::make_unique<SipiImage>();
+  auto simg_filename = std::make_unique<std::string>(imgpath);
   SImage simg;
-  simg.image = new SipiImage();
-  simg.filename = new std::string(imgpath);
+  simg.image = simg_image.release();
+  simg.filename = simg_filename.release();
   SImage *img = pushSImage(L, simg);
 
   try {

@@ -34,7 +34,6 @@
 #include "kdu_stripe_decompressor.h"
 
 #include "shttps/util/Global.h"
-#include "shttps/util/makeunique.h"
 #include "observability/metrics.h"
 
 #include "SipiError.h"
@@ -301,7 +300,7 @@ bool SipiIOJ2k::read(SipiImage *img,
           box.read(buf, 16);
           if (memcmp(buf, xmp_uuid, 16) == 0) {
             auto xmp_len = box.get_remaining_bytes();
-            auto xmp_buf = shttps::make_unique<char[]>(xmp_len);
+            auto xmp_buf = std::make_unique<char[]>(xmp_len);
             box.read((kdu_byte *)xmp_buf.get(), xmp_len);
             try {
               img->xmp = std::make_shared<Xmp>(xmp_buf.get(),
@@ -311,7 +310,7 @@ bool SipiIOJ2k::read(SipiImage *img,
             }
           } else if (memcmp(buf, iptc_uuid, 16) == 0) {
             auto iptc_len = box.get_remaining_bytes();
-            auto iptc_buf = shttps::make_unique<unsigned char[]>(iptc_len);
+            auto iptc_buf = std::make_unique<unsigned char[]>(iptc_len);
             box.read(iptc_buf.get(), iptc_len);
             try {
               img->iptc = std::make_shared<Iptc>(iptc_buf.get(), iptc_len);
@@ -320,7 +319,7 @@ bool SipiIOJ2k::read(SipiImage *img,
             }
           } else if (memcmp(buf, exif_uuid, 16) == 0) {
             auto exif_len = box.get_remaining_bytes();
-            auto exif_buf = shttps::make_unique<unsigned char[]>(exif_len);
+            auto exif_buf = std::make_unique<unsigned char[]>(exif_len);
             box.read(exif_buf.get(), exif_len);
             try {
               img->exif = std::make_shared<Exif>(exif_buf.get(), exif_len);
@@ -332,7 +331,7 @@ bool SipiIOJ2k::read(SipiImage *img,
             // location for the packet; the codestream-comment branch below
             // remains as the legacy fallback for pre-rollout JP2 files.
             auto ess_len = box.get_remaining_bytes();
-            auto ess_buf = shttps::make_unique<std::byte[]>(ess_len);
+            auto ess_buf = std::make_unique<std::byte[]>(ess_len);
             box.read(reinterpret_cast<kdu_byte *>(ess_buf.get()), ess_len);
             std::span<const std::byte> bytes(ess_buf.get(), ess_len);
             if (auto parsed = Essentials::parse(bytes)) {
@@ -790,7 +789,7 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
           box.read(buf, 16);
           if (memcmp(buf, sipi_essentials_uuid, 16) == 0) {
             auto ess_len = box.get_remaining_bytes();
-            auto ess_buf = shttps::make_unique<std::byte[]>(ess_len);
+            auto ess_buf = std::make_unique<std::byte[]>(ess_len);
             box.read(reinterpret_cast<kdu_byte *>(ess_buf.get()), ess_len);
             std::span<const std::byte> bytes(ess_buf.get(), ess_len);
             if (auto parsed = Essentials::parse(bytes)) {

@@ -41,7 +41,6 @@ cc_library(
         "Hash.h",
         "Parsing.h",
         "UrlDecode.h",
-        "makeunique.h",
         ":magic_mgc_h",
     ],
     strip_include_prefix = "/src",

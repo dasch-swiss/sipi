@@ -1,8 +1,9 @@
 //
 // Created by Lukas Rosenthaler on 04.06.17.
 //
-#include <iostream>
 #include <fstream>
+#include <iostream>
+#include <memory>
 
 #include <dirent.h>
 #include <sys/stat.h>
@@ -59,12 +60,12 @@ static int n_dirs[6];
 static int scanDir(const std::string &path, int level)
 {
   if (level == 0) { n_dirs[0] = n_dirs[1] = n_dirs[2] = n_dirs[3] = n_dirs[4] = n_dirs[5] = 0; }
-  DIR *dirp = opendir(path.c_str());
+  std::unique_ptr<DIR, decltype(&closedir)> dirp(opendir(path.c_str()), closedir);
   if (dirp == nullptr) {
     throw shttps::Error(std::string("Couldn't read directory content! Path: ") + path, errno);
   }
   struct dirent *dp;
-  while ((dp = readdir(dirp)) != nullptr) {
+  while ((dp = readdir(dirp.get())) != nullptr) {
     if (dp->d_type == DT_DIR) {
       if ((strlen(dp->d_name) == 1) && (dp->d_name[0] >= 'A' && dp->d_name[0] <= 'Z')) {
         n_dirs[level]++;
@@ -73,7 +74,7 @@ static int scanDir(const std::string &path, int level)
       }
     }
   }
-  closedir(dirp);
+  dirp.reset();
 
   int i = 0;
   int k = 26;
@@ -92,14 +93,14 @@ int SipiFilenameHash::check_levels(const std::string &imgdir) { return scanDir(i
 
 static void add_level(const std::string &path, int cur_level)
 {
-  DIR *dirp = opendir(path.c_str());
+  std::unique_ptr<DIR, decltype(&closedir)> dirp(opendir(path.c_str()), closedir);
   if (dirp == nullptr) {
     throw shttps::Error(std::string("Couldn't read directory content! Path: ") + path, errno);
   }
   std::vector<std::string> filelist;
   struct dirent *dp;
   int n_dirs = 0;
-  while ((dp = readdir(dirp)) != nullptr) {
+  while ((dp = readdir(dirp.get())) != nullptr) {
     if (dp->d_type == DT_DIR) {
       if ((strlen(dp->d_name) == 1) && (dp->d_name[0] >= 'A' && dp->d_name[0] <= 'Z')) {
         char tmp[3] = { '/', dp->d_name[0], '\0' };
@@ -113,7 +114,7 @@ static void add_level(const std::string &path, int cur_level)
       filelist.push_back(std::string(dp->d_name));
     }
   }
-  closedir(dirp);
+  dirp.reset();
 
   //
   // first create all new subdirs
@@ -147,7 +148,7 @@ static bool remove_level(const std::string &path, int cur_level)
   //
   // prepare scanning the directory
   //
-  DIR *dirp = opendir(path.c_str());
+  std::unique_ptr<DIR, decltype(&closedir)> dirp(opendir(path.c_str()), closedir);
   if (dirp == nullptr) {
     throw shttps::Error(std::string("Couldn't read directory content! Path: ") + path, errno);
   }
@@ -158,7 +159,7 @@ static bool remove_level(const std::string &path, int cur_level)
   //
   // start scanning the directory
   //
-  while ((dp = readdir(dirp)) != nullptr) {
+  while ((dp = readdir(dirp.get())) != nullptr) {
     if (dp->d_type == DT_DIR) {
       if ((strlen(dp->d_name) == 1) && (dp->d_name[0] >= 'A' && dp->d_name[0] <= 'Z')) {
         //
@@ -175,7 +176,7 @@ static bool remove_level(const std::string &path, int cur_level)
       filelist.push_back(std::string(dp->d_name));
     }
   }
-  closedir(dirp);
+  dirp.reset();
 
   if (n_dirs == 0) {
     if (cur_level > 0) {

@@ -18,7 +18,6 @@
 
 #include <tiff.h>
 
-#include "shttps/util/makeunique.h"
 
 #include "logging/logger.h"
 #include "SipiCommon.h"
@@ -1210,7 +1209,7 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
       char start[] = "Exif\000\000";
       size_t start_l = sizeof(start) - 1;
       // NOTE: make_unique leak on longjmp is acceptable (see comment above setjmp)
-      auto exifchunk = shttps::make_unique<unsigned char[]>(buf.size() + start_l);
+      auto exifchunk = std::make_unique<unsigned char[]>(buf.size() + start_l);
       memcpy(exifchunk.get(), start, (size_t)start_l);
       if (buf.size() > 0) memcpy(exifchunk.get() + start_l, buf.data(), (size_t)buf.size());
       jpeg_write_marker(&cinfo, JPEG_APP0 + 1, (JOCTET *)exifchunk.get(), start_l + buf.size());
@@ -1222,7 +1221,7 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
     if ((!buf.empty()) && (buf.size() <= 65535)) {
       char start[] = "http://ns.adobe.com/xap/1.0/\000";
       size_t start_l = sizeof(start) - 1;
-      auto xmpchunk = shttps::make_unique<char[]>(buf.size() + start_l);
+      auto xmpchunk = std::make_unique<char[]>(buf.size() + start_l);
       memcpy(xmpchunk.get(), start, (size_t)start_l);
       memcpy(xmpchunk.get() + start_l, buf.data(), (size_t)buf.size());
       jpeg_write_marker(&cinfo, JPEG_APP0 + 1, (JOCTET *)xmpchunk.get(), start_l + buf.size());
@@ -1248,7 +1247,7 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
     size_t start_l = 14;
     unsigned int n = buf.size() / (65533 - start_l + 1) + 1;
 
-    auto iccchunk = shttps::make_unique<unsigned char[]>(65533);
+    auto iccchunk = std::make_unique<unsigned char[]>(65533);
 
     unsigned int n_towrite = buf.size();
     unsigned int n_nextwrite = 65533 - start_l;
@@ -1277,7 +1276,7 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
       siz[2] = (unsigned char)((buf.size() >> 8) & 0x000000ff);
       siz[3] = (unsigned char)(buf.size() & 0x000000ff);
 
-      auto iptcchunk = shttps::make_unique<char[]>(start_l + 4 + buf.size());
+      auto iptcchunk = std::make_unique<char[]>(start_l + 4 + buf.size());
       memcpy(iptcchunk.get(), start, (size_t)start_l);
       memcpy(iptcchunk.get() + start_l, siz, (size_t)4);
       if (buf.size() > 0) memcpy(iptcchunk.get() + start_l + 4, buf.data(), (size_t)buf.size());

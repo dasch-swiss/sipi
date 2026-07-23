@@ -14,6 +14,7 @@
 #include <iomanip>
 #include <iostream>
 #include <locale>
+#include <memory>
 #include <sstream>
 #include <string>
 
@@ -30,7 +31,6 @@
 #include "shttps/util/Error.h"
 #include "shttps/util/UrlDecode.h"
 #include "Server.h"// TEMPORARY !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-#include "shttps/util/makeunique.h"
 
 using namespace std;
 
@@ -613,7 +613,7 @@ Connection::Connection(Server *server_p,
 
               tmpname = _tmpdir + "/sipi_XXXXXXXX";
 
-              auto writable = make_unique<char[]>(tmpname.size() + 1);
+              auto writable = std::make_unique<char[]>(tmpname.size() + 1);
               std::copy(tmpname.begin(), tmpname.end(), writable.get());
               (writable.get())[tmpname.size()] = '\0';// don't forget the terminating 0
               int fd = mkstemp(writable.get());
