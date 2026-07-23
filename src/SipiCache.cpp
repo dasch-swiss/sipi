@@ -37,22 +37,35 @@ namespace Sipi {
 
 using observability::Metrics;
 
+// Owns a scandir() result: frees every entry and the array itself.
+struct ScandirList
+{
+  struct dirent **namelist{ nullptr };
+  int n{ -1 };
+
+  explicit ScandirList(const std::string &dir) { n = scandir(dir.c_str(), &namelist, nullptr, alphasort); }
+
+  ~ScandirList()
+  {
+    for (int i = 0; i < n; i++) { free(namelist[i]); }
+    free(namelist);
+  }
+
+  ScandirList(const ScandirList &) = delete;
+  ScandirList &operator=(const ScandirList &) = delete;
+};
+
 // Helper: remove all non-dotfiles from a directory, returns count removed
 static int clearCacheDir(const std::string &dir)
 {
   int removed = 0;
-  struct dirent **namelist;
-  int n = scandir(dir.c_str(), &namelist, nullptr, alphasort);
-  if (n >= 0) {
-    while (n--) {
-      if (namelist[n]->d_name[0] != '.') {
-        std::string ff = dir + "/" + namelist[n]->d_name;
-        ::remove(ff.c_str());
-        removed++;
-      }
-      free(namelist[n]);
+  ScandirList files(dir);
+  for (int i = 0; i < files.n; i++) {
+    if (files.namelist[i]->d_name[0] != '.') {
+      std::string ff = dir + "/" + files.namelist[i]->d_name;
+      ::remove(ff.c_str());
+      removed++;
     }
-    free(namelist);
   }
   return removed;
 }
@@ -162,27 +175,17 @@ SipiCache::SipiCache(const std::string &cachedir_p,
         known_cache_files.insert(ele.second.cachepath);
       }
 
-      struct dirent **namelist;
-      int n = scandir(_cachedir.c_str(), &namelist, nullptr, alphasort);
+      ScandirList files(_cachedir);
+      for (int i = 0; i < files.n; i++) {
+        if (files.namelist[i]->d_name[0] == '.') { continue; }
+        std::string file_on_disk = files.namelist[i]->d_name;
 
-      if (n >= 0) {
-        while (n--) {
-          if (namelist[n]->d_name[0] == '.') {
-            free(namelist[n]);
-            continue;
-          }
-          std::string file_on_disk = namelist[n]->d_name;
-
-          if (known_cache_files.find(file_on_disk) == known_cache_files.end()) {
-            std::string ff = _cachedir + "/" + file_on_disk;
-            log_debug("Orphan file \"%s\" not in cache index, removing", file_on_disk.c_str());
-            ::remove(ff.c_str());
-            orphans_removed++;
-          }
-
-          free(namelist[n]);
+        if (known_cache_files.find(file_on_disk) == known_cache_files.end()) {
+          std::string ff = _cachedir + "/" + file_on_disk;
+          log_debug("Orphan file \"%s\" not in cache index, removing", file_on_disk.c_str());
+          ::remove(ff.c_str());
+          orphans_removed++;
         }
-        free(namelist);
       }
     }
   }

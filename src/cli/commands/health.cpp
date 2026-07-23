@@ -7,6 +7,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <string>
 
 #include <curl/curl.h>
@@ -27,22 +28,21 @@ int cmd_health(const HealthArgs &args)
   // subcommand callback fires, so a plain `curl_easy_init` is safe here.
   const std::string url = "http://127.0.0.1:" + std::to_string(args.port) + "/health";
 
-  CURL *curl = curl_easy_init();
+  std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl(curl_easy_init(), curl_easy_cleanup);
   if (curl == nullptr) {
     std::fprintf(stderr, "health: failed to initialise HTTP client\n");
     return EXIT_FAILURE;
   }
 
-  curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-  curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-  curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 1000L);
-  curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 2000L);// fail fast; never hang the probe
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, discard_body);
+  curl_easy_setopt(curl.get(), CURLOPT_URL, url.c_str());
+  curl_easy_setopt(curl.get(), CURLOPT_NOSIGNAL, 1L);
+  curl_easy_setopt(curl.get(), CURLOPT_CONNECTTIMEOUT_MS, 1000L);
+  curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT_MS, 2000L);// fail fast; never hang the probe
+  curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, discard_body);
 
-  const CURLcode rc = curl_easy_perform(curl);
+  const CURLcode rc = curl_easy_perform(curl.get());
   long status = 0;
-  if (rc == CURLE_OK) { curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status); }
-  curl_easy_cleanup(curl);
+  if (rc == CURLE_OK) { curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &status); }
 
   if (rc != CURLE_OK) {
     std::fprintf(stderr, "health: %s failed: %s\n", url.c_str(), curl_easy_strerror(rc));

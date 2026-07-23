@@ -6,7 +6,7 @@ module boundary is a build-graph fact rather than a naming convention:
   - `transport/` — the HTTP/socket layer (Server, Connection,
     SocketControl, SockStream, ChunkReader, ThreadControl, ConnectionMetrics)
   - `lua/`       — the per-request Lua interpreter (LuaServer)
-  - `util/`      — generic helpers (Parsing, Hash, Error, Global, makeunique)
+  - `util/`      — generic helpers (Parsing, Hash, Error, Global)
   - `jwt/`       — JWT verify/sign
   - `lua_sqlite/`— SQLite-backed Lua bindings
 

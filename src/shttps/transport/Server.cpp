@@ -6,10 +6,11 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>// Needed for memset
-#include <thread>
 #include <iostream>
+#include <memory>
 #include <regex>
 #include <string>
+#include <thread>
 #include <utility>
 
 #include <arpa/inet.h>//inet_addr
@@ -37,7 +38,6 @@
 #include "Server.h"
 #include "SockStream.h"
 #include "connection_request_context.h"
-#include "shttps/util/makeunique.h"
 
 // Tracy thread naming. shttps sits below //src/observability in the dependency
 // graph, so it uses the upstream header directly rather than the first-party
@@ -554,7 +554,7 @@ Server::Server(int port_p,
     if (getuid() == 0) {// must be root to setuid() !!
       struct passwd pwd, *res;
       size_t buffer_len = sysconf(_SC_GETPW_R_SIZE_MAX) * sizeof(char);
-      auto buffer = make_unique<char[]>(buffer_len);
+      auto buffer = std::make_unique<char[]>(buffer_len);
       getpwnam_r(userid_str.c_str(), &pwd, buffer.get(), buffer_len, &res);
 
       if (res != nullptr) {
@@ -764,9 +764,9 @@ static void *socket_request_processor(void *arg)
 
         std::unique_ptr<SockStream> sockstream;
         if (msg.ssl_sid != nullptr) {
-          sockstream = make_unique<SockStream>(msg.ssl_sid);
+          sockstream = std::make_unique<SockStream>(msg.ssl_sid);
         } else {
-          sockstream = make_unique<SockStream>(msg.sid);
+          sockstream = std::make_unique<SockStream>(msg.sid);
         }
 
         std::istream ins(sockstream.get());

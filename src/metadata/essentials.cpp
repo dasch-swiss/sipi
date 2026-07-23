@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -37,27 +38,24 @@ std::vector<unsigned char> base64Decode(const std::string &b64message)
 {
   if (b64message.empty()) return {};
 
-  BIO *bio;
-  BIO *b64;
   std::size_t decodedLength = calcDecodeLength(b64message);
 
-  auto *buffer = static_cast<unsigned char *>(std::malloc(decodedLength + 1));
-  if (buffer == nullptr) { throw shttps::Error("Failed to allocate memory", errno); }
-  FILE *stream = fmemopen(const_cast<char *>(b64message.c_str()), b64message.size(), "r");
+  std::vector<unsigned char> buffer(decodedLength + 1);
+  std::unique_ptr<FILE, decltype(&fclose)> stream(
+    fmemopen(const_cast<char *>(b64message.c_str()), b64message.size(), "r"), fclose);
+  if (stream == nullptr) { throw shttps::Error("fmemopen failed", errno); }
 
-  b64 = BIO_new(BIO_f_base64());
-  bio = BIO_new_fp(stream, BIO_NOCLOSE);
-  bio = BIO_push(b64, bio);
-  BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
-  decodedLength = BIO_read(bio, buffer, static_cast<int>(b64message.size()));
-  buffer[decodedLength] = '\0';
+  std::unique_ptr<BIO, decltype(&BIO_free_all)> bio(BIO_new(BIO_f_base64()), BIO_free_all);
+  if (bio == nullptr) { throw shttps::Error("BIO_new failed"); }
+  BIO *file_bio = BIO_new_fp(stream.get(), BIO_NOCLOSE);
+  if (file_bio == nullptr) { throw shttps::Error("BIO_new_fp failed"); }
+  BIO_push(bio.get(), file_bio);
+  BIO_set_flags(bio.get(), BIO_FLAGS_BASE64_NO_NL);
+  const int nread = BIO_read(bio.get(), buffer.data(), static_cast<int>(b64message.size()));
+  if (nread < 0) { throw shttps::Error("base64 decode failed"); }
 
-  BIO_free_all(bio);
-  std::fclose(stream);
-
-  std::vector<unsigned char> data(buffer, buffer + decodedLength);
-  std::free(buffer);
-  return data;
+  buffer.resize(static_cast<size_t>(nread));
+  return buffer;
 }
 
 std::vector<std::string> split(std::string_view s, std::string_view delimiter)

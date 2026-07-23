@@ -18,7 +18,7 @@ The sources are split into five sub-packages, one Bazel package per module, so t
 | `lua/` | `LuaServer` (the per-request interpreter) | Kept, fed by a buffered request context, then ported to mlua |
 | `lua_sqlite/` | `LuaSqlite` (SQLite Lua bindings) | Kept, then ported |
 | `jwt/` | `jwt.{c,h}` | Kept (or → Rust `jsonwebtoken`) |
-| `util/` | `Parsing`, `Hash`, `Error`, `Global`, `makeunique` | Kept, re-homed SIPI-side |
+| `util/` | `Parsing`, `Hash`, `Error`, `Global` | Kept, re-homed SIPI-side |
 
 `transport` and `lua` are mutually dependent (`Server` holds a `LuaServer`; `LuaServer` needs the full `Connection` type), so they share one Bazel package (`:shttps_headers` + `:shttps`); `util` and `jwt` are leaf packages and `lua_sqlite` depends one-directionally on `:shttps`. Cross-module includes are written in the explicit `shttps/<module>/X.h` form; same-directory siblings stay bare (ADR-0003).
 
@@ -87,7 +87,7 @@ A handful of files in this module are SIPI domain concerns or generic helpers, n
 - `Hash` / `HashType` — used by `Essentials::pixel_checksum`. Belongs to SIPI's preservation domain.
 - `Parsing` — URL decoding, mime-type magic, header parsing helpers. Generic utilities; SIPI-side support module.
 - `Error` — base class of `SipiError`. Fold into SIPI's error hierarchy.
-- `Global`, `makeunique` — pure utilities. Inline or move to SIPI-side support.
+- `Global` — pure utilities. Inline or move to SIPI-side support.
 
 Per ADR-0013, the re-homing is no longer a *Rust precondition* — the whole codebase is going to Rust, so the destination on the C++ side does not affect the Rust shape.
 

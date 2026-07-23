@@ -5,6 +5,7 @@
 
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <string>
 
@@ -15,7 +16,6 @@
 
 #include "Error.h"
 #include "Hash.h"
-#include "makeunique.h"
 
 using namespace std;
 
@@ -67,7 +67,7 @@ bool Hash::add_data(const void *data, size_t len) { return EVP_DigestUpdate(cont
 
 bool Hash::hash_of_file(const string &path, size_t buflen)
 {
-  auto buf = make_unique<char[]>(buflen);
+  auto buf = std::make_unique<char[]>(buflen);
 
   int fptr = ::open(path.c_str(), O_RDONLY);
   if (fptr == -1) { return false; }
