@@ -35,12 +35,30 @@ to determine the SemVer bump and generate the changelog.
 
 ## Pull request CI
 
-Workflow: `.github/workflows/ci.yml`. Trigger: `pull_request` only.
+Workflow: `.github/workflows/ci.yml`. Trigger: `pull_request` plus
+manual `workflow_dispatch`. No Nix anywhere in this workflow — every
+job provisions Bazel and `just` on a plain GitHub-hosted runner via
+the `.github/actions/ci-setup` composite action (see "CI environment
+provisioning" below). Nix remains the local dev-shell provisioner only.
+
+### `changes` gate
+
+A `changes` job runs first and inspects the diff to decide whether the
+two sanitizer jobs (below) need to run: it looks for changes under
+`src/`, `include/`, `test/`, `fuzz/`, `bazel/`, `platforms/`, `config/`,
+`scripts/`, `MODULE.bazel*`, `.bazelrc`, `.bazelversion`, `BUILD.bazel`,
+`justfile`, `.lsan_suppressions.txt`, `ci.yml`, and `.github/actions/`.
+A docs-only PR skips both sanitizer jobs — a skipped required job still
+satisfies branch rulesets. The `test` matrix has no `needs:` on this
+job and starts immediately, in parallel with it. A manual
+`workflow_dispatch` run bypasses the filter and always runs both
+sanitizer jobs.
 
 ### Test matrix
 
 The `test` job runs on three platforms — `linux-amd64`,
-`linux-arm64`, `darwin-arm64`. Every platform runs the same steps:
+`linux-arm64`, `darwin-arm64` — and all three legs start immediately;
+none of them wait on a separate lint gate. Every leg runs:
 
 1. **Build + test** — `just bazel-test` (fastbuild, no
    instrumentation; unit + approval + e2e in a single Bazel
@@ -50,15 +68,61 @@ The `test` job runs on three platforms — `linux-amd64`,
    `:docker_smoke` rust_test, the test loads the OCI tarball into
    the local Docker daemon, and runs the smoke suite against the
    loaded container.
-3. **Docker Scout** (Linux PRs only):
-   - `Docker Scout — compare to production` — both arches.
-   - `Docker Scout — CVE report (SARIF)` and
-     `Upload SARIF to GitHub Security` — amd64 only (CVE findings
-     are arch-independent).
+3. **Docker Scout** (linux-amd64 PRs only, one leg — a single PR
+   comment): `Docker Scout — compare to production`,
+   `Docker Scout — CVE report (SARIF)`, and
+   `Upload SARIF to GitHub Security`.
+
+The standalone `lint` job is gone. Its four checks — the shttps→sipi
+boundary check, the differential-coverage drift guard,
+`bazel-rustfmt-check`, and `bazel-clippy-check` — now run as extra
+steps inside the `test / linux-arm64` leg, the shortest of the three
+legs, instead of gating the matrix from a separate job.
+
+The differential parity gate (Rust shell vs the retained C++ oracle,
+`just bazel-test-differential`) also runs as an extra step, on the
+`linux-amd64` leg only — one platform is enough since Rust↔C++
+divergences are code-level, not platform-specific.
 
 A separate `docs` job runs `just docs-build` (mkdocs strict-mode
 build) on ubuntu-latest. The `docs-build` job is the gate that
 catches broken cross-links and stale nav entries on every PR.
+
+### Path-gated sanitizer jobs
+
+The jobs `sanitizer-unit` (`asan-ubsan-unit / amd64`) and
+`sanitizer-e2e` (`asan-ubsan-e2e / amd64`) run ASan+UBSan over the
+unit and e2e suites respectively, in parallel, gated by the `changes`
+job above. Splitting unit and e2e into two concurrent jobs saves
+wall-clock time; RBE dedups the shared instrumented `sipi` compile
+across both via the remote cache, so the split costs no extra
+compute. Runs on linux-x86_64 only
+(the macOS toolchain args omit the sanitizer header path). ASan/LSan
+symbol resolution (`ASAN_SYMBOLIZER_PATH`) now comes from the
+hermetic LLVM 22.1.7 toolchain via the `//bazel:llvm-symbolizer` alias
+and the `just asan-symbolizer` recipe (version-matched to clang
+22.1.7) — not from a Nix `.#llvm-tools` shell.
+
+### CI environment provisioning
+
+Every Bazel-invoking job in `ci.yml` (and in `publish.yml`,
+`coverage.yml`, `fuzz.yml`) starts with the `.github/actions/ci-setup`
+composite action, which wraps:
+
+- `bazelbuild/setup-bazelisk` — bazelisk on PATH (reads
+  `.bazelversion`).
+- `extractions/setup-just` — `just` on PATH.
+- Optional git-LFS restore/pull (test images), when the job needs them.
+- The Bazel repository cache (`actions/cache` over
+  `~/.cache/bazel-repo`), keyed on `MODULE.bazel.lock`.
+- The existing `.github/actions/bazel-rbe` composite action, for the
+  RBE mTLS material and cross-compile flags.
+
+`gh` is preinstalled on GitHub-hosted runners, so no setup step
+provisions it. `GH_TOKEN` is passed as plain step `env:` on the
+`just bazel-*` invocation that needs it (the `gh_release_archive`
+repository_rule shells out to `gh release download` for the Kakadu
+fetch) — there is no Nix-impure-env hack involved.
 
 ### Forked PR behavior
 
@@ -68,17 +132,27 @@ Every Bazel-invoking step sets
 don't have access to `DASCHBOT_PAT`, so the Kakadu fetch fails
 and the build short-circuits. Internal PRs are unaffected.
 
+### Required checks
+
+Branch rulesets require the three `test / *` legs
+(`test / linux-amd64`, `test / linux-arm64`, `test / darwin-arm64`)
+plus the two `asan-ubsan-*` jobs. The `docs` job and the `changes`
+gate itself are not required checks.
+
 ## Post-merge coverage
 
 Workflow: `.github/workflows/coverage.yml`. Trigger:
-`push: branches: [main]` + `workflow_dispatch` for manual runs.
-Fires on every merge to `main`.
+`workflow_dispatch` only (manual runs) — see the workflow's header
+comment for why the `push: branches: [main]` trigger stays disabled
+under the current hermetic-llvm toolchain.
 
-A single `linux-amd64` job enters the `.#llvm-tools` dev shell
-(default shell + `llvmPackages_19.llvm` for `llvm-cov` /
-`llvm-profdata`) and runs `just bazel-coverage`. The combined
-lcov report at `bazel-out/_coverage/_coverage_report.dat` is
-uploaded to Codecov.
+A single `linux-amd64` job runs via `ci-setup` and calls
+`just bazel-coverage`. The recipe's `collect_cc_coverage.sh` needs
+`COVERAGE_GCOV_PATH`/`LLVM_COV` on PATH; those resolve from the
+hermetic Bazel toolchain's `//bazel:llvm-profdata`/`//bazel:llvm-cov`
+aliases, not from a Nix dev shell — no `.#llvm-tools` shell is
+involved in CI. The combined lcov report at
+`bazel-out/_coverage/_coverage_report.dat` is uploaded to Codecov.
 
 **Why split out:** Coverage instrumentation adds 1.5–2× compile
 overhead and slower test runtime; running it on every PR push
@@ -88,18 +162,13 @@ shows up immediately after merge instead. To restore PR-scoped
 signal selectively, add a `pull_request: paths: ['src/**']` trigger
 to this workflow.
 
-**Why a separate dev shell:** `bazel coverage`'s
-`collect_cc_coverage.sh` hard-requires `COVERAGE_GCOV_PATH` and
-`LLVM_COV` env vars on every test action. The justfile recipe
-resolves them via `$(command -v llvm-{cov,profdata})`, so those
-binaries must be on PATH. Keeping LLVM 19 host binaries out of the
-default shell saves ~200 MB of closure on first `nix develop` for
-everyday users.
-
 ## Tag release CI/CD
 
 Workflow: `.github/workflows/publish.yml`. Trigger: tag push
 matching `v*`.
+
+Like `ci.yml`, every Bazel-invoking job provisions its environment via
+the `.github/actions/ci-setup` composite action — no Nix.
 
 Gate model:
 
@@ -108,19 +177,24 @@ Gate model:
    `just bazel-docker-build-${arch}` and runs
    `just bazel-test-smoke` against it.
 2. `release-gate` — fires on `validate-docker` success.
-3. Publish jobs run in parallel after the gate:
+3. Publish jobs run after the gate:
    - `publish-docker / {amd64, arm64}` — rebuilds the per-arch
      image, extracts the `.debug` file via
-     `just bazel-docker-extract-debug ${arch}`, runs smoke tests,
-     pushes via `just bazel-docker-push-${arch}`, uploads SBOM,
-     pushes debug symbols to Sentry.
-   - `manifest` — runs `just bazel-docker-publish-manifest`
-     (`crane index append`) to assemble the multi-arch manifest at
-     `daschswiss/sipi:v<version>` from the two pushed per-arch
-     digests. Also tags the manifest as `:latest`.
-   - `docs` — mkdocs deploy.
-4. `sentry` finalises the release after the manifest job
-   completes.
+     `just bazel-docker-extract-debug ${arch}`, pushes via
+     `just bazel-docker-push-${arch}`, uploads SBOM, pushes debug
+     symbols to Sentry. It does not repeat the smoke test —
+     `validate-docker` already validated the same commit.
+   - `manifest` — needs `publish-docker`; runs
+     `just bazel-docker-publish-manifest` (`crane index append`) to
+     assemble the multi-arch manifest at `daschswiss/sipi:v<version>`
+     from the two pushed per-arch digests, and tags it `:latest`.
+     Provisioned via `imjasonh/setup-crane` + `extractions/setup-just`
+     only — no Bazel/RBE setup, since the recipe only shells out to
+     `crane`.
+   - `sentry` — also needs `publish-docker` directly and runs in
+     parallel with `manifest` (not after it), finalising the Sentry
+     release.
+   - `docs` — needs `release-gate`; mkdocs deploy.
 
 ## Remote build execution and caching
 
@@ -146,8 +220,10 @@ VM provisioning and the NativeLink service configuration.
 ## Local reproduction
 
 Every CI step invokes `just <recipe>` — there are no inline
-`bazel ...` calls in any workflow. To reproduce any CI job
-locally, run the same recipe inside `nix develop`:
+`bazel ...` calls in any workflow. CI itself runs Nix-free (see
+"Pull request CI" above); locally, Nix still provisions the dev
+shell. To reproduce any CI job locally, run the same recipe inside
+`nix develop`:
 
 ```bash
 nix develop
@@ -156,10 +232,11 @@ nix develop
 just bazel-test
 just bazel-test-smoke
 
-# Coverage (matches `coverage.yml`; needs the .#llvm-tools shell)
+# Coverage (matches `coverage.yml`; needs the .#llvm-tools shell locally)
 nix develop .#llvm-tools --command just bazel-coverage
 
-# Sanitizer build + e2e (what sanitizer.yml runs)
+# Sanitizer build + e2e (matches the `sanitizer-unit`/`sanitizer-e2e`
+# jobs folded into ci.yml)
 just bazel-build-sanitized
 just bazel-test-e2e --config=asan --config=ubsan
 

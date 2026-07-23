@@ -101,7 +101,8 @@
             };
             # LLVM-host-tools shell — `default` + `llvmPackages_19.llvm`,
             # which ships `llvm-cov`, `llvm-profdata`, and `llvm-symbolizer`.
-            # Two consumers, both gated on host LLVM binaries on PATH:
+            # For LOCAL coverage/sanitizer runs only, gated on host LLVM
+            # binaries on PATH:
             #   - `just bazel-coverage` — Bazel's `collect_cc_coverage.sh`
             #     hard-requires `COVERAGE_GCOV_PATH` (= llvm-profdata) and
             #     `LLVM_COV` (= llvm-cov); the justfile recipe resolves
@@ -111,9 +112,10 @@
             #     frames into function names so the name-based
             #     suppressions in `.lsan_suppressions.txt` (`leak:lua*`)
             #     can match.
-            # Used by `.github/workflows/coverage.yml` and `sanitizer.yml`.
-            # Local devs running coverage or sanitizers should
-            # `nix develop .#llvm-tools` instead of the default shell.
+            # CI resolves these tools hermetically from the Bazel toolchain
+            # (`//bazel:llvm-*` aliases) instead of this shell. Local devs
+            # running coverage or sanitizers should `nix develop .#llvm-tools`
+            # instead of the default shell.
             llvm-tools = mkSipiShell {
               name = "sipi-llvm-tools";
               stdenv = pkgs.llvmPackages_19.libcxxStdenv;

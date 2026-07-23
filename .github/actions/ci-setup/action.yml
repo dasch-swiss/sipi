@@ -1,0 +1,79 @@
+name: CI setup
+description: >
+  Provisions the Bazel CI environment: optional git-LFS test-data pull,
+  bazelisk, just, the Bazel repository cache, and RBE mTLS flags. Consumed by
+  ci.yml, publish.yml, coverage.yml, and fuzz.yml — every workflow that runs a
+  `just bazel-*` recipe.
+
+  NOT handled here: GH_TOKEN. Callers pass it as step `env:` on the `just
+  bazel-*` invocation itself — the `gh_release_archive` repository_rule shells
+  out to `gh release download` for the Kakadu fetch, and `gh` is preinstalled
+  on GitHub-hosted runners (no setup step needed).
+
+inputs:
+  lfs:
+    description: "Whether to restore/pull git-LFS objects (test images). 'true' or 'false'."
+    default: "false"
+  target-platform:
+    description: "Bazel target platform for this runner, forwarded to bazel-rbe (e.g. //platforms:linux_aarch64)."
+    default: "//platforms:linux_x86_64"
+  rbe-runner-endpoint:
+    description: RE-API endpoint (empty on fork PRs — no secrets available).
+  rbe-ca-cert:
+    description: NativeLink server CA (PEM).
+  rbe-client-cert:
+    description: mTLS client cert (PEM).
+  rbe-client-key:
+    description: mTLS client key (PEM).
+
+outputs:
+  flags:
+    description: Bazel flag string from bazel-rbe; pass to a `just bazel-*` recipe.
+    value: ${{ steps.rbe.outputs.flags }}
+
+runs:
+  using: composite
+  steps:
+    # Persist git-LFS objects (test images) across runs so a warm cache skips
+    # re-downloading them from the LFS store.
+    - if: inputs.lfs == 'true'
+      name: restore LFS cache
+      uses: actions/cache@v4
+      with:
+        path: .git/lfs
+        key: lfs-${{ hashFiles('.gitattributes') }}
+        restore-keys: lfs-
+
+    - if: inputs.lfs == 'true'
+      name: pull LFS objects
+      shell: bash
+      run: |
+        git lfs install
+        git lfs pull
+
+    # Recipes invoke `bazel` directly — don't rely on a runner-image
+    # preinstall (versions drift; bazelisk pins `.bazelversion`).
+    - uses: bazelbuild/setup-bazelisk@v3
+
+    - uses: extractions/setup-just@v3
+
+    # Persist Bazel's repository cache (--repository_cache in .bazelrc) across
+    # runs: external archives + bzlmod registry files download from upstream
+    # only when MODULE.bazel.lock changes.
+    - name: Restore Bazel repository cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/bazel-repo
+        key: bazel-repo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('MODULE.bazel.lock') }}
+        restore-keys: bazel-repo-${{ runner.os }}-${{ runner.arch }}-
+
+    # Remote cache + executor mTLS material + the Bazel flag string. See
+    # `.github/actions/bazel-rbe/action.yml` for the RBE topology.
+    - id: rbe
+      uses: ./.github/actions/bazel-rbe
+      with:
+        runner-endpoint: ${{ inputs.rbe-runner-endpoint }}
+        ca-cert: ${{ inputs.rbe-ca-cert }}
+        client-cert: ${{ inputs.rbe-client-cert }}
+        client-key: ${{ inputs.rbe-client-key }}
+        target-platform: ${{ inputs.target-platform }}

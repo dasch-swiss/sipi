@@ -277,8 +277,9 @@ Bazel 9; parse the JSON directly.)
 On a warm cache the two approaches are essentially equal. RBE is slower cold because all
 three legs share one worker and each has to rebuild the shared exec-config toolchain from
 scratch concurrently (only ~220–430 cross-leg cache hits on a cold run). The cache-only
-setup has no shared bottleneck. A ~6–9 minute fixed per-leg overhead (`nix develop`, LFS
-pull, Docker Scout) is identical either way and cannot be accelerated by RBE.
+setup has no shared bottleneck. A ~6–9 minute fixed per-leg overhead (`ci-setup`
+provisioning, LFS pull, Docker Scout) is identical either way and cannot be accelerated
+by RBE.
 
 **RBE buys no per-PR speed on a single worker. Its value is cross-compilation and the
 ability to scale out workers.**
@@ -357,15 +358,18 @@ fetched). The smoke test then finds the image regardless of its cache state.
 
 `ci.yml`'s `test` job runs the matrix on all three platforms. Each leg:
 
-1. Calls `.github/actions/bazel-rbe` with its `matrix.bazel-platform` to obtain the
-   `$RBE_FLAGS` string.
+1. Calls `.github/actions/ci-setup` with its `matrix.bazel-platform`, which provisions
+   bazelisk + `just` on the plain GitHub-hosted runner and internally calls
+   `.github/actions/bazel-rbe` to obtain the `$RBE_FLAGS` string — no Nix involved.
 2. Passes `$RBE_FLAGS` to every `just bazel-*` invocation.
 3. Runs `just bazel-test` (unit + approval + e2e).
 4. On Linux: runs `just bazel-test-smoke` (which first calls `bazel run //src:image_load`).
-5. On Linux PRs: runs Docker Scout.
+5. On linux-amd64 PRs: runs Docker Scout.
 
-The `coverage.yml`, `sanitizer.yml`, `fuzz.yml`, and `publish.yml` workflows use the
-same composite action so all Bazel invocations benefit from the shared remote cache.
+`ci.yml`'s path-gated `sanitizer-unit`/`sanitizer-e2e` jobs, plus `coverage.yml`,
+`fuzz.yml`, and `publish.yml`, all go
+through the same `ci-setup` action so every Bazel invocation benefits from the shared
+remote cache.
 
 ## Reference
 

@@ -188,7 +188,7 @@ differential-coverage-check:
 
 # Sanitized build: Debug + ASan + UBSan via Bazel
 # `--config=asan --config=ubsan`. The resulting binary at
-# `bazel-bin/src/cli/sipi` is what `sanitizer.yml`'s e2e step consumes
+# `bazel-bin/src/cli/sipi` is what ci.yml's sanitizer jobs' e2e tests consume
 # via `SIPI_BIN`. DWARF stays inline (`--strip=never` in
 # `.bazelrc`) so the symbol-name suppressions in `.lsan_suppressions.txt`
 # match. `--verbose_failures` surfaces the full failing compile/link

@@ -394,7 +394,7 @@
     },
     "//bazel:kakadu_extension.bzl%kakadu_extension": {
       "general": {
-        "bzlTransitiveDigest": "Jr0+G+GPDj5PAPvJYQKjufqx411DvwnrXf2C2+0mTuY=",
+        "bzlTransitiveDigest": "pLiKEH/PYi69EYoI6T5lT6ZYqQNSdH3ABpEE4EdTKGQ=",
         "usagesDigest": "qQJAPNB0P4wpi2VGK88Ly/QPw3k4aStJZGi3BDzVzjc=",
         "recordedInputs": [],
         "generatedRepoSpecs": {

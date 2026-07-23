@@ -61,7 +61,7 @@ just bench <tier>                # tier ∈ parse|decode|process|encode; -c opt 
 just bench-compare before after  # U-test deltas + geomean via //tools/benchmark:compare
 
 # Sanitizer + fuzz
-just bazel-build-sanitized       # bazel build --config=asan --config=ubsan //src/cli:sipi  (sanitizer.yml CI)
+just bazel-build-sanitized       # bazel build --config=asan --config=ubsan //src/cli:sipi  (ci.yml sanitizer-unit/sanitizer-e2e jobs)
 just bazel-build-fuzz            # bazel build --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz  (fuzz.yml CI on linux-x86_64; darwin-aarch64 supported for local dev)
 just bazel-run-fuzz <corpus> <duration> [seed]  # libFuzzer args; recipe builds + execs the binary directly
 
