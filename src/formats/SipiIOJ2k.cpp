@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <span>
 #include <string>
 #include <vector>
@@ -197,9 +198,9 @@ static KduSipiError kdu_sipi_error("Kakadu-library: ");
 
 static bool is_jpx(const char *fname)
 {
-  int inf;
   int retval = 0;
-  if ((inf = ::open(fname, O_RDONLY)) != -1) {
+  int inf = ::open(fname, O_RDONLY);
+  if (inf != -1) {
     char testbuf[48];
     char sig0[] = { '\xff', '\x52' };
     char sig1[] = { '\xff', '\x4f', '\xff', '\x51' };
@@ -211,8 +212,8 @@ static bool is_jpx(const char *fname)
       retval = 1;
     } else if ((n >= 12) && (memcmp(sig2, testbuf, 12) == 0))
       retval = 1;
+    close(inf);
   }
-  close(inf);
   return retval == 1;
 }
 //=============================================================================
@@ -247,6 +248,30 @@ bool SipiIOJ2k::read(SipiImage *img,
   kdu_supp::jp2_palette palette;
   kdu_supp::jp2_resolution resolution;
   kdu_supp::jp2_colour colour;
+
+  kdu_core::kdu_codestream codestream;
+
+  // Tears down the Kakadu decode machinery exactly once on every exit path
+  // (normal, throw, and error-return), in the required order: codestream
+  // first, then the compressed source, then the JPX container.
+  struct KduReadTeardown
+  {
+    kdu_core::kdu_codestream &codestream;
+    kdu_core::kdu_compressed_source *&input;
+    kdu_supp::jpx_source &jpx_in;
+    bool done = false;
+
+    void teardown()
+    {
+      if (done) { return; }
+      done = true;
+      if (codestream.exists()) { codestream.destroy(); }
+      if (input != nullptr) { input->close(); }
+      jpx_in.close();
+    }
+
+    ~KduReadTeardown() { teardown(); }
+  } kdu_teardown{ codestream, input, jpx_in };
 
   jp2_ultimate_src.open(filepath.c_str());
 
@@ -334,23 +359,20 @@ bool SipiIOJ2k::read(SipiImage *img,
       input = jpx_stream.open_stream();
       palette = jpx_stream.access_palette();
     } catch (kdu_exception&) {
-      // input is live only if open_stream() returned before the throw; the
-      // codestream is not created yet. jp2_ultimate_src is released by its
-      // destructor on unwind, as on the normal path (which closes only
-      // input + jpx_in).
-      if (input != nullptr) input->close();
-      jpx_in.close();
+      // KduReadTeardown closes whatever is live (input is set only if
+      // open_stream() returned before the throw; the codestream is not
+      // created yet). jp2_ultimate_src is released by its destructor on
+      // unwind, as on the normal path.
       throw SipiImageError(
         "Cannot read JPEG2000 file \"" + filepath + "\": no usable codestream in JP2/JPX container");
     }
   }
 
-  kdu_core::kdu_codestream codestream;
   // Corrupt or truncated input makes create()/header parsing raise a Kakadu
   // error, which KduSipiError::flush throws as a kdu_exception. Convert it to a
-  // SipiImageError (as the JPEG/PNG handlers do) after tearing down the
-  // codestream + source, so the engine reports an enriched error rather than a
-  // bare catch-all, and no source is leaked on the failure path.
+  // SipiImageError (as the JPEG/PNG handlers do); KduReadTeardown tears down
+  // the codestream + source, so the engine reports an enriched error rather
+  // than a bare catch-all, and no source is leaked on the failure path.
   int maximal_reduce;
   try {
     codestream.create(input);
@@ -358,11 +380,6 @@ bool SipiIOJ2k::read(SipiImage *img,
     codestream.set_fast();// No errors expected in input
     maximal_reduce = codestream.get_min_dwt_levels();
   } catch (kdu_exception&) {
-    // create() can throw before the codestream exists; input is already set by
-    // the branch above. Otherwise the same teardown as the ROI/normal paths.
-    if (codestream.exists()) codestream.destroy();
-    input->close();
-    jpx_in.close();
     throw SipiImageError(
       "Cannot read JPEG2000 file \"" + filepath + "\": corrupt or truncated codestream");
   }
@@ -407,18 +424,11 @@ bool SipiIOJ2k::read(SipiImage *img,
   kdu_core::kdu_dims roi;
   bool do_roi = false;
   if ((region != nullptr) && (region->getType()) != SipiRegion::FULL) {
-    try {
-      size_t sx, sy;
-      region->crop_coords(__nx, __ny, roi.pos.x, roi.pos.y, sx, sy);
-      roi.size.x = sx;
-      roi.size.y = sy;
-      do_roi = true;
-    } catch (Sipi::SipiError &err) {
-      codestream.destroy();
-      input->close();
-      jpx_in.close();// Not really necessary here.
-      throw err;
-    }
+    size_t sx, sy;
+    region->crop_coords(__nx, __ny, roi.pos.x, roi.pos.y, sx, sy);
+    roi.size.x = sx;
+    roi.size.y = sy;
+    do_roi = true;
   }
 
   //
@@ -457,9 +467,9 @@ bool SipiIOJ2k::read(SipiImage *img,
   //
   // The following definitions we need in case we get a palette color image!
   //
-  byte *rlut = NULL;
-  byte *glut = NULL;
-  byte *blut = NULL;
+  std::vector<byte> rlut;
+  std::vector<byte> glut;
+  std::vector<byte> blut;
   //
   // get ICC-Profile if available
   //
@@ -474,20 +484,19 @@ bool SipiIOJ2k::read(SipiImage *img,
     int nluts = palette.get_num_luts();
     if (nluts == 3) {
       int nentries = palette.get_num_entries();
-      rlut = new byte[nentries];
-      glut = new byte[nentries];
-      blut = new byte[nentries];
-      float *tmplut = new float[nentries];
+      rlut.resize(nentries);
+      glut.resize(nentries);
+      blut.resize(nentries);
+      std::vector<float> tmplut(nentries);
 
-      palette.get_lut(0, tmplut);
+      palette.get_lut(0, tmplut.data());
       for (int i = 0; i < nentries; i++) { rlut[i] = roundf((tmplut[i] + 0.5) * 255.0); }
 
-      palette.get_lut(1, tmplut);
+      palette.get_lut(1, tmplut.data());
       for (int i = 0; i < nentries; i++) { glut[i] = roundf((tmplut[i] + 0.5) * 255.0); }
 
-      palette.get_lut(2, tmplut);
+      palette.get_lut(2, tmplut.data());
       for (int i = 0; i < nentries; i++) { blut[i] = roundf((tmplut[i] + 0.5) * 255.0); }
-      delete[] tmplut;
     }
     img->orientation = TOPLEFT;
     if (img->nc > numcol) {// we have more components than colors -> alpha channel!
@@ -604,11 +613,6 @@ bool SipiIOJ2k::read(SipiImage *img,
   try {
     decompressor.start(codestream);
   } catch (kdu_exception&) {
-    // codestream + input are both live here (create() already succeeded);
-    // unconditional teardown, matching the ROI-error and normal-exit paths.
-    codestream.destroy();
-    input->close();
-    jpx_in.close();
     throw SipiImageError(
       "Cannot read JPEG2000 file \"" + filepath + "\": corrupt codestream (decompressor start failed)");
   }
@@ -620,57 +624,55 @@ bool SipiIOJ2k::read(SipiImage *img,
   if (force_bps_8) img->bps = 8;// forces kakadu to convert to 8 bit!
   switch (img->bps) {
   case 8: {
-    auto *buffer8 = new kdu_core::kdu_byte[static_cast<int>(dims.area()) * img->nc];
+    auto buffer8 = std::make_unique<kdu_core::kdu_byte[]>(static_cast<int>(dims.area()) * img->nc);
     try {
-      decompressor.pull_stripe(buffer8, stripe_heights);
+      decompressor.pull_stripe(buffer8.get(), stripe_heights);
     } catch (kdu_exception &exc) {
-      codestream.destroy();
-      input->close();
-      jpx_in.close();// Not really necessary here.
       log_err("Error while decompressing image: %s.", filepath.c_str());
       return false;
     }
-    img->pixels = buffer8;
+    img->pixels = buffer8.release();
     break;
   }
   case 12: {
     std::vector<char> get_signed(img->nc, 0);// vector<bool> does not work -> special treatment in C++
-    auto *buffer16 = new kdu_core::kdu_int16[(int)dims.area() * img->nc];
+    auto buffer16 = std::make_unique<kdu_core::kdu_int16[]>((int)dims.area() * img->nc);
     try {
-      decompressor.pull_stripe(
-        buffer16, stripe_heights, nullptr, nullptr, nullptr, nullptr, reinterpret_cast<bool *>(get_signed.data()));
+      decompressor.pull_stripe(buffer16.get(),
+        stripe_heights,
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr,
+        reinterpret_cast<bool *>(get_signed.data()));
     } catch (kdu_exception &exc) {
-      codestream.destroy();
-      input->close();
-      jpx_in.close();// Not really necessary here.
       log_err("Error while decompressing image: %s.", filepath.c_str());
       return false;
     }
-    img->pixels = reinterpret_cast<byte *>(buffer16);
+    img->pixels = reinterpret_cast<byte *>(buffer16.release());
     img->bps = 16;
     break;
   }
   case 16: {
     std::vector<char> get_signed(img->nc, 0);// vector<bool> does not work -> special treatment in C++
-    auto *buffer16 = new kdu_core::kdu_int16[(int)dims.area() * img->nc];
+    auto buffer16 = std::make_unique<kdu_core::kdu_int16[]>((int)dims.area() * img->nc);
     try {
-      decompressor.pull_stripe(
-        buffer16, stripe_heights, nullptr, nullptr, nullptr, nullptr, reinterpret_cast<bool *>(get_signed.data()));
+      decompressor.pull_stripe(buffer16.get(),
+        stripe_heights,
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr,
+        reinterpret_cast<bool *>(get_signed.data()));
     } catch (kdu_exception &exc) {
-      codestream.destroy();
-      input->close();
-      jpx_in.close();// Not really necessary here.
       log_err("Error while decompressing image: %s.", filepath.c_str());
       return false;
     }
-    img->pixels = reinterpret_cast<byte *>(buffer16);
+    img->pixels = reinterpret_cast<byte *>(buffer16.release());
     break;
   }
   default: {
     decompressor.finish();
-    codestream.destroy();
-    input->close();
-    jpx_in.close();// Not really necessary here.
     log_err("Unsupported number of bits/sample: %ld in file %s", img->bps, filepath.c_str());
     throw SipiImageError("Cannot read JPEG2000: unsupported bits/sample (" + std::to_string(img->bps)
       + ") in file \"" + filepath + "\" (dimensions: " + std::to_string(img->nx) + "x"
@@ -678,15 +680,13 @@ bool SipiIOJ2k::read(SipiImage *img,
   }
   }
   decompressor.finish();
-  codestream.destroy();
-  input->close();
-  jpx_in.close();// Not really necessary here.
+  kdu_teardown.teardown();
 
-  if (rlut != NULL) {
+  if (!rlut.empty()) {
     //
     // we have a palette color image...
     //
-    byte *tmpbuf = new byte[img->nx * img->ny * numcol];
+    auto tmpbuf = std::make_unique<byte[]>(img->nx * img->ny * numcol);
     for (int y = 0; y < img->ny; ++y) {
       for (int x = 0; x < img->nx; ++x) {
         tmpbuf[3 * (y * img->nx + x) + 0] = rlut[img->pixels[y * img->nx + x]];
@@ -695,11 +695,8 @@ bool SipiIOJ2k::read(SipiImage *img,
       }
     }
     delete[] img->pixels;
-    img->pixels = tmpbuf;
+    img->pixels = tmpbuf.release();
     img->nc = numcol;
-    delete[] rlut;
-    delete[] glut;
-    delete[] blut;
   }
   if (img->photo == PhotometricInterpretation::YCBCR) {
     img->convertYCC2RGB();
@@ -744,6 +741,30 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
   kdu_supp::jpx_codestream_source jpx_stream;
   kdu_core::kdu_compressed_source *input = nullptr;
   kdu_supp::kdu_simple_file_source file_in;
+
+  kdu_core::kdu_codestream codestream;
+
+  // Same exactly-once teardown as in read(): a corrupt file makes
+  // codestream.create() (or set_fussy header parsing) throw a kdu_exception,
+  // and the sources must not leak on that path.
+  struct KduReadTeardown
+  {
+    kdu_core::kdu_codestream &codestream;
+    kdu_core::kdu_compressed_source *&input;
+    kdu_supp::jpx_source &jpx_in;
+    bool done = false;
+
+    void teardown()
+    {
+      if (done) { return; }
+      done = true;
+      if (codestream.exists()) { codestream.destroy(); }
+      if (input != nullptr) { input->close(); }
+      jpx_in.close();
+    }
+
+    ~KduReadTeardown() { teardown(); }
+  } kdu_teardown{ codestream, input, jpx_in };
 
   jp2_ultimate_src.open(filepath.c_str());
 
@@ -809,7 +830,6 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
         Sipi::observability::EssentialsFormat::Jp2,
         Sipi::observability::ReadShapeFastPathOutcome::Hit)
         .Increment();
-      jpx_in.close();
       return info;
     }
     // Pre-record fast-path outcome for the slow path; the actual
@@ -819,7 +839,6 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
     input = jpx_stream.open_stream();
   }
 
-  kdu_core::kdu_codestream codestream;
   codestream.create(input);
   codestream.set_fussy();// Set the parsing error tolerance.
 
@@ -876,10 +895,6 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
   }
   Sipi::observability::read_shape_fast_path_counter(
     Sipi::observability::EssentialsFormat::Jp2, outcome).Increment();
-
-  codestream.destroy();
-  input->close();
-  jpx_in.close();// Not really necessary here.
 
   return info;
 }
@@ -972,6 +987,12 @@ void SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const SipiCompress
   std::unique_ptr<SinkStream> sink_stream;
   std::unique_ptr<J2kHttpStream> http;
 
+  // Declared outside the try so the catch below can destroy it; the JPX
+  // target and its boxes are deliberately NOT closed on the error path —
+  // closing a jpx_target with incompletely written codestreams raises
+  // another Kakadu error.
+  kdu_codestream codestream;
+
   try {
     // Construct code-stream object
     siz_params siz;
@@ -1054,7 +1075,6 @@ void SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const SipiCompress
       env_ref = nullptr;
     }
 
-    kdu_codestream codestream;
     codestream.create(&siz, output, nullptr, 0, 0, env_ref, &membroker);
 
     // Set up any specific coding parameters and finalize them.
@@ -1378,18 +1398,13 @@ void SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const SipiCompress
 
     // int *stripe_heights = new int[img->nc];
     int stripe_heights[5];
-    int *precisions;
-    bool *is_signed;
     if (img->bps == 16) {
       kdu_int16 *buf = (kdu_int16 *)img->pixels;
-      precisions = new int[img->nc];
-      is_signed = new bool[img->nc];
-      for (size_t i = 0; i < img->nc; i++) {
-        precisions[i] = img->bps;
-        is_signed[i] = false;
-      }
+      std::vector<int> precisions(img->nc, static_cast<int>(img->bps));
+      std::vector<char> is_signed(img->nc, 0);// vector<bool> does not work -> special treatment in C++
       for (size_t i = 0; i < img->nc; i++) { stripe_heights[i] = img->ny; }
-      compressor.push_stripe(buf, stripe_heights, nullptr, nullptr, nullptr, precisions, is_signed);
+      compressor.push_stripe(
+        buf, stripe_heights, nullptr, nullptr, nullptr, precisions.data(), reinterpret_cast<bool *>(is_signed.data()));
     } else if (img->bps == 8) {
       if (th == 0) th = img->ny;
       size_t stripe_start = 0;
@@ -1418,12 +1433,8 @@ void SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const SipiCompress
     output->close();// Not really necessary here.
     jpx_out.close();
     if (jp2_ultimate_tgt.exists()) { jp2_ultimate_tgt.close(); }
-    // delete[] stripe_heights;
-    if (img->bps == 16) {
-      delete[] precisions;
-      delete[] is_signed;
-    }
   } catch (kdu_exception e) {
+    if (codestream.exists()) { codestream.destroy(); }
     if (http && http->client_aborted) {
       throw SipiImageClientAbortError("Client aborted HTTP response during JPEG2000 write");
     }
