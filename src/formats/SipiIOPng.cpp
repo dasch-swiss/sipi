@@ -47,25 +47,19 @@ static char xmp_tag[] = "XML:com.adobe.xmp";
 static char sipi_tag[] = "SIPI:io.sipi.essentials";
 
 //============== HELPER CLASS ==================
+// NOTE: pointers returned by next() are invalidated by the following next()
+// call; write the entry through them immediately (as add_zTXt/add_iTXt do).
 class PngTextPtr
 {
 private:
-  png_text *text_ptr;
-  unsigned int num_text;
-  unsigned int num_text_len;
+  std::vector<png_text> text;
 
 public:
-  inline PngTextPtr(unsigned int len = 16) : num_text_len(len)
-  {
-    num_text = 0;
-    text_ptr = new png_text[num_text_len];
-  };
+  inline PngTextPtr(unsigned int len = 16) { text.reserve(len); };
 
-  inline ~PngTextPtr() { delete[] text_ptr; };
+  inline unsigned int num() const { return static_cast<unsigned int>(text.size()); };
 
-  inline unsigned int num() const { return num_text; };
-
-  inline png_text *ptr() { return text_ptr; };
+  inline png_text *ptr() { return text.data(); };
 
   png_text *next();
 
@@ -74,18 +68,7 @@ public:
   void add_iTXt(char *key, char *data, unsigned int len);
 };
 
-png_text *PngTextPtr::next()
-{
-  if (num_text < num_text_len) {
-    return &(text_ptr[num_text++]);
-  } else {
-    auto *tmpptr = new png_text[num_text_len + 16];
-    for (unsigned int i = 0; i < num_text_len; i++) tmpptr[i] = text_ptr[i];
-    delete[] text_ptr;
-    text_ptr = tmpptr;
-    return &(text_ptr[num_text++]);
-  }
-}
+png_text *PngTextPtr::next() { return &text.emplace_back(); }
 //=============================================
 
 void PngTextPtr::add_zTXt(char *key, char *data, unsigned int len)
@@ -135,33 +118,31 @@ bool SipiIOPng::read(SipiImage *img,
   ScalingQuality scaling_quality)
 {
   SIPI_ZONE_N("SipiIOPng::read");
-  FILE *infile;
   unsigned char header[PNG_BYTES_TO_CHECK];
   png_structp png_ptr;
   png_infop info_ptr;
 
   //
-  // open the input file
+  // open the input file. The unique_ptr is declared before the setjmp, so its
+  // destructor runs on the C++ unwind path when the handler below throws.
   //
-  if ((infile = fopen(filepath.c_str(), "rb")) == nullptr) { return FALSE; }
+  auto infile = std::unique_ptr<FILE, decltype(&fclose)>(fopen(filepath.c_str(), "rb"), fclose);
+  if (infile == nullptr) { return FALSE; }
 
   //
   // check header if we really have a PNG file...
   //
-  fread(header, 1, PNG_BYTES_TO_CHECK, infile);
+  fread(header, 1, PNG_BYTES_TO_CHECK, infile.get());
   if (png_sig_cmp(header, 0, PNG_BYTES_TO_CHECK) != 0) {
-    fclose(infile);
     return FALSE;// it's not a PNG file
   }
 
   if ((png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, (png_voidp) nullptr, sipi_error_fn, sipi_warning_fn))
       == nullptr) {
-    fclose(infile);
     throw SipiImageError("Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_structp !");
   }
   if ((info_ptr = png_create_info_struct(png_ptr)) == nullptr) {
     png_destroy_read_struct(&png_ptr, nullptr, nullptr);
-    fclose(infile);
     throw SipiImageError("Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_infop !");
   }
 
@@ -175,11 +156,10 @@ bool SipiIOPng::read(SipiImage *img,
     delete[] pixel_buffer_guard;
     delete[] row_pointers_guard;
     png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
-    fclose(infile);
     throw SipiImageError("PNG read failed for \"" + filepath + "\"");
   }
 
-  png_init_io(png_ptr, infile);
+  png_init_io(png_ptr, infile.get());
   png_set_sig_bytes(png_ptr, PNG_BYTES_TO_CHECK);
   png_read_info(png_ptr, info_ptr);
 
@@ -308,7 +288,7 @@ bool SipiIOPng::read(SipiImage *img,
   img->pixels = buffer;
 
   delete[] row_pointers;
-  fclose(infile);
+  infile.reset();
 
   if (region != nullptr) {// we just use the image.crop method
     (void)img->crop(region);
@@ -464,6 +444,10 @@ void SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompress
   FILE *outfile = nullptr;
   png_structp png_ptr;
 
+  // Owns the output FILE for the file branch (stdout is never owned).
+  // Declared before the setjmp so the handler's throw unwinds it.
+  auto outfile_guard = std::unique_ptr<FILE, decltype(&fclose)>(nullptr, fclose);
+
   if (!(png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, sipi_error_fn, sipi_warning_fn))) {
     throw SipiImageError("Error writing PNG file \"" + filepath + "\": png_create_write_struct failed !");
   }
@@ -485,19 +469,18 @@ void SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompress
       png_free_data(png_ptr, nullptr, PNG_FREE_ALL, -1);
       throw SipiImageError("Error writing PNG file \"" + filepath + "\": Could not open output file!");
     }
+    outfile_guard.reset(outfile);
   }
 
   png_infop info_ptr;
   if (!(info_ptr = png_create_info_struct(png_ptr))) {
     png_free_data(png_ptr, nullptr, PNG_FREE_ALL, -1);
-    if (outfile != nullptr && outfile != stdout) fclose(outfile);
     throw SipiImageError("Error writing PNG file \"" + filepath + "\": png_create_info_struct !");
   }
 
   // setjmp error recovery for write — sipi_error_fn calls longjmp
   if (setjmp(png_jmpbuf(png_ptr))) {
     png_destroy_write_struct(&png_ptr, &info_ptr);
-    if (outfile != nullptr && outfile != stdout) fclose(outfile);
     if (http_ctx.client_aborted) {
       throw SipiImageClientAbortError("Client aborted HTTP response during PNG write");
     }
@@ -622,8 +605,6 @@ void SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompress
 
   png_ptr = nullptr;
   info_ptr = nullptr;
-
-  if (outfile != nullptr && outfile != stdout) fclose(outfile);
 }
 
 }
