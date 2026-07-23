@@ -1,5 +1,13 @@
 # Changelog
 
+## [6.2.0](https://github.com/dasch-swiss/sipi/compare/v6.1.0...v6.2.0) (2026-07-23)
+
+
+### Features
+
+* **server-rs,cli-rs:** Cache pre_flight access decisions per (image, credential) ([61fd954](https://github.com/dasch-swiss/sipi/commit/61fd9544ca6928379871526c458e710985f25168))
+* **server-rs,ffi:** Trace engine serve phases as child spans ([d650e26](https://github.com/dasch-swiss/sipi/commit/d650e26c4f22b009b3679ac8f45420157e78214b))
+
 ## [6.1.0](https://github.com/dasch-swiss/sipi/compare/v6.0.0...v6.1.0) (2026-07-23)
 
 
