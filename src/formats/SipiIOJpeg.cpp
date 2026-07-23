@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <unistd.h>
 
@@ -94,12 +95,22 @@ static void jpegErrorExit(j_common_ptr cinfo)
 //------------------------------------------------------------------
 
 
-typedef struct FileBuffer
+/*!
+ * Buffer for libjpeg's file source/destination managers. Owned by the caller
+ * of jpeg_file_src/jpeg_file_dest and declared *before* the setjmp() so its
+ * destructor runs on the C++ unwind path; the term_* callbacks only flush and
+ * unhook — they do not free (longjmp would otherwise leak what they skip).
+ */
+struct FileBuffer
 {
-  JOCTET *buffer;
+  explicit FileBuffer(int file_id_p, size_t buflen_p = 65536)
+    : buffer(std::make_unique<JOCTET[]>(buflen_p)), buflen(buflen_p), file_id(file_id_p)
+  {}
+
+  std::unique_ptr<JOCTET[]> buffer;
   size_t buflen;
   int file_id;
-} FileBuffer;
+};
 
 /*!
  * Function which initializes the structures for managing the IO
@@ -108,7 +119,7 @@ static void init_file_destination(j_compress_ptr cinfo)
 {
   auto *file_buffer = (FileBuffer *)cinfo->client_data;
   cinfo->dest->free_in_buffer = file_buffer->buflen;
-  cinfo->dest->next_output_byte = file_buffer->buffer;
+  cinfo->dest->next_output_byte = file_buffer->buffer.get();
 }
 
 //=============================================================================
@@ -122,7 +133,7 @@ static boolean empty_file_buffer(j_compress_ptr cinfo)
   size_t n = file_buffer->buflen;
   size_t nn = 0;
   do {
-    ssize_t tmp_n = write(file_buffer->file_id, file_buffer->buffer + nn, n);
+    ssize_t tmp_n = write(file_buffer->file_id, file_buffer->buffer.get() + nn, n);
     if (tmp_n < 0) {
       ERREXIT(cinfo, JERR_FILE_WRITE);  // triggers jpegErrorExit → longjmp
       return FALSE;  // unreachable, but satisfies return type
@@ -133,7 +144,7 @@ static boolean empty_file_buffer(j_compress_ptr cinfo)
   } while (n > 0);
 
   cinfo->dest->free_in_buffer = file_buffer->buflen;
-  cinfo->dest->next_output_byte = file_buffer->buffer;
+  cinfo->dest->next_output_byte = file_buffer->buffer.get();
 
   return static_cast<boolean>(1);
 }
@@ -146,10 +157,10 @@ static boolean empty_file_buffer(j_compress_ptr cinfo)
 static void term_file_destination(j_compress_ptr cinfo)
 {
   FileBuffer *file_buffer = (FileBuffer *)cinfo->client_data;
-  size_t n = cinfo->dest->next_output_byte - file_buffer->buffer;
+  size_t n = cinfo->dest->next_output_byte - file_buffer->buffer.get();
   size_t nn = 0;
   do {
-    auto tmp_n = write(file_buffer->file_id, file_buffer->buffer + nn, n);
+    auto tmp_n = write(file_buffer->file_id, file_buffer->buffer.get() + nn, n);
     if (tmp_n < 0) {
       ERREXIT(cinfo, JERR_FILE_WRITE);  // triggers jpegErrorExit → longjmp
       return;  // unreachable
@@ -159,32 +170,23 @@ static void term_file_destination(j_compress_ptr cinfo)
     }
   } while (n > 0);
 
-  delete[] file_buffer->buffer;
-  delete file_buffer;
+  // The FileBuffer and the destination manager are owned by the caller of
+  // jpeg_file_dest; only unhook them here.
   cinfo->client_data = nullptr;
-
-  free(cinfo->dest);
   cinfo->dest = nullptr;
 }
 
 //=============================================================================
 
 /*!
- * This function is used to setup the I/O destination to the HTTP socket
+ * This function is used to setup the I/O destination to a file descriptor.
+ * Both the FileBuffer and the destination manager are owned by the caller and
+ * must outlive the compress struct (declare them before the setjmp).
  */
-static void jpeg_file_dest(struct jpeg_compress_struct *cinfo, int file_id)
+static void
+  jpeg_file_dest(struct jpeg_compress_struct *cinfo, FileBuffer *file_buffer, struct jpeg_destination_mgr *destmgr)
 {
-  struct jpeg_destination_mgr *destmgr;
-  FileBuffer *file_buffer;
-  cinfo->client_data = new FileBuffer;
-  file_buffer = (FileBuffer *)cinfo->client_data;
-
-  file_buffer->buffer = new JOCTET[65536];
-  //(JOCTET *) malloc(buflen*sizeof(JOCTET));
-  file_buffer->buflen = 65536;
-  file_buffer->file_id = file_id;
-
-  destmgr = (struct jpeg_destination_mgr *)malloc(sizeof(struct jpeg_destination_mgr));
+  cinfo->client_data = file_buffer;
 
   destmgr->init_destination = init_file_destination;
   destmgr->empty_output_buffer = empty_file_buffer;
@@ -199,7 +201,7 @@ static void jpeg_file_dest(struct jpeg_compress_struct *cinfo, int file_id)
 static void init_file_source(struct jpeg_decompress_struct *cinfo)
 {
   auto *file_buffer = (FileBuffer *)cinfo->client_data;
-  cinfo->src->next_input_byte = file_buffer->buffer;
+  cinfo->src->next_input_byte = file_buffer->buffer.get();
   cinfo->src->bytes_in_buffer = 0;
 }
 
@@ -210,7 +212,7 @@ static boolean file_source_fill_input_buffer(struct jpeg_decompress_struct *cinf
   auto *file_buffer = (FileBuffer *)cinfo->client_data;
   size_t nbytes = 0;
   do {
-    auto n = read(file_buffer->file_id, file_buffer->buffer + nbytes, file_buffer->buflen - nbytes);
+    auto n = read(file_buffer->file_id, file_buffer->buffer.get() + nbytes, file_buffer->buflen - nbytes);
     if (n < 0) {
       break;// error
     }
@@ -226,7 +228,7 @@ static boolean file_source_fill_input_buffer(struct jpeg_decompress_struct *cinf
     nbytes = 2;
     */
   }
-  cinfo->src->next_input_byte = file_buffer->buffer;
+  cinfo->src->next_input_byte = file_buffer->buffer.get();
   cinfo->src->bytes_in_buffer = nbytes;
   return static_cast<boolean>(true);
 }
@@ -249,32 +251,23 @@ static void file_source_skip_input_data(struct jpeg_decompress_struct *cinfo, lo
 
 static void term_file_source(struct jpeg_decompress_struct *cinfo)
 {
-  auto *file_buffer = (FileBuffer *)cinfo->client_data;
-
-  delete[] file_buffer->buffer;
-  delete file_buffer;
+  // The FileBuffer and the source manager are owned by the caller of
+  // jpeg_file_src; only unhook them here.
   cinfo->client_data = nullptr;
-  free(cinfo->src);
   cinfo->src = nullptr;
 }
 
 //=============================================================================
 
 /*!
- * Load the JPEG file
+ * Load the JPEG file. Both the FileBuffer and the source manager are owned by
+ * the caller and must outlive the decompress struct (declare them before the
+ * setjmp).
  */
-static void jpeg_file_src(struct jpeg_decompress_struct *cinfo, int file_id)
+static void jpeg_file_src(struct jpeg_decompress_struct *cinfo, FileBuffer *file_buffer, struct jpeg_source_mgr *srcmgr)
 {
-  struct jpeg_source_mgr *srcmgr;
-  FileBuffer *file_buffer;
-  cinfo->client_data = new FileBuffer;
-  file_buffer = (FileBuffer *)cinfo->client_data;
+  cinfo->client_data = file_buffer;
 
-  file_buffer->buffer = new JOCTET[65536];
-  file_buffer->buflen = 65536;
-  file_buffer->file_id = file_id;
-
-  srcmgr = (struct jpeg_source_mgr *)malloc(sizeof(struct jpeg_source_mgr));
   srcmgr->init_source = init_file_source;
   srcmgr->fill_input_buffer = file_source_fill_input_buffer;
   srcmgr->skip_input_data = file_source_skip_input_data;
@@ -472,12 +465,12 @@ bool SipiIOJpeg::read(SipiImage *img,
   // open the input file
   //
   if ((infile = ::open(filepath.c_str(), O_RDONLY)) == -1) { return false; }
+  FdGuard infile_guard(infile);
   // workaround for bug #0011: jpeglib crashes the app when the file is not a jpeg file
   // we check the magic number before calling any jpeglib routines
   unsigned char magic[2];
-  if (::read(infile, magic, 2) != 2) { ::close(infile); return false; }
+  if (::read(infile, magic, 2) != 2) { return false; }
   if ((magic[0] != 0xff) || (magic[1] != 0xd8)) {
-    close(infile);
     return false;// it's not a JPEG file!
   }
   // move infile position back to the beginning of the file
@@ -494,6 +487,11 @@ bool SipiIOJpeg::read(SipiImage *img,
   JSAMPARRAY linbuf = nullptr;
   jpeg_saved_marker_ptr marker = nullptr;
   unsigned char *icc_buffer_guard = nullptr;  // for cleanup on longjmp
+
+  // Source manager + buffer, owned here and declared before the setjmp so
+  // their destructors run on the C++ unwind path.
+  FileBuffer file_buffer(infile);
+  struct jpeg_source_mgr srcmgr{};
 
   //
   // let's create the decompressor
@@ -517,19 +515,15 @@ bool SipiIOJpeg::read(SipiImage *img,
   // eliminating C++ throw-through-C undefined behavior.
   //
   if (setjmp(jerr.error_jmp)) {
-    // longjmp landed here — clean up and throw in C++ context
+    // longjmp landed here — clean up and throw in C++ context.
+    // file_buffer / srcmgr / infile_guard are declared before the setjmp, so
+    // their destructors run during the throw's stack unwinding.
     free(icc_buffer_guard);  // may have been allocated during marker parsing
-    // Call term_source to free the source manager allocated by jpeg_file_src.
-    // jpeg_destroy_decompress does NOT call term_source on error paths.
-    if (cinfo.src && cinfo.src->term_source) {
-      cinfo.src->term_source(&cinfo);
-    }
     jpeg_destroy_decompress(&cinfo);
-    ::close(infile);
     throw SipiImageError("JPEG read failed for \"" + filepath + "\": " + std::string(jerr.error_message));
   }
 
-  jpeg_file_src(&cinfo, infile);
+  jpeg_file_src(&cinfo, &file_buffer, &srcmgr);
   jpeg_save_markers(&cinfo, JPEG_COM, 0xffff);
   for (int i = 0; i < 16; i++) { jpeg_save_markers(&cinfo, JPEG_APP0 + i, 0xffff); }
 
@@ -539,7 +533,6 @@ bool SipiIOJpeg::read(SipiImage *img,
   int res = jpeg_read_header(&cinfo, static_cast<boolean>(true));
   if (res != JPEG_HEADER_OK) {
     jpeg_destroy_decompress(&cinfo);
-    close(infile);
     throw SipiImageError("Error reading JPEG file: \"" + filepath + "\"");
   }
 
@@ -749,7 +742,6 @@ bool SipiIOJpeg::read(SipiImage *img,
 
   jpeg_finish_decompress(&cinfo);
   jpeg_destroy_decompress(&cinfo);
-  ::close(infile);
 
   //
   // CMYK / YCCK polarity handling.
@@ -861,28 +853,25 @@ SipiImgInfo SipiIOJpeg::read_shape(const std::string &filepath)
 
   jpeg_saved_marker_ptr marker;
 
+  // Source manager + buffer, owned here and declared before the setjmp so
+  // their destructors run on the C++ unwind path.
+  FileBuffer file_buffer(raw_fd);
+  struct jpeg_source_mgr srcmgr{};
+
   cinfo.err = jpeg_std_error(&jerr.pub);
   jerr.pub.error_exit = jpegErrorExit;
 
   jpeg_create_decompress(&cinfo);
   cinfo.dct_method = JDCT_ISLOW;// integer IDCT — cross-arch bit-exact (see the main read path)
 
-  // Helper to clean up jpeg resources (source manager + decompress struct).
-  auto cleanup_jpeg = [&cinfo]() {
-    if (cinfo.src && cinfo.src->term_source) {
-      cinfo.src->term_source(&cinfo);
-    }
-    jpeg_destroy_decompress(&cinfo);
-  };
-
   // setjmp error handler for read_shape — libjpeg errors longjmp here
   if (setjmp(jerr.error_jmp)) {
-    cleanup_jpeg();
+    jpeg_destroy_decompress(&cinfo);
     info.success = SipiImgInfo::FAILURE;
     return info;
   }
 
-  jpeg_file_src(&cinfo, raw_fd);
+  jpeg_file_src(&cinfo, &file_buffer, &srcmgr);
   jpeg_save_markers(&cinfo, JPEG_COM, 0xffff);
   for (int i = 0; i < 16; i++) { jpeg_save_markers(&cinfo, JPEG_APP0 + i, 0xffff); }
 
@@ -891,7 +880,7 @@ SipiImgInfo SipiIOJpeg::read_shape(const std::string &filepath)
   //
   int res = jpeg_read_header(&cinfo, static_cast<boolean>(true));
   if (res != JPEG_HEADER_OK) {
-    cleanup_jpeg();
+    jpeg_destroy_decompress(&cinfo);
     info.success = SipiImgInfo::FAILURE;
     return info;
   }
@@ -984,15 +973,22 @@ SipiImgInfo SipiIOJpeg::read_shape(const std::string &filepath)
 
           img.xmp = std::make_shared<Xmp>(xmpstr);
         } catch (SipiImageError &err) {
-          cleanup_jpeg();
+          jpeg_destroy_decompress(&cinfo);
           info.success = SipiImgInfo::FAILURE;
           return info;
         }
       }
     } else if (marker->marker == JPEG_APP0 + 13) {
       // PHOTOSHOP MARKER....
+      // Wrapped like the main read path: a malformed IPTC / EXIF / XMP inside
+      // the Photoshop resource block must not abort the shape probe (and must
+      // not unwind past the live decompress struct).
       if (strncmp("Photoshop 3.0", (char *)marker->data, 14) == 0) {
-        parse_photoshop(&img, (char *)marker->data + 14, (int)marker->data_length - 14);
+        try {
+          parse_photoshop(&img, (char *)marker->data + 14, (int)marker->data_length - 14);
+        } catch (const std::exception &err) {
+          log_warn("Failed to parse Photoshop APP13 resource block: %s", err.what());
+        }
       }
     }
     marker = marker->next;
@@ -1011,7 +1007,7 @@ SipiImgInfo SipiIOJpeg::read_shape(const std::string &filepath)
     if (img.exif->getValByKey("Exif.Image.Orientation", ori)) { info.orientation = Orientation(ori); }
   }
   info.success = SipiImgInfo::DIMS;
-  cleanup_jpeg();
+  jpeg_destroy_decompress(&cinfo);
   // fd_guard closes the file descriptor automatically
   return info;// portions derived from IJG code */
 }
@@ -1069,12 +1065,13 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
   // FdGuard for outfile — constructed before setjmp. Its destructor runs
   // during the C++ stack unwinding from the throw SipiImageError after longjmp.
   FdGuard outfile_guard(-1);
-  // HTTP destination owned by the caller via unique_ptr. Declared before
-  // setjmp so destructors are on the normal C++ unwind path when we throw
-  // from the setjmp handler (longjmp would skip destructors of objects
+  // HTTP / file destination owned by the caller via unique_ptr. Declared
+  // before setjmp so destructors are on the normal C++ unwind path when we
+  // throw from the setjmp handler (longjmp would skip destructors of objects
   // constructed *between* setjmp and longjmp — these live outside that window).
   std::unique_ptr<SinkStream> sink_stream;
   std::unique_ptr<HtmlBuffer> html_buffer;
+  std::unique_ptr<FileBuffer> file_buffer;
   std::unique_ptr<jpeg_destination_mgr> destmgr;
   JSAMPROW row_pointer[1];
   int row_stride;
@@ -1117,7 +1114,9 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
         throw SipiImageError("Cannot open file \"" + filepath + "\"!");
       }
       outfile_guard.fd = outfile;
-      jpeg_file_dest(&cinfo, outfile);
+      file_buffer = std::make_unique<FileBuffer>(outfile);
+      destmgr = std::make_unique<jpeg_destination_mgr>();
+      jpeg_file_dest(&cinfo, file_buffer.get(), destmgr.get());
     }
   }
 
