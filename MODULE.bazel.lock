@@ -374,7 +374,7 @@
   "moduleExtensions": {
     "//bazel:benchmark_fixtures_extension.bzl%benchmark_fixtures_extension": {
       "general": {
-        "bzlTransitiveDigest": "LTpreO52kIPpVsBKekTBnXnonOEfi/B0L7PcGwN1Xd8=",
+        "bzlTransitiveDigest": "H14/96cHfmxp6CjcA8kwwdPaaC5gP23piJmoXkGUMVw=",
         "usagesDigest": "/OVd0sRob8VDNWU93dMHAiBNsg7C2sxDHY58Rp2wOJw=",
         "recordedInputs": [],
         "generatedRepoSpecs": {

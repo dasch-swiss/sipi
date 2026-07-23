@@ -1485,8 +1485,9 @@ bool SipiImage::toBitonal()
 void SipiImage::add_watermark(const std::string &wmfilename)
 {
   int wm_nx, wm_ny, wm_nc;
-  byte *wmbuf = read_watermark(wmfilename, wm_nx, wm_ny, wm_nc);
-  if (wmbuf == nullptr) { throw SipiImageError("Cannot read watermark file " + wmfilename); }
+  std::vector<unsigned char> wm = read_watermark(wmfilename, wm_nx, wm_ny, wm_nc);
+  if (wm.empty()) { throw SipiImageError("Cannot read watermark file " + wmfilename); }
+  byte *wmbuf = wm.data();
 
   // scaling is calculated with the middle point as point of origin
   double wm_scale = ((double)wm_nx / wm_ny > (double)nx / ny) ? (double)wm_nx / nx : (double)wm_ny / ny;
@@ -1522,8 +1523,6 @@ void SipiImage::add_watermark(const std::string &wmfilename)
   } else if (bps == 16) {
     // 16bps support was never really finished, left unimplemented
   }
-
-  delete[] wmbuf;
 }
 
 #undef POSITION
