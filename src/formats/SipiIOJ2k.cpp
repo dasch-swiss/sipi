@@ -624,21 +624,21 @@ bool SipiIOJ2k::read(SipiImage *img,
   if (force_bps_8) img->bps = 8;// forces kakadu to convert to 8 bit!
   switch (img->bps) {
   case 8: {
-    auto buffer8 = std::make_unique<kdu_core::kdu_byte[]>(static_cast<int>(dims.area()) * img->nc);
+    std::vector<byte> buffer8(static_cast<int>(dims.area()) * img->nc);
     try {
-      decompressor.pull_stripe(buffer8.get(), stripe_heights);
+      decompressor.pull_stripe(buffer8.data(), stripe_heights);
     } catch (kdu_exception &exc) {
       log_err("Error while decompressing image: %s.", filepath.c_str());
       return false;
     }
-    img->pixels = buffer8.release();
+    img->pixels = std::move(buffer8);
     break;
   }
   case 12: {
     std::vector<char> get_signed(img->nc, 0);// vector<bool> does not work -> special treatment in C++
-    auto buffer16 = std::make_unique<kdu_core::kdu_int16[]>((int)dims.area() * img->nc);
+    std::vector<byte> buffer16(2 * dims.area() * img->nc);
     try {
-      decompressor.pull_stripe(buffer16.get(),
+      decompressor.pull_stripe(reinterpret_cast<kdu_core::kdu_int16 *>(buffer16.data()),
         stripe_heights,
         nullptr,
         nullptr,
@@ -649,15 +649,15 @@ bool SipiIOJ2k::read(SipiImage *img,
       log_err("Error while decompressing image: %s.", filepath.c_str());
       return false;
     }
-    img->pixels = reinterpret_cast<byte *>(buffer16.release());
+    img->pixels = std::move(buffer16);
     img->bps = 16;
     break;
   }
   case 16: {
     std::vector<char> get_signed(img->nc, 0);// vector<bool> does not work -> special treatment in C++
-    auto buffer16 = std::make_unique<kdu_core::kdu_int16[]>((int)dims.area() * img->nc);
+    std::vector<byte> buffer16(2 * dims.area() * img->nc);
     try {
-      decompressor.pull_stripe(buffer16.get(),
+      decompressor.pull_stripe(reinterpret_cast<kdu_core::kdu_int16 *>(buffer16.data()),
         stripe_heights,
         nullptr,
         nullptr,
@@ -668,7 +668,7 @@ bool SipiIOJ2k::read(SipiImage *img,
       log_err("Error while decompressing image: %s.", filepath.c_str());
       return false;
     }
-    img->pixels = reinterpret_cast<byte *>(buffer16.release());
+    img->pixels = std::move(buffer16);
     break;
   }
   default: {
@@ -686,7 +686,7 @@ bool SipiIOJ2k::read(SipiImage *img,
     //
     // we have a palette color image...
     //
-    auto tmpbuf = std::make_unique<byte[]>(img->nx * img->ny * numcol);
+    std::vector<byte> tmpbuf(img->nx * img->ny * numcol);
     for (int y = 0; y < img->ny; ++y) {
       for (int x = 0; x < img->nx; ++x) {
         tmpbuf[3 * (y * img->nx + x) + 0] = rlut[img->pixels[y * img->nx + x]];
@@ -694,8 +694,7 @@ bool SipiIOJ2k::read(SipiImage *img,
         tmpbuf[3 * (y * img->nx + x) + 2] = blut[img->pixels[y * img->nx + x]];
       }
     }
-    delete[] img->pixels;
-    img->pixels = tmpbuf.release();
+    img->pixels = std::move(tmpbuf);
     img->nc = numcol;
   }
   if (img->photo == PhotometricInterpretation::YCBCR) {
@@ -1399,7 +1398,7 @@ void SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const SipiCompress
     // int *stripe_heights = new int[img->nc];
     int stripe_heights[5];
     if (img->bps == 16) {
-      kdu_int16 *buf = (kdu_int16 *)img->pixels;
+      kdu_int16 *buf = (kdu_int16 *)img->pixels.data();
       std::vector<int> precisions(img->nc, static_cast<int>(img->bps));
       std::vector<char> is_signed(img->nc, 0);// vector<bool> does not work -> special treatment in C++
       for (size_t i = 0; i < img->nc; i++) { stripe_heights[i] = img->ny; }
@@ -1409,13 +1408,13 @@ void SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const SipiCompress
       if (th == 0) th = img->ny;
       size_t stripe_start = 0;
       do {
-        kdu_byte *buf = (kdu_byte *)img->pixels + stripe_start * img->nc * img->nx;
+        kdu_byte *buf = img->pixels.data() + stripe_start * img->nc * img->nx;
         for (size_t i = 0; i < img->nc; i++) { stripe_heights[i] = th; }
         compressor.push_stripe(buf, stripe_heights);
         stripe_start += th;
       } while ((img->ny - stripe_start) >= th);
       if ((img->ny - stripe_start) > 0) {
-        kdu_byte *buf = (kdu_byte *)img->pixels + stripe_start * img->nc * img->nx;
+        kdu_byte *buf = img->pixels.data() + stripe_start * img->nc * img->nx;
         for (size_t i = 0; i < img->nc; i++) { stripe_heights[i] = img->ny - stripe_start; }
         compressor.push_stripe(buf, stripe_heights);
         stripe_start += img->ny - stripe_start;

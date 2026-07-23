@@ -720,19 +720,31 @@ std::expected<ServeResponse, SipiStatus>
       Metrics::instance().client_disconnected_total.Increment();
       return std::unexpected(SipiStatus::ClientGone);
     }
-    PhaseTimer phase_timer(SIPI_PHASE_QUALITY);
-    switch (quality_format.quality()) {
-    case SipiQualityFormat::COLOR:
-      img.convertToIcc(Icc(icc_sRGB), 8);
-      break;
-    case SipiQualityFormat::GRAY:
-      img.convertToIcc(Icc(icc_GRAY_D50), 8);
-      break;
-    case SipiQualityFormat::BITONAL:
-      img.toBitonal();
-      break;
-    default:
-      return std::unexpected(SipiStatus::BadRequest);
+    try {
+      PhaseTimer phase_timer(SIPI_PHASE_QUALITY);
+      switch (quality_format.quality()) {
+      case SipiQualityFormat::COLOR:
+        img.convertToIcc(Icc(icc_sRGB), 8);
+        break;
+      case SipiQualityFormat::GRAY:
+        img.convertToIcc(Icc(icc_GRAY_D50), 8);
+        break;
+      case SipiQualityFormat::BITONAL:
+        img.toBitonal();
+        break;
+      default:
+        return std::unexpected(SipiStatus::BadRequest);
+      }
+    } catch (const std::bad_alloc &) {
+      Metrics::instance().memory_alloc_failures_total.Increment();
+      return std::unexpected(SipiStatus::InternalError);
+    } catch (Sipi::SipiError &err) {
+      ImageContext sentry_ctx;
+      sentry_ctx.input_file = infile;
+      sentry_ctx.file_size_bytes = get_file_size(infile);
+      populate_from_image(sentry_ctx, img);
+      report_image_error(req.report_error, req.report_ctx, err.to_string(), "convert", sentry_ctx);
+      return std::unexpected(SipiStatus::InternalError);
     }
   }
 

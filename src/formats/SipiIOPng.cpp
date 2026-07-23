@@ -146,15 +146,14 @@ bool SipiIOPng::read(SipiImage *img,
     throw SipiImageError("Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_infop !");
   }
 
-  // Guards for allocations that happen after setjmp — longjmp skips destructors,
-  // so we track raw pointers here for cleanup in the error handler.
-  uint8_t *pixel_buffer_guard = nullptr;
-  png_bytep *row_pointers_guard = nullptr;
+  // Declared before the setjmp: on longjmp the handler throws, and the C++
+  // unwind path destroys these (they are resized inside the window, which is
+  // safe — the vector object's storage is stable memory, not a register).
+  std::vector<uint8_t> buffer;
+  std::vector<png_bytep> row_pointers;
 
   // setjmp error recovery — sipi_error_fn calls longjmp(png_jmpbuf(png_ptr), 1)
   if (setjmp(png_jmpbuf(png_ptr))) {
-    delete[] pixel_buffer_guard;
-    delete[] row_pointers_guard;
     png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
     throw SipiImageError("PNG read failed for \"" + filepath + "\"");
   }
@@ -265,14 +264,12 @@ bool SipiIOPng::read(SipiImage *img,
   }
 
   size_t sll = png_get_rowbytes(png_ptr, info_ptr);
-  auto *buffer = new uint8_t[height * sll];
-  pixel_buffer_guard = buffer;  // track for longjmp cleanup
+  buffer.resize(height * sll);
 
-  auto *row_pointers = new png_bytep[height];
-  row_pointers_guard = row_pointers;  // track for longjmp cleanup
-  for (size_t i = 0; i < img->ny; i++) { row_pointers[i] = (buffer + i * sll); }
+  row_pointers.resize(height);
+  for (size_t i = 0; i < img->ny; i++) { row_pointers[i] = (buffer.data() + i * sll); }
 
-  png_read_image(png_ptr, row_pointers);
+  png_read_image(png_ptr, row_pointers.data());
   png_read_end(png_ptr, info_ptr);
   img->bps = png_get_bit_depth(png_ptr, info_ptr);
   img->nc = png_get_channels(png_ptr, info_ptr);
@@ -281,13 +278,11 @@ bool SipiIOPng::read(SipiImage *img,
   png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 
   if (img->bps == 16) {
-    auto *tmp = (unsigned short *)buffer;
+    auto *tmp = (unsigned short *)buffer.data();
     for (int i = 0; i < img->nx * img->ny * img->nc; i++) { tmp[i] = ntohs(tmp[i]); }
   }
-  delete[] img->pixels;// free previous buffer if re-reading into same SipiImage
-  img->pixels = buffer;
+  img->pixels = std::move(buffer);
 
-  delete[] row_pointers;
   infile.reset();
 
   if (region != nullptr) {// we just use the image.crop method
@@ -316,9 +311,7 @@ bool SipiIOPng::read(SipiImage *img,
     }
   }
 
-  if (force_bps_8) {
-    if (!img->to8bps()) { throw SipiImageError("Cannot convert to 8 bits/sample"); }
-  }
+  if (force_bps_8) { img->to8bps(); }
   return true;
 };
 
@@ -585,9 +578,9 @@ void SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompress
   png_bytep *row_pointers = (png_bytep *)png_malloc(png_ptr, img->ny * sizeof(png_byte *));
 
   if (img->bps == 8) {
-    for (size_t i = 0; i < img->ny; i++) { row_pointers[i] = (img->pixels + i * img->nx * img->nc); }
+    for (size_t i = 0; i < img->ny; i++) { row_pointers[i] = (img->pixels.data() + i * img->nx * img->nc); }
   } else if (img->bps == 16) {
-    for (size_t i = 0; i < img->ny; i++) { row_pointers[i] = (img->pixels + 2 * i * img->nx * img->nc); }
+    for (size_t i = 0; i < img->ny; i++) { row_pointers[i] = (img->pixels.data() + 2 * i * img->nx * img->nc); }
   }
 
   png_set_rows(png_ptr, info_ptr, row_pointers);

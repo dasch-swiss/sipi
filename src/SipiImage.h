@@ -99,8 +99,7 @@ protected:
   std::vector<ExtraSamples> es;//!< meaning of the extra samples (channels)
   Orientation orientation;//!< Orientation of the image
   PhotometricInterpretation photo;//!< Image type, that is the meaning of the channels
-  byte *pixels;//!< Pointer to block of memory holding the pixels (allways in big-endian format if interpreted as 16
-               //!< bit/sample)
+  std::vector<byte> pixels;//!< Pixel buffer (allways in big-endian format if interpreted as 16 bit/sample)
   std::shared_ptr<Xmp> xmp;//!< Pointer to instance Xmp class (\ref Xmp), or NULL
   std::shared_ptr<Icc> icc;//!< Pointer to instance of Icc class (\ref Icc), or NULL
   std::shared_ptr<Iptc> iptc;//!< Pointer to instance of Iptc class (\ref Iptc), or NULL
@@ -220,11 +219,7 @@ public:
   [[nodiscard]] PhotometricInterpretation getPhoto() const { return photo; };
 
 
-  /*! Destructor
-   *
-   * Destroys the image and frees all the resources associated with it
-   */
-  ~SipiImage();
+  ~SipiImage() = default;
 
   /*!
    * Gets the value of a pixel sample.
@@ -244,11 +239,11 @@ public:
     if (c >= nc) throw((int)3);
     switch (bps) {
     case 8: {
-      unsigned char *tmp = (unsigned char *)pixels;
+      const unsigned char *tmp = pixels.data();
       return static_cast<int>(tmp[nc * (y * nx + x) + c]);
     }
     case 16: {
-      unsigned short *tmp = (unsigned short *)pixels;
+      const unsigned short *tmp = (const unsigned short *)pixels.data();
       return static_cast<int>(tmp[nc * (y * nx + x) + c]);
     }
     default: {
@@ -274,13 +269,13 @@ public:
     switch (bps) {
     case 8: {
       if (val > 0xff) throw((int)4);
-      unsigned char *tmp = (unsigned char *)pixels;
+      unsigned char *tmp = pixels.data();
       tmp[nc * (y * nx + x) + c] = (unsigned char)val;
       break;
     }
     case 16: {
       if (val > 0xffff) throw((int)5);
-      unsigned short *tmp = (unsigned short *)pixels;
+      unsigned short *tmp = (unsigned short *)pixels.data();
       tmp[nc * (y * nx + x) + c] = (unsigned short)val;
       break;
     }
@@ -523,20 +518,16 @@ public:
   /*!
    * Convert an image from 16 to 8 bit. The algorithm just divides all pixel values
    * by 256 using the ">> 8" operator (fast & efficient)
-   *
-   * \returns Returns true on success, false on error
    */
-  bool to8bps();
+  void to8bps();
 
   /*!
    * Convert an image to a bitonal representation using Steinberg-Floyd dithering.
    *
    * The method does nothing if the image is already bitonal. Otherwise, the image is converted
    * into a gray value image if necessary and then a FLoyd-Steinberg dithering is applied.
-   *
-   * \returns Returns true on success, false on error
    */
-  bool toBitonal();
+  void toBitonal();
 
   /*!
    * Conclude similarity of two SipiImages, used in tests. Only tested with small differences.
