@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> [!IMPORTANT]
+> **No commit or push without the lint gates passing.** For any Rust change
+> (`src/server-rs`, `src/cli-rs`, `test/e2e`), run **`just bazel-rustfmt-check`**
+> and **`just bazel-clippy-check`** before committing (fix with `just bazel-rustfmt`).
+> Both are CI gates (`-Dwarnings`, run as `rules_rust` lint aspects on the `test`
+> job) that are **not** exercised by `just bazel-test`, `bazel-test-e2e`,
+> `bazel-coverage`, or the differential gate — so a fully green local test run can
+> still fail CI on a formatting or clippy finding. This is a hard rule, not a
+> suggestion.
+
 ## Project Overview
 
 SIPI (Simple Image Presentation Interface) is a multithreaded, high-performance, IIIF-compatible media server written in C++23. It implements IIIF Image API 3.0 and provides efficient image format conversions while preserving metadata. The server can be used both as a command-line tool and as a web server with Lua scripting support.
