@@ -10,7 +10,9 @@
 #ifndef SIPI_METADATA_ICC_H
 #define SIPI_METADATA_ICC_H
 
+#include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include <limits.h>
@@ -47,18 +49,20 @@ typedef enum {
 class Icc
 {
 private:
-  cmsHPROFILE icc_profile{};//!< Handle of the littleCMS profile data
-  PredefinedProfiles profile_type;//!< Profile type that is represented
+  struct ProfileCloser
+  {
+    void operator()(cmsHPROFILE p) const { cmsCloseProfile(p); }
+  };
+  using ProfilePtr = std::unique_ptr<std::remove_pointer_t<cmsHPROFILE>, ProfileCloser>;
+
+  ProfilePtr icc_profile{};//!< Owning handle of the littleCMS profile data
+  PredefinedProfiles profile_type{ icc_undefined };//!< Profile type that is represented
 
 public:
   /*!
    * Constructor (default) which results in empty, undefined profile
    */
-  inline Icc()
-  {
-    icc_profile = NULL;
-    profile_type = icc_undefined;
-  };
+  Icc() = default;
 
   /*!
    * Constructor which takes a blob that contains the ICC profile
@@ -95,10 +99,9 @@ public:
    */
   Icc(float white_point_p[], float primaries_p[], const unsigned short *tfunc = nullptr, int tfunc_len = 0);
 
-  /**
-   * Destructor
-   */
-  ~Icc();
+  Icc(Icc &&) = default;
+
+  Icc &operator=(Icc &&) = default;
 
   /*!
    * Assignment operator which makes deep copy

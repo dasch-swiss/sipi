@@ -8,6 +8,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include <cassert>
@@ -512,12 +513,13 @@ void SipiImage::convertToIcc(const Icc &target_icc_p, int new_bps)
     throw SipiImageError("Unsupported bits/sample (" + std::to_string(bps) + ")");
   }
 
-  cmsHTRANSFORM hTransform;
   in_formatter = icc->iccFormatter(bps, nc, photo);
   out_formatter = target_icc_p.iccFormatter(new_bps);
 
-  hTransform = cmsCreateTransform(
-    icc->getIccProfile(), in_formatter, target_icc_p.getIccProfile(), out_formatter, INTENT_PERCEPTUAL, 0);
+  std::unique_ptr<std::remove_pointer_t<cmsHTRANSFORM>, decltype(&cmsDeleteTransform)> hTransform(
+    cmsCreateTransform(
+      icc->getIccProfile(), in_formatter, target_icc_p.getIccProfile(), out_formatter, INTENT_PERCEPTUAL, 0),
+    &cmsDeleteTransform);
 
   if (hTransform == nullptr) {
     throw SipiImageError("Failed to create color transform"
@@ -529,13 +531,11 @@ void SipiImage::convertToIcc(const Icc &target_icc_p, int new_bps)
       + ", target_profile_type=" + std::to_string(static_cast<int>(target_icc_p.getProfileType())));
   }
 
-  byte *inbuf = pixels;
-  byte *outbuf = new byte[nx * ny * nnc * new_bps / 8];
-  cmsDoTransform(hTransform, inbuf, outbuf, nx * ny);
-  cmsDeleteTransform(hTransform);
+  auto outbuf = std::make_unique<byte[]>(nx * ny * nnc * new_bps / 8);
+  cmsDoTransform(hTransform.get(), pixels, outbuf.get(), nx * ny);
   icc = std::make_shared<Icc>(target_icc_p);
-  pixels = outbuf;
-  delete[] inbuf;
+  delete[] pixels;
+  pixels = outbuf.release();
   nc = nnc;
   bps = new_bps;
 

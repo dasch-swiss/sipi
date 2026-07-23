@@ -15,8 +15,6 @@ namespace Sipi {
 
 Exif::Exif()
 {
-  binaryExif = nullptr;
-  binary_size = 0;
   byteorder = Exiv2::littleEndian;// that's today's default....
 };
 //============================================================================
@@ -24,29 +22,17 @@ Exif::Exif()
 
 Exif::Exif(const unsigned char *exif, unsigned int len)
 {
-  //
-  // first we save the binary exif... we use it later for constructing a binary exif again!
-  //
-  // Hold the buffer in a unique_ptr until decode succeeds. If
-  // Exiv2::ExifParser::decode throws (e.g. on malformed EXIF embedded
-  // in PNG text comments), the unique_ptr cleans up on stack unwind.
-  // Releasing into the raw member only after decode succeeds keeps
-  // the destructor's `delete[]` honest.
-  auto buf = std::make_unique<unsigned char[]>(len);
-  std::memcpy(buf.get(), exif, len);
-
   try {
     byteorder = Exiv2::ExifParser::decode(exifData, exif, (uint32_t)len);
   } catch (Exiv2::Error &exiverr) {
     throw SipiError(exiverr.what());
   }
 
-  binaryExif = buf.release();
-  binary_size = len;
+  //
+  // we save the binary exif... we use it later for constructing a binary exif again!
+  //
+  binaryExif.assign(exif, exif + len);
 }
-//============================================================================
-
-Exif::~Exif() { delete[] binaryExif; }
 //============================================================================
 
 // Type-dispatched assignment helpers backing the inline `getValByKey<T>`
@@ -176,16 +162,13 @@ bool Exif::assign_val(Exiv2::Value::UniquePtr &v, std::vector<Exiv2::Rational> &
 std::vector<unsigned char> Exif::exifBytes()
 {
   Exiv2::Blob blob;
-  Exiv2::WriteMethod wm = Exiv2::ExifParser::encode(blob, binaryExif, binary_size, byteorder, exifData);
+  Exiv2::WriteMethod wm =
+    Exiv2::ExifParser::encode(blob, binaryExif.data(), static_cast<uint32_t>(binaryExif.size()), byteorder, exifData);
   if (wm == Exiv2::wmIntrusive) {
     // Refresh the cached binary blob so subsequent reads see the encoded form.
-    binary_size = blob.size();
-    unsigned char *tmpbuf = new unsigned char[binary_size];
-    if (binary_size > 0) memcpy(tmpbuf, blob.data(), binary_size);
-    delete[] binaryExif;
-    binaryExif = tmpbuf;
+    binaryExif.assign(blob.begin(), blob.end());
   }
-  return std::vector<unsigned char>(binaryExif, binaryExif + binary_size);
+  return binaryExif;
 }
 //============================================================================
 
