@@ -613,6 +613,7 @@ bool SipiIOJ2k::read(SipiImage *img,
   kdu_thread_env *env_ref = nullptr;
   kdu_supp::kdu_stripe_decompressor decompressor;
   try {
+    num_threads = 0;// DIAG(asan-e2e): runtime MT disabled to isolate the variable — do not merge
     if (num_threads > 0) {
       env.create();
       for (int nt = 1; nt < num_threads; nt++) {
