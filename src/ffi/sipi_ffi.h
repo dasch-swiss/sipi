@@ -423,12 +423,57 @@ typedef void (*SipiRouteFn)(void *ctx, const char *method, const char *route, co
  *  known together or not at all. */
 typedef void (*SipiEssentialsFn)(void *ctx, const char *orig_mimetype, const char *orig_filename);
 
+/* ── Per-phase serve timings ─────────────────────────────────────────────────
+ * Nanosecond timings for the phases of one `sipi_serve_image` call, relative to
+ * the call's start. The engine accumulates them in a thread-local during the
+ * call; `sipi_serve_timings_take` reads that accumulator, so the caller must
+ * call it on the SAME thread immediately after `sipi_serve_image` returns. A
+ * `present[i]` of 0 means the phase did not run (a cache hit or passthrough
+ * skips decode/encode; a rotate-free request skips ROTATE, etc.); a `failed[i]`
+ * of 1 means the phase started but exited via a C++ exception (a decode/encode
+ * error), so the shell marks that span `Status=Error`. Purely observational: the
+ * Rust shell mints one child span per present phase under its request span — the
+ * engine emits no spans of its own.
+ *
+ * Caveat: SIPI_PHASE_ENCODE spans the streamed encode *and* the write to the
+ * response sink, so a slow/back-pressured HTTP client inflates its `dur_ns` with
+ * client-side wait, not just codec CPU. */
+typedef enum {
+  SIPI_PHASE_SHAPE = 0, /* header/shape probe (source open, no full decode) */
+  SIPI_PHASE_DECODE = 1, /* SipiImage::read — decode + region + scale */
+  SIPI_PHASE_ROTATE = 2, /* rotate / mirror */
+  SIPI_PHASE_QUALITY = 3, /* colour/gray ICC or bitonal conversion */
+  SIPI_PHASE_WATERMARK = 4, /* watermark overlay */
+  SIPI_PHASE_ENCODE = 5, /* encode + write (streamed tail) */
+  SIPI_PHASE_COUNT = 6 /* sentinel: number of phases, not a phase index */
+} SipiPhase;
+
+typedef struct
+{
+  uint64_t start_ns[SIPI_PHASE_COUNT]; /* offset from the serve call's start */
+  uint64_t dur_ns[SIPI_PHASE_COUNT];
+  uint8_t present[SIPI_PHASE_COUNT];
+  uint8_t failed[SIPI_PHASE_COUNT]; /* 1 = phase exited via an exception */
+} SipiServeTimings;
+
 /* ── Entry points ───────────────────────────────────────────────────────────
  * All return 0 on success / an error code on failure; none let a C++ exception
  * cross the boundary. */
 
 /*! IIIF decode→transform→encode→stream; honours the restrict size/watermark. */
 SIPI_FFI_NODISCARD int sipi_serve_image(const SipiServeRequest *req, const SipiResponse *resp);
+
+/*! Copy the current thread's per-phase serve timings (see `SipiServeTimings`)
+ *  into `*out`. Call on the SAME thread right after `sipi_serve_image` returns;
+ *  a NULL `out` is a no-op. Never fails and emits nothing; the accumulator is
+ *  reset at the next `sipi_serve_image` entry on the thread. */
+void sipi_serve_timings_take(SipiServeTimings *out);
+
+/*! The engine's serve-phase count (`SIPI_PHASE_COUNT`). The Rust shell mirrors
+ *  `SipiServeTimings` by hand, so it asserts its own `PHASE_COUNT` against this
+ *  at test time — a one-sided phase-count change then fails loudly instead of
+ *  writing past a stale-sized `SipiServeTimings`. */
+int sipi_phase_count(void);
 
 /*! Raw `/file` passthrough incl. HTTP Range / 206 — no decode. Owns the serve
  *  *policy* (stat, MIME → Content-Type, Range parse → status + Content-Range)

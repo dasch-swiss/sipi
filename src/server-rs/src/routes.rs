@@ -13,7 +13,7 @@ use std::ffi::CString;
 use std::io::Write;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use axum::body::{to_bytes, Body};
 use axum::extract::{DefaultBodyLimit, FromRequest, Multipart, OriginalUri, Request, State};
@@ -705,12 +705,58 @@ fn serve_image(
         report_ctx: c_uri.as_ptr() as *mut std::ffi::c_void,
     };
 
+    // Wall-clock anchor for the engine child spans: the per-phase offsets the
+    // engine records (monotonic) are added onto this. Captured just before the
+    // call, a hair earlier than the engine's own monotonic origin — an accepted,
+    // sub-microsecond skew (one struct build, no I/O, in between).
+    let engine_start = SystemTime::now();
     // SAFETY: every pointer in `req` outlives this synchronous call; the seam
     // guards C++ exceptions (→ status code, never an unwind into Rust). The
     // streamed head's CORS header is added by the caller (`iiif`).
     sink::serve_streaming(outcome_tx, body_tx, |resp: &SipiResponse| unsafe {
         ffi::sipi_serve_image(&req, resp)
     });
+    // Break the opaque engine span open: one child span per phase (decode,
+    // encode, …) under `sipi.serve`, from the timings the engine just recorded.
+    emit_engine_phase_spans(engine_start);
+}
+
+/// Mint an OTel child span under the current `sipi.serve` span for each engine
+/// phase the just-returned `sipi_serve_image` recorded, placing it on the trace
+/// timeline from the FFI-returned per-phase offsets (relative to `engine_start`).
+/// Runs on the same blocking thread as the FFI call, so `serve_timings_take`
+/// reads that call's accumulator and `Span::current()` is `sipi.serve`. Returns
+/// immediately when trace export is off (no throwaway spans on the hot path) or
+/// when the engine recorded nothing (cache hit / HEAD / passthrough). A phase
+/// that exited via an exception (`failed`) is marked `Status=Error`.
+fn emit_engine_phase_spans(engine_start: SystemTime) {
+    use opentelemetry::trace::{Span as _, Status, Tracer as _};
+    use tracing_opentelemetry::OpenTelemetrySpanExt as _;
+
+    if !crate::telemetry::tracing_active() {
+        return;
+    }
+    let timings = ffi::serve_timings_take();
+    if !timings.present.iter().any(|&p| p != 0) {
+        return;
+    }
+    let parent_cx = tracing::Span::current().context();
+    let tracer = opentelemetry::global::tracer("sipi");
+    for i in 0..ffi::PHASE_COUNT {
+        if timings.present[i] == 0 {
+            continue;
+        }
+        let start = engine_start + Duration::from_nanos(timings.start_ns[i]);
+        let end = start + Duration::from_nanos(timings.dur_ns[i]);
+        let mut span = tracer
+            .span_builder(ffi::PHASE_SPAN_NAMES[i])
+            .with_start_time(start)
+            .start_with_context(&tracer, &parent_cx);
+        if timings.failed[i] != 0 {
+            span.set_status(Status::error("engine phase failed"));
+        }
+        span.end_with_timestamp(end);
+    }
 }
 
 /// Raw `/file` passthrough via `sipi_serve_file` (Range/206). The CORS echo and,

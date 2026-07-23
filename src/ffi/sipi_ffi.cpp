@@ -22,6 +22,7 @@
 #include "ffi/run_lua_route.h"
 #include "ffi/serve_image.h"
 #include "ffi/serve_response.h"
+#include "ffi/serve_timings.h"// serve_timings_reset/export (sipi_serve_timings_take)
 #include "logging/logger.h"// set_log_trace_context (sipi_set_log_trace_context)
 #include "observability/metrics.h"
 #include "shttps/lua/request_context.h"// shttps::RequestContext (the opaque SipiRequestContext)
@@ -108,6 +109,10 @@ int sipi_serve_image(const SipiServeRequest *req, const SipiResponse *resp)
   // no-throw guard. A return of 499 (SipiStatus::ClientGone) means the client
   // vanished mid-decode and nothing was emitted — the caller renders no error.
   return Sipi::ffi::sipi_guard([&] {
+    // Reset the per-phase timing accumulator for this thread; the phase timers in
+    // build_image_response + the streamed encode fill it, and the shell reads it
+    // back via sipi_serve_timings_take right after this returns.
+    Sipi::ffi::serve_timings_reset();
     const auto cancelled = [resp] { return resp->cancelled != nullptr && resp->cancelled(resp->ctx) != 0; };
     auto result = Sipi::ffi::build_image_response(*req, Sipi::ffi::engine_context(), cancelled);
     if (!result) { return static_cast<int>(result.error()); }
@@ -115,6 +120,10 @@ int sipi_serve_image(const SipiServeRequest *req, const SipiResponse *resp)
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
   });
 }
+
+void sipi_serve_timings_take(SipiServeTimings *out) { Sipi::ffi::serve_timings_export(out); }
+
+int sipi_phase_count(void) { return SIPI_PHASE_COUNT; }
 
 int sipi_preflight(const char *prefix,
   const char *identifier,

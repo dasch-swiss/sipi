@@ -15,8 +15,8 @@ within the package use the bare quote form (`#include "sipi_ffi.h"`).
 
 The target hosts the C++ side of the seam; its `srcs` grow as the engine is
 carved behind the FFI (today: `sipi_serve_file` / `sipi_serve_image` /
-`sipi_metrics_snapshot` and the Lua preflight `sipi_preflight` /
-`sipi_file_preflight`).
+`sipi_serve_timings_take` / `sipi_phase_count` / `sipi_metrics_snapshot` and the
+Lua preflight `sipi_preflight` / `sipi_file_preflight`).
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
@@ -44,6 +44,7 @@ cc_library(
         "run_lua_route.cpp",
         "serve_image.cpp",
         "serve_response.cpp",
+        "serve_timings.cpp",
         "sipi_ffi.cpp",
     ],
     hdrs = [
@@ -56,6 +57,7 @@ cc_library(
         "run_lua_route.h",
         "serve_image.h",
         "serve_response.h",
+        "serve_timings.h",
         "sipi_ffi.h",
     ],
     strip_include_prefix = "/src",
@@ -128,6 +130,18 @@ cc_test(
     deps = [
         ":sipi_ffi",
         "//test:test_paths",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# Co-located unit test for the per-phase serve-timing accumulator: exercises
+# serve_timings_reset/export + the RAII PhaseTimer directly (present/failed flags,
+# overwrite-on-retime, reset clearing, out-of-range no-op), without a transport.
+cc_test(
+    name = "serve_timings_test",
+    srcs = ["serve_timings_test.cpp"],
+    deps = [
+        ":sipi_ffi",
         "@googletest//:gtest_main",
     ],
 )

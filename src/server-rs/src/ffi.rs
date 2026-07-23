@@ -273,6 +273,69 @@ pub struct SipiRequestContext {
     _private: [u8; 0],
 }
 
+/// Number of serve phases — matches the C `SIPI_PHASE_COUNT`. The
+/// `serve_timings_layout` test asserts this equals the engine's own
+/// `sipi_phase_count()` so a one-sided change fails loudly.
+pub const PHASE_COUNT: usize = 6;
+
+/// Serve phase, mirroring the C `SipiPhase` enum (`ffi/sipi_ffi.h`) index-for-
+/// index. Used to index [`PHASE_SPAN_NAMES`] and the `SipiServeTimings` arrays;
+/// the order is guarded against the span names by the `serve_timings_layout`
+/// test.
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SipiPhase {
+    Shape = 0,
+    Decode = 1,
+    Rotate = 2,
+    Quality = 3,
+    Watermark = 4,
+    Encode = 5,
+}
+
+/// Low-cardinality child-span name per phase index, matching the [`SipiPhase`]
+/// order (shape, decode, rotate, quality, watermark, encode).
+pub const PHASE_SPAN_NAMES: [&str; PHASE_COUNT] = [
+    "sipi.engine.shape",
+    "sipi.engine.decode",
+    "sipi.engine.rotate",
+    "sipi.engine.quality",
+    "sipi.engine.watermark",
+    "sipi.engine.encode",
+];
+
+/// Per-phase engine timings for one `sipi_serve_image` call — the hand-mirrored
+/// layout of the C `SipiServeTimings` (`ffi/sipi_ffi.h`). `start_ns[i]`/`dur_ns[i]`
+/// are nanosecond offset-from-call-start + duration for phase `i`; `present[i]`
+/// is 0 when the phase did not run, and `failed[i]` is 1 when the phase exited
+/// via an exception (the shell then marks that span errored). Kept in lock-step
+/// with the C struct by the `serve_timings_layout` test below.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct SipiServeTimings {
+    pub start_ns: [u64; PHASE_COUNT],
+    pub dur_ns: [u64; PHASE_COUNT],
+    pub present: [u8; PHASE_COUNT],
+    pub failed: [u8; PHASE_COUNT],
+}
+
+/// Take the calling thread's per-phase serve timings. Call right after
+/// [`sipi_serve_image`] on the same thread; every `present` is 0 when the engine
+/// recorded nothing (e.g. a cache hit or HEAD, which skip decode/encode).
+#[must_use]
+pub fn serve_timings_take() -> SipiServeTimings {
+    let mut out = SipiServeTimings {
+        start_ns: [0; PHASE_COUNT],
+        dur_ns: [0; PHASE_COUNT],
+        present: [0; PHASE_COUNT],
+        failed: [0; PHASE_COUNT],
+    };
+    // SAFETY: `out` is a valid, fully-initialised SipiServeTimings; the FFI only
+    // writes its fields for the duration of the call and never retains the pointer.
+    unsafe { sipi_serve_timings_take(&mut out) };
+    out
+}
+
 extern "C" {
     /// IIIF decode→transform→encode→stream; honours the restrict size/watermark.
     /// Returns 0 when the response was emitted via the sink, or an HTTP status
@@ -280,6 +343,16 @@ extern "C" {
     /// response). The engine reads `engine_context()`, so `sipi_init` must have
     /// run first.
     pub fn sipi_serve_image(req: *const SipiServeRequest, resp: *const SipiResponse) -> c_int;
+
+    /// Copy the current thread's per-phase serve timings into `*out`. Call on the
+    /// same thread right after [`sipi_serve_image`] returns; a null `out` is a
+    /// no-op. Never fails, emits nothing.
+    pub fn sipi_serve_timings_take(out: *mut SipiServeTimings);
+
+    /// The engine's serve-phase count (`SIPI_PHASE_COUNT`), asserted equal to
+    /// [`PHASE_COUNT`] by the layout test so a one-sided phase-count change fails
+    /// loudly instead of overflowing the Rust-sized [`SipiServeTimings`].
+    pub fn sipi_phase_count() -> c_int;
 
     /// Raw `/file` passthrough incl. HTTP Range / 206 — no decode.
     /// `resolved_path` is an already-validated absolute path; `range` is the raw
@@ -1382,9 +1455,63 @@ pub fn has_file_preflight() -> Result<bool, i32> {
 }
 
 // Lock-step layout guard — paired with the C++ static_assert/offsetof block in
-// sipi_ffi.h. All fields are 8-byte-wide (pointers / u64), so there is no
-// packing subtlety, but the guard still catches an accidental field reorder
-// or insertion on either side. LP64 on every supported target.
+// src/ffi/serve_timings.cpp. The offset asserts catch a field reorder; the
+// `size_of` literal and the `sipi_phase_count()` cross-check catch a one-sided
+// phase-count change (which the self-consistent offset asserts on either side
+// would miss) before it overflows the Rust-sized struct. LP64 on every target.
+#[cfg(test)]
+mod serve_timings_layout {
+    use super::{sipi_phase_count, SipiServeTimings, PHASE_COUNT, PHASE_SPAN_NAMES};
+    use std::mem::{align_of, offset_of, size_of};
+
+    #[test]
+    fn repr_c_matches_sipi_ffi_h() {
+        assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
+        assert_eq!(PHASE_COUNT, 6);
+        // Cross-check against the engine's own count, not just our literal, so a
+        // C-side SIPI_PHASE_COUNT bump without a Rust bump fails here.
+        // SAFETY: a pure `return SIPI_PHASE_COUNT` accessor; no state, never fails.
+        assert_eq!(PHASE_COUNT, unsafe { sipi_phase_count() } as usize);
+        assert_eq!(align_of::<SipiServeTimings>(), 8);
+        assert_eq!(size_of::<SipiServeTimings>(), 112);
+        assert_eq!(offset_of!(SipiServeTimings, start_ns), 0);
+        assert_eq!(offset_of!(SipiServeTimings, dur_ns), PHASE_COUNT * 8);
+        assert_eq!(offset_of!(SipiServeTimings, present), 2 * PHASE_COUNT * 8);
+        assert_eq!(
+            offset_of!(SipiServeTimings, failed),
+            2 * PHASE_COUNT * 8 + PHASE_COUNT
+        );
+    }
+
+    #[test]
+    fn span_names_match_phase_order() {
+        // Bind the span-name array to the SipiPhase order so a future enum reorder
+        // (which the offset/count asserts cannot see) can't silently mislabel spans.
+        use super::SipiPhase::*;
+        assert_eq!(PHASE_SPAN_NAMES.len(), PHASE_COUNT);
+        assert_eq!(PHASE_SPAN_NAMES[Shape as usize], "sipi.engine.shape");
+        assert_eq!(PHASE_SPAN_NAMES[Decode as usize], "sipi.engine.decode");
+        assert_eq!(PHASE_SPAN_NAMES[Rotate as usize], "sipi.engine.rotate");
+        assert_eq!(PHASE_SPAN_NAMES[Quality as usize], "sipi.engine.quality");
+        assert_eq!(
+            PHASE_SPAN_NAMES[Watermark as usize],
+            "sipi.engine.watermark"
+        );
+        assert_eq!(PHASE_SPAN_NAMES[Encode as usize], "sipi.engine.encode");
+    }
+
+    #[test]
+    fn take_without_a_serve_is_all_absent() {
+        // On a thread that has not run `sipi_serve_image`, the accumulator reads
+        // as all-zero / absent — validates the FFI symbol links and the struct
+        // marshals across the seam.
+        let t = super::serve_timings_take();
+        assert!(t.present.iter().all(|&p| p == 0));
+        assert!(t.dur_ns.iter().all(|&d| d == 0));
+        assert!(t.failed.iter().all(|&f| f == 0));
+    }
+}
+
 #[cfg(test)]
 mod image_error_layout {
     use super::SipiImageErrorReport;
