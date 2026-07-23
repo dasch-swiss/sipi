@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.1.0](https://github.com/dasch-swiss/sipi/compare/v6.0.0...v6.1.0) (2026-07-23)
+
+
+### Features
+
+* **server-rs,cli-rs:** Queue requests at the engine pool instead of shedding ([6cc6f2b](https://github.com/dasch-swiss/sipi/commit/6cc6f2b9c6998d9935b5d1d2a4a9597a21c981ba))
+
 ## [6.0.0](https://github.com/dasch-swiss/sipi/compare/v6.0.0...v6.0.0) (2026-07-23)
 
 
