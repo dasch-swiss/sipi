@@ -583,14 +583,6 @@ fuzz-corpus-update:
     rm -rf {{justfile_directory()}}/.fuzz-corpus-ci
 
 #####################################
-# Architecture boundaries
-#####################################
-
-# Enforce shttps → sipi one-way dependency boundary.
-shttps-context-check:
-    @scripts/shttps-context-check.sh
-
-#####################################
 # Documentation
 #####################################
 

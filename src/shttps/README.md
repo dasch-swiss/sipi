@@ -76,10 +76,9 @@ Strictly SIPI → shttps. shttps depends on the rest of `src/` only through `//s
 
 Enforcement today:
 - Bazel `visibility` — only `//src:__subpackages__` and `//src/shttps:__subpackages__` can depend on `//src/shttps:shttps`.
-- `scripts/shttps-context-check.sh` — CI regex gate that fails on any new `#include "Sipi*.h"` or `Sipi*::` symbol in `src/shttps/`.
 - Curated direct-deps list in `src/shttps/BUILD.bazel`.
 
-Bazel `--features=layering_check` is **deferred** to the broader Y+8 layering rollout (DEV-6353) — the third-party native `cc_library` deps (libtiff, exiv2, …) are not layering-clean (they freely include each other's internal headers), so enabling layering_check globally fails their compiles. The shell-script gate is the active enforcement until DEV-6353.
+Bazel `--features=layering_check` is **deferred** to the broader Y+8 layering rollout (DEV-6353) — the third-party native `cc_library` deps (libtiff, exiv2, …) are not layering-clean (they freely include each other's internal headers), so enabling layering_check globally fails their compiles. Bazel `visibility` plus the curated direct-deps list are the active enforcement until DEV-6353.
 
 ## Utilities scheduled for re-homing
 

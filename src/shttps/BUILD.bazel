@@ -26,17 +26,14 @@ library.
 
 Direction enforcement:
   - `visibility` restricts consumers to `//src/...` packages only.
-  - `scripts/shttps-context-check.sh` (wired into the `just
-    shttps-context-check` recipe and CI) recursively regex-scans
-    `src/shttps/` for `#include "Sipi*.h"` or `Sipi*::` symbol references.
   - The direct-deps list is curated to a single SIPI-side entry.
 
 Bazel `--features=layering_check` is not enabled on this package: the
 third-party native `cc_library` deps (libtiff, exiv2, …) are not
 layering-clean — they freely include each other's internal headers — so
 enabling layering_check globally fails their compiles. Deferred to the
-broader layering rollout (DEV-6353); the shell-script context check above
-is the active enforcement until then.
+broader layering rollout (DEV-6353); `visibility` plus the curated
+direct-deps list are the active enforcement until then.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")

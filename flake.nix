@@ -51,7 +51,6 @@
           # hermetic toolchain.
 
           commonShellHook = ''
-            git config core.hooksPath .githooks 2>/dev/null || true
             # gh's Go-based TLS needs an explicit cert bundle on headless Linux.
             export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
             # On macOS, prepend /usr/bin so toolchains_llvm's `xcrun --show-
