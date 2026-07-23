@@ -85,6 +85,30 @@ end
 ```
 Above example preflight function allows all files to be served without restriction.
 
+#### Preflight access-cache (opt-in) and its contract
+
+SIPI can cache the `pre_flight` access decision to avoid re-running the hook for
+repeated requests to the same image, which matters when the hook makes a remote
+call (e.g. to an auth service). The cache is **disabled by default** and is enabled
+with `--preflight-cache-ttl <secs>` / `SIPI_PREFLIGHT_CACHE_TTL` (the TTL is the
+maximum staleness of a revoked or expired permission).
+
+The cache key is `(prefix, identifier, Cookie header, Authorization header)`
+**only**. A cached decision is therefore reused for any later request that matches
+those fields, regardless of the rest of the request. Even though `pre_flight`
+receives only `(prefix, identifier, cookie)` as arguments, the hook body can also
+read the full request through the `server` bindings — `server.uri` (the complete
+IIIF path, including region/size/quality), any other header via `server.header`,
+the host, and the client IP. If your hook's decision depends on any of those, the
+cache will serve a stale or wrong decision to a different request that shares only
+the keyed fields.
+
+> **Enable the cache only if your `pre_flight` decision is a pure function of
+> `(prefix, identifier, Cookie, Authorization)`.** A hook that consults
+> `server.uri`, other headers (e.g. an `X-Api-Key`), the host, or the client IP
+> must leave the cache disabled (the default), or it risks returning access
+> decisions made for a different request.
+
 #### More complex example of preflight function 
 
 The following example uses some SIPI lua funtions

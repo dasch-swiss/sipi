@@ -279,6 +279,8 @@ These options are accepted by the `server` subcommand. Usage:
 | `--nthreads <n>` | `-t` | `SIPI_NTHREADS` | `0` (auto) | Worker threads (`0` = auto-detect from CPU cores, container-aware) |
 | `--max-waiting <n>` | | `SIPI_MAX_WAITING` | `0` (unlimited) | Max queued connections before HTTP 503 rejection (`0` = unlimited, timeout-only) |
 | `--queue-timeout <sec>` | | `SIPI_QUEUE_TIMEOUT` | `10` | Max seconds a request waits in queue before 503 |
+| `--preflight-cache-ttl <sec>` | | `SIPI_PREFLIGHT_CACHE_TTL` | `0` (disabled) | Seconds a `pre_flight` access decision is cached per `(prefix, identifier, credential)`. Opt-in; enable (`>0`) only if the hook decides purely on prefix/identifier/Cookie/Authorization (see the Preflight access-cache section in the Lua scripting guide) |
+| `--preflight-cache-slots <n>` | | `SIPI_PREFLIGHT_CACHE_SLOTS` | `4096` | Slot count for the preflight access-cache |
 | `--maxpost <size>` | | `SIPI_MAXPOSTSIZE` | `300M` | Maximum POST upload size |
 | `--imgroot <path>` | | `SIPI_IMGROOT` | `./images` | Image repository root directory |
 | `--docroot <path>` | | `SIPI_DOCROOT` | `./server` | Web server document root |
@@ -327,6 +329,8 @@ flags.
 | `SIPI_NTHREADS` | `--nthreads` | `0` (auto) | Worker threads (`0` = auto-detect, container-aware) |
 | `SIPI_MAX_WAITING` | `--max-waiting` | `0` (unlimited) | Max queued connections before 503 (`0` = unlimited, timeout-only) |
 | `SIPI_QUEUE_TIMEOUT` | `--queue-timeout` | `10` | Max seconds in queue before 503 |
+| `SIPI_PREFLIGHT_CACHE_TTL` | `--preflight-cache-ttl` | `0` (disabled) | Seconds a `pre_flight` decision is cached per `(prefix, identifier, credential)`. Opt-in; see the Preflight access-cache section in the Lua scripting guide before enabling |
+| `SIPI_PREFLIGHT_CACHE_SLOTS` | `--preflight-cache-slots` | `4096` | Slot count for the preflight access-cache |
 | `SIPI_MAXPOSTSIZE` | `--maxpost` | `300M` | Max POST size |
 | `SIPI_IMGROOT` | `--imgroot` | `./images` | Image root directory |
 | `SIPI_DOCROOT` | `--docroot` | `./server` | Document root |

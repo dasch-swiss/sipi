@@ -24,6 +24,7 @@ pub mod iiif;
 pub mod info;
 pub mod metrics;
 pub mod path;
+pub mod preflight_cache;
 pub mod routes;
 pub mod sink;
 pub mod telemetry;
@@ -58,9 +59,18 @@ static START: OnceLock<Instant> = OnceLock::new();
 /// (default 30). `nthreads`/`max_waiting`/`queue_timeout` are the Rust-owned
 /// engine-pool knobs (`--nthreads`/`--max-waiting`/`--queue-timeout`): the worker
 /// count that sizes the pool, how many requests may queue for a worker, and how
-/// long each waits, before the shell sheds with 503. Blocks until shutdown;
-/// returns the process exit code. Telemetry init lives in [`server_main`] (inside
-/// the runtime) because the OTLP batch exporter needs a tokio runtime.
+/// long each waits, before the shell sheds with 503.
+/// `preflight_cache_ttl`/`preflight_cache_slots` are the Rust-owned preflight
+/// access-cache knobs (`--preflight-cache-ttl`/`--preflight-cache-slots`): the
+/// per-`(image, credential)` cache TTL in seconds (default 0 = disabled; the cache
+/// is opt-in) and its slot count.
+/// Blocks until shutdown; returns the process exit code. Telemetry init lives in
+/// [`server_main`] (inside the runtime) because the OTLP batch exporter needs a
+/// tokio runtime.
+// The Rust-owned serve knobs (pool sizing + preflight-cache tuning) are threaded
+// individually down this entry chain; the arg count is inherent to the seam, not
+// a smell worth a bundling struct here.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     config: Option<String>,
     overrides: ServerOverrides,
@@ -68,6 +78,8 @@ pub fn run(
     nthreads: Option<u32>,
     max_waiting: Option<u64>,
     queue_timeout: Option<u32>,
+    preflight_cache_ttl: Option<u32>,
+    preflight_cache_slots: Option<u64>,
 ) -> ExitCode {
     let mut builder = tokio::runtime::Builder::new_multi_thread();
     builder.enable_all();
@@ -100,12 +112,15 @@ pub fn run(
         nthreads,
         max_waiting,
         queue_timeout,
+        preflight_cache_ttl,
+        preflight_cache_slots,
     ))
 }
 
 /// The async server lifecycle inside the tokio runtime: install telemetry, prove
 /// the FFI seam, install the engine + Lua config, serve, then flush telemetry on
 /// the way out.
+#[allow(clippy::too_many_arguments)]
 async fn server_main(
     config: Option<String>,
     overrides: ServerOverrides,
@@ -113,6 +128,8 @@ async fn server_main(
     nthreads: Option<u32>,
     max_waiting: Option<u64>,
     queue_timeout: Option<u32>,
+    preflight_cache_ttl: Option<u32>,
+    preflight_cache_slots: Option<u64>,
 ) -> ExitCode {
     // Stamp the process start for /health uptime before anything else.
     let _ = START.set(Instant::now());
@@ -209,6 +226,8 @@ async fn server_main(
         nthreads,
         max_waiting,
         queue_timeout,
+        preflight_cache_ttl,
+        preflight_cache_slots,
     )
     .await;
 
@@ -320,6 +339,7 @@ pub fn app(state: Arc<routes::AppState>) -> Router {
         .with_state(state)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn serve(
     port: Option<u16>,
     lua_config_port: Option<u16>,
@@ -328,6 +348,8 @@ async fn serve(
     nthreads: Option<u32>,
     max_waiting: Option<u64>,
     queue_timeout: Option<u32>,
+    preflight_cache_ttl: Option<u32>,
+    preflight_cache_slots: Option<u64>,
 ) -> std::io::Result<()> {
     // Read the cached engine config once (image root + prefix_as_path); a
     // not-ready state (no --config) leaves the serve routes returning 503.
@@ -338,6 +360,8 @@ async fn serve(
         nthreads,
         max_waiting,
         queue_timeout,
+        preflight_cache_ttl,
+        preflight_cache_slots,
     ));
     // Bind the OTel observable instruments now that the engine pool exists (the
     // concurrency gauges read its permits). A no-op when no meter provider was
@@ -461,7 +485,9 @@ mod app_tests {
     // serve routes 503. The full serve path (real images via the FFI) is covered
     // by the manual smoke run and the reqwest e2e suite targeting //src/cli-rs:sipi.
     fn test_app() -> Router {
-        app(Arc::new(routes::AppState::load(None, None, None, None)))
+        app(Arc::new(routes::AppState::load(
+            None, None, None, None, None, None,
+        )))
     }
 
     async fn status_of(uri: &str) -> StatusCode {
