@@ -50,6 +50,10 @@ public:
    */
   Hash(HashType type);
 
+  Hash(const Hash &) = delete;
+
+  Hash &operator=(const Hash &) = delete;
+
   /*!
    * Destructor which cleans up everything
    */

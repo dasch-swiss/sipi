@@ -88,18 +88,9 @@ public:
    */
   LuaServer(RequestContext &ctx, const std::string &luafile, bool iscode, const std::string &lua_scriptdir);
 
-  /*!
-   * Copy constructor throws error (not allowed!)
-   */
-  LuaServer(const LuaServer &other) { throw Error("Copy constructor not allowed!"); }
+  LuaServer(const LuaServer &) = delete;
 
-  /*!
-   * Assignment operator throws error (not allowed!)
-   */
-  inline LuaServer &operator=(const LuaServer &other)
-  {
-    throw Error("Assigment operator not allowed!");
-  }
+  LuaServer &operator=(const LuaServer &) = delete;
 
   /*!
    * Destroys the lua interpreter and all associated resources

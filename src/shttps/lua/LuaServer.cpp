@@ -11,6 +11,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <string>
 
@@ -36,6 +37,14 @@
 
 using ms = std::chrono::milliseconds;
 using get_time = std::chrono::steady_clock;
+
+// Owning handles for the C libraries used here. LuaStatePtr guards a lua_State
+// only until a constructor completes; the panic handler converts Lua errors to
+// C++ exceptions, so without it a failed load would leak the state.
+using LuaStatePtr = std::unique_ptr<lua_State, decltype(&lua_close)>;
+using JsonPtr = std::unique_ptr<json_t, decltype(&json_decref)>;
+using JwtPtr = std::unique_ptr<jwt_t, decltype(&jwt_free)>;
+using CStrPtr = std::unique_ptr<char, decltype(&free)>;
 
 static const char servertablename[] = "server";
 
@@ -213,9 +222,12 @@ static std::string base64_decode(std::string const &encoded_string)
  */
 LuaServer::LuaServer()
 {
-  if ((L = luaL_newstate()) == nullptr) { throw Error("Couldn't start lua interpreter"); }
+  LuaStatePtr state(luaL_newstate(), &lua_close);
+  if (state == nullptr) { throw Error("Couldn't start lua interpreter"); }
+  L = state.get();
   lua_atpanic(L, dont_panic);
   luaL_openlibs(L);
+  state.release();
 }
 //=========================================================================
 
@@ -224,11 +236,13 @@ LuaServer::LuaServer()
  */
 LuaServer::LuaServer(RequestContext &ctx)
 {
-  if ((L = luaL_newstate()) == nullptr) { throw Error("Couldn't start lua interpreter"); }
-
+  LuaStatePtr state(luaL_newstate(), &lua_close);
+  if (state == nullptr) { throw Error("Couldn't start lua interpreter"); }
+  L = state.get();
   lua_atpanic(L, dont_panic);
   luaL_openlibs(L);
   createGlobals(ctx);
+  state.release();
 }
 //=========================================================================
 
@@ -239,8 +253,9 @@ LuaServer::LuaServer(RequestContext &ctx)
  */
 LuaServer::LuaServer(const std::string &luafile, bool iscode)
 {
-  if ((L = luaL_newstate()) == nullptr) { throw Error("Couldn't start lua interpreter"); }
-
+  LuaStatePtr state(luaL_newstate(), &lua_close);
+  if (state == nullptr) { throw Error("Couldn't start lua interpreter"); }
+  L = state.get();
   lua_atpanic(L, dont_panic);
   luaL_openlibs(L);
 
@@ -253,6 +268,8 @@ LuaServer::LuaServer(const std::string &luafile, bool iscode)
 
     if (lua_pcall(L, 0, LUA_MULTRET, 0) != 0) { lua_error(L); }
   }
+
+  state.release();
 }
 //=========================================================================
 
@@ -264,8 +281,9 @@ LuaServer::LuaServer(const std::string &luafile, bool iscode)
  */
 LuaServer::LuaServer(RequestContext &ctx, const std::string &luafile, bool iscode, const std::string &lua_scriptdir)
 {
-  if ((L = luaL_newstate()) == nullptr) { throw Error("Couldn't start lua interpreter"); }
-
+  LuaStatePtr state(luaL_newstate(), &lua_close);
+  if (state == nullptr) { throw Error("Couldn't start lua interpreter"); }
+  L = state.get();
   lua_atpanic(L, dont_panic);
   luaL_openlibs(L);
   createGlobals(ctx);
@@ -283,6 +301,8 @@ LuaServer::LuaServer(RequestContext &ctx, const std::string &luafile, bool iscod
 
     if (lua_pcall(L, 0, LUA_MULTRET, 0) != 0) { lua_error(L); }
   }
+
+  state.release();
 }
 //=========================================================================
 
@@ -808,6 +828,7 @@ static int lua_fs_chdir(lua_State *L)
   if (chdir(dirname) != 0) {
     lua_pushboolean(L, false);
     lua_pushstring(L, strerror(errno));
+    free(olddirname);
     return 2;
   }
 
@@ -1233,117 +1254,105 @@ public:
   CurlConnection(const std::string &url,
     const std::unordered_map<std::string, std::string> &requestHeaders,
     long timeout)
-    : _url(url)
+    : _url(url), _headers(nullptr, &curl_slist_free_all), _conn(curl_easy_init(), &curl_easy_cleanup)
   {
-    // Make a libcurl connection object.
-
-    _conn = curl_easy_init();
-
     if (_conn == nullptr) { throw HttpError(__LINE__, "Failed to create libcurl connection"); }
 
-    try {
-      // Set the connection object's error message buffer.
-      if (curl_easy_setopt(_conn, CURLOPT_ERRORBUFFER, _curlErrorBuffer) != CURLE_OK) {
-        throw HttpError(__LINE__, "Failed to set libcurl error buffer");
+    // Set the connection object's error message buffer.
+    if (curl_easy_setopt(_conn.get(), CURLOPT_ERRORBUFFER, _curlErrorBuffer) != CURLE_OK) {
+      throw HttpError(__LINE__, "Failed to set libcurl error buffer");
+    }
+
+    // Tell Curl not to use signal handlers. This is required in multi-threaded applications.
+    if (curl_easy_setopt(_conn.get(), CURLOPT_NOSIGNAL, 1L) != CURLE_OK) {
+      std::ostringstream errMsg;
+      errMsg << "Failed to set CURLOPT_NOSIGNAL: " << _curlErrorBuffer;
+      throw HttpError(__LINE__, errMsg.str());
+    }
+
+    // Set the connection URL.
+    if (curl_easy_setopt(_conn.get(), CURLOPT_URL, url.c_str()) != CURLE_OK) {
+      std::ostringstream errMsg;
+      errMsg << "Failed to set libcurl URL: " << _curlErrorBuffer;
+      throw HttpError(__LINE__, errMsg.str());
+    }
+
+    // Set the connection timeout.
+    if (curl_easy_setopt(_conn.get(), CURLOPT_CONNECTTIMEOUT_MS, timeout) != CURLE_OK) {
+      std::ostringstream errMsg;
+      errMsg << "Failed to set connection timeout: " << _curlErrorBuffer;
+      throw HttpError(__LINE__, errMsg.str());
+    }
+
+    // Set the HTTP request headers.
+
+    bool has_traceparent = false;
+    for (const auto &header : requestHeaders) {
+      std::string headerStr = header.first + ": " + header.second;
+      _headers.reset(curl_slist_append(_headers.release(), headerStr.c_str()));
+      if (!has_traceparent) {
+        std::string name = header.first;
+        std::transform(
+          name.begin(), name.end(), name.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (name == "traceparent") { has_traceparent = true; }
       }
+    }
 
-      // Tell Curl not to use signal handlers. This is required in multi-threaded applications.
-      if (curl_easy_setopt(_conn, CURLOPT_NOSIGNAL, 1L) != CURLE_OK) {
-        std::ostringstream errMsg;
-        errMsg << "Failed to set CURLOPT_NOSIGNAL: " << _curlErrorBuffer;
-        throw HttpError(__LINE__, errMsg.str());
-      }
+    // Continue the caller's distributed trace: inject the W3C `traceparent`
+    // the Rust shell stamped for this thread (from the active span), unless the
+    // script set its own. Empty when no trace is active — and in the C++ CLI,
+    // which never sets it — so this is a no-op off the Rust server path.
+    const std::string traceparent = get_outbound_traceparent();
+    if (!traceparent.empty() && !has_traceparent) {
+      const std::string headerStr = "traceparent: " + traceparent;
+      _headers.reset(curl_slist_append(_headers.release(), headerStr.c_str()));
+    }
 
-      // Set the connection URL.
-      if (curl_easy_setopt(_conn, CURLOPT_URL, url.c_str()) != CURLE_OK) {
-        std::ostringstream errMsg;
-        errMsg << "Failed to set libcurl URL: " << _curlErrorBuffer;
-        throw HttpError(__LINE__, errMsg.str());
-      }
+    if (curl_easy_setopt(_conn.get(), CURLOPT_HTTPHEADER, _headers.get()) != CURLE_OK) {
+      std::ostringstream errMsg;
+      errMsg << "Failed to set HTTP headers: " << _curlErrorBuffer;
+      throw HttpError(__LINE__, errMsg.str());
+    }
 
-      // Set the connection timeout.
-      if (curl_easy_setopt(_conn, CURLOPT_CONNECTTIMEOUT_MS, timeout) != CURLE_OK) {
-        std::ostringstream errMsg;
-        errMsg << "Failed to set connection timeout: " << _curlErrorBuffer;
-        throw HttpError(__LINE__, errMsg.str());
-      }
+    // Tell the connection to follow redirects.
+    if (curl_easy_setopt(_conn.get(), CURLOPT_FOLLOWLOCATION, 1L) != CURLE_OK) {
+      std::ostringstream errMsg;
+      errMsg << "Failed to set libcurl redirect option: " << _curlErrorBuffer;
+      throw HttpError(__LINE__, errMsg.str());
+    }
 
-      // Set the HTTP request headers.
+    // Register a function for handling the connection's response data.
+    if (curl_easy_setopt(_conn.get(), CURLOPT_WRITEFUNCTION, curlWriterCallback) != CURLE_OK) {
+      std::ostringstream errMsg;
+      errMsg << "Failed to set libcurl writer callback: " << _curlErrorBuffer;
+      throw HttpError(__LINE__, errMsg.str());
+    }
 
-      struct curl_slist *chunk = nullptr;
+    // Set the connection's response data buffer.
+    if (curl_easy_setopt(_conn.get(), CURLOPT_WRITEDATA, &responseBody) != CURLE_OK) {
+      std::ostringstream errMsg;
+      errMsg << "Failed to set libcurl response data buffer: " << _curlErrorBuffer;
+      throw HttpError(__LINE__, errMsg.str());
+    }
 
-      bool has_traceparent = false;
-      for (const auto &header : requestHeaders) {
-        std::string headerStr = header.first + ": " + header.second;
-        chunk = curl_slist_append(chunk, headerStr.c_str());
-        if (!has_traceparent) {
-          std::string name = header.first;
-          std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) {
-            return static_cast<char>(std::tolower(c));
-          });
-          if (name == "traceparent") { has_traceparent = true; }
-        }
-      }
+    // Register a fiunction for handling the connection's response headers.
+    if (curl_easy_setopt(_conn.get(), CURLOPT_HEADERFUNCTION, curlHeaderCallback) != CURLE_OK) {
+      std::ostringstream errMsg;
+      errMsg << "Failed to set libcurl response header callback: " << _curlErrorBuffer;
+      throw HttpError(__LINE__, errMsg.str());
+    }
 
-      // Continue the caller's distributed trace: inject the W3C `traceparent`
-      // the Rust shell stamped for this thread (from the active span), unless the
-      // script set its own. Empty when no trace is active — and in the C++ CLI,
-      // which never sets it — so this is a no-op off the Rust server path.
-      const std::string traceparent = get_outbound_traceparent();
-      if (!traceparent.empty() && !has_traceparent) {
-        const std::string headerStr = "traceparent: " + traceparent;
-        chunk = curl_slist_append(chunk, headerStr.c_str());
-      }
-
-      if (curl_easy_setopt(_conn, CURLOPT_HTTPHEADER, chunk) != CURLE_OK) {
-        std::ostringstream errMsg;
-        errMsg << "Failed to set HTTP headers: " << _curlErrorBuffer;
-        throw HttpError(__LINE__, errMsg.str());
-      }
-
-      // Tell the connection to follow redirects.
-      if (curl_easy_setopt(_conn, CURLOPT_FOLLOWLOCATION, 1L) != CURLE_OK) {
-        std::ostringstream errMsg;
-        errMsg << "Failed to set libcurl redirect option: " << _curlErrorBuffer;
-        throw HttpError(__LINE__, errMsg.str());
-      }
-
-      // Register a function for handling the connection's response data.
-      if (curl_easy_setopt(_conn, CURLOPT_WRITEFUNCTION, curlWriterCallback) != CURLE_OK) {
-        std::ostringstream errMsg;
-        errMsg << "Failed to set libcurl writer callback: " << _curlErrorBuffer;
-        throw HttpError(__LINE__, errMsg.str());
-      }
-
-      // Set the connection's response data buffer.
-      if (curl_easy_setopt(_conn, CURLOPT_WRITEDATA, &responseBody) != CURLE_OK) {
-        std::ostringstream errMsg;
-        errMsg << "Failed to set libcurl response data buffer: " << _curlErrorBuffer;
-        throw HttpError(__LINE__, errMsg.str());
-      }
-
-      // Register a fiunction for handling the connection's response headers.
-      if (curl_easy_setopt(_conn, CURLOPT_HEADERFUNCTION, curlHeaderCallback) != CURLE_OK) {
-        std::ostringstream errMsg;
-        errMsg << "Failed to set libcurl response header callback: " << _curlErrorBuffer;
-        throw HttpError(__LINE__, errMsg.str());
-      }
-
-      // Set the object that will collect the respnse headers.
-      if (curl_easy_setopt(_conn, CURLOPT_HEADERDATA, &responseHeaders) != CURLE_OK) {
-        std::ostringstream errMsg;
-        errMsg << "Failed to set libcurl response header object: " << _curlErrorBuffer;
-        throw HttpError(__LINE__, errMsg.str());
-      }
-    } catch (HttpError &err) {
-      curl_easy_cleanup(_conn);
-      throw err;
+    // Set the object that will collect the respnse headers.
+    if (curl_easy_setopt(_conn.get(), CURLOPT_HEADERDATA, &responseHeaders) != CURLE_OK) {
+      std::ostringstream errMsg;
+      errMsg << "Failed to set libcurl response header object: " << _curlErrorBuffer;
+      throw HttpError(__LINE__, errMsg.str());
     }
   }
 
   void doGetRequest()
   {
-    if (curl_easy_perform(_conn) != CURLE_OK) {
+    if (curl_easy_perform(_conn.get()) != CURLE_OK) {
       std::ostringstream errMsg;
       errMsg << "HTTP GET request to " << _url << " failed: " << _curlErrorBuffer;
       throw HttpError(__LINE__, errMsg.str());
@@ -1353,15 +1362,16 @@ public:
   long getStatusCode()
   {
     long status_code;
-    curl_easy_getinfo(_conn, CURLINFO_RESPONSE_CODE, &status_code);
+    curl_easy_getinfo(_conn.get(), CURLINFO_RESPONSE_CODE, &status_code);
     return status_code;
   }
 
-  ~CurlConnection() { curl_easy_cleanup(_conn); }
-
 private:
-  CURL *_conn;
   std::string _url;
+  // libcurl requires the header list to outlive the easy handle's use of it:
+  // _headers is declared before _conn so it is destroyed after the handle.
+  std::unique_ptr<struct curl_slist, decltype(&curl_slist_free_all)> _headers;
+  std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> _conn;
   char _curlErrorBuffer[CURL_ERROR_SIZE];
 };
 
@@ -1487,9 +1497,8 @@ static int lua_http_client(lua_State *L)
 static json_t *subtable(lua_State *L, int index)
 {
   std::string table_error("server.table_to_json(table): datatype inconsistency");
-  json_t *tableobj = nullptr;
-  json_t *arrayobj = nullptr;
-  json_t *tmp_luanumber = nullptr;
+  JsonPtr tableobj(nullptr, &json_decref);
+  JsonPtr arrayobj(nullptr, &json_decref);
   const char *skey;
   lua_pushnil(L); /* first key */
 
@@ -1505,7 +1514,7 @@ static json_t *subtable(lua_State *L, int index)
         throw std::string("'server.table_to_json(table)': Cannot mix int and strings as key");
       }
 
-      if (tableobj == nullptr) { tableobj = json_object(); }
+      if (tableobj == nullptr) { tableobj.reset(json_object()); }
     } else if (lua_type(L, index + 1) == LUA_TNUMBER) {
       (void)lua_tointeger(L, index + 1);
 
@@ -1513,7 +1522,7 @@ static json_t *subtable(lua_State *L, int index)
         throw std::string("'server.table_to_json(table)': Cannot mix int and strings as key");
       }
 
-      if (arrayobj == nullptr) { arrayobj = json_array(); }
+      if (arrayobj == nullptr) { arrayobj.reset(json_array()); }
     } else {
       // something else as key....
       throw std::string("'server.table_to_json(table)': Cannot convert key to JSON object field");
@@ -1528,20 +1537,15 @@ static json_t *subtable(lua_State *L, int index)
     if (lua_type(L, index + 2) == LUA_TNUMBER) {
       // a number value
       double val = lua_tonumber(L, index + 2);
-
-      if (floor(val) == val) {
-        // the lua number is actually an integer
-        tmp_luanumber = json_integer(static_cast<long>(floor(val)));
-      } else {
-        // the lua number is a double
-        tmp_luanumber = json_real(val);
-      }
+      json_t *luanumber =
+        (floor(val) == val) ? json_integer(static_cast<long>(floor(val))) : json_real(val);
 
       if (tableobj != nullptr) {
-        json_object_set_new(tableobj, skey, tmp_luanumber);
+        json_object_set_new(tableobj.get(), skey, luanumber);
       } else if (arrayobj != nullptr) {
-        json_array_append_new(arrayobj, tmp_luanumber);
+        json_array_append_new(arrayobj.get(), luanumber);
       } else {
+        json_decref(luanumber);
         throw table_error;
       }
     } else if (lua_type(L, index + 2) == LUA_TSTRING) {
@@ -1549,9 +1553,9 @@ static json_t *subtable(lua_State *L, int index)
       const char *val = lua_tostring(L, index + 2);
 
       if (tableobj != nullptr) {
-        json_object_set_new(tableobj, skey, json_string(val));
+        json_object_set_new(tableobj.get(), skey, json_string(val));
       } else if (arrayobj != nullptr) {
-        json_array_append_new(arrayobj, json_string(val));
+        json_array_append_new(arrayobj.get(), json_string(val));
       } else {
         throw table_error;
       }
@@ -1560,17 +1564,17 @@ static json_t *subtable(lua_State *L, int index)
       bool val = lua_toboolean(L, index + 2);
 
       if (tableobj != nullptr) {
-        json_object_set_new(tableobj, skey, json_boolean(val));
+        json_object_set_new(tableobj.get(), skey, json_boolean(val));
       } else if (arrayobj != nullptr) {
-        json_array_append_new(arrayobj, json_boolean(val));
+        json_array_append_new(arrayobj.get(), json_boolean(val));
       } else {
         throw table_error;
       }
     } else if (lua_type(L, index + 2) == LUA_TTABLE) {
       if (tableobj != nullptr) {
-        json_object_set_new(tableobj, skey, subtable(L, index + 2));
+        json_object_set_new(tableobj.get(), skey, subtable(L, index + 2));
       } else if (arrayobj != nullptr) {
-        json_array_append_new(arrayobj, subtable(L, index + 2));
+        json_array_append_new(arrayobj.get(), subtable(L, index + 2));
       } else {
         throw table_error;
       }
@@ -1579,7 +1583,9 @@ static json_t *subtable(lua_State *L, int index)
     }
     lua_pop(L, 1);
   }
-  return tableobj != nullptr ? tableobj : (arrayobj != nullptr ? arrayobj : nullptr);
+  if (tableobj != nullptr) { return tableobj.release(); }
+  if (arrayobj != nullptr) { return arrayobj.release(); }
+  return nullptr;
 }
 //=========================================================================
 
@@ -1604,21 +1610,20 @@ static int lua_table_to_json(lua_State *L)
     return 2;
   }
 
-  json_t *root = nullptr;
+  JsonPtr root(nullptr, &json_decref);
 
   try {
-    root = subtable(L, 1);
+    root.reset(subtable(L, 1));
   } catch (std::string &errmsg) {
     lua_settop(L, 0);// clear stack
     lua_pushboolean(L, false);
     lua_pushstring(L, errmsg.c_str());
+    return 2;
   }
 
   lua_pushboolean(L, true);// we are successful...
-  char *jsonstr = json_dumps(root, JSON_INDENT(3));
-  lua_pushstring(L, jsonstr);
-  free(jsonstr);
-  json_decref(root);
+  CStrPtr jsonstr(json_dumps(root.get(), JSON_INDENT(3)), &free);
+  lua_pushstring(L, jsonstr.get());
   return 2;
 }
 //=========================================================================
@@ -1757,7 +1762,7 @@ static int lua_json_to_table(lua_State *L)
   const char *jsonstr = lua_tostring(L, 1);
   lua_pop(L, top);
   json_error_t jsonerror;
-  json_t *jsonobj = json_loads(jsonstr, JSON_REJECT_DUPLICATES, &jsonerror);
+  JsonPtr jsonobj(json_loads(jsonstr, JSON_REJECT_DUPLICATES, &jsonerror), &json_decref);
 
   if (jsonobj == nullptr) {
     lua_pushboolean(L, false);
@@ -1772,10 +1777,10 @@ static int lua_json_to_table(lua_State *L)
   lua_pushboolean(L, true);// we assume success
 
   try {
-    if (json_is_object(jsonobj)) {
-      lua_jsonobj(L, jsonobj);
-    } else if (json_is_array(jsonobj)) {
-      lua_jsonarr(L, jsonobj);
+    if (json_is_object(jsonobj.get())) {
+      lua_jsonobj(L, jsonobj.get());
+    } else if (json_is_array(jsonobj.get())) {
+      lua_jsonarr(L, jsonobj.get());
     } else {
       lua_settop(L, 0);// clear stack
       lua_pushboolean(L, false);
@@ -1787,8 +1792,6 @@ static int lua_json_to_table(lua_State *L)
     lua_pushboolean(L, false);
     lua_pushstring(L, errmsg.c_str());
   }
-
-  json_decref(jsonobj);
 
   return 2;
 }
@@ -2096,9 +2099,19 @@ static int lua_generate_jwt(lua_State *L)
     return 2;
   }
 
-  json_t *root = subtable(L, 1);
-  char *jsonstr = json_dumps(root, JSON_INDENT(3));
-  json_decref(root);
+  JsonPtr root(nullptr, &json_decref);
+
+  try {
+    root.reset(subtable(L, 1));
+  } catch (std::string &errmsg) {
+    lua_settop(L, 0);// clear stack
+    lua_pushboolean(L, false);
+    lua_pushstring(L, errmsg.c_str());
+    return 2;
+  }
+
+  CStrPtr jsonstr(json_dumps(root.get(), JSON_INDENT(3)), &free);
+  root.reset();
 
   if (jwt_new(&jwt) != 0) {
     lua_settop(L, 0);// clear stack
@@ -2106,16 +2119,23 @@ static int lua_generate_jwt(lua_State *L)
     lua_pushstring(L, "'server.table_to_json(table)': Creating token failed");
     return 2;
   }
+  JwtPtr jwt_guard(jwt, &jwt_free);
 
   jwt_set_alg(
     jwt, JWT_ALG_HS256, (unsigned char *)ctx->jwt_secret.c_str(), ctx->jwt_secret.size());
-  jwt_add_grants_json(jwt, jsonstr);
+  jwt_add_grants_json(jwt, jsonstr.get());
 
-  char *token = jwt_encode_str(jwt);
+  CStrPtr token(jwt_encode_str(jwt), &free);
+
+  if (token == nullptr) {
+    lua_settop(L, 0);// clear stack
+    lua_pushboolean(L, false);
+    lua_pushstring(L, "'server.generate_jwt(table)': Encoding token failed");
+    return 2;
+  }
 
   lua_pushboolean(L, true);
-  lua_pushstring(L, token);
-  free(jsonstr);
+  lua_pushstring(L, token.get());
 
   return 2;
 }
@@ -2158,26 +2178,24 @@ static int lua_decode_jwt(lua_State *L)
     return 2;
   }
 
-  char *tokendata;
+  JwtPtr jwt_guard(jwt, &jwt_free);
+  CStrPtr tokendata(jwt_dump_str(jwt, false), &free);
 
-  if ((tokendata = jwt_dump_str(jwt, false)) == nullptr) {
-    jwt_free(jwt);
+  if (tokendata == nullptr) {
     lua_pushboolean(L, false);
     lua_pushstring(L, "'server.decode_jwt(token)': Error in decoding token! (2)");
     return 2;
   }
-  jwt_free(jwt);
 
-  std::string tokenstr = tokendata;
-  free(tokendata);
+  std::string tokenstr = tokendata.get();
   size_t pos = tokenstr.find(".");
   std::string jsonstr = tokenstr.substr(pos + 1);
   json_error_t jsonerror;
-  json_t *jsonobj = json_loads(jsonstr.c_str(), JSON_REJECT_DUPLICATES, &jsonerror);
+  JsonPtr jsonobj(json_loads(jsonstr.c_str(), JSON_REJECT_DUPLICATES, &jsonerror), &json_decref);
   lua_pushboolean(L, true);
 
   try {
-    lua_jsonobj(L, jsonobj);
+    lua_jsonobj(L, jsonobj.get());
   } catch (std::string &errorMsg) {
 
     lua_settop(L, 0);// clear stack
@@ -2186,8 +2204,6 @@ static int lua_decode_jwt(lua_State *L)
     lua_pushstring(L, tmpstr.c_str());
     return 2;
   }
-
-  json_decref(jsonobj);
 
   return 2;
 }

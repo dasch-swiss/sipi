@@ -71,19 +71,15 @@ bool Hash::hash_of_file(const string &path, size_t buflen)
 
   int fptr = ::open(path.c_str(), O_RDONLY);
   if (fptr == -1) { return false; }
-  size_t n;
+  ssize_t n;
   while ((n = ::read(fptr, buf.get(), buflen)) > 0) {
-    if (n == -1) {
-      ::close(fptr);
-      return false;
-    }
-    if (!EVP_DigestUpdate(context, buf.get(), n)) {
+    if (!EVP_DigestUpdate(context, buf.get(), static_cast<size_t>(n))) {
       ::close(fptr);
       return false;
     }
   }
   ::close(fptr);
-  return true;
+  return n == 0;
 }
 //==========================================================================
 
