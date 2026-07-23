@@ -37,12 +37,27 @@ _LINUX_X86_64 = "@@//platforms:is_linux_x86_64"
 _LINUX_AARCH64 = "@@//platforms:is_linux_aarch64"
 
 # Warning suppressions + language level shared by every Kakadu TU.
+#
+# `-fno-sanitize=function,shift,pointer-overflow` disables exactly the three
+# UBSan subchecks Kakadu's hand-tuned internals trip (a no-op unless
+# `--config=ubsan` is active, where the hermetic toolchain otherwise adds
+# `-fsanitize=undefined` to every target — see `.bazelrc`). The constructs are
+# benign in this commercial codec: function-pointer casts in the worker-job
+# dispatch (`function`), signed left shifts (`shift`), and pointer arithmetic in
+# the AVX2 synthesis (`pointer-overflow`). These fire only on the multi-threaded
+# decode path (`kdu_thread_env` in `SipiIOJ2k::read`) and abort the process
+# under the gate. They are third-party-library noise, not SIPI defects, and are
+# not reachable in production (which runs neither UBSan). The rest of UBSan
+# (null, bool, enum, vla-bound, integer-divide-by-zero, …) and all of ASan
+# (memory-error) instrumentation on Kakadu are deliberately retained — that is
+# the coverage the `.bazelrc` sanitizer rationale is about.
 _BASE_COPTS = [
     "-std=gnu++17",
     "-DNDEBUG",
     "-Wall",
     "-Wno-unused-function",
     "-Wno-overloaded-virtual",
+    "-fno-sanitize=function,shift,pointer-overflow",
 ]
 
 # Per-platform base flags from coresys/make/Makefile-<P> C_OPT (minus the

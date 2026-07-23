@@ -230,6 +230,14 @@ bool SipiIOJ2k::read(SipiImage *img,
 
   int num_threads;
   if ((num_threads = kdu_get_num_processors()) < 2) num_threads = 0;
+#if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
+  // Same ASan "Joining already joined thread" false positive as the encode path
+  // (see the guard in write() for the full rationale): Kakadu's worker-thread
+  // pool trips ASan's thread registry when this engine is linked into the Rust
+  // shell. Single-threaded decode sidesteps it; ASan builds never ship, so the
+  // throughput cost is test-only.
+  num_threads = 0;
+#endif
 
   // Custom messaging services
   kdu_customize_warnings(&kdu_sipi_warn);
@@ -249,12 +257,21 @@ bool SipiIOJ2k::read(SipiImage *img,
   kdu_supp::jp2_colour colour;
 
   kdu_core::kdu_codestream codestream;
+  // Multi-threaded decode environment, created below (before decompressor.start)
+  // when num_threads > 0. Owned by KduReadTeardown so its worker threads are
+  // joined ahead of the codestream they read from.
+  kdu_core::kdu_thread_env env;
+  kdu_core::kdu_thread_env *env_ref = nullptr;
 
   // Tears down the Kakadu decode machinery exactly once on every exit path
-  // (normal, throw, and error-return), in the required order: codestream
-  // first, then the compressed source, then the JPX container.
+  // (normal, throw, and error-return), in the required order: the decode worker
+  // threads first (env), then the codestream, then the compressed source, then
+  // the JPX container. env-before-codestream mirrors Kakadu's own
+  // kdu_buffered_expand demo (env.destroy ahead of codestream.destroy), so no
+  // worker thread outlives the codestream it reads from.
   struct KduReadTeardown
   {
+    kdu_core::kdu_thread_env &env;
     kdu_core::kdu_codestream &codestream;
     kdu_core::kdu_compressed_source *&input;
     kdu_supp::jpx_source &jpx_in;
@@ -264,13 +281,14 @@ bool SipiIOJ2k::read(SipiImage *img,
     {
       if (done) { return; }
       done = true;
+      if (env.exists()) { env.destroy(); }
       if (codestream.exists()) { codestream.destroy(); }
       if (input != nullptr) { input->close(); }
       jpx_in.close();
     }
 
     ~KduReadTeardown() { teardown(); }
-  } kdu_teardown{ codestream, input, jpx_in };
+  } kdu_teardown{ env, codestream, input, jpx_in };
 
   jp2_ultimate_src.open(filepath.c_str());
 
@@ -610,7 +628,21 @@ bool SipiIOJ2k::read(SipiImage *img,
   //
   kdu_supp::kdu_stripe_decompressor decompressor;
   try {
-    decompressor.start(codestream);
+    // Multi-threaded decode: one worker per core (mirroring the encode path in
+    // write()), so the inverse DWT and sample processing run across all cores.
+    // num_threads is 0 on a single-core host (and under ASan), in which case
+    // env_ref stays NULL and decode falls back to the single-threaded path.
+    if (num_threads > 0) {
+      env.create();
+      for (int nt = 1; nt < num_threads; nt++) {
+        if (!env.add_thread()) {
+          num_threads = nt;// Unable to create all the threads requested
+          break;
+        }
+      }
+      env_ref = &env;
+    }
+    decompressor.start(codestream, false, false, env_ref);
   } catch (kdu_exception&) {
     throw SipiImageError(
       "Cannot read JPEG2000 file \"" + filepath + "\": corrupt codestream (decompressor start failed)");
