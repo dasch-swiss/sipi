@@ -1,0 +1,70 @@
+# Benchmarking
+
+Sipi uses [Google Benchmark](https://github.com/google/benchmark) for in-process microbenchmarks of the production codec and the IIIF parser front door. The suite exists to enforce one convention:
+
+> **No benchmark, no hot-path change.** Before changing any image decode/encode hot path (`src/formats/*`, `SipiImage` read/write, `iiifparser`), a microbenchmark must exist — add one if it doesn't — and the change is justified with a before/after comparison in the PR.
+
+The suite was motivated by Ruven Pillay's *Evaluating IIIF Server Performance* (IIIF Annual Conference 2026, `docs/benchmarks/01_Ruven_Pillay_Evaluating_IIIF_Server_Performance.pdf`), which benchmarked SIPI as the slowest server tested for TIFF and JPEG. The microbenchmarks measure *intra-SIPI* per-stage cost — what can be measured rigorously and locally; the PDF's cross-server, end-to-end HTTP comparison is deliberately out of scope (apples-to-oranges across machines and OSes).
+
+## The tiers
+
+One manual-tagged `cc_binary` per pipeline stage, named `//src:<tier>_benchmark`:
+
+| Tier      | Source                               | What it times                                                                                                                                                                                             |
+| --------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `parse`   | `src/iiifparser/parse_benchmark.cpp` | The five IIIF URL component parsers + the full per-request parse. Pure CPU, no fixtures.                                                                                                                  |
+| `decode`  | `src/formats/decode_benchmark.cpp`   | `SipiImage::read()` across the input-format matrix (tiled-pyramid TIFF none/zstd/webp, JP2, plain-JPEG and flat-TIFF slow baselines) in two access shapes: full-resolution tile and `!256,256` thumbnail. |
+| `process` | `src/process_benchmark.cpp`          | The operators between decode and encode: `scaleFast`/`scaleMedium`/`scale`, `rotate` (90° fast path + 45° general), `crop`, `to8bps`, `convertToIcc`, `removeChannel`.                                    |
+| `encode`  | `src/formats/encode_benchmark.cpp`   | `SipiImage::write()` for the four formats SIPI emits: JPEG (Q75/Q90), PNG, TIFF, JPEG2000.                                                                                                                |
+
+Benchmarks are co-located with the module they measure (ADR-0003 direction: `*_benchmark.cpp` beside the source, the Abseil/Bloomberg-BDE/Chromium convention). The `cc_binary` targets live in `src/BUILD.bazel` until ADR-0003 promotes the respective modules; a `**/*_benchmark.cpp` glob exclude on `//src:sipi_lib` keeps the sources out of the production library and the coverage build, and `tags = ["manual"]` keeps the targets out of `bazel test //...`.
+
+HTJ2K is absent from the decode matrix: Kakadu's HT block coder is license-gated (`FBC_ENABLED`, evaluation-only) and the production SIPI build can neither encode nor decode HT codestreams.
+
+## Fixtures
+
+- The `parse` tier needs none.
+- The `process` tier reuses small checked-in repo fixtures (`test/_test_data/images/`) with the specific shapes its operators need (alpha channel, 16 bps, CMYK, known dimensions).
+- The `decode`/`encode` tiers consume `@sipi_bench_fixtures` — a 321 MB variant matrix generated from one 7216×5412 photographic master by `tools/benchmark/generate_fixtures.sh` (the checked-in provenance: pinned source, pinned tool versions, exact commands). It is hosted as a release asset on `dasch-swiss/dsp-ci-assets` and fetched lazily — the first `just bench decode` downloads it; production and CI test builds never do.
+
+## Running
+
+```
+just bench <tier>                # tier ∈ parse | decode | process | encode
+just bench parse --benchmark_filter=ParseSize --benchmark_min_time=2s
+```
+
+`just bench` builds the binary with `-c opt` (matching production codegen — never fastbuild, never sanitized or instrumented) and execs it directly, exporting `SOURCE_DATE_EPOCH=946684800` + `SIPI_WORKSPACE_ROOT=.` (ADR-0002 ICC determinism + fixture resolution), `SIPI_BENCH_FIXTURES_DIR` (the `@sipi_bench_fixtures` runfiles location) and a throwaway `TEST_TMPDIR` for encode outputs. All Google Benchmark [flags](https://github.com/google/benchmark/blob/main/docs/user_guide.md) pass through.
+
+## The before/after workflow
+
+```
+just bench decode --benchmark_repetitions=20 \
+    --benchmark_out=before.json --benchmark_out_format=json
+# ... make the hot-path change, rebuild happens automatically ...
+just bench decode --benchmark_repetitions=20 \
+    --benchmark_out=after.json --benchmark_out_format=json
+just bench-compare before.json after.json
+```
+
+`bench-compare` runs the vendored google_benchmark `compare.py` (`//tools/benchmark:compare`, hermetic Python + numpy/scipy via the `sipi_bench_pip` hub — nothing needed on the host). It prints per-benchmark deltas with a Mann-Whitney U-test and an `OVERALL_GEOMEAN`:
+
+- green/red numbers are the relative change (`+0.05` = 5% slower),
+- the U-test p-value (with `--benchmark_repetitions`) tells you whether the two distributions actually differ.
+
+## The regression decision rule
+
+On Apple Silicon you cannot disable turbo or thermal throttling; rely on statistics instead:
+
+- Run both sides with `--benchmark_repetitions=20` on a quiesced machine and demand a baseline CV ≤ ~2% (`_cv` rows in the repetition output). A CV of 5–10% means the machine is too noisy — re-run cooler or raise `--benchmark_min_time`.
+- Trust a delta only if it is **green (p < 0.05) AND the median shift exceeds the baseline CV**. Treat sub-3% deltas as noise; trust ≥5% green shifts.
+- **Same machine, same `-c opt` binary, for both before and after.** Never compare a Mac "before" against a Linux "after".
+
+This is never a CI gate — cross-machine comparisons are meaningless and shared runners are too noisy. The numbers live in PR descriptions, produced on the author's machine.
+
+## Adding a benchmark
+
+1. Put `<name>_benchmark.cpp` beside the code it measures (it moves with the module when ADR-0003 promotes it).
+1. Declare a `cc_binary` in `src/BUILD.bazel` next to the existing ones: `tags = ["manual"]`, `testonly = True`, deps on `//src:sipi_lib` + `@google_benchmark//:benchmark_main` (+ `//test:test_paths` and `env`/`data` if it reads fixtures or emits ICC-stamped output).
+1. Keep file I/O and source decoding out of the timed loop (decode once, deep-copy per iteration outside the timing if the operator mutates), and defeat the optimizer with `benchmark::DoNotOptimize` / `benchmark::ClobberMemory`.
+1. `just bench <name>` — there is nothing to register anywhere else.
