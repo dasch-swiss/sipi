@@ -142,7 +142,6 @@ groups:
 | `run` | `just bazel-build` then run sipi with the dev config |
 | `valgrind` | `just bazel-build` then run sipi under Valgrind |
 | `fuzz-corpus-update` | Download CI fuzz corpus and merge into the seed corpus |
-| `shttps-context-check` | Advisory grep that enforces SIPI → shttps boundary |
 | `docs-build` | Build documentation site (`mkdocs build`) |
 | `docs-serve` | Serve documentation locally for preview |
 

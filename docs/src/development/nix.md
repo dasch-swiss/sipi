@@ -82,11 +82,8 @@ Highlights:
 
 ## Shell hooks
 
-The default shell hook does three things:
+The default shell hook does two things:
 
-- `git config core.hooksPath .githooks` — points Git at the
-  repo-tracked pre-commit hooks (the SIPI → shttps boundary
-  check).
 - Exports `SSL_CERT_FILE` from the `cacert` package so `gh`'s
   Go-based TLS works on headless Linux dev shells.
 - On macOS, prepends `/usr/bin` to `PATH` so Apple's

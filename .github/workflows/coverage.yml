@@ -6,10 +6,10 @@
 # (skips instrumentation overhead, 1.5-2x compile + slower test
 # runtime, and Codecov network latency on every push).
 #
-# Trade-off: PRs no longer surface a Codecov coverage delta in the
-# review UI; coverage drift is detected on each merge to main instead.
-# If we ever want per-PR coverage signal back, scope it to PRs that
-# touch `src/` in a separate workflow.
+# Trade-off: PRs do not surface a Codecov coverage delta in the review
+# UI; coverage drift is detected on each merge to main instead. For a
+# per-PR coverage signal, scope it to PRs that touch `src/` in a separate
+# workflow.
 #
 # `bazel-coverage`'s `llvm-profdata`/`llvm-cov` needs (COVERAGE_GCOV_PATH,
 # LLVM_COV) resolve from the hermetic-toolchain aliases

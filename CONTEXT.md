@@ -26,7 +26,7 @@ Prefer the glossary's canonical terms over the variant spellings in older code.
 
 Module API surface (the four seam types — the documented strangler seam, ADR-0013): `Server`, `Connection`, `RequestHandler`, `LuaServer`. Full module documentation in [`src/shttps/README.md`](./src/shttps/README.md).
 
-**Dependency direction:** strictly SIPI → shttps. shttps depends on the rest of `src/` only through `//src/logging:logging` — a generic levelled-logging primitive (not domain code), visibility-allowlisted as a shared support library. Enforcement: Bazel `visibility` plus `scripts/shttps-context-check.sh` (CI gate); broader Bazel `--features=layering_check` rollout tracked under DEV-6353.
+**Dependency direction:** strictly SIPI → shttps. shttps depends on the rest of `src/` only through `//src/logging:logging` — a generic levelled-logging primitive (not domain code), visibility-allowlisted as a shared support library. Enforcement: Bazel `visibility`; broader Bazel `--features=layering_check` rollout tracked under DEV-6353.
 
 **Rust shell + retained oracle:** the HTTP server is the Rust shell (`//src/cli-rs:sipi` over the `//src/server-rs:lib` library), which drives the C++ image engine through the FFI seam. The C++ `shttps` transport + `SipiHttpServer` are retained in-tree as the differential-parity oracle — the reference binary the Rust shell is diffed against — and are removed after deploy. See [ADR-0013](docs/adr/0013-shttps-as-internal-module.md).
 

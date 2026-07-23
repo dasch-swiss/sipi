@@ -6,22 +6,24 @@
 #      `test` matrix does NOT depend on it and starts immediately.
 #   2. `test` — the 3-leg build+test matrix (linux-amd64, linux-arm64,
 #      darwin-arm64), each running `just bazel-test` (fastbuild, no
-#      instrumentation; unit + approval + e2e). The former standalone `lint`
-#      job is folded onto the linux-arm64 leg (the shortest-queue runner):
-#      the shttps→sipi boundary check and the differential-coverage drift
-#      guard run first as pure-shell pre-checks, and Rust formatting +
-#      clippy run after the main test step. Linux legs additionally build the
-#      Docker image, run the Bazel-built smoke test against it, and feed
-#      Docker Scout; amd64 alone runs the differential parity gate and
-#      uploads the SARIF CVE scan.
+#      instrumentation; unit + approval + e2e). The linux-amd64 leg runs the
+#      lint gates BEFORE its build+test, as fail-fast gates: the
+#      differential-coverage drift guard first as a pure-shell pre-check, then
+#      Rust formatting + clippy (clippy compiles the Rust crates natively on
+#      the amd64 RBE worker — no cross-compile). amd64 carries the heaviest
+#      downstream work (differential parity gate, Docker smoke, Scout, SARIF),
+#      so short-circuiting it on a lint finding saves the most. Linux legs
+#      additionally build the Docker image, run the Bazel-built smoke test
+#      against it, and feed Docker Scout; amd64 alone runs the differential
+#      parity gate and uploads the SARIF CVE scan.
 #   3. `sanitizer-unit` / `sanitizer-e2e` — two parallel path-gated
 #      ASan+UBSan jobs (see the scope-rationale comment above those jobs).
-#   4. `docs` — MkDocs build, unchanged in shape.
+#   4. `docs` — MkDocs build.
 #
 # Coverage instrumentation lives in `.github/workflows/coverage.yml`, which
 # runs on every push to `main` (post-merge) on a single linux-amd64 runner and
-# uploads lcov to Codecov. PRs no longer get a per-PR coverage delta in
-# Codecov; trade-off accepted for faster PR CI.
+# uploads lcov to Codecov. PRs do not get a per-PR coverage delta in Codecov;
+# trade-off for faster PR CI.
 #
 # Every step invokes `just <recipe>`. No inline bazel calls — recipes are
 # the contract surface. See the justfile "Bazel — what CI runs" section.
@@ -122,14 +124,10 @@ jobs:
           fetch-depth: 0
           lfs: false  # ci-setup restores/pulls LFS via its own cached step
 
-      # Fast, platform-independent pre-checks folded from the old standalone
-      # `lint` job, placed on the linux-arm64 leg (the shortest queue): pure
-      # shell, so they run before any setup step and fail in seconds on a
-      # boundary violation or an unreviewed differential-corpus drift.
-      - if: matrix.platform == 'linux-arm64'
-        name: Enforce shttps→sipi boundary
-        run: bash scripts/shttps-context-check.sh
-      - if: matrix.platform == 'linux-arm64'
+      # Fast pre-check on the linux-amd64 leg (the fail-fast leg): pure shell,
+      # so it runs before any setup step and fails in seconds on an unreviewed
+      # differential-corpus drift.
+      - if: matrix.arch == 'amd64'
         name: Check differential coverage (drift guard)
         run: bash tools/differential_coverage_check.sh
 
@@ -143,6 +141,21 @@ jobs:
           rbe-ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
           rbe-client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
           rbe-client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
+
+      # Rust lint gates on the linux-amd64 leg, BEFORE build+test, so a
+      # formatting/clippy finding fails the leg in lint time — short-circuiting
+      # the leg's heavy downstream steps (build+test, differential parity gate,
+      # Docker smoke, Scout).
+      - if: matrix.arch == 'amd64'
+        name: Check Rust formatting
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+        run: just bazel-rustfmt-check ${{ steps.setup.outputs.flags }}
+      - if: matrix.arch == 'amd64'
+        name: Run clippy
+        env:
+          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+        run: just bazel-clippy-check ${{ steps.setup.outputs.flags }}
 
       # Skip on forked PRs and on macOS runners — DOCKER_HUB_TOKEN is
       # unavailable to forks (and macOS doesn't run Docker steps anyway).
@@ -177,20 +190,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: just bazel-test ${{ steps.setup.outputs.flags }}
-
-      # Rust gates folded from the old standalone `lint` job. Placed on the
-      # linux-arm64 leg (the shortest queue) so a formatting/clippy failure
-      # surfaces without waiting on the longer amd64/darwin legs.
-      - if: matrix.platform == 'linux-arm64'
-        name: Check Rust formatting
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: just bazel-rustfmt-check ${{ steps.setup.outputs.flags }}
-      - if: matrix.platform == 'linux-arm64'
-        name: Run clippy
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: just bazel-clippy-check ${{ steps.setup.outputs.flags }}
 
       # The differential parity gate (Rust shell vs the retained C++ oracle)
       # is `manual`-tagged, so the `just bazel-test` wildcard above and
@@ -295,14 +294,13 @@ jobs:
   # `sipi+0xOFFSET` frames into function names — needed for the name-based
   # suppressions in `.lsan_suppressions.txt` (`leak:lua*`) to match. The
   # symbolizer comes from the hermetic LLVM 22.1.7 toolchain
-  # (`just asan-symbolizer`, version-matched to the instrumented build),
-  # replacing the old Nix `.#llvm-tools` dev shell.
+  # (`just asan-symbolizer`, version-matched to the instrumented build).
   #
-  # Re-armed under hermetic-llvm (DEV-6563). `--config=asan` / `--config=ubsan`
-  # set `--@llvm//config:{asan,ubsan}=true`, which makes the toolchain build +
-  # link the compiler-rt ASan/UBSan runtimes from source and put the sanitizer
-  # headers on the include path. Runs on linux-x86_64 only (the macOS
-  # toolchain args omit the sanitizer header path).
+  # `--config=asan` / `--config=ubsan` set `--@llvm//config:{asan,ubsan}=true`,
+  # which makes the toolchain build + link the compiler-rt ASan/UBSan runtimes
+  # from source and put the sanitizer headers on the include path. Runs on
+  # linux-x86_64 only (the macOS toolchain args omit the sanitizer header
+  # path).
   #
   # Split into two jobs so unit and e2e run concurrently; RBE dedups the
   # shared instrumented `sipi` compile across the two concurrent jobs via the
