@@ -51,6 +51,19 @@ alias(
     visibility = ["//visibility:public"],
 )
 
+# Consumed by the sanitizer CI jobs and local sanitizer runs to symbolize
+# ASan/LSan reports (`sipi+0xOFFSET` frames) — required for the name-based
+# suppressions in `.lsan_suppressions.txt` to match symbolized frames.
+alias(
+    name = "llvm-symbolizer",
+    actual = select({
+        "//platforms:is_linux_x86_64": "@llvm-toolchain-minimal-22.1.7-linux-amd64//:bin/llvm-symbolizer",
+        "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-22.1.7-linux-arm64//:bin/llvm-symbolizer",
+        "//conditions:default": "@llvm-toolchain-minimal-22.1.7-darwin-arm64//:bin/llvm-symbolizer",
+    }),
+    visibility = ["//visibility:public"],
+)
+
 # glibc 2.42 → 2.31 ABI compatibility shims. See glibc23_compat.c for
 # the full rationale. Linked into //src/cli:sipi on Linux only (see
 # `linkopts` selector there).
