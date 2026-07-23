@@ -37,6 +37,7 @@ rust_library(
         "src/lib.rs",
         "src/metrics.rs",
         "src/path.rs",
+        "src/preflight_cache.rs",
         "src/routes.rs",
         "src/sink.rs",
         "src/telemetry.rs",

@@ -92,8 +92,9 @@ pub fn run(server_argv: &[String]) -> ExitCode {
     };
 
     // `--drain-timeout` and the concurrency knobs (`--nthreads`, `--max-waiting`,
-    // `--queue-timeout`) are Rust-owned serve knobs, not config overrides, so they
-    // are handed straight to `sipi::run` rather than layered onto the engine config.
+    // `--queue-timeout`, `--preflight-cache-ttl`, `--preflight-cache-slots`) are
+    // Rust-owned serve knobs, not config overrides, so they are handed straight to
+    // `sipi::run` rather than layered onto the engine config.
     let overrides = ServerOverrides::from(&args);
     sipi::run(
         args.config,
@@ -102,5 +103,7 @@ pub fn run(server_argv: &[String]) -> ExitCode {
         args.concurrency.nthreads,
         args.concurrency.max_waiting,
         args.concurrency.queue_timeout,
+        args.concurrency.preflight_cache_ttl,
+        args.concurrency.preflight_cache_slots,
     )
 }

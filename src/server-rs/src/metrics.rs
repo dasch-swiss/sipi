@@ -32,6 +32,7 @@ use opentelemetry::metrics::Meter;
 use tokio::sync::Semaphore;
 
 use crate::ffi::{self, SipiMetricsSnapshot};
+use crate::preflight_cache;
 use crate::routes;
 
 /// Register the engine + pool observable instruments against the global meter.
@@ -94,6 +95,29 @@ pub(crate) fn register(pool: Arc<Semaphore>, permits_total: usize) {
         .u64_observable_counter("sipi.pool.queue_timeout")
         .with_description("Requests shed with 503 after waiting past the queue timeout")
         .with_callback(|observer| observer.observe(routes::queue_timeout_total(), &[]))
+        .build();
+
+    // ── Preflight access-cache metrics ──────────────────────────────────────
+    // The shell's opt-in cache in front of the `pre_flight` hook (see
+    // `crate::preflight_cache`). Zero unless the cache is enabled
+    // (`--preflight-cache-ttl > 0`); disabled by default, so no request touches it.
+    meter
+        .u64_observable_counter("sipi.preflight_cache.hits")
+        .with_description("Preflight access-cache hits (hook skipped)")
+        .with_callback(|observer| observer.observe(preflight_cache::hits(), &[]))
+        .build();
+    meter
+        .u64_observable_counter("sipi.preflight_cache.misses")
+        .with_description("Preflight access-cache misses (hook ran)")
+        .with_callback(|observer| observer.observe(preflight_cache::misses(), &[]))
+        .build();
+    meter
+        .i64_observable_gauge("sipi.preflight_cache.entries")
+        .with_description(
+            "Filled slots in the preflight access-cache (incl. expired-but-not-yet-reclaimed; \
+             trends toward the slot ceiling on a busy server)",
+        )
+        .with_callback(|observer| observer.observe(preflight_cache::entries(), &[]))
         .build();
 }
 

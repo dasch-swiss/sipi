@@ -13,7 +13,7 @@ use std::ffi::CString;
 use std::io::Write;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use axum::body::{to_bytes, Body};
 use axum::extract::{DefaultBodyLimit, FromRequest, Multipart, OriginalUri, Request, State};
@@ -27,6 +27,7 @@ use crate::ffi::{self, PreflightOutcome, SipiPermType, SipiResponse, SipiServeRe
 use crate::iiif::{self, ParsedRequest, RequestKind};
 use crate::info::{self, Sidecar};
 use crate::path::{self, Resolved};
+use crate::preflight_cache;
 use crate::sink::{self, Outcome};
 
 /// Image MIME types that take the IIIF / image-dimension code path (the same set
@@ -77,6 +78,10 @@ pub struct AppState {
     /// The URL prefix the docroot fileserver is mounted at (e.g. "/server"). Read
     /// by [`crate::app`] to register the static route. Empty = fileserver off.
     pub wwwroute: String,
+    /// Burst-coalescing cache for the `pre_flight` access decision, in front of the
+    /// hook in [`iiif_access`]. `None` when disabled (`--preflight-cache-ttl 0`).
+    /// See [`crate::preflight_cache`].
+    preflight_cache: Option<Arc<preflight_cache::PreflightCache>>,
 }
 
 impl AppState {
@@ -97,6 +102,8 @@ impl AppState {
         nthreads: Option<u32>,
         max_waiting: Option<u64>,
         queue_timeout: Option<u32>,
+        preflight_cache_ttl: Option<u32>,
+        preflight_cache_slots: Option<u64>,
     ) -> Self {
         // Bound concurrent engine work with a semaphore sized from
         // `--nthreads`/`SIPI_NTHREADS`; unset (or 0 = auto) sizes it from the host
@@ -111,6 +118,14 @@ impl AppState {
         // (a full pool then sheds immediately).
         let max_waiting = max_waiting.map_or_else(|| permits.saturating_mul(2), |n| n as usize);
         let queue_timeout = Duration::from_secs(u64::from(queue_timeout.unwrap_or(5)));
+        // Preflight access-cache: opt-in, TTL default 0 = disabled (→ `None`, no
+        // cache work per request); a TTL > 0 enables it, slots default 4096.
+        let preflight_cache = preflight_cache::PreflightCache::new(
+            preflight_cache_slots.map_or(preflight_cache::DEFAULT_SLOTS, |n| n as usize),
+            Duration::from_secs(
+                preflight_cache_ttl.map_or(preflight_cache::DEFAULT_TTL_SECS, u64::from),
+            ),
+        );
         match (
             ffi::imgroot(false),
             ffi::imgroot(true),
@@ -137,6 +152,7 @@ impl AppState {
                 // no static route registered, parity with the C++ file_handler gate).
                 docroot: ffi::docroot().unwrap_or_default(),
                 wwwroute: ffi::wwwroute().unwrap_or_default(),
+                preflight_cache,
             },
             _ => Self {
                 ready: false,
@@ -153,6 +169,7 @@ impl AppState {
                 max_post_size: 0,
                 docroot: String::new(),
                 wwwroute: String::new(),
+                preflight_cache,
             },
         }
     }
@@ -529,6 +546,32 @@ fn iiif_access(
     headers: &HeaderMap,
 ) -> Result<Access, Box<Response>> {
     if state.has_preflight {
+        // Opt-in burst-coalescing cache in front of the hook (`None` unless a TTL
+        // was configured): a hit skips the whole FFI + Lua + dsp-api round-trip.
+        // Keyed on (prefix, identifier, raw Cookie, raw Authorization) — distinct
+        // credentials never share a decision. The key does NOT cover the rest of the
+        // request the hook can read via `server.*` (the full `server.uri` path,
+        // other headers such as `X-Api-Key`, host, client IP); the cache is only
+        // correct for a hook whose decision is a pure function of the keyed fields
+        // (see `crate::preflight_cache` and `docs/src/lua/index.md`). Only plain
+        // outcomes are cached (a hook `direct_response` is request-specific).
+        let cache_key = state.preflight_cache.as_ref().map(|_| {
+            preflight_cache::make_key(
+                &parsed.prefix,
+                &parsed.identifier,
+                header_str(headers, header::COOKIE.as_str()).as_deref(),
+                header_str(headers, header::AUTHORIZATION.as_str()).as_deref(),
+            )
+        });
+        if let (Some(cache), Some(key)) = (state.preflight_cache.as_ref(), cache_key.as_ref()) {
+            if let Some(hit) = cache.get(key, Instant::now()) {
+                return Ok(access_from(PreflightOutcome {
+                    permission: hit.permission,
+                    kv: hit.kv,
+                }));
+            }
+        }
+
         let ctx = build_ctx(method, uri, headers)
             .ok_or_else(|| Box::new(sink::error_response(StatusCode::BAD_REQUEST)))?;
         // Run the hook under a `sipi.preflight` span and stamp the outbound
@@ -546,9 +589,20 @@ fn iiif_access(
         if let Some(dr) = result.direct_response {
             return Err(Box::new(preflight_direct_response(dr)));
         }
-        Ok(access_from(result.outcome.expect(
-            "a preflight Ok result always carries a direct response or an outcome",
-        )))
+        let outcome = result
+            .outcome
+            .expect("a preflight Ok result always carries a direct response or an outcome");
+        if let (Some(cache), Some(key)) = (state.preflight_cache.as_ref(), cache_key.as_ref()) {
+            cache.insert(
+                key,
+                preflight_cache::CachedDecision {
+                    permission: outcome.permission,
+                    kv: outcome.kv.clone(),
+                },
+                Instant::now(),
+            );
+        }
+        Ok(access_from(outcome))
     } else {
         Ok(Access {
             infile: path::build_request_path(
