@@ -600,12 +600,36 @@ bool SipiIOJ2k::read(SipiImage *img,
   // the following code directly converts a 16-Bit jpx into an 8-bit image.
   // In order to retrieve a 16-Bit image, use kdu_uin16 *buffer and the apropriate signature of the pull_stripe method
   //
+  // Multi-threaded decode, mirroring the encode path in write(): create a
+  // kdu_thread_env with one worker thread per core and hand it to the stripe
+  // decompressor so the inverse DWT and sample processing run across all cores.
+  // Without an env the decode is single-threaded and dominates request latency
+  // on large masters. The env is set up inside the start() try so a Kakadu
+  // error during thread creation is converted to a SipiImageError like every
+  // other codestream fault. num_threads was computed at the top of read() and
+  // is 0 on a single-core host, in which case env_ref stays NULL and decode
+  // falls back to the single-threaded path.
+  kdu_thread_env env;
+  kdu_thread_env *env_ref = nullptr;
   kdu_supp::kdu_stripe_decompressor decompressor;
   try {
-    decompressor.start(codestream);
+    if (num_threads > 0) {
+      env.create();
+      for (int nt = 1; nt < num_threads; nt++) {
+        if (!env.add_thread()) {
+          num_threads = nt;// Unable to create all the threads requested
+          break;
+        }
+      }
+      env_ref = &env;
+    }
+    decompressor.start(codestream, false, false, env_ref);
   } catch (kdu_exception&) {
     // codestream + input are both live here (create() already succeeded);
     // unconditional teardown, matching the ROI-error and normal-exit paths.
+    // env.destroy() terminates the worker threads before the codestream they
+    // read from is torn down (safe no-op if the env was never created).
+    env.destroy();
     codestream.destroy();
     input->close();
     jpx_in.close();
@@ -624,6 +648,11 @@ bool SipiIOJ2k::read(SipiImage *img,
     try {
       decompressor.pull_stripe(buffer8, stripe_heights);
     } catch (kdu_exception &exc) {
+      // MT teardown (see kdu_stripe_decompressor.h): stop the worker threads and
+      // reset the decompressor before destroying the codestream they read from.
+      // Both calls are safe no-ops on the single-threaded (env_ref == NULL) path.
+      env.destroy();
+      decompressor.reset();
       codestream.destroy();
       input->close();
       jpx_in.close();// Not really necessary here.
@@ -640,6 +669,11 @@ bool SipiIOJ2k::read(SipiImage *img,
       decompressor.pull_stripe(
         buffer16, stripe_heights, nullptr, nullptr, nullptr, nullptr, reinterpret_cast<bool *>(get_signed.data()));
     } catch (kdu_exception &exc) {
+      // MT teardown (see kdu_stripe_decompressor.h): stop the worker threads and
+      // reset the decompressor before destroying the codestream they read from.
+      // Both calls are safe no-ops on the single-threaded (env_ref == NULL) path.
+      env.destroy();
+      decompressor.reset();
       codestream.destroy();
       input->close();
       jpx_in.close();// Not really necessary here.
@@ -657,6 +691,11 @@ bool SipiIOJ2k::read(SipiImage *img,
       decompressor.pull_stripe(
         buffer16, stripe_heights, nullptr, nullptr, nullptr, nullptr, reinterpret_cast<bool *>(get_signed.data()));
     } catch (kdu_exception &exc) {
+      // MT teardown (see kdu_stripe_decompressor.h): stop the worker threads and
+      // reset the decompressor before destroying the codestream they read from.
+      // Both calls are safe no-ops on the single-threaded (env_ref == NULL) path.
+      env.destroy();
+      decompressor.reset();
       codestream.destroy();
       input->close();
       jpx_in.close();// Not really necessary here.
