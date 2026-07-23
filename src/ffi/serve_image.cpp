@@ -4,6 +4,7 @@
  */
 
 #include "ffi/serve_image.h"
+#include "ffi/serve_timings.h"// PhaseTimer (per-phase serve timings for the shell's child spans)
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -287,6 +288,9 @@ namespace {
                                : OutputSink{ socket };
 
       try {
+        // Spans the encode AND the streamed write to the sink, so a slow client's
+        // back-pressure counts toward this phase's duration (see SipiServeTimings).
+        PhaseTimer phase_timer(SIPI_PHASE_ENCODE);
         switch (format_) {
         case SipiQualityFormat::JPG: {
           SipiCompressionParams qp = { { JPEG_QUALITY, std::to_string(jpeg_quality_) } };
@@ -469,6 +473,7 @@ std::expected<ServeResponse, SipiStatus>
   SipiImgInfo info;
   try {
     SipiImage probe;
+    PhaseTimer phase_timer(SIPI_PHASE_SHAPE);
     info = probe.read_shape(infile);
   } catch (SipiImageError &err) {
     ImageContext sentry_ctx;
@@ -669,6 +674,7 @@ std::expected<ServeResponse, SipiStatus>
 
   SipiImage img;
   try {
+    PhaseTimer phase_timer(SIPI_PHASE_DECODE);
     img.read(infile, region, size, quality_format.format() == SipiQualityFormat::JPG, eng.scaling_quality);
   } catch (const std::bad_alloc &) {
     Metrics::instance().memory_alloc_failures_total.Increment();
@@ -694,6 +700,7 @@ std::expected<ServeResponse, SipiStatus>
       return std::unexpected(SipiStatus::ClientGone);
     }
     try {
+      PhaseTimer phase_timer(SIPI_PHASE_ROTATE);
       img.rotate(angle, mirror);
     } catch (const std::bad_alloc &) {
       Metrics::instance().memory_alloc_failures_total.Increment();
@@ -713,6 +720,7 @@ std::expected<ServeResponse, SipiStatus>
       Metrics::instance().client_disconnected_total.Increment();
       return std::unexpected(SipiStatus::ClientGone);
     }
+    PhaseTimer phase_timer(SIPI_PHASE_QUALITY);
     switch (quality_format.quality()) {
     case SipiQualityFormat::COLOR:
       img.convertToIcc(Icc(icc_sRGB), 8);
@@ -734,6 +742,7 @@ std::expected<ServeResponse, SipiStatus>
       return std::unexpected(SipiStatus::ClientGone);
     }
     try {
+      PhaseTimer phase_timer(SIPI_PHASE_WATERMARK);
       img.add_watermark(watermark);
     } catch (Sipi::SipiError &err) {
       ImageContext sentry_ctx;

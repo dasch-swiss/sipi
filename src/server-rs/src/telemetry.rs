@@ -18,7 +18,7 @@ use std::fmt::{self, Write as _};
 
 use opentelemetry::trace::{TraceContextExt, TracerProvider as _};
 use opentelemetry::KeyValue;
-use opentelemetry_sdk::trace::SdkTracerProvider;
+use opentelemetry_sdk::trace::{Sampler, SdkTracerProvider};
 use tracing::field::{Field, Visit};
 use tracing::{Event, Subscriber};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -28,6 +28,18 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
+
+/// Set once in [`init`] when a tracer provider was built (an OTLP endpoint is
+/// configured). Lets the hot serve path skip span minting entirely when tracing
+/// is off, rather than building throwaway no-op spans per request.
+static TRACING_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether trace export is active (an OTLP endpoint was configured at startup).
+/// The serve path checks this before minting engine-phase child spans.
+#[must_use]
+pub fn tracing_active() -> bool {
+    TRACING_ACTIVE.load(std::sync::atomic::Ordering::Relaxed)
+}
 
 /// Owns the trace, metric, and (in local dev) log providers so their exporters
 /// flush on shutdown. Each is `None` when not configured (fail-open).
@@ -74,6 +86,15 @@ pub fn init() -> Telemetry {
     let otel_layer = provider
         .as_ref()
         .map(|p| tracing_opentelemetry::layer().with_tracer(p.tracer("sipi")));
+    // Register the tracer provider globally too, so the engine-phase child spans
+    // that `routes.rs` mints directly via the OTel API (from the FFI-returned
+    // per-phase timings) go through this same batch exporter. When no endpoint is
+    // configured we leave the global default and flag tracing inactive, so the
+    // serve path skips span minting rather than building throwaway no-op spans.
+    if let Some(p) = provider.as_ref() {
+        global::set_tracer_provider(p.clone());
+        TRACING_ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
 
     // The metric meter provider (same fail-open endpoint gate). Set it as the
     // global provider so `crate::metrics::register` (called later, once the
@@ -176,10 +197,25 @@ fn build_tracer_provider() -> Option<SdkTracerProvider> {
     let resource = otel_resource();
     Some(
         SdkTracerProvider::builder()
+            .with_sampler(build_sampler())
             .with_batch_exporter(exporter)
             .with_resource(resource)
             .build(),
     )
+}
+
+/// `ParentBased(TraceIdRatioBased(ratio))` head sampler. `ratio` comes from the
+/// standard `OTEL_TRACES_SAMPLER_ARG` (clamped to `0.0..=1.0`), defaulting to
+/// `1.0` — sample everything, the prior behaviour. Parent-based so a sampled
+/// caller's trace is always continued; the ratio only governs root spans SIPI
+/// starts itself. Since one serve emits up to `PHASE_COUNT + 1` spans, dropping
+/// the ratio below 1.0 bounds trace-backend ingestion under load.
+fn build_sampler() -> Sampler {
+    let ratio = std::env::var("OTEL_TRACES_SAMPLER_ARG")
+        .ok()
+        .and_then(|s| s.trim().parse::<f64>().ok())
+        .map_or(1.0, |r| r.clamp(0.0, 1.0));
+    Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(ratio)))
 }
 
 /// Build the OTLP (gRPC-tonic) meter provider, or `None` when no endpoint is

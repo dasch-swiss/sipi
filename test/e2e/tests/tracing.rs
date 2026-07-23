@@ -159,3 +159,46 @@ routes = {{}}
         "outbound dsp-api call must be in SIPI's trace (outbound={outbound}, response={resp_tp})"
     );
 }
+
+/// The engine-phase child spans (`sipi.engine.decode`/`.encode`/…) are minted on
+/// the hot serve path from the FFI-returned timings when tracing is active. This
+/// guards that the minting path runs without breaking image serving: with the
+/// OTLP exporter enabled (so the global tracer is live and `emit_engine_phase_spans`
+/// builds real spans), a decoding request still returns a correct image. The
+/// spans themselves are verified by observation in Grafana (no in-repo OTLP
+/// collector); this is the regression guard on the request path.
+#[test]
+fn engine_phase_spans_do_not_break_serving() {
+    let test_data = test_data_dir();
+    // OTLP enabled (dead endpoint): the tracer provider is installed, so the
+    // per-phase spans are actually built (and their export is fail-open/dropped).
+    let srv = SipiServer::start_env(
+        "config/sipi.e2e-test-config.lua",
+        &test_data,
+        &[],
+        &[("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:1")],
+    );
+    let client = http_client();
+
+    // A resize forces the decode → encode path (not a passthrough), so the
+    // DECODE and ENCODE phase timers fire and their spans are minted.
+    let resp = client
+        .get(format!(
+            "{}/unit/lena512.jp2/full/256,/0/default.jpg",
+            srv.base_url
+        ))
+        .send()
+        .expect("request to sipi");
+    assert_eq!(
+        resp.status().as_u16(),
+        200,
+        "decode request must still succeed"
+    );
+    let body = resp.bytes().expect("read image body");
+    assert!(!body.is_empty(), "served image must be non-empty");
+    assert_eq!(
+        &body[..2],
+        &[0xFF, 0xD8],
+        "JPEG SOI marker (valid decode+encode)"
+    );
+}
