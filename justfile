@@ -33,10 +33,16 @@ default:
 # `--disk_cache=$HOME/.cache/bazel-disk` in CI, `--runs_per_test=3` for
 # flakiness gates on the high-load e2e targets.
 #
-# `--stamp` is on for every recipe whose output reads
-# `STABLE_SIPI_VERSION` (set by `tools/workspace_status.sh`). Only the
-# `:sipi_version_h` action's cache key depends on `STABLE_*` values, so
-# the stamp adds at most one re-link per workspace_status change.
+# `--stamp` is on for recipes whose output must carry the real version
+# (`STABLE_SIPI_VERSION` from `tools/workspace_status.sh`): `bazel-build`,
+# `bazel-build-server`, `bazel-test-smoke`, and the docker/release recipes.
+# The `bazel-test` and `bazel-coverage` recipes are deliberately UNSTAMPED:
+# the stamp changes the `:sipi_version_h` cache key every commit, which forces
+# a fresh `sipi` re-link (and, on Linux, a fresh OCI image) whose closure the
+# RBE worker re-materialises to disk on every run — the tests don't need the
+# version string (they accept the `0.0.0-unstamped` fallback), so unstamped
+# outputs cache across commits instead. See
+# `docs/src/development/rbe-write-pressure.md`.
 #####################################
 
 # Build sipi. Bazel's fastbuild default — fast incremental rebuilds
@@ -57,8 +63,15 @@ bazel-build-server *FLAGS='':
 # paying instrumentation overhead (1.5-2x compile, slower runtime,
 # flakiness risk on the high-load e2e targets) for arches that don't
 # upload anyway.
+#
+# `--build_tests_only` keeps the wildcard from building the non-test OCI
+# image + layer tars (built only by `bazel-test-smoke` / the docker recipes).
+# `--test_tag_filters=-requires-docker` drops `//test/e2e:docker_smoke` (run
+# separately by `bazel-test-smoke`), so its `//src:image` data dep is not built
+# here either. Both cut RBE worker materialisation; see
+# `docs/src/development/rbe-write-pressure.md`.
 bazel-test *FLAGS='':
-    bazel test --stamp //src/... //test/unit/... //test/approval/... //test/e2e/... {{FLAGS}}
+    bazel test --build_tests_only --test_tag_filters=-requires-docker //src/... //test/unit/... //test/approval/... //test/e2e/... {{FLAGS}}
 
 # Build + run all tests (unit + approval + e2e) under coverage
 # instrumentation; emit combined lcov at
@@ -95,7 +108,8 @@ bazel-coverage *FLAGS='':
         --features=-gcc_coverage_map_format \
         --test_env=COVERAGE_GCOV_PATH \
         --test_env=LLVM_COV \
-        --stamp \
+        --build_tests_only \
+        --test_tag_filters=-requires-docker \
         //src/... //test/unit/... //test/approval/... //test/e2e/... {{FLAGS}}
 
 # Run every GoogleTest unit-test target — both the legacy
