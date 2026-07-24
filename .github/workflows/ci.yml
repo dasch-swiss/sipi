@@ -15,7 +15,9 @@
 #      so short-circuiting it on a lint finding saves the most. Linux legs
 #      additionally build the Docker image, run the Bazel-built smoke test
 #      against it, and feed Docker Scout; amd64 alone runs the differential
-#      parity gate and uploads the SARIF CVE scan.
+#      parity gate and uploads the SARIF CVE scan. Every leg writes its
+#      `just bazel-test` invocation's Build Event Protocol JSON and uploads it
+#      as a `bep-<platform>` artifact for offline cache-hit-rate analysis.
 #   3. `sanitizer-unit` / `sanitizer-e2e` — two parallel path-gated
 #      ASan+UBSan jobs (see the scope-rationale comment above those jobs).
 #   4. `docs` — MkDocs build.
@@ -189,7 +191,22 @@ jobs:
       - name: Build + run all tests
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: just bazel-test ${{ steps.setup.outputs.flags }}
+        run: just bazel-test ${{ steps.setup.outputs.flags }} --build_event_json_file=bep-${{ matrix.platform }}.json
+
+      # Attach the Build Event Protocol JSON so the action/remote cache hit
+      # rate can be analyzed offline. Bazel emits one BuildMetrics event per
+      # invocation whose actionSummary.runnerCount[] breaks actions down by
+      # runner type (total / remote cache hit / remote / local / internal) —
+      # the cache-hit signal, present in the default BEP without
+      # --build_event_publish_all_actions. `always()` so a failed build's
+      # breakdown (often the most interesting) is still captured.
+      - name: Upload build event JSON (cache-hit-rate analysis)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bep-${{ matrix.platform }}
+          path: bep-${{ matrix.platform }}.json
+          retention-days: 30
 
       # The differential parity gate (Rust shell vs the retained C++ oracle)
       # is `manual`-tagged, so the `just bazel-test` wildcard above and
@@ -338,11 +355,22 @@ jobs:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: |
           export ASAN_SYMBOLIZER_PATH="$(just asan-symbolizer)"
-          just bazel-test-unit --config=asan --config=ubsan --build_tag_filters=-no-sanitizer --test_tag_filters=-no-sanitizer ${{ steps.setup.outputs.flags }}
+          just bazel-test-unit --config=asan --config=ubsan --build_tag_filters=-no-sanitizer --test_tag_filters=-no-sanitizer ${{ steps.setup.outputs.flags }} --build_event_json_file=bep-sanitizer-unit.json
 
       - name: Check for sanitizer findings
         if: always()
         run: bash tools/check_sanitizer_findings.sh
+
+      # BEP for cache-hit-rate analysis (see the `test` job's upload step).
+      # This leg's instrumented sanitizer build has its own cache behavior
+      # worth tracking separately.
+      - name: Upload build event JSON (cache-hit-rate analysis)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bep-sanitizer-unit
+          retention-days: 30
+          path: bep-sanitizer-unit.json
 
       - name: Upload sanitizer reports
         if: failure()
@@ -384,11 +412,22 @@ jobs:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
         run: |
           export ASAN_SYMBOLIZER_PATH="$(just asan-symbolizer)"
-          just bazel-test-e2e --config=asan --config=ubsan --test_tag_filters=-no-sanitizer ${{ steps.setup.outputs.flags }}
+          just bazel-test-e2e --config=asan --config=ubsan --test_tag_filters=-no-sanitizer ${{ steps.setup.outputs.flags }} --build_event_json_file=bep-sanitizer-e2e.json
 
       - name: Check for sanitizer findings
         if: always()
         run: bash tools/check_sanitizer_findings.sh
+
+      # BEP for cache-hit-rate analysis (see the `test` job's upload step).
+      # This leg's instrumented sanitizer build has its own cache behavior
+      # worth tracking separately.
+      - name: Upload build event JSON (cache-hit-rate analysis)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bep-sanitizer-e2e
+          retention-days: 30
+          path: bep-sanitizer-e2e.json
 
       - name: Upload sanitizer reports
         if: failure()
