@@ -385,6 +385,31 @@ bench-compare before after *FLAGS='':
     for f in "${@:3}"; do [ -n "$f" ] && flags+=("$f"); done
     bazel run //tools/benchmark:compare -- ${flags[@]+"${flags[@]}"} benchmarks "$BEFORE" "$AFTER"
 
+# Concurrent-load decode measurement (local dev loop, never CI-gated). Unlike
+# `just bench` (single-request microbench), this drives the production Rust
+# shell under N concurrent clients requesting distinct native-resolution JP2
+# tiles — every request decodes — and reports throughput + latency percentiles
+# per concurrency level. Answers "how does a decode-path change behave at the
+# request pool's saturation point", which the isolated microbench cannot.
+# Compare two runs by eye (run on each branch); see benchmarking.md.
+# Usage: just loadtest-decode "10,20,40"
+loadtest-decode concs='10,20,40' dur='20' warm='5' id='knora/load_test.jpx':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bazel build -c opt //src/cli-rs:sipi
+    port=2048
+    rm -rf ./loadtest_cache && mkdir -p ./loadtest_cache
+    ./bazel-bin/src/cli-rs/sipi server --config config/sipi.loadtest-config.lua \
+        --serverport "$port" --drain-timeout 2 >/tmp/sipi-loadtest.log 2>&1 &
+    srv=$!
+    trap 'kill $srv 2>/dev/null || true; wait $srv 2>/dev/null || true' EXIT
+    for _ in $(seq 1 60); do
+        curl -fsS "http://localhost:$port/health" >/dev/null 2>&1 && break
+        kill -0 $srv 2>/dev/null || { echo "server died; see /tmp/sipi-loadtest.log"; exit 1; }
+        sleep 0.5
+    done
+    python3 tools/loadtest/loadgen.py "http://localhost:$port" "{{id}}" 512 max "{{concs}}" "{{dur}}" "{{warm}}"
+
 #####################################
 # Bazel Docker (rules_oci)
 #

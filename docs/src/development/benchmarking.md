@@ -121,3 +121,29 @@ on the author's machine.
    defeat the optimizer with `benchmark::DoNotOptimize` /
    `benchmark::ClobberMemory`.
 4. `just bench <name>` — there is nothing to register anywhere else.
+
+## Concurrent-load measurement
+
+`just bench` measures a single decode/encode in isolation. It cannot see how
+a change behaves when many requests run at once — the regime that matters for
+decisions about worker-thread counts, pool sizing, or anything whose cost is
+paid in contention rather than per-call work. A single-request speedup can
+coincide with no aggregate gain (or a regression) once the request pool is
+saturated.
+
+`just loadtest-decode "10,20,40"` covers that gap. It builds the production
+Rust shell (`//src/cli-rs:sipi`, `-c opt`), serves `load_test.jpx` via
+`config/sipi.loadtest-config.lua`, and drives it with
+`tools/loadtest/loadgen.py`: N concurrent clients each requesting a distinct
+native-resolution tile (distinct region → cache miss → real decode), reporting
+throughput and p50/p90/p99 per concurrency level after a warm-up window. The
+pool is sized from the host core count (`nthreads = 0`), so the listed
+concurrencies straddle its saturation point.
+
+Same rules as the microbench: never CI-gated, run on a quiesced machine, and
+compare a "before" branch against an "after" **on the same host** (build and
+run each branch in turn — do not run a build during a measurement, it steals
+cores). Interpretation caveats: the effect of thread-count changes scales with
+core count, so a result on a 10-core laptop does not settle behavior on a
+high-core production host; and the Rust FFI pool already bounds concurrent
+decodes to its permit count, which caps the worst-case thread total.
