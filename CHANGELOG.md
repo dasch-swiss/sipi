@@ -1,5 +1,23 @@
 # Changelog
 
+## [6.2.1](https://github.com/dasch-swiss/sipi/compare/v6.2.0...v6.2.1) (2026-07-24)
+
+
+### Bug Fixes
+
+* **formats:** Close TIFF handles and buffers via RAII on all read/write paths ([82597ed](https://github.com/dasch-swiss/sipi/commit/82597edde3f6fda5d9367006ccd0711ab8a80dc4))
+* **formats:** Make PNG text chunks and FILE handles RAII-safe ([0832860](https://github.com/dasch-swiss/sipi/commit/08328600a2ce0c7ea6e9ffa199d067fa3860ae69))
+* **formats:** Move JPEG source/destination ownership out of the longjmp window ([1c1d0c3](https://github.com/dasch-swiss/sipi/commit/1c1d0c3511f99d9a34704730934c16caf6bf798a))
+* **formats:** Tear down Kakadu decode machinery exactly once via RAII ([68e4b01](https://github.com/dasch-swiss/sipi/commit/68e4b01dbc00e6dfbac867a11bbe2a88bff73284))
+* **image:** Compare 16 bps pixels against rhs in operator== ([15aaf5d](https://github.com/dasch-swiss/sipi/commit/15aaf5d13d4a049873c7b26ecb7c9bebe7b0cbd9))
+* **metadata:** Give Exif and Icc correct ownership semantics ([74737bd](https://github.com/dasch-swiss/sipi/commit/74737bdc64bb385cc5d9dc13c8147f3f5e2e7808))
+* **shttps:** Stop resource leaks on Lua, JWT, curl, and JSON error paths ([3c76649](https://github.com/dasch-swiss/sipi/commit/3c76649c7b827cee548ad6e1c6679dbd49f821be))
+
+
+### Performance Improvements
+
+* **formats:** Multithread JP2 decode via kdu_thread_env ([7bdb634](https://github.com/dasch-swiss/sipi/commit/7bdb6349562f4fb3f737bb74ba2349b8ece8b1c3))
+
 ## [6.2.0](https://github.com/dasch-swiss/sipi/compare/v6.1.0...v6.2.0) (2026-07-23)
 
 
