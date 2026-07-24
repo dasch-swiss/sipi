@@ -49,8 +49,10 @@ When release-please goes wrong:
   the correct prefix (or a `Release-As: X.Y.Z` footer commit) so
   release-please catches up. Do not edit `version.txt` / `CHANGELOG.md`
   by hand.
-- **Need to skip a release** — merge only non-release-bumping commits
-  (`docs:`, `chore:`, `refactor:`, `test:`, `build:`, `ci:`, `style:`).
+- **Need to skip a release** — leave the release PR unmerged. Every commit
+  type is changelog-visible, so any merge to `main` keeps a release PR open;
+  landing only internal-work commits no longer suppresses it. A release made
+  up solely of internal-work commits is a patch bump.
 - **Emergency patch on an old version** — branch from the tag, cherry-pick
   the fix, push a tag manually. `publish.yml` runs the same way.
 - **`publish.yml` fails after a tag** — fix forward; do not delete the tag.

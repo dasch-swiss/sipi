@@ -25,7 +25,19 @@ to determine the SemVer bump and generate the changelog.
 | `feat!:` / `fix!:` | major bump | Breaking Changes |
 | `perf:` | patch bump | Performance Improvements |
 | `revert:` | patch bump | Reverts |
-| `docs:`, `style:`, `refactor:`, `test:`, `build:`, `ci:`, `chore:` | no bump | hidden |
+| `docs:` | patch bump | Documentation |
+| `style:` | patch bump | Styles |
+| `chore:` | patch bump | Miscellaneous Chores |
+| `refactor:` | patch bump | Code Refactoring |
+| `test:` | patch bump | Tests |
+| `build:` | patch bump | Build System |
+| `ci:` | patch bump | Continuous Integration |
+
+Every commit with a valid prefix appears in the release notes, in its own
+section. The internal-work sections render after Features / Bug Fixes /
+Performance Improvements / Reverts. A release containing only internal-work
+commits is therefore a patch release — release-please keeps a release PR open
+for it, and the maintainer decides when to merge it.
 
 !!! warning "Correct commit prefixes are critical"
     A commit without a valid Conventional Commit prefix will be invisible to

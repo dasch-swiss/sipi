@@ -19,7 +19,7 @@ Checklist for human and AI reviewers. Not every item applies to every PR — use
 
 ## Commit & PR Hygiene
 
-- [ ] Commits follow [commit-conventions.md](commit-conventions.md) — `feat:` / `fix:` for changelog-visible changes, `build:` / `test:` / `refactor:` for internal
+- [ ] Commits follow [commit-conventions.md](commit-conventions.md) — `feat:` / `fix:` for changes a deployer cares about, `build:` / `test:` / `refactor:` for internal work
 - [ ] One topic per commit (rebase-merge = commits land as-is on `main`)
 - [ ] PR description follows the template (Motivation, Summary, Key Changes, Test Plan)
 

@@ -40,13 +40,17 @@ to determine SemVer bumps and generate the changelog —
 | `fix` | Bug fix (see [What `fix:` means](#what-fix-means)) | Bug Fixes | patch |
 | `perf` | Performance improvement | Performance Improvements | patch |
 | `revert` | Revert of a previous commit | Reverts | patch |
-| `refactor` | Code restructuring, no behavior change | hidden | none |
-| `docs` | Documentation | hidden | none |
-| `test` | Adding or refactoring tests | hidden | none |
-| `build` | Build system or dependencies | hidden | none |
-| `ci` | Continuous integration | hidden | none |
-| `style` | Formatting, no code change | hidden | none |
-| `chore` | Miscellaneous maintenance | hidden | none |
+| `refactor` | Code restructuring, no behavior change | Code Refactoring | patch |
+| `docs` | Documentation | Documentation | patch |
+| `test` | Adding or refactoring tests | Tests | patch |
+| `build` | Build system or dependencies | Build System | patch |
+| `ci` | Continuous integration | Continuous Integration | patch |
+| `style` | Formatting, no code change | Styles | patch |
+| `chore` | Miscellaneous maintenance | Miscellaneous Chores | patch |
+
+Every prefix in this table is visible in the release notes, in its own section.
+The bottom seven render after Features / Bug Fixes / Performance Improvements /
+Reverts.
 
 Breaking changes take a `!` suffix (or a `BREAKING CHANGE:` footer) and
 bump the **major** version:
@@ -65,7 +69,9 @@ eviction`, not `feat(cache): Add ...`).
 
 A `fix:` corrects behavior that exists on `main` — a bug a deployer could
 hit today, or that a released version shipped. It earns a "Bug Fixes"
-changelog line and a patch bump precisely because deployers need to know.
+changelog line precisely because deployers need to know. The same change
+filed as `chore:` or `refactor:` still appears in the release notes, but
+under a section nobody scanning for a regression will read.
 
 A bug you introduced earlier in the **same branch** is not a `fix:`. Fold
 it into the commit that introduced it (`git commit --fixup=<sha>`, then
@@ -114,12 +120,13 @@ self-contained changes that each stand on their own.
 
 ### Rules
 
-1. Each `feat:` or `fix:` commit = one changelog entry visible to
-   developers deploying Sipi.
+1. Each `feat:` or `fix:` commit = one changelog entry in the sections
+   developers deploying Sipi read first.
 2. Internal work (`build:`, `ci:`, `refactor:`, `docs:`, `chore:`,
-   `test:`) is hidden from the changelog — squash aggressively.
+   `test:`) lands in its own changelog section further down — squash
+   aggressively so those sections stay readable.
 3. Ask: "would a developer deploying Sipi care about this change?"
-   If yes → `feat:` or `fix:`. If no → hidden type.
+   If yes → `feat:` or `fix:`. If no → an internal-work prefix.
 4. Debugging journeys (trial-and-error, reverts of in-branch mistakes,
    iterative fixes) belong in the PR description, not the commit history.
    See [What `fix:` means](#what-fix-means).
@@ -128,7 +135,7 @@ self-contained changes that each stand on their own.
 
 | Layer | Audience | Content |
 |-------|----------|---------|
-| Commit messages | Release notes readers | User-visible changes only |
+| Commit messages | Release notes readers | Every change; `feat:`/`fix:` carry the user-visible ones |
 | PR description | Reviewers + future developers | Full context including challenges |
 | Learnings docs | Future Claude + engineers | Structured, searchable knowledge |
 | Code comments | Code readers | "Why not the obvious approach" |
@@ -187,7 +194,7 @@ learnings automatically.
 |-------------|-------------|
 | New feature / breaking change | Commit message (`feat:` / `feat!:`) |
 | Bug fix | Commit message (`fix:`) |
-| Build/CI/refactor details | Commit message (hidden type) |
+| Build/CI/refactor details | Commit message (`build:` / `ci:` / `refactor:`) |
 | Why the work was needed | PR Motivation section |
 | What was tried and failed | PR Challenges section |
 | Architecture decisions + rationale | PR Challenges section |
