@@ -46,6 +46,7 @@ cmake-build-relwithdebinfo-inside-docker/
 cmake-build-relwithdebinfo-nix-develop/
 # ignore runtime cache directory
 /cache/
+/loadtest_cache/
 # test-generated cache directories and configs
 test/_test_data/cache/
 test/_test_data/cache_test_*/
