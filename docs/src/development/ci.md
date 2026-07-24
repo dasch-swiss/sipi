@@ -214,7 +214,7 @@ remote configured.
 See **[Remote build execution](./rbe.md)** for the full topology, the
 cross-compile flag rationale, and the developer-facing workflow, and the
 [`ops-tf`](https://github.com/dasch-swiss/ops-tf) /
-[`ops-infra`](https://github.com/dasch-swiss/ops-infra) repos (private) for the
+[`infra`](https://github.com/dasch-swiss/infra) repos (private) for the
 VM provisioning and the NativeLink service configuration.
 
 ## Local reproduction

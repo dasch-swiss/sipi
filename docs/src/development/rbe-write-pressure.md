@@ -8,7 +8,7 @@ reproduce the analysis.
 
 See [Remote Build Execution](rbe.md) for the backend topology and cross-compile
 setup. The store lives on the DaSCH-hosted VM `dasch-remotebuild-prod-01`
-(NativeLink config in [`ops-infra`](https://github.com/dasch-swiss/ops-infra)
+(NativeLink config in [`infra`](https://github.com/dasch-swiss/infra)
 `OS/ansible/roles/dasch.nativelink`).
 
 ## Bottom line
