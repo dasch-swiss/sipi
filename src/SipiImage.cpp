@@ -1760,7 +1760,7 @@ bool SipiImage::operator==(const SipiImage &rhs) const
   }
   case 16: {
     word *ltmp1 = (word *)pixels.data();
-    word *ltmp2 = (word *)pixels.data();
+    word *ltmp2 = (word *)rhs.pixels.data();
     for (size_t j = 0; j < ny; j++) {
       for (size_t i = 0; i < nx; i++) {
         for (size_t k = 0; k < nc; k++) {
