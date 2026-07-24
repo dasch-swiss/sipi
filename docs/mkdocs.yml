@@ -20,6 +20,7 @@ nav:
   - Building with Bazel: development/bazel.md
   - Nix dev shell: development/nix.md
   - CI and Release: development/ci.md
+  - RBE Write Pressure: development/rbe-write-pressure.md
   - Developing: development/developing.md
   - Fuzz Testing: development/fuzzing.md
   - Benchmarking: development/benchmarking.md
