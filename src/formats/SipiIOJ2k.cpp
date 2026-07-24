@@ -230,6 +230,14 @@ bool SipiIOJ2k::read(SipiImage *img,
 
   int num_threads;
   if ((num_threads = kdu_get_num_processors()) < 2) num_threads = 0;
+  // Cap decode workers well below the core count. The server admits up to
+  // available_parallelism() concurrent decodes (the Rust FFI pool in
+  // routes.rs); one worker per core each would oversubscribe to ~N² threads on
+  // N cores under normal load. 4 retains most of the single-request speedup
+  // (decode parallelism has steep diminishing returns past ~4 workers) while
+  // bounding that contention. Encode (write()) is ingest-time and rare, so it
+  // keeps the full core count.
+  else if (num_threads > 4) num_threads = 4;
 #if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
   // Same ASan "Joining already joined thread" false positive as the encode path
   // (see the guard in write() for the full rationale): Kakadu's worker-thread
