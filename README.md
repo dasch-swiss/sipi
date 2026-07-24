@@ -131,21 +131,25 @@ The most important prefixes you should have in mind are:
 * `feat!:`,  or `fix!:`, `refactor!:`, etc., which represent a breaking change
   (indicated by the `!`) and will result in a SemVer major.
 
-This is the complete list of what is defined and if it is visible in the
-changelog:
+Every prefix is visible in the release notes. This is the complete list, in the
+order the sections are rendered:
+
 - 'feat' -> section: 'Features'
 - 'feature' -> section: 'Features'
 - 'fix' -> section: 'Bug Fixes'
 - 'perf' -> section: 'Performance Improvements'
 - 'revert' -> section: 'Reverts'
-- 'docs' -> section: 'Documentation', hidden: true
-- 'style' -> section: 'Styles', hidden: true
-- 'chore' -> section: 'Miscellaneous Chores', hidden: true
-- 'refactor' -> section: 'Code Refactoring', hidden: true
-- 'test' -> section: 'Tests', hidden: true
-- 'build' -> section: 'Build System', hidden: true
-- 'ci' -> section: 'Continuous Integration', hidden: true
-```
+- 'docs' -> section: 'Documentation'
+- 'style' -> section: 'Styles'
+- 'chore' -> section: 'Miscellaneous Chores'
+- 'refactor' -> section: 'Code Refactoring'
+- 'test' -> section: 'Tests'
+- 'build' -> section: 'Build System'
+- 'ci' -> section: 'Continuous Integration'
+
+The canonical prefix-to-release mapping, including the SemVer effect of each
+prefix, lives in
+[docs/src/development/ci.md](docs/src/development/ci.md#release-automation-release-please).
 
 # Contact Information
 
