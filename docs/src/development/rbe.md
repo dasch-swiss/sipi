@@ -7,7 +7,7 @@ measured performance characteristics, and how CI wires everything together.
 The backend (`dasch-remotebuild-prod-01`) is DaSCH-hosted and defined outside
 this repo: the libvirt VM in [`ops-tf`](https://github.com/dasch-swiss/ops-tf)
 (`live/virt-03/prod/vms/`), the NativeLink/bazel-remote service configuration
-in [`ops-infra`](https://github.com/dasch-swiss/ops-infra)
+in [`infra`](https://github.com/dasch-swiss/infra)
 (`OS/ansible/roles/dasch.nativelink`, including its README and store-topology
 notes).
 
@@ -381,7 +381,7 @@ remote cache.
 - `platforms/BUILD.bazel` — `//platforms:linux_x86_64` exec properties
 - `test/e2e/sipi_e2e_test.bzl` and `test/e2e/BUILD.bazel` — `no-sandbox` tag on e2e tests
 - [`ops-tf`](https://github.com/dasch-swiss/ops-tf) (`live/virt-03/prod/vms/`) and
-  [`ops-infra`](https://github.com/dasch-swiss/ops-infra)
+  [`infra`](https://github.com/dasch-swiss/infra)
   (`OS/ansible/roles/dasch.nativelink`) — VM provisioning and NativeLink store
   configuration / operations (private repos)
 - [RBE Write Pressure](rbe-write-pressure.md) — why the store disk writes

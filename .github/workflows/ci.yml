@@ -173,7 +173,7 @@ jobs:
       # REMOTE BUILD EXECUTION:
       #
       # The self-hosted RBE backend (dasch-remotebuild-prod-01, defined in the
-      # ops-tf + ops-infra repos) is the single Bazel backend. It serves the
+      # ops-tf + infra repos) is the single Bazel backend. It serves the
       # Remote Cache + Remote Execution (the runner endpoint, mTLS).
       # http_archive downloads are cached client-side via --repository_cache
       # (.bazelrc) + the actions/cache step inside `ci-setup`, not via a gRPC
