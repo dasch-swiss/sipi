@@ -98,6 +98,11 @@ unit of responsibility, not necessarily a directory yet — the migration
 to per-module co-located directories is tracked by
 [ADR-0003](docs/adr/0003-module-co-located-source-and-tests.md).
 
+Scope a commit by the responsibility it serves, not the directory the edited
+files happen to sit in. A metrics or tracing change is `observability` even
+when the code lives under `src/server-rs/` or rides the `ffi` seam; a change
+is scoped `ffi` only when the seam mechanism itself is the point.
+
 | Module (scope) | Path | Responsibility |
 |---|---|---|
 | `image` | `src/SipiImage.*`, `include/SipiImage.hpp` | Image read/write pipeline; orchestrates decode → process → encode |
@@ -120,10 +125,12 @@ The C++ `SipiHttpServer` orchestration (`src/SipiHttpServer.*`) is being
 strangled by `server-rs`; new server work lands under `server-rs`, and
 route/handler changes use `handlers` or `shttps`.
 
-Beyond modules, commits use **test-layer scopes** (`e2e`, `approval`) and
-**cross-cutting scopes** (`deps`, `bazel`, `ci`, `nix`, `docker`). If none
-of the enumerated scopes genuinely fits a change, ask the maintainer
-before inventing a new one. The full scope rules live in
+Beyond modules, commits use **test-layer scopes** (`e2e`, `approval`, for a
+test layer's own harness or fixtures) and **cross-cutting scopes** (`deps`,
+`bazel`, `ci`, `nix`, `docker`). A test *about* a concern takes that concern's
+scope — `test(observability)`, not `test(e2e)` — since the `test` type already
+says it is a test. If none of the enumerated scopes genuinely fits a change,
+ask the maintainer before inventing a new one. The full scope rules live in
 [commit-conventions.md § Scopes](docs/src/development/commit-conventions.md#scopes).
 
 ### Directory layouts

@@ -84,7 +84,11 @@ the `feat:`/`refactor:` you happened to be writing.
 
 ## Scopes
 
-The scope names the **module** the change belongs to. The canonical
+The scope names the **concern the change serves** — the module whose
+responsibility it belongs to, not the directory the edited files happen to
+sit in. Telemetry code under `src/server-rs/` is `observability`; an `ffi`
+seam field whose only purpose is to carry a metric across is `observability`
+too. Scope by what the change is *about*, not where it landed. The canonical
 module list — which is also the scope vocabulary — lives in
 [`CONVENTIONS.md` § Module Layout](../../../CONVENTIONS.md). Use one of
 these names, lowercase:
@@ -92,9 +96,11 @@ these names, lowercase:
 - **Module scopes:** `image`, `formats`, `metadata`, `iiifparser`,
   `handlers`, `shttps`, `cache`, `memory-budget`, `observability`,
   `logging`, `cli`, `ffi`, `lua`, `server-rs`, `cli-rs`
-- **Test-layer scopes** (test-only changes spanning a whole layer):
-  `e2e`, `approval`. A unit-test change takes the scope of the module
-  under test.
+- **Test-layer scopes** (`e2e`, `approval`) — for changes to a test
+  layer's own harness or fixtures. A test *about* a specific concern takes
+  that concern's scope (`test(observability): ...`), not the layer: the
+  `test` type already says it is a test, so the scope is free to name the
+  concern. A unit-test change takes the scope of the module under test.
 - **Cross-cutting scopes** (changes not tied to one module): `deps`,
   `bazel`, `ci`, `nix`, `docker`.
 
@@ -105,6 +111,9 @@ Rules:
   (`chore: ...`, `ci: ...`).
 - A commit that spans several modules may list them comma-separated:
   `refactor(cli-rs,server-rs): ...`.
+- **Concern over location.** When code for one module's responsibility lives
+  under another module's directory, scope by the responsibility, not the
+  enclosing directory. `server-rs/src/metrics.rs` → `observability`.
 - **If none of the enumerated scopes genuinely fits, ask the maintainer
   before inventing a new one.** New scopes are added to the canonical
   list in `CONVENTIONS.md` deliberately, not ad hoc.
