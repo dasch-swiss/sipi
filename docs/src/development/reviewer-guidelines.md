@@ -67,5 +67,5 @@ Checklist for human and AI reviewers. Not every item applies to every PR — use
 ## Security
 
 - [ ] No path traversal possible via user-supplied inputs (IIIF identifiers, config paths, cache file names)
-- [ ] Internal-only endpoints (e.g., `/metrics`) documented as requiring reverse proxy protection
+- [ ] Internal-only endpoints documented as requiring reverse proxy protection
 - [ ] No secrets or credentials in log output

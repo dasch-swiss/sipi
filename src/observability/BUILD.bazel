@@ -69,3 +69,20 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+# The seam tripwire: pins every registry family name against a classification of
+# how (or whether) it reaches production OTLP. Separate target from the adapter
+# test because it asserts a property of the registry as a whole, and because a
+# failure here means "decide how your new metric crosses the seam", not "the
+# adapter is broken".
+cc_test(
+    name = "metrics_registry_test",
+    srcs = [
+        "metrics_registry_test.cpp",
+        "test_main.cpp",
+    ],
+    deps = [
+        ":observability",
+        "@googletest//:gtest_main",
+    ],
+)

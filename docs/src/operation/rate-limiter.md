@@ -21,10 +21,10 @@ All parameters available via Lua config, CLI flags (`--rate-limit-*`), and envir
 
 1. **Deploy in monitor mode** (default in ops-deploy):
    - Rate limiter logs and counts but never returns 429
-   - `sipi_rate_limit_decisions_total{action="shadow_rejected"}` shows what *would* be blocked
+   - `sipi_rate_limit_shadow_rejected_total` shows what *would* be blocked
 
 2. **Observe metrics** (1-2 weeks):
-   - Dashboard: `rate(sipi_rate_limit_decisions_total{action="shadow_rejected"}[5m])`
+   - Dashboard: `rate(sipi_rate_limit_shadow_rejected_total[5m])`
    - If shadow rejection rate > 5%, thresholds may be too aggressive
    - Check Loki logs for which IPs would be affected
 
@@ -36,9 +36,14 @@ All parameters available via Lua config, CLI flags (`--rate-limit-*`), and envir
 
 ## Prometheus Metrics
 
+SIPI exports over OTLP, so these are the names the collector renders after
+normalization, not the output of a scrape endpoint.
+
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `sipi_rate_limit_decisions_total` | Counter | `action` (allowed/rejected/shadow_rejected) | Core metric — rejection ratio |
+| `sipi_rate_limit_allowed_total` | Counter | — | Admitted requests (denominator for the rejection ratio) |
+| `sipi_rate_limit_rejected_total` | Counter | — | Requests refused with 429 in `enforce` mode |
+| `sipi_rate_limit_shadow_rejected_total` | Counter | — | Requests that *would* be refused in `monitor` mode |
 | `sipi_rate_limit_near_limit_total` | Counter | — | Clients at >80% of budget (early warning) |
 | `sipi_rate_limit_clients_tracked` | Gauge | — | Active client entries in map |
 

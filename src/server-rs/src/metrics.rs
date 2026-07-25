@@ -14,11 +14,14 @@
 //! Instrument names are OTel-idiomatic (`sipi.cache.hits`), which the standard
 //! OTLP→Prometheus normalization at the collector renders as the existing
 //! dashboard names (`sipi_cache_hits_total`). Two snapshot fields are **not**
-//! bridged — `rejected_connections_total` and `waiting_connections` are never
-//! written on the FFI serve path, so they stay zero (see
-//! [`crate::ffi::SipiMetricsSnapshot`]); the shell exposes its own analogs
-//! instead, `sipi.pool.load_shed` and `sipi.pool.waiting` (the bounded wait queue
-//! in front of the pool), both below.
+//! bridged: `rejected_connections_total` and `waiting_connections` are never
+//! written on the FFI serve path, so under this shell they stay zero, and the
+//! pool publishes its own `sipi.pool.*` analogues instead.
+//!
+//! `every_snapshot_field_is_accounted_for` in the tests below is the tripwire: a
+//! field added to the snapshot must land in [`COUNTERS`], [`GAUGES`], or that
+//! two-name exclusion list, or the test fails. Nothing else detects a metric that
+//! stops at the seam — it just never appears in Grafana.
 //!
 //! opentelemetry 0.31 has no batch-observer API (`register_callback` was
 //! removed), so each instrument carries its own callback and each snapshots the
@@ -408,4 +411,81 @@ fn gauge(
             }
         })
         .build();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{COUNTERS, GAUGES};
+    use crate::ffi::SipiMetricsSnapshot;
+    use std::collections::HashSet;
+    use std::mem::size_of;
+
+    /// Snapshot fields deliberately not exported, by field name. Neither is
+    /// written on the FFI serve path, so both stay permanently zero under this
+    /// shell; the pool publishes `sipi.pool.waiting` and `sipi.pool.load_shed`
+    /// instead.
+    ///
+    /// Lives here rather than beside the tables because it exists to be counted,
+    /// not read — the reasoning is in the module docs.
+    const NOT_BRIDGED: &[&str] = &["rejected_connections_total", "waiting_connections"];
+
+    /// Every field the engine hands across the seam must either be exported or be
+    /// listed as deliberately unexported.
+    ///
+    /// This is the check that was missing when the OTLP cutover shipped: the
+    /// `SipiMetricsSnapshot` layout test pins the struct's *shape*, so a field
+    /// added C++-side and never bridged passed silently and simply never reached
+    /// production.
+    ///
+    /// The field count comes from the struct size rather than a hand-maintained
+    /// name list, which would just be one more place to forget: every snapshot
+    /// field is an 8-byte `u64`/`i64`, so `size_of / 8` is exact, and it moves on
+    /// its own when a field is added.
+    #[test]
+    fn every_snapshot_field_is_accounted_for() {
+        let field_count = size_of::<SipiMetricsSnapshot>() / 8;
+        let accounted = COUNTERS.len() + GAUGES.len() + NOT_BRIDGED.len();
+        assert_eq!(
+            accounted, field_count,
+            "{field_count} snapshot fields but {accounted} accounted for — a new \
+             field must be added to COUNTERS, GAUGES, or NOT_BRIDGED, or it will \
+             never reach OTLP"
+        );
+    }
+
+    #[test]
+    fn instrument_names_are_unique() {
+        // A duplicate name would have two callbacks reporting one series, which
+        // the SDK reconciles silently rather than rejecting.
+        let names = names();
+        let unique: HashSet<&&str> = names.iter().collect();
+        assert_eq!(unique.len(), names.len(), "duplicate instrument name");
+    }
+
+    #[test]
+    fn instrument_names_are_sipi_namespaced() {
+        // Engine names reach dashboards through the collector's OTLP→Prometheus
+        // normalization, which maps `.` to `_`. Underscores *within* a segment are
+        // fine and intended (`sipi.cache.size_bytes` → `sipi_cache_size_bytes`);
+        // an empty segment is not, because it renders a double underscore.
+        for name in names() {
+            assert!(
+                name.starts_with("sipi."),
+                "{name} should be namespaced under `sipi.`"
+            );
+            assert!(
+                !name.ends_with('.') && !name.contains(".."),
+                "{name} has an empty name segment"
+            );
+        }
+    }
+
+    /// Every engine instrument name, counters then gauges.
+    fn names() -> Vec<&'static str> {
+        COUNTERS
+            .iter()
+            .map(|(name, ..)| *name)
+            .chain(GAUGES.iter().map(|(name, ..)| *name))
+            .collect()
+    }
 }
