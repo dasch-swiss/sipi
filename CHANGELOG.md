@@ -1,5 +1,56 @@
 # Changelog
 
+## [6.2.1](https://github.com/dasch-swiss/sipi/compare/v6.2.0...v6.2.1) (2026-07-25)
+
+
+### Bug Fixes
+
+* **formats:** Close TIFF handles and buffers via RAII on all read/write paths ([82597ed](https://github.com/dasch-swiss/sipi/commit/82597edde3f6fda5d9367006ccd0711ab8a80dc4))
+* **formats:** Make PNG text chunks and FILE handles RAII-safe ([0832860](https://github.com/dasch-swiss/sipi/commit/08328600a2ce0c7ea6e9ffa199d067fa3860ae69))
+* **formats:** Move JPEG source/destination ownership out of the longjmp window ([1c1d0c3](https://github.com/dasch-swiss/sipi/commit/1c1d0c3511f99d9a34704730934c16caf6bf798a))
+* **formats:** Tear down Kakadu decode machinery exactly once via RAII ([68e4b01](https://github.com/dasch-swiss/sipi/commit/68e4b01dbc00e6dfbac867a11bbe2a88bff73284))
+* **image:** Compare 16 bps pixels against rhs in operator== ([15aaf5d](https://github.com/dasch-swiss/sipi/commit/15aaf5d13d4a049873c7b26ecb7c9bebe7b0cbd9))
+* **metadata:** Give Exif and Icc correct ownership semantics ([74737bd](https://github.com/dasch-swiss/sipi/commit/74737bdc64bb385cc5d9dc13c8147f3f5e2e7808))
+* **shttps:** Stop resource leaks on Lua, JWT, curl, and JSON error paths ([3c76649](https://github.com/dasch-swiss/sipi/commit/3c76649c7b827cee548ad6e1c6679dbd49f821be))
+
+
+### Performance Improvements
+
+* **formats:** Multithread JP2 decode via kdu_thread_env ([7bdb634](https://github.com/dasch-swiss/sipi/commit/7bdb6349562f4fb3f737bb74ba2349b8ece8b1c3))
+
+
+### Documentation
+
+* Correct the infra repo name (ops-infra → infra) ([865bc41](https://github.com/dasch-swiss/sipi/commit/865bc415f36d38137d8ba1c0ca1248a64434a186))
+
+
+### Miscellaneous Chores
+
+* Enable misc plugin ([472974f](https://github.com/dasch-swiss/sipi/commit/472974f72e81cdcaf7f12c7413e31ddd688f8e16))
+
+
+### Code Refactoring
+
+* **image:** Own the pixel buffer as std::vector ([955c450](https://github.com/dasch-swiss/sipi/commit/955c4506ae9e717858b36c00cae7b4c79301425f))
+* **shttps:** Finish the RAII cleanup sweep ([bf2f391](https://github.com/dasch-swiss/sipi/commit/bf2f391ce8252ea2eb9bed67ce6cb4d091fc25b4))
+
+
+### Tests
+
+* Add concurrent-load decode harness ([f5daa39](https://github.com/dasch-swiss/sipi/commit/f5daa39a272357aa0d25a01f549a35c3b55c5332))
+* **image:** Cover the IIIF transform pipeline at the unit sanitizer layer ([dad9026](https://github.com/dasch-swiss/sipi/commit/dad902643b076b44b3b4d7a1764e1d80508d3f40))
+
+
+### Build System
+
+* **bazel:** Cut RBE write pressure from the test path ([5d3f9fe](https://github.com/dasch-swiss/sipi/commit/5d3f9fe37b38252d0f91cd2541c989783b2a563c))
+
+
+### Continuous Integration
+
+* Attach Bazel build-event JSON for cache-hit-rate analysis ([c01f6af](https://github.com/dasch-swiss/sipi/commit/c01f6afa4100823ee4b6f993c2bb7953c2a61ace))
+* Surface every commit type in the release notes ([f63fd0e](https://github.com/dasch-swiss/sipi/commit/f63fd0eb698433fe464549826af2845177987ad6))
+
 ## [6.2.0](https://github.com/dasch-swiss/sipi/compare/v6.1.0...v6.2.0) (2026-07-23)
 
 
