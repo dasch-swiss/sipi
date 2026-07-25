@@ -36,6 +36,6 @@ We accept this for three reasons.
 
 - **Bot-mitigation contracts in tests update**. Any e2e/Hurl test that asserted rate-limit behaviour on a cache-hit response gets adjusted (or deleted, if the assertion was incidental). Tests asserting rate-limit behaviour on cache-miss responses are unaffected.
 
-- **Metrics labels unchanged**. `rate_limit_decisions_total{action="allowed|rejected|shadow_rejected"}` continues to use the same label set; the distribution shifts (cache-miss requests dominate the counter; cache-hit requests are no longer counted). `rate_limit_clients_tracked` likewise shifts to count clients that have made at least one cache-miss request in the window.
+- **Metric outcomes unchanged**. The same decision outcomes are counted post-cache; only the distribution shifts (cache-miss requests dominate the counter; cache-hit requests are no longer counted). Production queries the flattened OTLP counters `sipi_rate_limit_{allowed,rejected,shadow_rejected}_total`; the engine registry's label-fanned `sipi_rate_limit_decisions_total{action=...}` is oracle-only. `rate_limit_clients_tracked` likewise shifts to count clients that have made at least one cache-miss request in the window.
 
 - **Documented in glossary**. The `Rate limiter` glossary entry sharpens to note the post-cache placement; the `Cache` entry adds "cache-hit short-circuits all Throttling gates"; the `Throttling` umbrella entry references this ADR for the gate-site decision.

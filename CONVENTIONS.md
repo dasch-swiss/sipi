@@ -215,7 +215,34 @@ New config options need:
 ## Prometheus Metrics
 
 SIPI-side singleton at `Sipi::observability::Metrics::instance()`
-(`src/observability/metrics.h`); exposed at `GET /metrics`.
+(`src/observability/metrics.h`). `GET /metrics` serialises it on the retained C++
+server only, which is oracle-only and never deployed. In production the Rust shell
+exports over OTLP instead: scalar counters and gauges cross the seam as the flat
+`SipiMetricsSnapshot` and are re-registered as OTel observable instruments in
+`src/server-rs/src/metrics.rs`. **A new counter or gauge here does not reach
+production until it is added to that snapshot and that module.** Distributions
+cannot cross the flat snapshot at all; record them as OTel histograms shell-side
+(see `record_http_duration` and `record_decode_estimate`).
+
+Two tests enforce this, because the seam is easy to forget and a metric that stops
+at it fails silently — it simply never appears in Grafana:
+
+- `//src/observability:metrics_registry_test` classifies every registry family by
+  how it reaches production. Adding a metric fails it until you say which.
+- `every_snapshot_field_is_accounted_for` in `src/server-rs/src/metrics.rs` fails
+  unless each snapshot field is exported or explicitly listed as unexported.
+
+**Known exceptions** — incremented in production, observable by nobody, recorded
+in the first test's `kKnownExceptionsNotObservable`:
+
+| Metric | Why | Cost to fix |
+|---|---|---|
+| `sipi_read_shape_fast_path_total` (ADR-0004) | Label-fanned `format` × `outcome`, 8 children; the flat snapshot holds scalars | 8 scalar fields |
+| `sipi_essentials_hash_mismatch_total` (ADR-0010) | Same, 5 children. This is the **corruption tripwire** — nothing in production can see a detected corruption; `sipi verify service-file` is the only read path | 5 scalar fields |
+
+Both label sets are static and pre-created, so bridging them is mechanical rather
+than a design problem. Shrinking that list is a welcome change; growing it needs an
+argument in review.
 
 ```cpp
 prometheus::Counter &my_counter_total =
