@@ -138,12 +138,14 @@ pub fn init() -> Telemetry {
 }
 
 /// The OTel resource shared by the tracer + logger providers. `service.name` is
-/// the constant `sipi`; `service.version` and `deployment.environment.name` fall
-/// back to the `SIPI_SENTRY_{RELEASE,ENVIRONMENT}` env the deploy already sets for
-/// Sentry, so the three required resource attributes are present even when
-/// `OTEL_RESOURCE_ATTRIBUTES` is not configured (Grafana Application Observability
-/// wants them). `OTEL_RESOURCE_ATTRIBUTES`, if set, still merges via the env
-/// detector `Resource::builder()` runs.
+/// the constant `sipi`; `service.version` and `vcs.ref.head.revision` come from
+/// the engine's Bazel build stamp, and `deployment.environment.name` from the
+/// `SIPI_SENTRY_ENVIRONMENT` env the deploy already sets for Sentry, so the
+/// required resource attributes are present even when `OTEL_RESOURCE_ATTRIBUTES`
+/// is not configured (Grafana Application Observability wants them).
+/// `OTEL_RESOURCE_ATTRIBUTES`, if set, still merges via the env detector
+/// `Resource::builder()` runs — which is how a deploy adds its own bundle version
+/// alongside SIPI's.
 fn otel_resource() -> opentelemetry_sdk::Resource {
     let mut attrs = vec![KeyValue::new(
         "deployment.environment.name",
@@ -151,6 +153,9 @@ fn otel_resource() -> opentelemetry_sdk::Resource {
     )];
     if let Some(version) = service_version() {
         attrs.push(KeyValue::new("service.version", version));
+    }
+    if let Some(commit) = build_commit() {
+        attrs.push(KeyValue::new("vcs.ref.head.revision", commit));
     }
     opentelemetry_sdk::Resource::builder()
         .with_service_name("sipi")
@@ -168,16 +173,33 @@ pub fn deployment_environment() -> String {
         .unwrap_or_else(|| "development".to_owned())
 }
 
-/// `SIPI_SENTRY_RELEASE`, or `None` if unset/empty — shared by the OTel
-/// resource above and Sentry's `release` (`main.rs`). There is no Rust-side
-/// build-stamp equivalent to the C++ `BUILD_SCM_TAG` (no `build.rs`/workspace-
-/// status wiring for the Rust binaries today), so both observability backends
-/// fall back to the same deploy-provided env var rather than disagreeing on
-/// two different sources.
+/// SIPI's own version, from the engine's Bazel build stamp (`version.txt`, which
+/// release-please owns). `None` for an unstamped build, whose sentinel is
+/// filtered by [`stamped`] — absent is more honest than a version nobody can map
+/// to a release.
+///
+/// Deliberately *not* `SIPI_SENTRY_RELEASE`: that names the deploy bundle, not
+/// SIPI, so reporting it as `service.version` left telemetry unable to say which
+/// SIPI build was running. Sentry keeps reading `SIPI_SENTRY_RELEASE` for its own
+/// `release` (`main.rs`); a deploy that wants its bundle version in telemetry too
+/// can add it via `OTEL_RESOURCE_ATTRIBUTES`.
 pub fn service_version() -> Option<String> {
-    std::env::var("SIPI_SENTRY_RELEASE")
-        .ok()
-        .filter(|s| !s.is_empty())
+    stamped(crate::ffi::build_version()?).map(str::to_owned)
+}
+
+/// The commit the engine was built from (see [`service_version`]).
+fn build_commit() -> Option<String> {
+    stamped(crate::ffi::build_commit()?).map(str::to_owned)
+}
+
+/// Drop the sentinels `src/BUILD.bazel` bakes in when building without `--stamp`,
+/// so an unstamped dev or test binary omits the attribute instead of claiming a
+/// version or revision that does not exist.
+fn stamped(value: &str) -> Option<&str> {
+    match value {
+        "" | "unstamped" | "unknown" | "0.0.0-unstamped" => None,
+        v => Some(v),
+    }
 }
 
 /// Build the OTLP (gRPC-tonic) tracer provider, or `None` when no endpoint is
@@ -421,5 +443,32 @@ mod tests {
         assert_eq!(json_string("a\"b"), "\"a\\\"b\"");
         assert_eq!(json_string("a\nb\tc\\d"), "\"a\\nb\\tc\\\\d\"");
         assert_eq!(json_string("x\u{0001}y"), "\"x\\u0001y\"");
+    }
+
+    #[test]
+    fn stamped_filters_the_unstamped_sentinels() {
+        // An unstamped build must omit the attribute rather than report a version
+        // or revision that maps to no release and no commit.
+        assert_eq!(stamped("0.0.0-unstamped"), None);
+        assert_eq!(stamped("unstamped"), None);
+        assert_eq!(stamped("unknown"), None);
+        assert_eq!(stamped(""), None);
+        assert_eq!(stamped("6.2.1"), Some("6.2.1"));
+        assert_eq!(stamped("e2e981a1"), Some("e2e981a1"));
+    }
+
+    #[test]
+    fn build_stamp_reads_the_engine_header() {
+        // Links the seam getters and proves they resolve `generated/SipiVersion.h`
+        // rather than a colliding `-DVERSION` from a dependency (a transitive
+        // `VERSION=547` from libmagic reaches some other translation units).
+        // Asserted as properties, not literals, so the test holds whether or not
+        // the build was stamped.
+        let version = crate::ffi::build_version().expect("build version is valid UTF-8");
+        assert!(!version.is_empty());
+        assert_ne!(version, "547", "picked up a dependency's VERSION macro");
+        assert!(!crate::ffi::build_commit()
+            .expect("build commit is valid UTF-8")
+            .is_empty());
     }
 }

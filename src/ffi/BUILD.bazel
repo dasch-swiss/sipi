@@ -70,6 +70,9 @@ cc_library(
         # limiter, memory budget, format handlers) the IIIF pipeline drives.
         # //src:engine does NOT depend on this package, so there is no cycle.
         "//src:engine",
+        # generated/SipiVersion.h — the Bazel build stamp the seam hands to the
+        # shell for its OTel resource attributes (sipi_build_version/commit).
+        "//src:sipi_generated_hdrs",
         # Sentry error capture + the Prometheus metric counters serve_image emits.
         "//src/observability:observability",
         # Icc / predefined ICC profiles for the quality colour conversions.
