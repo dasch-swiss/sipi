@@ -770,27 +770,31 @@ fn serve_image(
     sink::serve_streaming(outcome_tx, body_tx, |resp: &SipiResponse| unsafe {
         ffi::sipi_serve_image(&req, resp)
     });
+    // Read back what the engine observed about this call, once. The decode-memory
+    // estimate feeds a metric and the per-phase timings feed child spans; metrics
+    // and traces are independent pipelines, so the take is unconditional.
+    let observed = ffi::serve_timings_take();
+    crate::metrics::record_decode_estimate(observed.decode_estimate_bytes);
     // Break the opaque engine span open: one child span per phase (decode,
     // encode, …) under `sipi.serve`, from the timings the engine just recorded.
-    emit_engine_phase_spans(engine_start);
+    emit_engine_phase_spans(engine_start, &observed);
 }
 
 /// Mint an OTel child span under the current `sipi.serve` span for each engine
 /// phase the just-returned `sipi_serve_image` recorded, placing it on the trace
 /// timeline from the FFI-returned per-phase offsets (relative to `engine_start`).
-/// Runs on the same blocking thread as the FFI call, so `serve_timings_take`
-/// reads that call's accumulator and `Span::current()` is `sipi.serve`. Returns
-/// immediately when trace export is off (no throwaway spans on the hot path) or
-/// when the engine recorded nothing (cache hit / HEAD / passthrough). A phase
-/// that exited via an exception (`failed`) is marked `Status=Error`.
-fn emit_engine_phase_spans(engine_start: SystemTime) {
+/// Runs on the same blocking thread as the FFI call, so `Span::current()` is
+/// `sipi.serve`. Returns immediately when trace export is off (no throwaway spans
+/// on the hot path) or when the engine recorded nothing (cache hit / HEAD /
+/// passthrough). A phase that exited via an exception (`failed`) is marked
+/// `Status=Error`.
+fn emit_engine_phase_spans(engine_start: SystemTime, timings: &ffi::SipiServeTimings) {
     use opentelemetry::trace::{Span as _, Status, Tracer as _};
     use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 
     if !crate::telemetry::tracing_active() {
         return;
     }
-    let timings = ffi::serve_timings_take();
     if !timings.present.iter().any(|&p| p != 0) {
         return;
     }
