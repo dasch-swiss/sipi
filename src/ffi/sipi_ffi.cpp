@@ -23,6 +23,7 @@
 #include "ffi/serve_image.h"
 #include "ffi/serve_response.h"
 #include "ffi/serve_timings.h"// serve_timings_reset/export (sipi_serve_timings_take)
+#include "generated/SipiVersion.h"// VERSION / BUILD_SCM_REVISION (sipi_build_version/commit)
 #include "logging/logger.h"// set_log_trace_context (sipi_set_log_trace_context)
 #include "observability/metrics.h"
 #include "shttps/lua/request_context.h"// shttps::RequestContext (the opaque SipiRequestContext)
@@ -124,6 +125,10 @@ int sipi_serve_image(const SipiServeRequest *req, const SipiResponse *resp)
 void sipi_serve_timings_take(SipiServeTimings *out) { Sipi::ffi::serve_timings_export(out); }
 
 int sipi_phase_count(void) { return SIPI_PHASE_COUNT; }
+
+const char *sipi_build_version(void) { return VERSION; }
+
+const char *sipi_build_commit(void) { return BUILD_SCM_REVISION; }
 
 int sipi_preflight(const char *prefix,
   const char *identifier,
