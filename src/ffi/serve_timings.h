@@ -4,7 +4,7 @@
  */
 
 /*!
- * Per-phase timing capture for one `sipi_serve_image` call (strangler-fig; ADR-0013).
+ * Per-serve observation capture for one `sipi_serve_image` call (strangler-fig; ADR-0013).
  *
  * The engine emits no OpenTelemetry spans of its own — only the Rust shell runs
  * an OTel tracer + exporter. To break the opaque `sipi.serve` span into
@@ -25,6 +25,7 @@
 #define SIPI_FFI_SERVE_TIMINGS_H
 
 #include <chrono>
+#include <cstdint>
 
 #include "ffi/sipi_ffi.h"
 
@@ -37,6 +38,13 @@ void serve_timings_reset();
 /*! Copy the calling thread's accumulator into `*out` (no-op on NULL). Backs the
  *  `sipi_serve_timings_take` seam entry. */
 void serve_timings_export(SipiServeTimings *out);
+
+/*! Record this serve's estimated peak decode memory (bytes) — the value the
+ *  decode-memory budget admitted against. Not a timing, but it rides the same
+ *  accumulator: it is observed inside the same call and read back by the same
+ *  post-call `serve_timings_export`, and the shell records it into a histogram
+ *  the flat `SipiMetricsSnapshot` cannot carry. Left 0 when no decode ran. */
+void serve_timings_set_decode_estimate(std::uint64_t bytes);
 
 /*! RAII timer for one serve phase: records `[construction, destruction)` against
  *  `phase` in the thread-local accumulator, as an offset from the last

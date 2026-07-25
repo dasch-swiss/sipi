@@ -423,9 +423,10 @@ typedef void (*SipiRouteFn)(void *ctx, const char *method, const char *route, co
  *  known together or not at all. */
 typedef void (*SipiEssentialsFn)(void *ctx, const char *orig_mimetype, const char *orig_filename);
 
-/* ── Per-phase serve timings ─────────────────────────────────────────────────
- * Nanosecond timings for the phases of one `sipi_serve_image` call, relative to
- * the call's start. The engine accumulates them in a thread-local during the
+/* ── Per-serve observations ──────────────────────────────────────────────────
+ * What one `sipi_serve_image` call observed about itself: nanosecond timings per
+ * phase (relative to the call's start) plus the decode-memory estimate. The
+ * engine accumulates them in a thread-local during the
  * call; `sipi_serve_timings_take` reads that accumulator, so the caller must
  * call it on the SAME thread immediately after `sipi_serve_image` returns. A
  * `present[i]` of 0 means the phase did not run (a cache hit or passthrough
@@ -454,6 +455,14 @@ typedef struct
   uint64_t dur_ns[SIPI_PHASE_COUNT];
   uint8_t present[SIPI_PHASE_COUNT];
   uint8_t failed[SIPI_PHASE_COUNT]; /* 1 = phase exited via an exception */
+  /* Estimated peak decode memory for this serve, in bytes — the value the
+   * decode-memory budget admitted against. 0 when no decode ran (cache hit,
+   * HEAD, passthrough), mirroring `present`, so the caller can tell "no sample"
+   * from "a real measurement". Not a timing, but it rides the same thread-local
+   * accumulator because it is observed at the same point and taken by the same
+   * post-call read; the caller records it into a histogram the flat
+   * `SipiMetricsSnapshot` cannot carry. */
+  uint64_t decode_estimate_bytes;
 } SipiServeTimings;
 
 /* ── Entry points ───────────────────────────────────────────────────────────
@@ -463,11 +472,24 @@ typedef struct
 /*! IIIF decode→transform→encode→stream; honours the restrict size/watermark. */
 SIPI_FFI_NODISCARD int sipi_serve_image(const SipiServeRequest *req, const SipiResponse *resp);
 
-/*! Copy the current thread's per-phase serve timings (see `SipiServeTimings`)
+/*! Copy the current thread's per-serve observations (see `SipiServeTimings`)
  *  into `*out`. Call on the SAME thread right after `sipi_serve_image` returns;
  *  a NULL `out` is a no-op. Never fails and emits nothing; the accumulator is
  *  reset at the next `sipi_serve_image` entry on the thread. */
 void sipi_serve_timings_take(SipiServeTimings *out);
+
+/*! The build stamp Bazel baked into the engine, so telemetry can name the build
+ *  it is reporting from. Both return a pointer to a string literal with static
+ *  storage duration — never allocated, never freed, valid for the process
+ *  lifetime, so unlike `SipiStrFn` these need no callback to avoid an ownership
+ *  contract. Never NULL.
+ *
+ *  `sipi_build_version` is `version.txt` (release-please's single source of
+ *  truth), NOT the `git describe` tag: describe degrades to a stale nearest-tag
+ *  in a build context without full tag history, which is how a 6.2.1 build came
+ *  to report itself as `v5.0.1-dirty`. `sipi_build_commit` is the commit SHA. */
+const char *sipi_build_version(void);
+const char *sipi_build_commit(void);
 
 /*! The engine's serve-phase count (`SIPI_PHASE_COUNT`). The Rust shell mirrors
  *  `SipiServeTimings` by hand, so it asserts its own `PHASE_COUNT` against this

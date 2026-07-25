@@ -4,7 +4,7 @@
  */
 
 #include "ffi/serve_image.h"
-#include "ffi/serve_timings.h"// PhaseTimer (per-phase serve timings for the shell's child spans)
+#include "ffi/serve_timings.h"// PhaseTimer + decode-estimate capture, read back by the shell
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -630,17 +630,26 @@ std::expected<ServeResponse, SipiStatus>
     }
   }
 
-  // Memory budget — only the decode path pays it.
+  // Estimated peak decode memory for this serve. Observed for every decode —
+  // into the engine's own histogram and, via the seam accumulator, the shell's
+  // OTLP histogram — independently of whether the budget is enforced: the
+  // estimate describes the request, not the budget feature. (The engine's
+  // histogram is serialised only by `GET /metrics`; the OTLP path reads the
+  // value back over the seam instead.)
+  const auto ddims = compute_decode_dims(img_w, img_h, info.clevels, region, size);
+  const bool needs_icc = quality_format.quality() == SipiQualityFormat::COLOR
+                         || quality_format.quality() == SipiQualityFormat::GRAY;
+  const size_t estimated = estimate_peak_memory(
+    ddims.width, ddims.height, ddims.out_w, ddims.out_h, info.nc, info.bps, static_cast<double>(angle), needs_icc);
+
+  auto &metrics = Metrics::instance();
+  metrics.decode_memory_estimate_bytes.Observe(static_cast<double>(estimated));
+  serve_timings_set_decode_estimate(static_cast<std::uint64_t>(estimated));
+
+  // The budget is only enforced when configured (decode_memory_mode != "off");
+  // when off, eng.memory_budget is null and the decode proceeds unmetered.
   std::optional<MemoryBudgetGuard> budget_guard;
   if (eng.memory_budget != nullptr) {
-    const auto ddims = compute_decode_dims(img_w, img_h, info.clevels, region, size);
-    const bool needs_icc = quality_format.quality() == SipiQualityFormat::COLOR
-                           || quality_format.quality() == SipiQualityFormat::GRAY;
-    const size_t estimated = estimate_peak_memory(
-      ddims.width, ddims.height, ddims.out_w, ddims.out_h, info.nc, info.bps, static_cast<double>(angle), needs_icc);
-
-    auto &metrics = Metrics::instance();
-    metrics.decode_memory_estimate_bytes.Observe(static_cast<double>(estimated));
     const auto result = eng.memory_budget->try_acquire(estimated);
     metrics.decode_memory_used_bytes.Set(static_cast<double>(result.used));
 

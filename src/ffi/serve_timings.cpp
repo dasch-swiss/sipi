@@ -24,7 +24,13 @@ static_assert(offsetof(SipiServeTimings, present) == 2 * SIPI_PHASE_COUNT * size
   "SipiServeTimings.present offset");
 static_assert(offsetof(SipiServeTimings, failed) == 2 * SIPI_PHASE_COUNT * sizeof(uint64_t) + SIPI_PHASE_COUNT,
   "SipiServeTimings.failed offset");
-static_assert(sizeof(SipiServeTimings) == 112, "SipiServeTimings size drifted from src/server-rs/src/ffi.rs");
+// `failed` ends at 108; the uint64_t that follows is 8-aligned, so four bytes of
+// padding precede it. Spelled as a literal because the round-up is less legible
+// derived from SIPI_PHASE_COUNT than the `sizeof` assert that already catches a
+// one-sided phase-count bump.
+static_assert(offsetof(SipiServeTimings, decode_estimate_bytes) == 112,
+  "SipiServeTimings.decode_estimate_bytes offset");
+static_assert(sizeof(SipiServeTimings) == 120, "SipiServeTimings size drifted from src/server-rs/src/ffi.rs");
 
 namespace Sipi::ffi {
 
@@ -40,6 +46,7 @@ struct Accumulator
   std::array<std::uint64_t, SIPI_PHASE_COUNT> dur_ns{};
   std::array<std::uint8_t, SIPI_PHASE_COUNT> present{};
   std::array<std::uint8_t, SIPI_PHASE_COUNT> failed{};
+  std::uint64_t decode_estimate_bytes{};
 };
 
 thread_local Accumulator g_accum;
@@ -60,7 +67,10 @@ void serve_timings_reset()
   g_accum.dur_ns.fill(0);
   g_accum.present.fill(0);
   g_accum.failed.fill(0);
+  g_accum.decode_estimate_bytes = 0;
 }
+
+void serve_timings_set_decode_estimate(std::uint64_t bytes) { g_accum.decode_estimate_bytes = bytes; }
 
 void serve_timings_export(SipiServeTimings *out)
 {
@@ -71,6 +81,7 @@ void serve_timings_export(SipiServeTimings *out)
     out->present[i] = g_accum.present[static_cast<std::size_t>(i)];
     out->failed[i] = g_accum.failed[static_cast<std::size_t>(i)];
   }
+  out->decode_estimate_bytes = g_accum.decode_estimate_bytes;
 }
 
 PhaseTimer::PhaseTimer(SipiPhase phase)

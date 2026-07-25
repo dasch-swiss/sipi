@@ -43,12 +43,12 @@ The 25% headroom covers kernel buffers, Sipi heap, cache, Lua, and thread stacks
 
 1. **Deploy in monitor mode** (default in ops-deploy):
    - Budget is tracked and logged but requests are never rejected
-   - `sipi_decode_memory_decisions_total{action="shadow_rejected"}` shows what *would* be blocked
+   - `sipi_decode_memory_shadow_rejected_total` shows what *would* be blocked
 
 2. **Observe metrics** (1-2 weeks):
    - Budget utilization: `sipi_decode_memory_used_bytes / sipi_decode_memory_budget_bytes` — should be < 0.8 normally
-   - Shadow rejection rate: `rate(sipi_decode_memory_decisions_total{action="shadow_rejected"}[5m])`
-   - Request size distribution: `histogram_quantile(0.99, sipi_decode_memory_estimate_bytes)`
+   - Shadow rejection rate: `rate(sipi_decode_memory_shadow_rejected_total[5m])`
+   - Request size distribution: `histogram_quantile(0.99, rate(sipi_decode_memory_estimate_bytes_bucket[5m]))`
 
 3. **Tune budget** if needed:
    - If shadow rejections are frequent on normal tile traffic, budget is too low
@@ -58,11 +58,16 @@ The 25% headroom covers kernel buffers, Sipi heap, cache, Lua, and thread stacks
 
 ## Prometheus Metrics
 
+SIPI exports over OTLP, so these are the names the collector renders after
+normalization, not the output of a scrape endpoint.
+
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
 | `sipi_decode_memory_budget_bytes` | Gauge | — | Configured budget (set once at startup) |
 | `sipi_decode_memory_used_bytes` | Gauge | — | Currently allocated to in-flight decodes |
-| `sipi_decode_memory_decisions_total` | Counter | `action` | `acquired`, `rejected`, `shadow_rejected` |
+| `sipi_decode_memory_acquired_total` | Counter | — | Admitted decodes |
+| `sipi_decode_memory_rejected_total` | Counter | — | Decodes refused in `enforce` mode |
+| `sipi_decode_memory_shadow_rejected_total` | Counter | — | Decodes that *would* be refused in `shadow` mode |
 | `sipi_decode_memory_near_limit_total` | Counter | — | Acquisitions where usage > 80% of budget |
 | `sipi_decode_memory_estimate_bytes` | Histogram | — | Per-request peak memory estimates |
 
@@ -73,7 +78,7 @@ The 25% headroom covers kernel buffers, Sipi heap, cache, Lua, and thread stacks
 sipi_decode_memory_used_bytes / sipi_decode_memory_budget_bytes
 
 # Rejection rate (should be 0 under normal load)
-rate(sipi_decode_memory_decisions_total{action="rejected"}[5m])
+rate(sipi_decode_memory_rejected_total[5m])
 
 # Early warning (budget getting tight)
 rate(sipi_decode_memory_near_limit_total[5m])
@@ -95,7 +100,7 @@ histogram_quantile(0.99, rate(sipi_decode_memory_estimate_bytes_bucket[5m]))
 ## Troubleshooting
 
 **Budget seems too restrictive (503s on normal traffic):**
-- Check `histogram_quantile(0.5, sipi_decode_memory_estimate_bytes)` — median should be < 1MB for tile traffic
+- Check `histogram_quantile(0.5, rate(sipi_decode_memory_estimate_bytes_bucket[5m]))` — median should be < 1MB for tile traffic
 - If median is high, check for clients not using tiles (direct `/full/max/` requests)
 - Increase budget or add more container memory
 

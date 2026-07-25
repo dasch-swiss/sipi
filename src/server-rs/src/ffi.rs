@@ -304,12 +304,14 @@ pub const PHASE_SPAN_NAMES: [&str; PHASE_COUNT] = [
     "sipi.engine.encode",
 ];
 
-/// Per-phase engine timings for one `sipi_serve_image` call — the hand-mirrored
+/// What one `sipi_serve_image` call observed about itself — the hand-mirrored
 /// layout of the C `SipiServeTimings` (`ffi/sipi_ffi.h`). `start_ns[i]`/`dur_ns[i]`
 /// are nanosecond offset-from-call-start + duration for phase `i`; `present[i]`
 /// is 0 when the phase did not run, and `failed[i]` is 1 when the phase exited
-/// via an exception (the shell then marks that span errored). Kept in lock-step
-/// with the C struct by the `serve_timings_layout` test below.
+/// via an exception (the shell then marks that span errored).
+/// `decode_estimate_bytes` is the estimated peak decode memory the budget
+/// admitted against, 0 when no decode ran. Kept in lock-step with the C struct by
+/// the `serve_timings_layout` test below.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct SipiServeTimings {
@@ -317,9 +319,10 @@ pub struct SipiServeTimings {
     pub dur_ns: [u64; PHASE_COUNT],
     pub present: [u8; PHASE_COUNT],
     pub failed: [u8; PHASE_COUNT],
+    pub decode_estimate_bytes: u64,
 }
 
-/// Take the calling thread's per-phase serve timings. Call right after
+/// Take the calling thread's per-serve observations. Call right after
 /// [`sipi_serve_image`] on the same thread; every `present` is 0 when the engine
 /// recorded nothing (e.g. a cache hit or HEAD, which skip decode/encode).
 #[must_use]
@@ -329,11 +332,30 @@ pub fn serve_timings_take() -> SipiServeTimings {
         dur_ns: [0; PHASE_COUNT],
         present: [0; PHASE_COUNT],
         failed: [0; PHASE_COUNT],
+        decode_estimate_bytes: 0,
     };
     // SAFETY: `out` is a valid, fully-initialised SipiServeTimings; the FFI only
     // writes its fields for the duration of the call and never retains the pointer.
     unsafe { sipi_serve_timings_take(&mut out) };
     out
+}
+
+/// The engine's baked version — `version.txt`, via Bazel's build stamp. `None`
+/// only if the stamp somehow held non-UTF-8 bytes.
+#[must_use]
+pub fn build_version() -> Option<&'static str> {
+    // SAFETY: the seam returns a non-null string literal with static storage
+    // duration, so the borrow is sound for the process lifetime.
+    unsafe { CStr::from_ptr(sipi_build_version()) }
+        .to_str()
+        .ok()
+}
+
+/// The engine's baked commit SHA (see [`build_version`]).
+#[must_use]
+pub fn build_commit() -> Option<&'static str> {
+    // SAFETY: as `build_version` — a static string literal, never null.
+    unsafe { CStr::from_ptr(sipi_build_commit()) }.to_str().ok()
 }
 
 extern "C" {
@@ -344,7 +366,7 @@ extern "C" {
     /// run first.
     pub fn sipi_serve_image(req: *const SipiServeRequest, resp: *const SipiResponse) -> c_int;
 
-    /// Copy the current thread's per-phase serve timings into `*out`. Call on the
+    /// Copy the current thread's per-serve observations into `*out`. Call on the
     /// same thread right after [`sipi_serve_image`] returns; a null `out` is a
     /// no-op. Never fails, emits nothing.
     pub fn sipi_serve_timings_take(out: *mut SipiServeTimings);
@@ -353,6 +375,12 @@ extern "C" {
     /// [`PHASE_COUNT`] by the layout test so a one-sided phase-count change fails
     /// loudly instead of overflowing the Rust-sized [`SipiServeTimings`].
     pub fn sipi_phase_count() -> c_int;
+
+    /// The engine's baked build stamp — `version.txt` and the commit SHA. Both
+    /// return a string literal with static storage duration, never null, so the
+    /// borrow is good for the process lifetime.
+    pub fn sipi_build_version() -> *const c_char;
+    pub fn sipi_build_commit() -> *const c_char;
 
     /// Raw `/file` passthrough incl. HTTP Range / 206 — no decode.
     /// `resolved_path` is an already-validated absolute path; `range` is the raw
@@ -1473,7 +1501,7 @@ mod serve_timings_layout {
         // SAFETY: a pure `return SIPI_PHASE_COUNT` accessor; no state, never fails.
         assert_eq!(PHASE_COUNT, unsafe { sipi_phase_count() } as usize);
         assert_eq!(align_of::<SipiServeTimings>(), 8);
-        assert_eq!(size_of::<SipiServeTimings>(), 112);
+        assert_eq!(size_of::<SipiServeTimings>(), 120);
         assert_eq!(offset_of!(SipiServeTimings, start_ns), 0);
         assert_eq!(offset_of!(SipiServeTimings, dur_ns), PHASE_COUNT * 8);
         assert_eq!(offset_of!(SipiServeTimings, present), 2 * PHASE_COUNT * 8);
@@ -1481,6 +1509,9 @@ mod serve_timings_layout {
             offset_of!(SipiServeTimings, failed),
             2 * PHASE_COUNT * 8 + PHASE_COUNT
         );
+        // `failed` ends at 108; the u64 that follows is 8-aligned, so four bytes
+        // of padding precede it.
+        assert_eq!(offset_of!(SipiServeTimings, decode_estimate_bytes), 112);
     }
 
     #[test]
@@ -1509,6 +1540,7 @@ mod serve_timings_layout {
         assert!(t.present.iter().all(|&p| p == 0));
         assert!(t.dur_ns.iter().all(|&d| d == 0));
         assert!(t.failed.iter().all(|&f| f == 0));
+        assert_eq!(t.decode_estimate_bytes, 0);
     }
 }
 
