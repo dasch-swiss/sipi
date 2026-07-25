@@ -714,7 +714,7 @@ Memory leaks and undefined behavior are not a separate pyramid layer but a **bui
 
 ## Cross-Cutting: Performance Regression Detection
 
-**Current state:** Prometheus metrics include cache counters/gauges and `sipi_request_duration_seconds` histogram (5ms–10s buckets). CI infrastructure includes smoke latency assertions in PR CI. Throughput-style load testing is intentionally **not** run in CI — synthetic `wrk` against three IIIF endpoints on a shared GitHub runner does not mirror dasch-prod-01's actual workload (cold-cache reads of medium-sized JP2s under spiky concurrency) and the prior nightly `loadtest.yml` artifacts were not consulted. Meaningful load testing belongs in a staging environment with realistic fixtures and traffic shape.
+**Current state:** OTLP-exported metrics include cache counters/gauges and the semantic-convention `http.server.request.duration` histogram (5ms–10s buckets), which normalizes to `http_server_request_duration_seconds` at the collector. CI infrastructure includes smoke latency assertions in PR CI. Throughput-style load testing is intentionally **not** run in CI — synthetic `wrk` against three IIIF endpoints on a shared GitHub runner does not mirror dasch-prod-01's actual workload (cold-cache reads of medium-sized JP2s under spiky concurrency) and the prior nightly `loadtest.yml` artifacts were not consulted. Meaningful load testing belongs in a staging environment with realistic fixtures and traffic shape.
 
 **Strategy (three tiers):**
 
@@ -909,7 +909,6 @@ fn my_flaky_test() {
 ## Future Additions
 
 - **Doc tests:** Once sipi has Rust library code (post-migration), `///` example doc tests become valuable
-- **`sipi_request_duration_seconds`:** Prometheus histogram for production latency monitoring
 
 (Component microbenchmarks — formerly listed here as a post-Rust-migration
 `criterion` aspiration — exist today as the C++ Google Benchmark suite; see

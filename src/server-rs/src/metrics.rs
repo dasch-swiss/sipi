@@ -24,16 +24,59 @@
 //! removed), so each instrument carries its own callback and each snapshots the
 //! singleton. The read is a cheap singleton copy and collection runs at the
 //! reader interval (60s), so the ~22 reads per cycle are immaterial.
+//!
+//! Two instruments are **synchronous** rather than observable, because they
+//! record a distribution over individual requests that no end-of-interval poll
+//! can reconstruct: [`record_http_duration`] (request latency) and
+//! [`record_decode_estimate`] (per-serve decode-memory estimate). Their handles
+//! are kept in `OnceLock`s, and a request that arrives before [`register`] ran
+//! records nothing.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+use std::time::Instant;
 
-use opentelemetry::global;
-use opentelemetry::metrics::Meter;
+use axum::extract::{MatchedPath, Request};
+use axum::middleware::Next;
+use axum::response::Response;
+use opentelemetry::metrics::{Histogram, Meter};
+use opentelemetry::{global, KeyValue};
 use tokio::sync::Semaphore;
 
 use crate::ffi::{self, SipiMetricsSnapshot};
 use crate::preflight_cache;
 use crate::routes;
+
+/// Explicit bucket boundaries (seconds) for `http.server.request.duration`, as
+/// recommended by the HTTP semantic conventions.
+const HTTP_DURATION_BOUNDARIES: &[f64] = &[
+    0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0,
+];
+
+/// Bucket boundaries (bytes) for the decode-memory estimate: 1 KiB → 2 GiB,
+/// matching the buckets the engine's own histogram has always used, so the
+/// operator PromQL in `docs/src/operation/memory-budget.md` keeps its shape.
+const DECODE_ESTIMATE_BOUNDARIES: &[f64] = &[
+    1024.0,
+    10_240.0,
+    102_400.0,
+    1_048_576.0,
+    10_485_760.0,
+    104_857_600.0,
+    524_288_000.0,
+    1_073_741_824.0,
+    2_147_483_648.0,
+];
+
+/// The HTTP methods the semantic conventions treat as known; anything else is
+/// reported as `_OTHER` so a client cannot mint unbounded label values by
+/// sending arbitrary method tokens (a method router answers 405 *after* this
+/// layer has already seen the request).
+const KNOWN_METHODS: &[&str] = &[
+    "CONNECT", "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT", "TRACE",
+];
+
+static HTTP_DURATION: OnceLock<Histogram<f64>> = OnceLock::new();
+static DECODE_ESTIMATE: OnceLock<Histogram<u64>> = OnceLock::new();
 
 /// Register the engine + pool observable instruments against the global meter.
 /// Safe to call unconditionally: with no meter provider installed (no OTLP
@@ -47,6 +90,26 @@ use crate::routes;
 /// lifetime; the returned handle carries none of that state.
 pub(crate) fn register(pool: Arc<Semaphore>, permits_total: usize) {
     let meter = global::meter("sipi");
+
+    // ── Synchronous histograms ──────────────────────────────────────────────
+    // Recorded per request rather than polled: a latency or decode-size
+    // distribution cannot be reconstructed from an end-of-interval sample.
+    let _ = HTTP_DURATION.set(
+        meter
+            .f64_histogram("http.server.request.duration")
+            .with_description("Duration of HTTP server requests")
+            .with_unit("s")
+            .with_boundaries(HTTP_DURATION_BOUNDARIES.to_vec())
+            .build(),
+    );
+    let _ = DECODE_ESTIMATE.set(
+        meter
+            .u64_histogram("sipi.decode_memory.estimate_bytes")
+            .with_description("Estimated peak decode memory for one served image")
+            .with_unit("By")
+            .with_boundaries(DECODE_ESTIMATE_BOUNDARIES.to_vec())
+            .build(),
+    );
 
     // ── Engine counters (monotonic) ─────────────────────────────────────────
     for (name, description, extract) in COUNTERS {
@@ -119,6 +182,67 @@ pub(crate) fn register(pool: Arc<Semaphore>, permits_total: usize) {
         )
         .with_callback(|observer| observer.observe(preflight_cache::entries(), &[]))
         .build();
+}
+
+/// axum middleware recording `http.server.request.duration` for one request.
+///
+/// Registered as the outermost router layer, so the observed duration covers the
+/// whole in-router path — including the tracing layers — and is the closest thing
+/// to what the client waited for. `/health` and `/favicon.ico` are registered
+/// after the layers and so stay out of the histogram, matching their exclusion
+/// from the trace pipeline.
+///
+/// Attributes are the route *template* (never the raw path), the normalised
+/// method, and the status code, so the label set stays bounded by the routing
+/// table rather than by the request stream.
+pub(crate) async fn record_http_duration(req: Request, next: Next) -> Response {
+    let method = normalise_method(req.method().as_str());
+    let route = req
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|matched| matched.as_str().to_owned());
+    let start = Instant::now();
+    let response = next.run(req).await;
+    let elapsed = start.elapsed().as_secs_f64();
+
+    if let Some(histogram) = HTTP_DURATION.get() {
+        let mut attributes = vec![
+            KeyValue::new("http.request.method", method),
+            KeyValue::new(
+                "http.response.status_code",
+                i64::from(response.status().as_u16()),
+            ),
+        ];
+        // Conditionally required by the semantic conventions: present only when a
+        // route actually matched.
+        if let Some(route) = route {
+            attributes.push(KeyValue::new("http.route", route));
+        }
+        histogram.record(elapsed, &attributes);
+    }
+    response
+}
+
+/// Map a request method onto the semantic conventions' known-method set,
+/// collapsing anything else to `_OTHER` (see [`KNOWN_METHODS`]).
+fn normalise_method(method: &str) -> &'static str {
+    KNOWN_METHODS
+        .iter()
+        .find(|known| **known == method)
+        .copied()
+        .unwrap_or("_OTHER")
+}
+
+/// Record one serve's estimated peak decode memory, as carried back from the
+/// engine by [`crate::ffi::serve_timings_take`]. A zero estimate means no decode
+/// ran (cache hit, HEAD, or passthrough) and is not a sample.
+pub(crate) fn record_decode_estimate(estimate_bytes: u64) {
+    if estimate_bytes == 0 {
+        return;
+    }
+    if let Some(histogram) = DECODE_ESTIMATE.get() {
+        histogram.record(estimate_bytes, &[]);
+    }
 }
 
 /// The 15 live monotonic counters: OTel name, description, and the field to read

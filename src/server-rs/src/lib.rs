@@ -279,8 +279,8 @@ async fn flush_telemetry(otel: telemetry::Telemetry) {
 
 /// Build the axum application. `/health` + `/favicon.ico` are Rust-native and
 /// never touch the FFI; every other path is the IIIF catch-all, which classifies,
-/// validates, and drives the engine seam. The CORS, concurrency, and OTel
-/// layers wrap this.
+/// validates, and drives the engine seam. The CORS, concurrency, OTel, and
+/// request-duration layers wrap this.
 pub fn app(state: Arc<routes::AppState>) -> Router {
     use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
     let mut router = Router::new()
@@ -332,8 +332,12 @@ pub fn app(state: Arc<routes::AppState>) -> Router {
     router
         .layer(OtelInResponseLayer)
         .layer(OtelAxumLayer::default())
+        // Outermost, so the recorded duration spans the whole in-router path
+        // (tracing layers included) rather than just the handler.
+        .layer(axum::middleware::from_fn(metrics::record_http_duration))
         // Registered after the layers so liveness / asset probes never enter the
-        // trace pipeline — they also bypass the engine pool.
+        // trace pipeline or the latency histogram — they also bypass the engine
+        // pool.
         .route("/health", get(health))
         .route("/favicon.ico", get(favicon))
         .with_state(state)
