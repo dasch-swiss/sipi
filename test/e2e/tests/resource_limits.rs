@@ -1,7 +1,7 @@
 mod common;
 
 use common::{client, server};
-use sipi_e2e::{http_client, test_data_dir, SipiServer};
+use sipi_e2e::{http_client, poll_cache_file_count, test_data_dir, SipiServer};
 
 // =============================================================================
 // Resource limits tests — verify server handles heavy load without crashes
@@ -9,20 +9,16 @@ use sipi_e2e::{http_client, test_data_dir, SipiServer};
 
 #[test]
 fn sustained_load_memory_growth() {
-    // Send 100+ sequential requests for large images, check that /metrics
-    // doesn't show unbounded growth in cache or memory.
+    // Send 100+ sequential requests for large images and check the cache does not
+    // grow unboundedly. Pinned on the on-disk file count under `cache_dir`, per
+    // the DEV-6659 repin in `cache.rs`: the shell serves no `/metrics` route, so
+    // the original scrape silently yielded no reading and the growth assertion
+    // below never ran.
     let srv = server();
     let c = client();
+    let cache_dir = test_data_dir().join("cache");
 
-    // Capture initial metrics
-    let initial_metrics = c
-        .get(format!("{}/metrics", srv.base_url))
-        .send()
-        .expect("initial metrics request failed")
-        .text()
-        .unwrap_or_default();
-
-    let initial_cache_files = extract_metric(&initial_metrics, "sipi_cache_files");
+    let initial_cache_files = poll_cache_file_count(&cache_dir, |_| true);
 
     // Send 100 sequential requests alternating between info.json and image delivery.
     // The musl static binary can drop individual connections under sustained load
@@ -59,28 +55,25 @@ fn sustained_load_memory_growth() {
         max_failures
     );
 
-    // Check final metrics
-    let final_metrics = c
-        .get(format!("{}/metrics", srv.base_url))
-        .send()
-        .expect("final metrics request failed")
-        .text()
-        .unwrap_or_default();
-
-    let final_cache_files = extract_metric(&final_metrics, "sipi_cache_files");
-
-    // Cache files should not grow unboundedly — with the same image requested
-    // repeatedly, cache should stabilize (not grow by 100)
-    if let (Some(initial), Some(final_val)) = (initial_cache_files, final_cache_files) {
-        let growth = final_val - initial;
-        assert!(
-            growth < 20.0,
-            "cache files grew by {} over 100 requests (initial={}, final={}) — possible leak",
-            growth,
-            initial,
-            final_val
-        );
-    }
+    // Cache files should not grow unboundedly — the same two derivatives are
+    // requested over and over, so the count stabilises rather than growing by 100.
+    let final_cache_files = poll_cache_file_count(&cache_dir, |c| c > 0);
+    // Guard the guard: with an empty cache dir the growth check below would pass
+    // for the wrong reason, which is how the original `/metrics` version of this
+    // test went silently vacuous.
+    assert!(
+        final_cache_files > 0,
+        "100 image requests should have populated the cache at {}",
+        cache_dir.display()
+    );
+    let growth = final_cache_files.saturating_sub(initial_cache_files);
+    assert!(
+        growth < 20,
+        "cache files grew by {} over 100 requests (initial={}, final={}) — possible leak",
+        growth,
+        initial_cache_files,
+        final_cache_files
+    );
 
     // Verify server still responsive
     let health = c
@@ -344,21 +337,4 @@ routes = {}
     // cleans up the config file, so no manual remove is needed.)
     drop(srv);
     drop(cache_tmp);
-}
-
-/// Extract a gauge metric value from Prometheus text format.
-fn extract_metric(metrics_text: &str, metric_name: &str) -> Option<f64> {
-    for line in metrics_text.lines() {
-        if line.starts_with('#') {
-            continue;
-        }
-        if line.starts_with(metric_name) {
-            // Format: metric_name{labels} value or metric_name value
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 2 {
-                return parts.last().and_then(|v| v.parse().ok());
-            }
-        }
-    }
-    None
 }
