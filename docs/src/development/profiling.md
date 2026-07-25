@@ -23,13 +23,14 @@ wastes effort.
 
 A note on the production stack, because the three pieces are often conflated:
 **OpenTelemetry** is the instrumentation *standard* (how telemetry is emitted),
-**Prometheus** is the aggregate *metrics store* (the counters/gauges/histograms
-behind `GET /metrics`), and **Grafana** is the *visualization* layer on top.
-Sipi's Rust server emits **OpenTelemetry traces + OTLP metrics** (with Sentry for
-errors): per-request spans via `OtelAxumLayer`, W3C `traceparent` continuation
-in and out (incl. propagation to dsp-api on the Lua preflight's outbound call),
-and the engine counters bridged to OTLP. The retained C++ server still exposes
-the aggregate Prometheus `GET /metrics` scrape until the strangler cutover. None
+**Prometheus** is the aggregate *metrics store* (the counters/gauges/histograms,
+which the collector derives from the OTLP stream), and **Grafana** is the
+*visualization* layer on top. Sipi's Rust server emits **OpenTelemetry traces +
+OTLP metrics** (with Sentry for errors): per-request spans via `OtelAxumLayer`,
+W3C `traceparent` continuation in and out (incl. propagation to dsp-api on the
+Lua preflight's outbound call), the engine counters bridged to OTLP, and the
+`http.server.request.duration` latency histogram. The `GET /metrics` scrape
+survives only on the retained C++ oracle, which is never deployed. None
 of them tell you which C++ function consumed the milliseconds — that is Tracy's job.
 
 ## The loop
