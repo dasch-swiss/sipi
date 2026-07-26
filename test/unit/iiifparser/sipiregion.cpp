@@ -106,3 +106,32 @@ TEST(SipiRegion, CoordsReduceOneIsIdentity)
   region.crop_coords(400, 300, x, y, w, h);
   EXPECT_TRUE(x == 10 && y == 10 && w == 390 && h == 290);
 }
+
+// Cache-key stability: the canonical URL crops on FULL-resolution dims with the
+// default reduce=1, while the TIFF decode path crops on the reduced LEVEL dims
+// with set_reduce(ratio). Both must describe the same physical region so the
+// on-disk cache key matches the bytes decoded. For every region kind the
+// level-space crop must equal the full-resolution crop divided by the ratio.
+TEST(SipiRegion, FullResAndLevelCropsDescribeSameRegion)
+{
+  const size_t full_w = 400, full_h = 300;
+  const float ratio = 2.F;// a /2 pyramid level
+  const size_t lvl_w = full_w / static_cast<size_t>(ratio);
+  const size_t lvl_h = full_h / static_cast<size_t>(ratio);
+
+  for (const char *spec : { "40,30,200,150", "square", "pct:10,10,50,50" }) {
+    auto canonical = Sipi::SipiRegion(spec);// reduce defaults to 1
+    auto decode = Sipi::SipiRegion(spec);
+    decode.set_reduce(ratio);
+
+    int cx, cy, dx, dy;
+    size_t cw, ch, dw, dh;
+    canonical.crop_coords(full_w, full_h, cx, cy, cw, ch);
+    decode.crop_coords(lvl_w, lvl_h, dx, dy, dw, dh);
+
+    EXPECT_EQ(static_cast<size_t>(dx), static_cast<size_t>(cx) / 2) << spec;
+    EXPECT_EQ(static_cast<size_t>(dy), static_cast<size_t>(cy) / 2) << spec;
+    EXPECT_EQ(dw, cw / 2) << spec;
+    EXPECT_EQ(dh, ch / 2) << spec;
+  }
+}

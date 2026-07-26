@@ -106,3 +106,27 @@ TEST(SipiSize, PercentReduceClampedByMaxReduce)
   Sipi::SipiSize("pct:5").get_size(4000, 3000, w, h, reduce, reduce_only);
   EXPECT_EQ(reduce, 2);
 }
+
+// Exact power-of-two percentages land on a pyramid level with no residual scale,
+// so reduce_only is set. This locks the redonly flag the misleading in-source
+// TODO once questioned: pct:25 == 1/4 (exponent 2) and pct:12.5 == 1/8
+// (exponent 3) are both reduce-only.
+TEST(SipiSize, PercentExactPowerOfTwoIsReduceOnly)
+{
+  size_t w, h;
+
+  {
+    int reduce = 10000;
+    bool reduce_only = false;
+    Sipi::SipiSize("pct:25").get_size(400, 300, w, h, reduce, reduce_only);
+    EXPECT_EQ(reduce, 2);
+    EXPECT_TRUE(reduce_only);
+  }
+  {
+    int reduce = 10000;
+    bool reduce_only = false;
+    Sipi::SipiSize("pct:12.5").get_size(400, 300, w, h, reduce, reduce_only);
+    EXPECT_EQ(reduce, 3);
+    EXPECT_TRUE(reduce_only);
+  }
+}
