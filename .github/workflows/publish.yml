@@ -50,7 +50,21 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       - name: Build Docker image (Bazel rules_oci)
-        run: just bazel-docker-build-${{ matrix.arch }} ${{ steps.setup.outputs.flags }}
+        run: just bazel-docker-build-${{ matrix.arch }} ${{ steps.setup.outputs.flags }} --build_event_json_file=bep-validate-${{ matrix.arch }}.json
+      # Attach the Build Event Protocol JSON so the action/remote cache hit
+      # rate can be analyzed offline (cf. ci.yml). Bazel emits one
+      # BuildMetrics event per invocation whose actionSummary.runnerCount[]
+      # breaks actions down by runner type (total / remote cache hit /
+      # remote / local / internal) — the cache-hit signal, present in the
+      # default BEP. `always()` so a failed build's breakdown (often the
+      # most interesting) is still captured.
+      - name: Upload build event JSON (cache-hit-rate analysis)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bep-validate-${{ matrix.arch }}
+          path: bep-validate-${{ matrix.arch }}.json
+          retention-days: 30
       # Exercise the release-only debug-symbol extraction in the validation
       # stage so it can't silently break at publish time (as it did for
       # v6.0.0). The artifact is discarded here — publish-docker rebuilds it
@@ -121,7 +135,17 @@ jobs:
         # Binary version + OCI image tag come from version.txt, which
         # release-please updates before cutting the tag — no extra
         # plumbing required to keep them in sync with `${github.ref_name}`.
-        run: just bazel-docker-build-${{ matrix.arch }} ${{ steps.setup.outputs.flags }}
+        run: just bazel-docker-build-${{ matrix.arch }} ${{ steps.setup.outputs.flags }} --build_event_json_file=bep-publish-${{ matrix.arch }}.json
+      # Attach the Build Event Protocol JSON so the action/remote cache hit
+      # rate can be analyzed offline (cf. ci.yml). See the validate-docker
+      # job for the actionSummary.runnerCount[] breakdown this captures.
+      - name: Upload build event JSON (cache-hit-rate analysis)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bep-publish-${{ matrix.arch }}
+          path: bep-publish-${{ matrix.arch }}.json
+          retention-days: 30
       - name: Extract debug symbols for Sentry upload
         # The genrule depends on `:sipi`, already built and in the
         # remote cache from the build step just above.
