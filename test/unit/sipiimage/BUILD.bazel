@@ -13,6 +13,10 @@ _LINUX_GTEST_FILTER = {"GTEST_FILTER": "-SipiImage.PALETTE_Conversion"}
 cc_test(
     name = "sipi_image_tests",
     srcs = glob(["*.cpp"]),
+    # 98 test cases run serially in one process take ~50s+. Bazel shards the
+    # target into parallel test actions; the gtest_main honours the
+    # GTEST_TOTAL_SHARDS / GTEST_SHARD_INDEX env Bazel sets per shard.
+    shard_count = 8,
     data = ["//test/_test_data:images"],
     env = select({
         "@platforms//os:linux": {"SIPI_WORKSPACE_ROOT": "."} | _LINUX_GTEST_FILTER,
