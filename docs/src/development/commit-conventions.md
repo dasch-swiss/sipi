@@ -34,28 +34,30 @@ to determine SemVer bumps and generate the changelog —
     type(scope): subject
     body
 
-| Prefix | Meaning | Changelog section | Version bump |
+**Every commit has a type and a scope** — both are mandatory (see
+[Scopes](#scopes)). This is the whole table; there are exactly eight types:
+
+| Type | Meaning | Changelog section | Version bump |
 |--------|---------|-------------------|--------------|
 | `feat` | New user-visible functionality | Features | minor |
 | `fix` | Bug fix (see [What `fix:` means](#what-fix-means)) | Bug Fixes | patch |
 | `perf` | Performance improvement | Performance Improvements | patch |
-| `revert` | Revert of a previous commit | Reverts | patch |
 | `refactor` | Code restructuring, no behavior change | Code Refactoring | patch |
 | `docs` | Documentation | Documentation | patch |
 | `test` | Adding or refactoring tests | Tests | patch |
 | `build` | Build system or dependencies | Build System | patch |
-| `ci` | Continuous integration | Continuous Integration | patch |
-| `style` | Formatting, no code change | Styles | patch |
 | `chore` | Miscellaneous maintenance | Miscellaneous Chores | patch |
 
-Every prefix in this table is visible in the release notes, in its own section.
-The bottom seven render after Features / Bug Fixes / Performance Improvements /
-Reverts.
+Every type is visible in the release notes, in its own section, rendered in the
+order above. Because the scope is mandatory, every changelog line reads
+`concern: subject`. This table is the single human source for the type
+vocabulary; the machine source is
+[`.github/release-please/config.json`](../../../.github/release-please/config.json).
 
 Breaking changes take a `!` suffix (or a `BREAKING CHANGE:` footer) and
 bump the **major** version:
 
-    feat!: remove the deprecated cache-purge endpoint
+    feat(cache)!: remove the deprecated cache-purge endpoint
 
 Example:
 
@@ -64,6 +66,21 @@ Example:
 The release-please config sentence-cases subjects in the changelog, so
 write the subject in normal prose case (`feat(cache): add dual-limit
 eviction`, not `feat(cache): Add ...`).
+
+### Removed types
+
+`revert`, `style`, and `ci` are **not** valid types — the commit-lint gate
+rejects them, and release-please hides them if one ever slips onto `main`.
+
+- **CI/build automation** → `chore(ci): ...` (lands in Miscellaneous Chores).
+  Dividing CI into concerns is not worthwhile, and a dedicated Continuous
+  Integration changelog section is noise; it belongs under maintenance.
+- **Formatting-only changes** → fold into the functional commit, or
+  `chore(<scope>): ...`. `rustfmt`/`clang-format` are enforced gates, so a
+  standalone formatting commit should be rare.
+- **Reverts** → `fix(<scope>): revert ...` or `chore(<scope>): revert ...`
+  depending on whether it corrects released behavior. (release-please's built-in
+  revert auto-negation no longer applies; reverts are rare and handled by hand.)
 
 ### What `fix:` means
 
@@ -83,6 +100,9 @@ unrelated work, give it its **own** `fix:` commit — don't bury it inside
 the `feat:`/`refactor:` you happened to be writing.
 
 ## Scopes
+
+**A scope is mandatory.** Every commit is `type(scope): subject`, so every
+release-notes line reads `concern: subject`. There is no scopeless form.
 
 The scope names the **concern the change serves** — the module whose
 responsibility it belongs to, not the directory the edited files happen to
@@ -107,16 +127,40 @@ these names, lowercase:
 Rules:
 
 - Lowercase, kebab-case. `ci` not `CI`; `bazel` not `bazel-build`.
-- Scope is optional. Omit it for genuinely repo-wide changes
-  (`chore: ...`, `ci: ...`).
 - A commit that spans several modules may list them comma-separated:
   `refactor(cli-rs,server-rs): ...`.
 - **Concern over location.** When code for one module's responsibility lives
   under another module's directory, scope by the responsibility, not the
   enclosing directory. `server-rs/src/metrics.rs` → `observability`.
-- **If none of the enumerated scopes genuinely fits, ask the maintainer
-  before inventing a new one.** New scopes are added to the canonical
-  list in `CONVENTIONS.md` deliberately, not ad hoc.
+- **No catch-all.** There is no `repo`/`all` scope. If none of the enumerated
+  scopes genuinely fits, ask the maintainer before inventing one — new scopes
+  are added to the canonical list in `CONVENTIONS.md` deliberately, not ad hoc.
+
+The commit-lint gate enforces only that a scope is *present* (it does not yet
+restrict *which* scope — there is no closed vocabulary). The list above is the
+advisory vocabulary; keep to it.
+
+## Enforcement
+
+Commit messages are gated in CI by
+[`commitlint-rs`](https://github.com/KeisukeYamashita/commitlint-rs) via the
+`commit-lint` job in [`ci.yml`](../../../.github/workflows/ci.yml) (a composite
+action at `.github/actions/commit-lint`). The rules live in
+[`.commitlintrc.yml`](../../../.commitlintrc.yml): the `type` allowlist above is
+mandatory, `scope-empty` makes the scope mandatory, and the subject must be
+non-empty.
+
+Run the same check locally before pushing:
+
+    just commit-lint            # lints origin/main..HEAD
+    just commit-lint <base-ref> # lints <base-ref>..HEAD
+
+`commitlint-rs` is in the Nix dev shell (`nix develop`); CI installs it with
+`cargo install`.
+
+Merge commits are skipped by the linter (message rules do not apply to them). The
+rebase workflow is enforced separately by the `require linear history`
+branch-protection rule, which blocks any merge commit from landing on `main`.
 
 ## Commit Organization
 

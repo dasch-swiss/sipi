@@ -121,35 +121,18 @@ Releases are published on Dockerhub: https://hub.docker.com/repository/docker/da
 
 ## How should I write my commits?
 
-We are using [Conventional Commit messages](https://www.conventionalcommits.org/).
+We use [Conventional Commit messages](https://www.conventionalcommits.org/), and
+**every commit needs both a type and a scope** — `type(scope): subject`. The most
+important prefixes:
 
-The most important prefixes you should have in mind are:
+* `fix(scope):` — a bug fix, a [SemVer](https://semver.org/) patch.
+* `feat(scope):` — a new feature, a SemVer minor.
+* `feat(scope)!:`, `fix(scope)!:`, etc. — a breaking change (the `!`), a SemVer major.
 
-* `fix:` which represents bug fixes, and correlates to a [SemVer](https://semver.org/)
-  patch.
-* `feat:` which represents a new feature, and correlates to a SemVer minor.
-* `feat!:`,  or `fix!:`, `refactor!:`, etc., which represent a breaking change
-  (indicated by the `!`) and will result in a SemVer major.
-
-Every prefix is visible in the release notes. This is the complete list, in the
-order the sections are rendered:
-
-- 'feat' -> section: 'Features'
-- 'feature' -> section: 'Features'
-- 'fix' -> section: 'Bug Fixes'
-- 'perf' -> section: 'Performance Improvements'
-- 'revert' -> section: 'Reverts'
-- 'docs' -> section: 'Documentation'
-- 'style' -> section: 'Styles'
-- 'chore' -> section: 'Miscellaneous Chores'
-- 'refactor' -> section: 'Code Refactoring'
-- 'test' -> section: 'Tests'
-- 'build' -> section: 'Build System'
-- 'ci' -> section: 'Continuous Integration'
-
-The canonical prefix-to-release mapping, including the SemVer effect of each
-prefix, lives in
-[docs/src/development/ci.md](docs/src/development/ci.md#release-automation-release-please).
+A CI gate (`commitlint-rs`) enforces the type + mandatory scope. The full type
+list, the scope vocabulary, what `fix:` means, and how to run the check locally
+(`just commit-lint`) all live in one place —
+[docs/src/development/commit-conventions.md](docs/src/development/commit-conventions.md).
 
 # Contact Information
 
