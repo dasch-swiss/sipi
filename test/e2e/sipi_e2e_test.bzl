@@ -53,9 +53,11 @@ What the macro injects:
       - `--test-threads=1`       sipi can't tolerate parallel test load
                                  on the JP2 → JPEG decode path
                                  (musl-static-binary connection drops).
-                                 Combined with `tags = ["exclusive"]`
-                                 this forces serial execution within
-                                 AND between sibling e2e targets.
+                                 Combined with `tags = ["exclusive-if-local"]`
+                                 this forces serial execution within AND
+                                 between sibling e2e targets on a shared
+                                 local runner; on RBE each target runs on
+                                 its own isolated worker and they parallelise.
 
   * `tags`:
       - `exclusive-if-local`     When tests run locally — dev machines, and the
@@ -120,8 +122,8 @@ def sipi_e2e_test(
       extra_data: additional runtime files. Most targets don't need any;
         when a test reads a file outside `:test_fixtures` add it here.
       extra_env: additional env vars (merged on top of the shared dict).
-      extra_tags: additional Bazel tags (merged on top of `["exclusive",
-        "no-sandbox"]`).
+      extra_tags: additional Bazel tags (merged on top of
+        `["exclusive-if-local", "no-sandbox"]`).
     """
     base_env = {
         # The Rust shell is the binary under test: it

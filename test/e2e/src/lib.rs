@@ -737,6 +737,362 @@ pub fn test_data_dir() -> PathBuf {
     repo_root().join("test").join("_test_data")
 }
 
+// =============================================================================
+// CLI-mode test helpers (offline `sipi convert`/`query`/... verbs).
+//
+// Shared by the `cli*` e2e targets. The JP2 codec work is heavy under ASan, so
+// the heavy conversions are split out of `//test/e2e:cli` into the sibling
+// `//test/e2e:cli_conversions` target, which fans them out across threads via
+// `run_conversions`; these helpers keep both files small and their assertions
+// identical.
+// =============================================================================
+
+/// Run `sipi convert <input> <output> --format <format>` from the test-data
+/// dir and return the process output.
+pub fn cli_convert(input: &str, output: &str, format: &str) -> std::process::Output {
+    Command::new(sipi_bin_path())
+        .arg("convert")
+        .arg(input)
+        .arg(output)
+        .arg("--format")
+        .arg(format)
+        .current_dir(test_data_dir())
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to run sipi CLI: {}", e))
+}
+
+/// Run `sipi <args...>` from the test-data dir and return the process output.
+pub fn cli_run(args: &[&str]) -> std::process::Output {
+    Command::new(sipi_bin_path())
+        .args(args)
+        .current_dir(test_data_dir())
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to run sipi {:?}: {}", args, e))
+}
+
+/// A scratch path under `$TMPDIR` (or `/tmp`) for CLI conversion outputs.
+pub fn cli_tmp_path(name: &str) -> PathBuf {
+    let dir = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string());
+    PathBuf::from(dir).join(name)
+}
+
+/// Decode `file<i>.jp2` from the ISO 15444-4 conformance set to TIFF and assert
+/// the output exists and is non-empty (port of `test_iso_15444_4_decode_jp2`).
+pub fn assert_jp2_decode(i: u32) {
+    let input = test_data_dir()
+        .join("images/iso-15444-4/testfiles_jp2")
+        .join(format!("file{}.jp2", i));
+    let output = cli_tmp_path(&format!("sipi_cli_decode_{}.tif", i));
+
+    let result = cli_convert(input.to_str().unwrap(), output.to_str().unwrap(), "tif");
+    assert!(
+        result.status.success(),
+        "JP2→TIFF decode for file{}.jp2 failed: {}",
+        i,
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(output.exists(), "output TIFF should exist for file{}", i);
+    let meta = std::fs::metadata(&output).expect("read output metadata");
+    assert!(
+        meta.len() > 0,
+        "output TIFF should not be empty for file{}",
+        i
+    );
+
+    let _ = std::fs::remove_file(&output);
+}
+
+/// TIFF → JP2 → TIFF round-trip for `reference_jp2/jp2_<i>.tif` (port of
+/// `test_iso_15444_4_round_trip`): assert each step succeeds and the
+/// round-tripped TIFF is a sane size. No-op if the fixture is absent.
+pub fn assert_jp2_roundtrip(i: u32) {
+    let reference_tif = test_data_dir()
+        .join("images/iso-15444-4/reference_jp2")
+        .join(format!("jp2_{}.tif", i));
+
+    if !reference_tif.exists() {
+        eprintln!("Skipping round-trip for jp2_{}.tif — not found", i);
+        return;
+    }
+
+    let intermediate_jp2 = cli_tmp_path(&format!("sipi_cli_rt_{}.jp2", i));
+    let output_tif = cli_tmp_path(&format!("sipi_cli_rt_{}.tif", i));
+
+    let result1 = cli_convert(
+        reference_tif.to_str().unwrap(),
+        intermediate_jp2.to_str().unwrap(),
+        "jpx",
+    );
+    assert!(
+        result1.status.success(),
+        "TIFF→JP2 for jp2_{}.tif failed: {}",
+        i,
+        String::from_utf8_lossy(&result1.stderr)
+    );
+    assert!(
+        intermediate_jp2.exists(),
+        "intermediate JP2 should exist for file {}",
+        i
+    );
+
+    let result2 = cli_convert(
+        intermediate_jp2.to_str().unwrap(),
+        output_tif.to_str().unwrap(),
+        "tif",
+    );
+    assert!(
+        result2.status.success(),
+        "JP2→TIFF round-trip for file {} failed: {}",
+        i,
+        String::from_utf8_lossy(&result2.stderr)
+    );
+    assert!(
+        output_tif.exists(),
+        "round-trip TIFF should exist for file {}",
+        i
+    );
+
+    let ref_size = std::fs::metadata(&reference_tif).unwrap().len();
+    let out_size = std::fs::metadata(&output_tif).unwrap().len();
+    assert!(
+        out_size > 0,
+        "round-trip TIFF for file {} should not be empty",
+        i
+    );
+    // Round-trip may not be byte-identical, but should be within ~2x size.
+    assert!(
+        out_size < ref_size * 3,
+        "round-trip TIFF for file {} is suspiciously large ({} vs ref {})",
+        i,
+        out_size,
+        ref_size
+    );
+
+    let _ = std::fs::remove_file(&intermediate_jp2);
+    let _ = std::fs::remove_file(&output_tif);
+}
+
+/// Convert a TIFF to JP2 and back, then to JPEG and PNG, asserting each output
+/// carries valid magic bytes (port of the `cli_metadata_fidelity` test).
+pub fn assert_metadata_fidelity() {
+    let input = test_data_dir().join("images/unit/lena512.tif");
+    if !input.exists() {
+        eprintln!("Skipping metadata fidelity: lena512.tif not found");
+        return;
+    }
+
+    // TIFF → JP2 → TIFF, then assert the round-trip is a valid TIFF.
+    let jp2_output = cli_tmp_path("sipi_cli_meta.jp2");
+    let r1 = cli_convert(input.to_str().unwrap(), jp2_output.to_str().unwrap(), "jpx");
+    assert!(
+        r1.status.success(),
+        "TIFF→JP2 metadata test failed: {}",
+        String::from_utf8_lossy(&r1.stderr)
+    );
+    let tif_output = cli_tmp_path("sipi_cli_meta_rt.tif");
+    let r2 = cli_convert(
+        jp2_output.to_str().unwrap(),
+        tif_output.to_str().unwrap(),
+        "tif",
+    );
+    assert!(
+        r2.status.success(),
+        "JP2→TIFF metadata test failed: {}",
+        String::from_utf8_lossy(&r2.stderr)
+    );
+    let tif_bytes = std::fs::read(&tif_output).expect("read output TIFF");
+    assert!(tif_bytes.len() > 4, "output TIFF too small");
+    let is_tiff = (tif_bytes[0] == b'I' && tif_bytes[1] == b'I')
+        || (tif_bytes[0] == b'M' && tif_bytes[1] == b'M');
+    assert!(
+        is_tiff,
+        "output should be valid TIFF (starts with II or MM)"
+    );
+
+    // Format diversity: TIFF → JPEG and TIFF → PNG.
+    let jpg_output = cli_tmp_path("sipi_cli_meta.jpg");
+    let r3 = cli_convert(input.to_str().unwrap(), jpg_output.to_str().unwrap(), "jpg");
+    assert!(
+        r3.status.success(),
+        "TIFF→JPEG conversion failed: {}",
+        String::from_utf8_lossy(&r3.stderr)
+    );
+    let jpg_bytes = std::fs::read(&jpg_output).expect("read JPEG output");
+    assert!(
+        jpg_bytes.len() > 2 && jpg_bytes[0] == 0xFF && jpg_bytes[1] == 0xD8,
+        "output should be valid JPEG"
+    );
+
+    let png_output = cli_tmp_path("sipi_cli_meta.png");
+    let r4 = cli_convert(input.to_str().unwrap(), png_output.to_str().unwrap(), "png");
+    assert!(
+        r4.status.success(),
+        "TIFF→PNG conversion failed: {}",
+        String::from_utf8_lossy(&r4.stderr)
+    );
+    let png_bytes = std::fs::read(&png_output).expect("read PNG output");
+    assert!(
+        png_bytes.len() > 8 && &png_bytes[1..4] == b"PNG",
+        "output should be valid PNG"
+    );
+
+    for path in [&jp2_output, &tif_output, &jpg_output, &png_output] {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+/// The ADR-0009 Service → Access pipeline through the CLI (port of
+/// `cli_verify_pipeline_service_and_access_files`): `convert service-file`
+/// stamps an Essentials packet that `verify service-file` accepts, then
+/// `convert access-file` drops it and `verify access-file` accepts the result;
+/// the cross-checks assert each verify mode rejects the wrong file kind.
+pub fn assert_verify_pipeline() {
+    let service = cli_tmp_path("sipi_cli_verify_service.jp2");
+    let access = cli_tmp_path("sipi_cli_verify_access.jpg");
+    let _ = std::fs::remove_file(&service);
+    let _ = std::fs::remove_file(&access);
+
+    let r1 = cli_run(&[
+        "convert",
+        "service-file",
+        "images/unit/lena512.tif",
+        service.to_str().unwrap(),
+    ]);
+    assert!(
+        r1.status.success(),
+        "convert service-file must succeed; stderr:\n{}",
+        String::from_utf8_lossy(&r1.stderr)
+    );
+
+    let r2 = cli_run(&["verify", "service-file", service.to_str().unwrap()]);
+    assert!(
+        r2.status.success(),
+        "verify service-file must accept its own convert service-file output; stderr:\n{}",
+        String::from_utf8_lossy(&r2.stderr)
+    );
+
+    let r3 = cli_run(&[
+        "convert",
+        "access-file",
+        service.to_str().unwrap(),
+        access.to_str().unwrap(),
+    ]);
+    assert!(
+        r3.status.success(),
+        "convert access-file must succeed on a Service File input; stderr:\n{}",
+        String::from_utf8_lossy(&r3.stderr)
+    );
+
+    let r4 = cli_run(&["verify", "access-file", access.to_str().unwrap()]);
+    assert!(
+        r4.status.success(),
+        "verify access-file must accept its own convert access-file output; stderr:\n{}",
+        String::from_utf8_lossy(&r4.stderr)
+    );
+
+    // Cross-checks: an Access File must fail verify service-file (no
+    // Essentials) and a Service File must fail verify access-file (carries one).
+    let r5 = cli_run(&["verify", "service-file", access.to_str().unwrap()]);
+    assert!(
+        !r5.status.success(),
+        "verify service-file must reject an Access File (no Essentials packet)"
+    );
+    let r6 = cli_run(&["verify", "access-file", service.to_str().unwrap()]);
+    assert!(
+        !r6.status.success(),
+        "verify access-file must reject a Service File (carries an Essentials packet)"
+    );
+
+    let _ = std::fs::remove_file(&service);
+    let _ = std::fs::remove_file(&access);
+}
+
+/// A labelled CLI-conversion task for [`run_conversions`]. The `label` is what
+/// the executor prints if the task fails, so it should name the conversion
+/// precisely (e.g. `"jp2_roundtrip_7"`).
+pub struct ConversionTask {
+    label: String,
+    run: Box<dyn FnOnce() + Send>,
+}
+
+/// Build a labelled [`ConversionTask`] from a closure (usually a call to one of
+/// the `assert_*` conversion helpers).
+pub fn conversion_task(
+    label: impl Into<String>,
+    run: impl FnOnce() + Send + 'static,
+) -> ConversionTask {
+    ConversionTask {
+        label: label.into(),
+        run: Box::new(run),
+    }
+}
+
+/// Thread count for [`run_conversions`]: `SIPI_E2E_CONVERT_THREADS` if set and
+/// parseable, otherwise the machine's available parallelism. A single-core
+/// action degrades to serial execution (no regression versus the old one-test
+/// form); a many-core RBE worker fans the conversions out.
+pub fn conversion_threads() -> usize {
+    std::env::var("SIPI_E2E_CONVERT_THREADS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .map(|n| n.max(1))
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
+}
+
+/// Run `tasks` across up to `threads` OS threads. Each task spawns its own
+/// `sipi` subprocess, so they are independent. Every task is isolated with
+/// `catch_unwind`, so one failure never hides another: ALL failures are
+/// collected across every task, then reported together — the resulting panic
+/// lists each failed task by its label. (The individual panic messages, with
+/// their `file:line`, still print to stderr as they occur.)
+pub fn run_conversions(tasks: Vec<ConversionTask>, threads: usize) {
+    let threads = threads.clamp(1, tasks.len().max(1));
+
+    // Round-robin the tasks into `threads` buckets so the work spreads evenly.
+    let mut buckets: Vec<Vec<ConversionTask>> = (0..threads).map(|_| Vec::new()).collect();
+    for (i, task) in tasks.into_iter().enumerate() {
+        buckets[i % threads].push(task);
+    }
+
+    let handles: Vec<_> = buckets
+        .into_iter()
+        .map(|bucket| {
+            std::thread::spawn(move || {
+                let mut failures: Vec<String> = Vec::new();
+                for task in bucket {
+                    let ConversionTask { label, run } = task;
+                    if let Err(payload) =
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(run))
+                    {
+                        let msg = payload
+                            .downcast_ref::<String>()
+                            .map(|s| s.as_str())
+                            .or_else(|| payload.downcast_ref::<&str>().copied())
+                            .unwrap_or("<non-string panic>");
+                        failures.push(format!("{label}: {msg}"));
+                    }
+                }
+                failures
+            })
+        })
+        .collect();
+
+    let mut failures: Vec<String> = Vec::new();
+    for handle in handles {
+        match handle.join() {
+            Ok(mut bucket_failures) => failures.append(&mut bucket_failures),
+            Err(_) => failures.push("<a conversion worker thread itself panicked>".to_string()),
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "{} conversion task(s) failed:\n  - {}",
+        failures.len(),
+        failures.join("\n  - ")
+    );
+}
+
 /// Terminate any process listening on the given port (cleanup from previous
 /// test runs). Sends SIGTERM first and polls for exit; falls back to SIGKILL
 /// only if the process is still alive after the deadline. Forced SIGKILL
