@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -987,6 +988,126 @@ bool SipiImage::scaleMedium(size_t nnx, size_t nny)
 /*==========================================================================*/
 
 
+namespace {
+
+// Separable resample weights for one axis, in CSR layout: output sample `i`
+// is the weighted sum of source samples idx[offset[i] .. offset[i+1]). The
+// per-output weights sum to 1. Shrinking uses area (box) averaging for an
+// anti-aliased downscale; enlarging uses 2-tap linear interpolation; an
+// unchanged axis is an identity passthrough.
+struct AxisWeights
+{
+  std::vector<size_t> offset;// dst + 1 row pointers into idx/wt
+  std::vector<size_t> idx;   // source sample indices
+  std::vector<double> wt;    // weights (each output's weights sum to 1)
+};
+
+AxisWeights build_axis_weights(size_t src, size_t dst)
+{
+  AxisWeights w;
+  w.offset.reserve(dst + 1);
+
+  if (dst == src) {
+    for (size_t i = 0; i < dst; ++i) {
+      w.offset.push_back(w.idx.size());
+      w.idx.push_back(i);
+      w.wt.push_back(1.0);
+    }
+    w.offset.push_back(w.idx.size());
+    return w;
+  }
+
+  if (dst < src) {
+    // Area averaging: output i covers the source interval [i*ratio, (i+1)*ratio);
+    // each covered source sample contributes its overlap length, normalised by
+    // the interval width so the weights sum to 1.
+    const double ratio = static_cast<double>(src) / static_cast<double>(dst);
+    for (size_t i = 0; i < dst; ++i) {
+      w.offset.push_back(w.idx.size());
+      const double start = static_cast<double>(i) * ratio;
+      const double end = static_cast<double>(i + 1) * ratio;
+      for (auto s = static_cast<size_t>(std::floor(start)); static_cast<double>(s) < end && s < src; ++s) {
+        const double lo = std::max(start, static_cast<double>(s));
+        const double hi = std::min(end, static_cast<double>(s + 1));
+        const double cover = hi - lo;
+        if (cover <= 0.0) { continue; }
+        w.idx.push_back(s);
+        w.wt.push_back(cover / ratio);
+      }
+    }
+    w.offset.push_back(w.idx.size());
+    return w;
+  }
+
+  // Enlarge: 2-tap linear interpolation. The sample position matches the legacy
+  // mapping i*(src-1)/(dst-1), so an exact integer upscale lands on grid points.
+  for (size_t i = 0; i < dst; ++i) {
+    w.offset.push_back(w.idx.size());
+    const double pos =
+      (dst > 1) ? static_cast<double>(i) * static_cast<double>(src - 1) / static_cast<double>(dst - 1) : 0.0;
+    const auto s0 = static_cast<size_t>(std::floor(pos));
+    const double frac = pos - static_cast<double>(s0);
+    const size_t s1 = std::min(s0 + 1, src - 1);
+    w.idx.push_back(s0);
+    w.wt.push_back(1.0 - frac);
+    if (s1 != s0) {
+      w.idx.push_back(s1);
+      w.wt.push_back(frac);
+    }
+  }
+  w.offset.push_back(w.idx.size());
+  return w;
+}
+
+// Two-pass separable resample of an interleaved image (nx*ny*nc, sample type T)
+// to nnx*nny. The horizontal pass resamples nx→nnx into a double scratch buffer;
+// the vertical pass resamples ny→nny and rounds/clamps back into a byte buffer
+// carrying T-typed samples. Intermediates are `double` — as the previous scale()
+// path was — so the result is bit-reproducible across the x86-64 and aarch64
+// targets (a float accumulator drifts by an LSB between them under FMA
+// contraction, which would break the byte-exact approval goldens).
+template<typename T>
+std::vector<byte> resample_separable(const T *in, size_t nx, size_t ny, size_t nc, size_t nnx, size_t nny,
+  const AxisWeights &wx, const AxisWeights &wy)
+{
+  constexpr long maxval = static_cast<long>(std::numeric_limits<T>::max());
+
+  std::vector<double> tmp(ny * nnx * nc);
+  for (size_t y = 0; y < ny; ++y) {
+    const T *row = in + y * nx * nc;
+    double *orow = tmp.data() + y * nnx * nc;
+    for (size_t i = 0; i < nnx; ++i) {
+      for (size_t k = 0; k < nc; ++k) {
+        double acc = 0.0;
+        for (size_t t = wx.offset[i]; t < wx.offset[i + 1]; ++t) {
+          acc += wx.wt[t] * static_cast<double>(row[wx.idx[t] * nc + k]);
+        }
+        orow[i * nc + k] = acc;
+      }
+    }
+  }
+
+  std::vector<byte> out(nnx * nny * nc * sizeof(T));
+  T *outp = reinterpret_cast<T *>(out.data());
+  for (size_t j = 0; j < nny; ++j) {
+    T *orow = outp + j * nnx * nc;
+    for (size_t i = 0; i < nnx; ++i) {
+      for (size_t k = 0; k < nc; ++k) {
+        double acc = 0.0;
+        for (size_t t = wy.offset[j]; t < wy.offset[j + 1]; ++t) {
+          acc += wy.wt[t] * tmp[(wy.idx[t] * nnx + i) * nc + k];
+        }
+        long v = std::lround(acc);
+        v = std::clamp(v, 0L, maxval);
+        orow[i * nc + k] = static_cast<T>(v);
+      }
+    }
+  }
+  return out;
+}
+
+}// namespace
+
 bool SipiImage::scale(size_t nnx, size_t nny)
 {
   SIPI_ZONE_N("SipiImage::scale");
@@ -995,111 +1116,19 @@ bool SipiImage::scale(size_t nnx, size_t nny)
     return false;
   }
 
-  size_t iix = 1, iiy = 1;
-  size_t nnnx, nnny;
-
-  //
-  // if the scaling is less than 1 (that is, the image gets smaller), we first
-  // expand it to a integer multiple of the desired size, and then we just
-  // avarage the number of pixels. This is the "proper" way of downscale an
-  // image...
-  //
-  if (nnx < nx) {
-    while (nnx * iix < nx) iix++;
-    nnnx = nnx * iix;
-  } else {
-    nnnx = nnx;
-  }
-
-  if (nny < ny) {
-    while (nny * iiy < ny) iiy++;
-    nnny = nny * iiy;
-  } else {
-    nnny = nny;
-  }
-
-  auto xlut = std::make_unique<double[]>(nnnx);
-  auto ylut = std::make_unique<double[]>(nnny);
-
-  for (size_t i = 0; i < nnnx; i++) { xlut[i] = (double)(i * (nx - 1)) / (double)(nnnx - 1); }
-  for (size_t j = 0; j < nnny; j++) { ylut[j] = (double)(j * (ny - 1)) / (double)(nnny - 1); }
+  // Separable resample: one pass per axis, work proportional to the output size
+  // rather than the source. Area averaging on a shrinking axis anti-aliases the
+  // downscale; linear interpolation enlarges.
+  const AxisWeights wx = build_axis_weights(nx, nnx);
+  const AxisWeights wy = build_axis_weights(ny, nny);
 
   if (bps == 8) {
-    byte *inbuf = pixels.data();
-    std::vector<byte> outbuf(nnnx * nnny * nc);
-    double rx, ry;
-
-    for (size_t j = 0; j < nnny; j++) {
-      ry = ylut[j];
-      for (size_t i = 0; i < nnnx; i++) {
-        rx = xlut[i];
-        for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nnnx + i) + k] = bilinn(inbuf, nx, ny, rx, ry, k, nc); }
-      }
-    }
-
-    pixels = std::move(outbuf);
+    pixels = resample_separable<byte>(pixels.data(), nx, ny, nc, nnx, nny, wx, wy);
   } else if (bps == 16) {
-    word *inbuf = (word *)pixels.data();
-    std::vector<byte> outbuf_v(2 * (nnnx * nnny * nc));
-    word *outbuf = (word *)outbuf_v.data();
-    double rx, ry;
-
-    for (size_t j = 0; j < nnny; j++) {
-      ry = ylut[j];
-      for (size_t i = 0; i < nnnx; i++) {
-        rx = xlut[i];
-        for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nnnx + i) + k] = bilinn(inbuf, nx, ny, rx, ry, k, nc); }
-      }
-    }
-
-    pixels = std::move(outbuf_v);
+    pixels =
+      resample_separable<word>(reinterpret_cast<const word *>(pixels.data()), nx, ny, nc, nnx, nny, wx, wy);
   } else {
     return false;
-    // clean up and throw exception
-  }
-
-  //
-  // now we have to check if we have to average the pixels
-  //
-  if ((iix > 1) || (iiy > 1)) {
-    if (bps == 8) {
-      byte *inbuf = pixels.data();
-      std::vector<byte> outbuf(nnx * nny * nc);
-      for (size_t j = 0; j < nny; j++) {
-        for (size_t i = 0; i < nnx; i++) {
-          for (size_t k = 0; k < nc; k++) {
-            unsigned int accu = 0;
-
-            for (size_t jj = 0; jj < iiy; jj++) {
-              for (size_t ii = 0; ii < iix; ii++) { accu += inbuf[nc * ((iiy * j + jj) * nnnx + (iix * i + ii)) + k]; }
-            }
-
-            outbuf[nc * (j * nnx + i) + k] = accu / (iix * iiy);
-          }
-        }
-      }
-      pixels = std::move(outbuf);
-    } else if (bps == 16) {
-      word *inbuf = (word *)pixels.data();
-      std::vector<byte> outbuf_v(2 * (nnx * nny * nc));
-      word *outbuf = (word *)outbuf_v.data();
-
-      for (size_t j = 0; j < nny; j++) {
-        for (size_t i = 0; i < nnx; i++) {
-          for (size_t k = 0; k < nc; k++) {
-            unsigned int accu = 0;
-
-            for (size_t jj = 0; jj < iiy; jj++) {
-              for (size_t ii = 0; ii < iix; ii++) { accu += inbuf[nc * ((iiy * j + jj) * nnnx + (iix * i + ii)) + k]; }
-            }
-
-            outbuf[nc * (j * nnx + i) + k] = accu / (iix * iiy);
-          }
-        }
-      }
-
-      pixels = std::move(outbuf_v);
-    }
   }
 
   nx = nnx;
