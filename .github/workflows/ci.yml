@@ -1,8 +1,8 @@
 # Main CI workflow for pull requests (and manual workflow_dispatch runs).
 #
 # Structure:
-#   1. `changes` — a ~15s path-filter gate. It exists ONLY to skip the two
-#      sanitizer jobs on PRs that don't touch native/build-relevant paths; the
+#   1. `changes` — a ~15s path-filter gate. It exists ONLY to skip the
+#      sanitizer job on PRs that don't touch native/build-relevant paths; the
 #      `test` matrix does NOT depend on it and starts immediately.
 #   2. `test` — the 3-leg build+test matrix (linux-amd64, linux-arm64,
 #      darwin-arm64), each running `just bazel-test` (fastbuild, no
@@ -18,8 +18,8 @@
 #      parity gate and uploads the SARIF CVE scan. Every leg writes its
 #      `just bazel-test` invocation's Build Event Protocol JSON and uploads it
 #      as a `bep-<platform>` artifact for offline cache-hit-rate analysis.
-#   3. `sanitizer-unit` / `sanitizer-e2e` — two parallel path-gated
-#      ASan+UBSan jobs (see the scope-rationale comment above those jobs).
+#   3. `sanitizer` — a path-gated ASan+UBSan job running unit + e2e in one
+#      invocation (see the scope-rationale comment above the job).
 #   4. `docs` — MkDocs build.
 #
 # Coverage instrumentation lives in `.github/workflows/coverage.yml`, which
@@ -50,12 +50,12 @@ permissions:
   contents: read
 
 jobs:
-  # Path-filter gate for the sanitizer jobs ONLY — the `test` matrix has no
+  # Path-filter gate for the sanitizer job ONLY — the `test` matrix has no
   # `needs:` on this job and starts immediately, overlapping the ~15s this
   # takes and the ~5m macOS runner queue.
   #
-  # Why job-level gating instead of `on.paths` on the sanitizer jobs
-  # themselves: `sanitizer-unit`/`sanitizer-e2e` are REQUIRED status checks.
+  # Why job-level gating instead of `on.paths` on the sanitizer job
+  # itself: `sanitizer` is a REQUIRED status check.
   # With `on.paths`, a PR that doesn't match the filter never triggers the
   # job at all, so its required-check entry sits at "Expected" forever and
   # blocks merge. A job that runs and is merely skipped (via `if:`) reports
@@ -284,9 +284,8 @@ jobs:
   # gate — sanitizer findings fail the PR check. Also runnable on-demand via
   # workflow_dispatch (unconditional — bypasses the `changes` filter).
   #
-  # Scope: unit (`sanitizer-unit`) + e2e (`sanitizer-e2e`) under ASan/UBSan
-  # (`just bazel-test-unit` / `bazel-test-e2e`, each `--config=asan
-  # --config=ubsan`). Covering unit — not just e2e — puts the sanitizers over
+  # Scope: unit + e2e under ASan/UBSan in one invocation (`just
+  # bazel-test-sanitized --config=asan --config=ubsan`). Covering unit — not just e2e — puts the sanitizers over
   # the codec/ICC/metadata paths (the unit round-trip + delivery code) where
   # memory bugs in a media server are most likely. Two suites are
   # intentionally excluded:
@@ -302,16 +301,16 @@ jobs:
   #     publish.yml); instrumenting the OCI image adds no memory-safety
   #     signal.
   #
-  # `LSAN_OPTIONS` (leak suppressions) is set per-e2e-test by
-  # `test/e2e/sipi_e2e_test.bzl` (data-deps `//:lsan_suppressions`).
+  # `LSAN_OPTIONS` (leak suppressions) and `ASAN_SYMBOLIZER_PATH` are set
+  # per-e2e-test by `test/e2e/sipi_e2e_test.bzl`, which data-deps
+  # `//:lsan_suppressions` and (under `--config=asan`) `//bazel:llvm-symbolizer`
+  # and points the env at their runfiles paths — so both resolve when the test
+  # executes on the RBE worker. The symbolizer lets ASan/LSan resolve
+  # `sipi+0xOFFSET` frames into function names, needed for the name-based
+  # suppressions in `.lsan_suppressions.txt` (`leak:lua*`) to match.
   # `ASAN_OPTIONS log_path` is set by `.bazelrc`'s `test:asan` block to
   # `$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e`, surfaced by Bazel under
-  # `bazel-testlogs/**/test.outputs/asan-e2e.<pid>` for every layer; the same
-  # block passes through `ASAN_SYMBOLIZER_PATH` so ASan/LSan can resolve
-  # `sipi+0xOFFSET` frames into function names — needed for the name-based
-  # suppressions in `.lsan_suppressions.txt` (`leak:lua*`) to match. The
-  # symbolizer comes from the hermetic LLVM 22.1.7 toolchain
-  # (`just asan-symbolizer`, version-matched to the instrumented build).
+  # `bazel-testlogs/**/test.outputs/asan-e2e.<pid>` for every layer.
   #
   # `--config=asan` / `--config=ubsan` set `--@llvm//config:{asan,ubsan}=true`,
   # which makes the toolchain build + link the compiler-rt ASan/UBSan runtimes
@@ -319,20 +318,22 @@ jobs:
   # linux-x86_64 only (the macOS toolchain args omit the sanitizer header
   # path).
   #
-  # Split into two jobs so unit and e2e run concurrently; RBE dedups the
-  # shared instrumented `sipi` compile across the two concurrent jobs via the
-  # remote cache, so the split costs no extra compute — only wall-clock is
-  # saved.
-  sanitizer-unit:
+  # One job runs unit + e2e in a single `bazel test` invocation so the
+  # instrumented `sipi` tree compiles exactly once and both suites share that
+  # one ~5500-file ASan/UBSan compile within a single action graph. Two
+  # separate jobs would each compile the full tree (concurrent jobs race, so
+  # neither warms the other's remote cache). See
+  # `docs/src/development/rbe-write-pressure.md`.
+  sanitizer:
     needs: changes
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.native == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    name: asan-ubsan-unit / amd64
+    name: asan-ubsan / amd64
     permissions:
       contents: read
     concurrency:
-      group: ${{ github.workflow }}-sanitizer-unit-${{ github.head_ref || github.ref }}
+      group: ${{ github.workflow }}-sanitizer-${{ github.head_ref || github.ref }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v6
@@ -350,90 +351,31 @@ jobs:
           rbe-client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
           rbe-client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
 
-      - name: Run unit tests under ASan + UBSan
+      - name: Run unit + e2e tests under ASan + UBSan
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: |
-          export ASAN_SYMBOLIZER_PATH="$(just asan-symbolizer)"
-          just bazel-test-unit --config=asan --config=ubsan --build_tag_filters=-no-sanitizer --test_tag_filters=-no-sanitizer ${{ steps.setup.outputs.flags }} --build_event_json_file=bep-sanitizer-unit.json
+        run: just bazel-test-sanitized --config=asan --config=ubsan --build_tag_filters=-no-sanitizer --test_tag_filters=-no-sanitizer ${{ steps.setup.outputs.flags }} --build_event_json_file=bep-sanitizer.json
 
       - name: Check for sanitizer findings
         if: always()
         run: bash tools/check_sanitizer_findings.sh
 
       # BEP for cache-hit-rate analysis (see the `test` job's upload step).
-      # This leg's instrumented sanitizer build has its own cache behavior
-      # worth tracking separately.
+      # The instrumented sanitizer build has its own cache behavior worth
+      # tracking separately.
       - name: Upload build event JSON (cache-hit-rate analysis)
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: bep-sanitizer-unit
+          name: bep-sanitizer
           retention-days: 30
-          path: bep-sanitizer-unit.json
+          path: bep-sanitizer.json
 
       - name: Upload sanitizer reports
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: sanitizer-reports-unit
-          retention-days: 30
-          path: bazel-testlogs/**/test.outputs/asan-e2e.*
-
-  sanitizer-e2e:
-    needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.native == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    name: asan-ubsan-e2e / amd64
-    permissions:
-      contents: read
-    concurrency:
-      group: ${{ github.workflow }}-sanitizer-e2e-${{ github.head_ref || github.ref }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          lfs: false
-
-      - name: CI setup (bazelisk, just, LFS, repo cache, RBE flags)
-        id: setup
-        uses: ./.github/actions/ci-setup
-        with:
-          lfs: "true"
-          rbe-runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
-          rbe-ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
-          rbe-client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
-          rbe-client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
-
-      - name: Run e2e tests under ASan + UBSan
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: |
-          export ASAN_SYMBOLIZER_PATH="$(just asan-symbolizer)"
-          just bazel-test-e2e --config=asan --config=ubsan --test_tag_filters=-no-sanitizer ${{ steps.setup.outputs.flags }} --build_event_json_file=bep-sanitizer-e2e.json
-
-      - name: Check for sanitizer findings
-        if: always()
-        run: bash tools/check_sanitizer_findings.sh
-
-      # BEP for cache-hit-rate analysis (see the `test` job's upload step).
-      # This leg's instrumented sanitizer build has its own cache behavior
-      # worth tracking separately.
-      - name: Upload build event JSON (cache-hit-rate analysis)
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: bep-sanitizer-e2e
-          retention-days: 30
-          path: bep-sanitizer-e2e.json
-
-      - name: Upload sanitizer reports
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: sanitizer-reports-e2e
+          name: sanitizer-reports
           retention-days: 30
           path: bazel-testlogs/**/test.outputs/asan-e2e.*
 

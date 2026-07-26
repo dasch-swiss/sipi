@@ -155,35 +155,54 @@ If the worker is unreachable and the build falls back to the local arm64/darwin 
 the x86_64 `process_wrapper` binary would be dispatched there and crash. Cross legs
 therefore disable local fallback. The amd64 leg retains the `.bazelrc` graceful fallback.
 
-### Tests run on the native runner
+### Where tests execute
 
 ```
---strategy=TestRunner=local
+--strategy=TestRunner=local   # cross legs only (arm64/darwin)
 ```
 
-Test binaries are cross-compiled on the worker but executed locally on the native runner.
-This is the standard "compile remote, test local" pattern: the runner has the right
-kernel ABI, Docker daemon (for smoke tests), and filesystem for running the binary.
+**Cross legs (arm64/darwin).** Test binaries are cross-compiled on the x86_64 worker but
+executed locally on the native runner — the cross-built binary can't run on the x86_64
+worker, and the runner has the right kernel ABI and filesystem. `bazel-rbe` emits
+`--strategy=TestRunner=local` only on these legs.
 
-### The `no-sandbox` tag on e2e tests
+**Native x86_64 legs (amd64 `test` + `sanitizer`).** Tests EXECUTE on the worker
+(exec == target == x86_64): results cache remotely and the runner skips the multi-GB
+output download under `--remote_download_minimal`. The e2e tests are tagged
+`exclusive-if-local` (see below), so on isolated workers they run in parallel rather than
+serially. Under `--config=asan` the e2e macro attaches `//bazel:llvm-symbolizer` as a
+runfile and sets `ASAN_SYMBOLIZER_PATH` to its runfiles path, so the sanitizer e2e tests
+run remotely too (a runner-side absolute symbolizer path would not exist on the worker).
+One exception re-pins `--strategy=TestRunner=local` in its own recipe:
+`bazel-test-differential` (spawns the C++ oracle alongside the subject). `docker_smoke`
+stays local via its plain `exclusive` tag and its Docker-daemon dependency.
 
-E2E tests are tagged `no-sandbox` in `test/e2e/sipi_e2e_test.bzl` and in the inline
-`docker_smoke` target in `test/e2e/BUILD.bazel`. This choice is permanent and correct;
-do not change it to `local`.
+### The `exclusive-if-local` and `no-sandbox` tags on e2e tests
 
-The distinction matters for RBE:
+E2E tests are tagged `exclusive-if-local` and `no-sandbox` in
+`test/e2e/sipi_e2e_test.bzl` (`docker_smoke` keeps plain `exclusive` in
+`test/e2e/BUILD.bazel`). Neither is `local`, and that is permanent and correct.
 
+- `exclusive-if-local` runs the tests serially only when they execute locally (dev, cross
+  legs), preventing port collisions between binaries that all bind `11024 + PID % 16384`
+  on the shared runner. On the native x86_64 RBE leg each test runs on its own isolated
+  worker, so there is no shared port range and Bazel runs them in parallel. Plain
+  `exclusive` would disable remote execution entirely — Bazel can't guarantee exclusivity
+  on a machine it doesn't own — which is why `docker_smoke` (which must stay on the runner
+  for its Docker daemon) keeps `exclusive`.
 - `local` propagates to the test's COMPILE action and pins the compile to the runner.
   On a cross leg this routes an arm64/darwin process_wrapper to the x86_64 worker —
   it crashes. `local` breaks cross-compilation.
-- `no-sandbox` disables the macOS Bazel sandbox for the TEST RUN only (the compile is
+- `no-sandbox` disables the Bazel sandbox for the TEST RUN only (the compile is
   unaffected). It does not prevent cross-compilation.
 
 The reason e2e tests need `no-sandbox` at all: SIPI's `validate_resolved_path` guard
-in `src/SipiHttpServer.cpp` canonicalises the request path via `realpath(3)`. In the
-macOS Bazel sandbox, `repo_root()` returns the writable runfiles path rather than the
+in `src/SipiHttpServer.cpp` canonicalises the request path via `realpath(3)`. Under the
+Bazel sandbox, `repo_root()` returns the writable runfiles path rather than the
 `TEST_TMPDIR` copy, so sipi rejects legitimate test files with HTTP 400. Disabling the
-sandbox sidesteps this runfiles-symlink interaction. The guard itself is correct and
+sandbox sidesteps this runfiles-symlink interaction. This is also the open question when
+e2e tests execute remotely: the NativeLink executor must honor `no-sandbox` (materialise
+real files under a stable root) for the guard to pass. The guard itself is correct and
 must not be weakened for testing.
 
 ## The hermetic-llvm headers glob patch
@@ -366,7 +385,7 @@ fetched). The smoke test then finds the image regardless of its cache state.
 4. On Linux: runs `just bazel-test-smoke` (which first calls `bazel run //src:image_load`).
 5. On linux-amd64 PRs: runs Docker Scout.
 
-`ci.yml`'s path-gated `sanitizer-unit`/`sanitizer-e2e` jobs, plus `coverage.yml`,
+`ci.yml`'s path-gated `sanitizer` job, plus `coverage.yml`,
 `fuzz.yml`, and `publish.yml`, all go
 through the same `ci-setup` action so every Bazel invocation benefits from the shared
 remote cache.

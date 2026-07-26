@@ -51,7 +51,7 @@
 - Memory fixes verified under ASan (no leaks, no UB)
 - New HTTP behavior tested in Rust e2e
 - Tests verify behavior (dimensions, content, structure), not just HTTP status codes
-- **Sanitizer gate:** PRs touching native/build-relevant paths (`src/`, `include/`, `test/`, `bazel/`, …) automatically run the sanitizer jobs in `ci.yml` (`asan-ubsan-unit` / `asan-ubsan-e2e`). Zero findings required to merge. The sanitizer build runs the unit and e2e suites under ASan/UBSan; first-party translation units are instrumented at compile time
+- **Sanitizer gate:** PRs touching native/build-relevant paths (`src/`, `include/`, `test/`, `bazel/`, …) automatically run the `sanitizer` job in `ci.yml` (`asan-ubsan / amd64`). Zero findings required to merge. The sanitizer build runs the unit and e2e suites under ASan/UBSan; first-party translation units are instrumented at compile time
 - **Bazel test parity:** PRs that add a new unit test must add the matching `cc_test` target in `test/unit/<mod>/BUILD.bazel`. CI runs `just bazel-coverage`, which exercises every `cc_test` under `//test/unit/...` plus `//test/approval/...` and `//test/e2e/...` in a single pass — a missing `cc_test` target = no CI coverage
 
 ### Performance

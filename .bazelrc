@@ -244,10 +244,11 @@ build:asan --@llvm//config:asan=true
 # every leak in one report rather than needing N reruns.
 test:asan --test_env=ASAN_OPTIONS=detect_leaks=1:halt_on_error=0:log_path=$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e
 
-# The sanitizer runtime needs the symbolizer path inside the test sandbox;
-# passthrough form inherits the client-env value (CI exports it via
-# `just asan-symbolizer`) and is a no-op when unset.
-test:asan --test_env=ASAN_SYMBOLIZER_PATH
+# ASAN_SYMBOLIZER_PATH is NOT forwarded from the client env here: the e2e test
+# macro (`test/e2e/sipi_e2e_test.bzl`) attaches `//bazel:llvm-symbolizer` as a
+# runfile under `--config=asan` and sets the env to its runfiles-relative path,
+# so LSan symbolization works when the test executes on the RBE worker (a
+# runner-side absolute path would not exist there).
 
 # Neutralize production hardening for UBSan — same rationale as `build:asan`.
 build:ubsan --copt=-U_FORTIFY_SOURCE

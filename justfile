@@ -193,12 +193,28 @@ bazel-rust-project:
 # `resource_limits` / `latency`. Useful for inner-loop development; CI
 # runs e2e tests via `bazel-coverage`.
 #
-# `--stamp` is on so `cli_version_flag` reads the stamped
-# `STABLE_SIPI_VERSION` rather than the `0.0.0-unstamped` fallback. Only
-# the `:sipi_version_h` action's cache key depends on `STABLE_*` values,
-# so the stamp adds at most one re-link per workspace_status change.
+# Unstamped, like `bazel-test`: `cli_version_flag` accepts the
+# `0.0.0-unstamped` fallback (see `test/e2e/tests/cli.rs`), so the e2e
+# test actions cache across commits instead of forcing a
+# `:sipi_version_h` re-link (and its closure re-materialisation on the
+# RBE worker) every commit. See `docs/src/development/rbe-write-pressure.md`.
 bazel-test-e2e *FLAGS='':
-    bazel test --stamp --verbose_failures {{FLAGS}} //test/e2e:all_e2e
+    bazel test --verbose_failures {{FLAGS}} //test/e2e:all_e2e
+
+# Build + run the unit and e2e suites in ONE invocation under the
+# sanitizer configs — CI's `sanitizer` job passes `--config=asan
+# --config=ubsan --build_tag_filters=-no-sanitizer
+# --test_tag_filters=-no-sanitizer`. Running both suites through a single
+# `bazel test` compiles the instrumented `sipi` tree exactly once — both
+# suites share that one ~5500-file `CppCompile` set within a single action
+# graph (two separate jobs would each compile the full tree). Combining
+# them here is the reason for this recipe over `bazel-test-unit` +
+# `bazel-test-e2e`. `--build_tests_only` keeps the `//src/...` wildcard
+# from building the non-test OCI image + CLI binary under instrumentation.
+# Unstamped for the same caching reason as `bazel-test-e2e`. See
+# `docs/src/development/rbe-write-pressure.md`.
+bazel-test-sanitized *FLAGS='':
+    bazel test --build_tests_only --verbose_failures //src/... //test/unit/... //test/e2e:all_e2e {{FLAGS}}
 
 # Run the Docker smoke test against the Bazel-built OCI image.
 #
@@ -220,11 +236,14 @@ bazel-test-smoke *FLAGS='':
 # retained C++ server (reference, via `$SIPI_BIN_REF`) and diffs their
 # responses across the divergence allowlist. `manual`-tagged so it stays out of
 # `:all_e2e` and `bazel-coverage`'s `//test/e2e/...` wildcard — run it
-# explicitly here. The two-binary spawn is `exclusive`/`local` with
-# `--test-threads=1` (set by the test macro). CI runs it as a dedicated
-# linux-amd64 step.
+# explicitly here. `exclusive-if-local` + `--test-threads=1` (set by the test
+# macro). CI runs it as a dedicated linux-amd64 step.
+#
+# `--strategy=TestRunner=local` pins execution to the runner: the two-binary
+# spawn (subject + C++ oracle) is a serial parity gate, kept off the RBE worker
+# even on the native x86_64 leg where other e2e tests execute remotely.
 bazel-test-differential *FLAGS='':
-    bazel test --stamp --verbose_failures {{FLAGS}} //test/e2e:differential
+    bazel test --stamp --verbose_failures --strategy=TestRunner=local {{FLAGS}} //test/e2e:differential
 
 # Drift guard: assert the differential corpus still covers the e2e surface
 # (pins the e2e #[test] count; trips when a test is added/removed so the
@@ -234,7 +253,7 @@ differential-coverage-check:
 
 # Sanitized build: Debug + ASan + UBSan via Bazel
 # `--config=asan --config=ubsan`. The resulting binary at
-# `bazel-bin/src/cli/sipi` is what ci.yml's sanitizer jobs' e2e tests consume
+# `bazel-bin/src/cli/sipi` is what ci.yml's sanitizer job's e2e tests consume
 # via `SIPI_BIN`. DWARF stays inline (`--strip=never` in
 # `.bazelrc`) so the symbol-name suppressions in `.lsan_suppressions.txt`
 # match. `--verbose_failures` surfaces the full failing compile/link
@@ -248,19 +267,6 @@ differential-coverage-check:
 bazel-build-sanitized *FLAGS='':
     bazel build --config=asan --config=ubsan --verbose_failures --stamp {{FLAGS}} //src/cli:sipi
     @echo "Binary at: $(pwd)/bazel-bin/src/cli/sipi"
-
-# Print the absolute path of the hermetic (LLVM 22, version-matched) symbolizer.
-# ASan/LSan need it to resolve `sipi+0xOFFSET` frames, and the name-based
-# suppressions in `.lsan_suppressions.txt` (e.g. `leak:lua*`) can only match
-# once frames are symbolized. Used by the sanitizer CI jobs in ci.yml via
-# `export ASAN_SYMBOLIZER_PATH="$(just asan-symbolizer)"`, and available for
-# local sanitizer runs.
-asan-symbolizer:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    bazel build //bazel:llvm-symbolizer 1>&2
-    EXEC_ROOT="$(bazel info execution_root)"
-    echo "$EXEC_ROOT/$(bazel cquery --output=files //bazel:llvm-symbolizer 2>/dev/null)"
 
 # Tracy-instrumented profiling build: `-c opt --config=tracy`. Local dev only,
 # never CI-gated (like `bench` / `valgrind`). `-c opt` so the timeline reflects

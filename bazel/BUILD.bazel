@@ -51,9 +51,12 @@ alias(
     visibility = ["//visibility:public"],
 )
 
-# Consumed by the sanitizer CI jobs and local sanitizer runs to symbolize
+# Consumed by the sanitizer CI job and local sanitizer runs to symbolize
 # ASan/LSan reports (`sipi+0xOFFSET` frames) — required for the name-based
 # suppressions in `.lsan_suppressions.txt` to match symbolized frames.
+# e2e test targets attach this as a `data` dep under `:asan_enabled` and point
+# `ASAN_SYMBOLIZER_PATH` at its runfiles path, so the symbolizer travels with
+# the test and resolves whether it runs on the runner or the RBE worker.
 alias(
     name = "llvm-symbolizer",
     actual = select({
@@ -61,6 +64,15 @@ alias(
         "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-22.1.7-linux-arm64//:bin/llvm-symbolizer",
         "//conditions:default": "@llvm-toolchain-minimal-22.1.7-darwin-arm64//:bin/llvm-symbolizer",
     }),
+    visibility = ["//visibility:public"],
+)
+
+# True whenever `--config=asan` (i.e. `--@llvm//config:asan=true`) is in effect.
+# Lets test targets attach the LLVM symbolizer as a runfile only under the
+# sanitizer build, so non-sanitizer runs don't drag it into their closure.
+config_setting(
+    name = "asan_enabled",
+    flag_values = {"@llvm//config:asan": "true"},
     visibility = ["//visibility:public"],
 )
 

@@ -101,13 +101,14 @@ run for no test coverage. Scope the test pattern (or use
 `--build_tag_filters`) so the image and other non-test artifacts are not pulled
 into the test graph.
 
-### 3. Deduplicate the concurrent sanitizer builds
+### 3. Deduplicate the concurrent sanitizer builds — DONE
 
-`sanitizer-unit` and `sanitizer-e2e` each remotely compile the full
-`--config=asan --config=ubsan` tree (~5500 `CppCompile` each) and run
-concurrently, so the worker materializes two near-identical instrumented
-closures. Serializing them (or merging into one build that runs both test sets)
-lets the second reuse the first's cached objects.
+Previously `sanitizer-unit` and `sanitizer-e2e` each remotely compiled the full
+`--config=asan --config=ubsan` tree (~5500 `CppCompile` each) and ran
+concurrently, so the worker materialized two near-identical instrumented
+closures. They are now merged into a single `sanitizer` job that runs both test
+sets in one `bazel test` invocation (`just bazel-test-sanitized`), so the shared
+instrumented tree compiles exactly once.
 
 ### 4. Raise the cache-hit rate generally
 
@@ -133,7 +134,7 @@ problem) for permanently worse hit rates, i.e. *more* remote execution and
 
 Every `ci.yml` test leg writes its Bazel invocation's BEP JSON via
 `--build_event_json_file` and uploads it as an artifact (`bep-<platform>`,
-`bep-sanitizer-unit`, `bep-sanitizer-e2e`; 30-day retention). See the upload
+`bep-sanitizer`; 30-day retention). See the upload
 steps in `.github/workflows/ci.yml`.
 
 ```bash
