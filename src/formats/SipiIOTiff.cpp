@@ -849,6 +849,25 @@ std::vector<SubImageInfo> read_resolutions(uint64_t image_width, TIFF *tif)
   return resolutions;
 }
 
+uint32_t select_pyramid_level(const std::vector<SubImageInfo> &resolutions, int reduce_exp)
+{
+  if (resolutions.empty() || reduce_exp <= 0) return 0;
+  // Clamp the exponent so `1u << reduce_exp` can never overflow; a divisor larger
+  // than the pyramid depth just selects the smallest level via the loop below.
+  if (reduce_exp > 31) reduce_exp = 31;
+  const uint32_t divisor = 1u << static_cast<uint32_t>(reduce_exp);
+
+  uint32_t level = 0;
+  for (uint32_t i = 0; i < resolutions.size(); ++i) {
+    if (resolutions[i].reduce <= divisor) {
+      level = i;
+    } else {
+      break;
+    }
+  }
+  return level;
+}
+
 #include <iostream>
 std::ostream &operator<<(std::ostream &os, const SubImageInfo &s)
 {
@@ -1191,7 +1210,6 @@ bool SipiIOTiff::read(SipiImage *img,
       }
     }
 
-    // TODO: the TIFFSetDirectory(tif, 0); in read_resolutions introduces a regression for JPEG auto-conversion test
     auto resolutions = read_resolutions(img->getNx(), tif);
     int reduce = -1;
 
@@ -1202,23 +1220,27 @@ bool SipiIOTiff::read(SipiImage *img,
     uint32_t level = 0;
 
     if (size) {
+      // get_size hands back `reduce` as a log2 exponent (0, 1, 2, 3 …). Pick the
+      // pyramid IFD whose reduction ratio is the largest available not exceeding
+      // 2^reduce, then decode from that directory. Any residual between the level
+      // ratio and the requested size is handled by the downstream size stage.
       size->get_size(w, h, out_w, out_h, reduce, redonly);
 
-      // NOTE: if uncommented, region + pct:50 will not behave
-      // level = -1;
-      // for (auto r : resolutions) {
-      //   printf("[SipiIOTiff] resolution(%i) // %i > %i == %i\n", level, r.reduce, reduce, r.reduce > reduce);
-      //   ++level;
-      //   if (r.reduce > reduce) break;
-      // }
-      // printf("[SipiIOTiff] resolution level picked: %i\n", level);
-      // TIFFSetDirectory(tif, level);
+      level = select_pyramid_level(resolutions, reduce);
+      TIFFSetDirectory(tif, level);
 
       img->nx = resolutions[level].width;
       img->ny = resolutions[level].height;
-      if (region != nullptr) { region->set_reduce(static_cast<float>(reduce)); }
+
+      // crop_coords maps a full-resolution region into this level's coordinate
+      // space by dividing by the level's ratio (1, 2, 4, 8 …), NOT by the log2
+      // exponent. Passing the exponent here is the historical "region + pct:50"
+      // bug; the ratio is always ≥ 1 so there is no division by zero.
+      if (region != nullptr) { region->set_reduce(static_cast<float>(resolutions[level].reduce)); }
     }
     is_tiled = (resolutions[level].tile_width != 0) && (resolutions[level].tile_height != 0);
+
+    if (level > 0) { observability::Metrics::instance().tiff_pyramid_reduced_decodes_total.Increment(); }
 
     int32_t roi_x;
     int32_t roi_y;

@@ -248,7 +248,7 @@ pub(crate) fn record_decode_estimate(estimate_bytes: u64) {
     }
 }
 
-/// The 15 live monotonic counters: OTel name, description, and the field to read
+/// The 16 live monotonic counters: OTel name, description, and the field to read
 /// from a snapshot. (`rejected_connections_total` is omitted — transport-dead.)
 type CounterRow = (&'static str, &'static str, fn(&SipiMetricsSnapshot) -> u64);
 const COUNTERS: &[CounterRow] = &[
@@ -318,6 +318,11 @@ const COUNTERS: &[CounterRow] = &[
         "sipi.decode_memory.near_limit",
         "Decode-memory budget: times usage exceeded 80% of budget",
         |s| s.decode_memory_near_limit_total,
+    ),
+    (
+        "sipi.tiff_pyramid.reduced_decodes",
+        "TIFF decodes served from a reduced pyramid level",
+        |s| s.tiff_pyramid_reduced_decodes_total,
     ),
 ];
 

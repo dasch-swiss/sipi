@@ -107,6 +107,12 @@ public:
   prometheus::Counter &essentials_hash_mismatch_png;
   prometheus::Counter &essentials_hash_mismatch_other;
 
+  // TIFF decodes that read from a reduced pyramid level (level > 0) instead of
+  // the full-resolution IFD. Measures how much reduced-level TIFF traffic the
+  // server sees. A scalar (no label) so it rides the serve-path snapshot bridge
+  // to OTLP.
+  prometheus::Counter &tiff_pyramid_reduced_decodes_total;
+
 private:
   Metrics();
 };

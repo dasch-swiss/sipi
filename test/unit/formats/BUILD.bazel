@@ -1,0 +1,12 @@
+"""TIFF format-handler unit tests (pyramid-level selection)."""
+
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "formats_tests",
+    srcs = glob(["*.cpp"]),
+    deps = [
+        "//src:sipi_lib",
+        "@googletest//:gtest_main",
+    ],
+)

@@ -374,6 +374,8 @@ report cache health. For server load and backpressure, use the engine-pool metri
 queue depth, `sipi_pool_load_shed_total` and `sipi_pool_queue_timeout_total` for 503 sheds).
 Request latency is the semantic-convention histogram `http_server_request_duration_seconds`, labelled by
 `http_route`, `http_request_method`, and `http_response_status_code`.
+`sipi_tiff_pyramid_reduced_decodes_total` counts TIFF decodes served from a reduced pyramid level (a
+zoomed-out or thumbnail request that read a smaller stored resolution instead of the full-resolution image).
 
 The following configuration parameters determine the behaviour of the cache:
 
