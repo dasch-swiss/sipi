@@ -1,0 +1,26 @@
+# commitlint-rs config — enforced by the `commit-lint` CI job and `just commit-lint`.
+# See docs/src/development/commit-conventions.md for the human-facing rules.
+#
+# The `type` allowlist is the eight allowed types (the machine source for the
+# release-please rendering is .github/release-please/config.json). `scope-empty`
+# makes the scope mandatory so every changelog line reads `concern: subject`.
+# There is deliberately NO `scope` allowlist: we have no closed scope vocabulary
+# yet, so the gate requires a scope but does not restrict which one.
+rules:
+  type:
+    level: error
+    options:
+      - feat
+      - fix
+      - perf
+      - refactor
+      - docs
+      - test
+      - build
+      - chore
+  type-empty:
+    level: error
+  scope-empty:
+    level: error
+  subject-empty:
+    level: error

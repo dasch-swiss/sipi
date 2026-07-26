@@ -148,6 +148,38 @@ bazel-rustfmt-check *FLAGS='':
 bazel-clippy-check *FLAGS='':
     bazel build //src/server-rs/... //src/cli-rs/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect --output_groups=clippy_checks --@rules_rust//rust/settings:clippy_flags=-Dwarnings {{FLAGS}}
 
+# Lint commit messages with commitlint-rs — the CI `commit-lint` gate. Enforces
+# the type allowlist + mandatory scope from `.commitlintrc.yml` on every commit in
+# `<from>..HEAD` (`from` defaults to origin/main). `commitlint` is in the Nix dev
+# shell; CI installs it via `cargo install`.
+#
+# We feed one message at a time on stdin instead of commitlint's `--from/--to`
+# range mode: commitlint-rs reads stdin whenever stdin is not a TTY (always true
+# in CI and under `just`), so range mode is unreachable in automation. The loop
+# also attributes each failure to its commit and is a no-op on an empty range.
+# `--no-merges` skips merge commits, so neither the synthetic `refs/pull/N/merge`
+# commit GitHub checks out for a PR nor a merge a developer created locally is
+# message-checked here. That is deliberate: message rules do not apply to merges,
+# and the `require linear history` branch-protection rule is what actually blocks a
+# merge commit from landing on `main`. See `docs/src/development/commit-conventions.md`.
+commit-lint from="origin/main":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    base="$(git merge-base "{{from}}" HEAD)"
+    fail=0
+    while IFS= read -r sha; do
+        [ -n "$sha" ] || continue
+        if ! git log -1 --pretty=%B "$sha" | commitlint; then
+            echo "  ↳ offending commit: $(git log -1 --pretty='%h %s' "$sha")" >&2
+            fail=1
+        fi
+    done < <(git rev-list --no-merges --reverse "$base..HEAD")
+    if [ "$fail" -ne 0 ]; then
+        echo "commit-lint: one or more commits violate the convention (see above)" >&2
+        exit 1
+    fi
+    echo "commit-lint: all commits in $base..HEAD OK"
+
 # (Re)generate rust-project.json so rust-analyzer understands the Bazel crate
 # graph (cargo can't see the rules_rust targets). The file is git-ignored — it
 # holds machine-absolute paths. Re-run after adding/moving a Rust target or dep.

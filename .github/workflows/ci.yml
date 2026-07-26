@@ -464,3 +464,21 @@ jobs:
       - uses: extractions/setup-just@v3
       - run: just docs-install-requirements
       - run: just docs-build
+
+  # Enforce commit conventions (type allowlist + mandatory scope) on the PR's
+  # commits via commitlint-rs. See docs/src/development/commit-conventions.md.
+  commit-lint:
+    name: commit-lint
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-commit-lint-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          lfs: false
+      - uses: ./.github/actions/commit-lint
+        with:
+          base-ref: ${{ github.event.pull_request.base.sha }}

@@ -1,0 +1,39 @@
+name: commit-lint
+description: >
+  Lint the PR's commit messages with commitlint-rs — the type allowlist +
+  mandatory scope from `.commitlintrc.yml`. Runs the same `just commit-lint`
+  recipe developers run locally. Self-contained: needs only git + cargo + just,
+  not the Bazel `ci-setup` path. See docs/src/development/commit-conventions.md.
+
+inputs:
+  base-ref:
+    description: >
+      Base commit/ref; commits in `<base-ref>..HEAD` are linted. Pass the PR
+      base SHA (github.event.pull_request.base.sha).
+    required: true
+  version:
+    description: commitlint-rs version to install via cargo.
+    default: "0.2.4"
+
+runs:
+  using: composite
+  steps:
+    - uses: extractions/setup-just@v3
+
+    # Cache the compiled binary so `cargo install` only pays the build cost when
+    # the pinned version changes.
+    - name: Cache commitlint-rs
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/bin/commitlint
+        key: commitlint-rs-${{ runner.os }}-${{ inputs.version }}
+
+    - name: Install commitlint-rs
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: cargo install commitlint-rs --version "${{ inputs.version }}" --locked
+
+    - name: Lint commit messages
+      shell: bash
+      run: just commit-lint "${{ inputs.base-ref }}"

@@ -38,6 +38,11 @@
             go-containerregistry
             just
 
+            # commitlint-rs — the `commit-lint` gate (`just commit-lint`).
+            # Enforces the type allowlist + mandatory scope from `.commitlintrc.yml`.
+            # Local only; CI installs it via `cargo install commitlint-rs`.
+            commitlint-rs
+
             # jpylyzer — JP2 conformance validator. Runs against
             # regenerated JP2 goldens to confirm the SIPI UUID box reads as an
             # informational `Unknown UUID` and the file otherwise passes
