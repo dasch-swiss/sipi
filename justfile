@@ -239,11 +239,17 @@ bazel-test-smoke *FLAGS='':
 # explicitly here. `exclusive-if-local` + `--test-threads=1` (set by the test
 # macro). CI runs it as a dedicated linux-amd64 step.
 #
-# `--strategy=TestRunner=local` pins execution to the runner: the two-binary
-# spawn (subject + C++ oracle) is a serial parity gate, kept off the RBE worker
-# even on the native x86_64 leg where other e2e tests execute remotely.
+# Executes on the worker on the native x86_64 leg like every other e2e test
+# (exec == target == x86_64): both spawned binaries — the Rust shell subject and
+# the C++ oracle `//src/cli:sipi` reference — are x86_64 and run natively there.
+# `exclusive-if-local` parallelises across isolated workers; `--test-threads=1`
+# still serialises the corpus + flag-probe subtests within this single target.
+# Unstamped for the same caching reason as `bazel-test-e2e` (the
+# `0.0.0-unstamped` fallback lets the test actions cache across commits instead
+# of forcing a `:sipi_version_h` re-link + closure re-materialisation on the
+# worker every commit; see `docs/src/development/rbe-write-pressure.md`).
 bazel-test-differential *FLAGS='':
-    bazel test --stamp --verbose_failures --strategy=TestRunner=local {{FLAGS}} //test/e2e:differential
+    bazel test --verbose_failures {{FLAGS}} //test/e2e:differential
 
 # Drift guard: assert the differential corpus still covers the e2e surface
 # (pins the e2e #[test] count; trips when a test is added/removed so the

@@ -173,9 +173,9 @@ output download under `--remote_download_minimal`. The e2e tests are tagged
 serially. Under `--config=asan` the e2e macro attaches `//bazel:llvm-symbolizer` as a
 runfile and sets `ASAN_SYMBOLIZER_PATH` to its runfiles path, so the sanitizer e2e tests
 run remotely too (a runner-side absolute symbolizer path would not exist on the worker).
-One exception re-pins `--strategy=TestRunner=local` in its own recipe:
-`bazel-test-differential` (spawns the C++ oracle alongside the subject). `docker_smoke`
-stays local via its plain `exclusive` tag and its Docker-daemon dependency.
+The `differential` parity gate also executes on the worker here, adding the C++ oracle
+(`//src/cli:sipi`, also x86_64) alongside the subject. `docker_smoke` is the sole local
+exception, kept on the runner by its plain `exclusive` tag and its Docker-daemon dependency.
 
 ### The `exclusive-if-local` and `no-sandbox` tags on e2e tests
 

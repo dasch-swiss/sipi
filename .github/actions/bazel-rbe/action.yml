@@ -108,7 +108,7 @@ runs:
         # `exclusive-if-local` (isolated workers can't collide on the shared port range),
         # so they run in parallel here; under `--config=asan` the LLVM symbolizer travels
         # as a runfile (test/e2e/sipi_e2e_test.bzl), so the sanitizer e2e tests run
-        # remotely too. `bazel-test-differential` re-pins `--strategy=TestRunner=local`
-        # in its recipe (the C++-oracle two-binary spawn stays on the runner). amd64
-        # keeps .bazelrc's graceful fallback.
+        # remotely too. The `differential` parity gate also executes on the worker (both
+        # its subject and the C++ oracle are x86_64). amd64 keeps .bazelrc's graceful
+        # fallback.
         echo "flags=$FLAGS" >> "$GITHUB_OUTPUT"
