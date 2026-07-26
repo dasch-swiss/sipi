@@ -990,34 +990,41 @@ bool SipiImage::scaleMedium(size_t nnx, size_t nny)
 
 namespace {
 
+// Fixed-point precision for resample weights. Weights are held as integers
+// scaled by 2^kResamplePrecisionBits; accumulation is integer, so the result is
+// bit-identical regardless of SIMD lane width or architecture (integer add is
+// associative and exact) — the property a float/double accumulator lacks, and
+// what lets the resampler vectorize while keeping one approval golden set valid
+// across x86-64 and aarch64. 14 bits keeps 8- and 16-bit sample sums inside
+// int32: max term 65535 * 2^14 ≈ 1.07e9 < INT32_MAX.
+constexpr int kResamplePrecisionBits = 14;
+constexpr int32_t kResampleOne = 1 << kResamplePrecisionBits;
+
 // Separable resample weights for one axis, in CSR layout: output sample `i`
 // is the weighted sum of source samples idx[offset[i] .. offset[i+1]). The
-// per-output weights sum to 1. Shrinking uses area (box) averaging for an
-// anti-aliased downscale; enlarging uses 2-tap linear interpolation; an
-// unchanged axis is an identity passthrough.
+// per-output weights are fixed-point and sum to exactly kResampleOne. Shrinking
+// uses area (box) averaging for an anti-aliased downscale; enlarging uses 2-tap
+// linear interpolation; an unchanged axis is an identity passthrough.
 struct AxisWeights
 {
   std::vector<size_t> offset;// dst + 1 row pointers into idx/wt
   std::vector<size_t> idx;   // source sample indices
-  std::vector<double> wt;    // weights (each output's weights sum to 1)
+  std::vector<int32_t> wt;   // fixed-point weights (each output's weights sum to kResampleOne)
 };
 
 AxisWeights build_axis_weights(size_t src, size_t dst)
 {
   AxisWeights w;
+  std::vector<double> dwt;// real-valued weights, quantised to fixed point below
   w.offset.reserve(dst + 1);
 
   if (dst == src) {
     for (size_t i = 0; i < dst; ++i) {
       w.offset.push_back(w.idx.size());
       w.idx.push_back(i);
-      w.wt.push_back(1.0);
+      dwt.push_back(1.0);
     }
-    w.offset.push_back(w.idx.size());
-    return w;
-  }
-
-  if (dst < src) {
+  } else if (dst < src) {
     // Area averaging: output i covers the source interval [i*ratio, (i+1)*ratio);
     // each covered source sample contributes its overlap length, normalised by
     // the interval width so the weights sum to 1.
@@ -1032,57 +1039,72 @@ AxisWeights build_axis_weights(size_t src, size_t dst)
         const double cover = hi - lo;
         if (cover <= 0.0) { continue; }
         w.idx.push_back(s);
-        w.wt.push_back(cover / ratio);
+        dwt.push_back(cover / ratio);
       }
     }
-    w.offset.push_back(w.idx.size());
-    return w;
-  }
-
-  // Enlarge: 2-tap linear interpolation. The sample position matches the legacy
-  // mapping i*(src-1)/(dst-1), so an exact integer upscale lands on grid points.
-  for (size_t i = 0; i < dst; ++i) {
-    w.offset.push_back(w.idx.size());
-    const double pos =
-      (dst > 1) ? static_cast<double>(i) * static_cast<double>(src - 1) / static_cast<double>(dst - 1) : 0.0;
-    const auto s0 = static_cast<size_t>(std::floor(pos));
-    const double frac = pos - static_cast<double>(s0);
-    const size_t s1 = std::min(s0 + 1, src - 1);
-    w.idx.push_back(s0);
-    w.wt.push_back(1.0 - frac);
-    if (s1 != s0) {
-      w.idx.push_back(s1);
-      w.wt.push_back(frac);
+  } else {
+    // Enlarge: 2-tap linear interpolation. The sample position matches the
+    // legacy mapping i*(src-1)/(dst-1), so an exact integer upscale lands on
+    // grid points.
+    for (size_t i = 0; i < dst; ++i) {
+      w.offset.push_back(w.idx.size());
+      const double pos =
+        (dst > 1) ? static_cast<double>(i) * static_cast<double>(src - 1) / static_cast<double>(dst - 1) : 0.0;
+      const auto s0 = static_cast<size_t>(std::floor(pos));
+      const double frac = pos - static_cast<double>(s0);
+      const size_t s1 = std::min(s0 + 1, src - 1);
+      w.idx.push_back(s0);
+      dwt.push_back(1.0 - frac);
+      if (s1 != s0) {
+        w.idx.push_back(s1);
+        dwt.push_back(frac);
+      }
     }
   }
   w.offset.push_back(w.idx.size());
+
+  // Quantise each output's real weights to fixed point, then fold the rounding
+  // residual into the largest tap so the group sums to exactly kResampleOne
+  // (preserves the DC level: a flat region resamples to itself).
+  w.wt.resize(dwt.size());
+  for (size_t i = 0; i + 1 < w.offset.size(); ++i) {
+    int32_t sum = 0;
+    size_t max_t = w.offset[i];
+    for (size_t t = w.offset[i]; t < w.offset[i + 1]; ++t) {
+      w.wt[t] = static_cast<int32_t>(std::lround(dwt[t] * kResampleOne));
+      sum += w.wt[t];
+      if (dwt[t] > dwt[max_t]) { max_t = t; }
+    }
+    if (w.offset[i] < w.offset[i + 1]) { w.wt[max_t] += kResampleOne - sum; }
+  }
   return w;
 }
 
 // Two-pass separable resample of an interleaved image (nx*ny*nc, sample type T)
-// to nnx*nny. The horizontal pass resamples nx→nnx into a double scratch buffer;
-// the vertical pass resamples ny→nny and rounds/clamps back into a byte buffer
-// carrying T-typed samples. Intermediates are `double` — as the previous scale()
-// path was — so the result is bit-reproducible across the x86-64 and aarch64
-// targets (a float accumulator drifts by an LSB between them under FMA
-// contraction, which would break the byte-exact approval goldens).
+// to nnx*nny. The horizontal pass resamples nx→nnx into an int32 scratch buffer
+// (already rounded back into the sample range); the vertical pass resamples
+// ny→nny and rounds/clamps into a byte buffer carrying T-typed samples.
+// Accumulation is integer fixed-point (see kResamplePrecisionBits): the weights
+// sum to kResampleOne, so `(acc + kResampleOne/2) >> bits` is a round-to-nearest
+// back to the sample scale.
 template<typename T>
 std::vector<byte> resample_separable(const T *in, size_t nx, size_t ny, size_t nc, size_t nnx, size_t nny,
   const AxisWeights &wx, const AxisWeights &wy)
 {
-  constexpr long maxval = static_cast<long>(std::numeric_limits<T>::max());
+  constexpr int32_t maxval = static_cast<int32_t>(std::numeric_limits<T>::max());
+  constexpr int32_t round = kResampleOne / 2;
 
-  std::vector<double> tmp(ny * nnx * nc);
+  std::vector<int32_t> tmp(ny * nnx * nc);
   for (size_t y = 0; y < ny; ++y) {
     const T *row = in + y * nx * nc;
-    double *orow = tmp.data() + y * nnx * nc;
+    int32_t *orow = tmp.data() + y * nnx * nc;
     for (size_t i = 0; i < nnx; ++i) {
       for (size_t k = 0; k < nc; ++k) {
-        double acc = 0.0;
+        int32_t acc = round;
         for (size_t t = wx.offset[i]; t < wx.offset[i + 1]; ++t) {
-          acc += wx.wt[t] * static_cast<double>(row[wx.idx[t] * nc + k]);
+          acc += wx.wt[t] * static_cast<int32_t>(row[wx.idx[t] * nc + k]);
         }
-        orow[i * nc + k] = acc;
+        orow[i * nc + k] = std::clamp(acc >> kResamplePrecisionBits, 0, maxval);
       }
     }
   }
@@ -1093,13 +1115,11 @@ std::vector<byte> resample_separable(const T *in, size_t nx, size_t ny, size_t n
     T *orow = outp + j * nnx * nc;
     for (size_t i = 0; i < nnx; ++i) {
       for (size_t k = 0; k < nc; ++k) {
-        double acc = 0.0;
+        int32_t acc = round;
         for (size_t t = wy.offset[j]; t < wy.offset[j + 1]; ++t) {
           acc += wy.wt[t] * tmp[(wy.idx[t] * nnx + i) * nc + k];
         }
-        long v = std::lround(acc);
-        v = std::clamp(v, 0L, maxval);
-        orow[i * nc + k] = static_cast<T>(v);
+        orow[i * nc + k] = static_cast<T>(std::clamp(acc >> kResamplePrecisionBits, 0, maxval));
       }
     }
   }
