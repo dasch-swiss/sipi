@@ -1,5 +1,46 @@
 # Changelog
 
+## [6.2.2](https://github.com/dasch-swiss/sipi/compare/v6.2.1...v6.2.2) (2026-07-26)
+
+
+### Bug Fixes
+
+* **formats:** Decode TIFF from the matching pyramid level ([f38b0c0](https://github.com/dasch-swiss/sipi/commit/f38b0c0151ae50ba12fad5591a43fb4bd38825ed))
+* **observability:** Carry the decode-memory estimate across the serve seam ([870d598](https://github.com/dasch-swiss/sipi/commit/870d598e52f158c0e81546b8296820ee26438cd4))
+* **observability:** Record http.server.request.duration on the serve path ([42cbe42](https://github.com/dasch-swiss/sipi/commit/42cbe4240d2965a69bd7c468ab8904e09582db80))
+* **observability:** Stamp service.version from the engine build version ([3a817bb](https://github.com/dasch-swiss/sipi/commit/3a817bb608a765df95f0a2c582e2ae9cba996183))
+
+
+### Performance Improvements
+
+* **image:** Resample scale() in fixed-point integer arithmetic ([861bafe](https://github.com/dasch-swiss/sipi/commit/861bafec8e546ac539f42253e8da1c6bbb0dd3a3))
+* **image:** Resample scale() with a separable two-pass filter ([567cc30](https://github.com/dasch-swiss/sipi/commit/567cc30b3537b844e0ab79912c866395dee1b632))
+* **image:** Vectorize the resampler with Highway SIMD ([ff27cfa](https://github.com/dasch-swiss/sipi/commit/ff27cfabf97bc34f1b0abe2bfad961ad1da1c321))
+
+
+### Documentation
+
+* **commit-conventions:** Require a scope, drop revert/style/ci, single-source the vocabulary ([a11a3c2](https://github.com/dasch-swiss/sipi/commit/a11a3c285f0d2738967cf660fcecdfffee0765cb))
+* Scope commits by concern, not code location ([e4f14af](https://github.com/dasch-swiss/sipi/commit/e4f14af79d47e80491cfe384389713b717ecdbe8))
+
+
+### Tests
+
+* **e2e:** Split the cli target so JP2 conversions run in parallel ([4d916cd](https://github.com/dasch-swiss/sipi/commit/4d916cd458c45c8596db3964f913bd36921dc796))
+* **iiifparser:** Cover reduce-driven crop_coords and size reduce levels ([82c9f26](https://github.com/dasch-swiss/sipi/commit/82c9f260c534a06baba3e696bb6c85d921c3f3cc))
+* **iiifparser:** Lock percent-reduce selection and crop_coords level consistency ([314e5ad](https://github.com/dasch-swiss/sipi/commit/314e5ade231a63c1b7ebdd7e4eba46dc6160ca86))
+* **image:** Characterize scale() resampler output ([2428e34](https://github.com/dasch-swiss/sipi/commit/2428e34a6bb38bd609b94a27e2ac4cc47367be55))
+* **image:** Shard sipi_image_tests and drop a redundant pyramid write ([62fd2bb](https://github.com/dasch-swiss/sipi/commit/62fd2bb531cc44d3b9f3f7e70e9b888a6980d80b))
+* **observability:** Assert cache growth on disk instead of the removed /metrics route ([17b3d18](https://github.com/dasch-swiss/sipi/commit/17b3d18306b35f7222d976995b78dc6170395ee2))
+* **observability:** Trip on metrics that stop at the FFI seam ([2509c98](https://github.com/dasch-swiss/sipi/commit/2509c98d0ac9eb643211534f5d748725c9c0a22a))
+
+
+### Miscellaneous Chores
+
+* **ci:** Enforce commit type and scope with commitlint-rs ([854a14c](https://github.com/dasch-swiss/sipi/commit/854a14c86291960eda4d604fd46df211ad749ded))
+* **ci:** Merge the sanitizer jobs and run e2e tests on RBE ([11d4994](https://github.com/dasch-swiss/sipi/commit/11d4994c7861e0244848fee407918b4e33eba6d1))
+* **ci:** Run the differential parity gate on the RBE worker ([9885b00](https://github.com/dasch-swiss/sipi/commit/9885b00c24b4dde82c6d81d5179caf52d168082b))
+
 ## [6.2.1](https://github.com/dasch-swiss/sipi/compare/v6.2.0...v6.2.1) (2026-07-25)
 
 
