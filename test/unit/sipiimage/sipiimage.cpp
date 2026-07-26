@@ -431,21 +431,23 @@ TEST(SipiImage, TiffPyramidLayers)
 {
   Sipi::SipiIOTiff::initLibrary();
 
-  for (int reduce : std::views::iota(0, 5)) {
-    reduce = 100 - (reduce * 10);
-    const int x = 4032, y = 3024;
+  const int x = 4032, y = 3024;
+
+  // The pyramid TIFF is identical for every reduce level (same source, same
+  // params), so build it once and read it back at each percentage below.
+  Sipi::SipiCompressionParams params = { { Sipi::TIFF_Pyramid, "yes" } };
+  Sipi::SipiImage src;
+  EXPECT_NO_THROW(src.read(imgExifGps));
+  EXPECT_TRUE(src.getNx() == x);
+  EXPECT_TRUE(src.getNy() == y);
+  EXPECT_NO_THROW(src.write("tif", imgExifGpsTifOut, &params));
+
+  const std::shared_ptr<Sipi::SipiRegion> region;
+  for (int step : std::views::iota(0, 5)) {
+    const int reduce = 100 - (step * 10);
+    const auto size = std::make_shared<Sipi::SipiSize>("pct:" + std::to_string(reduce));
 
     Sipi::SipiImage img;
-    const std::shared_ptr<Sipi::SipiRegion> region;
-    const auto size = std::make_shared<Sipi::SipiSize>("pct:" + std::to_string(reduce));
-    Sipi::SipiCompressionParams params = { { Sipi::TIFF_Pyramid, "yes" } };
-
-    EXPECT_NO_THROW(img.read(imgExifGps));
-
-    EXPECT_TRUE(img.getNx() == x);
-    EXPECT_TRUE(img.getNy() == y);
-
-    EXPECT_NO_THROW(img.write("tif", imgExifGpsTifOut, &params));
     EXPECT_NO_THROW(img.read(imgExifGpsTifOut, region, size));
 
     assertErrorPercent(img.getNx(), static_cast<float>(x) * reduce / 100, 0.01);
