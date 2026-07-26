@@ -46,15 +46,15 @@ provisioning" below). Nix remains the local dev-shell provisioner only.
 ### `changes` gate
 
 A `changes` job runs first and inspects the diff to decide whether the
-two sanitizer jobs (below) need to run: it looks for changes under
+sanitizer job (below) needs to run: it looks for changes under
 `src/`, `include/`, `test/`, `fuzz/`, `bazel/`, `platforms/`, `config/`,
 `scripts/`, `MODULE.bazel*`, `.bazelrc`, `.bazelversion`, `BUILD.bazel`,
 `justfile`, `.lsan_suppressions.txt`, `ci.yml`, and `.github/actions/`.
-A docs-only PR skips both sanitizer jobs — a skipped required job still
+A docs-only PR skips the sanitizer job — a skipped required job still
 satisfies branch rulesets. The `test` matrix has no `needs:` on this
 job and starts immediately, in parallel with it. A manual
-`workflow_dispatch` run bypasses the filter and always runs both
-sanitizer jobs.
+`workflow_dispatch` run bypasses the filter and always runs the
+sanitizer job.
 
 ### Test matrix
 
@@ -90,20 +90,20 @@ A separate `docs` job runs `just docs-build` (mkdocs strict-mode
 build) on ubuntu-latest. The `docs-build` job is the gate that
 catches broken cross-links and stale nav entries on every PR.
 
-### Path-gated sanitizer jobs
+### Path-gated sanitizer job
 
-The jobs `sanitizer-unit` (`asan-ubsan-unit / amd64`) and
-`sanitizer-e2e` (`asan-ubsan-e2e / amd64`) run ASan+UBSan over the
-unit and e2e suites respectively, in parallel, gated by the `changes`
-job above. Splitting unit and e2e into two concurrent jobs saves
-wall-clock time; RBE dedups the shared instrumented `sipi` compile
-across both via the remote cache, so the split costs no extra
-compute. Runs on linux-x86_64 only
+The `sanitizer` job (`asan-ubsan / amd64`) runs ASan+UBSan over the
+unit and e2e suites in a single `just bazel-test-sanitized` invocation,
+gated by the `changes` job above. Running both suites in one `bazel
+test` compiles the instrumented `sipi` tree exactly once — a single
+action graph shares the ~5500-file compile across both suites (two
+separate jobs would each compile the full tree). Runs on linux-x86_64 only
 (the macOS toolchain args omit the sanitizer header path). ASan/LSan
-symbol resolution (`ASAN_SYMBOLIZER_PATH`) now comes from the
-hermetic LLVM 22.1.7 toolchain via the `//bazel:llvm-symbolizer` alias
-and the `just asan-symbolizer` recipe (version-matched to clang
-22.1.7) — not from a Nix `.#llvm-tools` shell.
+symbol resolution uses the hermetic LLVM 22.1.7 `//bazel:llvm-symbolizer`
+(version-matched to clang 22.1.7), which the e2e macro attaches as a test
+runfile under `--config=asan` and points `ASAN_SYMBOLIZER_PATH` at — so the
+tests (unit + e2e) execute on the RBE worker, symbolizer included, rather
+than on the runner.
 
 ### CI environment provisioning
 
@@ -138,8 +138,10 @@ and the build short-circuits. Internal PRs are unaffected.
 
 Branch rulesets require the three `test / *` legs
 (`test / linux-amd64`, `test / linux-arm64`, `test / darwin-arm64`)
-plus the two `asan-ubsan-*` jobs. The `docs` job and the `changes`
-gate itself are not required checks.
+plus the `asan-ubsan / amd64` job. The `docs` job and the `changes`
+gate itself are not required checks. (This job was previously split
+into `asan-ubsan-unit / amd64` + `asan-ubsan-e2e / amd64`; the ruleset
+must be updated to the merged name.)
 
 ## Post-merge coverage
 
@@ -237,10 +239,8 @@ just bazel-test-smoke
 # Coverage (matches `coverage.yml`; needs the .#llvm-tools shell locally)
 nix develop .#llvm-tools --command just bazel-coverage
 
-# Sanitizer build + e2e (matches the `sanitizer-unit`/`sanitizer-e2e`
-# jobs folded into ci.yml)
-just bazel-build-sanitized
-just bazel-test-e2e --config=asan --config=ubsan
+# Sanitizer unit + e2e (matches the `sanitizer` job in ci.yml)
+just bazel-test-sanitized --config=asan --config=ubsan
 
 # Fuzz build + run (what fuzz.yml runs; linux-x86_64 only)
 just bazel-build-fuzz

@@ -76,31 +76,39 @@ runs:
         # operations.md). Retune alongside nativelink_worker_count as more
         # repositories onboard.
         FLAGS="$FLAGS --jobs=192"
-        # Cross-compile on the x86_64 worker, run tests on the native runner:
+        # Compile on the x86_64 worker; where tests EXECUTE depends on the leg (below):
         #   --extra_execution_platforms pins the EXEC platform to the worker (x86_64) so
         #     exec-config build tools resolve to x86_64, not the runner's arch (that
         #     mismatch ships an arm64/darwin tool to the x86_64 worker → it can't run).
         #   --platforms sets the TARGET arch this runner builds for.
-        #   --strategy=TestRunner=local runs the cross-built test binary on the runner.
         FLAGS="$FLAGS --remote_executor=$RBE_RUNNER_ENDPOINT --remote_default_exec_properties=cpu_arch=x86_64"
-        # Exec platforms: the x86_64 worker FIRST (compiles/exec tools prefer it), plus
-        # the target platform so Bazel's test toolchain can resolve an exec platform
-        # matching the target arch and run tests on the native runner. For cross legs the
-        # target arch's exec toolchains don't match x86_64-only rules, so compiles still
-        # land on the worker; only the test toolchain picks the target-arch platform.
+        # Exec platforms: the x86_64 worker FIRST (compiles/exec tools prefer it). For
+        # cross legs the target platform is appended so Bazel's test toolchain can
+        # resolve an exec platform matching the target arch and run tests on the native
+        # runner; the target arch's exec toolchains don't match x86_64-only rules, so
+        # compiles still land on the worker.
         if [ "$RBE_TARGET_PLATFORM" = "//platforms:linux_x86_64" ]; then
           EXEC_PLATFORMS="//platforms:linux_x86_64"
         else
           EXEC_PLATFORMS="//platforms:linux_x86_64,$RBE_TARGET_PLATFORM"
         fi
         FLAGS="$FLAGS --extra_execution_platforms=$EXEC_PLATFORMS --platforms=$RBE_TARGET_PLATFORM"
-        FLAGS="$FLAGS --strategy=TestRunner=local"
         if [ "$RBE_TARGET_PLATFORM" != "//platforms:linux_x86_64" ]; then
-          # Cross legs (arm64/darwin runner → x86_64 worker): pin the host config to
-          # x86_64 so rules_rust exec-config tools (process_wrapper, build scripts,
-          # proc-macros) build for the worker, not the local host (rules_rust #327).
-          # And disable local fallback — a fallback to the arm64/darwin host would run
-          # x86_64 exec tools there and crash. (amd64 keeps .bazelrc's graceful fallback.)
-          FLAGS="$FLAGS --host_platform=//platforms:linux_x86_64 --noremote_local_fallback"
+          # Cross legs (arm64/darwin runner → x86_64 worker): run tests on the native
+          # runner (`--strategy=TestRunner=local`) — the cross-built binary can't run on
+          # the x86_64 worker. Pin the host config to x86_64 so rules_rust exec-config
+          # tools (process_wrapper, build scripts, proc-macros) build for the worker, not
+          # the local host (rules_rust #327). And disable local fallback — a fallback to
+          # the arm64/darwin host would run x86_64 exec tools there and crash.
+          FLAGS="$FLAGS --strategy=TestRunner=local --host_platform=//platforms:linux_x86_64 --noremote_local_fallback"
         fi
+        # Native x86_64 leg (amd64 `test` + `sanitizer`): tests EXECUTE on the worker
+        # (exec == target == x86_64), so results cache remotely and the runner skips the
+        # multi-GB output download under `--remote_download_minimal`. e2e tests are
+        # `exclusive-if-local` (isolated workers can't collide on the shared port range),
+        # so they run in parallel here; under `--config=asan` the LLVM symbolizer travels
+        # as a runfile (test/e2e/sipi_e2e_test.bzl), so the sanitizer e2e tests run
+        # remotely too. `bazel-test-differential` re-pins `--strategy=TestRunner=local`
+        # in its recipe (the C++-oracle two-binary spawn stays on the runner). amd64
+        # keeps .bazelrc's graceful fallback.
         echo "flags=$FLAGS" >> "$GITHUB_OUTPUT"

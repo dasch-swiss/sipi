@@ -18,6 +18,11 @@ What the macro injects:
                                  LSan under `--config=asan`.
       - `:snapshots`             `insta` snapshot files under
                                  `tests/snapshots/`.
+      - `//bazel:llvm-symbolizer` attached only under `--config=asan` (via a
+                                 `select` on `//bazel:asan_enabled`). Travels
+                                 as a runfile so `ASAN_SYMBOLIZER_PATH` resolves
+                                 whether the test runs on the local runner or
+                                 the RBE worker.
 
   * `env`:
       - `SIPI_BIN`               `$(rootpath //src/cli-rs:sipi)` — runfiles-
@@ -38,6 +43,11 @@ What the macro injects:
                                  Cheap (~80 B) and unconditional — the
                                  file only takes effect when LSan is
                                  active (`--config=asan`).
+      - `ASAN_SYMBOLIZER_PATH`   `$(rootpath //bazel:llvm-symbolizer)`, set only
+                                 under `--config=asan`. Points LSan at the
+                                 runfiles-relative symbolizer so it works
+                                 remotely; there is no runner-side env to
+                                 forward.
 
   * `args`:
       - `--test-threads=1`       sipi can't tolerate parallel test load
@@ -48,16 +58,24 @@ What the macro injects:
                                  AND between sibling e2e targets.
 
   * `tags`:
-      - `exclusive`              Bazel runs at most one `exclusive`
-                                 test at a time on a given runner,
-                                 preventing port collisions between
-                                 test binaries that all spin up sipi
-                                 on `11024 + (PID % 16384)`.
+      - `exclusive-if-local`     When tests run locally — dev machines, and the
+                                 arm64/darwin CI legs whose cross-built binary
+                                 can't run on the x86_64 worker — Bazel runs at
+                                 most one at a time, preventing port collisions
+                                 between test binaries that all spin up sipi on
+                                 `11024 + (PID % 16384)` on the shared runner.
+                                 On the native x86_64 RBE leg each test executes
+                                 on its own isolated worker, so there is no
+                                 shared port space to collide on and Bazel runs
+                                 them in parallel. Plain `exclusive` would
+                                 disable remote execution entirely (Bazel can't
+                                 guarantee exclusivity on a machine it doesn't
+                                 own).
       - `no-sandbox`             Skips the sandbox for this target's actions.
-                                 Required because macOS Bazel's sandbox
-                                 interferes with `realpath()` resolution
-                                 against the materialised `:test_fixtures`
-                                 tree — sipi's path-traversal guard
+                                 Required because Bazel's sandbox interferes
+                                 with `realpath()` resolution against the
+                                 materialised `:test_fixtures` tree — sipi's
+                                 path-traversal guard
                                  (`SipiHttpServer.cpp:validate_resolved_path`)
                                  then rejects every IIIF request with
                                  "Invalid IIIF identifier".
@@ -65,11 +83,6 @@ What the macro injects:
                                  the test's COMPILE on the local host, which
                                  breaks RBE cross-compilation (x86_64 exec
                                  tools can't run on an arm64/darwin runner).
-                                 Local test EXECUTION is ensured separately by
-                                 CI's `--strategy=TestRunner=local` (and is the
-                                 default with no remote executor), so
-                                 `no-sandbox` covers the sandbox need without
-                                 pinning the compile.
 
 The macro DOES cover the `differential` parity target through
 `extra_data` / `extra_env`: that target adds the retained C++ server
@@ -110,6 +123,34 @@ def sipi_e2e_test(
       extra_tags: additional Bazel tags (merged on top of `["exclusive",
         "no-sandbox"]`).
     """
+    base_env = {
+        # The Rust shell is the binary under test: it
+        # serves `server` natively and forwards every offline subcommand to
+        # the C++ CLI via sipi_cli_main, so it covers both the server and CLI
+        # e2e suites. The C++ `//src/cli:sipi` server is retired at the delete.
+        "SIPI_BIN": "$(rootpath //src/cli-rs:sipi)",
+        # Points at the `copy_to_directory` output that materialises
+        # `version.txt`, `test/_test_data/`, `config/`, `scripts/`,
+        # `server/` as real files (no symlinks). Required so sipi's
+        # `realpath()`-based path-traversal guard
+        # (`SipiHttpServer.cpp:validate_resolved_path`) keeps
+        # imgroot's resolved prefix and per-request files in
+        # agreement — under a runfiles tree of symlinks the prefix
+        # check rejects every IIIF request. The same materialisation
+        # also fixes Lua `require` and `insta` snapshot lookups.
+        "SIPI_REPO_ROOT": "$(rootpath //:test_fixtures)",
+        # `insta` writes/reads snapshots under
+        # `<INSTA_WORKSPACE_ROOT>/<package_dir>/tests/snapshots/`.
+        # `:snapshots` data dep materialises the goldens at
+        # `<runfiles_workspace_root>/test/e2e/tests/snapshots/`,
+        # so pointing INSTA_WORKSPACE_ROOT at the runfiles
+        # workspace root (`.`, matching the `SIPI_WORKSPACE_ROOT`
+        # convention from the C++ unit tests) lets insta resolve
+        # them under `./test/e2e/tests/snapshots/<n>.snap`.
+        "INSTA_WORKSPACE_ROOT": ".",
+        "LSAN_OPTIONS": "suppressions=$(rootpath //:lsan_suppressions)",
+    } | extra_env
+
     rust_test(
         name = name,
         srcs = [
@@ -125,39 +166,22 @@ def sipi_e2e_test(
         # `:snapshots` attaches the insta golden tree unconditionally —
         # only a couple of tests consume it but the cost is trivial and
         # makes adding new `assert_*_snapshot!()` calls a no-op wiring-wise.
+        # Under `--config=asan` the LLVM symbolizer travels as a runfile so
+        # `ASAN_SYMBOLIZER_PATH` resolves on the RBE worker as well as the
+        # local runner (LSan needs it to match the `leak:lua*` suppressions).
         data = [
             "//src/cli-rs:sipi",
             "//:test_fixtures",
             "//:lsan_suppressions",
             ":snapshots",
-        ] + extra_data,
-        env = {
-            # The Rust shell is the binary under test: it
-            # serves `server` natively and forwards every offline subcommand to
-            # the C++ CLI via sipi_cli_main, so it covers both the server and CLI
-            # e2e suites. The C++ `//src/cli:sipi` server is retired at the delete.
-            "SIPI_BIN": "$(rootpath //src/cli-rs:sipi)",
-            # Points at the `copy_to_directory` output that materialises
-            # `version.txt`, `test/_test_data/`, `config/`, `scripts/`,
-            # `server/` as real files (no symlinks). Required so sipi's
-            # `realpath()`-based path-traversal guard
-            # (`SipiHttpServer.cpp:validate_resolved_path`) keeps
-            # imgroot's resolved prefix and per-request files in
-            # agreement — under a runfiles tree of symlinks the prefix
-            # check rejects every IIIF request. The same materialisation
-            # also fixes Lua `require` and `insta` snapshot lookups.
-            "SIPI_REPO_ROOT": "$(rootpath //:test_fixtures)",
-            # `insta` writes/reads snapshots under
-            # `<INSTA_WORKSPACE_ROOT>/<package_dir>/tests/snapshots/`.
-            # `:snapshots` data dep materialises the goldens at
-            # `<runfiles_workspace_root>/test/e2e/tests/snapshots/`,
-            # so pointing INSTA_WORKSPACE_ROOT at the runfiles
-            # workspace root (`.`, matching the `SIPI_WORKSPACE_ROOT`
-            # convention from the C++ unit tests) lets insta resolve
-            # them under `./test/e2e/tests/snapshots/<n>.snap`.
-            "INSTA_WORKSPACE_ROOT": ".",
-            "LSAN_OPTIONS": "suppressions=$(rootpath //:lsan_suppressions)",
-        } | extra_env,
+        ] + extra_data + select({
+            "//bazel:asan_enabled": ["//bazel:llvm-symbolizer"],
+            "//conditions:default": [],
+        }),
+        env = select({
+            "//bazel:asan_enabled": base_env | {"ASAN_SYMBOLIZER_PATH": "$(rootpath //bazel:llvm-symbolizer)"},
+            "//conditions:default": base_env,
+        }),
         args = ["--test-threads=1"],
-        tags = ["exclusive", "no-sandbox"] + extra_tags,
+        tags = ["exclusive-if-local", "no-sandbox"] + extra_tags,
     )
