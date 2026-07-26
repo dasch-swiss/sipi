@@ -237,6 +237,8 @@ int sipi_metrics_snapshot(SipiMetricsSnapshot *out)
     out->decode_memory_shadow_rejected_total = counter(m.decode_memory_shadow_rejected);
     out->decode_memory_near_limit_total = counter(m.decode_memory_near_limit_total);
 
+    out->tiff_pyramid_reduced_decodes_total = counter(m.tiff_pyramid_reduced_decodes_total);
+
     out->waiting_connections = gauge(m.waiting_connections);
     out->cache_size_bytes = gauge(m.cache_size_bytes);
     out->cache_files = gauge(m.cache_files);

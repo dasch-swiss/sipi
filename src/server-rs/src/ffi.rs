@@ -177,6 +177,7 @@ pub struct SipiMetricsSnapshot {
     pub decode_memory_rejected_total: u64,
     pub decode_memory_shadow_rejected_total: u64,
     pub decode_memory_near_limit_total: u64,
+    pub tiff_pyramid_reduced_decodes_total: u64,
     pub waiting_connections: i64,
     pub cache_size_bytes: i64,
     pub cache_files: i64,
@@ -1583,7 +1584,7 @@ mod metrics_snapshot_layout {
     fn repr_c_matches_metrics_snapshot_h() {
         assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
         assert_eq!(align_of::<SipiMetricsSnapshot>(), 8);
-        assert_eq!(size_of::<SipiMetricsSnapshot>(), 192);
+        assert_eq!(size_of::<SipiMetricsSnapshot>(), 200);
 
         assert_eq!(offset_of!(SipiMetricsSnapshot, cache_hits_total), 0);
         assert_eq!(offset_of!(SipiMetricsSnapshot, cache_misses_total), 8);
@@ -1634,22 +1635,26 @@ mod metrics_snapshot_layout {
             offset_of!(SipiMetricsSnapshot, decode_memory_near_limit_total),
             120
         );
-        assert_eq!(offset_of!(SipiMetricsSnapshot, waiting_connections), 128);
-        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_bytes), 136);
-        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files), 144);
-        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_limit_bytes), 152);
-        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files_limit), 160);
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, tiff_pyramid_reduced_decodes_total),
+            128
+        );
+        assert_eq!(offset_of!(SipiMetricsSnapshot, waiting_connections), 136);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_bytes), 144);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files), 152);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_limit_bytes), 160);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files_limit), 168);
         assert_eq!(
             offset_of!(SipiMetricsSnapshot, rate_limit_clients_tracked),
-            168
-        );
-        assert_eq!(
-            offset_of!(SipiMetricsSnapshot, decode_memory_budget_bytes),
             176
         );
         assert_eq!(
-            offset_of!(SipiMetricsSnapshot, decode_memory_used_bytes),
+            offset_of!(SipiMetricsSnapshot, decode_memory_budget_bytes),
             184
+        );
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, decode_memory_used_bytes),
+            192
         );
     }
 }

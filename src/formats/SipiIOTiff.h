@@ -22,6 +22,19 @@ namespace Sipi {
 
 std::vector<unsigned char> read_watermark(const std::string &wmfile, int &nx, int &ny, int &nc);
 
+/*!
+ * Select the pyramid resolution level (IFD index) for a requested reduce.
+ *
+ * `resolutions` are ordered full-first (level 0 = full, ratio 1, then 2, 4, 8
+ * …); `SubImageInfo::reduce` is the ratio image_width / level_width. `reduce_exp`
+ * is the IIIF size stage's log2 exponent (0, 1, 2, 3 → divisor 1, 2, 4, 8).
+ * Returns the largest level whose ratio does not exceed the requested divisor;
+ * the caller applies any residual scale in that level's coordinate space.
+ * Returns 0 for an empty pyramid or a full-size (exp ≤ 0) request. Never
+ * divides by zero: the divisor is always ≥ 1.
+ */
+[[nodiscard]] uint32_t select_pyramid_level(const std::vector<SubImageInfo> &resolutions, int reduce_exp);
+
 /*! Class which implements the TIFF-reader/writer */
 class SipiIOTiff : public SipiIO
 {

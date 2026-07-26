@@ -50,6 +50,7 @@ const std::set<std::string> kBridgedToOtlp = {
   "sipi_rate_limit_clients_tracked",
   "sipi_decode_memory_budget_bytes",
   "sipi_decode_memory_used_bytes",
+  "sipi_tiff_pyramid_reduced_decodes_total",
 };
 
 // Label-fanned families whose pre-created children are bridged individually,

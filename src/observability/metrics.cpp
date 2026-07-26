@@ -204,7 +204,13 @@ Metrics::Metrics()
     essentials_hash_mismatch_tiff(essentials_hash_mismatch_total.Add({{"format", "tiff"}})),
     essentials_hash_mismatch_jpeg(essentials_hash_mismatch_total.Add({{"format", "jpeg"}})),
     essentials_hash_mismatch_png(essentials_hash_mismatch_total.Add({{"format", "png"}})),
-    essentials_hash_mismatch_other(essentials_hash_mismatch_total.Add({{"format", "other"}}))
+    essentials_hash_mismatch_other(essentials_hash_mismatch_total.Add({{"format", "other"}})),
+
+    tiff_pyramid_reduced_decodes_total(prometheus::BuildCounter()
+                                         .Name("sipi_tiff_pyramid_reduced_decodes_total")
+                                         .Help("TIFF decodes served from a reduced pyramid level (level > 0).")
+                                         .Register(*registry_)
+                                         .Add({}))
 {
   // Set build info gauge to 1 (it's an info-style metric — value is always 1, labels carry metadata)
   build_info.Set(1);

@@ -8,6 +8,7 @@
 #include "../../../src/SipiImage.h"
 #include "../../../src/SipiImageError.h"
 #include "SipiIOTiff.h"
+#include "observability/metrics.h"
 #include "test_paths.h"
 #include <cmath>
 #include <ranges>
@@ -48,6 +49,9 @@ const std::string wrongrotation = test_images + "unit/image_orientation.jpg";
 const std::string watermark_correct = test_images + "unit/watermark_correct.tif";
 const std::string watermark_incorrect = test_images + "unit/watermark_incorrect.tif";
 const std::string tiffJpegScanlineBug = test_images + "knora/tiffJpegScanlineBug.tif";
+// Tiled multi-IFD pyramid TIFF (levels 512/256/128/64, tiled 256²) used to
+// exercise TIFF pyramid-level selection.
+const std::string lena512Pyramid = test_images + "unit/lena512_pyramid.tif";
 const std::string imgExifGps = test_images + "unit/img_exif_gps.jpg";
 const std::string imgExifGpsTifOut = tmp_dir + "img_exif_gps_out.tif";
 
@@ -66,6 +70,37 @@ TEST(SipiImage, CheckIfTestImagesCanBeFound)
   EXPECT_TRUE(exists_file(watermark_correct));
   EXPECT_TRUE(exists_file(watermark_incorrect));
   EXPECT_TRUE(exists_file(tiffJpegScanlineBug));
+  EXPECT_TRUE(exists_file(lena512Pyramid));
+}
+
+// The pyramid fixture reads correctly at full resolution and at a reduced size,
+// and a reduced request decodes from a deeper pyramid level. Output dimensions
+// are level-independent (the pipeline always yields the requested size), so the
+// reduced-level decode is verified via the reduced-decodes counter rather than
+// dims: a full-size read must NOT bump it (level 0), a reduced read must.
+TEST(SipiImage, PyramidTiffReadsFullAndReduced)
+{
+  auto &reduced_decodes = Sipi::observability::Metrics::instance().tiff_pyramid_reduced_decodes_total;
+  Sipi::SipiIOTiff::initLibrary();
+
+  // A full read decodes from level 0 — the reduced-decodes counter stays put.
+  const double before_full = reduced_decodes.Value();
+  Sipi::SipiImage full;
+  ASSERT_NO_THROW(full.read(lena512Pyramid));
+  EXPECT_EQ(full.getNx(), 512u);
+  EXPECT_EQ(full.getNy(), 512u);
+  EXPECT_DOUBLE_EQ(reduced_decodes.Value(), before_full);
+
+  // A !128,128 best-fit of the 512² source reduces by /4 → a deeper pyramid
+  // level, so the reduced-decodes counter advances by one.
+  const double before_reduced = reduced_decodes.Value();
+  const std::shared_ptr<Sipi::SipiRegion> region;
+  const auto size = std::make_shared<Sipi::SipiSize>("!128,128");
+  Sipi::SipiImage reduced;
+  ASSERT_NO_THROW(reduced.read(lena512Pyramid, region, size));
+  EXPECT_EQ(reduced.getNx(), 128u);
+  EXPECT_EQ(reduced.getNy(), 128u);
+  EXPECT_DOUBLE_EQ(reduced_decodes.Value(), before_reduced + 1.0);
 }
 
 TEST(SipiImage, ImageComparison)
