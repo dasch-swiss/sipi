@@ -184,7 +184,7 @@ For CI pipeline details (Docker publishing, release automation), see [`docs/src/
 
 **Releases are automated via release-please.** Correct [Conventional Commit](https://www.conventionalcommits.org/) prefixes are required — they drive SemVer bumps and changelog generation. See [`docs/src/development/ci.md`](docs/src/development/ci.md) for the full prefix-to-release mapping.
 
-Valid prefixes: `feat`, `fix`, `perf`, `revert`, `refactor`, `docs`, `style`, `test`, `build`, `chore`, `ci`. Breaking changes use `!` suffix: `feat!: ...`. The scope is a module name from [`CONVENTIONS.md` § Module Layout](CONVENTIONS.md); if none fits, ask the maintainer before coining a new one.
+Valid types (exactly eight): `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `chore`. `revert`, `style`, and `ci` are **not** valid — use `chore(ci): ...`, fold formatting in, and `fix`/`chore` for reverts. Breaking changes use `!` suffix: `feat(scope)!: ...`. **A scope is mandatory** (`type(scope): subject`, no catch-all) — a module name from [`CONVENTIONS.md` § Module Layout](CONVENTIONS.md); if none fits, ask the maintainer before coining a new one. A CI gate (`commitlint-rs`, `just commit-lint`) enforces this. Full schema single-sourced in [`docs/src/development/commit-conventions.md`](docs/src/development/commit-conventions.md).
 
 **A PR lands as one commit by default.** Rebase-merge puts every branch commit on `main` verbatim — there is no squash safety net. Clean up the branch before merge; split into multiple commits only when the work is genuinely several independent, self-contained changes. A `fix:` corrects behavior already on `main`; a bug introduced earlier in the same branch is folded into its introducing commit, never a standalone `fix:`.
 

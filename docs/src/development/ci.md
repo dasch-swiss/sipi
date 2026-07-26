@@ -16,34 +16,24 @@ to determine the SemVer bump and generate the changelog.
 - `.github/release-please/manifest.json` — current version
 - `.github/workflows/release-please.yml` — GitHub Actions workflow
 
-**How commit types map to releases:**
+**How commit types map to releases:** the type → changelog-section → SemVer-bump
+table is single-sourced in
+[Commit and PR Conventions § Commit message schema](commit-conventions.md#commit-message-schema).
+The machine source release-please actually reads is
+[`.github/release-please/config.json`](../../../.github/release-please/config.json).
 
-| Prefix | SemVer effect | Changelog section |
-|--------|--------------|-------------------|
-| `feat:` | minor bump | Features |
-| `fix:` | patch bump | Bug Fixes |
-| `feat!:` / `fix!:` | major bump | Breaking Changes |
-| `perf:` | patch bump | Performance Improvements |
-| `revert:` | patch bump | Reverts |
-| `docs:` | patch bump | Documentation |
-| `style:` | patch bump | Styles |
-| `chore:` | patch bump | Miscellaneous Chores |
-| `refactor:` | patch bump | Code Refactoring |
-| `test:` | patch bump | Tests |
-| `build:` | patch bump | Build System |
-| `ci:` | patch bump | Continuous Integration |
+Every commit appears in the release notes in its own section, and — because the
+scope is mandatory — each line reads `concern: subject`. A release containing only
+internal-work commits (`refactor`/`docs`/`test`/`build`/`chore`) is a patch release:
+release-please keeps a release PR open for it, and the maintainer decides when to
+merge it.
 
-Every commit with a valid prefix appears in the release notes, in its own
-section. The internal-work sections render after Features / Bug Fixes /
-Performance Improvements / Reverts. A release containing only internal-work
-commits is therefore a patch release — release-please keeps a release PR open
-for it, and the maintainer decides when to merge it.
-
-!!! warning "Correct commit prefixes are critical"
-    A commit without a valid Conventional Commit prefix will be invisible to
-    release-please — it won't trigger a release or appear in the changelog.
-    See [Commit and PR Conventions](commit-conventions.md) for the full
-    commit message schema, scope vocabulary, and what `fix:` means.
+!!! warning "Correct type + scope are critical, and enforced"
+    A commit without a valid type is invisible to release-please — it won't trigger
+    a release or appear in the changelog. Both the type (one of the eight allowed)
+    and a mandatory scope are enforced in CI by the `commit-lint` job (`commitlint-rs`).
+    See [Commit and PR Conventions](commit-conventions.md) for the full schema, the
+    scope vocabulary, what `fix:` means, and `just commit-lint`.
 
 ## Pull request CI
 
