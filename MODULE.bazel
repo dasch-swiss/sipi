@@ -103,6 +103,10 @@ bazel_dep(name = "libjpeg_turbo", version = "3.1.3.bcr.5")
 bazel_dep(name = "libwebp", version = "1.6.0")
 bazel_dep(name = "libdeflate", version = "1.25")
 
+# Portable SIMD (runtime dynamic dispatch) for the fixed-point image resampler
+# (src/resample.cc). A true BCR drop-in — a SIMD utility, not a codec (ADR-0015).
+bazel_dep(name = "highway", version = "1.3.0.bcr.1")
+
 # Hard pin to the 5.3 line — SipiLua.cpp and src/shttps/lua/LuaServer.cpp use the
 # Lua C API extensively, and 5.3 → 5.4 is not ABI-compatible (lua_resume
 # signature change, integer-subtype defaults, bitlib removal).

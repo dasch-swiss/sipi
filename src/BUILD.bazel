@@ -244,6 +244,7 @@ cc_library(
         "SipiMemoryBudget.cpp",
         "SipiRateLimiter.cpp",
         "populate_from_image.cpp",
+        "resample.cc",
         "formats/SipiIOJ2k.cpp",
         "formats/SipiIOJpeg.cpp",
         "formats/SipiIOPng.cpp",
@@ -271,6 +272,7 @@ cc_library(
         "SipiPeakMemory.h",
         "SipiRateLimiter.h",
         "populate_from_image.h",
+        "resample.h",
         "formats/SipiIOJ2k.h",
         "formats/SipiIOJpeg.h",
         "formats/SipiIOPng.h",
@@ -344,6 +346,7 @@ cc_library(
         "@zstd",
         "@zlib",
         "@kakadu//:kdu",
+        "@highway//:hwy",
     ] + select({
         "@platforms//os:linux": ["//bazel:glibc23_compat"],
         "//conditions:default": [],

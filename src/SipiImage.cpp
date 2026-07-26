@@ -24,6 +24,7 @@
 #include "logging/logger.h"
 #include "SipiImage.h"
 #include "SipiImageError.h"
+#include "resample.h"
 #include "formats/SipiIOJ2k.h"
 #include "formats/SipiIOJpeg.h"
 #include "formats/SipiIOPng.h"
@@ -990,14 +991,9 @@ bool SipiImage::scaleMedium(size_t nnx, size_t nny)
 
 namespace {
 
-// Fixed-point precision for resample weights. Weights are held as integers
-// scaled by 2^kResamplePrecisionBits; accumulation is integer, so the result is
-// bit-identical regardless of SIMD lane width or architecture (integer add is
-// associative and exact) — the property a float/double accumulator lacks, and
-// what lets the resampler vectorize while keeping one approval golden set valid
-// across x86-64 and aarch64. 14 bits keeps 8- and 16-bit sample sums inside
-// int32: max term 65535 * 2^14 ≈ 1.07e9 < INT32_MAX.
-constexpr int kResamplePrecisionBits = 14;
+// Fixed-point one (weights sum to this per output). kResamplePrecisionBits and
+// the accumulation kernel live in resample.h / resample.cc; the builder below
+// only produces the integer weights the kernel consumes.
 constexpr int32_t kResampleOne = 1 << kResamplePrecisionBits;
 
 // Separable resample weights for one axis, in CSR layout: output sample `i`
@@ -1080,52 +1076,6 @@ AxisWeights build_axis_weights(size_t src, size_t dst)
   return w;
 }
 
-// Two-pass separable resample of an interleaved image (nx*ny*nc, sample type T)
-// to nnx*nny. The horizontal pass resamples nx→nnx into an int32 scratch buffer
-// (already rounded back into the sample range); the vertical pass resamples
-// ny→nny and rounds/clamps into a byte buffer carrying T-typed samples.
-// Accumulation is integer fixed-point (see kResamplePrecisionBits): the weights
-// sum to kResampleOne, so `(acc + kResampleOne/2) >> bits` is a round-to-nearest
-// back to the sample scale.
-template<typename T>
-std::vector<byte> resample_separable(const T *in, size_t nx, size_t ny, size_t nc, size_t nnx, size_t nny,
-  const AxisWeights &wx, const AxisWeights &wy)
-{
-  constexpr int32_t maxval = static_cast<int32_t>(std::numeric_limits<T>::max());
-  constexpr int32_t round = kResampleOne / 2;
-
-  std::vector<int32_t> tmp(ny * nnx * nc);
-  for (size_t y = 0; y < ny; ++y) {
-    const T *row = in + y * nx * nc;
-    int32_t *orow = tmp.data() + y * nnx * nc;
-    for (size_t i = 0; i < nnx; ++i) {
-      for (size_t k = 0; k < nc; ++k) {
-        int32_t acc = round;
-        for (size_t t = wx.offset[i]; t < wx.offset[i + 1]; ++t) {
-          acc += wx.wt[t] * static_cast<int32_t>(row[wx.idx[t] * nc + k]);
-        }
-        orow[i * nc + k] = std::clamp(acc >> kResamplePrecisionBits, 0, maxval);
-      }
-    }
-  }
-
-  std::vector<byte> out(nnx * nny * nc * sizeof(T));
-  T *outp = reinterpret_cast<T *>(out.data());
-  for (size_t j = 0; j < nny; ++j) {
-    T *orow = outp + j * nnx * nc;
-    for (size_t i = 0; i < nnx; ++i) {
-      for (size_t k = 0; k < nc; ++k) {
-        int32_t acc = round;
-        for (size_t t = wy.offset[j]; t < wy.offset[j + 1]; ++t) {
-          acc += wy.wt[t] * tmp[(wy.idx[t] * nnx + i) * nc + k];
-        }
-        orow[i * nc + k] = static_cast<T>(std::clamp(acc >> kResamplePrecisionBits, 0, maxval));
-      }
-    }
-  }
-  return out;
-}
-
 }// namespace
 
 bool SipiImage::scale(size_t nnx, size_t nny)
@@ -1138,18 +1088,23 @@ bool SipiImage::scale(size_t nnx, size_t nny)
 
   // Separable resample: one pass per axis, work proportional to the output size
   // rather than the source. Area averaging on a shrinking axis anti-aliases the
-  // downscale; linear interpolation enlarges.
+  // downscale; linear interpolation enlarges. The SIMD kernel lives in
+  // resample.cc (Highway); the weights carry the fixed-point contract.
   const AxisWeights wx = build_axis_weights(nx, nnx);
   const AxisWeights wy = build_axis_weights(ny, nny);
 
+  std::vector<byte> out(nnx * nny * nc * (bps == 16 ? 2 : 1));
   if (bps == 8) {
-    pixels = resample_separable<byte>(pixels.data(), nx, ny, nc, nnx, nny, wx, wy);
+    resample_separable_u8(pixels.data(), nx, ny, nc, nnx, nny, wx.offset.data(), wx.idx.data(), wx.wt.data(),
+      wy.offset.data(), wy.idx.data(), wy.wt.data(), out.data());
   } else if (bps == 16) {
-    pixels =
-      resample_separable<word>(reinterpret_cast<const word *>(pixels.data()), nx, ny, nc, nnx, nny, wx, wy);
+    resample_separable_u16(reinterpret_cast<const word *>(pixels.data()), nx, ny, nc, nnx, nny, wx.offset.data(),
+      wx.idx.data(), wx.wt.data(), wy.offset.data(), wy.idx.data(), wy.wt.data(),
+      reinterpret_cast<word *>(out.data()));
   } else {
     return false;
   }
+  pixels = std::move(out);
 
   nx = nnx;
   ny = nny;
