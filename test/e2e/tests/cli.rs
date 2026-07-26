@@ -1,215 +1,13 @@
 use insta::assert_snapshot;
-use sipi_e2e::{repo_root, sipi_bin_path, test_data_dir};
-use std::path::PathBuf;
+use sipi_e2e::{cli_convert, cli_run, cli_tmp_path, repo_root, sipi_bin_path, test_data_dir};
 use std::process::Command;
 
 // =============================================================================
-// CLI mode tests — `sipi convert <input> <output> --format <fmt>`
+// Lightweight CLI-mode tests (version, quality plumbing, help snapshot, query,
+// compare, watermark). The heavy Kakadu JP2 conversions — decodes, round-trips,
+// format-fidelity, and the verify pipeline — run in the sibling `cli_conversions`
+// target, which fans them out in parallel (see `tests/cli_conversions.rs`).
 // =============================================================================
-
-fn sipi_convert(input: &str, output: &str, format: &str) -> std::process::Output {
-    let sipi_bin = sipi_bin_path();
-
-    Command::new(&sipi_bin)
-        .arg("convert")
-        .arg(input)
-        .arg(output)
-        .arg("--format")
-        .arg(format)
-        .current_dir(test_data_dir())
-        .output()
-        .unwrap_or_else(|e| panic!("Failed to run sipi CLI: {}", e))
-}
-
-fn tmp_path(name: &str) -> PathBuf {
-    let dir = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string());
-    PathBuf::from(dir).join(name)
-}
-
-#[test]
-fn cli_file_conversion() {
-    // Port of test_iso_15444_4_decode_jp2 + test_iso_15444_4_round_trip:
-    // Convert JP2 → TIFF and TIFF → JP2 → TIFF round-trip using CLI mode.
-    let data = test_data_dir().join("images");
-
-    // Part 1: JP2 → TIFF decode (files 1 and 4 — others have known issues)
-    for i in [1, 4] {
-        let input = data
-            .join("iso-15444-4/testfiles_jp2")
-            .join(format!("file{}.jp2", i));
-        let output = tmp_path(&format!("sipi_cli_decode_{}.tif", i));
-
-        let result = sipi_convert(input.to_str().unwrap(), output.to_str().unwrap(), "tif");
-
-        assert!(
-            result.status.success(),
-            "JP2→TIFF decode for file{}.jp2 failed: {}",
-            i,
-            String::from_utf8_lossy(&result.stderr)
-        );
-
-        // Output file should exist and have content
-        assert!(output.exists(), "output TIFF should exist for file{}", i);
-        let meta = std::fs::metadata(&output).expect("read output metadata");
-        assert!(
-            meta.len() > 0,
-            "output TIFF should not be empty for file{}",
-            i
-        );
-
-        let _ = std::fs::remove_file(&output);
-    }
-
-    // Part 2: TIFF → JP2 → TIFF round-trip (files 1-9)
-    for i in 1..=9 {
-        let reference_tif = data
-            .join("iso-15444-4/reference_jp2")
-            .join(format!("jp2_{}.tif", i));
-
-        if !reference_tif.exists() {
-            eprintln!("Skipping round-trip for jp2_{}.tif — not found", i);
-            continue;
-        }
-
-        let intermediate_jp2 = tmp_path(&format!("sipi_cli_rt_{}.jp2", i));
-        let output_tif = tmp_path(&format!("sipi_cli_rt_{}.tif", i));
-
-        // TIFF → JP2
-        let result1 = sipi_convert(
-            reference_tif.to_str().unwrap(),
-            intermediate_jp2.to_str().unwrap(),
-            "jpx",
-        );
-
-        assert!(
-            result1.status.success(),
-            "TIFF→JP2 for jp2_{}.tif failed: {}",
-            i,
-            String::from_utf8_lossy(&result1.stderr)
-        );
-        assert!(
-            intermediate_jp2.exists(),
-            "intermediate JP2 should exist for file {}",
-            i
-        );
-
-        // JP2 → TIFF
-        let result2 = sipi_convert(
-            intermediate_jp2.to_str().unwrap(),
-            output_tif.to_str().unwrap(),
-            "tif",
-        );
-
-        assert!(
-            result2.status.success(),
-            "JP2→TIFF round-trip for file {} failed: {}",
-            i,
-            String::from_utf8_lossy(&result2.stderr)
-        );
-        assert!(
-            output_tif.exists(),
-            "round-trip TIFF should exist for file {}",
-            i
-        );
-
-        // Output TIFF should have reasonable size (not zero, not corrupt)
-        let ref_size = std::fs::metadata(&reference_tif).unwrap().len();
-        let out_size = std::fs::metadata(&output_tif).unwrap().len();
-        assert!(
-            out_size > 0,
-            "round-trip TIFF for file {} should not be empty",
-            i
-        );
-        // Round-trip may not be byte-identical, but should be within 2x size
-        assert!(
-            out_size < ref_size * 3,
-            "round-trip TIFF for file {} is suspiciously large ({} vs ref {})",
-            i,
-            out_size,
-            ref_size
-        );
-
-        let _ = std::fs::remove_file(&intermediate_jp2);
-        let _ = std::fs::remove_file(&output_tif);
-    }
-}
-
-#[test]
-fn cli_metadata_fidelity() {
-    // Convert a TIFF with metadata to JP2 and back, verify the output
-    // is a valid image with reasonable properties.
-    let data = test_data_dir().join("images");
-    let input = data.join("unit/lena512.tif");
-
-    if !input.exists() {
-        eprintln!("Skipping: lena512.tif not found");
-        return;
-    }
-
-    // TIFF → JP2
-    let jp2_output = tmp_path("sipi_cli_meta.jp2");
-    let result1 = sipi_convert(input.to_str().unwrap(), jp2_output.to_str().unwrap(), "jpx");
-    assert!(
-        result1.status.success(),
-        "TIFF→JP2 metadata test failed: {}",
-        String::from_utf8_lossy(&result1.stderr)
-    );
-
-    // JP2 → TIFF (back)
-    let tif_output = tmp_path("sipi_cli_meta_rt.tif");
-    let result2 = sipi_convert(
-        jp2_output.to_str().unwrap(),
-        tif_output.to_str().unwrap(),
-        "tif",
-    );
-    assert!(
-        result2.status.success(),
-        "JP2→TIFF metadata test failed: {}",
-        String::from_utf8_lossy(&result2.stderr)
-    );
-
-    // Verify output is valid — check TIFF magic bytes (II or MM)
-    let tif_bytes = std::fs::read(&tif_output).expect("read output TIFF");
-    assert!(tif_bytes.len() > 4, "output TIFF too small");
-    let is_tiff = (tif_bytes[0] == b'I' && tif_bytes[1] == b'I')
-        || (tif_bytes[0] == b'M' && tif_bytes[1] == b'M');
-    assert!(
-        is_tiff,
-        "output should be valid TIFF (starts with II or MM)"
-    );
-
-    // Also convert to JPEG and PNG to test format diversity
-    let jpg_output = tmp_path("sipi_cli_meta.jpg");
-    let result3 = sipi_convert(input.to_str().unwrap(), jpg_output.to_str().unwrap(), "jpg");
-    assert!(
-        result3.status.success(),
-        "TIFF→JPEG conversion failed: {}",
-        String::from_utf8_lossy(&result3.stderr)
-    );
-    let jpg_bytes = std::fs::read(&jpg_output).expect("read JPEG output");
-    assert!(
-        jpg_bytes.len() > 2 && jpg_bytes[0] == 0xFF && jpg_bytes[1] == 0xD8,
-        "output should be valid JPEG"
-    );
-
-    let png_output = tmp_path("sipi_cli_meta.png");
-    let result4 = sipi_convert(input.to_str().unwrap(), png_output.to_str().unwrap(), "png");
-    assert!(
-        result4.status.success(),
-        "TIFF→PNG conversion failed: {}",
-        String::from_utf8_lossy(&result4.stderr)
-    );
-    let png_bytes = std::fs::read(&png_output).expect("read PNG output");
-    assert!(
-        png_bytes.len() > 8 && &png_bytes[1..4] == b"PNG",
-        "output should be valid PNG"
-    );
-
-    // Cleanup
-    for path in [&jp2_output, &tif_output, &jpg_output, &png_output] {
-        let _ = std::fs::remove_file(path);
-    }
-}
 
 #[test]
 fn cli_version_flag() {
@@ -280,7 +78,7 @@ fn sipi_convert_quality(input: &str, output: &str, quality: u32) -> std::process
 #[test]
 fn cli_convert_quality_succeeds_and_emits_jpeg() {
     let input = test_data_dir().join("images/unit/lena512.tif");
-    let output = tmp_path("sipi_cli_quality_ok.jpg");
+    let output = cli_tmp_path("sipi_cli_quality_ok.jpg");
     let _ = std::fs::remove_file(&output);
 
     let result = sipi_convert_quality(input.to_str().unwrap(), output.to_str().unwrap(), 80);
@@ -312,8 +110,8 @@ fn cli_convert_quality_actually_affects_output() {
     // avoid erroring. A low-quality encode must be meaningfully smaller than a
     // high-quality one — false if the option is dropped or mis-threaded.
     let input = test_data_dir().join("images/unit/lena512.tif");
-    let low = tmp_path("sipi_cli_quality_low.jpg");
-    let high = tmp_path("sipi_cli_quality_high.jpg");
+    let low = cli_tmp_path("sipi_cli_quality_low.jpg");
+    let high = cli_tmp_path("sipi_cli_quality_high.jpg");
     let _ = std::fs::remove_file(&low);
     let _ = std::fs::remove_file(&high);
 
@@ -380,25 +178,18 @@ fn sipi_server_help_heading_order() {
 }
 
 // =============================================================================
-// The offline verbs beyond `convert`/`--version`: `query`, `compare`, `verify`,
-// and `convert`'s `-w/--watermark`. All delegate to the C++ CLI (`sipi_cli_main`)
-// on both binaries, so this is plain e2e coverage, not differential-relevant.
+// The offline verbs `query` and `compare`. Both delegate to the C++ CLI
+// (`sipi_cli_main`) on both binaries, so this is plain e2e coverage, not
+// differential-relevant. (`verify` runs in the `cli_conversions` batch;
+// `convert`'s `-w/--watermark` lives below.)
 // =============================================================================
-
-fn sipi_run(args: &[&str]) -> std::process::Output {
-    Command::new(sipi_bin_path())
-        .args(args)
-        .current_dir(test_data_dir())
-        .output()
-        .unwrap_or_else(|e| panic!("Failed to run sipi {:?}: {}", args, e))
-}
 
 #[test]
 fn cli_query_dumps_image_info() {
     // `sipi query <file>` streams SipiImage::operator<<, a fixed-field text
     // dump (SipiImage.cpp) — not a --json contract. lena512 is a known 512x512
     // fixture (see info_json_dimensions_match_lena512 in iiif_compliance.rs).
-    let result = sipi_run(&["query", "images/unit/lena512.tif"]);
+    let result = cli_run(&["query", "images/unit/lena512.tif"]);
     assert!(
         result.status.success(),
         "sipi query must succeed; stderr:\n{}",
@@ -418,7 +209,7 @@ fn cli_query_dumps_image_info() {
 #[test]
 fn cli_compare_identical_files_reports_match() {
     // Comparing a file against itself: img1 == img2, exit 0 ("Files identical!").
-    let result = sipi_run(&[
+    let result = cli_run(&[
         "compare",
         "images/unit/lena512.tif",
         "images/unit/lena512.tif",
@@ -435,7 +226,7 @@ fn cli_compare_differing_files_reports_mismatch() {
     // Two genuinely different images: run_compare returns -1 (truncates to a
     // non-zero exit code on the wire) and writes diff.tif — assert only the
     // non-zero contract, not the platform-specific truncated value.
-    let result = sipi_run(&[
+    let result = cli_run(&[
         "compare",
         "images/unit/lena512.tif",
         "images/unit/mario.tif",
@@ -447,75 +238,6 @@ fn cli_compare_differing_files_reports_mismatch() {
 }
 
 #[test]
-fn cli_verify_pipeline_service_and_access_files() {
-    // The ADR-0009 Service -> Access pipeline through the CLI, end to end:
-    // a plain source has neither `verify` mode's precondition met until it
-    // passes through `convert service-file` (which stamps an Essentials
-    // packet) and then `convert access-file` (which requires one on input
-    // and drops it on output). Exercises 4 previously-untested subcommands
-    // together rather than in isolation, since each verify mode's precondition
-    // is exactly what the matching convert mode produces.
-    let service = tmp_path("sipi_cli_verify_service.jp2");
-    let access = tmp_path("sipi_cli_verify_access.jpg");
-    let _ = std::fs::remove_file(&service);
-    let _ = std::fs::remove_file(&access);
-
-    let r1 = sipi_run(&[
-        "convert",
-        "service-file",
-        "images/unit/lena512.tif",
-        service.to_str().unwrap(),
-    ]);
-    assert!(
-        r1.status.success(),
-        "convert service-file must succeed; stderr:\n{}",
-        String::from_utf8_lossy(&r1.stderr)
-    );
-
-    let r2 = sipi_run(&["verify", "service-file", service.to_str().unwrap()]);
-    assert!(
-        r2.status.success(),
-        "verify service-file must accept its own convert service-file output; stderr:\n{}",
-        String::from_utf8_lossy(&r2.stderr)
-    );
-
-    let r3 = sipi_run(&[
-        "convert",
-        "access-file",
-        service.to_str().unwrap(),
-        access.to_str().unwrap(),
-    ]);
-    assert!(
-        r3.status.success(),
-        "convert access-file must succeed on a Service File input; stderr:\n{}",
-        String::from_utf8_lossy(&r3.stderr)
-    );
-
-    let r4 = sipi_run(&["verify", "access-file", access.to_str().unwrap()]);
-    assert!(
-        r4.status.success(),
-        "verify access-file must accept its own convert access-file output; stderr:\n{}",
-        String::from_utf8_lossy(&r4.stderr)
-    );
-
-    // Cross-checks: an Access File must fail verify service-file (no
-    // Essentials) and a Service File must fail verify access-file (carries one).
-    let r5 = sipi_run(&["verify", "service-file", access.to_str().unwrap()]);
-    assert!(
-        !r5.status.success(),
-        "verify service-file must reject an Access File (no Essentials packet)"
-    );
-    let r6 = sipi_run(&["verify", "access-file", service.to_str().unwrap()]);
-    assert!(
-        !r6.status.success(),
-        "verify access-file must reject a Service File (carries an Essentials packet)"
-    );
-
-    let _ = std::fs::remove_file(&service);
-    let _ = std::fs::remove_file(&access);
-}
-
-#[test]
 fn cli_convert_watermark_changes_output_bytes() {
     // `-w/--watermark` on the bare `convert` verb (attach_generic_transform_opts,
     // cli_app.cpp) is implemented but had no e2e coverage. Compare a plain
@@ -523,12 +245,12 @@ fn cli_convert_watermark_changes_output_bytes() {
     // must differ, and the watermarked output must still be a valid JPEG.
     let input = test_data_dir().join("images/unit/lena512.tif");
     let watermark = test_data_dir().join("images/unit/watermark_correct.tif");
-    let plain = tmp_path("sipi_cli_watermark_plain.jpg");
-    let watermarked = tmp_path("sipi_cli_watermark_applied.jpg");
+    let plain = cli_tmp_path("sipi_cli_watermark_plain.jpg");
+    let watermarked = cli_tmp_path("sipi_cli_watermark_applied.jpg");
     let _ = std::fs::remove_file(&plain);
     let _ = std::fs::remove_file(&watermarked);
 
-    let r_plain = sipi_convert(input.to_str().unwrap(), plain.to_str().unwrap(), "jpg");
+    let r_plain = cli_convert(input.to_str().unwrap(), plain.to_str().unwrap(), "jpg");
     assert!(
         r_plain.status.success(),
         "plain convert must succeed; stderr:\n{}",

@@ -9,7 +9,7 @@ Layout:
   * `:sipi_e2e`        `rust_library` exposing the shared helpers
                        (`SipiServer`, `repo_root`, `http_client`, …)
                        consumed by every test binary.
-  * 27 × `rust_test`   one target per non-docker `tests/<name>.rs`,
+  * 28 × `rust_test`   one target per non-docker `tests/<name>.rs`,
                        defined via `sipi_e2e_test()` (see
                        `sipi_e2e_test.bzl`). The macro injects the
                        shared `data`/`env`/`args`/`tags` so the
@@ -23,7 +23,7 @@ Layout:
   * `:docker_smoke`    inline `rust_test` — its data shape (OCI image
                        tarball) and tags (`requires-docker`) diverge
                        from the macro's defaults.
-  * `:all_e2e`         `test_suite` aggregating the 27 non-docker
+  * `:all_e2e`         `test_suite` aggregating the 28 non-docker
                        targets (not `:differential` / `:docker_smoke`).
                        `just bazel-test-e2e` wraps `bazel test
                        //test/e2e:all_e2e`.
@@ -42,8 +42,10 @@ Runtime contracts (set per-target by `sipi_e2e_test()` or below):
                        which `repo_root()` resolves fixture paths.
   * `--test-threads=1` Sipi can't tolerate parallel test load on the
                        JP2 → JPEG decode path. Enforced by `args` in
-                       the macro AND by `tags = ["exclusive"]` so
-                       siblings can't collide on the shared port pool.
+                       the macro AND by `tags = ["exclusive-if-local"]`
+                       so siblings can't collide on the shared port pool
+                       when run locally (on RBE each runs on its own
+                       isolated worker, so parallel execution is safe).
   * `CARGO_PROFILE`    Bazel's default `--compilation_mode=fastbuild`
                        (dbg-equivalent) matches Cargo's `test` default.
                        Don't switch to `--compilation_mode=opt`.
@@ -114,6 +116,11 @@ sipi_e2e_test(name = "bilevel_tiff", deps = _e2e_test_deps)
 sipi_e2e_test(name = "cache", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "cli", deps = _e2e_test_deps)
+
+# The heavy Kakadu JP2 / format conversions, split out of `cli` and run in
+# parallel within the test binary (see tests/cli_conversions.rs). Its own
+# target so RBE schedules it on a separate worker from the lightweight `cli`.
+sipi_e2e_test(name = "cli_conversions", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "cli_json", deps = _e2e_test_deps)
 
@@ -189,7 +196,7 @@ sipi_e2e_test(name = "upload", deps = _e2e_test_deps)
 #      `:all_e2e` matrix step and `bazel-coverage` skip it. CI runs it as its
 #      own step (linux-amd64, like the rustfmt gate) via
 #      `just bazel-test-differential`; the heavy two-binary spawn is
-#      `exclusive` + `no-sandbox` from the macro.
+#      `exclusive-if-local` + `no-sandbox` from the macro.
 #
 sipi_e2e_test(
     name = "differential",
@@ -289,6 +296,7 @@ test_suite(
         ":bilevel_tiff",
         ":cache",
         ":cli",
+        ":cli_conversions",
         ":cli_json",
         ":config",
         ":connection",
