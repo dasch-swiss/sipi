@@ -1,5 +1,17 @@
 # Changelog
 
+## [6.2.3](https://github.com/dasch-swiss/sipi/compare/v6.2.2...v6.2.3) (2026-07-28)
+
+
+### Performance Improvements
+
+* **docker:** Cap glibc malloc arenas in the container image ([444518d](https://github.com/dasch-swiss/sipi/commit/444518db1cf8accd01cd8204752a4943e517d410))
+
+
+### Miscellaneous Chores
+
+* **bazel:** Pin LC_ALL for macOS test actions to avoid nix-bash locale segfault ([a2393d7](https://github.com/dasch-swiss/sipi/commit/a2393d7fd2703011c664ba3ec34543413daf2542))
+
 ## [6.2.2](https://github.com/dasch-swiss/sipi/compare/v6.2.1...v6.2.2) (2026-07-26)
 
 
