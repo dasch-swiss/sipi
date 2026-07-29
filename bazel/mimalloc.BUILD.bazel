@@ -1,0 +1,74 @@
+"""Native `cc_library` for mimalloc v3 — the production malloc override.
+
+Vendored because BCR carries only mimalloc 2.x, whose segment architecture
+retains the freed memory of terminated threads (abandoned segments are
+reclaimed lazily and their pages never purged by default). SIPI's JP2 decode
+path creates and destroys a Kakadu worker-thread pool per request, so under
+replayed production load a 2.2.4-linked binary rode to the container limit and
+OOM-ed in minutes — worse than the glibc ratchet it was meant to fix. mimalloc
+v3 replaced segments with per-page management and reclaims dead threads' pages
+on free, which is exactly this workload. See
+docs/adr/0019-mimalloc-production-allocator.md.
+
+The target mirrors the BCR 2.x overlay's `:mimalloc-lib` shape: one
+`alwayslink` (whole-archive) library compiled as C with `MI_MALLOC_OVERRIDE`,
+so the `malloc`/`free`/`operator new` override objects — `src/alloc-override.c`
+is textually included by `src/alloc.c` — are unconditionally in any link that
+depends on this target. Consumed only by `//src/cli-rs:sipi` (Linux); nothing
+else may depend on it (the C++ engine binary stays on glibc as the
+allocator-isolated oracle baseline).
+"""
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "mimalloc",
+    srcs = [
+        # keep sorted — `set(mi_sources …)` from upstream CMakeLists.txt
+        "src/alloc.c",
+        "src/alloc-aligned.c",
+        "src/alloc-posix.c",
+        "src/arena.c",
+        "src/arena-meta.c",
+        "src/bitmap.c",
+        "src/heap.c",
+        "src/init.c",
+        "src/libc.c",
+        "src/options.c",
+        "src/os.c",
+        "src/page.c",
+        "src/page-map.c",
+        "src/prim/prim.c",
+        "src/random.c",
+        "src/stats.c",
+        "src/theap.c",
+        "src/threadlocal.c",
+    ] + glob([
+        "src/*.h",
+        "include/mimalloc/*.h",
+    ]),
+    hdrs = [
+        "include/mimalloc.h",
+        "include/mimalloc-override.h",
+        "include/mimalloc-stats.h",
+    ],
+    # `#include`d into other TUs (alloc.c / page.c / prim.c), never compiled
+    # standalone.
+    textual_hdrs = [
+        "src/alloc-override.c",
+        "src/free.c",
+        "src/page-queue.c",
+        "src/prim/unix/prim.c",
+    ],
+    alwayslink = True,
+    includes = ["include"],
+    linkopts = ["-lpthread", "-lrt"],
+    linkstatic = True,
+    local_defines = [
+        "MI_MALLOC_OVERRIDE",
+        "MI_STATIC_LIB",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+)

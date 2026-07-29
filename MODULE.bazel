@@ -93,6 +93,16 @@ bazel_dep(name = "sqlite3", version = "3.51.2.bcr.1")
 bazel_dep(name = "libexpat", version = "2.7.1.bcr.1")
 bazel_dep(name = "libmagic", version = "5.47")
 
+# The BCR libmagic BUILD omits HAVE_STRNDUP, compiling a fallback `strndup`
+# that collides with mimalloc's whole-archived override at the final link of
+# `//src/cli-rs:sipi`. All supported platforms provide strndup; see the patch
+# header for the drop condition.
+single_version_override(
+    module_name = "libmagic",
+    patch_strip = 1,
+    patches = ["//bazel/patches:libmagic_have_strndup.patch"],
+)
+
 # Codec libs consumed as BCR drop-ins. libjpeg_turbo is consumed at the classic
 # ≤v8 API target `@libjpeg_turbo//:jpeg` (SipiIOJpeg.cpp uses only that surface;
 # `:turbojpeg` is a separate API we don't consume). libwebp is reached only via
@@ -643,6 +653,19 @@ http_archive(
     sha256 = "f4f377da17b10201a60c1108613e78ee15df6b12016b116b6de42209f47a474f",
     strip_prefix = "jansson-2.13.1",
     url = "https://www.digip.org/jansson/releases/jansson-2.13.1.tar.gz",
+)
+
+# Production allocator (v3 — vendored; BCR carries only 2.x, whose
+# abandoned-segment retention OOMs under SIPI's per-request Kakadu
+# thread churn). Statically linked as the process-wide malloc override into
+# `//src/cli-rs:sipi`, Linux targets only — see `_ALLOCATOR` there and
+# docs/adr/0019-mimalloc-production-allocator.md.
+http_archive(
+    name = "mimalloc",
+    build_file = "//bazel:mimalloc.BUILD.bazel",
+    sha256 = "7b043c26b64dde66344d144fbcac3664858a4eb32197793ea2a18feb32741ca1",
+    strip_prefix = "mimalloc-3.4.3",
+    url = "https://github.com/microsoft/mimalloc/archive/refs/tags/v3.4.3.tar.gz",
 )
 
 http_archive(

@@ -1,0 +1,23 @@
+Define `HAVE_STRNDUP` so libmagic's bundled strndup fallback is not compiled.
+
+The BCR `libmagic@5.47` BUILD hand-picks its config defines and omits
+`HAVE_STRNDUP`, so `src/softmagic.c` compiles its own fallback `strndup`
+unconditionally. Every platform this project targets (Linux glibc ≥ 2.28,
+macOS) provides strndup (POSIX.1-2008), so the fallback is dead weight — and
+it collides at link time with mimalloc's whole-archived malloc-override
+`strndup` in `//src/cli-rs:sipi` (ld.lld: duplicate symbol). Defining the
+macro drops the fallback and libmagic uses the interposable libc symbol like
+every other allocation site. Drop this patch if the BCR module ever grows the
+define upstream (the patch fails loudly on file-shape changes — desired
+feedback).
+
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -55,6 +55,7 @@
+         "HAVE_INTTYPES_H",
+         "HAVE_MKSTEMP",
+         "HAVE_STDINT_H",
++        "HAVE_STRNDUP",
+         "HAVE_UNISTD_H",
+         "VERSION=\\\"%s\\\"" % _VERSION,
+     ],

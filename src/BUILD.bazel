@@ -972,13 +972,6 @@ oci_image(
     env = {
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
-        # Cap glibc malloc arenas. The engine frees every decode buffer
-        # correctly, but glibc's default (up to 8x cores) per-thread arenas
-        # each retain their peak allocation rather than returning it to the OS,
-        # so RSS climbs to a concurrency x peak-decode watermark and plateaus
-        # under load. Capping arenas lets freed decode buffers coalesce and
-        # trim back, keeping steady-state RSS closer to the true working set.
-        "MALLOC_ARENA_MAX": "2",
         # distroless_base ships ca-certificates at this canonical Debian
         # path; sipi's curl-built libcurl reads SSL_CERT_FILE for outbound
         # HTTPS (e.g. JWT issuer keys). Sentry's own HTTPS transport is the
