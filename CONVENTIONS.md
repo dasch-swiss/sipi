@@ -113,6 +113,7 @@ is scoped `ffi` only when the seam mechanism itself is the point.
 | `shttps` | `src/shttps/` | Internal HTTP framework (threading, TLS, connection pooling, JWT) |
 | `cache` | `include/SipiCache.h` | File-based LRU cache with dual-limit eviction |
 | `memory-budget` | `include/SipiMemoryBudget.h` | Lock-free decode memory budget |
+| `memory` | `bazel/mimalloc.BUILD.bazel`, `_ALLOCATOR` in `src/cli-rs/BUILD.bazel`, `tools/allocator-replay/` | Process memory behavior: the production allocator, RSS/retention measurement |
 | `observability` | `src/observability/` | Prometheus metrics, tracing |
 | `logging` | `src/logging/` | Structured logging |
 | `cli` | `src/cli/` | C++ CLI app, arg parsing, subcommand dispatch |

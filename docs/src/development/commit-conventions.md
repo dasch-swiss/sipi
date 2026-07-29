@@ -114,7 +114,7 @@ module list — which is also the scope vocabulary — lives in
 these names, lowercase:
 
 - **Module scopes:** `image`, `formats`, `metadata`, `iiifparser`,
-  `handlers`, `shttps`, `cache`, `memory-budget`, `observability`,
+  `handlers`, `shttps`, `cache`, `memory-budget`, `memory`, `observability`,
   `logging`, `cli`, `ffi`, `lua`, `server-rs`, `cli-rs`
 - **Test-layer scopes** (`e2e`, `approval`) — for changes to a test
   layer's own harness or fixtures. A test *about* a specific concern takes

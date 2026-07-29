@@ -20,6 +20,9 @@ use std::os::raw::{c_char, c_int};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
+    #[cfg(feature = "mimalloc")]
+    allocator::init();
+
     // The `rustls-no-provider` feature on `sentry` (below) pulls in TLS support
     // without forcing a crypto provider — install `ring` explicitly. `sentry`'s
     // plain `rustls` feature would otherwise resolve to reqwest's aws-lc-rs
@@ -92,6 +95,133 @@ fn main() -> ExitCode {
         Some(idx) if argv[idx] == "health" => commands::health::run(&argv[idx..]),
         // Everything else → the C++ CLI, verbatim.
         _ => run_cli(&argv),
+    }
+}
+
+/// The binary's side of the allocator contract: this target links mimalloc as
+/// the process-wide malloc override on Linux (`_ALLOCATOR` in BUILD.bazel),
+/// so it owns verifying the override took and supplying allocator stats to
+/// the `sipi` library's gauges (`sipi::malloc_stats` deliberately stays
+/// allocator-agnostic — a downstream crate with its own `main` chooses its
+/// own allocator). The `mimalloc` crate feature is set by BUILD.bazel under
+/// exactly the condition the dep is linked (Linux, non-ASan), so this module
+/// and its `mi_*` extern references drop out together with the library.
+/// See docs/adr/0019-mimalloc-production-allocator.md.
+#[cfg(feature = "mimalloc")]
+mod allocator {
+    use std::ffi::c_void;
+
+    extern "C" {
+        fn mi_version() -> core::ffi::c_int;
+        fn mi_is_in_heap_region(p: *const c_void) -> bool;
+        fn mi_stats_get(stats_size: usize, stats: *mut MiStatsPrefix);
+    }
+
+    /// `mi_stat_count_t` from `mimalloc-stats.h`.
+    #[repr(C)]
+    #[derive(Clone, Copy, Default)]
+    struct MiStatCount {
+        total: i64,
+        peak: i64,
+        current: i64,
+    }
+
+    /// Leading fields of `mi_stats_t` (`mimalloc-stats.h`, `MI_STAT_VERSION`
+    /// 5 — the vendored v3 layout, where `reset`/`purged` are single-`i64`
+    /// counters), through the last field the gauges read. `mi_stats_get`
+    /// copies `min(stats_size, sizeof(mi_stats_t))` bytes, so a prefix read
+    /// is part of its contract — the trailing counters/bins are never copied.
+    #[repr(C)]
+    #[derive(Default)]
+    struct MiStatsPrefix {
+        version: i32,
+        pages: MiStatCount,
+        reserved: MiStatCount,
+        committed: MiStatCount,
+        reset: i64,
+        purged: i64,
+        page_committed: MiStatCount,
+        pages_abandoned: MiStatCount,
+        threads: MiStatCount,
+        malloc_normal: MiStatCount,
+        malloc_huge: MiStatCount,
+        malloc_requested: MiStatCount,
+    }
+
+    const MI_STAT_VERSION: i32 = 5;
+
+    /// Verify interposition (abort on failure) and register the mimalloc
+    /// stats reader with the library's allocator gauges.
+    pub(super) fn init() {
+        verify_interposition();
+        sipi::malloc_stats::set_source(stats);
+    }
+
+    /// Verify that the statically linked mimalloc interposes *libc-internal*
+    /// allocations, not just the binary's own — the two bind through
+    /// different mechanisms. Code linked into the binary resolves
+    /// `malloc`/`free` at static link time and can never miss; allocations
+    /// made inside libc.so.6 (`getcwd(NULL, 0)`, `scandir`, …) go through
+    /// libc's own GOT and reach mimalloc only if the executable exports the
+    /// override symbols to its dynamic table. A process where those two
+    /// disagree is in a latent heap-corruption state — glibc-malloc'd
+    /// pointers handed to mimalloc's `free` (e.g. the `scandir` entries the
+    /// engine's cache frees) — so a failed probe aborts rather than serving.
+    ///
+    /// `getcwd(NULL, 0)` is the probe because glibc documents it as
+    /// allocating the buffer itself, inside libc.so.6.
+    fn verify_interposition() {
+        // SAFETY: `getcwd(NULL, 0)` is the documented glibc extension that
+        // allocates a sufficiently large buffer and returns it (NULL on error).
+        let p = unsafe { libc::getcwd(std::ptr::null_mut(), 0) };
+        if p.is_null() {
+            // getcwd failure (e.g. deleted cwd) says nothing about the allocator.
+            return;
+        }
+        // SAFETY: `p` is a valid pointer returned by getcwd; mi_is_in_heap_region
+        // only inspects mimalloc's own region map and never dereferences `p`.
+        if unsafe { mi_is_in_heap_region(p.cast()) } {
+            // SAFETY: `p` was allocated by (interposed) malloc and is freed
+            // exactly once, through the same allocator.
+            unsafe { libc::free(p.cast()) };
+        } else {
+            // Deliberately leak `p`: freeing a glibc-malloc'd pointer through
+            // the statically bound mimalloc `free` is the very defect being
+            // detected.
+            // SAFETY: mi_version takes no arguments and reads a constant.
+            let version = unsafe { mi_version() };
+            eprintln!(
+                "fatal: mimalloc v{version} is linked, but libc-internal allocations \
+                 bypass it (override symbols not exported to the dynamic table); \
+                 refusing to run with mixed allocators"
+            );
+            std::process::abort();
+        }
+    }
+
+    /// Read mimalloc's accounting into the library's allocator-neutral
+    /// [`sipi::malloc_stats::MallocStats`] shape (field mapping documented
+    /// there). `None` on a stats-version bump — wrong-layout numbers are
+    /// worse than no numbers.
+    fn stats() -> Option<sipi::malloc_stats::MallocStats> {
+        let mut prefix = MiStatsPrefix::default();
+        // SAFETY: `prefix` is a properly aligned #[repr(C)] prefix of
+        // `mi_stats_t`; `mi_stats_get` zeroes then copies at most
+        // `size_of::<MiStatsPrefix>()` bytes into it.
+        unsafe { mi_stats_get(std::mem::size_of::<MiStatsPrefix>(), &mut prefix) };
+        if prefix.version != MI_STAT_VERSION {
+            return None;
+        }
+        let in_use = prefix
+            .malloc_normal
+            .current
+            .saturating_add(prefix.malloc_huge.current);
+        Some(sipi::malloc_stats::MallocStats {
+            in_use_bytes: in_use,
+            retained_bytes: prefix.committed.current.saturating_sub(in_use).max(0),
+            mmap_bytes: prefix.malloc_huge.current,
+            arena_bytes: prefix.committed.current,
+        })
     }
 }
 

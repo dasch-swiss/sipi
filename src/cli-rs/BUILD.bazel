@@ -83,9 +83,41 @@ _DEPS = [
     "//src/cli:cli_app",
 ]
 
+# Process-wide allocator: mimalloc v3 (vendored, `bazel/mimalloc.BUILD.bazel`)
+# statically linked as the malloc/free override on Linux (what production
+# runs); macOS dev builds stay on the system allocator. The library is
+# alwayslink, so the override objects are whole-archived ahead of the
+# lazily-scanned libc++abi/libc. The allocator belongs on the final-link
+# target only: a dep on //src/ffi:sipi_ffi would leak it into every cc_test
+# and the glibc-baselined C++ engine binary //src/cli:sipi. main.rs verifies
+# interposition at startup (a partially interposed process is latent heap
+# corruption). See docs/adr/0019-mimalloc-production-allocator.md.
+#
+# Never under ASan: AddressSanitizer interposes malloc/free with its own
+# allocator, and two interposers in one binary is undefined behavior (the
+# asan-ubsan e2e leg crashed every C++ CLI verb). The `mimalloc` crate
+# feature carries the same condition into the Rust source, so the
+# interposition probe and stats reader drop out together with the dep.
+config_setting(
+    name = "linux_sans_asan",
+    constraint_values = ["@platforms//os:linux"],
+    flag_values = {"@llvm//config:asan": "false"},
+)
+
+_ALLOCATOR = select({
+    ":linux_sans_asan": ["@mimalloc//:mimalloc"],
+    "//conditions:default": [],
+})
+
+_ALLOCATOR_FEATURE = select({
+    ":linux_sans_asan": ["mimalloc"],
+    "//conditions:default": [],
+})
+
 rust_binary(
     name = "sipi",
     srcs = _SRCS,
+    crate_features = _ALLOCATOR_FEATURE,
     crate_name = "sipi_cli",
     edition = "2021",
     rustc_flags = _CPP_STDLIB_LINK,
@@ -95,10 +127,11 @@ rust_binary(
     tags = ["no-sanitizer"],
     deps = [
         "@crates//:clap",
+        "@crates//:libc",
         "@crates//:rustls",
         "@crates//:sentry",
         "@crates//:sentry-rust-minidump",
-    ] + _DEPS,
+    ] + _DEPS + _ALLOCATOR,
 )
 
 # Inline #[cfg(test)] unit tests — the clap `server` arg-parsing pins (e.g. that
@@ -109,6 +142,7 @@ rust_binary(
 rust_test(
     name = "sipi_unit_test",
     crate = ":sipi",
+    crate_features = _ALLOCATOR_FEATURE,
     edition = "2021",
     rustc_flags = _CPP_STDLIB_LINK,
     tags = ["no-sanitizer"],
