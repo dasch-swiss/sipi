@@ -1,5 +1,22 @@
 # Changelog
 
+## [6.3.0](https://github.com/dasch-swiss/sipi/compare/v6.2.3...v6.3.0) (2026-07-29)
+
+
+### Features
+
+* **observability:** Export process-allocator gauges over OTLP ([329b09c](https://github.com/dasch-swiss/sipi/commit/329b09c2ba5d17a573ddd208b258701169217224))
+
+
+### Performance Improvements
+
+* **memory:** Switch the production allocator to mimalloc v3 ([923adaa](https://github.com/dasch-swiss/sipi/commit/923adaad4173dc481f90e4bdd428ed613743485e))
+
+
+### Tests
+
+* **memory:** Add the allocator replay harness ([da2b044](https://github.com/dasch-swiss/sipi/commit/da2b0441ef432c9cdb983922800e4ff64281061a))
+
 ## [6.2.3](https://github.com/dasch-swiss/sipi/compare/v6.2.2...v6.2.3) (2026-07-28)
 
 
