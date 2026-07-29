@@ -35,6 +35,7 @@ rust_library(
         "src/iiif.rs",
         "src/info.rs",
         "src/lib.rs",
+        "src/malloc_stats.rs",
         "src/metrics.rs",
         "src/path.rs",
         "src/preflight_cache.rs",

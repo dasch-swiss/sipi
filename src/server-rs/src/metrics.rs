@@ -46,6 +46,7 @@ use opentelemetry::{global, KeyValue};
 use tokio::sync::Semaphore;
 
 use crate::ffi::{self, SipiMetricsSnapshot};
+use crate::malloc_stats::{self, MallocStats};
 use crate::preflight_cache;
 use crate::routes;
 
@@ -177,6 +178,27 @@ pub(crate) fn register(pool: Arc<Semaphore>, permits_total: usize) {
         .with_description("Preflight access-cache misses (hook ran)")
         .with_callback(|observer| observer.observe(preflight_cache::misses(), &[]))
         .build();
+    // ── Process allocator metrics ───────────────────────────────────────────
+    // Gauges splitting container RSS into "in use" vs "freed but retained by
+    // the allocator" — the series that tells a leak apart from allocator
+    // retention when RSS climbs. The binary registers a reader for its linked
+    // allocator (mimalloc in production); the fallback reads glibc `mallinfo2`
+    // (see `crate::malloc_stats`). When neither applies `stats()` is `None`
+    // and the gauges observe nothing.
+    for (name, description, extract) in MALLOC_GAUGES {
+        let extract = *extract;
+        meter
+            .i64_observable_gauge(*name)
+            .with_description(*description)
+            .with_unit("By")
+            .with_callback(move |observer| {
+                if let Some(stats) = malloc_stats::stats() {
+                    observer.observe(extract(&stats), &[]);
+                }
+            })
+            .build();
+    }
+
     meter
         .i64_observable_gauge("sipi.preflight_cache.entries")
         .with_description(
@@ -373,6 +395,33 @@ const GAUGES: &[GaugeRow] = &[
     ),
 ];
 
+/// The process-allocator gauges: OTel name, description, and the field to
+/// read from a [`MallocStats`] reading. All byte-valued. Field semantics per
+/// allocator are documented on [`MallocStats`].
+type MallocGaugeRow = (&'static str, &'static str, fn(&MallocStats) -> i64);
+const MALLOC_GAUGES: &[MallocGaugeRow] = &[
+    (
+        "sipi.malloc.in_use_bytes",
+        "Bytes allocated and not yet freed",
+        |s| s.in_use_bytes,
+    ),
+    (
+        "sipi.malloc.retained_bytes",
+        "Freed bytes the allocator retains instead of returning to the OS",
+        |s| s.retained_bytes,
+    ),
+    (
+        "sipi.malloc.mmap_bytes",
+        "Bytes in mmap-served allocations outside the regular heap",
+        |s| s.mmap_bytes,
+    ),
+    (
+        "sipi.malloc.arena_bytes",
+        "Bytes the allocator holds from the OS backing RSS",
+        |s| s.arena_bytes,
+    ),
+];
+
 /// Build one observable `u64` counter whose callback snapshots the engine
 /// metrics and reports `extract`'s field. A failed snapshot observes nothing
 /// (fail-safe on the collection thread). The handle is dropped (see
@@ -420,7 +469,7 @@ fn gauge(
 
 #[cfg(test)]
 mod tests {
-    use super::{COUNTERS, GAUGES};
+    use super::{COUNTERS, GAUGES, MALLOC_GAUGES};
     use crate::ffi::SipiMetricsSnapshot;
     use std::collections::HashSet;
     use std::mem::size_of;
@@ -485,12 +534,14 @@ mod tests {
         }
     }
 
-    /// Every engine instrument name, counters then gauges.
+    /// Every table-driven instrument name: engine counters and gauges, then
+    /// the allocator gauges.
     fn names() -> Vec<&'static str> {
         COUNTERS
             .iter()
             .map(|(name, ..)| *name)
             .chain(GAUGES.iter().map(|(name, ..)| *name))
+            .chain(MALLOC_GAUGES.iter().map(|(name, ..)| *name))
             .collect()
     }
 }
