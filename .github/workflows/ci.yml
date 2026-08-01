@@ -250,7 +250,7 @@ jobs:
       # leg means one PR comment.
       - name: Docker Scout — compare to production
         if: matrix.platform == 'linux-amd64' && github.event_name == 'pull_request'
-        uses: docker/scout-action@v1
+        uses: docker/scout-action@v1.23.1
         with:
           command: compare
           image: local://daschswiss/sipi:latest
@@ -263,7 +263,7 @@ jobs:
 
       - name: Docker Scout — CVE report (SARIF)
         if: matrix.platform == 'linux-amd64' && github.event_name == 'pull_request'
-        uses: docker/scout-action@v1
+        uses: docker/scout-action@v1.23.1
         with:
           command: cves
           image: local://daschswiss/sipi:latest
@@ -274,7 +274,7 @@ jobs:
 
       - name: Upload SARIF to GitHub Security
         if: matrix.platform == 'linux-amd64' && github.event_name == 'pull_request'
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@v4.37.3
         with:
           sarif_file: scout-results.sarif
 
