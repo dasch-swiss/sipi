@@ -77,6 +77,15 @@ jobs:
       - name: Run Docker smoke tests
         run: just bazel-test-smoke ${{ steps.setup.outputs.flags }}
 
+      # Persist the repository cache even when the job fails — the paired
+      # save for ci-setup's restore-only cache step (rationale there).
+      - name: Save Bazel repository cache
+        if: ${{ !cancelled() && steps.setup.outputs.repo-cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/bazel-repo
+          key: ${{ steps.setup.outputs.repo-cache-key }}
+
   release-gate:
     runs-on: ubuntu-latest
     needs: [validate-docker]
@@ -206,6 +215,15 @@ jobs:
             echo "Expected debug symbol file not found: ${{ matrix.debug_file }}"
             exit 1
           fi
+
+      # Persist the repository cache even when the job fails — the paired
+      # save for ci-setup's restore-only cache step (rationale there).
+      - name: Save Bazel repository cache
+        if: ${{ !cancelled() && steps.setup.outputs.repo-cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/bazel-repo
+          key: ${{ steps.setup.outputs.repo-cache-key }}
 
   manifest:
     runs-on: ubuntu-latest
