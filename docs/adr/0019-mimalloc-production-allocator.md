@@ -85,10 +85,15 @@ probes a libc-internal allocation (`getcwd(NULL, 0)`) with
 `mi_is_in_heap_region` and aborts on mismatch rather than serving.
 
 **Allocator observability moves with the allocator.** `sipi::malloc_stats`
-stays allocator-agnostic: the final-link binary registers a stats reader
-(`mi_stats_get` prefix read) via `set_source`; without one, the library falls
-back to glibc `mallinfo2`. The `sipi.malloc.*` OTLP gauges therefore report
-the allocator that is actually serving the heap.
+stays allocator-agnostic: the final-link binary registers a stats reader via
+`set_source`; without one, the library falls back to glibc `mallinfo2`. The
+`sipi.malloc.*` OTLP gauges therefore report the allocator that is actually
+serving the heap. The reader calls `mi_stats_get` through a one-function C
+shim (`src/cli-rs/mi_stats_shim.c`) compiled against the vendored
+`mimalloc-stats.h`, never through a Rust `extern "C"` re-declaration: nothing
+verifies a hand-mirrored declaration against the header, and a drift from the
+pinned version is a SIGSEGV on the metrics thread at the first collection
+(SIPI-1R, the 6.3.0 ls-test crash loop) instead of a build error.
 
 **The C++ engine binary `//src/cli:sipi` stays on glibc**, deliberately: it is
 oracle-only (never deployed), and keeping it un-switched preserves an

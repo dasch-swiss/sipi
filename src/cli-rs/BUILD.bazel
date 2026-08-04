@@ -18,6 +18,7 @@ which keeps the production socket until the cutover renames this to the stock
 `sipi` entry point and switches the Docker entrypoint.
 """
 
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -104,8 +105,26 @@ config_setting(
     flag_values = {"@llvm//config:asan": "false"},
 )
 
+# The mimalloc stats read (`sipi.malloc.*` gauges) goes through this
+# one-function C shim, compiled against the vendored `mimalloc-stats.h` so the
+# `mi_stats_get` signature and `mi_stats_t` layout are compiler-checked against
+# the exact @mimalloc pin. Rust-side `extern "C"` re-declarations of mimalloc's
+# stats API are banned: nothing verifies them against the header, and a
+# declaration drifting from the pinned version segfaults the metrics thread at
+# the first collection (SIPI-1R) instead of failing the build.
+cc_library(
+    name = "mi_stats_shim",
+    srcs = ["mi_stats_shim.c"],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = ["@mimalloc//:mimalloc"],
+)
+
 _ALLOCATOR = select({
-    ":linux_sans_asan": ["@mimalloc//:mimalloc"],
+    ":linux_sans_asan": [
+        ":mi_stats_shim",
+        "@mimalloc//:mimalloc",
+    ],
     "//conditions:default": [],
 })
 

@@ -9,12 +9,12 @@ Layout:
   * `:sipi_e2e`        `rust_library` exposing the shared helpers
                        (`SipiServer`, `repo_root`, `http_client`, …)
                        consumed by every test binary.
-  * 28 × `rust_test`   one target per non-docker `tests/<name>.rs`,
+  * 29 × `rust_test`   one target per non-docker `tests/<name>.rs`,
                        defined via `sipi_e2e_test()` (see
                        `sipi_e2e_test.bzl`). The macro injects the
                        shared `data`/`env`/`args`/`tags` so the
                        contracts can't drift across targets.
-  * `:differential`    a 25th `sipi_e2e_test()` target that also spawns
+  * `:differential`    an additional `sipi_e2e_test()` target that also spawns
                        the C++ oracle (`SIPI_BIN_REF`) and diffs it
                        against the Rust shell. `manual`-tagged, so it is
                        kept OUT of `:all_e2e` and the `//test/e2e/...`
@@ -23,7 +23,7 @@ Layout:
   * `:docker_smoke`    inline `rust_test` — its data shape (OCI image
                        tarball) and tags (`requires-docker`) diverge
                        from the macro's defaults.
-  * `:all_e2e`         `test_suite` aggregating the 28 non-docker
+  * `:all_e2e`         `test_suite` aggregating the 29 non-docker
                        targets (not `:differential` / `:docker_smoke`).
                        `just bazel-test-e2e` wraps `bazel test
                        //test/e2e:all_e2e`.
@@ -144,6 +144,16 @@ sipi_e2e_test(name = "latency", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "memory_budget", deps = _e2e_test_deps)
 
+# SIPI-1R regression gate: several OTel metric collections — the path that
+# segfaulted 6.3.0's mis-declared `mi_stats_get` FFI — must run without
+# killing the server. `no-sanitizer` because it activates the OTLP exporter
+# (see `tracing` below for the ASan thread-registry rationale).
+sipi_e2e_test(
+    name = "metrics_export",
+    deps = _e2e_test_deps,
+    extra_tags = ["no-sanitizer"],
+)
+
 sipi_e2e_test(name = "option_matrix", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "preflight_cache", deps = _e2e_test_deps)
@@ -166,7 +176,7 @@ sipi_e2e_test(name = "smoke", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "toml_config", deps = _e2e_test_deps)
 
-# `no-sanitizer`: the only e2e test that activates the OTLP exporter (it sets
+# `no-sanitizer`: activates the OTLP exporter (sets
 # `OTEL_EXPORTER_OTLP_ENDPOINT` so the shell produces span contexts to propagate).
 # Under ASan the exporter's tonic/tokio background threads trip the known
 # thread-registry false positive (`sanitizer_thread_arg_retval.cpp` CHECK), which
@@ -308,6 +318,7 @@ test_suite(
         ":input_validation",
         ":latency",
         ":memory_budget",
+        ":metrics_export",
         ":option_matrix",
         ":preflight_cache",
         ":proptest_iiif_uri",
