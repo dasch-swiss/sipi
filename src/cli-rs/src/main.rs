@@ -114,41 +114,19 @@ mod allocator {
     extern "C" {
         fn mi_version() -> core::ffi::c_int;
         fn mi_is_in_heap_region(p: *const c_void) -> bool;
-        fn mi_stats_get(stats_size: usize, stats: *mut MiStatsPrefix);
+        // `mi_stats_shim.c` (`:mi_stats_shim` in BUILD.bazel). The mimalloc
+        // stats read lives in C, compiled against the vendored
+        // `mimalloc-stats.h`, so the `mi_stats_get` contract is checked by
+        // the C compiler. Never re-declare mimalloc's stats API in Rust:
+        // nothing verifies a hand-mirrored declaration against the header,
+        // and a drift from the pinned version is a SIGSEGV on the metrics
+        // thread (SIPI-1R), not a build error.
+        fn sipi_mi_stats_read(
+            malloc_normal_current: *mut i64,
+            malloc_huge_current: *mut i64,
+            committed_current: *mut i64,
+        ) -> bool;
     }
-
-    /// `mi_stat_count_t` from `mimalloc-stats.h`.
-    #[repr(C)]
-    #[derive(Clone, Copy, Default)]
-    struct MiStatCount {
-        total: i64,
-        peak: i64,
-        current: i64,
-    }
-
-    /// Leading fields of `mi_stats_t` (`mimalloc-stats.h`, `MI_STAT_VERSION`
-    /// 5 — the vendored v3 layout, where `reset`/`purged` are single-`i64`
-    /// counters), through the last field the gauges read. `mi_stats_get`
-    /// copies `min(stats_size, sizeof(mi_stats_t))` bytes, so a prefix read
-    /// is part of its contract — the trailing counters/bins are never copied.
-    #[repr(C)]
-    #[derive(Default)]
-    struct MiStatsPrefix {
-        version: i32,
-        pages: MiStatCount,
-        reserved: MiStatCount,
-        committed: MiStatCount,
-        reset: i64,
-        purged: i64,
-        page_committed: MiStatCount,
-        pages_abandoned: MiStatCount,
-        threads: MiStatCount,
-        malloc_normal: MiStatCount,
-        malloc_huge: MiStatCount,
-        malloc_requested: MiStatCount,
-    }
-
-    const MI_STAT_VERSION: i32 = 5;
 
     /// Verify interposition (abort on failure) and register the mimalloc
     /// stats reader with the library's allocator gauges.
@@ -201,27 +179,56 @@ mod allocator {
 
     /// Read mimalloc's accounting into the library's allocator-neutral
     /// [`sipi::malloc_stats::MallocStats`] shape (field mapping documented
-    /// there). `None` on a stats-version bump — wrong-layout numbers are
-    /// worse than no numbers.
+    /// there). `None` when the shim's size/version handshake with
+    /// `mi_stats_get` fails — wrong-layout numbers are worse than no numbers.
     fn stats() -> Option<sipi::malloc_stats::MallocStats> {
-        let mut prefix = MiStatsPrefix::default();
-        // SAFETY: `prefix` is a properly aligned #[repr(C)] prefix of
-        // `mi_stats_t`; `mi_stats_get` zeroes then copies at most
-        // `size_of::<MiStatsPrefix>()` bytes into it.
-        unsafe { mi_stats_get(std::mem::size_of::<MiStatsPrefix>(), &mut prefix) };
-        if prefix.version != MI_STAT_VERSION {
+        let mut malloc_normal: i64 = 0;
+        let mut malloc_huge: i64 = 0;
+        let mut committed: i64 = 0;
+        // SAFETY: the three out-pointers are valid and distinct; the shim
+        // writes all of them before returning true and touches nothing else.
+        let ok =
+            unsafe { sipi_mi_stats_read(&mut malloc_normal, &mut malloc_huge, &mut committed) };
+        if !ok {
             return None;
         }
-        let in_use = prefix
-            .malloc_normal
-            .current
-            .saturating_add(prefix.malloc_huge.current);
+        let in_use = malloc_normal.saturating_add(malloc_huge);
         Some(sipi::malloc_stats::MallocStats {
             in_use_bytes: in_use,
-            retained_bytes: prefix.committed.current.saturating_sub(in_use).max(0),
-            mmap_bytes: prefix.malloc_huge.current,
-            arena_bytes: prefix.committed.current,
+            retained_bytes: committed.saturating_sub(in_use).max(0),
+            mmap_bytes: malloc_huge,
+            arena_bytes: committed,
         })
+    }
+
+    #[cfg(test)]
+    mod tests {
+        /// The reader must survive a real `mi_stats_get` round-trip against
+        /// the linked mimalloc and report live allocations.
+        /// `//src/cli-rs:sipi_unit_test` links mimalloc exactly like the
+        /// binary, so this is the in-CI execution of the stats FFI that was
+        /// missing when 6.3.0's mis-declared `mi_stats_get` shipped and
+        /// segfaulted the first OTel metrics collection (SIPI-1R).
+        #[test]
+        fn stats_reads_live_mimalloc_accounting() {
+            // Hold 1 MiB of small binned blocks — the `malloc_normal` class.
+            // A single large Vec would land in `malloc_huge` (> 512 KiB),
+            // which mimalloc tracks even with binned accounting compiled out
+            // (`MI_STAT=0`), and would miss a stats-level regression in
+            // bazel/mimalloc.BUILD.bazel's `MI_STAT=1` define.
+            let held: Vec<Vec<u8>> = (0..256).map(|_| vec![0u8; 4096]).collect();
+            let held_bytes: i64 = held.iter().map(|b| b.len() as i64).sum();
+            let stats = super::stats().expect("mi_stats_get size/version handshake");
+            assert!(
+                stats.in_use_bytes >= held_bytes,
+                "in_use ({}) must cover {held_bytes} B of live binned allocations",
+                stats.in_use_bytes
+            );
+            assert!(stats.arena_bytes > 0, "committed memory backs the heap");
+            assert!(stats.retained_bytes >= 0);
+            assert!(stats.mmap_bytes >= 0);
+            drop(std::hint::black_box(held));
+        }
     }
 }
 

@@ -69,6 +69,14 @@ cc_library(
     local_defines = [
         "MI_MALLOC_OVERRIDE",
         "MI_STATIC_LIB",
+        # Binned-allocation accounting (`malloc_normal` in `mi_stats_get`) is
+        # compiled out at mimalloc's release default (`MI_STAT=0`, only
+        # os-level "essential" stats) — the `sipi.malloc.in_use_bytes` gauge
+        # would then count only >512 KiB "huge" blocks and silently
+        # underreport the heap. Level 1 is upstream's "maintain statistics"
+        # mode (one per-thread-heap counter update per malloc/free); the
+        # "costs some performance" fine-grained tracking is level 2.
+        "MI_STAT=1",
     ],
     target_compatible_with = ["@platforms//os:linux"],
 )
