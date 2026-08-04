@@ -1,5 +1,18 @@
 # Changelog
 
+## [6.3.1](https://github.com/dasch-swiss/sipi/compare/v6.3.0...v6.3.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* **memory:** Read mimalloc stats through a header-checked C shim ([aa52ec2](https://github.com/dasch-swiss/sipi/commit/aa52ec22b338e26af665e84b9c1bf27769dab6e3))
+
+
+### Miscellaneous Chores
+
+* **bazel:** Fan single-host distfile fetches out to verified mirrors ([e27d51d](https://github.com/dasch-swiss/sipi/commit/e27d51d5d115cc68601692768a237774e035f890))
+* **ci:** Save the Bazel repo cache even when a job fails ([4a48668](https://github.com/dasch-swiss/sipi/commit/4a48668424c30cafeea4528bd675b8be7ff72b91))
+
 ## [6.3.0](https://github.com/dasch-swiss/sipi/compare/v6.2.3...v6.3.0) (2026-07-29)
 
 
