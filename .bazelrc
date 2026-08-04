@@ -416,6 +416,17 @@ build --remote_max_connections=200
 # shared location across workspaces.
 common --repository_cache=~/.cache/bazel-repo
 
+# Mirror fallbacks for single-host upstream distfiles (www.lua.org,
+# www.cl.cam.ac.uk, www.digip.org — the first two failed CI within one
+# 2026-08-04 window on every leg whose repository cache didn't already hold
+# the tarball). Pinned checksums verify every candidate, so mirrors add
+# availability, never trust. See the config file for the rewrite semantics. The path must stay relative:
+# Bazel resolves it against the workspace root itself
+# (BazelRepositoryModule passes env.getWorkspace() to the UrlRewriter), and
+# %workspace% is NOT expanded for this flag — the literal token fails
+# every command at startup.
+common --downloader_config=bazel/downloader.cfg
+
 # BCR curl ships with three configurable TLS backends (boringssl default,
 # mbedtls, openssl) selected via a `string_flag`. Pin to `openssl` so the
 # resolved cc dep is `@openssl//:{ssl,crypto}` rather than BoringSSL —
