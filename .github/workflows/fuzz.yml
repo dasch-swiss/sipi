@@ -161,3 +161,12 @@ jobs:
             timeout-*
             fuzz-output.log
             crash-summary.md
+
+      # Persist the repository cache even when the job fails — the paired
+      # save for ci-setup's restore-only cache step (rationale there).
+      - name: Save Bazel repository cache
+        if: ${{ !cancelled() && steps.setup.outputs.repo-cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/bazel-repo
+          key: ${{ steps.setup.outputs.repo-cache-key }}

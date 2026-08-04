@@ -30,6 +30,17 @@ outputs:
   flags:
     description: Bazel flag string from bazel-rbe; pass to a `just bazel-*` recipe.
     value: ${{ steps.rbe.outputs.flags }}
+  repo-cache-key:
+    description: >
+      Primary key of the Bazel repository cache restore. Feed it to the
+      caller's end-of-job `actions/cache/save` step (see the restore step
+      below for why saving lives in the caller).
+    value: ${{ steps.repo-cache.outputs.cache-primary-key }}
+  repo-cache-hit:
+    description: >
+      'true' when the restore hit the primary key exactly — the caller's save
+      step should skip then (saving an existing key is a no-op warning).
+    value: ${{ steps.repo-cache.outputs.cache-hit }}
 
 runs:
   using: composite
@@ -60,8 +71,20 @@ runs:
     # Persist Bazel's repository cache (--repository_cache in .bazelrc) across
     # runs: external archives + bzlmod registry files download from upstream
     # only when MODULE.bazel.lock changes.
+    #
+    # restore-only, NOT `actions/cache@v4`: the combined action's post step
+    # saves only when the job SUCCEEDS, so a job that fails after fetching
+    # (flaky test, upstream outage on a later archive) throws its downloads
+    # away and re-fetches them from upstream on every retry — the exact
+    # dependence the cache exists to remove (2026-08-04: the lua.org outage
+    # kept the arm64 legs red because their evicted caches could never
+    # repopulate). A composite action cannot schedule an end-of-job step, so
+    # each CALLER pairs this with `actions/cache/save` guarded by
+    # `!cancelled()` as its last step, keyed via the `repo-cache-key` /
+    # `repo-cache-hit` outputs above.
     - name: Restore Bazel repository cache
-      uses: actions/cache@v4
+      id: repo-cache
+      uses: actions/cache/restore@v4
       with:
         path: ~/.cache/bazel-repo
         key: bazel-repo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('MODULE.bazel.lock') }}
