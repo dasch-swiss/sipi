@@ -1165,57 +1165,6 @@ fn cache_nfiles_flag_honoured_on_both() {
     }
 }
 
-/// Joint probe: the four `--rate-limit-*` flags together. `Retry-After`
-/// presence only is asserted — the exact seconds-remaining is
-/// timing-dependent and deliberately unpinned.
-#[test]
-fn rate_limit_flags_honoured_on_both() {
-    let (subject, reference) = SipiServer::start_pair(
-        "config/sipi.e2e-test-config.lua",
-        &sipi_e2e::test_data_dir(),
-        &[
-            "--cache-size",
-            "0",
-            "--rate-limit-mode",
-            "enforce",
-            "--rate-limit-max-pixels",
-            "300000", // just above one 512x512 request's 262144px
-            "--rate-limit-window",
-            "60",
-            "--rate-limit-pixel-threshold",
-            "0",
-        ],
-    );
-    let path = "/unit/lena512.jp2/full/max/0/default.jpg";
-    let c = sipi_e2e::http_client();
-
-    for (label, srv) in [("subject", &subject), ("reference", &reference)] {
-        let first = c
-            .get(format!("{}{path}", srv.base_url))
-            .send()
-            .expect("first request");
-        assert_eq!(
-            first.status().as_u16(),
-            200,
-            "[{label}] first request within budget"
-        );
-
-        let second = c
-            .get(format!("{}{path}", srv.base_url))
-            .send()
-            .expect("second request");
-        assert_eq!(
-            second.status().as_u16(),
-            429,
-            "[{label}] second request exceeds budget"
-        );
-        assert!(
-            second.headers().contains_key("retry-after"),
-            "[{label}] 429 should include a Retry-After header"
-        );
-    }
-}
-
 // ---- P-conditional probes ----------------------------------------------------
 
 /// P-conditional: `--thumbsize`/`--knorapath`/`--knoraport` have no

@@ -38,13 +38,6 @@ public:
   prometheus::Counter &client_disconnected_total;
   prometheus::Counter &memory_alloc_failures_total;
 
-  // Rate limiter counters (R30)
-  prometheus::Family<prometheus::Counter> &rate_limit_decisions_total;
-  prometheus::Counter &rate_limit_allowed;         ///< cached: decisions_total{action="allowed"}
-  prometheus::Counter &rate_limit_rejected;        ///< cached: decisions_total{action="rejected"}
-  prometheus::Counter &rate_limit_shadow_rejected; ///< cached: decisions_total{action="shadow_rejected"}
-  prometheus::Counter &rate_limit_near_limit_total;
-
   // Queue counters
   prometheus::Counter &rejected_connections_total;
 
@@ -54,7 +47,6 @@ public:
   prometheus::Gauge &cache_files;
   prometheus::Gauge &cache_size_limit_bytes;
   prometheus::Gauge &cache_files_limit;
-  prometheus::Gauge &rate_limit_clients_tracked;
 
   // Memory budget metrics
   prometheus::Gauge &decode_memory_budget_bytes;

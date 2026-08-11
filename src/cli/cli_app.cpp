@@ -45,7 +45,6 @@
 #include "SipiHttpServer.h"
 #include "SipiMemoryBudget.h"
 #include "observability/metrics.h"
-#include "SipiRateLimiter.h"
 #include "SipiIO.h"
 #include "SipiImage.h"
 #include "SipiImageError.h"
@@ -432,7 +431,6 @@ struct ServerRuntime
 {
   Sipi::SipiConf conf;
   std::unique_ptr<Sipi::SipiCache> cache;
-  std::unique_ptr<Sipi::SipiRateLimiter> rate_limiter;
   std::unique_ptr<Sipi::SipiMemoryBudget> memory_budget;
 };
 std::unique_ptr<ServerRuntime> g_server_runtime;
@@ -443,7 +441,7 @@ std::unique_ptr<ServerRuntime> g_server_runtime;
  * (strangler-fig rewrite). This is the from-scratch counterpart to the C++
  * server's parity install (`SipiHttpServer`'s `set_engine_context` +
  * run_server's `set_lua_config`); the Rust shell calls it once at startup
- * before serving. Builds the cache / rate limiter / memory budget into
+ * before serving. Builds the cache / memory budget into
  * `g_server_runtime`, points `engine_context()` at them, and installs the
  * engine-held Lua config VM factory. Returns 0 on success or `EXIT_FAILURE`;
  * never lets a C++ exception cross the boundary.
@@ -479,7 +477,7 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
     Sipi::SipiConf &conf = runtime->conf;
 
     // CLI/env overrides: layer the present overrides onto the
-    // Lua-parsed SipiConf BEFORE the cache / rate-limiter / memory-budget
+    // Lua-parsed SipiConf BEFORE the cache / memory-budget
     // services below are built from `conf`, so an override reaches the engine.
     // Setter names are SipiConf's verbatim (incl. the `setPasswort` typo). Sized
     // strings (cache_size/maxpost/max_decode_memory) carry the raw "300M" text;
@@ -510,7 +508,6 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
         conf.setMaxDecodeMemory(v > 0 ? static_cast<size_t>(v) : 0);// <=0 -> 0 (auto-detect 75% RAM)
       }
       if (o.decode_memory_mode != nullptr) conf.setDecodeMemoryMode(o.decode_memory_mode);
-      if (o.rate_limit_mode != nullptr) conf.setRateLimitMode(o.rate_limit_mode);
       if (o.thumbsize != nullptr) conf.setThumbSize(o.thumbsize);
       if (o.knorapath != nullptr) conf.setKnoraPath(o.knorapath);
       if (o.knoraport != nullptr) conf.setKnoraPort(o.knoraport);
@@ -543,10 +540,7 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
       if (o.has_cache_nfiles) conf.setCacheNFiles(o.cache_nfiles);
       if (o.has_subdirlevels) conf.setSubdirLevels(o.subdirlevels);
       if (o.has_pathprefix) conf.setPrefixAsPath(o.pathprefix != 0);
-      if (o.has_rate_limit_window) conf.setRateLimitWindow(o.rate_limit_window);
       if (o.has_max_pixel_limit) conf.setMaxPixelLimit(o.max_pixel_limit);
-      if (o.has_rate_limit_max_pixels) conf.setRateLimitMaxPixels(o.rate_limit_max_pixels);
-      if (o.has_rate_limit_pixel_threshold) conf.setRateLimitPixelThreshold(o.rate_limit_pixel_threshold);
       if (o.has_jpeg_quality) conf.setJpegQuality(o.jpeg_quality);
     }
 
@@ -565,14 +559,6 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
           log_warn("sipi_init: caching disabled — %s", e.what());
           runtime->cache = nullptr;
         }
-      }
-    }
-    {
-      const Sipi::RateLimitMode mode = Sipi::parse_rate_limit_mode(conf.getRateLimitMode());
-      const std::size_t rl_max = conf.getRateLimitMaxPixels();
-      if (mode != Sipi::RateLimitMode::OFF && rl_max > 0) {
-        runtime->rate_limiter = std::make_unique<Sipi::SipiRateLimiter>(
-          conf.getRateLimitWindow(), rl_max, mode, conf.getRateLimitPixelThreshold());
       }
     }
     {
@@ -619,7 +605,6 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
     // Install the engine context — non-owning pointers into g_server_runtime.
     Sipi::ffi::set_engine_context(Sipi::ffi::EngineContext{
       .cache = runtime->cache.get(),
-      .rate_limiter = runtime->rate_limiter.get(),
       .memory_budget = runtime->memory_budget.get(),
       .imgroot = imgroot,
       .resolved_imgroot = resolved_imgroot,
@@ -795,10 +780,6 @@ extern "C" int sipi_cli_main(int argc, char **argv)
   unsigned optCacheNFiles = 200;// unsigned: CLI11 rejects a negative (no signed→size_t wrap)
   double optCacheHysteresisIgnored = 0.0;
   size_t optMaxPixelLimit = 0;
-  size_t optRateLimitMaxPixels = 0;
-  unsigned optRateLimitWindow = 600;
-  std::string optRateLimitMode = "off";
-  size_t optRateLimitPixelThreshold = 2000000;
   std::string optMaxDecodeMemory = "0";
   std::string optDecodeMemoryMode = "off";
   unsigned optDrainTimeout = 30;
@@ -1422,27 +1403,6 @@ extern "C" int sipi_cli_main(int argc, char **argv)
         if (pixel_limit > 0) { log_info("Max output pixel limit: %zu", pixel_limit); }
       }
 
-      // Rate limiter — CLI/env overrides config file
-      {
-        size_t rl_max = sipiConf.getRateLimitMaxPixels();
-        if (user_set("--rate-limit-max-pixels")) rl_max = optRateLimitMaxPixels;
-        unsigned rl_window = sipiConf.getRateLimitWindow();
-        if (user_set("--rate-limit-window")) rl_window = optRateLimitWindow;
-        std::string rl_mode_str = sipiConf.getRateLimitMode();
-        if (user_set("--rate-limit-mode")) rl_mode_str = optRateLimitMode;
-        size_t rl_threshold = sipiConf.getRateLimitPixelThreshold();
-        if (user_set("--rate-limit-pixel-threshold")) rl_threshold = optRateLimitPixelThreshold;
-
-        auto rl_mode = Sipi::parse_rate_limit_mode(rl_mode_str);
-        if (rl_mode != Sipi::RateLimitMode::OFF && rl_max > 0) {
-          server.rate_limiter(std::make_unique<Sipi::SipiRateLimiter>(rl_window, rl_max, rl_mode, rl_threshold));
-          log_info("Rate limiting enabled: mode=%s, %zu pixels per %u seconds, threshold=%zu",
-            rl_mode_str.c_str(), rl_max, rl_window, rl_threshold);
-        } else {
-          log_info("Rate limiting disabled");
-        }
-      }
-
       // Memory budget — CLI/env overrides config file
       {
         size_t budget_bytes = sipiConf.getMaxDecodeMemory();
@@ -1703,18 +1663,6 @@ extern "C" int sipi_cli_main(int argc, char **argv)
     cmd->add_option("--max-pixel-limit", optMaxPixelLimit,
         "Max output pixels (width*height) per IIIF request. 0 = unlimited.")
       ->envname("SIPI_MAX_PIXEL_LIMIT");
-    cmd->add_option("--rate-limit-max-pixels", optRateLimitMaxPixels,
-        "Max output pixels per client per window. 0 = disabled.")
-      ->envname("SIPI_RATE_LIMIT_MAX_PIXELS");
-    cmd->add_option("--rate-limit-window", optRateLimitWindow,
-        "Rate limit sliding window in seconds (default 600).")
-      ->envname("SIPI_RATE_LIMIT_WINDOW");
-    cmd->add_option("--rate-limit-mode", optRateLimitMode,
-        "Rate limit mode: off, monitor, enforce (default off).")
-      ->envname("SIPI_RATE_LIMIT_MODE");
-    cmd->add_option("--rate-limit-pixel-threshold", optRateLimitPixelThreshold,
-        "Requests below this pixel count are free (default 2000000).")
-      ->envname("SIPI_RATE_LIMIT_PIXEL_THRESHOLD");
     cmd->add_option("--max-decode-memory", optMaxDecodeMemory,
         "Max concurrent decode memory budget (e.g., 2G, 500M). 0 = auto (75% of detected memory).")
       ->envname("SIPI_MAX_DECODE_MEMORY");

@@ -48,7 +48,6 @@ enum class SipiStatus : int {
   NotFound = 404,
   InternalError = 500,
   ServiceUnavailable = 503,//!< memory budget exhausted (with Retry-After)
-  TooManyRequests = 429,//!< rate limit exceeded (with Retry-After)
   //! Not an HTTP status to render: the client disconnected mid-decode. The
   //! caller emits nothing (the response was never committed); the engine has
   //! already counted it. 499 mirrors the nginx/Traefik "client closed request".

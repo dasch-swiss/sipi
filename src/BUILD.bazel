@@ -224,7 +224,7 @@ cc_library(
 # ── //src:engine ───────────────────────────────────────────────────────────
 # The transport-free image engine: decode/encode (SipiImage + the four format
 # handlers), IIIF parameter parsing (iiifparser), and the serve-time admission
-# primitives (cache, rate limiter, memory budget). Carved out of `:sipi_lib`
+# primitives (cache, memory budget). Carved out of `:sipi_lib`
 # so the FFI seam (//src/ffi:sipi_ffi) can drive the engine WITHOUT a
 # dependency cycle — `:sipi_lib` deps `:sipi_ffi`, so `:sipi_ffi` cannot reach
 # the engine while it lives inside `:sipi_lib`. The engine *source* is free of
@@ -242,7 +242,6 @@ cc_library(
         "SipiFilenameHash.cpp",
         "SipiImage.cpp",
         "SipiMemoryBudget.cpp",
-        "SipiRateLimiter.cpp",
         "populate_from_image.cpp",
         "resample.cc",
         "formats/SipiIOJ2k.cpp",
@@ -270,7 +269,6 @@ cc_library(
         "SipiImageError.h",
         "SipiMemoryBudget.h",
         "SipiPeakMemory.h",
-        "SipiRateLimiter.h",
         "populate_from_image.h",
         "resample.h",
         "formats/SipiIOJ2k.h",
@@ -376,7 +374,6 @@ cc_library(
             "SipiFilenameHash.cpp",
             "SipiImage.cpp",
             "SipiMemoryBudget.cpp",
-            "SipiRateLimiter.cpp",
             "populate_from_image.cpp",
             "formats/SipiIOJ2k.cpp",
             "formats/SipiIOJpeg.cpp",

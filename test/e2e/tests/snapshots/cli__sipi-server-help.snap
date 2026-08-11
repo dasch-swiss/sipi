@@ -45,12 +45,6 @@ Cache:
       --cache-size <SIZE>  Cache size: "-1" (unlimited), "0" (disabled), or e.g. "200M" (engine parses the suffix) [env: SIPI_CACHE_SIZE=]
       --cache-nfiles <N>   Max number of cached files (0 = no limit). Unsigned: a negative is rejected (matches the C++ CLI; no signed→unsigned wrap) [env: SIPI_CACHE_NFILES=]
 
-Rate limiting:
-      --rate-limit-max-pixels <PIXELS>       Max output pixels per client per window (0 = disabled) [env: SIPI_RATE_LIMIT_MAX_PIXELS=]
-      --rate-limit-window <SECS>             Sliding window in seconds [env: SIPI_RATE_LIMIT_WINDOW=]
-      --rate-limit-mode <MODE>               Rate-limit mode: off, monitor, enforce (engine validates) [env: SIPI_RATE_LIMIT_MODE=]
-      --rate-limit-pixel-threshold <PIXELS>  Requests below this pixel count are free [env: SIPI_RATE_LIMIT_PIXEL_THRESHOLD=]
-
 TLS & Auth:
       --sslcert <FILE>        Path to the SSL certificate (parse-only: TLS at Traefik) [env: SIPI_SSLCERTIFICATE=]
       --sslkey <FILE>         Path to the SSL key (parse-only: TLS at Traefik) [env: SIPI_SSLKEY=]

@@ -62,22 +62,6 @@ Metrics::Metrics()
                                   .Register(*registry_)
                                   .Add({})),
 
-    rate_limit_decisions_total(prometheus::BuildCounter()
-                                 .Name("sipi_rate_limit_decisions_total")
-                                 .Help("Rate limit decisions by action (allowed, rejected, shadow_rejected)")
-                                 .Register(*registry_)),
-
-    // Pre-create counter children to avoid per-request map lookups
-    rate_limit_allowed(rate_limit_decisions_total.Add({{"action", "allowed"}})),
-    rate_limit_rejected(rate_limit_decisions_total.Add({{"action", "rejected"}})),
-    rate_limit_shadow_rejected(rate_limit_decisions_total.Add({{"action", "shadow_rejected"}})),
-
-    rate_limit_near_limit_total(prometheus::BuildCounter()
-                                  .Name("sipi_rate_limit_near_limit_total")
-                                  .Help("Clients at >80% of pixel budget")
-                                  .Register(*registry_)
-                                  .Add({})),
-
     rejected_connections_total(prometheus::BuildCounter()
                                  .Name("sipi_rejected_connections_total")
                                  .Help("Total requests rejected with 503 due to queue full or timeout")
@@ -113,12 +97,6 @@ Metrics::Metrics()
                         .Help("Configured cache file count limit (0 = no limit)")
                         .Register(*registry_)
                         .Add({})),
-
-    rate_limit_clients_tracked(prometheus::BuildGauge()
-                                 .Name("sipi_rate_limit_clients_tracked")
-                                 .Help("Number of active client entries in rate limiter map")
-                                 .Register(*registry_)
-                                 .Add({})),
 
     decode_memory_budget_bytes(prometheus::BuildGauge()
                                   .Name("sipi_decode_memory_budget_bytes")

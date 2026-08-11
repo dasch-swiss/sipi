@@ -64,12 +64,6 @@ pub struct ServerOverrides {
     /// `unsigned` var), so there is no signed→unsigned wrap.
     pub cache_nfiles: Option<u32>,
 
-    // Rate limiting
-    pub rate_limit_max_pixels: Option<u64>,
-    pub rate_limit_window: Option<u32>,
-    pub rate_limit_mode: Option<String>,
-    pub rate_limit_pixel_threshold: Option<u64>,
-
     // Limits
     /// Raw size string; the engine parses the suffix.
     pub max_decode_memory: Option<String>,
@@ -130,12 +124,6 @@ impl ServerOverrides {
             cache_dir: self.cache_dir.or(base.cache_dir),
             cache_size: self.cache_size.or(base.cache_size),
             cache_nfiles: self.cache_nfiles.or(base.cache_nfiles),
-            rate_limit_max_pixels: self.rate_limit_max_pixels.or(base.rate_limit_max_pixels),
-            rate_limit_window: self.rate_limit_window.or(base.rate_limit_window),
-            rate_limit_mode: self.rate_limit_mode.or(base.rate_limit_mode),
-            rate_limit_pixel_threshold: self
-                .rate_limit_pixel_threshold
-                .or(base.rate_limit_pixel_threshold),
             max_decode_memory: self.max_decode_memory.or(base.max_decode_memory),
             decode_memory_mode: self.decode_memory_mode.or(base.decode_memory_mode),
             max_pixel_limit: self.max_pixel_limit.or(base.max_pixel_limit),
@@ -187,7 +175,6 @@ pub(crate) struct SipiServerConfig {
     pub maxpost: *const c_char,    // raw "300M" — engine parses the suffix
     pub max_decode_memory: *const c_char, // raw — engine parses the suffix
     pub decode_memory_mode: *const c_char,
-    pub rate_limit_mode: *const c_char,
     pub thumbsize: *const c_char,
     pub knorapath: *const c_char,
     pub knoraport: *const c_char,
@@ -205,15 +192,12 @@ pub(crate) struct SipiServerConfig {
     pub subdirexcludes_len: usize,
     // 8-byte: 64-bit scalar values (presence via the has_ flags below)
     pub max_pixel_limit: u64,
-    pub rate_limit_max_pixels: u64,
-    pub rate_limit_pixel_threshold: u64,
     // 4-byte scalar values (presence via the has_ flags below)
     pub serverport: i32,
     pub maxtmpage: i32,
     pub cache_nfiles: u32, // 0 = unlimited; a negative is rejected at the CLI (no wrap)
     pub subdirlevels: i32,
-    pub pathprefix: i32, // prefix_as_path, bool carried as 0/1
-    pub rate_limit_window: u32,
+    pub pathprefix: i32,   // prefix_as_path, bool carried as 0/1
     pub jpeg_quality: i32, // JPEG output quality (1-100); TOML-only
     // 4-byte presence flags (non-zero = present)
     pub has_serverport: c_int,
@@ -221,10 +205,7 @@ pub(crate) struct SipiServerConfig {
     pub has_cache_nfiles: c_int,
     pub has_subdirlevels: c_int,
     pub has_pathprefix: c_int,
-    pub has_rate_limit_window: c_int,
     pub has_max_pixel_limit: c_int,
-    pub has_rate_limit_max_pixels: c_int,
-    pub has_rate_limit_pixel_threshold: c_int,
     pub has_jpeg_quality: c_int,
 }
 
@@ -283,7 +264,6 @@ impl OverridesHolder {
             maxpost: intern_cstr(&mut strings, &o.maxpost)?,
             max_decode_memory: intern_cstr(&mut strings, &o.max_decode_memory)?,
             decode_memory_mode: intern_cstr(&mut strings, &o.decode_memory_mode)?,
-            rate_limit_mode: intern_cstr(&mut strings, &o.rate_limit_mode)?,
             thumbsize: intern_cstr(&mut strings, &o.thumbsize)?,
             knorapath: intern_cstr(&mut strings, &o.knorapath)?,
             knoraport: intern_cstr(&mut strings, &o.knoraport)?,
@@ -297,24 +277,18 @@ impl OverridesHolder {
             subdirexcludes,
             subdirexcludes_len,
             max_pixel_limit: o.max_pixel_limit.unwrap_or(0),
-            rate_limit_max_pixels: o.rate_limit_max_pixels.unwrap_or(0),
-            rate_limit_pixel_threshold: o.rate_limit_pixel_threshold.unwrap_or(0),
             serverport: o.serverport.map(i32::from).unwrap_or(0),
             maxtmpage: o.maxtmpage.unwrap_or(0),
             cache_nfiles: o.cache_nfiles.unwrap_or(0),
             subdirlevels: o.subdirlevels.unwrap_or(0),
             pathprefix: o.pathprefix.map(i32::from).unwrap_or(0),
-            rate_limit_window: o.rate_limit_window.unwrap_or(0),
             jpeg_quality: o.jpeg_quality.unwrap_or(0),
             has_serverport: o.serverport.is_some() as c_int,
             has_maxtmpage: o.maxtmpage.is_some() as c_int,
             has_cache_nfiles: o.cache_nfiles.is_some() as c_int,
             has_subdirlevels: o.subdirlevels.is_some() as c_int,
             has_pathprefix: o.pathprefix.is_some() as c_int,
-            has_rate_limit_window: o.rate_limit_window.is_some() as c_int,
             has_max_pixel_limit: o.max_pixel_limit.is_some() as c_int,
-            has_rate_limit_max_pixels: o.rate_limit_max_pixels.is_some() as c_int,
-            has_rate_limit_pixel_threshold: o.rate_limit_pixel_threshold.is_some() as c_int,
             has_jpeg_quality: o.jpeg_quality.is_some() as c_int,
         };
 
@@ -363,7 +337,7 @@ mod layout {
     fn repr_c_matches_sipi_ffi_h() {
         assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
         assert_eq!(align_of::<SipiServerConfig>(), 8);
-        assert_eq!(size_of::<SipiServerConfig>(), 296);
+        assert_eq!(size_of::<SipiServerConfig>(), 256);
 
         assert_eq!(offset_of!(SipiServerConfig, imgroot), 0);
         assert_eq!(offset_of!(SipiServerConfig, scriptdir), 8);
@@ -377,45 +351,32 @@ mod layout {
         assert_eq!(offset_of!(SipiServerConfig, maxpost), 72);
         assert_eq!(offset_of!(SipiServerConfig, max_decode_memory), 80);
         assert_eq!(offset_of!(SipiServerConfig, decode_memory_mode), 88);
-        assert_eq!(offset_of!(SipiServerConfig, rate_limit_mode), 96);
-        assert_eq!(offset_of!(SipiServerConfig, thumbsize), 104);
-        assert_eq!(offset_of!(SipiServerConfig, knorapath), 112);
-        assert_eq!(offset_of!(SipiServerConfig, knoraport), 120);
-        assert_eq!(offset_of!(SipiServerConfig, docroot), 128);
-        assert_eq!(offset_of!(SipiServerConfig, wwwroute), 136);
-        assert_eq!(offset_of!(SipiServerConfig, loglevel), 144);
-        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_jpeg), 152);
-        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_tiff), 160);
-        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_png), 168);
-        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_j2k), 176);
-        assert_eq!(offset_of!(SipiServerConfig, subdirexcludes), 184);
-        assert_eq!(offset_of!(SipiServerConfig, subdirexcludes_len), 192);
-        assert_eq!(offset_of!(SipiServerConfig, max_pixel_limit), 200);
-        assert_eq!(offset_of!(SipiServerConfig, rate_limit_max_pixels), 208);
-        assert_eq!(
-            offset_of!(SipiServerConfig, rate_limit_pixel_threshold),
-            216
-        );
-        assert_eq!(offset_of!(SipiServerConfig, serverport), 224);
-        assert_eq!(offset_of!(SipiServerConfig, maxtmpage), 228);
-        assert_eq!(offset_of!(SipiServerConfig, cache_nfiles), 232);
-        assert_eq!(offset_of!(SipiServerConfig, subdirlevels), 236);
-        assert_eq!(offset_of!(SipiServerConfig, pathprefix), 240);
-        assert_eq!(offset_of!(SipiServerConfig, rate_limit_window), 244);
-        assert_eq!(offset_of!(SipiServerConfig, jpeg_quality), 248);
-        assert_eq!(offset_of!(SipiServerConfig, has_serverport), 252);
-        assert_eq!(offset_of!(SipiServerConfig, has_maxtmpage), 256);
-        assert_eq!(offset_of!(SipiServerConfig, has_cache_nfiles), 260);
-        assert_eq!(offset_of!(SipiServerConfig, has_subdirlevels), 264);
-        assert_eq!(offset_of!(SipiServerConfig, has_pathprefix), 268);
-        assert_eq!(offset_of!(SipiServerConfig, has_rate_limit_window), 272);
-        assert_eq!(offset_of!(SipiServerConfig, has_max_pixel_limit), 276);
-        assert_eq!(offset_of!(SipiServerConfig, has_rate_limit_max_pixels), 280);
-        assert_eq!(
-            offset_of!(SipiServerConfig, has_rate_limit_pixel_threshold),
-            284
-        );
-        assert_eq!(offset_of!(SipiServerConfig, has_jpeg_quality), 288);
+        assert_eq!(offset_of!(SipiServerConfig, thumbsize), 96);
+        assert_eq!(offset_of!(SipiServerConfig, knorapath), 104);
+        assert_eq!(offset_of!(SipiServerConfig, knoraport), 112);
+        assert_eq!(offset_of!(SipiServerConfig, docroot), 120);
+        assert_eq!(offset_of!(SipiServerConfig, wwwroute), 128);
+        assert_eq!(offset_of!(SipiServerConfig, loglevel), 136);
+        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_jpeg), 144);
+        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_tiff), 152);
+        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_png), 160);
+        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_j2k), 168);
+        assert_eq!(offset_of!(SipiServerConfig, subdirexcludes), 176);
+        assert_eq!(offset_of!(SipiServerConfig, subdirexcludes_len), 184);
+        assert_eq!(offset_of!(SipiServerConfig, max_pixel_limit), 192);
+        assert_eq!(offset_of!(SipiServerConfig, serverport), 200);
+        assert_eq!(offset_of!(SipiServerConfig, maxtmpage), 204);
+        assert_eq!(offset_of!(SipiServerConfig, cache_nfiles), 208);
+        assert_eq!(offset_of!(SipiServerConfig, subdirlevels), 212);
+        assert_eq!(offset_of!(SipiServerConfig, pathprefix), 216);
+        assert_eq!(offset_of!(SipiServerConfig, jpeg_quality), 220);
+        assert_eq!(offset_of!(SipiServerConfig, has_serverport), 224);
+        assert_eq!(offset_of!(SipiServerConfig, has_maxtmpage), 228);
+        assert_eq!(offset_of!(SipiServerConfig, has_cache_nfiles), 232);
+        assert_eq!(offset_of!(SipiServerConfig, has_subdirlevels), 236);
+        assert_eq!(offset_of!(SipiServerConfig, has_pathprefix), 240);
+        assert_eq!(offset_of!(SipiServerConfig, has_max_pixel_limit), 244);
+        assert_eq!(offset_of!(SipiServerConfig, has_jpeg_quality), 248);
     }
 }
 

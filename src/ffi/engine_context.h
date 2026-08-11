@@ -7,7 +7,7 @@
  * The engine-owned services + config the FFI image pipeline reads.
  *
  * `sipi_serve_image` is a C ABI of shape `(req, resp)` — it has no slot for the
- * cache, rate limiter, memory budget, or the server config knobs the decode
+ * cache, memory budget, or the server config knobs the decode
  * pipeline needs. `EngineContext` is that durable engine state, read by
  * `build_image_response`. Eventually `sipi_init` constructs and installs it;
  * while the C++ transport still owns the socket, the still-living
@@ -27,20 +27,18 @@
 
 namespace Sipi {
 class SipiCache;
-class SipiRateLimiter;
 class SipiMemoryBudget;
 }// namespace Sipi
 
 namespace Sipi::ffi {
 
-/*! Engine services + config read by the IIIF image pipeline. The three service
+/*! Engine services + config read by the IIIF image pipeline. The two service
  *  pointers are non-owning (the installer outlives every serve call) and may be
  *  null when the corresponding feature is disabled, mirroring the legacy
- *  `server->cache()/rate_limiter()/memory_budget()` accessors. */
+ *  `server->cache()/memory_budget()` accessors. */
 struct EngineContext
 {
   SipiCache *cache = nullptr;//!< file cache, or null when caching is off
-  SipiRateLimiter *rate_limiter = nullptr;//!< per-client limiter, or null when off
   SipiMemoryBudget *memory_budget = nullptr;//!< decode memory budget, or null when off
 
   std::string imgroot;//!< image root: raw config value, for the Rust edge's path build (parity with imgroot())

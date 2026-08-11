@@ -1859,13 +1859,15 @@ fn canonical_id(scheme: &str, host: &str, prefix: &str, identifier: &str) -> Str
     }
 }
 
-/// The rate-limit client IP: the rightmost `X-Forwarded-For` value, else empty.
+/// The client IP: the rightmost `X-Forwarded-For` value, else empty. Feeds the
+/// IIIF request's `client_ip` field and the Lua request context's
+/// `server.client_ip`.
 ///
 /// SECURITY: this trusts `X-Forwarded-For`, which is sound only when SIPI sits
 /// behind a reverse proxy (Traefik) that overwrites the header with the real
 /// peer. The shell must never be directly reachable by clients — a directly
-/// connected client could forge `X-Forwarded-For` on every request to mint
-/// unlimited rate-limit buckets and defeat the per-client limiter.
+/// connected client could forge `X-Forwarded-For` on every request to spoof
+/// its reported client identity.
 fn client_ip(headers: &HeaderMap) -> String {
     header_str(headers, "x-forwarded-for")
         .and_then(|v| v.rsplit(',').next().map(|s| s.trim().to_owned()))

@@ -162,8 +162,6 @@ sipi_e2e_test(name = "proptest_iiif_uri", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "range_requests", deps = _e2e_test_deps)
 
-sipi_e2e_test(name = "rate_limiter", deps = _e2e_test_deps)
-
 sipi_e2e_test(name = "resource_limits", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "security", deps = _e2e_test_deps)
@@ -323,7 +321,6 @@ test_suite(
         ":preflight_cache",
         ":proptest_iiif_uri",
         ":range_requests",
-        ":rate_limiter",
         ":resource_limits",
         ":security",
         ":server",

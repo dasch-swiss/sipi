@@ -9,7 +9,7 @@
  * `build_image_response` builds the transport-pure response for an IIIF image
  * request, the `serve_iiif` decode path carved out of `SipiHttpServer`. It
  * reconstructs the typed IIIF params from the flat `SipiServeRequest`, runs
- * admission (rate-limit / cache / memory-budget), builds the canonical URL, and
+ * admission (cache / memory-budget), builds the canonical URL, and
  * then decodes + transforms — every fallible step *before* the response is
  * committed, so a failure is a clean status code. It returns either a
  * `FileBody` (cache hit or direct passthrough → `sendFile`) or a `StreamBody`

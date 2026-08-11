@@ -169,10 +169,6 @@ pub struct SipiMetricsSnapshot {
     pub client_disconnected_total: u64,
     pub memory_alloc_failures_total: u64,
     pub rejected_connections_total: u64,
-    pub rate_limit_allowed_total: u64,
-    pub rate_limit_rejected_total: u64,
-    pub rate_limit_shadow_rejected_total: u64,
-    pub rate_limit_near_limit_total: u64,
     pub decode_memory_acquired_total: u64,
     pub decode_memory_rejected_total: u64,
     pub decode_memory_shadow_rejected_total: u64,
@@ -183,7 +179,6 @@ pub struct SipiMetricsSnapshot {
     pub cache_files: i64,
     pub cache_size_limit_bytes: i64,
     pub cache_files_limit: i64,
-    pub rate_limit_clients_tracked: i64,
     pub decode_memory_budget_bytes: i64,
     pub decode_memory_used_bytes: i64,
 }
@@ -435,7 +430,7 @@ extern "C" {
     /// Returns 0, or 500 if `sipi_init` has not run.
     pub fn sipi_port(out: *mut c_int) -> c_int;
 
-    /// Snapshot the engine metrics singleton (cache / rate-limiter /
+    /// Snapshot the engine metrics singleton (cache /
     /// decode-memory / admission counters + gauges) into `out`, a caller-owned
     /// buffer. A pure `sipi_guard`-only read — no response sink, no fallible
     /// pre-commit step. Returns 0, or non-zero on an internal error.
@@ -1584,7 +1579,7 @@ mod metrics_snapshot_layout {
     fn repr_c_matches_metrics_snapshot_h() {
         assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
         assert_eq!(align_of::<SipiMetricsSnapshot>(), 8);
-        assert_eq!(size_of::<SipiMetricsSnapshot>(), 200);
+        assert_eq!(size_of::<SipiMetricsSnapshot>(), 160);
 
         assert_eq!(offset_of!(SipiMetricsSnapshot, cache_hits_total), 0);
         assert_eq!(offset_of!(SipiMetricsSnapshot, cache_misses_total), 8);
@@ -1604,57 +1599,37 @@ mod metrics_snapshot_layout {
             56
         );
         assert_eq!(
-            offset_of!(SipiMetricsSnapshot, rate_limit_allowed_total),
+            offset_of!(SipiMetricsSnapshot, decode_memory_acquired_total),
             64
         );
         assert_eq!(
-            offset_of!(SipiMetricsSnapshot, rate_limit_rejected_total),
+            offset_of!(SipiMetricsSnapshot, decode_memory_rejected_total),
             72
         );
         assert_eq!(
-            offset_of!(SipiMetricsSnapshot, rate_limit_shadow_rejected_total),
+            offset_of!(SipiMetricsSnapshot, decode_memory_shadow_rejected_total),
             80
         );
         assert_eq!(
-            offset_of!(SipiMetricsSnapshot, rate_limit_near_limit_total),
+            offset_of!(SipiMetricsSnapshot, decode_memory_near_limit_total),
             88
         );
         assert_eq!(
-            offset_of!(SipiMetricsSnapshot, decode_memory_acquired_total),
+            offset_of!(SipiMetricsSnapshot, tiff_pyramid_reduced_decodes_total),
             96
         );
-        assert_eq!(
-            offset_of!(SipiMetricsSnapshot, decode_memory_rejected_total),
-            104
-        );
-        assert_eq!(
-            offset_of!(SipiMetricsSnapshot, decode_memory_shadow_rejected_total),
-            112
-        );
-        assert_eq!(
-            offset_of!(SipiMetricsSnapshot, decode_memory_near_limit_total),
-            120
-        );
-        assert_eq!(
-            offset_of!(SipiMetricsSnapshot, tiff_pyramid_reduced_decodes_total),
-            128
-        );
-        assert_eq!(offset_of!(SipiMetricsSnapshot, waiting_connections), 136);
-        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_bytes), 144);
-        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files), 152);
-        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_limit_bytes), 160);
-        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files_limit), 168);
-        assert_eq!(
-            offset_of!(SipiMetricsSnapshot, rate_limit_clients_tracked),
-            176
-        );
+        assert_eq!(offset_of!(SipiMetricsSnapshot, waiting_connections), 104);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_bytes), 112);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files), 120);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_limit_bytes), 128);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files_limit), 136);
         assert_eq!(
             offset_of!(SipiMetricsSnapshot, decode_memory_budget_bytes),
-            184
+            144
         );
         assert_eq!(
             offset_of!(SipiMetricsSnapshot, decode_memory_used_bytes),
-            192
+            152
         );
     }
 }

@@ -46,7 +46,6 @@
 #include "generated/SipiVersion.h"
 #include "SipiMemoryBudget.h"
 #include "SipiPeakMemory.h"
-#include "SipiRateLimiter.h"
 #include "iiifparser/SipiDecodeDims.h"
 #include "favicon.h"
 #include "ffi/engine_context.h"
@@ -327,7 +326,7 @@ validate_resolved_path(std::string_view file_path, std::string_view resolved_img
 //=========================================================================
 
 /*!
- * R25: Resolve client identity for rate limiting.
+ * R25: Resolve client identity for the FFI request's `client_ip` field.
  * Priority: X-Forwarded-For (rightmost) > peer IP.
  */
 static std::string resolve_client_id(Connection &conn_obj)
@@ -1259,7 +1258,7 @@ static void serve_iiif(Connection &conn_obj,
 
   // Flatten the parsed params into the typed FFI seam (the enum values mirror
   // the iiifparser enums 1:1). The decode/transform/encode pipeline,
-  // admission (cache/rate-limit/budget), and canonical-URL building all live
+  // admission (cache/budget), and canonical-URL building all live
   // behind sipi_serve_image now.
   ::SipiIiifParams p{};
   p.region_type = static_cast<SipiRegionType>(region->getType());
@@ -1472,12 +1471,11 @@ void SipiHttpServer::run()
   user_data(this);
 
   // Install the engine context the FFI image pipeline (sipi_serve_image) reads.
-  // While this server still owns cache/rate-limiter/memory-budget, it hands
+  // While this server still owns cache/memory-budget, it hands
   // the FFI non-owning pointers + the config knobs. At the cutover
   // sipi_init takes over and this install (and SipiHttpServer) go away.
   Sipi::ffi::set_engine_context(Sipi::ffi::EngineContext{
     .cache = _cache.get(),
-    .rate_limiter = _rate_limiter.get(),
     .memory_budget = _memory_budget.get(),
     .imgroot = _imgroot,
     .resolved_imgroot = _resolved_imgroot,

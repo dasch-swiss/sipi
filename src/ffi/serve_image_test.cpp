@@ -56,7 +56,7 @@ SipiIiifParams full_params(SipiFormatType format, SipiQualityType quality = SIPI
 
 EngineContext bare_engine()
 {
-  EngineContext eng;// all services null (cache/rate-limit/budget disabled)
+  EngineContext eng;// all services null (cache/budget disabled)
   eng.imgroot = kImagesDir;
   eng.resolved_imgroot = kImagesDir;
   eng.jpeg_quality = 60;

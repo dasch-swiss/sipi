@@ -28,7 +28,6 @@ TEST(MetricsSnapshot, CountersReflectIncrements)
   m.cache_hits_total.Increment();
   m.cache_misses_total.Increment();
   m.decode_memory_acquired.Increment();
-  m.rate_limit_decisions_total.Add({ { "action", "allowed" } }).Increment();
 
   SipiMetricsSnapshot after{};
   ASSERT_EQ(sipi_metrics_snapshot(&after), 0);
@@ -36,7 +35,6 @@ TEST(MetricsSnapshot, CountersReflectIncrements)
   EXPECT_EQ(after.cache_hits_total - before.cache_hits_total, 2u);
   EXPECT_EQ(after.cache_misses_total - before.cache_misses_total, 1u);
   EXPECT_EQ(after.decode_memory_acquired_total - before.decode_memory_acquired_total, 1u);
-  EXPECT_EQ(after.rate_limit_allowed_total - before.rate_limit_allowed_total, 1u);
 }
 
 TEST(MetricsSnapshot, GaugesReflectCurrentValue)

@@ -41,13 +41,11 @@ const std::set<std::string> kBridgedToOtlp = {
   "sipi_image_too_large_total",
   "sipi_client_disconnected_total",
   "sipi_memory_alloc_failures_total",
-  "sipi_rate_limit_near_limit_total",
   "sipi_decode_memory_near_limit_total",
   "sipi_cache_size_bytes",
   "sipi_cache_files",
   "sipi_cache_size_limit_bytes",
   "sipi_cache_files_limit",
-  "sipi_rate_limit_clients_tracked",
   "sipi_decode_memory_budget_bytes",
   "sipi_decode_memory_used_bytes",
   "sipi_tiff_pyramid_reduced_decodes_total",
@@ -58,7 +56,6 @@ const std::set<std::string> kBridgedToOtlp = {
 // scalars, not label sets). Operator PromQL must use the flattened names —
 // `..._decisions_total{action="rejected"}` matches nothing in production.
 const std::set<std::string> kBridgedFlattened = {
-  "sipi_rate_limit_decisions_total",// → sipi.rate_limit.{allowed,rejected,shadow_rejected}
   "sipi_decode_memory_decisions_total",// → sipi.decode_memory.{acquired,rejected,shadow_rejected}
 };
 
