@@ -1,7 +1,7 @@
 //! The OTLP metrics bridge: engine counters + the shell's own concurrency
 //! signals, exported as OTel observable instruments.
 //!
-//! The C++ engine keeps its own metrics singleton (cache / rate-limiter /
+//! The C++ engine keeps its own metrics singleton (cache /
 //! decode-memory / admission counters + gauges), read across the seam as a flat
 //! [`SipiMetricsSnapshot`]. This module registers an OTel **observable** (async)
 //! instrument per field: on each collection the SDK invokes the callback, which
@@ -270,7 +270,7 @@ pub(crate) fn record_decode_estimate(estimate_bytes: u64) {
     }
 }
 
-/// The 16 live monotonic counters: OTel name, description, and the field to read
+/// The 12 live monotonic counters: OTel name, description, and the field to read
 /// from a snapshot. (`rejected_connections_total` is omitted — transport-dead.)
 type CounterRow = (&'static str, &'static str, fn(&SipiMetricsSnapshot) -> u64);
 const COUNTERS: &[CounterRow] = &[
@@ -302,26 +302,6 @@ const COUNTERS: &[CounterRow] = &[
         |s| s.memory_alloc_failures_total,
     ),
     (
-        "sipi.rate_limit.allowed",
-        "Rate-limiter: requests allowed",
-        |s| s.rate_limit_allowed_total,
-    ),
-    (
-        "sipi.rate_limit.rejected",
-        "Rate-limiter: requests rejected",
-        |s| s.rate_limit_rejected_total,
-    ),
-    (
-        "sipi.rate_limit.shadow_rejected",
-        "Rate-limiter: shadow-mode rejections",
-        |s| s.rate_limit_shadow_rejected_total,
-    ),
-    (
-        "sipi.rate_limit.near_limit",
-        "Rate-limiter: times a client exceeded 80% of its budget",
-        |s| s.rate_limit_near_limit_total,
-    ),
-    (
         "sipi.decode_memory.acquired",
         "Decode-memory budget: acquisitions",
         |s| s.decode_memory_acquired_total,
@@ -348,7 +328,7 @@ const COUNTERS: &[CounterRow] = &[
     ),
 ];
 
-/// The 7 live gauges: OTel name, description, unit (`""` = none), and the field.
+/// The 6 live gauges: OTel name, description, unit (`""` = none), and the field.
 /// (`waiting_connections` is omitted — transport-dead.)
 type GaugeRow = (
     &'static str,
@@ -374,12 +354,6 @@ const GAUGES: &[GaugeRow] = &[
         "Configured cache file-count limit (0 = none)",
         "",
         |s| s.cache_files_limit,
-    ),
-    (
-        "sipi.rate_limit.clients_tracked",
-        "Active client entries in the rate limiter",
-        "",
-        |s| s.rate_limit_clients_tracked,
     ),
     (
         "sipi.decode_memory.budget_bytes",

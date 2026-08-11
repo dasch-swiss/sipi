@@ -207,7 +207,7 @@ typedef struct
   const char *resolved_path; /* image-root-validated absolute path (validation owned by the Rust edge) */
   const char *prefix; /* IIIF prefix — canonical-URL + cache key */
   const char *identifier; /* IIIF identifier — canonical-URL `id` + cache key */
-  const char *client_ip; /* rate-limit key — XFF-resolved at the Rust edge */
+  const char *client_ip; /* XFF-resolved client identity at the Rust edge */
   SipiIiifParams params; /* region/size/rotation/quality/format */
   const char *restricted_size; /* preflight `restrict` downscale, or NULL */
   const char *watermark_path; /* preflight `restrict` watermark, or NULL */
@@ -248,7 +248,7 @@ typedef struct
 
 /* ── CLI/env override channel (concrete) ──────────────────────────────────────
  * The CLI/env overrides `sipi_init` layers on top of the Lua-parsed SipiConf,
- * before the cache / rate-limiter / memory-budget services are built from it.
+ * before the cache / memory-budget services are built from it.
  * Hand-mirrored by the Rust `#[repr(C)] SipiServerConfig` in
  * src/server-rs/src/config.rs — field order, widths, and the `has_` presence
  * flags must match byte-for-byte or it is silent UB on drift. NOT bindgen: the
@@ -279,7 +279,6 @@ typedef struct SipiServerConfig
   const char *maxpost;            /* raw "300M" — engine parses the suffix */
   const char *max_decode_memory;  /* raw — engine parses the suffix */
   const char *decode_memory_mode;
-  const char *rate_limit_mode;
   const char *thumbsize;
   const char *knorapath;
   const char *knoraport;
@@ -298,15 +297,12 @@ typedef struct SipiServerConfig
   size_t subdirexcludes_len;
   /* 8-byte: 64-bit scalar values (presence via the has_ flags below) */
   uint64_t max_pixel_limit;
-  uint64_t rate_limit_max_pixels;
-  uint64_t rate_limit_pixel_threshold;
   /* 4-byte scalar values (presence via the has_ flags below) */
   int32_t serverport;
   int32_t maxtmpage;
   uint32_t cache_nfiles;          /* 0 = unlimited; a negative is rejected at the CLI (no wrap) */
   int32_t subdirlevels;
   int32_t pathprefix;             /* prefix_as_path, bool carried as 0/1 */
-  uint32_t rate_limit_window;
   int32_t jpeg_quality;           /* JPEG output quality (1-100); TOML-config-only */
   /* 4-byte presence flags for the scalars above (non-zero = present) */
   int has_serverport;
@@ -314,10 +310,7 @@ typedef struct SipiServerConfig
   int has_cache_nfiles;
   int has_subdirlevels;
   int has_pathprefix;
-  int has_rate_limit_window;
   int has_max_pixel_limit;
-  int has_rate_limit_max_pixels;
-  int has_rate_limit_pixel_threshold;
   int has_jpeg_quality;
 } SipiServerConfig;
 
@@ -327,7 +320,7 @@ typedef struct SipiServerConfig
  * breaks one of the two. LP64 on every supported target (darwin-aarch64,
  * linux-x86_64, linux-aarch64). */
 static_assert(sizeof(void *) == 8, "SipiServerConfig layout assumes an LP64 target");
-static_assert(sizeof(SipiServerConfig) == 296, "SipiServerConfig size drifted from src/server-rs/src/config.rs");
+static_assert(sizeof(SipiServerConfig) == 256, "SipiServerConfig size drifted from src/server-rs/src/config.rs");
 static_assert(offsetof(SipiServerConfig, imgroot) == 0, "SipiServerConfig layout drift");
 static_assert(offsetof(SipiServerConfig, scriptdir) == 8, "SipiServerConfig layout drift");
 static_assert(offsetof(SipiServerConfig, initscript) == 16, "SipiServerConfig layout drift");
@@ -340,39 +333,32 @@ static_assert(offsetof(SipiServerConfig, cache_size) == 64, "SipiServerConfig la
 static_assert(offsetof(SipiServerConfig, maxpost) == 72, "SipiServerConfig layout drift");
 static_assert(offsetof(SipiServerConfig, max_decode_memory) == 80, "SipiServerConfig layout drift");
 static_assert(offsetof(SipiServerConfig, decode_memory_mode) == 88, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, rate_limit_mode) == 96, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, thumbsize) == 104, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, knorapath) == 112, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, knoraport) == 120, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, docroot) == 128, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, wwwroute) == 136, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, loglevel) == 144, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, scaling_quality_jpeg) == 152, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, scaling_quality_tiff) == 160, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, scaling_quality_png) == 168, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, scaling_quality_j2k) == 176, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, subdirexcludes) == 184, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, subdirexcludes_len) == 192, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, max_pixel_limit) == 200, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, rate_limit_max_pixels) == 208, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, rate_limit_pixel_threshold) == 216, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, serverport) == 224, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, maxtmpage) == 228, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, cache_nfiles) == 232, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, subdirlevels) == 236, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, pathprefix) == 240, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, rate_limit_window) == 244, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, jpeg_quality) == 248, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_serverport) == 252, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_maxtmpage) == 256, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_cache_nfiles) == 260, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_subdirlevels) == 264, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_pathprefix) == 268, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_rate_limit_window) == 272, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_max_pixel_limit) == 276, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_rate_limit_max_pixels) == 280, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_rate_limit_pixel_threshold) == 284, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_jpeg_quality) == 288, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, thumbsize) == 96, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, knorapath) == 104, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, knoraport) == 112, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, docroot) == 120, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, wwwroute) == 128, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, loglevel) == 136, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, scaling_quality_jpeg) == 144, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, scaling_quality_tiff) == 152, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, scaling_quality_png) == 160, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, scaling_quality_j2k) == 168, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, subdirexcludes) == 176, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, subdirexcludes_len) == 184, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, max_pixel_limit) == 192, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, serverport) == 200, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, maxtmpage) == 204, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, cache_nfiles) == 208, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, subdirlevels) == 212, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, pathprefix) == 216, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, jpeg_quality) == 220, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, has_serverport) == 224, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, has_maxtmpage) == 228, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, has_cache_nfiles) == 232, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, has_subdirlevels) == 236, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, has_pathprefix) == 240, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, has_max_pixel_limit) == 244, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, has_jpeg_quality) == 248, "SipiServerConfig layout drift");
 #endif
 
 /* Engine-counter snapshot for `sipi_metrics_snapshot`. Incomplete here on

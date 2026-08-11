@@ -35,7 +35,6 @@ mod limits;
 mod logging;
 mod network;
 mod paths;
-mod rate_limit;
 mod tls_auth;
 
 pub use cache::CacheArgs;
@@ -45,7 +44,6 @@ pub use limits::LimitsArgs;
 pub use logging::LoggingArgs;
 pub use network::NetworkArgs;
 pub use paths::PathArgs;
-pub use rate_limit::RateLimitArgs;
 pub use tls_auth::TlsAuthArgs;
 
 use clap::Parser;
@@ -68,8 +66,6 @@ pub struct ServerArgs {
     pub paths: PathArgs,
     #[command(flatten)]
     pub cache: CacheArgs,
-    #[command(flatten)]
-    pub rate_limit: RateLimitArgs,
     #[command(flatten)]
     pub tls_auth: TlsAuthArgs,
     #[command(flatten)]
@@ -111,7 +107,6 @@ mod tests {
         assert_eq!(args.paths.pathprefix, None);
         assert_eq!(args.paths.subdirexcludes, None);
         assert_eq!(args.cache.cache_dir, None);
-        assert_eq!(args.rate_limit.rate_limit_mode, None);
         assert_eq!(args.tls_auth.jwtkey, None);
         assert_eq!(args.knora.knorapath, None);
         assert_eq!(args.logging.loglevel, None);
@@ -119,7 +114,7 @@ mod tests {
 
     /// The flags route into their groups and parse to the expected types — a
     /// canary that the flatten wiring and the long-flag names hold across all
-    /// nine groups, that the top-level `config`/`--nthreads` `-c`/`-t` short
+    /// eight groups, that the top-level `config`/`--nthreads` `-c`/`-t` short
     /// forms mirror the oracle, and that `--pathprefix` (an optional-value flag)
     /// resolves to `Some(true)` when given without a value.
     #[test]
@@ -140,8 +135,6 @@ mod tests {
             "1000",
             "--cache-dir",
             "/c",
-            "--rate-limit-mode",
-            "enforce",
             "--jwtkey",
             "secret",
             "--knoraport",
@@ -160,7 +153,6 @@ mod tests {
         assert_eq!(args.limits.max_pixel_limit, Some(1000));
         assert_eq!(args.paths.imgroot.as_deref(), Some("/img"));
         assert_eq!(args.cache.cache_dir.as_deref(), Some("/c"));
-        assert_eq!(args.rate_limit.rate_limit_mode.as_deref(), Some("enforce"));
         assert_eq!(args.tls_auth.jwtkey.as_deref(), Some("secret"));
         assert_eq!(args.knora.knoraport.as_deref(), Some("3434"));
         assert_eq!(args.logging.loglevel.as_deref(), Some("INFO"));

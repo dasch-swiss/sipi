@@ -56,10 +56,6 @@ impl From<&ServerArgs> for ServerOverrides {
                 .clone()
                 .or_else(|| args.cache.cachesize.clone()),
             cache_nfiles: args.cache.cache_nfiles.or(args.cache.cachenfiles),
-            rate_limit_max_pixels: args.rate_limit.rate_limit_max_pixels,
-            rate_limit_window: args.rate_limit.rate_limit_window,
-            rate_limit_mode: args.rate_limit.rate_limit_mode.clone(),
-            rate_limit_pixel_threshold: args.rate_limit.rate_limit_pixel_threshold,
             max_decode_memory: args.limits.max_decode_memory.clone(),
             decode_memory_mode: args.limits.decode_memory_mode.clone(),
             max_pixel_limit: args.limits.max_pixel_limit,

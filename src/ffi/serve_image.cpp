@@ -21,7 +21,6 @@
 #include "SipiCache.h"
 #include "SipiMemoryBudget.h"
 #include "SipiPeakMemory.h"
-#include "SipiRateLimiter.h"
 #include "formats/output_sink.h"
 #include "iiifparser/SipiDecodeDims.h"
 #include "iiifparser/SipiIdentifier.h"
@@ -499,7 +498,7 @@ std::expected<ServeResponse, SipiStatus>
   }
 
   // Requested output dims, before restricted_size may shrink them (the pixel
-  // limit + rate limit key off the request, not the served size).
+  // limit is computed off the request, not the served size).
   const size_t requested_w = tmp_r_w;
   const size_t requested_h = tmp_r_h;
 
@@ -521,38 +520,6 @@ std::expected<ServeResponse, SipiStatus>
       Metrics::instance().image_too_large_total.Increment();
       return std::unexpected(SipiStatus::BadRequest);
     }
-  }
-
-  // Per-client rate limiting.
-  if (eng.rate_limiter != nullptr && requested_w > 0 && requested_h > 0) {
-    const size_t request_pixels = requested_w * requested_h;
-    const std::string client_id = str_or_empty(req.client_ip);
-    const auto result = eng.rate_limiter->check_and_record(client_id, request_pixels);
-    auto &metrics = Metrics::instance();
-
-    if (result.over_budget) {
-      const std::string action = result.allowed ? "shadow_rejected" : "rejected";
-      log_warn("{\"event\":\"rate_limit_exceeded\",\"client_ip\":\"%s\","
-               "\"pixels_consumed\":%zu,\"budget\":%zu,\"window_seconds\":%u,"
-               "\"action\":\"%s\",\"request_pixels\":%zu,\"path\":\"%s\"}",
-        client_id.c_str(), result.pixels_consumed, result.budget,
-        eng.rate_limiter->mode() == RateLimitMode::MONITOR ? 0u : result.retry_after,
-        action.c_str(), request_pixels, uri.c_str());
-      (result.allowed ? metrics.rate_limit_shadow_rejected : metrics.rate_limit_rejected).Increment();
-
-      if (!result.allowed) {
-        ServeResponse out;
-        out.http_status = 429;
-        out.headers.emplace_back("Retry-After", std::to_string(result.retry_after));
-        out.body = EmptyBody{};
-        return out;
-      }
-    } else {
-      metrics.rate_limit_allowed.Increment();
-    }
-
-    if (result.pixels_consumed > result.budget * 80 / 100) { metrics.rate_limit_near_limit_total.Increment(); }
-    metrics.rate_limit_clients_tracked.Set(static_cast<double>(eng.rate_limiter->tracked_clients()));
   }
 
   // Canonical URL (Link header + cache key). The Link header honours

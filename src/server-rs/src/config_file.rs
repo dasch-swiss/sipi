@@ -49,8 +49,6 @@ pub struct Config {
     #[serde(default)]
     image: ImageSection,
     #[serde(default)]
-    rate_limit: RateLimitSection,
-    #[serde(default)]
     tls_auth: TlsAuthSection,
     #[serde(default)]
     knora: KnoraSection,
@@ -118,15 +116,6 @@ struct ScalingQualitySection {
     tiff: Option<String>,
     png: Option<String>,
     j2k: Option<String>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RateLimitSection {
-    max_pixels: Option<u64>,
-    window: Option<u32>,
-    mode: Option<String>,
-    pixel_threshold: Option<u64>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -296,10 +285,6 @@ impl Config {
             cache_dir: self.cache.dir.clone(),
             cache_size: self.cache.size.clone(),
             cache_nfiles: self.cache.n_files,
-            rate_limit_max_pixels: self.rate_limit.max_pixels,
-            rate_limit_window: self.rate_limit.window,
-            rate_limit_mode: self.rate_limit.mode.clone(),
-            rate_limit_pixel_threshold: self.rate_limit.pixel_threshold,
             max_decode_memory: self.limits.max_decode_memory.clone(),
             decode_memory_mode: self.limits.decode_memory_mode.clone(),
             max_pixel_limit: self.limits.max_pixel_limit,

@@ -26,7 +26,7 @@ void set_engine_context(const EngineContext &ctx)
 const EngineContext &engine_context()
 {
   // A missing install is a hard configuration error, not a silent all-disabled
-  // serve: without it the pipeline would run with no cache/rate-limit/budget and
+  // serve: without it the pipeline would run with no cache/memory-budget and
   // no resolved image root. sipi_serve_image's sipi_guard turns this throw into
   // a clean 500 instead of undefined behaviour on an uninitialised engine.
   if (!g_engine_installed) {

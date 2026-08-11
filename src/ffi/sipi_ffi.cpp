@@ -227,11 +227,6 @@ int sipi_metrics_snapshot(SipiMetricsSnapshot *out)
     out->memory_alloc_failures_total = counter(m.memory_alloc_failures_total);
     out->rejected_connections_total = counter(m.rejected_connections_total);
 
-    out->rate_limit_allowed_total = counter(m.rate_limit_allowed);
-    out->rate_limit_rejected_total = counter(m.rate_limit_rejected);
-    out->rate_limit_shadow_rejected_total = counter(m.rate_limit_shadow_rejected);
-    out->rate_limit_near_limit_total = counter(m.rate_limit_near_limit_total);
-
     out->decode_memory_acquired_total = counter(m.decode_memory_acquired);
     out->decode_memory_rejected_total = counter(m.decode_memory_rejected);
     out->decode_memory_shadow_rejected_total = counter(m.decode_memory_shadow_rejected);
@@ -244,7 +239,6 @@ int sipi_metrics_snapshot(SipiMetricsSnapshot *out)
     out->cache_files = gauge(m.cache_files);
     out->cache_size_limit_bytes = gauge(m.cache_size_limit_bytes);
     out->cache_files_limit = gauge(m.cache_files_limit);
-    out->rate_limit_clients_tracked = gauge(m.rate_limit_clients_tracked);
     out->decode_memory_budget_bytes = gauge(m.decode_memory_budget_bytes);
     out->decode_memory_used_bytes = gauge(m.decode_memory_used_bytes);
 

@@ -139,9 +139,9 @@ fn cli_convert_quality_actually_affects_output() {
 // =============================================================================
 // `sipi server --help` snapshot.
 //
-// `ServerArgs` composes its ~40 flags from nine `#[command(flatten)]` groups
-// (Network/Concurrency/Limits/Paths/Cache/Rate limiting/TLS & Auth/Knora/
-// Logging); clap renders each group under its own `next_help_heading` in
+// `ServerArgs` composes its ~40 flags from eight `#[command(flatten)]` groups
+// (Network/Concurrency/Limits/Paths/Cache/TLS & Auth/Knora/Logging); clap
+// renders each group under its own `next_help_heading` in
 // declaration order. This snapshot locks that heading order (and the full
 // rendered surface) against silent drift from a reordered/renamed group.
 // `term_width = 0` (`args/mod.rs`) fixes the wrap width so the snapshot is
