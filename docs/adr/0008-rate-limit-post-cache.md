@@ -1,8 +1,10 @@
 ---
-status: proposed
+status: superseded
 ---
 
 # Rate-limit gate fires after the cache-hit short-circuit
+
+> **Superseded (2026-08, sipi#777):** the per-client rate limiter this ADR concerns was removed (wrong axis against distributed crawler swarms). The post-cache gate placement it established still holds for the surviving throttling policies — the decode memory budget and the output-size guard.
 
 The per-client rate limiter fires at the same post-cache gate point as the decode memory budget and the output-size guard, **not** before the cache lookup. Cache-hit responses therefore bypass rate-limit accounting entirely.
 

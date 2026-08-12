@@ -118,10 +118,6 @@ The TOML key for each Lua config key:
 | `[limits] thumb_size` | `thumb_size` |
 | `[image] jpeg_quality` | `jpeg_quality` |
 | `[image] scaling_quality.{jpeg,tiff,png,j2k}` | `scaling_quality.{…}` (the `j2k` entry is accepted but currently has no effect — the engine reads that slot under a legacy key) |
-| `[rate_limit] max_pixels` | `rate_limit_max_pixels` |
-| `[rate_limit] window` | `rate_limit_window` |
-| `[rate_limit] mode` | `rate_limit_mode` |
-| `[rate_limit] pixel_threshold` | `rate_limit_pixel_threshold` |
 | `[tls_auth] jwt_secret` | `jwt_secret` |
 | `[tls_auth] admin_user` | `admin.user` |
 | `[tls_auth] admin_password` | `admin.password` |

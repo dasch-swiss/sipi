@@ -83,7 +83,7 @@ The codebase has mixed naming styles. For new code, prefer the C++23 style guide
 
 | Entity | Existing Convention | Example |
 |---|---|---|
-| Types / Classes | `PascalCase` with `Sipi` prefix | `SipiImage`, `SipiCache`, `SipiRateLimiter` |
+| Types / Classes | `PascalCase` with `Sipi` prefix | `SipiImage`, `SipiCache` |
 | Functions / Methods | Mixed `camelCase` / `snake_case` | `imgroot()`, `send_error()`, `get_canonical_url()` |
 | Private members | `_leading_underscore` | `_imgroot`, `_nthreads` |
 | Namespaces | `PascalCase` | `Sipi::`, `shttps::` |
@@ -176,7 +176,6 @@ Available in `Connection::StatusCodes` enum (`shttps/transport/Connection.h`):
 | 400 | `BAD_REQUEST` | Invalid IIIF parameters, path traversal attempts |
 | 403 | `FORBIDDEN` | Access denied by preflight Lua script |
 | 404 | `NOT_FOUND` | Image file not found |
-| 429 | `TOO_MANY_REQUESTS` | Rate limiter triggered |
 | 500 | `INTERNAL_SERVER_ERROR` | Unexpected failures, OOM recovery |
 | 503 | `SERVICE_UNAVAILABLE` | Server overloaded / shutting down / memory budget exhausted |
 
