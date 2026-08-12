@@ -4,7 +4,7 @@ Global decode memory budget that prevents OOM from concurrent large image decode
 
 ## Why
 
-The thread pool controls CPU concurrency but has no awareness of memory. Multiple concurrent full-resolution JP2 decodes (e.g., 20000x30000 pixels) can each consume 1-2GB, exhausting a 4GB container. The per-request pixel limit caps individual requests and the per-client rate limiter throttles per-client throughput, but neither prevents aggregate memory exhaustion from multiple legitimate clients requesting large images simultaneously.
+The thread pool controls CPU concurrency but has no awareness of memory. Multiple concurrent full-resolution JP2 decodes (e.g., 20000x30000 pixels) can each consume 1-2GB, exhausting a 4GB container. The per-request pixel limit caps individual requests, but it does not prevent aggregate memory exhaustion from multiple concurrent large decodes.
 
 ## How It Works
 
