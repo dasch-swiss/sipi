@@ -413,7 +413,7 @@ fn build_prefix_strict(parts: &[String]) -> Result<String, ParseError> {
 
 /// Classify a request URI and, for an IIIF image request, parse its params. A
 /// faithful port of `handlers::iiif_handler::parse_iiif_uri`
-/// (src/handlers/iiif_handler.cpp:148-376), including its reject-vs-redirect
+/// (`src/iiifparser/iiif_handler.cpp`), including its reject-vs-redirect
 /// logic: a URL that *looks* like a (malformed) IIIF image request — a valid
 /// quality.format tail, or region+size+rotation valid — is an **error**, not a
 /// redirect. `uri` is the path portion (scheme/host already stripped).

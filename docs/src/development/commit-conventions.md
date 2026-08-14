@@ -114,10 +114,11 @@ module list — which is also the scope vocabulary — lives in
 these names, lowercase:
 
 - **Module scopes:** `image`, `formats`, `metadata`, `iiifparser`,
-  `handlers`, `scripting`, `util`, `jwt`, `cache`, `memory-budget`,
+  `scripting`, `util`, `jwt`, `cache`, `memory-budget`,
   `memory`, `observability`, `logging`, `cli`, `ffi`, `lua`, `server-rs`,
   `cli-rs` (`scripting` = the C++ Lua runtime in `src/scripting/`; `lua` stays
-  the Lua *scripts*/config in `scripts/` + `config/*.lua`)
+  the Lua *scripts*/config in `scripts/` + `config/*.lua`; the retired `handlers`
+  scope folded into `iiifparser` per DUNE-014)
 - **Test-layer scopes** (`e2e`, `approval`) — for changes to a test
   layer's own harness or fixtures. A test *about* a specific concern takes
   that concern's scope (`test(observability): ...`), not the layer: the

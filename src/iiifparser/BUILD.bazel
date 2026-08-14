@@ -64,3 +64,23 @@ cc_binary(
         "@google_benchmark//:benchmark_main",
     ],
 )
+
+# The C++ `parse_iiif_uri` request classifier (`handlers::iiif_handler`). The
+# Rust shell owns IIIF parsing in production (`server-rs/src/iiif.rs`, a faithful
+# port of this classifier); this C++ code is now only the reference the port's
+# unit + approval + corpus tests check against, so it is `testonly` and out of
+# `//src:sipi_lib` — folded here (DUNE-014) from the retired `src/handlers/`
+# package so the classifier lives beside the IIIF component parsers it classifies
+# into. `strip_include_prefix` exposes it at `#include "iiifparser/iiif_handler.h"`.
+cc_library(
+    name = "iiif_handler",
+    srcs = ["iiif_handler.cpp"],
+    hdrs = ["iiif_handler.h"],
+    strip_include_prefix = "/src",
+    testonly = True,
+    visibility = [
+        "//test/approval:__pkg__",
+        "//test/unit/handlers:__pkg__",
+    ],
+    deps = ["//src/util"],
+)

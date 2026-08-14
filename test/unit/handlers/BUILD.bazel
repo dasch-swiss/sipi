@@ -17,7 +17,7 @@ cc_test(
     data = ["//test/unit/handlers/corpus:seed_corpus"],
     local_defines = ['SIPI_FUZZ_CORPUS_DIR=\\"test/unit/handlers/corpus\\"'],
     deps = [
-        "//src:sipi_lib",
+        "//src/iiifparser:iiif_handler",
         "@googletest//:gtest_main",
     ],
 )

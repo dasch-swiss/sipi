@@ -107,8 +107,7 @@ is scoped `ffi` only when the seam mechanism itself is the point.
 | `image` | `src/SipiImage.{h,cpp}` | Image read/write pipeline; orchestrates decode → process → encode |
 | `formats` | `src/formats/` | Per-format codecs: TIFF, JP2 (Kakadu), PNG, JPEG |
 | `metadata` | `src/metadata/` | EXIF, IPTC, XMP, ICC profile handling |
-| `iiifparser` | `src/iiifparser/` | IIIF URL parsing (identifier, region, size, rotation, quality, format) |
-| `handlers` | `src/handlers/` | IIIF URI classifier (`parse_iiif_uri`, C++) |
+| `iiifparser` | `src/iiifparser/` | IIIF URL parsing (identifier, region, size, rotation, quality, format) and the `parse_iiif_uri` request classifier (`:iiif_handler`, testonly — the Rust shell parses in production) |
 | `scripting` | `src/scripting/` | Connection-less Lua runtime: `LuaServer` + `request_context.h` + the `server.db` sqlite bindings |
 | `util` | `src/util/` | Generic SIPI-domain helpers: MIME/string parsing, file hashing, the `shttps::Error`/`Global` types |
 | `jwt` | `src/jwt/` | JWT (JWS) sign/verify leaf over OpenSSL + jansson |
@@ -147,7 +146,7 @@ The codebase has two coexisting layouts:
 - **Module-co-located ([ADR-0003](docs/adr/0003-module-co-located-source-and-tests.md), proposed):**
   `src/<mod>/{Foo.cpp, Foo.h, foo_test.cpp}` with flat-style includes
   (`#include "metadata/Foo.h"` cross-module, `#include "Foo.h"`
-  intra-module). `src/util/`, `src/scripting/`, `src/jwt/`, and `src/handlers/`
+  intra-module). `src/util/`, `src/scripting/`, `src/jwt/`, and `src/iiifparser/`
   already follow this. Migration is staged behind the Bazel build-tool migration
   and lands as mechanical per-module PRs.
 
