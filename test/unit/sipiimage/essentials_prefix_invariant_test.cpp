@@ -34,7 +34,7 @@ namespace {
 
 constexpr std::size_t kPrefixBudgetBytes = 64 * 1024;
 
-// SIPI Essentials UUID (kSipiEssentialsUuid from src/formats/SipiIOJ2k.cpp).
+// SIPI Essentials UUID (sipi_essentials_uuid from src/formats/SipiIOJ2k.cpp).
 // Duplicated here as raw bytes — the constant has internal linkage in the
 // JP2 source. The value is also documented in ADR-0005 and the glossary.
 constexpr unsigned char kSipiUuid[16] = { 0x7B, 0x28, 0xA6, 0x46, 0xB9, 0xC3, 0x4F, 0xB2, 0x90, 0x0B, 0xB6, 0x85, 0x5D,

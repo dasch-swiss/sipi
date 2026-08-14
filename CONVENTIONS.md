@@ -105,14 +105,14 @@ is scoped `ffi` only when the seam mechanism itself is the point.
 
 | Module (scope) | Path | Responsibility |
 |---|---|---|
-| `image` | `src/SipiImage.*`, `include/SipiImage.hpp` | Image read/write pipeline; orchestrates decode → process → encode |
-| `formats` | `src/formats/`, `include/formats/` | Per-format codecs: TIFF, JP2 (Kakadu), PNG, JPEG |
+| `image` | `src/SipiImage.{h,cpp}` | Image read/write pipeline; orchestrates decode → process → encode |
+| `formats` | `src/formats/` | Per-format codecs: TIFF, JP2 (Kakadu), PNG, JPEG |
 | `metadata` | `src/metadata/` | EXIF, IPTC, XMP, ICC profile handling |
-| `iiifparser` | `src/iiifparser/`, `include/iiifparser/` | IIIF URL parsing (identifier, region, size, rotation, quality, format) |
+| `iiifparser` | `src/iiifparser/` | IIIF URL parsing (identifier, region, size, rotation, quality, format) |
 | `handlers` | `src/handlers/` | HTTP request handlers |
 | `shttps` | `src/shttps/` | Internal HTTP framework (threading, TLS, connection pooling, JWT) |
-| `cache` | `include/SipiCache.h` | File-based LRU cache with dual-limit eviction |
-| `memory-budget` | `include/SipiMemoryBudget.h` | Lock-free decode memory budget |
+| `cache` | `src/SipiCache.{h,cpp}` | File-based LRU cache with dual-limit eviction |
+| `memory-budget` | `src/SipiMemoryBudget.{h,cpp}` | Lock-free decode memory budget |
 | `memory` | `bazel/mimalloc.BUILD.bazel`, `_ALLOCATOR` in `src/cli-rs/BUILD.bazel`, `tools/allocator-replay/` | Process memory behavior: the production allocator, RSS/retention measurement |
 | `observability` | `src/observability/` | Prometheus metrics, tracing |
 | `logging` | `src/logging/` | Structured logging |
@@ -128,7 +128,10 @@ route/handler changes use `handlers` or `shttps`.
 
 Beyond modules, commits use **test-layer scopes** (`e2e`, `approval`, for a
 test layer's own harness or fixtures) and **cross-cutting scopes** (`deps`,
-`bazel`, `ci`, `nix`, `docker`). A test *about* a concern takes that concern's
+`bazel`, `ci`, `nix`, `docker`, `docs`). `docs` is for the agent-context /
+domain documentation that is not tied to one module — the root `CLAUDE.md` /
+`CONVENTIONS.md` / `CONTEXT.md` / `UBIQUITOUS_LANGUAGE.md` and the ADRs; a doc
+change scoped to one module still takes that module's scope. A test *about* a concern takes that concern's
 scope — `test(observability)`, not `test(e2e)` — since the `test` type already
 says it is a test. If none of the enumerated scopes genuinely fits a change,
 ask the maintainer before inventing a new one. The full scope rules live in
@@ -186,7 +189,7 @@ Config flows: CLI args (CLI11) → Lua config file → `SipiConf` struct → `Si
 New config options need:
 1. Field in `SipiConf.h` / `SipiConf.cpp` (Lua table read)
 2. CLI option in `src/cli/cli_app.cpp` (CLI11)
-3. Accessor in `SipiHttpServer.hpp`
+3. Accessor in `src/SipiHttpServer.h`
 4. Documentation in `config/sipi.config.lua`
 5. Environment variable override (optional, for Docker)
 

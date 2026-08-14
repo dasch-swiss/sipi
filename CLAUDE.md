@@ -35,7 +35,7 @@ For full build instructions, see [`docs/src/development/building.md`](docs/src/d
 
 **First-time setup:** Bazel builds (including `just bazel-docker-build-${arch}`) fetch Kakadu directly via Bazel's `gh_release_archive` repository_rule (no `vendor/` step). Requires `gh auth login` and `dasch-swiss` org membership. See [`docs/src/development/kakadu.md`](docs/src/development/kakadu.md).
 
-**ICC determinism invariant:** [`Icc::iccBytes()`](src/metadata/Icc.cpp) is the single chokepoint that converts an `cmsHPROFILE` into raw bytes for codec consumption — every TIFF, JPEG, PNG, and JP2 emission funnels through it. Any new format handler must route through `iccBytes()`; bypassing it (calling `cmsSaveProfileToMem` directly) breaks the approval-test gate. Approval tests run with `SOURCE_DATE_EPOCH=946684800` and `SIPI_WORKSPACE_ROOT="."` injected by `test/approval/BUILD.bazel` so the wall-clock-stamped ICC creation date is overwritten with a fixed value and goldens stay byte-deterministic. Production never sets the env var; deployed binaries continue to embed wall-clock-stamped ICC headers. See [`docs/adr/0002-icc-profile-determinism-test-only.md`](docs/adr/0002-icc-profile-determinism-test-only.md).
+**ICC determinism invariant:** [`Icc::iccBytes()`](src/metadata/icc.cpp) is the single chokepoint that converts an `cmsHPROFILE` into raw bytes for codec consumption — every TIFF, JPEG, PNG, and JP2 emission funnels through it. Any new format handler must route through `iccBytes()`; bypassing it (calling `cmsSaveProfileToMem` directly) breaks the approval-test gate. Approval tests run with `SOURCE_DATE_EPOCH=946684800` and `SIPI_WORKSPACE_ROOT="."` injected by `test/approval/BUILD.bazel` so the wall-clock-stamped ICC creation date is overwritten with a fixed value and goldens stay byte-deterministic. Production never sets the env var; deployed binaries continue to embed wall-clock-stamped ICC headers. See [`docs/adr/0002-icc-profile-determinism-test-only.md`](docs/adr/0002-icc-profile-determinism-test-only.md).
 
 ### Quick Reference
 
@@ -114,14 +114,14 @@ localdev config in one step.
 | Component | Path | Purpose |
 |-----------|------|---------|
 | Main Application | `src/cli/cli_app.cpp` | CLI11 arg parsing + subcommand dispatch (CLI + server modes), behind the `sipi_cli_main` FFI entry; `src/cli-rs/src/main.rs` owns `main` and Sentry init |
-| SipiImage | `src/SipiImage.hpp` | Image processing: TIFF, JP2, PNG, JPEG; metadata (EXIF, IPTC, XMP); ICC profiles |
-| SipiHttpServer | `src/SipiHttpServer.hpp` | HTTP server, IIIF endpoints, caching, Lua scripting integration |
-| IIIF Parser | `include/iiifparser/` | IIIF URL parsing: identifier, region, size, rotation, quality/format |
-| Format Handlers | `include/formats/` | SipiIO base class + SipiIOTiff, SipiIOJ2k, SipiIOJpeg, SipiIOPng |
+| SipiImage | `src/SipiImage.h` | Image processing: TIFF, JP2, PNG, JPEG; metadata (EXIF, IPTC, XMP); ICC profiles |
+| SipiHttpServer | `src/SipiHttpServer.h` | HTTP server, IIIF endpoints, caching, Lua scripting integration |
+| IIIF Parser | `src/iiifparser/` | IIIF URL parsing: identifier, region, size, rotation, quality/format |
+| Format Handlers | `src/formats/` | SipiIO base class + SipiIOTiff, SipiIOJ2k, SipiIOJpeg, SipiIOPng |
 | SHTTPS Framework | `src/shttps/` | HTTP server impl: threading, SSL/TLS, connection pooling, JWT auth |
-| Caching | `include/SipiCache.h` | File-based LRU cache with dual-limit eviction (size + file count), crash recovery |
+| Caching | `src/SipiCache.h` | File-based LRU cache with dual-limit eviction (size + file count), crash recovery |
 | Metrics | `src/observability/metrics.h` | Prometheus metrics singleton (`Sipi::observability::Metrics`) — cache counters/gauges; `GET /metrics` is oracle-only, production exports over OTLP via `src/server-rs/src/metrics.rs` |
-| Memory Budget | `include/SipiMemoryBudget.h` | Lock-free decode memory budget with RAII guard — prevents OOM from concurrent large decodes |
+| Memory Budget | `src/SipiMemoryBudget.h` | Lock-free decode memory budget with RAII guard — prevents OOM from concurrent large decodes |
 | Lua Integration | `src/ffi/SipiLua.h` | Lua bindings for image manipulation, HTTP handling, config/routes |
 
 ### Image Processing Pipeline

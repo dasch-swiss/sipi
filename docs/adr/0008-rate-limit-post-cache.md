@@ -5,6 +5,8 @@ status: superseded
 # Rate-limit gate fires after the cache-hit short-circuit
 
 > **Superseded (2026-08, sipi#777):** the per-client rate limiter this ADR concerns was removed (wrong axis against distributed crawler swarms). The post-cache gate placement it established still holds for the surviving throttling policies — the decode memory budget and the output-size guard.
+>
+> **Reading the body below (historical).** It is preserved as the decision record as-made and is *not* a description of the current tree. Two things it says no longer hold: (1) *Throttling* now has **two** sub-policies (Decode memory budget, Output size guard), not the three named below — the Rate limiter is gone; (2) the code paths it names (`route_handlers/serve_iiif.cpp`, `throttling/client_id.{h,cpp}`, a `throttling/` module) were the then-planned target layout and were never built — the two surviving gates fire inline in `src/ffi/serve_image.cpp`. See `UBIQUITOUS_LANGUAGE.md` for the current *Throttling* terms.
 
 The per-client rate limiter fires at the same post-cache gate point as the decode memory budget and the output-size guard, **not** before the cache lookup. Cache-hit responses therefore bypass rate-limit accounting entirely.
 

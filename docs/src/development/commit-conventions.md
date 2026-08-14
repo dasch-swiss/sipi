@@ -122,7 +122,10 @@ these names, lowercase:
   `test` type already says it is a test, so the scope is free to name the
   concern. A unit-test change takes the scope of the module under test.
 - **Cross-cutting scopes** (changes not tied to one module): `deps`,
-  `bazel`, `ci`, `nix`, `docker`.
+  `bazel`, `ci`, `nix`, `docker`, `docs`. Use `docs` for the agent-context /
+  domain documentation that spans no single module — the root `CLAUDE.md` /
+  `CONVENTIONS.md` / `CONTEXT.md` / `UBIQUITOUS_LANGUAGE.md` and the ADRs. A doc
+  change about one module still takes that module's scope.
 
 Rules:
 
