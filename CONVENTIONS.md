@@ -83,7 +83,7 @@ The codebase has mixed naming styles. For new code, prefer the C++23 style guide
 | Entity | Existing Convention | Example |
 |---|---|---|
 | Types / Classes | `PascalCase` with `Sipi` prefix | `SipiImage`, `SipiCache` |
-| Functions / Methods | Mixed `camelCase` / `snake_case` | `imgroot()`, `send_error()`, `get_canonical_url()` |
+| Functions / Methods | Mixed `camelCase` / `snake_case` | `imgroot()`, `send_error()`, `build_canonical_url()` |
 | Private members | `_leading_underscore` | `_imgroot`, `_nthreads` |
 | Namespaces | `PascalCase` | `Sipi::`, `shttps::` |
 

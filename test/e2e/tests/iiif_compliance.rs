@@ -421,7 +421,7 @@ fn cors_info_json_with_origin() {
 
 #[test]
 fn cors_image_with_origin() {
-    // Image responses echo the Origin header (Connection.cpp:415)
+    // Image responses echo the Origin header
     let srv = server();
     let resp = client()
         .get(format!(
@@ -444,7 +444,7 @@ fn cors_image_with_origin() {
 
 #[test]
 fn cors_image_without_origin() {
-    // Without Origin, Connection.cpp does not set ACAO for image responses
+    // Without an Origin, no ACAO is set for image responses
     let srv = server();
     let resp = client()
         .get(format!(
@@ -455,7 +455,7 @@ fn cors_image_without_origin() {
         .expect("GET image without Origin failed");
 
     assert_eq!(resp.status().as_u16(), 200);
-    // No ACAO header should be present (Connection.cpp only sets it when Origin is provided)
+    // No ACAO header should be present (set only when an Origin is provided)
     assert!(
         resp.headers().get("access-control-allow-origin").is_none(),
         "image response should not have ACAO without Origin header"
@@ -464,7 +464,7 @@ fn cors_image_without_origin() {
 
 #[test]
 fn cors_preflight() {
-    // OPTIONS with all three required headers triggers CORS preflight (Connection.cpp:419-441)
+    // OPTIONS with all three required headers triggers CORS preflight
     let srv = server();
     let resp = client()
         .request(
