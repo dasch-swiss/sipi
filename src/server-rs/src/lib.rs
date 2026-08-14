@@ -37,12 +37,12 @@ use std::process::ExitCode;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
-/// Last-resort listen port: used only when NONE of `SIPI_RS_PORT`,
-/// `--serverport`/`SIPI_SERVERPORT`, and (for a Lua config) the config's own
-/// `sipi.port` selected one. A Lua config that omits `port` entirely falls to
-/// `SipiConf`'s own in-class default (3333, `SipiConf.h`) one tier before this
-/// — that tier is never 1024, so an operator relying on this constant should
-/// set `port` explicitly (as every known config does).
+/// Last-resort listen port, used only when the `serve()` port resolution below
+/// (the single authority on port precedence) selects nothing else. A Lua config
+/// that omits `port` entirely falls to `SipiConf`'s own in-class default (3333,
+/// `SipiConf.h`) one tier before this — that tier is never 1024, so an operator
+/// relying on this constant should set `port` explicitly (as every known config
+/// does).
 const DEFAULT_PORT: u16 = 1024;
 
 /// Process start time, for the `/health` uptime field. Set once at server
