@@ -1,14 +1,12 @@
-//! IIIF Image API 3.0 URL parser (strangler-fig rewrite; ADR-0013).
+//! IIIF Image API 3.0 URL parser.
 //!
-//! A Rust port of the C++ `iiifparser` (`SipiRegion` / `SipiSize` /
-//! `SipiRotation` / `SipiQualityFormat`) + `handlers::iiif_handler::parse_iiif_uri`.
-//! It classifies a request URI and, for an IIIF image request, parses the
+//! Classifies a request URI and, for an IIIF image request, parses the
 //! region/size/rotation/quality.format into the flattened [`SipiIiifParams`] the
 //! engine's `sipi_serve_image` consumes. The Rust shell owns IIIF parsing (the
 //! seam has no parser entry).
 //!
-//! Parity is gated by the unit tests below + the e2e suite (`proptest_iiif_uri`,
-//! `iiif_compliance`) once it runs against the Rust binary.
+//! Correctness is gated by the unit tests below + the e2e suite
+//! (`proptest_iiif_uri`, `iiif_compliance`).
 
 use crate::ffi::{SipiFormatType, SipiIiifParams, SipiQualityType, SipiRegionType, SipiSizeType};
 
@@ -540,9 +538,9 @@ pub fn parse_request(uri: &str) -> Result<ParsedRequest, ParseError> {
 mod tests {
     use super::*;
 
-    // Classification goldens ported 1:1 from the C++ parity corpus
-    // (test/unit/handlers/iiif_handler_test.cpp). The C++ is the parity target,
-    // so divergence here is a defect by the module's own contract.
+    // Classification goldens ported 1:1 from the C++ classifier corpus
+    // (test/unit/handlers/iiif_handler_test.cpp). The C++ classifier is the
+    // reference, so divergence here is a defect by the module's own contract.
 
     fn ok(uri: &str) -> ParsedRequest {
         parse_request(uri).unwrap_or_else(|e| panic!("{uri} should parse: {}", e.0))

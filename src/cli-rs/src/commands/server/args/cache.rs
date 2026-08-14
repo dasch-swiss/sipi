@@ -2,14 +2,12 @@
 //!
 //! `cache_size` is a sized string ("-1" unlimited, "0" disabled, or e.g.
 //! "200M") parsed engine-side. The deprecated `--cachedir` / `--cachesize` /
-//! `--cachenfiles` aliases mirror the C++ oracle's separate CLI11 options
-//! (`cli_app.cpp:1776/1780/1784`, each with its own `->envname` binding onto
-//! the same underlying variable as the canonical flag) — declared here as
-//! hidden fields (a `visible_alias` doesn't apply: they differ in hyphen shape
-//! from the canonical long names) and collapsed onto the canonical field in
+//! `--cachenfiles` aliases are declared here as hidden fields (a
+//! `visible_alias` doesn't apply: they differ in hyphen shape from the
+//! canonical long names) and collapsed onto the canonical field in
 //! `commands/server/mod.rs`'s `From<&ServerArgs>` (canonical wins if both are
-//! set). `--cachehysteresis` is intentionally never declared — an unknown flag
-//! rejection is the Rust-side equivalent of the C++ no-op.
+//! set). `--cachehysteresis` is intentionally never declared — rejecting it as
+//! an unknown flag is deliberate, as it has no effect on the serve path.
 
 use clap::Args;
 

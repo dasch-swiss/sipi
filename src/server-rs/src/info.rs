@@ -1,10 +1,10 @@
-//! IIIF `info.json` + SIPI `knora.json` assembly (strangler-fig rewrite).
+//! IIIF `info.json` + SIPI `knora.json` assembly.
 //!
 //! The seam has no serve entry for these JSON responses — the Rust shell builds
 //! them from the edge-probe results (`sipi_image_dims` / `sipi_mimetype`), a
-//! `stat`, and the optional `.info` sidecar. Ported field-for-field from
-//! `serve_info_json_file` (`SipiHttpServer.cpp:547-794`) and
-//! `serve_knora_json_file` (`:806-981`). Key order is irrelevant: both
+//! `stat`, and the optional `.info` sidecar. Ported field-for-field from the
+//! C++ `serve_info_json_file` / `serve_knora_json_file` builders. Key order is
+//! irrelevant: both
 //! `serde_json` and the e2e `insta` snapshots normalise to sorted keys.
 //!
 //! The builders are pure (they take already-fetched data), so they unit-test
@@ -17,7 +17,7 @@ use crate::ffi::{ImageEssentials, SipiImageDims, SipiPermType};
 const IMAGE_CONTEXT: &str = "http://iiif.io/api/image/3/context.json";
 const FILE_CONTEXT: &str = "http://sipi.io/api/file/3/context.json";
 
-/// The 17 IIIF `extraFeatures` SIPI advertises (`SipiHttpServer.cpp:741-757`).
+/// The 17 IIIF `extraFeatures` SIPI advertises.
 const EXTRA_FEATURES: [&str; 17] = [
     "baseUriRedirect",
     "canonicalLinkHeader",
@@ -52,8 +52,8 @@ pub const fn file_context() -> &'static str {
 
 /// The `sizes[]` pyramid: for reduce level `i` in `1..clevels`, the dimension is
 /// `ceil(native / 2^i)` (the C++ `SipiSize::REDUCE` formula, `SipiSize.cpp:329`),
-/// appending each level and breaking once both width and height are `< 128`
-/// (`SipiHttpServer.cpp:698-709`). `clevels` falls back to 5 when 0.
+/// appending each level and breaking once both width and height are `< 128`.
+/// `clevels` falls back to 5 when 0.
 fn size_pyramid(width: u32, height: u32, clevels: u32) -> Vec<Value> {
     let cnt = if clevels > 0 { clevels } else { 5 };
     let reduce = |dim: u32, level: u32| -> u32 {
@@ -72,7 +72,7 @@ fn size_pyramid(width: u32, height: u32, clevels: u32) -> Vec<Value> {
     sizes
 }
 
-/// IIIF `info.json` for an image (`SipiHttpServer.cpp:576-764`). The auth-service
+/// IIIF `info.json` for an image. The auth-service
 /// block (preflight-driven) is added by the handler.
 #[must_use]
 pub fn image_info_json(id: &str, dims: &SipiImageDims) -> Value {
@@ -108,7 +108,7 @@ pub fn image_info_json(id: &str, dims: &SipiImageDims) -> Value {
     Value::Object(root)
 }
 
-/// `info.json` for a non-image file (`SipiHttpServer.cpp:578-602`): the SIPI file
+/// `info.json` for a non-image file: the SIPI file
 /// context, the id, the detected MIME type, and the file size.
 #[must_use]
 pub fn file_info_json(id: &str, mime: &str, file_size: u64) -> Value {
@@ -120,8 +120,8 @@ pub fn file_info_json(id: &str, mime: &str, file_size: u64) -> Value {
     })
 }
 
-/// The optional `.info` sidecar SIPI writes next to a derivative
-/// (`SipiHttpServer.cpp:857-905`). All fields are optional; a missing or
+/// The optional `.info` sidecar SIPI writes next to a derivative.
+/// All fields are optional; a missing or
 /// unparseable sidecar yields the default (everything `None`).
 #[derive(Debug, Default, Clone)]
 pub struct Sidecar {
@@ -157,7 +157,7 @@ impl Sidecar {
 }
 
 /// The common `knora.json` prelude: context, id, and the sidecar checksums
-/// (emitted for every file type, `SipiHttpServer.cpp:841-910`).
+/// (emitted for every file type).
 fn knora_base(id: &str, sidecar: &Sidecar) -> Map<String, Value> {
     let mut root = Map::new();
     root.insert("@context".into(), json!(FILE_CONTEXT));
@@ -171,13 +171,13 @@ fn knora_base(id: &str, sidecar: &Sidecar) -> Map<String, Value> {
     root
 }
 
-/// `knora.json` for an image (`SipiHttpServer.cpp:913-944`). `originalMimeType` /
+/// `knora.json` for an image. `originalMimeType` /
 /// `originalFilename` come from the image's embedded Essentials packet
 /// (`essentials`, via `sipi_image_essentials`) — present together iff
 /// `read_shape` reports one (`success == ALL`), absent together otherwise (a
 /// plain JPEG/PNG or a packet-less TIFF/JP2). Unlike the video/generic paths,
-/// these do NOT come from the `.info` sidecar — the C++ oracle sources image
-/// identity from the embedded packet only.
+/// these do NOT come from the `.info` sidecar — SIPI sources image identity
+/// from the embedded packet only.
 #[must_use]
 pub fn image_knora_json(
     id: &str,
@@ -200,7 +200,7 @@ pub fn image_knora_json(
     Value::Object(root)
 }
 
-/// `knora.json` for `video/mp4` (`SipiHttpServer.cpp:948-967`): MIME + size, plus
+/// `knora.json` for `video/mp4`: MIME + size, plus
 /// the sidecar's filename and media metrics (each emitted only when present and
 /// non-negative, as JSON reals).
 #[must_use]
@@ -228,7 +228,7 @@ pub fn video_knora_json(id: &str, mime: &str, file_size: u64, sidecar: &Sidecar)
     Value::Object(root)
 }
 
-/// `knora.json` for any other file (`SipiHttpServer.cpp:968-978`): MIME, size, and
+/// `knora.json` for any other file: MIME, size, and
 /// the original filename (empty string when there is no sidecar).
 #[must_use]
 pub fn generic_knora_json(id: &str, mime: &str, file_size: u64, sidecar: &Sidecar) -> Value {
@@ -255,9 +255,9 @@ pub fn is_auth_type(permission: SipiPermType) -> bool {
     )
 }
 
-/// Build the IIIF Auth API v1 `service` object for an auth-type info.json
-/// (`SipiHttpServer.cpp:607-658`). Requires `cookieUrl` (and `tokenUrl`); a
-/// missing required key → `None` (the C++ 500). The remaining kv pairs pass
+/// Build the IIIF Auth API v1 `service` object for an auth-type info.json.
+/// Requires `cookieUrl` (and `tokenUrl`); a
+/// missing required key → `None` (a 500). The remaining kv pairs pass
 /// through except the structural keys. `logoutUrl` is optional.
 pub fn auth_service(permission: SipiPermType, kv: &[(String, String)]) -> Option<Value> {
     let get = |key: &str| kv.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str());

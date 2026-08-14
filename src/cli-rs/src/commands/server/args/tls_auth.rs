@@ -1,12 +1,7 @@
 //! TLS + auth flags (the "TLS & Auth" `--help` heading).
 //!
 //! `sslcert` / `sslkey` are parse-only: TLS terminates at Traefik and the shell
-//! serves plain HTTP. `--adminuser` binds the correct
-//! `SIPI_ADMINUSER` env var; the C++ oracle binds the misspelled
-//! `SIPI_ADMIINUSER` (`cli_app.cpp:1822`) — a latent typo nobody can
-//! intentionally rely on. The documented typo-divergence is pinned by
-//! `test/e2e/tests/differential.rs::adminuser_env_name_documented_divergence`:
-//! a parse-level `--help` grep, since no behavioural probe exists.
+//! serves plain HTTP. `--adminuser` binds the `SIPI_ADMINUSER` env var.
 
 use clap::Args;
 

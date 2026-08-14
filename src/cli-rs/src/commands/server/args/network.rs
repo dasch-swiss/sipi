@@ -1,10 +1,10 @@
 //! Network listener flags (the "Network" `--help` heading).
 //!
 //! `sslport`, `hostname`, and `keepalive` are parse-only on the Rust shell —
-//! they reach the engine on no path post-cutover (TLS terminates at Traefik,
-//! tokio is async so the keep-alive knob is unread, and the external host is
-//! derived from `X-Forwarded-Host`). They parse for CLI/oracle parity but are
-//! not forwarded into `ServerOverrides` (the forward/parse-only split).
+//! they reach the engine on no path (TLS terminates at Traefik, tokio is async
+//! so the keep-alive knob is unread, and the external host is derived from
+//! `X-Forwarded-Host`). They are accepted for CLI compatibility but are not
+//! forwarded into `ServerOverrides` (the forward/parse-only split).
 
 use clap::Args;
 

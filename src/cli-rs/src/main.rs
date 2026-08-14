@@ -241,8 +241,7 @@ mod allocator {
 }
 
 /// `SIPI_SENTRY_DSN` empty/unset/unparseable ⇒ `None`, and `sentry::init` is
-/// never called at all — mirrors the C++ oracle's `init_sentry` early-return
-/// on an empty DSN, but goes one step further: constructing a disabled client
+/// never called at all on an empty DSN: constructing a disabled client
 /// still exercises `sentry`'s init-time machinery (integrations, its
 /// `reqwest`-backed transport factory) for no observable benefit, since a
 /// disabled client's panic hook already just chains through to the previous

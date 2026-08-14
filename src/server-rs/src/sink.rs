@@ -1,4 +1,4 @@
-//! The Rust side of the `SipiResponse` sink (strangler-fig rewrite).
+//! The Rust side of the `SipiResponse` sink.
 //!
 //! The C++ engine emits the whole response through the [`crate::ffi::SipiResponse`]
 //! callbacks **during** a synchronous `sipi_serve_*` call: `set_status` once
@@ -285,8 +285,7 @@ pub fn direct_response(status: u16, headers: Vec<(String, String)>, body: Vec<u8
 }
 
 fn apply_headers(mut builder: Builder, headers: &[(String, String)]) -> Builder {
-    // Last-write-wins per header name, mirroring the C++ transport's `header_out`
-    // map (Connection.cpp:1194 — even Set-Cookie is keyed there): a route that
+    // Last-write-wins per header name (even Set-Cookie is keyed by name): a route that
     // sets the same header twice — e.g. a Lua script that sends `Content-Type:
     // text/html` and then `application/json` via `send_response.lua` — must emit a
     // single value, not both. `HeaderMap::insert` replaces any prior value under

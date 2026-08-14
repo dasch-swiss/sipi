@@ -1,6 +1,6 @@
-//! The IIIF request router (strangler-fig rewrite).
+//! The IIIF request router.
 //!
-//! Replaces the C++ `iiif_handler` dispatch (`SipiHttpServer.cpp:1326`): a
+//! Replaces the C++ `iiif_handler` dispatch: a
 //! catch-all axum handler classifies the path with [`crate::iiif`], validates it
 //! at the edge with [`crate::path`], runs the Lua preflight hook (auth + path
 //! resolution) through the seam, and dispatches to the engine
@@ -52,8 +52,8 @@ pub struct AppState {
     has_preflight: bool,
     has_file_preflight: bool,
     /// Permits = the configured worker count: a permit is held for the duration
-    /// of each blocking engine dispatch, reconstructing the shttps
-    /// thread-per-connection bound. Shared (`Arc`) across all requests.
+    /// of each blocking engine dispatch, bounding concurrent engine work to the
+    /// worker count. Shared (`Arc`) across all requests.
     pool: Arc<tokio::sync::Semaphore>,
     /// The total permit count the pool was sized to (an observable-gauge
     /// baseline: `permits - available_permits()` = engine work in flight).
@@ -150,7 +150,7 @@ impl AppState {
                 routes: configured_routes.unwrap_or_else(|| ffi::routes().unwrap_or_default()),
                 max_post_size: ffi::max_post_size().unwrap_or(0),
                 // The fileserver docroot/wwwroute (empty when not configured →
-                // no static route registered, parity with the C++ file_handler gate).
+                // no static route registered).
                 docroot: ffi::docroot().unwrap_or_default(),
                 wwwroute: ffi::wwwroute().unwrap_or_default(),
                 preflight_cache,
@@ -292,7 +292,7 @@ struct Access {
 /// every failure this code renders is a bare status via [`sink::error_response`]
 /// — the one exception is a `pre_flight` hook that answers the request itself
 /// (`preflight_direct_response`), whose body is whatever the script wrote, by
-/// the script's own choice, same as the C++ oracle's live connection sink.
+/// the script's own choice.
 pub async fn iiif(
     State(state): State<Arc<AppState>>,
     method: Method,
@@ -309,13 +309,11 @@ pub async fn iiif(
     };
 
     // R7: an interior NUL in the decoded identifier/prefix is rejected outright
-    // (matches the docroot guard's R7, `decode_path_suffix`; the C++ oracle's
-    // own null-byte guard, `Connection.cpp:359-373`, is also NUL-only). NUL
-    // only — not the full control-char set: this path has no independent CRLF
-    // guard (unlike `redirect()`, whose `HeaderValue::from_str` already rejects
-    // CRLF regardless of this check), and the C++ oracle doesn't reject CRLF
-    // here either — broadening this check would reject an identifier the
-    // oracle still serves, a new, unpinned divergence.
+    // (matches the docroot guard's R7, `decode_path_suffix`). NUL only — not the
+    // full control-char set: this path has no independent CRLF guard (unlike
+    // `redirect()`, whose `HeaderValue::from_str` already rejects CRLF
+    // regardless of this check), so broadening this check would reject
+    // identifiers currently served — a behaviour change to weigh separately.
     if parsed.identifier.contains('\0') || parsed.prefix.contains('\0') {
         return sink::error_response(StatusCode::BAD_REQUEST);
     }
@@ -352,8 +350,8 @@ pub async fn iiif(
     };
     // Shell-set headers on the streamed (success) response, captured before the
     // request is moved onto the blocking thread: the CORS Origin echo + credentials
-    // (image + /file; Connection.cpp:390-395) and, for a /file Range request, the
-    // identifier-derived Content-Disposition (SipiHttpServer.cpp:1120-1129).
+    // (image + /file) and, for a /file Range request, the
+    // identifier-derived Content-Disposition.
     let cors_origin = header_str(&headers, "origin").and_then(|o| HeaderValue::from_str(&o).ok());
     let content_disp = (parsed.kind == RequestKind::FileDownload
         && headers.contains_key(header::RANGE))
@@ -365,7 +363,7 @@ pub async fn iiif(
     // back-pressures the engine thread; a disconnect drops the receiver, which
     // the engine's cancelled() poll and a failed body send both observe, aborting
     // the work. The pool permit is held for the whole dispatch — released when the
-    // blocking task ends (after the last chunk), reconstructing the shttps bound.
+    // blocking task ends (after the last chunk), restoring the concurrency bound.
     let (outcome_tx, outcome_rx) = oneshot::channel::<Outcome>();
     let (body_tx, body_rx) = mpsc::channel::<axum::body::Bytes>(sink::BODY_CHANNEL_CAP);
     // Carry the request span (created by OtelAxumLayer) onto the blocking thread
@@ -393,7 +391,7 @@ pub async fn iiif(
                 let h = response.headers_mut();
                 h.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
                 // Cookie auth: without credentials the browser withholds the
-                // DSP/Knora session cookie cross-origin (Connection.cpp:394).
+                // DSP/Knora session cookie cross-origin.
                 h.insert(
                     header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
                     HeaderValue::from_static("true"),
@@ -484,8 +482,7 @@ fn dispatch_engine(
             serve_image(
                 &resolved,
                 parsed,
-                // Raw, percent-encoded request path (matches the C++ oracle's
-                // `req.request_uri`, SipiHttpServer.cpp:1302) — log/report context
+                // Raw, percent-encoded request path — log/report context
                 // only; never re-parsed by the engine.
                 uri.path(),
                 headers,
@@ -538,7 +535,7 @@ fn busy_response() -> Response {
 /// Resolve the infile + permission for an IIIF / info / knora request: run the
 /// `pre_flight` hook when one is defined (it returns the infile), else build the
 /// default `imgroot/prefix/identifier` path with `allow`
-/// (`SipiHttpServer.cpp:465-478`).
+///.
 fn iiif_access(
     state: &AppState,
     parsed: &ParsedRequest,
@@ -619,7 +616,7 @@ fn iiif_access(
 }
 
 /// Resolve the infile + permission for a `/file` download: build the path, then
-/// run `file_pre_flight` on it when defined (`SipiHttpServer.cpp:1078-1100`).
+/// run `file_pre_flight` on it when defined.
 /// A non-allow/restrict permission is rejected here (401).
 fn file_access(
     state: &AppState,
@@ -820,7 +817,7 @@ fn emit_engine_phase_spans(engine_start: SystemTime, timings: &ffi::SipiServeTim
 
 /// Raw `/file` passthrough via `sipi_serve_file` (Range/206). The CORS echo and,
 /// on a Range request, the identifier-derived Content-Disposition are added to
-/// the streamed head by the caller (`iiif`, `SipiHttpServer.cpp:1120-1129`).
+/// the streamed head by the caller (`iiif`).
 fn serve_file(
     resolved: &str,
     headers: &HeaderMap,
@@ -842,8 +839,7 @@ fn serve_file(
 }
 
 /// CORS preflight (`OPTIONS`): echo the Origin + credentials, advertise the
-/// served methods (matching the oracle's `GET, POST, PUT, DELETE`), and echo the
-/// requested headers (`Connection.cpp:411-416`).
+/// served methods (`GET, POST, PUT, DELETE`), and echo the requested headers.
 /// Engine-independent, so it serves without the readiness gate.
 pub async fn cors_preflight(headers: HeaderMap) -> Response {
     cors_preflight_response(&headers)
@@ -852,8 +848,7 @@ pub async fn cors_preflight(headers: HeaderMap) -> Response {
 /// The CORS-preflight response (`OPTIONS`): `204` + the served methods + the
 /// echoed Origin + credentials + the requested headers. Shared by the
 /// [`cors_preflight`] handler and the docroot fileserver's OPTIONS path.
-/// (The oracle answers 200 by transport default; the 204-vs-200 shape is an
-/// allowlisted differential divergence (CORS credentials contract).)
+/// Answers `204` (not `200`) to keep the CORS credentials contract intact.
 fn cors_preflight_response(headers: &HeaderMap) -> Response {
     let mut builder = Response::builder().status(StatusCode::NO_CONTENT).header(
         header::ACCESS_CONTROL_ALLOW_METHODS,
@@ -1152,8 +1147,8 @@ fn run_lua_route_blocking(
     }) else {
         return complete(outcome_tx, sink::error_response(StatusCode::BAD_REQUEST));
     };
-    // A docroot script reads `server.docroot` (the C++ file_handler injects it,
-    // Server.cpp:310); configured routes pass None and leave it unset.
+    // A docroot script reads `server.docroot` (the fileserver injects it);
+    // configured routes pass None and leave it unset.
     if let Some(dr) = docroot {
         ctx.set_docroot(dr);
     }
@@ -1186,9 +1181,9 @@ fn run_lua_route_blocking(
 // ── /server docroot fileserver ───────────────────────────────────────────────
 
 /// Build the `MethodRouter` for the `/server` docroot fileserver, or `None` when
-/// no docroot+wwwroute is configured (parity with the C++ file_handler gate,
-/// `SipiHttpServer.cpp:1466`). GET/HEAD/POST serve a static file (Range/206 +
-/// MIME) or run a docroot `.lua`/`.elua` script; OPTIONS is the CORS preflight.
+/// no docroot+wwwroute is configured. GET/HEAD/POST serve a static file
+/// (Range/206 + MIME) or run a docroot `.lua`/`.elua` script; OPTIONS is the
+/// CORS preflight.
 /// [`crate::app`] registers it at the wwwroute prefix.
 #[must_use]
 pub fn docroot_method_router(state: Arc<AppState>) -> Option<MethodRouter<Arc<AppState>>> {
@@ -1221,11 +1216,10 @@ pub fn docroot_method_router(state: Arc<AppState>) -> Option<MethodRouter<Arc<Ap
     })
 }
 
-/// The `/server` docroot handler (the C++ `shttps::file_handler` analogue,
-/// `Server.cpp:292`): serve a static file (Range/206 + MIME) or execute a docroot
-/// `.lua`/`.elua` script with `server.docroot` injected. The path is
-/// containment-validated against the realpath'd docroot before any open — the C++
-/// handler had no traversal guard; the Rust shell adds R1/R2. An
+/// The `/server` docroot handler: serve a static file (Range/206 + MIME) or
+/// execute a docroot `.lua`/`.elua` script with `server.docroot` injected. The
+/// path is containment-validated against the realpath'd docroot before any
+/// open (an R1/R2 traversal guard). An
 /// interior NUL or other control char in the decoded path → 400 (this handler's
 /// own guard, `decode_path_suffix`, R7 — strictly wider than the IIIF
 /// catch-all's own R7, which rejects NUL only; see that check's comment for
@@ -1260,8 +1254,8 @@ async fn serve_docroot(state: Arc<AppState>, req: Request) -> Response {
         format!("/{suffix}")
     };
 
-    // infile = raw docroot + suffix (parity with the C++ `docroot + uri`): the
-    // Content-Disposition path (206) and the canonicalisation input.
+    // infile = raw docroot + suffix: the Content-Disposition path (206) and the
+    // canonicalisation input.
     let infile = format!("{}{}", state.docroot, suffix);
     let docroot = state.docroot.clone();
     let ext = extension_of(&suffix);
@@ -1341,8 +1335,8 @@ enum StaticOutcome {
 
 /// Resolve a docroot file off the executor: canonicalise the docroot (it may be
 /// created after startup, unlike imgroot), realpath + contain the file, and check
-/// it is a regular file. Missing → 404 (parity with the C++ access() check),
-/// escape → 400 (the Rust-added traversal guard), directory/device → 404.
+/// it is a regular file. Missing → 404 (an existence check),
+/// escape → 400 (the traversal guard), directory/device → 404.
 fn resolve_docroot_file(docroot: &str, infile: &str) -> Result<String, StatusCode> {
     let canon_root = std::fs::canonicalize(docroot).map_err(|_| StatusCode::NOT_FOUND)?;
     let resolved = match path::validate_resolved_path(infile, &canon_root.to_string_lossy()) {
@@ -1358,8 +1352,8 @@ fn resolve_docroot_file(docroot: &str, infile: &str) -> Result<String, StatusCod
 
 /// Resolve + describe a static docroot file (off the executor). `.html` (when the
 /// sniff is `text/html`) / `.js` / `.css` get a hardcoded Content-Type and the
-/// full file with no Range (parity with `Server.cpp:357-365`); everything else
-/// sniffs the MIME via the engine and supports Range/206.
+/// full file with no Range; everything else sniffs the MIME via the engine and
+/// supports Range/206.
 fn serve_static_blocking(
     docroot: &str,
     infile: &str,
@@ -1383,7 +1377,7 @@ fn serve_static_blocking(
         return static_special(&resolved, ct, is_head, origin);
     }
     // `.html` and binary need the sniffed MIME; the `.html` hardcoded type is used
-    // only when the sniff is `text/html` (parity with `Server.cpp:357`).
+    // only when the sniff is `text/html`.
     let mime = match ffi::mimetype(&resolved) {
         Ok(m) => m,
         Err(_) => return StaticOutcome::Err(StatusCode::INTERNAL_SERVER_ERROR),
@@ -1395,8 +1389,7 @@ fn serve_static_blocking(
 }
 
 /// Branch A (`.html`/`.js`/`.css`): a full-file 200 with only Content-Type — no
-/// Range, Cache-Control, or Last-Modified (the C++ html/js/css branches,
-/// `Server.cpp:357-365`).
+/// Range, Cache-Control, or Last-Modified.
 fn static_special(
     resolved: &str,
     content_type: &str,
@@ -1424,9 +1417,8 @@ fn static_special(
     }
 }
 
-/// Branch B (binary/media): full caching headers + Range/206 (the C++
-/// file_handler else-branch, `Server.cpp:444-502`). Content-Length is left to
-/// hyper, which streams chunked — the differential harness ignores transport framing.
+/// Branch B (binary/media): full caching headers + Range/206. Content-Length is
+/// left to hyper, which streams chunked.
 fn static_binary(
     resolved: &str,
     infile: &str,
@@ -1459,16 +1451,15 @@ fn static_binary(
     match range {
         Some(raw) => {
             let Some((start, end)) = parse_byte_range(raw, fsize) else {
-                // Malformed / inverted range / start past EOF → 500 (parity with
-                // the C++ throw → file_handler catch, `Server.cpp:486`/`507`).
+                // Malformed / inverted range / start past EOF → 500.
                 return StaticOutcome::Err(StatusCode::INTERNAL_SERVER_ERROR);
             };
             headers.push((
                 header::CONTENT_RANGE.to_string(),
                 format!("bytes {start}-{end}/{fsize}"),
             ));
-            // The full infile path is leaked here, replicated for strict parity
-            // with the oracle (`Server.cpp:498`); hardening is deferred.
+            // The full infile path is leaked here in the filename; hardening is
+            // deferred.
             headers.push((
                 header::CONTENT_DISPOSITION.to_string(),
                 format!("inline; filename={infile}"),
@@ -1615,9 +1606,9 @@ fn has_request_body(method: &Method) -> bool {
 /// pairs via the `form_urlencoded` crate (WHATWG semantics: `&`-split, `=`-split,
 /// `+` → space, percent-decode; empty pairs skipped).
 ///
-/// DIFFERENTIAL-VERIFY: this feeds the Lua `server.get`/`server.post` bindings,
-/// so its output must match the C++ shttps query/POST parser. Confirm parity via
-/// the differential harness.
+/// This feeds the Lua `server.get`/`server.post` bindings, so its output must
+/// match the documented query/POST parse the scripts rely on (exercised by the
+/// Lua e2e tests).
 fn parse_form_encoded(s: &str) -> Vec<(String, String)> {
     form_urlencoded::parse(s.as_bytes()).into_owned().collect()
 }
@@ -1659,14 +1650,14 @@ fn serve_info_json(
                 }
                 StatusCode::UNAUTHORIZED
             }
-            // Missing cookieUrl/tokenUrl in the hook result → 500 (parity).
+            // Missing cookieUrl/tokenUrl in the hook result → 500.
             None => return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
         }
     } else {
         StatusCode::OK
     };
 
-    // info.json always sends ACAO: * (SipiHttpServer.cpp:768), even with an Origin.
+    // info.json always sends ACAO: *, even with an Origin.
     json_response(status, &value, headers, Some(link_context), "*")
 }
 
@@ -1698,13 +1689,13 @@ fn serve_knora_json(resolved: &str, parsed: &ParsedRequest, headers: &HeaderMap)
         }
     };
 
-    // knora.json echoes the Origin when present, else * (SipiHttpServer.cpp:815-821).
+    // knora.json echoes the Origin when present, else *.
     let acao = header_str(headers, "origin").unwrap_or_else(|| "*".to_owned());
     json_response(StatusCode::OK, &value, headers, None, &acao)
 }
 
 /// 303 redirect from a bare identifier to its canonical info.json
-/// (`SipiHttpServer.cpp:506-531`).
+///.
 fn redirect(headers: &HeaderMap, parsed: &ParsedRequest) -> Response {
     let (scheme, host) = forwarded(headers);
     let target = if parsed.prefix.is_empty() {
@@ -1763,9 +1754,8 @@ fn build_ctx(method: &Method, uri: &Uri, headers: &HeaderMap) -> Option<ffi::Req
 /// Parse the `Cookie` header into name/value pairs (the parsed map the Lua
 /// `server.cookies` binding reads) via the `cookie` crate's RFC 6265 splitter.
 ///
-/// DIFFERENTIAL-VERIFY: this feeds the Lua `server.cookies` binding, so its
-/// output must match the C++ shttps cookie parser. Confirm parity via the
-/// differential harness.
+/// This feeds the Lua `server.cookies` binding, so its output must match the
+/// documented cookie parse the scripts rely on (exercised by the Lua e2e tests).
 fn parse_cookies(headers: &HeaderMap) -> Vec<(String, String)> {
     let Some(raw) = header_str(headers, header::COOKIE.as_str()) else {
         return Vec::new();
@@ -1784,7 +1774,7 @@ fn access_kv_cstring(access: &Access, key: &str) -> Option<CString> {
         .and_then(|(_, v)| CString::new(v.as_str()).ok())
 }
 
-/// Serialise a JSON value with the IIIF headers the C++ server sets: a CORS
+/// Serialise a JSON value with the standard IIIF headers: a CORS
 /// `Access-Control-Allow-Origin` (`acao`: `*` for info.json, Origin-echo-else-`*`
 /// for knora.json) and either `application/ld+json` (when the client `Accept`s
 /// it) or `application/json` + a `Link` to the JSON-LD context. A concretely
@@ -1803,8 +1793,8 @@ fn json_response(
         builder = builder.header(header::ACCESS_CONTROL_ALLOW_ORIGIN, acao_value);
         // A concrete echoed origin (knora.json with an Origin) also needs
         // credentials so the browser accepts the cookie-authenticated
-        // cross-origin response (Connection.cpp:393-394 sets it whenever an
-        // Origin is present). `*` (public info.json) must not pair with
+        // cross-origin response (set whenever an Origin is present).
+        // `*` (public info.json) must not pair with
         // credentials — CORS forbids it — so it is intentionally excluded.
         if acao != "*" {
             builder = builder.header(header::ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
@@ -1875,8 +1865,8 @@ fn client_ip(headers: &HeaderMap) -> String {
         .unwrap_or_default()
 }
 
-/// `Content-Disposition` for a `/file` download, mirroring the C++ oracle
-/// (`SipiHttpServer.cpp:1120-1129`): strip CR/LF/NUL/control/DEL bytes (R8,
+/// `Content-Disposition` for a `/file` download: strip CR/LF/NUL/control/DEL
+/// bytes (R8,
 /// preserving bytes ≥ 0x80), then either an RFC 2616 quoted `filename="…"` for an
 /// ASCII name, or the RFC 6266 `filename*=UTF-8''…` percent-encoded form for a
 /// non-ASCII one. Operates on the already-URL-decoded identifier.
@@ -1899,7 +1889,7 @@ fn content_disposition(identifier: &str) -> Option<HeaderValue> {
         format!("inline; filename=\"{quoted}\"")
     } else {
         // Non-ASCII → RFC 6266, percent-encoding every byte except the RFC 3986
-        // unreserved set (uppercase hex, matching the oracle).
+        // unreserved set (uppercase hex).
         let mut enc = String::with_capacity(safe.len() * 3);
         for &b in &safe {
             if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
@@ -1965,7 +1955,7 @@ mod tests {
     #[test]
     fn cors_preflight_echoes_origin_credentials_and_methods() {
         // Cookie auth: with an Origin, the preflight echoes it + credentials and
-        // advertises the oracle's method list (Connection.cpp:414).
+        // advertises the served method list.
         let resp = cors_preflight_response(&headers(&[
             ("origin", "https://example.org"),
             ("access-control-request-headers", "authorization"),
@@ -2073,7 +2063,7 @@ mod tests {
     #[test]
     fn content_disposition_escapes_quotes_and_strips_controls() {
         // Controls (here `\n`) are stripped (R8); a `"` is backslash-escaped, not
-        // stripped — matching the C++ oracle's escape_quoted_string.
+        // stripped (RFC 6266 quoted-string escaping).
         let v = content_disposition("a\"b\nc.tif").unwrap();
         assert_eq!(v.to_str().unwrap(), "inline; filename=\"a\\\"bc.tif\"");
     }
@@ -2081,7 +2071,7 @@ mod tests {
     #[test]
     fn content_disposition_non_ascii_uses_rfc6266() {
         // A non-ASCII name routes to `filename*=UTF-8''` with percent-encoded
-        // UTF-8 bytes (uppercase hex), matching SipiHttpServer.cpp:1127.
+        // UTF-8 bytes (uppercase hex).
         let v = content_disposition("café.tif").unwrap();
         assert_eq!(
             v.to_str().unwrap(),

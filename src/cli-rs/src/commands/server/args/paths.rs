@@ -1,13 +1,13 @@
 //! Filesystem path + path-resolution flags (the "Paths" `--help` heading).
 //!
-//! `subdirlevels` is deprecated and has no effect on the Rust serve path;
-//! it parses for oracle parity. `pathprefix` DOES have an effect —
+//! `subdirlevels` is deprecated and has no effect on the Rust serve path; it is
+//! accepted for CLI compatibility. `pathprefix` DOES have an effect —
 //! `routes.rs` reads `prefix_as_path` off the engine context to decide whether
 //! the IIIF prefix is a path component under imgroot (the
 //! previously-untested `prefix_as_path = false` branch). `pathprefix` is
-//! flag-shaped on the C++ side (a bare `--pathprefix` means "true"), so it
-//! takes an optional value here (`--pathprefix` → true, `--pathprefix=false` →
-//! false, absent → fall through to the config).
+//! flag-shaped (a bare `--pathprefix` means "true"), so it takes an optional
+//! value here (`--pathprefix` → true, `--pathprefix=false` → false, absent →
+//! fall through to the config).
 
 use clap::Args;
 
@@ -35,9 +35,8 @@ pub struct PathArgs {
     /// Path to the Lua init script.
     #[arg(long, env = "SIPI_INITSCRIPT", value_name = "FILE")]
     pub initscript: Option<String>,
-    /// IIIF prefix is part of the image path (deprecated on the C++ oracle;
-    /// still honoured on the Rust serve path via `routes.rs`'s
-    /// `prefix_as_path`).
+    /// IIIF prefix is part of the image path (honoured on the serve path via
+    /// `routes.rs`'s `prefix_as_path`).
     #[arg(
         long,
         env = "SIPI_PATHPREFIX",
