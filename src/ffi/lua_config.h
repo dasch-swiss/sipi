@@ -74,6 +74,14 @@ void set_lua_config(LuaConfig cfg);
  *  `sipi_guard`). */
 [[nodiscard]] std::unique_ptr<shttps::LuaServer> make_lua_server(shttps::RequestContext &ctx);
 
+/*! Lua globals installer (a `shttps::LuaSetGlobalsFunc`) that publishes the
+ *  `config` table Lua scripts read — every `sipi.config.*` value flattened from
+ *  the `Sipi::SipiConf` passed as `user_data`. Registered as the first entry of
+ *  `LuaConfig::globals` by both production `sipi_init` (`ffi/init.cpp`) and the
+ *  oracle `run_server` (`cli/cli_app.cpp`), so it is shared here rather than
+ *  duplicated. `user_data` must be a live `Sipi::SipiConf *`. */
+void sipiConfGlobals(lua_State *L, shttps::RequestContext &ctx, void *user_data);
+
 }// namespace Sipi::ffi
 
 #endif// SIPI_FFI_LUA_CONFIG_H

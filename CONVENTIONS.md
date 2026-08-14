@@ -9,7 +9,7 @@ For reviewer guidelines, see `docs/src/development/reviewer-guidelines.md`.
 
 ## Production surface vs oracle
 
-The **Rust axum shell** (`src/server-rs` + `src/cli-rs`) is the production server. It drives the C++ **image engine** (`libsipi`, the FFI callee) over the seam in `src/server-rs/src/ffi.rs`. The retained C++ **server** (`src/shttps` + `src/cli`) is **oracle-only**: kept solely as the reference in the differential parity test (`test/e2e/tests/differential.rs`), never deployed.
+The **Rust axum shell** (`src/server-rs` + `src/cli-rs`) is the production server. It drives the C++ **image engine** (`libsipi`, the FFI callee) over the seam in `src/server-rs/src/ffi.rs`. The retained C++ **server** — `src/shttps` plus `src/cli`'s **server mode** (`run_server` + `SipiHttpServer`) — is **oracle-only**: kept solely as the reference in the differential parity test (`test/e2e/tests/differential.rs`), never deployed. The rest of `src/cli` is production: `sipi_cli_main` and the offline verbs (`convert`/`verify`/`query`/`compare`) the Rust CLI shell drives.
 
 Consequences for production (Rust) code:
 

@@ -39,6 +39,12 @@ cc_library(
         # SipiHttpServer (the dead `__sipiserver` light-userdata was dropped).
         "SipiLua.cpp",
         "engine_context.cpp",
+        # init.cpp is the production `sipi_init` engine install (the from-scratch
+        # counterpart to the C++ server's parity install), moved here out of the
+        # oracle-hosting //src/cli so no production FFI entry lives in the oracle
+        # label; startup.cpp holds the LibraryInitialiser + memory-detection
+        # helpers it shares with the CLI dispatch (dependency runs cli -> ffi).
+        "init.cpp",
         "lua_config.cpp",
         "preflight.cpp",
         "run_lua_route.cpp",
@@ -46,6 +52,7 @@ cc_library(
         "serve_response.cpp",
         "serve_timings.cpp",
         "sipi_ffi.cpp",
+        "startup.cpp",
     ],
     hdrs = [
         "SipiLua.h",
@@ -59,6 +66,7 @@ cc_library(
         "serve_response.h",
         "serve_timings.h",
         "sipi_ffi.h",
+        "startup.h",
     ],
     strip_include_prefix = "/src",
     # -fexceptions: the catch-all guard in each entry point relies on
@@ -91,6 +99,15 @@ cc_library(
         "//src/shttps/lua",
         # The Lua C API the SipiImage bindings call directly (lua_State, luaL_*).
         "@lua",
+        # sipi_init installs shttps::sqliteGlobals into the engine Lua config, so
+        # configured Lua routes get the `db` (sqlite) bindings — same installer the
+        # oracle server registers. Transport-free, like //src/shttps/lua.
+        "//src/shttps/lua_sqlite:lua_sqlite",
+        # startup.cpp's LibraryInitialiser initialises these directly (curl_global_init,
+        # Exiv2::XmpParser). Both also arrive transitively via //src:engine; named
+        # here because startup.cpp includes their headers directly.
+        "@curl",
+        "@exiv2//:exiv2",
     ],
 )
 
