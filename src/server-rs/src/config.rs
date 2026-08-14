@@ -32,11 +32,10 @@ use std::os::raw::{c_char, c_int};
 /// [`crate::run`] (like `--drain-timeout`), not layered onto the engine config.
 #[derive(Debug, Default, Clone)]
 pub struct ServerOverrides {
-    /// HTTP listen port (`--serverport` / `SIPI_SERVERPORT`). `None` → fall back
-    /// to the Lua config's `sipi.port` (Lua config only), then the hardcoded
-    /// default. `serve()`'s actual resolution order (`lib.rs`) is
-    /// `SIPI_RS_PORT` (dev/test) > this field > Lua config port > default —
-    /// `SIPI_RS_PORT` is checked first, ahead of this field, not after it.
+    /// HTTP listen port (`--serverport` / `SIPI_SERVERPORT`). One input to the
+    /// listen-port resolution in `serve()` (`lib.rs`), which is the single
+    /// authority on precedence — note `SIPI_RS_PORT` is checked *ahead* of this
+    /// field, not after it.
     pub serverport: Option<u16>,
 
     // Paths
