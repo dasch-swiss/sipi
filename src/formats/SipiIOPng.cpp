@@ -3,6 +3,24 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+/*
+ * Byte-exact output invariant (approval gate).
+ *
+ * The PNG encode path here is pinned byte-for-byte by the approval tests
+ * (//test/approval:approvaltests), which CI runs on every supported platform —
+ * so the emitted bytes must be identical across darwin-aarch64, linux-x86_64,
+ * and linux-aarch64. Keep any pixel math that feeds the encoder deterministic
+ * and architecture-independent (prefer fixed-point to float, which can differ
+ * bit-for-bit across arches). Embedded ICC profiles are serialized through
+ * Sipi::Icc::iccBytes(), whose SOURCE_DATE_EPOCH normalization keeps the
+ * wall-clock-stamped creation date out of the goldens — see
+ * docs/adr/0002-icc-profile-determinism-test-only.md.
+ *
+ * Hot path: any change to this decode/encode code needs a Google Benchmark
+ * microbench and a before/after `just bench {decode,encode}` run on the same
+ * -c opt binary (ADR-0003; docs/src/development/benchmarking.md).
+ */
+
 #include <arpa/inet.h>
 #include <cassert>
 #include <csetjmp>
