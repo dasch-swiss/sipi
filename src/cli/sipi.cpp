@@ -11,9 +11,9 @@
  * translation unit lets the Rust HTTP shell (ADR-0013) link `cli_app` and
  * call `sipi_cli_main` without colliding with this `main`. The `sipi_cli_main`
  * entry owns process-global init (library init) and dispatch, and returns the
- * exit code rather than calling `exit()`. This binary (the differential-test
- * oracle) has no Sentry integration of its own — that lives in the Rust
- * shell's `main` (`cli-rs/src/main.rs`).
+ * exit code rather than calling `exit()`. This offline-verbs binary has no
+ * Sentry integration of its own — that lives in the Rust shell's `main`
+ * (`cli-rs/src/main.rs`).
  */
 #include "ffi/sipi_ffi.h"
 
