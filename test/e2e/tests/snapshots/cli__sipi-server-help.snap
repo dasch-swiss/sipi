@@ -5,7 +5,7 @@ expression: stdout
 Usage: server [OPTIONS]
 
 Options:
-  -c, --config <FILE>  Path to the SIPI Lua config (installed by `sipi_init` before serving). Also accepts the C++ oracle's `-c` short form [env: SIPI_CONFIGFILE=]
+  -c, --config <FILE>  Path to the SIPI Lua config (installed by `sipi_init` before serving). Also accepts the `-c` short form [env: SIPI_CONFIGFILE=]
   -h, --help           Print help
 
 Network:
@@ -36,7 +36,7 @@ Paths:
       --tmpdir <DIR>          Temporary directory (uploads etc.) [env: SIPI_TMPDIR=]
       --maxtmpage <SECS>      Max age in seconds of temp files before deletion [env: SIPI_MAXTMPAGE=]
       --initscript <FILE>     Path to the Lua init script [env: SIPI_INITSCRIPT=]
-      --pathprefix [<BOOL>]   IIIF prefix is part of the image path (deprecated on the C++ oracle; still honoured on the Rust serve path via `routes.rs`'s `prefix_as_path`) [env: SIPI_PATHPREFIX=] [possible values: true, false]
+      --pathprefix [<BOOL>]   IIIF prefix is part of the image path (honoured on the serve path via `routes.rs`'s `prefix_as_path`) [env: SIPI_PATHPREFIX=] [possible values: true, false]
       --subdirlevels <N>      Number of subdir levels (deprecated; no effect on the Rust path) [env: SIPI_SUBDIRLEVELS=]
       --subdirexcludes <DIR>  Directories excluded from subdir calculations [env: SIPI_SUBDIREXCLUDES=]
 

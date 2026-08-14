@@ -1,4 +1,4 @@
-//! SIPI Rust HTTP shell (strangler-fig rewrite; ADR-0013).
+//! SIPI Rust HTTP shell.
 //!
 //! This crate is the `sipi` **library**: it owns the axum + tokio server,
 //! routing, the FFI wiring to the C++ image engine, config, and observability,
@@ -8,9 +8,6 @@
 //! Shipping the server as a library is what lets SIPI be consumed as a
 //! dependency: a downstream crate can own `main`, depend on
 //! `sipi`, and inject its own behaviour.
-//!
-//! The shell is built additively: it runs in parallel with the existing C++
-//! server, which keeps the production socket until the cutover.
 
 // Fast unsafe check (CI `lint` gate): every `unsafe {}` block must carry a
 // `// SAFETY:` comment. `allow`-by-default (clippy `restriction` group), so it
@@ -468,9 +465,8 @@ async fn health() -> Response {
         .into_response()
 }
 
-/// Rust-native favicon — 200 + `image/x-icon`, byte-identical to the C++ oracle
-/// (the `favicon_ico` array in `include/favicon.h`, served by
-/// `SipiHttpServer.cpp:1406-1411`).
+/// Rust-native favicon — 200 + `image/x-icon`, byte-identical to the
+/// `favicon_ico` array in `include/favicon.h`.
 async fn favicon() -> impl IntoResponse {
     (
         [(axum::http::header::CONTENT_TYPE, "image/x-icon")],
@@ -524,7 +520,7 @@ mod app_tests {
         let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
             .await
             .unwrap();
-        assert_eq!(body.len(), 1406, "favicon must match the C++ oracle bytes");
+        assert_eq!(body.len(), 1406, "favicon must match the favicon_ico bytes");
     }
 
     #[tokio::test]

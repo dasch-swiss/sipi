@@ -1,7 +1,7 @@
 //! Rust bindings for the narrow C FFI seam (`src/ffi/sipi_ffi.h`).
 //!
 //! Hand-written rather than bindgen-generated: the seam is a small, locked
-//! `extern "C"` contract (strangler-fig rewrite; ADR-0013), so mirroring it by
+//! `extern "C"` contract (ADR-0013), so mirroring it by
 //! hand keeps the Bazel graph free of a bindgen build step and keeps the Rust
 //! types readable. Each declaration here tracks `sipi_ffi.h` 1:1 — when the
 //! header changes, this file changes in lock-step.
@@ -309,7 +309,7 @@ pub struct SipiStrPair {
 /// The preflight key/value emit callback (mirrors `SipiKVFn`).
 pub type SipiKVFn = extern "C" fn(ctx: *mut c_void, key: *const c_char, value: *const c_char);
 
-/// The opaque request context the preflight hooks read (`= shttps::RequestContext`).
+/// The opaque request context the preflight hooks read (an opaque C++ handle).
 /// Built by [`sipi_make_request_context`], freed by [`sipi_free_request_context`].
 #[repr(C)]
 pub struct SipiRequestContext {
@@ -737,7 +737,7 @@ pub fn init(config_path: &str, overrides: &ServerOverrides) -> Result<(), i32> {
 }
 
 /// The configured image root. `resolved = false` → the raw config value (used to
-/// build the request path, parity with the C++ `imgroot()`); `resolved = true`
+/// build the request path, as the engine's `imgroot()` returns it); `resolved = true`
 /// → the realpath()-resolved root (used for the R2 containment check). Returns
 /// an owned copy — the underlying C string is process-static, but the edge holds
 /// these in its own config so a copy keeps lifetimes simple. `Err` carries the
@@ -1037,9 +1037,8 @@ pub fn image_dims_and_essentials(
 }
 
 /// Builds a `sentry::Event` from a reported handled-error context and
-/// captures it — mirrors the shape the C++ oracle's `capture_image_error`
-/// (sentry-native) used to send directly; the engine now links no Sentry SDK
-/// and reports this context across the seam instead (a report is
+/// captures it — the engine links no Sentry SDK and reports this
+/// handled-error context across the seam instead (a report is
 /// always a side-channel, never a body). `ctx` is the request-URI C string
 /// the Rust edge passes as `report_ctx` — not part of the flat struct, since
 /// the edge already holds it for `SipiServeRequest::request_uri`.
@@ -1138,7 +1137,7 @@ pub(crate) extern "C" fn report_image_error(ctx: *mut c_void, err: *const SipiIm
 
 // ── Preflight wrappers ──────────────────────────────────────────────────────
 
-/// An owned request context. Frees the underlying `shttps::RequestContext` on
+/// An owned request context. Frees the underlying C++ request context on
 /// drop, so a preflight call never leaks (the seam contract: Rust owns it).
 pub struct RequestContext {
     ptr: *mut SipiRequestContext,

@@ -460,10 +460,9 @@ mod tests {
     /// Every field the engine hands across the seam must either be exported or be
     /// listed as deliberately unexported.
     ///
-    /// This is the check that was missing when the OTLP cutover shipped: the
-    /// `SipiMetricsSnapshot` layout test pins the struct's *shape*, so a field
-    /// added C++-side and never bridged passed silently and simply never reached
-    /// production.
+    /// This guards the gap the `SipiMetricsSnapshot` layout test leaves: that
+    /// test pins the struct's *shape*, so a field added C++-side and never
+    /// bridged would pass silently and simply never reach production.
     ///
     /// The field count comes from the struct size rather than a hand-maintained
     /// name list, which would just be one more place to forget: every snapshot

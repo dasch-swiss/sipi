@@ -111,7 +111,7 @@ _CPP_STDLIB_LINK = select({
     "//conditions:default": [],
 })
 
-# Inline #[cfg(test)] unit tests (the IIIF parser parity tests). Compiles the
+# Inline #[cfg(test)] unit tests (the IIIF parser unit tests). Compiles the
 # library crate with --cfg test; needs the C++ stdlib link args because it
 # links the same cc deps as the library.
 rust_test(

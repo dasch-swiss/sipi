@@ -34,8 +34,8 @@ impl From<&ServerArgs> for ServerOverrides {
         // serve knobs handed straight to `sipi::run`, not layered onto the engine
         // config. The deprecated cache aliases (--cachedir/--cachesize/
         // --cachenfiles) collapse onto their canonical field — canonical wins if
-        // both are set (parity with the oracle's last-write-wins on `optCache*`;
-        // neither binary's precedence between the two spellings is a contract).
+        // both are set (the precedence between the two spellings is not a
+        // contract).
         let ServerArgs {
             config: _,
             network,
@@ -130,8 +130,8 @@ impl From<&ServerArgs> for ServerOverrides {
             knorapath: knorapath.clone(),
             knoraport: knoraport.clone(),
             loglevel: loglevel.clone(),
-            // jpeg_quality + scaling_quality are TOML-config-only (no CLI flag —
-            // the oracle has none either), so the clap path never sets them.
+            // jpeg_quality + scaling_quality are TOML-config-only (no CLI flag),
+            // so the clap path never sets them.
             jpeg_quality: None,
             scaling_quality: Default::default(),
         }
@@ -146,8 +146,7 @@ pub fn run(server_argv: &[String]) -> ExitCode {
         Err(e) => {
             // clap renders help/version to stdout and usage errors to stderr;
             // mirror its own exit codes — 0 for `--help`/`--version`, 2 for a
-            // usage error — instead of forcing 2 (the C++ oracle exits 0 on
-            // `server --help`). We never call clap's process-exiting `.exit()`.
+            // usage error. We never call clap's process-exiting `.exit()`.
             let _ = e.print();
             return ExitCode::from(e.exit_code() as u8);
         }

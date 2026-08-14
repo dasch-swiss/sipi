@@ -2,7 +2,7 @@
 //!
 //! On the Rust shell, log routing is `RUST_LOG`/EnvFilter-driven.
 //! `loglevel` still forwards to the engine's own logger config; `logfile`
-//! parses for oracle parity but is not forwarded (NYI in the engine).
+//! is accepted for CLI compatibility but is not forwarded (NYI in the engine).
 
 use clap::Args;
 

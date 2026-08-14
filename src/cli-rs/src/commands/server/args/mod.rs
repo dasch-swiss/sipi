@@ -9,13 +9,13 @@
 //! The full ~40-flag server surface parses here (so e.g. `server --imgroot X`
 //! no longer exits 2), with each overridable flag an `Option<T>` carrying its
 //! `SIPI_*` env var — NO `default_value`, so an unset flag stays `None` and
-//! falls through to the loaded Lua config (the Rust analog of the C++
-//! `user_set` gate; precedence `config < env < CLI`). Every
-//! engine-behaviour flag forwards into `ServerOverrides` (see `mod.rs`'s
-//! `From<&ServerArgs>`); the transport flags the Rust shell owns
-//! (`sslport`/`sslcert`/`sslkey`, `keepalive`, `max-waiting`/`queue-timeout`,
-//! `hostname`, `nthreads`, `logfile`) parse for CLI/oracle parity but stay
-//! unforwarded, doc-commented per group.
+//! falls through to the loaded Lua config (an unset flag never overrides;
+//! precedence `config < env < CLI`). Every engine-behaviour flag forwards into
+//! `ServerOverrides` (see `mod.rs`'s `From<&ServerArgs>`); the transport flags
+//! the Rust shell owns (`sslport`/`sslcert`/`sslkey`, `keepalive`,
+//! `max-waiting`/`queue-timeout`, `hostname`, `nthreads`, `logfile`) are
+//! accepted for CLI compatibility but stay unforwarded, doc-commented per
+//! group.
 //!
 //! Two fields stay top-level rather than in a group:
 //! - `config` is bootstrap — it *selects* the base Lua config the overrides
@@ -52,7 +52,7 @@ use clap::Parser;
 #[command(name = "sipi server", term_width = 0)]
 pub struct ServerArgs {
     /// Path to the SIPI Lua config (installed by `sipi_init` before serving).
-    /// Also accepts the C++ oracle's `-c` short form.
+    /// Also accepts the `-c` short form.
     #[arg(long, short = 'c', env = "SIPI_CONFIGFILE", value_name = "FILE")]
     pub config: Option<String>,
 
@@ -115,7 +115,7 @@ mod tests {
     /// The flags route into their groups and parse to the expected types — a
     /// canary that the flatten wiring and the long-flag names hold across all
     /// eight groups, that the top-level `config`/`--nthreads` `-c`/`-t` short
-    /// forms mirror the oracle, and that `--pathprefix` (an optional-value flag)
+    /// forms resolve, and that `--pathprefix` (an optional-value flag)
     /// resolves to `Some(true)` when given without a value.
     #[test]
     fn server_flags_parse_into_their_groups() {

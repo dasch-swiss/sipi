@@ -25,8 +25,8 @@ use std::os::raw::{c_char, c_int};
 /// wins).
 ///
 /// Only engine-behaviour flags are forwarded. Transport flags the Rust shell
-/// owns (`--sslport`/`--sslcert`/`--sslkey`, `--keepalive`, `--hostname`) parse
-/// for CLI parity but are never forwarded, so they are absent here.
+/// owns (`--sslport`/`--sslcert`/`--sslkey`, `--keepalive`, `--hostname`) are
+/// accepted for CLI compatibility but are never forwarded, so they are absent here.
 /// `--max-waiting`/`--queue-timeout` are also absent here, but for the opposite
 /// reason: the shell honors them as Rust-owned serve knobs passed straight to
 /// [`crate::run`] (like `--drain-timeout`), not layered onto the engine config.
@@ -80,7 +80,7 @@ pub struct ServerOverrides {
     // Logging
     pub loglevel: Option<String>,
 
-    // Image quality — TOML-config-only (no CLI flag; the oracle has none either).
+    // Image quality — TOML-config-only (no CLI flag).
     pub jpeg_quality: Option<i32>,
     pub scaling_quality: ScalingQuality,
 }
@@ -90,7 +90,7 @@ pub struct ServerOverrides {
 ///
 /// The engine reads the j2k slot under a legacy `"jpk"` map key (a pre-existing
 /// quirk), so `j2k` currently has no effect on either the Lua or TOML path; it is
-/// kept for schema completeness and parity with the Lua `scaling_quality` table.
+/// kept for schema completeness and alignment with the Lua `scaling_quality` table.
 #[derive(Debug, Default, Clone)]
 pub struct ScalingQuality {
     pub jpeg: Option<String>,
@@ -190,7 +190,7 @@ pub(crate) struct SipiServerConfig {
     pub wwwroute: *const c_char,
     pub loglevel: *const c_char,
     // 8-byte: image scaling-quality per codec (null = engine default). TOML-only
-    // (no CLI flag — the oracle has none either).
+    // (no CLI flag).
     pub scaling_quality_jpeg: *const c_char,
     pub scaling_quality_tiff: *const c_char,
     pub scaling_quality_png: *const c_char,

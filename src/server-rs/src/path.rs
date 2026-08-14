@@ -1,15 +1,13 @@
-//! Image-root path construction + traversal validation at the request edge
-//! (strangler-fig rewrite). The FFI trusts the `resolved_path` it is handed —
-//! "validation owned by the Rust edge" (`sipi_ffi.h`) — so the shell reproduces
-//! the C++ server's two-stage check before any serve call:
+//! Image-root path construction + traversal validation at the request edge.
+//! The FFI trusts the `resolved_path` it is handed — "validation owned by the
+//! Rust edge" (`sipi_ffi.h`) — so the shell performs a two-stage check before
+//! any serve call:
 //!
 //!  - **R1** ([`contains_traversal`]) is a pure string check on the URL-decoded
 //!    identifier (and prefix, when `prefix_as_path`), rejecting `..` components
-//!    and their single/double percent-encoded variants. Ported 1:1 from
-//!    `SipiHttpServer.cpp:205-223`.
+//!    and their single/double percent-encoded variants.
 //!  - **R2** ([`validate_resolved_path`]) realpath-resolves the built path and
-//!    asserts it stays within the resolved image root. Ported from
-//!    `SipiHttpServer.cpp:244-266`.
+//!    asserts it stays within the resolved image root.
 //!
 //! The image root + `prefix_as_path` knob come from the engine (`sipi_imgroot` /
 //! `sipi_prefix_as_path`) and are cached by the shell at startup; the functions
@@ -43,8 +41,7 @@ pub fn is_within(resolved: &str, resolved_root: &str) -> bool {
     resolved.len() == resolved_root.len() || resolved.as_bytes()[resolved_root.len()] == b'/'
 }
 
-/// Build the on-disk request path the way the C++ server does
-/// (`SipiHttpServer.cpp:472-475`): `imgroot/prefix/identifier` when
+/// Build the on-disk request path: `imgroot/prefix/identifier` when
 /// `prefix_as_path` and the prefix is non-empty, else `imgroot/identifier`.
 /// `prefix` and `identifier` are the already-URL-decoded parser outputs.
 #[must_use]
