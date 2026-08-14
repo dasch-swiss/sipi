@@ -187,14 +187,50 @@ Available in `Connection::StatusCodes` enum (`shttps/transport/Connection.h`):
 
 ## Configuration Pattern
 
-Config flows: CLI args (CLI11) → Lua config file → `SipiConf` struct → `SipiHttpServer` accessors.
+Production config for an engine-behaviour knob flows **Rust → FFI → C++ engine**:
+the Rust shell parses CLI/env (clap) and TOML, layers them into a
+`ServerOverrides` bag, hands it across the FFI seam as the `#[repr(C)]`
+`SipiServerConfig`, and `sipi_init` applies it onto the Lua-parsed `SipiConf`
+before the engine reads it. Adding one option touches every link below; most
+links **fail to compile** if you forget them (DUNE-006), except the last C++
+apply block, which is the one hand-mirrored seam.
 
-New config options need:
-1. Field in `SipiConf.h` / `SipiConf.cpp` (Lua table read)
-2. CLI option in `src/cli/cli_app.cpp` (CLI11)
-3. Accessor in `src/SipiHttpServer.h`
-4. Documentation in `config/sipi.config.lua`
-5. Environment variable override (optional, for Docker)
+Rust production side:
+1. **clap flag** — a field in the right `src/cli-rs/src/commands/server/args/<group>.rs`
+   group (network/paths/cache/limits/tls_auth/knora/logging/concurrency), with a
+   colocated `env = "SIPI_X"` (clap owns CLI-over-env precedence).
+2. **`ServerOverrides` field** — `src/server-rs/src/config.rs` (the Rust-native bag).
+3. **forward from clap** — `From<&ServerArgs> for ServerOverrides`
+   (`src/cli-rs/src/commands/server/mod.rs`). *Exhaustively destructures every
+   clap group → a new flag that is not forwarded (or explicitly `field: _`) fails
+   to compile.*
+4. **TOML base** — a `Config` field + its `Config::base()` mapping
+   (`src/server-rs/src/config_file.rs`). *Exhaustive `ServerOverrides` literal →
+   a missing map fails to compile.*
+5. **merge** — `ServerOverrides::layered_over` (`config.rs`). *Exhaustive literal.*
+
+FFI seam:
+6. **`SipiServerConfig` struct** — a field (plus a `has_*` presence flag for a
+   scalar) in `src/ffi/sipi_ffi.h`, mirrored by the Rust `#[repr(C)]
+   SipiServerConfig` in `config.rs`. Both sides are layout-guarded by the paired
+   `static_assert`/`offset_of!` blocks (a drift fails the build/tests).
+7. **forward to the FFI struct** — `OverridesHolder::new` (`config.rs`).
+   *Exhaustively destructures `ServerOverrides` → a field never forwarded to the C
+   struct fails to compile (unused binding under `-D warnings`).*
+
+C++ engine:
+8. **`include/SipiConf.h` + `src/SipiConf.cpp`** — the getter/setter and the Lua
+   `config.*` table read (the engine's own config surface).
+9. **`config/sipi.config.lua`** — document the option.
+10. **THE ONE UNMECHANIZED LINK — the `sipi_init` apply block**
+    (`src/ffi/init.cpp`): a hand-written `if (o.newfield != nullptr)
+    conf.setNewfield(...)` per override. **Nothing checks this for
+    completeness** — a forgotten line compiles clean and silently drops the
+    override before the engine sees it. Always add the apply line here when you
+    add an FFI field (step 6).
+
+Oracle (parity only, deleted with the C++ server): the equivalent CLI11 flag in
+`src/cli/cli_app.cpp` server mode + accessor in `src/SipiHttpServer.h`.
 
 ## Error Handling Pattern
 
