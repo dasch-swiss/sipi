@@ -11,59 +11,125 @@
 
 mod args;
 
-use args::ServerArgs;
+use args::{
+    CacheArgs, ConcurrencyArgs, KnoraArgs, LimitsArgs, LoggingArgs, NetworkArgs, PathArgs,
+    ServerArgs, TlsAuthArgs,
+};
 use clap::Parser;
 use sipi::ServerOverrides;
 use std::process::ExitCode;
 
 impl From<&ServerArgs> for ServerOverrides {
     fn from(args: &ServerArgs) -> Self {
-        // Engine-behaviour flags forward into this overrides bag; flags the shell
-        // does not act on (sslport/sslcert/sslkey, keepalive, hostname, logfile)
-        // are accepted but not forwarded. `--nthreads`, `--max-waiting`, and
-        // `--queue-timeout` are handled separately: Rust-owned serve knobs handed
-        // straight to `sipi::run` below (like `--drain-timeout`), not layered onto
-        // the engine config. The
-        // deprecated
-        // cache aliases (--cachedir/--cachesize/--cachenfiles) collapse onto
-        // their canonical field here — canonical wins if both are somehow set
-        // (matches the C++ oracle's last-write-wins on the shared `optCache*`
-        // variable closely enough: neither binary's precedence between the two
-        // spellings is a contract anyone can rely on).
+        // Fail-on-omission (DUNE-006): every clap flag group is destructured
+        // exhaustively — no `..` rest pattern — so a NEW `server` flag fails to
+        // compile here until it is either forwarded into `ServerOverrides` or
+        // explicitly bound `field: _` (accepted-but-not-forwarded). Without this,
+        // a forgotten forward is a silent drop the engine never sees.
+        //
+        // Deliberately NOT forwarded (bound `_`): sslport/sslcert/sslkey,
+        // keepalive, hostname, logfile (the shell does not act on them);
+        // `config` + `drain_timeout` + the whole concurrency group (`nthreads`,
+        // `max_waiting`, `queue_timeout`, preflight-cache knobs) are Rust-owned
+        // serve knobs handed straight to `sipi::run`, not layered onto the engine
+        // config. The deprecated cache aliases (--cachedir/--cachesize/
+        // --cachenfiles) collapse onto their canonical field — canonical wins if
+        // both are set (parity with the oracle's last-write-wins on `optCache*`;
+        // neither binary's precedence between the two spellings is a contract).
+        let ServerArgs {
+            config: _,
+            network,
+            concurrency,
+            limits,
+            paths,
+            cache,
+            tls_auth,
+            knora,
+            logging,
+            drain_timeout: _,
+        } = args;
+        let NetworkArgs {
+            serverport,
+            sslport: _,
+            hostname: _,
+            keepalive: _,
+        } = network;
+        let PathArgs {
+            imgroot,
+            docroot,
+            wwwroute,
+            scriptdir,
+            tmpdir,
+            maxtmpage,
+            initscript,
+            pathprefix,
+            subdirlevels,
+            subdirexcludes,
+        } = paths;
+        let CacheArgs {
+            cache_dir,
+            cache_size,
+            cache_nfiles,
+            cachedir,
+            cachesize,
+            cachenfiles,
+        } = cache;
+        let LimitsArgs {
+            maxpost,
+            max_pixel_limit,
+            max_decode_memory,
+            decode_memory_mode,
+            thumbsize,
+        } = limits;
+        let TlsAuthArgs {
+            sslcert: _,
+            sslkey: _,
+            jwtkey,
+            adminuser,
+            adminpasswd,
+        } = tls_auth;
+        let KnoraArgs {
+            knorapath,
+            knoraport,
+        } = knora;
+        let LoggingArgs {
+            logfile: _,
+            loglevel,
+        } = logging;
+        let ConcurrencyArgs {
+            nthreads: _,
+            max_waiting: _,
+            queue_timeout: _,
+            preflight_cache_ttl: _,
+            preflight_cache_slots: _,
+        } = concurrency;
+
         ServerOverrides {
-            serverport: args.network.serverport,
-            imgroot: args.paths.imgroot.clone(),
-            scriptdir: args.paths.scriptdir.clone(),
-            initscript: args.paths.initscript.clone(),
-            tmpdir: args.paths.tmpdir.clone(),
-            maxtmpage: args.paths.maxtmpage,
-            docroot: args.paths.docroot.clone(),
-            wwwroute: args.paths.wwwroute.clone(),
-            pathprefix: args.paths.pathprefix,
-            subdirlevels: args.paths.subdirlevels,
-            subdirexcludes: args.paths.subdirexcludes.clone(),
-            jwtkey: args.tls_auth.jwtkey.clone(),
-            adminuser: args.tls_auth.adminuser.clone(),
-            adminpasswd: args.tls_auth.adminpasswd.clone(),
-            cache_dir: args
-                .cache
-                .cache_dir
-                .clone()
-                .or_else(|| args.cache.cachedir.clone()),
-            cache_size: args
-                .cache
-                .cache_size
-                .clone()
-                .or_else(|| args.cache.cachesize.clone()),
-            cache_nfiles: args.cache.cache_nfiles.or(args.cache.cachenfiles),
-            max_decode_memory: args.limits.max_decode_memory.clone(),
-            decode_memory_mode: args.limits.decode_memory_mode.clone(),
-            max_pixel_limit: args.limits.max_pixel_limit,
-            maxpost: args.limits.maxpost.clone(),
-            thumbsize: args.limits.thumbsize.clone(),
-            knorapath: args.knora.knorapath.clone(),
-            knoraport: args.knora.knoraport.clone(),
-            loglevel: args.logging.loglevel.clone(),
+            serverport: *serverport,
+            imgroot: imgroot.clone(),
+            scriptdir: scriptdir.clone(),
+            initscript: initscript.clone(),
+            tmpdir: tmpdir.clone(),
+            maxtmpage: *maxtmpage,
+            docroot: docroot.clone(),
+            wwwroute: wwwroute.clone(),
+            pathprefix: *pathprefix,
+            subdirlevels: *subdirlevels,
+            subdirexcludes: subdirexcludes.clone(),
+            jwtkey: jwtkey.clone(),
+            adminuser: adminuser.clone(),
+            adminpasswd: adminpasswd.clone(),
+            cache_dir: cache_dir.clone().or_else(|| cachedir.clone()),
+            cache_size: cache_size.clone().or_else(|| cachesize.clone()),
+            cache_nfiles: cache_nfiles.or(*cachenfiles),
+            max_decode_memory: max_decode_memory.clone(),
+            decode_memory_mode: decode_memory_mode.clone(),
+            max_pixel_limit: *max_pixel_limit,
+            maxpost: maxpost.clone(),
+            thumbsize: thumbsize.clone(),
+            knorapath: knorapath.clone(),
+            knoraport: knoraport.clone(),
+            loglevel: loglevel.clone(),
             // jpeg_quality + scaling_quality are TOML-config-only (no CLI flag —
             // the oracle has none either), so the clap path never sets them.
             jpeg_quality: None,

@@ -104,6 +104,14 @@ impl ServerOverrides {
     /// config): per field, keep `self`'s value when set, else fall back to
     /// `base`. With clap's own `CLI > env`, this realises `config < env < CLI`
     /// with a TOML base, matching the Lua-config precedence.
+    ///
+    /// Fail-on-omission (DUNE-006): the returned struct literal names every field
+    /// with no `..` rest, and the output type IS `ServerOverrides`, so a new
+    /// field fails to compile here until it is explicitly merged
+    /// (`self.new.or(base.new)`). No separate destructure of `self`/`base` is
+    /// needed — the exhaustive literal already forces reading both sides (unlike
+    /// `From<&ServerArgs>` / `OverridesHolder::new`, whose outputs are different
+    /// structs and so destructure their source).
     #[must_use]
     pub fn layered_over(self, base: ServerOverrides) -> ServerOverrides {
         ServerOverrides {
@@ -233,11 +241,48 @@ pub(crate) struct OverridesHolder {
 
 impl OverridesHolder {
     pub fn new(o: &ServerOverrides) -> Result<Self, NulError> {
+        // Fail-on-omission (DUNE-006): destructure the whole `ServerOverrides`
+        // (no `..` rest pattern) so a field that is never forwarded into the C
+        // `SipiServerConfig` below fails to compile — an unused binding under the
+        // crate's `-D warnings` clippy gate — instead of being silently dropped
+        // before it reaches the engine. Cloned so the bindings are owned (a single
+        // clone at startup); the scalar `Option`s are `Copy`, so the value +
+        // `has_*` presence flag can each read the same binding.
+        let ServerOverrides {
+            serverport,
+            imgroot,
+            scriptdir,
+            initscript,
+            tmpdir,
+            maxtmpage,
+            docroot,
+            wwwroute,
+            pathprefix,
+            subdirlevels,
+            subdirexcludes,
+            jwtkey,
+            adminuser,
+            adminpasswd,
+            cache_dir,
+            cache_size,
+            cache_nfiles,
+            max_decode_memory,
+            decode_memory_mode,
+            max_pixel_limit,
+            maxpost,
+            thumbsize,
+            knorapath,
+            knoraport,
+            loglevel,
+            jpeg_quality,
+            scaling_quality,
+        } = o.clone();
+
         let mut strings: Vec<CString> = Vec::new();
         let mut subdir_strings: Vec<CString> = Vec::new();
         let mut subdir_ptrs: Vec<*const c_char> = Vec::new();
 
-        let (subdirexcludes, subdirexcludes_len) = match &o.subdirexcludes {
+        let (subdirexcludes_ptr, subdirexcludes_len) = match subdirexcludes {
             Some(list) if !list.is_empty() => {
                 for s in list {
                     let c = CString::new(s.as_str())?;
@@ -252,44 +297,44 @@ impl OverridesHolder {
         };
 
         let cfg = SipiServerConfig {
-            imgroot: intern_cstr(&mut strings, &o.imgroot)?,
-            scriptdir: intern_cstr(&mut strings, &o.scriptdir)?,
-            initscript: intern_cstr(&mut strings, &o.initscript)?,
-            tmpdir: intern_cstr(&mut strings, &o.tmpdir)?,
-            jwtkey: intern_cstr(&mut strings, &o.jwtkey)?,
-            adminuser: intern_cstr(&mut strings, &o.adminuser)?,
-            adminpasswd: intern_cstr(&mut strings, &o.adminpasswd)?,
-            cache_dir: intern_cstr(&mut strings, &o.cache_dir)?,
-            cache_size: intern_cstr(&mut strings, &o.cache_size)?,
-            maxpost: intern_cstr(&mut strings, &o.maxpost)?,
-            max_decode_memory: intern_cstr(&mut strings, &o.max_decode_memory)?,
-            decode_memory_mode: intern_cstr(&mut strings, &o.decode_memory_mode)?,
-            thumbsize: intern_cstr(&mut strings, &o.thumbsize)?,
-            knorapath: intern_cstr(&mut strings, &o.knorapath)?,
-            knoraport: intern_cstr(&mut strings, &o.knoraport)?,
-            docroot: intern_cstr(&mut strings, &o.docroot)?,
-            wwwroute: intern_cstr(&mut strings, &o.wwwroute)?,
-            loglevel: intern_cstr(&mut strings, &o.loglevel)?,
-            scaling_quality_jpeg: intern_cstr(&mut strings, &o.scaling_quality.jpeg)?,
-            scaling_quality_tiff: intern_cstr(&mut strings, &o.scaling_quality.tiff)?,
-            scaling_quality_png: intern_cstr(&mut strings, &o.scaling_quality.png)?,
-            scaling_quality_j2k: intern_cstr(&mut strings, &o.scaling_quality.j2k)?,
-            subdirexcludes,
+            imgroot: intern_cstr(&mut strings, &imgroot)?,
+            scriptdir: intern_cstr(&mut strings, &scriptdir)?,
+            initscript: intern_cstr(&mut strings, &initscript)?,
+            tmpdir: intern_cstr(&mut strings, &tmpdir)?,
+            jwtkey: intern_cstr(&mut strings, &jwtkey)?,
+            adminuser: intern_cstr(&mut strings, &adminuser)?,
+            adminpasswd: intern_cstr(&mut strings, &adminpasswd)?,
+            cache_dir: intern_cstr(&mut strings, &cache_dir)?,
+            cache_size: intern_cstr(&mut strings, &cache_size)?,
+            maxpost: intern_cstr(&mut strings, &maxpost)?,
+            max_decode_memory: intern_cstr(&mut strings, &max_decode_memory)?,
+            decode_memory_mode: intern_cstr(&mut strings, &decode_memory_mode)?,
+            thumbsize: intern_cstr(&mut strings, &thumbsize)?,
+            knorapath: intern_cstr(&mut strings, &knorapath)?,
+            knoraport: intern_cstr(&mut strings, &knoraport)?,
+            docroot: intern_cstr(&mut strings, &docroot)?,
+            wwwroute: intern_cstr(&mut strings, &wwwroute)?,
+            loglevel: intern_cstr(&mut strings, &loglevel)?,
+            scaling_quality_jpeg: intern_cstr(&mut strings, &scaling_quality.jpeg)?,
+            scaling_quality_tiff: intern_cstr(&mut strings, &scaling_quality.tiff)?,
+            scaling_quality_png: intern_cstr(&mut strings, &scaling_quality.png)?,
+            scaling_quality_j2k: intern_cstr(&mut strings, &scaling_quality.j2k)?,
+            subdirexcludes: subdirexcludes_ptr,
             subdirexcludes_len,
-            max_pixel_limit: o.max_pixel_limit.unwrap_or(0),
-            serverport: o.serverport.map(i32::from).unwrap_or(0),
-            maxtmpage: o.maxtmpage.unwrap_or(0),
-            cache_nfiles: o.cache_nfiles.unwrap_or(0),
-            subdirlevels: o.subdirlevels.unwrap_or(0),
-            pathprefix: o.pathprefix.map(i32::from).unwrap_or(0),
-            jpeg_quality: o.jpeg_quality.unwrap_or(0),
-            has_serverport: o.serverport.is_some() as c_int,
-            has_maxtmpage: o.maxtmpage.is_some() as c_int,
-            has_cache_nfiles: o.cache_nfiles.is_some() as c_int,
-            has_subdirlevels: o.subdirlevels.is_some() as c_int,
-            has_pathprefix: o.pathprefix.is_some() as c_int,
-            has_max_pixel_limit: o.max_pixel_limit.is_some() as c_int,
-            has_jpeg_quality: o.jpeg_quality.is_some() as c_int,
+            max_pixel_limit: max_pixel_limit.unwrap_or(0),
+            serverport: serverport.map(i32::from).unwrap_or(0),
+            maxtmpage: maxtmpage.unwrap_or(0),
+            cache_nfiles: cache_nfiles.unwrap_or(0),
+            subdirlevels: subdirlevels.unwrap_or(0),
+            pathprefix: pathprefix.map(i32::from).unwrap_or(0),
+            jpeg_quality: jpeg_quality.unwrap_or(0),
+            has_serverport: serverport.is_some() as c_int,
+            has_maxtmpage: maxtmpage.is_some() as c_int,
+            has_cache_nfiles: cache_nfiles.is_some() as c_int,
+            has_subdirlevels: subdirlevels.is_some() as c_int,
+            has_pathprefix: pathprefix.is_some() as c_int,
+            has_max_pixel_limit: max_pixel_limit.is_some() as c_int,
+            has_jpeg_quality: jpeg_quality.is_some() as c_int,
         };
 
         Ok(Self {
@@ -382,7 +427,68 @@ mod layout {
 
 #[cfg(test)]
 mod overrides_tests {
-    use super::{OverridesHolder, ServerOverrides};
+    use super::{OverridesHolder, ScalingQuality, ServerOverrides};
+
+    #[test]
+    fn layered_over_prefers_self_then_falls_back_to_base() {
+        // Precedence direction: `self` (CLI/env) wins per field when set; `base`
+        // (TOML config) fills the gaps. The exhaustive struct literal guarantees
+        // every field is *merged*; this test guards the *direction* of each merge
+        // — a swapped `self`/`base` or an `or` typo would still compile, so a
+        // behavioural test is the only thing that catches it. One field per group.
+        let base = ServerOverrides {
+            serverport: Some(1000),                  // network
+            imgroot: Some("/base/img".into()),       // paths (set in both)
+            scriptdir: Some("/base/scripts".into()), // paths (self None → base)
+            maxtmpage: Some(10),
+            pathprefix: Some(false),
+            subdirexcludes: Some(vec!["base".into()]), // paths (self None → base)
+            adminuser: Some("base-admin".into()),      // auth (self None → base)
+            cache_nfiles: Some(1),                     // cache
+            max_pixel_limit: Some(100),                // limits
+            knorapath: Some("base-knora".into()),      // knora (self None → base)
+            loglevel: Some("INFO".into()),             // logging
+            jpeg_quality: Some(50),                    // image quality
+            scaling_quality: ScalingQuality {
+                jpeg: Some("low".into()),
+                tiff: Some("low".into()), // self None → base
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let this = ServerOverrides {
+            serverport: Some(2000),
+            imgroot: Some("/self/img".into()),
+            maxtmpage: Some(20),
+            pathprefix: Some(true),
+            cache_nfiles: Some(2),
+            max_pixel_limit: Some(200),
+            loglevel: Some("DEBUG".into()),
+            jpeg_quality: Some(90),
+            scaling_quality: ScalingQuality {
+                jpeg: Some("high".into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let merged = this.layered_over(base);
+        // self wins where set:
+        assert_eq!(merged.serverport, Some(2000));
+        assert_eq!(merged.imgroot.as_deref(), Some("/self/img"));
+        assert_eq!(merged.maxtmpage, Some(20));
+        assert_eq!(merged.pathprefix, Some(true));
+        assert_eq!(merged.cache_nfiles, Some(2));
+        assert_eq!(merged.max_pixel_limit, Some(200));
+        assert_eq!(merged.loglevel.as_deref(), Some("DEBUG"));
+        assert_eq!(merged.jpeg_quality, Some(90));
+        assert_eq!(merged.scaling_quality.jpeg.as_deref(), Some("high"));
+        // base fills where self is None:
+        assert_eq!(merged.scriptdir.as_deref(), Some("/base/scripts"));
+        assert_eq!(merged.subdirexcludes, Some(vec!["base".to_string()]));
+        assert_eq!(merged.adminuser.as_deref(), Some("base-admin"));
+        assert_eq!(merged.knorapath.as_deref(), Some("base-knora"));
+        assert_eq!(merged.scaling_quality.tiff.as_deref(), Some("low"));
+    }
 
     #[test]
     fn new_rejects_interior_nul() {
