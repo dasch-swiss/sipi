@@ -30,8 +30,9 @@ use crate::path::{self, Resolved};
 use crate::preflight_cache;
 use crate::sink::{self, Outcome};
 
-/// Image MIME types that take the IIIF / image-dimension code path (the same set
-/// the C++ server branches on, `SipiHttpServer.cpp:568-570,913-914`).
+/// Image MIME types that take the IIIF / image-dimension code path. The C++
+/// engine's `detect_in_format` (`src/ffi/serve_image.cpp`) is the matching
+/// server-side table; both must list the same image mimes.
 const IMAGE_MIMES: [&str; 5] = [
     "image/tiff",
     "image/jpeg",
