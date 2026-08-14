@@ -24,14 +24,14 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "shttps/util/Error.h"
-#include "shttps/util/Global.h"
+#include "util/Error.h"
+#include "util/Global.h"
 #include "LuaServer.h"
-#include "shttps/util/Parsing.h"
+#include "util/Parsing.h"
 #include "curl/curl.h"
 
 #include "logging/logger.h"
-#include "shttps/jwt/jwt.h"
+#include "jwt/jwt.h"
 #include "sole.hpp"
 #include <jansson.h>
 

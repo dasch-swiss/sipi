@@ -28,8 +28,8 @@
 #include "ChunkReader.h"
 #include "Connection.h"
 #include "SockStream.h"
-#include "shttps/util/Error.h"
-#include "shttps/util/UrlDecode.h"
+#include "util/Error.h"
+#include "util/UrlDecode.h"
 #include "Server.h"// TEMPORARY !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 using namespace std;

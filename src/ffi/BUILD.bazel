@@ -6,11 +6,11 @@ callbacks rather than returned in a struct, and no C++ exception crosses the
 boundary. Lives in its own Bazel package so the seam is a build-graph
 invariant and so the `rust_binary` can link this `cc_library` (via
 rules_rust `cc_import`/`deps`) as a defined unit. (It is not dependency-free:
-the `//src/shttps/util` dep below pulls libmagic transitively; as the engine
+the `//src/util` dep below pulls libmagic transitively; as the engine
 slices land behind the FFI the target grows rather than shrinks.)
 
 `strip_include_prefix = "/src"` exposes the header at `#include "ffi/sipi_ffi.h"`
-self-sufficiently (ADR-0003), the same shape as `//src/shttps/util`. Siblings
+self-sufficiently (ADR-0003), the same shape as `//src/util`. Siblings
 within the package use the bare quote form (`#include "sipi_ffi.h"`).
 
 The target hosts the C++ side of the seam; its `srcs` grow as the engine is
@@ -90,19 +90,19 @@ cc_library(
         # shttps::Parsing::getBestFileMimetype / getFileMimetype (the libmagic
         # MIME sniff) + shttps::urldecode. Generic SIPI-domain utilities, not the
         # HTTP transport, so this is no SIPI -> shttps-transport coupling.
-        "//src/shttps/util",
+        "//src/util",
         # The connection-less LuaServer + RequestContext the SipiLua `sipi.*`
-        # bindings install into. //src/shttps/lua is transport-free (transport
+        # bindings install into. //src/scripting:scripting is transport-free (transport
         # deps lua, never the reverse), so this is no SIPI -> shttps-transport
         # coupling — it is exactly the dep the seam needs to reach the
         # Lua runtime connection-less.
-        "//src/shttps/lua",
+        "//src/scripting:scripting",
         # The Lua C API the SipiImage bindings call directly (lua_State, luaL_*).
         "@lua",
         # sipi_init installs shttps::sqliteGlobals into the engine Lua config, so
         # configured Lua routes get the `db` (sqlite) bindings — same installer the
-        # oracle server registers. Transport-free, like //src/shttps/lua.
-        "//src/shttps/lua_sqlite:lua_sqlite",
+        # oracle server registers. Transport-free, like //src/scripting:scripting.
+        "//src/scripting:lua_sqlite",
         # startup.cpp's LibraryInitialiser initialises these directly (curl_global_init,
         # Exiv2::XmpParser). Both also arrive transitively via //src:engine; named
         # here because startup.cpp includes their headers directly.

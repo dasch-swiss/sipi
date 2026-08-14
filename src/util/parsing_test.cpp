@@ -1,7 +1,7 @@
 #include "gtest/gtest.h"
 
-#include "shttps/util/Parsing.h"
-#include "shttps/util/Error.h"
+#include "util/Parsing.h"
+#include "util/Error.h"
 
 TEST(Parsing, ParseIntValid)
 {

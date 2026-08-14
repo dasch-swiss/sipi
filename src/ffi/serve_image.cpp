@@ -32,8 +32,8 @@
 #include "metadata/icc.h"
 #include "observability/metrics.h"
 #include "populate_from_image.h"
-#include "shttps/util/Parsing.h"
-#include "shttps/util/UrlDecode.h"
+#include "util/Parsing.h"
+#include "util/UrlDecode.h"
 
 namespace Sipi::ffi {
 namespace {

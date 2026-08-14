@@ -20,7 +20,7 @@
 
 #include "ChunkReader.h"
 #include "Connection.h"
-#include "shttps/util/Error.h"
+#include "util/Error.h"
 
 using namespace std;
 

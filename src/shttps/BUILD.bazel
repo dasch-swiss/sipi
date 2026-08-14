@@ -11,7 +11,7 @@ module boundary is a build-graph fact rather than a naming convention:
   - `lua_sqlite/`— SQLite-backed Lua bindings
 
 This package holds the `transport/` layer (`:shttps_headers` + `:shttps`).
-`lua/` is its own `//src/shttps/lua` package: the request_context decoupling
+`lua/` is its own `//src/scripting:scripting` package: the request_context decoupling
 severed `LuaServer`'s dependency on `shttps::Connection`, so the edge is now
 one-directional — `transport` depends on `lua` (Server constructs a LuaServer
 per request), never the reverse, which also lets `//src/ffi` link `lua`
@@ -54,8 +54,8 @@ package(default_visibility = [
 # include forms: external consumers reach the headers as
 # `#include "shttps/transport/X.h"` (prefix form); same-directory siblings keep
 # working as `#include "X.h"` (the `transport` entry puts the module dir on the
-# quote path). Server.h includes `#include "shttps/lua/LuaServer.h"` and
-# `lua.hpp`, so the `//src/shttps/lua` package + `@lua` are deps here to carry
+# quote path). Server.h includes `#include "scripting/LuaServer.h"` and
+# `lua.hpp`, so the `//src/scripting:scripting` package + `@lua` are deps here to carry
 # those headers to every consumer of this surface.
 cc_library(
     name = "shttps_headers",
@@ -71,9 +71,13 @@ cc_library(
         # Generic levelled-logging primitive; visibility-allowlisted for
         # this package as a shared support library.
         "//src/logging:logging",
-        "//src/shttps/util",
-        # Server.h pulls in shttps/lua/LuaServer.h.
-        "//src/shttps/lua",
+        # INTERIM REVERSE EDGE (transport -> extracted module) — dies in Phase 7.
+        # After the Phase 4 decomposition, util/scripting live outside src/shttps;
+        # only the retained oracle transport still depends back on them, and both
+        # edges disappear when this package is deleted with the oracle.
+        "//src/util",
+        # Server.h pulls in scripting/LuaServer.h. INTERIM REVERSE EDGE — dies in Phase 7.
+        "//src/scripting:scripting",
         # Server.h includes lua.hpp directly.
         "@lua",
         "@openssl//:crypto",
@@ -96,12 +100,13 @@ cc_library(
     deps = [
         ":shttps_headers",
         # Generic SIPI-domain utilities; the transport sources here
-        # `#include "shttps/util/X.h"`.
-        "//src/shttps/util",
+        # `#include "util/X.h"`. INTERIM REVERSE EDGE — dies in Phase 7.
+        "//src/util",
         # Server constructs a LuaServer per request and registers the
         # LuaSetGlobalsFunc installers; the Lua runtime is its own package
-        # since the request_context decoupling (transport -> lua, one-way).
-        "//src/shttps/lua",
+        # since the request_context decoupling (transport -> scripting, one-way).
+        # INTERIM REVERSE EDGE — dies in Phase 7.
+        "//src/scripting:scripting",
         # Server.cpp names the pool's worker threads for the Tracy timeline
         # (`tracy::SetThreadName`). Inert unless `--config=tracy`.
         "@tracy//:tracy",
@@ -121,7 +126,7 @@ cc_library(
 # inputs live. The cross-package source — //src's `iiif_handler.cpp` — is
 # reached via `exports_files` in `src/BUILD.bazel`, with its companion
 # header surfaced via `//src:iiif_handler_hdrs`. `Error`'s exception types
-# are referenced by the compiled cpps; `Error` lives in `//src/shttps/util`,
+# are referenced by the compiled cpps; `Error` lives in `//src/util`,
 # whose archive supplies both its header and object code under the fuzz
 # instrumentation.
 #
@@ -142,7 +147,7 @@ cc_library(
     visibility = ["//fuzz/handlers:__pkg__"],
     deps = [
         ":shttps_headers",
-        "//src/shttps/util",
+        "//src/util",
         "@openssl//:crypto",
         "@openssl//:ssl",
         "//src:iiif_handler_hdrs",
@@ -151,7 +156,7 @@ cc_library(
 
 # Co-located unit tests for the transport module (ADR-0003): the
 # SocketControl/ThreadControl pair. Depends only on the transport+lua core
-# archive, not the whole `:sipi_lib`. (urldecode moved to //src/shttps/util.)
+# archive, not the whole `:sipi_lib`. (urldecode moved to //src/util.)
 cc_test(
     name = "transport_test",
     srcs = [

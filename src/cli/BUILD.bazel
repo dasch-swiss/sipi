@@ -32,7 +32,7 @@ cc_library(
         "//src:sipi_lib",
         "//src/cli/commands:commands",
         # cli_app.cpp registers the SQLite-backed Lua bindings (sqliteGlobals).
-        "//src/shttps/lua_sqlite",
+        "//src/scripting:lua_sqlite",
         # The sipi_cli_main declaration (the extern "C" seam contract).
         "//src/ffi:sipi_ffi",
         # cli_app.cpp's `#include <CLI/CLI.hpp>` — the sole CLI11 consumer.

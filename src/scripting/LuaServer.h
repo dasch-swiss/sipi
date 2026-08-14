@@ -17,8 +17,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "shttps/lua/request_context.h"
-#include "shttps/util/Error.h"
+#include "scripting/request_context.h"
+#include "util/Error.h"
 
 #include "lua.hpp"
 

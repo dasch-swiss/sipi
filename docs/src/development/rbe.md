@@ -322,7 +322,7 @@ Measured from the `--profile` JSON for the regular build (fastbuild):
 - **amd64 critical path** is dominated (~87%) by `Tar src/ffmpeg_layer_amd64.tar`
   (≈21.6 min cold under `--remote_download_toplevel`; mitigated by
   `--remote_download_minimal`). The slowest translation units are
-  `shttps/util/Parsing.cpp` (65–71s) and `protobuf/descriptor.cc` (48–59s).
+  `util/Parsing.cpp` (65–71s) and `protobuf/descriptor.cc` (48–59s).
 - **Toolchain bootstrap** is ~18% of total action-seconds. The exec-config toolchain
   (exec=linux-x86_64) is shared across all three legs. On a warm CAS all legs reuse it;
   on a cold run they race.

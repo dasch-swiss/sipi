@@ -1,4 +1,4 @@
-"""shttps/jwt — minimal JWT (JWS) verify/sign over OpenSSL + jansson.
+"""jwt — minimal JWT (JWS) verify/sign over OpenSSL + jansson.
 
 A self-contained C leaf: `jwt.h` is an `extern "C"` surface consumed by the
 Lua `server.jwt` bindings; `jwt.c` implements signing/verification on
@@ -6,12 +6,14 @@ OpenSSL's EVP/HMAC/PEM APIs and serialises claims with jansson. No shttps
 dependency, so it links cleanly on its own.
 
 `strip_include_prefix = "/src"` exposes the header at the path-prefixed
-form `#include "shttps/jwt/jwt.h"` (ADR-0003) self-sufficiently.
+form `#include "jwt/jwt.h"` (ADR-0003) self-sufficiently.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
-package(default_visibility = ["//src:__subpackages__"])
+# Only the Lua runtime binds the `server.jwt` functions, so the visibility is
+# narrowed to the scripting package (was package-wide under //src/shttps).
+package(default_visibility = ["//src/scripting:__pkg__"])
 
 cc_library(
     name = "jwt",

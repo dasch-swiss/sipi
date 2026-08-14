@@ -1,0 +1,73 @@
+"""src/scripting — the connection-less Lua runtime (LuaServer + the sqlite bindings).
+
+Extracted out of `src/shttps/` (Phase 4 of the agent-legibility remediation,
+DEV-6968) so that no production file includes anything under `src/shttps/` and
+the oracle transport's removal becomes a pure deletion.
+
+`LuaServer` drives the Lua VM behind the preflight hook, the configured Lua
+routes, and the init script. Since the request_context decoupling it names no
+`shttps::Connection`: it reads request fields and writes the response through the
+connection-less `RequestContext` / `ResponseSink` seam (`request_context.h`), so
+it carries no transport dependency and builds below `//src/ffi`. The retained
+oracle `transport` depends on `scripting`, never the reverse (an interim reverse
+edge that dies with the oracle in Phase 7).
+
+The C++ symbols stay in `namespace shttps` (only the file/package location
+moved, not the API). `strip_include_prefix = "/src"` exposes the headers at
+`#include "scripting/LuaServer.h"` / `"scripting/request_context.h"` /
+`"scripting/LuaSqlite.h"` (ADR-0003); siblings use the bare quote form.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//src:__subpackages__"])
+
+# The Lua interpreter. Used broadly across production (`//src/ffi`) and, until
+# Phase 7, the oracle transport (`//src/shttps/transport`), so its visibility
+# stays package-wide.
+cc_library(
+    name = "scripting",
+    srcs = ["LuaServer.cpp"],
+    hdrs = [
+        "LuaServer.h",
+        "request_context.h",
+    ],
+    strip_include_prefix = "/src",
+    deps = [
+        # Levelled logging primitive (server.log).
+        "//src/logging:logging",
+        # server.jwt bindings (generate/decode).
+        "//src/jwt",
+        # Generic helpers: Error, Global, Parsing, Hash.
+        "//src/util",
+        # server.http client (CurlConnection).
+        "@curl",
+        # server.table_to_json / json_to_table.
+        "@jansson//:jansson",
+        # the Lua C API.
+        "@lua",
+        # server.uuid* — r-lyeh's base62 UUID (DSP IRI scheme).
+        "@sole//:sole",
+    ],
+)
+
+# The Lua `server.db` bindings backed by SQLite (`sqliteGlobals` is a
+# `LuaSetGlobalsFunc`). Only the two production Lua-config installers use it, so
+# its visibility is narrowed to those packages.
+cc_library(
+    name = "lua_sqlite",
+    srcs = ["LuaSqlite.cpp"],
+    hdrs = ["LuaSqlite.h"],
+    strip_include_prefix = "/src",
+    visibility = [
+        "//src/cli:__pkg__",
+        "//src/ffi:__pkg__",
+    ],
+    deps = [
+        # LuaServer.h surface + its link symbols (connection-less since the
+        # request_context decoupling).
+        ":scripting",
+        "@lua",
+        "@sqlite3",
+    ],
+)

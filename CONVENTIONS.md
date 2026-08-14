@@ -110,7 +110,10 @@ is scoped `ffi` only when the seam mechanism itself is the point.
 | `metadata` | `src/metadata/` | EXIF, IPTC, XMP, ICC profile handling |
 | `iiifparser` | `src/iiifparser/` | IIIF URL parsing (identifier, region, size, rotation, quality, format) |
 | `handlers` | `src/handlers/` | HTTP request handlers |
-| `shttps` | `src/shttps/` | Internal HTTP framework (threading, TLS, connection pooling, JWT) |
+| `shttps` | `src/shttps/` | Internal HTTP transport framework (threading, TLS, connection pooling); oracle-only after the decomposition |
+| `scripting` | `src/scripting/` | Connection-less Lua runtime: `LuaServer` + `request_context.h` + the `server.db` sqlite bindings |
+| `util` | `src/util/` | Generic SIPI-domain helpers: MIME/string parsing, file hashing, the shttps error/global types |
+| `jwt` | `src/jwt/` | JWT (JWS) sign/verify leaf over OpenSSL + jansson |
 | `cache` | `src/SipiCache.{h,cpp}` | File-based LRU cache with dual-limit eviction |
 | `memory-budget` | `src/SipiMemoryBudget.{h,cpp}` | Lock-free decode memory budget |
 | `memory` | `bazel/mimalloc.BUILD.bazel`, `_ALLOCATOR` in `src/cli-rs/BUILD.bazel`, `tools/allocator-replay/` | Process memory behavior: the production allocator, RSS/retention measurement |

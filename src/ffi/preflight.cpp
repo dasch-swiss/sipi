@@ -11,8 +11,8 @@
 
 #include "ffi/lua_config.h"
 #include "logging/logger.h"
-#include "shttps/lua/LuaServer.h"
-#include "shttps/lua/request_context.h"
+#include "scripting/LuaServer.h"
+#include "scripting/request_context.h"
 
 namespace Sipi::ffi {
 namespace {

@@ -19,7 +19,7 @@
 #define SIPI_FFI_RUN_LUA_ROUTE_H
 
 #include "ffi/sipi_ffi.h"// SipiResponse
-#include "shttps/lua/request_context.h"// shttps::RequestContext
+#include "scripting/request_context.h"// shttps::RequestContext
 
 namespace Sipi::ffi {
 

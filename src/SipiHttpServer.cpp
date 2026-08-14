@@ -26,9 +26,9 @@
 #include <vector>
 
 #include "shttps/transport/Connection.h"
-#include "shttps/lua/LuaServer.h"
-#include "shttps/util/Parsing.h"
-#include "shttps/util/UrlDecode.h"
+#include "scripting/LuaServer.h"
+#include "util/Parsing.h"
+#include "util/UrlDecode.h"
 
 #include "SipiError.h"
 #include "SipiImage.h"
@@ -51,7 +51,7 @@
 #include "ffi/engine_context.h"
 #include "ffi/preflight.h"
 #include "ffi/sipi_ffi.h"
-#include "shttps/lua/request_context.h"
+#include "scripting/request_context.h"
 #include "shttps/transport/connection_request_context.h"
 #include "handlers/iiif_handler.h"
 #include "jansson.h"

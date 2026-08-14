@@ -16,7 +16,7 @@
 
 #include <curl/curl.h>
 
-#include "shttps/util/Error.h"// shttps::Error
+#include "util/Error.h"// shttps::Error
 #include "formats/SipiIOTiff.h"// Sipi::SipiIOTiff::initLibrary
 #include "metadata/xmp.h"// Sipi::xmplock_func, Sipi::xmp_mutex
 

@@ -229,7 +229,7 @@ cc_library(
 # dependency cycle — `:sipi_lib` deps `:sipi_ffi`, so `:sipi_ffi` cannot reach
 # the engine while it lives inside `:sipi_lib`. The engine *source* is free of
 # the shttps HTTP transport (no `shttps::Connection`/`Server` include — only
-# `shttps/util`). The one remaining transitive shttps link edge enters through
+# `util`). The one remaining transitive shttps link edge enters through
 # `:sipi_top` / //src/metadata / //src/observability, a pre-existing layering
 # leak those packages already carry (their BUILD comments note it; tracked
 # under DEV-6353), not a new coupling introduced here. The `rust_binary`
@@ -318,7 +318,7 @@ cc_library(
     # The transport-free subset of :sipi_lib's deps: shttps transport
     # (//src/shttps:shttps), Lua (@lua) and SQLite (@sqlite3) are dropped — no
     # engine TU includes them. Everything else (codecs, metadata, observability,
-    # shttps/util) is retained.
+    # util) is retained.
     deps = [
         ":sipi_generated_hdrs",
         ":sipi_top",
@@ -326,7 +326,7 @@ cc_library(
         "//src/logging:logging",
         "//src/metadata:metadata",
         "//src/observability:observability",
-        "//src/shttps/util",
+        "//src/util",
         "@lcms2//:lcms2",
         "@exiv2//:exiv2",
         "@libexpat",

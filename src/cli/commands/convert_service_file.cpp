@@ -16,8 +16,8 @@
 #include "SipiImage.h"
 #include "metadata/essentials.h"
 #include "metadata/icc.h"
-#include "shttps/util/Hash.h"
-#include "shttps/util/Parsing.h"
+#include "util/Hash.h"
+#include "util/Parsing.h"
 
 namespace Sipi::cli {
 

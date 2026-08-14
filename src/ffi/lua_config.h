@@ -29,7 +29,7 @@
 #include <string>
 #include <vector>
 
-#include "shttps/lua/LuaServer.h"// shttps::LuaServer, LuaSetGlobalsFunc, RequestContext
+#include "scripting/LuaServer.h"// shttps::LuaServer, LuaSetGlobalsFunc, RequestContext
 
 namespace Sipi::ffi {
 
