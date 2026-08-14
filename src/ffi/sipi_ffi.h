@@ -451,6 +451,104 @@ typedef struct
   uint64_t decode_estimate_bytes;
 } SipiServeTimings;
 
+#ifdef __cplusplus
+/* Lock-step ABI guard for the hand-mirrored seam types — paired with the Rust
+ * `offset_of!`/`size_of` tests and `const _` enum asserts in
+ * `src/server-rs/src/ffi.rs`. A field reorder / width change / insertion, or a
+ * one-sided enum renumber, breaks one side of the pair before it becomes silent
+ * UB across the boundary. (`SipiServeTimings`, `SipiImageErrorReport`,
+ * `SipiServerConfig`, and `SipiMetricsSnapshot` are guarded next to their own
+ * definitions.) LP64 on every supported target. */
+static_assert(sizeof(void *) == 8, "seam ABI assumes an LP64 target");
+
+/* Request/size/quality/format + permission enum discriminants. */
+static_assert(SIPI_REGION_FULL == 0, "SipiRegionType drift");
+static_assert(SIPI_REGION_SQUARE == 1, "SipiRegionType drift");
+static_assert(SIPI_REGION_COORDS == 2, "SipiRegionType drift");
+static_assert(SIPI_REGION_PERCENTS == 3, "SipiRegionType drift");
+static_assert(SIPI_SIZE_UNDEFINED == 0, "SipiSizeType drift");
+static_assert(SIPI_SIZE_FULL == 1, "SipiSizeType drift");
+static_assert(SIPI_SIZE_PIXELS_XY == 2, "SipiSizeType drift");
+static_assert(SIPI_SIZE_PIXELS_X == 3, "SipiSizeType drift");
+static_assert(SIPI_SIZE_PIXELS_Y == 4, "SipiSizeType drift");
+static_assert(SIPI_SIZE_MAXDIM == 5, "SipiSizeType drift");
+static_assert(SIPI_SIZE_PERCENTS == 6, "SipiSizeType drift");
+static_assert(SIPI_SIZE_REDUCE == 7, "SipiSizeType drift");
+static_assert(SIPI_QUALITY_DEFAULT == 0, "SipiQualityType drift");
+static_assert(SIPI_QUALITY_COLOR == 1, "SipiQualityType drift");
+static_assert(SIPI_QUALITY_GRAY == 2, "SipiQualityType drift");
+static_assert(SIPI_QUALITY_BITONAL == 3, "SipiQualityType drift");
+static_assert(SIPI_FORMAT_UNSUPPORTED == 0, "SipiFormatType drift");
+static_assert(SIPI_FORMAT_JPG == 1, "SipiFormatType drift");
+static_assert(SIPI_FORMAT_TIF == 2, "SipiFormatType drift");
+static_assert(SIPI_FORMAT_PNG == 3, "SipiFormatType drift");
+static_assert(SIPI_FORMAT_GIF == 4, "SipiFormatType drift");
+static_assert(SIPI_FORMAT_JP2 == 5, "SipiFormatType drift");
+static_assert(SIPI_FORMAT_PDF == 6, "SipiFormatType drift");
+static_assert(SIPI_FORMAT_WEBP == 7, "SipiFormatType drift");
+static_assert(SIPI_ALLOW == 0, "SipiPermType drift");
+static_assert(SIPI_LOGIN == 1, "SipiPermType drift");
+static_assert(SIPI_CLICKTHROUGH == 2, "SipiPermType drift");
+static_assert(SIPI_KIOSK == 3, "SipiPermType drift");
+static_assert(SIPI_EXTERNAL == 4, "SipiPermType drift");
+static_assert(SIPI_RESTRICT == 5, "SipiPermType drift");
+static_assert(SIPI_DENY == 6, "SipiPermType drift");
+
+/* SipiResponse — void* + five callback pointers. */
+static_assert(sizeof(SipiResponse) == 48, "SipiResponse size drifted from src/server-rs/src/ffi.rs");
+static_assert(offsetof(SipiResponse, ctx) == 0, "SipiResponse layout drift");
+static_assert(offsetof(SipiResponse, set_status) == 8, "SipiResponse layout drift");
+static_assert(offsetof(SipiResponse, add_header) == 16, "SipiResponse layout drift");
+static_assert(offsetof(SipiResponse, write) == 24, "SipiResponse layout drift");
+static_assert(offsetof(SipiResponse, send_file) == 32, "SipiResponse layout drift");
+static_assert(offsetof(SipiResponse, cancelled) == 40, "SipiResponse layout drift");
+
+/* SipiIiifParams — the flattened IIIF params (also nested in SipiServeRequest). */
+static_assert(sizeof(SipiIiifParams) == 72, "SipiIiifParams size drifted from src/server-rs/src/ffi.rs");
+static_assert(offsetof(SipiIiifParams, region_type) == 0, "SipiIiifParams layout drift");
+static_assert(offsetof(SipiIiifParams, region) == 4, "SipiIiifParams layout drift");
+static_assert(offsetof(SipiIiifParams, size_type) == 20, "SipiIiifParams layout drift");
+static_assert(offsetof(SipiIiifParams, size_upscaling) == 24, "SipiIiifParams layout drift");
+static_assert(offsetof(SipiIiifParams, size_percent) == 28, "SipiIiifParams layout drift");
+static_assert(offsetof(SipiIiifParams, size_reduce) == 32, "SipiIiifParams layout drift");
+static_assert(offsetof(SipiIiifParams, size_nx) == 40, "SipiIiifParams layout drift");
+static_assert(offsetof(SipiIiifParams, size_ny) == 48, "SipiIiifParams layout drift");
+static_assert(offsetof(SipiIiifParams, rotation) == 56, "SipiIiifParams layout drift");
+static_assert(offsetof(SipiIiifParams, rotation_mirror) == 60, "SipiIiifParams layout drift");
+static_assert(offsetof(SipiIiifParams, quality_type) == 64, "SipiIiifParams layout drift");
+static_assert(offsetof(SipiIiifParams, format_type) == 68, "SipiIiifParams layout drift");
+
+/* SipiServeRequest — pointers + the nested SipiIiifParams + the report channel. */
+static_assert(sizeof(SipiServeRequest) == 168, "SipiServeRequest size drifted from src/server-rs/src/ffi.rs");
+static_assert(offsetof(SipiServeRequest, resolved_path) == 0, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, prefix) == 8, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, identifier) == 16, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, client_ip) == 24, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, params) == 32, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, restricted_size) == 104, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, watermark_path) == 112, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, forwarded_proto) == 120, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, forwarded_host) == 128, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, request_uri) == 136, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, is_head) == 144, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, report_error) == 152, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, report_ctx) == 160, "SipiServeRequest layout drift");
+
+/* SipiStrPair — the header/cookie name/value pair. */
+static_assert(sizeof(SipiStrPair) == 16, "SipiStrPair size drifted from src/server-rs/src/ffi.rs");
+static_assert(offsetof(SipiStrPair, name) == 0, "SipiStrPair layout drift");
+static_assert(offsetof(SipiStrPair, value) == 8, "SipiStrPair layout drift");
+
+/* SipiImageDims — six uint32_t; 4-aligned, unlike the pointer-bearing structs. */
+static_assert(sizeof(SipiImageDims) == 24, "SipiImageDims size drifted from src/server-rs/src/ffi.rs");
+static_assert(offsetof(SipiImageDims, width) == 0, "SipiImageDims layout drift");
+static_assert(offsetof(SipiImageDims, height) == 4, "SipiImageDims layout drift");
+static_assert(offsetof(SipiImageDims, numpages) == 8, "SipiImageDims layout drift");
+static_assert(offsetof(SipiImageDims, tile_width) == 12, "SipiImageDims layout drift");
+static_assert(offsetof(SipiImageDims, tile_height) == 16, "SipiImageDims layout drift");
+static_assert(offsetof(SipiImageDims, clevels) == 20, "SipiImageDims layout drift");
+#endif
+
 /* ── Entry points ───────────────────────────────────────────────────────────
  * All return 0 on success / an error code on failure; none let a C++ exception
  * cross the boundary. */
