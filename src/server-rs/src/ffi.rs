@@ -101,6 +101,40 @@ pub enum SipiFormatType {
     Webp = 7,
 }
 
+// Compile-time value guard for the IIIF request enums — paired with the C++
+// `static_assert`s in `sipi_ffi.h`. Each discriminant is the seam contract; a
+// one-sided renumber (here or in the header) breaks this side's assert before it
+// can silently mis-tag a region/size/quality/format across the boundary.
+const _: () = {
+    assert!(SipiRegionType::Full as isize == 0);
+    assert!(SipiRegionType::Square as isize == 1);
+    assert!(SipiRegionType::Coords as isize == 2);
+    assert!(SipiRegionType::Percents as isize == 3);
+
+    assert!(SipiSizeType::Undefined as isize == 0);
+    assert!(SipiSizeType::Full as isize == 1);
+    assert!(SipiSizeType::PixelsXy as isize == 2);
+    assert!(SipiSizeType::PixelsX as isize == 3);
+    assert!(SipiSizeType::PixelsY as isize == 4);
+    assert!(SipiSizeType::Maxdim as isize == 5);
+    assert!(SipiSizeType::Percents as isize == 6);
+    assert!(SipiSizeType::Reduce as isize == 7);
+
+    assert!(SipiQualityType::Default as isize == 0);
+    assert!(SipiQualityType::Color as isize == 1);
+    assert!(SipiQualityType::Gray as isize == 2);
+    assert!(SipiQualityType::Bitonal as isize == 3);
+
+    assert!(SipiFormatType::Unsupported as isize == 0);
+    assert!(SipiFormatType::Jpg as isize == 1);
+    assert!(SipiFormatType::Tif as isize == 2);
+    assert!(SipiFormatType::Png as isize == 3);
+    assert!(SipiFormatType::Gif as isize == 4);
+    assert!(SipiFormatType::Jp2 as isize == 5);
+    assert!(SipiFormatType::Pdf as isize == 6);
+    assert!(SipiFormatType::Webp as isize == 7);
+};
+
 /// Flattened IIIF region/size/rotation/quality.format — mirrors `SipiIiifParams`
 /// in `sipi_ffi.h`. `c_int` ⇔ C `int`, `usize` ⇔ C `size_t`, `f32` ⇔ C `float`.
 #[repr(C)]
@@ -251,6 +285,19 @@ pub enum SipiPermType {
     Restrict = 5,
     Deny = 6,
 }
+
+// Compile-time value guard for the preflight permission enum — paired with the
+// C++ `static_assert`s in `sipi_ffi.h`. A one-sided renumber breaks this assert
+// before a permission can be silently misread across the boundary.
+const _: () = {
+    assert!(SipiPermType::Allow as isize == 0);
+    assert!(SipiPermType::Login as isize == 1);
+    assert!(SipiPermType::Clickthrough as isize == 2);
+    assert!(SipiPermType::Kiosk as isize == 3);
+    assert!(SipiPermType::External as isize == 4);
+    assert!(SipiPermType::Restrict as isize == 5);
+    assert!(SipiPermType::Deny as isize == 6);
+};
 
 /// A name/value pair passed to the request-context builder (mirrors `SipiStrPair`).
 #[repr(C)]
@@ -1631,5 +1678,116 @@ mod metrics_snapshot_layout {
             offset_of!(SipiMetricsSnapshot, decode_memory_used_bytes),
             152
         );
+    }
+}
+
+// Lock-step layout guards for the remaining hand-mirrored seam structs — paired
+// with the C++ `static_assert` block in `src/ffi/sipi_ffi.h`. The `size_of`
+// literal + `offset_of!` asserts catch a field reorder, width change, or
+// insertion on either side before it becomes silent UB across the boundary. LP64
+// on every supported target.
+#[cfg(test)]
+mod response_layout {
+    use super::SipiResponse;
+    use std::mem::{align_of, offset_of, size_of};
+
+    #[test]
+    fn repr_c_matches_sipi_ffi_h() {
+        assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
+        assert_eq!(align_of::<SipiResponse>(), 8);
+        assert_eq!(size_of::<SipiResponse>(), 48);
+        assert_eq!(offset_of!(SipiResponse, ctx), 0);
+        assert_eq!(offset_of!(SipiResponse, set_status), 8);
+        assert_eq!(offset_of!(SipiResponse, add_header), 16);
+        assert_eq!(offset_of!(SipiResponse, write), 24);
+        assert_eq!(offset_of!(SipiResponse, send_file), 32);
+        assert_eq!(offset_of!(SipiResponse, cancelled), 40);
+    }
+}
+
+#[cfg(test)]
+mod iiif_params_layout {
+    use super::SipiIiifParams;
+    use std::mem::{align_of, offset_of, size_of};
+
+    #[test]
+    fn repr_c_matches_sipi_ffi_h() {
+        assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
+        assert_eq!(align_of::<SipiIiifParams>(), 8);
+        assert_eq!(size_of::<SipiIiifParams>(), 72);
+        assert_eq!(offset_of!(SipiIiifParams, region_type), 0);
+        assert_eq!(offset_of!(SipiIiifParams, region), 4);
+        assert_eq!(offset_of!(SipiIiifParams, size_type), 20);
+        assert_eq!(offset_of!(SipiIiifParams, size_upscaling), 24);
+        assert_eq!(offset_of!(SipiIiifParams, size_percent), 28);
+        assert_eq!(offset_of!(SipiIiifParams, size_reduce), 32);
+        assert_eq!(offset_of!(SipiIiifParams, size_nx), 40);
+        assert_eq!(offset_of!(SipiIiifParams, size_ny), 48);
+        assert_eq!(offset_of!(SipiIiifParams, rotation), 56);
+        assert_eq!(offset_of!(SipiIiifParams, rotation_mirror), 60);
+        assert_eq!(offset_of!(SipiIiifParams, quality_type), 64);
+        assert_eq!(offset_of!(SipiIiifParams, format_type), 68);
+    }
+}
+
+#[cfg(test)]
+mod serve_request_layout {
+    use super::SipiServeRequest;
+    use std::mem::{align_of, offset_of, size_of};
+
+    #[test]
+    fn repr_c_matches_sipi_ffi_h() {
+        assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
+        assert_eq!(align_of::<SipiServeRequest>(), 8);
+        assert_eq!(size_of::<SipiServeRequest>(), 168);
+        assert_eq!(offset_of!(SipiServeRequest, resolved_path), 0);
+        assert_eq!(offset_of!(SipiServeRequest, prefix), 8);
+        assert_eq!(offset_of!(SipiServeRequest, identifier), 16);
+        assert_eq!(offset_of!(SipiServeRequest, client_ip), 24);
+        // `params` (SipiIiifParams, size 72) is guarded field-by-field by
+        // `iiif_params_layout`; here we pin only where it sits in the request.
+        assert_eq!(offset_of!(SipiServeRequest, params), 32);
+        assert_eq!(offset_of!(SipiServeRequest, restricted_size), 104);
+        assert_eq!(offset_of!(SipiServeRequest, watermark_path), 112);
+        assert_eq!(offset_of!(SipiServeRequest, forwarded_proto), 120);
+        assert_eq!(offset_of!(SipiServeRequest, forwarded_host), 128);
+        assert_eq!(offset_of!(SipiServeRequest, request_uri), 136);
+        assert_eq!(offset_of!(SipiServeRequest, is_head), 144);
+        assert_eq!(offset_of!(SipiServeRequest, report_error), 152);
+        assert_eq!(offset_of!(SipiServeRequest, report_ctx), 160);
+    }
+}
+
+#[cfg(test)]
+mod image_dims_layout {
+    use super::SipiImageDims;
+    use std::mem::{align_of, offset_of, size_of};
+
+    #[test]
+    fn repr_c_matches_sipi_ffi_h() {
+        // All fields are u32, so this struct is 4-aligned (unlike the others).
+        assert_eq!(align_of::<SipiImageDims>(), 4);
+        assert_eq!(size_of::<SipiImageDims>(), 24);
+        assert_eq!(offset_of!(SipiImageDims, width), 0);
+        assert_eq!(offset_of!(SipiImageDims, height), 4);
+        assert_eq!(offset_of!(SipiImageDims, numpages), 8);
+        assert_eq!(offset_of!(SipiImageDims, tile_width), 12);
+        assert_eq!(offset_of!(SipiImageDims, tile_height), 16);
+        assert_eq!(offset_of!(SipiImageDims, clevels), 20);
+    }
+}
+
+#[cfg(test)]
+mod str_pair_layout {
+    use super::SipiStrPair;
+    use std::mem::{align_of, offset_of, size_of};
+
+    #[test]
+    fn repr_c_matches_sipi_ffi_h() {
+        assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
+        assert_eq!(align_of::<SipiStrPair>(), 8);
+        assert_eq!(size_of::<SipiStrPair>(), 16);
+        assert_eq!(offset_of!(SipiStrPair, name), 0);
+        assert_eq!(offset_of!(SipiStrPair, value), 8);
     }
 }

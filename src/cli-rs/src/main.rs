@@ -111,6 +111,14 @@ fn main() -> ExitCode {
 mod allocator {
     use std::ffi::c_void;
 
+    // These `mi_*` / `sipi_mi_stats_read` symbols are declared here, inside the
+    // `#[cfg(feature = "mimalloc")]` module, rather than in the shell's shared
+    // seam bindings (`sipi::ffi`): the block is valid only when mimalloc is
+    // actually linked, and colocating it under the same feature gate makes the
+    // declarations vanish in lock-step with the dep (ASan / non-Linux builds
+    // link no mimalloc, so nothing here must resolve). Kept out of a central FFI
+    // file on purpose — a stray, always-compiled declaration would reference
+    // symbols that need not exist. See docs/adr/0019-mimalloc-production-allocator.md.
     extern "C" {
         fn mi_version() -> core::ffi::c_int;
         fn mi_is_in_heap_region(p: *const c_void) -> bool;
