@@ -20,33 +20,38 @@ The canonical SIPI glossary is in [UBIQUITOUS_LANGUAGE.md](./UBIQUITOUS_LANGUAGE
 
 Prefer the glossary's canonical terms over the variant spellings in older code.
 
-## Internal module: shttps
+## The HTTP server: Rust shell over the C++ engine
 
-`src/shttps/` is an internal HTTP-framework module — multithreaded HTTP/HTTPS server, route registration, per-request embedded Lua scripting, JWT helpers. It is **not** a peer bounded context. SIPI subclasses `shttps::Server` (`Sipi::SipiHttpServer`), registers `shttps::RequestHandler`s (`iiif_handler`, `file_handler`), and runs SIPI's three Lua entry points inside the request-scoped `shttps::LuaServer`.
+The HTTP server is the Rust shell (`//src/cli-rs:sipi` over the `//src/server-rs:lib`
+library, axum-based), which drives the C++ image engine through the FFI seam. There
+is no C++ HTTP server: the retained `shttps` transport and `SipiHttpServer` — kept
+in-tree through the strangler migration as the differential-parity oracle — have
+been removed ([ADR-0020](docs/adr/0020-oracle-removal.md), which completes the
+migration [ADR-0013](docs/adr/0013-shttps-as-internal-module.md) prepared). The
+Rust shell owns the connection pool and its knobs (`max_waiting`, `queue_timeout`,
+`nthreads`), route registration (axum for built-in endpoints, Lua for scripted
+routes per [ADR-0017](docs/adr/0017-extensibility-lua-and-rust.md)), and IIIF URI
+parsing (`src/server-rs/src/iiif.rs`).
 
-Module API surface (the four seam types — the documented strangler seam, ADR-0013): `Server`, `Connection`, `RequestHandler`, `LuaServer`. Full module documentation in [`src/shttps/README.md`](./src/shttps/README.md).
+## Extracted domain modules (namespace `shttps`)
 
-**Dependency direction:** strictly SIPI → shttps. shttps depends on the rest of `src/` only through `//src/logging:logging` — a generic levelled-logging primitive (not domain code), visibility-allowlisted as a shared support library. Enforcement: Bazel `visibility`; broader Bazel `--features=layering_check` rollout tracked under DEV-6353.
+The C++ domain modules that used to live under `src/shttps/` survive the oracle
+removal as ordinary top-level packages:
 
-**Rust shell + retained oracle:** the HTTP server is the Rust shell (`//src/cli-rs:sipi` over the `//src/server-rs:lib` library), which drives the C++ image engine through the FFI seam. The C++ `shttps` transport + `SipiHttpServer` are retained in-tree as the differential-parity oracle — the reference binary the Rust shell is diffed against — and are removed after deploy. See [ADR-0013](docs/adr/0013-shttps-as-internal-module.md).
+- `src/util/` — generic utilities (`shttps::Hash` / `HashType`, `shttps::Parsing`,
+  `shttps::Error`, `shttps::Global`, `shttps::urldecode`).
+- `src/jwt/` — the JWT verify/sign leaf.
+- `src/scripting/` — the connection-less Lua runtime (`shttps::LuaServer` +
+  `request_context.h` + the `server.db` sqlite bindings), the C++ side of SIPI's
+  three Lua entry points.
 
-### Cross-module naming gotchas (kept verbatim from prior docs)
+Their C++ symbols keep `namespace shttps` (only the file/package location moved),
+so a `shttps::` qualifier in code refers to one of these surviving modules, not to
+a deleted HTTP transport. `src/shttps/` no longer exists.
 
-- shttps' **`RequestHandler`** is the C++ function-pointer that dispatches a request. SIPI's **Route handler** (in `UBIQUITOUS_LANGUAGE.md`) is a *Lua script* bound to a URL pattern. They are not the same thing: a SIPI Route handler is *invoked by* a `RequestHandler` that loads and runs the script. Keep both terms when discussing the seam.
-- **"file_handler" is overloaded.** `shttps::file_handler` is the built-in static-file + Lua-in-HTML handler that SIPI registers on the configured `wwwroute` URL prefix; it reads from the **document root**. SIPI's IIIF `/file` endpoint (the **Bitstream** path-through) is the `FILE_DOWNLOAD` case inside `Sipi::iiif_handler` and reads from the **image root**. Same word, two unrelated handlers; always qualify which side.
-- The **document root**, the **init script**, and the **connection-pool knobs** (`keep_alive_timeout`, `queue_timeout`, `max_waiting_connections`) are shttps concepts. SIPI sets their values from its config (`sipi.config.lua`) but does not own the concepts. See [`src/shttps/README.md`](./src/shttps/README.md).
+### Naming clarification
 
-## Extracted domain modules
-
-The cutover survivors that used to live under `src/shttps/` — the generic
-utilities (`shttps::Hash` / `HashType`, `shttps::Parsing`, `shttps::Error`,
-`shttps::Global`), the JWT leaf, and the connection-less Lua runtime
-(`LuaServer` + the `server.db` sqlite bindings) — have been extracted to
-top-level packages: `src/util/`, `src/jwt/`, and `src/scripting/`. Their C++
-symbols stay in `namespace shttps` (only the file/package location moved). No
-production file includes anything under `src/shttps/` anymore; what remains
-there is the oracle transport (`transport/`, `SipiHttpServer`), which the oracle
-removal deletes wholesale. The retained transport still depends *back* on
-`src/util` and `src/scripting` — interim reverse edges, visibility-allowlisted
-and commented, that disappear with the oracle. See
-[ADR-0013](docs/adr/0013-shttps-as-internal-module.md).
+SIPI's **Route handler** (in `UBIQUITOUS_LANGUAGE.md`) is a *Lua script* bound to a
+URL pattern, run inside the request-scoped `shttps::LuaServer`. SIPI's IIIF `/file`
+endpoint (the **Bitstream** path-through) is the `FILE_DOWNLOAD` case of the Rust
+IIIF classifier (`src/server-rs/src/iiif.rs`), which reads from the **image root**.

@@ -9,8 +9,8 @@
  *
  * `sipi_metrics_snapshot` ferries the engine's `Sipi::observability::Metrics`
  * singleton counters/gauges across the seam so the Rust shell can feed
- * them to an OTel meter (the C++ Prometheus `/metrics` handler stays until the
- * cutover, then retires — OTLP-only). The seam header keeps this struct opaque
+ * them to an OTel meter (production exports these over OTLP). The seam header
+ * keeps this struct opaque
  * so the contract commits no field set it doesn't need; this header — owned by
  * the implementing translation unit — carries the layout. The Rust shell mirrors
  * it by hand (`#[repr(C)] SipiMetricsSnapshot` in `src/server-rs/src/ffi.rs`),

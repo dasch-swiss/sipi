@@ -407,7 +407,7 @@ fn video_knora_json_checksums() {
 
 #[test]
 fn knora_json_image_required_fields() {
-    // knora.json for images: verify all required fields from SipiHttpServer.cpp:880-1062
+    // knora.json for images: verify all required fields (src/server-rs/src/info.rs)
     let srv = server();
     let json: serde_json::Value = client()
         .get(format!("{}/unit/lena512.jp2/knora.json", srv.base_url))
@@ -485,8 +485,7 @@ fn knora_json_csv_file() {
 // test would have checked is already asserted without one:
 // `info_json_x_forwarded_proto_https` (iiif_compliance.rs) drives info.json
 // over plain HTTP with `X-Forwarded-Proto: https` and asserts the same `id`
-// scheme; the differential harness covers the same XFP-derived scheme/host on
-// info/knora and the 303 redirect scheme at full parity (DEV-6659).
+// scheme.
 
 #[test]
 fn mime_consistency() {

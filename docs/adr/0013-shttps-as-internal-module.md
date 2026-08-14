@@ -18,6 +18,12 @@ supersedes: 0001-shttps-as-strangler-fig-target.md
 > `SipiHttpServer`); it still depends *back* on `src/util` and `src/scripting`
 > (interim reverse edges, visibility-allowlisted and commented), and both die
 > when the oracle is deleted wholesale.
+>
+> **Update — oracle deleted ([ADR-0020](0020-oracle-removal.md), 2026-08-14).**
+> The wholesale deletion above has happened: `src/shttps/`, `SipiHttpServer`, the
+> C++ `server` mode, the differential parity gate, prometheus-cpp, and
+> `GET /metrics` are gone. The Rust shell is the sole production server. This ADR
+> is retained as the record of the decomposition that made that removal bounded.
 
 `src/shttps/` is an internal module of this codebase, depended on one-way by the rest of `src/`. It is not a peer bounded context. The Rust rewrite scope is the whole of SIPI, with shttps as the first strangler-fig slice — not the only slice that ever gets replaced.
 

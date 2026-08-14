@@ -2,9 +2,9 @@
 
 ## Always check
 
-### Production vs oracle
-- The Rust shell (`src/server-rs`, `src/cli-rs`) is the production server; the C++ server (`src/shttps`, `src/cli`) is oracle-only (differential parity, never deployed).
-- Flag new comments in Rust production code that frame it relative to the C++ server / oracle / transport ("matches the oracle", "the transport's X"). Comments should state current Rust behavior. Referencing the C++ **engine** (the FFI callee) is fine; parity notes belong in `test/e2e/tests/differential.rs`.
+### Production surface
+- The Rust shell (`src/server-rs`, `src/cli-rs`) is the sole production server; it drives the C++ image engine (`libsipi`) over the FFI seam. There is no C++ server (the shttps oracle was removed, ADR-0020); the C++ `//src/cli:sipi` binary provides only the offline verbs.
+- Flag comments in production code that frame it relative to the removed C++ server / oracle / transport ("matches the oracle", "the transport's X", "at the cutover"). Comments should state current behavior. Referencing the C++ **engine** (the FFI callee) is fine.
 - Flag roadmap / in-flight-history comments ("not yet wired", "previously", "now uses") — describe what the code does today.
 
 ### Security (input validation)
@@ -13,7 +13,6 @@
 - Null bytes (`\0`, `%00`) stripped or rejected from all URL components before reaching C-string operations
 - HTTP response headers sanitized — no CR/LF/null from user input interpolated into headers (especially Content-Disposition)
 - Error messages to clients do not leak internal file paths, server state, or stack traces
-- Internal-only endpoints (`/metrics`) documented as requiring reverse proxy protection
 
 ### Memory safety (C++ ownership)
 - No raw owning `new`/`delete` in new code — use `std::unique_ptr`, `std::make_unique`, or value semantics
@@ -41,13 +40,13 @@
 - Rate limiter budget deducted before processing, not after
 
 ### Configuration consistency
-- New config options added to all four surfaces: `SipiConf.h`/`.cpp` (Lua), `cli_app.cpp` (CLI11), `SipiHttpServer.hpp` (accessor), and `config/sipi.config.lua` (documentation)
+- New server config options are threaded through every surface — see the config recipe in [`CONVENTIONS.md`](CONVENTIONS.md). Server config originates in the Rust shell (clap arg with colocated `env`, `config.rs`, `config_file.rs`), crosses the FFI as `SipiServerConfig` (`src/ffi/sipi_ffi.h`), and the C++ engine applies it in `src/ffi/init.cpp`.
 - Defaults identical across all entry points
 - `docs/src/development/reviewer-guidelines.md` summarises this as "Lua / CLI / env" for review-checklist brevity; the four-surface list above is the authoritative one
 - Invalid values produce clear startup errors with guidance on valid values
 
 ### Testing
-- Security fixes include fuzz corpus entries and e2e tests
+- Security fixes include e2e tests (and proptest cases for parser-input regressions)
 - Memory fixes verified under ASan (no leaks, no UB)
 - New HTTP behavior tested in Rust e2e
 - Tests verify behavior (dimensions, content, structure), not just HTTP status codes
@@ -59,10 +58,10 @@
 - Trust a delta only if it is green (U-test p < 0.05) AND the median shift exceeds the baseline CV; same machine, same `-c opt` binary for before and after. Sub-3% deltas are noise
 
 ### Metrics
-- New metrics use correct Prometheus types (counter for monotonic, gauge for current state, histogram for distributions)
-- Metric names follow `sipi_` prefix convention with `_total` suffix for counters
+- New metrics use the right atomic type in `observability/metrics.h`: `Counter` for monotonic totals, `Gauge` for current state
+- Metric field names follow the `_total` suffix convention for counters
 - Instrumentation in the correct layer (not duplicated across call chain)
-- shttps-side instrumentation (request lifecycle, queue events) emits through the `shttps::ConnectionMetrics` Strategy interface (`shttps/transport/ConnectionMetrics.h`) — never call `Sipi::observability::Metrics::instance()` directly from `shttps/`. The SIPI → shttps direction is enforced by `package_group()` visibility in `BUILD.bazel`
+- A new scalar metric reaches production OTLP only if it is also read into `SipiMetricsSnapshot` (`src/ffi/sipi_ffi.cpp`) and mapped in `src/server-rs/src/metrics.rs`; the `metrics_registry_test.cpp` seam tripwire forces that decision. Label-fanned counters stay engine-internal (not snapshotted)
 
 ### Thread safety
 - Shared mutable state protected by `std::mutex` + `std::scoped_lock` or `std::atomic`

@@ -7,14 +7,13 @@ For the full C++23 style guide, see `docs/src/development/cpp-style-guide.md`.
 For commit and PR conventions, see `docs/src/development/commit-conventions.md`.
 For reviewer guidelines, see `docs/src/development/reviewer-guidelines.md`.
 
-## Production surface vs oracle
+## Production surface
 
-The **Rust axum shell** (`src/server-rs` + `src/cli-rs`) is the production server. It drives the C++ **image engine** (`libsipi`, the FFI callee) over the seam in `src/server-rs/src/ffi.rs`. The retained C++ **server** — `src/shttps` plus `src/cli`'s **server mode** (`run_server` + `SipiHttpServer`) — is **oracle-only**: kept solely as the reference in the differential parity test (`test/e2e/tests/differential.rs`), never deployed. The rest of `src/cli` is production: `sipi_cli_main` and the offline verbs (`convert`/`verify`/`query`/`compare`) the Rust CLI shell drives.
+The **Rust axum shell** (`src/server-rs` + `src/cli-rs`) is the sole production server. It drives the C++ **image engine** (`libsipi`, the FFI callee) over the seam in `src/server-rs/src/ffi.rs`. There is no C++ server: the `shttps` transport and `SipiHttpServer` were removed with the oracle ([ADR-0020](docs/adr/0020-oracle-removal.md)). `src/cli` is production too: `sipi_cli_main` and the offline verbs (`convert`/`verify`/`query`/`compare`/`health`) the Rust CLI shell drives.
 
-Consequences for production (Rust) code:
+Consequences for production code:
 
-- Comments describe current, working Rust behavior on its own terms. Do **not** frame the Rust shell relative to the C++ server / oracle / transport ("matches the oracle", "the transport's X", "reconstructs shttps' Y"). Referencing the C++ **engine** (the production FFI callee) is fine — that is what the shell calls into.
-- Parity observations belong in the differential test, not in shell code comments.
+- Comments describe current, working behavior on their own terms. Do **not** frame the Rust shell relative to the removed C++ server / oracle / transport ("matches the oracle", "the transport's X", "at the cutover", "reconstructs shttps' Y"). Referencing the C++ **engine** (the production FFI callee) is fine — that is what the shell calls into.
 - Do not describe roadmap or in-flight history ("not yet wired", "previously", "now uses"); state what the code does today.
 
 ## Stack
@@ -22,7 +21,7 @@ Consequences for production (Rust) code:
 - C++23, Clang 15+ / GCC 13+
 - Build orchestrator: Bazel (single source of truth for CI; reproducible action graph)
 - Reproducible dev environment: Nix dev shells (`flake.nix` `devShells` only — no Nix-side build derivations)
-- HTTP framework: Rust axum shell (`src/server-rs`, `src/cli-rs`) — the production server; the retained C++ `shttps/` library is oracle-only (see "Production surface vs oracle")
+- HTTP framework: Rust axum shell (`src/server-rs`, `src/cli-rs`) — the production server (see "Production surface")
 - Image formats: libtiff, libpng, libjpeg, libwebp, Kakadu (JPEG 2000)
 - Scripting: Lua (routes, preflight checks, image manipulation)
 
@@ -109,25 +108,24 @@ is scoped `ffi` only when the seam mechanism itself is the point.
 | `formats` | `src/formats/` | Per-format codecs: TIFF, JP2 (Kakadu), PNG, JPEG |
 | `metadata` | `src/metadata/` | EXIF, IPTC, XMP, ICC profile handling |
 | `iiifparser` | `src/iiifparser/` | IIIF URL parsing (identifier, region, size, rotation, quality, format) |
-| `handlers` | `src/handlers/` | HTTP request handlers |
-| `shttps` | `src/shttps/` | Internal HTTP transport framework (threading, TLS, connection pooling); oracle-only after the decomposition |
+| `handlers` | `src/handlers/` | IIIF URI classifier (`parse_iiif_uri`, C++) |
 | `scripting` | `src/scripting/` | Connection-less Lua runtime: `LuaServer` + `request_context.h` + the `server.db` sqlite bindings |
-| `util` | `src/util/` | Generic SIPI-domain helpers: MIME/string parsing, file hashing, the shttps error/global types |
+| `util` | `src/util/` | Generic SIPI-domain helpers: MIME/string parsing, file hashing, the `shttps::Error`/`Global` types |
 | `jwt` | `src/jwt/` | JWT (JWS) sign/verify leaf over OpenSSL + jansson |
 | `cache` | `src/SipiCache.{h,cpp}` | File-based LRU cache with dual-limit eviction |
 | `memory-budget` | `src/SipiMemoryBudget.{h,cpp}` | Lock-free decode memory budget |
 | `memory` | `bazel/mimalloc.BUILD.bazel`, `_ALLOCATOR` in `src/cli-rs/BUILD.bazel`, `tools/allocator-replay/` | Process memory behavior: the production allocator, RSS/retention measurement |
-| `observability` | `src/observability/` | Prometheus metrics, tracing |
+| `observability` | `src/observability/` | Metrics (atomic counters/gauges), tracing |
 | `logging` | `src/logging/` | Structured logging |
-| `cli` | `src/cli/` | C++ CLI app, arg parsing, subcommand dispatch |
+| `cli` | `src/cli/` | C++ CLI app (offline verbs) behind the `sipi_cli_main` FFI entry |
 | `ffi` | `src/ffi/` | Rust↔C++ FFI seam and Lua bindings |
 | `lua` | `scripts/`, `config/*.lua` | Lua route/preflight scripts and config |
-| `server-rs` | `src/server-rs/` | Rust server shell (strangler-fig subject) |
+| `server-rs` | `src/server-rs/` | Rust server shell — the production server |
 | `cli-rs` | `src/cli-rs/` | Rust CLI shell |
 
-The C++ `SipiHttpServer` orchestration (`src/SipiHttpServer.*`) is being
-strangled by `server-rs`; new server work lands under `server-rs`, and
-route/handler changes use `handlers` or `shttps`.
+All server work lands under `server-rs`; there is no C++ server (the `shttps`
+transport and `SipiHttpServer` were removed with the oracle,
+[ADR-0020](docs/adr/0020-oracle-removal.md)).
 
 Beyond modules, commits use **test-layer scopes** (`e2e`, `approval`, for a
 test layer's own harness or fixtures) and **cross-cutting scopes** (`deps`,
@@ -149,9 +147,9 @@ The codebase has two coexisting layouts:
 - **Module-co-located ([ADR-0003](docs/adr/0003-module-co-located-source-and-tests.md), proposed):**
   `src/<mod>/{Foo.cpp, Foo.h, foo_test.cpp}` with flat-style includes
   (`#include "metadata/Foo.h"` cross-module, `#include "Foo.h"`
-  intra-module). `shttps/` and `src/handlers/` already follow this.
-  Migration is staged behind the Bazel build-tool migration and lands
-  as five mechanical per-module PRs.
+  intra-module). `src/util/`, `src/scripting/`, `src/jwt/`, and `src/handlers/`
+  already follow this. Migration is staged behind the Bazel build-tool migration
+  and lands as mechanical per-module PRs.
 
 Until ADR-0003 is accepted and a module is migrated, follow the
 historical layout for that module. After migration, follow the new
@@ -160,22 +158,17 @@ per-module diff shape.
 
 ## Route Registration
 
-Routes are registered in `SipiHttpServer::run()` via `add_route()`:
-
-```cpp
-void SipiHttpServer::run() {
-  add_route(Connection::GET, "/metrics", metrics_handler);
-  add_route(Connection::GET, "/health", health_handler);  // example
-  add_route(Connection::GET, "/", iiif_handler);           // catch-all last
-  Server::run();
-}
-```
-
-The catch-all `/` route must be registered **last** — it matches everything.
+Built-in routes are registered on the axum `Router` in the Rust shell
+(`src/server-rs/src/routes.rs`). Scripted routes are Lua scripts bound to URL
+patterns in the config ([ADR-0017](docs/adr/0017-extensibility-lua-and-rust.md)):
+a `Route handler` is a Lua script the shell dispatches to, run inside the
+request-scoped `shttps::LuaServer`. IIIF requests are classified in
+`src/server-rs/src/iiif.rs` (`parse_request`), which owns region/size/rotation/
+quality/format parsing; the flattened params cross the FFI seam to the C++ engine.
 
 ## HTTP Status Codes
 
-Available in `Connection::StatusCodes` enum (`shttps/transport/Connection.h`):
+The Rust shell returns axum `http::StatusCode`s. Common cases:
 
 | Code | Enum | Use for |
 |---|---|---|
@@ -229,17 +222,14 @@ C++ engine:
     override before the engine sees it. Always add the apply line here when you
     add an FFI field (step 6).
 
-Oracle (parity only, deleted with the C++ server): the equivalent CLI11 flag in
-`src/cli/cli_app.cpp` server mode + accessor in `src/SipiHttpServer.h`.
-
 ## Error Handling Pattern
 
 | Situation | Mechanism |
 |---|---|
 | Fallible operations (parsing, I/O, validation) | `std::expected<T, E>` (new code) or `SipiError` (existing) |
 | Truly unrecoverable errors | `throw SipiError(...)` |
-| HTTP errors to clients | `send_error(conn_obj, Connection::STATUS_CODE, "message")` |
-| Resource exhaustion (OOM) | Catch `std::bad_alloc`, return HTTP 500, log, continue serving |
+| Engine errors to the client | The engine returns a `SipiStatus` over the FFI seam; the Rust shell maps it to an axum HTTP response |
+| Resource exhaustion (OOM) | Catch `std::bad_alloc`, return an error status over the seam, log, continue serving |
 
 ## Docker
 
@@ -254,13 +244,13 @@ Oracle (parity only, deleted with the C++ server): the equivalent CLI11 flag in
 - Image root: `/sipi/images/`
 - Cache: `/sipi/cache/`
 
-## Prometheus Metrics
+## Metrics
 
-SIPI-side singleton at `Sipi::observability::Metrics::instance()`
-(`src/observability/metrics.h`). `GET /metrics` serialises it on the retained C++
-server only, which is oracle-only and never deployed. In production the Rust shell
-exports over OTLP instead: scalar counters and gauges cross the seam as the flat
-`SipiMetricsSnapshot` and are re-registered as OTel observable instruments in
+Engine-internal singleton at `Sipi::observability::Metrics::instance()`
+(`src/observability/metrics.h`) — plain lock-free atomics (`Counter` / `Gauge`).
+The engine bumps them on the decode/cache/serve paths. Production exports over OTLP:
+the scalar counters and gauges cross the seam as the flat `SipiMetricsSnapshot`
+(`src/ffi/sipi_ffi.cpp`) and are re-registered as OTel observable instruments in
 `src/server-rs/src/metrics.rs`. **A new counter or gauge here does not reach
 production until it is added to that snapshot and that module.** Distributions
 cannot cross the flat snapshot at all; record them as OTel histograms shell-side
@@ -269,40 +259,29 @@ cannot cross the flat snapshot at all; record them as OTel histograms shell-side
 Two tests enforce this, because the seam is easy to forget and a metric that stops
 at it fails silently — it simply never appears in Grafana:
 
-- `//src/observability:metrics_registry_test` classifies every registry family by
-  how it reaches production. Adding a metric fails it until you say which.
+- `//src/observability:metrics_registry_test` classifies every metric field as
+  bridged-to-OTLP or engine-internal. Adding a field fails it until you say which.
 - `every_snapshot_field_is_accounted_for` in `src/server-rs/src/metrics.rs` fails
   unless each snapshot field is exported or explicitly listed as unexported.
 
-**Known exceptions** — incremented in production, observable by nobody, recorded
-in the first test's `kKnownExceptionsNotObservable`:
+**Engine-internal (not bridged)** — incremented in production, observable by
+nobody, recorded in the first test's `kEngineInternalNotBridged`:
 
 | Metric | Why | Cost to fix |
 |---|---|---|
-| `sipi_read_shape_fast_path_total` (ADR-0004) | Label-fanned `format` × `outcome`, 8 children; the flat snapshot holds scalars | 8 scalar fields |
-| `sipi_essentials_hash_mismatch_total` (ADR-0010) | Same, 5 children. This is the **corruption tripwire** — nothing in production can see a detected corruption; `sipi verify service-file` is the only read path | 5 scalar fields |
+| `read_shape_fast_path_*` (ADR-0004) | Label-fanned `format` × `outcome`, 8 counters; the flat snapshot holds scalars | 8 scalar fields |
+| `essentials_hash_mismatch_*` (ADR-0010) | Same, 5 counters. This is the **corruption tripwire** — nothing in production can see a detected corruption; `sipi verify service-file` is the only read path | 5 scalar fields |
 
-Both label sets are static and pre-created, so bridging them is mechanical rather
-than a design problem. Shrinking that list is a welcome change; growing it needs an
-argument in review.
+Both label sets are static, so bridging them is mechanical rather than a design
+problem. Shrinking that list is a welcome change; growing it needs an argument in
+review.
 
 ```cpp
-prometheus::Counter &my_counter_total =
-  prometheus::BuildCounter()
-    .Name("sipi_my_counter_total")
-    .Help("Description")
-    .Register(*Sipi::observability::Metrics::instance().registry)
-    .Add({});
+// Declared as a member of Sipi::observability::Metrics (metrics.h):
+Counter my_counter_total;
+// Bumped on the hot path:
+Sipi::observability::Metrics::instance().my_counter_total.Increment();
 ```
 
-shttps-side instrumentation goes through the
-`shttps::ConnectionMetrics` Strategy interface (see
-`shttps/transport/ConnectionMetrics.h`). At startup, `src/cli/cli_app.cpp` installs a
-`Sipi::observability::ConnectionMetricsAdapter` (Adapter pattern) that bridges
-shttps events into the `Sipi::observability::Metrics` singleton. **Do not call
-`Sipi::observability::Metrics::instance()` from `shttps/` code** — that
-direction is the SIPI ← shttps leak that
-[ADR-0001](docs/adr/0001-shttps-as-strangler-fig-target.md)'s
-strangler-fig is closing (commit `f2ee8cfd`, Apr 30 2026). New
-shttps-emitted events go on the `ConnectionMetrics` interface and
-are implemented in the adapter.
+To reach production OTLP, also read the field into `SipiMetricsSnapshot`
+(`src/ffi/sipi_ffi.cpp`) and map it in `src/server-rs/src/metrics.rs`.

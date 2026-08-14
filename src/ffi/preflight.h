@@ -49,8 +49,7 @@ struct PreflightDecision
  *  resolve from the real request), run the hook, validate the result, return the
  *  decision. The `cookie` Lua argument is taken from `ctx` (the `cookie`
  *  header). `ctx` must outlive the call. Pure of the C output channel. Returns
- *  `SipiStatus::InternalError` (logged) on any Lua / validation failure, matching
- *  the legacy handler's 500. */
+ *  `SipiStatus::InternalError` (logged) on any Lua / validation failure. */
 [[nodiscard]] std::expected<PreflightDecision, SipiStatus> build_preflight(const char *prefix,
   const char *identifier,
   shttps::RequestContext &ctx);
@@ -65,10 +64,8 @@ struct PreflightDecision
  *  permission type, then emit each kv pair. */
 void apply_preflight(PreflightDecision &&decision, SipiPermType *type, SipiKVFn emit_kv, void *kv_ctx);
 
-/*! The Lua-facing permission string for a type (`SIPI_ALLOW` → `"allow"`, …).
- *  Used by the parity adapters in `SipiHttpServer.cpp`, on the current
- *  transport path, to rebuild the string-keyed `preflight_info` map the
- *  existing handlers consume. */
+/*! The Lua-facing permission string for a type (`SIPI_ALLOW` → `"allow"`, …) —
+ *  the inverse of the string-keyed permission parse. */
 [[nodiscard]] const char *perm_type_to_string(SipiPermType type);
 
 }// namespace Sipi::ffi

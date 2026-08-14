@@ -61,7 +61,7 @@ bump the **major** version:
 
 Example:
 
-    feat(shttps): support more authentication methods
+    feat(jwt): support more authentication methods
 
 The release-please config sentence-cases subjects in the changelog, so
 write the subject in normal prose case (`feat(cache): add dual-limit
@@ -114,7 +114,7 @@ module list — which is also the scope vocabulary — lives in
 these names, lowercase:
 
 - **Module scopes:** `image`, `formats`, `metadata`, `iiifparser`,
-  `handlers`, `shttps`, `scripting`, `util`, `jwt`, `cache`, `memory-budget`,
+  `handlers`, `scripting`, `util`, `jwt`, `cache`, `memory-budget`,
   `memory`, `observability`, `logging`, `cli`, `ffi`, `lua`, `server-rs`,
   `cli-rs` (`scripting` = the C++ Lua runtime in `src/scripting/`; `lua` stays
   the Lua *scripts*/config in `scripts/` + `config/*.lua`)

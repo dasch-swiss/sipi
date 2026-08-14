@@ -9,13 +9,8 @@
  * `sipi_serve_image` is a C ABI of shape `(req, resp)` — it has no slot for the
  * cache, memory budget, or the server config knobs the decode
  * pipeline needs. `EngineContext` is that durable engine state, read by
- * `build_image_response`. Eventually `sipi_init` constructs and installs it;
- * while the C++ transport still owns the socket, the still-living
- * `SipiHttpServer` installs non-owning pointers to the services it already
- * owns via `set_engine_context`.
- * The install call is the only throwaway part — the same shape as the
- * `Connection`→`SipiResponse` adapter that drives `sipi_serve_file` today — and
- * goes away with `SipiHttpServer` at the cutover.
+ * `build_image_response`. `sipi_init` constructs and installs it once at startup
+ * via `set_engine_context`, holding non-owning pointers to the services it owns.
  */
 #ifndef SIPI_FFI_ENGINE_CONTEXT_H
 #define SIPI_FFI_ENGINE_CONTEXT_H
@@ -34,14 +29,13 @@ namespace Sipi::ffi {
 
 /*! Engine services + config read by the IIIF image pipeline. The two service
  *  pointers are non-owning (the installer outlives every serve call) and may be
- *  null when the corresponding feature is disabled, mirroring the legacy
- *  `server->cache()/memory_budget()` accessors. */
+ *  null when the corresponding feature is disabled. */
 struct EngineContext
 {
   SipiCache *cache = nullptr;//!< file cache, or null when caching is off
   SipiMemoryBudget *memory_budget = nullptr;//!< decode memory budget, or null when off
 
-  std::string imgroot;//!< image root: raw config value, for the Rust edge's path build (parity with imgroot())
+  std::string imgroot;//!< image root: raw config value, for the Rust edge's path build
   std::string resolved_imgroot;//!< realpath()-resolved image root, for the R2 containment check
   std::string docroot;//!< `/server` fileserver docroot: raw config value (the Rust edge canonicalises per request); empty = fileserver off
   std::string wwwroute;//!< URL prefix the docroot fileserver is mounted at (e.g. "/server"); empty = fileserver off
@@ -54,8 +48,8 @@ struct EngineContext
   std::size_t max_post_size = 0;//!< max POST body size in bytes (the Rust shell caps Lua-route uploads); 0 = unlimited
 };
 
-/*! Install the engine context (copied into a file-static). Called once at server
- *  startup on the current transport path; superseded once `sipi_init` takes over. */
+/*! Install the engine context (copied into a file-static). Called once at
+ *  startup by `sipi_init`. */
 void set_engine_context(const EngineContext &ctx);
 
 /*! The installed engine context. Throws `shttps::Error` if neither

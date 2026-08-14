@@ -15,7 +15,6 @@ target directly):
 
 Cross-package consumers:
   //src:sipi_lib       — primary consumer
-  //src/shttps:shttps      — consumes shttps-relevant headers via this bundle
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library")

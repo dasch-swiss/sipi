@@ -8,8 +8,6 @@ use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-pub mod diff;
-pub use diff::{diff_get, diff_request, BodyMatch, DiffAllowlist, DiffResult, HeaderDiff};
 pub mod jwt;
 
 /// Atomic port counter to avoid conflicts when tests run in parallel.
@@ -33,43 +31,6 @@ pub fn allocate_ports() -> (u16, u16) {
     assert!(http < 65534, "port counter overflow");
     let ssl = http + 1;
     (http, ssl)
-}
-
-/// Which binary a `SipiServer` instance wraps. Internal to the harness —
-/// callers select a binary through `start_with_args` (subject) or
-/// `start_pair` (subject + reference), never by naming a `ServerKind`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ServerKind {
-    /// The Rust shell under test — `//src/cli-rs:sipi`, resolved from `$SIPI_BIN`.
-    Subject,
-    /// The retained C++ server used as a differential oracle —
-    /// `//src/cli:sipi`, resolved from `$SIPI_BIN_REF`.
-    Reference,
-}
-
-impl ServerKind {
-    /// The log line each binary emits once its HTTP listener is bound, used
-    /// as a fast readiness hint. The startup poll falls back to a TCP /
-    /// `/health` probe if it never appears (suppressed by log level, or
-    /// written to a stream we don't match), so this is an optimization, not
-    /// a hard requirement.
-    fn ready_signal(self) -> &'static str {
-        match self {
-            // server-rs logs this once `sipi::run` binds the axum listener.
-            ServerKind::Subject => "SIPI Rust shell listening",
-            // shttps `Server::run` logs "Server listening on HTTP port %d".
-            ServerKind::Reference => "Server listening on HTTP port",
-        }
-    }
-
-    /// Short label for `[test-harness]` diagnostics so two interleaved
-    /// spawns are distinguishable.
-    fn label(self) -> &'static str {
-        match self {
-            ServerKind::Subject => "subject(rust)",
-            ServerKind::Reference => "reference(c++)",
-        }
-    }
 }
 
 /// Manages a sipi server process for testing.
@@ -101,122 +62,13 @@ impl SipiServer {
         extra_args: &[&str],
         extra_env: &[(&str, &str)],
     ) -> Self {
-        Self::spawn(
-            sipi_bin_path(),
-            ServerKind::Subject,
-            config,
-            working_dir,
-            extra_args,
-            extra_env,
-        )
+        Self::spawn(sipi_bin_path(), config, working_dir, extra_args, extra_env)
     }
 
-    /// Start ONLY the C++ oracle (reference) — the reference-side counterpart
-    /// to [`Self::start_with_args`]. Use when a probe needs subject and
-    /// reference to access shared state (e.g. a `--cache-dir`) SEQUENTIALLY
-    /// rather than concurrently, to avoid two live `SipiCache` instances
-    /// racing on the same `.sipicache` index file (confirmed on CI to be a
-    /// real crash, not just a benign duplicate write).
-    pub fn start_reference_with_args(
-        config: &str,
-        working_dir: &Path,
-        extra_args: &[&str],
-    ) -> Self {
-        Self::start_reference_env(config, working_dir, extra_args, &[])
-    }
-
-    /// Like [`Self::start_reference_with_args`], additionally setting
-    /// `extra_env` in the spawned process's environment.
-    pub fn start_reference_env(
-        config: &str,
-        working_dir: &Path,
-        extra_args: &[&str],
-        extra_env: &[(&str, &str)],
-    ) -> Self {
-        Self::spawn(
-            sipi_oracle_bin_path(),
-            ServerKind::Reference,
-            config,
-            working_dir,
-            extra_args,
-            extra_env,
-        )
-    }
-
-    /// Start the Rust shell (subject) and the C++ oracle (reference) on
-    /// separate port pairs from the same config, for differential testing.
-    /// The subject resolves from `$SIPI_BIN`, the reference from
-    /// `$SIPI_BIN_REF` (set only by the `//test/e2e:differential` target).
-    /// Spawned sequentially so the two binaries' startup logs don't interleave.
-    pub fn start_pair(
-        config: &str,
-        working_dir: &Path,
-        extra_args: &[&str],
-    ) -> (SipiServer, SipiServer) {
-        Self::start_pair_env(config, working_dir, extra_args, &[])
-    }
-
-    /// Like [`Self::start_pair`], additionally setting `extra_env` in both
-    /// spawned processes' environment (e.g. to probe a `SIPI_*` env binding).
-    pub fn start_pair_env(
-        config: &str,
-        working_dir: &Path,
-        extra_args: &[&str],
-        extra_env: &[(&str, &str)],
-    ) -> (SipiServer, SipiServer) {
-        let subject = Self::spawn(
-            sipi_bin_path(),
-            ServerKind::Subject,
-            config,
-            working_dir,
-            extra_args,
-            extra_env,
-        );
-        let reference = Self::spawn(
-            sipi_oracle_bin_path(),
-            ServerKind::Reference,
-            config,
-            working_dir,
-            extra_args,
-            extra_env,
-        );
-        (subject, reference)
-    }
-
-    /// Like [`Self::start_pair`], but the subject and reference get
-    /// DIFFERENT `extra_args` (e.g. each its own isolated `--cache-dir` so
-    /// two independent `SipiCache` instances never race on a shared
-    /// `.sipicache` index file — a `cache-nfiles` probe).
-    pub fn start_pair_split(
-        config: &str,
-        working_dir: &Path,
-        subject_extra_args: &[&str],
-        reference_extra_args: &[&str],
-    ) -> (SipiServer, SipiServer) {
-        let subject = Self::spawn(
-            sipi_bin_path(),
-            ServerKind::Subject,
-            config,
-            working_dir,
-            subject_extra_args,
-            &[],
-        );
-        let reference = Self::spawn(
-            sipi_oracle_bin_path(),
-            ServerKind::Reference,
-            config,
-            working_dir,
-            reference_extra_args,
-            &[],
-        );
-        (subject, reference)
-    }
-
-    /// Spawn one sipi process of `kind` from the resolved `bin`, wait until
-    /// it serves `/health`, and return the handle.
+    /// Spawn the sipi process from the resolved `bin`, wait until it serves
+    /// `/health`, and return the handle.
     fn spawn(
         bin: String,
-        kind: ServerKind,
         config: &str,
         working_dir: &Path,
         extra_args: &[&str],
@@ -232,8 +84,7 @@ impl SipiServer {
         kill_process_on_port(ssl_port);
 
         eprintln!(
-            "[test-harness] Starting {} sipi: bin={} config={} ports={}/{} cwd={} extra_args={:?} extra_env={:?}",
-            kind.label(),
+            "[test-harness] Starting sipi: bin={} config={} ports={}/{} cwd={} extra_args={:?} extra_env={:?}",
             bin,
             config,
             http_port,
@@ -270,15 +121,11 @@ impl SipiServer {
             .arg("--config")
             .arg(config)
             .arg("--serverport")
-            .arg(http_port.to_string());
-        // The Rust shell parses `--sslport` but serves plain HTTP behind
-        // Traefik. The C++ oracle would bind a real SSL listener, so the
-        // reference is spawned HTTP-only: with `--config` its `ssl_port`
-        // defaults to -1 and the SSL block is skipped when `--sslport` is
-        // absent. The resulting TLS difference is an allowlisted divergence.
-        if matches!(kind, ServerKind::Subject) {
-            cmd.arg("--sslport").arg(ssl_port.to_string());
-        }
+            .arg(http_port.to_string())
+            // The Rust shell parses `--sslport` but serves plain HTTP behind
+            // Traefik in production.
+            .arg("--sslport")
+            .arg(ssl_port.to_string());
         cmd.arg("--drain-timeout")
             .arg("2")
             .args(extra_args)
@@ -299,8 +146,8 @@ impl SipiServer {
         // in build/. GCOV_PREFIX redirects them to the build dir.
         //
         // Derive `build_dir` from the *actually-resolved* sipi binary so a
-        // `$SIPI_BIN`/`$SIPI_BIN_REF` outside `repo_root/build` (static-musl CI,
-        // sanitizer CI, or any custom binary) still computes the right dir.
+        // `$SIPI_BIN` outside `repo_root/build` (static-musl CI, sanitizer CI,
+        // or any custom binary) still computes the right dir.
         let build_dir = PathBuf::from(&bin)
             .parent()
             .expect("sipi binary should be in a build directory")
@@ -311,19 +158,20 @@ impl SipiServer {
         }
 
         let mut child = cmd.spawn().unwrap_or_else(|e| {
-            panic!("Failed to start {} sipi at {}: {}", kind.label(), bin, e);
+            panic!("Failed to start sipi at {}: {}", bin, e);
         });
-        eprintln!(
-            "[test-harness] Spawned {} sipi PID={}",
-            kind.label(),
-            child.id()
-        );
+        eprintln!("[test-harness] Spawned sipi PID={}", child.id());
 
         // Drain both child streams on background threads (prevents pipe-buffer
         // backpressure) and feed the readiness channel on the listen-log line.
         // Watching both streams keeps readiness independent of which sink a
         // given binary logs to.
-        let ready_signal = kind.ready_signal();
+        // server-rs logs this once `sipi::run` binds the axum listener. Used
+        // as a fast readiness hint; the startup poll falls back to a TCP /
+        // `/health` probe if it never appears (suppressed by log level, or
+        // written to a stream we don't match), so this is an optimization, not
+        // a hard requirement.
+        let ready_signal = "SIPI Rust shell listening";
         let (tx, rx) = std::sync::mpsc::channel();
         let stderr_buf = spawn_log_drain(
             child.stderr.take().expect("stderr captured"),
@@ -338,16 +186,14 @@ impl SipiServer {
 
         // Wait for readiness: the listen-log signal (fast hint) or a successful
         // TCP connect. Polling both avoids a 30s stall when the signal is
-        // suppressed or lands on a stream we don't match (the C++ oracle's log
-        // sink is configurable).
+        // suppressed or lands on a stream we don't match.
         let timeout = Duration::from_secs(30);
         let start = Instant::now();
         let mut connected = false;
         while start.elapsed() < timeout {
             if rx.try_recv().is_ok() {
                 eprintln!(
-                    "[test-harness] {} readiness signal after {:?}",
-                    kind.label(),
+                    "[test-harness] readiness signal after {:?}",
                     start.elapsed()
                 );
                 connected = true;
@@ -359,8 +205,7 @@ impl SipiServer {
             }
             if let Ok(Some(status)) = child.try_wait() {
                 panic!(
-                    "{} sipi exited with {} during startup\nstdout:\n{}\nstderr:\n{}",
-                    kind.label(),
+                    "sipi exited with {} during startup\nstdout:\n{}\nstderr:\n{}",
                     status,
                     dump(&stdout_buf),
                     dump(&stderr_buf)
@@ -371,8 +216,7 @@ impl SipiServer {
         if !connected {
             child.kill().ok();
             panic!(
-                "{} sipi failed to start within {:?} on port {}\nstdout:\n{}\nstderr:\n{}",
-                kind.label(),
+                "sipi failed to start within {:?} on port {}\nstdout:\n{}\nstderr:\n{}",
                 timeout,
                 http_port,
                 dump(&stdout_buf),
@@ -381,8 +225,8 @@ impl SipiServer {
         }
 
         // The listen log / TCP-accept precedes the event loop actually
-        // processing requests. Probe /health (Rust-native, engine-independent,
-        // served by both transports) to confirm the server is serving.
+        // processing requests. Probe /health (Rust-native, engine-independent)
+        // to confirm the server is serving.
         let base_url = format!("http://127.0.0.1:{}", http_port);
         let probe_client = reqwest::blocking::Client::builder()
             .danger_accept_invalid_certs(true)
@@ -399,8 +243,7 @@ impl SipiServer {
                 Ok(resp) if resp.status().is_success() => {
                     http_ready = true;
                     eprintln!(
-                        "[test-harness] {} HTTP ready after {} probes, {:?} total",
-                        kind.label(),
+                        "[test-harness] HTTP ready after {} probes, {:?} total",
                         probe_count,
                         start.elapsed()
                     );
@@ -415,9 +258,8 @@ impl SipiServer {
             }
             if let Ok(Some(status)) = child.try_wait() {
                 panic!(
-                    "{} sipi exited with {} after {} /health probes\n\
+                    "sipi exited with {} after {} /health probes\n\
                      last probe error: {}\nstdout:\n{}\nstderr:\n{}",
-                    kind.label(),
                     status,
                     probe_count,
                     last_probe_err,
@@ -431,9 +273,8 @@ impl SipiServer {
         if !http_ready {
             child.kill().ok();
             panic!(
-                "{} sipi started but never served HTTP on port {} within {:?}\n\
+                "sipi started but never served HTTP on port {} within {:?}\n\
                  probes attempted: {}, last error: {}\nstdout:\n{}\nstderr:\n{}",
-                kind.label(),
                 http_port,
                 timeout,
                 probe_count,
@@ -718,18 +559,6 @@ pub fn sipi_bin_path_from(env_var: &str, fallback: PathBuf) -> String {
 /// cmake inner-loop fallback (`<repo>/build/sipi`).
 pub fn sipi_bin_path() -> String {
     sipi_bin_path_from("SIPI_BIN", find_sipi_bin())
-}
-
-/// The C++ oracle (`//src/cli:sipi`) for the differential harness, from
-/// `$SIPI_BIN_REF`. Set only by the `//test/e2e:differential` Bazel target;
-/// under `cargo test` it is unset and the fallback path won't exist, so
-/// `start_pair` panics at spawn with a clear message — the differential
-/// suite is Bazel-only.
-pub fn sipi_oracle_bin_path() -> String {
-    sipi_bin_path_from(
-        "SIPI_BIN_REF",
-        repo_root().join("build").join("sipi-oracle"),
-    )
 }
 
 /// Path to the test data directory.

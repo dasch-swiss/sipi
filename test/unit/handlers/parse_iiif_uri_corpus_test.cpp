@@ -3,7 +3,7 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-// Sweep `parse_iiif_uri` over every input file in the seed fuzz corpus under
+// Sweep `parse_iiif_uri` over every input file in the regression corpus under
 // a wall-clock budget. New corpus inputs are exercised automatically.
 
 #include "gtest/gtest.h"
@@ -20,7 +20,7 @@
 #include "handlers/iiif_handler.h"
 
 #ifndef SIPI_FUZZ_CORPUS_DIR
-#error "SIPI_FUZZ_CORPUS_DIR must point at fuzz/handlers/corpus/"
+#error "SIPI_FUZZ_CORPUS_DIR must point at test/unit/handlers/corpus/"
 #endif
 
 namespace {

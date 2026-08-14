@@ -4,7 +4,6 @@
  */
 
 #include "observability/metrics.h"
-#include "generated/SipiVersion.h"
 
 #include <algorithm>
 #include <cctype>
@@ -15,183 +14,6 @@ Metrics &Metrics::instance()
 {
   static Metrics inst;
   return inst;
-}
-
-Metrics::Metrics()
-  : registry_(std::make_shared<prometheus::Registry>()),
-
-    cache_hits_total(prometheus::BuildCounter()
-                       .Name("sipi_cache_hits_total")
-                       .Help("Total number of cache hits")
-                       .Register(*registry_)
-                       .Add({})),
-
-    cache_misses_total(prometheus::BuildCounter()
-                         .Name("sipi_cache_misses_total")
-                         .Help("Total number of cache misses")
-                         .Register(*registry_)
-                         .Add({})),
-
-    cache_evictions_total(prometheus::BuildCounter()
-                            .Name("sipi_cache_evictions_total")
-                            .Help("Total number of cache evictions")
-                            .Register(*registry_)
-                            .Add({})),
-
-    cache_skips_total(prometheus::BuildCounter()
-                        .Name("sipi_cache_skips_total")
-                        .Help("Total number of oversized files skipped")
-                        .Register(*registry_)
-                        .Add({})),
-
-    image_too_large_total(prometheus::BuildCounter()
-                            .Name("sipi_image_too_large_total")
-                            .Help("Total requests rejected due to output pixel limit")
-                            .Register(*registry_)
-                            .Add({})),
-
-    client_disconnected_total(prometheus::BuildCounter()
-                                .Name("sipi_client_disconnected_total")
-                                .Help("Total requests aborted due to client disconnect during processing")
-                                .Register(*registry_)
-                                .Add({})),
-
-    memory_alloc_failures_total(prometheus::BuildCounter()
-                                  .Name("sipi_memory_alloc_failures_total")
-                                  .Help("Total memory allocation failures during image processing")
-                                  .Register(*registry_)
-                                  .Add({})),
-
-    rejected_connections_total(prometheus::BuildCounter()
-                                 .Name("sipi_rejected_connections_total")
-                                 .Help("Total requests rejected with 503 due to queue full or timeout")
-                                 .Register(*registry_)
-                                 .Add({})),
-
-    waiting_connections(prometheus::BuildGauge()
-                          .Name("sipi_waiting_connections")
-                          .Help("Current number of requests in waiting queue")
-                          .Register(*registry_)
-                          .Add({})),
-
-    cache_size_bytes(prometheus::BuildGauge()
-                       .Name("sipi_cache_size_bytes")
-                       .Help("Current cache size in bytes")
-                       .Register(*registry_)
-                       .Add({})),
-
-    cache_files(prometheus::BuildGauge()
-                  .Name("sipi_cache_files")
-                  .Help("Current number of cached files")
-                  .Register(*registry_)
-                  .Add({})),
-
-    cache_size_limit_bytes(prometheus::BuildGauge()
-                             .Name("sipi_cache_size_limit_bytes")
-                             .Help("Configured cache size limit in bytes (-1 = unlimited)")
-                             .Register(*registry_)
-                             .Add({})),
-
-    cache_files_limit(prometheus::BuildGauge()
-                        .Name("sipi_cache_files_limit")
-                        .Help("Configured cache file count limit (0 = no limit)")
-                        .Register(*registry_)
-                        .Add({})),
-
-    decode_memory_budget_bytes(prometheus::BuildGauge()
-                                  .Name("sipi_decode_memory_budget_bytes")
-                                  .Help("Configured decode memory budget in bytes")
-                                  .Register(*registry_)
-                                  .Add({})),
-
-    decode_memory_used_bytes(prometheus::BuildGauge()
-                                .Name("sipi_decode_memory_used_bytes")
-                                .Help("Currently allocated to in-flight decodes in bytes")
-                                .Register(*registry_)
-                                .Add({})),
-
-    decode_memory_decisions_total(prometheus::BuildCounter()
-                                    .Name("sipi_decode_memory_decisions_total")
-                                    .Help("Memory budget decisions by action (acquired, rejected, shadow_rejected)")
-                                    .Register(*registry_)),
-
-    // Pre-create counter children to avoid per-request map lookups
-    decode_memory_acquired(decode_memory_decisions_total.Add({{"action", "acquired"}})),
-    decode_memory_rejected(decode_memory_decisions_total.Add({{"action", "rejected"}})),
-    decode_memory_shadow_rejected(decode_memory_decisions_total.Add({{"action", "shadow_rejected"}})),
-
-    decode_memory_near_limit_total(prometheus::BuildCounter()
-                                     .Name("sipi_decode_memory_near_limit_total")
-                                     .Help("Acquisitions where usage > 80% of budget (early warning)")
-                                     .Register(*registry_)
-                                     .Add({})),
-
-    decode_memory_estimate_bytes(
-      prometheus::BuildHistogram()
-        .Name("sipi_decode_memory_estimate_bytes")
-        .Help("Distribution of per-request peak memory estimates in bytes")
-        .Register(*registry_)
-        .Add({}, prometheus::Histogram::BucketBoundaries{
-          1024, 10240, 102400, 1048576, 10485760, 104857600, 524288000, 1073741824, 2147483648.0})),
-
-    build_info(prometheus::BuildGauge()
-                  .Name("sipi_build_info")
-                  .Help("Sipi build metadata. Value is always 1.")
-                  .Register(*registry_)
-                  .Add({{"version", BUILD_SCM_TAG}, {"commit", BUILD_SCM_REVISION}})),
-
-    request_duration_seconds(
-      prometheus::BuildHistogram()
-        .Name("sipi_request_duration_seconds")
-        .Help("HTTP request duration in seconds")
-        .Register(*registry_)
-        .Add({}, prometheus::Histogram::BucketBoundaries{
-          0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0})),
-
-    read_shape_fast_path_total(prometheus::BuildCounter()
-                                  .Name("sipi_read_shape_fast_path_total")
-                                  .Help("read_shape calls labelled by format and outcome "
-                                        "(hit, miss, partial, fallback). ADR-0004 / DEV-6537.")
-                                  .Register(*registry_)),
-
-    // Pre-create counter children to avoid per-call map lookups.
-    read_shape_fast_path_jp2_hit(
-      read_shape_fast_path_total.Add({{"format", "jp2"}, {"outcome", "hit"}})),
-    read_shape_fast_path_jp2_miss(
-      read_shape_fast_path_total.Add({{"format", "jp2"}, {"outcome", "miss"}})),
-    read_shape_fast_path_jp2_partial(
-      read_shape_fast_path_total.Add({{"format", "jp2"}, {"outcome", "partial"}})),
-    read_shape_fast_path_jp2_fallback(
-      read_shape_fast_path_total.Add({{"format", "jp2"}, {"outcome", "fallback"}})),
-    read_shape_fast_path_tiff_hit(
-      read_shape_fast_path_total.Add({{"format", "tiff"}, {"outcome", "hit"}})),
-    read_shape_fast_path_tiff_miss(
-      read_shape_fast_path_total.Add({{"format", "tiff"}, {"outcome", "miss"}})),
-    read_shape_fast_path_tiff_partial(
-      read_shape_fast_path_total.Add({{"format", "tiff"}, {"outcome", "partial"}})),
-    read_shape_fast_path_tiff_fallback(
-      read_shape_fast_path_total.Add({{"format", "tiff"}, {"outcome", "fallback"}})),
-
-    essentials_hash_mismatch_total(prometheus::BuildCounter()
-                                      .Name("sipi_essentials_hash_mismatch_total")
-                                      .Help("Essentials data_chksum mismatch events "
-                                            "(corruption tripwire). ADR-0010 / DEV-6537.")
-                                      .Register(*registry_)),
-
-    essentials_hash_mismatch_jp2(essentials_hash_mismatch_total.Add({{"format", "jp2"}})),
-    essentials_hash_mismatch_tiff(essentials_hash_mismatch_total.Add({{"format", "tiff"}})),
-    essentials_hash_mismatch_jpeg(essentials_hash_mismatch_total.Add({{"format", "jpeg"}})),
-    essentials_hash_mismatch_png(essentials_hash_mismatch_total.Add({{"format", "png"}})),
-    essentials_hash_mismatch_other(essentials_hash_mismatch_total.Add({{"format", "other"}})),
-
-    tiff_pyramid_reduced_decodes_total(prometheus::BuildCounter()
-                                         .Name("sipi_tiff_pyramid_reduced_decodes_total")
-                                         .Help("TIFF decodes served from a reduced pyramid level (level > 0).")
-                                         .Register(*registry_)
-                                         .Add({}))
-{
-  // Set build info gauge to 1 (it's an info-style metric — value is always 1, labels carry metadata)
-  build_info.Set(1);
 }
 
 EssentialsFormat format_from_path(const std::string &path)
@@ -208,7 +30,7 @@ EssentialsFormat format_from_path(const std::string &path)
   return EssentialsFormat::Other;
 }
 
-prometheus::Counter &read_shape_fast_path_counter(
+Counter &read_shape_fast_path_counter(
   EssentialsFormat format,
   ReadShapeFastPathOutcome outcome)
 {
@@ -241,7 +63,7 @@ prometheus::Counter &read_shape_fast_path_counter(
   return m.read_shape_fast_path_jp2_miss;
 }
 
-prometheus::Counter &essentials_hash_mismatch_counter(EssentialsFormat format)
+Counter &essentials_hash_mismatch_counter(EssentialsFormat format)
 {
   Metrics &m = Metrics::instance();
   switch (format) {
@@ -252,13 +74,6 @@ prometheus::Counter &essentials_hash_mismatch_counter(EssentialsFormat format)
   case EssentialsFormat::Other: return m.essentials_hash_mismatch_other;
   }
   return m.essentials_hash_mismatch_other;
-}
-
-std::string Metrics::serialize()
-{
-  prometheus::TextSerializer serializer;
-  auto collected = registry_->Collect();
-  return serializer.Serialize(collected);
 }
 
 }// namespace Sipi::observability

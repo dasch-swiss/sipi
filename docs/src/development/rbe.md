@@ -173,9 +173,8 @@ output download under `--remote_download_minimal`. The e2e tests are tagged
 serially. Under `--config=asan` the e2e macro attaches `//bazel:llvm-symbolizer` as a
 runfile and sets `ASAN_SYMBOLIZER_PATH` to its runfiles path, so the sanitizer e2e tests
 run remotely too (a runner-side absolute symbolizer path would not exist on the worker).
-The `differential` parity gate also executes on the worker here, adding the C++ oracle
-(`//src/cli:sipi`, also x86_64) alongside the subject. `docker_smoke` is the sole local
-exception, kept on the runner by its plain `exclusive` tag and its Docker-daemon dependency.
+`docker_smoke` is the sole local exception, kept on the runner by its plain `exclusive`
+tag and its Docker-daemon dependency.
 
 ### The `exclusive-if-local` and `no-sandbox` tags on e2e tests
 
@@ -197,9 +196,10 @@ E2E tests are tagged `exclusive-if-local` and `no-sandbox` in
   unaffected). It does not prevent cross-compilation.
 
 The reason e2e tests need `no-sandbox` at all: SIPI's `validate_resolved_path` guard
-in `src/SipiHttpServer.cpp` canonicalises the request path via `realpath(3)`. Under the
-Bazel sandbox, `repo_root()` returns the writable runfiles path rather than the
-`TEST_TMPDIR` copy, so sipi rejects legitimate test files with HTTP 400. Disabling the
+in `src/server-rs/src/path.rs` canonicalises the request path via `realpath(3)`
+(Rust's `std::fs::canonicalize`). Under the Bazel sandbox, path resolution returns the
+writable runfiles path rather than the `TEST_TMPDIR` copy, so sipi rejects legitimate
+test files with HTTP 400. Disabling the
 sandbox sidesteps this runfiles-symlink interaction. This is also the open question when
 e2e tests execute remotely: the NativeLink executor must honor `no-sandbox` (materialise
 real files under a stable root) for the guard to pass. The guard itself is correct and

@@ -7,8 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > (`src/server-rs`, `src/cli-rs`, `test/e2e`), run **`just bazel-rustfmt-check`**
 > and **`just bazel-clippy-check`** before committing (fix with `just bazel-rustfmt`).
 > Both are CI gates (`-Dwarnings`, run as `rules_rust` lint aspects on the `test`
-> job) that are **not** exercised by `just bazel-test`, `bazel-test-e2e`,
-> `bazel-coverage`, or the differential gate — so a fully green local test run can
+> job) that are **not** exercised by `just bazel-test`, `bazel-test-e2e`, or
+> `bazel-coverage` — so a fully green local test run can
 > still fail CI on a formatting or clippy finding. This is a hard rule, not a
 > suggestion.
 
@@ -21,8 +21,8 @@ SIPI (Simple Image Presentation Interface) is a multithreaded, high-performance,
 Read these before reasoning about names, boundaries, or architectural decisions:
 
 - [`UBIQUITOUS_LANGUAGE.md`](UBIQUITOUS_LANGUAGE.md) — canonical SIPI glossary. Defines Image vs Bitstream, the IIIF pipeline terms (Region / Size / Rotation / Quality / Format / Decode level / Canonical URL / Cache key), Preservation metadata, the three Lua entry points, the seven Permission types, and more. Use these terms in code comments, commit messages, and PR descriptions; aliases listed there are *avoid*.
-- [`CONTEXT.md`](CONTEXT.md) — SIPI is the IIIF subdomain implementation of the **Access Area** bounded context in the wider [`dsp-repository`](https://github.com/dasch-swiss/dsp-repository) system. Defines the Published Language inherited from Access Area (**Preservation File** / **Service File** / **Access File**) and points at the SIPI-local glossary. [`src/shttps/README.md`](src/shttps/README.md) documents the internal HTTP-framework module and its four-type seam API.
-- [`docs/adr/`](docs/adr/) — architectural decision records. Start with [`0013-shttps-as-internal-module.md`](docs/adr/0013-shttps-as-internal-module.md) (the strangler-fig seam) and [`0017-extensibility-lua-and-rust.md`](docs/adr/0017-extensibility-lua-and-rust.md) (Lua and Rust extensions are both first-class, permanently).
+- [`CONTEXT.md`](CONTEXT.md) — SIPI is the IIIF subdomain implementation of the **Access Area** bounded context in the wider [`dsp-repository`](https://github.com/dasch-swiss/dsp-repository) system. Defines the Published Language inherited from Access Area (**Preservation File** / **Service File** / **Access File**) and points at the SIPI-local glossary.
+- [`docs/adr/`](docs/adr/) — architectural decision records. Start with [`0020-oracle-removal.md`](docs/adr/0020-oracle-removal.md) (the C++ oracle is removed; the Rust shell is the sole server — completing the strangler-fig migration that [`0013-shttps-as-internal-module.md`](docs/adr/0013-shttps-as-internal-module.md) prepared) and [`0017-extensibility-lua-and-rust.md`](docs/adr/0017-extensibility-lua-and-rust.md) (Lua and Rust extensions are both first-class, permanently).
 
 ## Build System and Common Commands
 
@@ -31,7 +31,7 @@ For full build instructions, see [`docs/src/development/building.md`](docs/src/d
 
 **Build reproducibility invariant:** Bazel is the build system; Nix provisions only the dev shell. Every build/test/coverage step in CI invokes one of the `just bazel-*` recipes — no inline `bazel` calls, no `nix build` calls. Bazel's own incremental rebuild IS the inner-loop edit/rebuild cycle (`just bazel-build` after a single-file edit completes in seconds via the action cache). CI runs on a self-hosted NativeLink Remote Build Execution backend — remote cache (AC + CAS) + executor on `:50051` (mTLS), plus a `bazel-remote` download cache on `:50052` for `http_archive` tarballs. The connection, mTLS, and cross-compile flags are assembled by the `.github/actions/bazel-rbe` composite action and injected per CI step; see [`docs/src/development/rbe.md`](docs/src/development/rbe.md). The backend (`dasch-remotebuild-prod-01`) is DaSCH-hosted and defined outside this repo: the libvirt VM in [`ops-tf`](https://github.com/dasch-swiss/ops-tf) (`live/virt-03/prod/vms/`), the NativeLink/bazel-remote service config in [`infra`](https://github.com/dasch-swiss/infra) (`OS/ansible/roles/dasch.nativelink`). Local dev never contacts the backend — the remote flags are injected only by CI workflow steps; Bazel doesn't expand env vars in `.bazelrc`, so they live in the workflow, not the rc file. **RBE write pressure** (why the store disk writes terabytes/day, that it is worker-side materialization and not client uploads, and the client-side levers that reduce it) is analyzed once and for all in [`docs/src/development/rbe-write-pressure.md`](docs/src/development/rbe-write-pressure.md) — read it before re-investigating RBE disk-write behavior. Every `ci.yml` test leg attaches its Bazel BEP JSON as a `bep-*` artifact for offline analysis.
 
-**Build completeness invariant:** every build target must succeed on every supported platform — macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. The Docker image (`//src:image` via `rules_oci`) is Linux-only — `bazel-docker-build-{amd64,arm64}` is gated by host-CPU `target_compatible_with`. The sanitized variant is `bazel build --config=asan --config=ubsan //src/cli:sipi`; the libFuzzer harness is Bazel-native on linux-x86_64 (CI) and darwin-aarch64 (local dev) — the `bazel-build-fuzz` / `bazel-run-fuzz` recipes detect the host and select the matching `//tools/fuzz:<host>_fuzz` platform. linux-aarch64 is out of scope for the fuzz harness. CI runs the test matrix on all three platforms, so a green CI run verifies macOS as well as Linux. Before shipping any change to `flake.nix`, `MODULE.bazel`, `BUILD.bazel`, or a `justfile` build recipe, run `just bazel-build` and `just bazel-coverage` locally on macOS at minimum.
+**Build completeness invariant:** every build target must succeed on every supported platform — macOS (darwin-aarch64), linux-x86_64, and linux-aarch64. The Docker image (`//src:image` via `rules_oci`) is Linux-only — `bazel-docker-build-{amd64,arm64}` is gated by host-CPU `target_compatible_with`. The sanitized variant is `bazel build --config=asan --config=ubsan //src/cli:sipi`. CI runs the test matrix on all three platforms, so a green CI run verifies macOS as well as Linux. Before shipping any change to `flake.nix`, `MODULE.bazel`, `BUILD.bazel`, or a `justfile` build recipe, run `just bazel-build` and `just bazel-coverage` locally on macOS at minimum.
 
 **First-time setup:** Bazel builds (including `just bazel-docker-build-${arch}`) fetch Kakadu directly via Bazel's `gh_release_archive` repository_rule (no `vendor/` step). Requires `gh auth login` and `dasch-swiss` org membership. See [`docs/src/development/kakadu.md`](docs/src/development/kakadu.md).
 
@@ -51,7 +51,6 @@ just bazel-test-unit             # bazel test //test/unit/...  (12 components)
 just bazel-test-approval         # bazel test //test/approval:approvaltests
 just bazel-test-e2e              # Rust e2e tests via rules_rust
 just bazel-test-smoke            # Docker smoke test (OCI tarball loaded by the test)
-just bazel-test-differential     # differential parity gate vs the C++ oracle (manual; spawns both binaries)
 
 # Coverage (canonical CI build — what ci.yml invokes on every PR)
 just bazel-coverage              # unit + approval + e2e under instrumentation; lcov
@@ -70,10 +69,8 @@ just valgrind                    # run sipi under Valgrind
 just bench <tier>                # tier ∈ parse|decode|process|encode; -c opt build + direct exec
 just bench-compare before after  # U-test deltas + geomean via //tools/benchmark:compare
 
-# Sanitizer + fuzz
+# Sanitizer
 just bazel-build-sanitized       # bazel build --config=asan --config=ubsan //src/cli:sipi  (ci.yml sanitizer job)
-just bazel-build-fuzz            # bazel build --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz  (fuzz.yml CI on linux-x86_64; darwin-aarch64 supported for local dev)
-just bazel-run-fuzz <corpus> <duration> [seed]  # libFuzzer args; recipe builds + execs the binary directly
 
 # Docker (Bazel rules_oci)
 just bazel-docker-build-amd64            # build + load amd64 image as daschswiss/sipi:latest (CI on amd64 runner)
@@ -107,20 +104,19 @@ localdev config in one step.
 
 ## High-Level Architecture
 
-**Production surface vs oracle.** The **Rust axum shell** (`src/server-rs` + `src/cli-rs`, built by `just bazel-build-server`) is the production server. It drives the C++ **image engine** (`libsipi`) over the FFI seam in `src/server-rs/src/ffi.rs`. The retained C++ **server** (`src/shttps` + `src/cli/cli_app.cpp` server mode) is **oracle-only** — kept solely as the reference in the differential parity gate (`test/e2e/tests/differential.rs`), never deployed. In production Rust code, describe current Rust behavior on its own terms; do not frame it relative to the C++ server / oracle / transport (referencing the C++ *engine*, the FFI callee, is fine), and keep parity notes in the differential test, not in shell comments. See [`CONVENTIONS.md` § Production surface vs oracle](CONVENTIONS.md).
+**Production surface.** The **Rust axum shell** (`src/server-rs` + `src/cli-rs`, built by `just bazel-build-server`) is the production server. It drives the C++ **image engine** (`libsipi`) over the FFI seam in `src/server-rs/src/ffi.rs`. There is no C++ server: the retained shttps oracle was removed (ADR-0020); the C++ `//src/cli:sipi` binary now provides only the offline verbs (`convert`/`verify`/`query`/`compare`/`health`). In production Rust code, describe current behavior on its own terms; do not frame it relative to the removed C++ server / oracle / transport (referencing the C++ *engine*, the FFI callee, is fine). See [`CONVENTIONS.md` § Production surface](CONVENTIONS.md).
 
 ### Core Components
 
 | Component | Path | Purpose |
 |-----------|------|---------|
-| Main Application | `src/cli/cli_app.cpp` | CLI11 arg parsing + subcommand dispatch (CLI + server modes), behind the `sipi_cli_main` FFI entry; `src/cli-rs/src/main.rs` owns `main` and Sentry init |
+| Main Application | `src/cli/cli_app.cpp` | CLI11 arg parsing + offline-verb dispatch, behind the `sipi_cli_main` FFI entry; `src/cli-rs/src/main.rs` owns `main` and Sentry init |
 | SipiImage | `src/SipiImage.h` | Image processing: TIFF, JP2, PNG, JPEG; metadata (EXIF, IPTC, XMP); ICC profiles |
-| SipiHttpServer | `src/SipiHttpServer.h` | HTTP server, IIIF endpoints, caching, Lua scripting integration |
-| IIIF Parser | `src/iiifparser/` | IIIF URL parsing: identifier, region, size, rotation, quality/format |
+| Rust HTTP shell | `src/server-rs/` | The production server: axum routes, IIIF endpoints, caching, Lua request-shaping; drives the C++ engine over FFI |
+| IIIF Parser | `src/iiifparser/` (C++ engine) / `src/server-rs/src/iiif.rs` (production) | IIIF URL parsing: identifier, region, size, rotation, quality/format. Production parses in Rust; the C++ engine rebuilds params from the flattened seam struct |
 | Format Handlers | `src/formats/` | SipiIO base class + SipiIOTiff, SipiIOJ2k, SipiIOJpeg, SipiIOPng |
-| SHTTPS Framework | `src/shttps/` | HTTP server impl: threading, SSL/TLS, connection pooling, JWT auth |
 | Caching | `src/SipiCache.h` | File-based LRU cache with dual-limit eviction (size + file count), crash recovery |
-| Metrics | `src/observability/metrics.h` | Prometheus metrics singleton (`Sipi::observability::Metrics`) — cache counters/gauges; `GET /metrics` is oracle-only, production exports over OTLP via `src/server-rs/src/metrics.rs` |
+| Metrics | `src/observability/metrics.h` | Metrics singleton (`Sipi::observability::Metrics`) — plain atomic counters/gauges; scalar fields cross the FFI seam as `SipiMetricsSnapshot` and export over OTLP via `src/server-rs/src/metrics.rs` |
 | Memory Budget | `src/SipiMemoryBudget.h` | Lock-free decode memory budget with RAII guard — prevents OOM from concurrent large decodes |
 | Lua Integration | `src/ffi/SipiLua.h` | Lua bindings for image manipulation, HTTP handling, config/routes |
 
@@ -147,7 +143,7 @@ hand-written native `cc_library` over an `http_archive`/release fetch
 (`bazel/<lib>.BUILD.bazel`) — never `rules_foreign_cc` (see
 [`docs/adr/0015-native-cc_library-over-foreign_cc.md`](docs/adr/0015-native-cc_library-over-foreign_cc.md)).
 BCR drop-ins: libpng, libjpeg_turbo, libwebp, libdeflate, zlib, bzip2, xz, zstd,
-sqlite3, libexpat, libmagic, Lua, curl, OpenSSL, prometheus-cpp (core only),
+sqlite3, libexpat, libmagic, Lua, curl, OpenSSL,
 protobuf. Native `cc_library`: libtiff (codecs re-enabled + JBIG via jbigkit),
 exiv2, lcms2, jansson, jbigkit, and Kakadu (requires license).
 
@@ -172,7 +168,6 @@ For test framework details (how to run tests, directory layout, adding tests), s
 - **Approval tests** (`test/approval/`): snapshot-based regression — `just bazel-test-approval` (or via `bazel-coverage` in CI). `SOURCE_DATE_EPOCH=946684800` and `SIPI_WORKSPACE_ROOT="."` are injected by `test/approval/BUILD.bazel`.
 - **E2E tests** (`test/e2e/`): Rust (reqwest + `rules_rust`'s hermetic rustc). Run via `just bazel-test-e2e`, or a single target with `bazel test //test/e2e:<name> --test_output=streamed`.
 - **Smoke tests** (`test/e2e/tests/docker_smoke.rs`): against Docker image. Run via `just bazel-test-smoke` — the `:docker_smoke` rust_test consumes the OCI tarball from `//src:image_load` and `docker load`s it before probing endpoints.
-- **Differential parity** (`test/e2e/tests/differential.rs`): THE strangler parity gate — replays a deduped corpus of every replayable e2e request against both the Rust shell (subject, `$SIPI_BIN`) and the retained C++ server (reference, `$SIPI_BIN_REF`) and asserts they agree modulo the divergence allowlist; intentional/known divergences are per-`Case` `gap`s. Run via `just bazel-test-differential` — `manual`-tagged, so it stays out of `:all_e2e` and coverage; CI runs it as a dedicated linux-amd64 step. `just differential-coverage-check` guards the corpus against drift as e2e tests are added.
 
 Run a single unit-test target with `bazel test //test/unit/<component>:<component>_test --test_output=streamed`.
 
@@ -232,6 +227,5 @@ These are not style preferences — they are contract with the maintainer. Code 
 - `bazel build --config=release //src/cli:sipi` — production: `-c opt` + `_FORTIFY_SOURCE=2` hardening; what the Docker image ships
 - `bazel build -c dbg //src/cli:sipi` — Debug (`-O0 -g`)
 - `bazel build --config=asan --config=ubsan //src/cli:sipi` — sanitizers
-- `bazel build --config=fuzz //fuzz/handlers:iiif_handler_uri_parser_fuzz` — libFuzzer harness
 
 **Error Reporting:** Optional Sentry integration (Rust `sentry` crate, `cli-rs/src/main.rs`) via `SIPI_SENTRY_DSN`, `SIPI_SENTRY_ENVIRONMENT`, `SIPI_SENTRY_RELEASE` environment variables — panics and handled image errors for every verb, plus an out-of-process minidump reporter for native crashes on `server` (see [`docs/adr/0018-minidump-crash-memory-accepted-risk.md`](docs/adr/0018-minidump-crash-memory-accepted-risk.md)).

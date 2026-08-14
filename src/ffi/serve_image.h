@@ -7,7 +7,7 @@
  * The IIIF image pipeline behind the FFI seam (strangler-fig).
  *
  * `build_image_response` builds the transport-pure response for an IIIF image
- * request, the `serve_iiif` decode path carved out of `SipiHttpServer`. It
+ * request — the `serve_iiif` decode path. It
  * reconstructs the typed IIIF params from the flat `SipiServeRequest`, runs
  * admission (cache / memory-budget), builds the canonical URL, and
  * then decodes + transforms — every fallible step *before* the response is
@@ -29,8 +29,8 @@
 namespace Sipi::ffi {
 
 /*! Build the response for an IIIF image request. Reads engine services + config
- *  from `eng`. `cancelled` is polled between the decode stages (mirrors the
- *  legacy `peerConnected()` checks) — pass `[]{ return false; }` in tests.
+ *  from `eng`. `cancelled` is polled between the decode stages to abort when the
+ *  client has disconnected — pass `[]{ return false; }` in tests.
  *  Returns the error status the caller renders, or `SipiStatus::ClientGone`
  *  when the client vanished mid-decode (the caller emits nothing). */
 [[nodiscard]] std::expected<ServeResponse, SipiStatus>

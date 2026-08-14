@@ -211,12 +211,11 @@ int sipi_metrics_snapshot(SipiMetricsSnapshot *out)
   return Sipi::ffi::sipi_guard([&] {
     auto &m = Sipi::observability::Metrics::instance();
 
-    // prometheus stores every value as a double; the snapshot narrows to the
-    // integral type the OTel instrument wants — uint64 for monotonic counters,
-    // int64 for gauges (which may be negative: the cache size limit is -1 when
-    // unlimited).
-    const auto counter = [](const prometheus::Counter &c) { return static_cast<std::uint64_t>(c.Value()); };
-    const auto gauge = [](const prometheus::Gauge &g) { return static_cast<std::int64_t>(g.Value()); };
+    // The singleton stores counters as uint64 and gauges as int64 (a gauge may
+    // be negative: the cache size limit is -1 when unlimited). These readers make
+    // the snapshot's integral narrowing explicit at the seam.
+    const auto counter = [](const Sipi::observability::Counter &c) { return c.Value(); };
+    const auto gauge = [](const Sipi::observability::Gauge &g) { return g.Value(); };
 
     out->cache_hits_total = counter(m.cache_hits_total);
     out->cache_misses_total = counter(m.cache_misses_total);

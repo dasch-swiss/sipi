@@ -3,9 +3,7 @@
 `logger.{h,cpp}` is a small, generic logging surface in the default
 namespace (`log_info`, `log_warn`, `log_err`, `log_debug`, plus the
 `set_cli_mode` / `set_json_mode` mode flags). No `Sipi::` business
-logic — any module in this codebase can legitimately depend on it,
-including `//src/shttps:shttps`. The visibility allowlist below reflects
-this.
+logic — any module in this codebase can legitimately depend on it.
 
 `logger.cpp` deps only on the standard library plus its own header,
 so `layering_check` runs cleanly.
@@ -13,11 +11,7 @@ so `layering_check` runs cleanly.
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
-package(default_visibility = [
-    "//src:__subpackages__",
-    # Generic primitive consumed by shttps as a shared support library.
-    "//src/shttps:__pkg__",
-])
+package(default_visibility = ["//src:__subpackages__"])
 
 cc_library(
     name = "logging",
@@ -26,7 +20,7 @@ cc_library(
     # Virtual-include staging publishes `logger.h` as `logging/logger.h`
     # regardless of where the consumer sits — required for top-level
     # packages whose include path does not have `src/` on it (e.g.
-    # `//src/shttps:shttps`) and thus cannot resolve the include via
+    # `//src/util`, `//src/scripting`) and thus cannot resolve the include via
     # `:sipi_lib`'s `includes = ["."]`.
     include_prefix = "logging",
     features = ["layering_check", "parse_headers"],

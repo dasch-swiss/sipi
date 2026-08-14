@@ -78,22 +78,13 @@ What the macro injects:
                                  with `realpath()` resolution against the
                                  materialised `:test_fixtures` tree — sipi's
                                  path-traversal guard
-                                 (`SipiHttpServer.cpp:validate_resolved_path`)
+                                 (`src/server-rs/src/path.rs`)
                                  then rejects every IIIF request with
                                  "Invalid IIIF identifier".
                                  NOT `local`: `local` additionally force-runs
                                  the test's COMPILE on the local host, which
                                  breaks RBE cross-compilation (x86_64 exec
                                  tools can't run on an arm64/darwin runner).
-
-The macro DOES cover the `differential` parity target through
-`extra_data` / `extra_env`: that target adds the retained C++ server
-`//src/cli:sipi` to `data` and sets `SIPI_BIN_REF` to its runfiles path,
-so `SipiServer::start_pair` can spawn the reference oracle alongside the
-`SIPI_BIN` subject. It is `manual`-tagged (kept out of `:all_e2e` and the
-`//test/e2e/...` coverage wildcard) and run via
-`just bazel-test-differential` as a dedicated CI step (linux-amd64) and
-locally.
 
 The macro deliberately does NOT cover `docker_smoke` — that target has
 its own data shape (the OCI image tarball, `:sipi_image_tar`) and own
@@ -129,13 +120,13 @@ def sipi_e2e_test(
         # The Rust shell is the binary under test: it
         # serves `server` natively and forwards every offline subcommand to
         # the C++ CLI via sipi_cli_main, so it covers both the server and CLI
-        # e2e suites. The C++ `//src/cli:sipi` server is retired at the delete.
+        # e2e suites.
         "SIPI_BIN": "$(rootpath //src/cli-rs:sipi)",
         # Points at the `copy_to_directory` output that materialises
         # `version.txt`, `test/_test_data/`, `config/`, `scripts/`,
         # `server/` as real files (no symlinks). Required so sipi's
         # `realpath()`-based path-traversal guard
-        # (`SipiHttpServer.cpp:validate_resolved_path`) keeps
+        # (`src/server-rs/src/path.rs`) keeps
         # imgroot's resolved prefix and per-request files in
         # agreement — under a runfiles tree of symlinks the prefix
         # check rejects every IIIF request. The same materialisation

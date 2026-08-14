@@ -14,8 +14,8 @@ recipes — there are no inline `bazel ...` calls in any workflow.
 
 ```bash
 nix develop                                    # bazelisk + host tools on PATH
-just bazel-build                               # bazel build --stamp //src/cli:sipi
-./bazel-bin/src/cli/sipi server --config config/sipi.localdev-config.lua
+just bazel-build-server                        # bazel build --stamp //src/cli-rs:sipi (the Rust server shell)
+./bazel-bin/src/cli-rs/sipi server --config config/sipi.localdev-config.lua
 ```
 
 `just run` chains the two: it depends on `bazel-build` and starts
@@ -129,11 +129,7 @@ groups:
 | `bazel-test-approval` | `bazel test //test/approval:approvaltests` |
 | `bazel-test-e2e [*FLAGS]` | All Rust e2e `rust_test` targets |
 | `bazel-test-smoke [*FLAGS]` | Docker smoke test (consumes Bazel-built image tarball) |
-| `bazel-test-differential [*FLAGS]` | Differential parity gate: full e2e corpus, Rust shell vs C++ oracle; `manual`-tagged; dedicated linux-amd64 CI step |
-| `differential-coverage-check` | Drift guard: assert the differential corpus still covers the e2e surface (pure shell) |
 | `bazel-build-sanitized [*FLAGS]` | `bazel build --config=asan --config=ubsan //src/cli:sipi` |
-| `bazel-build-fuzz [*FLAGS]` | libFuzzer harness (linux-x86_64 in CI, darwin-aarch64 local) |
-| `bazel-run-fuzz corpus duration [seed]` | Run libFuzzer harness against a corpus |
 | `bazel-cross-build-image {amd64,arm64}` | Cross-build `//src:image` for the Linux target arch (build-only; darwin→linux gate) |
 | `bazel-docker-build-{amd64,arm64}` | Build + load per-arch image as `daschswiss/sipi:latest` |
 | `bazel-docker-push-{amd64,arm64}` | Push to `daschswiss/sipi:{latest,v<version>}-${arch}` |
@@ -141,7 +137,6 @@ groups:
 | `bazel-docker-extract-debug arch` | Build `:sipi_debug_layout`, surface `sipi-<arch>.debug` |
 | `run` | `just bazel-build` then run sipi with the dev config |
 | `valgrind` | `just bazel-build` then run sipi under Valgrind |
-| `fuzz-corpus-update` | Download CI fuzz corpus and merge into the seed corpus |
 | `docs-build` | Build documentation site (`mkdocs build`) |
 | `docs-serve` | Serve documentation locally for preview |
 

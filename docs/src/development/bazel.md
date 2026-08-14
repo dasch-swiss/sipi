@@ -20,15 +20,15 @@ native-`cc_library` deps' source archives via `http_archive`. Version
 bumps live here.
 
 **BUILD.bazel** files describe the *target graph*. Each first-party
-package — `//src`, `//shttps`, `//test/unit/<mod>`,
-`//fuzz/handlers`, `//tools/fuzz`, `//bazel/...` — has its own
+package — `//src`, `//src/server-rs`, `//src/cli-rs`,
+`//test/unit/<mod>`, `//bazel/...` — has its own
 BUILD.bazel that declares its `cc_library`/`cc_binary`/`cc_test`/
 `oci_image`/`rust_test` targets and visibility rules.
 
 **Hermetic toolchain.** The BCR `llvm` (hermetic-llvm) module, pinned
 at 0.8.10, registers a single constraint-based LLVM 22.1.7 toolchain
-that every cc action runs under — it serves all platforms, including
-the `//tools/fuzz:*` fuzz platforms. libc++ is the default stdlib.
+that every cc action runs under — it serves all platforms.
+libc++ is the default stdlib.
 The bundle ships per-target glibc (~2.28) + libc++ + compiler-rt on
 Linux (no external Chromium debian sysroots) and fetches the macOS
 SDK hermetically from Apple's CDN (no host Xcode CLT). The host
@@ -59,10 +59,10 @@ through link.
 
 ```bash
 nix develop                                    # bazelisk + host tools on PATH
-just bazel-build                               # bazel build --stamp //src/cli:sipi
-./bazel-bin/src/cli/sipi server --config config/sipi.localdev-config.lua
+just bazel-build-server                        # bazel build --stamp //src/cli-rs:sipi (the Rust server shell)
+./bazel-bin/src/cli-rs/sipi server --config config/sipi.localdev-config.lua
 # Subsequent edits:
-just bazel-build                               # incremental, sub-second through link
+just bazel-build-server                        # incremental, sub-second through link
 ```
 
 `just run` chains the two: it depends on `bazel-build` and starts
@@ -89,10 +89,8 @@ just bazel-test-smoke            # Docker smoke test (OCI tarball loaded by the 
 just bazel-coverage              # unit + approval + e2e under instrumentation;
                                  # lcov at bazel-out/_coverage/_coverage_report.dat
 
-# Sanitizer + fuzz
+# Sanitizer
 just bazel-build-sanitized       # bazel build --config=asan --config=ubsan //src/cli:sipi
-just bazel-build-fuzz            # libFuzzer harness (linux-x86_64 in CI, darwin-aarch64 local)
-just bazel-run-fuzz <corpus> <duration> [seed]
 
 # Docker (rules_oci)
 just bazel-docker-build-amd64    # build + load amd64 image as daschswiss/sipi:latest
@@ -113,7 +111,6 @@ Defined in `.bazelrc`. Each flag composes with `bazel build` /
 | `-c dbg` | `-O0 -g`. Full debug symbols; what `bazel-build-sanitized` consumes. |
 | `--config=asan` | AddressSanitizer + DWARF inline; consults `.lsan_suppressions.txt` at e2e time. |
 | `--config=ubsan` | UndefinedBehaviorSanitizer. Composes with `--config=asan`. |
-| `--config=fuzz` | libFuzzer harness on the single hermetic-llvm toolchain (libc++) via the `//tools/fuzz:<host>_fuzz` platform. |
 
 ## Querying the build graph
 
@@ -124,8 +121,8 @@ without running an action:
 # What does //src/cli:sipi depend on?
 bazel query 'deps(//src/cli:sipi)' --output=label_kind | head -20
 
-# Which targets transitively depend on //shttps:shttps?
-bazel query 'rdeps(//..., //shttps:shttps)' --output=label
+# Which targets transitively depend on //src/util:util?
+bazel query 'rdeps(//..., //src/util:util)' --output=label
 
 # Which BUILD files declare cc_test targets?
 bazel query 'kind("cc_test", //test/unit/...)' --output=label
@@ -184,10 +181,9 @@ approach is being reconsidered) — verify it locally. Without a
 `--platforms` override the default host platform on macOS is darwin,
 which fails the linux gate and skips the target.
 
-The fuzz harness is supported on linux-x86_64 (CI) and
-darwin-aarch64 (local dev) — `just bazel-build-fuzz` selects the
-host's matching `//tools/fuzz:<host>_fuzz` platform automatically.
-linux-aarch64 is out of scope for the fuzz harness.
+The C++ libFuzzer harness has been retired along with the C++ IIIF URL
+parser it targeted; a Rust fuzz harness against the Rust shell's
+`parse_request` is a tracked follow-up. See [Fuzzing](fuzzing.md).
 
 For Linux-target builds from a macOS host, see
 [Building from source](building.md#cross-platform-builds).

@@ -75,16 +75,10 @@ none of them wait on a separate lint gate. Every leg runs:
    `Docker Scout — CVE report (SARIF)`, and
    `Upload SARIF to GitHub Security`.
 
-The standalone `lint` job is gone. Its four checks — the shttps→sipi
-boundary check, the differential-coverage drift guard,
-`bazel-rustfmt-check`, and `bazel-clippy-check` — now run as extra
+The standalone `lint` job is gone. Its lint checks —
+`bazel-rustfmt-check` and `bazel-clippy-check` — now run as extra
 steps inside the `test / linux-arm64` leg, the shortest of the three
 legs, instead of gating the matrix from a separate job.
-
-The differential parity gate (Rust shell vs the retained C++ oracle,
-`just bazel-test-differential`) also runs as an extra step, on the
-`linux-amd64` leg only — one platform is enough since Rust↔C++
-divergences are code-level, not platform-specific.
 
 A separate `docs` job runs `just docs-build` (mkdocs strict-mode
 build) on ubuntu-latest. The `docs-build` job is the gate that
@@ -242,11 +236,6 @@ nix develop .#llvm-tools --command just bazel-coverage
 # Sanitizer unit + e2e (matches the `sanitizer` job in ci.yml)
 just bazel-test-sanitized --config=asan --config=ubsan
 
-# Fuzz build + run (what fuzz.yml runs; linux-x86_64 only)
-just bazel-build-fuzz
-mkdir fuzz-corpus-live
-just bazel-run-fuzz fuzz-corpus-live 60 fuzz/handlers/corpus
-
 # Docker image with split debug symbols (what publish.yml does)
 just bazel-docker-build-amd64
 just bazel-test-smoke
@@ -260,12 +249,9 @@ invocation, that's a drift signal — either the step is non-build
 glue (e.g. artifact upload, Codecov upload, Sentry push) or the
 justfile is missing a recipe and should grow one.
 
-## Nightly fuzz testing
+## Fuzz testing
 
-A nightly fuzz workflow (`.github/workflows/fuzz.yml`) runs
-libFuzzer against the IIIF URL parser to find crashes and edge
-cases. Fuzz corpora are persisted as artifacts across runs so
-coverage accumulates over time.
-
-See [Fuzzing](fuzzing.md) for details on the fuzz harness, corpus
-management, and how to reproduce crashes locally.
+The C++ libFuzzer harness has been retired along with the C++ IIIF URL
+parser it targeted; a Rust fuzz harness against the Rust shell's
+`parse_request` is a tracked follow-up. See [Fuzzing](fuzzing.md) for the
+current status.

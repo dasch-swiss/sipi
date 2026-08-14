@@ -381,7 +381,7 @@ fn info_json_x_forwarded_proto_https() {
 
 #[test]
 fn cors_info_json_without_origin() {
-    // info.json always sends Access-Control-Allow-Origin: * (SipiHttpServer.cpp:849)
+    // info.json always sends Access-Control-Allow-Origin: * (src/server-rs/src/info.rs)
     let srv = server();
     let resp = client()
         .get(format!("{}/unit/lena512.jp2/info.json", srv.base_url))
@@ -415,7 +415,7 @@ fn cors_info_json_with_origin() {
         .expect("missing ACAO header")
         .to_str()
         .unwrap();
-    // info.json hardcodes * in SipiHttpServer.cpp:849
+    // info.json hardcodes * (src/server-rs/src/info.rs)
     assert_eq!(acao, "*", "info.json ACAO should be * even with Origin");
 }
 

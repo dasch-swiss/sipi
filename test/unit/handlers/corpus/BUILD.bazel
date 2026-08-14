@@ -1,9 +1,9 @@
-"""Seed corpus for the IIIF URI parser fuzz harness.
+"""Regression corpus for the IIIF URI parser.
 
-Consumers:
-  * `fuzz/handlers/iiif_handler_uri_parser_fuzz` — the libFuzzer harness.
-  * `test/unit/handlers/parse_iiif_uri_corpus_test` — re-runs the corpus
-    against the parser as a regression suite.
+Consumer:
+  * `test/unit/handlers/parse_iiif_uri_corpus_test` — sweeps `parse_iiif_uri`
+    over every input as a regression suite (originally the libFuzzer seed
+    corpus; the fuzz harness was retired with the oracle, ADR-0020).
 
 Exposing the corpus as a Bazel `filegroup` lets the unit test declare it
 as a `data` dep and find the files at workspace-relative paths in the

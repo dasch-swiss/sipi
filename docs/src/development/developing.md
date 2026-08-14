@@ -49,16 +49,14 @@ link.
 # Note: requests that need no processing (same format, full size, no rotation)
 # are served directly from the original file and bypass the cache.
 curl http://localhost:1024/unit/gradient-stars.tif/full/max/0/default.jpg -o /tmp/test.jpg
-
-# Prometheus metrics (cache counters, gauges, no auth required)
-curl http://localhost:1024/metrics
-
-# Cache file list via Lua API (requires admin credentials from config)
-curl -u admin:Sipi-Admin http://localhost:1024/api/cache
 ```
 
+The server exports metrics over OTLP, not a scrape endpoint. Cache
+behaviour is observable directly from the on-disk cache directory
+(`./cache` under the localdev config).
+
 Make several different image requests to fill the cache past its
-1 MB / 10 file limits and watch the eviction metrics change:
+1 MB / 10 file limits and watch entries evict from `./cache`:
 
 ```bash
 # Format conversions (TIF → JPG) trigger caching — all well under 2 MB
@@ -70,7 +68,7 @@ curl http://localhost:1024/unit/cielab.tif/full/max/0/default.jpg -o /dev/null
 curl http://localhost:1024/unit/MaoriFigure.jpg/full/200,/0/default.jpg -o /dev/null
 curl http://localhost:1024/unit/MaoriFigureWatermark.jpg/full/200,/0/default.jpg -o /dev/null
 
-curl http://localhost:1024/metrics | grep sipi_cache
+ls ./cache
 ```
 
 ### Available configs
@@ -123,10 +121,9 @@ ApprovalTests. Tests are organized by component:
 Per-module Bazel packages co-locate their unit tests alongside the sources
 (per ADR-0003). Co-located tests today:
 
-- `//src/observability:connection_metrics_adapter_test` — shttps→sipi metrics adapter tests (was `test/unit/sipiconnectionmetrics/`)
+- `//src/observability:metrics_registry_test` — metrics-registry seam tripwire: pins every metric field against how it reaches production OTLP via the `SipiMetricsSnapshot` bridge
 - `//src/metadata:icc_normalize_test` — ICC profile normalization tests (was `test/unit/sipiicc/`)
-- `//src/util:util_test` — shttps util tests: Hash, Parsing (was `test/unit/shttps/`)
-- `//src/shttps:transport_test` — shttps transport tests: urldecode, SocketControl (was `test/unit/shttps/`)
+- `//src/util:util_test` — util tests: Hash, Parsing, urldecode
 
 Run one component:
 
@@ -251,7 +248,7 @@ Adding a brand-new dependency: prefer a BCR `bazel_dep` if the module is
 a true drop-in. Otherwise add an `http_archive(...)` + a native
 `cc_library` in `bazel/<lib>.BUILD.bazel` (use a sibling lib as the
 template) and wire it into the consumers (`//src:sipi_lib`,
-`//src/shttps:shttps`, …) via `@<lib>//:<target>`.
+`//src/util:util`, …) via `@<lib>//:<target>`.
 
 Kakadu is special: it is fetched via a custom `gh_release_archive`
 repository_rule (`bazel/gh_release.bzl`) that shells out to

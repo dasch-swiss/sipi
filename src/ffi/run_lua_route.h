@@ -4,9 +4,8 @@
  */
 
 /*!
- * Run a configured Lua route connection-less behind the seam — the engine-side
- * replacement for the transport's `script_handler` (deleted at the cutover, when
- * the Rust shell owns route dispatch).
+ * Run a configured Lua route connection-less behind the seam. The Rust shell owns
+ * route dispatch and calls in here to execute the route's Lua script.
  *
  * Builds a per-request `LuaServer` from the engine-held config VM bound to the
  * caller's request context, reads the route's script, and executes it; the
@@ -28,8 +27,7 @@ namespace Sipi::ffi {
  *  Returns 0 once the response is emitted, 404 when the script is not readable,
  *  or 500 on a Lua error / unknown script extension. A 404/500 returned before
  *  any byte is written lets the caller render a bare error; once the body has
- *  started, the status is already committed and the stream simply truncates
- *  (matching the transport). */
+ *  started, the status is already committed and the stream simply truncates. */
 int run_lua_route(const char *script_path, shttps::RequestContext &rc, const SipiResponse &resp);
 
 }// namespace Sipi::ffi
