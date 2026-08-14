@@ -1,4 +1,4 @@
-"""shttps/util — generic SIPI-domain utilities (parsing, hashing, errors).
+"""util — generic SIPI-domain utilities (parsing, hashing, errors).
 
 Generic helpers — MIME/string parsing, file hashing, the shttps error type
 — that are SIPI-domain rather than HTTP transport, kept as a leaf package
@@ -7,7 +7,7 @@ are OpenSSL (Hash's EVP digest context) and libmagic (Parsing's MIME
 sniffing plus the embedded `magic.mgc` database).
 
 `strip_include_prefix = "/src"` exposes the headers at the path-prefixed
-form `#include "shttps/util/Parsing.h"` (ADR-0003) self-sufficiently — no
+form `#include "util/Parsing.h"` (ADR-0003) self-sufficiently — no
 reliance on a consumer's `includes = ["."]`. Siblings within the package
 use the bare quote form (`#include "Error.h"`).
 """
@@ -20,7 +20,7 @@ package(default_visibility = ["//src:__subpackages__"])
 # Embeds libmagic's `magic.mgc` database as a C array consumed by
 # `Parsing.cpp` (`magic_load_buffers(magic_mgc, magic_mgc_len, …)`) so SIPI
 # binaries ship the magic database in-binary. Reached as
-# `#include "shttps/util/generated/magic_mgc.h"` via strip_include_prefix.
+# `#include "util/generated/magic_mgc.h"` via strip_include_prefix.
 magic_mgc_header(
     name = "magic_mgc_h",
     mgc = "@libmagic//:magic.mgc",

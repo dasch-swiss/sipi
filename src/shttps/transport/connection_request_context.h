@@ -22,7 +22,7 @@
 #include <cstddef>
 #include <string>
 
-#include "shttps/lua/request_context.h"
+#include "scripting/request_context.h"
 #include "shttps/transport/Connection.h"
 
 namespace shttps {

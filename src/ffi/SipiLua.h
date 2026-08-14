@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "shttps/lua/LuaServer.h"
+#include "scripting/LuaServer.h"
 
 /*!
  * This module implements a new Lua datatype, "SipiImage"

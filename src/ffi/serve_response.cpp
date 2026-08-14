@@ -12,7 +12,7 @@
 #include <regex>
 #include <string>
 
-#include "shttps/util/Parsing.h"
+#include "util/Parsing.h"
 
 namespace Sipi::ffi {
 namespace {

@@ -15,7 +15,7 @@
 #include "ffi/lua_config.h"// make_lua_server
 #include "ffi/response_sink.h"// FfiResponseSink
 #include "logging/logger.h"
-#include "shttps/lua/LuaServer.h"
+#include "scripting/LuaServer.h"
 
 namespace Sipi::ffi {
 namespace {

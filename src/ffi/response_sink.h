@@ -23,7 +23,7 @@
 #include <string>
 
 #include "ffi/sipi_ffi.h"// SipiResponse
-#include "shttps/lua/request_context.h"// shttps::ResponseSink, ResponseCookie
+#include "scripting/request_context.h"// shttps::ResponseSink, ResponseCookie
 
 namespace Sipi::ffi {
 

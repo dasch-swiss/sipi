@@ -9,7 +9,7 @@
 #include <iostream>
 #include <vector>
 
-#include "shttps/lua/LuaServer.h"
+#include "scripting/LuaServer.h"
 
 namespace shttps {
 extern void sqliteGlobals(lua_State *L, shttps::RequestContext &ctx, void *user_data);

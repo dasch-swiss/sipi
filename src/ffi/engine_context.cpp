@@ -6,7 +6,7 @@
 #include "ffi/engine_context.h"
 
 #include "logging/logger.h"
-#include "shttps/util/Error.h"
+#include "util/Error.h"
 
 namespace Sipi::ffi {
 namespace {

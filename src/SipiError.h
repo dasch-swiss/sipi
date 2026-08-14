@@ -17,7 +17,7 @@
 #include <memory>
 #include <string>
 
-#include "shttps/util/Error.h"
+#include "util/Error.h"
 
 /**
  * \namespace Sipi Used for all sipi things.

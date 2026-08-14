@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-#include "shttps/util/Hash.h"
+#include "util/Hash.h"
 
 // Internal protobuf codec for the Essentials packet (ADR-0005 / DEV-6410).
 //

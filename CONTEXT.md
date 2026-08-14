@@ -36,6 +36,17 @@ Module API surface (the four seam types — the documented strangler seam, ADR-0
 - **"file_handler" is overloaded.** `shttps::file_handler` is the built-in static-file + Lua-in-HTML handler that SIPI registers on the configured `wwwroute` URL prefix; it reads from the **document root**. SIPI's IIIF `/file` endpoint (the **Bitstream** path-through) is the `FILE_DOWNLOAD` case inside `Sipi::iiif_handler` and reads from the **image root**. Same word, two unrelated handlers; always qualify which side.
 - The **document root**, the **init script**, and the **connection-pool knobs** (`keep_alive_timeout`, `queue_timeout`, `max_waiting_connections`) are shttps concepts. SIPI sets their values from its config (`sipi.config.lua`) but does not own the concepts. See [`src/shttps/README.md`](./src/shttps/README.md).
 
-## Pending modularization
+## Extracted domain modules
 
-`src/shttps/` contains a handful of utilities that are SIPI domain concerns or generic helpers rather than HTTP-framework code — `shttps::Hash` / `HashType` (used by `Essentials::pixel_checksum`), `shttps::Parsing` (URL decoding, mime-type magic, header parsing helpers), `shttps::Error` (base class of `SipiError`), `shttps::Global`. They are now grouped in the `shttps/util/` sub-package (a `--strict_deps`-clean leaf), but still live under `shttps/` for historical reasons. Re-homing them fully SIPI-side is on the backlog as **consistency cleanup** (a C++-side cleanup only, per ADR-0013 — their location does not affect the Rust shell, which reaches the engine through the FFI seam).
+The cutover survivors that used to live under `src/shttps/` — the generic
+utilities (`shttps::Hash` / `HashType`, `shttps::Parsing`, `shttps::Error`,
+`shttps::Global`), the JWT leaf, and the connection-less Lua runtime
+(`LuaServer` + the `server.db` sqlite bindings) — have been extracted to
+top-level packages: `src/util/`, `src/jwt/`, and `src/scripting/`. Their C++
+symbols stay in `namespace shttps` (only the file/package location moved). No
+production file includes anything under `src/shttps/` anymore; what remains
+there is the oracle transport (`transport/`, `SipiHttpServer`), which the oracle
+removal deletes wholesale. The retained transport still depends *back* on
+`src/util` and `src/scripting` — interim reverse edges, visibility-allowlisted
+and commented, that disappear with the oracle. See
+[ADR-0013](docs/adr/0013-shttps-as-internal-module.md).

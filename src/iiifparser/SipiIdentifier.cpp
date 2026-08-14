@@ -8,7 +8,7 @@
 
 #include "../SipiError.h"
 #include "SipiIdentifier.h"
-#include "shttps/util/UrlDecode.h"
+#include "util/UrlDecode.h"
 
 namespace Sipi {
 SipiIdentifier::SipiIdentifier(const std::string &str)

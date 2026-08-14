@@ -7,9 +7,9 @@
 #include <iostream>
 #include <set>
 
-#include "shttps/lua/request_context.h"
-#include "shttps/util/Error.h"
-#include "shttps/util/Parsing.h"
+#include "scripting/request_context.h"
+#include "util/Error.h"
+#include "util/Parsing.h"
 
 #include "SipiCache.h"
 #include "SipiFilenameHash.h"

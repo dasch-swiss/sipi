@@ -38,10 +38,10 @@
 
 #include "Connection.h"
 #include "ConnectionMetrics.h"
-#include "shttps/util/Error.h"
-#include "shttps/util/Global.h"
+#include "util/Error.h"
+#include "util/Global.h"
 #include "logging/logger.h"
-#include "shttps/lua/LuaServer.h"
+#include "scripting/LuaServer.h"
 #include "SocketControl.h"
 #include "ThreadControl.h"
 #include "lua.hpp"

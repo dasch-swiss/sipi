@@ -19,7 +19,7 @@ which:
 The three shttps transport cpps + `iiif_handler.cpp` that make up the
 harness's explicit subset live under `//src/shttps:fuzz_subset` (kept in
 shttps's package because three of its four sources are native there;
-`Error` is supplied by the `//src/shttps/util` archive dep). The seed
+`Error` is supplied by the `//src/util` archive dep). The seed
 corpus stays committed under `fuzz/handlers/corpus/` and is exposed as
 `//fuzz/handlers/corpus:seed_corpus`. `data = [...]` makes it available
 in runfiles for `bazel test`; `bazel run` resolves seed paths via

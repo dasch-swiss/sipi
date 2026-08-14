@@ -27,9 +27,9 @@
 #include <curl/curl.h>
 #include <jansson.h>
 
-#include "shttps/lua/LuaServer.h"
-#include "shttps/lua_sqlite/LuaSqlite.h"
-#include "shttps/util/Parsing.h"
+#include "scripting/LuaServer.h"
+#include "scripting/LuaSqlite.h"
+#include "util/Parsing.h"
 #include "shttps/transport/Server.h"
 
 

@@ -125,7 +125,7 @@ Per-module Bazel packages co-locate their unit tests alongside the sources
 
 - `//src/observability:connection_metrics_adapter_test` — shttps→sipi metrics adapter tests (was `test/unit/sipiconnectionmetrics/`)
 - `//src/metadata:icc_normalize_test` — ICC profile normalization tests (was `test/unit/sipiicc/`)
-- `//src/shttps/util:util_test` — shttps util tests: Hash, Parsing (was `test/unit/shttps/`)
+- `//src/util:util_test` — shttps util tests: Hash, Parsing (was `test/unit/shttps/`)
 - `//src/shttps:transport_test` — shttps transport tests: urldecode, SocketControl (was `test/unit/shttps/`)
 
 Run one component:

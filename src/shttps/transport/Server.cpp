@@ -33,8 +33,8 @@
 
 
 #include "logging/logger.h"
-#include "shttps/lua/LuaServer.h"
-#include "shttps/util/Parsing.h"
+#include "scripting/LuaServer.h"
+#include "util/Parsing.h"
 #include "Server.h"
 #include "SockStream.h"
 #include "connection_request_context.h"

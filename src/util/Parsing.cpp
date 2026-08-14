@@ -10,7 +10,7 @@
 #include "Parsing.h"
 
 #include "magic.h"
-#include "shttps/util/generated/magic_mgc.h"
+#include "util/generated/magic_mgc.h"
 
 namespace shttps::Parsing {
 

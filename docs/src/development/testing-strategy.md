@@ -83,7 +83,7 @@ The `shttps` library is a custom lightweight HTTP server:
 | Range requests | HTTP 206 Partial Content | Handler-level |
 | CORS | Via Lua preflight scripts | `scripts/` |
 | Methods | GET, POST, PUT, DELETE | `shttps/transport/Connection.h` |
-| Authentication | JWT (HS256), HTTP Basic Auth, cookie support | `shttps/jwt/jwt.h` |
+| Authentication | JWT (HS256), HTTP Basic Auth, cookie support | `jwt/jwt.h` |
 | Max POST size | Configurable (`max_post_size`, default 300M) | `shttps/transport/Connection.cpp` |
 | Multipart upload | Form-data file upload with metadata | `shttps/transport/Connection.h` |
 

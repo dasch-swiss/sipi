@@ -26,8 +26,8 @@
 #include "generated/SipiVersion.h"// VERSION / BUILD_SCM_REVISION (sipi_build_version/commit)
 #include "logging/logger.h"// set_log_trace_context (sipi_set_log_trace_context)
 #include "observability/metrics.h"
-#include "shttps/lua/request_context.h"// shttps::RequestContext (the opaque SipiRequestContext)
-#include "shttps/util/Parsing.h"// shttps::Parsing::getBestFileMimetype (sipi_mimetype)
+#include "scripting/request_context.h"// shttps::RequestContext (the opaque SipiRequestContext)
+#include "util/Parsing.h"// shttps::Parsing::getBestFileMimetype (sipi_mimetype)
 
 namespace {
 

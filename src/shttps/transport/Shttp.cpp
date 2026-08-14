@@ -10,9 +10,9 @@
 #include <csignal>
 #include <utility>
 
-#include "shttps/util/Error.h"
+#include "util/Error.h"
 #include "Server.h"
-#include "shttps/lua/LuaServer.h"
+#include "scripting/LuaServer.h"
 #include "logging/logger.h"
 
 shttps::Server *serverptr = nullptr;

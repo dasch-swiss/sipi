@@ -28,7 +28,7 @@
 
 #include "ffi/serve_response.h"// SipiStatus
 #include "ffi/sipi_ffi.h"// SipiPermType, SipiKVFn
-#include "shttps/lua/request_context.h"// shttps::RequestContext
+#include "scripting/request_context.h"// shttps::RequestContext
 
 namespace Sipi::ffi {
 

@@ -19,7 +19,7 @@
 
 #include "lcms2.h"
 
-#include "shttps/util/Parsing.h"
+#include "util/Parsing.h"
 
 #include "logging/logger.h"
 #include "SipiImage.h"
@@ -31,8 +31,8 @@
 #include "formats/SipiIOTiff.h"
 #include "observability/metrics.h"
 #include "observability/profiling.h"
-#include "shttps/util/Global.h"
-#include "shttps/util/Hash.h"
+#include "util/Global.h"
+#include "util/Hash.h"
 
 namespace Sipi {
 

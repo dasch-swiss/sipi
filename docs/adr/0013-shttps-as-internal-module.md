@@ -5,6 +5,20 @@ supersedes: 0001-shttps-as-strangler-fig-target.md
 
 # shttps is an internal SIPI module, not a peer bounded context
 
+> **Amended 2026-08-14 (DEV-6968, shttps decomposition).** The "four seam types
+> (`Server`, `Connection`, `RequestHandler`, `LuaServer`) stay canonical" story
+> below, and the "re-homing … relaxed to consistency cleanup" consequence, are
+> superseded by the decomposition that prepares the oracle removal. The cutover
+> survivors have been extracted to top-level packages — `src/scripting/`
+> (`LuaServer` + `request_context.h` + the sqlite bindings), `src/util/`
+> (`Hash` / `Parsing` / `Error` / `Global`), `src/jwt/` — so production reaches
+> them directly and **no production file includes anything under `src/shttps/`**.
+> The C++ symbols stay in `namespace shttps` (only the location moved). What
+> remains inside `src/shttps/` is the oracle **transport** (`transport/`,
+> `SipiHttpServer`); it still depends *back* on `src/util` and `src/scripting`
+> (interim reverse edges, visibility-allowlisted and commented), and both die
+> when the oracle is deleted wholesale.
+
 `src/shttps/` is an internal module of this codebase, depended on one-way by the rest of `src/`. It is not a peer bounded context. The Rust rewrite scope is the whole of SIPI, with shttps as the first strangler-fig slice — not the only slice that ever gets replaced.
 
 We accept this because the system-level Context Map for `dsp-repository` (the wider system SIPI ships into) names exactly one bounded context that contains SIPI: **Access Area**, the OAIS Access functional entity. Inside Access Area, **IIIF** is a subdomain; SIPI is one implementation of that subdomain. A module inside an implementation cannot also be a peer bounded context — the DDD framing in [ADR-0001](0001-shttps-as-strangler-fig-target.md) (`CONTEXT-MAP.md`, `shttps/CONTEXT.md` as a peer to the SIPI `CONTEXT.md`) over-claimed shttps's autonomy. Demoting shttps to an internal-module API surface aligns the in-repo modeling with that system-level reality.

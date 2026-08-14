@@ -33,7 +33,7 @@
 #include "kdu_stripe_compressor.h"
 #include "kdu_stripe_decompressor.h"
 
-#include "shttps/util/Global.h"
+#include "util/Global.h"
 #include "observability/metrics.h"
 
 #include "SipiError.h"

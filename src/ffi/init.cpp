@@ -23,9 +23,9 @@
 #include <string>
 #include <vector>
 
-#include "shttps/lua/LuaServer.h"// shttps::LuaServer (parse the Lua config)
-#include "shttps/lua_sqlite/LuaSqlite.h"// shttps::sqliteGlobals
-#include "shttps/util/Error.h"// shttps::Error
+#include "scripting/LuaServer.h"// shttps::LuaServer (parse the Lua config)
+#include "scripting/LuaSqlite.h"// shttps::sqliteGlobals
+#include "util/Error.h"// shttps::Error
 
 #include "SipiCache.h"
 #include "SipiConf.h"// Sipi::SipiConf, Sipi::parseSizeString
