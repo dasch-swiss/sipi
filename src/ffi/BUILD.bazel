@@ -73,10 +73,16 @@ cc_library(
     # instead of unwinding across the C ABI (FFI contract).
     copts = ["-fexceptions"],
     deps = [
-        # The transport-free image engine (SipiImage, iiifparser, cache, rate
-        # limiter, memory budget, format handlers) the IIIF pipeline drives.
-        # //src:engine does NOT depend on this package, so there is no cycle.
+        # The transport-free image engine (SipiImage, cache, memory budget) the
+        # IIIF pipeline drives, with the IIIF parser (//src/iiifparser) reached
+        # transitively. //src:engine does NOT depend on this package, so there
+        # is no cycle.
         "//src:engine",
+        # The codec handlers. serve_image.cpp calls SipiImage::read/write, whose
+        # `io` handler registry is defined in //src/formats (moved there to
+        # break the SipiImage<->handler cycle); this dep puts that definition —
+        # and the four SipiIO* handlers it instantiates — on the link line.
+        "//src/formats:formats",
         # generated/SipiVersion.h — the Bazel build stamp the seam hands to the
         # shell for its OTel resource attributes (sipi_build_version/commit).
         "//src:sipi_generated_hdrs",

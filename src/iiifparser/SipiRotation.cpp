@@ -7,7 +7,7 @@
 #include <cstring>
 #include <fstream>
 
-#include "../SipiError.h"
+#include "SipiError.h"
 #include "SipiRotation.h"
 #include "util/Parsing.h"
 

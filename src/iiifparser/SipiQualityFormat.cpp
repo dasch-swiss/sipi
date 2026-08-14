@@ -6,7 +6,7 @@
 
 #include <fstream>
 
-#include "../SipiError.h"
+#include "SipiError.h"
 #include "SipiQualityFormat.h"
 
 

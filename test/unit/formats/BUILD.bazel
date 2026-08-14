@@ -6,7 +6,7 @@ cc_test(
     name = "formats_tests",
     srcs = glob(["*.cpp"]),
     deps = [
-        "//src:sipi_lib",
+        "//src/formats:formats",
         "@googletest//:gtest_main",
     ],
 )

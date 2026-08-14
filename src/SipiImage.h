@@ -30,6 +30,12 @@
  */
 namespace Sipi {
 
+// Reads a watermark TIFF into a grayscale byte buffer. `SipiImage::add_watermark`
+// (engine) calls this; the definition lives in //src/formats (SipiIOTiff.cpp,
+// which uses libtiff) and is resolved at link — the engine does not include the
+// formats headers, keeping the SipiImage<->handler cycle broken.
+std::vector<unsigned char> read_watermark(const std::string &wmfile, int &nx, int &ny, int &nc);
+
 // Used for 8 bits per sample (color channel) images
 using byte = unsigned char;
 
@@ -79,9 +85,11 @@ struct PixelDelta
  *
  * Base class for all images in the Sipi package.
  * This class implements all the data and handling (methods) associated with
- * images in Sipi. Please note that the map of io-classes (see \ref SipiIO) has to
- * be instantiated in the SipiImage.cpp! Thus adding a new file format requires that SipiImage.cpp
- * is being modified!
+ * images in Sipi. Please note that the map of io-classes (see \ref SipiIO) is
+ * defined in `src/formats/format_registry.cpp` (in //src/formats, which depends
+ * one-way on the engine); adding a new file format edits that registry plus the
+ * read/read_shape dispatch below — see `tools/formats-fanout.sh` for the full
+ * list of shared edit sites.
  */
 class SipiImage
 {

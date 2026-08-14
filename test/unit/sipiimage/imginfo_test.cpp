@@ -7,10 +7,10 @@
 
 #include <sys/stat.h>
 
-#include "SipiIOJ2k.h"
-#include "SipiIOJpeg.h"
-#include "SipiIOPng.h"
-#include "SipiIOTiff.h"
+#include "formats/SipiIOJ2k.h"
+#include "formats/SipiIOJpeg.h"
+#include "formats/SipiIOPng.h"
+#include "formats/SipiIOTiff.h"
 #include "test_paths.h"
 
 // CMake/ctest runs this binary from build/test/unit/sipiimage/, where the

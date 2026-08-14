@@ -1,0 +1,125 @@
+"""src/formats/ — image codec handlers (per-module carve, DEV-6353).
+
+The four `SipiIO` implementations (TIFF, JPEG2000, JPEG, PNG) plus the shared
+`output_sink`, wrapping libtiff / Kakadu / libjpeg-turbo / libpng. Each handler
+reads a codec into a `SipiImage` and writes one back out, so it depends on the
+full image surface in `//src:engine` (`SipiImage`, `SipiIO`, `SipiImageError`).
+
+Cycle inversion: `SipiImage` and the concrete handlers reference each other
+(SipiImage dispatches read/write through the `io` registry; the handlers touch
+SipiImage internals as `friend`s). A Bazel package cannot depend on itself, so
+this package depends one-way on `//src:engine`, and the `SipiImage::io`
+registry definition was moved OUT of the engine into `format_registry.cpp`
+here. The engine references `io`; the linker resolves it from this package,
+which every final link pulls in via `//src:sipi_lib` and `//src/ffi:sipi_ffi`.
+
+`strip_include_prefix = "/src"` exposes the headers at the path-prefixed form
+(`#include "formats/SipiIOTiff.h"`); siblings use the quote-form.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+package(default_visibility = ["//src:__subpackages__"])
+
+# The codec-agnostic streaming write target (`"file"`/stdout/HTTP sink). A pure
+# leaf — stdlib only, no SipiImage — that `SipiIO::write` returns through, so
+# `//src:engine`'s `SipiIO.h` includes it. Kept a separate target from
+# `:formats` so the engine can depend on it WITHOUT depending on the handler
+# package that in turn depends on the engine (the cycle stays broken at target
+# granularity: output_sink <- engine <- formats).
+cc_library(
+    name = "output_sink",
+    srcs = ["output_sink.cpp"],
+    hdrs = ["output_sink.h"],
+    strip_include_prefix = "/src",
+    visibility = [
+        "//src:__subpackages__",
+        "//test/unit/output_sink:__pkg__",
+    ],
+)
+
+cc_library(
+    name = "formats",
+    srcs = [
+        "SipiIOJ2k.cpp",
+        "SipiIOJpeg.cpp",
+        "SipiIOPng.cpp",
+        "SipiIOTiff.cpp",
+        "format_registry.cpp",
+    ],
+    hdrs = [
+        "SipiIOJ2k.h",
+        "SipiIOJpeg.h",
+        "SipiIOPng.h",
+        "SipiIOTiff.h",
+    ],
+    copts = ["-fexceptions"],
+    strip_include_prefix = "/src",
+    visibility = [
+        "//src:__subpackages__",
+        "//test/unit/formats:__pkg__",
+    ],
+    deps = [
+        ":output_sink",
+        "//include:headers",
+        "//src:engine",
+        "//src:sipi_generated_hdrs",
+        "//src:sipi_top",
+        "//src/logging:logging",
+        "//src/metadata:metadata",
+        "//src/observability:observability",
+        "//src/util",
+        "@bzip2//:bz2",
+        "@curl",
+        "@highway//:hwy",
+        "@jansson//:jansson",
+        "@kakadu//:kdu",
+        "@libexpat",
+        "@libjpeg_turbo//:jpeg",
+        "@libmagic//:lib",
+        "@libpng//:png",
+        "@openssl//:crypto",
+        "@openssl//:ssl",
+        "@tiff//:tiff",
+        "@xz//:lzma",
+        "@zlib",
+        "@zstd",
+    ] + select({
+        "@platforms//os:linux": ["//bazel:glibc23_compat"],
+        "//conditions:default": [],
+    }),
+)
+
+# Decode tier — SipiImage::read() across the @sipi_bench_fixtures input-format
+# matrix. Co-located with the module per ADR-0003 (moved from //src with the
+# formats carve). Built only by `just bench` (`tags = ["manual"]`).
+cc_binary(
+    name = "decode_benchmark",
+    srcs = ["decode_benchmark.cpp"],
+    data = ["@sipi_bench_fixtures//:images"],
+    tags = ["manual"],
+    testonly = True,
+    deps = [
+        "//src:sipi_lib",
+        "@google_benchmark//:benchmark_main",
+    ],
+)
+
+# Encode tier — SipiImage::write() across the four emitted formats. SOURCE_DATE_EPOCH
+# pins the wall-clock-stamped ICC creation date in emitted headers (ADR-0002).
+cc_binary(
+    name = "encode_benchmark",
+    srcs = ["encode_benchmark.cpp"],
+    data = ["@sipi_bench_fixtures//:images"],
+    env = {
+        "SIPI_WORKSPACE_ROOT": ".",
+        "SOURCE_DATE_EPOCH": "946684800",
+    },
+    tags = ["manual"],
+    testonly = True,
+    deps = [
+        "//src:sipi_lib",
+        "//test:test_paths",
+        "@google_benchmark//:benchmark_main",
+    ],
+)

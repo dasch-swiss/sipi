@@ -15,12 +15,14 @@
 #include "tiff.h"
 #include "tiffio.h"
 
-#include "../../src/SipiImage.h"
+#include "SipiImage.h"
 #include "SipiIO.h"
 
 namespace Sipi {
 
-std::vector<unsigned char> read_watermark(const std::string &wmfile, int &nx, int &ny, int &nc);
+// `read_watermark` is declared in SipiImage.h (the engine header this file
+// includes above) and defined in SipiIOTiff.cpp below — it is the one codec
+// helper the engine's `SipiImage::add_watermark` calls back into.
 
 /*!
  * Select the pyramid resolution level (IFD index) for a requested reduce.

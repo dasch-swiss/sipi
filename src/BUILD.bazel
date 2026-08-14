@@ -192,16 +192,25 @@ cc_library(
 )
 
 # ── //src:engine ───────────────────────────────────────────────────────────
-# The transport-free image engine: decode/encode (SipiImage + the four format
-# handlers), IIIF parameter parsing (iiifparser), and the serve-time admission
-# primitives (cache, memory budget). Carved out of `:sipi_lib`
-# so the FFI seam (//src/ffi:sipi_ffi) can drive the engine WITHOUT a
-# dependency cycle — `:sipi_lib` deps `:sipi_ffi`, so `:sipi_ffi` cannot reach
+# The transport-free image core: `SipiImage` (decode/encode + pixel ops) and
+# the serve-time admission primitives (cache, memory budget). Carved out of
+# `:sipi_lib` so the FFI seam (//src/ffi:sipi_ffi) can drive the engine WITHOUT
+# a dependency cycle — `:sipi_lib` deps `:sipi_ffi`, so `:sipi_ffi` cannot reach
 # the engine while it lives inside `:sipi_lib`. The engine depends only on the
-# domain-utility layer (`//src/util` — the `shttps::Error`/`Hash` helpers,
-# namespaced `shttps` but located under `src/util/` since the Phase 4
-# decomposition), never any HTTP transport. The `rust_binary` links the engine
-# through //src/ffi:sipi_ffi.
+# domain-utility layer (`//src/util`), the IIIF parser (`//src/iiifparser`) and
+# the codec-agnostic write sink (`//src/formats:output_sink`), never any HTTP
+# transport. The `rust_binary` links the engine through //src/ffi:sipi_ffi.
+#
+# SipiImage, cache and the memory budget stay ONE package: they share no
+# internal boundary worth a cut (cache/budget exist only to serve SipiImage
+# reads), and SipiImage is the hub every other module points at. The IIIF
+# parser (`//src/iiifparser`) and the codec handlers (`//src/formats`) were the
+# separable leaves and were carved out. The handlers could not become a package
+# BELOW SipiImage — they read/write it as `friend`s and SipiImage dispatches
+# through the `io` registry, a bidirectional coupling — so //src/formats depends
+# one-way on the engine and defines `SipiImage::io` (format_registry.cpp); the
+# engine references `io` and `Sipi::read_watermark`, resolved at link from
+# //src/formats. The engine therefore does NOT depend on //src/formats:formats.
 cc_library(
     name = "engine",
     srcs = [
@@ -212,17 +221,6 @@ cc_library(
         "SipiMemoryBudget.cpp",
         "populate_from_image.cpp",
         "resample.cc",
-        "formats/SipiIOJ2k.cpp",
-        "formats/SipiIOJpeg.cpp",
-        "formats/SipiIOPng.cpp",
-        "formats/SipiIOTiff.cpp",
-        "formats/output_sink.cpp",
-        "iiifparser/SipiDecodeDims.cpp",
-        "iiifparser/SipiIdentifier.cpp",
-        "iiifparser/SipiQualityFormat.cpp",
-        "iiifparser/SipiRegion.cpp",
-        "iiifparser/SipiRotation.cpp",
-        "iiifparser/SipiSize.cpp",
     ],
     hdrs = [
         # The engine's headers, co-located with their sources (ADR-0003).
@@ -239,26 +237,14 @@ cc_library(
         "SipiPeakMemory.h",
         "populate_from_image.h",
         "resample.h",
-        "formats/SipiIOJ2k.h",
-        "formats/SipiIOJpeg.h",
-        "formats/SipiIOPng.h",
-        "formats/SipiIOTiff.h",
-        "formats/output_sink.h",
-        "iiifparser/SipiDecodeDims.h",
-        "iiifparser/SipiIdentifier.h",
-        "iiifparser/SipiQualityFormat.h",
-        "iiifparser/SipiRegion.h",
-        "iiifparser/SipiRotation.h",
-        "iiifparser/SipiSize.h",
     ],
-    # Each per-subsystem header dir is on the include path so both the
-    # sibling-relative (`#include "SipiIOTiff.h"`) and prefixed
-    # (`#include "formats/SipiIOTiff.h"`) forms resolve — mirrors the layout
-    # //include:headers used before the carve.
+    # `.` (i.e. `src/`) on the include path resolves the engine's own quote-form
+    # headers (`#include "SipiImage.h"`). The `formats/` and `iiifparser/`
+    # headers now live in `//src/formats` and `//src/iiifparser`, whose
+    # `strip_include_prefix = "/src"` resolves the `formats/SipiIOTiff.h` /
+    # `iiifparser/SipiSize.h` forms for the engine's own headers.
     includes = [
         ".",
-        "formats",
-        "iiifparser",
     ],
     copts = ["-fexceptions"],
     # Mirror :sipi_lib's system link surface so a target that links :engine
@@ -290,6 +276,8 @@ cc_library(
         ":sipi_generated_hdrs",
         ":sipi_top",
         "//include:headers",
+        "//src/formats:output_sink",
+        "//src/iiifparser",
         "//src/logging:logging",
         "//src/metadata:metadata",
         "//src/observability:observability",
@@ -341,17 +329,6 @@ cc_library(
             "SipiImage.cpp",
             "SipiMemoryBudget.cpp",
             "populate_from_image.cpp",
-            "formats/SipiIOJ2k.cpp",
-            "formats/SipiIOJpeg.cpp",
-            "formats/SipiIOPng.cpp",
-            "formats/SipiIOTiff.cpp",
-            "formats/output_sink.cpp",
-            "iiifparser/SipiDecodeDims.cpp",
-            "iiifparser/SipiIdentifier.cpp",
-            "iiifparser/SipiQualityFormat.cpp",
-            "iiifparser/SipiRegion.cpp",
-            "iiifparser/SipiRotation.cpp",
-            "iiifparser/SipiSize.cpp",
             # Google Benchmark microbenchmark sources are `cc_binary`
             # main()-providers, not library TUs. Excluded here so they
             # never enter the production library or the `--instrumentation_filter=//src`
@@ -408,6 +385,7 @@ cc_library(
         ":sipi_top",
         "//include:headers",
         "//src/ffi:sipi_ffi",
+        "//src/formats:formats",
         "//src/scripting:scripting",
         "//src/logging:logging",
         "//src/metadata:metadata",
@@ -458,17 +436,9 @@ cc_library(
 # module is promoted (the `deps` line + BUILD location move with the module).
 # See docs/src/development/benchmarking.md.
 
-# Parse tier — IIIF URL component string parsers. Pure CPU, no fixtures.
-cc_binary(
-    name = "parse_benchmark",
-    srcs = ["iiifparser/parse_benchmark.cpp"],
-    tags = ["manual"],
-    testonly = True,
-    deps = [
-        ":sipi_lib",
-        "@google_benchmark//:benchmark_main",
-    ],
-)
+# Parse tier — IIIF URL component string parsers. Now co-located with the
+# module at `//src/iiifparser:parse_benchmark` (per ADR-0003), moved with the
+# iiifparser carve.
 
 # Process tier — the image-processing operators between decode and encode
 # (scale/rotate/crop/to8bps/convertToIcc/removeChannel). Uses existing small
@@ -495,46 +465,9 @@ cc_binary(
     ],
 )
 
-# Decode tier — SipiImage::read() across the @sipi_bench_fixtures input-
-# format matrix (full-resolution tile + thumbnail access shapes, incl. the
-# plain-JPEG / flat-TIFF slow baselines). Fixture paths resolve via
-# SIPI_BENCH_FIXTURES_DIR, which `just bench` exports from the binary's
-# runfiles tree — external-repo files are invisible to the workspace-
-# relative resolution //test:test_paths provides, so the env var (not
-# test_paths) is the seam here.
-cc_binary(
-    name = "decode_benchmark",
-    srcs = ["formats/decode_benchmark.cpp"],
-    data = ["@sipi_bench_fixtures//:images"],
-    tags = ["manual"],
-    testonly = True,
-    deps = [
-        ":sipi_lib",
-        "@google_benchmark//:benchmark_main",
-    ],
-)
-
-# Encode tier — SipiImage::write() across the four formats SIPI emits
-# (jpg/png/tif/jpx) from the decoded fixture master. SOURCE_DATE_EPOCH pins
-# the wall-clock-stamped ICC creation date in emitted headers (ADR-0002);
-# the `env` applies under `bazel run`, and `just bench` exports the same
-# variables (plus TEST_TMPDIR for the output files) when exec'ing directly.
-cc_binary(
-    name = "encode_benchmark",
-    srcs = ["formats/encode_benchmark.cpp"],
-    data = ["@sipi_bench_fixtures//:images"],
-    env = {
-        "SIPI_WORKSPACE_ROOT": ".",
-        "SOURCE_DATE_EPOCH": "946684800",
-    },
-    tags = ["manual"],
-    testonly = True,
-    deps = [
-        ":sipi_lib",
-        "//test:test_paths",
-        "@google_benchmark//:benchmark_main",
-    ],
-)
+# Decode + encode tiers — now co-located with the module at
+# `//src/formats:{decode,encode}_benchmark` (per ADR-0003), moved with the
+# formats carve.
 
 # ── //src/cli:sipi ─────────────────────────────────────────────────────────
 # The sipi cc_binary lives at `//src/cli:sipi`; see `src/cli/BUILD.bazel`.
