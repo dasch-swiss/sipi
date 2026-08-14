@@ -33,36 +33,6 @@ load("@tar.bzl", "tar")
 
 package(default_visibility = ["//visibility:public"])
 
-# ── Cross-package surface for the fuzz subset ─────────────────────────────
-# The IIIF URI parser fuzz harness recompiles `iiif_handler.cpp` under the
-# libFuzzer instrumentation flags as part of `//src/shttps:fuzz_subset` (where
-# the four shttps cpps it joins also live). Linking the full `:sipi_lib`
-# archive into the fuzz binary would inflate the libFuzzer corpus
-# search-space cost, so the only `//src` surface the fuzz graph reaches
-# is the single TU `iiif_handler.cpp` plus its companion header.
-#
-# `:iiif_handler_hdrs` makes `#include "handlers/iiif_handler.h"` resolve
-# explicitly — both for `iiif_handler.cpp` itself when compiled inside
-# `//src/shttps:fuzz_subset` and for the fuzz harness target.cpp at
-# `//fuzz/handlers:iiif_handler_uri_parser_fuzz` (which uses the same
-# `handlers/`-prefixed include form). Without the header cc_library, that
-# include resolution would rely on Bazel's workspace-root quote_includes
-# default — fragile under future sandbox-strip changes.
-exports_files(
-    ["handlers/iiif_handler.cpp"],
-    visibility = ["//src/shttps:__pkg__"],
-)
-
-cc_library(
-    name = "iiif_handler_hdrs",
-    hdrs = ["handlers/iiif_handler.h"],
-    includes = ["."],
-    visibility = [
-        "//src/shttps:__pkg__",
-        "//fuzz/handlers:__pkg__",
-    ],
-)
-
 # ── generated/SipiVersion.h ────────────────────────────────────────────────
 # Bazel re-evaluates `STABLE_*` keys on every build, but downstream actions
 # invalidate only when a value *changes* — editing an unrelated .cpp leaves
@@ -70,8 +40,8 @@ cc_library(
 # bumping `version.txt` flips `STABLE_SIPI_VERSION`, the header regenerates,
 # and the few TUs that include it recompile.
 #
-# Output path is `generated/SipiVersion.h` because `src/cli/sipi.cpp`,
-# `src/SipiHttpServer.cpp`, and `src/observability/metrics.cpp` consume it as
+# Output path is `generated/SipiVersion.h` because `src/cli/sipi.cpp` and
+# `src/observability/metrics.cpp` consume it as
 # `#include "generated/SipiVersion.h"` — the prefix is mandatory and
 # matches the existing CMake build's `${CMAKE_BINARY_DIR}/generated/`
 # layout.
@@ -216,7 +186,7 @@ cc_library(
     visibility = ["//src:__subpackages__"],
     deps = [
         "//include:headers",
-        "//src/shttps:shttps",
+        "//src/util",
         "//src/logging:logging",
     ],
 )
@@ -227,13 +197,11 @@ cc_library(
 # primitives (cache, memory budget). Carved out of `:sipi_lib`
 # so the FFI seam (//src/ffi:sipi_ffi) can drive the engine WITHOUT a
 # dependency cycle — `:sipi_lib` deps `:sipi_ffi`, so `:sipi_ffi` cannot reach
-# the engine while it lives inside `:sipi_lib`. The engine *source* is free of
-# the shttps HTTP transport (no `shttps::Connection`/`Server` include — only
-# `util`). The one remaining transitive shttps link edge enters through
-# `:sipi_top` / //src/metadata / //src/observability, a pre-existing layering
-# leak those packages already carry (their BUILD comments note it; tracked
-# under DEV-6353), not a new coupling introduced here. The `rust_binary`
-# links the engine through //src/ffi:sipi_ffi.
+# the engine while it lives inside `:sipi_lib`. The engine depends only on the
+# domain-utility layer (`//src/util` — the `shttps::Error`/`Hash` helpers,
+# namespaced `shttps` but located under `src/util/` since the Phase 4
+# decomposition), never any HTTP transport. The `rust_binary` links the engine
+# through //src/ffi:sipi_ffi.
 cc_library(
     name = "engine",
     srcs = [
@@ -315,10 +283,9 @@ cc_library(
         "//conditions:default": [],
     }),
     visibility = ["//src:__subpackages__"],
-    # The transport-free subset of :sipi_lib's deps: shttps transport
-    # (//src/shttps:shttps), Lua (@lua) and SQLite (@sqlite3) are dropped — no
-    # engine TU includes them. Everything else (codecs, metadata, observability,
-    # util) is retained.
+    # The engine's deps: codecs, metadata, observability, and the domain-utility
+    # layer (//src/util). No HTTP transport, Lua, or SQLite — no engine TU
+    # includes them.
     deps = [
         ":sipi_generated_hdrs",
         ":sipi_top",
@@ -335,7 +302,6 @@ cc_library(
         "@xz//:lzma",
         "@libmagic//:lib",
         "@jansson//:jansson",
-        "@prometheus-cpp//core",
         "@curl",
         "@openssl//:crypto",
         "@openssl//:ssl",
@@ -442,7 +408,7 @@ cc_library(
         ":sipi_top",
         "//include:headers",
         "//src/ffi:sipi_ffi",
-        "//src/shttps:shttps",
+        "//src/scripting:scripting",
         "//src/logging:logging",
         "//src/metadata:metadata",
         "//src/observability:observability",
@@ -455,8 +421,6 @@ cc_library(
         "@libmagic//:lib",
         "@lua",
         "@jansson//:jansson",
-        "@sqlite3",
-        "@prometheus-cpp//core",
         "@curl",
         "@openssl//:crypto",
         "@openssl//:ssl",
@@ -847,10 +811,10 @@ tar(
 # the DWARF built under `--config=release` lives only in the `.debug`
 # uploaded to Sentry (`:sipi_debug_layout`), never in the shipped image; the
 # stripped binary keeps its `.note.gnu.build-id` + an embedded debuglink so
-# Sentry matches crash minidumps back to those symbols. cli-rs is the
-# deployed entrypoint; the C++ //src/cli:sipi transport stays in-tree only as
-# the differential oracle (DEV-6659). Kept at /sbin/sipi so the entrypoint +
-# `sipi health` HEALTHCHECK are unchanged. Linux-only (the binary is Linux
+# Sentry matches crash minidumps back to those symbols. cli-rs is the deployed
+# entrypoint; the C++ //src/cli:sipi binary provides the offline CLI verbs only
+# (convert/verify/query/compare/health), not a server. Kept at /sbin/sipi so the
+# entrypoint + `sipi health` HEALTHCHECK are unchanged. Linux-only (the binary is Linux
 # ELF; on darwin :sipi is Mach-O and not consumed here).
 tar(
     name = "sipi_bin_layer",

@@ -86,8 +86,8 @@ and image closures on every run.
 
 The test suite is already written to tolerate the unstamped
 `0.0.0-unstamped` fallback: `test/e2e/tests/cli.rs::cli_version_flag` asserts
-*either* the stamped or unstamped string, `health.rs` / `docker_smoke.rs` only
-assert the `version` field is a string, and `differential.rs` masks `/version`.
+*either* the stamped or unstamped string, and `health.rs` / `docker_smoke.rs`
+only assert the `version` field is a string.
 Keep `--stamp` on `bazel-build`, the Docker build, and release recipes (they need
 the real version); drop it only from `bazel-test` / `bazel-coverage`.
 

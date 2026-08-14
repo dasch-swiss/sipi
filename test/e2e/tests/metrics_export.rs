@@ -16,11 +16,6 @@
 //! through several collection cycles — each one invokes every observable
 //! callback, including the allocator stats reader — and assert the server
 //! is still alive and serving.
-//!
-//! Non-replayable for the differential gate (env-driven lifecycle/timing:
-//! the subject is spawned with OTel env and the assertion is
-//! survival-over-time, not a response); its GET requests are standard
-//! corpus material already.
 
 use std::time::Duration;
 

@@ -12,10 +12,6 @@
 // docs/src/development/profiling.md). In every other build
 // <tracy/Tracy.hpp> defines its own macros as no-ops, so SIPI_ZONE* compile to
 // nothing — zero overhead, nothing to strip.
-//
-// Worker-thread naming in src/shttps/ uses <tracy/Tracy.hpp> directly rather
-// than this shim, because shttps sits below observability in the dependency
-// graph and cannot include this header without inverting that direction.
 #include <tracy/Tracy.hpp>
 
 // Profile the enclosing scope; the zone is labelled with the function name.

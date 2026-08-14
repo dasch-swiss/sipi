@@ -6,66 +6,87 @@
 #ifndef SIPI_OBSERVABILITY_METRICS_H
 #define SIPI_OBSERVABILITY_METRICS_H
 
-#include <memory>
+#include <atomic>
+#include <cstdint>
 #include <string>
-
-#include <prometheus/counter.h>
-#include <prometheus/gauge.h>
-#include <prometheus/histogram.h>
-#include <prometheus/registry.h>
-#include <prometheus/text_serializer.h>
 
 namespace Sipi::observability {
 
+/*!
+ * Monotonic counter — a lock-free `std::atomic<uint64_t>`. Every scalar counter
+ * the production FFI snapshot (`sipi_metrics_snapshot`) reads is one of these;
+ * the Rust shell narrows `Value()` into the OTLP instrument. `Increment(double)`
+ * exists so the eviction call sites can add a batch count in one call.
+ */
+class Counter
+{
+  std::atomic<std::uint64_t> value_{ 0 };
+
+public:
+  void Increment() noexcept { value_.fetch_add(1, std::memory_order_relaxed); }
+  void Increment(double n) noexcept
+  {
+    if (n > 0.0) { value_.fetch_add(static_cast<std::uint64_t>(n), std::memory_order_relaxed); }
+  }
+  [[nodiscard]] std::uint64_t Value() const noexcept { return value_.load(std::memory_order_relaxed); }
+};
+
+/*!
+ * Point-in-time gauge — a lock-free `std::atomic<int64_t>` (signed: the cache
+ * size limit is -1 when unlimited). `Set` takes a `double` because the cache and
+ * memory-budget call sites hold their values as `size_t`/`double`.
+ */
+class Gauge
+{
+  std::atomic<std::int64_t> value_{ 0 };
+
+public:
+  void Set(double v) noexcept { value_.store(static_cast<std::int64_t>(v), std::memory_order_relaxed); }
+  [[nodiscard]] std::int64_t Value() const noexcept { return value_.load(std::memory_order_relaxed); }
+};
+
+/*!
+ * The engine's metrics singleton. Plain atomic counters and gauges bumped on the
+ * decode/cache/serve paths. Scalar fields cross the FFI seam as
+ * `SipiMetricsSnapshot` (`src/ffi/sipi_ffi.cpp`) and are exported over OTLP by the
+ * Rust shell — see `src/ffi/metrics_snapshot.h`'s inclusion rule for which fields
+ * ride the bridge (the label-fanned `read_shape_*` / `essentials_hash_mismatch_*`
+ * families are engine-internal and do not).
+ */
 class Metrics
 {
-  // registry_ must be declared first: C++ initializes members in declaration order
-  std::shared_ptr<prometheus::Registry> registry_;
-
 public:
   static Metrics &instance();
 
-  std::shared_ptr<prometheus::Registry> registry() { return registry_; }
-
-  std::string serialize();
-
   // Counters
-  prometheus::Counter &cache_hits_total;
-  prometheus::Counter &cache_misses_total;
-  prometheus::Counter &cache_evictions_total;
-  prometheus::Counter &cache_skips_total;
-  prometheus::Counter &image_too_large_total;
-  prometheus::Counter &client_disconnected_total;
-  prometheus::Counter &memory_alloc_failures_total;
+  Counter cache_hits_total;
+  Counter cache_misses_total;
+  Counter cache_evictions_total;
+  Counter cache_skips_total;
+  Counter image_too_large_total;
+  Counter client_disconnected_total;
+  Counter memory_alloc_failures_total;
 
   // Queue counters
-  prometheus::Counter &rejected_connections_total;
+  Counter rejected_connections_total;
 
   // Gauges
-  prometheus::Gauge &waiting_connections;
-  prometheus::Gauge &cache_size_bytes;
-  prometheus::Gauge &cache_files;
-  prometheus::Gauge &cache_size_limit_bytes;
-  prometheus::Gauge &cache_files_limit;
+  Gauge waiting_connections;
+  Gauge cache_size_bytes;
+  Gauge cache_files;
+  Gauge cache_size_limit_bytes;
+  Gauge cache_files_limit;
 
   // Memory budget metrics
-  prometheus::Gauge &decode_memory_budget_bytes;
-  prometheus::Gauge &decode_memory_used_bytes;
-  prometheus::Family<prometheus::Counter> &decode_memory_decisions_total;
-  prometheus::Counter &decode_memory_acquired;        ///< cached: decisions_total{action="acquired"}
-  prometheus::Counter &decode_memory_rejected;        ///< cached: decisions_total{action="rejected"}
-  prometheus::Counter &decode_memory_shadow_rejected; ///< cached: decisions_total{action="shadow_rejected"}
-  prometheus::Counter &decode_memory_near_limit_total;
-  prometheus::Histogram &decode_memory_estimate_bytes;
-
-  // Build info (version correlation)
-  prometheus::Gauge &build_info;
-
-  // Histograms
-  prometheus::Histogram &request_duration_seconds;
+  Gauge decode_memory_budget_bytes;
+  Gauge decode_memory_used_bytes;
+  Counter decode_memory_acquired;
+  Counter decode_memory_rejected;
+  Counter decode_memory_shadow_rejected;
+  Counter decode_memory_near_limit_total;
 
   // read_shape fast path (ADR-0004 / DEV-6537).
-  // Labels: format = {jp2, tiff}; outcome = {hit, miss, partial, fallback}.
+  // Format = {jp2, tiff}; outcome = {hit, miss, partial, fallback}.
   //   - hit:      Essentials packet parsed; img_w & img_h populated;
   //               fast path returned shape from packet.
   //   - miss:     No Essentials packet found; slow path computed shape.
@@ -74,15 +95,14 @@ public:
   //   - fallback: Legacy pipe-delimited carrier present (no shape
   //               fields) OR new-carrier parse error; slow path
   //               computed shape.
-  prometheus::Family<prometheus::Counter> &read_shape_fast_path_total;
-  prometheus::Counter &read_shape_fast_path_jp2_hit;
-  prometheus::Counter &read_shape_fast_path_jp2_miss;
-  prometheus::Counter &read_shape_fast_path_jp2_partial;
-  prometheus::Counter &read_shape_fast_path_jp2_fallback;
-  prometheus::Counter &read_shape_fast_path_tiff_hit;
-  prometheus::Counter &read_shape_fast_path_tiff_miss;
-  prometheus::Counter &read_shape_fast_path_tiff_partial;
-  prometheus::Counter &read_shape_fast_path_tiff_fallback;
+  Counter read_shape_fast_path_jp2_hit;
+  Counter read_shape_fast_path_jp2_miss;
+  Counter read_shape_fast_path_jp2_partial;
+  Counter read_shape_fast_path_jp2_fallback;
+  Counter read_shape_fast_path_tiff_hit;
+  Counter read_shape_fast_path_tiff_miss;
+  Counter read_shape_fast_path_tiff_partial;
+  Counter read_shape_fast_path_tiff_fallback;
 
   // Essentials hash-mismatch corruption tripwire (ADR-0010 /
   // DEV-6537). Incremented from:
@@ -91,26 +111,24 @@ public:
   //     match `data_chksum` (soft signal — log + continue).
   //   - `sipi verify service-file` on the same mismatch
   //     (hard signal — log + non-zero exit).
-  // Label: format = {jp2, tiff, jpeg, png, other}.
-  prometheus::Family<prometheus::Counter> &essentials_hash_mismatch_total;
-  prometheus::Counter &essentials_hash_mismatch_jp2;
-  prometheus::Counter &essentials_hash_mismatch_tiff;
-  prometheus::Counter &essentials_hash_mismatch_jpeg;
-  prometheus::Counter &essentials_hash_mismatch_png;
-  prometheus::Counter &essentials_hash_mismatch_other;
+  // Format = {jp2, tiff, jpeg, png, other}.
+  Counter essentials_hash_mismatch_jp2;
+  Counter essentials_hash_mismatch_tiff;
+  Counter essentials_hash_mismatch_jpeg;
+  Counter essentials_hash_mismatch_png;
+  Counter essentials_hash_mismatch_other;
 
   // TIFF decodes that read from a reduced pyramid level (level > 0) instead of
-  // the full-resolution IFD. Measures how much reduced-level TIFF traffic the
-  // server sees. A scalar (no label) so it rides the serve-path snapshot bridge
-  // to OTLP.
-  prometheus::Counter &tiff_pyramid_reduced_decodes_total;
+  // the full-resolution IFD. A scalar (no label) so it rides the serve-path
+  // snapshot bridge to OTLP.
+  Counter tiff_pyramid_reduced_decodes_total;
 
 private:
-  Metrics();
+  Metrics() = default;
 };
 
 /*!
- * Outcome labels for `read_shape_fast_path_total`.
+ * Outcome labels for the `read_shape_fast_path_*` counters.
  */
 enum class ReadShapeFastPathOutcome {
   Hit,
@@ -141,18 +159,16 @@ enum class EssentialsFormat {
 [[nodiscard]] EssentialsFormat format_from_path(const std::string &path);
 
 /*!
- * Resolve the pre-created counter child for the (format, outcome) pair.
- * Lives next to the Family so call sites don't pay for label-map lookups
- * on every read.
+ * Resolve the counter for the (format, outcome) pair.
  */
-[[nodiscard]] prometheus::Counter &read_shape_fast_path_counter(
+[[nodiscard]] Counter &read_shape_fast_path_counter(
   EssentialsFormat format,
   ReadShapeFastPathOutcome outcome);
 
 /*!
- * Resolve the pre-created counter child for the given format.
+ * Resolve the counter for the given format.
  */
-[[nodiscard]] prometheus::Counter &essentials_hash_mismatch_counter(EssentialsFormat format);
+[[nodiscard]] Counter &essentials_hash_mismatch_counter(EssentialsFormat format);
 
 }// namespace Sipi::observability
 

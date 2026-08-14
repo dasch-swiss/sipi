@@ -8,7 +8,7 @@
 // dereferences `Sipi::SipiImage`, currently owned by sipi_lib. Co-locating
 // in observability/ would force a //src/observability → //src:sipi_lib edge,
 // closing a cycle (sipi_lib already depends on observability for the rest of
-// the surface — Metrics, ConnectionMetricsAdapter, …). Move back into
+// the surface — Metrics, …). Move back into
 // observability/ once SipiImage moves to its own package per DEV-6388 / DEV-6395.
 
 #include "populate_from_image.h"

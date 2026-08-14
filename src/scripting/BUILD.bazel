@@ -1,16 +1,13 @@
 """src/scripting — the connection-less Lua runtime (LuaServer + the sqlite bindings).
 
-Extracted out of `src/shttps/` (Phase 4 of the agent-legibility remediation,
-DEV-6968) so that no production file includes anything under `src/shttps/` and
-the oracle transport's removal becomes a pure deletion.
+Extracted out of the former `src/shttps/` transport package (DEV-6968) as a
+top-level module.
 
 `LuaServer` drives the Lua VM behind the preflight hook, the configured Lua
-routes, and the init script. Since the request_context decoupling it names no
-`shttps::Connection`: it reads request fields and writes the response through the
-connection-less `RequestContext` / `ResponseSink` seam (`request_context.h`), so
-it carries no transport dependency and builds below `//src/ffi`. The retained
-oracle `transport` depends on `scripting`, never the reverse (an interim reverse
-edge that dies with the oracle in Phase 7).
+routes, and the init script. It names no `shttps::Connection`: it reads request
+fields and writes the response through the connection-less `RequestContext` /
+`ResponseSink` seam (`request_context.h`), so it carries no transport dependency
+and builds below `//src/ffi`.
 
 The C++ symbols stay in `namespace shttps` (only the file/package location
 moved, not the API). `strip_include_prefix = "/src"` exposes the headers at
@@ -22,8 +19,8 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 
 package(default_visibility = ["//src:__subpackages__"])
 
-# The Lua interpreter. Used broadly across production (`//src/ffi`) and, until
-# Phase 7, the oracle transport (`//src/shttps/transport`), so its visibility
+# The Lua interpreter. Used broadly across production (`//src/ffi` for the
+# preflight/route Lua VMs, and `//src` via `:sipi_lib`), so its visibility
 # stays package-wide.
 cc_library(
     name = "scripting",

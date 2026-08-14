@@ -43,7 +43,7 @@ extern "C" {
 
 /* ── Response sink callbacks (Rust-owned) ──────────────────────────────────
  * The engine emits the whole response through these. `ctx` is the opaque
- * Rust-owned (or, in the C++ parity path, Connection-owned) cookie. */
+ * Rust-owned cookie. */
 
 /*! Body bytes, forward-only, for an **unknown-length** body (e.g. the image
  *  encoder, whose output size isn't known until encoding finishes — the
@@ -70,7 +70,7 @@ typedef void (*SipiHeaderFn)(void *ctx, const char *name, const char *value);
 typedef void (*SipiStatusFn)(void *ctx, int status);
 
 /*! Polled between pipeline stages; 1 = client gone / timed out → abort and
- *  unlink any partial cache file (the Rust equivalent of `peerConnected()`). */
+ *  unlink any partial cache file. */
 typedef int (*SipiCancelledFn)(void *ctx);
 
 /*! The response sink the engine drives. A body is delivered either as a
@@ -286,8 +286,8 @@ typedef struct SipiServerConfig
   const char *wwwroute;
   const char *loglevel;
   /* 8-byte: image scaling-quality per codec ("high"|"medium"|"low"; NULL =
-   * engine default). TOML-config-only — there is no CLI flag (the oracle has
-   * none either), so these never arrive from the clap path. */
+   * engine default). TOML-config-only — there is no CLI flag, so these never
+   * arrive from the clap path. */
   const char *scaling_quality_jpeg;
   const char *scaling_quality_tiff;
   const char *scaling_quality_png;
@@ -371,13 +371,12 @@ typedef struct SipiMetricsSnapshot SipiMetricsSnapshot;
  * runtime stays C++ behind the seam (it wraps the C++ `shttps::RequestContext`);
  * the Lua hooks can read ANY request field via `server.*`, so preflight and
  * configured routes carry the full request, not the narrow IIIF `SipiServeRequest`.
- * Built by the caller — the transport in the C++ parity path, or the Rust
- * shell via a builder. */
+ * Built by the caller — the Rust shell via a builder. */
 typedef struct SipiRequestContext SipiRequestContext;
 
 /* ── Edge-probe types (Rust-edge path validation + info.json/knora.json) ─────
- * Read-only helpers the Rust shell needs to build a request the way the C++
- * server did and to assemble the JSON responses the seam has no serve entry for. */
+ * Read-only helpers the Rust shell needs to build a request and to assemble the
+ * JSON responses the seam has no serve entry for. */
 
 /*! Native image shape from a header read (NOT a full decode). `numpages` is 0
  *  for a single-page image; `tile_width`/`tile_height` are 0 when the image is
@@ -603,8 +602,8 @@ SIPI_FFI_NODISCARD int sipi_serve_file(const char *resolved_path, const char *ra
  *  returning a permission — e.g. an auth script that fails to decode a bearer
  *  token and sends its own 500 before returning. Without a sink, that write
  *  dereferences `ctx->response == NULL`. Pass NULL only when `ctx->response`
- *  is already set by the caller (the C++ transport's own live connection
- *  sink) — a non-NULL `resp` here always wins and overwrites it. */
+ *  is already set by the caller — a non-NULL `resp` here always wins and
+ *  overwrites it. */
 SIPI_FFI_NODISCARD int sipi_preflight(const char *prefix,
   const char *identifier,
   SipiRequestContext *ctx,
@@ -625,9 +624,8 @@ SIPI_FFI_NODISCARD int sipi_file_preflight(const char *filepath,
   const SipiResponse *resp);
 
 /*! Build the opaque request context the preflight hooks read (`server.*`) from
- *  primitive request fields — the Rust shell's replacement for the transport's
- *  `make_request_context(Connection&)`. Header names are lowercased to match the
- *  transport. The JWT secret is NOT taken here: it is injected from the engine
+ *  primitive request fields. Header names are lowercased for case-insensitive
+ *  lookup. The JWT secret is NOT taken here: it is injected from the engine
  *  Lua config by `make_lua_server`. The response sink is likewise not taken
  *  here — it is wired per-call via `sipi_preflight`/`sipi_file_preflight`'s
  *  `resp` parameter, not stored on the context itself. Deep-copies
@@ -675,14 +673,13 @@ void sipi_request_context_add_upload(SipiRequestContext *ctx,
 
 /*! Append a GET (`kind` = 0 → `server.get`) or POST (`kind` = 1 → `server.post`)
  *  form parameter. Each is also visible through `server.request` (the merged
- *  view), matching the transport's get/post/request split. */
+ *  view of GET + POST). */
 void sipi_request_context_add_param(SipiRequestContext *ctx, int kind, const char *name, const char *value);
 
-/*! Set `server.docroot` for a docroot `.lua`/`.elua` script — the transport's
- *  file_handler injects it (`Server.cpp:310`) before executing a docroot script,
- *  so the Rust shell sets it here before `sipi_run_lua_route` for docroot scripts.
- *  A configured route leaves it unset, so `server.docroot` stays absent there
- *  (parity with the transport's `script_handler`). NULL/empty = not injected. */
+/*! Set `server.docroot` for a docroot `.lua`/`.elua` script — the Rust shell sets
+ *  it before `sipi_run_lua_route` for docroot scripts so the script can read it.
+ *  A configured route leaves it unset, so `server.docroot` stays absent there.
+ *  NULL/empty = not injected. */
 void sipi_request_context_set_docroot(SipiRequestContext *ctx, const char *docroot);
 
 /*! Enumerate the configured Lua routes (method/route/script) installed by
@@ -698,13 +695,12 @@ SIPI_FFI_NODISCARD int sipi_routes(SipiRouteFn emit, void *ctx);
 SIPI_FFI_NODISCARD int sipi_has_preflight(int *out);
 SIPI_FFI_NODISCARD int sipi_has_file_preflight(int *out);
 
-/*! Run a configured Lua route (the C++ `script_handler` analogue): execute the
- *  route's script in the engine-config VM and emit its response (`server.print` /
- *  `sendStatus` / `sendHeader` / `sendCookie`) through `resp`. Takes the FULL
- *  request as the opaque `SipiRequestContext` — a route reads arbitrary request
- *  data via `server.*`, so it carries the whole request, not the narrow IIIF
- *  `SipiServeRequest`. Defined at the cutover, when the Rust shell owns route
- *  dispatch and the transport's `script_handler` is deleted; the upload routes
+/*! Run a configured Lua route: execute the route's script in the engine-config VM
+ *  and emit its response (`server.print` / `sendStatus` / `sendHeader` /
+ *  `sendCookie`) through `resp`. Takes the FULL request as the opaque
+ *  `SipiRequestContext` — a route reads arbitrary request data via `server.*`, so
+ *  it carries the whole request, not the narrow IIIF `SipiServeRequest`. The Rust
+ *  shell owns route dispatch and calls this per matched route; the upload routes
  *  additionally depend on multipart `uploads` reaching the context. */
 SIPI_FFI_NODISCARD int sipi_run_lua_route(const char *script, SipiRequestContext *ctx, const SipiResponse *resp);
 
@@ -721,8 +717,8 @@ SIPI_FFI_NODISCARD int sipi_init(const char *lua_config_path, const SipiServerCo
  * (no build/apply split). All require `sipi_init` to have installed the engine. */
 
 /*! The configured image root, for the Rust edge to build + containment-check a
- *  `resolved_path`. `resolved` = 0 → the raw config value (path build, parity
- *  with the C++ `imgroot()`); `resolved` = 1 → the realpath()-resolved root (the
+ *  `resolved_path`. `resolved` = 0 → the raw config value (for the path build);
+ *  `resolved` = 1 → the realpath()-resolved root (the
  *  R2 containment check). `*out` points at process-static memory owned by the
  *  installed engine context — valid for the process lifetime after `sipi_init`,
  *  never freed by the caller. Returns 0, or 500 if `sipi_init` has not run. */
@@ -739,8 +735,7 @@ SIPI_FFI_NODISCARD int sipi_docroot(const char **out);
 /*! The URL prefix the docroot fileserver is mounted at (the Lua config
  *  `fileserver.wwwroute`, e.g. "/server"). `*out` is empty when no fileserver is
  *  configured; the Rust shell registers the static route only when both docroot
- *  and wwwroute are non-empty (parity with `SipiHttpServer`'s file_handler gate).
- *  Returns 0, or 500 if `sipi_init` has not run. */
+ *  and wwwroute are non-empty. Returns 0, or 500 if `sipi_init` has not run. */
 SIPI_FFI_NODISCARD int sipi_wwwroute(const char **out);
 
 /*! The `prefix_as_path` config knob: `*out` = 1 → the IIIF prefix is a path

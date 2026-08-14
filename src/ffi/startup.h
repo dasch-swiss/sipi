@@ -7,9 +7,9 @@
  * Process-startup helpers shared by the two production entry points that run at
  * process start: `sipi_init` (the server-mode engine install, `ffi/init.cpp`)
  * and `sipi_cli_main` (the CLI dispatch, `cli/cli_app.cpp`). They live here in
- * the seam package — not in `cli/` — so the production `init.cpp` can reach them
- * without a `src/cli` → oracle dependency; the oracle CLI reaches them the same
- * way (the dependency runs cli → ffi, never the reverse).
+ * the seam package — not in `cli/` — so `init.cpp` (in `src/ffi`) can reach them
+ * without an `ffi → cli` dependency; `sipi_cli_main` in `cli/` reaches them the
+ * same way (the dependency runs cli → ffi, never the reverse).
  */
 #ifndef SIPI_FFI_STARTUP_H
 #define SIPI_FFI_STARTUP_H

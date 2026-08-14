@@ -17,12 +17,8 @@ namespace {
   bool g_engine_installed = false;
 }// namespace
 
-// Two callers install the context, one per surface: in production, `sipi_init`
-// (`ffi/init.cpp`); in the retained oracle transport, `SipiHttpServer` at
-// startup (its parity install). Both run once, before any serve call, and write
-// the same shape — the oracle path exists only for the differential gate and
-// dies with the C++ server. Documented here at the single sink rather than at
-// each caller.
+// `sipi_init` (`ffi/init.cpp`) installs the context once at startup, before any
+// serve call.
 void set_engine_context(const EngineContext &ctx)
 {
   g_engine = ctx;

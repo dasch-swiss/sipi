@@ -420,8 +420,8 @@ static void conn_write_data(png_structp png_ptr, png_bytep data, png_size_t leng
 static void conn_flush_data(png_structp /*png_ptr*/)
 {
   // No-op: the per-chunk SinkStream write already pushed bytes downstream, and
-  // the HTTP framing/terminator is flushed by the request handler after write()
-  // returns (SipiHttpServer serve_iiif). libpng requires a non-null flush fn.
+  // the HTTP framing/terminator is flushed by the caller after write() returns.
+  // libpng requires a non-null flush fn.
 }
 
 /*==========================================================================*/

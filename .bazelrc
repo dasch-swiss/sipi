@@ -75,12 +75,11 @@ build:linux --dynamic_mode=off
 # libmagic's own dprintf-related declaration). Hardening host tools adds
 # no security value, so the simpler course is to keep host config clean.
 #
-# Sanitizer (`--config=asan`/`--config=ubsan`) and fuzz (`--config=fuzz`)
-# builds keep target hardening off — `_FORTIFY_SOURCE=2` intercepts the
-# same libc functions ASan does (memcpy/memmove/etc.), and the
-# instrumentation already subsumes the stack canary's intent. The
-# per-config overrides further down ensure those compile lines do NOT
-# carry the new hardening flags.
+# Sanitizer (`--config=asan`/`--config=ubsan`) builds keep target hardening
+# off — `_FORTIFY_SOURCE=2` intercepts the same libc functions ASan does
+# (memcpy/memmove/etc.), and the instrumentation already subsumes the stack
+# canary's intent. The per-config overrides further down ensure those compile
+# lines do NOT carry the new hardening flags.
 build --copt=-fstack-protector-strong
 # `_FORTIFY_SOURCE=2` lives in `--config=release` (just below), NOT the global
 # `build` config: it requires optimization, so at the default fastbuild `-O0` it
@@ -270,51 +269,6 @@ build:ubsan --copt=-fno-stack-protector
 build:ubsan --compilation_mode=dbg
 build:ubsan --strip=never
 build:ubsan --@llvm//config:ubsan=true
-
-# ── Fuzz harness — opt-in via --config=fuzz ────────────────────────────────
-# Replaces the deleted `.#fuzz` Nix variant. CI's `fuzz.yml` workflow
-# consumes it via `just bazel-build-fuzz` and `just bazel-run-fuzz
-# <corpus> <duration> <seed>`.
-#
-# `--platforms=//tools/fuzz:<host>_fuzz` is set by the justfile recipes
-# based on `uname`. The platform carries `//tools/fuzz:fuzz_enabled`,
-# which activates the `target_compatible_with` gate on
-# `//fuzz/handlers:iiif_handler_uri_parser_fuzz` (it builds under
-# `--config=fuzz`, skips analysis otherwise). A single hermetic LLVM
-# toolchain (libc++) serves both the normal and the fuzz build.
-#
-# Instrumentation + runtimes come from the toolchain's own sanitizer
-# flags — same mechanism as `build:asan` above (DEV-6563):
-#   * `--@llvm//config:fuzzer=true` — `-fsanitize=fuzzer` on every target
-#     compile (libFuzzer coverage: trace-pc-guard / trace-cmp / …) and
-#     link, and builds + links the compiler-rt **libFuzzer runtime** from
-#     source (the runtime ADR-0014 carved this gate out for).
-#   * `--@llvm//config:asan=true` — ASan instrumentation + runtime, which
-#     the harness has always carried alongside libFuzzer.
-# These are global (every reachable dep instrumented), not the old
-# first-party `--per_file_copt` scoping — the toolchain bundles runtime
-# provisioning with the global flag and exposes no runtime-only knob. The
-# fuzz binary's reachable graph is just `//src/shttps:fuzz_subset`
-# (+ curl / jansson / libmagic / lua / openssl / sqlite3 / zlib), so the
-# coverage map stays bounded. libFuzzer supplies the binary's `main()`;
-# only that one `cc_binary` is built under `--config=fuzz`, so the global
-# `-fsanitize=fuzzer` link flag never reaches a production binary.
-#
-# **linux-x86_64 only.** Darwin is gapped under hermetic-llvm, on two
-# layers: (1) the macOS toolchain args omit the sanitizer header/runtime
-# wiring the Linux args carry (`undefined symbol: __asan_init`), and (2)
-# even once that is patched in, building the darwin compiler-rt sanitizer
-# runtimes from source hits an upstream Bazel-sandbox bug ("Could not copy
-# inputs into sandbox: compiler-rt/include (File exists)"). The module README
-# flags non-Linux sanitizer support as WIP. `bazel-build-fuzz` still selects
-# `darwin_aarch64_fuzz` locally but will not link until both close upstream;
-# the CI gate is linux-x86_64 regardless. See the `build:asan` note.
-#
-# Neutralize production hardening for fuzz — same rationale as `build:asan`.
-build:fuzz --copt=-U_FORTIFY_SOURCE
-build:fuzz --copt=-fno-stack-protector
-build:fuzz --@llvm//config:fuzzer=true
-build:fuzz --@llvm//config:asan=true
 
 # ── Tracy profiler — opt-in via --config=tracy ─────────────────────────────
 # Local-dev only, never CI-gated (like `just bench` / `just valgrind`).

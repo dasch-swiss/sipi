@@ -47,9 +47,9 @@ namespace {
 
   // Flattens a handled image error into the seam's SipiImageErrorReport and
   // reports it through `report_error` iff non-null — the seam's "NULL =
-  // absent" idiom (the C++ oracle's own server, `SipiHttpServer.cpp`, passes
-  // no callback and stays on its own log-only path). Never affects the
-  // caller's SipiStatus: this is purely a side channel for error reporting.
+  // absent" idiom: a caller that passes no callback stays on a log-only path.
+  // Never affects the caller's SipiStatus: this is purely a side channel for
+  // error reporting.
   // Named *Report*, not *Error*, to avoid colliding with the
   // `Sipi::SipiImageError` exception type this same file catches.
   void report_image_error(SipiReportErrorFn report_error,
@@ -126,9 +126,8 @@ namespace {
       p.size_ny);
   }
 
-  // The canonical IIIF URL (Link header + cache key). Relocated verbatim from
-  // SipiHttpServer::get_canonical_url — pure of the transport, so it lives with
-  // the engine-facing seam rather than the soon-deleted HTTP server.
+  // The canonical IIIF URL (Link header + cache key). Pure of the transport, so
+  // it lives with the engine-facing seam.
   std::pair<std::string, std::string> build_canonical_url(size_t tmp_w,
     size_t tmp_h,
     const std::string &scheme,
@@ -426,7 +425,7 @@ namespace {
   // A full-file body for the passthrough / cache-hit paths, stat'd here so a
   // file that vanished after the earlier checks is a clean error rather than a
   // 200 with a wrong length (get_file_size returns 0 on a failed stat, which
-  // would underflow the transport's inclusive send_file range). A 0-byte file
+  // would underflow send_file's inclusive byte range). A 0-byte file
   // becomes an EmptyBody for the same reason.
   std::expected<Body, SipiStatus> full_file_body(const std::string &path)
   {
@@ -597,12 +596,10 @@ std::expected<ServeResponse, SipiStatus>
     }
   }
 
-  // Estimated peak decode memory for this serve. Observed for every decode —
-  // into the engine's own histogram and, via the seam accumulator, the shell's
-  // OTLP histogram — independently of whether the budget is enforced: the
-  // estimate describes the request, not the budget feature. (The engine's
-  // histogram is serialised only by `GET /metrics`; the OTLP path reads the
-  // value back over the seam instead.)
+  // Estimated peak decode memory for this serve. Recorded for every decode —
+  // handed back over the seam accumulator into the shell's OTLP histogram —
+  // independently of whether the budget is enforced: the estimate describes the
+  // request, not the budget feature.
   const auto ddims = compute_decode_dims(img_w, img_h, info.clevels, region, size);
   const bool needs_icc = quality_format.quality() == SipiQualityFormat::COLOR
                          || quality_format.quality() == SipiQualityFormat::GRAY;
@@ -610,7 +607,6 @@ std::expected<ServeResponse, SipiStatus>
     ddims.width, ddims.height, ddims.out_w, ddims.out_h, info.nc, info.bps, static_cast<double>(angle), needs_icc);
 
   auto &metrics = Metrics::instance();
-  metrics.decode_memory_estimate_bytes.Observe(static_cast<double>(estimated));
   serve_timings_set_decode_estimate(static_cast<std::uint64_t>(estimated));
 
   // The budget is only enforced when configured (decode_memory_mode != "off");

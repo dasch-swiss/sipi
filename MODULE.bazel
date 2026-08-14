@@ -41,32 +41,6 @@ bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
 # third-party CMake/Make build step runs during the build.
 # See docs/adr/0015-native-cc_library-over-foreign_cc.md.
 
-# `prometheus-cpp` consumed via the BCR module. SIPI only
-# links the core counters/gauges/histograms (no HTTP exposer — metrics are
-# served by SIPI's own shttps handler), so `@prometheus-cpp//core` is the
-# only target consumed; the BCR module's optional `pull`/`push`/`civetweb`
-# subgraphs stay outside the action graph. Version `1.3.0.bcr.2` is the
-# BCR re-pack of upstream `v1.3.0` — same source, no upstream bump.
-# Canonical-shape `bazel_dep` per BCR `docs/bcr-policies.md`: module name
-# is the apparent name; no `repo_name=` override.
-bazel_dep(name = "prometheus-cpp", version = "1.3.0.bcr.2")
-
-# Surgical fix for the BCR repack: upstream `core/BUILD.bazel` uses bare
-# `cc_library(...)` without a `load()`, which Bazel 9 rejects (the legacy
-# global cc rules were removed). The BCR module only patches MODULE.bazel,
-# not the BUILD files. Patching here — instead of enabling
-# `--incompatible_autoload_externally=+cc_library` project-wide — keeps
-# the explicit-load discipline intact for our own first-party BUILDs.
-# `patch_strip = 1` matches the conventional `a/`/`b/` prefixes in the
-# diff. Drop this `single_version_override` when prometheus-cpp publishes
-# a Bazel-9-clean BCR rev (the patch will fail loudly when the upstream
-# file shape changes — desired feedback).
-single_version_override(
-    module_name = "prometheus-cpp",
-    patch_strip = 1,
-    patches = ["//bazel/patches:prometheus_cpp_load_cc.patch"],
-)
-
 # `protobuf` consumed via BCR (DEV-6410 / ADR-0005). The Essentials packet
 # (`src/metadata/essentials.proto`) uses `optimize_for = LITE_RUNTIME`, so only
 # the protobuf-lite static archive enters the link (≈300-500 KB).
@@ -434,13 +408,10 @@ use_repo(llvm_source, "llvm-raw", "llvm_config", "llvm_zlib", "llvm_zstd")
 # `undefined reference to std::__1::…`. (darwin→linux cross-compile
 # is a separate path and does not need a linux-aarch64 exec host.)
 #
-# A single registered toolchain serves every platform, INCLUDING the
-# `//tools/fuzz:*_fuzz` platforms: the extra `fuzz_enabled` constraint they
-# carry comes from a constraint_setting this toolchain never references, so it
-# is ignored during resolution (Bazel matches by subset inclusion). This folds
-# away the prior second `llvm_toolchain_fuzz` toolchain, which was functionally
-# identical on Linux (both libc++) and existed only for the first-registered-
-# wins routing that a single toolchain makes unnecessary.
+# A single registered toolchain serves every platform (libc++ everywhere),
+# which folds away the prior second `llvm_toolchain_fuzz` toolchain that was
+# functionally identical on Linux and existed only for first-registered-wins
+# routing a single toolchain makes unnecessary.
 toolchain = use_extension("@llvm//extensions:toolchain.bzl", "toolchain")
 toolchain.exec(
     arch = "aarch64",

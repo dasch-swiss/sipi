@@ -79,8 +79,7 @@ bazel-test *FLAGS='':
 # to consume directly — no cobertura conversion.
 #
 # `instrumentation_filter` keeps measurement scoped to first-party
-# code (`//src`, which now subsumes the shttps module at //src/shttps),
-# excluding test bodies and ext/* deps. Coverage spans unit + approval +
+# code (`//src`), excluding test bodies and ext/* deps. Coverage spans unit + approval +
 # e2e, so the reported % includes HTTP and Lua paths the unit suite cannot
 # reach.
 #
@@ -232,31 +231,6 @@ bazel-test-smoke *FLAGS='':
     bazel run --stamp --verbose_failures {{FLAGS}} //src:image_load
     bazel test --stamp --verbose_failures {{FLAGS}} //test/e2e:docker_smoke
 
-# Run the differential parity gate: spawns the Rust shell (subject) and the
-# retained C++ server (reference, via `$SIPI_BIN_REF`) and diffs their
-# responses across the divergence allowlist. `manual`-tagged so it stays out of
-# `:all_e2e` and `bazel-coverage`'s `//test/e2e/...` wildcard — run it
-# explicitly here. `exclusive-if-local` + `--test-threads=1` (set by the test
-# macro). CI runs it as a dedicated linux-amd64 step.
-#
-# Executes on the worker on the native x86_64 leg like every other e2e test
-# (exec == target == x86_64): both spawned binaries — the Rust shell subject and
-# the C++ oracle `//src/cli:sipi` reference — are x86_64 and run natively there.
-# `exclusive-if-local` parallelises across isolated workers; `--test-threads=1`
-# still serialises the corpus + flag-probe subtests within this single target.
-# Unstamped for the same caching reason as `bazel-test-e2e` (the
-# `0.0.0-unstamped` fallback lets the test actions cache across commits instead
-# of forcing a `:sipi_version_h` re-link + closure re-materialisation on the
-# worker every commit; see `docs/src/development/rbe-write-pressure.md`).
-bazel-test-differential *FLAGS='':
-    bazel test --verbose_failures {{FLAGS}} //test/e2e:differential
-
-# Drift guard: assert the differential corpus still covers the e2e surface
-# (pins the e2e #[test] count; trips when a test is added/removed so the
-# corpus is reviewed). Pure shell — no Bazel/Nix needed.
-differential-coverage-check:
-    bash tools/differential_coverage_check.sh
-
 # Sanitized build: Debug + ASan + UBSan via Bazel
 # `--config=asan --config=ubsan`. The resulting binary at
 # `bazel-bin/src/cli/sipi` is what ci.yml's sanitizer job's e2e tests consume
@@ -283,98 +257,9 @@ bazel-build-sanitized *FLAGS='':
 # it connects over the network too, so a macOS GUI can profile a Linux server.
 # See docs/src/development/profiling.md.
 bazel-build-tracy *FLAGS='':
-    bazel build -c opt --config=tracy --verbose_failures --stamp {{FLAGS}} //src/cli:sipi
-    @echo "Tracy-instrumented binary at: $(pwd)/bazel-bin/src/cli/sipi"
-    @echo "Run it, then open the Tracy profiler and Connect (localhost:8086)."
-
-# Resolve the per-host fuzz `--platforms=` label. linux-x86_64 → libstdc++
-# toolchain (`@llvm_toolchain_fuzz`) for libFuzzer ABI parity with the
-# prior CMake build. darwin-aarch64 → default `@llvm_toolchain` (Apple SDK
-# + libc++; libFuzzer's ABI on darwin). Other host tuples are rejected
-# loudly — the libFuzzer harness is supported on linux-x86_64 (CI) and
-# darwin-aarch64 (local dev) only. Used as a `recipe: dep` so both
-# `bazel-build-fuzz` and `bazel-run-fuzz` share the same host detection.
-_fuzz-platform:
-    #!/usr/bin/env bash
-    case "$(uname -s)-$(uname -m)" in
-        Linux-x86_64)   echo "//tools/fuzz:linux_x86_64_fuzz" ;;
-        Darwin-arm64)   echo "//tools/fuzz:darwin_aarch64_fuzz" ;;
-        *)
-            echo "fuzz harness: unsupported host $(uname -s)-$(uname -m)." >&2
-            echo "  Supported: linux-x86_64 (CI) and darwin-aarch64 (local dev)." >&2
-            echo "  linux-aarch64 is out of scope; use OrbStack/colima or workflow_dispatch." >&2
-            exit 1
-            ;;
-    esac
-
-# Fuzz harness build: produces the libFuzzer binary only. The
-# `--platforms=` is resolved by `_fuzz-platform` from the host
-# (`uname`) — linux-x86_64
-# routes to the libstdc++ toolchain, darwin-aarch64 to the default
-# libc++ toolchain. The `target_compatible_with = ["//tools/fuzz:fuzz_enabled"]`
-# gate on the binary activates under both. CI's `fuzz.yml` workflow's
-# `Build fuzz target` step invokes this recipe.
-bazel-build-fuzz *FLAGS='':
-    #!/usr/bin/env bash
-    set -euo pipefail
-    PLATFORM=$(just _fuzz-platform)
-    # `--platforms` is placed AFTER {{FLAGS}} so the fuzz platform wins: the
-    # bazel-rbe composite action emits `--platforms=//platforms:linux_x86_64` in
-    # the flag string, but the fuzz target is only compatible with
-    # `//tools/fuzz:<host>_fuzz` (it carries the `fuzz_enabled` constraint). The
-    # action's remote cache + executor flags still apply, so the build runs on
-    # the worker; only the target platform is overridden back to the fuzz one.
-    bazel build --config=fuzz --verbose_failures {{FLAGS}} --platforms="$PLATFORM" //fuzz/handlers:iiif_handler_uri_parser_fuzz
-    echo "Fuzzer at: $(pwd)/bazel-bin/fuzz/handlers/iiif_handler_uri_parser_fuzz"
-
-# Run the libFuzzer harness against a live corpus (read+write) for a bounded
-# time budget. Optional read-only seed corpus can be passed as the third arg.
-# Argument triple matches today's deleted `nix-run-fuzz` recipe verbatim so
-# `fuzz.yml`'s `Run fuzzer` step needs only the recipe-name swap.
-#
-# Exit 0 = time budget reached with no findings; non-zero = finding (crash,
-# timeout, or oom).
-#
-# `-timeout=1`: any single input that takes >1 s to parse is reported as a
-# `timeout-*` finding instead of being absorbed into the run budget.
-# `-rss_limit_mb=1024`: any allocation past 1 GiB is reported as an `oom-*`
-# finding instead of OOM-killing the runner. Both libFuzzer flags are
-# emitted by the harness binary, not by Bazel — the `bazel run -- <args>`
-# form forwards everything past `--` to the binary's argv directly.
-#
-# `bazel run` resolves the binary's `cwd` to `$BUILD_WORKSPACE_DIRECTORY`
-# (the workspace root), so `{{corpus}}` and `{{seed}}` are interpreted
-# relative to the same in-tree paths today's Nix-based recipe used.
-# Crash/timeout/oom artifacts (`crash-*`, `timeout-*`, `oom-*`) land in
-# the workspace root; `fuzz.yml`'s `Collect crash details` glob keeps
-# working unchanged.
-bazel-run-fuzz corpus duration seed="":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    PLATFORM=$(just _fuzz-platform)
-
-    # Build first (cached after the first invocation).
-    bazel build --config=fuzz --platforms="$PLATFORM" --verbose_failures //fuzz/handlers:iiif_handler_uri_parser_fuzz
-
-    args=("{{corpus}}")
-    [ -n "{{seed}}" ] && args+=("{{seed}}")
-
-    # Apple's ASan runtime (`libclang_rt.asan_osx_dynamic.dylib`) is always
-    # dynamically linked, and toolchains_llvm's binary references it via
-    # `@rpath`. Under `bazel run`, cwd is the workspace root, so the
-    # binary's `external/toolchains_llvm…` relative rpath does not
-    # resolve. Setting DYLD_LIBRARY_PATH and exec'ing the binary directly
-    # avoids that and also dodges macOS SIP, which strips DYLD_* across
-    # `bazel run`'s subprocess chain. cwd is the workspace root either
-    # way so corpus paths and crash-file globs keep working unchanged.
-    if [ "$(uname -s)" = "Darwin" ]; then
-        EXECROOT=$(bazel info execution_root)
-        export DYLD_LIBRARY_PATH="$EXECROOT/external/toolchains_llvm++llvm+llvm_toolchain_llvm/lib/clang/19/lib/darwin${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
-    fi
-
-    exec ./bazel-bin/fuzz/handlers/iiif_handler_uri_parser_fuzz \
-        "${args[@]}" \
-        -max_total_time={{duration}} -timeout=1 -rss_limit_mb=1024 -print_final_stats=1
+    bazel build -c opt --config=tracy --verbose_failures --stamp {{FLAGS}} //src/cli-rs:sipi
+    @echo "Tracy-instrumented server binary at: $(pwd)/bazel-bin/src/cli-rs/sipi"
+    @echo "Run it (e.g. `sipi server --config …`), then open the Tracy profiler and Connect (localhost:8086)."
 
 #####################################
 # Microbenchmarks (Google Benchmark)
@@ -609,10 +494,10 @@ bazel-docker-extract-debug arch *FLAGS='':
     echo "Debug symbols copied to: sipi-{{arch}}.debug"
 
 # Run sipi with the localdev config.
-run: bazel-build
+run: bazel-build-server
     #!/usr/bin/env bash
     set -euo pipefail
-    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/cli/sipi}"
+    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/cli-rs/sipi}"
     "$SIPI_BIN" server --config={{justfile_directory()}}/config/sipi.localdev-config.lua
 
 # Start a local LGTM observability stack (Grafana on :3000, OTLP gRPC :4317 /
@@ -642,28 +527,11 @@ run-otel: bazel-build-server
         --config="{{justfile_directory()}}/config/sipi.localdev-config.lua" --serverport 1024
 
 # Run sipi under Valgrind.
-valgrind: bazel-build
+valgrind: bazel-build-server
     #!/usr/bin/env bash
     set -euo pipefail
-    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/cli/sipi}"
+    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/cli-rs/sipi}"
     valgrind --leak-check=yes --track-origins=yes "$SIPI_BIN" server --config={{justfile_directory()}}/config/sipi.config.lua
-
-# Download CI fuzz corpus and merge into seed corpus
-fuzz-corpus-update:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "Downloading latest fuzz corpus from CI..."
-    rm -rf {{justfile_directory()}}/.fuzz-corpus-ci
-    gh run download --name fuzz-corpus --dir {{justfile_directory()}}/.fuzz-corpus-ci || \
-        { echo "No fuzz-corpus artifact found. Has the fuzz workflow run yet?"; exit 1; }
-    before=$(ls fuzz/handlers/corpus/ | wc -l | tr -d ' ')
-    for f in {{justfile_directory()}}/.fuzz-corpus-ci/*; do
-        hash=$(shasum -a 256 "$f" | cut -d' ' -f1 | head -c 16)
-        cp "$f" "fuzz/handlers/corpus/$hash"
-    done
-    after=$(ls fuzz/handlers/corpus/ | wc -l | tr -d ' ')
-    echo "Corpus: $before → $after inputs ($((after - before)) new)"
-    rm -rf {{justfile_directory()}}/.fuzz-corpus-ci
 
 #####################################
 # Documentation

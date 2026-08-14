@@ -29,8 +29,7 @@ which the collector derives from the OTLP stream), and **Grafana** is the
 OTLP metrics** (with Sentry for errors): per-request spans via `OtelAxumLayer`,
 W3C `traceparent` continuation in and out (incl. propagation to dsp-api on the
 Lua preflight's outbound call), the engine counters bridged to OTLP, and the
-`http.server.request.duration` latency histogram. The `GET /metrics` scrape
-survives only on the retained C++ oracle, which is never deployed. None
+`http.server.request.duration` latency histogram. None
 of them tell you which C++ function consumed the milliseconds — that is Tracy's job.
 
 ## The loop
@@ -53,8 +52,8 @@ from a hunch about which function "feels slow."
 ## Building and running
 
 ```bash
-just bazel-build-tracy        # -c opt --config=tracy //src/cli:sipi
-./bazel-bin/src/cli/sipi server --config config/sipi.localdev-config.lua
+just bazel-build-tracy        # -c opt --config=tracy //src/cli-rs:sipi
+./bazel-bin/src/cli-rs/sipi server --config config/sipi.localdev-config.lua
 ```
 
 `just bazel-build-tracy` builds at `-c opt` (so the timeline reflects production

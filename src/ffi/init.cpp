@@ -11,7 +11,7 @@
  * CLI/env overrides on top, builds the cache / decode-memory-budget services,
  * points `engine_context()` at them, and installs the engine-held Lua config VM
  * factory. It is a production entry point, so it lives in the seam package
- * (`src/ffi`), not in the oracle-hosting `src/cli`.
+ * (`src/ffi`), not in the CLI package (`src/cli`).
  */
 
 #include <climits>
@@ -42,8 +42,7 @@
 
 namespace {
 
-/*! Map a config scaling-quality string to a ScalingMethod; unknown/missing → HIGH
- *  (matching the legacy SipiHttpServer::scaling_quality setter). */
+/*! Map a config scaling-quality string to a ScalingMethod; unknown/missing → HIGH. */
 Sipi::ScalingMethod parse_scaling_method(const std::string &v)
 {
   if (v == "medium") { return Sipi::ScalingMethod::MEDIUM; }
@@ -52,8 +51,7 @@ Sipi::ScalingMethod parse_scaling_method(const std::string &v)
 }
 
 /*! Convert SipiConf's `map<string,string>` scaling-quality table into the
- *  `ScalingQuality` struct EngineContext holds — the conversion the legacy
- *  SipiHttpServer::scaling_quality(map) setter performs (jk2 ← the "jpk" key). */
+ *  `ScalingQuality` struct EngineContext holds (jk2 ← the "jpk" key). */
 Sipi::ScalingQuality to_scaling_quality(const std::map<std::string, std::string> &m)
 {
   const auto get = [&](const char *k) -> std::string {
@@ -71,8 +69,8 @@ Sipi::ScalingQuality to_scaling_quality(const std::map<std::string, std::string>
 /*!
  * Process-wide server runtime installed by `sipi_init`.
  *
- * The Rust shell, unlike the C++ `SipiHttpServer`, has no server object to own
- * the engine services, so `sipi_init` parks them here for the process lifetime.
+ * The Rust shell has no server object to own the engine services, so `sipi_init`
+ * parks them here for the process lifetime.
  * `engine_context()` stores non-owning pointers into this holder, so it must
  * outlive every serve call — hence file-static. The held `SipiConf` also backs
  * the `sipiConfGlobals` installer captured in the Lua config (the per-request VM
@@ -89,9 +87,7 @@ std::unique_ptr<ServerRuntime> g_server_runtime;
 }// namespace
 
 /*!
- * Parse the Lua config and install the engine + Lua config from scratch. This is
- * the from-scratch counterpart to the C++ server's parity install
- * (`SipiHttpServer`'s `set_engine_context` + run_server's `set_lua_config`); the
+ * Parse the Lua config and install the engine + Lua config from scratch. The
  * Rust shell calls it once at startup before serving. Builds the cache / memory
  * budget into `g_server_runtime`, points `engine_context()` at them, and installs
  * the engine-held Lua config VM factory. Returns 0 on success or `EXIT_FAILURE`;
@@ -117,7 +113,7 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
 
     auto runtime = std::make_unique<ServerRuntime>();
 
-    // Parse the Lua config — the same VM the C++ server path reads via SipiConf.
+    // Parse the Lua config into SipiConf.
     // Skipped on the Lua-less path: `runtime->conf` stays default-constructed (an
     // all-defaults config via SipiConf's in-class initializers) and the overrides
     // below supply imgroot / scriptdir / etc.
@@ -133,7 +129,7 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
     // Setter names are SipiConf's verbatim (incl. the `setPasswort` typo). Sized
     // strings (cache_size/maxpost/max_decode_memory) carry the raw "300M" text;
     // parseSizeString expands the suffix engine-side. A negative maxpost /
-    // max-decode-memory clamps to 0 (matching the SipiConf ctor + run_server) so
+    // max-decode-memory clamps to 0 (matching the SipiConf ctor) so
     // it cannot become SIZE_MAX and skip the budget auto-detect; cache_size keeps
     // -1 as its valid "unlimited" sentinel. cache_nfiles is `unsigned` (0 =
     // unlimited; a negative is rejected by CLI11 on both binaries / by clap u32),
@@ -195,15 +191,15 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
       if (o.has_jpeg_quality) conf.setJpegQuality(o.jpeg_quality);
     }
 
-    // Engine services, mirroring run_server()'s construction (config values, with
-    // the CLI/env overrides above already applied). A null service means
-    // the corresponding feature is disabled, matching the legacy accessors.
+    // Engine services built from the config values (with the CLI/env overrides
+    // above already applied). A null service means the corresponding feature is
+    // disabled.
     {
       const std::string cachedir = conf.getCacheDir();
       const long long cache_size = conf.getCacheSize();
       if (cache_size != 0 && !cachedir.empty()) {
         // Degrade to no-cache on a bad/unwritable cache dir rather than aborting
-        // startup — parity with SipiHttpServer::cache() (which logs + continues).
+        // startup — cache init failure is non-fatal, so log the error and continue.
         try {
           runtime->cache = std::make_unique<Sipi::SipiCache>(cachedir, cache_size, conf.getCacheNFiles());
         } catch (const shttps::Error &e) {
@@ -225,8 +221,7 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
       }
     }
 
-    // Resolve the image root (realpath) for path-traversal containment (R2),
-    // mirroring SipiHttpServer's resolve at startup.
+    // Resolve the image root (realpath) for path-traversal containment (R2).
     const std::string imgroot = conf.getImgRoot();
     char resolved[PATH_MAX];
     if (realpath(imgroot.c_str(), resolved) == nullptr) {
@@ -271,8 +266,8 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
     });
 
     // Install the engine-held Lua config (the per-call VM factory behind
-    // sipi_preflight / sipi_run_lua_route). Same scriptdir, JWT secret, and
-    // globals installers (in registration order) as run_server's set_lua_config.
+    // sipi_preflight / sipi_run_lua_route): the scriptdir, JWT secret, and
+    // globals installers (in registration order) the factory applies.
     // The sipiConfGlobals installer captures &conf, which stays valid: `runtime`
     // is heap-allocated, so its SipiConf address is stable across the move into
     // g_server_runtime below.

@@ -71,7 +71,6 @@ updates:
           - "*"
     ignore:
       # Majors require manual review against MODULE.bazel's override comments
-      # (prometheus-cpp patch, rules_go / rules_android floors driven by
-      # protobuf 34.1, BCR repacks).
+      # (rules_go / rules_android floors driven by protobuf 34.1, BCR repacks).
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]

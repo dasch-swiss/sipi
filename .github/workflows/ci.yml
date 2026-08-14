@@ -7,15 +7,13 @@
 #   2. `test` — the 3-leg build+test matrix (linux-amd64, linux-arm64,
 #      darwin-arm64), each running `just bazel-test` (fastbuild, no
 #      instrumentation; unit + approval + e2e). The linux-amd64 leg runs the
-#      lint gates BEFORE its build+test, as fail-fast gates: the
-#      differential-coverage drift guard first as a pure-shell pre-check, then
-#      Rust formatting + clippy (clippy compiles the Rust crates natively on
-#      the amd64 RBE worker — no cross-compile). amd64 carries the heaviest
-#      downstream work (differential parity gate, Docker smoke, Scout, SARIF),
-#      so short-circuiting it on a lint finding saves the most. Linux legs
-#      additionally build the Docker image, run the Bazel-built smoke test
-#      against it, and feed Docker Scout; amd64 alone runs the differential
-#      parity gate and uploads the SARIF CVE scan. Every leg writes its
+#      Rust lint gates (formatting + clippy) BEFORE its build+test, as
+#      fail-fast gates (clippy compiles the Rust crates natively on the amd64
+#      RBE worker — no cross-compile). amd64 carries the heaviest downstream
+#      work (Docker smoke, Scout, SARIF), so short-circuiting it on a lint
+#      finding saves the most. Linux legs additionally build the Docker image,
+#      run the Bazel-built smoke test against it, and feed Docker Scout; amd64
+#      alone uploads the SARIF CVE scan. Every leg writes its
 #      `just bazel-test` invocation's Build Event Protocol JSON and uploads it
 #      as a `bep-<platform>` artifact for offline cache-hit-rate analysis.
 #   3. `sanitizer` — a path-gated ASan+UBSan job running unit + e2e in one
@@ -82,7 +80,7 @@ jobs:
           FILES=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
           echo "=== changed files ==="
           echo "$FILES"
-          INCLUDE='^(src/|include/|test/|fuzz/|bazel/|platforms/|config/|scripts/|MODULE\.bazel|\.bazelrc|\.bazelversion|BUILD\.bazel|justfile|\.lsan_suppressions\.txt|\.github/workflows/ci\.yml|\.github/actions/)'
+          INCLUDE='^(src/|include/|test/|bazel/|platforms/|config/|scripts/|MODULE\.bazel|\.bazelrc|\.bazelversion|BUILD\.bazel|justfile|\.lsan_suppressions\.txt|\.github/workflows/ci\.yml|\.github/actions/)'
           MATCHED=$(echo "$FILES" | grep -E "$INCLUDE" || true)
           if [ -n "$MATCHED" ]; then
             echo "native-relevant change detected:"
@@ -126,13 +124,6 @@ jobs:
           fetch-depth: 0
           lfs: false  # ci-setup restores/pulls LFS via its own cached step
 
-      # Fast pre-check on the linux-amd64 leg (the fail-fast leg): pure shell,
-      # so it runs before any setup step and fails in seconds on an unreviewed
-      # differential-corpus drift.
-      - if: matrix.arch == 'amd64'
-        name: Check differential coverage (drift guard)
-        run: bash tools/differential_coverage_check.sh
-
       - name: CI setup (bazelisk, just, LFS, repo cache, RBE flags)
         id: setup
         uses: ./.github/actions/ci-setup
@@ -146,8 +137,7 @@ jobs:
 
       # Rust lint gates on the linux-amd64 leg, BEFORE build+test, so a
       # formatting/clippy finding fails the leg in lint time — short-circuiting
-      # the leg's heavy downstream steps (build+test, differential parity gate,
-      # Docker smoke, Scout).
+      # the leg's heavy downstream steps (build+test, Docker smoke, Scout).
       - if: matrix.arch == 'amd64'
         name: Check Rust formatting
         env:
@@ -207,18 +197,6 @@ jobs:
           name: bep-${{ matrix.platform }}
           path: bep-${{ matrix.platform }}.json
           retention-days: 30
-
-      # The differential parity gate (Rust shell vs the retained C++ oracle)
-      # is `manual`-tagged, so the `just bazel-test` wildcard above and
-      # `bazel-coverage` skip it — it needs its own explicit invocation, like
-      # `docker_smoke`. Runs on linux-amd64 only: Rust↔C++ divergences are
-      # code-level, not platform-specific, so one platform catches them and
-      # keeps the per-PR cost of the heavy two-binary spawn bounded.
-      - name: Run differential parity gate (Rust shell vs C++ oracle)
-        if: matrix.arch == 'amd64'
-        env:
-          GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: just bazel-test-differential ${{ steps.setup.outputs.flags }}
 
       # Docker steps run on Linux only because they `docker load` the image
       # into a local Linux Docker daemon (absent on the macOS runner) — not

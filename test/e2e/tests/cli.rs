@@ -179,9 +179,8 @@ fn sipi_server_help_heading_order() {
 
 // =============================================================================
 // The offline verbs `query` and `compare`. Both delegate to the C++ CLI
-// (`sipi_cli_main`) on both binaries, so this is plain e2e coverage, not
-// differential-relevant. (`verify` runs in the `cli_conversions` batch;
-// `convert`'s `-w/--watermark` lives below.)
+// (`sipi_cli_main`), so this is plain e2e coverage. (`verify` runs in the
+// `cli_conversions` batch; `convert`'s `-w/--watermark` lives below.)
 // =============================================================================
 
 #[test]

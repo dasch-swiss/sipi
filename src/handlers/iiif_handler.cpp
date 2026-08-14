@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <string_view>
 
-#include "shttps/transport/Connection.h"
 #include "util/UrlDecode.h"
 
 namespace handlers::iiif_handler {

@@ -1,19 +1,18 @@
 """src/observability/ — operational telemetry surface (Y+8L per DEV-6353).
 
-First per-probe Bazel package promotion. Houses SIPI's Prometheus metrics
-(`Sipi::observability::Metrics`) and the shttps connection-metrics adapter
-(`ConnectionMetricsAdapter`). Crash/error reporting (Sentry) is Rust-owned
-(DEV-6659) — the engine links no Sentry SDK; handled image errors cross the
-FFI seam as `SipiImageErrorReport` (see `//src/ffi:sipi_ffi`), flattened from
+First per-probe Bazel package promotion. Houses SIPI's metrics singleton
+(`Sipi::observability::Metrics`) — plain atomic counters/gauges whose scalar
+fields cross the FFI seam as `SipiMetricsSnapshot` (see `//src/ffi:sipi_ffi`)
+and are exported over OTLP by the Rust shell. Crash/error reporting (Sentry) is
+Rust-owned (DEV-6659) — the engine links no Sentry SDK; handled image errors
+cross the FFI seam as `SipiImageErrorReport`, flattened from
 `Sipi::observability::ImageContext` (`//src:populate_from_image.h`, not this
 package — it dereferences `SipiImage`, which this package doesn't depend on).
 
-Co-locates the unit test (`connection_metrics_adapter_test.cpp` +
-`test_main.cpp`) per ADR-0003 — moved from `test/unit/sipiconnectionmetrics/`.
+Co-locates the `metrics_registry_test.cpp` seam tripwire per ADR-0003.
 
 `layering_check` and `parse_headers` are **deferred** until SipiImage moves
-into its own package (DEV-6388 / DEV-6395) — see the shttps/BUILD.bazel
-comment about Logger.h rehome for the same disposition on a sibling package.
+into its own package (DEV-6388 / DEV-6395).
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
@@ -23,11 +22,9 @@ package(default_visibility = ["//src:__subpackages__"])
 cc_library(
     name = "observability",
     srcs = [
-        "connection_metrics_adapter.cpp",
         "metrics.cpp",
     ],
     hdrs = [
-        "connection_metrics_adapter.h",
         "metrics.h",
         # The Tracy zone-macro shim. Header-only; the `@tracy//:tracy` dep below
         # propagates the (inert-unless-`--config=tracy`) profiler to every
@@ -42,32 +39,16 @@ cc_library(
     # directory automatically.
     deps = [
         "//include:headers",
-        "//src/shttps:shttps",
         "//src:sipi_generated_hdrs",
-        "@prometheus-cpp//core",
         # Profiler shim (profiling.h). Inert unless `--config=tracy` defines
         # TRACY_ENABLE; see bazel/tracy.BUILD.bazel.
         "@tracy//:tracy",
     ],
 )
 
-cc_test(
-    name = "connection_metrics_adapter_test",
-    srcs = [
-        "connection_metrics_adapter_test.cpp",
-        "test_main.cpp",
-    ],
-    deps = [
-        ":observability",
-        "@googletest//:gtest_main",
-    ],
-)
-
-# The seam tripwire: pins every registry family name against a classification of
-# how (or whether) it reaches production OTLP. Separate target from the adapter
-# test because it asserts a property of the registry as a whole, and because a
-# failure here means "decide how your new metric crosses the seam", not "the
-# adapter is broken".
+# The seam tripwire: pins every metric field against a classification of
+# how (or whether) it reaches production OTLP. A failure here means "decide how
+# your new metric crosses the seam" (the `SipiMetricsSnapshot` scalar bridge).
 cc_test(
     name = "metrics_registry_test",
     srcs = [

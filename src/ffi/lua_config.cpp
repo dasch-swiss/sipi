@@ -13,11 +13,10 @@
 
 namespace Sipi::ffi {
 namespace {
-  // Process-wide engine Lua config. Installed once at startup — in production by
-  // `sipi_init` (`ffi/init.cpp`), and in the oracle transport by the still-living
-  // C++ server before the cutover — and only read thereafter, so the per-call VM
-  // factory needs no synchronization on the config itself. (Each call still gets
-  // its own LuaServer — the Lua VM is never shared across threads.)
+  // Process-wide engine Lua config. Installed once at startup by `sipi_init`
+  // (`ffi/init.cpp`) and only read thereafter, so the per-call VM factory needs no
+  // synchronization on the config itself. (Each call still gets its own LuaServer
+  // — the Lua VM is never shared across threads.)
   LuaConfig g_lua_config;
 }// namespace
 
@@ -30,7 +29,7 @@ std::unique_ptr<shttps::LuaServer> make_lua_server(shttps::RequestContext &ctx)
   const LuaConfig &cfg = g_lua_config;
   ctx.jwt_secret = cfg.jwt_secret;
 
-  // Mirror Server::process_request: package.path base, then the init script
+  // Build the per-request VM: package.path base, then the init script
   // (createGlobals installs server.* and the script defines the preflight
   // hooks), then the remaining globals in registration order.
   const std::string lua_scriptdir = cfg.script_dir + "/?.lua";

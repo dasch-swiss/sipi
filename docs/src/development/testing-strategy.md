@@ -20,9 +20,9 @@ Sipi implements the full [IIIF Image API 3.0](https://iiif.io/api/image/3.0/) at
 | **Quality** (Section 4.4) | `default`, `color`, `gray`, `bitonal` | `src/iiifparser/SipiQualityFormat.cpp` |
 | **Format** (Section 4.5) | `jpg`, `png`, `tif`, `jp2`, `webp` | `src/iiifparser/SipiQualityFormat.cpp` |
 | **Identifiers** (Section 3) | URL-encoded, `%2F` slash, prefix-based resolution | `src/iiifparser/SipiIdentifier.cpp` |
-| **Info.json** (Section 5) | Full response: `@context`, `id`, `type`, `protocol`, `profile`, `width`, `height`, `sizes`, `tiles`, `extraFormats`, `extraFeatures`, `preferredFormats` | `src/SipiHttpServer.cpp` |
-| **Content negotiation** | `Accept: application/ld+json` → JSON-LD with `@context`; default → `application/json` | `src/SipiHttpServer.cpp` |
-| **HTTP behavior** (Section 7) | Base URI redirect, HEAD, CORS, Link headers, canonical URI, 400/401/403/404/500/501 errors | `src/SipiHttpServer.cpp` |
+| **Info.json** (Section 5) | Full response: `@context`, `id`, `type`, `protocol`, `profile`, `width`, `height`, `sizes`, `tiles`, `extraFormats`, `extraFeatures`, `preferredFormats` | `src/server-rs/src/info.rs` |
+| **Content negotiation** | `Accept: application/ld+json` → JSON-LD with `@context`; default → `application/json` | `src/server-rs/src/info.rs` |
+| **HTTP behavior** (Section 7) | Base URI redirect, HEAD, CORS, Link headers, canonical URI, 400/401/403/404/500/501 errors | `src/server-rs/src/routes.rs` |
 | **IIIF Extension: `red:n`** | Reduce factor for JP2 (faster subsampling on read) — sipi-specific, not in IIIF spec | `src/iiifparser/SipiSize.cpp` |
 
 !!! note "IIIF Auth exclusion"
@@ -70,22 +70,23 @@ Each step allocates an intermediate buffer. Peak memory is ~2x image size per tr
 
 **Watermarking** is applied as an additional step when the preflight script returns a `restrict` permission with a watermark path. Watermark files must be single-channel 8-bit gray TIFF (SAMPLESPERPIXEL=1, BITSPERSAMPLE=8, PHOTOMETRIC=MINISBLACK).
 
-### HTTP Server (`shttps/`)
+### HTTP Server (Rust axum shell)
 
-The `shttps` library is a custom lightweight HTTP server:
+The production HTTP server is the Rust axum shell (`src/server-rs` +
+`src/cli-rs`), which drives the C++ image engine over the FFI seam:
 
 | Feature | Details | Source |
 |---|---|---|
-| SSL/TLS | Configurable port, certificate, and key paths | `shttps/transport/Server.h` |
-| Threading | Configurable thread pool (`nthreads`, default 8) | `shttps/transport/Server.h` |
-| Keep-alive | Configurable timeout (seconds) | `shttps/transport/Connection.h` |
-| Chunked transfer | `Transfer-Encoding: chunked` support | `shttps/transport/Connection.h` |
+| SSL/TLS | Terminated at Traefik in front of the shell; `sslport`/`sslcert`/`sslkey` keys parse but are inert | `src/server-rs/src/config.rs` |
+| Threading | Bounded worker pool with a request queue (env-tunable: `SIPI_NTHREADS`, `SIPI_MAX_WAITING`, `SIPI_QUEUE_TIMEOUT`) | `src/server-rs/src/routes.rs` |
+| Keep-alive | `keepalive` config key | `src/server-rs/src/config.rs` |
+| Chunked transfer | axum/hyper streaming responses | `src/server-rs/src/sink.rs` |
 | Range requests | HTTP 206 Partial Content | Handler-level |
 | CORS | Via Lua preflight scripts | `scripts/` |
-| Methods | GET, POST, PUT, DELETE | `shttps/transport/Connection.h` |
-| Authentication | JWT (HS256), HTTP Basic Auth, cookie support | `jwt/jwt.h` |
-| Max POST size | Configurable (`max_post_size`, default 300M) | `shttps/transport/Connection.cpp` |
-| Multipart upload | Form-data file upload with metadata | `shttps/transport/Connection.h` |
+| Methods | GET, POST, PUT, DELETE | `src/server-rs/src/lib.rs` |
+| Authentication | JWT (HS256), HTTP Basic Auth, cookie support | `src/jwt/jwt.h` |
+| Max POST size | Configurable (`max_post_size`, default 300M) | `src/server-rs/src/config_file.rs` |
+| Multipart upload | Form-data file upload retained as a Lua route (ADR-0017) | `scripts/` |
 
 ### Caching System
 
@@ -99,8 +100,8 @@ File-based LRU cache with dual-limit eviction (`SipiCache.h`, `src/SipiCache.cpp
 | **Crash recovery** | Serialized index on disk; rebuild from directory scan if index missing |
 | **Concurrent access** | Mutex-protected; `blocked_files` map prevents reads during writes |
 | **Canonical key** | Full IIIF URL (with watermark flag) as cache key |
-| **Metrics** | hits, misses, evictions, skips, size, file count (Prometheus — C++ oracle only, see below) |
-| **API endpoints** | `GET /api/cache` (list files), `DELETE /api/cache` (purge/delete specific) — C++ oracle only; the Lua `cache` table bindings and the route are both absent on the Rust shell |
+| **Metrics** | hits, misses, evictions, skips, size, file count — the scalar counters cross the FFI seam via `SipiMetricsSnapshot` and export over OTLP (see below) |
+| **API endpoints** | None. There is no `/api/cache` route on the Rust shell; observe cache behaviour via the on-disk cache-dir file count |
 | **Cache metadata** | Image dimensions, tile info, pyramid levels, MIME type, checksum per entry |
 
 ### Lua Scripting System
@@ -187,7 +188,7 @@ Sipi operates in three CLI modes (`src/cli/cli_app.cpp`):
 
 **Compare Mode:** `sipi compare file1 file2` — compare two images.
 
-**Server Mode:** `sipi server --config config.lua` with CLI overrides for port, hostname, imgroot, cache settings, SSL, JWT, admin credentials, logging, etc.
+**Server Mode:** the Rust axum shell (`//src/cli-rs:sipi server --config config.lua`) with CLI overrides for port, hostname, imgroot, cache settings, JWT, admin credentials, logging, etc. (TLS terminates at Traefik; `sslcert`/`sslkey` flags parse but are inert.)
 
 ### Configuration System
 
@@ -209,9 +210,9 @@ Lua-based configuration (`SipiConf.h`, `src/SipiConf.cpp`):
 
 **Deprecated keys:** `cachedir` → `cache_dir`, `cachesize` → `cache_size`, `cache_hysteresis` → removed (80% low-water mark is now hardcoded).
 
-### Prometheus Metrics
+### Metrics (OTLP)
 
-Metrics endpoint at `GET /metrics` (`src/observability/metrics.h`, `src/observability/metrics.cpp`). **C++ oracle only** — the Rust shell (`src/server-rs`) does not register this route; OTLP replaces it there. Test accordingly: cache observability on the Rust shell goes through on-disk cache-dir file counts (`cache.rs`), not this endpoint.
+The cache counters and gauges are exported over OTLP, not a scrape endpoint. The C++ engine maintains them (`src/observability/metrics.h`, `src/observability/metrics.cpp`); the scalar fields cross the FFI seam via `SipiMetricsSnapshot` and the Rust shell (`src/server-rs/src/metrics.rs`) emits them over OTLP. There is no `GET /metrics` route. Test accordingly: cache observability goes through on-disk cache-dir file counts (`cache.rs`), not a scrape endpoint.
 
 | Metric | Type | Description |
 |---|---|---|
@@ -247,7 +248,6 @@ Metrics endpoint at `GET /metrics` (`src/observability/metrics.h`, `src/observab
 | Feature | Details |
 |---|---|
 | **Knora/DSP** | Session cookie validation, knora.json sidecar, configurable API path/port |
-| **API endpoints** | `/metrics` (Prometheus) — C++ oracle only, not on the Rust shell |
 | **File access** | Raw file download via `/prefix/identifier/file` with `file_pre_flight` auth |
 | **Sentry** | Error reporting via `SIPI_SENTRY_DSN`, `SIPI_SENTRY_ENVIRONMENT`, `SIPI_SENTRY_RELEASE` |
 
@@ -311,7 +311,7 @@ Four layers, from fastest/narrowest to slowest/broadest:
 - **FFI / C-library boundaries** where the bug class lives in the C++↔C interop (libtiff variadic-arg type widths, kakadu callback lifetimes, lcms2 profile ownership) and Rust e2e would observe only the downstream symptom.
 - **Move/copy/RAII semantics** that pure-function tests can pin but server-level tests cannot (assignment-operator buffer lifecycle, exception-safety guarantees, `noexcept` move correctness).
 - **Concurrency primitives** with lock-free or atomic semantics (`SipiMemoryBudget`) where deterministic e2e reproduction is impractical.
-- **Replacement-target coverage:** components scheduled for Rust replacement (shttps, Lua scripting, cache management) are covered with C++ unit tests that travel with the C++ code and disappear cleanly when the component is replaced. This documents existing behavior for the rewrite team and avoids false failures when the Rust replacement changes internal behavior while preserving the HTTP contract.
+- **Engine-internal coverage:** C++ engine components the Rust shell drives (Lua scripting, cache management) are covered with C++ unit tests that travel with the C++ code. This documents existing engine behavior and avoids false failures when internal C++ behavior changes while the HTTP contract the shell exposes stays fixed.
 
 Behavior that *is* HTTP-observable belongs in Rust e2e — not in C++ unit tests.
 
@@ -362,23 +362,23 @@ Behavior that *is* HTTP-observable belongs in Rust e2e — not in C++ unit tests
 - Range requests
 - Concurrent request handling
 
-### Layer 4: Fuzz Testing (continuous, nightly)
+### Layer 4: Property & Fuzz Testing
 
 **Purpose:** Find crashes, memory safety issues, and edge cases in parsers and input handlers.
 
 | Framework | Location | When to use |
 |---|---|---|
-| libFuzzer (C++) | `fuzz/` | IIIF URI parser, HTTP request parser |
-| `cargo-fuzz` / `proptest` (Rust, future) | Future crate `fuzz/` | After Rust migration of parsers |
+| `proptest` (Rust) | `test/e2e/tests/proptest_iiif_uri.rs` | Property-based coverage of the Rust IIIF URI parser (`parse_request`) |
+| Rust fuzz harness (`cargo-fuzz` / `libfuzzer-sys`, tracked follow-up) | — | Coverage-guided fuzzing of `src/server-rs/src/iiif.rs::parse_request` |
+
+The C++ libFuzzer harness (`//fuzz/handlers`) has been retired along with the C++
+IIIF URL parser it targeted. See [Fuzzing](fuzzing.md) for the current status.
 
 **What belongs here:**
 
-- IIIF URI parser (`parse_iiif_uri`)
-- HTTP request parsing
+- IIIF URI parser (`src/server-rs/src/iiif.rs::parse_request`)
 - Image format header parsing
 - Any function that processes untrusted input
-
-**Corpus management:** CI uploads corpus artifacts; `just fuzz-corpus-update` merges CI corpus into seed corpus. See [Fuzz Testing](fuzzing.md) for full details.
 
 ## Test Decision Tree
 
@@ -392,7 +392,7 @@ New test needed?
 ├── Is it regression detection for complex output?
 │   └── insta snapshot (JSON structure, headers) — this is a Rust e2e test with insta
 ├── Is it testing untrusted input handling?
-│   └── Fuzz test (libFuzzer or cargo-fuzz)
+│   └── proptest today (`proptest_iiif_uri.rs`); a Rust fuzz harness is a tracked follow-up
 ├── Is it testing image output correctness?
 │   └── Rust e2e with `image` crate decode + dimension/checksum verification
 └── Does it need filesystem setup or custom server config?
@@ -577,7 +577,7 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 | Large-file range requests (10MB+) | :white_check_mark: | `range_requests.rs` | 8 tests |
 | Cache hit/miss verification | :white_check_mark: | `cache.rs::cache_hit_avoids_decode`, `head_does_not_warm_cache` | observed via on-disk cache-dir file count, not `/metrics` (removed) |
 | CLI mode (file conversion) | :white_check_mark: | `test/e2e/tests/cli.rs` | `sipi convert <in> <out>` covered |
-| Prometheus metrics endpoint | N/A — removed | — | OTLP replaces it on the Rust shell; C++-oracle-only, gapped intentionally in the differential corpus |
+| Prometheus metrics endpoint | N/A — removed | — | OTLP replaces it on the Rust shell; there is no scrape endpoint |
 | SSL/TLS endpoints | N/A — removed | — | TLS terminates at Traefik; the Rust shell serves plain HTTP only, flags parse-only |
 | Image dimension verification | :white_check_mark: | `iiif_compliance.rs::region_dimension_verification`, `size_dimension_verification`, `rotation_dimension_verification` | decodes output and asserts actual pixel dimensions |
 | EXIF preservation through IIIF pipeline | :white_check_mark: | `iiif_compliance.rs::metadata_iiif_pipeline`; `server.rs::lua_exif_gps` | HTTP-level; deep tag-by-tag EXIF diffing remains a gap (no exiv2 binding in the Rust test crate) |
@@ -593,18 +593,18 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 | Restricted image size reduction | :white_check_mark: | `server.rs::restricted_image_reduction` | |
 | 4-bit palette PNG upload | :white_check_mark: | `upload.rs` | `upload_4bit_palette_png` |
 | Cache API routes (`/api/cache`) | N/A — removed | — | route unregistered, Lua `cache` table bindings absent from `src/` |
-| Favicon endpoint | :white_check_mark: | `differential.rs::favicon` | |
+| Favicon endpoint | :x: GAP | — | favicon route exists (`src/server-rs/src/lib.rs`); its only e2e test was removed with the differential suite |
 | Memory safety (ASan/LSan) | :white_check_mark: | `ci.yml`'s `sanitizer` job | unit + e2e suites against an ASan+UBSan-instrumented binary (see Cross-Cutting section below) |
 | Thread safety (TSan) | :x: GAP | — | Untested for data races; future optional nightly variant |
 | Performance regression detection | :white_check_mark: | `latency.rs` | smoke thresholds only (info.json / cache-miss / cache-hit); load-baseline tier intentionally deferred to staging (see Cross-Cutting section) |
 | Corrupt/truncated image handling | :white_check_mark: | `iiif_compliance.rs::corrupt_jpeg_handling`, `corrupt_png_handling`, `corrupt_image_handling` (truncated JP2) | JP2 decode converts Kakadu's thrown error into a `SipiImageError` (like JPEG/PNG); the server returns a clean error and stays up (DEV-6731) |
-| Lua route handler errors | :white_check_mark: | `differential.rs::lua_route_error_handling` | |
+| Lua route handler errors | :white_check_mark: | `server.rs::lua_route_error_handling` | |
 | Zero-byte / empty file upload | :white_check_mark: | `upload.rs::empty_file_upload` | |
 | Invalid server config startup | :white_check_mark: | `config.rs::invalid_config_startup` | |
-| Double-encoded URL handling | :white_check_mark: | `differential.rs::double_encoded_url` | `%252F`: intentional divergence (Rust single-decodes, DEV-6700) |
+| Double-encoded URL handling | :white_check_mark: | `iiif_compliance.rs::double_encoded_url` | `%252F`: the Rust shell single-decodes (DEV-6700) |
 | Extremely long URL / header | :x: GAP | — | Partially covered by fuzz only |
-| JWT validation edge cases | :white_check_mark: | `security.rs::jwt_expired_token`, `jwt_alg_none_bypass`, `jwt_tampered_payload`; `differential.rs::jwt_*_parity` | the preflight response-sink crash (DEV-6670) is fixed — a Bearer token to an `/auth`-prefixed image no longer null-derefs |
-| Image decompression bomb | :white_check_mark: | `security.rs::decompression_bomb_rejection`; `differential.rs::decompression_bomb_rejection` | |
+| JWT validation edge cases | :white_check_mark: | `security.rs::jwt_expired_token`, `jwt_alg_none_bypass`, `jwt_tampered_payload` | the preflight response-sink crash (DEV-6670) is fixed — a Bearer token to an `/auth`-prefixed image no longer null-derefs |
+| Image decompression bomb | :white_check_mark: | `security.rs::decompression_bomb_rejection` | |
 | Upload size enforcement | :white_check_mark: | `upload.rs::upload_size_enforcement` | |
 | CRLF header injection | :white_check_mark: | `security.rs::crlf_header_injection`; `input_validation.rs::crlf_in_identifier_no_header_injection` | |
 | Cache key collision | :white_check_mark: | `cache.rs::cache_key_isolation` | |
@@ -617,20 +617,20 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 | Invalid Lua config syntax | :white_check_mark: | `config.rs::invalid_config_startup` | |
 | Config with nonexistent paths | :white_check_mark: | `config.rs::config_nonexistent_paths` | |
 | SImage Lua API coverage | :x: GAP | — | Methods tested only via black-box HTTP, not a direct Lua-API unit harness |
-| Lua JWT round-trip | :white_check_mark: | `differential.rs::lua_jwt_round_trip`; `server.rs::lua_jwt_round_trip` | |
-| Lua UUID round-trip | :white_check_mark: | `server.rs::lua_uuid_round_trip` (single-server only — non-deterministic body excludes it from the differential corpus) | |
-| Lua `server.http` outbound | :white_check_mark: | `server.rs::lua_http_client_error_handling` (single-server only — same non-determinism reason) | |
-| Lua error propagation to HTTP | :white_check_mark: | `differential.rs::lua_route_error_handling` | |
+| Lua JWT round-trip | :white_check_mark: | `server.rs::lua_jwt_round_trip` | |
+| Lua UUID round-trip | :white_check_mark: | `server.rs::lua_uuid_round_trip` | non-deterministic body |
+| Lua `server.http` outbound | :white_check_mark: | `server.rs::lua_http_client_error_handling` | |
+| Lua error propagation to HTTP | :white_check_mark: | `server.rs::lua_route_error_handling` | |
 | HTTP keep-alive | :white_check_mark: | `connection.rs::http_keep_alive` | |
 | Chunked transfer encoding | :white_check_mark: | `connection.rs::chunked_transfer_upload` | |
 | Connection: close header | :white_check_mark: | `connection.rs::connection_close_header` | |
 | Thread pool exhaustion | :x: GAP | — | 503 load-shedding exists (semaphore-backed pool) but has no dedicated saturation test; masked today by `flaky_test_attempts` on suite-load bursts |
 | Graceful shutdown | :white_check_mark: | `connection.rs::graceful_shutdown`; `shutdown.rs` (×3) | |
 | Multi-page TIFF `@page` e2e | :x: GAP (documented) | `iiif_compliance.rs::multipage_tiff_page_selection` | `#[ignore]`'d — page selection may not be implemented; test documents current behavior |
-| CMYK→sRGB through IIIF pipeline | :white_check_mark: | `iiif_compliance.rs::cmyk_through_iiif_pipeline`; `differential.rs::cmyk_through_iiif_pipeline` | |
-| CIELab through IIIF pipeline | :white_check_mark: | `iiif_compliance.rs::cielab_through_iiif_pipeline`; `differential.rs::cielab_through_iiif_pipeline` | |
+| CMYK→sRGB through IIIF pipeline | :white_check_mark: | `iiif_compliance.rs::cmyk_through_iiif_pipeline` | |
+| CIELab through IIIF pipeline | :white_check_mark: | `iiif_compliance.rs::cielab_through_iiif_pipeline` | |
 | 16-bit depth through IIIF pipeline | :white_check_mark: | `iiif_compliance.rs::bit16_through_iiif_pipeline` | |
-| Progressive JPEG handling | :white_check_mark: | `iiif_compliance.rs::progressive_jpeg_input`; `differential.rs::progressive_jpeg_input_*` | |
+| Progressive JPEG handling | :white_check_mark: | `iiif_compliance.rs::progressive_jpeg_input` | |
 | TIFF with JPEG compression | :white_check_mark: | `iiif_compliance.rs::tiff_jpeg_compression_input` | documents current (non-crashing) behavior for the known scanline-order edge case |
 | 1-bit TIFF (bi-level) | :white_check_mark: | unit + rust-e2e (`bilevel_tiff.rs`) | MINISWHITE and MINISBLACK, LZW and uncompressed |
 | JPEG YCCK colorspace | :white_check_mark: | unit | Was throw; now decoded via CMYK path |
@@ -639,8 +639,8 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 | JPEG with APP13 before APP1 + non-ASCII IPTC | :white_check_mark: | unit + `heritage_jpeg.rs` | heritage collection regression |
 | CLI `--json` output contract | :white_check_mark: | unit + rust-e2e (`cli_json.rs`) | success + error payloads, single-document stdout |
 | CLI `query` / `compare` / `verify` subcommands | :white_check_mark: | `cli.rs::cli_query_dumps_image_info`, `cli_compare_identical_files_reports_match`, `cli_compare_differing_files_reports_mismatch`, `cli_verify_pipeline_service_and_access_files` | the verify pipeline test exercises `convert service-file` → `verify service-file` → `convert access-file` → `verify access-file` end to end |
-| Watermark application via HTTP | :white_check_mark: | `server.rs::watermark_applied_via_http`; `differential.rs::watermark_applied_via_http_watermarked` | |
-| Restrict + watermark combined | :white_check_mark: | `server.rs::restrict_plus_watermark`; `differential.rs::restrict_plus_watermark` | |
+| Watermark application via HTTP | :white_check_mark: | `server.rs::watermark_applied_via_http` | |
+| Restrict + watermark combined | :white_check_mark: | `server.rs::restrict_plus_watermark` | |
 | Watermark cache key separation | :white_check_mark: | `cache.rs::watermark_cache_separation` | |
 | CLI watermark mode | :white_check_mark: | `cli.rs::cli_convert_watermark_changes_output_bytes` | asserts a valid JPEG whose bytes differ from a plain convert of the same input |
 | Concurrent cache writes (same key) | :white_check_mark: | `cache.rs::cache_returns_consistent_results` | |
@@ -670,22 +670,23 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 | CORS | 5 | 0 | 100% |
 | HTTP behavior | 13 | 0 | 100% |
 | Identifiers | 4 | 1 (ARK/URN) | 80% |
-| Sipi extensions | 91 | 7 | 93% |
-| **Total** | **183** | **8** | **96%** |
+| Sipi extensions | 90 | 8 | 92% |
+| **Total** | **182** | **9** | **95%** |
 
 *(Three additional Sipi-extension rows — Prometheus `/metrics`, `/api/cache`, SSL/TLS — are excluded from this count entirely: they are removed-on-the-Rust-shell features, not gaps. See the N/A note above the extension matrix.)*
 
-**Key remaining gap categories** (7 rows, all in Sipi extensions):
+**Key remaining gap categories** (8 rows, all in Sipi extensions):
 
 - **Deep metadata survival** (2 gaps): positive XMP round-trip, ICC profile HTTP-level round-trip — EXIF/IPTC now covered
 - **Concurrency edge cases** (1 gap): thread-pool-exhaustion saturation test (`concurrent_requests`/`lua_state_thread_isolation` are written and correct, just `#[ignore]`'d for the unrelated 503-shedding reason above — not gaps)
 - **Hardening depth** (2 gaps): TSan (nightly-future), extremely long URL/header (fuzz-only today)
 - **Test-harness depth** (1 gap): a direct SImage Lua-API unit harness (vs. black-box HTTP coverage)
+- **Test removed with the differential suite** (1 gap): favicon endpoint — the route exists but its only e2e test lived in the removed differential suite
 - **Documented, not missing** (1 row): multi-page TIFF `@page` — `#[ignore]`'d pending a real page-selection implementation, not an untested behavior
 
 ## Cross-Cutting: Memory Safety (Sanitizer Builds)
 
-Memory leaks and undefined behavior are not a separate pyramid layer but a **build variant** that runs existing tests with compiler instrumentation. This is critical for sipi as a long-running C++ server where leaks accumulate.
+Memory leaks and undefined behavior are not a separate pyramid layer but a **build variant** that runs existing tests with compiler instrumentation. This is critical for sipi's long-running C++ image engine, where leaks accumulate over the process lifetime.
 
 **Current state:** ASan+UBSan infrastructure is in place — Bazel `--config=asan` and `--config=ubsan` blocks in `.bazelrc`, `just bazel-build-sanitized` (`bazel build --config=asan --config=ubsan //src/cli:sipi`), and one path-gated `sanitizer` job in `ci.yml` that exercises the unit and e2e suites against the instrumented binary in a single `just bazel-test-sanitized` invocation. Known findings to triage on first run:
 
@@ -776,11 +777,10 @@ insta::assert_json_snapshot!(info_json, {
 | Rust e2e tests (CI) | `just nix-test-e2e` | PR CI | Pre-built binaries from `.#e2e-tests` (crane); reads `$SIPI_BIN` |
 | Rust e2e tests (inner-loop) | `bazel test //test/e2e:<name>` | local | Same hermetic toolchain as CI |
 | Docker smoke (CI) | `just bazel-test-smoke` | PR + tag CI | Bazel-built OCI tarball, `docker load`ed by the test |
-| Differential parity (CI) | `just bazel-test-differential` | PR CI (linux-amd64) | THE strangler parity gate: full deduped e2e request corpus, Rust shell (subject) vs C++ oracle (`SIPI_BIN_REF`); dedicated step, `manual`-tagged (out of `:all_e2e`/coverage) |
-| Differential drift guard | `just differential-coverage-check` | PR CI (linux-amd64) | Pins the e2e `#[test]` count so the differential corpus can't silently lag (pure shell) |
+| Differential parity | *(retired)* | — | The strangler parity gate and the retained C++ oracle server it compared against have been removed; the Rust shell is the sole production surface |
 | Hurl contract tests | *(retired)* | — | Folded into Rust e2e (`tests/http_contracts.rs` + `iiif_compliance.rs`) |
 | Python e2e tests | *(retired)* | — | Replaced by Rust e2e tests |
-| Fuzz testing | `.github/workflows/fuzz.yml` | Nightly | libFuzzer corpus growth |
+| Fuzz testing | *(retired)* | — | The C++ libFuzzer harness was removed with the C++ IIIF URL parser; a Rust fuzz harness against `src/server-rs/src/iiif.rs::parse_request` is a tracked follow-up (see [Fuzzing](fuzzing.md)) |
 | Sanitizer builds | `just bazel-build-sanitized` (`bazel build --config=asan --config=ubsan //src/cli:sipi`) | PR | ASan+UBSan; e2e suite against `bazel-bin/src/cli/sipi` with `.lsan_suppressions.txt` |
 
 ## Python Test Deprecation — Parity Checklist
@@ -874,7 +874,7 @@ When a C++ component is migrated to Rust:
 3. **After migration:** Existing e2e tests validate the Rust implementation matches C++ behavior
 4. **Cleanup:** Remove corresponding C++ unit tests (they tested the old implementation)
 
-The `insta` golden baselines are critical — they capture exact C++ server behavior and detect any Rust implementation drift.
+The `insta` golden baselines are critical — they capture the Rust shell's exact response output and detect any implementation drift.
 
 ## Flaky Test Handling
 

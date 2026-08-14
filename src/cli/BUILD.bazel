@@ -1,12 +1,12 @@
 """Sipi CLI binary + the CLI app library behind the FFI seam.
 
 `//src/cli:cli_app` is the `cc_library` that owns the CLI11 app and every
-subcommand body (`server`/`convert`/`verify`/`query`/`compare`/`health`),
+offline subcommand body (`convert`/`verify`/`query`/`compare`/`health`),
 exposed through the `extern "C" sipi_cli_main` entry declared in
 `ffi/sipi_ffi.h`. It lives in its own library — separate from the binary's
-`main` translation unit — so the Rust HTTP shell (strangler-fig,
-`//src/server-rs`) can link it and call `sipi_cli_main` for the offline
-subcommands without colliding with Rust's own `main`.
+`main` translation unit — so the Rust HTTP shell (`//src/server-rs`) can link
+it and call `sipi_cli_main` for the offline subcommands without colliding with
+Rust's own `main`.
 
 `//src/cli:sipi` is the thin `cc_binary` for the sipi executable: its only
 translation unit is `sipi.cpp`, whose `main` just calls `sipi_cli_main`.
@@ -31,8 +31,6 @@ cc_library(
     deps = [
         "//src:sipi_lib",
         "//src/cli/commands:commands",
-        # cli_app.cpp registers the SQLite-backed Lua bindings (sqliteGlobals).
-        "//src/scripting:lua_sqlite",
         # The sipi_cli_main declaration (the extern "C" seam contract).
         "//src/ffi:sipi_ffi",
         # cli_app.cpp's `#include <CLI/CLI.hpp>` — the sole CLI11 consumer.

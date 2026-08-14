@@ -24,7 +24,7 @@ filegroup(
 #
 # **Why `copy_to_directory` instead of a `filegroup`.** Bazel's runfiles
 # tree symlinks individual files back to the source repository. Sipi's
-# path-traversal guard (`SipiHttpServer.cpp` `validate_resolved_path`)
+# path-traversal guard (the serve path's `realpath()` prefix check)
 # resolves both `imgroot` and per-request `infile` via `realpath()` and
 # rejects mismatched prefixes — under symlinked runfiles, the imgroot's
 # resolved path stays inside runfiles while a file's resolved path

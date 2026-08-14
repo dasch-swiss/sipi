@@ -45,13 +45,13 @@ Checklist for human and AI reviewers. Not every item applies to every PR — use
 
 ## Metrics
 
-- [ ] New metrics use correct Prometheus types (counter for monotonic, gauge for current state, histogram for distributions)
+- [ ] New metrics use correct metric types (counter for monotonic, gauge for current state, histogram for distributions)
 - [ ] Metric names follow `sipi_` prefix convention with `_total` suffix for counters
 - [ ] Instrumentation points are in the correct layer (not duplicated across call chain)
 
 ## Consistency
 
-- [ ] Follow existing patterns (route registration in `SipiHttpServer::run()`, native third-party deps as `cc_library` in `bazel/<lib>.BUILD.bazel`, test layout in `test/unit/`)
+- [ ] Follow existing patterns (route registration in the Rust axum router, `app()` in `src/server-rs/src/lib.rs`; native third-party deps as `cc_library` in `bazel/<lib>.BUILD.bazel`; test layout in `test/unit/`)
 - [ ] Config example files updated alongside code changes
 - [ ] New fields mirror structure of similar existing fields
 

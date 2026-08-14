@@ -1,8 +1,7 @@
-//! Test-only JWT construction helpers, shared between `security.rs`
-//! (single-server negative-path tests) and `differential.rs` (cross-binary
-//! JWT parity tests) — both exercise sipi's `server.decode_jwt` Lua binding,
-//! which only supports HS256 (HMAC), so that is the only algorithm modelled
-//! here.
+//! Test-only JWT construction helpers for the e2e tests (e.g. `security.rs`'s
+//! single-server negative-path tests) — they exercise sipi's `server.decode_jwt`
+//! Lua binding, which only supports HS256 (HMAC), so that is the only algorithm
+//! modelled here.
 
 use base64::Engine;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
