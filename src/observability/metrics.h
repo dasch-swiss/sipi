@@ -10,6 +10,19 @@
 #include <cstdint>
 #include <string>
 
+/*!
+ * FFI snapshot-bridge invariant.
+ *
+ * `Sipi::observability::Metrics` is engine-internal state, NOT the production
+ * metrics surface. A scalar counter/gauge added here reaches production only if
+ * it is also read into `SipiMetricsSnapshot` (src/ffi/metrics_snapshot.h — see
+ * its "Inclusion rule" block for what belongs) by `sipi_metrics_snapshot`
+ * (src/ffi/sipi_ffi.cpp) and mapped in server-rs/src/metrics.rs, from where the
+ * Rust shell exports it over OTLP. The co-located seam tripwire
+ * `metrics_registry_test.cpp` pins the full field inventory against that bridge,
+ * so adding a field forces a conscious decision about whether it crosses to OTLP.
+ */
+
 namespace Sipi::observability {
 
 /*!
