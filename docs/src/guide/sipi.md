@@ -369,7 +369,7 @@ independently — whichever is reached first triggers eviction.
 the standard OTLP-to-Prometheus normalization produces at the collector. Cache counters
 (`sipi_cache_hits_total`, `sipi_cache_misses_total`, `sipi_cache_evictions_total`, `sipi_cache_skips_total`)
 and gauges (`sipi_cache_size_bytes`, `sipi_cache_files`, `sipi_cache_size_limit_bytes`, `sipi_cache_files_limit`)
-report cache health. For server load and backpressure, use the engine-pool metrics
+report cache health. For server load and throttling, use the engine-pool metrics
 (`sipi_pool_permits_in_use` and `sipi_pool_permits_total` for saturation, `sipi_pool_waiting` for current
 queue depth, `sipi_pool_load_shed_total` and `sipi_pool_queue_timeout_total` for 503 sheds).
 Request latency is the semantic-convention histogram `http_server_request_duration_seconds`, labelled by

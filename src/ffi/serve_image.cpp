@@ -140,8 +140,10 @@ namespace {
       p.size_ny);
   }
 
-  // The canonical IIIF URL (Link header + cache key). Pure of the transport, so
-  // it lives with the engine-facing seam.
+  // Builds the Canonical URL (IIIF spec form). Returns it twice-shaped: the
+  // `<...>;rel="canonical"` Link-header value (`.first`) and the bare URL
+  // (`.second`), which the serve path then uses as the Cache key. Engine-facing,
+  // so it lives with the seam.
   std::pair<std::string, std::string> build_canonical_url(size_t tmp_w,
     size_t tmp_h,
     const std::string &scheme,
@@ -275,14 +277,14 @@ namespace {
       SipiCache *cache,
       std::string cachefile,
       std::string infile,
-      std::string canonical,
+      std::string cache_key,
       std::string request_uri,
       SipiImgInfo info,
       std::optional<MemoryBudgetGuard> budget_guard,
       SipiReportErrorFn report_error,
       void *report_ctx)
       : budget_guard_(std::move(budget_guard)), img_(std::move(img)), format_(format), jpeg_quality_(jpeg_quality),
-        cache_(cache), cachefile_(std::move(cachefile)), infile_(std::move(infile)), canonical_(std::move(canonical)),
+        cache_(cache), cachefile_(std::move(cachefile)), infile_(std::move(infile)), cache_key_(std::move(cache_key)),
         request_uri_(std::move(request_uri)), info_(info), report_error_(report_error), report_ctx_(report_ctx)
     {}
 
@@ -400,7 +402,7 @@ namespace {
         return;
       }
       cache_->add(infile_,
-        canonical_,
+        cache_key_,
         cachefile_,
         info_.width,
         info_.height,
@@ -421,7 +423,7 @@ namespace {
     SipiCache *cache_;
     std::string cachefile_;
     std::string infile_;
-    std::string canonical_;
+    std::string cache_key_;
     std::string request_uri_;
     SipiImgInfo info_;
     // Safe to hold past construction only because `produce()` runs
@@ -551,7 +553,9 @@ std::expected<ServeResponse, SipiStatus>
     return std::unexpected(SipiStatus::BadRequest);
   }
   const std::string canonical_header = canonical_info.first;
-  const std::string canonical = canonical_info.second;
+  // The Canonical URL used verbatim as the Cache key (this serve path adds no
+  // watermark suffix); `SipiCache` keys its table by this string.
+  const std::string cache_key = canonical_info.second;
   const char *content_type = content_type_for(quality_format.format());
 
   auto base_headers = [&] {
@@ -592,7 +596,7 @@ std::expected<ServeResponse, SipiStatus>
   // Cache hit (never for watermarked output): pin the file, serve it, unpin when
   // the body has been delivered.
   if (eng.cache != nullptr) {
-    const std::string cachefile = eng.cache->check(infile, canonical, true);
+    const std::string cachefile = eng.cache->check(infile, cache_key, true);
     if (!cachefile.empty()) {
       log_debug("Using cachefile %s", cachefile.c_str());
       SipiCache *cache = eng.cache;
@@ -783,9 +787,9 @@ std::expected<ServeResponse, SipiStatus>
     quality_format.format(),
     eng.jpeg_quality,
     eng.cache,
-    std::move(cachefile),// the only non-const local here; infile/canonical/uri are const, so copied
+    std::move(cachefile),// the only non-const local here; infile/cache_key/uri are const, so copied
     infile,
-    canonical,
+    cache_key,
     uri,
     info,
     std::move(budget_guard),

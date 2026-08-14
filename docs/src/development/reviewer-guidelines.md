@@ -55,6 +55,17 @@ Checklist for human and AI reviewers. Not every item applies to every PR — use
 - [ ] Config example files updated alongside code changes
 - [ ] New fields mirror structure of similar existing fields
 
+## Ubiquitous Language
+
+Identifiers, comments, commit messages, and PR text use the canonical terms in [`UBIQUITOUS_LANGUAGE.md`](../../../UBIQUITOUS_LANGUAGE.md), not the aliases that column flags as "avoid". Common slips to reject:
+
+- [ ] **Bitstream**, not "file" as a domain noun for the served byte stream (*file* survives only in URL paths and filesystem discussion)
+- [ ] **Region**, not "ROI" / "crop" / "crop coords"
+- [ ] **Size**, not "scale" / "dimensions"; **Decode level**, not "reduce" (except as a codec-API parameter name)
+- [ ] **Cache key**, not "canonical URL" when the string is used to key the cache (*Canonical URL* = the IIIF spec form only)
+- [ ] **Throttling**, not "backpressure" for the load-driven 503/400 rejection policies
+- [ ] **Bitstream Information document** / **Image Information document**, not "info.json" (the file name) for the response schemas
+
 ## Testing Strategy Compliance
 
 - [ ] New tests placed in the correct pyramid layer — consult the [decision tree](testing-strategy.md#test-decision-tree)

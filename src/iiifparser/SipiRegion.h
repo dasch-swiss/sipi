@@ -4,7 +4,8 @@
  */
 
 /*!
- * This file handles regions of interests / cropping
+ * Parses the IIIF **Region** request parameter — the rectangle of the source
+ * image to return (`full` / `square` / `x,y,w,h` / `pct:x,y,w,h`).
  */
 #ifndef __sipi_region_h
 #define __sipi_region_h
