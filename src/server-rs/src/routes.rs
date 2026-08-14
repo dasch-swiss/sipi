@@ -42,7 +42,7 @@ const IMAGE_MIMES: [&str; 5] = [
 ];
 
 /// Cached engine config (read once at startup, after `sipi_init`) plus the shared
-/// backpressure pool that bounds concurrent engine work.
+/// Throttling pool that bounds concurrent engine work.
 #[derive(Clone)]
 pub struct AppState {
     ready: bool,
@@ -208,7 +208,7 @@ pub(crate) fn waiting() -> i64 {
 }
 
 /// Cumulative 503s from requests that waited past `queue_timeout` (a subset of
-/// [`LOAD_SHED_TOTAL`], which counts every backpressure shed). Read by the OTel
+/// [`LOAD_SHED_TOTAL`], which counts every Throttling shed). Read by the OTel
 /// bridge as the `sipi.pool.queue_timeout` counter.
 static QUEUE_TIMEOUT_TOTAL: AtomicU64 = AtomicU64::new(0);
 
@@ -360,7 +360,7 @@ pub async fn iiif(
 
     // The engine commits the head (status + headers) on the oneshot, then streams
     // body chunks on the bounded mpsc as it produces them. A slow client
-    // back-pressures the engine thread; a disconnect drops the receiver, which
+    // stalls the engine thread; a disconnect drops the receiver, which
     // the engine's cancelled() poll and a failed body send both observe, aborting
     // the work. The pool permit is held for the whole dispatch — released when the
     // blocking task ends (after the last chunk), restoring the concurrency bound.
@@ -519,7 +519,7 @@ fn complete(outcome_tx: oneshot::Sender<Outcome>, response: Response) {
     let _ = outcome_tx.send(Outcome::Complete(response));
 }
 
-/// Pool-full backpressure: a bare 503 with `Retry-After: 1` — no body,
+/// Pool-full Throttling: a bare 503 with `Retry-After: 1` — no body,
 /// no internal detail. The client should retry shortly.
 fn busy_response() -> Response {
     LOAD_SHED_TOTAL.fetch_add(1, Ordering::Relaxed);
@@ -1638,7 +1638,10 @@ fn serve_info_json(
             Ok(m) => m.len(),
             Err(_) => return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
         };
-        (info::file_info_json(&id, &mime, size), info::file_context())
+        (
+            info::bitstream_info_json(&id, &mime, size),
+            info::file_context(),
+        )
     };
 
     // An auth-type permission adds the IIIF Auth service block at status 401.
@@ -2081,7 +2084,7 @@ mod tests {
 
     #[test]
     fn busy_response_is_503_with_retry_after() {
-        // The pool-full backpressure contract: bare 503 + Retry-After: 1.
+        // The pool-full Throttling contract: bare 503 + Retry-After: 1.
         let resp = busy_response();
         assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(resp.headers().get(header::RETRY_AFTER).unwrap(), "1");

@@ -108,10 +108,10 @@ pub fn image_info_json(id: &str, dims: &SipiImageDims) -> Value {
     Value::Object(root)
 }
 
-/// `info.json` for a non-image file: the SIPI file
-/// context, the id, the detected MIME type, and the file size.
+/// The Bitstream Information document (`info.json` for a non-image resource):
+/// the SIPI file context, the id, the detected MIME type, and the byte size.
 #[must_use]
-pub fn file_info_json(id: &str, mime: &str, file_size: u64) -> Value {
+pub fn bitstream_info_json(id: &str, mime: &str, file_size: u64) -> Value {
     json!({
         "@context": FILE_CONTEXT,
         "id": id,
@@ -339,8 +339,8 @@ mod tests {
     }
 
     #[test]
-    fn file_info_json_shape() {
-        let v = file_info_json("http://h/doc.pdf", "application/pdf", 1234);
+    fn bitstream_info_json_shape() {
+        let v = bitstream_info_json("http://h/doc.pdf", "application/pdf", 1234);
         assert_eq!(v["@context"], FILE_CONTEXT);
         assert_eq!(v["internalMimeType"], "application/pdf");
         assert_eq!(v["fileSize"], 1234);

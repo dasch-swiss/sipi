@@ -162,8 +162,9 @@ impl SipiServer {
         });
         eprintln!("[test-harness] Spawned sipi PID={}", child.id());
 
-        // Drain both child streams on background threads (prevents pipe-buffer
-        // backpressure) and feed the readiness channel on the listen-log line.
+        // Drain both child streams on background threads (keeps the pipe buffer
+        // from filling and blocking the child) and feed the readiness channel on
+        // the listen-log line.
         // Watching both streams keeps readiness independent of which sink a
         // given binary logs to.
         // server-rs logs this once `sipi::run` binds the axum listener. Used

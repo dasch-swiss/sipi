@@ -142,7 +142,7 @@ pub(crate) fn register(pool: Arc<Semaphore>, permits_total: usize) {
         .with_description("Engine-pool total permit count (the configured worker count)")
         .with_callback(move |observer| observer.observe(permits_total as i64, &[]))
         .build();
-    // 503 load-shed count: every backpressure shed (immediate + queue-timeout).
+    // 503 load-shed count: every Throttling shed (immediate + queue-timeout).
     meter
         .u64_observable_counter("sipi.pool.load_shed")
         .with_description("Requests shed with 503 because the engine pool was saturated")

@@ -10,7 +10,7 @@
 //! response head (status + headers) is handed to the async handler through a
 //! oneshot the moment the engine commits it, then body chunks flow over a
 //! bounded mpsc channel as they are produced — neither the encoded image nor a
-//! `/file` region is ever fully buffered. A slow client back-pressures the engine
+//! `/file` region is ever fully buffered. A slow client stalls the engine
 //! thread (the bounded channel blocks the blocking [`cb_write`]); a disconnected
 //! client drops the receiver, which [`cb_cancelled`] observes (and a body send
 //! then fails), so the engine aborts instead of finishing work nobody reads.
@@ -30,7 +30,7 @@ use tokio_stream::StreamExt;
 use crate::ffi::SipiResponse;
 
 /// Body-chunk channel capacity: bounds in-flight memory to `CAP × chunk` and
-/// back-pressures the engine thread when the client drains slowly.
+/// stalls the engine thread when the client drains slowly.
 pub const BODY_CHANNEL_CAP: usize = 16;
 
 /// Read size for the `send_file` body mode (the `/file` region is streamed, not
@@ -125,7 +125,7 @@ extern "C" fn cb_write(ctx: *mut c_void, data: *const u8, len: usize) -> c_int {
         }
         // SAFETY: the engine guarantees `data` points at `len` valid bytes.
         let chunk = Bytes::copy_from_slice(unsafe { std::slice::from_raw_parts(data, len) });
-        // blocking_send back-pressures a slow client; Err = the receiver is gone
+        // blocking_send blocks on a slow client; Err = the receiver is gone
         // (client disconnected) → tell the engine to abort + unlink partial cache.
         match state.body_tx.blocking_send(chunk) {
             Ok(()) => 0,

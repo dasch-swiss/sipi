@@ -130,7 +130,7 @@ proptest! {
             Ok(r) => {
                 let status = r.status().as_u16();
                 // Server should respond with a valid HTTP status, not hang.
-                // 503 is acceptable — it means queue backpressure (all threads busy).
+                // 503 is acceptable — it means the request was throttled (all threads busy).
                 prop_assert!(
                     [200, 400, 404, 500, 501, 503].contains(&status),
                     "Unexpected status {} for URL: {}",
