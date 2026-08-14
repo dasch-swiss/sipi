@@ -297,16 +297,24 @@ bazel-build-tracy *FLAGS='':
 bench name *FLAGS='':
     #!/usr/bin/env bash
     set -euo pipefail
-    bazel build -c opt //src:{{name}}_benchmark
+    # The parse tier lives in the carved //src/iiifparser package and the
+    # decode/encode tiers in //src/formats (ADR-0003); the process tier still
+    # sits at //src.
+    case "{{name}}" in
+        parse)         pkg="src/iiifparser" ;;
+        decode|encode) pkg="src/formats" ;;
+        *)             pkg="src" ;;
+    esac
+    bazel build -c opt //${pkg}:{{name}}_benchmark
     shopt -s nullglob
-    fixtures=(./bazel-bin/src/{{name}}_benchmark.runfiles/+*sipi_bench_fixtures)
+    fixtures=(./bazel-bin/${pkg}/{{name}}_benchmark.runfiles/+*sipi_bench_fixtures)
     env_args=()
     [ ${#fixtures[@]} -gt 0 ] && env_args+=("SIPI_BENCH_FIXTURES_DIR=${fixtures[0]}")
     TMP=$(mktemp -d)
     trap 'rm -rf "$TMP"' EXIT
     env SOURCE_DATE_EPOCH=946684800 SIPI_WORKSPACE_ROOT="." TEST_TMPDIR="$TMP" \
         ${env_args[@]+"${env_args[@]}"} \
-        ./bazel-bin/src/{{name}}_benchmark "${@:2}"
+        ./bazel-bin/${pkg}/{{name}}_benchmark "${@:2}"
 
 # Compare two `just bench` JSON outputs: per-benchmark Mann-Whitney
 # U-test deltas + OVERALL_GEOMEAN via the vendored google_benchmark

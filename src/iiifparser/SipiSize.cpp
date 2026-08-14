@@ -15,7 +15,7 @@
 #include <cstring>
 
 
-#include "../SipiError.h"
+#include "SipiError.h"
 #include "SipiSize.h"
 #include "util/Parsing.h"
 

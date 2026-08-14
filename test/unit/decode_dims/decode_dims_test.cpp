@@ -5,9 +5,9 @@
 
 #include <gtest/gtest.h>
 
-#include "SipiDecodeDims.h"
-#include "SipiRegion.h"
-#include "SipiSize.h"
+#include "iiifparser/SipiDecodeDims.h"
+#include "iiifparser/SipiRegion.h"
+#include "iiifparser/SipiSize.h"
 
 using namespace Sipi;
 

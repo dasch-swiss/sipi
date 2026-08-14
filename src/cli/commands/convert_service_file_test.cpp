@@ -43,7 +43,7 @@
 
 #include "SipiImage.h"
 #include "cli/commands/convert_service_file.h"
-#include "SipiIOTiff.h"
+#include "formats/SipiIOTiff.h"
 #include "metadata/essentials.h"
 #include "util/Hash.h"
 #include "test_paths.h"

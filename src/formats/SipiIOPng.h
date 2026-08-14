@@ -11,7 +11,7 @@
 
 #include <string>
 
-#include "../../src/SipiImage.h"
+#include "SipiImage.h"
 #include "SipiIO.h"
 
 namespace Sipi {

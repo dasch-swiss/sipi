@@ -25,10 +25,6 @@
 #include "SipiImage.h"
 #include "SipiImageError.h"
 #include "resample.h"
-#include "formats/SipiIOJ2k.h"
-#include "formats/SipiIOJpeg.h"
-#include "formats/SipiIOPng.h"
-#include "formats/SipiIOTiff.h"
 #include "observability/metrics.h"
 #include "observability/profiling.h"
 #include "util/Global.h"
@@ -36,10 +32,11 @@
 
 namespace Sipi {
 
-std::unordered_map<std::string, std::shared_ptr<SipiIO>> SipiImage::io = { { "tif", std::make_shared<SipiIOTiff>() },
-  { "jpx", std::make_shared<SipiIOJ2k>() },
-  { "jpg", std::make_shared<SipiIOJpeg>() },
-  { "png", std::make_shared<SipiIOPng>() } };
+// SipiImage::io — the static format-handler registry — is defined in
+// //src/formats (format_registry.cpp), not here, so the engine does not
+// include the concrete SipiIO* handlers and the SipiImage<->handler Bazel
+// dependency cycle stays broken. The engine references `io` below; the linker
+// resolves its definition from the formats package.
 
 SipiImage::SipiImage()
 {

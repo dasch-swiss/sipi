@@ -6,7 +6,7 @@ cc_test(
     name = "decode_dims_tests",
     srcs = glob(["*.cpp"]),
     deps = [
-        "//src:sipi_lib",
+        "//src/iiifparser",
         "@googletest//:gtest_main",
     ],
 )

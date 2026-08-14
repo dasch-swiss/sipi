@@ -18,7 +18,7 @@
 #include <vector>
 
 #include "../../../src/SipiImage.h"
-#include "SipiIOTiff.h"
+#include "formats/SipiIOTiff.h"
 #include "metadata/exif.h"
 #include "test_paths.h"
 

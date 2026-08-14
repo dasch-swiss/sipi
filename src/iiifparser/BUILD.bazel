@@ -1,0 +1,66 @@
+"""src/iiifparser/ — IIIF URL component parsers (per-module carve, DEV-6353).
+
+The pure-CPU front door that turns the region/size/rotation/quality/format/
+identifier path segments of an IIIF URL into validated value objects
+(`SipiRegion`, `SipiSize`, `SipiRotation`, `SipiQualityFormat`,
+`SipiIdentifier`, `SipiDecodeDims`). A leaf of the engine graph: it depends
+only on `SipiError` (`//src:sipi_top`) and the string helpers in `//src/util`,
+never on `SipiImage` or any codec. Carved out of `//src:engine` so the
+image engine deps this narrow parser rather than housing it, and so
+`//test/unit/iiifparser` links the parser alone.
+
+`strip_include_prefix = "/src"` exposes the headers at the path-prefixed form
+(`#include "iiifparser/SipiSize.h"`) for cross-module consumers
+(`SipiImage.h`, `SipiIO.h`, `serve_image.cpp`) without relying on a consumer's
+`includes = ["."]`. Siblings inside the package use the quote-form
+(`#include "SipiSize.h"`), which auto-searches the current source's directory.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+package(default_visibility = ["//src:__subpackages__"])
+
+cc_library(
+    name = "iiifparser",
+    srcs = [
+        "SipiDecodeDims.cpp",
+        "SipiIdentifier.cpp",
+        "SipiQualityFormat.cpp",
+        "SipiRegion.cpp",
+        "SipiRotation.cpp",
+        "SipiSize.cpp",
+    ],
+    hdrs = [
+        "SipiDecodeDims.h",
+        "SipiIdentifier.h",
+        "SipiQualityFormat.h",
+        "SipiRegion.h",
+        "SipiRotation.h",
+        "SipiSize.h",
+    ],
+    copts = ["-fexceptions"],
+    strip_include_prefix = "/src",
+    visibility = [
+        "//src:__subpackages__",
+        "//test/unit/decode_dims:__pkg__",
+        "//test/unit/iiifparser:__pkg__",
+    ],
+    deps = [
+        "//src:sipi_top",
+        "//src/util",
+    ],
+)
+
+# Parse tier microbenchmark — IIIF URL component string parsers. Pure CPU, no
+# fixtures. Co-located with the module per ADR-0003 (moved from //src). Built
+# only by `just bench` (`tags = ["manual"]`, dep of no test).
+cc_binary(
+    name = "parse_benchmark",
+    srcs = ["parse_benchmark.cpp"],
+    tags = ["manual"],
+    testonly = True,
+    deps = [
+        ":iiifparser",
+        "@google_benchmark//:benchmark_main",
+    ],
+)

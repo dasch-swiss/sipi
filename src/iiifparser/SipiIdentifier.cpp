@@ -6,7 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "../SipiError.h"
+#include "SipiError.h"
 #include "SipiIdentifier.h"
 #include "util/UrlDecode.h"
 

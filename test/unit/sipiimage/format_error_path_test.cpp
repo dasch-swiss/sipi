@@ -12,9 +12,9 @@
 
 #include "SipiImage.h"
 #include "SipiImageError.h"
-#include "SipiIOJpeg.h"
-#include "SipiIOPng.h"
-#include "SipiIOTiff.h"
+#include "formats/SipiIOJpeg.h"
+#include "formats/SipiIOPng.h"
+#include "formats/SipiIOTiff.h"
 #include "test_paths.h"
 
 // `sipi::test::{data_dir,tmp_dir}` honour Bazel's SIPI_TEST_DATA_DIR /
