@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
@@ -75,31 +76,44 @@ namespace {
     report_error(report_ctx, &err);
   }
 
-  // The Content-Type for an emitted IIIF format (matches the legacy switch).
+  // The single FormatType ↔ Content-Type table for the served image formats.
+  // `content_type_for` and `detect_in_format` are exact inverses and both source
+  // from this one table, so the format/mime pairing lives in one place
+  // (DUNE-005). The engine's own read-time mime classifier
+  // (`SipiImage::getFileType`, SipiImage.cpp) keeps its separate sniff-alias
+  // list — unifying the two is format-descriptor-table work, deferred until a
+  // fifth format arrives (decision 2; see ARCH-MAP formats entry).
+  struct FormatMime
+  {
+    SipiQualityFormat::FormatType fmt;
+    const char *mime;
+  };
+  constexpr std::array<FormatMime, 4> kFormatMimes = { {
+    { SipiQualityFormat::TIF, "image/tiff" },
+    { SipiQualityFormat::JPG, "image/jpeg" },
+    { SipiQualityFormat::PNG, "image/png" },
+    { SipiQualityFormat::JP2, "image/jp2" },
+  } };
+
+  // The Content-Type for an emitted IIIF format.
   const char *content_type_for(SipiQualityFormat::FormatType fmt)
   {
-    switch (fmt) {
-    case SipiQualityFormat::TIF:
-      return "image/tiff";
-    case SipiQualityFormat::JPG:
-      return "image/jpeg";
-    case SipiQualityFormat::PNG:
-      return "image/png";
-    case SipiQualityFormat::JP2:
-      return "image/jp2";
-    default:
-      return nullptr;
+    for (const auto &e : kFormatMimes) {
+      if (e.fmt == fmt) { return e.mime; }
     }
+    return nullptr;
   }
 
-  // The image-root mimetype → input format (matches the legacy sniff).
+  // The image-root mimetype → input format (matches the legacy sniff). `image/jpx`
+  // is the JP2 alias `getFileMimetype` can return; fold it onto the canonical mime
+  // before the table lookup.
   SipiQualityFormat::FormatType detect_in_format(const std::string &infile)
   {
     const std::string mime = shttps::Parsing::getFileMimetype(infile).first;
-    if (mime == "image/tiff") { return SipiQualityFormat::TIF; }
-    if (mime == "image/jpeg") { return SipiQualityFormat::JPG; }
-    if (mime == "image/png") { return SipiQualityFormat::PNG; }
-    if (mime == "image/jpx" || mime == "image/jp2") { return SipiQualityFormat::JP2; }
+    const std::string canonical = (mime == "image/jpx") ? "image/jp2" : mime;
+    for (const auto &e : kFormatMimes) {
+      if (canonical == e.mime) { return e.fmt; }
+    }
     return SipiQualityFormat::UNSUPPORTED;
   }
 
