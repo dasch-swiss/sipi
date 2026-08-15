@@ -1,13 +1,17 @@
 """Regression corpus for the IIIF URI parser.
 
-Consumer:
-  * `//src/iiifparser:iiif_handler_test` — sweeps `parse_iiif_uri`
-    over every input as a regression suite (originally the libFuzzer seed
-    corpus; the fuzz harness was retired with the oracle, ADR-0020).
+Consumers:
+  * `//src/iiifparser/cpp/classifier:iiif_handler_test` — sweeps the C++
+    `parse_iiif_uri` classifier over every input as a regression suite
+    (originally the libFuzzer seed corpus; the fuzz harness was retired with the
+    oracle, ADR-0020).
+  * `//src/iiifparser/rust:corpus_regression_test` — sweeps the production Rust
+    `iiif_parser::parse_request` over the same corpus (ADR-0021).
 
-Exposing the corpus as a Bazel `filegroup` lets the unit test declare it
-as a `data` dep and find the files at workspace-relative paths in the
-runfiles tree (cc_test cwd = workspace root).
+Exposing the corpus as a Bazel `filegroup` lets each test declare it as a `data`
+dep and find the files in its runfiles tree — the `cc_test` at a
+workspace-relative path (cwd = workspace root), the `rust_test` via the
+`@rules_rust//rust/runfiles` library.
 """
 
 package(default_visibility = ["//visibility:public"])

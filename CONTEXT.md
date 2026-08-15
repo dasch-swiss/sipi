@@ -31,7 +31,7 @@ migration [ADR-0013](docs/adr/0013-shttps-as-internal-module.md) prepared). The
 Rust shell owns the connection pool and its knobs (`max_waiting`, `queue_timeout`,
 `nthreads`), route registration (axum for built-in endpoints, Lua for scripted
 routes per [ADR-0017](docs/adr/0017-extensibility-lua-and-rust.md)), and IIIF URI
-parsing (`src/server-rs/src/iiif.rs`).
+parsing (the standalone `//src/iiifparser/rust:iiif_parser` crate).
 
 ## Extracted domain modules (namespace `shttps`)
 
@@ -54,4 +54,4 @@ a deleted HTTP transport. `src/shttps/` no longer exists.
 SIPI's **Route handler** (in `UBIQUITOUS_LANGUAGE.md`) is a *Lua script* bound to a
 URL pattern, run inside the request-scoped `shttps::LuaServer`. SIPI's IIIF `/file`
 endpoint (the **Bitstream** path-through) is the `FILE_DOWNLOAD` case of the Rust
-IIIF classifier (`src/server-rs/src/iiif.rs`), which reads from the **image root**.
+IIIF classifier (`//src/iiifparser/rust:iiif_parser`), which reads from the **image root**.

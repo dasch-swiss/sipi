@@ -49,9 +49,9 @@ cc_test(
     deps = [
         "//src:sipi_lib",
         # The `parse_iiif_uri` classifier `iiif_parse_approval_test.cpp` checks;
-        # testonly, no longer in `//src:sipi_lib` (folded into //src/iiifparser,
-        # DUNE-014).
-        "//src/iiifparser:iiif_handler",
+        # testonly reference oracle, no longer in `//src:sipi_lib` (colocated
+        # under the iiifparser component, DUNE-015).
+        "//src/iiifparser/cpp/classifier:iiif_handler",
         "//test:test_paths",
         "@approvaltests_cpp//:approval_tests",
         "@googletest//:gtest_main",

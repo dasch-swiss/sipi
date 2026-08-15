@@ -1,0 +1,49 @@
+"""src/iiifparser/cpp/classifier — the `parse_iiif_uri` reference oracle.
+
+The C++ IIIF request classifier (`handlers::iiif_handler`). The Rust shell owns
+IIIF parsing in production (`//src/iiifparser/rust:iiif_parser`, a faithful port
+of this classifier); this C++ code is now only the reference the port's unit +
+approval + corpus tests check against, so it is `testonly` and out of
+`//src:sipi_lib`. It deps `//src/util` only — never the value objects — so the
+whole `classifier/` folder is `rm -rf`-deletable once the Rust port is trusted
+(only the `//test/approval` edge and the corpus consumer need unwiring). Tracked
+as **DUNE-015**.
+
+Include-path form: `strip_include_prefix` pins to this subpackage's physical
+depth and `include_prefix = "iiifparser"` restores the virtual prefix, so the
+classifier stays reachable as `#include "iiifparser/iiif_handler.h"` after the
+polyglot-colocation move (ADR-0021).
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+cc_library(
+    name = "iiif_handler",
+    srcs = ["iiif_handler.cpp"],
+    hdrs = ["iiif_handler.h"],
+    testonly = True,
+    include_prefix = "iiifparser",
+    strip_include_prefix = "/src/iiifparser/cpp/classifier",
+    # //test/approval:approvaltests exercises the same classifier; the colocated
+    # tests below reach it in-package.
+    visibility = ["//test/approval:__pkg__"],
+    deps = ["//src/util"],
+)
+
+# Colocated regression suite for the `parse_iiif_uri` classifier + its corpus
+# (originally the libFuzzer seed corpus; the fuzz harness was retired with the
+# oracle, ADR-0020). `SIPI_FUZZ_CORPUS_DIR` is the workspace-relative path the
+# test resolves through the runfiles tree (cc_test cwd = workspace root).
+cc_test(
+    name = "iiif_handler_test",
+    srcs = [
+        "iiif_handler_test.cpp",
+        "parse_iiif_uri_corpus_test.cpp",
+    ],
+    data = ["//src/iiifparser/corpus:seed_corpus"],
+    local_defines = ['SIPI_FUZZ_CORPUS_DIR=\\"src/iiifparser/corpus\\"'],
+    deps = [
+        ":iiif_handler",
+        "@googletest//:gtest_main",
+    ],
+)

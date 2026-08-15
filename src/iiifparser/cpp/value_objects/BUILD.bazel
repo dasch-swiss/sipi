@@ -1,0 +1,87 @@
+"""src/iiifparser/cpp/value_objects — the live IIIF value objects (engine code).
+
+The pure-CPU front door that turns the region/size/rotation/quality/format/
+identifier path segments of an IIIF URL into validated value objects
+(`SipiRegion`, `SipiSize`, `SipiRotation`, `SipiQualityFormat`,
+`SipiIdentifier`, `SipiDecodeDims`). A leaf of the engine graph: it depends
+only on `SipiError` (`//src:sipi_top`) and the string helpers in `//src/util`,
+never on `SipiImage` or any codec. `//src:engine` deps this library and the
+format handlers pass `std::shared_ptr<SipiRegion>`/`SipiSize` — this is **live
+production engine code**, non-`testonly`, not deletable. The string
+constructors here are the reference the Rust `parse_*` port
+(`//src/iiifparser/rust:iiif_parser`) is checked against.
+
+Include-path form: `strip_include_prefix` pins to this subpackage's physical
+depth and `include_prefix = "iiifparser"` restores the virtual prefix, so
+cross-module consumers keep `#include "iiifparser/SipiSize.h"` unchanged after
+the polyglot-colocation move (ADR-0021). Siblings inside the package use the
+quote-form (`#include "SipiSize.h"`), which auto-searches the current source's
+directory.
+
+Source, tests, and the parse microbenchmark are colocated per ADR-0003; the
+regression corpus lives one level up in `//src/iiifparser/corpus`.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
+package(default_visibility = ["//src:__subpackages__"])
+
+cc_library(
+    name = "iiifparser",
+    srcs = [
+        "SipiDecodeDims.cpp",
+        "SipiIdentifier.cpp",
+        "SipiQualityFormat.cpp",
+        "SipiRegion.cpp",
+        "SipiRotation.cpp",
+        "SipiSize.cpp",
+    ],
+    hdrs = [
+        "SipiDecodeDims.h",
+        "SipiIdentifier.h",
+        "SipiQualityFormat.h",
+        "SipiRegion.h",
+        "SipiRotation.h",
+        "SipiSize.h",
+    ],
+    copts = ["-fexceptions"],
+    include_prefix = "iiifparser",
+    strip_include_prefix = "/src/iiifparser/cpp/value_objects",
+    deps = [
+        "//src:sipi_top",
+        "//src/util",
+    ],
+)
+
+# Colocated unit tests (ADR-0003). The IIIF value-object parsers + the seam
+# round-trip + decode-dim computation, linking the narrow `:iiifparser`.
+cc_test(
+    name = "iiifparser_test",
+    srcs = [
+        "decode_dims_test.cpp",
+        "seam_roundtrip_test.cpp",
+        "sipiidentifier_test.cpp",
+        "sipiqualityformat_test.cpp",
+        "sipiregion_test.cpp",
+        "sipirotation_test.cpp",
+        "sipisize_test.cpp",
+    ],
+    deps = [
+        ":iiifparser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# Parse tier microbenchmark — IIIF URL component string parsers. Pure CPU, no
+# fixtures. Co-located with the module per ADR-0003. Built only by `just bench`
+# (`tags = ["manual"]`, dep of no test).
+cc_binary(
+    name = "parse_benchmark",
+    srcs = ["parse_benchmark.cpp"],
+    tags = ["manual"],
+    testonly = True,
+    deps = [
+        ":iiifparser",
+        "@google_benchmark//:benchmark_main",
+    ],
+)

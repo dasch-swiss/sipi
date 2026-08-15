@@ -17,7 +17,6 @@
 pub mod config;
 pub mod config_file;
 pub mod ffi;
-pub mod iiif;
 pub mod info;
 pub mod malloc_stats;
 pub mod metrics;

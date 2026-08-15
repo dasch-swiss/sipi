@@ -107,7 +107,7 @@ is scoped `ffi` only when the seam mechanism itself is the point.
 | `image` | `src/SipiImage.{h,cpp}` | Image read/write pipeline; orchestrates decode → process → encode |
 | `formats` | `src/formats/` | Per-format codecs: TIFF, JP2 (Kakadu), PNG, JPEG |
 | `metadata` | `src/metadata/` | EXIF, IPTC, XMP, ICC profile handling |
-| `iiifparser` | `src/iiifparser/` | IIIF URL parsing (identifier, region, size, rotation, quality, format) and the `parse_iiif_uri` request classifier (`:iiif_handler`, testonly — the Rust shell parses in production) |
+| `iiifparser` | `src/iiifparser/` | IIIF URL parsing, colocated polyglot (ADR-0021): `cpp/value_objects/` (live engine value objects), `cpp/classifier/` (testonly `parse_iiif_uri` reference oracle `:iiif_handler`), and `rust/` (the production parser `//src/iiifparser/rust:iiif_parser` the shell drives) |
 | `scripting` | `src/scripting/` | Connection-less Lua runtime: `LuaServer` + `request_context.h` + the `server.db` sqlite bindings |
 | `util` | `src/util/` | Generic SIPI-domain helpers: MIME/string parsing, file hashing, the `shttps::Error`/`Global` types |
 | `jwt` | `src/jwt/` | JWT (JWS) sign/verify leaf over OpenSSL + jansson |
@@ -147,7 +147,9 @@ The codebase has two coexisting layouts:
   `src/<mod>/{Foo.cpp, Foo.h, foo_test.cpp}` with flat-style includes
   (`#include "metadata/Foo.h"` cross-module, `#include "Foo.h"`
   intra-module). `src/util/`, `src/scripting/`, `src/jwt/`, and `src/iiifparser/`
-  already follow this. Migration is staged behind the Bazel build-tool migration
+  already follow this — `src/iiifparser/` additionally splits by language into
+  `cpp/` + `rust/` (the colocated polyglot of ADR-0021). Migration is staged
+  behind the Bazel build-tool migration
   and lands as mechanical per-module PRs.
 
 Until ADR-0003 is accepted and a module is migrated, follow the
@@ -161,9 +163,11 @@ Built-in routes are registered on the axum `Router` in the Rust shell
 (`src/server-rs/src/routes.rs`). Scripted routes are Lua scripts bound to URL
 patterns in the config ([ADR-0017](docs/adr/0017-extensibility-lua-and-rust.md)):
 a `Route handler` is a Lua script the shell dispatches to, run inside the
-request-scoped `shttps::LuaServer`. IIIF requests are classified in
-`src/server-rs/src/iiif.rs` (`parse_request`), which owns region/size/rotation/
-quality/format parsing; the flattened params cross the FFI seam to the C++ engine.
+request-scoped `shttps::LuaServer`. IIIF requests are classified by the
+standalone `//src/iiifparser/rust:iiif_parser` crate (`parse_request`), which
+owns region/size/rotation/quality/format parsing and emits domain types;
+`server-rs` flattens those into the FFI params that cross the seam to the C++
+engine.
 
 ## HTTP Status Codes
 

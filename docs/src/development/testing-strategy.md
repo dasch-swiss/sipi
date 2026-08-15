@@ -14,16 +14,16 @@ Sipi implements the full [IIIF Image API 3.0](https://iiif.io/api/image/3.0/) at
 
 | Feature Area | Parameters | Source |
 |---|---|---|
-| **Region** (Section 4.1) | `full`, `square`, `x,y,w,h`, `pct:x,y,w,h` | `src/iiifparser/SipiRegion.cpp` |
-| **Size** (Section 4.2) | `max`, `w,`, `,h`, `w,h`, `!w,h`, `pct:n`, `^` upscale variants | `src/iiifparser/SipiSize.cpp` |
-| **Rotation** (Section 4.3) | Arbitrary angles (float), `!` mirror prefix | `src/iiifparser/SipiRotation.cpp` |
-| **Quality** (Section 4.4) | `default`, `color`, `gray`, `bitonal` | `src/iiifparser/SipiQualityFormat.cpp` |
-| **Format** (Section 4.5) | `jpg`, `png`, `tif`, `jp2`, `webp` | `src/iiifparser/SipiQualityFormat.cpp` |
-| **Identifiers** (Section 3) | URL-encoded, `%2F` slash, prefix-based resolution | `src/iiifparser/SipiIdentifier.cpp` |
+| **Region** (Section 4.1) | `full`, `square`, `x,y,w,h`, `pct:x,y,w,h` | `src/iiifparser/cpp/value_objects/SipiRegion.cpp` |
+| **Size** (Section 4.2) | `max`, `w,`, `,h`, `w,h`, `!w,h`, `pct:n`, `^` upscale variants | `src/iiifparser/cpp/value_objects/SipiSize.cpp` |
+| **Rotation** (Section 4.3) | Arbitrary angles (float), `!` mirror prefix | `src/iiifparser/cpp/value_objects/SipiRotation.cpp` |
+| **Quality** (Section 4.4) | `default`, `color`, `gray`, `bitonal` | `src/iiifparser/cpp/value_objects/SipiQualityFormat.cpp` |
+| **Format** (Section 4.5) | `jpg`, `png`, `tif`, `jp2`, `webp` | `src/iiifparser/cpp/value_objects/SipiQualityFormat.cpp` |
+| **Identifiers** (Section 3) | URL-encoded, `%2F` slash, prefix-based resolution | `src/iiifparser/cpp/value_objects/SipiIdentifier.cpp` |
 | **Info.json** (Section 5) | Full response: `@context`, `id`, `type`, `protocol`, `profile`, `width`, `height`, `sizes`, `tiles`, `extraFormats`, `extraFeatures`, `preferredFormats` | `src/server-rs/src/info.rs` |
 | **Content negotiation** | `Accept: application/ld+json` → JSON-LD with `@context`; default → `application/json` | `src/server-rs/src/info.rs` |
 | **HTTP behavior** (Section 7) | Base URI redirect, HEAD, CORS, Link headers, canonical URI, 400/401/403/404/500/501 errors | `src/server-rs/src/routes.rs` |
-| **IIIF Extension: `red:n`** | Reduce factor for JP2 (faster subsampling on read) — sipi-specific, not in IIIF spec | `src/iiifparser/SipiSize.cpp` |
+| **IIIF Extension: `red:n`** | Reduce factor for JP2 (faster subsampling on read) — sipi-specific, not in IIIF spec | `src/iiifparser/cpp/value_objects/SipiSize.cpp` |
 
 !!! note "IIIF Auth exclusion"
     Sipi does **not** implement the IIIF Authentication API. Access control is handled via custom Lua preflight scripts (`pre_flight`, `file_pre_flight`) that return allow/deny/restrict permissions. This is intentional — the Knora/DSP integration requires custom auth flows (cookie-based sessions) that don't map to the IIIF Auth spec.
@@ -369,14 +369,14 @@ Behavior that *is* HTTP-observable belongs in Rust e2e — not in C++ unit tests
 | Framework | Location | When to use |
 |---|---|---|
 | `proptest` (Rust) | `test/e2e/tests/proptest_iiif_uri.rs` | Property-based coverage of the Rust IIIF URI parser (`parse_request`) |
-| Rust fuzz harness (`cargo-fuzz` / `libfuzzer-sys`, tracked follow-up) | — | Coverage-guided fuzzing of `src/server-rs/src/iiif.rs::parse_request` |
+| Rust fuzz harness (`cargo-fuzz` / `libfuzzer-sys`, tracked follow-up) | — | Coverage-guided fuzzing of `//src/iiifparser/rust:iiif_parser` (`parse_request`) |
 
 The C++ libFuzzer harness (`//fuzz/handlers`) has been retired along with the C++
 IIIF URL parser it targeted. See [Fuzzing](fuzzing.md) for the current status.
 
 **What belongs here:**
 
-- IIIF URI parser (`src/server-rs/src/iiif.rs::parse_request`)
+- IIIF URI parser (`//src/iiifparser/rust:iiif_parser` (`parse_request`))
 - Image format header parsing
 - Any function that processes untrusted input
 
@@ -780,7 +780,7 @@ insta::assert_json_snapshot!(info_json, {
 | Differential parity | *(retired)* | — | The strangler parity gate and the retained C++ oracle server it compared against have been removed; the Rust shell is the sole production surface |
 | Hurl contract tests | *(retired)* | — | Folded into Rust e2e (`tests/http_contracts.rs` + `iiif_compliance.rs`) |
 | Python e2e tests | *(retired)* | — | Replaced by Rust e2e tests |
-| Fuzz testing | *(retired)* | — | The C++ libFuzzer harness was removed with the C++ IIIF URL parser; a Rust fuzz harness against `src/server-rs/src/iiif.rs::parse_request` is a tracked follow-up (see [Fuzzing](fuzzing.md)) |
+| Fuzz testing | *(retired)* | — | The C++ libFuzzer harness was removed with the C++ IIIF URL parser; a Rust fuzz harness against `//src/iiifparser/rust:iiif_parser` (`parse_request`) is a tracked follow-up (see [Fuzzing](fuzzing.md)) |
 | Sanitizer builds | `just bazel-build-sanitized` (`bazel build --config=asan --config=ubsan //src/cli:sipi`) | PR | ASan+UBSan; e2e suite against `bazel-bin/src/cli/sipi` with `.lsan_suppressions.txt` |
 
 ## Python Test Deprecation — Parity Checklist

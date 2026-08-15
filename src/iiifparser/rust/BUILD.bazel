@@ -1,0 +1,56 @@
+"""src/iiifparser/rust — the production Rust IIIF URL parser (`iiif_parser`).
+
+Carved out of `//src/server-rs:lib` (ADR-0021) into a standalone, FFI-free
+`rust_library` that emits its own domain types (`RegionKind`/`SizeKind`/
+`QualityKind`/`FormatKind`, `IiifParams` with idiomatic `bool` flags). It
+depends only on `@crates//:percent-encoding` — no `//src/ffi:sipi_ffi`, no C++
+engine link, no `_CPP_STDLIB_LINK` bracket — so it builds pure-CPU and
+participates in the sanitizer leg without a `no-sanitizer` tag. `server-rs` owns
+the `From<iiif_parser::IiifParams> for SipiIiifParams` flattening at the seam.
+
+Split into internal modules (`domain`/`parse`/`request`) with `#[cfg(test)]`
+tests colocated per module (ADR-0003); the crate is uniformly production, so
+there is no package-level delete boundary to encode (unlike the C++ side's
+`cpp/value_objects` vs `cpp/classifier` split).
+"""
+
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//src:__subpackages__"])
+
+rust_library(
+    name = "iiif_parser",
+    srcs = [
+        "domain.rs",
+        "lib.rs",
+        "parse.rs",
+        "request.rs",
+    ],
+    crate_name = "iiif_parser",
+    crate_root = "lib.rs",
+    edition = "2021",
+    deps = ["@crates//:percent-encoding"],
+)
+
+# Inline #[cfg(test)] unit tests (the IIIF parser unit tests). Untagged — the
+# crate has no C++ dep, so it is sanitizer-eligible and needs no
+# `_CPP_STDLIB_LINK` link args.
+rust_test(
+    name = "iiif_parser_test",
+    crate = ":iiif_parser",
+    edition = "2021",
+)
+
+# Regression sweep of `parse_request` over the shared corpus. Locates the corpus
+# in its runfiles via `@rules_rust//rust/runfiles` (a `rust_test` does not run at
+# workspace root, so it cannot use the cc_test's cwd-relative path).
+rust_test(
+    name = "corpus_regression_test",
+    srcs = ["corpus_regression_test.rs"],
+    data = ["//src/iiifparser/corpus:seed_corpus"],
+    edition = "2021",
+    deps = [
+        ":iiif_parser",
+        "@rules_rust//rust/runfiles",
+    ],
+)
