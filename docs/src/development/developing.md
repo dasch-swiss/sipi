@@ -107,28 +107,30 @@ approval + e2e under instrumentation, lcov for Codecov).
 Unit tests live in `test/unit/` and use GoogleTest with
 ApprovalTests. Tests are organized by component:
 
+These still live under `test/unit/` (they test code that stays in `//src:engine`/`//src:sipi_lib`, not its own package):
+
 - `test/unit/cache/` — LRU cache tests
 - `test/unit/configuration/` — Configuration parsing tests
-- `test/unit/decode_dims/` — Decode-time dimension tests
 - `test/unit/filenamehash/` — Filename hashing tests
-- `test/unit/handlers/` — HTTP handler tests
-- `test/unit/iiifparser/` — IIIF URL parser tests
-- `test/unit/logger/` — Logger tests
 - `test/unit/memory_budget/` — Decode memory budget tests
-- `test/unit/ratelimiter/` — Rate-limiter tests
 - `test/unit/sipiimage/` — Image processing tests
+- `test/unit/tiff_codecs/` — libtiff ingest-codec coverage proof
 
 Per-module Bazel packages co-locate their unit tests alongside the sources
 (per ADR-0003). Co-located tests today:
 
 - `//src/observability:metrics_registry_test` — metrics-registry seam tripwire: pins every metric field against how it reaches production OTLP via the `SipiMetricsSnapshot` bridge
-- `//src/metadata:icc_normalize_test` — ICC profile normalization tests (was `test/unit/sipiicc/`)
-- `//src/util:util_test` — util tests: Hash, Parsing, urldecode
+- `//src/metadata:icc_normalize_test`, `//src/metadata:essentials_test` — ICC normalization + Essentials packet
+- `//src/util:util_test` — util: Hash, Parsing, urldecode
+- `//src/iiifparser:iiifparser_test` — IIIF value-object parsers + seam round-trip + decode dims
+- `//src/iiifparser:iiif_handler_test` — the `parse_iiif_uri` classifier + its regression corpus
+- `//src/formats:formats_test`, `//src/formats:output_sink_test` — TIFF pyramid selection + the write sink
+- `//src/logging:logger_test` — logger
 
 Run one component:
 
 ```bash
-bazel test //test/unit/iiifparser:iiifparser_test --test_output=streamed
+bazel test //src/iiifparser:iiifparser_test --test_output=streamed
 ```
 
 When adding a new unit test, declare a matching `cc_test` target in
