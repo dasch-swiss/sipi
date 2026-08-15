@@ -1,7 +1,7 @@
 ---
 dune_map: true
 schema_version: 1
-last_verified_commit: faedd7fdfa9bf74266f57cd3676e2b16c9a93d14
+last_verified_commit: 0f3d85bda963f078c220c7ae023db996e65e1d45
 date: 2026-08-15
 ---
 
@@ -85,13 +85,16 @@ image formats, whose registry fan-out is documented, not mechanized.
 ### iiifparser
 
 - **Paths:** `:(glob)src/iiifparser/**`
-- **Purpose:** Pure-CPU IIIF URL component parsers (region/size/rotation/quality/format/identifier) as validated value objects, plus `compute_decode_dims` and the testonly `parse_iiif_uri` request classifier.
-- **Key entities:** `SipiRegion`/`SipiSize`/`SipiRotation`/`SipiQualityFormat`/`SipiIdentifier` (each with a string-parse ctor and a flattened-FFI-seam ctor + `canonical()`), `SipiDecodeDims`/`compute_decode_dims`, `handlers::iiif_handler::parse_iiif_uri` (testonly reference)
-- **Public interface:** the value-object classes (via `//src/iiifparser`); `parse_iiif_uri` via the testonly `//src/iiifparser:iiif_handler`.
-- **Local-context kit:** `src/iiifparser/BUILD.bazel`, `src/iiifparser/SipiRegion.h`, `src/iiifparser/SipiSize.h`, `src/iiifparser/SipiDecodeDims.h`, `src/ffi/serve_image.cpp` (the FFI-seam reconstruction), `src/server-rs/src/iiif.rs` (the production Rust parser this classifier is the reference for)
-- **Depends on:** image (`//src:sipi_top` for `SipiError`), util
-- **Used by:** image (`SipiIO.h`), ffi (`serve_image.cpp` rebuilds the value objects), formats (`SipiIOJ2k`), cli
-- **Boundary rules:** a leaf — deps only `//src:sipi_top` + `//src/util`, never `SipiImage`/codecs; narrowed visibility grants the test packages. *Enforcement: `structure`* (Bazel visibility + dep set). `iiif_handler` is `testonly` (production parses IIIF in Rust). *Enforcement: `structure`* (`testonly` keeps it out of `//src:sipi_lib`).
+- **Purpose:** The IIIF URL parser, colocated polyglot (component-first, then language; ADR-0021). `cpp/value_objects/` is the live engine value objects (region/size/rotation/quality/format/identifier + `compute_decode_dims`); `cpp/classifier/` is the `testonly` `parse_iiif_uri` reference oracle; `rust/` is the production Rust parser (`//src/iiifparser/rust:iiif_parser`) the shell drives, emitting domain types. `corpus/` is the language-neutral regression corpus both languages sweep.
+- **Key entities:** C++: `SipiRegion`/`SipiSize`/`SipiRotation`/`SipiQualityFormat`/`SipiIdentifier` (each with a string-parse ctor and a flattened-FFI-seam ctor + `canonical()`), `SipiDecodeDims`/`compute_decode_dims`, `handlers::iiif_handler::parse_iiif_uri` (testonly reference). Rust: `parse_request`, `ParsedRequest`/`RequestKind`, `IiifParams`, `RegionKind`/`SizeKind`/`QualityKind`/`FormatKind` (domain enums, total supersets of the FFI enums)
+- **Public interface:** the value-object classes (via `//src/iiifparser/cpp/value_objects:iiifparser`); `parse_iiif_uri` via the testonly `//src/iiifparser/cpp/classifier:iiif_handler`; the Rust parser via `//src/iiifparser/rust:iiif_parser` (`parse_request` → domain `IiifParams`, `server-rs` owns the `From` flattening).
+- **Local-context kit:** `src/iiifparser/cpp/value_objects/BUILD.bazel`, `src/iiifparser/cpp/value_objects/SipiSize.h`, `src/iiifparser/cpp/classifier/iiif_handler.h`, `src/iiifparser/rust/BUILD.bazel`, `src/iiifparser/rust/parse.rs`, `src/ffi/serve_image.cpp` (the C++ FFI-seam reconstruction), `src/server-rs/src/ffi.rs` (the domain → seam `From<IiifParams>` mapping a domain-enum change must be kept exhaustive against). ADR-0021 is one hop away via every subpackage's BUILD docstring.
+- **Depends on:** image (`//src:sipi_top` for `SipiError`), util. The Rust crate deps only `@crates//:percent-encoding` — no FFI, no C++ engine.
+- **Used by:** image (`SipiIO.h`), ffi (`serve_image.cpp` rebuilds the value objects), formats (`SipiIOJ2k`), cli; server-rs (drives the Rust parser)
+- **Boundary rules:**
+  - `cpp/value_objects` is a leaf — deps only `//src:sipi_top` + `//src/util`, never `SipiImage`/codecs. *Enforcement: `structure`* (Bazel visibility + dep set). Each subpackage pins the virtual `iiifparser/` include prefix to its own physical depth (`strip_include_prefix` + `include_prefix = "iiifparser"`) so consumers keep `#include "iiifparser/*.h"`. *Enforcement: `structure`* (a wrong prefix fails the engine compile).
+  - `cpp/classifier` `iiif_handler` is the `testonly` reference oracle for the Rust `parse_request`, deps `//src/util` only, and is `rm -rf`-deletable as a whole folder once the Rust port is trusted (only the `//test/approval` edge + corpus consumer need unwiring). *Enforcement: `structure`* (`testonly` keeps it out of `//src:sipi_lib`; DUNE-015).
+  - `rust/iiif_parser` is FFI-free: `bazel query 'deps(...)'` shows no `//src/ffi:sipi_ffi` and no C++ engine, so it needs no `_CPP_STDLIB_LINK` and is sanitizer-eligible (untagged). *Enforcement: `structure`* (Bazel dep set). The domain→FFI `From` impls in `server-rs/ffi.rs` are exhaustive matches, never `as` casts. *Enforcement: `static-analysis`* (a new variant fails to compile; per-variant mapping test).
 - **Durable state:** `SipiSize::limitdim` (static compile-time constant, no writer).
 
 ### metadata
@@ -200,10 +203,10 @@ image formats, whose registry fan-out is documented, not mechanized.
 
 - **Paths:** `:(glob)src/server-rs/**`
 - **Purpose:** The production Rust axum HTTP shell — routing, IIIF/info assembly, the streaming response sink, edge path validation, config (Lua or TOML), the Throttling pool, the preflight cache, and OTel telemetry. Shipped as the `sipi` library so a downstream crate can embed it.
-- **Key entities:** `run`/`serve`/`app`, `routes::iiif`/`cors_preflight`/`serve_docroot`, `AppState`, `IMAGE_MIMES`, `iiif::parse_request`, `info::{image_info_json,bitstream_info_json}`, `preflight_cache::PreflightCache`, `ServerOverrides`, the `ffi.rs` `#[repr(C)]` mirrors + layout-lock tests
+- **Key entities:** `run`/`serve`/`app`, `routes::iiif`/`cors_preflight`/`serve_docroot`, `AppState`, `IMAGE_MIMES`, `iiif_parser::parse_request` (the carved parser crate), the `ffi.rs` `From<iiif_parser::IiifParams> for SipiIiifParams` seam mapping, `info::{image_info_json,bitstream_info_json}`, `preflight_cache::PreflightCache`, `ServerOverrides`, the `ffi.rs` `#[repr(C)]` mirrors + layout-lock tests
 - **Public interface:** crate `sipi` (`//src/server-rs:lib`) — `pub fn run` and `pub fn app`; `ServerOverrides`.
-- **Local-context kit:** `src/server-rs/src/lib.rs`, `src/server-rs/src/routes.rs`, `src/server-rs/src/ffi.rs`, `src/server-rs/src/iiif.rs`, `src/server-rs/src/config.rs`, `src/server-rs/BUILD.bazel`, `src/ffi/sipi_ffi.h` (the C++ side of the seam)
-- **Depends on:** ffi (`//src/ffi:sipi_ffi`, the first Rust→C++ link; carries the whole engine); axum/tokio/opentelemetry/sentry (via the single `@crates` hub)
+- **Local-context kit:** `src/server-rs/src/lib.rs`, `src/server-rs/src/routes.rs`, `src/server-rs/src/ffi.rs`, `src/server-rs/src/config.rs`, `src/server-rs/BUILD.bazel`, `src/ffi/sipi_ffi.h` (the C++ side of the seam)
+- **Depends on:** ffi (`//src/ffi:sipi_ffi`, the first Rust→C++ link; carries the whole engine); iiifparser (`//src/iiifparser/rust:iiif_parser`, the domain-typed URL parser); axum/tokio/opentelemetry/sentry (via the single `@crates` hub)
 - **Used by:** cli-rs (calls `sipi::run`)
 - **Boundary rules:**
   - Production Rust comments describe current behaviour on their own terms — the oracle vocabulary (`oracle|shttps|cutover|parity|strangler|C++ server`) is avoided in `src/server-rs/src` + `src/cli-rs/src` `.rs` files. *Enforcement: `docs-only`* (the `CONVENTIONS.md` § Production surface rule; DUNE-012).

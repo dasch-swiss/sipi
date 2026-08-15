@@ -136,7 +136,7 @@ bazel-rustfmt *FLAGS='':
 # `rustfmt --check` over every first-party Rust target and fails on any file
 # that is not rustfmt-clean; run `just bazel-rustfmt` to fix.
 bazel-rustfmt-check *FLAGS='':
-    bazel build //src/server-rs/... //src/cli-rs/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect --output_groups=rustfmt_checks {{FLAGS}}
+    bazel build //src/iiifparser/rust/... //src/server-rs/... //src/cli-rs/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect --output_groups=rustfmt_checks {{FLAGS}}
 
 # Run clippy — the CI lint gate. The rules_rust clippy aspect runs
 # `clippy-driver` over every first-party Rust target; `-Dwarnings` promotes
@@ -145,7 +145,7 @@ bazel-rustfmt-check *FLAGS='':
 # fast unsafe check: it requires a `// SAFETY:` comment on every `unsafe {}`
 # block. Runs in CI's `lint` job alongside `bazel-rustfmt-check`.
 bazel-clippy-check *FLAGS='':
-    bazel build //src/server-rs/... //src/cli-rs/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect --output_groups=clippy_checks --@rules_rust//rust/settings:clippy_flags=-Dwarnings {{FLAGS}}
+    bazel build //src/iiifparser/rust/... //src/server-rs/... //src/cli-rs/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect --output_groups=clippy_checks --@rules_rust//rust/settings:clippy_flags=-Dwarnings {{FLAGS}}
 
 # Lint commit messages with commitlint-rs — the CI `commit-lint` gate. Enforces
 # the type allowlist + mandatory scope from `.commitlintrc.yml` on every commit in
@@ -297,11 +297,11 @@ bazel-build-tracy *FLAGS='':
 bench name *FLAGS='':
     #!/usr/bin/env bash
     set -euo pipefail
-    # The parse tier lives in the carved //src/iiifparser package and the
-    # decode/encode tiers in //src/formats (ADR-0003); the process tier still
-    # sits at //src.
+    # The parse tier lives in the carved //src/iiifparser/cpp/value_objects
+    # package and the decode/encode tiers in //src/formats (ADR-0003); the
+    # process tier still sits at //src.
     case "{{name}}" in
-        parse)         pkg="src/iiifparser" ;;
+        parse)         pkg="src/iiifparser/cpp/value_objects" ;;
         decode|encode) pkg="src/formats" ;;
         *)             pkg="src" ;;
     esac

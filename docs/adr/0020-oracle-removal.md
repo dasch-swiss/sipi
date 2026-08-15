@@ -54,9 +54,10 @@ oracle collapses that surface to the one server that ships.
   prometheus-cpp `bazel_dep` + its BCR patch are dropped.
 - **The `//fuzz/handlers` libFuzzer target** — it fuzzed the C++ classifier
   `handlers::iiif_handler::parse_iiif_uri`, which was on the oracle path only.
-  Production parses IIIF URIs entirely in Rust (`src/server-rs/src/iiif.rs`). A
-  cargo-fuzz harness against `iiif.rs::parse_request` (the production parser) is a
-  tracked follow-up under DEV-6969; until it lands there is no IIIF-parser fuzzing.
+  Production parses IIIF URIs entirely in Rust (`//src/iiifparser/rust:iiif_parser`;
+  colocated per ADR-0021). A cargo-fuzz harness against its `parse_request` (the
+  production parser) is a tracked follow-up under DEV-6969; until it lands there
+  is no IIIF-parser fuzzing.
 
 ## Considered Options
 

@@ -1,7 +1,7 @@
 //! The IIIF request router.
 //!
 //! Replaces the C++ `iiif_handler` dispatch: a
-//! catch-all axum handler classifies the path with [`crate::iiif`], validates it
+//! catch-all axum handler classifies the path with [`iiif_parser`], validates it
 //! at the edge with [`crate::path`], runs the Lua preflight hook (auth + path
 //! resolution) through the seam, and dispatches to the engine
 //! (`sipi_serve_image` / `sipi_serve_file`) or assembles JSON with
@@ -23,8 +23,9 @@ use axum::routing::{on, MethodFilter, MethodRouter};
 use tempfile::NamedTempFile;
 use tokio::sync::{mpsc, oneshot, OwnedSemaphorePermit};
 
+use iiif_parser::{ParsedRequest, RequestKind};
+
 use crate::ffi::{self, PreflightOutcome, SipiPermType, SipiResponse, SipiServeRequest};
-use crate::iiif::{self, ParsedRequest, RequestKind};
 use crate::info::{self, Sidecar};
 use crate::path::{self, Resolved};
 use crate::preflight_cache;
@@ -303,7 +304,7 @@ pub async fn iiif(
         return sink::error_response(StatusCode::SERVICE_UNAVAILABLE);
     }
 
-    let parsed = match iiif::parse_request(uri.path()) {
+    let parsed = match iiif_parser::parse_request(uri.path()) {
         Ok(p) => p,
         Err(_) => return sink::error_response(StatusCode::BAD_REQUEST),
     };
@@ -707,9 +708,10 @@ fn serve_image(
     outcome_tx: oneshot::Sender<Outcome>,
     body_tx: mpsc::Sender<axum::body::Bytes>,
 ) {
-    let params = parsed
+    let params: ffi::SipiIiifParams = parsed
         .params
-        .expect("an Iiif request always carries parsed params");
+        .expect("an Iiif request always carries parsed params")
+        .into();
     let (scheme, host) = forwarded(headers);
 
     // Every C string must outlive the synchronous sipi_serve_image call.

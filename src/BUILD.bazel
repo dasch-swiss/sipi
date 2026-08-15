@@ -197,14 +197,16 @@ cc_library(
 # `:sipi_lib` so the FFI seam (//src/ffi:sipi_ffi) can drive the engine WITHOUT
 # a dependency cycle — `:sipi_lib` deps `:sipi_ffi`, so `:sipi_ffi` cannot reach
 # the engine while it lives inside `:sipi_lib`. The engine depends only on the
-# domain-utility layer (`//src/util`), the IIIF parser (`//src/iiifparser`) and
+# domain-utility layer (`//src/util`), the IIIF value objects
+# (`//src/iiifparser/cpp/value_objects`) and
 # the codec-agnostic write sink (`//src/formats:output_sink`), never any HTTP
 # transport. The `rust_binary` links the engine through //src/ffi:sipi_ffi.
 #
 # SipiImage, cache and the memory budget stay ONE package: they share no
 # internal boundary worth a cut (cache/budget exist only to serve SipiImage
-# reads), and SipiImage is the hub every other module points at. The IIIF
-# parser (`//src/iiifparser`) and the codec handlers (`//src/formats`) were the
+# reads), and SipiImage is the hub every other module points at. The IIIF value
+# objects (`//src/iiifparser/cpp/value_objects`) and the codec handlers
+# (`//src/formats`) were the
 # separable leaves and were carved out. The handlers could not become a package
 # BELOW SipiImage — they read/write it as `friend`s and SipiImage dispatches
 # through the `io` registry, a bidirectional coupling — so //src/formats depends
@@ -240,8 +242,9 @@ cc_library(
     ],
     # `.` (i.e. `src/`) on the include path resolves the engine's own quote-form
     # headers (`#include "SipiImage.h"`). The `formats/` and `iiifparser/`
-    # headers now live in `//src/formats` and `//src/iiifparser`, whose
-    # `strip_include_prefix = "/src"` resolves the `formats/SipiIOTiff.h` /
+    # headers now live in `//src/formats` and
+    # `//src/iiifparser/cpp/value_objects`, whose `strip_include_prefix` +
+    # `include_prefix = "iiifparser"` resolve the `formats/SipiIOTiff.h` /
     # `iiifparser/SipiSize.h` forms for the engine's own headers.
     includes = [
         ".",
@@ -277,7 +280,7 @@ cc_library(
         ":sipi_top",
         "//include:headers",
         "//src/formats:output_sink",
-        "//src/iiifparser",
+        "//src/iiifparser/cpp/value_objects:iiifparser",
         "//src/logging:logging",
         "//src/metadata:metadata",
         "//src/observability:observability",
@@ -437,8 +440,8 @@ cc_library(
 # See docs/src/development/benchmarking.md.
 
 # Parse tier — IIIF URL component string parsers. Now co-located with the
-# module at `//src/iiifparser:parse_benchmark` (per ADR-0003), moved with the
-# iiifparser carve.
+# module at `//src/iiifparser/cpp/value_objects:parse_benchmark` (per ADR-0003),
+# moved with the iiifparser carve.
 
 # Process tier — the image-processing operators between decode and encode
 # (scale/rotate/crop/to8bps/convertToIcc/removeChannel). Uses existing small

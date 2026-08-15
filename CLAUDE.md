@@ -114,7 +114,7 @@ localdev config in one step.
 | Main Application | `src/cli/cli_app.cpp` | CLI11 arg parsing + offline-verb dispatch, behind the `sipi_cli_main` FFI entry; `src/cli-rs/src/main.rs` owns `main` and Sentry init |
 | SipiImage | `src/SipiImage.h` | Image processing: TIFF, JP2, PNG, JPEG; metadata (EXIF, IPTC, XMP); ICC profiles |
 | Rust HTTP shell | `src/server-rs/` | The production server: axum routes, IIIF endpoints, caching, Lua request-shaping; drives the C++ engine over FFI |
-| IIIF Parser | `src/iiifparser/` (C++ engine) / `src/server-rs/src/iiif.rs` (production) | IIIF URL parsing: identifier, region, size, rotation, quality/format. Production parses in Rust; the C++ engine rebuilds params from the flattened seam struct |
+| IIIF Parser | `src/iiifparser/cpp/` (C++ engine) / `src/iiifparser/rust/` (production, `//src/iiifparser/rust:iiif_parser`) | IIIF URL parsing: identifier, region, size, rotation, quality/format. Production parses in Rust and emits domain types; `server-rs` flattens them into the seam struct the C++ engine consumes (ADR-0021) |
 | Format Handlers | `src/formats/` | SipiIO base class + SipiIOTiff, SipiIOJ2k, SipiIOJpeg, SipiIOPng |
 | Caching | `src/SipiCache.h` | File-based LRU cache with dual-limit eviction (size + file count), crash recovery |
 | Metrics | `src/observability/metrics.h` | Metrics singleton (`Sipi::observability::Metrics`) — plain atomic counters/gauges; scalar fields cross the FFI seam as `SipiMetricsSnapshot` and export over OTLP via `src/server-rs/src/metrics.rs` |

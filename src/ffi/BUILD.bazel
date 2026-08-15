@@ -74,9 +74,9 @@ cc_library(
     copts = ["-fexceptions"],
     deps = [
         # The transport-free image engine (SipiImage, cache, memory budget) the
-        # IIIF pipeline drives, with the IIIF parser (//src/iiifparser) reached
-        # transitively. //src:engine does NOT depend on this package, so there
-        # is no cycle.
+        # IIIF pipeline drives, with the IIIF value objects
+        # (//src/iiifparser/cpp/value_objects) reached transitively. //src:engine
+        # does NOT depend on this package, so there is no cycle.
         "//src:engine",
         # The codec handlers. serve_image.cpp calls SipiImage::read/write, whose
         # `io` handler registry is defined in //src/formats (moved there to

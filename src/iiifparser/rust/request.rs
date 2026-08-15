@@ -1,18 +1,12 @@
-//! IIIF Image API 3.0 URL parser.
-//!
-//! Classifies a request URI and, for an IIIF image request, parses the
-//! region/size/rotation/quality.format into the flattened [`SipiIiifParams`] the
-//! engine's `sipi_serve_image` consumes. The Rust shell owns IIIF parsing (the
-//! seam has no parser entry).
-//!
-//! Correctness is gated by the unit tests below + the e2e suite
-//! (`proptest_iiif_uri`, `iiif_compliance`).
+//! Request classification: tokenize an IIIF URL path and, for an image request,
+//! parse its `{region}/{size}/{rotation}/{quality}.{format}` into
+//! [`IiifParams`]. A faithful port of `handlers::iiif_handler::parse_iiif_uri`
+//! (`//src/iiifparser/cpp/classifier`).
 
-use crate::ffi::{SipiFormatType, SipiIiifParams, SipiQualityType, SipiRegionType, SipiSizeType};
-
-/// A parse failure → HTTP 400 at the edge (mirrors the C++ `SipiError` → 400).
-#[derive(Debug, PartialEq, Eq)]
-pub struct ParseError(pub String);
+use crate::domain::{IiifParams, ParseError};
+use crate::parse::{
+    is_valid_qualform, is_valid_region, is_valid_rotation, is_valid_size, parse_iiif_params,
+};
 
 /// IIIF request classification (`handlers::iiif_handler::RequestType`).
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -36,328 +30,7 @@ pub struct ParsedRequest {
     pub prefix: String,
     pub identifier: String,
     /// `Some` only for [`RequestKind::Iiif`].
-    pub params: Option<SipiIiifParams>,
-}
-
-// ── Low-level grammar consumers (mirror iiif_handler.cpp:21–48) ──────────────
-
-/// Consume `digit+`; return the remainder, or `None` if no leading digit.
-fn consume_posint(s: &str) -> Option<&str> {
-    let n = s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
-    if n == 0 {
-        None
-    } else {
-        Some(&s[n..])
-    }
-}
-
-/// Consume `digit+ ('.' digit+)?`; return the remainder, or `None`.
-fn consume_posfloat(s: &str) -> Option<&str> {
-    let rest = consume_posint(s)?;
-    match rest.strip_prefix('.') {
-        Some(after_dot) => consume_posint(after_dot),
-        None => Some(rest),
-    }
-}
-
-// ── Validators (gate classification; mirror iiif_handler.cpp:52–113) ─────────
-
-fn is_valid_region(s: &str) -> bool {
-    if s == "full" || s == "square" {
-        return true;
-    }
-    let is_pct = s.starts_with("pct:");
-    let mut rest = s.strip_prefix("pct:").unwrap_or(s);
-    for i in 0..4 {
-        if i > 0 {
-            rest = match rest.strip_prefix(',') {
-                Some(r) => r,
-                None => return false,
-            };
-        }
-        rest = match if is_pct {
-            consume_posfloat(rest)
-        } else {
-            consume_posint(rest)
-        } {
-            Some(r) => r,
-            None => return false,
-        };
-    }
-    rest.is_empty()
-}
-
-fn is_valid_size(s: &str) -> bool {
-    let s = s.strip_prefix('^').unwrap_or(s);
-    if s == "max" {
-        return true;
-    }
-    if let Some(p) = s.strip_prefix("pct:") {
-        return consume_posfloat(p).is_some_and(str::is_empty);
-    }
-    let (has_bang, s) = match s.strip_prefix('!') {
-        Some(r) => (true, r),
-        None => (false, s),
-    };
-    if let Some(r) = s.strip_prefix(',') {
-        // ",h": only valid without the "!" fit-in-box prefix.
-        if has_bang {
-            return false;
-        }
-        return consume_posint(r).is_some_and(str::is_empty);
-    }
-    let r = match consume_posint(s) {
-        Some(r) => r,
-        None => return false,
-    };
-    let r = match r.strip_prefix(',') {
-        Some(r) => r,
-        None => return false,
-    };
-    if r.is_empty() {
-        // "w,": valid only without "!".
-        return !has_bang;
-    }
-    consume_posint(r).is_some_and(str::is_empty)
-}
-
-fn is_valid_rotation(s: &str) -> bool {
-    let s = s.strip_prefix('!').unwrap_or(s);
-    consume_posfloat(s).is_some_and(str::is_empty)
-}
-
-fn is_valid_qualform(s: &str) -> bool {
-    const QUALITIES: [&str; 4] = ["color", "gray", "bitonal", "default"];
-    const FORMATS: [&str; 4] = ["jpg", "tif", "png", "jp2"];
-    for q in QUALITIES {
-        if let Some(rest) = s.strip_prefix(q) {
-            return rest
-                .strip_prefix('.')
-                .is_some_and(|fmt| FORMATS.contains(&fmt));
-        }
-    }
-    false
-}
-
-// ── Parsers (mirror the iiifparser constructors) ─────────────────────────────
-
-fn parse_region(s: &str) -> Result<(SipiRegionType, [f32; 4]), ParseError> {
-    if s == "full" {
-        return Ok((SipiRegionType::Full, [0.0; 4]));
-    }
-    if s == "square" {
-        return Ok((SipiRegionType::Square, [0.0; 4]));
-    }
-    let (ty, body) = match s.strip_prefix("pct:") {
-        Some(b) => (SipiRegionType::Percents, b),
-        None => (SipiRegionType::Coords, s),
-    };
-    let nums: Vec<&str> = body.split(',').collect();
-    if nums.len() != 4 {
-        return Err(ParseError(format!(
-            "IIIF Error reading Region parameter \"{s}\""
-        )));
-    }
-    let mut coords = [0.0f32; 4];
-    for (i, n) in nums.iter().enumerate() {
-        coords[i] = n
-            .parse::<f32>()
-            .map_err(|_| ParseError(format!("IIIF Error reading Region parameter \"{s}\"")))?;
-    }
-    Ok((ty, coords))
-}
-
-/// Parsed size fields, in `SipiIiifParams` shape.
-struct SizeParts {
-    ty: SipiSizeType,
-    upscaling: bool,
-    percent: f32,
-    reduce: i32,
-    nx: usize,
-    ny: usize,
-}
-
-fn parse_size(s: &str) -> Result<SizeParts, ParseError> {
-    let err = || ParseError(format!("Invalid IIIF size parameter: \"{s}\""));
-    let mut parts = SizeParts {
-        ty: SipiSizeType::Undefined,
-        upscaling: false,
-        percent: 0.0,
-        reduce: 0,
-        nx: 0,
-        ny: 0,
-    };
-
-    let mut rest = s;
-    if let Some(r) = rest.strip_prefix('^') {
-        parts.upscaling = true;
-        rest = r;
-    }
-    let mut exclamation = false;
-    if let Some(r) = rest.strip_prefix('!') {
-        exclamation = true;
-        rest = r;
-    }
-
-    if rest == "max" || rest.is_empty() {
-        parts.ty = SipiSizeType::Full;
-        return Ok(parts);
-    }
-    if let Some(p) = rest.strip_prefix("pct:") {
-        if exclamation {
-            return Err(err());
-        }
-        let mut pct = p.parse::<f32>().map_err(|_| err())?;
-        if pct <= 0.000_000_000_001 {
-            pct = 1.0;
-        }
-        parts.ty = SipiSizeType::Percents;
-        parts.percent = pct;
-        return Ok(parts);
-    }
-    // `red:` is unreachable via classification — neither is_valid_size here nor
-    // the C++ validator admits it — but SipiSize.cpp carries the same branch, so
-    // it is kept for port fidelity.
-    if let Some(p) = rest.strip_prefix("red:") {
-        if exclamation {
-            return Err(err());
-        }
-        let mut red = p.parse::<i32>().map_err(|_| err())?;
-        if red < 0 {
-            red = 0;
-        }
-        parts.ty = SipiSizeType::Reduce;
-        parts.reduce = red;
-        return Ok(parts);
-    }
-
-    let comma = rest
-        .find(',')
-        .ok_or_else(|| ParseError(format!("Could not parse IIIF size parameter: \"{s}\"")))?;
-    let width_str = &rest[..comma];
-    let height_str = &rest[comma + 1..];
-    let parse_dim = |v: &str| {
-        v.parse::<usize>()
-            .map_err(|_| ParseError(format!("Could not parse IIIF size parameter: \"{s}\"")))
-    };
-
-    if width_str.is_empty() {
-        // ",h"
-        if exclamation {
-            return Err(err());
-        }
-        let ny = parse_dim(height_str)?;
-        if ny == 0 {
-            return Err(ParseError(format!(
-                "IIIF size height cannot be zero: \"{s}\""
-            )));
-        }
-        parts.ty = SipiSizeType::PixelsY;
-        parts.ny = ny;
-    } else if height_str.is_empty() {
-        // "w,"
-        let nx = parse_dim(width_str)?;
-        if nx == 0 {
-            return Err(ParseError(format!(
-                "IIIF size width cannot be zero: \"{s}\""
-            )));
-        }
-        parts.ty = SipiSizeType::PixelsX;
-        parts.nx = nx;
-    } else {
-        // "w,h"
-        let nx = parse_dim(width_str)?;
-        let ny = parse_dim(height_str)?;
-        if nx == 0 || ny == 0 {
-            return Err(ParseError(format!("IIIF size cannot be zero: \"{s}\"")));
-        }
-        parts.ty = if exclamation {
-            SipiSizeType::Maxdim
-        } else {
-            SipiSizeType::PixelsXy
-        };
-        parts.nx = nx;
-        parts.ny = ny;
-    }
-
-    // Mirror the C++ hard cap on requested dimensions.
-    parts.nx = parts.nx.min(32_000);
-    parts.ny = parts.ny.min(32_000);
-    Ok(parts)
-}
-
-fn parse_rotation(s: &str) -> Result<(bool, f32), ParseError> {
-    if s.is_empty() {
-        return Ok((false, 0.0));
-    }
-    let (mirror, body) = match s.strip_prefix('!') {
-        Some(r) => (true, r),
-        None => (false, s),
-    };
-    let angle = body
-        .parse::<f32>()
-        .map_err(|_| ParseError(format!("Could not parse IIIF rotation parameter: {s}")))?;
-    Ok((mirror, angle))
-}
-
-fn parse_quality_format(s: &str) -> Result<(SipiQualityType, SipiFormatType), ParseError> {
-    if s.is_empty() {
-        return Ok((SipiQualityType::Default, SipiFormatType::Jpg));
-    }
-    let dot = s.find('.').ok_or_else(|| {
-        ParseError(format!(
-            "IIIF Error reading Quality+Format parameter \"{s}\" !"
-        ))
-    })?;
-    let quality = match &s[..dot] {
-        "default" => SipiQualityType::Default,
-        "color" => SipiQualityType::Color,
-        "gray" => SipiQualityType::Gray,
-        "bitonal" => SipiQualityType::Bitonal,
-        q => {
-            return Err(ParseError(format!(
-                "IIIF Error reading Quality parameter \"{q}\" !"
-            )))
-        }
-    };
-    let format = match &s[dot + 1..] {
-        "jpg" => SipiFormatType::Jpg,
-        "tif" => SipiFormatType::Tif,
-        "png" => SipiFormatType::Png,
-        "gif" => SipiFormatType::Gif,
-        "jp2" => SipiFormatType::Jp2,
-        "pdf" => SipiFormatType::Pdf,
-        "webp" => SipiFormatType::Webp,
-        _ => SipiFormatType::Unsupported,
-    };
-    Ok((quality, format))
-}
-
-/// Build the flattened `SipiIiifParams` from the four IIIF path segments.
-fn parse_iiif_params(
-    region: &str,
-    size: &str,
-    rotation: &str,
-    qualform: &str,
-) -> Result<SipiIiifParams, ParseError> {
-    let (region_type, region) = parse_region(region)?;
-    let sz = parse_size(size)?;
-    let (mirror, angle) = parse_rotation(rotation)?;
-    let (quality_type, format_type) = parse_quality_format(qualform)?;
-    Ok(SipiIiifParams {
-        region_type,
-        region,
-        size_type: sz.ty,
-        size_upscaling: i32::from(sz.upscaling),
-        size_percent: sz.percent,
-        size_reduce: sz.reduce,
-        size_nx: sz.nx,
-        size_ny: sz.ny,
-        rotation: angle,
-        rotation_mirror: i32::from(mirror),
-        quality_type,
-        format_type,
-    })
+    pub params: Option<IiifParams>,
 }
 
 /// Percent-decode a single path segment (the C++ urldecodes each part).
@@ -411,12 +84,11 @@ fn build_prefix_strict(parts: &[String]) -> Result<String, ParseError> {
     Ok(prefix)
 }
 
-/// Classify a request URI and, for an IIIF image request, parse its params. A
-/// faithful port of `handlers::iiif_handler::parse_iiif_uri`
-/// (`src/iiifparser/iiif_handler.cpp`), including its reject-vs-redirect
-/// logic: a URL that *looks* like a (malformed) IIIF image request — a valid
-/// quality.format tail, or region+size+rotation valid — is an **error**, not a
-/// redirect. `uri` is the path portion (scheme/host already stripped).
+/// Classify a request URI and, for an IIIF image request, parse its params.
+/// Including the reject-vs-redirect logic: a URL that *looks* like a (malformed)
+/// IIIF image request — a valid quality.format tail, or region+size+rotation
+/// valid — is an **error**, not a redirect. `uri` is the path portion
+/// (scheme/host already stripped).
 pub fn parse_request(uri: &str) -> Result<ParsedRequest, ParseError> {
     let parts = tokenize(uri);
     if parts.is_empty() {
@@ -537,10 +209,11 @@ pub fn parse_request(uri: &str) -> Result<ParsedRequest, ParseError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::{FormatKind, QualityKind, RegionKind, SizeKind};
 
     // Classification goldens ported 1:1 from the C++ classifier corpus
-    // (src/iiifparser/iiif_handler_test.cpp). The C++ classifier is the
-    // reference, so divergence here is a defect by the module's own contract.
+    // (//src/iiifparser/cpp/classifier). The C++ classifier is the reference, so
+    // divergence here is a defect by the module's own contract.
 
     fn ok(uri: &str) -> ParsedRequest {
         parse_request(uri).unwrap_or_else(|e| panic!("{uri} should parse: {}", e.0))
@@ -563,12 +236,12 @@ mod tests {
         assert_eq!(r.prefix, "iiif/2");
         assert_eq!(r.identifier, "image.jpg");
         let p = r.params.unwrap();
-        assert_eq!(p.region_type, SipiRegionType::Full);
-        assert_eq!(p.size_type, SipiSizeType::PixelsX);
+        assert_eq!(p.region_kind, RegionKind::Full);
+        assert_eq!(p.size_kind, SizeKind::PixelsX);
         assert_eq!(p.size_nx, 200);
         assert_eq!(p.size_ny, 0);
-        assert_eq!(p.quality_type, SipiQualityType::Default);
-        assert_eq!(p.format_type, SipiFormatType::Jpg);
+        assert_eq!(p.quality_kind, QualityKind::Default);
+        assert_eq!(p.format_kind, FormatKind::Jpg);
     }
 
     #[test]
@@ -755,67 +428,18 @@ mod tests {
         assert_eq!(r.identifier, "img.jp2");
     }
 
-    // ── Param-level flattening checks ──
-
-    #[test]
-    fn region_param_values() {
-        assert_eq!(parse_region("full").unwrap().0, SipiRegionType::Full);
-        assert_eq!(parse_region("square").unwrap().0, SipiRegionType::Square);
-        let (ty, c) = parse_region("10,20,30,40").unwrap();
-        assert_eq!(ty, SipiRegionType::Coords);
-        assert_eq!(c, [10.0, 20.0, 30.0, 40.0]);
-        let (ty, c) = parse_region("pct:0,0,50,50").unwrap();
-        assert_eq!(ty, SipiRegionType::Percents);
-        assert_eq!(c, [0.0, 0.0, 50.0, 50.0]);
-    }
-
-    #[test]
-    fn size_param_values() {
-        assert_eq!(parse_size("max").unwrap().ty, SipiSizeType::Full);
-        assert!(parse_size("^max").unwrap().upscaling);
-        assert_eq!(parse_size("200,").unwrap().ty, SipiSizeType::PixelsX);
-        assert_eq!(parse_size(",100").unwrap().ty, SipiSizeType::PixelsY);
-        let s = parse_size("200,100").unwrap();
-        assert_eq!((s.ty, s.nx, s.ny), (SipiSizeType::PixelsXy, 200, 100));
-        assert_eq!(parse_size("!200,100").unwrap().ty, SipiSizeType::Maxdim);
-        assert_eq!(parse_size("pct:50").unwrap().percent, 50.0);
-    }
-
-    #[test]
-    fn rotation_param_values() {
-        assert_eq!(parse_rotation("").unwrap(), (false, 0.0));
-        assert_eq!(parse_rotation("90").unwrap(), (false, 90.0));
-        assert_eq!(parse_rotation("!180").unwrap(), (true, 180.0));
-    }
-
-    #[test]
-    fn quality_format_param_values() {
-        assert_eq!(
-            parse_quality_format("default.jpg").unwrap(),
-            (SipiQualityType::Default, SipiFormatType::Jpg)
-        );
-        assert_eq!(
-            parse_quality_format("gray.png").unwrap(),
-            (SipiQualityType::Gray, SipiFormatType::Png)
-        );
-        assert_eq!(
-            parse_quality_format("color.jp2").unwrap(),
-            (SipiQualityType::Color, SipiFormatType::Jp2)
-        );
-    }
-
     #[test]
     fn upscaling_maxdim_mirror_full_request() {
         let r = ok("/p/img.tif/square/^!500,500/!90/color.png");
         let p = r.params.unwrap();
-        assert_eq!(p.region_type, SipiRegionType::Square);
-        assert_eq!(p.size_type, SipiSizeType::Maxdim);
-        assert_eq!(p.size_upscaling, 1);
-        assert_eq!(p.rotation_mirror, 1);
+        assert_eq!(p.region_kind, RegionKind::Square);
+        assert_eq!(p.size_kind, SizeKind::Maxdim);
+        assert!(p.size_upscaling);
+        assert!(p.rotation_mirror);
         assert_eq!(p.rotation, 90.0);
         assert_eq!(
-            (p.quality_type, p.format_type),
-            (SipiQualityType::Color, SipiFormatType::Png)
+            (p.quality_kind, p.format_kind),
+            (QualityKind::Color, FormatKind::Png)
         );
     }
 }

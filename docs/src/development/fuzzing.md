@@ -4,7 +4,7 @@
 > fuzzed the C++ IIIF URI parser (`//fuzz/handlers:iiif_handler_uri_parser_fuzz`,
 > its seed corpus, and the `fuzz/handlers/` package) has been removed. IIIF
 > request parsing now lives in the Rust shell
-> (`src/server-rs/src/iiif.rs::parse_request`), so the parser worth fuzzing is
+> (`//src/iiifparser/rust:iiif_parser` (`parse_request`)), so the parser worth fuzzing is
 > Rust code. A Rust fuzz harness against `parse_request` (e.g. `cargo-fuzz` /
 > `libfuzzer-sys` under `rules_rust`) is a tracked follow-up.
 

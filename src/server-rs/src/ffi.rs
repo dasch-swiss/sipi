@@ -154,6 +154,85 @@ pub struct SipiIiifParams {
     pub format_type: SipiFormatType,
 }
 
+// ── Domain → seam mapping ────────────────────────────────────────────────────
+// The `iiif_parser` crate emits idiomatic domain types; these `From` impls
+// flatten them into the `#[repr(C)]` seam struct/enums above. They are the sole
+// bridge, applied once at the `serve_image` seam site. Each is an **exhaustive
+// match** (never an `x as c_int` cast) so a new domain variant fails to compile
+// until it is mapped here — the compile-time complement to the discriminant
+// asserts below, which guard the wire values against the C++ header.
+
+impl From<iiif_parser::RegionKind> for SipiRegionType {
+    fn from(k: iiif_parser::RegionKind) -> Self {
+        match k {
+            iiif_parser::RegionKind::Full => SipiRegionType::Full,
+            iiif_parser::RegionKind::Square => SipiRegionType::Square,
+            iiif_parser::RegionKind::Coords => SipiRegionType::Coords,
+            iiif_parser::RegionKind::Percents => SipiRegionType::Percents,
+        }
+    }
+}
+
+impl From<iiif_parser::SizeKind> for SipiSizeType {
+    fn from(k: iiif_parser::SizeKind) -> Self {
+        match k {
+            iiif_parser::SizeKind::Undefined => SipiSizeType::Undefined,
+            iiif_parser::SizeKind::Full => SipiSizeType::Full,
+            iiif_parser::SizeKind::PixelsXy => SipiSizeType::PixelsXy,
+            iiif_parser::SizeKind::PixelsX => SipiSizeType::PixelsX,
+            iiif_parser::SizeKind::PixelsY => SipiSizeType::PixelsY,
+            iiif_parser::SizeKind::Maxdim => SipiSizeType::Maxdim,
+            iiif_parser::SizeKind::Percents => SipiSizeType::Percents,
+            iiif_parser::SizeKind::Reduce => SipiSizeType::Reduce,
+        }
+    }
+}
+
+impl From<iiif_parser::QualityKind> for SipiQualityType {
+    fn from(k: iiif_parser::QualityKind) -> Self {
+        match k {
+            iiif_parser::QualityKind::Default => SipiQualityType::Default,
+            iiif_parser::QualityKind::Color => SipiQualityType::Color,
+            iiif_parser::QualityKind::Gray => SipiQualityType::Gray,
+            iiif_parser::QualityKind::Bitonal => SipiQualityType::Bitonal,
+        }
+    }
+}
+
+impl From<iiif_parser::FormatKind> for SipiFormatType {
+    fn from(k: iiif_parser::FormatKind) -> Self {
+        match k {
+            iiif_parser::FormatKind::Unsupported => SipiFormatType::Unsupported,
+            iiif_parser::FormatKind::Jpg => SipiFormatType::Jpg,
+            iiif_parser::FormatKind::Tif => SipiFormatType::Tif,
+            iiif_parser::FormatKind::Png => SipiFormatType::Png,
+            iiif_parser::FormatKind::Gif => SipiFormatType::Gif,
+            iiif_parser::FormatKind::Jp2 => SipiFormatType::Jp2,
+            iiif_parser::FormatKind::Pdf => SipiFormatType::Pdf,
+            iiif_parser::FormatKind::Webp => SipiFormatType::Webp,
+        }
+    }
+}
+
+impl From<iiif_parser::IiifParams> for SipiIiifParams {
+    fn from(p: iiif_parser::IiifParams) -> Self {
+        SipiIiifParams {
+            region_type: p.region_kind.into(),
+            region: p.region,
+            size_type: p.size_kind.into(),
+            size_upscaling: c_int::from(p.size_upscaling),
+            size_percent: p.size_percent,
+            size_reduce: p.size_reduce,
+            size_nx: p.size_nx,
+            size_ny: p.size_ny,
+            rotation: p.rotation,
+            rotation_mirror: c_int::from(p.rotation_mirror),
+            quality_type: p.quality_kind.into(),
+            format_type: p.format_kind.into(),
+        }
+    }
+}
+
 /// Flat, engine-populated context for a handled (non-fatal) image error —
 /// mirrors `SipiImageErrorReport` in `sipi_ffi.h`. Every field is only valid for the
 /// duration of the `report_error` call — copy anything that needs to outlive
@@ -1726,6 +1805,115 @@ mod iiif_params_layout {
         assert_eq!(offset_of!(SipiIiifParams, rotation_mirror), 60);
         assert_eq!(offset_of!(SipiIiifParams, quality_type), 64);
         assert_eq!(offset_of!(SipiIiifParams, format_type), 68);
+    }
+}
+
+#[cfg(test)]
+mod domain_seam_mapping {
+    use super::{SipiFormatType, SipiQualityType, SipiRegionType, SipiSizeType};
+
+    // Every domain enum variant must map to the seam enum with the matching
+    // discriminant — the `From` impls are the coupling guard the parser used to
+    // provide by emitting the FFI enums directly. An exhaustive per-variant
+    // check plus the `bool → c_int` flag mapping below.
+
+    #[test]
+    fn region_kind_maps_every_variant() {
+        use iiif_parser::RegionKind::*;
+        for (k, want) in [
+            (Full, SipiRegionType::Full),
+            (Square, SipiRegionType::Square),
+            (Coords, SipiRegionType::Coords),
+            (Percents, SipiRegionType::Percents),
+        ] {
+            assert_eq!(SipiRegionType::from(k), want);
+        }
+    }
+
+    #[test]
+    fn size_kind_maps_every_variant() {
+        use iiif_parser::SizeKind::*;
+        for (k, want) in [
+            (Undefined, SipiSizeType::Undefined),
+            (Full, SipiSizeType::Full),
+            (PixelsXy, SipiSizeType::PixelsXy),
+            (PixelsX, SipiSizeType::PixelsX),
+            (PixelsY, SipiSizeType::PixelsY),
+            (Maxdim, SipiSizeType::Maxdim),
+            (Percents, SipiSizeType::Percents),
+            (Reduce, SipiSizeType::Reduce),
+        ] {
+            assert_eq!(SipiSizeType::from(k), want);
+        }
+    }
+
+    #[test]
+    fn quality_kind_maps_every_variant() {
+        use iiif_parser::QualityKind::*;
+        for (k, want) in [
+            (Default, SipiQualityType::Default),
+            (Color, SipiQualityType::Color),
+            (Gray, SipiQualityType::Gray),
+            (Bitonal, SipiQualityType::Bitonal),
+        ] {
+            assert_eq!(SipiQualityType::from(k), want);
+        }
+    }
+
+    #[test]
+    fn format_kind_maps_every_variant() {
+        use iiif_parser::FormatKind::*;
+        for (k, want) in [
+            (Unsupported, SipiFormatType::Unsupported),
+            (Jpg, SipiFormatType::Jpg),
+            (Tif, SipiFormatType::Tif),
+            (Png, SipiFormatType::Png),
+            (Gif, SipiFormatType::Gif),
+            (Jp2, SipiFormatType::Jp2),
+            (Pdf, SipiFormatType::Pdf),
+            (Webp, SipiFormatType::Webp),
+        ] {
+            assert_eq!(SipiFormatType::from(k), want);
+        }
+    }
+
+    #[test]
+    fn iiif_params_flatten_maps_bool_flags_and_fields() {
+        let domain = iiif_parser::IiifParams {
+            region_kind: iiif_parser::RegionKind::Square,
+            region: [1.0, 2.0, 3.0, 4.0],
+            size_kind: iiif_parser::SizeKind::Maxdim,
+            size_upscaling: true,
+            size_percent: 50.0,
+            size_reduce: 2,
+            size_nx: 640,
+            size_ny: 480,
+            rotation: 90.0,
+            rotation_mirror: true,
+            quality_kind: iiif_parser::QualityKind::Color,
+            format_kind: iiif_parser::FormatKind::Png,
+        };
+        let ffi = super::SipiIiifParams::from(domain);
+        assert_eq!(ffi.region_type, SipiRegionType::Square);
+        assert_eq!(ffi.region, [1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(ffi.size_type, SipiSizeType::Maxdim);
+        assert_eq!(ffi.size_upscaling, 1); // bool true → c_int 1
+        assert_eq!(ffi.size_percent, 50.0);
+        assert_eq!(ffi.size_reduce, 2);
+        assert_eq!(ffi.size_nx, 640);
+        assert_eq!(ffi.size_ny, 480);
+        assert_eq!(ffi.rotation, 90.0);
+        assert_eq!(ffi.rotation_mirror, 1); // bool true → c_int 1
+        assert_eq!(ffi.quality_type, SipiQualityType::Color);
+        assert_eq!(ffi.format_type, SipiFormatType::Png);
+
+        // The false path of both bool flags → c_int 0.
+        let mut d = domain;
+        d.size_upscaling = false;
+        d.rotation_mirror = false;
+        let ffi = super::SipiIiifParams::from(d);
+        assert_eq!(ffi.size_upscaling, 0);
+        assert_eq!(ffi.rotation_mirror, 0);
     }
 }
 
