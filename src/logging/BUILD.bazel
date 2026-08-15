@@ -9,7 +9,7 @@ logic — any module in this codebase can legitimately depend on it.
 so `layering_check` runs cleanly.
 """
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//src:__subpackages__"])
 
@@ -24,4 +24,17 @@ cc_library(
     # `:sipi_lib`'s `includes = ["."]`.
     include_prefix = "logging",
     features = ["layering_check", "parse_headers"],
+)
+
+# Colocated unit test (ADR-0003), linking the narrow `:logging` target.
+# Deps `@jansson` directly to parse and assert on the JSON-mode log output
+# (the library itself is stdlib-only; only the test needs a JSON reader).
+cc_test(
+    name = "logger_test",
+    srcs = ["logger_test.cpp"],
+    deps = [
+        ":logging",
+        "@googletest//:gtest_main",
+        "@jansson//:jansson",
+    ],
 )

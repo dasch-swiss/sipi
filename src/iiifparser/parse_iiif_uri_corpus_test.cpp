@@ -20,7 +20,7 @@
 #include "iiifparser/iiif_handler.h"
 
 #ifndef SIPI_FUZZ_CORPUS_DIR
-#error "SIPI_FUZZ_CORPUS_DIR must point at test/unit/handlers/corpus/"
+#error "SIPI_FUZZ_CORPUS_DIR must point at src/iiifparser/corpus/"
 #endif
 
 namespace {

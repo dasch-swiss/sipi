@@ -1,7 +1,7 @@
 """Regression corpus for the IIIF URI parser.
 
 Consumer:
-  * `test/unit/handlers/parse_iiif_uri_corpus_test` — sweeps `parse_iiif_uri`
+  * `//src/iiifparser:iiif_handler_test` — sweeps `parse_iiif_uri`
     over every input as a regression suite (originally the libFuzzer seed
     corpus; the fuzz harness was retired with the oracle, ADR-0020).
 

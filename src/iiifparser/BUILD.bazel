@@ -6,17 +6,19 @@ identifier path segments of an IIIF URL into validated value objects
 `SipiIdentifier`, `SipiDecodeDims`). A leaf of the engine graph: it depends
 only on `SipiError` (`//src:sipi_top`) and the string helpers in `//src/util`,
 never on `SipiImage` or any codec. Carved out of `//src:engine` so the
-image engine deps this narrow parser rather than housing it, and so
-`//test/unit/iiifparser` links the parser alone.
+image engine deps this narrow parser rather than housing it, and so the
+colocated `:iiifparser_test` links the parser alone.
 
 `strip_include_prefix = "/src"` exposes the headers at the path-prefixed form
 (`#include "iiifparser/SipiSize.h"`) for cross-module consumers
 (`SipiImage.h`, `SipiIO.h`, `serve_image.cpp`) without relying on a consumer's
 `includes = ["."]`. Siblings inside the package use the quote-form
 (`#include "SipiSize.h"`), which auto-searches the current source's directory.
+
+Source, tests, and the regression corpus are colocated per ADR-0003.
 """
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
 package(default_visibility = ["//src:__subpackages__"])
 
@@ -40,28 +42,9 @@ cc_library(
     ],
     copts = ["-fexceptions"],
     strip_include_prefix = "/src",
-    visibility = [
-        "//src:__subpackages__",
-        "//test/unit/decode_dims:__pkg__",
-        "//test/unit/iiifparser:__pkg__",
-    ],
     deps = [
         "//src:sipi_top",
         "//src/util",
-    ],
-)
-
-# Parse tier microbenchmark — IIIF URL component string parsers. Pure CPU, no
-# fixtures. Co-located with the module per ADR-0003 (moved from //src). Built
-# only by `just bench` (`tags = ["manual"]`, dep of no test).
-cc_binary(
-    name = "parse_benchmark",
-    srcs = ["parse_benchmark.cpp"],
-    tags = ["manual"],
-    testonly = True,
-    deps = [
-        ":iiifparser",
-        "@google_benchmark//:benchmark_main",
     ],
 )
 
@@ -78,9 +61,59 @@ cc_library(
     hdrs = ["iiif_handler.h"],
     strip_include_prefix = "/src",
     testonly = True,
-    visibility = [
-        "//test/approval:__pkg__",
-        "//test/unit/handlers:__pkg__",
-    ],
+    # //test/approval:approvaltests exercises the same classifier; the colocated
+    # tests below reach it in-package.
+    visibility = ["//test/approval:__pkg__"],
     deps = ["//src/util"],
+)
+
+# Colocated unit tests (ADR-0003). The IIIF value-object parsers + the seam
+# round-trip + decode-dim computation, linking the narrow `:iiifparser`.
+cc_test(
+    name = "iiifparser_test",
+    srcs = [
+        "decode_dims_test.cpp",
+        "seam_roundtrip_test.cpp",
+        "sipiidentifier_test.cpp",
+        "sipiqualityformat_test.cpp",
+        "sipiregion_test.cpp",
+        "sipirotation_test.cpp",
+        "sipisize_test.cpp",
+    ],
+    deps = [
+        ":iiifparser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# Colocated regression suite for the `parse_iiif_uri` classifier + its corpus
+# (originally the libFuzzer seed corpus; the fuzz harness was retired with the
+# oracle, ADR-0020). `SIPI_FUZZ_CORPUS_DIR` is the workspace-relative path the
+# test resolves through the runfiles tree (cc_test cwd = workspace root).
+cc_test(
+    name = "iiif_handler_test",
+    srcs = [
+        "iiif_handler_test.cpp",
+        "parse_iiif_uri_corpus_test.cpp",
+    ],
+    data = ["//src/iiifparser/corpus:seed_corpus"],
+    local_defines = ['SIPI_FUZZ_CORPUS_DIR=\\"src/iiifparser/corpus\\"'],
+    deps = [
+        ":iiif_handler",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# Parse tier microbenchmark — IIIF URL component string parsers. Pure CPU, no
+# fixtures. Co-located with the module per ADR-0003 (moved from //src). Built
+# only by `just bench` (`tags = ["manual"]`, dep of no test).
+cc_binary(
+    name = "parse_benchmark",
+    srcs = ["parse_benchmark.cpp"],
+    tags = ["manual"],
+    testonly = True,
+    deps = [
+        ":iiifparser",
+        "@google_benchmark//:benchmark_main",
+    ],
 )

@@ -17,7 +17,7 @@ which every final link pulls in via `//src:sipi_lib` and `//src/ffi:sipi_ffi`.
 (`#include "formats/SipiIOTiff.h"`); siblings use the quote-form.
 """
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
 package(default_visibility = ["//src:__subpackages__"])
 
@@ -32,10 +32,6 @@ cc_library(
     srcs = ["output_sink.cpp"],
     hdrs = ["output_sink.h"],
     strip_include_prefix = "/src",
-    visibility = [
-        "//src:__subpackages__",
-        "//test/unit/output_sink:__pkg__",
-    ],
 )
 
 cc_library(
@@ -55,10 +51,6 @@ cc_library(
     ],
     copts = ["-fexceptions"],
     strip_include_prefix = "/src",
-    visibility = [
-        "//src:__subpackages__",
-        "//test/unit/formats:__pkg__",
-    ],
     deps = [
         ":output_sink",
         "//include:headers",
@@ -121,5 +113,27 @@ cc_binary(
         "//src:sipi_lib",
         "//test:test_paths",
         "@google_benchmark//:benchmark_main",
+    ],
+)
+
+# Colocated unit tests (ADR-0003).
+
+# TIFF pyramid-level selection (`select_pyramid_level` in SipiIOTiff.h).
+cc_test(
+    name = "formats_test",
+    srcs = ["select_pyramid_level_test.cpp"],
+    deps = [
+        ":formats",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# The codec-agnostic write sink (`OutputSink` / `SinkStream`), linking the leaf.
+cc_test(
+    name = "output_sink_test",
+    srcs = ["output_sink_test.cpp"],
+    deps = [
+        ":output_sink",
+        "@googletest//:gtest_main",
     ],
 )

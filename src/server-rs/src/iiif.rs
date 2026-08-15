@@ -539,7 +539,7 @@ mod tests {
     use super::*;
 
     // Classification goldens ported 1:1 from the C++ classifier corpus
-    // (test/unit/handlers/iiif_handler_test.cpp). The C++ classifier is the
+    // (src/iiifparser/iiif_handler_test.cpp). The C++ classifier is the
     // reference, so divergence here is a defect by the module's own contract.
 
     fn ok(uri: &str) -> ParsedRequest {
