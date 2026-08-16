@@ -147,21 +147,63 @@ pub(crate) fn register(admission: Arc<Admission>) {
         "Admission total permit count (the configured worker count)",
         |s| s.permits_total as i64,
     );
-    // Requests currently parked waiting for a permit (both partitions).
+    // Full sub-pool permits in flight — full-partition saturation against the cap.
     admission_gauge(
         &meter,
         &admission,
-        "sipi.admission.waiting",
-        "Requests currently waiting for an admission permit",
-        |s| (s.tile_waiting + s.full_waiting) as i64,
+        "sipi.admission.full_in_use",
+        "Full sub-pool permits currently held (full decodes in flight)",
+        |s| s.full_in_use as i64,
     );
-    // 503 sheds across both partitions (immediate queue-full + queue-timeout).
+    // Requests currently parked waiting for a permit, per partition. Tiles wait
+    // only behind other tiles (exempt from the full queue-depth shed).
+    admission_gauge(
+        &meter,
+        &admission,
+        "sipi.admission.tile_waiting",
+        "Tile requests currently waiting for a global permit",
+        |s| s.tile_waiting as i64,
+    );
+    admission_gauge(
+        &meter,
+        &admission,
+        "sipi.admission.full_waiting",
+        "Full requests currently waiting for a permit",
+        |s| s.full_waiting as i64,
+    );
+    // 503 sheds per partition (immediate queue-full + queue-timeout).
     admission_counter(
         &meter,
         &admission,
-        "sipi.admission.shed",
-        "Requests shed with 503 because admission was saturated",
-        |s| s.tile_shed_total + s.full_shed_total,
+        "sipi.admission.tile_shed",
+        "Tile requests shed with 503 because the global pool was saturated",
+        |s| s.tile_shed_total,
+    );
+    admission_counter(
+        &meter,
+        &admission,
+        "sipi.admission.full_shed",
+        "Full requests shed with 503 because admission was saturated",
+        |s| s.full_shed_total,
+    );
+    // Monitor-only: fulls the enforce cap *would* have rejected — sizes `full_max`
+    // before the enforce flip. Always zero in enforce (the cap rejects for real,
+    // counted in `full_shed`).
+    admission_counter(
+        &meter,
+        &admission,
+        "sipi.admission.full_shadow_rejected",
+        "Monitor-mode fulls the enforce cap would have rejected",
+        |s| s.full_shadow_rejected_total,
+    );
+    // Residual heuristic drift: the shell's pre-dispatch partition disagreed with
+    // the engine's precise post-decode verdict.
+    admission_counter(
+        &meter,
+        &admission,
+        "sipi.admission.classifier_disagreement",
+        "Serves where the shell tile/full verdict differed from the engine's",
+        |s| s.classifier_disagreement_total,
     );
 
     // ── Config fingerprint ──────────────────────────────────────────────────
@@ -323,7 +365,7 @@ pub(crate) fn record_decode_estimate(estimate_bytes: u64) {
     }
 }
 
-/// The 12 live monotonic counters: OTel name, description, and the field to read
+/// The 14 live monotonic counters: OTel name, description, and the field to read
 /// from a snapshot. (`rejected_connections_total` is omitted — transport-dead.)
 type CounterRow = (&'static str, &'static str, fn(&SipiMetricsSnapshot) -> u64);
 const COUNTERS: &[CounterRow] = &[
@@ -373,6 +415,16 @@ const COUNTERS: &[CounterRow] = &[
         "sipi.decode_memory.near_limit",
         "Decode-memory budget: times usage exceeded 80% of budget",
         |s| s.decode_memory_near_limit_total,
+    ),
+    (
+        "sipi.decode_memory.too_large",
+        "Full-lane budget: requests whose estimate alone exceeds the budget (413)",
+        |s| s.decode_memory_too_large_total,
+    ),
+    (
+        "sipi.decode_memory.shadow_too_large",
+        "Full-lane budget: monitor-mode would-be 413 (estimate alone exceeds budget)",
+        |s| s.decode_memory_shadow_too_large_total,
     ),
     (
         "sipi.tiff_pyramid.reduced_decodes",
@@ -552,8 +604,8 @@ mod tests {
 
     /// Snapshot fields deliberately not exported, by field name. Neither is
     /// written on the FFI serve path, so both stay permanently zero under this
-    /// shell; the two-lane pool publishes `sipi.admission.waiting` and
-    /// `sipi.admission.shed` instead.
+    /// shell; the two-lane pool publishes its own per-partition series instead
+    /// (`sipi.admission.{tile,full}_waiting` / `_shed`).
     ///
     /// Lives here rather than beside the tables because it exists to be counted,
     /// not read — the reasoning is in the module docs.

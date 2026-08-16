@@ -233,6 +233,9 @@ int sipi_metrics_snapshot(SipiMetricsSnapshot *out)
 
     out->tiff_pyramid_reduced_decodes_total = counter(m.tiff_pyramid_reduced_decodes_total);
 
+    out->decode_memory_too_large_total = counter(m.decode_memory_too_large_total);
+    out->decode_memory_shadow_too_large_total = counter(m.decode_memory_shadow_too_large_total);
+
     out->waiting_connections = gauge(m.waiting_connections);
     out->cache_size_bytes = gauge(m.cache_size_bytes);
     out->cache_files = gauge(m.cache_files);

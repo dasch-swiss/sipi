@@ -165,7 +165,7 @@ engine-side memory budget under one component. Supersedes the former
 - **Local-context kit:** `src/observability/metrics.h`, `src/observability/metrics.cpp`, `src/observability/metrics_registry_test.cpp` (the seam tripwire), `src/ffi/metrics_snapshot.h` (the Inclusion rule), `src/server-rs/src/metrics.rs` (the OTLP bridge)
 - **Depends on:** tracy (inert unless `--config=tracy`)
 - **Used by:** image, cache (writers), ffi (reader/bridge), formats
-- **Boundary rules:** the singleton is engine-internal; a scalar counter reaches production only if it is also read into `SipiMetricsSnapshot` and mapped in `metrics.rs`. `metrics_registry_test` pins the full field inventory (20 bridged / 13 engine-internal). *Enforcement: `static-analysis`* (the seam-tripwire test + the `SipiMetricsSnapshot` 160-byte layout lock) + `docs-only` (the banner).
+- **Boundary rules:** the singleton is engine-internal; a scalar counter reaches production only if it is also read into `SipiMetricsSnapshot` and mapped in `metrics.rs`. `metrics_registry_test` pins the full field inventory (22 bridged / 13 engine-internal). *Enforcement: `static-analysis`* (the seam-tripwire test + the `SipiMetricsSnapshot` 176-byte layout lock) + `docs-only` (the banner).
 - **Durable state:** the `Metrics` singleton atomics (process-lifetime); writers across image/cache/formats/ffi, reader = `sipi_metrics_snapshot`.
 
 ### logging

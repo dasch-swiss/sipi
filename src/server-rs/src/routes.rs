@@ -395,6 +395,7 @@ fn dispatch_engine(
                 headers,
                 *method == Method::HEAD,
                 &access,
+                &state.admission,
                 outcome_tx,
                 body_tx,
             );
@@ -611,6 +612,7 @@ fn serve_image(
     headers: &HeaderMap,
     is_head: bool,
     access: &Access,
+    admission: &Admission,
     outcome_tx: oneshot::Sender<Outcome>,
     body_tx: mpsc::Sender<axum::body::Bytes>,
 ) {
@@ -681,6 +683,10 @@ fn serve_image(
     // and traces are independent pipelines, so the take is unconditional.
     let observed = ffi::serve_timings_take();
     crate::metrics::record_decode_estimate(observed.decode_estimate_bytes);
+    // Compare the shell's pre-dispatch partition against the engine's precise
+    // verdict (estimate ≥ threshold), bumping the disagreement counter on drift.
+    // A zero estimate (cache hit / HEAD / passthrough) records nothing.
+    admission.record_classification(admission.classify(parsed), observed.decode_estimate_bytes);
     // Break the opaque engine span open: one child span per phase (decode,
     // encode, …) under `sipi.serve`, from the timings the engine just recorded.
     emit_engine_phase_spans(engine_start, &observed);
