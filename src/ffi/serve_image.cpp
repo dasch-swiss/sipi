@@ -627,21 +627,43 @@ std::expected<ServeResponse, SipiStatus>
   auto &metrics = Metrics::instance();
   serve_timings_set_decode_estimate(static_cast<std::uint64_t>(estimated));
 
-  // The budget is only enforced when configured (decode_memory_mode != "off");
-  // when off, eng.memory_budget is null and the decode proceeds unmetered.
+  // The full-lane memory budget accounts only full-lane decodes: those whose
+  // estimated peak memory reaches the large-decode threshold. Tile decodes
+  // (below the threshold) bypass the budget entirely and are never charged, so a
+  // tile is never rejected for full-lane memory pressure.
   std::optional<MemoryBudgetGuard> budget_guard;
-  if (eng.memory_budget != nullptr) {
+  const bool is_full_lane = estimated >= eng.large_decode_threshold_bytes;
+  if (eng.memory_budget != nullptr && is_full_lane) {
     const auto result = eng.memory_budget->try_acquire(estimated);
     metrics.decode_memory_used_bytes.Set(static_cast<double>(result.used));
 
     if (result.allowed && !result.over_budget) {
       metrics.decode_memory_acquired.Increment();
     } else if (result.allowed && result.over_budget) {
-      metrics.decode_memory_shadow_rejected.Increment();
-      log_warn("Memory budget over limit (monitor): %zu / %zu bytes for %s", result.used, result.budget, uri.c_str());
+      // MONITOR: admit, but shadow-count the would-be rejection — distinguishing
+      // the permanently-unservable (would-be 413) case from the transient one.
+      if (result.exceeds_budget_alone) {
+        metrics.decode_memory_shadow_too_large_total.Increment();
+      } else {
+        metrics.decode_memory_shadow_rejected.Increment();
+      }
+      log_warn("Full-lane memory budget over limit (monitor): %zu / %zu bytes for %s",
+        result.used, result.budget, uri.c_str());
+    } else if (result.exceeds_budget_alone) {
+      // ENFORCE, permanently unservable: a single request whose estimate alone
+      // exceeds the full-lane budget can never succeed — 413, no Retry-After.
+      metrics.decode_memory_too_large_total.Increment();
+      log_warn("Request estimate %zu exceeds full-lane budget %zu; rejecting (413): %s",
+        estimated, result.budget, uri.c_str());
+      ServeResponse out;
+      out.http_status = 413;
+      out.body = EmptyBody{};
+      return out;
     } else {
+      // ENFORCE, transient: the full lane is currently exhausted — 503 + Retry-After.
       metrics.decode_memory_rejected.Increment();
-      log_warn("Memory budget exhausted (enforce): %zu / %zu bytes, rejecting %s", result.used, result.budget, uri.c_str());
+      log_warn("Full-lane memory budget exhausted (enforce): %zu / %zu bytes, rejecting %s",
+        result.used, result.budget, uri.c_str());
       ServeResponse out;
       out.http_status = 503;
       out.headers.emplace_back("Retry-After", "5");

@@ -13,7 +13,7 @@ using namespace Sipi;
 
 TEST(MemoryBudgetGuardTest, GuardReleasesOnScopeExit)
 {
-  SipiMemoryBudget budget(1000, MemoryBudgetMode::ENFORCE);
+  SipiMemoryBudget budget(1000, AdmissionMode::ENFORCE);
 
   {
     auto result = budget.try_acquire(500);
@@ -27,7 +27,7 @@ TEST(MemoryBudgetGuardTest, GuardReleasesOnScopeExit)
 
 TEST(MemoryBudgetGuardTest, GuardReleasesOnException)
 {
-  SipiMemoryBudget budget(1000, MemoryBudgetMode::ENFORCE);
+  SipiMemoryBudget budget(1000, AdmissionMode::ENFORCE);
 
   try {
     auto result = budget.try_acquire(500);
@@ -44,7 +44,7 @@ TEST(MemoryBudgetGuardTest, GuardReleasesOnException)
 
 TEST(MemoryBudgetGuardTest, GuardNotAcquiredDoesNotRelease)
 {
-  SipiMemoryBudget budget(100, MemoryBudgetMode::ENFORCE);
+  SipiMemoryBudget budget(100, AdmissionMode::ENFORCE);
 
   // Pre-fill to make acquire fail
   ASSERT_TRUE(budget.try_acquire(100).allowed);
@@ -61,7 +61,7 @@ TEST(MemoryBudgetGuardTest, GuardNotAcquiredDoesNotRelease)
 
 TEST(MemoryBudgetGuardTest, GuardMoveSemantics)
 {
-  SipiMemoryBudget budget(1000, MemoryBudgetMode::ENFORCE);
+  SipiMemoryBudget budget(1000, AdmissionMode::ENFORCE);
 
   {
     auto result = budget.try_acquire(500);

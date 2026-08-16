@@ -67,8 +67,9 @@ private:
   std::string adminuser;
   std::string password;
   size_t max_pixel_limit{ 0 };//<! max output pixels (w*h) per IIIF request, 0 = unlimited
-  size_t max_decode_memory{ 0 };              //!< max concurrent decode memory, 0 = auto (75% of detected)
-  std::string decode_memory_mode_str{ "off" }; //!< "off", "monitor", "enforce"
+  size_t memory_limit{ 0 };                       //!< total RAM envelope; 0 = auto (detect available RAM)
+  std::string admission_mode_str{ "monitor" };    //!< "monitor", "enforce"
+  double tiles_memory_ratio{ 0.25 };              //!< fraction of the envelope reserved for tiles + non-decode floor; the full lane gets envelope × (1 − ratio)
   unsigned drain_timeout{ 30 }; //!< seconds to wait for in-flight requests during shutdown
   size_t max_waiting_connections{ 0 }; //!< max queue size before 503 (0 = unlimited, timeout-only)
   unsigned queue_timeout{ 10 }; //!< max seconds in waiting queue before 503 (minimum 1)
@@ -180,11 +181,14 @@ public:
   size_t getMaxPixelLimit() const { return max_pixel_limit; }
   void setMaxPixelLimit(size_t v) { max_pixel_limit = v; }
 
-  size_t getMaxDecodeMemory() const { return max_decode_memory; }
-  void setMaxDecodeMemory(size_t v) { max_decode_memory = v; }
+  size_t getMemoryLimit() const { return memory_limit; }
+  void setMemoryLimit(size_t v) { memory_limit = v; }
 
-  std::string getDecodeMemoryMode() const { return decode_memory_mode_str; }
-  void setDecodeMemoryMode(const std::string &s) { decode_memory_mode_str = s; }
+  std::string getAdmissionMode() const { return admission_mode_str; }
+  void setAdmissionMode(const std::string &s) { admission_mode_str = s; }
+
+  double getTilesMemoryRatio() const { return tiles_memory_ratio; }
+  void setTilesMemoryRatio(double v) { tiles_memory_ratio = v; }
 
   unsigned getDrainTimeout() const { return drain_timeout; }
   void setDrainTimeout(unsigned v) { drain_timeout = v; }

@@ -111,8 +111,9 @@ The TOML key for each Lua config key:
 | `[cache] dir` | `cache_dir` |
 | `[cache] size` | `cache_size` |
 | `[cache] n_files` | `cache_nfiles` |
-| `[limits] max_decode_memory` | `max_decode_memory` |
-| `[limits] decode_memory_mode` | `decode_memory_mode` |
+| `[limits] memory_limit` | `memory_limit` |
+| `[limits] admission_mode` | `admission_mode` |
+| `[limits] tiles_memory_ratio` | `tiles_memory_ratio` |
 | `[limits] max_pixel_limit` | `max_pixel_limit` |
 | `[limits] max_post_size` | `max_post_size` |
 | `[limits] thumb_size` | `thumb_size` |
@@ -348,8 +349,10 @@ flags.
 | `SIPI_SENTRY_DSN` | | | Sentry DSN (no CLI flag) |
 | `SIPI_SENTRY_RELEASE` | | | Sentry release (no CLI flag) |
 | `SIPI_SENTRY_ENVIRONMENT` | | | Sentry environment (no CLI flag) |
-| `SIPI_MAX_DECODE_MEMORY` | `--max-decode-memory` | `0` (auto) | Max concurrent decode memory (`0`=auto 75%, `2G`, `500M`) |
-| `SIPI_DECODE_MEMORY_MODE` | `--decode-memory-mode` | `off` | Memory budget mode: `off`, `monitor`, `enforce` |
+| `SIPI_MEMORY_LIMIT` | `--memory-limit` | `0` (auto) | Total RAM envelope (`0`=auto-detect available RAM, `8G`, `500M`); the full lane gets envelope × (1 − `tiles_memory_ratio`) |
+| `SIPI_ADMISSION_MODE` | `--admission-mode` | `monitor` | Admission mode: `monitor`, `enforce` |
+| `SIPI_TILES_MEMORY_RATIO` | `--tiles-memory-ratio` | `0.25` | Fraction of the envelope reserved for tiles + non-decode floor (range 0..1) |
+| `SIPI_LARGE_DECODE_THRESHOLD_BYTES` | `--large-decode-threshold-bytes` | `33554432` (32 MiB) | Estimated peak-memory at/above which a decode is charged to the full lane; below it bypasses as a tile |
 
 **Configuration precedence** (highest to lowest):
 

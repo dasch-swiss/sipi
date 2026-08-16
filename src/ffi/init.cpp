@@ -20,6 +20,7 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -30,7 +31,7 @@
 #include "SipiCache.h"
 #include "SipiConf.h"// Sipi::SipiConf, Sipi::parseSizeString
 #include "SipiIO.h"// Sipi::ScalingMethod, Sipi::ScalingQuality
-#include "throttling/SipiMemoryBudget.h"// Sipi::SipiMemoryBudget, MemoryBudgetMode, parse_memory_budget_mode
+#include "throttling/SipiMemoryBudget.h"// Sipi::SipiMemoryBudget, AdmissionMode, parse_admission_mode
 #include "logging/logger.h"// log_warn / log_err / log_info
 #include "observability/metrics.h"// Sipi::observability::Metrics
 
@@ -127,13 +128,17 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
     // Lua-parsed SipiConf BEFORE the cache / memory-budget
     // services below are built from `conf`, so an override reaches the engine.
     // Setter names are SipiConf's verbatim (incl. the `setPasswort` typo). Sized
-    // strings (cache_size/maxpost/max_decode_memory) carry the raw "300M" text;
+    // strings (cache_size/maxpost/memory_limit) carry the raw "300M" text;
     // parseSizeString expands the suffix engine-side. A negative maxpost /
-    // max-decode-memory clamps to 0 (matching the SipiConf ctor) so
-    // it cannot become SIZE_MAX and skip the budget auto-detect; cache_size keeps
+    // memory-limit clamps to 0 (matching the SipiConf ctor) so
+    // it cannot become SIZE_MAX and skip the envelope auto-detect; cache_size keeps
     // -1 as its valid "unlimited" sentinel. cache_nfiles is `unsigned` (0 =
     // unlimited; a negative is rejected by CLI11 on both binaries / by clap u32),
     // so it forwards straight to setCacheNFiles(size_t) with no signed wrap.
+    // The large-decode classifier threshold: shell-sourced, read from the seam
+    // override, installed into the EngineContext below. 0 (shell did not set it)
+    // conservatively classifies every decode as full-lane.
+    std::size_t large_decode_threshold_bytes = 0;
     if (overrides != nullptr) {
       const SipiServerConfig &o = *overrides;
       // Strings (null = absent).
@@ -150,11 +155,17 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
         const long long v = Sipi::parseSizeString(o.maxpost);
         conf.setMaxPostSize(v > 0 ? static_cast<size_t>(v) : 0);// <=0 -> 0 (unlimited)
       }
-      if (o.max_decode_memory != nullptr) {
-        const long long v = Sipi::parseSizeString(o.max_decode_memory);
-        conf.setMaxDecodeMemory(v > 0 ? static_cast<size_t>(v) : 0);// <=0 -> 0 (auto-detect 75% RAM)
+      if (o.memory_limit != nullptr) {
+        const long long v = Sipi::parseSizeString(o.memory_limit);
+        conf.setMemoryLimit(v > 0 ? static_cast<size_t>(v) : 0);// <=0 -> 0 (auto-detect available RAM)
       }
-      if (o.decode_memory_mode != nullptr) conf.setDecodeMemoryMode(o.decode_memory_mode);
+      if (o.admission_mode != nullptr) conf.setAdmissionMode(o.admission_mode);
+      if (o.has_tiles_memory_ratio) conf.setTilesMemoryRatio(o.tiles_memory_ratio);
+      // The large-decode threshold is shell-sourced and engine-read-from-seam
+      // (DUNE-003): it never lands in SipiConf, only in the EngineContext below.
+      if (o.has_large_decode_threshold_bytes) {
+        large_decode_threshold_bytes = o.large_decode_threshold_bytes;
+      }
       if (o.thumbsize != nullptr) conf.setThumbSize(o.thumbsize);
       if (o.knorapath != nullptr) conf.setKnoraPath(o.knorapath);
       if (o.knoraport != nullptr) conf.setKnoraPort(o.knoraport);
@@ -209,16 +220,32 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
       }
     }
     {
-      const Sipi::MemoryBudgetMode mode = Sipi::parse_memory_budget_mode(conf.getDecodeMemoryMode());
-      if (mode != Sipi::MemoryBudgetMode::OFF) {
-        std::size_t budget = conf.getMaxDecodeMemory();
-        if (budget == 0) {
-          const std::size_t detected = Sipi::ffi::detect_available_memory();
-          budget = (detected > 0) ? detected * 3 / 4 : (1ULL * 1024 * 1024 * 1024);
-        }
-        runtime->memory_budget = std::make_unique<Sipi::SipiMemoryBudget>(budget, mode);
-        Sipi::observability::Metrics::instance().decode_memory_budget_bytes.Set(static_cast<double>(budget));
+      // Admission mode: fail loud on an unrecognized/legacy value (e.g. a stale
+      // "off" from an old template) rather than silently defaulting.
+      const std::optional<Sipi::AdmissionMode> mode = Sipi::parse_admission_mode(conf.getAdmissionMode());
+      if (!mode.has_value()) {
+        log_err("sipi_init: invalid admission_mode \"%s\" (expected \"monitor\" or \"enforce\")",
+          conf.getAdmissionMode().c_str());
+        return EXIT_FAILURE;
       }
+      // The tile reserve fraction must leave a positive full-lane budget.
+      const double ratio = conf.getTilesMemoryRatio();
+      if (!(ratio > 0.0 && ratio < 1.0)) {
+        log_err("sipi_init: tiles_memory_ratio %.4f out of range (0, 1)", ratio);
+        return EXIT_FAILURE;
+      }
+      // The RAM envelope: an explicit memory_limit, or the detected available RAM
+      // (0 = auto). The full lane gets envelope × (1 − tiles_memory_ratio); the
+      // reserve (envelope × tiles_memory_ratio) houses tile usage + the
+      // non-decode floor and is never charged to the full lane.
+      std::size_t envelope = conf.getMemoryLimit();
+      if (envelope == 0) {
+        const std::size_t detected = Sipi::ffi::detect_available_memory();
+        envelope = (detected > 0) ? detected : (1ULL * 1024 * 1024 * 1024);
+      }
+      const auto full_mem = static_cast<std::size_t>(static_cast<double>(envelope) * (1.0 - ratio));
+      runtime->memory_budget = std::make_unique<Sipi::SipiMemoryBudget>(full_mem, *mode);
+      Sipi::observability::Metrics::instance().decode_memory_budget_bytes.Set(static_cast<double>(full_mem));
     }
 
     // Resolve the image root (realpath) for path-traversal containment (R2).
@@ -252,6 +279,7 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
     Sipi::ffi::set_engine_context(Sipi::ffi::EngineContext{
       .cache = runtime->cache.get(),
       .memory_budget = runtime->memory_budget.get(),
+      .large_decode_threshold_bytes = large_decode_threshold_bytes,
       .imgroot = imgroot,
       .resolved_imgroot = resolved_imgroot,
       .docroot = conf.getDocRoot(),

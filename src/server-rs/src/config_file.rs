@@ -91,9 +91,17 @@ struct CacheSection {
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct LimitsSection {
-    /// Raw size string; the engine parses the suffix.
-    max_decode_memory: Option<String>,
-    decode_memory_mode: Option<String>,
+    /// Total RAM envelope as a raw size string ("8G"); the engine parses the
+    /// suffix. "0"/absent = auto-detect available RAM.
+    memory_limit: Option<String>,
+    /// Admission mode: "monitor" | "enforce".
+    admission_mode: Option<String>,
+    /// Fraction of the envelope reserved for tiles; the full lane gets
+    /// envelope × (1 − ratio).
+    tiles_memory_ratio: Option<f64>,
+    /// Estimated peak-memory threshold (bytes): at/above it a decode is a
+    /// full-lane decode charged against the budget; below it is a tile decode.
+    large_decode_threshold_bytes: Option<u64>,
     max_pixel_limit: Option<u64>,
     /// Raw size string ("300M"); the engine parses the suffix.
     max_post_size: Option<String>,
@@ -285,8 +293,10 @@ impl Config {
             cache_dir: self.cache.dir.clone(),
             cache_size: self.cache.size.clone(),
             cache_nfiles: self.cache.n_files,
-            max_decode_memory: self.limits.max_decode_memory.clone(),
-            decode_memory_mode: self.limits.decode_memory_mode.clone(),
+            memory_limit: self.limits.memory_limit.clone(),
+            admission_mode: self.limits.admission_mode.clone(),
+            tiles_memory_ratio: self.limits.tiles_memory_ratio,
+            large_decode_threshold_bytes: self.limits.large_decode_threshold_bytes,
             max_pixel_limit: self.limits.max_pixel_limit,
             maxpost: self.limits.max_post_size.clone(),
             thumbsize: self.limits.thumb_size.clone(),

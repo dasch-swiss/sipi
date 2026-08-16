@@ -77,8 +77,10 @@ impl From<&ServerArgs> for ServerOverrides {
         let LimitsArgs {
             maxpost,
             max_pixel_limit,
-            max_decode_memory,
-            decode_memory_mode,
+            memory_limit,
+            admission_mode,
+            tiles_memory_ratio,
+            large_decode_threshold_bytes,
             thumbsize,
         } = limits;
         let TlsAuthArgs {
@@ -122,8 +124,10 @@ impl From<&ServerArgs> for ServerOverrides {
             cache_dir: cache_dir.clone().or_else(|| cachedir.clone()),
             cache_size: cache_size.clone().or_else(|| cachesize.clone()),
             cache_nfiles: cache_nfiles.or(*cachenfiles),
-            max_decode_memory: max_decode_memory.clone(),
-            decode_memory_mode: decode_memory_mode.clone(),
+            memory_limit: memory_limit.clone(),
+            admission_mode: admission_mode.clone(),
+            tiles_memory_ratio: *tiles_memory_ratio,
+            large_decode_threshold_bytes: *large_decode_threshold_bytes,
             max_pixel_limit: *max_pixel_limit,
             maxpost: maxpost.clone(),
             thumbsize: thumbsize.clone(),
