@@ -132,7 +132,7 @@ mod allocator {
         fn sipi_mi_stats_read(
             malloc_normal_current: *mut i64,
             malloc_huge_current: *mut i64,
-            committed_current: *mut i64,
+            rss_current: *mut i64,
         ) -> bool;
     }
 
@@ -192,20 +192,23 @@ mod allocator {
     fn stats() -> Option<sipi::malloc_stats::MallocStats> {
         let mut malloc_normal: i64 = 0;
         let mut malloc_huge: i64 = 0;
-        let mut committed: i64 = 0;
+        let mut rss: i64 = 0;
         // SAFETY: the three out-pointers are valid and distinct; the shim
         // writes all of them before returning true and touches nothing else.
-        let ok =
-            unsafe { sipi_mi_stats_read(&mut malloc_normal, &mut malloc_huge, &mut committed) };
+        let ok = unsafe { sipi_mi_stats_read(&mut malloc_normal, &mut malloc_huge, &mut rss) };
         if !ok {
             return None;
         }
         let in_use = malloc_normal.saturating_add(malloc_huge);
+        // `arena`/`retained` report the true resident set (`mi_process_info`
+        // current_rss), not mimalloc's `committed` — which ratchets and reads
+        // far above RSS, so it misled as an OOM proxy. `retained` is the
+        // resident memory not currently handed out to the application.
         Some(sipi::malloc_stats::MallocStats {
             in_use_bytes: in_use,
-            retained_bytes: committed.saturating_sub(in_use).max(0),
+            retained_bytes: rss.saturating_sub(in_use).max(0),
             mmap_bytes: malloc_huge,
-            arena_bytes: committed,
+            arena_bytes: rss,
         })
     }
 
@@ -232,7 +235,7 @@ mod allocator {
                 "in_use ({}) must cover {held_bytes} B of live binned allocations",
                 stats.in_use_bytes
             );
-            assert!(stats.arena_bytes > 0, "committed memory backs the heap");
+            assert!(stats.arena_bytes > 0, "resident set backs the heap");
             assert!(stats.retained_bytes >= 0);
             assert!(stats.mmap_bytes >= 0);
             drop(std::hint::black_box(held));
