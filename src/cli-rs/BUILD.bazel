@@ -105,12 +105,14 @@ config_setting(
 )
 
 # The mimalloc stats read (`sipi.malloc.*` gauges) goes through this
-# one-function C shim, compiled against the vendored `mimalloc-stats.h` so the
-# `mi_stats_get` signature and `mi_stats_t` layout are compiler-checked against
-# the exact @mimalloc pin. Rust-side `extern "C"` re-declarations of mimalloc's
-# stats API are banned: nothing verifies them against the header, and a
-# declaration drifting from the pinned version segfaults the metrics thread at
-# the first collection (SIPI-1R) instead of failing the build.
+# one-function C shim, compiled against the vendored `mimalloc-stats.h`
+# (`mi_stats_get` signature + `mi_stats_t` layout) and `mimalloc.h`
+# (`mi_process_info`, for the resident-set figure) so both APIs are
+# compiler-checked against the exact @mimalloc pin. Rust-side `extern "C"`
+# re-declarations of mimalloc's stats API are banned: nothing verifies them
+# against the header, and a declaration drifting from the pinned version
+# segfaults the metrics thread at the first collection (SIPI-1R) instead of
+# failing the build.
 cc_library(
     name = "mi_stats_shim",
     srcs = ["mi_stats_shim.c"],

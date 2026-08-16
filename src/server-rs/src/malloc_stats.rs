@@ -36,16 +36,18 @@ pub struct MallocStats {
     /// actually using. Grows without bound only under a true leak.
     /// glibc: `uordblks`; mimalloc: `malloc_normal + malloc_huge` current.
     pub in_use_bytes: i64,
-    /// Freed bytes the allocator retains instead of returning to the OS —
+    /// Resident bytes the allocator holds that are not currently handed out —
     /// allocator retention. This is the series that explains an RSS ratchet
-    /// with no leak. glibc: `fordblks`; mimalloc: `committed − in_use`.
+    /// with no leak. glibc: `fordblks`; mimalloc: `current_rss − in_use`
+    /// (`mi_process_info`, not the ratcheting `committed`).
     pub retained_bytes: i64,
     /// Bytes in allocations served directly by `mmap`, outside the regular
     /// heap structures. glibc: `hblkhd`; mimalloc: `malloc_huge` current.
     pub mmap_bytes: i64,
-    /// Bytes the allocator holds from the OS that back RSS. glibc: `arena`
-    /// (sbrk'd heap; `arena + mmap` ≈ the allocator's share of RSS);
-    /// mimalloc: `committed` current.
+    /// Process resident set size — the true OS-resident figure. glibc: `arena`
+    /// (sbrk'd heap; `arena + mmap` ≈ the allocator's share of RSS); mimalloc:
+    /// `current_rss` (`mi_process_info`), so this gauge tracks actual RSS
+    /// rather than mimalloc's `committed`, which reads far above it.
     pub arena_bytes: i64,
 }
 

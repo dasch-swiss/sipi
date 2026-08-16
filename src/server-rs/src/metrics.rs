@@ -486,7 +486,7 @@ const MALLOC_GAUGES: &[MallocGaugeRow] = &[
     ),
     (
         "sipi.malloc.retained_bytes",
-        "Freed bytes the allocator retains instead of returning to the OS",
+        "Resident bytes the allocator holds that are not currently handed out",
         |s| s.retained_bytes,
     ),
     (
@@ -496,7 +496,7 @@ const MALLOC_GAUGES: &[MallocGaugeRow] = &[
     ),
     (
         "sipi.malloc.arena_bytes",
-        "Bytes the allocator holds from the OS backing RSS",
+        "Process resident set size (true RSS)",
         |s| s.arena_bytes,
     ),
 ];
