@@ -102,7 +102,7 @@ mod tests {
         assert_eq!(args.network.sslport, None);
         assert_eq!(args.concurrency.nthreads, None);
         assert_eq!(args.limits.maxpost, None);
-        assert_eq!(args.limits.decode_memory_mode, None);
+        assert_eq!(args.limits.admission_mode, None);
         assert_eq!(args.paths.imgroot, None);
         assert_eq!(args.paths.pathprefix, None);
         assert_eq!(args.paths.subdirexcludes, None);

@@ -1,8 +1,8 @@
-//! Request/decode limit flags (the "Limits" `--help` heading).
+//! Request/decode limit + admission flags (the "Limits" `--help` heading).
 //!
-//! `maxpost` and `max_decode_memory` are sized strings (e.g. "300M", "2G") —
-//! they carry the raw string across the seam and the engine parses the suffix
-//! (don't pre-parse Rust-side, the size grammar lives in C++).
+//! `maxpost` and `memory_limit` are sized strings (e.g. "300M", "8G") — they
+//! carry the raw string across the seam and the engine parses the suffix (don't
+//! pre-parse Rust-side, the size grammar lives in C++).
 
 use clap::Args;
 
@@ -15,13 +15,23 @@ pub struct LimitsArgs {
     /// Max output pixels (width × height) per IIIF request (0 = unlimited).
     #[arg(long, env = "SIPI_MAX_PIXEL_LIMIT", value_name = "PIXELS")]
     pub max_pixel_limit: Option<u64>,
-    /// Max concurrent decode-memory budget, e.g. "2G" (0 = auto; engine parses
-    /// the suffix).
-    #[arg(long, env = "SIPI_MAX_DECODE_MEMORY", value_name = "SIZE")]
-    pub max_decode_memory: Option<String>,
-    /// Decode-memory mode: off, monitor, enforce (engine validates).
-    #[arg(long, env = "SIPI_DECODE_MEMORY_MODE", value_name = "MODE")]
-    pub decode_memory_mode: Option<String>,
+    /// Total RAM envelope, e.g. "8G" (0 = auto-detect available RAM; engine
+    /// parses the suffix). The full lane's byte cap is derived from this and
+    /// `--tiles-memory-ratio`.
+    #[arg(long, env = "SIPI_MEMORY_LIMIT", value_name = "SIZE")]
+    pub memory_limit: Option<String>,
+    /// Admission mode: monitor, enforce (engine validates).
+    #[arg(long, env = "SIPI_ADMISSION_MODE", value_name = "MODE")]
+    pub admission_mode: Option<String>,
+    /// Fraction of the envelope reserved for tiles (0..1); the full lane gets
+    /// envelope × (1 − ratio). Defaults to 0.25.
+    #[arg(long, env = "SIPI_TILES_MEMORY_RATIO", value_name = "RATIO")]
+    pub tiles_memory_ratio: Option<f64>,
+    /// Estimated peak-memory threshold in bytes at/above which a decode is a
+    /// full-lane decode charged against the budget; below it is a tile decode
+    /// that bypasses the budget. Defaults to 32 MiB.
+    #[arg(long, env = "SIPI_LARGE_DECODE_THRESHOLD_BYTES", value_name = "BYTES")]
+    pub large_decode_threshold_bytes: Option<u64>,
     /// Thumbnail size used within Lua, e.g. "!128,128".
     #[arg(long, env = "SIPI_THUMBSIZE", value_name = "SIZE")]
     pub thumbsize: Option<String>,

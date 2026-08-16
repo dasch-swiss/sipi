@@ -9,30 +9,38 @@
 #include <atomic>
 #include <cstddef>
 #include <functional>
+#include <optional>
 #include <string>
 
 namespace Sipi {
 
-/// Memory budget mode: off (disabled), monitor (log only), enforce (return 503).
-enum class MemoryBudgetMode { OFF, MONITOR, ENFORCE };
+/// Admission mode: monitor (shadow-count only) or enforce (reject over budget
+/// with 503/413). There is no "off": the budget is always accounted so the
+/// shadow counters are always available to size the full lane before enforce.
+enum class AdmissionMode { MONITOR, ENFORCE };
 
-/// Parse mode string from config. Returns OFF for unrecognized values.
-[[nodiscard]] MemoryBudgetMode parse_memory_budget_mode(const std::string &mode_str);
+/// Parse the admission-mode string from config. Returns `std::nullopt` for an
+/// unrecognized value so the caller can fail loud at startup (a stale "off" from
+/// an old template is a configuration error, not a silent default).
+[[nodiscard]] std::optional<AdmissionMode> parse_admission_mode(const std::string &mode_str);
 
 /// Result of a memory budget acquisition attempt.
-struct MemoryBudgetResult {
-  bool allowed;       ///< false if over budget and mode == ENFORCE
-  bool over_budget;   ///< true if would exceed budget (logged in MONITOR mode)
-  size_t used;        ///< current usage after this request
-  size_t budget;      ///< total budget
+struct MemoryBudgetResult
+{
+  bool allowed;              ///< false if over budget and mode == ENFORCE
+  bool over_budget;          ///< true if this acquire pushed usage over budget (shadow-counted in MONITOR)
+  bool exceeds_budget_alone; ///< true if this request's estimate alone exceeds the budget (permanently unservable → 413, not 503)
+  size_t used;               ///< current usage after this request
+  size_t budget;             ///< total budget (the full lane's byte cap)
 };
 
 /*!
- * Global memory budget for concurrent image decode operations.
+ * Full-lane memory budget for concurrent image decode operations.
  *
- * Tracks aggregate memory consumption across all in-flight decodes using
- * a lock-free atomic counter. Prevents OOM from multiple simultaneous
- * large image decodes.
+ * Tracks aggregate memory consumption across all in-flight full-lane decodes
+ * using a lock-free atomic counter. Prevents OOM from multiple simultaneous
+ * large image decodes. Tile decodes (below the large-decode threshold) bypass
+ * the budget entirely and are never charged.
  *
  * Thread-safety: All public methods are safe to call from any thread.
  * Uses std::atomic<size_t> with compare_exchange_weak for lock-free
@@ -41,14 +49,16 @@ struct MemoryBudgetResult {
 class SipiMemoryBudget
 {
 public:
-  SipiMemoryBudget(size_t total_budget, MemoryBudgetMode mode);
+  SipiMemoryBudget(size_t total_budget, AdmissionMode mode);
 
   /*!
    * Try to acquire `bytes` from the budget.
    *
    * In ENFORCE mode: returns allowed=false if acquisition would exceed budget.
    * In MONITOR mode: returns allowed=true but sets over_budget=true for logging.
-   * In OFF mode: no tracking, always returns allowed=true, over_budget=false.
+   * `exceeds_budget_alone` is set independently of mode whenever this single
+   * request's estimate is larger than the whole budget (a permanently-unservable
+   * request the caller answers with 413, not a transient 503).
    *
    * @param bytes  Estimated peak memory for this decode operation
    * @return MemoryBudgetResult with decision and current state
@@ -70,12 +80,12 @@ public:
   [[nodiscard]] size_t budget() const { return _budget; }
 
   /// Current operating mode.
-  [[nodiscard]] MemoryBudgetMode mode() const { return _mode; }
+  [[nodiscard]] AdmissionMode mode() const { return _mode; }
 
 private:
   std::atomic<size_t> _used{0};
   size_t _budget;
-  MemoryBudgetMode _mode;
+  AdmissionMode _mode;
 };
 
 /*!

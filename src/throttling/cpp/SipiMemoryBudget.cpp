@@ -10,29 +10,34 @@
 
 namespace Sipi {
 
-MemoryBudgetMode parse_memory_budget_mode(const std::string &mode_str)
+std::optional<AdmissionMode> parse_admission_mode(const std::string &mode_str)
 {
   // Case-insensitive comparison
   std::string lower = mode_str;
   std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
 
-  if (lower == "enforce") return MemoryBudgetMode::ENFORCE;
-  if (lower == "monitor") return MemoryBudgetMode::MONITOR;
-  return MemoryBudgetMode::OFF;
+  if (lower == "enforce") return AdmissionMode::ENFORCE;
+  if (lower == "monitor") return AdmissionMode::MONITOR;
+  return std::nullopt;
 }
 
-SipiMemoryBudget::SipiMemoryBudget(size_t total_budget, MemoryBudgetMode mode)
+SipiMemoryBudget::SipiMemoryBudget(size_t total_budget, AdmissionMode mode)
   : _budget(total_budget), _mode(mode)
 {}
 
 MemoryBudgetResult SipiMemoryBudget::try_acquire(size_t bytes)
 {
-  if (_mode == MemoryBudgetMode::OFF) {
-    return {.allowed = true, .over_budget = false, .used = 0, .budget = _budget};
-  }
+  // A single request whose estimate alone exceeds the budget can never be
+  // admitted regardless of load — the caller answers it with 413, not a
+  // transient 503. Reported in both modes so monitor can shadow-count it.
+  const bool exceeds_alone = bytes > _budget;
 
   if (bytes == 0) {
-    return {.allowed = true, .over_budget = false, .used = _used.load(std::memory_order_relaxed), .budget = _budget};
+    return {.allowed = true,
+            .over_budget = false,
+            .exceeds_budget_alone = false,
+            .used = _used.load(std::memory_order_relaxed),
+            .budget = _budget};
   }
 
   // Lock-free acquire via compare_exchange_weak loop
@@ -42,13 +47,21 @@ MemoryBudgetResult SipiMemoryBudget::try_acquire(size_t bytes)
     size_t desired = (bytes <= SIZE_MAX - current) ? (current + bytes) : SIZE_MAX;
     bool would_exceed = desired > _budget;
 
-    if (would_exceed && _mode == MemoryBudgetMode::ENFORCE) {
-      return {.allowed = false, .over_budget = true, .used = current, .budget = _budget};
+    if (would_exceed && _mode == AdmissionMode::ENFORCE) {
+      return {.allowed = false,
+              .over_budget = true,
+              .exceeds_budget_alone = exceeds_alone,
+              .used = current,
+              .budget = _budget};
     }
 
     // In MONITOR mode or within budget: try to acquire
     if (_used.compare_exchange_weak(current, desired, std::memory_order_acq_rel, std::memory_order_relaxed)) {
-      return {.allowed = true, .over_budget = would_exceed, .used = desired, .budget = _budget};
+      return {.allowed = true,
+              .over_budget = would_exceed,
+              .exceeds_budget_alone = exceeds_alone,
+              .used = desired,
+              .budget = _budget};
     }
     // CAS failed — `current` has been updated by compare_exchange_weak, retry
   }
@@ -56,7 +69,7 @@ MemoryBudgetResult SipiMemoryBudget::try_acquire(size_t bytes)
 
 void SipiMemoryBudget::release(size_t bytes)
 {
-  if (_mode == MemoryBudgetMode::OFF || bytes == 0) {
+  if (bytes == 0) {
     return;
   }
 

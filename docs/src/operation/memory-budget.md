@@ -1,60 +1,126 @@
 # Memory Budget
 
-Global decode memory budget that prevents OOM from concurrent large image decodes by tracking aggregate memory consumption across all in-flight decode operations.
+The full-lane decode memory budget prevents OOM from concurrent large image
+decodes by capping the aggregate memory in-flight full-lane decodes may hold. It
+is the memory half of SIPI's two-lane admission control: expensive full-image
+decodes are hard-capped in decode bytes, while cheap tile decodes bypass the
+budget entirely and are never charged.
 
 ## Why
 
-The thread pool controls CPU concurrency but has no awareness of memory. Multiple concurrent full-resolution JP2 decodes (e.g., 20000x30000 pixels) can each consume 1-2GB, exhausting a 4GB container. The per-request pixel limit caps individual requests, but it does not prevent aggregate memory exhaustion from multiple concurrent large decodes.
+The thread pool controls CPU concurrency but has no awareness of memory. Multiple
+concurrent full-resolution JP2 decodes (e.g., 20000x30000 pixels) can each consume
+hundreds of MB to GBs, exhausting the RAM envelope. The per-request pixel limit
+caps individual requests, but it does not prevent aggregate memory exhaustion from
+multiple concurrent large decodes.
 
 ## How It Works
 
-1. **Precise estimation from IIIF parameters:** Before each decode, the actual decode buffer size is computed from IIIF region/size parameters. For JP2, this accounts for DWT reduce levels and ROI restrictions — a tile request on a 20000x30000 source estimates ~4MB, not 4.8GB.
+1. **Precise estimation from IIIF parameters:** Before each decode, the actual
+   decode buffer size is computed from IIIF region/size parameters. For JP2, this
+   accounts for DWT reduce levels and ROI restrictions — a tile request on a
+   20000x30000 source estimates ~4MB, not 4.8GB.
 
-2. **Pipeline-aware peak estimation:** Walks the processing stages (decode → scale → rotate → ICC convert) and returns the maximum concurrent allocation at any point, accounting for 2-stage downscale intermediates and rotation expansion.
+2. **Pipeline-aware peak estimation:** Walks the processing stages (decode → scale
+   → rotate → ICC convert) and returns the maximum concurrent allocation at any
+   point, accounting for 2-stage downscale intermediates and rotation expansion.
 
-3. **Lock-free accounting:** Uses `std::atomic<size_t>` with compare-exchange for zero-contention acquire/release. Budget check adds nanoseconds vs. millisecond decode times.
+3. **Lane classification:** A decode whose estimated peak memory reaches
+   `large_decode_threshold_bytes` (default 32 MiB) is a **full-lane** decode and is
+   charged against the budget; below it is a **tile** decode that bypasses the
+   budget. The threshold is defined once in the shell config and passed to the
+   engine over the FFI seam, so the shell (thread lanes) and the engine (memory
+   budget) classify against the same value.
 
-4. **RAII release:** `MemoryBudgetGuard` releases budget on all exit paths including exceptions. No manual cleanup needed.
+4. **Lock-free accounting:** Uses `std::atomic<size_t>` with compare-exchange for
+   zero-contention acquire/release. The budget check adds nanoseconds vs.
+   millisecond decode times.
+
+5. **RAII release:** `MemoryBudgetGuard` releases the budget on all exit paths
+   including exceptions and mid-decode client disconnect. No manual cleanup needed.
+
+## The full-lane budget
+
+The budget is derived from two knobs — the RAM envelope and the tile reserve:
+
+```
+full_mem = memory_limit × (1 − tiles_memory_ratio)
+```
+
+`memory_limit` is the total RAM envelope; `0` auto-detects available RAM. The
+reserve `memory_limit × tiles_memory_ratio` (25% by default) is never charged to
+the full lane — it houses tile decode usage plus the non-decode floor (base heap,
+allocator retention, HTTP/encode buffers, cache). The invariant to verify in
+`monitor` before switching to `enforce` is `reserve ≥ observed floor`.
 
 ## Configuration
 
-| Parameter | Default (binary) | Default (ops-deploy) | Description |
-|-----------|-----------------|---------------------|-------------|
-| `max_decode_memory` | `"0"` (auto) | `"0"` (auto) | Budget in bytes. `0` = auto-detect (75% of container memory). Accepts `M`/`G` suffixes: `"2G"`, `"500M"` |
-| `decode_memory_mode` | `"off"` | `"monitor"` | `"off"`, `"monitor"` (log only), `"enforce"` (HTTP 503) |
+| Parameter | Default (binary) | Description |
+|-----------|-----------------|-------------|
+| `memory_limit` | `"0"` (auto) | Total RAM envelope. `0` = auto-detect available RAM. Accepts `M`/`G` suffixes: `"8G"`, `"500M"` |
+| `tiles_memory_ratio` | `0.25` | Fraction of the envelope reserved for tiles + non-decode floor (range 0..1); the full lane gets the rest |
+| `admission_mode` | `"monitor"` | `"monitor"` (shadow-count only) or `"enforce"` (reject over budget). There is no `"off"` — the budget is always accounted |
+| `large_decode_threshold_bytes` | `33554432` (32 MiB) | Estimated peak-memory at/above which a decode is charged to the full lane; below it bypasses as a tile |
 
-All parameters available via:
-- Lua config: `max_decode_memory`, `decode_memory_mode`
-- CLI flags: `--max-decode-memory`, `--decode-memory-mode`
-- Environment: `SIPI_MAX_DECODE_MEMORY`, `SIPI_DECODE_MEMORY_MODE`
+Available via (see also [Running SIPI](../guide/running.md)):
+
+- Lua config: `memory_limit`, `tiles_memory_ratio`, `admission_mode`
+- CLI flags: `--memory-limit`, `--tiles-memory-ratio`, `--admission-mode`, `--large-decode-threshold-bytes`
+- Environment: `SIPI_MEMORY_LIMIT`, `SIPI_TILES_MEMORY_RATIO`, `SIPI_ADMISSION_MODE`, `SIPI_LARGE_DECODE_THRESHOLD_BYTES`
+
+An unrecognized `admission_mode` (e.g. a stale `"off"` from an old template) is a
+**startup error** — SIPI fails loud rather than silently defaulting.
 
 ### Auto-Detection
 
-When `max_decode_memory = "0"` (default), the budget is set to 75% of detected memory:
+When `memory_limit = "0"` (default), the envelope is the detected available RAM:
+
 1. **cgroups v2:** `/sys/fs/cgroup/memory.max`
 2. **cgroups v1:** `/sys/fs/cgroup/memory/memory.limit_in_bytes`
 3. **Linux fallback:** `/proc/meminfo` MemTotal
 4. **macOS:** `sysctl hw.memsize`
 5. **Fallback:** 1 GB if detection fails
 
-The 25% headroom covers kernel buffers, Sipi heap, cache, Lua, and thread stacks.
+The full lane then gets `envelope × (1 − tiles_memory_ratio)`; the reserve is the
+headroom for tiles and the non-decode floor.
+
+> On `vre-prod-01` SIPI is not cgroup-capped, so `memory_limit = "0"` would size
+> the envelope to the whole VM RAM. Set `memory_limit` explicitly (ops-deploy
+> renders `DSP_IIIF_MEMORY_LIMIT` into it) to hold SIPI to the intended cap.
+
+## Enforce behaviour: 503 vs 413
+
+In `enforce` mode a full-lane decode that cannot be admitted is rejected two ways:
+
+- **503 Service Unavailable + `Retry-After`** — the budget is *currently*
+  exhausted by concurrent decodes. The request fits on its own and may succeed on
+  retry.
+- **413 Payload Too Large** (no `Retry-After`) — the request's estimate *alone*
+  exceeds the whole full-lane budget. It can never succeed, so retrying is
+  pointless.
+
+Tile decodes are never rejected for full-lane memory pressure — they bypass the
+budget.
 
 ## Monitor to Enforce Workflow
 
-1. **Deploy in monitor mode** (default in ops-deploy):
-   - Budget is tracked and logged but requests are never rejected
-   - `sipi_decode_memory_shadow_rejected_total` shows what *would* be blocked
+1. **Deploy in monitor mode** (the default):
+   - The budget is tracked and logged but requests are never rejected.
+   - `sipi_decode_memory_shadow_rejected_total` shows what *would* be 503'd;
+     `sipi_decode_memory_shadow_too_large_total` what *would* be 413'd.
 
 2. **Observe metrics** (1-2 weeks):
-   - Budget utilization: `sipi_decode_memory_used_bytes / sipi_decode_memory_budget_bytes` — should be < 0.8 normally
-   - Shadow rejection rate: `rate(sipi_decode_memory_shadow_rejected_total[5m])`
-   - Request size distribution: `histogram_quantile(0.99, rate(sipi_decode_memory_estimate_bytes_bucket[5m]))`
+   - Budget utilization: `sipi_decode_memory_used_bytes / sipi_decode_memory_budget_bytes` — should be < 0.8 normally.
+   - Shadow rejection rate: `rate(sipi_decode_memory_shadow_rejected_total[5m])`.
+   - Request size distribution: `histogram_quantile(0.99, rate(sipi_decode_memory_estimate_bytes_bucket[5m]))`.
+   - Verify the reserve holds the floor: `(sipi_memory_limit_bytes − sipi_decode_memory_budget_bytes) ≥` the observed non-decode working set.
 
-3. **Tune budget** if needed:
-   - If shadow rejections are frequent on normal tile traffic, budget is too low
-   - Use the histogram to understand what size requests are being served
+3. **Tune** if needed:
+   - If shadow rejections fire on normal full traffic, raise `memory_limit` or lower `tiles_memory_ratio`.
+   - Use the histogram to understand the size distribution being served.
 
-4. **Switch to enforce**: Set `SIPI_DECODE_MEMORY_MODE=enforce` (or `DSP_IIIF_DECODE_MEMORY_MODE=enforce` in ops-deploy). Redeploy.
+4. **Switch to enforce**: Set `SIPI_ADMISSION_MODE=enforce` (or
+   `DSP_IIIF_ADMISSION_MODE=enforce` in ops-deploy). Redeploy.
 
 ## Prometheus Metrics
 
@@ -63,48 +129,34 @@ normalization, not the output of a scrape endpoint.
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `sipi_decode_memory_budget_bytes` | Gauge | — | Configured budget (set once at startup) |
-| `sipi_decode_memory_used_bytes` | Gauge | — | Currently allocated to in-flight decodes |
-| `sipi_decode_memory_acquired_total` | Counter | — | Admitted decodes |
-| `sipi_decode_memory_rejected_total` | Counter | — | Decodes refused in `enforce` mode |
-| `sipi_decode_memory_shadow_rejected_total` | Counter | — | Decodes that *would* be refused in `shadow` mode |
+| `sipi_decode_memory_budget_bytes` | Gauge | — | Full-lane byte cap (`memory_limit × (1 − tiles_memory_ratio)`; set at startup) |
+| `sipi_decode_memory_used_bytes` | Gauge | — | Currently allocated to in-flight full-lane decodes |
+| `sipi_decode_memory_acquired_total` | Counter | — | Admitted full-lane decodes |
+| `sipi_decode_memory_rejected_total` | Counter | — | Full-lane decodes refused with 503 in `enforce` mode (transient) |
+| `sipi_decode_memory_shadow_rejected_total` | Counter | — | Decodes that *would* be 503'd in `monitor` mode |
 | `sipi_decode_memory_near_limit_total` | Counter | — | Acquisitions where usage > 80% of budget |
 | `sipi_decode_memory_estimate_bytes` | Histogram | — | Per-request peak memory estimates |
 
-## Operational Dashboards
-
-```promql
-# Budget utilization (should be < 0.8)
-sipi_decode_memory_used_bytes / sipi_decode_memory_budget_bytes
-
-# Rejection rate (should be 0 under normal load)
-rate(sipi_decode_memory_rejected_total[5m])
-
-# Early warning (budget getting tight)
-rate(sipi_decode_memory_near_limit_total[5m])
-
-# Largest 1% of requests
-histogram_quantile(0.99, rate(sipi_decode_memory_estimate_bytes_bucket[5m]))
-```
-
 ## Traffic Patterns
 
-| Request Type | Typical Estimate | Budget Impact |
-|-------------|-----------------|---------------|
-| Tile (256x256) | < 1 MB | Negligible — passes instantly |
-| Thumbnail (/full/,128/) | < 100 KB | Negligible |
-| Medium (/full/,2000/) | 50-120 MB | Moderate |
-| Full resolution (/full/max/) | 1-5 GB | High — budget limits concurrency |
-| Full + rotation (/full/max/90/) | 2-10 GB | Very high |
+| Request Type | Typical Estimate | Lane |
+|-------------|-----------------|------|
+| Tile (256x256) | < 1 MB | Tile — bypasses the budget |
+| Thumbnail (/full/,128/) | < 100 KB | Tile — bypasses the budget |
+| Medium (/full/,2000/) | 50-120 MB | Full — charged against the budget |
+| Full resolution (/full/max/) | 1-5 GB | Full — budget limits concurrency |
+| Full + rotation (/full/max/90/) | 2-10 GB | Full — often exceeds the budget alone (413) |
 
 ## Troubleshooting
 
-**Budget seems too restrictive (503s on normal traffic):**
-- Check `histogram_quantile(0.5, rate(sipi_decode_memory_estimate_bytes_bucket[5m]))` — median should be < 1MB for tile traffic
-- If median is high, check for clients not using tiles (direct `/full/max/` requests)
-- Increase budget or add more container memory
+**Full-lane 503s on legitimate traffic:**
+- Check `histogram_quantile(0.5, rate(sipi_decode_memory_estimate_bytes_bucket[5m]))` — the median for viewer traffic should be well below the threshold.
+- If large requests dominate, raise `memory_limit` or lower `tiles_memory_ratio`.
 
-**OOM despite budget enabled:**
-- Check mode is `enforce`, not `monitor`
-- Check `sipi_decode_memory_budget_bytes` matches expected container memory
-- Memory outside decode pipeline (cache, Lua, HTTP buffers) is not budgeted
+**413s appearing:**
+- A single request's estimate exceeds the full-lane budget. Either the source is enormous and the client requested `/full/max/`, or `memory_limit`/`tiles_memory_ratio` leave the full lane too small.
+
+**OOM despite the budget enabled:**
+- Check mode is `enforce`, not `monitor`.
+- Check `sipi_decode_memory_budget_bytes` matches the expected `memory_limit × (1 − tiles_memory_ratio)`.
+- Memory outside the full-lane decode pipeline (tiles, cache, Lua, HTTP buffers) lives in the reserve, not the budget — size the reserve with `tiles_memory_ratio`.

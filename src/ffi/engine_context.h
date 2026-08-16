@@ -33,7 +33,12 @@ namespace Sipi::ffi {
 struct EngineContext
 {
   SipiCache *cache = nullptr;//!< file cache, or null when caching is off
-  SipiMemoryBudget *memory_budget = nullptr;//!< decode memory budget, or null when off
+  SipiMemoryBudget *memory_budget = nullptr;//!< full-lane decode memory budget (always installed; monitor or enforce)
+  //!< A decode whose estimated peak memory is >= this threshold is a full-lane
+  //!< decode and is charged against `memory_budget`; below it is a tile decode
+  //!< and bypasses the budget. Single-sourced in the shell config and passed
+  //!< over the seam at init (DUNE-003), so the two classifiers cannot drift.
+  std::size_t large_decode_threshold_bytes = 0;
 
   std::string imgroot;//!< image root: raw config value, for the Rust edge's path build
   std::string resolved_imgroot;//!< realpath()-resolved image root, for the R2 containment check

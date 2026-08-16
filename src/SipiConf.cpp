@@ -141,13 +141,16 @@ SipiConf::SipiConf(shttps::LuaServer &luacfg)
   if (parsed_pixel_limit < 0) parsed_pixel_limit = 0;
   max_pixel_limit = static_cast<size_t>(parsed_pixel_limit);
 
-  // Memory budget configuration
-  std::string max_decode_mem_str = luacfg.configString("sipi", "max_decode_memory", "0");
-  long long parsed_decode_mem = parseSizeString(max_decode_mem_str);
-  if (parsed_decode_mem < 0) parsed_decode_mem = 0;
-  max_decode_memory = static_cast<size_t>(parsed_decode_mem);
+  // Admission / memory-budget configuration. `memory_limit` is the total RAM
+  // envelope (0 = auto-detect); the full lane's byte cap is derived from it and
+  // `tiles_memory_ratio` at init.
+  std::string memory_limit_str = luacfg.configString("sipi", "memory_limit", "0");
+  long long parsed_memory_limit = parseSizeString(memory_limit_str);
+  if (parsed_memory_limit < 0) parsed_memory_limit = 0;
+  memory_limit = static_cast<size_t>(parsed_memory_limit);
 
-  decode_memory_mode_str = luacfg.configString("sipi", "decode_memory_mode", "off");
+  admission_mode_str = luacfg.configString("sipi", "admission_mode", "monitor");
+  tiles_memory_ratio = luacfg.configFloat("sipi", "tiles_memory_ratio", 0.25f);
 
   long long parsed_drain_timeout = luacfg.configInteger("sipi", "drain_timeout", 30);
   if (parsed_drain_timeout < 1) parsed_drain_timeout = 30;

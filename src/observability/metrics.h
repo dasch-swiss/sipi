@@ -90,13 +90,20 @@ public:
   Gauge cache_size_limit_bytes;
   Gauge cache_files_limit;
 
-  // Memory budget metrics
+  // Memory budget metrics (full lane). `decode_memory_budget_bytes` is the full
+  // lane's byte cap (envelope × (1 − tiles_memory_ratio)); tile decodes bypass
+  // the budget and are never charged.
   Gauge decode_memory_budget_bytes;
   Gauge decode_memory_used_bytes;
   Counter decode_memory_acquired;
-  Counter decode_memory_rejected;
-  Counter decode_memory_shadow_rejected;
+  Counter decode_memory_rejected;       // enforce: transient over-budget → 503
+  Counter decode_memory_shadow_rejected;// monitor: would-be 503
   Counter decode_memory_near_limit_total;
+  // A single request whose estimate alone exceeds the full-lane budget is
+  // permanently unservable → 413 (no Retry-After), distinct from a transient
+  // 503. Engine-internal until bridged through SipiMetricsSnapshot.
+  Counter decode_memory_too_large_total;       // enforce: 413 returned
+  Counter decode_memory_shadow_too_large_total;// monitor: would-be 413
 
   // read_shape fast path (ADR-0004 / DEV-6537).
   // Format = {jp2, tiff}; outcome = {hit, miss, partial, fallback}.
