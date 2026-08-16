@@ -68,10 +68,14 @@ tracked and their disagreement is observable, so residual drift can be tuned.
    as soon as the new binary runs. `monitor` is observe-only — it changes no
    behavior (the full thread cap does not reject; it shadow-counts).
 2. **Observe** (1–2 weeks):
-   - `sipi_admission_permits_in_use` / `sipi_admission_permits_total` — saturation.
-   - `sipi_admission_waiting`, `sipi_admission_shed` — queue pressure and 503s.
-   - The full-partition shadow counters (see Memory Budget) show what `enforce`
-     would shed — enough to size `full_max`/`full_mem`.
+   - `sipi_admission_permits_in_use` / `sipi_admission_permits_total` and
+     `sipi_admission_full_in_use` — global and full-partition saturation.
+   - `sipi_admission_tile_waiting` / `sipi_admission_full_waiting`,
+     `sipi_admission_tile_shed_total` / `sipi_admission_full_shed_total` —
+     per-partition queue pressure and 503s.
+   - `sipi_admission_full_shadow_rejected_total` and the full-partition memory
+     shadow counters (see Memory Budget) show what `enforce` would shed — enough
+     to size `full_max`/`full_mem`.
    - `sipi_admission_mode`, `sipi_admission_tile_min_threads`,
      `sipi_admission_full_max_threads`, the ratios, `sipi_admission_memory_limit_bytes`,
      `sipi_admission_large_decode_threshold_bytes` — the config fingerprint.
@@ -92,9 +96,35 @@ permit is genuinely free (a tile burst beyond `nthreads`).
 ## Metrics
 
 All admission metrics share the `sipi_admission_*` namespace (rendered from the
-OTLP `sipi.admission.*` instruments). Live occupancy: `permits_in_use`,
-`permits_total`, `waiting`, `shed`. Config fingerprint: `mode`,
+OTLP `sipi.admission.*` instruments; Prometheus appends `_total` to counters).
+
+**Gauges (point-in-time occupancy + sizing):**
+
+- `permits_in_use` / `permits_total` — global pool saturation.
+- `full_in_use` — full sub-pool permits held (against `full_max_threads`).
+- `tile_waiting` / `full_waiting` — requests parked per partition. Tiles wait
+  only behind other tiles (exempt from the full queue-depth shed).
+
+**Counters (monotonic):**
+
+- `tile_shed_total` / `full_shed_total` — 503 sheds per partition.
+- `full_shadow_rejected_total` — monitor-only: fulls the `enforce` cap *would*
+  have rejected (zero in `enforce`, where `full_shed_total` counts the real
+  rejections). The signal that sizes `full_max` before the flip.
+- `classifier_disagreement_total` — serves where the shell's pre-dispatch
+  tile/full verdict differed from the engine's precise post-decode verdict. A
+  low, flat value confirms the pixel-proxy heuristic tracks the engine; a rising
+  value means the bytes-per-pixel proxy needs revisiting.
+
+**Config fingerprint** (gauges, observable with no ops-deploy change): `mode`,
 `tile_min_threads`, `full_max_threads`, `tiles_thread_ratio`,
-`tiles_memory_ratio`, `memory_limit_bytes`, `large_decode_threshold_bytes`. The
-per-partition runtime series and the full-partition memory metrics are documented
-in [Memory Budget](memory-budget.md).
+`tiles_memory_ratio`, `memory_limit_bytes`, `large_decode_threshold_bytes`.
+
+The full-partition memory metrics (`decode_memory_*`, including the 413/`too_large`
+counters) are documented in [Memory Budget](memory-budget.md).
+
+> **Temporality.** The `sipi_admission_*` counters are cumulative (monotonic)
+> OTLP sums that live for the whole process and reset only on restart, so
+> `rate()` / `increase()` read them correctly. (The `max_over_time()` idiom some
+> SIPI dashboards use is for windowed *extremes* over gauges, a different query
+> pattern — it does not apply to these counters.)

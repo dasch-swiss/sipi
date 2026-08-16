@@ -133,7 +133,9 @@ normalization, not the output of a scrape endpoint.
 | `sipi_decode_memory_used_bytes` | Gauge | — | Currently allocated to in-flight full-lane decodes |
 | `sipi_decode_memory_acquired_total` | Counter | — | Admitted full-lane decodes |
 | `sipi_decode_memory_rejected_total` | Counter | — | Full-lane decodes refused with 503 in `enforce` mode (transient) |
+| `sipi_decode_memory_too_large_total` | Counter | — | Requests refused with 413 in `enforce` mode (estimate alone exceeds the budget — permanently unservable) |
 | `sipi_decode_memory_shadow_rejected_total` | Counter | — | Decodes that *would* be 503'd in `monitor` mode |
+| `sipi_decode_memory_shadow_too_large_total` | Counter | — | Requests that *would* be 413'd in `monitor` mode |
 | `sipi_decode_memory_near_limit_total` | Counter | — | Acquisitions where usage > 80% of budget |
 | `sipi_decode_memory_estimate_bytes` | Histogram | — | Per-request peak memory estimates |
 
@@ -160,3 +162,4 @@ normalization, not the output of a scrape endpoint.
 - Check mode is `enforce`, not `monitor`.
 - Check `sipi_decode_memory_budget_bytes` matches the expected `memory_limit × (1 − tiles_memory_ratio)`.
 - Memory outside the full-lane decode pipeline (tiles, cache, Lua, HTTP buffers) lives in the reserve, not the budget — size the reserve with `tiles_memory_ratio`.
+- `sipi_malloc_arena_bytes` reports the process resident set (true RSS, from `mi_process_info`) — compare it against the envelope and `container_memory_working_set_bytes` to see how close the whole process runs to the cap. `sipi_malloc_retained_bytes` (RSS not currently handed out) rising with a flat `in_use` is allocator retention, not a leak.
