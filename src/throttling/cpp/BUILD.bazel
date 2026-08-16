@@ -1,0 +1,48 @@
+"""src/throttling/cpp — the engine-side Throttling sub-policies.
+
+`memory_budget` is the lock-free, process-wide accounting of in-flight decode
+memory with its RAII guard (the *Decode memory budget* Throttling sub-policy).
+Carved out of `//src:engine` so its unit test links this narrow target rather
+than the whole image engine (ADR-0003), and colocated under `src/throttling/`
+with the shell-side `//src/throttling/rust:admission` pool (ADR-0021: the
+package carries the Throttling umbrella, the target carries the mechanism).
+
+`include_prefix = "throttling"` exposes the headers at
+`#include "throttling/SipiMemoryBudget.h"` for consumers anywhere in the tree;
+siblings inside the package use the bare quote form (`#include
+"SipiMemoryBudget.h"`).
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//src:__subpackages__"])
+
+cc_library(
+    name = "memory_budget",
+    srcs = ["SipiMemoryBudget.cpp"],
+    hdrs = [
+        "SipiMemoryBudget.h",
+        "SipiPeakMemory.h",
+    ],
+    # The MemoryBudgetGuard destructor swallows on_release exceptions
+    # (catch (...)), so the TU needs exceptions enabled.
+    copts = ["-fexceptions"],
+    include_prefix = "throttling",
+    strip_include_prefix = "/src/throttling/cpp",
+)
+
+# Co-located unit tests (ADR-0003): the CAS acquire/release accounting, the
+# RAII guard (release-on-scope-exit, on-move, on-panic), and the peak-memory
+# estimator — linked against the narrow target, not the whole engine.
+cc_test(
+    name = "memory_budget_test",
+    srcs = [
+        "memory_budget_guard_test.cpp",
+        "memory_budget_test.cpp",
+        "peak_memory_test.cpp",
+    ],
+    deps = [
+        ":memory_budget",
+        "@googletest//:gtest_main",
+    ],
+)

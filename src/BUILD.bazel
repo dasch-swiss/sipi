@@ -193,19 +193,21 @@ cc_library(
 
 # ── //src:engine ───────────────────────────────────────────────────────────
 # The transport-free image core: `SipiImage` (decode/encode + pixel ops) and
-# the serve-time admission primitives (cache, memory budget). Carved out of
+# the serve-time cache. Carved out of
 # `:sipi_lib` so the FFI seam (//src/ffi:sipi_ffi) can drive the engine WITHOUT
 # a dependency cycle — `:sipi_lib` deps `:sipi_ffi`, so `:sipi_ffi` cannot reach
 # the engine while it lives inside `:sipi_lib`. The engine depends only on the
 # domain-utility layer (`//src/util`), the IIIF value objects
-# (`//src/iiifparser/cpp/value_objects`) and
+# (`//src/iiifparser/cpp/value_objects`), the decode-memory budget
+# (`//src/throttling/cpp:memory_budget`) and
 # the codec-agnostic write sink (`//src/formats:output_sink`), never any HTTP
 # transport. The `rust_binary` links the engine through //src/ffi:sipi_ffi.
 #
-# SipiImage, cache and the memory budget stay ONE package: they share no
-# internal boundary worth a cut (cache/budget exist only to serve SipiImage
-# reads), and SipiImage is the hub every other module points at. The IIIF value
-# objects (`//src/iiifparser/cpp/value_objects`) and the codec handlers
+# SipiImage and the cache stay ONE package: they share no internal boundary
+# worth a cut (the cache exists only to serve SipiImage reads), and SipiImage is
+# the hub every other module points at. The IIIF value objects
+# (`//src/iiifparser/cpp/value_objects`), the decode-memory budget
+# (`//src/throttling/cpp:memory_budget`) and the codec handlers
 # (`//src/formats`) were the
 # separable leaves and were carved out. The handlers could not become a package
 # BELOW SipiImage — they read/write it as `friend`s and SipiImage dispatches
@@ -220,7 +222,6 @@ cc_library(
         "SipiCommon.cpp",
         "SipiFilenameHash.cpp",
         "SipiImage.cpp",
-        "SipiMemoryBudget.cpp",
         "populate_from_image.cpp",
         "resample.cc",
     ],
@@ -235,8 +236,6 @@ cc_library(
         "SipiIO.h",
         "SipiImage.h",
         "SipiImageError.h",
-        "SipiMemoryBudget.h",
-        "SipiPeakMemory.h",
         "populate_from_image.h",
         "resample.h",
     ],
@@ -284,6 +283,7 @@ cc_library(
         "//src/logging:logging",
         "//src/metadata:metadata",
         "//src/observability:observability",
+        "//src/throttling/cpp:memory_budget",
         "//src/util",
         "@lcms2//:lcms2",
         "@exiv2//:exiv2",
@@ -330,7 +330,6 @@ cc_library(
             "SipiCommon.cpp",
             "SipiFilenameHash.cpp",
             "SipiImage.cpp",
-            "SipiMemoryBudget.cpp",
             "populate_from_image.cpp",
             # Google Benchmark microbenchmark sources are `cc_binary`
             # main()-providers, not library TUs. Excluded here so they

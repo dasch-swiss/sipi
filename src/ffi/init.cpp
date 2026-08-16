@@ -30,7 +30,7 @@
 #include "SipiCache.h"
 #include "SipiConf.h"// Sipi::SipiConf, Sipi::parseSizeString
 #include "SipiIO.h"// Sipi::ScalingMethod, Sipi::ScalingQuality
-#include "SipiMemoryBudget.h"// Sipi::SipiMemoryBudget, MemoryBudgetMode, parse_memory_budget_mode
+#include "throttling/SipiMemoryBudget.h"// Sipi::SipiMemoryBudget, MemoryBudgetMode, parse_memory_budget_mode
 #include "logging/logger.h"// log_warn / log_err / log_info
 #include "observability/metrics.h"// Sipi::observability::Metrics
 

@@ -112,7 +112,6 @@ These still live under `test/unit/` (they test code that stays in `//src:engine`
 - `test/unit/cache/` — LRU cache tests
 - `test/unit/configuration/` — Configuration parsing tests
 - `test/unit/filenamehash/` — Filename hashing tests
-- `test/unit/memory_budget/` — Decode memory budget tests
 - `test/unit/sipiimage/` — Image processing tests
 - `test/unit/tiff_codecs/` — libtiff ingest-codec coverage proof
 
@@ -128,6 +127,7 @@ Per-module Bazel packages co-locate their unit tests alongside the sources
 - `//src/iiifparser/rust:corpus_regression_test` — the Rust parser swept over the shared corpus
 - `//src/formats:formats_test`, `//src/formats:output_sink_test` — TIFF pyramid selection + the write sink
 - `//src/logging:logger_test` — logger
+- `//src/throttling/cpp:memory_budget_test` — decode memory budget: CAS accounting, RAII guard, peak-memory estimator
 
 Run one component:
 
