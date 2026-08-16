@@ -104,6 +104,11 @@ rust_library(
 # Integration tests see the non-dev deps plus the dev-only `tempfile`.
 _e2e_test_deps = _E2E_LIB_DEPS + ["@crates//:tempfile"]
 
+# Advanced-mode two-lane admission control (ADR-0022): 503/413 split, tile
+# bypass, basic observe-only. Each test runs against its own empty cache dir
+# (a cache hit bypasses the memory-budget gate).
+sipi_e2e_test(name = "admission_control", deps = _e2e_test_deps)
+
 sipi_e2e_test(name = "bilevel_tiff", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "cache", deps = _e2e_test_deps)
@@ -134,8 +139,6 @@ sipi_e2e_test(name = "iiif_compliance", deps = _e2e_test_deps)
 sipi_e2e_test(name = "input_validation", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "latency", deps = _e2e_test_deps)
-
-sipi_e2e_test(name = "memory_budget", deps = _e2e_test_deps)
 
 # SIPI-1R regression gate: several OTel metric collections — the path that
 # segfaulted 6.3.0's mis-declared `mi_stats_get` FFI — must run without
@@ -270,6 +273,7 @@ rust_test(
 test_suite(
     name = "all_e2e",
     tests = [
+        ":admission_control",
         ":bilevel_tiff",
         ":cache",
         ":cli",
@@ -284,7 +288,6 @@ test_suite(
         ":iiif_compliance",
         ":input_validation",
         ":latency",
-        ":memory_budget",
         ":metrics_export",
         ":option_matrix",
         ":preflight_cache",

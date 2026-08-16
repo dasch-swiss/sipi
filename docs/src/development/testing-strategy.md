@@ -653,7 +653,8 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 | Keep-alive timeout enforcement | :white_check_mark: | `connection.rs::keepalive_timeout_enforcement` | |
 | Sustained load memory growth | :white_check_mark: | `resource_limits.rs::sustained_load_memory_growth` | |
 | Concurrent large image decode memory | :white_check_mark: | `resource_limits.rs::concurrent_large_image_decode` | |
-| Image decode memory accounting | :white_check_mark: | `memory_budget.rs` (enforce/monitor/off modes, ×6) | |
+| Full-lane budget rejection (enforce 413, tile bypass, in-budget, monitor) | :white_check_mark: | `admission_control.rs` (×4, each on its own cache dir) | Transient 503 is engine-unit-covered (`MemoryBudgetTest`), not e2e — a live-server 503 is a decode-timing race |
+| Two-lane admission (thread cap, tile floor/burst, per-partition shed, classifier) | :white_check_mark: | `//src/throttling/rust:admission` crate tests (engine-free) | |
 | Intermediate buffer accumulation | :white_check_mark: | `resource_limits.rs::transform_pipeline_memory` | |
 | Cache as memory pressure relief | :white_check_mark: | `cache.rs::cache_hit_avoids_decode` | |
 
