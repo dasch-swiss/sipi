@@ -270,7 +270,7 @@ pub type SipiReportErrorFn = extern "C" fn(ctx: *mut c_void, err: *const SipiIma
 /// Two counters are never written on the FFI serve path, so they stay zero and
 /// the bridge does not expose them: `rejected_connections_total` and
 /// `waiting_connections`. The shell tracks its own equivalents Rust-side instead
-/// (`sipi.admission.shed` and `sipi.admission.waiting` — its two-lane pool).
+/// (the two-lane pool's per-partition `sipi.admission.{tile,full}_waiting`/`_shed`).
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SipiMetricsSnapshot {
@@ -287,6 +287,8 @@ pub struct SipiMetricsSnapshot {
     pub decode_memory_shadow_rejected_total: u64,
     pub decode_memory_near_limit_total: u64,
     pub tiff_pyramid_reduced_decodes_total: u64,
+    pub decode_memory_too_large_total: u64,
+    pub decode_memory_shadow_too_large_total: u64,
     pub waiting_connections: i64,
     pub cache_size_bytes: i64,
     pub cache_files: i64,
@@ -1768,7 +1770,7 @@ mod metrics_snapshot_layout {
     fn repr_c_matches_metrics_snapshot_h() {
         assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
         assert_eq!(align_of::<SipiMetricsSnapshot>(), 8);
-        assert_eq!(size_of::<SipiMetricsSnapshot>(), 160);
+        assert_eq!(size_of::<SipiMetricsSnapshot>(), 176);
 
         assert_eq!(offset_of!(SipiMetricsSnapshot, cache_hits_total), 0);
         assert_eq!(offset_of!(SipiMetricsSnapshot, cache_misses_total), 8);
@@ -1807,18 +1809,26 @@ mod metrics_snapshot_layout {
             offset_of!(SipiMetricsSnapshot, tiff_pyramid_reduced_decodes_total),
             96
         );
-        assert_eq!(offset_of!(SipiMetricsSnapshot, waiting_connections), 104);
-        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_bytes), 112);
-        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files), 120);
-        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_limit_bytes), 128);
-        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files_limit), 136);
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, decode_memory_too_large_total),
+            104
+        );
+        assert_eq!(
+            offset_of!(SipiMetricsSnapshot, decode_memory_shadow_too_large_total),
+            112
+        );
+        assert_eq!(offset_of!(SipiMetricsSnapshot, waiting_connections), 120);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_bytes), 128);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files), 136);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_limit_bytes), 144);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files_limit), 152);
         assert_eq!(
             offset_of!(SipiMetricsSnapshot, decode_memory_budget_bytes),
-            144
+            160
         );
         assert_eq!(
             offset_of!(SipiMetricsSnapshot, decode_memory_used_bytes),
-            152
+            168
         );
     }
 }

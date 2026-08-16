@@ -61,6 +61,12 @@ struct SipiMetricsSnapshot
 
   uint64_t tiff_pyramid_reduced_decodes_total;
 
+  /* A single request whose estimate alone exceeds the full-lane budget is
+   * permanently unservable → 413 (enforce) / would-be 413 (monitor shadow),
+   * distinct from transient 503 exhaustion (decode_memory_rejected_total). */
+  uint64_t decode_memory_too_large_total;
+  uint64_t decode_memory_shadow_too_large_total;
+
   /* ── Gauges (signed: cache_size_limit_bytes uses -1 = unlimited) ─────────── */
   int64_t waiting_connections;
   int64_t cache_size_bytes;
@@ -76,7 +82,7 @@ struct SipiMetricsSnapshot
  * src/server-rs/src/ffi.rs. Every field is 8 bytes wide (uint64_t / int64_t),
  * so there is no packing subtlety, but the guard still catches an accidental
  * field reorder or insertion on either side. LP64 on every supported target. */
-static_assert(sizeof(SipiMetricsSnapshot) == 160, "SipiMetricsSnapshot size drifted from src/server-rs/src/ffi.rs");
+static_assert(sizeof(SipiMetricsSnapshot) == 176, "SipiMetricsSnapshot size drifted from src/server-rs/src/ffi.rs");
 static_assert(offsetof(SipiMetricsSnapshot, cache_hits_total) == 0, "SipiMetricsSnapshot layout drift");
 static_assert(offsetof(SipiMetricsSnapshot, cache_misses_total) == 8, "SipiMetricsSnapshot layout drift");
 static_assert(offsetof(SipiMetricsSnapshot, cache_evictions_total) == 16, "SipiMetricsSnapshot layout drift");
@@ -90,13 +96,15 @@ static_assert(offsetof(SipiMetricsSnapshot, decode_memory_rejected_total) == 72,
 static_assert(offsetof(SipiMetricsSnapshot, decode_memory_shadow_rejected_total) == 80, "SipiMetricsSnapshot layout drift");
 static_assert(offsetof(SipiMetricsSnapshot, decode_memory_near_limit_total) == 88, "SipiMetricsSnapshot layout drift");
 static_assert(offsetof(SipiMetricsSnapshot, tiff_pyramid_reduced_decodes_total) == 96, "SipiMetricsSnapshot layout drift");
-static_assert(offsetof(SipiMetricsSnapshot, waiting_connections) == 104, "SipiMetricsSnapshot layout drift");
-static_assert(offsetof(SipiMetricsSnapshot, cache_size_bytes) == 112, "SipiMetricsSnapshot layout drift");
-static_assert(offsetof(SipiMetricsSnapshot, cache_files) == 120, "SipiMetricsSnapshot layout drift");
-static_assert(offsetof(SipiMetricsSnapshot, cache_size_limit_bytes) == 128, "SipiMetricsSnapshot layout drift");
-static_assert(offsetof(SipiMetricsSnapshot, cache_files_limit) == 136, "SipiMetricsSnapshot layout drift");
-static_assert(offsetof(SipiMetricsSnapshot, decode_memory_budget_bytes) == 144, "SipiMetricsSnapshot layout drift");
-static_assert(offsetof(SipiMetricsSnapshot, decode_memory_used_bytes) == 152, "SipiMetricsSnapshot layout drift");
+static_assert(offsetof(SipiMetricsSnapshot, decode_memory_too_large_total) == 104, "SipiMetricsSnapshot layout drift");
+static_assert(offsetof(SipiMetricsSnapshot, decode_memory_shadow_too_large_total) == 112, "SipiMetricsSnapshot layout drift");
+static_assert(offsetof(SipiMetricsSnapshot, waiting_connections) == 120, "SipiMetricsSnapshot layout drift");
+static_assert(offsetof(SipiMetricsSnapshot, cache_size_bytes) == 128, "SipiMetricsSnapshot layout drift");
+static_assert(offsetof(SipiMetricsSnapshot, cache_files) == 136, "SipiMetricsSnapshot layout drift");
+static_assert(offsetof(SipiMetricsSnapshot, cache_size_limit_bytes) == 144, "SipiMetricsSnapshot layout drift");
+static_assert(offsetof(SipiMetricsSnapshot, cache_files_limit) == 152, "SipiMetricsSnapshot layout drift");
+static_assert(offsetof(SipiMetricsSnapshot, decode_memory_budget_bytes) == 160, "SipiMetricsSnapshot layout drift");
+static_assert(offsetof(SipiMetricsSnapshot, decode_memory_used_bytes) == 168, "SipiMetricsSnapshot layout drift");
 #endif
 
 #endif /* SIPI_FFI_METRICS_SNAPSHOT_H */

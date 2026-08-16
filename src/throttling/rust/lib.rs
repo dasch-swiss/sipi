@@ -147,6 +147,9 @@ pub struct AdmissionSnapshot {
     // Monitor-only: fulls that the full cap *would* have rejected in enforce but
     // were admitted (the signal that sizes `full_max` before the enforce flip).
     pub full_shadow_rejected_total: u64,
+    // Times the shell's pre-dispatch partition disagreed with the engine's precise
+    // post-decode verdict — residual heuristic drift, observable but not fatal.
+    pub classifier_disagreement_total: u64,
     // Config fingerprint.
     pub tiles_thread_ratio: f64,
     pub tiles_memory_ratio: f64,
@@ -184,6 +187,9 @@ pub struct Admission {
     tile_shed_total: AtomicU64,
     full_shed_total: AtomicU64,
     full_shadow_rejected_total: AtomicU64,
+    // Times the shell's pre-dispatch partition disagreed with the engine's precise
+    // post-decode verdict (see `record_classification`) — the residual-drift signal.
+    classifier_disagreement_total: AtomicU64,
 }
 
 impl Admission {
@@ -240,6 +246,7 @@ impl Admission {
             tile_shed_total: AtomicU64::new(0),
             full_shed_total: AtomicU64::new(0),
             full_shadow_rejected_total: AtomicU64::new(0),
+            classifier_disagreement_total: AtomicU64::new(0),
         })
     }
 
@@ -297,6 +304,28 @@ impl Admission {
             SizeKind::PixelsX => Some(nx.saturating_mul(nx)),
             SizeKind::PixelsY => Some(ny.saturating_mul(ny)),
             SizeKind::Full | SizeKind::Percents | SizeKind::Reduce | SizeKind::Undefined => None,
+        }
+    }
+
+    /// Record whether the shell's pre-dispatch partition matched the engine's
+    /// precise post-decode verdict, bumping the disagreement counter when they
+    /// differ. `engine_estimate_bytes` is the engine's decode-memory estimate for
+    /// this serve (`SipiServeTimings::decode_estimate_bytes`); `0` means no decode
+    /// ran (cache hit, HEAD, passthrough) — no engine verdict, nothing recorded.
+    /// The engine verdict mirrors its own gate: `estimate ≥ threshold` → `Full`,
+    /// so both sides read the single seam-sourced `large_decode_threshold_bytes`.
+    pub fn record_classification(&self, shell_kind: AdmissionKind, engine_estimate_bytes: u64) {
+        if engine_estimate_bytes == 0 {
+            return;
+        }
+        let engine_kind = if engine_estimate_bytes >= self.large_decode_threshold_bytes {
+            AdmissionKind::Full
+        } else {
+            AdmissionKind::Tile
+        };
+        if shell_kind != engine_kind {
+            self.classifier_disagreement_total
+                .fetch_add(1, Ordering::Relaxed);
         }
     }
 
@@ -448,6 +477,9 @@ impl Admission {
             tile_shed_total: self.tile_shed_total.load(Ordering::Relaxed),
             full_shed_total: self.full_shed_total.load(Ordering::Relaxed),
             full_shadow_rejected_total: self.full_shadow_rejected_total.load(Ordering::Relaxed),
+            classifier_disagreement_total: self
+                .classifier_disagreement_total
+                .load(Ordering::Relaxed),
             tiles_thread_ratio: self.tiles_thread_ratio,
             tiles_memory_ratio: self.tiles_memory_ratio,
             mode: self.mode,
@@ -776,5 +808,27 @@ mod tests {
         );
         assert_eq!(AdmissionMode::parse("off"), None);
         assert_eq!(AdmissionMode::parse(""), None);
+    }
+
+    #[test]
+    fn classifier_disagreement_counts_only_on_verdict_mismatch() {
+        let a = Admission::new(cfg(16, 0.5, 0, 50)).unwrap();
+        let threshold = a.snapshot().large_decode_threshold_bytes;
+
+        // A zero estimate (cache hit / HEAD / passthrough) carries no engine
+        // verdict — never recorded, whatever the shell said.
+        a.record_classification(AdmissionKind::Full, 0);
+        a.record_classification(AdmissionKind::Tile, 0);
+        assert_eq!(a.snapshot().classifier_disagreement_total, 0);
+
+        // Agreement: shell Full ↔ estimate ≥ threshold; shell Tile ↔ estimate <.
+        a.record_classification(AdmissionKind::Full, threshold);
+        a.record_classification(AdmissionKind::Tile, threshold - 1);
+        assert_eq!(a.snapshot().classifier_disagreement_total, 0);
+
+        // Disagreement in both directions.
+        a.record_classification(AdmissionKind::Tile, threshold); // engine Full
+        a.record_classification(AdmissionKind::Full, threshold - 1); // engine Tile
+        assert_eq!(a.snapshot().classifier_disagreement_total, 2);
     }
 }
