@@ -308,6 +308,48 @@ int sipi_max_post_size(size_t *out)
   });
 }
 
+int sipi_admission_mode(const char **out)
+{
+  // Guard-only edge probe — the resolved admission mode ("monitor"|"enforce"),
+  // read back so the shell's two-lane pool runs the same mode as the engine's
+  // memory budget (single authority = the engine's resolved config). Points at
+  // the process-static EngineContext copy, valid for the process lifetime.
+  return Sipi::ffi::sipi_guard([&] {
+    *out = Sipi::ffi::engine_context().admission_mode.c_str();
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
+int sipi_tiles_memory_ratio(double *out)
+{
+  // Guard-only edge probe — the tile reserve fraction, read back for the shell's
+  // config-fingerprint metric.
+  return Sipi::ffi::sipi_guard([&] {
+    *out = Sipi::ffi::engine_context().tiles_memory_ratio;
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
+int sipi_large_decode_threshold_bytes(size_t *out)
+{
+  // Guard-only edge probe — the tile/full classifier threshold, read back so the
+  // shell classifies against the same value the engine charges the budget by.
+  return Sipi::ffi::sipi_guard([&] {
+    *out = Sipi::ffi::engine_context().large_decode_threshold_bytes;
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
+int sipi_memory_limit_bytes(size_t *out)
+{
+  // Guard-only edge probe — the resolved RAM envelope (post 0→auto-detect), read
+  // back for the shell's config-fingerprint metric.
+  return Sipi::ffi::sipi_guard([&] {
+    *out = Sipi::ffi::engine_context().memory_limit_bytes;
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
+}
+
 int sipi_port(int *out)
 {
   // Guard-only edge probe — a pure read of the installed engine context, like

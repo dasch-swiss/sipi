@@ -16,7 +16,7 @@
 //! dashboard names (`sipi_cache_hits_total`). Two snapshot fields are **not**
 //! bridged: `rejected_connections_total` and `waiting_connections` are never
 //! written on the FFI serve path, so under this shell they stay zero, and the
-//! pool publishes its own `sipi.pool.*` analogues instead.
+//! two-lane pool publishes its own `sipi.admission.*` analogues instead.
 //!
 //! `every_snapshot_field_is_accounted_for` in the tests below is the tripwire: a
 //! field added to the snapshot must land in [`COUNTERS`], [`GAUGES`], or that
@@ -43,12 +43,12 @@ use axum::middleware::Next;
 use axum::response::Response;
 use opentelemetry::metrics::{Histogram, Meter};
 use opentelemetry::{global, KeyValue};
-use tokio::sync::Semaphore;
+
+use admission::{Admission, AdmissionMode, AdmissionSnapshot};
 
 use crate::ffi::{self, SipiMetricsSnapshot};
 use crate::malloc_stats::{self, MallocStats};
 use crate::preflight_cache;
-use crate::routes;
 
 /// Explicit bucket boundaries (seconds) for `http.server.request.duration`, as
 /// recommended by the HTTP semantic conventions.
@@ -82,17 +82,17 @@ const KNOWN_METHODS: &[&str] = &[
 static HTTP_DURATION: OnceLock<Histogram<f64>> = OnceLock::new();
 static DECODE_ESTIMATE: OnceLock<Histogram<u64>> = OnceLock::new();
 
-/// Register the engine + pool observable instruments against the global meter.
-/// Safe to call unconditionally: with no meter provider installed (no OTLP
+/// Register the engine + admission observable instruments against the global
+/// meter. Safe to call unconditionally: with no meter provider installed (no OTLP
 /// endpoint) the global meter is a no-op and this registers nothing observable.
 /// Call once, after [`crate::telemetry::init`] has set the global provider and
-/// after the [`crate::routes::AppState`] pool exists (its permit count feeds the
-/// concurrency gauges).
+/// after the [`crate::routes::AppState`] admission pool exists (its snapshot feeds
+/// the concurrency + config-fingerprint gauges).
 ///
 /// The instrument handles are intentionally dropped: `build()` registers the
 /// callback with the SDK meter pipeline, which owns it for the meter provider's
 /// lifetime; the returned handle carries none of that state.
-pub(crate) fn register(pool: Arc<Semaphore>, permits_total: usize) {
+pub(crate) fn register(admission: Arc<Admission>) {
     let meter = global::meter("sipi");
 
     // ── Synchronous histograms ──────────────────────────────────────────────
@@ -125,44 +125,97 @@ pub(crate) fn register(pool: Arc<Semaphore>, permits_total: usize) {
         gauge(&meter, name, description, unit, *extract);
     }
 
-    // ── Engine-pool concurrency metrics ─────────────────────────────────────
-    // Engine-pool permits in flight: total − currently-available — the real
-    // saturation signal.
-    meter
-        .i64_observable_gauge("sipi.pool.permits_in_use")
-        .with_description("Engine-pool permits currently held (blocking engine work in flight)")
-        .with_callback(move |observer| {
-            let in_use = permits_total.saturating_sub(pool.available_permits());
-            observer.observe(in_use as i64, &[]);
-        })
-        .build();
+    // ── Two-lane admission metrics ──────────────────────────────────────────
+    // Every instrument snapshots the shared `Admission` pool on collection (a
+    // cheap atomic read). All live occupancy + fixed-sizing + config-fingerprint
+    // signals share the one `sipi.admission.*` namespace.
+    //
+    // Global permits in flight: total − currently-available — the real saturation
+    // signal.
+    admission_gauge(
+        &meter,
+        &admission,
+        "sipi.admission.permits_in_use",
+        "Admission permits currently held (blocking engine work in flight)",
+        |s| s.permits_in_use as i64,
+    );
     // Total permits (the configured worker count); fixed after startup.
-    meter
-        .i64_observable_gauge("sipi.pool.permits_total")
-        .with_description("Engine-pool total permit count (the configured worker count)")
-        .with_callback(move |observer| observer.observe(permits_total as i64, &[]))
-        .build();
-    // 503 load-shed count: every Throttling shed (immediate + queue-timeout).
-    meter
-        .u64_observable_counter("sipi.pool.load_shed")
-        .with_description("Requests shed with 503 because the engine pool was saturated")
-        .with_callback(|observer| observer.observe(routes::load_shed_total(), &[]))
-        .build();
-    // Requests currently parked in the wait queue for a permit. With
-    // `permits_in_use` (== permits_total under load) this is the full saturation
-    // picture: a rising `waiting` is sustained overload approaching the shed edge.
-    meter
-        .i64_observable_gauge("sipi.pool.waiting")
-        .with_description("Requests currently waiting for an engine-pool permit")
-        .with_callback(|observer| observer.observe(routes::waiting(), &[]))
-        .build();
-    // Queue-timeout sheds — the subset of `load_shed` that waited past
-    // `queue_timeout` rather than shedding immediately on a full queue.
-    meter
-        .u64_observable_counter("sipi.pool.queue_timeout")
-        .with_description("Requests shed with 503 after waiting past the queue timeout")
-        .with_callback(|observer| observer.observe(routes::queue_timeout_total(), &[]))
-        .build();
+    admission_gauge(
+        &meter,
+        &admission,
+        "sipi.admission.permits_total",
+        "Admission total permit count (the configured worker count)",
+        |s| s.permits_total as i64,
+    );
+    // Requests currently parked waiting for a permit (both partitions).
+    admission_gauge(
+        &meter,
+        &admission,
+        "sipi.admission.waiting",
+        "Requests currently waiting for an admission permit",
+        |s| (s.tile_waiting + s.full_waiting) as i64,
+    );
+    // 503 sheds across both partitions (immediate queue-full + queue-timeout).
+    admission_counter(
+        &meter,
+        &admission,
+        "sipi.admission.shed",
+        "Requests shed with 503 because admission was saturated",
+        |s| s.tile_shed_total + s.full_shed_total,
+    );
+
+    // ── Config fingerprint ──────────────────────────────────────────────────
+    // The derived (threads, ratios, mode, thresholds) the pool was built from —
+    // observable on Grafana with no ops-deploy change after shipping the binary.
+    admission_gauge(
+        &meter,
+        &admission,
+        "sipi.admission.mode",
+        "Admission mode (0 = monitor, 1 = enforce)",
+        |s| i64::from(s.mode == AdmissionMode::Enforce),
+    );
+    admission_gauge(
+        &meter,
+        &admission,
+        "sipi.admission.tile_min_threads",
+        "Guaranteed tile thread floor",
+        |s| s.tile_min as i64,
+    );
+    admission_gauge(
+        &meter,
+        &admission,
+        "sipi.admission.full_max_threads",
+        "Full-partition thread hard cap",
+        |s| s.full_max as i64,
+    );
+    admission_gauge(
+        &meter,
+        &admission,
+        "sipi.admission.memory_limit_bytes",
+        "Resolved RAM envelope in bytes (0 = auto-detect at startup)",
+        |s| s.memory_limit_bytes as i64,
+    );
+    admission_gauge(
+        &meter,
+        &admission,
+        "sipi.admission.large_decode_threshold_bytes",
+        "Tile/full classifier threshold in bytes",
+        |s| s.large_decode_threshold_bytes as i64,
+    );
+    admission_float_gauge(
+        &meter,
+        &admission,
+        "sipi.admission.tiles_thread_ratio",
+        "Fraction of threads reserved as the tile floor",
+        |s| s.tiles_thread_ratio,
+    );
+    admission_float_gauge(
+        &meter,
+        &admission,
+        "sipi.admission.tiles_memory_ratio",
+        "Fraction of the RAM envelope reserved for tiles + the non-decode floor",
+        |s| s.tiles_memory_ratio,
+    );
 
     // ── Preflight access-cache metrics ──────────────────────────────────────
     // The shell's opt-in cache in front of the `pre_flight` hook (see
@@ -441,6 +494,55 @@ fn gauge(
         .build();
 }
 
+/// Build one observable `u64` counter whose callback snapshots the admission pool
+/// and reports `extract`'s field. The handle is dropped (see [`register`]).
+fn admission_counter(
+    meter: &Meter,
+    pool: &Arc<Admission>,
+    name: &'static str,
+    description: &'static str,
+    extract: fn(&AdmissionSnapshot) -> u64,
+) {
+    let pool = Arc::clone(pool);
+    meter
+        .u64_observable_counter(name)
+        .with_description(description)
+        .with_callback(move |observer| observer.observe(extract(&pool.snapshot()), &[]))
+        .build();
+}
+
+/// Build one observable `i64` gauge over an admission-snapshot field.
+fn admission_gauge(
+    meter: &Meter,
+    pool: &Arc<Admission>,
+    name: &'static str,
+    description: &'static str,
+    extract: fn(&AdmissionSnapshot) -> i64,
+) {
+    let pool = Arc::clone(pool);
+    meter
+        .i64_observable_gauge(name)
+        .with_description(description)
+        .with_callback(move |observer| observer.observe(extract(&pool.snapshot()), &[]))
+        .build();
+}
+
+/// Build one observable `f64` gauge over an admission-snapshot field (the ratios).
+fn admission_float_gauge(
+    meter: &Meter,
+    pool: &Arc<Admission>,
+    name: &'static str,
+    description: &'static str,
+    extract: fn(&AdmissionSnapshot) -> f64,
+) {
+    let pool = Arc::clone(pool);
+    meter
+        .f64_observable_gauge(name)
+        .with_description(description)
+        .with_callback(move |observer| observer.observe(extract(&pool.snapshot()), &[]))
+        .build();
+}
+
 #[cfg(test)]
 mod tests {
     use super::{COUNTERS, GAUGES, MALLOC_GAUGES};
@@ -450,8 +552,8 @@ mod tests {
 
     /// Snapshot fields deliberately not exported, by field name. Neither is
     /// written on the FFI serve path, so both stay permanently zero under this
-    /// shell; the pool publishes `sipi.pool.waiting` and `sipi.pool.load_shed`
-    /// instead.
+    /// shell; the two-lane pool publishes `sipi.admission.waiting` and
+    /// `sipi.admission.shed` instead.
     ///
     /// Lives here rather than beside the tables because it exists to be counted,
     /// not read — the reasoning is in the module docs.

@@ -39,6 +39,13 @@ struct EngineContext
   //!< and bypasses the budget. Single-sourced in the shell config and passed
   //!< over the seam at init (DUNE-003), so the two classifiers cannot drift.
   std::size_t large_decode_threshold_bytes = 0;
+  //!< Admission config the shell reads back so its two-lane thread pool matches
+  //!< the engine's memory budget (single authority = the engine's resolved
+  //!< config). `admission_mode` is the canonical "monitor"|"enforce";
+  //!< `memory_limit_bytes` is the resolved RAM envelope (post 0→auto-detect).
+  std::string admission_mode = "monitor";
+  double tiles_memory_ratio = 0.25;
+  std::size_t memory_limit_bytes = 0;
 
   std::string imgroot;//!< image root: raw config value, for the Rust edge's path build
   std::string resolved_imgroot;//!< realpath()-resolved image root, for the R2 containment check

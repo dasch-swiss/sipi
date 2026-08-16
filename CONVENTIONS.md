@@ -112,7 +112,7 @@ is scoped `ffi` only when the seam mechanism itself is the point.
 | `util` | `src/util/` | Generic SIPI-domain helpers: MIME/string parsing, file hashing, the `shttps::Error`/`Global` types |
 | `jwt` | `src/jwt/` | JWT (JWS) sign/verify leaf over OpenSSL + jansson |
 | `cache` | `src/SipiCache.{h,cpp}` | File-based LRU cache with dual-limit eviction |
-| `memory-budget` | `src/SipiMemoryBudget.{h,cpp}` | Lock-free decode memory budget |
+| `throttling` | `src/throttling/` (colocated polyglot, ADR-0021/0022): `cpp/` (engine-side `memory_budget` — the full-lane decode budget) + `rust/` (shell-side `admission` — the two-lane pool) | Load-driven request-rejection: two-lane admission (tile floor + full hard cap) and the full-lane memory budget |
 | `memory` | `bazel/mimalloc.BUILD.bazel`, `_ALLOCATOR` in `src/cli-rs/BUILD.bazel`, `tools/allocator-replay/` | Process memory behavior: the production allocator, RSS/retention measurement |
 | `observability` | `src/observability/` | Metrics (atomic counters/gauges), tracing |
 | `logging` | `src/logging/` | Structured logging |

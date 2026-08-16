@@ -1,8 +1,8 @@
 ---
 dune_map: true
 schema_version: 1
-last_verified_commit: 0f3d85bda963f078c220c7ae023db996e65e1d45
-date: 2026-08-15
+last_verified_commit: ce02be22
+date: 2026-08-16
 ---
 
 # ARCH-MAP.md — SIPI
@@ -55,17 +55,25 @@ image formats, whose registry fan-out is documented, not mechanized.
 - **Boundary rules:** Cache state is exposed **exclusively** through *Metrics*, never Lua bindings; cache-hit responses bypass both Throttling policies (ADR-0008). *Enforcement: `docs-only`* (glossary rule; no mechanical check).
 - **Durable state:** in-memory `cachetable` + `blocked_files` + `cache_used_bytes`/`nfiles` (mutex-guarded); on-disk `.sipicache` index (rewritten on destruction; corruption → dir cleared). Single owner = the FFI runtime (`std::unique_ptr`, constructed in `init.cpp`).
 
-### memory-budget
+### throttling
 
-- **Paths:** `:(glob)src/SipiMemoryBudget.{h,cpp}`, `:(glob)src/SipiPeakMemory.h`
-- **Purpose:** Lock-free process-wide accounting of in-flight decode memory with an RAII guard — the *Decode memory budget* Throttling sub-policy (503 + `Retry-After` on enforce). Compiled into `//src:engine`.
-- **Key entities:** `Sipi::SipiMemoryBudget`, `SipiMemoryBudget::try_acquire`/`release`, `MemoryBudgetGuard` (RAII, move-only), `enum class MemoryBudgetMode { OFF, MONITOR, ENFORCE }`, `Sipi::estimate_peak_memory`
-- **Public interface:** `SipiMemoryBudget` + `MemoryBudgetGuard` (via `//src:engine`).
-- **Local-context kit:** `src/SipiMemoryBudget.h`, `src/SipiMemoryBudget.cpp`, `src/SipiPeakMemory.h`, `src/ffi/serve_image.cpp` (acquire/guard site), `UBIQUITOUS_LANGUAGE.md` (Throttling)
-- **Depends on:** (none internal — decoupled from observability by design; the caller re-publishes gauges via the guard's `on_release` callback)
-- **Used by:** ffi (`init.cpp` constructs, `serve_image.cpp` acquires)
-- **Boundary rules:** the module writes no metrics itself; the acquire site in `serve_image.cpp` re-publishes gauges. *Enforcement: `docs-only`*.
-- **Durable state:** `std::atomic<size_t> _used` (process-lifetime, CAS-updated); no persistence.
+Colocated polyglot (ADR-0021/0022): a shell-side admission pool and an
+engine-side memory budget under one component. Supersedes the former
+`memory-budget` entry.
+
+- **Paths:** `:(glob)src/throttling/rust/**` (admission, shell-side), `:(glob)src/throttling/cpp/**` (memory_budget, engine-side); plus the inline output-size guard at the gate (`src/ffi/serve_image.cpp`, reading `eng.max_pixel_limit`).
+- **Purpose:** SIPI's load-driven request-rejection (Throttling). Three sub-policies: **Admission** (the two-partition thread pool — tile floor + full hard cap, pre-dispatch), the **Decode memory budget** (the full partition's decode-RAM cap, post-cache, 503/413 on enforce), and the **Output size guard** (intrinsic max-pixel ceiling, 400).
+- **Key entities:** Rust `admission::{Admission, AdmissionKind, AdmissionMode, AdmissionConfig, AdmissionSnapshot, Permit, default_pool_size}` (`//src/throttling/rust:admission`); C++ `Sipi::SipiMemoryBudget` + `MemoryBudgetGuard` + `enum class AdmissionMode { MONITOR, ENFORCE }` + `Sipi::estimate_peak_memory` (`//src/throttling/cpp:memory_budget`).
+- **Public interface:** `Admission` (owned by `server-rs` `AppState`; `classify`/`acquire`/`snapshot`); `SipiMemoryBudget` + `MemoryBudgetGuard` (via `//src:engine`).
+- **Local-context kit:** `src/throttling/rust/lib.rs`, `src/throttling/cpp/SipiMemoryBudget.{h,cpp}`, `src/throttling/cpp/SipiPeakMemory.h`, `src/ffi/serve_image.cpp` (budget acquire site + output-size guard), `src/ffi/init.cpp` (resolves the config), `src/server-rs/src/routes.rs` (`AppState`, classify/acquire call sites), `UBIQUITOUS_LANGUAGE.md` (Throttling), `docs/adr/0022-two-lane-admission-control.md`.
+- **Depends on:** admission (Rust) → `tokio` + `//src/iiifparser/rust:iiif_parser` only (FFI-free; no `//src/ffi`, no C++ engine — DUNE-002). memory_budget (C++) → nothing internal (decoupled from observability by design; the acquire site re-publishes gauges).
+- **Used by:** `server-rs` (`AppState` owns the pool; `routes.rs` classify/acquire; `metrics.rs` reads the snapshot); ffi (`init.cpp` constructs the budget, `serve_image.cpp` acquires).
+- **Boundary rules:**
+  - The admission crate is engine-free: `bazel query 'deps(//src/throttling/rust:admission)'` shows no `//src/ffi`, no engine, no Kakadu. *Enforcement: `structure`* (Bazel dep graph).
+  - The memory-budget module writes no metrics itself; the `serve_image.cpp` acquire site re-publishes gauges (DUNE-005). *Enforcement: `docs-only`*.
+  - The shell Semaphore pool (pre-dispatch) and the engine memory budget (post-cache) are two distinct admission layers. *Enforcement: `docs-only`*.
+  - `admission_mode`/`tiles_memory_ratio`/`large_decode_threshold_bytes`/`memory_limit` are resolved engine-side and read back over the seam (single authority, DUNE-003). *Enforcement: `docs-only`*.
+- **Durable state:** admission — `Arc<Semaphore>` global + full sub-pool, per-partition `AtomicUsize`/`AtomicU64` wait/shed counters (single writer). memory_budget — `std::atomic<size_t> _used` (CAS-updated). No persistence.
 
 ### formats
 
@@ -212,7 +220,7 @@ image formats, whose registry fan-out is documented, not mechanized.
   - Production Rust comments describe current behaviour on their own terms — the oracle vocabulary (`oracle|shttps|cutover|parity|strangler|C++ server`) is avoided in `src/server-rs/src` + `src/cli-rs/src` `.rs` files. *Enforcement: `docs-only`* (the `CONVENTIONS.md` § Production surface rule; DUNE-012).
   - The listen-port precedence chain has a single authority in `lib.rs::serve()` (`SIPI_RS_PORT` > `--serverport`/`SIPI_SERVERPORT` > Lua `sipi.port` > `DEFAULT_PORT=1024`). *Enforcement: `docs-only`* (one code site; doc copies are pointers).
   - `IMAGE_MIMES` must list the same image mimes as the C++ `detect_in_format`. *Enforcement: `docs-only`* (cross-reference comment; no mechanical check).
-- **Durable state:** `AppState` (built once per `serve()`); the Throttling `Semaphore` pool + `WAITING`/`LOAD_SHED_TOTAL`/`QUEUE_TIMEOUT_TOTAL` atomics; the opt-in Preflight cache.
+- **Durable state:** `AppState` (built once per `serve()`), which owns the two-lane `Admission` pool (`Arc<admission::Admission>`, holding the semaphores + per-partition counters — see the `throttling` component); the opt-in Preflight cache.
 
 ### cli-rs
 
@@ -235,7 +243,7 @@ Files and rules that span components rather than living in one:
 
 - **The FFI seam** (`src/ffi/sipi_ffi.h` ↔ `src/server-rs/src/ffi.rs`) is the single contract between the shell and the engine; its layout is locked on both sides (see the `ffi` and `server-rs` entries). A change to any `#[repr(C)]` struct is a two-file edit by construction.
 - **The metrics bridge** flows `observability::Metrics` (engine) → `SipiMetricsSnapshot` (`src/ffi/metrics_snapshot.h`) → `server-rs/src/metrics.rs` → OTLP. The `metrics_registry_test` seam tripwire is the mechanical guard that a new counter is a conscious bridge-or-not decision.
-- **The Throttling gate** (`src/ffi/serve_image.cpp`) is the one post-cache admission point where both sub-policies (memory-budget, output-size) fire (ADR-0008); the shell's Semaphore pool is a separate, earlier admission layer (`server-rs/routes.rs`).
+- **The Throttling gate** (`src/ffi/serve_image.cpp`) is the one post-cache point where the engine-side sub-policies (memory-budget, output-size) fire (ADR-0008); the shell's two-lane `Admission` pool is a separate, earlier (pre-dispatch) admission layer (`server-rs/routes.rs`, `//src/throttling/rust:admission`). See the `throttling` component and ADR-0022.
 - **Ubiquitous language** — identifiers/comments follow `UBIQUITOUS_LANGUAGE.md`; the reviewer checklist (`docs/src/development/reviewer-guidelines.md` § Ubiquitous Language) and the `CONVENTIONS.md` § Production surface rule are the guards (convention-only — no mechanical gate).
 
 ## Support areas (completeness coverage)

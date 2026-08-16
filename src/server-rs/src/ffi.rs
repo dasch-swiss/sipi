@@ -270,7 +270,7 @@ pub type SipiReportErrorFn = extern "C" fn(ctx: *mut c_void, err: *const SipiIma
 /// Two counters are never written on the FFI serve path, so they stay zero and
 /// the bridge does not expose them: `rejected_connections_total` and
 /// `waiting_connections`. The shell tracks its own equivalents Rust-side instead
-/// (`sipi.pool.load_shed` and `sipi.pool.waiting` — its bounded wait queue).
+/// (`sipi.admission.shed` and `sipi.admission.waiting` — its two-lane pool).
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SipiMetricsSnapshot {
@@ -550,6 +550,22 @@ extern "C" {
     /// The configured max POST body size in bytes (`*out`); 0 = unlimited.
     /// Returns 0, or 500 if `sipi_init` has not run.
     pub fn sipi_max_post_size(out: *mut usize) -> c_int;
+
+    /// The resolved admission mode ("monitor"|"enforce"). `*out` is process-static
+    /// engine memory. Returns 0, or 500 if `sipi_init` has not run.
+    pub fn sipi_admission_mode(out: *mut *const c_char) -> c_int;
+
+    /// The tile reserve fraction (`tiles_memory_ratio`). Returns 0, or 500 if
+    /// `sipi_init` has not run.
+    pub fn sipi_tiles_memory_ratio(out: *mut f64) -> c_int;
+
+    /// The tile/full classifier threshold in bytes. Returns 0, or 500 if
+    /// `sipi_init` has not run.
+    pub fn sipi_large_decode_threshold_bytes(out: *mut usize) -> c_int;
+
+    /// The resolved RAM envelope in bytes (`memory_limit`, post auto-detect).
+    /// Returns 0, or 500 if `sipi_init` has not run.
+    pub fn sipi_memory_limit_bytes(out: *mut usize) -> c_int;
 
     /// The configured HTTP listen port (the Lua config `sipi.port`); a
     /// fallback below `--serverport`/`SIPI_SERVERPORT`/`SIPI_RS_PORT`.
@@ -902,6 +918,54 @@ pub fn max_post_size() -> Result<usize, i32> {
         return Err(code);
     }
     Ok(v)
+}
+
+/// The resolved admission mode ("monitor"|"enforce"), read back so the shell's
+/// two-lane pool runs the same mode the engine's memory budget does. `Err`
+/// carries the FFI status (500 if `sipi_init` has not run, -1 on a null pointer).
+pub fn admission_mode() -> Result<String, i32> {
+    cstr_getter(|out| {
+        // SAFETY: `out` is the local out-pointer `cstr_getter` supplies; the seam guards exceptions.
+        unsafe { sipi_admission_mode(out) }
+    })
+}
+
+/// The tile reserve fraction (`tiles_memory_ratio`) for the config-fingerprint
+/// metric. `Err` carries the FFI status (500 if `sipi_init` has not run).
+pub fn tiles_memory_ratio() -> Result<f64, i32> {
+    let mut v: f64 = 0.0;
+    // SAFETY: `out` is a valid pointer; the seam guards exceptions.
+    let code = unsafe { sipi_tiles_memory_ratio(&mut v) };
+    if code != 0 {
+        return Err(code);
+    }
+    Ok(v)
+}
+
+/// The tile/full classifier threshold in bytes, read back so the shell classifies
+/// against the same value the engine charges the budget by. `Err` carries the FFI
+/// status (500 if `sipi_init` has not run).
+pub fn large_decode_threshold_bytes() -> Result<u64, i32> {
+    let mut v: usize = 0;
+    // SAFETY: `out` is a valid pointer; the seam guards exceptions.
+    let code = unsafe { sipi_large_decode_threshold_bytes(&mut v) };
+    if code != 0 {
+        return Err(code);
+    }
+    Ok(v as u64)
+}
+
+/// The resolved RAM envelope in bytes (`memory_limit`, post auto-detect) for the
+/// config-fingerprint metric. `Err` carries the FFI status (500 if `sipi_init` has
+/// not run).
+pub fn memory_limit_bytes() -> Result<u64, i32> {
+    let mut v: usize = 0;
+    // SAFETY: `out` is a valid pointer; the seam guards exceptions.
+    let code = unsafe { sipi_memory_limit_bytes(&mut v) };
+    if code != 0 {
+        return Err(code);
+    }
+    Ok(v as u64)
 }
 
 /// The configured HTTP listen port (the Lua config `sipi.port`). Used only as

@@ -1,0 +1,100 @@
+# Admission Control
+
+SIPI admits requests through a **cost-based two-partition pool** that protects
+viewer tile traffic and the RAM envelope from expensive full-image decodes
+(overwhelmingly distributed crawler bots). Each request is classified into a
+**Tile** or **Full** partition; tiles get a guaranteed thread floor and burst
+into idle capacity, full-image downloads are hard-capped in both threads and
+decode memory and shed when their share is exhausted.
+
+This page covers the thread partitions and the overall model. The memory half —
+the full partition's decode-RAM cap — is detailed in
+[Memory Budget](memory-budget.md).
+
+## The model
+
+Everything derives from two hard caps (RAM + CPU threads), two ratios, and a mode:
+
+- **Threads.** `tile_min = round(nthreads × tiles_thread_ratio)` is guaranteed to
+  tiles; `full_max = nthreads − tile_min` hard-caps concurrent full decodes. A
+  tile takes a global permit only and may burst up to `nthreads` when the full
+  partition is idle. A full takes its full-partition permit **first, then** the
+  global permit, so at most `full_max` fulls ever contend for global permits and
+  `≥ tile_min` are always free for tiles.
+- **Memory.** `full_mem = memory_limit × (1 − tiles_memory_ratio)` caps the full
+  partition's decode bytes; tiles bypass the budget. See
+  [Memory Budget](memory-budget.md).
+- **Mode.** `monitor` (default) shadow-counts what `enforce` would shed;
+  `enforce` applies the caps and sheds with 503/413.
+
+Tile priority is **bounded, not absolute**: `tokio`'s semaphore is FIFO, so a
+full already parked in the global queue does not yield to a later tile. The
+tile floor (`≥ tile_min` global permits kept free of fulls) is the mechanism that
+preserves tile headroom — an explicit design choice, not automatic preemption.
+
+## What is a tile vs a full request
+
+| Request | Partition |
+|---------|-----------|
+| Viewer tiles, small explicit `{w},{h}` / `!{w},{h}` sizes | Tile |
+| `info.json`, `knora.json` (metadata, no decode) | Tile |
+| `/{id}/file` (raw byte stream, no decode) | Tile |
+| Lua routes (global permit only; any decode they trigger is still memory-budgeted) | Tile |
+| Large explicit sizes, `/full/max/`, percentages (estimated peak ≥ `large_decode_threshold_bytes`) | Full |
+
+Classification is coarse in the shell (from the IIIF URL params, before any
+decode) and precise in the engine (from `estimate_peak_memory`). The two are
+tracked and their disagreement is observable, so residual drift can be tuned.
+
+## Configuration
+
+| Env var | CLI flag | Default | Description |
+|---------|----------|---------|-------------|
+| `SIPI_NTHREADS` | `--nthreads` | `0` (auto) | Worker threads (0 = auto-detect) |
+| `SIPI_TILES_THREAD_RATIO` | `--tiles-thread-ratio` | `0.5` | Fraction of workers guaranteed to tiles (0..1) |
+| `SIPI_MEMORY_LIMIT` | `--memory-limit` | `0` (auto) | Total RAM envelope (0 = auto-detect) |
+| `SIPI_TILES_MEMORY_RATIO` | `--tiles-memory-ratio` | `0.25` | Fraction of the envelope reserved for tiles + the non-decode floor |
+| `SIPI_ADMISSION_MODE` | `--admission-mode` | `monitor` | `monitor` or `enforce` |
+| `SIPI_LARGE_DECODE_THRESHOLD_BYTES` | `--large-decode-threshold-bytes` | `33554432` (32 MiB) | Estimated peak at/above which a decode is a full-partition decode |
+
+`ops-deploy` renders `DSP_IIIF_MEMORY_LIMIT` → `SIPI_MEMORY_LIMIT` and
+`DSP_IIIF_ADMISSION_MODE` → `SIPI_ADMISSION_MODE`. An unrecognized
+`admission_mode` (e.g. a stale `off`) is a **startup error** (fail loud).
+
+## Monitor → enforce workflow
+
+1. **Ship in `monitor`** (default). No ops-deploy change needed: the defaults
+   live in the binary, so the fingerprint and shadow counters appear on Grafana
+   as soon as the new binary runs. `monitor` is observe-only — it changes no
+   behavior (the full thread cap does not reject; it shadow-counts).
+2. **Observe** (1–2 weeks):
+   - `sipi_admission_permits_in_use` / `sipi_admission_permits_total` — saturation.
+   - `sipi_admission_waiting`, `sipi_admission_shed` — queue pressure and 503s.
+   - The full-partition shadow counters (see Memory Budget) show what `enforce`
+     would shed — enough to size `full_max`/`full_mem`.
+   - `sipi_admission_mode`, `sipi_admission_tile_min_threads`,
+     `sipi_admission_full_max_threads`, the ratios, `sipi_admission_memory_limit_bytes`,
+     `sipi_admission_large_decode_threshold_bytes` — the config fingerprint.
+3. **Tune** the ratios / `memory_limit` if the shadow counters fire on legitimate
+   traffic.
+4. **Flip to `enforce`**: set `DSP_IIIF_ADMISSION_MODE=enforce` and redeploy.
+
+## Rejections
+
+- **503 Service Unavailable + `Retry-After`** — the pool (threads) or the full
+  memory budget is currently saturated; retry may succeed.
+- **413 Payload Too Large** (no `Retry-After`) — a single request's estimate
+  alone exceeds the full-partition memory budget; it can never succeed.
+
+Tiles are never shed for full-partition pressure — they only shed when no global
+permit is genuinely free (a tile burst beyond `nthreads`).
+
+## Metrics
+
+All admission metrics share the `sipi_admission_*` namespace (rendered from the
+OTLP `sipi.admission.*` instruments). Live occupancy: `permits_in_use`,
+`permits_total`, `waiting`, `shed`. Config fingerprint: `mode`,
+`tile_min_threads`, `full_max_threads`, `tiles_thread_ratio`,
+`tiles_memory_ratio`, `memory_limit_bytes`, `large_decode_threshold_bytes`. The
+per-partition runtime series and the full-partition memory metrics are documented
+in [Memory Budget](memory-budget.md).

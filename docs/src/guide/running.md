@@ -274,6 +274,7 @@ These options are accepted by the `server` subcommand. Usage:
 | `--hostname <name>` | | `SIPI_HOSTNAME` | `localhost` | Public DNS hostname |
 | `--keepalive <sec>` | | `SIPI_KEEPALIVE` | `5` | HTTP keep-alive timeout in seconds (now enforced server-side) |
 | `--nthreads <n>` | `-t` | `SIPI_NTHREADS` | `0` (auto) | Worker threads (`0` = auto: available parallelism, container-aware, fallback 4) |
+| `--tiles-thread-ratio <r>` | | `SIPI_TILES_THREAD_RATIO` | `0.5` | Fraction of workers guaranteed to tiles (0..1); the full partition is hard-capped at the rest |
 | `--max-waiting <n>` | | `SIPI_MAX_WAITING` | `2×nthreads` | Max requests that may wait for a worker before HTTP 503 (`0` = no queue, shed immediately; `Retry-After: 1`) |
 | `--queue-timeout <sec>` | | `SIPI_QUEUE_TIMEOUT` | `5` | Max seconds a request waits in queue before 503 |
 | `--preflight-cache-ttl <sec>` | | `SIPI_PREFLIGHT_CACHE_TTL` | `0` (disabled) | Seconds a `pre_flight` access decision is cached per `(prefix, identifier, credential)`. Opt-in; enable (`>0`) only if the hook decides purely on prefix/identifier/Cookie/Authorization (see the Preflight access-cache section in the Lua scripting guide) |
@@ -325,6 +326,7 @@ flags.
 | `SIPI_HOSTNAME` | `--hostname` | `localhost` | Public hostname |
 | `SIPI_KEEPALIVE` | `--keepalive` | `5` | Keep-alive timeout (seconds, now enforced server-side) |
 | `SIPI_NTHREADS` | `--nthreads` | `0` (auto) | Worker threads (`0` = auto: available parallelism, container-aware, fallback 4) |
+| `SIPI_TILES_THREAD_RATIO` | `--tiles-thread-ratio` | `0.5` | Fraction of workers guaranteed to tiles (0..1); the full partition is hard-capped at the rest |
 | `SIPI_MAX_WAITING` | `--max-waiting` | `2×nthreads` | Max requests that may wait for a worker before 503 (`0` = no queue, shed immediately) |
 | `SIPI_QUEUE_TIMEOUT` | `--queue-timeout` | `5` | Max seconds in queue before 503 |
 | `SIPI_PREFLIGHT_CACHE_TTL` | `--preflight-cache-ttl` | `0` (disabled) | Seconds a `pre_flight` decision is cached per `(prefix, identifier, credential)`. Opt-in; see the Preflight access-cache section in the Lua scripting guide before enabling |

@@ -761,6 +761,26 @@ SIPI_FFI_NODISCARD int sipi_nthreads(int *out);
  *  `*out` = 0 means unlimited. Returns 0, or 500 if `sipi_init` has not run. */
 SIPI_FFI_NODISCARD int sipi_max_post_size(size_t *out);
 
+/*! The resolved admission mode, "monitor" or "enforce". Read back so the shell's
+ *  two-lane pool runs the same mode as the engine's memory budget. The pointer is
+ *  into the process-static EngineContext. Returns 0, or 500 if `sipi_init` has not
+ *  run. */
+SIPI_FFI_NODISCARD int sipi_admission_mode(const char **out);
+
+/*! The tile reserve fraction (`tiles_memory_ratio`) — for the shell's
+ *  config-fingerprint metric. Returns 0, or 500 if `sipi_init` has not run. */
+SIPI_FFI_NODISCARD int sipi_tiles_memory_ratio(double *out);
+
+/*! The tile/full classifier threshold in bytes (`large_decode_threshold_bytes`).
+ *  Read back so the shell classifies against the same value the engine charges
+ *  the budget by. Returns 0, or 500 if `sipi_init` has not run. */
+SIPI_FFI_NODISCARD int sipi_large_decode_threshold_bytes(size_t *out);
+
+/*! The resolved RAM envelope in bytes (`memory_limit`, post 0→auto-detect) — for
+ *  the shell's config-fingerprint metric. Returns 0, or 500 if `sipi_init` has not
+ *  run. */
+SIPI_FFI_NODISCARD int sipi_memory_limit_bytes(size_t *out);
+
 /*! The configured HTTP listen port (the Lua config `sipi.port`). The Rust edge
  *  falls back to this only when neither `--serverport`/`SIPI_SERVERPORT` nor
  *  the dev/test `SIPI_RS_PORT` selected a port. Returns 0, or
