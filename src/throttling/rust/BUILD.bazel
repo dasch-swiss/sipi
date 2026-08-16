@@ -1,0 +1,33 @@
+"""src/throttling/rust — the shell-side two-lane admission pool.
+
+`admission` is the pre-dispatch pool that classifies each request into a tile or
+full partition and bounds concurrency with two semaphores (a global pool + a full
+sub-pool). It is FFI-free — deps are `tokio` and the domain types from
+`//src/iiifparser/rust:iiif_parser` only, never `//src/ffi` or the C++ engine — so
+its concurrency tests run without linking Kakadu (DUNE-002). Colocated under
+`src/throttling/` with the engine-side `//src/throttling/cpp:memory_budget`
+(ADR-0021: the package carries the Throttling umbrella, the crate/type carry the
+mechanism).
+"""
+
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//src:__subpackages__"])
+
+rust_library(
+    name = "admission",
+    srcs = ["lib.rs"],
+    crate_name = "admission",
+    crate_root = "lib.rs",
+    edition = "2021",
+    deps = [
+        "//src/iiifparser/rust:iiif_parser",
+        "@crates//:tokio",
+    ],
+)
+
+rust_test(
+    name = "admission_test",
+    crate = ":admission",
+    edition = "2021",
+)

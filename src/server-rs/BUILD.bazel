@@ -75,6 +75,9 @@ rust_library(
         # The pure-CPU IIIF URL parser (domain types; no FFI). `server-rs` owns
         # the `From<iiif_parser::IiifParams> for SipiIiifParams` flattening.
         "//src/iiifparser/rust:iiif_parser",
+        # The FFI-free two-lane admission pool (classify + acquire + per-partition
+        # counters). Owned by `AppState`; `routes.rs` keeps only the call sites.
+        "//src/throttling/rust:admission",
         # The narrow C FFI seam → the transitive C++ image engine. This is the
         # cc_library → rust link (Open Question #1). //src/ffi:sipi_ffi pulls
         # //src:engine, so the library carries the engine without depending on

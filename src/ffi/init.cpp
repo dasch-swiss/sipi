@@ -219,6 +219,13 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
         }
       }
     }
+    // Admission config, resolved once here (the single authority): the shell
+    // reads these back over the seam so its two-lane thread pool matches the
+    // engine's memory budget. Declared at function scope for the EngineContext
+    // install below.
+    std::string admission_mode_resolved;
+    double tiles_memory_ratio_resolved = 0.0;
+    std::size_t memory_limit_resolved = 0;
     {
       // Admission mode: fail loud on an unrecognized/legacy value (e.g. a stale
       // "off" from an old template) rather than silently defaulting.
@@ -228,12 +235,14 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
           conf.getAdmissionMode().c_str());
         return EXIT_FAILURE;
       }
+      admission_mode_resolved = (*mode == Sipi::AdmissionMode::ENFORCE) ? "enforce" : "monitor";
       // The tile reserve fraction must leave a positive full-lane budget.
       const double ratio = conf.getTilesMemoryRatio();
       if (!(ratio > 0.0 && ratio < 1.0)) {
         log_err("sipi_init: tiles_memory_ratio %.4f out of range (0, 1)", ratio);
         return EXIT_FAILURE;
       }
+      tiles_memory_ratio_resolved = ratio;
       // The RAM envelope: an explicit memory_limit, or the detected available RAM
       // (0 = auto). The full lane gets envelope × (1 − tiles_memory_ratio); the
       // reserve (envelope × tiles_memory_ratio) houses tile usage + the
@@ -243,6 +252,7 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
         const std::size_t detected = Sipi::ffi::detect_available_memory();
         envelope = (detected > 0) ? detected : (1ULL * 1024 * 1024 * 1024);
       }
+      memory_limit_resolved = envelope;
       const auto full_mem = static_cast<std::size_t>(static_cast<double>(envelope) * (1.0 - ratio));
       runtime->memory_budget = std::make_unique<Sipi::SipiMemoryBudget>(full_mem, *mode);
       Sipi::observability::Metrics::instance().decode_memory_budget_bytes.Set(static_cast<double>(full_mem));
@@ -280,6 +290,9 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
       .cache = runtime->cache.get(),
       .memory_budget = runtime->memory_budget.get(),
       .large_decode_threshold_bytes = large_decode_threshold_bytes,
+      .admission_mode = admission_mode_resolved,
+      .tiles_memory_ratio = tiles_memory_ratio_resolved,
+      .memory_limit_bytes = memory_limit_resolved,
       .imgroot = imgroot,
       .resolved_imgroot = resolved_imgroot,
       .docroot = conf.getDocRoot(),

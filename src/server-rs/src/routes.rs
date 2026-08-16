@@ -11,7 +11,6 @@
 
 use std::ffi::CString;
 use std::io::Write;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -21,8 +20,11 @@ use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{on, MethodFilter, MethodRouter};
 use tempfile::NamedTempFile;
-use tokio::sync::{mpsc, oneshot, OwnedSemaphorePermit};
+use tokio::sync::{mpsc, oneshot};
 
+use admission::{
+    Acquired, Admission, AdmissionConfig, AdmissionError, AdmissionKind, AdmissionMode,
+};
 use iiif_parser::{ParsedRequest, RequestKind};
 
 use crate::ffi::{self, PreflightOutcome, SipiPermType, SipiResponse, SipiServeRequest};
@@ -43,7 +45,7 @@ const IMAGE_MIMES: [&str; 5] = [
 ];
 
 /// Cached engine config (read once at startup, after `sipi_init`) plus the shared
-/// Throttling pool that bounds concurrent engine work.
+/// two-lane [`Admission`] pool that bounds concurrent engine work.
 #[derive(Clone)]
 pub struct AppState {
     ready: bool,
@@ -52,22 +54,11 @@ pub struct AppState {
     prefix_as_path: bool,
     has_preflight: bool,
     has_file_preflight: bool,
-    /// Permits = the configured worker count: a permit is held for the duration
-    /// of each blocking engine dispatch, bounding concurrent engine work to the
-    /// worker count. Shared (`Arc`) across all requests.
-    pool: Arc<tokio::sync::Semaphore>,
-    /// The total permit count the pool was sized to (an observable-gauge
-    /// baseline: `permits - available_permits()` = engine work in flight).
-    /// Fixed after startup; `Semaphore` exposes only the live available count.
-    permits: usize,
-    /// How many requests may queue for a permit before the shell sheds
-    /// immediately (`--max-waiting`). A permit that frees admits the oldest
-    /// waiter; beyond this many waiters a new request 503s at once. `0` disables
-    /// queuing entirely (a full pool then sheds immediately).
-    max_waiting: usize,
-    /// How long a queued request waits for a permit before it is shed with 503
-    /// (`--queue-timeout`).
-    queue_timeout: Duration,
+    /// The two-lane admission pool: classifies each request tile/full and bounds
+    /// concurrency (global pool + full sub-pool). Owns the per-partition wait/shed
+    /// counters. Shared (`Arc`) across all requests. See
+    /// [`admission`](../../throttling/rust).
+    admission: Arc<Admission>,
     /// Configured Lua routes (method/route/script), registered as axum routes by
     /// [`crate::app`]. Empty when the engine is uninstalled.
     pub routes: Vec<ffi::RouteEntry>,
@@ -98,28 +89,44 @@ impl AppState {
     /// `nthreads`/`max_waiting`/`queue_timeout` are the
     /// `--nthreads`/`--max-waiting`/`--queue-timeout` serve knobs (`None` → the
     /// defaults below).
-    #[must_use]
     pub fn load(
         configured_routes: Option<Vec<ffi::RouteEntry>>,
         nthreads: Option<u32>,
+        tiles_thread_ratio: Option<f64>,
         max_waiting: Option<u64>,
         queue_timeout: Option<u32>,
         preflight_cache_ttl: Option<u32>,
         preflight_cache_slots: Option<u64>,
-    ) -> Self {
-        // Bound concurrent engine work with a semaphore sized from
-        // `--nthreads`/`SIPI_NTHREADS`; unset (or 0 = auto) sizes it from the host
-        // parallelism.
-        let permits = nthreads
+    ) -> Result<Self, AdmissionError> {
+        // The thread-pool knobs are Rust-owned serve args. `nthreads` (unset or
+        // 0 = auto) sizes the global pool from host parallelism; `max_waiting`
+        // defaults to 2×workers and `queue_timeout` to 5s.
+        let resolved_nthreads = nthreads
             .filter(|n| *n > 0)
-            .map_or_else(default_pool_size, |n| n as usize);
-        let pool = Arc::new(tokio::sync::Semaphore::new(permits));
-        // Bounded wait queue in front of the pool: how many requests may park for
-        // a permit and how long each waits before a 503. `max_waiting` defaults to
-        // 2×workers and `queue_timeout` to 5s; `max_waiting == 0` disables queuing
-        // (a full pool then sheds immediately).
-        let max_waiting = max_waiting.map_or_else(|| permits.saturating_mul(2), |n| n as usize);
+            .map_or_else(admission::default_pool_size, |n| n as usize);
+        let max_waiting =
+            max_waiting.map_or_else(|| resolved_nthreads.saturating_mul(2), |n| n as usize);
         let queue_timeout = Duration::from_secs(u64::from(queue_timeout.unwrap_or(5)));
+        // The memory-coupled admission config is read back from the engine (the
+        // single authority — it parsed the Lua/override config and resolved the
+        // envelope), so the shell's pool classifies and enforces against exactly
+        // the values the engine's memory budget uses. Falls back to the code
+        // defaults only when the engine is not installed (the not-ready arm).
+        let mode = ffi::admission_mode()
+            .ok()
+            .and_then(|s| AdmissionMode::parse(&s))
+            .unwrap_or(AdmissionMode::Monitor);
+        let admission = Arc::new(Admission::new(AdmissionConfig {
+            nthreads: resolved_nthreads,
+            tiles_thread_ratio: tiles_thread_ratio.unwrap_or(0.5),
+            tiles_memory_ratio: ffi::tiles_memory_ratio().unwrap_or(0.25),
+            mode,
+            max_waiting,
+            queue_timeout,
+            large_decode_threshold_bytes: ffi::large_decode_threshold_bytes()
+                .unwrap_or(32 * 1024 * 1024),
+            memory_limit_bytes: ffi::memory_limit_bytes().unwrap_or(0),
+        })?);
         // Preflight access-cache: opt-in, TTL default 0 = disabled (→ `None`, no
         // cache work per request); a TTL > 0 enables it, slots default 4096.
         let preflight_cache = preflight_cache::PreflightCache::new(
@@ -128,156 +135,57 @@ impl AppState {
                 preflight_cache_ttl.map_or(preflight_cache::DEFAULT_TTL_SECS, u64::from),
             ),
         );
-        match (
-            ffi::imgroot(false),
-            ffi::imgroot(true),
-            ffi::prefix_as_path(),
-        ) {
-            (Ok(imgroot), Ok(resolved_imgroot), Ok(prefix_as_path)) => Self {
-                ready: true,
-                imgroot,
-                resolved_imgroot,
-                prefix_as_path,
-                // A failed hook probe (engine error) disables preflight rather
-                // than failing startup — the same effect as "no hook defined".
-                has_preflight: ffi::has_preflight().unwrap_or(false),
-                has_file_preflight: ffi::has_file_preflight().unwrap_or(false),
-                pool,
-                permits,
-                max_waiting,
-                queue_timeout,
-                // TOML config supplies routes directly; a Lua config has them
-                // read back from the engine via the seam.
-                routes: configured_routes.unwrap_or_else(|| ffi::routes().unwrap_or_default()),
-                max_post_size: ffi::max_post_size().unwrap_or(0),
-                // The fileserver docroot/wwwroute (empty when not configured →
-                // no static route registered).
-                docroot: ffi::docroot().unwrap_or_default(),
-                wwwroute: ffi::wwwroute().unwrap_or_default(),
-                preflight_cache,
+        Ok(
+            match (
+                ffi::imgroot(false),
+                ffi::imgroot(true),
+                ffi::prefix_as_path(),
+            ) {
+                (Ok(imgroot), Ok(resolved_imgroot), Ok(prefix_as_path)) => Self {
+                    ready: true,
+                    imgroot,
+                    resolved_imgroot,
+                    prefix_as_path,
+                    // A failed hook probe (engine error) disables preflight rather
+                    // than failing startup — the same effect as "no hook defined".
+                    has_preflight: ffi::has_preflight().unwrap_or(false),
+                    has_file_preflight: ffi::has_file_preflight().unwrap_or(false),
+                    admission,
+                    // TOML config supplies routes directly; a Lua config has them
+                    // read back from the engine via the seam.
+                    routes: configured_routes.unwrap_or_else(|| ffi::routes().unwrap_or_default()),
+                    max_post_size: ffi::max_post_size().unwrap_or(0),
+                    // The fileserver docroot/wwwroute (empty when not configured →
+                    // no static route registered).
+                    docroot: ffi::docroot().unwrap_or_default(),
+                    wwwroute: ffi::wwwroute().unwrap_or_default(),
+                    preflight_cache,
+                },
+                _ => Self {
+                    ready: false,
+                    imgroot: String::new(),
+                    resolved_imgroot: String::new(),
+                    prefix_as_path: true,
+                    has_preflight: false,
+                    has_file_preflight: false,
+                    admission,
+                    routes: Vec::new(),
+                    max_post_size: 0,
+                    docroot: String::new(),
+                    wwwroute: String::new(),
+                    preflight_cache,
+                },
             },
-            _ => Self {
-                ready: false,
-                imgroot: String::new(),
-                resolved_imgroot: String::new(),
-                prefix_as_path: true,
-                has_preflight: false,
-                has_file_preflight: false,
-                pool,
-                permits,
-                max_waiting,
-                queue_timeout,
-                routes: Vec::new(),
-                max_post_size: 0,
-                docroot: String::new(),
-                wwwroute: String::new(),
-                preflight_cache,
-            },
-        }
+        )
     }
 
-    /// Register the OTel observable instruments for the engine + pool metrics
+    /// Register the OTel observable instruments for the engine + admission metrics
     /// against the global meter (a no-op when no meter provider is installed, so
     /// it is safe to call unconditionally). Hands the metrics module the shared
-    /// pool + its total-permit count for the concurrency gauges.
+    /// [`Admission`] pool, whose snapshot feeds the concurrency + fingerprint gauges.
     pub(crate) fn register_metrics(&self) {
-        crate::metrics::register(Arc::clone(&self.pool), self.permits);
+        crate::metrics::register(Arc::clone(&self.admission));
     }
-}
-
-/// Cumulative 503 load-shed count: incremented every time the engine pool is
-/// saturated and a request is shed ([`busy_response`]). Read by the OTel bridge
-/// ([`crate::metrics`]) as the `sipi.pool.load_shed` observable counter. A plain
-/// atomic (not an OTel sync counter) so the shed path holds no meter handle and
-/// the count is correct regardless of whether metrics export is enabled.
-static LOAD_SHED_TOTAL: AtomicU64 = AtomicU64::new(0);
-
-/// The cumulative 503 load-shed count for the OTel observable counter.
-pub(crate) fn load_shed_total() -> u64 {
-    LOAD_SHED_TOTAL.load(Ordering::Relaxed)
-}
-
-/// Requests currently parked in the wait queue for a pool permit. Read by the
-/// OTel bridge as the `sipi.pool.waiting` gauge; maintained by [`WaitGuard`].
-static WAITING: AtomicUsize = AtomicUsize::new(0);
-
-/// The live wait-queue depth for the OTel observable gauge.
-pub(crate) fn waiting() -> i64 {
-    // The count never exceeds `max_waiting` (a small config value), so the
-    // usize→i64 cast cannot overflow.
-    WAITING.load(Ordering::Relaxed) as i64
-}
-
-/// Cumulative 503s from requests that waited past `queue_timeout` (a subset of
-/// [`LOAD_SHED_TOTAL`], which counts every Throttling shed). Read by the OTel
-/// bridge as the `sipi.pool.queue_timeout` counter.
-static QUEUE_TIMEOUT_TOTAL: AtomicU64 = AtomicU64::new(0);
-
-/// The cumulative queue-timeout shed count for the OTel observable counter.
-pub(crate) fn queue_timeout_total() -> u64 {
-    QUEUE_TIMEOUT_TOTAL.load(Ordering::Relaxed)
-}
-
-/// RAII bump of the [`WAITING`] gauge: incremented while a request is parked for
-/// a permit, decremented on every exit (permit acquired, timeout, or panic).
-struct WaitGuard;
-impl WaitGuard {
-    fn new() -> Self {
-        WAITING.fetch_add(1, Ordering::Relaxed);
-        WaitGuard
-    }
-}
-impl Drop for WaitGuard {
-    fn drop(&mut self) {
-        WAITING.fetch_sub(1, Ordering::Relaxed);
-    }
-}
-
-/// The admission decision for a request that needs the engine pool.
-enum Admission {
-    /// A permit was acquired (immediately or after waiting); held for the dispatch.
-    Admitted(OwnedSemaphorePermit),
-    /// The pool is full and the wait queue is at capacity (or disabled) — shed now.
-    Shed,
-    /// Parked for a permit but `queue_timeout` elapsed first.
-    TimedOut,
-}
-
-/// Admit a request to the engine pool, or shed it. Fast path: a free permit is
-/// taken without waiting (the common case). Otherwise, if the wait queue has room
-/// (`WAITING < max_waiting`), park for up to `queue_timeout` for a permit; a full
-/// (or disabled, `max_waiting == 0`) queue sheds immediately, and an elapsed wait
-/// sheds as [`Admission::TimedOut`].
-async fn acquire_or_shed(
-    pool: Arc<tokio::sync::Semaphore>,
-    max_waiting: usize,
-    queue_timeout: Duration,
-) -> Admission {
-    if let Ok(permit) = Arc::clone(&pool).try_acquire_owned() {
-        return Admission::Admitted(permit);
-    }
-    // A small overshoot from a racing check-then-park is harmless: the bound is
-    // a soft cap on queue depth, not an invariant.
-    if max_waiting == 0 || WAITING.load(Ordering::Relaxed) >= max_waiting {
-        return Admission::Shed;
-    }
-    let _guard = WaitGuard::new();
-    match tokio::time::timeout(queue_timeout, pool.acquire_owned()).await {
-        Ok(Ok(permit)) => Admission::Admitted(permit),
-        // The semaphore is never closed in normal operation; treat a closed pool
-        // (only reachable on teardown) as a shed rather than a panic.
-        Ok(Err(_)) => Admission::Shed,
-        Err(_) => {
-            QUEUE_TIMEOUT_TOTAL.fetch_add(1, Ordering::Relaxed);
-            Admission::TimedOut
-        }
-    }
-}
-
-/// Pool size when the configured `nthreads` is 0 (auto) or unreadable: the host
-/// parallelism, falling back to 4 when even that is unavailable.
-fn default_pool_size() -> usize {
-    std::thread::available_parallelism().map_or(4, |n| n.get())
 }
 
 /// The resolved access decision: the on-disk file the hook chose, the permission,
@@ -334,20 +242,18 @@ pub async fn iiif(
     }
 
     // Everything else drives the blocking C++ engine (the per-call preflight VM,
-    // realpath, decode/encode). Bound concurrency on the pool and run the work on
-    // a blocking thread so the async runtime stays responsive; when the pool is
-    // full the request queues for up to `queue_timeout`, then sheds with 503 +
+    // realpath, decode/encode). Classify the request tile/full and admit it to
+    // that partition of the two-lane pool, running the work on a blocking thread
+    // so the async runtime stays responsive; a shed/timeout returns 503 +
     // Retry-After. /health, /favicon, and OPTIONS are separate routes that never
     // reach here.
-    let permit = match acquire_or_shed(
-        Arc::clone(&state.pool),
-        state.max_waiting,
-        state.queue_timeout,
-    )
-    .await
+    let permit = match state
+        .admission
+        .acquire(state.admission.classify(&parsed))
+        .await
     {
-        Admission::Admitted(permit) => permit,
-        Admission::Shed | Admission::TimedOut => return busy_response(),
+        Acquired::Admitted(permit) => permit,
+        Acquired::Shed | Acquired::TimedOut => return busy_response(),
     };
     // Shell-set headers on the streamed (success) response, captured before the
     // request is moved onto the blocking thread: the CORS Origin echo + credentials
@@ -521,9 +427,9 @@ fn complete(outcome_tx: oneshot::Sender<Outcome>, response: Response) {
 }
 
 /// Pool-full Throttling: a bare 503 with `Retry-After: 1` — no body,
-/// no internal detail. The client should retry shortly.
+/// no internal detail. The client should retry shortly. The shed is already
+/// counted per partition inside [`Admission`]; this only builds the response.
 fn busy_response() -> Response {
-    LOAD_SHED_TOTAL.fetch_add(1, Ordering::Relaxed);
     let mut response = sink::error_response(StatusCode::SERVICE_UNAVAILABLE);
     response
         .headers_mut()
@@ -1043,18 +949,13 @@ async fn serve_lua_script(
         body = bytes.to_vec();
     }
 
-    // Bound concurrency on the engine pool, then run the (blocking) Lua VM off the
-    // async runtime. A full pool queues for up to `queue_timeout`, then sheds with
-    // 503 + Retry-After.
-    let permit = match acquire_or_shed(
-        Arc::clone(&state.pool),
-        state.max_waiting,
-        state.queue_timeout,
-    )
-    .await
-    {
-        Admission::Admitted(permit) => permit,
-        Admission::Shed | Admission::TimedOut => return busy_response(),
+    // Lua routes take a global permit only (no full-partition thread slot); any
+    // decode they trigger is still charged to the full-lane memory budget engine
+    // side. Admit via the tile partition, then run the (blocking) Lua VM off the
+    // async runtime; a shed/timeout returns 503 + Retry-After.
+    let permit = match state.admission.acquire(AdmissionKind::Tile).await {
+        Acquired::Admitted(permit) => permit,
+        Acquired::Shed | Acquired::TimedOut => return busy_response(),
     };
     let (outcome_tx, outcome_rx) = oneshot::channel::<Outcome>();
     let (body_tx, body_rx) = mpsc::channel::<axum::body::Bytes>(sink::BODY_CHANNEL_CAP);
@@ -2092,78 +1993,8 @@ mod tests {
         assert_eq!(resp.headers().get(header::RETRY_AFTER).unwrap(), "1");
     }
 
-    /// A current-thread runtime with the timer driver, so `acquire_or_shed`'s
-    /// `tokio::time::timeout` works without the `#[tokio::test]` macro.
-    fn timed_rt() -> tokio::runtime::Runtime {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_time()
-            .build()
-            .unwrap()
-    }
-
-    #[test]
-    fn acquire_or_shed_admits_when_permit_free() {
-        timed_rt().block_on(async {
-            let pool = Arc::new(tokio::sync::Semaphore::new(2));
-            let admission = acquire_or_shed(Arc::clone(&pool), 4, Duration::from_secs(5)).await;
-            assert!(matches!(admission, Admission::Admitted(_)));
-        });
-    }
-
-    #[test]
-    fn acquire_or_shed_sheds_immediately_when_queue_disabled() {
-        timed_rt().block_on(async {
-            let pool = Arc::new(tokio::sync::Semaphore::new(1));
-            // Exhaust the pool and hold the permit for the whole test.
-            let _held = Arc::clone(&pool).try_acquire_owned().unwrap();
-            // max_waiting == 0 → no queue → shed without waiting.
-            let admission = acquire_or_shed(Arc::clone(&pool), 0, Duration::from_secs(5)).await;
-            assert!(matches!(admission, Admission::Shed));
-        });
-    }
-
-    #[test]
-    fn acquire_or_shed_times_out_when_pool_stays_full() {
-        timed_rt().block_on(async {
-            let pool = Arc::new(tokio::sync::Semaphore::new(1));
-            let _held = Arc::clone(&pool).try_acquire_owned().unwrap();
-            // A generous queue depth so a concurrent test's waiters cannot push us
-            // over max_waiting; the held permit never frees, so we must time out.
-            let admission =
-                acquire_or_shed(Arc::clone(&pool), 1000, Duration::from_millis(50)).await;
-            assert!(matches!(admission, Admission::TimedOut));
-        });
-    }
-
-    #[test]
-    fn acquire_or_shed_sheds_when_wait_queue_full() {
-        timed_rt().block_on(async {
-            let pool = Arc::new(tokio::sync::Semaphore::new(1));
-            let _held = Arc::clone(&pool).try_acquire_owned().unwrap(); // pool empty
-                                                                        // Park one waiter to fill the single queue slot (the permit never
-                                                                        // frees, so it stays parked holding its WaitGuard).
-            let bg = Arc::clone(&pool);
-            tokio::spawn(async move {
-                let _ = acquire_or_shed(bg, 1, Duration::from_secs(60)).await;
-            });
-            // Let the spawned task reach its park point (WaitGuard incremented).
-            for _ in 0..1000 {
-                if waiting() >= 1 {
-                    break;
-                }
-                tokio::task::yield_now().await;
-            }
-            assert!(waiting() >= 1, "background waiter did not park");
-            // Queue full (waiters ≥ max_waiting) → the next request sheds at once.
-            let admission = acquire_or_shed(Arc::clone(&pool), 1, Duration::from_millis(50)).await;
-            assert!(matches!(admission, Admission::Shed));
-        });
-    }
-
-    #[test]
-    fn default_pool_size_is_positive() {
-        assert!(default_pool_size() >= 1);
-    }
+    // The two-lane pool's acquire/shed/classify behaviour is covered by the
+    // engine-free crate tests in `//src/throttling/rust:admission_test`.
 
     // ── /server docroot fileserver pure helpers ──────────────────────────────
 

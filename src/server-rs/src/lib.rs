@@ -73,6 +73,7 @@ pub fn run(
     overrides: ServerOverrides,
     drain_timeout: Option<u64>,
     nthreads: Option<u32>,
+    tiles_thread_ratio: Option<f64>,
     max_waiting: Option<u64>,
     queue_timeout: Option<u32>,
     preflight_cache_ttl: Option<u32>,
@@ -107,6 +108,7 @@ pub fn run(
         overrides,
         drain_timeout,
         nthreads,
+        tiles_thread_ratio,
         max_waiting,
         queue_timeout,
         preflight_cache_ttl,
@@ -123,6 +125,7 @@ async fn server_main(
     overrides: ServerOverrides,
     drain_timeout: Option<u64>,
     nthreads: Option<u32>,
+    tiles_thread_ratio: Option<f64>,
     max_waiting: Option<u64>,
     queue_timeout: Option<u32>,
     preflight_cache_ttl: Option<u32>,
@@ -221,6 +224,7 @@ async fn server_main(
         drain_deadline,
         configured_routes,
         nthreads,
+        tiles_thread_ratio,
         max_waiting,
         queue_timeout,
         preflight_cache_ttl,
@@ -347,6 +351,7 @@ async fn serve(
     drain_timeout: Duration,
     configured_routes: Option<Vec<ffi::RouteEntry>>,
     nthreads: Option<u32>,
+    tiles_thread_ratio: Option<f64>,
     max_waiting: Option<u64>,
     queue_timeout: Option<u32>,
     preflight_cache_ttl: Option<u32>,
@@ -356,14 +361,20 @@ async fn serve(
     // not-ready state (no --config) leaves the serve routes returning 503.
     // `configured_routes` is `Some` for a TOML config (routes sourced Rust-side),
     // `None` for a Lua config (routes read back from the engine via the seam).
-    let state = Arc::new(routes::AppState::load(
-        configured_routes,
-        nthreads,
-        max_waiting,
-        queue_timeout,
-        preflight_cache_ttl,
-        preflight_cache_slots,
-    ));
+    // A degenerate admission ratio (`tiles_thread_ratio` ∉ (0,1)) is a hard
+    // config error — fail loud at startup rather than serve with a broken pool.
+    let state = Arc::new(
+        routes::AppState::load(
+            configured_routes,
+            nthreads,
+            tiles_thread_ratio,
+            max_waiting,
+            queue_timeout,
+            preflight_cache_ttl,
+            preflight_cache_slots,
+        )
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string()))?,
+    );
     // Bind the OTel observable instruments now that the engine pool exists (the
     // concurrency gauges read its permits). A no-op when no meter provider was
     // installed (no OTLP endpoint), so it is safe to call unconditionally.
@@ -485,9 +496,12 @@ mod app_tests {
     // serve routes 503. The full serve path (real images via the FFI) is covered
     // by the manual smoke run and the reqwest e2e suite targeting //src/cli-rs:sipi.
     fn test_app() -> Router {
-        app(Arc::new(routes::AppState::load(
-            None, None, None, None, None, None,
-        )))
+        // Defaults everywhere (ratios fall back to valid values), so `load` cannot
+        // return the degenerate-ratio error here.
+        app(Arc::new(
+            routes::AppState::load(None, None, None, None, None, None, None)
+                .expect("default admission config is valid"),
+        ))
     }
 
     async fn status_of(uri: &str) -> StatusCode {

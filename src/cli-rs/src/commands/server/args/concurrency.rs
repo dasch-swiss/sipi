@@ -8,8 +8,8 @@
 //! request waits before a 503 (default 5s). The last two configure the shell's
 //! opt-in preflight access-cache (`SIPI_PREFLIGHT_CACHE_TTL`/
 //! `SIPI_PREFLIGHT_CACHE_SLOTS`), disabled unless a TTL is set. See
-//! `server-rs/routes.rs`'s `AppState::load` / `acquire_or_shed` and
-//! `server-rs/preflight_cache.rs`.
+//! `server-rs/routes.rs`'s `AppState::load` and the `Admission` classify/acquire
+//! call sites (`//src/throttling/rust:admission`), and `server-rs/preflight_cache.rs`.
 
 use clap::Args;
 
@@ -20,6 +20,10 @@ pub struct ConcurrencyArgs {
     /// CPU cores). Also accepts the `-t` short form.
     #[arg(long, short = 't', env = "SIPI_NTHREADS", value_name = "N")]
     pub nthreads: Option<u32>,
+    /// Fraction of the worker threads guaranteed to tiles (0..1); the full
+    /// partition is hard-capped at the rest. Defaults to 0.5.
+    #[arg(long, env = "SIPI_TILES_THREAD_RATIO", value_name = "RATIO")]
+    pub tiles_thread_ratio: Option<f64>,
     /// Max requests queued for a worker before 503 (0 = no queue, shed
     /// immediately; default 2×nthreads).
     #[arg(long, env = "SIPI_MAX_WAITING", value_name = "N")]
