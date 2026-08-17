@@ -24,8 +24,10 @@ Everything derives from two hard caps (RAM + CPU threads), two ratios, and a mod
 - **Memory.** `full_mem = memory_limit × (1 − tiles_memory_ratio)` caps the full
   partition's decode bytes; tiles bypass the budget. See
   [Memory Budget](memory-budget.md).
-- **Mode.** `monitor` (default) shadow-counts what `enforce` would shed;
-  `enforce` applies the caps and sheds with 503/413.
+- **Mode.** Two tiers. The **basic tier** (the global CPU/thread concurrency cap)
+  is always enforced. `basic` (default) enforces only that tier and shadow-counts
+  what the **advanced tier** (the full thread cap plus the memory budget) *would*
+  shed; `advanced` also enforces the advanced tier and sheds with 503/413.
 
 Tile priority is **bounded, not absolute**: `tokio`'s semaphore is FIFO, so a
 full already parked in the global queue does not yield to a later tile. The
@@ -54,19 +56,21 @@ tracked and their disagreement is observable, so residual drift can be tuned.
 | `SIPI_TILES_THREAD_RATIO` | `--tiles-thread-ratio` | `0.5` | Fraction of workers guaranteed to tiles (0..1) |
 | `SIPI_MEMORY_LIMIT` | `--memory-limit` | `0` (auto) | Total RAM envelope (0 = auto-detect) |
 | `SIPI_TILES_MEMORY_RATIO` | `--tiles-memory-ratio` | `0.25` | Fraction of the envelope reserved for tiles + the non-decode floor |
-| `SIPI_ADMISSION_MODE` | `--admission-mode` | `monitor` | `monitor` or `enforce` |
+| `SIPI_ADMISSION_MODE` | `--admission-mode` | `basic` | `basic` (enforce basic tier only) or `advanced` (also enforce the advanced tier) |
 | `SIPI_LARGE_DECODE_THRESHOLD_BYTES` | `--large-decode-threshold-bytes` | `33554432` (32 MiB) | Estimated peak at/above which a decode is a full-partition decode |
 
 `ops-deploy` renders `DSP_IIIF_MEMORY_LIMIT` → `SIPI_MEMORY_LIMIT` and
 `DSP_IIIF_ADMISSION_MODE` → `SIPI_ADMISSION_MODE`. An unrecognized
-`admission_mode` (e.g. a stale `off`) is a **startup error** (fail loud).
+`admission_mode` (e.g. a stale `off` or a legacy `monitor`/`enforce`) is **not** a
+startup error; it silently falls back to the `basic` default.
 
-## Monitor → enforce workflow
+## Basic → advanced workflow
 
-1. **Ship in `monitor`** (default). No ops-deploy change needed: the defaults
+1. **Ship in `basic`** (default). No ops-deploy change needed: the defaults
    live in the binary, so the fingerprint and shadow counters appear on Grafana
-   as soon as the new binary runs. `monitor` is observe-only — it changes no
-   behavior (the full thread cap does not reject; it shadow-counts).
+   as soon as the new binary runs. `basic` enforces only the basic tier — the
+   advanced tier is observe-only, so it changes no behavior (the full thread cap
+   does not reject; it shadow-counts).
 2. **Observe** (1–2 weeks):
    - `sipi_admission_permits_in_use` / `sipi_admission_permits_total` and
      `sipi_admission_full_in_use` — global and full-partition saturation.
@@ -74,14 +78,14 @@ tracked and their disagreement is observable, so residual drift can be tuned.
      `sipi_admission_tile_shed_total` / `sipi_admission_full_shed_total` —
      per-partition queue pressure and 503s.
    - `sipi_admission_full_shadow_rejected_total` and the full-partition memory
-     shadow counters (see Memory Budget) show what `enforce` would shed — enough
+     shadow counters (see Memory Budget) show what `advanced` would shed — enough
      to size `full_max`/`full_mem`.
    - `sipi_admission_mode`, `sipi_admission_tile_min_threads`,
      `sipi_admission_full_max_threads`, the ratios, `sipi_admission_memory_limit_bytes`,
      `sipi_admission_large_decode_threshold_bytes` — the config fingerprint.
 3. **Tune** the ratios / `memory_limit` if the shadow counters fire on legitimate
    traffic.
-4. **Flip to `enforce`**: set `DSP_IIIF_ADMISSION_MODE=enforce` and redeploy.
+4. **Switch to `advanced`**: set `DSP_IIIF_ADMISSION_MODE=advanced` and redeploy.
 
 ## Rejections
 
@@ -108,9 +112,9 @@ OTLP `sipi.admission.*` instruments; Prometheus appends `_total` to counters).
 **Counters (monotonic):**
 
 - `tile_shed_total` / `full_shed_total` — 503 sheds per partition.
-- `full_shadow_rejected_total` — monitor-only: fulls the `enforce` cap *would*
-  have rejected (zero in `enforce`, where `full_shed_total` counts the real
-  rejections). The signal that sizes `full_max` before the flip.
+- `full_shadow_rejected_total` — basic-only: fulls the advanced-tier cap *would*
+  have rejected (zero in `advanced`, where `full_shed_total` counts the real
+  rejections). The signal that sizes `full_max` before the switch.
 - `classifier_disagreement_total` — serves where the shell's pre-dispatch
   tile/full verdict differed from the engine's precise post-decode verdict. A
   low, flat value confirms the pixel-proxy heuristic tracks the engine; a rising

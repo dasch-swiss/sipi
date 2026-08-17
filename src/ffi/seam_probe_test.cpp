@@ -102,20 +102,33 @@ TEST(SeamProbe, PrefixAsPathReflectsConfig)
   EXPECT_EQ(v, 1);
 }
 
-TEST(SeamProbe, NthreadsReflectsConfig)
+TEST(SeamProbe, AdmissionConfigReflectsEngineContext)
 {
-  Sipi::ffi::EngineContext eng;// services null (disabled) — the getter doesn't read them
-  eng.nthreads = 7;
+  // The shell reads the resolved admission config back over these getters so its
+  // two-lane pool runs the same mode/threshold/ratio/envelope the engine budget
+  // does (single authority = the engine's resolved EngineContext).
+  Sipi::ffi::EngineContext eng;// services null — the getters don't read them
+  eng.admission_mode = "advanced";
+  eng.tiles_memory_ratio = 0.3;
+  eng.large_decode_threshold_bytes = 64UL * 1024 * 1024;
+  eng.memory_limit_bytes = 8UL * 1024 * 1024 * 1024;
   Sipi::ffi::set_engine_context(eng);
-  int v = -1;
-  ASSERT_EQ(sipi_nthreads(&v), 0);
-  EXPECT_EQ(v, 7);
 
-  // 0 is the auto sentinel the Rust shell resolves against host parallelism.
-  eng.nthreads = 0;
-  Sipi::ffi::set_engine_context(eng);
-  ASSERT_EQ(sipi_nthreads(&v), 0);
-  EXPECT_EQ(v, 0);
+  const char *mode = nullptr;
+  ASSERT_EQ(sipi_admission_mode(&mode), 0);
+  EXPECT_STREQ(mode, "advanced");
+
+  double ratio = -1.0;
+  ASSERT_EQ(sipi_tiles_memory_ratio(&ratio), 0);
+  EXPECT_DOUBLE_EQ(ratio, 0.3);
+
+  size_t threshold = 0;
+  ASSERT_EQ(sipi_large_decode_threshold_bytes(&threshold), 0);
+  EXPECT_EQ(threshold, 64UL * 1024 * 1024);
+
+  size_t limit = 0;
+  ASSERT_EQ(sipi_memory_limit_bytes(&limit), 0);
+  EXPECT_EQ(limit, 8UL * 1024 * 1024 * 1024);
 }
 
 TEST(SeamProbe, ImageDimsReadsNativeShape)

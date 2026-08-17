@@ -268,11 +268,6 @@ client info could like follows:
             end
         </lua>
         <tr>
-            <td>number of threads:</td>
-            <td>:</td>
-            <td><lua>server.print(config.n_threads)</lua></td>
-        </tr>
-        <tr>
             <td>maximal post size:</td>
             <td>:</td>
             <td><lua>server.print(config.max_post_size)</lua></td>
@@ -543,13 +538,6 @@ Maximal keep-alive time for HTTP requests that ask for a keep-alive connection.
     
 Default thumbnail image size.
 (see [thumb_size](../guide/sipi.md#thumbsize) in configuration description).
-
-#### config.n\_threads
-
-    config.n_threads
-    
-Number of worker threads SIPI uses.
-(see [nthreads](../guide/sipi.md#nthreads) in configuration description).
 
 #### config.max\_post\_size
 

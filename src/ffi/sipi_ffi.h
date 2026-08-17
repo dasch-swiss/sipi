@@ -278,7 +278,7 @@ typedef struct SipiServerConfig
   const char *cache_size;         /* raw "200M" — engine parses the suffix */
   const char *maxpost;            /* raw "300M" — engine parses the suffix */
   const char *memory_limit;       /* raw "8G" RAM envelope — engine parses the suffix; "0"/absent = auto-detect */
-  const char *admission_mode;     /* "monitor" | "enforce" */
+  const char *admission_mode;     /* "basic" | "advanced" */
   const char *thumbsize;
   const char *knorapath;
   const char *knoraport;
@@ -751,17 +751,12 @@ SIPI_FFI_NODISCARD int sipi_wwwroute(const char **out);
  *  Returns 0, or 500 if `sipi_init` has not run. */
 SIPI_FFI_NODISCARD int sipi_prefix_as_path(int *out);
 
-/*! The configured worker-thread count (the Lua config `nthreads`). `*out` = 0
- *  means the operator left it auto — the Rust shell then sizes its blocking pool
- *  from the host parallelism. Returns 0, or 500 if `sipi_init` has not run. */
-SIPI_FFI_NODISCARD int sipi_nthreads(int *out);
-
 /*! The configured max POST body size in bytes (the Lua config `max_post_size`).
  *  The Rust shell caps Lua-route request bodies at this size (oversized → 413).
  *  `*out` = 0 means unlimited. Returns 0, or 500 if `sipi_init` has not run. */
 SIPI_FFI_NODISCARD int sipi_max_post_size(size_t *out);
 
-/*! The resolved admission mode, "monitor" or "enforce". Read back so the shell's
+/*! The resolved admission mode, "basic" or "advanced". Read back so the shell's
  *  two-lane pool runs the same mode as the engine's memory budget. The pointer is
  *  into the process-static EngineContext. Returns 0, or 500 if `sipi_init` has not
  *  run. */

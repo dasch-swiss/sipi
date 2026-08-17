@@ -227,15 +227,12 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
     double tiles_memory_ratio_resolved = 0.0;
     std::size_t memory_limit_resolved = 0;
     {
-      // Admission mode: fail loud on an unrecognized/legacy value (e.g. a stale
-      // "off" from an old template) rather than silently defaulting.
-      const std::optional<Sipi::AdmissionMode> mode = Sipi::parse_admission_mode(conf.getAdmissionMode());
-      if (!mode.has_value()) {
-        log_err("sipi_init: invalid admission_mode \"%s\" (expected \"monitor\" or \"enforce\")",
-          conf.getAdmissionMode().c_str());
-        return EXIT_FAILURE;
-      }
-      admission_mode_resolved = (*mode == Sipi::AdmissionMode::ENFORCE) ? "enforce" : "monitor";
+      // Admission mode: an unrecognized/legacy value (e.g. a stale "monitor"
+      // from an old template) falls back to the basic default rather than
+      // failing startup — same as the rest of config, "if it's wrong, too bad".
+      const Sipi::AdmissionMode mode =
+        Sipi::parse_admission_mode(conf.getAdmissionMode()).value_or(Sipi::AdmissionMode::BASIC);
+      admission_mode_resolved = (mode == Sipi::AdmissionMode::ADVANCED) ? "advanced" : "basic";
       // The tile reserve fraction must leave a positive full-lane budget.
       const double ratio = conf.getTilesMemoryRatio();
       if (!(ratio > 0.0 && ratio < 1.0)) {
@@ -254,7 +251,7 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
       }
       memory_limit_resolved = envelope;
       const auto full_mem = static_cast<std::size_t>(static_cast<double>(envelope) * (1.0 - ratio));
-      runtime->memory_budget = std::make_unique<Sipi::SipiMemoryBudget>(full_mem, *mode);
+      runtime->memory_budget = std::make_unique<Sipi::SipiMemoryBudget>(full_mem, mode);
       Sipi::observability::Metrics::instance().decode_memory_budget_bytes.Set(static_cast<double>(full_mem));
     }
 
@@ -301,7 +298,6 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
       .jpeg_quality = conf.getJpegQuality(),
       .scaling_quality = to_scaling_quality(conf.getScalingQuality()),
       .max_pixel_limit = conf.getMaxPixelLimit(),
-      .nthreads = static_cast<int>(conf.getNThreads()),
       .port = conf.getPort(),
       .max_post_size = conf.getMaxPostSize(),
     });

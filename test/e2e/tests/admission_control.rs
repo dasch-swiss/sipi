@@ -1,8 +1,8 @@
 //! End-to-end coverage for cost-based two-lane admission control (ADR-0022):
-//! enforce-mode full-lane budget rejection (413), the tile bypass, an
-//! in-budget full decode, and monitor observe-only. The oracle and its
+//! advanced-mode full-lane budget rejection (413), the tile bypass, an
+//! in-budget full decode, and basic-mode observe-only. The oracle and its
 //! differential parity gate were removed (ADR-0020), so this suite is the
-//! enforce-mode regression net alongside the engine-free
+//! advanced-mode regression net alongside the engine-free
 //! `//src/throttling/rust:admission` crate tests and the engine budget unit
 //! tests.
 //!
@@ -17,7 +17,7 @@
 //! `SingleRequestExceedingBudgetIsFlaggedAsTooLarge`) and the thread shed by
 //! the crate's `full_partition_is_hard_capped_even_when_tiles_idle`.
 //!
-//! Every enforce test runs against its **own empty cache dir**: a cache hit
+//! Every advanced-mode test runs against its **own empty cache dir**: a cache hit
 //! makes the engine return before the memory-budget gate (serve_image.cpp), so
 //! a shared/warm cache would mask the very rejection under test. Each server
 //! also lowers `--large-decode-threshold-bytes` to 100 KB so the small
@@ -63,10 +63,10 @@ const FULL_MAX: &str = "/unit/lena512.jp2/full/max/0/default.jpg";
 // =============================================================================
 
 #[test]
-fn enforce_estimate_alone_exceeds_budget_returns_413() {
+fn advanced_estimate_alone_exceeds_budget_returns_413() {
     // full_mem = 200 * (1 - 0.5) = 100 bytes; lena512's ~768 KB estimate exceeds
     // it on the very first CAS, independent of load -> 413, no concurrency needed.
-    let (srv, cache) = start("enforce", "200", "0.5");
+    let (srv, cache) = start("advanced", "200", "0.5");
     let resp = http_client()
         .get(format!("{}{}", srv.base_url, FULL_MAX))
         .send()
@@ -90,11 +90,11 @@ fn enforce_estimate_alone_exceeds_budget_returns_413() {
 // =============================================================================
 
 #[test]
-fn enforce_tile_bypasses_full_budget() {
+fn advanced_tile_bypasses_full_budget() {
     // A 64x64 region (~12 KB estimate) is below the 100 KB threshold, so it is a
     // tile: it never enters the full-lane budget and serves even though the
     // full budget (100 bytes) could not admit any real decode.
-    let (srv, cache) = start("enforce", "200", "0.5");
+    let (srv, cache) = start("advanced", "200", "0.5");
     let resp = http_client()
         .get(format!(
             "{}/unit/lena512.jp2/0,0,64,64/64,/0/default.jpg",
@@ -117,9 +117,9 @@ fn enforce_tile_bypasses_full_budget() {
 // =============================================================================
 
 #[test]
-fn enforce_full_within_budget_succeeds() {
+fn advanced_full_within_budget_succeeds() {
     // full_mem = 64M * (1 - 0.5) = 32 MiB, far above lena512's ~768 KB estimate.
-    let (srv, cache) = start("enforce", "64M", "0.5");
+    let (srv, cache) = start("advanced", "64M", "0.5");
     let resp = http_client()
         .get(format!("{}{}", srv.base_url, FULL_MAX))
         .send()
@@ -140,23 +140,23 @@ fn enforce_full_within_budget_succeeds() {
 }
 
 // =============================================================================
-// Monitor mode never rejects (observe-only)
+// Basic mode never rejects the advanced tier (observe-only)
 // =============================================================================
 
 #[test]
-fn monitor_over_budget_still_serves() {
-    // The default binary ships `monitor`: it shadow-counts what enforce would
+fn basic_over_budget_still_serves() {
+    // The default binary ships `basic`: it shadow-counts what advanced would
     // reject but changes no behaviour, so an over-budget full still serves 200.
-    let (srv, cache) = start("monitor", "200", "0.5");
+    let (srv, cache) = start("basic", "200", "0.5");
     let resp = http_client()
         .get(format!("{}{}", srv.base_url, FULL_MAX))
         .send()
-        .expect("monitor request should return a response");
+        .expect("basic-mode request should return a response");
 
     assert_eq!(
         resp.status().as_u16(),
         200,
-        "monitor mode is observe-only and must never reject"
+        "basic mode leaves the advanced tier observe-only and must never reject"
     );
     drop(srv);
     drop(cache);

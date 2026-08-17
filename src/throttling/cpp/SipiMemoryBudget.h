@@ -14,21 +14,21 @@
 
 namespace Sipi {
 
-/// Admission mode: monitor (shadow-count only) or enforce (reject over budget
-/// with 503/413). There is no "off": the budget is always accounted so the
-/// shadow counters are always available to size the full lane before enforce.
-enum class AdmissionMode { MONITOR, ENFORCE };
+/// Admission mode. Under `BASIC` the memory budget only shadow-counts what the
+/// advanced tier *would* shed; under `ADVANCED` it rejects over budget with
+/// 503/413. There is no "off": the budget is always accounted so the shadow
+/// counters are always available to size the full lane before the advanced flip.
+enum class AdmissionMode { BASIC, ADVANCED };
 
 /// Parse the admission-mode string from config. Returns `std::nullopt` for an
-/// unrecognized value so the caller can fail loud at startup (a stale "off" from
-/// an old template is a configuration error, not a silent default).
+/// unrecognized value so the caller can fall back to the `BASIC` default.
 [[nodiscard]] std::optional<AdmissionMode> parse_admission_mode(const std::string &mode_str);
 
 /// Result of a memory budget acquisition attempt.
 struct MemoryBudgetResult
 {
-  bool allowed;              ///< false if over budget and mode == ENFORCE
-  bool over_budget;          ///< true if this acquire pushed usage over budget (shadow-counted in MONITOR)
+  bool allowed;              ///< false if over budget and mode == ADVANCED
+  bool over_budget;          ///< true if this acquire pushed usage over budget (shadow-counted in BASIC)
   bool exceeds_budget_alone; ///< true if this request's estimate alone exceeds the budget (permanently unservable → 413, not 503)
   size_t used;               ///< current usage after this request
   size_t budget;             ///< total budget (the full lane's byte cap)
@@ -54,8 +54,8 @@ public:
   /*!
    * Try to acquire `bytes` from the budget.
    *
-   * In ENFORCE mode: returns allowed=false if acquisition would exceed budget.
-   * In MONITOR mode: returns allowed=true but sets over_budget=true for logging.
+   * In ADVANCED mode: returns allowed=false if acquisition would exceed budget.
+   * In BASIC mode: returns allowed=true but sets over_budget=true for logging.
    * `exceeds_budget_alone` is set independently of mode whenever this single
    * request's estimate is larger than the whole budget (a permanently-unservable
    * request the caller answers with 413, not a transient 503).

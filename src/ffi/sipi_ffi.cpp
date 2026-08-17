@@ -289,22 +289,10 @@ int sipi_prefix_as_path(int *out)
   });
 }
 
-int sipi_nthreads(int *out)
-{
-  // Guard-only edge probe — a pure read of the installed engine context, like
-  // sipi_prefix_as_path. 0 means the config left nthreads auto; the Rust shell
-  // resolves that against the host parallelism, so the C++ server's cores-1
-  // auto-detect formula stays out of the seam.
-  return Sipi::ffi::sipi_guard([&] {
-    *out = Sipi::ffi::engine_context().nthreads;
-    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
-  });
-}
-
 int sipi_max_post_size(size_t *out)
 {
   // Guard-only edge probe — a pure read of the installed engine context, like
-  // sipi_nthreads. 0 means the config left POST size unlimited.
+  // sipi_port. 0 means the config left POST size unlimited.
   return Sipi::ffi::sipi_guard([&] {
     *out = Sipi::ffi::engine_context().max_post_size;
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
@@ -313,7 +301,7 @@ int sipi_max_post_size(size_t *out)
 
 int sipi_admission_mode(const char **out)
 {
-  // Guard-only edge probe — the resolved admission mode ("monitor"|"enforce"),
+  // Guard-only edge probe — the resolved admission mode ("basic"|"advanced"),
   // read back so the shell's two-lane pool runs the same mode as the engine's
   // memory budget (single authority = the engine's resolved config). Points at
   // the process-static EngineContext copy, valid for the process lifetime.
@@ -355,8 +343,8 @@ int sipi_memory_limit_bytes(size_t *out)
 
 int sipi_port(int *out)
 {
-  // Guard-only edge probe — a pure read of the installed engine context, like
-  // sipi_nthreads. The Rust edge uses this only as a fallback below
+  // Guard-only edge probe — a pure read of the installed engine context. The
+  // Rust edge uses this only as a fallback below
   // --serverport/SIPI_SERVERPORT/SIPI_RS_PORT.
   return Sipi::ffi::sipi_guard([&] {
     *out = Sipi::ffi::engine_context().port;

@@ -26,7 +26,7 @@ Limits:
       --maxpost <SIZE>                        Max POST body size, e.g. "300M" (engine parses the suffix) [env: SIPI_MAXPOSTSIZE=]
       --max-pixel-limit <PIXELS>              Max output pixels (width × height) per IIIF request (0 = unlimited) [env: SIPI_MAX_PIXEL_LIMIT=]
       --memory-limit <SIZE>                   Total RAM envelope, e.g. "8G" (0 = auto-detect available RAM; engine parses the suffix). The full lane's byte cap is derived from this and `--tiles-memory-ratio` [env: SIPI_MEMORY_LIMIT=]
-      --admission-mode <MODE>                 Admission mode: monitor, enforce (engine validates) [env: SIPI_ADMISSION_MODE=]
+      --admission-mode <MODE>                 Admission mode: basic (thread cap only; default) or advanced (also the memory + two-lane caps). Unknown values fall back to basic [env: SIPI_ADMISSION_MODE=]
       --tiles-memory-ratio <RATIO>            Fraction of the envelope reserved for tiles (0..1); the full lane gets envelope × (1 − ratio). Defaults to 0.25 [env: SIPI_TILES_MEMORY_RATIO=]
       --large-decode-threshold-bytes <BYTES>  Estimated peak-memory threshold in bytes at/above which a decode is a full-lane decode charged against the budget; below it is a tile decode that bypasses the budget. Defaults to 32 MiB [env: SIPI_LARGE_DECODE_THRESHOLD_BYTES=]
       --thumbsize <SIZE>                      Thumbnail size used within Lua, e.g. "!128,128" [env: SIPI_THUMBSIZE=]
