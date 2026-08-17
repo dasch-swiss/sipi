@@ -33,7 +33,7 @@ namespace Sipi::ffi {
 struct EngineContext
 {
   SipiCache *cache = nullptr;//!< file cache, or null when caching is off
-  SipiMemoryBudget *memory_budget = nullptr;//!< full-lane decode memory budget (always installed; monitor or enforce)
+  SipiMemoryBudget *memory_budget = nullptr;//!< full-lane decode memory budget (always installed; basic or advanced)
   //!< A decode whose estimated peak memory is >= this threshold is a full-lane
   //!< decode and is charged against `memory_budget`; below it is a tile decode
   //!< and bypasses the budget. Single-sourced in the shell config and passed
@@ -41,9 +41,9 @@ struct EngineContext
   std::size_t large_decode_threshold_bytes = 0;
   //!< Admission config the shell reads back so its two-lane thread pool matches
   //!< the engine's memory budget (single authority = the engine's resolved
-  //!< config). `admission_mode` is the canonical "monitor"|"enforce";
+  //!< config). `admission_mode` is the canonical "basic"|"advanced";
   //!< `memory_limit_bytes` is the resolved RAM envelope (post 0→auto-detect).
-  std::string admission_mode = "monitor";
+  std::string admission_mode = "basic";
   double tiles_memory_ratio = 0.25;
   std::size_t memory_limit_bytes = 0;
 
@@ -55,7 +55,6 @@ struct EngineContext
   int jpeg_quality = 60;//!< JPEG encode quality
   ScalingQuality scaling_quality{};//!< per-format scaling method
   std::size_t max_pixel_limit = 0;//!< max output pixels per request (0 = unlimited)
-  int nthreads = 0;//!< configured worker-thread count; 0 = auto (the shell sizes its pool from host parallelism)
   int port = 3333;//!< configured HTTP listen port (the Lua config `sipi.port`); a fallback for the Rust edge's listener bind when no `--serverport`/`SIPI_SERVERPORT`/`SIPI_RS_PORT` selected one
   std::size_t max_post_size = 0;//!< max POST body size in bytes (the Rust shell caps Lua-route uploads); 0 = unlimited
 };

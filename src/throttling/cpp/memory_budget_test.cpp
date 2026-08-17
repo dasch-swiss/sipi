@@ -16,32 +16,34 @@ using namespace Sipi;
 
 // --- Mode parsing ---
 
-TEST(AdmissionModeTest, ParseEnforce)
+TEST(AdmissionModeTest, ParseAdvanced)
 {
-  EXPECT_EQ(parse_admission_mode("enforce"), AdmissionMode::ENFORCE);
-  EXPECT_EQ(parse_admission_mode("ENFORCE"), AdmissionMode::ENFORCE);
+  EXPECT_EQ(parse_admission_mode("advanced"), AdmissionMode::ADVANCED);
+  EXPECT_EQ(parse_admission_mode("ADVANCED"), AdmissionMode::ADVANCED);
 }
 
-TEST(AdmissionModeTest, ParseMonitor)
+TEST(AdmissionModeTest, ParseBasic)
 {
-  EXPECT_EQ(parse_admission_mode("monitor"), AdmissionMode::MONITOR);
-  EXPECT_EQ(parse_admission_mode("MONITOR"), AdmissionMode::MONITOR);
+  EXPECT_EQ(parse_admission_mode("basic"), AdmissionMode::BASIC);
+  EXPECT_EQ(parse_admission_mode("BASIC"), AdmissionMode::BASIC);
 }
 
 TEST(AdmissionModeTest, ParseUnknownReturnsNullopt)
 {
-  // There is no "off"; a stale/legacy value is a startup error, so the parser
-  // signals it with nullopt (the caller fails loud) rather than defaulting.
+  // There is no "off"; legacy values ("monitor"/"enforce") and anything else
+  // return nullopt so the caller falls back to the basic default.
+  EXPECT_EQ(parse_admission_mode("monitor"), std::nullopt);
+  EXPECT_EQ(parse_admission_mode("enforce"), std::nullopt);
   EXPECT_EQ(parse_admission_mode("off"), std::nullopt);
   EXPECT_EQ(parse_admission_mode("invalid"), std::nullopt);
   EXPECT_EQ(parse_admission_mode(""), std::nullopt);
 }
 
-// --- Acquire / Release in ENFORCE mode ---
+// --- Acquire / Release in ADVANCED mode ---
 
 TEST(MemoryBudgetTest, AcquireWithinBudgetSucceeds)
 {
-  SipiMemoryBudget budget(1000, AdmissionMode::ENFORCE);
+  SipiMemoryBudget budget(1000, AdmissionMode::ADVANCED);
   auto result = budget.try_acquire(100);
   EXPECT_TRUE(result.allowed);
   EXPECT_FALSE(result.over_budget);
@@ -53,7 +55,7 @@ TEST(MemoryBudgetTest, AcquireWithinBudgetSucceeds)
 // A single request larger than the whole budget → permanently unservable (413).
 TEST(MemoryBudgetTest, SingleRequestExceedingBudgetIsFlaggedAsTooLarge)
 {
-  SipiMemoryBudget budget(1000, AdmissionMode::ENFORCE);
+  SipiMemoryBudget budget(1000, AdmissionMode::ADVANCED);
   auto result = budget.try_acquire(1100);
   EXPECT_FALSE(result.allowed);
   EXPECT_TRUE(result.over_budget);
@@ -66,7 +68,7 @@ TEST(MemoryBudgetTest, SingleRequestExceedingBudgetIsFlaggedAsTooLarge)
 // usage → transient (503), NOT flagged as too-large.
 TEST(MemoryBudgetTest, TransientOverBudgetIsNotFlaggedAsTooLarge)
 {
-  SipiMemoryBudget budget(1000, AdmissionMode::ENFORCE);
+  SipiMemoryBudget budget(1000, AdmissionMode::ADVANCED);
   ASSERT_TRUE(budget.try_acquire(900).allowed);
   auto result = budget.try_acquire(200);// 200 alone fits, but 900+200 > 1000
   EXPECT_FALSE(result.allowed);
@@ -75,25 +77,25 @@ TEST(MemoryBudgetTest, TransientOverBudgetIsNotFlaggedAsTooLarge)
   EXPECT_EQ(budget.used(), 900);// unchanged
 }
 
-// --- MONITOR mode shadow-counts but always admits ---
+// --- BASIC mode shadow-counts but always admits ---
 
-TEST(MemoryBudgetTest, MonitorShadowCountsTransientOverBudget)
+TEST(MemoryBudgetTest, BasicShadowCountsTransientOverBudget)
 {
-  SipiMemoryBudget budget(1000, AdmissionMode::MONITOR);
+  SipiMemoryBudget budget(1000, AdmissionMode::BASIC);
   ASSERT_TRUE(budget.try_acquire(900).allowed);
   auto result = budget.try_acquire(200);
-  EXPECT_TRUE(result.allowed);// monitor always admits
+  EXPECT_TRUE(result.allowed);// basic always admits
   EXPECT_TRUE(result.over_budget);// but shadow-counts the would-be 503
   EXPECT_FALSE(result.exceeds_budget_alone);
-  EXPECT_EQ(result.used, 1100);// tracked even in monitor mode
+  EXPECT_EQ(result.used, 1100);// tracked even in basic mode
   EXPECT_EQ(budget.used(), 1100);
 }
 
-TEST(MemoryBudgetTest, MonitorShadowCountsTooLargeSingleRequest)
+TEST(MemoryBudgetTest, BasicShadowCountsTooLargeSingleRequest)
 {
-  SipiMemoryBudget budget(1000, AdmissionMode::MONITOR);
+  SipiMemoryBudget budget(1000, AdmissionMode::BASIC);
   auto result = budget.try_acquire(1100);
-  EXPECT_TRUE(result.allowed);// monitor always admits
+  EXPECT_TRUE(result.allowed);// basic always admits
   EXPECT_TRUE(result.over_budget);
   EXPECT_TRUE(result.exceeds_budget_alone);// shadow-counts the would-be 413
   EXPECT_EQ(budget.used(), 1100);
@@ -101,7 +103,7 @@ TEST(MemoryBudgetTest, MonitorShadowCountsTooLargeSingleRequest)
 
 TEST(MemoryBudgetTest, ReleaseRestoresBudget)
 {
-  SipiMemoryBudget budget(1000, AdmissionMode::ENFORCE);
+  SipiMemoryBudget budget(1000, AdmissionMode::ADVANCED);
   ASSERT_TRUE(budget.try_acquire(500).allowed);
   EXPECT_EQ(budget.used(), 500);
   budget.release(500);
@@ -110,7 +112,7 @@ TEST(MemoryBudgetTest, ReleaseRestoresBudget)
 
 TEST(MemoryBudgetTest, MultipleAcquiresAccumulate)
 {
-  SipiMemoryBudget budget(1000, AdmissionMode::ENFORCE);
+  SipiMemoryBudget budget(1000, AdmissionMode::ADVANCED);
   ASSERT_TRUE(budget.try_acquire(300).allowed);
   ASSERT_TRUE(budget.try_acquire(300).allowed);
   ASSERT_TRUE(budget.try_acquire(300).allowed);
@@ -124,7 +126,7 @@ TEST(MemoryBudgetTest, MultipleAcquiresAccumulate)
 
 TEST(MemoryBudgetTest, ReleaseMoreThanAcquiredClampsToZero)
 {
-  SipiMemoryBudget budget(1000, AdmissionMode::ENFORCE);
+  SipiMemoryBudget budget(1000, AdmissionMode::ADVANCED);
   ASSERT_TRUE(budget.try_acquire(100).allowed);
   budget.release(2000);// more than acquired
   EXPECT_EQ(budget.used(), 0);// clamped, no underflow
@@ -132,7 +134,7 @@ TEST(MemoryBudgetTest, ReleaseMoreThanAcquiredClampsToZero)
 
 TEST(MemoryBudgetTest, ZeroBytesAcquireAlwaysSucceeds)
 {
-  SipiMemoryBudget budget(1000, AdmissionMode::ENFORCE);
+  SipiMemoryBudget budget(1000, AdmissionMode::ADVANCED);
   ASSERT_TRUE(budget.try_acquire(1000).allowed);
   // Zero-byte acquire should still succeed
   auto result = budget.try_acquire(0);
@@ -143,7 +145,7 @@ TEST(MemoryBudgetTest, ZeroBytesAcquireAlwaysSucceeds)
 
 TEST(MemoryBudgetTest, ExactBudgetAcquireSucceeds)
 {
-  SipiMemoryBudget budget(1000, AdmissionMode::ENFORCE);
+  SipiMemoryBudget budget(1000, AdmissionMode::ADVANCED);
   auto result = budget.try_acquire(1000);
   EXPECT_TRUE(result.allowed);
   EXPECT_FALSE(result.over_budget);
@@ -155,7 +157,7 @@ TEST(MemoryBudgetTest, ExactBudgetAcquireSucceeds)
 
 TEST(MemoryBudgetTest, ConcurrentAcquireRelease)
 {
-  SipiMemoryBudget budget(1'000'000, AdmissionMode::ENFORCE);
+  SipiMemoryBudget budget(1'000'000, AdmissionMode::ADVANCED);
   constexpr int num_threads = 8;
   constexpr int iterations = 1000;
   constexpr size_t bytes_per_op = 100;
@@ -184,7 +186,7 @@ TEST(MemoryBudgetTest, ConcurrentAcquireRelease)
 TEST(MemoryBudgetTest, ConcurrentAcquiresRespectBudget)
 {
   constexpr size_t total_budget = 1000;
-  SipiMemoryBudget budget(total_budget, AdmissionMode::ENFORCE);
+  SipiMemoryBudget budget(total_budget, AdmissionMode::ADVANCED);
   constexpr int num_threads = 8;
   constexpr size_t bytes_per_acquire = 200;// 5 can fit in 1000
 

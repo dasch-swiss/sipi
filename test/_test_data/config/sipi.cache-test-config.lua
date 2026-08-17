@@ -1,6 +1,5 @@
 sipi = {
     port = 1024,
-    nthreads = 4,
     jpeg_quality = 60,
     scaling_quality = { jpeg = "medium", tiff = "high", png = "high", j2k = "high" },
     keep_alive = 5,

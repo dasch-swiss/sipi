@@ -52,7 +52,6 @@ private:
   int keep_alive{ 20 };
   std::string thumb_size;
   size_t cache_n_files{ 200 };
-  size_t n_threads{ 0 };     // 0 = auto-detect from CPU cores
   size_t max_post_size{ 0 }; // 0 = unlimited
   std::string tmp_dir;
   std::string scriptdir;
@@ -68,11 +67,9 @@ private:
   std::string password;
   size_t max_pixel_limit{ 0 };//<! max output pixels (w*h) per IIIF request, 0 = unlimited
   size_t memory_limit{ 0 };                       //!< total RAM envelope; 0 = auto (detect available RAM)
-  std::string admission_mode_str{ "monitor" };    //!< "monitor", "enforce"
+  std::string admission_mode_str{ "basic" };    //!< "basic", "advanced"
   double tiles_memory_ratio{ 0.25 };              //!< fraction of the envelope reserved for tiles + non-decode floor; the full lane gets envelope × (1 − ratio)
   unsigned drain_timeout{ 30 }; //!< seconds to wait for in-flight requests during shutdown
-  size_t max_waiting_connections{ 0 }; //!< max queue size before 503 (0 = unlimited, timeout-only)
-  unsigned queue_timeout{ 10 }; //!< max seconds in waiting queue before 503 (minimum 1)
 
 public:
   SipiConf();
@@ -136,9 +133,6 @@ public:
   size_t getCacheNFiles() const { return cache_n_files; }
   void setCacheNFiles(size_t i) { cache_n_files = i; }
 
-  unsigned int getNThreads() const { return n_threads; }
-  void setNThreads(const unsigned int i) { n_threads = i; }
-
   size_t getMaxPostSize() const { return max_post_size; }
   void setMaxPostSize(const size_t i) { max_post_size = i; }
 
@@ -192,12 +186,6 @@ public:
 
   unsigned getDrainTimeout() const { return drain_timeout; }
   void setDrainTimeout(unsigned v) { drain_timeout = v; }
-
-  size_t getMaxWaitingConnections() const { return max_waiting_connections; }
-  void setMaxWaitingConnections(size_t v) { max_waiting_connections = v; }
-
-  unsigned getQueueTimeout() const { return queue_timeout; }
-  void setQueueTimeout(unsigned v) { queue_timeout = v; }
 };
 
 }// namespace Sipi

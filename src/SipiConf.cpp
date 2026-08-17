@@ -114,15 +114,6 @@ SipiConf::SipiConf(shttps::LuaServer &luacfg)
 
   keep_alive = luacfg.configInteger("sipi", "keep_alive", 20);
   thumb_size = luacfg.configString("sipi", "thumb_size", "!128,128");
-  n_threads = luacfg.configInteger("sipi", "nthreads", 0);// 0 = auto-detect from CPU cores
-  {
-    int mwc = luacfg.configInteger("sipi", "max_waiting_connections", 0);
-    max_waiting_connections = (mwc < 0) ? 0 : static_cast<size_t>(mwc);// 0 = 2*nthreads
-  }
-  {
-    int qt = luacfg.configInteger("sipi", "queue_timeout", 10);
-    queue_timeout = (qt < 1) ? 1 : static_cast<unsigned>(qt);// seconds, minimum 1
-  }
   std::string max_post_size_str = luacfg.configString("sipi", "max_post_size", "0");
   long long parsed_post_size = parseSizeString(max_post_size_str);
   if (parsed_post_size < 0) parsed_post_size = 0;
@@ -141,16 +132,10 @@ SipiConf::SipiConf(shttps::LuaServer &luacfg)
   if (parsed_pixel_limit < 0) parsed_pixel_limit = 0;
   max_pixel_limit = static_cast<size_t>(parsed_pixel_limit);
 
-  // Admission / memory-budget configuration. `memory_limit` is the total RAM
-  // envelope (0 = auto-detect); the full lane's byte cap is derived from it and
-  // `tiles_memory_ratio` at init.
-  std::string memory_limit_str = luacfg.configString("sipi", "memory_limit", "0");
-  long long parsed_memory_limit = parseSizeString(memory_limit_str);
-  if (parsed_memory_limit < 0) parsed_memory_limit = 0;
-  memory_limit = static_cast<size_t>(parsed_memory_limit);
-
-  admission_mode_str = luacfg.configString("sipi", "admission_mode", "monitor");
-  tiles_memory_ratio = luacfg.configFloat("sipi", "tiles_memory_ratio", 0.25f);
+  // The two-lane admission knobs (memory_limit, tiles_memory_ratio,
+  // admission_mode) are shell-owned: set via CLI/env or the Rust TOML config and
+  // applied over the seam at init, not read from the Lua config. The fields keep
+  // their SipiConf defaults (0 / 0.25 / "basic") until an override lands.
 
   long long parsed_drain_timeout = luacfg.configInteger("sipi", "drain_timeout", 30);
   if (parsed_drain_timeout < 1) parsed_drain_timeout = 30;

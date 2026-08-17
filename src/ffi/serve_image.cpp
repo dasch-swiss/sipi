@@ -640,17 +640,17 @@ std::expected<ServeResponse, SipiStatus>
     if (result.allowed && !result.over_budget) {
       metrics.decode_memory_acquired.Increment();
     } else if (result.allowed && result.over_budget) {
-      // MONITOR: admit, but shadow-count the would-be rejection — distinguishing
+      // BASIC: admit, but shadow-count the would-be rejection — distinguishing
       // the permanently-unservable (would-be 413) case from the transient one.
       if (result.exceeds_budget_alone) {
         metrics.decode_memory_shadow_too_large_total.Increment();
       } else {
         metrics.decode_memory_shadow_rejected.Increment();
       }
-      log_warn("Full-lane memory budget over limit (monitor): %zu / %zu bytes for %s",
+      log_warn("Full-lane memory budget over limit (basic): %zu / %zu bytes for %s",
         result.used, result.budget, uri.c_str());
     } else if (result.exceeds_budget_alone) {
-      // ENFORCE, permanently unservable: a single request whose estimate alone
+      // ADVANCED, permanently unservable: a single request whose estimate alone
       // exceeds the full-lane budget can never succeed — 413, no Retry-After.
       metrics.decode_memory_too_large_total.Increment();
       log_warn("Request estimate %zu exceeds full-lane budget %zu; rejecting (413): %s",
@@ -660,9 +660,9 @@ std::expected<ServeResponse, SipiStatus>
       out.body = EmptyBody{};
       return out;
     } else {
-      // ENFORCE, transient: the full lane is currently exhausted — 503 + Retry-After.
+      // ADVANCED, transient: the full lane is currently exhausted — 503 + Retry-After.
       metrics.decode_memory_rejected.Increment();
-      log_warn("Full-lane memory budget exhausted (enforce): %zu / %zu bytes, rejecting %s",
+      log_warn("Full-lane memory budget exhausted (advanced): %zu / %zu bytes, rejecting %s",
         result.used, result.budget, uri.c_str());
       ServeResponse out;
       out.http_status = 503;

@@ -16,8 +16,8 @@ std::optional<AdmissionMode> parse_admission_mode(const std::string &mode_str)
   std::string lower = mode_str;
   std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
 
-  if (lower == "enforce") return AdmissionMode::ENFORCE;
-  if (lower == "monitor") return AdmissionMode::MONITOR;
+  if (lower == "advanced") return AdmissionMode::ADVANCED;
+  if (lower == "basic") return AdmissionMode::BASIC;
   return std::nullopt;
 }
 
@@ -29,7 +29,7 @@ MemoryBudgetResult SipiMemoryBudget::try_acquire(size_t bytes)
 {
   // A single request whose estimate alone exceeds the budget can never be
   // admitted regardless of load — the caller answers it with 413, not a
-  // transient 503. Reported in both modes so monitor can shadow-count it.
+  // transient 503. Reported in both modes so basic mode can shadow-count it.
   const bool exceeds_alone = bytes > _budget;
 
   if (bytes == 0) {
@@ -43,11 +43,11 @@ MemoryBudgetResult SipiMemoryBudget::try_acquire(size_t bytes)
   // Lock-free acquire via compare_exchange_weak loop
   size_t current = _used.load(std::memory_order_relaxed);
   while (true) {
-    // Saturate on overflow (defensive — prevents wraparound in monitor mode)
+    // Saturate on overflow (defensive — prevents wraparound in basic mode)
     size_t desired = (bytes <= SIZE_MAX - current) ? (current + bytes) : SIZE_MAX;
     bool would_exceed = desired > _budget;
 
-    if (would_exceed && _mode == AdmissionMode::ENFORCE) {
+    if (would_exceed && _mode == AdmissionMode::ADVANCED) {
       return {.allowed = false,
               .over_budget = true,
               .exceeds_budget_alone = exceeds_alone,
@@ -55,7 +55,7 @@ MemoryBudgetResult SipiMemoryBudget::try_acquire(size_t bytes)
               .budget = _budget};
     }
 
-    // In MONITOR mode or within budget: try to acquire
+    // In BASIC mode or within budget: try to acquire
     if (_used.compare_exchange_weak(current, desired, std::memory_order_acq_rel, std::memory_order_relaxed)) {
       return {.allowed = true,
               .over_budget = would_exceed,

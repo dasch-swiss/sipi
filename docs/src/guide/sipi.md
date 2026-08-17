@@ -260,14 +260,6 @@ The following configuration parameters are used by the SIPI server:
   *Environment variable: `SIPI_SSLPORT`*  
   *Default: `443`*
   
-- <a name="nthreads"></a>`nthreads=num`: Number of worker threads that SIPI allocates. SIPI is a multithreaded server and pre-allocates a
-  given number of working threads that can be configured. Set to `0` for auto-detection, which uses the host's available
-  parallelism (`std::thread::available_parallelism()` — container-aware, honouring the cgroup CPU limit inside Docker),
-  falling back to `4` if that cannot be determined.
-  *Cmdline option: `--nthreads`*
-  *Environment variable: `SIPI_NTHREADS`*
-  *Default: `0` (auto-detect: available parallelism, fallback 4)*
-  
 - <a name="prefixaspath"></a>`prefix_as_path=bool`: If `true`, the prefix is used as path within the image root directory. If false, the prefix
   is ignored and it is assumed that all images are directly located in the image root.  
   *Cmdline option: `--pathprefix`*  
@@ -303,17 +295,10 @@ The following configuration parameters are used by the SIPI server:
   *Environment variable: `SIPI_KEEPALIVE`*
   *Default: `5`*
 
-- <a name="max_waiting_connections"></a>`max_waiting_connections=num`: Maximum number of requests that may wait for a worker when all worker threads are busy.
-  When the queue is full, further requests are shed with HTTP 503 (Service Unavailable) and a `Retry-After: 1` header.
-  Set to `0` to disable queuing entirely — a full pool then sheds immediately.
-  *Cmdline option: `--max-waiting`*
-  *Environment variable: `SIPI_MAX_WAITING`*
-  *Default: `2×` the worker count (`nthreads`)*
-
-- <a name="queue_timeout"></a>`queue_timeout=seconds`: Maximum number of seconds a request may wait in the queue before being shed with HTTP 503.
-  *Cmdline option: `--queue-timeout`*
-  *Environment variable: `SIPI_QUEUE_TIMEOUT`*
-  *Default: `5`*
+Request queuing (how many requests may wait for a worker, and how long) is not a
+config-file key. It is controlled by the `--max-waiting` / `SIPI_MAX_WAITING` and
+`--queue-timeout` / `SIPI_QUEUE_TIMEOUT` CLI flags — see
+[Running SIPI](running.md#command-line-options).
 
 - <a name="jpegquality">`jpeg_quality=num`: Compression parameter when producing JPEG output. Must be a number
   between 1 and 100. Unfortunately, the IIIF Image API does not allow to give a JPEG quality (=compression) on the IIIF URL. SIPI

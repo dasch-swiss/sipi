@@ -115,7 +115,7 @@ impl AppState {
         let mode = ffi::admission_mode()
             .ok()
             .and_then(|s| AdmissionMode::parse(&s))
-            .unwrap_or(AdmissionMode::Monitor);
+            .unwrap_or(AdmissionMode::Basic);
         let admission = Arc::new(Admission::new(AdmissionConfig {
             nthreads: resolved_nthreads,
             tiles_thread_ratio: tiles_thread_ratio.unwrap_or(0.5),

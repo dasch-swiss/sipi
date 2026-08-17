@@ -1,18 +1,17 @@
 -- Config for the concurrent-load decode harness (`just loadtest-decode`).
 --
--- Deliberately differs from the localdev config in two ways that matter for a
--- decode-throughput measurement:
---   * `nthreads = 0` sizes the Rust FFI pool from the host core count — the
---     production default, i.e. the pool's real saturation point.
---   * a tiny cache (4 files) so that, combined with the harness requesting a
---     distinct tile region per request, every request misses the cache and
---     exercises a real JPEG2000 decode rather than a cache hit.
+-- Deliberately differs from the localdev config for a decode-throughput
+-- measurement: a tiny cache (4 files) so that, combined with the harness
+-- requesting a distinct tile region per request, every request misses the cache
+-- and exercises a real JPEG2000 decode rather than a cache hit.
+--
+-- Pool sizing and the wait-queue are CLI/env knobs, not config-file keys. The
+-- harness leaves SIPI_NTHREADS unset so the pool sizes from the host core count
+-- (the production default = the pool's real saturation point); tune load-shedding
+-- with SIPI_MAX_WAITING / SIPI_QUEUE_TIMEOUT if needed.
 sipi = {
     hostname = 'localhost',
     port = 2048,
-    nthreads = 0,                  -- 0 = auto (host core count) = pool saturation point
-    max_waiting_connections = 200, -- generous queue so excess clients wait rather than 503 immediately
-    queue_timeout = 60,
     keep_alive = 5,
     imgroot = './test/_test_data/images',
     prefix_as_path = true,

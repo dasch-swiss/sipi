@@ -62,7 +62,7 @@ struct SipiMetricsSnapshot
   uint64_t tiff_pyramid_reduced_decodes_total;
 
   /* A single request whose estimate alone exceeds the full-lane budget is
-   * permanently unservable → 413 (enforce) / would-be 413 (monitor shadow),
+   * permanently unservable → 413 (advanced) / would-be 413 (basic shadow),
    * distinct from transient 503 exhaustion (decode_memory_rejected_total). */
   uint64_t decode_memory_too_large_total;
   uint64_t decode_memory_shadow_too_large_total;

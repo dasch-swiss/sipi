@@ -75,7 +75,7 @@ pub struct ServerOverrides {
     /// Total RAM envelope as a raw size string ("8G"); the engine parses the
     /// suffix. "0"/absent = auto-detect available RAM.
     pub memory_limit: Option<String>,
-    /// Admission mode: "monitor" | "enforce".
+    /// Admission mode: "basic" | "advanced".
     pub admission_mode: Option<String>,
     /// Fraction of the envelope reserved for tiles; the full lane gets
     /// envelope × (1 − ratio). Engine-consumed (full-lane byte cap).
@@ -201,7 +201,7 @@ pub(crate) struct SipiServerConfig {
     pub cache_size: *const c_char, // raw "200M" — engine parses the suffix
     pub maxpost: *const c_char,    // raw "300M" — engine parses the suffix
     pub memory_limit: *const c_char, // raw "8G" RAM envelope — engine parses the suffix; "0"/absent = auto-detect
-    pub admission_mode: *const c_char, // "monitor" | "enforce"
+    pub admission_mode: *const c_char, // "basic" | "advanced"
     pub thumbsize: *const c_char,
     pub knorapath: *const c_char,
     pub knoraport: *const c_char,

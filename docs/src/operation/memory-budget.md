@@ -51,7 +51,7 @@ full_mem = memory_limit × (1 − tiles_memory_ratio)
 reserve `memory_limit × tiles_memory_ratio` (25% by default) is never charged to
 the full lane — it houses tile decode usage plus the non-decode floor (base heap,
 allocator retention, HTTP/encode buffers, cache). The invariant to verify in
-`monitor` before switching to `enforce` is `reserve ≥ observed floor`.
+`basic` before switching to `advanced` is `reserve ≥ observed floor`.
 
 ## Configuration
 
@@ -59,17 +59,21 @@ allocator retention, HTTP/encode buffers, cache). The invariant to verify in
 |-----------|-----------------|-------------|
 | `memory_limit` | `"0"` (auto) | Total RAM envelope. `0` = auto-detect available RAM. Accepts `M`/`G` suffixes: `"8G"`, `"500M"` |
 | `tiles_memory_ratio` | `0.25` | Fraction of the envelope reserved for tiles + non-decode floor (range 0..1); the full lane gets the rest |
-| `admission_mode` | `"monitor"` | `"monitor"` (shadow-count only) or `"enforce"` (reject over budget). There is no `"off"` — the budget is always accounted |
+| `admission_mode` | `"basic"` | `"basic"` (advanced tier shadow-counts only) or `"advanced"` (reject over budget). There is no `"off"` — the budget is always accounted |
 | `large_decode_threshold_bytes` | `33554432` (32 MiB) | Estimated peak-memory at/above which a decode is charged to the full lane; below it bypasses as a tile |
 
 Available via (see also [Running SIPI](../guide/running.md)):
 
-- Lua config: `memory_limit`, `tiles_memory_ratio`, `admission_mode`
 - CLI flags: `--memory-limit`, `--tiles-memory-ratio`, `--admission-mode`, `--large-decode-threshold-bytes`
 - Environment: `SIPI_MEMORY_LIMIT`, `SIPI_TILES_MEMORY_RATIO`, `SIPI_ADMISSION_MODE`, `SIPI_LARGE_DECODE_THRESHOLD_BYTES`
+- Rust TOML config file (shell-owned)
 
-An unrecognized `admission_mode` (e.g. a stale `"off"` from an old template) is a
-**startup error** — SIPI fails loud rather than silently defaulting.
+These knobs are **not** read from the Lua config — they are set via the CLI/env/TOML
+surface above and applied over the seam at init.
+
+An unrecognized `admission_mode` (e.g. a stale `"off"` from an old template, or a
+legacy `"monitor"`/`"enforce"`) is not a startup error — SIPI silently falls back
+to the `"basic"` default.
 
 ### Auto-Detection
 
@@ -88,9 +92,9 @@ headroom for tiles and the non-decode floor.
 > the envelope to the whole VM RAM. Set `memory_limit` explicitly (ops-deploy
 > renders `DSP_IIIF_MEMORY_LIMIT` into it) to hold SIPI to the intended cap.
 
-## Enforce behaviour: 503 vs 413
+## Advanced behaviour: 503 vs 413
 
-In `enforce` mode a full-lane decode that cannot be admitted is rejected two ways:
+In `advanced` mode a full-lane decode that cannot be admitted is rejected two ways:
 
 - **503 Service Unavailable + `Retry-After`** — the budget is *currently*
   exhausted by concurrent decodes. The request fits on its own and may succeed on
@@ -102,9 +106,9 @@ In `enforce` mode a full-lane decode that cannot be admitted is rejected two way
 Tile decodes are never rejected for full-lane memory pressure — they bypass the
 budget.
 
-## Monitor to Enforce Workflow
+## Basic to Advanced Workflow
 
-1. **Deploy in monitor mode** (the default):
+1. **Deploy in basic mode** (the default):
    - The budget is tracked and logged but requests are never rejected.
    - `sipi_decode_memory_shadow_rejected_total` shows what *would* be 503'd;
      `sipi_decode_memory_shadow_too_large_total` what *would* be 413'd.
@@ -119,8 +123,8 @@ budget.
    - If shadow rejections fire on normal full traffic, raise `memory_limit` or lower `tiles_memory_ratio`.
    - Use the histogram to understand the size distribution being served.
 
-4. **Switch to enforce**: Set `SIPI_ADMISSION_MODE=enforce` (or
-   `DSP_IIIF_ADMISSION_MODE=enforce` in ops-deploy). Redeploy.
+4. **Switch to advanced**: Set `SIPI_ADMISSION_MODE=advanced` (or
+   `DSP_IIIF_ADMISSION_MODE=advanced` in ops-deploy). Redeploy.
 
 ## Prometheus Metrics
 
@@ -132,10 +136,10 @@ normalization, not the output of a scrape endpoint.
 | `sipi_decode_memory_budget_bytes` | Gauge | — | Full-lane byte cap (`memory_limit × (1 − tiles_memory_ratio)`; set at startup) |
 | `sipi_decode_memory_used_bytes` | Gauge | — | Currently allocated to in-flight full-lane decodes |
 | `sipi_decode_memory_acquired_total` | Counter | — | Admitted full-lane decodes |
-| `sipi_decode_memory_rejected_total` | Counter | — | Full-lane decodes refused with 503 in `enforce` mode (transient) |
-| `sipi_decode_memory_too_large_total` | Counter | — | Requests refused with 413 in `enforce` mode (estimate alone exceeds the budget — permanently unservable) |
-| `sipi_decode_memory_shadow_rejected_total` | Counter | — | Decodes that *would* be 503'd in `monitor` mode |
-| `sipi_decode_memory_shadow_too_large_total` | Counter | — | Requests that *would* be 413'd in `monitor` mode |
+| `sipi_decode_memory_rejected_total` | Counter | — | Full-lane decodes refused with 503 in `advanced` mode (transient) |
+| `sipi_decode_memory_too_large_total` | Counter | — | Requests refused with 413 in `advanced` mode (estimate alone exceeds the budget — permanently unservable) |
+| `sipi_decode_memory_shadow_rejected_total` | Counter | — | Decodes that *would* be 503'd in `basic` mode |
+| `sipi_decode_memory_shadow_too_large_total` | Counter | — | Requests that *would* be 413'd in `basic` mode |
 | `sipi_decode_memory_near_limit_total` | Counter | — | Acquisitions where usage > 80% of budget |
 | `sipi_decode_memory_estimate_bytes` | Histogram | — | Per-request peak memory estimates |
 
@@ -159,7 +163,7 @@ normalization, not the output of a scrape endpoint.
 - A single request's estimate exceeds the full-lane budget. Either the source is enormous and the client requested `/full/max/`, or `memory_limit`/`tiles_memory_ratio` leave the full lane too small.
 
 **OOM despite the budget enabled:**
-- Check mode is `enforce`, not `monitor`.
+- Check mode is `advanced`, not `basic`.
 - Check `sipi_decode_memory_budget_bytes` matches the expected `memory_limit × (1 − tiles_memory_ratio)`.
 - Memory outside the full-lane decode pipeline (tiles, cache, Lua, HTTP buffers) lives in the reserve, not the budget — size the reserve with `tiles_memory_ratio`.
 - `sipi_malloc_arena_bytes` reports the process resident set (true RSS, from `mi_process_info`) — compare it against the envelope and `container_memory_working_set_bytes` to see how close the whole process runs to the cap. `sipi_malloc_retained_bytes` (RSS not currently handed out) rising with a flat `in_use` is allocator retention, not a leak.

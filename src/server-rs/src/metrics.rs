@@ -186,14 +186,14 @@ pub(crate) fn register(admission: Arc<Admission>) {
         "Full requests shed with 503 because admission was saturated",
         |s| s.full_shed_total,
     );
-    // Monitor-only: fulls the enforce cap *would* have rejected — sizes `full_max`
-    // before the enforce flip. Always zero in enforce (the cap rejects for real,
-    // counted in `full_shed`).
+    // Basic-mode-only: fulls the advanced cap *would* have rejected — sizes
+    // `full_max` before the flip to advanced. Always zero under advanced (the cap
+    // rejects for real, counted in `full_shed`).
     admission_counter(
         &meter,
         &admission,
         "sipi.admission.full_shadow_rejected",
-        "Monitor-mode fulls the enforce cap would have rejected",
+        "Basic-mode fulls the advanced cap would have rejected",
         |s| s.full_shadow_rejected_total,
     );
     // Residual heuristic drift: the shell's pre-dispatch partition disagreed with
@@ -213,8 +213,8 @@ pub(crate) fn register(admission: Arc<Admission>) {
         &meter,
         &admission,
         "sipi.admission.mode",
-        "Admission mode (0 = monitor, 1 = enforce)",
-        |s| i64::from(s.mode == AdmissionMode::Enforce),
+        "Admission mode (0 = basic, 1 = advanced)",
+        |s| i64::from(s.mode == AdmissionMode::Advanced),
     );
     admission_gauge(
         &meter,
@@ -423,7 +423,7 @@ const COUNTERS: &[CounterRow] = &[
     ),
     (
         "sipi.decode_memory.shadow_too_large",
-        "Full-lane budget: monitor-mode would-be 413 (estimate alone exceeds budget)",
+        "Full-lane budget: basic-mode would-be 413 (estimate alone exceeds budget)",
         |s| s.decode_memory_shadow_too_large_total,
     ),
     (

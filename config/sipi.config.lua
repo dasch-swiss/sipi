@@ -44,21 +44,10 @@ sipi = {
     ssl_port = 1025,
 
     --
-    -- Number of threads to use
+    -- Worker threads and the wait-queue in front of the pool are CLI/env knobs,
+    -- not config-file keys: --nthreads/SIPI_NTHREADS (0/unset = auto-detect from
+    -- CPU cores), --max-waiting/SIPI_MAX_WAITING, --queue-timeout/SIPI_QUEUE_TIMEOUT.
     --
-    nthreads = 0, -- auto-detect from CPU cores (container-aware)
-
-    --
-    -- Maximum number of connections waiting in queue when all threads are busy.
-    -- When the queue is full, new connections get HTTP 503 with Retry-After: 5.
-    -- 0 = unlimited (queue_timeout provides protection against unbounded growth).
-    --
-    max_waiting_connections = 0,
-
-    --
-    -- Maximum seconds a request may wait in the queue before being rejected with HTTP 503.
-    --
-    queue_timeout = 10,
 
     --
     -- SIPI is using libjpeg to generate the JPEG images. libjpeg requires a quality value which
@@ -212,30 +201,12 @@ sipi = {
     max_pixel_limit = 0,
 
     --
-    -- Admission control: the total RAM envelope SIPI sizes its two-lane pool from.
-    -- The full lane (large decodes) is hard-capped at envelope × (1 − tiles_memory_ratio)
-    -- decode bytes; tile decodes bypass the budget. Prevents OOM from concurrent
-    -- large image decodes.
-    -- 0 = auto-detect available RAM.
-    -- Examples: "8G", "500M", "0" (auto), "1073741824" (1GB in bytes)
+    -- The two-lane admission knobs are CLI/env (or Rust TOML config) settings,
+    -- not Lua config keys:
+    --   memory_limit       --memory-limit / SIPI_MEMORY_LIMIT (0 = auto-detect RAM)
+    --   tiles_memory_ratio --tiles-memory-ratio / SIPI_TILES_MEMORY_RATIO (0.25)
+    --   admission_mode     --admission-mode / SIPI_ADMISSION_MODE (basic | advanced)
     --
-    memory_limit = "0",
-
-    --
-    -- Fraction of the envelope reserved for tiles + the non-decode floor (base
-    -- heap, HTTP/encode buffers, cache). The full lane gets the rest. Range (0,1).
-    --
-    tiles_memory_ratio = 0.25,
-
-    --
-    -- Admission mode:
-    --   "monitor" = track and log but don't reject requests (default)
-    --   "enforce" = reject full-lane requests with 503 (budget exhausted) or 413
-    --               (a single request larger than the whole full-lane budget)
-    -- Recommended: start with "monitor", size the full lane with metrics, then
-    -- switch to "enforce".
-    --
-    admission_mode = "monitor"
 }
 
 admin = {

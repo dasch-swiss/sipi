@@ -34,10 +34,15 @@ and CPU threads) plus two ratios and a mode:
 - **Memory.** `full_mem = memory_limit × (1 − tiles_memory_ratio)` hard-caps the
   full partition's accounted decode bytes; tiles bypass the budget. The reserve
   `memory_limit × tiles_memory_ratio` houses tile usage + the non-decode floor.
-- **Mode.** `admission_mode = monitor | enforce` (no "off"; default `monitor`).
-  `monitor` shadow-counts what `enforce` would shed — including the thread cap, so
-  shipping the default binary changes no behavior — letting the operator size the
-  full partition before flipping to `enforce`.
+- **Mode.** `admission_mode = basic | advanced` (no "off"; default `basic`). This
+  is a two-tier model: the **basic tier** (the global CPU/thread concurrency cap)
+  is always enforced, while the **advanced tier** (the full thread cap plus the
+  memory budget and two-lane load-shedding) is enforced only under `advanced`.
+  Under `basic` the advanced tier shadow-counts what it *would* shed, so shipping
+  the default binary changes no behavior — letting the operator size the full
+  partition before switching to `advanced`. An unrecognized value (e.g. a stale
+  `off` or a legacy `monitor`/`enforce`) is not a startup error; it falls back to
+  the `basic` default.
 
 Everything derives from four env knobs — `SIPI_MEMORY_LIMIT`, `SIPI_NTHREADS`,
 `SIPI_TILES_THREAD_RATIO` (0.5), `SIPI_TILES_MEMORY_RATIO` (0.25) — plus
@@ -118,14 +123,16 @@ like the pre-existing pool knobs.
 
 - Tiles get a guaranteed thread floor and burst; full downloads are hard-capped
   in threads and memory and shed with 503/413 when their share is exhausted.
-- The default `monitor` mode is observe-only: shipping the binary is safe and
-  needs no ops-deploy change; the shadow counters + fingerprint metrics size the
-  full partition before the `enforce` flip.
-- `monitor` preserves the pre-existing global-pool concurrency bound and the
+- The default `basic` mode enforces only the basic tier (the global-pool
+  concurrency cap); the advanced tier is observe-only, so shipping the binary is
+  safe and needs no ops-deploy change; the shadow counters + fingerprint metrics
+  size the full partition before the switch to `advanced`.
+- `basic` preserves the pre-existing global-pool concurrency bound and the
   per-partition wait accounting fix (tiles are never shed by full-queue depth);
-  only the full thread cap and the full-specific rejections are mode-gated.
+  only the full thread cap and the full-specific rejections (the advanced tier)
+  are mode-gated.
 - The shell Semaphore pool (pre-dispatch) and the engine memory budget
   (post-cache) remain two distinct admission layers, as ARCH-MAP records.
 - The regression net is subject-only (e2e + approval + proptest + unit); the C++
   oracle and its differential gate were removed ([ADR-0020](0020-oracle-removal.md)),
-  so enforce-mode 503/413 is covered by dedicated e2e, not a diff.
+  so advanced-mode 503/413 is covered by dedicated e2e, not a diff.

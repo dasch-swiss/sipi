@@ -36,23 +36,26 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 /// classifier-disagreement counter.
 const BYTES_PER_PIXEL_PROXY: u64 = 4;
 
-/// Admission mode: `Monitor` shadow-counts what enforce *would* shed; `Enforce`
-/// applies the caps and sheds. There is no "off" — the pool always accounts, so
-/// the shadow counters are always available to size the full partition.
+/// Which admission tier is enforced. `Basic` enforces only the basic tier — the
+/// global CPU/thread concurrency cap — while the advanced tier (the memory-aware
+/// full-lane cap) only shadow-counts what it *would* shed. `Advanced` also
+/// enforces that advanced tier and sheds over the memory/full budget. There is
+/// no "off" — the basic tier always applies and the advanced tier always
+/// accounts, so its shadow counters are available to size the full partition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdmissionMode {
-    Monitor,
-    Enforce,
+    Basic,
+    Advanced,
 }
 
 impl AdmissionMode {
     /// Parse the mode string (case-insensitive). `None` for an unrecognized
-    /// value so the caller can fail loud at startup.
+    /// value so the caller can fall back to the `Basic` default.
     #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
         match s.to_ascii_lowercase().as_str() {
-            "monitor" => Some(Self::Monitor),
-            "enforce" => Some(Self::Enforce),
+            "basic" => Some(Self::Basic),
+            "advanced" => Some(Self::Advanced),
             _ => None,
         }
     }
@@ -60,8 +63,8 @@ impl AdmissionMode {
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Monitor => "monitor",
-            Self::Enforce => "enforce",
+            Self::Basic => "basic",
+            Self::Advanced => "advanced",
         }
     }
 }
@@ -144,8 +147,9 @@ pub struct AdmissionSnapshot {
     // Cumulative sheds (immediate queue-full + timeout), per partition.
     pub tile_shed_total: u64,
     pub full_shed_total: u64,
-    // Monitor-only: fulls that the full cap *would* have rejected in enforce but
-    // were admitted (the signal that sizes `full_max` before the enforce flip).
+    // Basic-mode-only: fulls that the full cap *would* have rejected under
+    // advanced but were admitted (the signal that sizes `full_max` before the
+    // flip to advanced).
     pub full_shadow_rejected_total: u64,
     // Times the shell's pre-dispatch partition disagreed with the engine's precise
     // post-decode verdict — residual heuristic drift, observable but not fatal.
@@ -369,14 +373,14 @@ impl Admission {
 
     async fn acquire_full(&self) -> Acquired {
         match self.mode {
-            AdmissionMode::Enforce => self.acquire_full_enforce().await,
-            AdmissionMode::Monitor => self.acquire_full_monitor().await,
+            AdmissionMode::Advanced => self.acquire_full_advanced().await,
+            AdmissionMode::Basic => self.acquire_full_basic().await,
         }
     }
 
-    /// Enforce: the full cap binds. Acquire the full sub-pool permit FIRST, then
+    /// Advanced: the full cap binds. Acquire the full sub-pool permit FIRST, then
     /// the global permit.
-    async fn acquire_full_enforce(&self) -> Acquired {
+    async fn acquire_full_advanced(&self) -> Acquired {
         // Fast path: full sub-pool permit then global, both immediately free.
         if let Ok(f) = Arc::clone(&self.full).try_acquire_owned() {
             if let Ok(g) = Arc::clone(&self.global).try_acquire_owned() {
@@ -419,13 +423,14 @@ impl Admission {
         }
     }
 
-    /// Monitor: observe-only. The full cap never rejects — shipping the default
-    /// `monitor` binary must not change behavior. A full takes a full sub-pool
-    /// permit when one is free (so `full_in_use` tracks up to `full_max`);
-    /// otherwise it shadow-counts the would-be full-cap rejection and proceeds
-    /// with a global permit only. The global concurrency bound still applies, as
-    /// it did before two-lane admission existed.
-    async fn acquire_full_monitor(&self) -> Acquired {
+    /// Basic: the advanced (memory/full-lane) cap is observe-only. The full cap
+    /// never rejects — the default `basic` mode must not change behavior beyond
+    /// the basic thread cap. A full takes a full sub-pool permit when one is free
+    /// (so `full_in_use` tracks up to `full_max`); otherwise it shadow-counts the
+    /// would-be full-cap rejection and proceeds with a global permit only. The
+    /// basic tier — the global concurrency bound — still applies, as it did
+    /// before two-lane admission existed.
+    async fn acquire_full_basic(&self) -> Acquired {
         let full_permit = Arc::clone(&self.full).try_acquire_owned().ok();
         if full_permit.is_none() {
             self.full_shadow_rejected_total
@@ -521,7 +526,7 @@ mod tests {
             nthreads,
             tiles_thread_ratio,
             tiles_memory_ratio: 0.25,
-            mode: AdmissionMode::Enforce,
+            mode: AdmissionMode::Advanced,
             max_waiting,
             queue_timeout: Duration::from_millis(timeout_ms),
             large_decode_threshold_bytes: 32 * 1024 * 1024,
@@ -635,11 +640,12 @@ mod tests {
     }
 
     #[test]
-    fn monitor_mode_never_caps_fulls_but_shadow_counts() {
-        // Observe-only: with the full cap at 8, a 12-deep full burst is admitted
-        // (global has 16 permits), and the 4 over the cap are shadow-counted.
+    fn basic_mode_never_caps_fulls_but_shadow_counts() {
+        // Advanced tier observe-only: with the full cap at 8, a 12-deep full
+        // burst is admitted (global has 16 permits), and the 4 over the cap are
+        // shadow-counted.
         let mut c = cfg(16, 0.5, 0, 50);
-        c.mode = AdmissionMode::Monitor;
+        c.mode = AdmissionMode::Basic;
         let a = Admission::new(c).unwrap();
         rt().block_on(async {
             let mut held = Vec::new();
@@ -647,7 +653,7 @@ mod tests {
                 held.push(admitted(a.acquire(AdmissionKind::Full).await));
             }
             let s = a.snapshot();
-            assert_eq!(held.len(), 12, "monitor must admit past the cap");
+            assert_eq!(held.len(), 12, "basic mode must admit past the cap");
             assert_eq!(s.full_in_use, 8, "full_in_use tracks up to full_max");
             assert_eq!(
                 s.full_shadow_rejected_total, 4,
@@ -797,15 +803,15 @@ mod tests {
     }
 
     #[test]
-    fn mode_parses_and_rejects_legacy_off() {
+    fn mode_parses_and_rejects_unknown() {
+        assert_eq!(AdmissionMode::parse("basic"), Some(AdmissionMode::Basic));
         assert_eq!(
-            AdmissionMode::parse("monitor"),
-            Some(AdmissionMode::Monitor)
+            AdmissionMode::parse("ADVANCED"),
+            Some(AdmissionMode::Advanced)
         );
-        assert_eq!(
-            AdmissionMode::parse("ENFORCE"),
-            Some(AdmissionMode::Enforce)
-        );
+        // Legacy values and "off" are no longer recognized (caller defaults to basic).
+        assert_eq!(AdmissionMode::parse("monitor"), None);
+        assert_eq!(AdmissionMode::parse("enforce"), None);
         assert_eq!(AdmissionMode::parse("off"), None);
         assert_eq!(AdmissionMode::parse(""), None);
     }

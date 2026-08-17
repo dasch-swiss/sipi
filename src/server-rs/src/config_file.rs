@@ -94,7 +94,7 @@ struct LimitsSection {
     /// Total RAM envelope as a raw size string ("8G"); the engine parses the
     /// suffix. "0"/absent = auto-detect available RAM.
     memory_limit: Option<String>,
-    /// Admission mode: "monitor" | "enforce".
+    /// Admission mode: "basic" | "advanced".
     admission_mode: Option<String>,
     /// Fraction of the envelope reserved for tiles; the full lane gets
     /// envelope × (1 − ratio).

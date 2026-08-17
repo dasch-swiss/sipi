@@ -96,10 +96,6 @@ void sipiConfGlobals(lua_State *L, shttps::RequestContext & /*ctx*/, void *user_
   lua_pushinteger(L, conf->getCacheNFiles());
   lua_rawset(L, -3);// table1
 
-  lua_pushstring(L, "n_threads");// table1 - "index_L1"
-  lua_pushinteger(L, conf->getNThreads());
-  lua_rawset(L, -3);// table1
-
   lua_pushstring(L, "max_post_size");// table1 - "index_L1"
   lua_pushinteger(L, conf->getMaxPostSize());
   lua_rawset(L, -3);// table1

@@ -553,7 +553,7 @@ extern "C" {
     /// Returns 0, or 500 if `sipi_init` has not run.
     pub fn sipi_max_post_size(out: *mut usize) -> c_int;
 
-    /// The resolved admission mode ("monitor"|"enforce"). `*out` is process-static
+    /// The resolved admission mode ("basic"|"advanced"). `*out` is process-static
     /// engine memory. Returns 0, or 500 if `sipi_init` has not run.
     pub fn sipi_admission_mode(out: *mut *const c_char) -> c_int;
 
@@ -922,7 +922,7 @@ pub fn max_post_size() -> Result<usize, i32> {
     Ok(v)
 }
 
-/// The resolved admission mode ("monitor"|"enforce"), read back so the shell's
+/// The resolved admission mode ("basic"|"advanced"), read back so the shell's
 /// two-lane pool runs the same mode the engine's memory budget does. `Err`
 /// carries the FFI status (500 if `sipi_init` has not run, -1 on a null pointer).
 pub fn admission_mode() -> Result<String, i32> {

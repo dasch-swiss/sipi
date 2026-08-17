@@ -352,7 +352,7 @@ flags.
 | `SIPI_SENTRY_RELEASE` | | | Sentry release (no CLI flag) |
 | `SIPI_SENTRY_ENVIRONMENT` | | | Sentry environment (no CLI flag) |
 | `SIPI_MEMORY_LIMIT` | `--memory-limit` | `0` (auto) | Total RAM envelope (`0`=auto-detect available RAM, `8G`, `500M`); the full lane gets envelope × (1 − `tiles_memory_ratio`) |
-| `SIPI_ADMISSION_MODE` | `--admission-mode` | `monitor` | Admission mode: `monitor`, `enforce` |
+| `SIPI_ADMISSION_MODE` | `--admission-mode` | `basic` | Admission mode: `basic` (enforce basic tier only), `advanced` (also enforce the advanced tier) |
 | `SIPI_TILES_MEMORY_RATIO` | `--tiles-memory-ratio` | `0.25` | Fraction of the envelope reserved for tiles + non-decode floor (range 0..1) |
 | `SIPI_LARGE_DECODE_THRESHOLD_BYTES` | `--large-decode-threshold-bytes` | `33554432` (32 MiB) | Estimated peak-memory at/above which a decode is charged to the full lane; below it bypasses as a tile |
 

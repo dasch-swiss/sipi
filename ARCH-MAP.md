@@ -1,7 +1,7 @@
 ---
 dune_map: true
 schema_version: 1
-last_verified_commit: ce02be22
+last_verified_commit: none   # not SHA-tracked: rebase-merge rewrites branch SHAs, so a pre-merge SHA is unknowable. Use `date` for freshness.
 date: 2026-08-16
 ---
 
@@ -36,7 +36,7 @@ image formats, whose registry fan-out is documented, not mechanized.
 - **Key entities:** `Sipi::SipiImage`, `SipiImage::io` (static handler registry, *defined* in `formats`), `SipiImage::read`/`read_shape`/`write`/`add_watermark`/`convertToIcc`/`scale`/`rotate`/`crop`, `Sipi::SipiIO` (abstract), `SipiImgInfo`, `Sipi::read_watermark` (defined in `formats`), `SipiFilenameHash`, `Sipi::resample_separable_u8/u16`, `Sipi::estimate_peak_memory`, `Sipi::SipiError`/`SipiImageError`, `Sipi::SipiConf`, `Sipi::emit_json_report`
 - **Public interface:** `SipiImage` (via `//src:engine`), `SipiIO`, `SipiError`; consumed by `formats`, `ffi`, `cli`, and the Lua bindings.
 - **Local-context kit:** `src/SipiImage.h`, `src/SipiImage.cpp`, `src/SipiIO.h`, `src/BUILD.bazel` (the `:engine`/`:sipi_lib` targets), `src/formats/format_registry.cpp` (where `io` is defined), `docs/adr/0007-sipiimage-decomposition.md`, `CONVENTIONS.md`
-- **Depends on:** metadata, iiifparser, formats (`:output_sink` only), util, logging, observability, cache, memory-budget
+- **Depends on:** metadata, iiifparser, formats (`:output_sink` only), util, logging, observability, cache, throttling
 - **Used by:** formats (one-way back-edge, see rule), ffi, cli, cli-rs (transitively)
 - **Boundary rules:**
   - The engine references but does **not** define `SipiImage::io` / `Sipi::read_watermark`; both are defined in `formats`, so `//src:engine` does not depend on `//src/formats:formats`. This inverts the `SipiImage`↔handler cycle. *Enforcement: `structure`* (a Bazel package cannot depend on itself; the cycle is unrepresentable).
@@ -61,11 +61,11 @@ Colocated polyglot (ADR-0021/0022): a shell-side admission pool and an
 engine-side memory budget under one component. Supersedes the former
 `memory-budget` entry.
 
-- **Paths:** `:(glob)src/throttling/rust/**` (admission, shell-side), `:(glob)src/throttling/cpp/**` (memory_budget, engine-side); plus the inline output-size guard at the gate (`src/ffi/serve_image.cpp`, reading `eng.max_pixel_limit`).
-- **Purpose:** SIPI's load-driven request-rejection (Throttling). Three sub-policies: **Admission** (the two-partition thread pool — tile floor + full hard cap, pre-dispatch), the **Decode memory budget** (the full partition's decode-RAM cap, post-cache, 503/413 on enforce), and the **Output size guard** (intrinsic max-pixel ceiling, 400).
-- **Key entities:** Rust `admission::{Admission, AdmissionKind, AdmissionMode, AdmissionConfig, AdmissionSnapshot, Permit, default_pool_size}` (`//src/throttling/rust:admission`); C++ `Sipi::SipiMemoryBudget` + `MemoryBudgetGuard` + `enum class AdmissionMode { MONITOR, ENFORCE }` + `Sipi::estimate_peak_memory` (`//src/throttling/cpp:memory_budget`).
+- **Paths:** `:(glob)src/throttling/rust/**` (admission, shell-side), `:(glob)src/throttling/cpp/**` (memory_budget, engine-side).
+- **Purpose:** SIPI's load-driven request-rejection (Throttling). Two sub-policies: **Admission** (the two-partition thread pool — tile floor + full hard cap, pre-dispatch) and the **Decode memory budget** (the full partition's decode-RAM cap, post-cache, 503/413 under advanced mode).
+- **Key entities:** Rust `admission::{Admission, AdmissionKind, AdmissionMode, AdmissionConfig, AdmissionSnapshot, Permit, default_pool_size}` (`//src/throttling/rust:admission`); C++ `Sipi::SipiMemoryBudget` + `MemoryBudgetGuard` + `enum class AdmissionMode { BASIC, ADVANCED }` + `Sipi::estimate_peak_memory` (`//src/throttling/cpp:memory_budget`).
 - **Public interface:** `Admission` (owned by `server-rs` `AppState`; `classify`/`acquire`/`snapshot`); `SipiMemoryBudget` + `MemoryBudgetGuard` (via `//src:engine`).
-- **Local-context kit:** `src/throttling/rust/lib.rs`, `src/throttling/cpp/SipiMemoryBudget.{h,cpp}`, `src/throttling/cpp/SipiPeakMemory.h`, `src/ffi/serve_image.cpp` (budget acquire site + output-size guard), `src/ffi/init.cpp` (resolves the config), `src/server-rs/src/routes.rs` (`AppState`, classify/acquire call sites), `UBIQUITOUS_LANGUAGE.md` (Throttling), `docs/adr/0022-two-lane-admission-control.md`.
+- **Local-context kit:** `src/throttling/rust/lib.rs`, `src/throttling/cpp/SipiMemoryBudget.{h,cpp}`, `src/throttling/cpp/SipiPeakMemory.h`, `src/ffi/serve_image.cpp` (budget acquire site), `src/ffi/init.cpp` (resolves the config), `src/server-rs/src/routes.rs` (`AppState`, classify/acquire call sites), `UBIQUITOUS_LANGUAGE.md` (Throttling), `docs/adr/0022-two-lane-admission-control.md`.
 - **Depends on:** admission (Rust) → `tokio` + `//src/iiifparser/rust:iiif_parser` only (FFI-free; no `//src/ffi`, no C++ engine — DUNE-002). memory_budget (C++) → nothing internal (decoupled from observability by design; the acquire site re-publishes gauges).
 - **Used by:** `server-rs` (`AppState` owns the pool; `routes.rs` classify/acquire; `metrics.rs` reads the snapshot); ffi (`init.cpp` constructs the budget, `serve_image.cpp` acquires).
 - **Boundary rules:**
@@ -243,7 +243,7 @@ Files and rules that span components rather than living in one:
 
 - **The FFI seam** (`src/ffi/sipi_ffi.h` ↔ `src/server-rs/src/ffi.rs`) is the single contract between the shell and the engine; its layout is locked on both sides (see the `ffi` and `server-rs` entries). A change to any `#[repr(C)]` struct is a two-file edit by construction.
 - **The metrics bridge** flows `observability::Metrics` (engine) → `SipiMetricsSnapshot` (`src/ffi/metrics_snapshot.h`) → `server-rs/src/metrics.rs` → OTLP. The `metrics_registry_test` seam tripwire is the mechanical guard that a new counter is a conscious bridge-or-not decision.
-- **The Throttling gate** (`src/ffi/serve_image.cpp`) is the one post-cache point where the engine-side sub-policies (memory-budget, output-size) fire (ADR-0008); the shell's two-lane `Admission` pool is a separate, earlier (pre-dispatch) admission layer (`server-rs/routes.rs`, `//src/throttling/rust:admission`). See the `throttling` component and ADR-0022.
+- **The Throttling gate** (`src/ffi/serve_image.cpp`) is the one post-cache point where the engine-side memory budget fires (ADR-0008); the shell's two-lane `Admission` pool is a separate, earlier (pre-dispatch) admission layer (`server-rs/routes.rs`, `//src/throttling/rust:admission`). See the `throttling` component and ADR-0022.
 - **Ubiquitous language** — identifiers/comments follow `UBIQUITOUS_LANGUAGE.md`; the reviewer checklist (`docs/src/development/reviewer-guidelines.md` § Ubiquitous Language) and the `CONVENTIONS.md` § Production surface rule are the guards (convention-only — no mechanical gate).
 
 ## Support areas (completeness coverage)
