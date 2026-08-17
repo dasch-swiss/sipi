@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "SipiConf.h"// Sipi::SipiConf
-#include "logging/logger.h"// LogLevel (LL_EMERG … LL_DEBUG)
 
 namespace Sipi::ffi {
 namespace {
@@ -84,10 +83,6 @@ void sipiConfGlobals(lua_State *L, shttps::RequestContext & /*ctx*/, void *user_
   lua_pushinteger(L, conf->getJpegQuality());
   lua_rawset(L, -3);// table1
 
-  lua_pushstring(L, "keep_alive");// table1 - "index_L1"
-  lua_pushinteger(L, conf->getKeepAlive());
-  lua_rawset(L, -3);// table1
-
   lua_pushstring(L, "thumb_size");// table1 - "index_L1"
   lua_pushstring(L, conf->getThumbSize().c_str());
   lua_rawset(L, -3);// table1
@@ -104,43 +99,8 @@ void sipiConfGlobals(lua_State *L, shttps::RequestContext & /*ctx*/, void *user_
   lua_pushstring(L, conf->getTmpDir().c_str());
   lua_rawset(L, -3);// table1
 
-  lua_pushstring(L, "ssl_certificate");// table1 - "index_L1"
-  lua_pushstring(L, conf->getSSLCertificate().c_str());
-  lua_rawset(L, -3);// table1
-
-  lua_pushstring(L, "ssl_key");// table1 - "index_L1"
-  lua_pushstring(L, conf->getSSLKey().c_str());
-  lua_rawset(L, -3);// table1
-
   lua_pushstring(L, "scriptdir");// table1 - "index_L1"
   lua_pushstring(L, conf->getScriptDir().c_str());
-  lua_rawset(L, -3);// table1
-
-  lua_pushstring(L, "logfile");// table1 - "index_L1"
-  lua_pushstring(L, conf->getLogfile().c_str());
-  lua_rawset(L, -3);// table1
-
-  lua_pushstring(L, "loglevel");// table1 - "index_L1"
-  const std::string loglevel = conf->getLoglevel();
-  if (loglevel == "EMERG") {
-    lua_pushinteger(L, LL_EMERG);
-  } else if (loglevel == "ALERT") {
-    lua_pushinteger(L, LL_ALERT);
-  } else if (loglevel == "CRIT") {
-    lua_pushinteger(L, LL_CRIT);
-  } else if (loglevel == "ERR") {
-    lua_pushinteger(L, LL_ERR);
-  } else if (loglevel == "WARNING") {
-    lua_pushinteger(L, LL_WARNING);
-  } else if (loglevel == "NOTICE") {
-    lua_pushinteger(L, LL_NOTICE);
-  } else if (loglevel == "INFO") {
-    lua_pushinteger(L, LL_INFO);
-  } else if (loglevel == "DEBUG") {
-    lua_pushinteger(L, LL_DEBUG);
-  } else {
-    lua_pushinteger(L, -1);
-  }
   lua_rawset(L, -3);// table1
 
   lua_pushstring(L, "knora_path");// table1 - "index_L1"

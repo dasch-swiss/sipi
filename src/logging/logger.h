@@ -19,6 +19,13 @@ void set_log_level(LogLevel level);
 LogLevel get_log_level();
 
 /*!
+ * Map a log-level name (case-insensitive: DEBUG, INFO, NOTICE, WARNING, ERR,
+ * CRIT, ALERT, EMERG) to its `LogLevel`. Returns `fallback` for an empty or
+ * unrecognized value.
+ */
+[[nodiscard]] LogLevel parse_log_level(const std::string &name, LogLevel fallback);
+
+/*!
  * Enable JSON-output mode. When true, every log level (info, warn, err) is
  * routed to stderr so that stdout stays reserved for the single JSON document
  * produced by `--json`. Backed by `std::atomic<bool>`: writers use

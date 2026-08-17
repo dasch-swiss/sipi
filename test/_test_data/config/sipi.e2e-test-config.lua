@@ -24,12 +24,6 @@
 --
 sipi = {
     --
-    -- The user under which the Sipi server should run. Use this only if Sipi should setuid to a particular user after
-    -- starting. Otherwise, leave this commented out. If this setting is used, Sipi must be started as root.
-    --
-    -- userid = '_www',
-
-    --
     -- port number the server is listening to
     --
     port = 1024,
@@ -63,11 +57,6 @@ sipi = {
     },
 
     --
-    -- Number of seconds a connection (socket) remains open
-    --
-    keep_alive = 5,
-
-    --
     -- Maximal size of a post request.
     --
     max_post_size = '300M',
@@ -85,25 +74,6 @@ sipi = {
     -- If TRUE, the IIIF prefix is used to build the path to the image files.
     --
     prefix_as_path = true,
-
-    --
-    -- In order not to accumulate too many files into one directory (which slows down file
-    -- access considerabely), the images are stored in recursive subdirectories 'A'-'Z'.
-    -- If subdir_levels is equal 0, no subdirectories are used. The maximum is 6.
-    -- The recommendation is that on average there should not be more than a few
-    -- thousand files in a unix directory (your mileage may vary depending on the
-    -- file system used).
-    --
-    subdir_levels = 0,
-
-    --
-    -- if subdir_levels is > 0 and if prefix_as_path is true, all prefixes will be
-    -- regarded as directories under imgroot. Thus, the subdirs 'A'-'Z' will be
-    -- created in these directories for the prefixes. However, it may make sense
-    -- for certain prefixes *not* to use subdirs. A list of these prefix-directories
-    -- can be given with this configuration parameter.
-    --
-    subdir_excludes = { "tmp", "thumb"},
 
     --
     -- Lua script which is executed on initialization of the Lua interpreter
@@ -156,43 +126,10 @@ sipi = {
     knora_port = '3434',
 
     --
-    -- If compiled with SSL support, the port the server is listening for secure connections
-    --
-    ssl_port = 1025,
-
-    --
-    -- If compiled with SSL support, the path to the certificate (must be .pem file)
-    -- The follow commands can be used to generate a self-signed certificate
-    -- # openssl genrsa -out key.pem 2048
-    -- # openssl req -new -key key.pem -out csr.pem
-    -- #openssl req -x509 -days 365 -key key.pem -in csr.pem -out certificate.pem
-    --
-    ssl_certificate = './certificate/certificate.pem',
-
-    --
-    -- If compiled with SSL support, the path to the key file (see above to create)
-    --
-    ssl_key = './certificate/key.pem',
-
-
-    --
     -- The secret for generating JWT's (JSON Web Tokens) (42 characters)
     --
     jwt_secret = 'UP 4888, nice 4-8-4 steam engine',
     --            12345678901234567890123456789012
-
-
-    --
-    -- Name of the logfile (a ".txt" is added...) !!! Currently not used, since logging
-    -- is based on syslog !!!!
-    --
-    logfile = "sipi.log",
-
-    --
-    -- loglevel, one of "DEBUG", "INFO", "NOTICE", "WARNING", "ERR",
-    -- "CRIT", "ALERT", "EMERG"
-    --
-    loglevel = "DEBUG"
 }
 
 admin = {

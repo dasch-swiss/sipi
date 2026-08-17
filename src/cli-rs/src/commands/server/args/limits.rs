@@ -12,9 +12,6 @@ pub struct LimitsArgs {
     /// Max POST body size, e.g. "300M" (engine parses the suffix).
     #[arg(long, env = "SIPI_MAXPOSTSIZE", value_name = "SIZE")]
     pub maxpost: Option<String>,
-    /// Max output pixels (width × height) per IIIF request (0 = unlimited).
-    #[arg(long, env = "SIPI_MAX_PIXEL_LIMIT", value_name = "PIXELS")]
-    pub max_pixel_limit: Option<u64>,
     /// Total RAM envelope, e.g. "8G" (0 = auto-detect available RAM; engine
     /// parses the suffix). The full lane's byte cap is derived from this and
     /// `--tiles-memory-ratio`.

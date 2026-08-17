@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -35,6 +37,23 @@ void set_cli_mode(bool cli) { g_cli_mode = cli; }
 bool is_cli_mode() { return g_cli_mode; }
 void set_log_level(LogLevel level) { g_log_level = level; }
 LogLevel get_log_level() { return g_log_level; }
+
+LogLevel parse_log_level(const std::string &name, LogLevel fallback)
+{
+  std::string upper(name);
+  std::transform(upper.begin(), upper.end(), upper.begin(), [](unsigned char c) {
+    return static_cast<char>(std::toupper(c));
+  });
+  if (upper == "DEBUG") return LL_DEBUG;
+  if (upper == "INFO") return LL_INFO;
+  if (upper == "NOTICE") return LL_NOTICE;
+  if (upper == "WARNING") return LL_WARNING;
+  if (upper == "ERR") return LL_ERR;
+  if (upper == "CRIT") return LL_CRIT;
+  if (upper == "ALERT") return LL_ALERT;
+  if (upper == "EMERG") return LL_EMERG;
+  return fallback;
+}
 void set_json_mode(bool enabled) { g_json_mode.store(enabled, std::memory_order_relaxed); }
 bool is_json_mode() { return g_json_mode.load(std::memory_order_relaxed); }
 

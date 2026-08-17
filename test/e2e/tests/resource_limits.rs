@@ -1,7 +1,7 @@
 mod common;
 
 use common::{client, server};
-use sipi_e2e::{http_client, poll_cache_file_count, test_data_dir, SipiServer};
+use sipi_e2e::{http_client, poll_cache_file_count, test_data_dir};
 
 // =============================================================================
 // Resource limits tests — verify server handles heavy load without crashes
@@ -226,115 +226,4 @@ fn transform_pipeline_memory() {
         200,
         "server not responsive after transform pipeline"
     );
-}
-
-#[test]
-fn pixel_limit_rejects_oversized_request() {
-    // Start a server with a low max_pixel_limit (10000 = ~100x100)
-    // and verify that a 512x512 request (262144 pixels) is rejected.
-    let test_data = test_data_dir();
-
-    // Write a config with low pixel limit
-    let config_content = r#"sipi = {
-    port = 1024,
-    nthreads = 4,
-    jpeg_quality = 60,
-    scaling_quality = { jpeg = "medium", tiff = "high", png = "high", j2k = "high" },
-    keep_alive = 5,
-    max_post_size = '300M',
-    imgroot = './images',
-    prefix_as_path = true,
-    subdir_levels = 0,
-    subdir_excludes = { "tmp", "thumb" },
-    initscript = './config/sipi.init-knora.lua',
-    cache_dir = './cache',
-    cache_size = '20M',
-    cache_nfiles = 8,
-    scriptdir = './scripts',
-    thumb_size = '!128,128',
-    tmpdir = '/tmp',
-    max_temp_file_age = 86400,
-    knora_path = 'localhost',
-    knora_port = '3434',
-    ssl_port = 1025,
-    ssl_certificate = './certificate/certificate.pem',
-    ssl_key = './certificate/key.pem',
-    jwt_secret = 'UP 4888, nice 4-8-4 steam engine',
-    logfile = "sipi.log",
-    loglevel = "DEBUG",
-    max_pixel_limit = 10000
-}
-
-admin = {
-    user = 'admin',
-    password = 'Sipi-Admin'
-}
-
-fileserver = {
-    docroot = './server',
-    wwwroute = '/server'
-}
-
-routes = {}
-"#;
-
-    // Give the isolated server its own cache dir so its startup orphan
-    // scan doesn't wipe out the main shared server's cache entries —
-    // shared `cache_dir = './cache'` from the Lua config means concurrent
-    // sipi processes race on `.sipicache` index updates and on disk files.
-    let cache_tmp = tempfile::tempdir().expect("create isolated cache dir");
-    let cache_arg = cache_tmp.path().to_string_lossy().to_string();
-
-    // Write the pixel-limit-test config inside the per-test tempdir so two
-    // parallel runs (different `cargo test` invocations or two CI workspaces
-    // sharing this checkout) can't race on a single shared
-    // `test_data/config/sipi.pixel-limit-test.lua` path. sipi's `--config`
-    // accepts an absolute path, so this works the same as the old in-tree
-    // config write.
-    let config_path = cache_tmp.path().join("sipi.pixel-limit-test.lua");
-    std::fs::write(&config_path, config_content).expect("write pixel limit config");
-    let config_arg = config_path.to_str().expect("config path is valid utf-8");
-
-    let srv = SipiServer::start_with_args(config_arg, &test_data, &["--cache-dir", &cache_arg]);
-    let c = http_client();
-
-    // Request full-size image (512x512 = 262144 pixels, exceeds 10000 limit)
-    let resp = c
-        .get(format!(
-            "{}/unit/lena512.jp2/full/max/0/default.jpg",
-            srv.base_url
-        ))
-        .send()
-        .expect("pixel limit request failed");
-
-    assert_eq!(
-        resp.status().as_u16(),
-        400,
-        "request exceeding max_pixel_limit should return 400"
-    );
-
-    // Small request should still work (100x100 = 10000, within limit)
-    let resp = c
-        .get(format!(
-            "{}/unit/lena512.jp2/full/100,100/0/default.jpg",
-            srv.base_url
-        ))
-        .send()
-        .expect("small image request failed");
-
-    assert_eq!(
-        resp.status().as_u16(),
-        200,
-        "request within max_pixel_limit should return 200"
-    );
-
-    // Drop the server before the temp dir: SipiServer::Drop sends SIGTERM
-    // and waits up to 5s for graceful shutdown; if `cache_tmp` were dropped
-    // first, the cache_dir + the config file inside it would be deleted
-    // under sipi's feet during its shutdown flush. Today this is enforced
-    // implicitly by reverse-declaration drop order — make it explicit so a
-    // future refactor can't silently break it. (cache_tmp's Drop also
-    // cleans up the config file, so no manual remove is needed.)
-    drop(srv);
-    drop(cache_tmp);
 }

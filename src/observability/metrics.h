@@ -76,7 +76,6 @@ public:
   Counter cache_misses_total;
   Counter cache_evictions_total;
   Counter cache_skips_total;
-  Counter image_too_large_total;
   Counter client_disconnected_total;
   Counter memory_alloc_failures_total;
 
@@ -96,14 +95,14 @@ public:
   Gauge decode_memory_budget_bytes;
   Gauge decode_memory_used_bytes;
   Counter decode_memory_acquired;
-  Counter decode_memory_rejected;       // enforce: transient over-budget → 503
-  Counter decode_memory_shadow_rejected;// monitor: would-be 503
+  Counter decode_memory_rejected;       // advanced: transient over-budget → 503
+  Counter decode_memory_shadow_rejected;// basic: would-be 503 (shadow-counted)
   Counter decode_memory_near_limit_total;
   // A single request whose estimate alone exceeds the full-lane budget is
   // permanently unservable → 413 (no Retry-After), distinct from a transient
   // 503. Engine-internal until bridged through SipiMetricsSnapshot.
-  Counter decode_memory_too_large_total;       // enforce: 413 returned
-  Counter decode_memory_shadow_too_large_total;// monitor: would-be 413
+  Counter decode_memory_too_large_total;       // advanced: 413 returned
+  Counter decode_memory_shadow_too_large_total;// basic: would-be 413 (shadow-counted)
 
   // read_shape fast path (ADR-0004 / DEV-6537).
   // Format = {jp2, tiff}; outcome = {hit, miss, partial, fallback}.

@@ -164,20 +164,6 @@ TEST(BuildImageResponse, HeadRequestIsEmptyBody)
   EXPECT_TRUE(has_header(*result, "Content-Type", "image/png"));
 }
 
-TEST(BuildImageResponse, OutputPixelLimitIsBadRequest)
-{
-  auto eng = bare_engine();
-  eng.max_pixel_limit = 1000;// the 512x512 = 262144-pixel output blows the cap
-
-  const std::string path = fixture("/unit/lena512.tif");
-  const auto params = full_params(SIPI_FORMAT_PNG);
-  const auto req = make_request(path, params);
-
-  const auto result = build_image_response(req, eng, kNeverCancelled);
-  ASSERT_FALSE(result.has_value());
-  EXPECT_EQ(result.error(), SipiStatus::BadRequest);
-}
-
 TEST(BuildImageResponse, ClientGoneBeforeDecode)
 {
   const std::string path = fixture("/unit/lena512.tif");

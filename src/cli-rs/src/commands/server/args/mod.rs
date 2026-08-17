@@ -88,8 +88,7 @@ mod tests {
     /// env provides it, so it falls through to the loaded Lua config.
     /// A `default_value` on any overridable field would silently clobber
     /// the config value — this pins one representative field per group against
-    /// that regression, plus the two non-trivial parse configs (`pathprefix`'s
-    /// optional-value flag and `subdirexcludes`'s delimited list), where the
+    /// that regression, plus `pathprefix`'s optional-value flag, where the
     /// `default_value`-vs-`default_missing_value` distinction is easiest to get
     /// wrong. The argv starts at `"server"` because that is what
     /// `commands::server::run` hands `try_parse_from` after the verb dispatch.
@@ -105,7 +104,6 @@ mod tests {
         assert_eq!(args.limits.admission_mode, None);
         assert_eq!(args.paths.imgroot, None);
         assert_eq!(args.paths.pathprefix, None);
-        assert_eq!(args.paths.subdirexcludes, None);
         assert_eq!(args.cache.cache_dir, None);
         assert_eq!(args.tls_auth.jwtkey, None);
         assert_eq!(args.knora.knorapath, None);
@@ -131,8 +129,6 @@ mod tests {
             "300M",
             "--imgroot",
             "/img",
-            "--max-pixel-limit",
-            "1000",
             "--cache-dir",
             "/c",
             "--jwtkey",
@@ -150,7 +146,6 @@ mod tests {
         assert_eq!(args.network.serverport, Some(1024));
         assert_eq!(args.concurrency.nthreads, Some(8));
         assert_eq!(args.limits.maxpost.as_deref(), Some("300M"));
-        assert_eq!(args.limits.max_pixel_limit, Some(1000));
         assert_eq!(args.paths.imgroot.as_deref(), Some("/img"));
         assert_eq!(args.cache.cache_dir.as_deref(), Some("/c"));
         assert_eq!(args.tls_auth.jwtkey.as_deref(), Some("secret"));

@@ -16,7 +16,7 @@
 // counter/gauge in `metrics.h` must appear in exactly one of the two sets below,
 // so adding a field forces a conscious decision about whether it crosses to OTLP.
 //
-// The `kBridgedToOtlp` set is the same 22 fields the FFI snapshot reads; its size
+// The `kBridgedToOtlp` set is the same 21 fields the FFI snapshot reads; its size
 // is locked here and independently by the `SipiMetricsSnapshot` layout asserts in
 // `src/ffi/metrics_snapshot.h` (size + per-field offset, mirrored in
 // `server-rs/src/ffi.rs`).
@@ -33,14 +33,13 @@
 namespace {
 
 // Fields whose values reach production OTLP, via `SipiMetricsSnapshot` and the
-// COUNTERS/GAUGES tables in `server-rs/src/metrics.rs`. Exactly the 22 members
+// COUNTERS/GAUGES tables in `server-rs/src/metrics.rs`. Exactly the 21 members
 // `sipi_metrics_snapshot` reads.
 const std::set<std::string> kBridgedToOtlp = {
   "cache_hits_total",
   "cache_misses_total",
   "cache_evictions_total",
   "cache_skips_total",
-  "image_too_large_total",
   "client_disconnected_total",
   "memory_alloc_failures_total",
   "rejected_connections_total",
@@ -90,10 +89,10 @@ const std::set<std::string> kEngineInternalNotBridged = {
 
 TEST(SipiMetricsSeam, BridgedSetMatchesTheSnapshotFieldCount)
 {
-  // The snapshot reads exactly 22 scalar members (8 counters + 6 decode-memory
+  // The snapshot reads exactly 21 scalar members (7 counters + 6 decode-memory
   // counters + tiff_pyramid + 7 gauges). The `SipiMetricsSnapshot` layout asserts
   // lock the struct; this pins the classification's view of it.
-  EXPECT_EQ(kBridgedToOtlp.size(), 22U)
+  EXPECT_EQ(kBridgedToOtlp.size(), 21U)
     << "The bridged-to-OTLP set changed. If you added/removed a snapshot field, "
        "update ffi/metrics_snapshot.h + server-rs/src/metrics.rs to match.";
 }

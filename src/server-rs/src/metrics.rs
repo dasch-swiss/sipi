@@ -365,7 +365,7 @@ pub(crate) fn record_decode_estimate(estimate_bytes: u64) {
     }
 }
 
-/// The 14 live monotonic counters: OTel name, description, and the field to read
+/// The 13 live monotonic counters: OTel name, description, and the field to read
 /// from a snapshot. (`rejected_connections_total` is omitted — transport-dead.)
 type CounterRow = (&'static str, &'static str, fn(&SipiMetricsSnapshot) -> u64);
 const COUNTERS: &[CounterRow] = &[
@@ -380,11 +380,6 @@ const COUNTERS: &[CounterRow] = &[
         "sipi.cache.skips",
         "Files too large to cache (skipped)",
         |s| s.cache_skips_total,
-    ),
-    (
-        "sipi.image_too_large",
-        "Requests rejected by the output pixel limit",
-        |s| s.image_too_large_total,
     ),
     (
         "sipi.client_disconnected",

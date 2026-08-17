@@ -89,9 +89,12 @@ Precedence is `config file < environment variable < command-line flag`, the same
 as for a Lua config: a CLI flag (or its `SIPI_*` env var) overrides the matching
 TOML key. `img_root` is required (an empty image root has nothing to resolve);
 routes with a relative `script` require `[paths].script_dir`. Unknown keys are
-rejected (a typo is a startup error, not a silently-ignored value), so transport
-knobs the Rust server does not own — TLS (`ssl_*`), `hostname`, `keep_alive`,
-thread count, and `logfile` — have no TOML key and are reported as unsupported.
+rejected (a typo is a startup error, not a silently-ignored value), so knobs
+the Rust server does not own as config — TLS (`ssl_*`), `hostname`,
+`keep_alive`, thread count, and `logfile` — have no TOML key and are reported
+as unsupported; these are now CLI-flag/env-var-only knobs, accepted for
+parse-only compatibility (see [Server Options](#server-options) below), not
+Lua config or TOML keys.
 
 The TOML key for each Lua config key:
 
@@ -106,15 +109,12 @@ The TOML key for each Lua config key:
 | `[paths] doc_root` | `fileserver.docroot` |
 | `[paths] www_route` | `fileserver.wwwroute` |
 | `[paths] prefix_as_path` | `prefix_as_path` |
-| `[paths] subdir_levels` | `subdir_levels` |
-| `[paths] subdir_excludes` | `subdir_excludes` |
 | `[cache] dir` | `cache_dir` |
 | `[cache] size` | `cache_size` |
 | `[cache] n_files` | `cache_nfiles` |
 | `[limits] memory_limit` | `memory_limit` |
 | `[limits] admission_mode` | `admission_mode` |
 | `[limits] tiles_memory_ratio` | `tiles_memory_ratio` |
-| `[limits] max_pixel_limit` | `max_pixel_limit` |
 | `[limits] max_post_size` | `max_post_size` |
 | `[limits] thumb_size` | `thumb_size` |
 | `[image] jpeg_quality` | `jpeg_quality` |
@@ -271,12 +271,16 @@ These options are accepted by the `server` subcommand. Usage:
 | `--config <file>` | `-c` | `SIPI_CONFIGFILE` | | Server config file — Lua (`.lua`) or TOML (`.toml`); see [Configuration file format](#configuration-file-format-lua-or-toml) |
 | `--serverport <n>` | | `SIPI_SERVERPORT` | `80` | HTTP port |
 | `--sslport <n>` | | `SIPI_SSLPORT` | `443` | HTTPS port |
-| `--hostname <name>` | | `SIPI_HOSTNAME` | `localhost` | Public DNS hostname |
-| `--keepalive <sec>` | | `SIPI_KEEPALIVE` | `5` | HTTP keep-alive timeout in seconds (now enforced server-side) |
+| `--hostname <name>` | | `SIPI_HOSTNAME` | `localhost` | Public DNS hostname. Parse-only: accepted for compatibility, not read by the server |
+| `--keepalive <sec>` | | `SIPI_KEEPALIVE` | `5` | HTTP keep-alive timeout in seconds. Parse-only: accepted for compatibility, unread |
 | `--nthreads <n>` | `-t` | `SIPI_NTHREADS` | `0` (auto) | Worker threads (`0` = auto: available parallelism, container-aware, fallback 4) |
 | `--tiles-thread-ratio <r>` | | `SIPI_TILES_THREAD_RATIO` | `0.5` | Fraction of workers guaranteed to tiles (0..1); the full partition is hard-capped at the rest |
 | `--max-waiting <n>` | | `SIPI_MAX_WAITING` | `2×nthreads` | Max requests that may wait for a worker before HTTP 503 (`0` = no queue, shed immediately; `Retry-After: 1`) |
 | `--queue-timeout <sec>` | | `SIPI_QUEUE_TIMEOUT` | `5` | Max seconds a request waits in queue before 503 |
+| `--memory-limit <size>` | | `SIPI_MEMORY_LIMIT` | `0` (auto) | Total decode-memory envelope (`0` = auto-detect available RAM; `8G`, `500M`); the full partition's budget is envelope × (1 − tiles-memory-ratio) |
+| `--admission-mode <mode>` | | `SIPI_ADMISSION_MODE` | `basic` | `basic` (enforce the basic tier only; advanced tier observe-only) or `advanced` (also enforce the memory budget + 503/413) |
+| `--tiles-memory-ratio <r>` | | `SIPI_TILES_MEMORY_RATIO` | `0.25` | Fraction of the envelope reserved for tiles + non-decode floor (0..1) |
+| `--large-decode-threshold-bytes <n>` | | `SIPI_LARGE_DECODE_THRESHOLD_BYTES` | `33554432` (32 MiB) | Estimated peak-memory at/above which a decode is charged to the full partition; below it bypasses as a tile |
 | `--preflight-cache-ttl <sec>` | | `SIPI_PREFLIGHT_CACHE_TTL` | `0` (disabled) | Seconds a `pre_flight` access decision is cached per `(prefix, identifier, credential)`. Opt-in; enable (`>0`) only if the hook decides purely on prefix/identifier/Cookie/Authorization (see the Preflight access-cache section in the Lua scripting guide) |
 | `--preflight-cache-slots <n>` | | `SIPI_PREFLIGHT_CACHE_SLOTS` | `4096` | Slot count for the preflight access-cache |
 | `--maxpost <size>` | | `SIPI_MAXPOSTSIZE` | `300M` | Maximum POST upload size |
@@ -291,10 +295,10 @@ These options are accepted by the `server` subcommand. Usage:
 | `--cachesize <size>` | | `SIPI_CACHESIZE` | `200M` | Maximum cache size (`-1`=unlimited, `0`=disabled) |
 | `--cachenfiles <n>` | | `SIPI_CACHENFILES` | `200` | Maximum number of cached files (`0`=no limit) |
 | `--thumbsize <size>` | | `SIPI_THUMBSIZE` | `!128,128` | Default thumbnail size (IIIF syntax) |
-| `--sslcert <path>` | | `SIPI_SSLCERTIFICATE` | `./certificate/certificate.pem` | SSL certificate path |
-| `--sslkey <path>` | | `SIPI_SSLKEY` | `./certificate/key.pem` | SSL key file path |
+| `--sslcert <path>` | | `SIPI_SSLCERTIFICATE` | `./certificate/certificate.pem` | SSL certificate path. Parse-only: accepted for compatibility, unread |
+| `--sslkey <path>` | | `SIPI_SSLKEY` | `./certificate/key.pem` | SSL key file path. Parse-only: accepted for compatibility, unread |
 | `--jwtkey <string>` | | `SIPI_JWTKEY` | | JWT shared secret (42 chars) |
-| `--loglevel <level>` | | `SIPI_LOGLEVEL` | `DEBUG` | Log level (see Logging section) |
+| `--loglevel <level>` | | `SIPI_LOGLEVEL` | `DEBUG` | Sets the engine log level (`DEBUG`/`INFO`/…, see Logging section); applied via `set_log_level` |
 
 ### Sentry Error Reporting
 
@@ -307,8 +311,6 @@ Variables](#environment-variables) below): `SIPI_SENTRY_DSN`,
 
 | Flag | Description |
 |------|-------------|
-| `--subdirlevels <n>` | Number of subdirectory levels (deprecated) |
-| `--subdirexcludes <dirs>` | Directories excluded from subdir calculations |
 | `--pathprefix[=BOOL]` | Treat the IIIF URL prefix as a subdirectory under imgroot, i.e. `<imgroot>/<prefix>/<id>` (default: true; bare flag means true) |
 
 ## Environment Variables
@@ -323,8 +325,8 @@ flags.
 | `SIPI_RS_PORT` | *(none)* | | Highest-precedence HTTP listen-port override (env-only, no CLI flag). Overrides `--serverport`/`SIPI_SERVERPORT` and the config's `port`. Primarily for parallel dev/test shells; safe to leave unset in production |
 | `SIPI_SERVERPORT` | `--serverport` | `80` | HTTP port |
 | `SIPI_SSLPORT` | `--sslport` | `443` | HTTPS port |
-| `SIPI_HOSTNAME` | `--hostname` | `localhost` | Public hostname |
-| `SIPI_KEEPALIVE` | `--keepalive` | `5` | Keep-alive timeout (seconds, now enforced server-side) |
+| `SIPI_HOSTNAME` | `--hostname` | `localhost` | Public hostname. Parse-only: accepted for compatibility, not read by the server |
+| `SIPI_KEEPALIVE` | `--keepalive` | `5` | Keep-alive timeout (seconds). Parse-only: accepted for compatibility, unread |
 | `SIPI_NTHREADS` | `--nthreads` | `0` (auto) | Worker threads (`0` = auto: available parallelism, container-aware, fallback 4) |
 | `SIPI_TILES_THREAD_RATIO` | `--tiles-thread-ratio` | `0.5` | Fraction of workers guaranteed to tiles (0..1); the full partition is hard-capped at the rest |
 | `SIPI_MAX_WAITING` | `--max-waiting` | `2×nthreads` | Max requests that may wait for a worker before 503 (`0` = no queue, shed immediately) |
@@ -343,11 +345,11 @@ flags.
 | `SIPI_CACHESIZE` | `--cachesize` | `200M` | Max cache size (`-1`=unlimited, `0`=disabled) |
 | `SIPI_CACHENFILES` | `--cachenfiles` | `200` | Max cached files (`0`=no limit) |
 | `SIPI_THUMBSIZE` | `--thumbsize` | `!128,128` | Thumbnail size |
-| `SIPI_SSLCERTIFICATE` | `--sslcert` | `./certificate/certificate.pem` | SSL certificate |
-| `SIPI_SSLKEY` | `--sslkey` | `./certificate/key.pem` | SSL key |
+| `SIPI_SSLCERTIFICATE` | `--sslcert` | `./certificate/certificate.pem` | SSL certificate. Parse-only: accepted for compatibility, unread |
+| `SIPI_SSLKEY` | `--sslkey` | `./certificate/key.pem` | SSL key. Parse-only: accepted for compatibility, unread |
 | `SIPI_JWTKEY` | `--jwtkey` | | JWT secret |
 | `SIPI_JPEGQUALITY` | `--quality` | `60` | JPEG quality |
-| `SIPI_LOGLEVEL` | `--loglevel` | `DEBUG` | Log level |
+| `SIPI_LOGLEVEL` | `--loglevel` | `DEBUG` | Sets the engine log level; applied via `set_log_level` |
 | `SIPI_SENTRY_DSN` | | | Sentry DSN (no CLI flag) |
 | `SIPI_SENTRY_RELEASE` | | | Sentry release (no CLI flag) |
 | `SIPI_SENTRY_ENVIRONMENT` | | | Sentry environment (no CLI flag) |

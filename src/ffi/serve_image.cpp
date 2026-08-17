@@ -512,11 +512,6 @@ std::expected<ServeResponse, SipiStatus>
     return std::unexpected(SipiStatus::BadRequest);
   }
 
-  // Requested output dims, before restricted_size may shrink them (the pixel
-  // limit is computed off the request, not the served size).
-  const size_t requested_w = tmp_r_w;
-  const size_t requested_h = tmp_r_h;
-
   try {
     restricted_size->get_size(img_w, img_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
   } catch (Sipi::SipiSizeError &) {
@@ -525,17 +520,6 @@ std::expected<ServeResponse, SipiStatus>
     return std::unexpected(SipiStatus::BadRequest);
   }
   if (!restricted_size->undefined() && (*size > *restricted_size)) { size = restricted_size; }
-
-  // Output pixel-count guard.
-  if (eng.max_pixel_limit > 0 && requested_w > 0 && requested_h > 0) {
-    const size_t output_pixels = requested_w * requested_h;
-    if (output_pixels > eng.max_pixel_limit) {
-      log_warn("Request rejected: output %zux%zu (%zu pixels) exceeds limit %zu: %s",
-        requested_w, requested_h, output_pixels, eng.max_pixel_limit, uri.c_str());
-      Metrics::instance().image_too_large_total.Increment();
-      return std::unexpected(SipiStatus::BadRequest);
-    }
-  }
 
   // Canonical URL (Link header + cache key). The Link header honours
   // X-Forwarded-Proto (SIPI serves plain HTTP behind Traefik); the cache key

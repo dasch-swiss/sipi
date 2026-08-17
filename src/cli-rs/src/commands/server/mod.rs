@@ -63,8 +63,6 @@ impl From<&ServerArgs> for ServerOverrides {
             maxtmpage,
             initscript,
             pathprefix,
-            subdirlevels,
-            subdirexcludes,
         } = paths;
         let CacheArgs {
             cache_dir,
@@ -76,7 +74,6 @@ impl From<&ServerArgs> for ServerOverrides {
         } = cache;
         let LimitsArgs {
             maxpost,
-            max_pixel_limit,
             memory_limit,
             admission_mode,
             tiles_memory_ratio,
@@ -117,8 +114,6 @@ impl From<&ServerArgs> for ServerOverrides {
             docroot: docroot.clone(),
             wwwroute: wwwroute.clone(),
             pathprefix: *pathprefix,
-            subdirlevels: *subdirlevels,
-            subdirexcludes: subdirexcludes.clone(),
             jwtkey: jwtkey.clone(),
             adminuser: adminuser.clone(),
             adminpasswd: adminpasswd.clone(),
@@ -129,7 +124,6 @@ impl From<&ServerArgs> for ServerOverrides {
             admission_mode: admission_mode.clone(),
             tiles_memory_ratio: *tiles_memory_ratio,
             large_decode_threshold_bytes: *large_decode_threshold_bytes,
-            max_pixel_limit: *max_pixel_limit,
             maxpost: maxpost.clone(),
             thumbsize: thumbsize.clone(),
             knorapath: knorapath.clone(),

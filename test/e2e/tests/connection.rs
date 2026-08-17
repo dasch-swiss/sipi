@@ -197,8 +197,8 @@ fn graceful_shutdown() {
 
 #[test]
 fn keepalive_timeout_enforcement() {
-    // Open a keep-alive connection, idle for longer than keep_alive_timeout,
-    // verify server closes it. Config has keep_alive = 5 seconds.
+    // Open a keep-alive connection, idle for longer than the server's idle
+    // keep-alive timeout, and verify the server closes it.
     let srv = server();
     let addr = format!("127.0.0.1:{}", srv.http_port);
 

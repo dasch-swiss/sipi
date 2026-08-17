@@ -88,12 +88,11 @@ across code, metrics, and docs (maintainer decision, 2026-08-16). This lifts the
 former glossary ban on "admission control" — it is now the term, kept distinct
 from *Permission* (the Lua access decision).
 
-**Deliberately not colocated: the output size guard.** It is a ~10-line
-stateless check at the gate site (`serve_image.cpp`, reading
-`eng.max_pixel_limit`), and the gate must stay in `src/ffi` (it orchestrates
-cache-check → policies; it is the seam). Extracting ten lines into a module to
-complete the package name would be shape without substance. ARCH-MAP records the
-guard's gate-site location so the umbrella still has one findable index.
+**Deliberately not colocated: the gate site itself.** The serve gate
+(`serve_image.cpp`) orchestrates cache-check → policies and must stay in
+`src/ffi` — it is the seam. Extracting it into a module to complete the
+package name would be shape without substance. ARCH-MAP records the gate's
+gate-site location so the umbrella still has one findable index.
 
 ### Two classifiers, one intent
 
@@ -111,7 +110,8 @@ is exported as a disagreement counter.
 
 `admission_mode`, `tiles_memory_ratio`, `large_decode_threshold_bytes`, and the
 resolved `memory_limit` envelope are parsed/resolved **once, engine-side** (the
-engine reads the Lua config and layers the CLI/env overrides), and the shell
+engine resolves the defaults and layers the CLI/env/TOML overrides — these are
+shell-owned knobs, no longer read from the Lua config), and the shell
 reads them back over the seam (`sipi_admission_mode` / `sipi_tiles_memory_ratio` /
 `sipi_large_decode_threshold_bytes` / `sipi_memory_limit_bytes`). One authority,
 no drift — the shell's pool runs the same mode and classifies against the same

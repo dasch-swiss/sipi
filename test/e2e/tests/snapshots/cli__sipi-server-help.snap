@@ -24,7 +24,6 @@ Concurrency:
 
 Limits:
       --maxpost <SIZE>                        Max POST body size, e.g. "300M" (engine parses the suffix) [env: SIPI_MAXPOSTSIZE=]
-      --max-pixel-limit <PIXELS>              Max output pixels (width × height) per IIIF request (0 = unlimited) [env: SIPI_MAX_PIXEL_LIMIT=]
       --memory-limit <SIZE>                   Total RAM envelope, e.g. "8G" (0 = auto-detect available RAM; engine parses the suffix). The full lane's byte cap is derived from this and `--tiles-memory-ratio` [env: SIPI_MEMORY_LIMIT=]
       --admission-mode <MODE>                 Admission mode: basic (thread cap only; default) or advanced (also the memory + two-lane caps). Unknown values fall back to basic [env: SIPI_ADMISSION_MODE=]
       --tiles-memory-ratio <RATIO>            Fraction of the envelope reserved for tiles (0..1); the full lane gets envelope × (1 − ratio). Defaults to 0.25 [env: SIPI_TILES_MEMORY_RATIO=]
@@ -32,16 +31,14 @@ Limits:
       --thumbsize <SIZE>                      Thumbnail size used within Lua, e.g. "!128,128" [env: SIPI_THUMBSIZE=]
 
 Paths:
-      --imgroot <DIR>         Root directory containing the images [env: SIPI_IMGROOT=]
-      --docroot <DIR>         Document root for the static fileserver [env: SIPI_DOCROOT=]
-      --wwwroute <ROUTE>      URL route for the static fileserver [env: SIPI_WWWROUTE=]
-      --scriptdir <DIR>       Directory containing the Lua route scripts [env: SIPI_SCRIPTDIR=]
-      --tmpdir <DIR>          Temporary directory (uploads etc.) [env: SIPI_TMPDIR=]
-      --maxtmpage <SECS>      Max age in seconds of temp files before deletion [env: SIPI_MAXTMPAGE=]
-      --initscript <FILE>     Path to the Lua init script [env: SIPI_INITSCRIPT=]
-      --pathprefix [<BOOL>]   IIIF prefix is part of the image path (honoured on the serve path via `routes.rs`'s `prefix_as_path`) [env: SIPI_PATHPREFIX=] [possible values: true, false]
-      --subdirlevels <N>      Number of subdir levels (deprecated; no effect on the Rust path) [env: SIPI_SUBDIRLEVELS=]
-      --subdirexcludes <DIR>  Directories excluded from subdir calculations [env: SIPI_SUBDIREXCLUDES=]
+      --imgroot <DIR>        Root directory containing the images [env: SIPI_IMGROOT=]
+      --docroot <DIR>        Document root for the static fileserver [env: SIPI_DOCROOT=]
+      --wwwroute <ROUTE>     URL route for the static fileserver [env: SIPI_WWWROUTE=]
+      --scriptdir <DIR>      Directory containing the Lua route scripts [env: SIPI_SCRIPTDIR=]
+      --tmpdir <DIR>         Temporary directory (uploads etc.) [env: SIPI_TMPDIR=]
+      --maxtmpage <SECS>     Max age in seconds of temp files before deletion [env: SIPI_MAXTMPAGE=]
+      --initscript <FILE>    Path to the Lua init script [env: SIPI_INITSCRIPT=]
+      --pathprefix [<BOOL>]  IIIF prefix is part of the image path (honoured on the serve path via `routes.rs`'s `prefix_as_path`) [env: SIPI_PATHPREFIX=] [possible values: true, false]
 
 Cache:
       --cache-dir <DIR>    Cache directory [env: SIPI_CACHE_DIR=]

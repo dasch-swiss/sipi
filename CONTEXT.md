@@ -16,7 +16,7 @@ Use these terms in code, commits, ADRs, and PR descriptions when crossing the se
 
 ## Subdomain language (SIPI-local)
 
-The canonical SIPI glossary is in [UBIQUITOUS_LANGUAGE.md](./UBIQUITOUS_LANGUAGE.md). It defines: Image vs Bitstream, Identifier (with embedded Page) + Prefix, Image root vs Document root, the IIIF pipeline terms (Region / Size / Rotation / Quality / Format / Decode level / Canonical URL / Cache key), Format handler vs Codec, Preservation metadata (umbrella) over Embedded metadata + Essentials packet, Image / Bitstream Information document, the three Lua entry points (Init script / Preflight script / Route handler), the seven Permission types, and the Throttling umbrella over Decode memory budget + Output size guard.
+The canonical SIPI glossary is in [UBIQUITOUS_LANGUAGE.md](./UBIQUITOUS_LANGUAGE.md). It defines: Image vs Bitstream, Identifier (with embedded Page) + Prefix, Image root vs Document root, the IIIF pipeline terms (Region / Size / Rotation / Quality / Format / Decode level / Canonical URL / Cache key), Format handler vs Codec, Preservation metadata (umbrella) over Embedded metadata + Essentials packet, Image / Bitstream Information document, the three Lua entry points (Init script / Preflight script / Route handler), the seven Permission types, and the Throttling umbrella over Admission (the shell-side two-lane pool) + Decode memory budget.
 
 Prefer the glossary's canonical terms over the variant spellings in older code.
 
@@ -28,10 +28,10 @@ is no C++ HTTP server: the retained `shttps` transport and `SipiHttpServer` — 
 in-tree through the strangler migration as the differential-parity oracle — have
 been removed ([ADR-0020](docs/adr/0020-oracle-removal.md), which completes the
 migration [ADR-0013](docs/adr/0013-shttps-as-internal-module.md) prepared). The
-Rust shell owns the connection pool and its knobs (`max_waiting`, `queue_timeout`,
-`nthreads`), route registration (axum for built-in endpoints, Lua for scripted
-routes per [ADR-0017](docs/adr/0017-extensibility-lua-and-rust.md)), and IIIF URI
-parsing (the standalone `//src/iiifparser/rust:iiif_parser` crate).
+Rust shell owns the two-lane Admission pool and its knobs (`nthreads`, `max_waiting`,
+`queue_timeout`, the tile/full ratios), route registration (axum for built-in
+endpoints, Lua for scripted routes per [ADR-0017](docs/adr/0017-extensibility-lua-and-rust.md)),
+and IIIF URI parsing (the standalone `//src/iiifparser/rust:iiif_parser` crate).
 
 ## Extracted domain modules (namespace `shttps`)
 

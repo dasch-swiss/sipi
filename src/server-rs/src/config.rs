@@ -55,8 +55,6 @@ pub struct ServerOverrides {
     pub docroot: Option<String>,
     pub wwwroute: Option<String>,
     pub pathprefix: Option<bool>,
-    pub subdirlevels: Option<i32>,
-    pub subdirexcludes: Option<Vec<String>>,
 
     // Auth (TLS terminates at Traefik; only the auth knobs forward)
     pub jwtkey: Option<String>,
@@ -83,7 +81,6 @@ pub struct ServerOverrides {
     /// Estimated peak-memory threshold (bytes) at/above which a decode is a
     /// full-lane decode charged against the budget; below it is a tile decode.
     pub large_decode_threshold_bytes: Option<u64>,
-    pub max_pixel_limit: Option<u64>,
     /// Raw size string ("300M"); the engine parses the suffix.
     pub maxpost: Option<String>,
     pub thumbsize: Option<String>,
@@ -139,8 +136,6 @@ impl ServerOverrides {
             docroot: self.docroot.or(base.docroot),
             wwwroute: self.wwwroute.or(base.wwwroute),
             pathprefix: self.pathprefix.or(base.pathprefix),
-            subdirlevels: self.subdirlevels.or(base.subdirlevels),
-            subdirexcludes: self.subdirexcludes.or(base.subdirexcludes),
             jwtkey: self.jwtkey.or(base.jwtkey),
             adminuser: self.adminuser.or(base.adminuser),
             adminpasswd: self.adminpasswd.or(base.adminpasswd),
@@ -153,7 +148,6 @@ impl ServerOverrides {
             large_decode_threshold_bytes: self
                 .large_decode_threshold_bytes
                 .or(base.large_decode_threshold_bytes),
-            max_pixel_limit: self.max_pixel_limit.or(base.max_pixel_limit),
             maxpost: self.maxpost.or(base.maxpost),
             thumbsize: self.thumbsize.or(base.thumbsize),
             knorapath: self.knorapath.or(base.knorapath),
@@ -214,27 +208,20 @@ pub(crate) struct SipiServerConfig {
     pub scaling_quality_tiff: *const c_char,
     pub scaling_quality_png: *const c_char,
     pub scaling_quality_j2k: *const c_char,
-    // 8-byte: the subdir-exclude array + its length (null/0 = absent)
-    pub subdirexcludes: *const *const c_char,
-    pub subdirexcludes_len: usize,
     // 8-byte: 64-bit scalar values (presence via the has_ flags below)
-    pub max_pixel_limit: u64,
     pub tiles_memory_ratio: f64, // fraction of the envelope reserved for tiles; full lane = envelope × (1 − ratio)
     pub large_decode_threshold_bytes: u64, // estimated peak >= this => full lane (charged); below => tile (bypass)
     // 4-byte scalar values (presence via the has_ flags below)
     pub serverport: i32,
     pub maxtmpage: i32,
     pub cache_nfiles: u32, // 0 = unlimited; a negative is rejected at the CLI (no wrap)
-    pub subdirlevels: i32,
     pub pathprefix: i32,   // prefix_as_path, bool carried as 0/1
     pub jpeg_quality: i32, // JPEG output quality (1-100); TOML-only
     // 4-byte presence flags (non-zero = present)
     pub has_serverport: c_int,
     pub has_maxtmpage: c_int,
     pub has_cache_nfiles: c_int,
-    pub has_subdirlevels: c_int,
     pub has_pathprefix: c_int,
-    pub has_max_pixel_limit: c_int,
     pub has_jpeg_quality: c_int,
     pub has_tiles_memory_ratio: c_int,
     pub has_large_decode_threshold_bytes: c_int,
@@ -245,7 +232,7 @@ pub(crate) struct SipiServerConfig {
 /// outlive the call). Built from a [`ServerOverrides`]; the engine deep-copies
 /// every present value during `sipi_init`, so the holder can drop right after.
 ///
-/// `cfg`'s pointers reference heap buffers owned by `_strings` / `_subdir_*`. A
+/// `cfg`'s pointers reference heap buffers owned by `_strings`. A
 /// `CString`'s buffer and a `Vec`'s buffer keep a stable address when the owning
 /// struct moves, so the holder itself is safe to move; only [`Self::as_ptr`]'s
 /// result is move-sensitive (it borrows `self.cfg`), and it is consumed inline
@@ -257,8 +244,6 @@ pub(crate) struct SipiServerConfig {
 /// instead of panicking — the caller surfaces it as a startup failure.
 pub(crate) struct OverridesHolder {
     _strings: Vec<CString>,
-    _subdir_strings: Vec<CString>,
-    _subdir_ptrs: Vec<*const c_char>,
     cfg: SipiServerConfig,
 }
 
@@ -281,8 +266,6 @@ impl OverridesHolder {
             docroot,
             wwwroute,
             pathprefix,
-            subdirlevels,
-            subdirexcludes,
             jwtkey,
             adminuser,
             adminpasswd,
@@ -293,7 +276,6 @@ impl OverridesHolder {
             admission_mode,
             tiles_memory_ratio,
             large_decode_threshold_bytes,
-            max_pixel_limit,
             maxpost,
             thumbsize,
             knorapath,
@@ -304,22 +286,6 @@ impl OverridesHolder {
         } = o.clone();
 
         let mut strings: Vec<CString> = Vec::new();
-        let mut subdir_strings: Vec<CString> = Vec::new();
-        let mut subdir_ptrs: Vec<*const c_char> = Vec::new();
-
-        let (subdirexcludes_ptr, subdirexcludes_len) = match subdirexcludes {
-            Some(list) if !list.is_empty() => {
-                for s in list {
-                    let c = CString::new(s.as_str())?;
-                    subdir_ptrs.push(c.as_ptr());
-                    subdir_strings.push(c);
-                }
-                // Taken after the loop (no further pushes): the heap buffer the
-                // pointer addresses survives the move of `subdir_ptrs` into `self`.
-                (subdir_ptrs.as_ptr(), subdir_ptrs.len())
-            }
-            _ => (std::ptr::null(), 0),
-        };
 
         let cfg = SipiServerConfig {
             imgroot: intern_cstr(&mut strings, &imgroot)?,
@@ -344,9 +310,6 @@ impl OverridesHolder {
             scaling_quality_tiff: intern_cstr(&mut strings, &scaling_quality.tiff)?,
             scaling_quality_png: intern_cstr(&mut strings, &scaling_quality.png)?,
             scaling_quality_j2k: intern_cstr(&mut strings, &scaling_quality.j2k)?,
-            subdirexcludes: subdirexcludes_ptr,
-            subdirexcludes_len,
-            max_pixel_limit: max_pixel_limit.unwrap_or(0),
             tiles_memory_ratio: tiles_memory_ratio.unwrap_or(0.0),
             // Always sent with the shell-side default when unset: the shell owns
             // the single definition (DUNE-003), so the engine reads it from the
@@ -356,15 +319,12 @@ impl OverridesHolder {
             serverport: serverport.map(i32::from).unwrap_or(0),
             maxtmpage: maxtmpage.unwrap_or(0),
             cache_nfiles: cache_nfiles.unwrap_or(0),
-            subdirlevels: subdirlevels.unwrap_or(0),
             pathprefix: pathprefix.map(i32::from).unwrap_or(0),
             jpeg_quality: jpeg_quality.unwrap_or(0),
             has_serverport: serverport.is_some() as c_int,
             has_maxtmpage: maxtmpage.is_some() as c_int,
             has_cache_nfiles: cache_nfiles.is_some() as c_int,
-            has_subdirlevels: subdirlevels.is_some() as c_int,
             has_pathprefix: pathprefix.is_some() as c_int,
-            has_max_pixel_limit: max_pixel_limit.is_some() as c_int,
             has_jpeg_quality: jpeg_quality.is_some() as c_int,
             has_tiles_memory_ratio: tiles_memory_ratio.is_some() as c_int,
             // Always present: the shell always supplies the threshold (its own
@@ -374,8 +334,6 @@ impl OverridesHolder {
 
         Ok(Self {
             _strings: strings,
-            _subdir_strings: subdir_strings,
-            _subdir_ptrs: subdir_ptrs,
             cfg,
         })
     }
@@ -417,7 +375,7 @@ mod layout {
     fn repr_c_matches_sipi_ffi_h() {
         assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
         assert_eq!(align_of::<SipiServerConfig>(), 8);
-        assert_eq!(size_of::<SipiServerConfig>(), 280);
+        assert_eq!(size_of::<SipiServerConfig>(), 240);
 
         assert_eq!(offset_of!(SipiServerConfig, imgroot), 0);
         assert_eq!(offset_of!(SipiServerConfig, scriptdir), 8);
@@ -441,31 +399,25 @@ mod layout {
         assert_eq!(offset_of!(SipiServerConfig, scaling_quality_tiff), 152);
         assert_eq!(offset_of!(SipiServerConfig, scaling_quality_png), 160);
         assert_eq!(offset_of!(SipiServerConfig, scaling_quality_j2k), 168);
-        assert_eq!(offset_of!(SipiServerConfig, subdirexcludes), 176);
-        assert_eq!(offset_of!(SipiServerConfig, subdirexcludes_len), 184);
-        assert_eq!(offset_of!(SipiServerConfig, max_pixel_limit), 192);
-        assert_eq!(offset_of!(SipiServerConfig, tiles_memory_ratio), 200);
+        assert_eq!(offset_of!(SipiServerConfig, tiles_memory_ratio), 176);
         assert_eq!(
             offset_of!(SipiServerConfig, large_decode_threshold_bytes),
-            208
+            184
         );
-        assert_eq!(offset_of!(SipiServerConfig, serverport), 216);
-        assert_eq!(offset_of!(SipiServerConfig, maxtmpage), 220);
-        assert_eq!(offset_of!(SipiServerConfig, cache_nfiles), 224);
-        assert_eq!(offset_of!(SipiServerConfig, subdirlevels), 228);
-        assert_eq!(offset_of!(SipiServerConfig, pathprefix), 232);
-        assert_eq!(offset_of!(SipiServerConfig, jpeg_quality), 236);
-        assert_eq!(offset_of!(SipiServerConfig, has_serverport), 240);
-        assert_eq!(offset_of!(SipiServerConfig, has_maxtmpage), 244);
-        assert_eq!(offset_of!(SipiServerConfig, has_cache_nfiles), 248);
-        assert_eq!(offset_of!(SipiServerConfig, has_subdirlevels), 252);
-        assert_eq!(offset_of!(SipiServerConfig, has_pathprefix), 256);
-        assert_eq!(offset_of!(SipiServerConfig, has_max_pixel_limit), 260);
-        assert_eq!(offset_of!(SipiServerConfig, has_jpeg_quality), 264);
-        assert_eq!(offset_of!(SipiServerConfig, has_tiles_memory_ratio), 268);
+        assert_eq!(offset_of!(SipiServerConfig, serverport), 192);
+        assert_eq!(offset_of!(SipiServerConfig, maxtmpage), 196);
+        assert_eq!(offset_of!(SipiServerConfig, cache_nfiles), 200);
+        assert_eq!(offset_of!(SipiServerConfig, pathprefix), 204);
+        assert_eq!(offset_of!(SipiServerConfig, jpeg_quality), 208);
+        assert_eq!(offset_of!(SipiServerConfig, has_serverport), 212);
+        assert_eq!(offset_of!(SipiServerConfig, has_maxtmpage), 216);
+        assert_eq!(offset_of!(SipiServerConfig, has_cache_nfiles), 220);
+        assert_eq!(offset_of!(SipiServerConfig, has_pathprefix), 224);
+        assert_eq!(offset_of!(SipiServerConfig, has_jpeg_quality), 228);
+        assert_eq!(offset_of!(SipiServerConfig, has_tiles_memory_ratio), 232);
         assert_eq!(
             offset_of!(SipiServerConfig, has_large_decode_threshold_bytes),
-            272
+            236
         );
     }
 }
@@ -487,13 +439,12 @@ mod overrides_tests {
             scriptdir: Some("/base/scripts".into()), // paths (self None → base)
             maxtmpage: Some(10),
             pathprefix: Some(false),
-            subdirexcludes: Some(vec!["base".into()]), // paths (self None → base)
-            adminuser: Some("base-admin".into()),      // auth (self None → base)
-            cache_nfiles: Some(1),                     // cache
-            max_pixel_limit: Some(100),                // limits
-            knorapath: Some("base-knora".into()),      // knora (self None → base)
-            loglevel: Some("INFO".into()),             // logging
-            jpeg_quality: Some(50),                    // image quality
+            adminuser: Some("base-admin".into()), // auth (self None → base)
+            cache_nfiles: Some(1),                // cache
+            maxpost: Some("100M".into()),         // limits
+            knorapath: Some("base-knora".into()), // knora (self None → base)
+            loglevel: Some("INFO".into()),        // logging
+            jpeg_quality: Some(50),               // image quality
             scaling_quality: ScalingQuality {
                 jpeg: Some("low".into()),
                 tiff: Some("low".into()), // self None → base
@@ -507,7 +458,7 @@ mod overrides_tests {
             maxtmpage: Some(20),
             pathprefix: Some(true),
             cache_nfiles: Some(2),
-            max_pixel_limit: Some(200),
+            maxpost: Some("200M".into()),
             loglevel: Some("DEBUG".into()),
             jpeg_quality: Some(90),
             scaling_quality: ScalingQuality {
@@ -523,13 +474,12 @@ mod overrides_tests {
         assert_eq!(merged.maxtmpage, Some(20));
         assert_eq!(merged.pathprefix, Some(true));
         assert_eq!(merged.cache_nfiles, Some(2));
-        assert_eq!(merged.max_pixel_limit, Some(200));
+        assert_eq!(merged.maxpost.as_deref(), Some("200M"));
         assert_eq!(merged.loglevel.as_deref(), Some("DEBUG"));
         assert_eq!(merged.jpeg_quality, Some(90));
         assert_eq!(merged.scaling_quality.jpeg.as_deref(), Some("high"));
         // base fills where self is None:
         assert_eq!(merged.scriptdir.as_deref(), Some("/base/scripts"));
-        assert_eq!(merged.subdirexcludes, Some(vec!["base".to_string()]));
         assert_eq!(merged.adminuser.as_deref(), Some("base-admin"));
         assert_eq!(merged.knorapath.as_deref(), Some("base-knora"));
         assert_eq!(merged.scaling_quality.tiff.as_deref(), Some("low"));

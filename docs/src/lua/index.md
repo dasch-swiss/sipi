@@ -237,11 +237,6 @@ client info could like follows:
             <td><lua>server.print(server.docroot)</lua></td>
         </tr>
         <tr>
-            <td>hostname</td>
-            <td>:</td>
-            <td><lua>server.print(config.hostname)</lua></td>
-        </tr>
-        <tr>
             <td>scriptdir</td>
             <td>:</td>
             <td><lua>server.print(config.scriptdir)</lua></td>
@@ -426,9 +421,9 @@ as command line option when starting the server.
 #### config.hostname
 
     config.hostname
-    
-The hostname  SIPI is configures to run on
-(see [hostname](../guide/sipi.md#hostname) in configuration description).
+
+The configured hostname, exposed to Lua route scripts (e.g. to build absolute
+preview URLs). Defaults to `localhost`; not used by the server itself.
 
 #### config.port
 
@@ -525,13 +520,6 @@ quality (with lowest compression factor = biggest file size). Please note that S
 lossless compression for JPEG files.
 (see [jpeg_quality](../guide/sipi.md#jpegquality) in configuration description).
 
-#### config.keep\_alive
-
-    config.keep_alive
-    
-Maximal keep-alive time for HTTP requests that ask for a keep-alive connection.
-(see [keep_alive](../guide/sipi.md#keepalive) in configuration description).
-
 #### config.thumb\_size
 
     config.thumb_size
@@ -552,35 +540,6 @@ Maximal size of POST data allowed
     
 Temporary directory to store uploads.
 (see [tmpdir](../guide/sipi.md#tmpdir) in configuration description).
-
-#### config.ssl/_certificate
-
-    config.ssl_certificate
-    
-Path to the SSL certificate that SIPI uses.
-(see [ssl_certificate](../guide/sipi.md#sslcertificate) in configuration description).
-
-#### config.ssl/_key
-
-    config.ssl_key
-    
-Path to the SSL key that SIPI uses.
-(see [ssl_key](../guide/sipi.md#sslkey) in configuration description).
-
-#### config.logfile
-
-    config.logfile
-    
-Name of the logfile. SIPI is currently using the built-in logger which logs to stdout and the
-logfile name is ignored. 
-(see [logfile](../guide/sipi.md#logfile) in configuration description).
-
-#### config.loglevel
-
-    config.loglevel
-    
-Indicates what should be logged. The variable contains a integer that corresponds to the syslog level.
-(see [loglevel](../guide/sipi.md#loglevel) in configuration description).
 
 #### config.adminuser
 
