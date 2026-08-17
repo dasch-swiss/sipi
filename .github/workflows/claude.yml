@@ -11,63 +11,86 @@ on:
     types: [submitted]
 
 jobs:
-  # Gate on author_association (DEV-6884): comment-triggered workflows always run from the
-  # default branch with secrets available, and "Require approval for all external
-  # contributors" covers only fork pull_request events — without this gate any GitHub
-  # account able to comment could spend the org's API key. The check sits inside each
-  # trigger arm because issue_comment payloads also carry issue.author_association, so a
-  # single AND-ed check would pass a stranger's comment on any issue or PR a member opened.
-  # A blocked trigger skips silently, like a non-matching comment.
-  claude:
+  # Job 1: Dedicated code review with a predefined prompt, triggered by '@claude review' on a PR.
+  #
+  # Split out of the former single 'claude' job so the review can be given a tight, validated
+  # tool set without also constraining the general assistant, which legitimately needs to write
+  # code. Before the split the two shared one job, so any tool decision was a trade-off between
+  # them: leave the tools open and the review cannot be pinned to what was benchmarked; close
+  # them and '@claude <prompt>' loses the ability to edit files.
+  #
+  # Both jobs gate on author_association (DEV-6884): comment-triggered workflows always run
+  # from the default branch with secrets available, and "Require approval for all external
+  # contributors" gates only fork pull_request events — not comment events — so without this
+  # gate any GitHub account able to comment could spend the org's API key. CONTRIBUTOR is
+  # deliberately outside the allowlist; a member can trigger on an outside contributor's
+  # behalf. A blocked trigger skips silently, like a non-matching comment.
+  claude-code-review:
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') &&
-        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude') &&
-        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude') &&
-        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association)) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) &&
-        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association))
+      (github.event.issue.pull_request || github.event.pull_request) &&
+      (contains(github.event.comment.body, '@claude review') || contains(github.event.review.body, '@claude review')) &&
+      (
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) ||
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association)
+      )
     runs-on: ubuntu-latest
+    # 30, not 15: a review that is killed mid-run yields nothing at all, because the action
+    # writes its result only at the end. A generous ceiling costs nothing on runs that finish
+    # early — measured review runs land well inside it.
+    timeout-minutes: 30
+    # Least privilege for the review: it reads the diff and posts a review. It does not need
+    # 'contents: write' or 'issues: write', which the shared job carried for the assistant's
+    # sake. 'actions: read' stays because the prompt checks whether the sanitizer job failed.
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
-      issues: write
       id-token: write
       actions: read
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # --model / --effort: from the 2026-08 review benchmark (157 runs, 15 commits with
-          # known answers, dsp-api + dsp-app). Model choice dominated prompt choice: Opus 5
-          # caught 6/6 planted bugs with zero blocking false positives, while Opus 4.8 caught
-          # 0/6 at the same list price -- claude-opus-4-6 is older still. Effort medium because
-          # detection was identical to high across all nine commits run at both levels, high's
-          # only distinguishing behaviour was holding one clean diff on a real but minor
-          # finding, and medium is ~16% cheaper.
-          #
-          # Deliberately NOT adding --allowed-tools here, unlike dsp-api and dsp-app. This
-          # workflow has never carried one, its prompt requires posting a review through
-          # GitHub's review API (which the list validated in the benchmark does not cover),
-          # and every recent run of this workflow was skipped, so there is no run log showing
-          # what it actually relies on. Narrowing tools blind could silently remove the
-          # review-posting path. See the note in the pull request about this repo's
-          # .claude/settings.json being inherited by CI.
-          claude_args: "--model claude-opus-5 --effort medium"
           track_progress: "true"
           include_fix_links: "false"
           additional_permissions: |
             actions: read
+          # --model / --effort / --allowed-tools: from the 2026-08 review benchmark — 157 runs
+          # against 15 commits with known answers in dsp-api and dsp-app. Aligned with the list
+          # validated there, because what a review has to execute is language-independent:
+          # read the diff, read the changed files in full, search the repo, fetch an external
+          # specification, post the review.
+          #
+          # Model: Opus 5 caught 6/6 planted bugs with zero blocking false positives, while
+          # Opus 4.8 caught 0/6 at the same list price (claude-opus-4-6 is older still).
+          # Effort: medium — detection was identical to high on all nine commits run at both,
+          # high's only distinguishing behaviour was holding one clean diff on a real but
+          # non-blocking finding, and medium is ~16% cheaper.
+          #
+          # --allowed-tools is the complete resolved set; the action adds nothing to it, so
+          # Read must be granted explicitly or the prompt's "read the changed files in full"
+          # cannot be honoured. WebFetch/WebSearch are what make the external-verification
+          # clause executable — the clause that took one bug class from 16 straight misses to
+          # 2 of 2, and the reason it matters here is that this server's own 400 responses are
+          # exactly the kind of precondition it exists to check.
+          #
+          # Three additions beyond the dsp-api list, both required by this repo's prompt:
+          # 'gh api' / 'gh pr review' to submit a single inline review, and 'gh run' to read
+          # sanitizer CI status.
+          #
+          # --setting-sources user: do NOT load this repo's own .claude/settings.json. That
+          # file is a local-developer convenience list — it grants docker run, gcloud, gcc,
+          # g++, find and grep — and the action would otherwise union it into this job's
+          # permissions. The review's tool set is defined on this line and nowhere else.
+          claude_args: '--model claude-opus-5 --effort medium --setting-sources user --allowed-tools "Read,Grep,Glob,WebSearch,WebFetch,Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh api:*),Bash(gh pr review:*),Bash(gh run list:*),Bash(gh run view:*)"'
           prompt: |
-            When asked to "review" a PR, perform a thorough code review following
-            the project's REVIEW.md checklist. Read REVIEW.md from the repository
-            root first, then review every changed file against each applicable section.
-            Honour its "Skip" section — do not spend the run on what it tells you to skip.
+            Perform a thorough code review of this pull request following the project's
+            REVIEW.md checklist. Read REVIEW.md from the repository root first, then review
+            every changed file against each applicable section. Honour its "Skip" section —
+            do not spend the run on what it tells you to skip.
 
             Report issues only in lines this PR changed — but read whatever you need to
             decide whether an issue is real: the changed files in full (diff hunks alone
@@ -118,16 +141,15 @@ jobs:
             Separately, grade impact High, Medium or Low, for triage ordering only. Impact
             never determines Blocking.
 
-            Post your findings as inline PR review comments on the specific lines
-            where issues are found. Use GitHub's review API to submit a single review
-            with all comments (not individual comments). For each finding give the trigger
-            and wrong outcome you named above, how you verified the mechanism, and a
-            suggested fix.
+            Post your findings as inline PR review comments on the specific lines where
+            issues are found. Use GitHub's review API to submit a single review with all
+            comments (not individual comments). For each finding give the trigger and wrong
+            outcome you named above, how you verified the mechanism, and a suggested fix.
 
             Submit that single review as:
-            - 🔴 Request changes — if any finding is Blocking.
-            - 🟡 Comment — if there are findings but none of them is Blocking.
-            - 🟢 Approve — if no issues were found.
+            - Request changes — if any finding is Blocking.
+            - Comment — if there are findings but none of them is Blocking.
+            - Approve — if no issues were found.
 
             Do not override this in prose: if you find yourself arguing that a Non-blocking
             issue should hold the PR, it is Blocking; re-mark it.
@@ -136,7 +158,51 @@ jobs:
             "Multi-buffer dimension safety" sections — these catch the class of
             bugs that sanitizers find at runtime.
 
-            When reviewing, also check CI status — if the sanitizer workflow failed,
-            include its findings in your review.
+            Also check CI status — if the sanitizer workflow failed, include its findings
+            in your review.
 
-            For general "@claude" mentions (not "review"), respond normally.
+  # Job 2: General Claude assistant (flexible), triggered by '@claude <PROMPT>' on PRs, issues etc.
+  # The negated clause is exactly job 1's condition, so the two jobs are mutually exclusive by
+  # construction, while '@claude review' on a plain issue — where job 1 cannot run — still lands
+  # here. Deliberately keeps the write permissions, the full-history checkout and an unrestricted
+  # tool set: this is the arm people use to change code, and none of the benchmark's findings
+  # are about it. Only the model is updated.
+  claude-general:
+    # The allowlist check sits inside each trigger arm: issue_comment payloads also carry
+    # issue.author_association, so a single AND-ed check across the arms would pass a
+    # stranger's comment on any issue or PR a member opened.
+    if: |
+      (
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') &&
+          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude') &&
+          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
+        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude') &&
+          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association)) ||
+        (github.event_name == 'issues' && (github.event.action == 'opened' || github.event.action == 'assigned') && contains(github.event.issue.body, '@claude') &&
+          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association))
+      ) &&
+      !(
+        (github.event.issue.pull_request || github.event.pull_request) &&
+        (contains(github.event.comment.body, '@claude review') || contains(github.event.review.body, '@claude review'))
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--model claude-opus-5"
+          track_progress: "true"
+          include_fix_links: "false"
+          additional_permissions: |
+            actions: read
