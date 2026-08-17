@@ -1,10 +1,8 @@
 //! Filesystem path + path-resolution flags (the "Paths" `--help` heading).
 //!
-//! `subdirlevels` is deprecated and has no effect on the Rust serve path; it is
-//! accepted for CLI compatibility. `pathprefix` DOES have an effect —
-//! `routes.rs` reads `prefix_as_path` off the engine context to decide whether
-//! the IIIF prefix is a path component under imgroot (the
-//! previously-untested `prefix_as_path = false` branch). `pathprefix` is
+//! `pathprefix` has an effect — `routes.rs` reads `prefix_as_path` off the engine
+//! context to decide whether the IIIF prefix is a path component under imgroot
+//! (the previously-untested `prefix_as_path = false` branch). `pathprefix` is
 //! flag-shaped (a bare `--pathprefix` means "true"), so it takes an optional
 //! value here (`--pathprefix` → true, `--pathprefix=false` → false, absent →
 //! fall through to the config).
@@ -45,15 +43,4 @@ pub struct PathArgs {
         value_name = "BOOL"
     )]
     pub pathprefix: Option<bool>,
-    /// Number of subdir levels (deprecated; no effect on the Rust path).
-    #[arg(long, env = "SIPI_SUBDIRLEVELS", value_name = "N")]
-    pub subdirlevels: Option<i32>,
-    /// Directories excluded from subdir calculations.
-    #[arg(
-        long,
-        env = "SIPI_SUBDIREXCLUDES",
-        value_name = "DIR",
-        value_delimiter = ','
-    )]
-    pub subdirexcludes: Option<Vec<String>>,
 }

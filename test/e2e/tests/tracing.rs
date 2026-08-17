@@ -93,7 +93,6 @@ fn preflight_propagates_traceparent_to_outbound_http() {
     nthreads = 4,
     imgroot = './images',
     prefix_as_path = true,
-    subdir_levels = 0,
     initscript = './config/sipi.init-knora-test.lua',
     cache_dir = './cache',
     cache_size = '20M',
@@ -104,7 +103,6 @@ fn preflight_propagates_traceparent_to_outbound_http() {
     knora_path = '127.0.0.1',
     knora_port = '{mock_port}',
     jwt_secret = '',
-    loglevel = "DEBUG"
 }}
 
 fileserver = {{ docroot = './server', wwwroute = '/server' }}

@@ -221,7 +221,6 @@ int sipi_metrics_snapshot(SipiMetricsSnapshot *out)
     out->cache_misses_total = counter(m.cache_misses_total);
     out->cache_evictions_total = counter(m.cache_evictions_total);
     out->cache_skips_total = counter(m.cache_skips_total);
-    out->image_too_large_total = counter(m.image_too_large_total);
     out->client_disconnected_total = counter(m.client_disconnected_total);
     out->memory_alloc_failures_total = counter(m.memory_alloc_failures_total);
     out->rejected_connections_total = counter(m.rejected_connections_total);

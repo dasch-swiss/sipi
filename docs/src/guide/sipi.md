@@ -244,12 +244,6 @@ feature, a server directory has to be defined. This definition ist in the `files
 #### SIPI Configuration Parameters
 The following configuration parameters are used by the SIPI server:
 
-- <a name="hostname"></a>`hostname=dns-name`: The DNS name that SIPI shall show to the outside world. It should be
-  the dns name the client uses to access the SIPI server (and not internal hostnames by proxies etc.). 
-  *Cmdline option: `--hostname`*  
-  *Environment variable: `SIPI_HOSTNAME`*  
-  *Default: `localhost`*
-  
 - <a name="portnum"></a>`port=portnum`: Portnumber SIPI should listen on for incoming HTTP requests.  
   *Cmdline option: `--serverport`*  
   *Environment variable: `SIPI_SERVERPORT`*  
@@ -266,16 +260,6 @@ The following configuration parameters are used by the SIPI server:
   *Environment variable: `SIPI_PATHPREFIX`*  
   *Default: `false`*
   
-- <a name="sslcertificate"></a>`ssl_certificate=path`: Path to the SSL certificate. Is mandatory if SSL is to be used.  
-  *Cmdline option: `--sslcert`*  
-  *Environment variable: `SIPI_SSLCERTIFICATE`*  
-  *Default: `./certificate/certificate.pem`*
-
-- <a name="sslkey">`ssl_key=path`: Path to the SSL key file. Is mandatory if SSL is to be used.  
-  *Cmdline option: `--sslkey`*  
-  *Environment variable: `SIPI_SSLKEY`*  
-  *Default: `./certificate/key.pem`*
-
 - <a name="jwt-secret"></a>`jwt_secret=string`: Shared secret to encode web tokens.  
   *Cmdline option: `--jwtkey`*  
   *Environment variable: `SIPI_JWTKEY`*  
@@ -288,13 +272,6 @@ The following configuration parameters are used by the SIPI server:
   *Environment variable: `SIPI_MAXPOSTSIZE`*  
   *Default: `300M`*
   
-- <a name="keepalive"></a>`keep_alive` : Number of seconds a connection (socket) remains open at maximum ("keep-alive"),
-  if a client requests a "keep-alive" connection in the request header. For more information see
-  [Keep-Alive](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Keep-Alive).  
-  *Cmdline option: `--keepalive`*
-  *Environment variable: `SIPI_KEEPALIVE`*
-  *Default: `5`*
-
 Request queuing (how many requests may wait for a worker, and how long) is not a
 config-file key. It is controlled by the `--max-waiting` / `SIPI_MAX_WAITING` and
 `--queue-timeout` / `SIPI_QUEUE_TIMEOUT` CLI flags — see
@@ -316,19 +293,6 @@ config-file key. It is controlled by the `--max-waiting` / `SIPI_MAX_WAITING` an
   *Cmdline option: `--thumbsize`*  
   *Environment variable: `SIPI_THUMBSIZE`*  
   *Default: `!128,128`*
-
-- <a name="logfile"></a>`logfile=path`: SIPI uses [syslog](https://en.wikipedia.org/wiki/Syslog) as logging facility. The logging name
-  is `Sipi`. It supports the following levels:
-  "EMERGENCY", "ALERT", "CRITICAL", "ERROR", "WARNING", "NOTICE", "INFORMATIONAL", "DEBUG".  
-  *Cmdline option: `--logfile`*  
-  *Environment variable: `SIPI_LOGFILE`*  
-  *Default: `Sipi`*
-
-- <a name="loglevel"></a>`loglevel=level`: SIPI uses syslog as logging facility. The logging name is `Sipi`. It supports the following levels:
-  "EMERGENCY", "ALERT", "CRITICAL", "ERROR", "WARNING", "NOTICE", "INFORMATIONAL", "DEBUG".  
-  *Cmdline option: `--loglevel`*  
-  *Environment variable: `SIPI_LOGLEVEL`*  
-  *Default: `DEBUG`*
 
 - <a name="maxtmpfileage"></a>`max_temp_file_age=num`: The maximum allowed age of temporary files (in seconds) before they are deleted.  
   *Cmdline option: `--maxtmpage`*  
@@ -355,9 +319,10 @@ independently — whichever is reached first triggers eviction.
 the standard OTLP-to-Prometheus normalization produces at the collector. Cache counters
 (`sipi_cache_hits_total`, `sipi_cache_misses_total`, `sipi_cache_evictions_total`, `sipi_cache_skips_total`)
 and gauges (`sipi_cache_size_bytes`, `sipi_cache_files`, `sipi_cache_size_limit_bytes`, `sipi_cache_files_limit`)
-report cache health. For server load and throttling, use the engine-pool metrics
-(`sipi_pool_permits_in_use` and `sipi_pool_permits_total` for saturation, `sipi_pool_waiting` for current
-queue depth, `sipi_pool_load_shed_total` and `sipi_pool_queue_timeout_total` for 503 sheds).
+report cache health. For server load and throttling, use the admission metrics
+(`sipi_admission_permits_in_use` and `sipi_admission_permits_total` for saturation,
+`sipi_admission_tile_waiting`/`sipi_admission_full_waiting` for per-partition queue depth,
+`sipi_admission_tile_shed_total`/`sipi_admission_full_shed_total` for per-partition sheds).
 Request latency is the semantic-convention histogram `http_server_request_duration_seconds`, labelled by
 `http_route`, `http_request_method`, and `http_response_status_code`.
 `sipi_tiff_pyramid_reduced_decodes_total` counts TIFF decodes served from a reduced pyramid level (a

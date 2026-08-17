@@ -15,14 +15,11 @@
 --   curl http://localhost:1024/metrics
 --
 sipi = {
-    hostname = 'localhost',
     port = 1024,
-    keep_alive = 5,
 
     -- Use bundled test images so IIIF requests work immediately
     imgroot = './test/_test_data/images',
     prefix_as_path = true,
-    subdir_levels = 0,
 
     -- Small cache to easily trigger eviction
     cache_dir = './cache',
@@ -44,13 +41,7 @@ sipi = {
     initscript = './config/sipi.init.lua',
     scriptdir = './scripts',
 
-    ssl_port = 1025,
-    ssl_certificate = './certificate/certificate.pem',
-    ssl_key = './certificate/key.pem',
-
     jwt_secret = 'UP 4888, nice 4-8-4 steam engine',
-
-    loglevel = 'DEBUG'
 }
 
 admin = {

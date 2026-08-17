@@ -79,7 +79,7 @@ The production HTTP server is the Rust axum shell (`src/server-rs` +
 |---|---|---|
 | SSL/TLS | Terminated at Traefik in front of the shell; `sslport`/`sslcert`/`sslkey` keys parse but are inert | `src/server-rs/src/config.rs` |
 | Threading | Bounded worker pool with a request queue (env-tunable: `SIPI_NTHREADS`, `SIPI_MAX_WAITING`, `SIPI_QUEUE_TIMEOUT`) | `src/server-rs/src/routes.rs` |
-| Keep-alive | `keepalive` config key | `src/server-rs/src/config.rs` |
+| Keep-alive | `keepalive`/`SIPI_KEEPALIVE` CLI/env flag; parse-only, unread | `src/server-rs/src/config.rs` |
 | Chunked transfer | axum/hyper streaming responses | `src/server-rs/src/sink.rs` |
 | Range requests | HTTP 206 Partial Content | Handler-level |
 | CORS | Via Lua preflight scripts | `scripts/` |
@@ -196,8 +196,8 @@ Lua-based configuration (`SipiConf.h`, `src/SipiConf.cpp`):
 
 | Category | Keys |
 |---|---|
-| **Server** | `hostname`, `port`, `ssl_port`, `ssl_certificate`, `ssl_key`, `nthreads`, `keep_alive` |
-| **Image repository** | `imgroot`, `prefix_as_path`, `subdir_levels`, `subdir_excludes` |
+| **Server** | `port`, `nthreads` |
+| **Image repository** | `imgroot`, `prefix_as_path` |
 | **Image processing** | `jpeg_quality`, `scaling_quality.{jpeg,tiff,png,j2k}` (high/medium/low) |
 | **Cache** | `cache_dir`, `cache_size`, `cache_nfiles` |
 | **Request handling** | `max_post_size`, `tmpdir`, `max_temp_file_age` |
@@ -205,7 +205,6 @@ Lua-based configuration (`SipiConf.h`, `src/SipiConf.cpp`):
 | **Authentication** | `jwt_secret` (42 chars), `admin.user`, `admin.password` |
 | **Static files** | `fileserver.docroot`, `fileserver.wwwroute` |
 | **Knora/DSP** | `knora_path`, `knora_port` |
-| **Logging** | `loglevel`, `logfile` |
 | **Routes** | `routes` table: `{method, route, script}` |
 
 **Deprecated keys:** `cachedir` → `cache_dir`, `cachesize` → `cache_size`, `cache_hysteresis` → removed (80% low-water mark is now hardcoded).
@@ -653,7 +652,7 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 | Keep-alive timeout enforcement | :white_check_mark: | `connection.rs::keepalive_timeout_enforcement` | |
 | Sustained load memory growth | :white_check_mark: | `resource_limits.rs::sustained_load_memory_growth` | |
 | Concurrent large image decode memory | :white_check_mark: | `resource_limits.rs::concurrent_large_image_decode` | |
-| Full-lane budget rejection (enforce 413, tile bypass, in-budget, monitor) | :white_check_mark: | `admission_control.rs` (×4, each on its own cache dir) | Transient 503 is engine-unit-covered (`MemoryBudgetTest`), not e2e — a live-server 503 is a decode-timing race |
+| Full-lane budget rejection (advanced 413, tile bypass, in-budget, basic) | :white_check_mark: | `admission_control.rs` (×4, each on its own cache dir) | Transient 503 is engine-unit-covered (`MemoryBudgetTest`), not e2e — a live-server 503 is a decode-timing race |
 | Two-lane admission (thread cap, tile floor/burst, per-partition shed, classifier) | :white_check_mark: | `//src/throttling/rust:admission` crate tests (engine-free) | |
 | Intermediate buffer accumulation | :white_check_mark: | `resource_limits.rs::transform_pipeline_memory` | |
 | Cache as memory pressure relief | :white_check_mark: | `cache.rs::cache_hit_avoids_decode` | |

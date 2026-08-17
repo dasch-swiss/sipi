@@ -40,19 +40,12 @@ SipiConf::SipiConf()
 
 SipiConf::SipiConf(shttps::LuaServer &luacfg)
 {
-  userid_str = luacfg.configString("sipi", "userid", "");
   hostname = luacfg.configString("sipi", "hostname", "localhost");
   port = luacfg.configInteger("sipi", "port", 3333);
-
   ssl_port = luacfg.configInteger("sipi", "ssl_port", -1);
-  ssl_certificate = luacfg.configString("sipi", "ssl_certificate", "");
-  ssl_key = luacfg.configString("sipi", "ssl_key", "");
 
   img_root = luacfg.configString("sipi", "imgroot", ".");
   max_temp_file_age = luacfg.configInteger("sipi", "max_temp_file_age", 86400);
-  subdir_levels = luacfg.configInteger("sipi", "subdir_levels", 0);
-  subdir_excludes = luacfg.configStringList("sipi", "subdir_excludes");
-  // has no defaults, returns an empty vector if nothing is there
   prefix_as_path = luacfg.configBoolean("sipi", "prefix_as_path", true);
   jpeg_quality = luacfg.configInteger("sipi", "jpeg_quality", 80);
 
@@ -112,7 +105,6 @@ SipiConf::SipiConf(shttps::LuaServer &luacfg)
     log_warn("Config key 'cache_hysteresis' is no longer supported (replaced by built-in 80%% low-water mark). Remove it from your config.");
   }
 
-  keep_alive = luacfg.configInteger("sipi", "keep_alive", 20);
   thumb_size = luacfg.configString("sipi", "thumb_size", "!128,128");
   std::string max_post_size_str = luacfg.configString("sipi", "max_post_size", "0");
   long long parsed_post_size = parseSizeString(max_post_size_str);
@@ -124,13 +116,8 @@ SipiConf::SipiConf(shttps::LuaServer &luacfg)
   jwt_secret = luacfg.configString("sipi", "jwt_secret", "");
   knora_path = luacfg.configString("sipi", "knora_path", "localhost");
   knora_port = luacfg.configString("sipi", "knora_port", "3333");
-  loglevel = luacfg.configString("sipi", "loglevel", "WARN");
-  logfile = luacfg.configString("sipi", "logfile", "sipi.log");
   adminuser = luacfg.configString("admin", "user", "");
   password = luacfg.configString("admin", "password", "");
-  long long parsed_pixel_limit = luacfg.configInteger("sipi", "max_pixel_limit", 0);
-  if (parsed_pixel_limit < 0) parsed_pixel_limit = 0;
-  max_pixel_limit = static_cast<size_t>(parsed_pixel_limit);
 
   // The two-lane admission knobs (memory_limit, tiles_memory_ratio,
   // admission_mode) are shell-owned: set via CLI/env or the Rust TOML config and

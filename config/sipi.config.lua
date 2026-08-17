@@ -21,26 +21,17 @@
 --
 sipi = {
     --
-    -- The user under which the Sipi server should run. Use this only if Sipi should setuid to a particular user after
-    -- starting. Otherwise, leave this commented out. If this setting is used, Sipi must be started as root.
-    --
-    -- userid = '_www',
-
-    --
-    -- Indicate the hostname (DNS-name), under which the SIPI server is being addressed
-    --
-    hostname = 'localhost',
-    
-    --
     -- port number the server is listening to. If SIPI is running on a dedicated system, this should
     -- be set to 80
     --
     port = 1024,
 
     --
-    -- If compiled with SSL support, the port the server is listening for secure connections.
-    -- If SIPI is running on a dedicated system, this should be set to 443
+    -- `hostname` and `ssl_port` are not used by the server itself; they are only
+    -- exposed to Lua route scripts via the `config` table (e.g. to build absolute
+    -- preview URLs). Defaults: hostname = "localhost", ssl_port = -1.
     --
+    hostname = 'localhost',
     ssl_port = 1025,
 
     --
@@ -73,11 +64,6 @@ sipi = {
     },
 
     --
-    -- Number of seconds a connection (socket) remains open at maximum ("keep-alive")
-    --
-    keep_alive = 5,
-
-    --
     -- Maximal size of a post request.
     --
     max_post_size = '300M',
@@ -98,25 +84,6 @@ sipi = {
     -- If true, the IIIF prefix is used to build the path to the image files.
     --
     prefix_as_path = true,
-
-    --
-    -- In order not to accumulate too many files into one directory (which slows down file
-    -- access considerabely), the images are stored in recursive subdirectories 'A'-'Z'.
-    -- If subdir_levels is equal 0, no subdirectories are used. The maximum is 6.
-    -- The recommendation is that on average there should not be more than a few
-    -- thousand files in a unix directory (your mileage may vary depending on the
-    -- file system used).
-    --
-    subdir_levels = 0,
-
-    --
-    -- if subdir_levels is > 0 and if prefix_as_path is true, all prefixes will be
-    -- regarded as directories under imgroot. Thus, the subdirs 'A'-'Z' will be
-    -- created in these directories for the prefixes. However, it may make sense
-    -- for certain prefixes *not* to use subdirs. A list of these prefix-directories
-    -- can be given with this configuration parameter.
-    --
-    subdir_excludes = { "tmp", "thumb"},
 
     --
     -- Lua script which is executed on initialization of the Lua interpreter
@@ -161,44 +128,16 @@ sipi = {
     max_temp_file_age = 86400,
 
     --
-    -- If compiled with SSL support, the path to the certificate (must be .pem file)
-    -- The following commands can be used to generate a self-signed certificate
-    -- # openssl genrsa -out key.pem 2048
-    -- # openssl req -new -key key.pem -out csr.pem
-    -- #openssl req -x509 -days 365 -key key.pem -in csr.pem -out certificate.pem
-    --
-    ssl_certificate = './certificate/certificate.pem',
-
-    --
-    -- If compiled with SSL support, the path to the key file (see above to create)
-    --
-    ssl_key = './certificate/key.pem',
-
-
-    --
     -- The secret for generating JWT's (JSON Web Tokens) (exactly 42 characters)
     --
     jwt_secret = 'UP 4888, nice 4-8-4 steam engine',
     --            123456789012345678901234567890123456789012
 
     --
-    -- Name of the logfile (a ".txt" is added...) !!! Currently not used, since logging
-    -- is based on syslog !!!!
+    -- The engine log level is a CLI/env (or Rust TOML config) setting, not a Lua
+    -- config key: --loglevel / SIPI_LOGLEVEL, one of "DEBUG", "INFO", "NOTICE",
+    -- "WARNING", "ERR", "CRIT", "ALERT", "EMERG" (default "INFO").
     --
-    logfile = "sipi.log",
-
-    --
-    -- loglevel, one of "DEBUG", "INFO", "NOTICE", "WARNING", "ERR", "CRIT", "ALERT", "EMERG"
-    --
-    loglevel = "DEBUG",
-    --loglevel = "ERR"
-
-    --
-    -- Maximum output pixels (width * height) per IIIF request.
-    -- Requests producing images larger than this are rejected with HTTP 400.
-    -- 0 = unlimited (default). Example: 100000000 = 100 megapixels.
-    --
-    max_pixel_limit = 0,
 
     --
     -- The two-lane admission knobs are CLI/env (or Rust TOML config) settings,

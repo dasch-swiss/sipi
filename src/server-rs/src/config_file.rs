@@ -75,8 +75,6 @@ struct PathsSection {
     doc_root: Option<String>,
     www_route: Option<String>,
     prefix_as_path: Option<bool>,
-    subdir_levels: Option<i32>,
-    subdir_excludes: Option<Vec<String>>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -102,7 +100,6 @@ struct LimitsSection {
     /// Estimated peak-memory threshold (bytes): at/above it a decode is a
     /// full-lane decode charged against the budget; below it is a tile decode.
     large_decode_threshold_bytes: Option<u64>,
-    max_pixel_limit: Option<u64>,
     /// Raw size string ("300M"); the engine parses the suffix.
     max_post_size: Option<String>,
     thumb_size: Option<String>,
@@ -285,8 +282,6 @@ impl Config {
             docroot: self.paths.doc_root.clone(),
             wwwroute: self.paths.www_route.clone(),
             pathprefix: self.paths.prefix_as_path,
-            subdirlevels: self.paths.subdir_levels,
-            subdirexcludes: self.paths.subdir_excludes.clone(),
             jwtkey: self.tls_auth.jwt_secret.clone(),
             adminuser: self.tls_auth.admin_user.clone(),
             adminpasswd: self.tls_auth.admin_password.clone(),
@@ -297,7 +292,6 @@ impl Config {
             admission_mode: self.limits.admission_mode.clone(),
             tiles_memory_ratio: self.limits.tiles_memory_ratio,
             large_decode_threshold_bytes: self.limits.large_decode_threshold_bytes,
-            max_pixel_limit: self.limits.max_pixel_limit,
             maxpost: self.limits.max_post_size.clone(),
             thumbsize: self.limits.thumb_size.clone(),
             knorapath: self.knora.path.clone(),

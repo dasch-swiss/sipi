@@ -29,27 +29,23 @@ long long parseSizeString(const std::string &str);
 class SipiConf
 {
 private:
-  std::string userid_str;
-  std::string hostname;
   // In-class initializers below carry the same defaults the Lua ctor applies, so
   // a default-constructed SipiConf (the base for the Lua-less / TOML `sipi_init`
   // path) is a valid all-defaults config rather than indeterminate.
+  // `hostname`/`ssl_port` are not consumed by the engine, but stay because Lua
+  // route scripts read them via the `config` table (e.g. building preview URLs).
+  std::string hostname{ "localhost" };
   int port{ 3333 };//<! port number for server
-  int ssl_port = -1;
-  std::string ssl_certificate;
-  std::string ssl_key;
+  int ssl_port{ -1 };
 
   std::string img_root;//<! path to root of image repository
   int max_temp_file_age{ 86400 };
-  int subdir_levels = -1;
-  std::vector<std::string> subdir_excludes;
   bool prefix_as_path{ true };//<! Use IIIF-prefix as part of path or ignore it...
   int jpeg_quality{ 80 };
   std::map<std::string, std::string> scaling_quality;
   std::string init_script;
   std::string cache_dir;
   long long cache_size{ 200LL * 1024 * 1024 };// 200M (the Lua-config default)
-  int keep_alive{ 20 };
   std::string thumb_size;
   size_t cache_n_files{ 200 };
   size_t max_post_size{ 0 }; // 0 = unlimited
@@ -58,14 +54,12 @@ private:
   std::vector<shttps::LuaRoute> routes;
   std::string knora_path;
   std::string knora_port;
-  std::string logfile;
   std::string loglevel;
   std::string docroot;
   std::string wwwroute;
   std::string jwt_secret;
   std::string adminuser;
   std::string password;
-  size_t max_pixel_limit{ 0 };//<! max output pixels (w*h) per IIIF request, 0 = unlimited
   size_t memory_limit{ 0 };                       //!< total RAM envelope; 0 = auto (detect available RAM)
   std::string admission_mode_str{ "basic" };    //!< "basic", "advanced"
   double tiles_memory_ratio{ 0.25 };              //!< fraction of the envelope reserved for tiles + non-decode floor; the full lane gets envelope × (1 − ratio)
@@ -76,9 +70,6 @@ public:
 
   explicit SipiConf(shttps::LuaServer &luacfg);
 
-  std::string getUseridStr() { return userid_str; }
-  void setUseridStr(const std::string &str) { userid_str = str; };
-
   std::string getHostname() { return hostname; }
   void setHostname(const std::string &str) { hostname = str; }
 
@@ -86,13 +77,7 @@ public:
   void setPort(int i) { port = i; }
 
   int getSSLPort() const { return ssl_port; }
-  void setSSLPort(const int i) { ssl_port = i; }
-
-  std::string getSSLCertificate() { return ssl_certificate; }
-  void setSSLCertificate(const std::string &str) { ssl_certificate = str; }
-
-  std::string getSSLKey() { return ssl_key; }
-  void setSSLKey(const std::string &str) { ssl_key = str; }
+  void setSSLPort(int i) { ssl_port = i; }
 
   std::string getImgRoot() { return img_root; }
   void setImgRoot(const std::string &str) { img_root = str; }
@@ -109,12 +94,6 @@ public:
   std::map<std::string, std::string> getScalingQuality() { return scaling_quality; }
   void setScalingQuality(const std::map<std::string, std::string> &v) { scaling_quality = v; }
 
-  int getSubdirLevels() const { return subdir_levels; }
-  void setSubdirLevels(const int i) { subdir_levels = i; }
-
-  std::vector<std::string> getSubdirExcludes() { return subdir_excludes; }
-  void setSubdirExcludes(const std::vector<std::string> &v) { subdir_excludes = v; }
-
   std::string getInitScript() { return init_script; }
   void setInitScript(const std::string &str) { init_script = str; }
 
@@ -123,9 +102,6 @@ public:
 
   std::string getCacheDir() { return cache_dir; }
   void setCacheDir(const std::string &str) { cache_dir = str; }
-
-  int getKeepAlive() const { return keep_alive; }
-  void setKeepAlive(int i) { keep_alive = i; }
 
   std::string getThumbSize() { return thumb_size; }
   void setThumbSize(const std::string &str) { thumb_size = str; }
@@ -154,9 +130,6 @@ public:
   std::string getLoglevel() { return loglevel; }
   void setLogLevel(const std::string &str) { loglevel = str; }
 
-  std::string getLogfile() { return logfile; }
-  void setLogfile(const std::string &str) { logfile = str; }
-
   std::string getDocRoot() { return docroot; }
   void setDocRoot(const std::string &str) { docroot = str; }
 
@@ -171,9 +144,6 @@ public:
 
   std::string getPassword() { return password; }
   inline void setPasswort(const std::string &str) { password = str; }
-
-  size_t getMaxPixelLimit() const { return max_pixel_limit; }
-  void setMaxPixelLimit(size_t v) { max_pixel_limit = v; }
 
   size_t getMemoryLimit() const { return memory_limit; }
   void setMemoryLimit(size_t v) { memory_limit = v; }

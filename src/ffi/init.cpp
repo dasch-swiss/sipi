@@ -186,21 +186,17 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
         if (o.scaling_quality_j2k != nullptr) sq["j2k"] = o.scaling_quality_j2k;
         conf.setScalingQuality(sq);
       }
-      if (o.subdirexcludes != nullptr && o.subdirexcludes_len > 0) {
-        std::vector<std::string> excludes;
-        excludes.reserve(o.subdirexcludes_len);
-        for (size_t i = 0; i < o.subdirexcludes_len; ++i) excludes.emplace_back(o.subdirexcludes[i]);
-        conf.setSubdirExcludes(excludes);
-      }
       // Scalars (presence flag — 0 is a valid value, so gate on has_).
       if (o.has_serverport) conf.setPort(o.serverport);
       if (o.has_maxtmpage) conf.setMaxTempFileAge(o.maxtmpage);
       if (o.has_cache_nfiles) conf.setCacheNFiles(o.cache_nfiles);
-      if (o.has_subdirlevels) conf.setSubdirLevels(o.subdirlevels);
       if (o.has_pathprefix) conf.setPrefixAsPath(o.pathprefix != 0);
-      if (o.has_max_pixel_limit) conf.setMaxPixelLimit(o.max_pixel_limit);
       if (o.has_jpeg_quality) conf.setJpegQuality(o.jpeg_quality);
     }
+
+    // Apply the resolved engine log level to the C++ logger gate (CLI/env/TOML;
+    // LL_INFO when unset). Without this the configured level is silently ignored.
+    set_log_level(parse_log_level(conf.getLoglevel(), LL_INFO));
 
     // Engine services built from the config values (with the CLI/env overrides
     // above already applied). A null service means the corresponding feature is
@@ -297,7 +293,6 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
       .prefix_as_path = conf.getPrefixAsPath(),
       .jpeg_quality = conf.getJpegQuality(),
       .scaling_quality = to_scaling_quality(conf.getScalingQuality()),
-      .max_pixel_limit = conf.getMaxPixelLimit(),
       .port = conf.getPort(),
       .max_post_size = conf.getMaxPostSize(),
     });

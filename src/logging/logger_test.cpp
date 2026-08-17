@@ -196,6 +196,31 @@ TEST_F(LoggerTest, SetLogLevelAllValues)
   }
 }
 
+TEST_F(LoggerTest, ParseLogLevelCanonicalNames)
+{
+  EXPECT_EQ(parse_log_level("DEBUG", LL_INFO), LL_DEBUG);
+  EXPECT_EQ(parse_log_level("INFO", LL_ERR), LL_INFO);
+  EXPECT_EQ(parse_log_level("NOTICE", LL_ERR), LL_NOTICE);
+  EXPECT_EQ(parse_log_level("WARNING", LL_ERR), LL_WARNING);
+  EXPECT_EQ(parse_log_level("ERR", LL_INFO), LL_ERR);
+  EXPECT_EQ(parse_log_level("CRIT", LL_INFO), LL_CRIT);
+  EXPECT_EQ(parse_log_level("ALERT", LL_INFO), LL_ALERT);
+  EXPECT_EQ(parse_log_level("EMERG", LL_INFO), LL_EMERG);
+}
+
+TEST_F(LoggerTest, ParseLogLevelIsCaseInsensitive)
+{
+  EXPECT_EQ(parse_log_level("debug", LL_INFO), LL_DEBUG);
+  EXPECT_EQ(parse_log_level("Warning", LL_INFO), LL_WARNING);
+}
+
+TEST_F(LoggerTest, ParseLogLevelUnknownReturnsFallback)
+{
+  EXPECT_EQ(parse_log_level("", LL_INFO), LL_INFO);
+  EXPECT_EQ(parse_log_level("WARN", LL_INFO), LL_INFO);// not a canonical name
+  EXPECT_EQ(parse_log_level("nonsense", LL_ERR), LL_ERR);
+}
+
 // ================================================================
 // Log level filtering tests
 // ================================================================

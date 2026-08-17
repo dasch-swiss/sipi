@@ -54,7 +54,6 @@ struct EngineContext
   bool prefix_as_path = true;//!< IIIF prefix is a path component under imgroot (config knob, exposed to the edge)
   int jpeg_quality = 60;//!< JPEG encode quality
   ScalingQuality scaling_quality{};//!< per-format scaling method
-  std::size_t max_pixel_limit = 0;//!< max output pixels per request (0 = unlimited)
   int port = 3333;//!< configured HTTP listen port (the Lua config `sipi.port`); a fallback for the Rust edge's listener bind when no `--serverport`/`SIPI_SERVERPORT`/`SIPI_RS_PORT` selected one
   std::size_t max_post_size = 0;//!< max POST body size in bytes (the Rust shell caps Lua-route uploads); 0 = unlimited
 };

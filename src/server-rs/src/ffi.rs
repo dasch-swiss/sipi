@@ -278,7 +278,6 @@ pub struct SipiMetricsSnapshot {
     pub cache_misses_total: u64,
     pub cache_evictions_total: u64,
     pub cache_skips_total: u64,
-    pub image_too_large_total: u64,
     pub client_disconnected_total: u64,
     pub memory_alloc_failures_total: u64,
     pub rejected_connections_total: u64,
@@ -1770,65 +1769,64 @@ mod metrics_snapshot_layout {
     fn repr_c_matches_metrics_snapshot_h() {
         assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
         assert_eq!(align_of::<SipiMetricsSnapshot>(), 8);
-        assert_eq!(size_of::<SipiMetricsSnapshot>(), 176);
+        assert_eq!(size_of::<SipiMetricsSnapshot>(), 168);
 
         assert_eq!(offset_of!(SipiMetricsSnapshot, cache_hits_total), 0);
         assert_eq!(offset_of!(SipiMetricsSnapshot, cache_misses_total), 8);
         assert_eq!(offset_of!(SipiMetricsSnapshot, cache_evictions_total), 16);
         assert_eq!(offset_of!(SipiMetricsSnapshot, cache_skips_total), 24);
-        assert_eq!(offset_of!(SipiMetricsSnapshot, image_too_large_total), 32);
         assert_eq!(
             offset_of!(SipiMetricsSnapshot, client_disconnected_total),
-            40
+            32
         );
         assert_eq!(
             offset_of!(SipiMetricsSnapshot, memory_alloc_failures_total),
-            48
+            40
         );
         assert_eq!(
             offset_of!(SipiMetricsSnapshot, rejected_connections_total),
-            56
+            48
         );
         assert_eq!(
             offset_of!(SipiMetricsSnapshot, decode_memory_acquired_total),
-            64
+            56
         );
         assert_eq!(
             offset_of!(SipiMetricsSnapshot, decode_memory_rejected_total),
-            72
+            64
         );
         assert_eq!(
             offset_of!(SipiMetricsSnapshot, decode_memory_shadow_rejected_total),
-            80
+            72
         );
         assert_eq!(
             offset_of!(SipiMetricsSnapshot, decode_memory_near_limit_total),
-            88
+            80
         );
         assert_eq!(
             offset_of!(SipiMetricsSnapshot, tiff_pyramid_reduced_decodes_total),
-            96
+            88
         );
         assert_eq!(
             offset_of!(SipiMetricsSnapshot, decode_memory_too_large_total),
-            104
+            96
         );
         assert_eq!(
             offset_of!(SipiMetricsSnapshot, decode_memory_shadow_too_large_total),
-            112
+            104
         );
-        assert_eq!(offset_of!(SipiMetricsSnapshot, waiting_connections), 120);
-        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_bytes), 128);
-        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files), 136);
-        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_limit_bytes), 144);
-        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files_limit), 152);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, waiting_connections), 112);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_bytes), 120);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files), 128);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_size_limit_bytes), 136);
+        assert_eq!(offset_of!(SipiMetricsSnapshot, cache_files_limit), 144);
         assert_eq!(
             offset_of!(SipiMetricsSnapshot, decode_memory_budget_bytes),
-            160
+            152
         );
         assert_eq!(
             offset_of!(SipiMetricsSnapshot, decode_memory_used_bytes),
-            168
+            160
         );
     }
 }

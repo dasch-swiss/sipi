@@ -11,7 +11,6 @@ sipi = {
     cache_size = '0',
     jpeg_quality = 60,
     thumb_size = '!128,128',
-    loglevel = 'INFO',
 }
 
 routes = {

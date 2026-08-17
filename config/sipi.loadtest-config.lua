@@ -10,12 +10,9 @@
 -- (the production default = the pool's real saturation point); tune load-shedding
 -- with SIPI_MAX_WAITING / SIPI_QUEUE_TIMEOUT if needed.
 sipi = {
-    hostname = 'localhost',
     port = 2048,
-    keep_alive = 5,
     imgroot = './test/_test_data/images',
     prefix_as_path = true,
-    subdir_levels = 0,
     cache_dir = './loadtest_cache',
     cache_size = '1M',
     cache_nfiles = 4,              -- tiny; distinct tile regions guarantee decode-every-request anyway
@@ -26,11 +23,7 @@ sipi = {
     tmpdir = '/tmp',
     initscript = './config/sipi.init.lua',
     scriptdir = './scripts',
-    ssl_port = 2049,
-    ssl_certificate = './certificate/certificate.pem',
-    ssl_key = './certificate/key.pem',
     jwt_secret = 'UP 4888, nice 4-8-4 steam engine',
-    loglevel = 'WARN'
 }
 admin = { user = 'admin', password = 'Sipi-Admin' }
 fileserver = { docroot = './server', wwwroute = '/server' }
