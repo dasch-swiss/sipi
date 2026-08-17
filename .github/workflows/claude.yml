@@ -43,7 +43,22 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_args: "--model claude-opus-4-6"
+          # --model / --effort: from the 2026-08 review benchmark (157 runs, 15 commits with
+          # known answers, dsp-api + dsp-app). Model choice dominated prompt choice: Opus 5
+          # caught 6/6 planted bugs with zero blocking false positives, while Opus 4.8 caught
+          # 0/6 at the same list price -- claude-opus-4-6 is older still. Effort medium because
+          # detection was identical to high across all nine commits run at both levels, high's
+          # only distinguishing behaviour was holding one clean diff on a real but minor
+          # finding, and medium is ~16% cheaper.
+          #
+          # Deliberately NOT adding --allowed-tools here, unlike dsp-api and dsp-app. This
+          # workflow has never carried one, its prompt requires posting a review through
+          # GitHub's review API (which the list validated in the benchmark does not cover),
+          # and every recent run of this workflow was skipped, so there is no run log showing
+          # what it actually relies on. Narrowing tools blind could silently remove the
+          # review-posting path. See the note in the pull request about this repo's
+          # .claude/settings.json being inherited by CI.
+          claude_args: "--model claude-opus-5 --effort medium"
           track_progress: "true"
           include_fix_links: "false"
           additional_permissions: |
@@ -52,15 +67,70 @@ jobs:
             When asked to "review" a PR, perform a thorough code review following
             the project's REVIEW.md checklist. Read REVIEW.md from the repository
             root first, then review every changed file against each applicable section.
+            Honour its "Skip" section — do not spend the run on what it tells you to skip.
+
+            Report issues only in lines this PR changed — but read whatever you need to
+            decide whether an issue is real: the changed files in full (diff hunks alone
+            give too little context), their callers, their tests, and neighbouring
+            implementations of the same pattern. Reading widely is fine; reporting
+            widely is not.
+
+            Before reporting an issue, name the concrete input or state that triggers it
+            and the wrong output, crash, or regression that results. Drop any issue where
+            you cannot; where the justification is only "more robust" or "best practice";
+            or where a code comment explains it as a deliberate decision (read the comments
+            before flagging). If you checked a concern and could not prove it but still
+            believe it matters, report it as Suspected rather than dropping it or inflating
+            its severity. A few defensible issues beat many speculative ones, and reporting
+            no issues at all is a valid and useful outcome.
+
+            Do not assert how a library, a C API or an external service behaves from memory
+            — in either direction. When the diff constructs or parses a value that some
+            other system interprets (an IIIF size, region or rotation parameter, a URL, a
+            path template, an image-format header, a media-type string), you must check the
+            constructed form against that system's own specification before you either
+            report it or clear it. Well-formed is not the same as accepted: a form can be
+            valid syntax, and listed as supported by the receiving system, and still be
+            rejected at runtime because of a precondition attached to that form — a
+            permitted value range, a limit that depends on the input data rather than on the
+            string, a flag that must be present for the operation to be allowed. So do not
+            stop at "the syntax is valid" or "the server supports this feature": find the
+            preconditions the specification attaches to the form you built, and for each one
+            name the input that would violate it or state why none can. Confirm against the
+            versions this repo builds with (`MODULE.bazel`) or the specification itself via
+            web search. If you cannot complete that check, say so explicitly and grade the
+            line Suspected — do not declare it correct.
+
+            Classify each finding as **Blocking** or **Non-blocking**. This is independent
+            of how bad the outcome is, and independent of which REVIEW.md section it came
+            from:
+            - Blocking: you established, from the code or an authoritative external source,
+              that a reachable input or state produces a wrong outcome — memory unsafety, an
+              error or crash on a normal path, incorrect bytes or dimensions written or
+              returned, access incorrectly granted or denied, or a deterministic CI failure.
+              "Reachable" means you can name the input. It does not require the feature to
+              stop working, and it does not require the outcome to be severe.
+            - Non-blocking: everything else — style, naming, missing tests, performance that
+              is not a regression, and anything you could not verify.
+            - Suspected: a concern you could not prove. Always Non-blocking. State what
+              would confirm or refute it.
+
+            Separately, grade impact High, Medium or Low, for triage ordering only. Impact
+            never determines Blocking.
 
             Post your findings as inline PR review comments on the specific lines
             where issues are found. Use GitHub's review API to submit a single review
-            with all comments (not individual comments).
+            with all comments (not individual comments). For each finding give the trigger
+            and wrong outcome you named above, how you verified the mechanism, and a
+            suggested fix.
 
-            Classify each finding:
-            - 🔴 Request changes: security issues, memory safety violations, heap-buffer-overflow risks, type mismatches at C library boundaries
-            - 🟡 Comment: style violations, missing RAII wrappers, test gaps, documentation gaps
-            - 🟢 Approve: if no issues found
+            Submit that single review as:
+            - 🔴 Request changes — if any finding is Blocking.
+            - 🟡 Comment — if there are findings but none of them is Blocking.
+            - 🟢 Approve — if no issues were found.
+
+            Do not override this in prose: if you find yourself arguing that a Non-blocking
+            issue should hold the PR, it is Blocking; re-mark it.
 
             Pay special attention to the "C library boundary safety (FFI)" and
             "Multi-buffer dimension safety" sections — these catch the class of
