@@ -320,7 +320,9 @@ pub struct SipiServeRequest {
 /// Native image shape from a header read — mirrors `SipiImageDims` in
 /// `sipi_ffi.h`. `numpages` is 0 for a single-page image; `tile_width`/
 /// `tile_height` are 0 when untiled; `clevels` is the JP2/pyramidal level count.
-/// Enough to assemble info.json's `sizes[]` / `tiles[]` from one probe.
+/// `width`/`height`/`tile_*` are enough to assemble info.json's `sizes[]` /
+/// `tiles[]` from one probe — the pyramid is derived from the tile grid, not
+/// `clevels`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SipiImageDims {

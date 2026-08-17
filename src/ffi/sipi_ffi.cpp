@@ -356,7 +356,8 @@ int sipi_image_dims(const char *resolved_path, SipiImageDims *out, SipiEssential
   // Header-only shape read. The Rust edge owns existence + containment (R1/R2)
   // before calling, so read_shape throwing here is a genuine engine failure →
   // 500 via the guard (read_shape never returns FAILURE; it throws). Native
-  // shape only: numpages/tile_*/clevels drive info.json sizes[]/tiles[].
+  // shape only: numpages and tile_* (with width/height) drive info.json
+  // sizes[]/tiles[]; clevels is no longer consulted for the pyramid.
   // One read_shape() call also carries the Essentials identity (origmimetype/
   // origname) when the file has one — emitted through the optional `emit`
   // callback (NULL when the caller, e.g. info.json, doesn't need it), so a

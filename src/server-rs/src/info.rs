@@ -50,26 +50,39 @@ pub const fn file_context() -> &'static str {
     FILE_CONTEXT
 }
 
-/// The `sizes[]` pyramid: for reduce level `i` in `1..clevels`, the dimension is
-/// `ceil(native / 2^i)` (the C++ `SipiSize::REDUCE` formula, `SipiSize.cpp:329`),
-/// appending each level and breaking once both width and height are `< 128`.
-/// `clevels` falls back to 5 when 0.
-fn size_pyramid(width: u32, height: u32, clevels: u32) -> Vec<Value> {
-    let cnt = if clevels > 0 { clevels } else { 5 };
-    let reduce = |dim: u32, level: u32| -> u32 {
-        let sf = 1u64 << level;
-        u64::from(dim).div_ceil(sf) as u32
-    };
-    let mut sizes = Vec::new();
-    for i in 1..cnt {
-        let w = reduce(width, i);
-        let h = reduce(height, i);
-        if w < 128 && h < 128 {
-            break;
+/// Reference tile size for the `sizes` ladder when the image is untiled.
+const DEFAULT_TILE_SIZE: u32 = 512;
+
+/// Contiguous powers of two `[2^0 .. 2^n]` (ascending) derived from the tile
+/// grid, where `n` is the smallest level count that puts the whole image inside
+/// one tile on both axes: `n = max(ceil(log2(w / tile_w)), ceil(log2(h / tile_h)))`.
+/// `n` is clamped to 31 so every factor fits `u32` (`2^32` would truncate to 0 and
+/// make `sizes_for` divide by zero); the clamp is unreachable for real images,
+/// which need `n <= 31` unless a tile axis is `1` and the image exceeds `2^31` px.
+/// This is the single source of truth feeding both `scaleFactors` and `sizes`, so
+/// the two arrays describe the same pyramid. Assumes `tile_w`/`tile_h >= 1` (the
+/// caller substitutes `DEFAULT_TILE_SIZE` for untiled images).
+fn pyramid_scale_factors(width: u32, height: u32, tile_w: u32, tile_h: u32) -> Vec<u32> {
+    let levels = |dim: u32, tile: u32| -> u32 {
+        let mut n = 0u32;
+        while (u64::from(tile) << n) < u64::from(dim) {
+            n += 1;
         }
-        sizes.push(json!({ "width": w, "height": h }));
-    }
-    sizes
+        n
+    };
+    let n = levels(width, tile_w).max(levels(height, tile_h)).min(31);
+    (0..=n).map(|i| 1u32 << i).collect()
+}
+
+/// `sizes` for an ascending scale-factor list, emitted ascending (smallest →
+/// native), native size included. A pure transform of the factor list, so
+/// `sizes` and `scaleFactors` cannot describe different pyramids.
+fn sizes_for(width: u32, height: u32, scale_factors: &[u32]) -> Vec<Value> {
+    scale_factors
+        .iter()
+        .rev()
+        .map(|&sf| json!({ "width": width.div_ceil(sf), "height": height.div_ceil(sf) }))
+        .collect()
 }
 
 /// IIIF `info.json` for an image. The auth-service
@@ -87,13 +100,21 @@ pub fn image_info_json(id: &str, dims: &SipiImageDims) -> Value {
     if dims.numpages > 0 {
         root.insert("numpages".into(), json!(dims.numpages));
     }
+    // Derive one pyramid from the tile grid and feed both arrays from it, so
+    // `sizes` and `scaleFactors` can never drift apart. Untiled images fall back
+    // to a reference tile size; `clevels` is no longer consulted (it was the
+    // source of the ordinal-scaleFactors bug).
+    let (tw, th) = if dims.tile_width > 0 && dims.tile_height > 0 {
+        (dims.tile_width, dims.tile_height)
+    } else {
+        (DEFAULT_TILE_SIZE, DEFAULT_TILE_SIZE)
+    };
+    let scale_factors = pyramid_scale_factors(dims.width, dims.height, tw, th);
     root.insert(
         "sizes".into(),
-        json!(size_pyramid(dims.width, dims.height, dims.clevels)),
+        json!(sizes_for(dims.width, dims.height, &scale_factors)),
     );
     if dims.tile_width > 0 && dims.tile_height > 0 {
-        let cnt = if dims.clevels > 0 { dims.clevels } else { 5 };
-        let scale_factors: Vec<u32> = (1..cnt).collect();
         root.insert(
             "tiles".into(),
             json!([{ "width": dims.tile_width, "height": dims.tile_height, "scaleFactors": scale_factors }]),
@@ -312,19 +333,17 @@ mod tests {
     #[test]
     fn info_json_matches_lena512_golden() {
         // The exact shape the e2e golden snapshot pins (iiif_compliance__info-json-lena512):
-        // 512x512, tile 512, clevels 8 → sizes [{256},{128}], scaleFactors [1..7].
+        // 512x512, tile 512 → the whole image already fits one tile, so there is no
+        // pyramid: scaleFactors [1] and sizes [{512,512}] (native only).
         let v = image_info_json("http://h/unit/lena512.jp2", &dims(512, 512, 512, 8));
         assert_eq!(v["type"], "ImageService3");
         assert_eq!(v["protocol"], "http://iiif.io/api/image");
         assert_eq!(v["profile"], "level2");
         assert_eq!(v["width"], 512);
         assert_eq!(v["height"], 512);
-        assert_eq!(
-            v["sizes"],
-            json!([{ "width": 256, "height": 256 }, { "width": 128, "height": 128 }])
-        );
+        assert_eq!(v["sizes"], json!([{ "width": 512, "height": 512 }]));
         assert_eq!(v["tiles"][0]["width"], 512);
-        assert_eq!(v["tiles"][0]["scaleFactors"], json!([1, 2, 3, 4, 5, 6, 7]));
+        assert_eq!(v["tiles"][0]["scaleFactors"], json!([1]));
         assert_eq!(v["extraFeatures"].as_array().unwrap().len(), 17);
         assert_eq!(v["extraFormats"], json!(["tif", "jp2"]));
         assert!(v.get("numpages").is_none());
@@ -332,10 +351,156 @@ mod tests {
 
     #[test]
     fn untiled_image_omits_tiles() {
+        // tile_width == 0 → derive the sizes ladder from DEFAULT_TILE_SIZE (512),
+        // tiles stays omitted. 1000x800 / 512 → scaleFactors [1,2], so
+        // sizes ascending are [{500,400},{1000,800}].
         let v = image_info_json("http://h/id", &dims(1000, 800, 0, 0));
         assert!(v.get("tiles").is_none());
-        // clevels=0 → fallback 5: levels 1..5 → 500,250,125(<128 stops at h=100<128? 800/8=100)
-        assert!(!v["sizes"].as_array().unwrap().is_empty());
+        assert_eq!(
+            v["sizes"],
+            json!([{ "width": 500, "height": 400 }, { "width": 1000, "height": 800 }])
+        );
+    }
+
+    #[test]
+    fn descriptor_conformance() {
+        // Each case pins scaleFactors and sizes as literals (not a re-derivation of
+        // sizes_for's own formula) so a shared-formula bug can't pass. sizes are
+        // ascending (smallest → native), one per scale factor.
+        struct Case {
+            w: u32,
+            h: u32,
+            tw: u32,
+            th: u32,
+            sf: &'static [u32],
+            sizes: &'static [(u32, u32)],
+        }
+        let cases = [
+            // deep pyramid
+            Case {
+                w: 3505,
+                h: 5156,
+                tw: 1024,
+                th: 1024,
+                sf: &[1, 2, 4, 8],
+                sizes: &[(439, 645), (877, 1289), (1753, 2578), (3505, 5156)],
+            },
+            // single tile, no pyramid
+            Case {
+                w: 512,
+                h: 512,
+                tw: 512,
+                th: 512,
+                sf: &[1],
+                sizes: &[(512, 512)],
+            },
+            // non-square tiles: levels_h (256px axis) drives depth, not levels_w
+            Case {
+                w: 4096,
+                h: 4096,
+                tw: 1024,
+                th: 256,
+                sf: &[1, 2, 4, 8, 16],
+                sizes: &[
+                    (256, 256),
+                    (512, 512),
+                    (1024, 1024),
+                    (2048, 2048),
+                    (4096, 4096),
+                ],
+            },
+        ];
+        for c in cases {
+            let d = SipiImageDims {
+                width: c.w,
+                height: c.h,
+                numpages: 0,
+                tile_width: c.tw,
+                tile_height: c.th,
+                clevels: 0,
+            };
+            let v = image_info_json("http://h/id", &d);
+
+            // §5.4: exactly one tile object; width/height are the stored tile size,
+            // passed through unchanged (criterion 4, no regression of finding 1).
+            let tiles = v["tiles"].as_array().unwrap();
+            assert_eq!(tiles.len(), 1, "single tile object (§5.4)");
+            assert_eq!(tiles[0]["width"], c.tw);
+            assert_eq!(tiles[0]["height"], c.th);
+
+            // Criteria 1 + 5 + §5.4 uniqueness: the exact power-of-two, ascending,
+            // once-each factor list.
+            assert_eq!(
+                tiles[0]["scaleFactors"],
+                json!(c.sf),
+                "scaleFactors {}x{}/{}x{}",
+                c.w,
+                c.h,
+                c.tw,
+                c.th
+            );
+
+            // Criteria 2 + 5: same pyramid — one size per factor, ascending, native
+            // included.
+            let expected_sizes: Vec<Value> = c
+                .sizes
+                .iter()
+                .map(|&(w, h)| json!({ "width": w, "height": h }))
+                .collect();
+            assert_eq!(
+                v["sizes"],
+                json!(expected_sizes),
+                "sizes {}x{}/{}x{}",
+                c.w,
+                c.h,
+                c.tw,
+                c.th
+            );
+            assert_eq!(
+                c.sizes.len(),
+                c.sf.len(),
+                "sizes.length == scaleFactors.length"
+            );
+
+            // Criterion 3: the deepest scale factor puts the whole image within a
+            // single tile on both axes.
+            let deepest = *c.sf.last().unwrap();
+            assert!(
+                c.w.div_ceil(deepest) <= c.tw,
+                "image fits one tile horizontally"
+            );
+            assert!(
+                c.h.div_ceil(deepest) <= c.th,
+                "image fits one tile vertically"
+            );
+        }
+    }
+
+    #[test]
+    fn pyramid_exponent_clamped_no_panic() {
+        // Degenerate FFI input: a 1px tile axis with an image wider than 2^31 drives
+        // the exponent to 32, where 2^32 would truncate to 0 and make sizes_for
+        // divide by zero. The clamp to 31 keeps every factor a valid nonzero u32.
+        let d = SipiImageDims {
+            width: u32::MAX,
+            height: 512,
+            numpages: 0,
+            tile_width: 1,
+            tile_height: 512,
+            clevels: 0,
+        };
+        let v = image_info_json("http://h/id", &d);
+        let sf = v["tiles"][0]["scaleFactors"].as_array().unwrap();
+        assert_eq!(sf.len(), 32, "exponent clamped to 31 → 2^0..2^31");
+        assert!(
+            sf.iter().all(|f| f.as_u64().unwrap() > 0),
+            "no factor truncated to 0"
+        );
+        assert_eq!(
+            v["sizes"].as_array().unwrap().len(),
+            sf.len(),
+            "sizes stay in step with the clamped factor list"
+        );
     }
 
     #[test]

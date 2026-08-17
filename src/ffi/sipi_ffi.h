@@ -376,8 +376,9 @@ typedef struct SipiRequestContext SipiRequestContext;
 /*! Native image shape from a header read (NOT a full decode). `numpages` is 0
  *  for a single-page image; `tile_width`/`tile_height` are 0 when the image is
  *  untiled; `clevels` is the JP2/pyramidal resolution-level count (0 when none).
- *  Carries the tiling + level fields so the Rust shell assembles info.json's
- *  `sizes[]` / `tiles[]` from one probe rather than a second call. */
+ *  Carries the tiling fields so the Rust shell assembles info.json's `sizes[]` /
+ *  `tiles[]` from one probe rather than a second call — the pyramid is derived
+ *  from the tile grid, not `clevels`. */
 typedef struct
 {
   uint32_t width;
