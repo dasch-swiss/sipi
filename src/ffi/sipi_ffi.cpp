@@ -357,7 +357,7 @@ int sipi_image_dims(const char *resolved_path, SipiImageDims *out, SipiEssential
   // before calling, so read_shape throwing here is a genuine engine failure →
   // 500 via the guard (read_shape never returns FAILURE; it throws). Native
   // shape only: numpages and tile_* (with width/height) drive info.json
-  // sizes[]/tiles[]; clevels is no longer consulted for the pyramid.
+  // sizes[]/tiles[]; the pyramid is derived from the tile grid.
   // One read_shape() call also carries the Essentials identity (origmimetype/
   // origname) when the file has one — emitted through the optional `emit`
   // callback (NULL when the caller, e.g. info.json, doesn't need it), so a
@@ -370,7 +370,6 @@ int sipi_image_dims(const char *resolved_path, SipiImageDims *out, SipiEssential
     out->numpages = static_cast<std::uint32_t>(info.numpages);
     out->tile_width = static_cast<std::uint32_t>(info.tile_width);
     out->tile_height = static_cast<std::uint32_t>(info.tile_height);
-    out->clevels = static_cast<std::uint32_t>(info.clevels);
     if (emit != nullptr && info.success == Sipi::SipiImgInfo::ALL) {
       emit(ctx, info.origmimetype.c_str(), info.origname.c_str());
     }

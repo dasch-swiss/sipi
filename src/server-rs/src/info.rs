@@ -102,8 +102,8 @@ pub fn image_info_json(id: &str, dims: &SipiImageDims) -> Value {
     }
     // Derive one pyramid from the tile grid and feed both arrays from it, so
     // `sizes` and `scaleFactors` can never drift apart. Untiled images fall back
-    // to a reference tile size; `clevels` is no longer consulted (it was the
-    // source of the ordinal-scaleFactors bug).
+    // to a reference tile size. Depth comes from the tile grid, not a
+    // resolution-level count (the ordinal count was the source of the old bug).
     let (tw, th) = if dims.tile_width > 0 && dims.tile_height > 0 {
         (dims.tile_width, dims.tile_height)
     } else {
@@ -319,14 +319,13 @@ pub fn auth_service(permission: SipiPermType, kv: &[(String, String)]) -> Option
 mod tests {
     use super::*;
 
-    fn dims(width: u32, height: u32, tile: u32, clevels: u32) -> SipiImageDims {
+    fn dims(width: u32, height: u32, tile: u32) -> SipiImageDims {
         SipiImageDims {
             width,
             height,
             numpages: 0,
             tile_width: tile,
             tile_height: tile,
-            clevels,
         }
     }
 
@@ -335,7 +334,7 @@ mod tests {
         // The exact shape the e2e golden snapshot pins (iiif_compliance__info-json-lena512):
         // 512x512, tile 512 → the whole image already fits one tile, so there is no
         // pyramid: scaleFactors [1] and sizes [{512,512}] (native only).
-        let v = image_info_json("http://h/unit/lena512.jp2", &dims(512, 512, 512, 8));
+        let v = image_info_json("http://h/unit/lena512.jp2", &dims(512, 512, 512));
         assert_eq!(v["type"], "ImageService3");
         assert_eq!(v["protocol"], "http://iiif.io/api/image");
         assert_eq!(v["profile"], "level2");
@@ -354,7 +353,7 @@ mod tests {
         // tile_width == 0 → derive the sizes ladder from DEFAULT_TILE_SIZE (512),
         // tiles stays omitted. 1000x800 / 512 → scaleFactors [1,2], so
         // sizes ascending are [{500,400},{1000,800}].
-        let v = image_info_json("http://h/id", &dims(1000, 800, 0, 0));
+        let v = image_info_json("http://h/id", &dims(1000, 800, 0));
         assert!(v.get("tiles").is_none());
         assert_eq!(
             v["sizes"],
@@ -417,7 +416,6 @@ mod tests {
                 numpages: 0,
                 tile_width: c.tw,
                 tile_height: c.th,
-                clevels: 0,
             };
             let v = image_info_json("http://h/id", &d);
 
@@ -487,7 +485,6 @@ mod tests {
             numpages: 0,
             tile_width: 1,
             tile_height: 512,
-            clevels: 0,
         };
         let v = image_info_json("http://h/id", &d);
         let sf = v["tiles"][0]["scaleFactors"].as_array().unwrap();
@@ -540,7 +537,7 @@ mod tests {
         let v = image_knora_json(
             "http://h/i.jp2",
             "image/jp2",
-            &dims(512, 512, 512, 8),
+            &dims(512, 512, 512),
             &Sidecar::default(),
             None,
         );
@@ -561,7 +558,7 @@ mod tests {
         let v = image_knora_json(
             "http://h/i.jp2",
             "image/jp2",
-            &dims(512, 512, 512, 8),
+            &dims(512, 512, 512),
             &Sidecar::default(),
             Some(&essentials),
         );
