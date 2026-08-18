@@ -64,8 +64,12 @@ jobs:
           # read the diff, read the changed files in full, search the repo, fetch an external
           # specification, post the review.
           #
-          # Model: Opus 5 caught 6/6 planted bugs with zero blocking false positives, while
-          # Opus 4.8 caught 0/6 at the same list price (claude-opus-4-6 is older still).
+          # Model: on the six phase-1 cells (two planted bugs x three prompts) Opus 5 fully
+          # caught five and partially caught one, with zero blocking false positives, while
+          # Opus 4.8 fully caught none -- two partial, four missed. Per-token pricing is
+          # identical across Opus 5/4.8/4.7/4.6 ($5 in / $25 out per MTok), so this is not a
+          # cost-for-quality trade on rate.
+          # claude-opus-4-6 is a generation older than the arm that fully caught nothing.
           # Effort: medium — detection was identical to high on all nine commits run at both,
           # high's only distinguishing behaviour was holding one clean diff on a real but
           # non-blocking finding, and medium is ~16% cheaper.
