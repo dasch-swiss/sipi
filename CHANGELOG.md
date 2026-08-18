@@ -1,5 +1,65 @@
 # Changelog
 
+## [6.4.0](https://github.com/dasch-swiss/sipi/compare/v6.3.1...v6.4.0) (2026-08-18)
+
+
+### Features
+
+* **observability:** Expose runtime admission metrics over OTLP ([1878570](https://github.com/dasch-swiss/sipi/commit/187857094ffe32adc39d518f335e99bdc68f030c))
+* **throttling:** Full-lane memory budget + admission mode over the seam ([542b3b2](https://github.com/dasch-swiss/sipi/commit/542b3b2b82efce968db0dac6b8b93204c46e3978))
+* **throttling:** Two-lane admission pool (admission crate) + shell integration ([51a0126](https://github.com/dasch-swiss/sipi/commit/51a01266ce7e7c08952ef9c7abd97e98b63e1a13))
+
+
+### Bug Fixes
+
+* **ci:** Gate Claude workflow triggers to org members (DEV-6884) ([8cfcf25](https://github.com/dasch-swiss/sipi/commit/8cfcf25d6926a6be4f82e8f9adf4d9dfbd4e8a3b))
+* **observability:** Remap allocator arena/retained gauges to true RSS ([210c179](https://github.com/dasch-swiss/sipi/commit/210c1791af1de22d5fd035911ec14880d3590ae9))
+
+
+### Code Refactoring
+
+* **bazel:** Carve iiifparser and formats into their own packages ([171c343](https://github.com/dasch-swiss/sipi/commit/171c343b64b593eca4788ec043662db5b02425c1))
+* **ffi:** Collapse the served-image format↔mime pairing to one table ([223fbd1](https://github.com/dasch-swiss/sipi/commit/223fbd15b3bd809c6b64f8fc9b7708a19ed9e1b5))
+* **ffi:** Move sipi_init out of the oracle label into the seam ([236d22c](https://github.com/dasch-swiss/sipi/commit/236d22c7062debac0d7b787e82cc6f0505c3fed9))
+* **ffi:** Remove the dead config surface and apply the configured engine log level ([b1fdeb1](https://github.com/dasch-swiss/sipi/commit/b1fdeb13ffbf89fbcac48c48524e7e847f41c5df))
+* **handlers:** Remove the per-IP rate limiter ([1ec8492](https://github.com/dasch-swiss/sipi/commit/1ec84925c44045f547ab1c569edf68d124f1f013))
+* **iiifparser:** Colocate the polyglot implementations and carve a domain-typed Rust parser ([a0c56d1](https://github.com/dasch-swiss/sipi/commit/a0c56d1f872f07fe1893748d7976d9ad1c358daf))
+* **iiifparser:** Fold the parse_iiif_uri classifier out of src/handlers ([bc0e09c](https://github.com/dasch-swiss/sipi/commit/bc0e09cc086dfc166de9cd5a6b7294416f7bdcb5))
+* **server-rs,cli-rs:** Make the config seam fail on a dropped field ([6e5eeb3](https://github.com/dasch-swiss/sipi/commit/6e5eeb3fc75e87a9a4bf85e388a6c9bcdf70b188))
+* **server-rs,cli-rs:** Sweep oracle-era framing from Rust comments ([78c1cee](https://github.com/dasch-swiss/sipi/commit/78c1cee9d82bb33647c6ba15a6139ed9219a59e9))
+* **server-rs,ffi,iiifparser:** Align code with the ubiquitous language ([1e3ecc6](https://github.com/dasch-swiss/sipi/commit/1e3ecc681d977c97714619d4e9094b3802ddcdd4))
+* **shttps:** Decompose into scripting/util/jwt, out of src/shttps ([fa66a6a](https://github.com/dasch-swiss/sipi/commit/fa66a6a25286775065802f47b86a150412988e44))
+* **shttps:** Remove the C++ oracle server ([b7e34b3](https://github.com/dasch-swiss/sipi/commit/b7e34b3f825153444eb5e345ba3af5e2509fc085))
+* **throttling:** Carve the memory budget into src/throttling/cpp ([fb7030a](https://github.com/dasch-swiss/sipi/commit/fb7030a0eb1b73ea11962fbdd5a58788d0fb0aad))
+* **throttling:** Rename admission_mode to basic/advanced, take pool config off the Lua surface ([937ef86](https://github.com/dasch-swiss/sipi/commit/937ef86b4891c080c4b3384f911f1263b11b4061))
+
+
+### Documentation
+
+* **cli:** Drop the stale "differential-test oracle" label from sipi.cpp ([53ff8a9](https://github.com/dasch-swiss/sipi/commit/53ff8a9eb388cf7b05d0c82d6433c5e42c6db6d9))
+* **docs:** Bootstrap ARCH-MAP.md from the oracle-free tree (DUNE-001) ([f720d00](https://github.com/dasch-swiss/sipi/commit/f720d00eb77daaf6ad24440d8bc184162f483149))
+* **docs:** Correct the operator pool-knob and port docs against the code ([b5557e2](https://github.com/dasch-swiss/sipi/commit/b5557e23c9775d9cb435aed70b76515e509eaa67))
+* **docs:** Reconcile agent-context docs with the current tree ([d4e326d](https://github.com/dasch-swiss/sipi/commit/d4e326d2807b4b742bb463504c18b6062b4e2ec1))
+* **docs:** Scrub dangling deleted-oracle-file citations the .rs gate can't reach ([d528dab](https://github.com/dasch-swiss/sipi/commit/d528dabcd78eafee452338b283ee4f220e3f8a47))
+* **formats:** Add in-place invariant banners to the codec + metrics surfaces ([003614b](https://github.com/dasch-swiss/sipi/commit/003614b99656fb7b6d9e77424fe308926fb8241e))
+* **handlers:** Remove the rate-limiter documentation ([e906d5c](https://github.com/dasch-swiss/sipi/commit/e906d5cc652daec8c4073ceeab6a88b3651bb639))
+* **iiifparser:** Add ADR-0021 for polyglot colocation and domain-typed Rust parser ([5398d56](https://github.com/dasch-swiss/sipi/commit/5398d569be5fd00bb184fb790b8ba4b878212bb3))
+* Memory-budget.md, running.md, and the sample Lua config updated. ([542b3b2](https://github.com/dasch-swiss/sipi/commit/542b3b2b82efce968db0dac6b8b93204c46e3978))
+* **observability:** Document per-partition admission + 413 metrics and the RSS remap ([1302ec7](https://github.com/dasch-swiss/sipi/commit/1302ec7e55ffe86c3b23ff238d3040de7348ba01))
+
+
+### Tests
+
+* **ffi:** Guard every seam struct and enum against silent drift ([80d9327](https://github.com/dasch-swiss/sipi/commit/80d9327a65ff1c366285f0b1dc55d71af5a58db8))
+* **iiifparser,formats,logging:** Colocate carved-module unit tests (ADR-0003) ([2654ea5](https://github.com/dasch-swiss/sipi/commit/2654ea5c84cf5cb1c8b7f41626fcfc81c844b214))
+* **throttling:** E2e admission suite for enforce-mode 413 + rewrite stale memory_budget ([5d396eb](https://github.com/dasch-swiss/sipi/commit/5d396ebbbe1525f7ffd39fe9dcabb887b29009f6))
+
+
+### Miscellaneous Chores
+
+* **bazel:** Drop the stale observability→shttps grant, fix layering rationale ([6d6b2c7](https://github.com/dasch-swiss/sipi/commit/6d6b2c79d476f55b264bab913e11b28f3e2de643))
+* **claude:** Drop unresolved my-eng plugin from enabled plugins ([032b90b](https://github.com/dasch-swiss/sipi/commit/032b90bd4edd22bf2d6bb68bdb9eb96b87aa33e8))
+
 ## [6.3.1](https://github.com/dasch-swiss/sipi/compare/v6.3.0...v6.3.1) (2026-08-04)
 
 
