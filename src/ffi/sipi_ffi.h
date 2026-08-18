@@ -375,10 +375,9 @@ typedef struct SipiRequestContext SipiRequestContext;
 
 /*! Native image shape from a header read (NOT a full decode). `numpages` is 0
  *  for a single-page image; `tile_width`/`tile_height` are 0 when the image is
- *  untiled; `clevels` is the JP2/pyramidal resolution-level count (0 when none).
- *  Carries the tiling fields so the Rust shell assembles info.json's `sizes[]` /
- *  `tiles[]` from one probe rather than a second call — the pyramid is derived
- *  from the tile grid, not `clevels`. */
+ *  untiled. Carries the tiling fields so the Rust shell assembles info.json's
+ *  `sizes[]` / `tiles[]` from one probe rather than a second call — the pyramid
+ *  is derived from the tile grid. */
 typedef struct
 {
   uint32_t width;
@@ -386,7 +385,6 @@ typedef struct
   uint32_t numpages;
   uint32_t tile_width;
   uint32_t tile_height;
-  uint32_t clevels;
 } SipiImageDims;
 
 /*! Emits a single string value through a caller callback, so the seam returns no
@@ -534,14 +532,13 @@ static_assert(sizeof(SipiStrPair) == 16, "SipiStrPair size drifted from src/serv
 static_assert(offsetof(SipiStrPair, name) == 0, "SipiStrPair layout drift");
 static_assert(offsetof(SipiStrPair, value) == 8, "SipiStrPair layout drift");
 
-/* SipiImageDims — six uint32_t; 4-aligned, unlike the pointer-bearing structs. */
-static_assert(sizeof(SipiImageDims) == 24, "SipiImageDims size drifted from src/server-rs/src/ffi.rs");
+/* SipiImageDims — five uint32_t; 4-aligned, unlike the pointer-bearing structs. */
+static_assert(sizeof(SipiImageDims) == 20, "SipiImageDims size drifted from src/server-rs/src/ffi.rs");
 static_assert(offsetof(SipiImageDims, width) == 0, "SipiImageDims layout drift");
 static_assert(offsetof(SipiImageDims, height) == 4, "SipiImageDims layout drift");
 static_assert(offsetof(SipiImageDims, numpages) == 8, "SipiImageDims layout drift");
 static_assert(offsetof(SipiImageDims, tile_width) == 12, "SipiImageDims layout drift");
 static_assert(offsetof(SipiImageDims, tile_height) == 16, "SipiImageDims layout drift");
-static_assert(offsetof(SipiImageDims, clevels) == 20, "SipiImageDims layout drift");
 #endif
 
 /* ── Entry points ───────────────────────────────────────────────────────────

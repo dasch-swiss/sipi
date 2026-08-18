@@ -319,10 +319,9 @@ pub struct SipiServeRequest {
 
 /// Native image shape from a header read — mirrors `SipiImageDims` in
 /// `sipi_ffi.h`. `numpages` is 0 for a single-page image; `tile_width`/
-/// `tile_height` are 0 when untiled; `clevels` is the JP2/pyramidal level count.
-/// `width`/`height`/`tile_*` are enough to assemble info.json's `sizes[]` /
-/// `tiles[]` from one probe — the pyramid is derived from the tile grid, not
-/// `clevels`.
+/// `tile_height` are 0 when untiled. `width`/`height`/`tile_*` are enough to
+/// assemble info.json's `sizes[]` / `tiles[]` from one probe — the pyramid is
+/// derived from the tile grid.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SipiImageDims {
@@ -331,7 +330,6 @@ pub struct SipiImageDims {
     pub numpages: u32,
     pub tile_width: u32,
     pub tile_height: u32,
-    pub clevels: u32,
 }
 
 /// Emits a single string value (mirrors `SipiStrFn`) — the seam returns no owned
@@ -2028,13 +2026,12 @@ mod image_dims_layout {
     fn repr_c_matches_sipi_ffi_h() {
         // All fields are u32, so this struct is 4-aligned (unlike the others).
         assert_eq!(align_of::<SipiImageDims>(), 4);
-        assert_eq!(size_of::<SipiImageDims>(), 24);
+        assert_eq!(size_of::<SipiImageDims>(), 20);
         assert_eq!(offset_of!(SipiImageDims, width), 0);
         assert_eq!(offset_of!(SipiImageDims, height), 4);
         assert_eq!(offset_of!(SipiImageDims, numpages), 8);
         assert_eq!(offset_of!(SipiImageDims, tile_width), 12);
         assert_eq!(offset_of!(SipiImageDims, tile_height), 16);
-        assert_eq!(offset_of!(SipiImageDims, clevels), 20);
     }
 }
 
