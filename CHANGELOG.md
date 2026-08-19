@@ -1,5 +1,17 @@
 # Changelog
 
+## [6.4.1](https://github.com/dasch-swiss/sipi/compare/v6.4.0...v6.4.1) (2026-08-19)
+
+
+### Bug Fixes
+
+* **server-rs:** Derive info.json scaleFactors/sizes from one tile-grid pyramid ([ac320ba](https://github.com/dasch-swiss/sipi/commit/ac320bad72b132ebd73273929b65e1d3b83690f2))
+
+
+### Code Refactoring
+
+* **ffi:** Drop the dead clevels field from SipiImageDims ([9016a1d](https://github.com/dasch-swiss/sipi/commit/9016a1d9154752c32f2f6244a03641f7a9a1e9e4))
+
 ## [6.4.0](https://github.com/dasch-swiss/sipi/compare/v6.3.1...v6.4.0) (2026-08-18)
 
 
