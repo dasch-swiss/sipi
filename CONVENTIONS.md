@@ -108,7 +108,7 @@ is scoped `ffi` only when the seam mechanism itself is the point.
 | `formats` | `src/formats/` | Per-format codecs: TIFF, JP2 (Kakadu), PNG, JPEG |
 | `metadata` | `src/metadata/` | EXIF, IPTC, XMP, ICC profile handling |
 | `iiifparser` | `src/iiifparser/` | IIIF URL parsing, colocated polyglot (ADR-0021): `cpp/value_objects/` (live engine value objects), `cpp/classifier/` (testonly `parse_iiif_uri` reference oracle `:iiif_handler`), and `rust/` (the production parser `//src/iiifparser/rust:iiif_parser` the shell drives) |
-| `scripting` | `src/scripting/` | Connection-less Lua runtime: `LuaServer` + `request_context.h` + the `server.db` sqlite bindings |
+| `scripting` | `src/scripting/` (colocated polyglot, ADR-0021/0023) | The Lua runtime: `rust/` (the mlua runtime — hardened VM profile, limits, bytecode cache) + the C++ `LuaServer`/`request_context.h`/`server.db` sqlite bindings (deleted at the ADR-0023 cutover) |
 | `util` | `src/util/` | Generic SIPI-domain helpers: MIME/string parsing, file hashing, the `shttps::Error`/`Global` types |
 | `jwt` | `src/jwt/` | JWT (JWS) sign/verify leaf over OpenSSL + jansson |
 | `cache` | `src/SipiCache.{h,cpp}` | File-based LRU cache with dual-limit eviction |

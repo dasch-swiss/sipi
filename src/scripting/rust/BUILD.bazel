@@ -8,9 +8,52 @@ symbol set in the final binary. Colocated component-first / language-second
 with the C++ `//src/scripting` package (the ADR-0021 pattern).
 """
 
-load("@rules_rust//rust:defs.bzl", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//src:__subpackages__"])
+
+# The runtime crate: VM factory (hardened profile, deadline hook, binding
+# chokepoint), limits/kill accounting, and the bytecode cache. `@lua` is a
+# direct dep — mlua's `external` mode emits no link inputs of its own, so the
+# interpreter symbols come from the same BCR cc_library the C++ side links
+# (one symbol set in the final binary).
+rust_library(
+    name = "scripting",
+    srcs = [
+        "lib.rs",
+        "limits.rs",
+        "runtime.rs",
+    ],
+    crate_name = "scripting",
+    crate_root = "lib.rs",
+    edition = "2021",
+    deps = [
+        "@crates//:libc",
+        "@crates//:mlua",
+        "@crates//:tracing",
+        "@lua",
+    ],
+)
+
+# Inline #[cfg(test)] unit tests (limits/deadline/kill accounting).
+rust_test(
+    name = "scripting_test",
+    crate = ":scripting",
+    edition = "2021",
+)
+
+# Runtime-profile tests: whitelist invariants, limit enforcement (pcall
+# included), restricted require, bytecode cache, binding chokepoint.
+rust_test(
+    name = "runtime_test",
+    srcs = ["runtime_tests.rs"],
+    edition = "2021",
+    deps = [
+        ":scripting",
+        "@crates//:mlua",
+        "@crates//:tempfile",
+    ],
+)
 
 # Pins the mlua ↔ `@lua` external-link contract: VM creation, chunk exec,
 # integer-width ABI, `set_memory_limit`, the instruction-count hook, and the
