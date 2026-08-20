@@ -34,7 +34,7 @@ function test_db()
 end
 
 function err (x)
-    server.send_error(500, x)
+    send_error(500, x)
     return false
 end
 

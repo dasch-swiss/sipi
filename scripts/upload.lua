@@ -109,7 +109,7 @@ for imgindex,imgparam in pairs(server.uploads) do
         success, newfilepath = helper.filename_hash(newfilename[imgindex]);
         if not success then
             server.log(newfilepath, server.loglevel.error)
-            server.send_error(500, newfilepath)
+            send_error(500, newfilepath)
             return false
         end
 
@@ -144,7 +144,7 @@ for imgindex,imgparam in pairs(server.uploads) do
         success, newfilepath = helper.filename_hash(filename)
         if not success then
             server.log(newfilepath, server.loglevel.error)
-            server.send_error(500, newfilepath)
+            send_error(500, newfilepath)
             return false
         end
 
