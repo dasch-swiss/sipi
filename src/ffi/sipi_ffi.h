@@ -588,38 +588,7 @@ int sipi_phase_count(void);
  *  so the caller can render its own error response. */
 SIPI_FFI_NODISCARD int sipi_serve_file(const char *resolved_path, const char *range, const SipiResponse *resp);
 
-/*! C++ LuaServer `pre_flight()`: returns a permission type + key/value channel.
- *  The IIIF image preflight (serve_iiif / info.json). The hook reads the request
- *  through `ctx` (`server.header` / `server.cookies` / …) and gets prefix +
- *  identifier + the cookie header as its Lua arguments. Valid permission types:
- *  allow / login / clickthrough / kiosk / external / restrict / deny.
- *
- *  `resp`, if non-NULL, is wired as `ctx`'s response sink for the duration of
- *  the call: some `pre_flight` scripts emit a response directly
- *  (`server.sendStatus`/`sendHeader`/`server.print`) instead of, or alongside,
- *  returning a permission — e.g. an auth script that fails to decode a bearer
- *  token and sends its own 500 before returning. Without a sink, that write
- *  dereferences `ctx->response == NULL`. Pass NULL only when `ctx->response`
- *  is already set by the caller — a non-NULL `resp` here always wins and
- *  overwrites it. */
-SIPI_FFI_NODISCARD int sipi_preflight(const char *prefix,
-  const char *identifier,
-  SipiRequestContext *ctx,
-  SipiPermType *type,
-  SipiKVFn emit_kv,
-  void *kv_ctx,
-  const SipiResponse *resp);
 
-/*! C++ LuaServer `file_pre_flight()`: the `/file` media-serving path (audio /
- *  video / PDF / any non-IIIF file). Same shape as sipi_preflight but takes a
- *  resolved filepath; narrower valid permission set: allow / login / restrict /
- *  deny. `resp` is the same optional response-sink channel as `sipi_preflight`. */
-SIPI_FFI_NODISCARD int sipi_file_preflight(const char *filepath,
-  SipiRequestContext *ctx,
-  SipiPermType *type,
-  SipiKVFn emit_kv,
-  void *kv_ctx,
-  const SipiResponse *resp);
 
 /*! Build the opaque request context the preflight hooks read (`server.*`) from
  *  primitive request fields. Header names are lowercased for case-insensitive
@@ -680,12 +649,7 @@ void sipi_request_context_add_param(SipiRequestContext *ctx, int kind, const cha
  *  NULL/empty = not injected. */
 void sipi_request_context_set_docroot(SipiRequestContext *ctx, const char *docroot);
 
-/*! Whether the engine Lua config defines a `pre_flight` / `file_pre_flight` hook
- *  (`luaFunctionExists`). The Rust shell reads these once at startup to mirror the
- *  C++ `luaFunctionExists` gate: with no hook it falls back to a default path +
- *  allow. Builds a VM, so call once and cache. Returns 0, or 500 if uninitialised. */
-SIPI_FFI_NODISCARD int sipi_has_preflight(int *out);
-SIPI_FFI_NODISCARD int sipi_has_file_preflight(int *out);
+
 
 /*! Run a configured Lua route: execute the route's script in the engine-config VM
  *  and emit its response (`server.print` / `sendStatus` / `sendHeader` /

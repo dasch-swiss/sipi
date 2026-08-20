@@ -15,8 +15,8 @@ within the package use the bare quote form (`#include "sipi_ffi.h"`).
 
 The target hosts the C++ side of the seam; its `srcs` grow as the engine is
 carved behind the FFI (today: `sipi_serve_file` / `sipi_serve_image` /
-`sipi_serve_timings_take` / `sipi_phase_count` / `sipi_metrics_snapshot` and the
-Lua preflight `sipi_preflight` / `sipi_file_preflight`).
+`sipi_serve_timings_take` / `sipi_phase_count` / `sipi_metrics_snapshot`,
+the `sipi_image_*` handle family, and the `sipi_run_lua_route` route entry).
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
@@ -34,9 +34,9 @@ cc_library(
         # sipi_metrics_snapshot, which fills the SipiMetricsSnapshot layout
         # defined in metrics_snapshot.h). SipiLua.cpp is the SipiImage Lua
         # bindings (the `sipi.*` globals installer), relocated here from
-        # //src:sipi_lib so the engine-held config VM behind sipi_preflight /
-        # sipi_run_lua_route can install them — they name no server object (there
-        # is no `__sipiserver` light-userdata).
+        # //src:sipi_lib so the engine-held config VM behind
+        # sipi_run_lua_route can install them — they name no server object
+        # (there is no `__sipiserver` light-userdata).
         "SipiLua.cpp",
         "engine_context.cpp",
         # init.cpp is the production `sipi_init` engine install; it lives in
@@ -45,7 +45,6 @@ cc_library(
         # helpers it shares with the CLI dispatch (dependency runs cli -> ffi).
         "init.cpp",
         "lua_config.cpp",
-        "preflight.cpp",
         "run_lua_route.cpp",
         "serve_image.cpp",
         "serve_response.cpp",
@@ -58,7 +57,6 @@ cc_library(
         "SipiLua.h",
         "engine_context.h",
         "lua_config.h",
-        "preflight.h",
         "metrics_snapshot.h",
         "response_sink.h",
         "run_lua_route.h",

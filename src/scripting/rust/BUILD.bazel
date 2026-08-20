@@ -143,6 +143,20 @@ rust_test(
     tags = ["no-sanitizer"],
 )
 
+# LuaEnv entry-point tests: boot probes (fail-closed init) + the preflight
+# return-shape matrix.
+rust_test(
+    name = "entry_test",
+    srcs = ["entry_tests.rs"],
+    edition = "2021",
+    rustc_flags = _CPP_STDLIB_LINK,
+    tags = ["no-sanitizer"],
+    deps = [
+        ":scripting",
+        "@crates//:tempfile",
+    ],
+)
+
 # SipiImage-binding tests over the real engine — the seam probes for the
 # sipi_image_* handle ABI, driven from Lua. Links the engine (Kakadu et al.),
 # so it needs the C++ stdlib bracket and is sanitizer-excluded.

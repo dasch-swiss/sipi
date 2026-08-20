@@ -11,11 +11,15 @@
 //! `jwt_secret = '…'` literally): Lua messages are cut at their `near '…'`
 //! source echo, keeping chunk name + line + reason.
 
-use std::path::Path;
+use std::cell::RefCell;
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
-use mlua::{Lua, Table, Value};
+use mlua::{Lua, MultiValue, Table, Value};
 
-use crate::runtime::config_vm;
+use crate::bindings::{self, BindingCtx, ConfigValues, RequestData, ResponseWriter};
+use crate::limits::{KillReason, LimitConfig, RuntimeError};
+use crate::runtime::{config_vm, RequestVm, ScriptRuntime};
 
 /// One `routes` table row (`{ method = …, route = …, script = … }`); `script`
 /// is as written in the config — the caller composes it against `script_dir`.
@@ -359,4 +363,326 @@ fn read_routes(lua: &Lua) -> Result<Vec<LuaRouteSpec>, String> {
 fn format_lua_number(n: f64) -> String {
     let s = format!("{n}");
     s.strip_suffix(".0").map_or_else(|| s.clone(), String::from)
+}
+
+// ── The request-serving environment ─────────────────────────────────────────
+
+/// The long-lived Lua environment the shell owns: the hardened
+/// [`ScriptRuntime`], the configured init script, the JWT secret, and the
+/// `config`-table values. Every entry point builds a fresh request VM
+/// (isolation is across requests), installs the bindings, executes the init
+/// script from the bytecode cache, and runs the hook or route chunk.
+pub struct LuaEnv {
+    runtime: ScriptRuntime,
+    init_script: Option<PathBuf>,
+    jwt_secret: String,
+    config: ConfigValues,
+}
+
+/// Which hooks the init script defines — probed once at boot and frozen
+/// (`AppState`); a hook added post-boot takes effect only on restart.
+#[derive(Debug, Clone, Copy)]
+pub struct HookProbes {
+    pub pre_flight: bool,
+    pub file_pre_flight: bool,
+}
+
+/// A preflight hook's answer.
+pub enum PreflightReply {
+    /// The validated permission string + the open kv channel (`infile`,
+    /// `watermark`, `size`, auth-service keys …).
+    Decision {
+        permission: String,
+        kv: Vec<(String, String)>,
+    },
+    /// The hook answered the request itself (`sendStatus` was called) —
+    /// render this verbatim instead of dispatching on a permission.
+    Direct {
+        status: u16,
+        headers: Vec<(String, String)>,
+        body: Vec<u8>,
+    },
+}
+
+/// Why a preflight call produced no reply. `Killed` maps to the kill path
+/// (500, never cached); `Error` is logged here and maps to a bare 500.
+#[derive(Debug)]
+pub enum PreflightFailure {
+    Killed(KillReason),
+    Error(String),
+}
+
+impl LuaEnv {
+    pub fn new(
+        script_dir: PathBuf,
+        init_script: Option<PathBuf>,
+        jwt_secret: String,
+        limits: LimitConfig,
+        config: ConfigValues,
+    ) -> Self {
+        Self {
+            runtime: ScriptRuntime::new(script_dir, limits),
+            init_script,
+            jwt_secret,
+            config,
+        }
+    }
+
+    pub fn config(&self) -> &ConfigValues {
+        &self.config
+    }
+
+    /// Builds a request VM with the bindings installed and the init script
+    /// executed (through the bytecode cache).
+    fn vm_with_bindings(
+        &self,
+        mut req: RequestData,
+        writer: ResponseWriter,
+    ) -> Result<(RequestVm, Rc<RefCell<ResponseWriter>>), RuntimeError> {
+        req.jwt_secret = self.jwt_secret.clone();
+        let vm = self.runtime.request_vm()?;
+        let response = Rc::new(RefCell::new(writer));
+        let ctx = BindingCtx {
+            request: Rc::new(req),
+            response: Rc::clone(&response),
+            config: Rc::new(self.config.clone()),
+        };
+        bindings::install(&vm, &ctx).map_err(|e| RuntimeError::Setup(e.to_string()))?;
+        if let Some(init) = &self.init_script {
+            let chunk = self
+                .runtime
+                .cache()
+                .load_function(vm.lua(), init)
+                .map_err(|e| RuntimeError::Setup(e.to_string()))?;
+            vm.run(|_| chunk.call::<()>(()))?;
+        }
+        Ok((vm, response))
+    }
+
+    /// A throwaway writer for VMs whose output nobody reads (probes).
+    fn null_writer() -> ResponseWriter {
+        ResponseWriter::new(Box::new(|_, _| {}), Box::new(|_| Ok(())))
+    }
+
+    /// Boot-time probe: runs the init script under the request-VM limit
+    /// profile (an honest canary) and reports which hooks it defines. An
+    /// init-script *error* is fatal — the caller refuses startup (fail
+    /// closed); a hook genuinely not defined is the legitimate no-preflight
+    /// mode.
+    pub fn probe_hooks(&self) -> Result<HookProbes, RuntimeError> {
+        let (vm, _response) = self.vm_with_bindings(RequestData::default(), Self::null_writer())?;
+        let is_function = |name: &str| -> bool {
+            matches!(
+                vm.lua().globals().get::<Value>(name),
+                Ok(Value::Function(_))
+            )
+        };
+        Ok(HookProbes {
+            pre_flight: is_function("pre_flight"),
+            file_pre_flight: is_function("file_pre_flight"),
+        })
+    }
+
+    /// The IIIF `pre_flight` hook: `pre_flight(prefix, identifier, cookie)`.
+    pub fn preflight(
+        &self,
+        req: RequestData,
+        prefix: &str,
+        identifier: &str,
+    ) -> Result<PreflightReply, PreflightFailure> {
+        let cookie = raw_cookie_header(&req);
+        self.run_hook(
+            req,
+            "pre_flight",
+            (prefix.to_string(), identifier.to_string(), cookie),
+            /*extended=*/ true,
+        )
+    }
+
+    /// The `/file` `file_pre_flight` hook: `file_pre_flight(filepath, cookie)`
+    /// (narrower permission set — no clickthrough/kiosk/external).
+    pub fn file_preflight(
+        &self,
+        req: RequestData,
+        filepath: &str,
+    ) -> Result<PreflightReply, PreflightFailure> {
+        let cookie = raw_cookie_header(&req);
+        self.run_hook(
+            req,
+            "file_pre_flight",
+            (filepath.to_string(), cookie),
+            /*extended=*/ false,
+        )
+    }
+
+    fn run_hook(
+        &self,
+        req: RequestData,
+        funcname: &str,
+        args: impl mlua::IntoLuaMulti,
+        extended: bool,
+    ) -> Result<PreflightReply, PreflightFailure> {
+        // The hook's own response, buffered (a preflight direct response is a
+        // script's error/redirect page, never a streamed body).
+        let head: Head = Rc::default();
+        let body: Rc<RefCell<Vec<u8>>> = Rc::default();
+        let commit_head = Rc::clone(&head);
+        let write_body = Rc::clone(&body);
+        let writer = ResponseWriter::new(
+            Box::new(move |status, headers| {
+                *commit_head.borrow_mut() = Some((status, headers));
+            }),
+            Box::new(move |data| {
+                write_body.borrow_mut().extend_from_slice(data);
+                Ok(())
+            }),
+        );
+
+        let (vm, response) = self.vm_with_bindings(req, writer).map_err(|e| match e {
+            RuntimeError::Killed(k) => PreflightFailure::Killed(k),
+            other => PreflightFailure::Error(other.to_string()),
+        })?;
+
+        let result = vm.run(|lua| {
+            // Fetching the hook inside the run: a hook that vanished after the
+            // boot-frozen probe is a request-time error (fail closed).
+            let hook: mlua::Function = lua.globals().get(funcname)?;
+            hook.call::<MultiValue>(args)
+        });
+
+        let rvals = match result {
+            Err(RuntimeError::Killed(k)) => return Err(PreflightFailure::Killed(k)),
+            Err(other) => {
+                // A hook that failed but already answered the request itself
+                // still resolves to its direct response (the historical
+                // `return false` after `sendStatus`).
+                if response.borrow().status_was_set() {
+                    return Ok(direct_reply(&response, &head, &body));
+                }
+                tracing::error!(hook = funcname, error = %other, "Lua hook failed");
+                return Err(PreflightFailure::Error(other.to_string()));
+            }
+            Ok(rvals) => rvals,
+        };
+
+        // A written response wins over the returned values.
+        if response.borrow().status_was_set() {
+            return Ok(direct_reply(&response, &head, &body));
+        }
+
+        match parse_preflight_values(&rvals, funcname, extended) {
+            Ok((permission, kv)) => Ok(PreflightReply::Decision { permission, kv }),
+            Err(msg) => {
+                tracing::error!(hook = funcname, "{msg}");
+                Err(PreflightFailure::Error(msg))
+            }
+        }
+    }
+}
+
+fn raw_cookie_header(req: &RequestData) -> String {
+    req.headers
+        .iter()
+        .find(|(name, _)| name == "cookie")
+        .map(|(_, value)| value.clone())
+        .unwrap_or_default()
+}
+
+type Head = Rc<RefCell<Option<(u16, Vec<(String, String)>)>>>;
+
+fn direct_reply(
+    response: &Rc<RefCell<ResponseWriter>>,
+    head: &Head,
+    body: &Rc<RefCell<Vec<u8>>>,
+) -> PreflightReply {
+    // Committed (the hook printed a body): the captured head + body.
+    // Uncommitted (sendStatus/sendHeader only): the writer's snapshot.
+    let (status, headers) = head
+        .borrow()
+        .clone()
+        .unwrap_or_else(|| response.borrow().head_snapshot());
+    PreflightReply::Direct {
+        status,
+        headers,
+        body: std::mem::take(&mut body.borrow_mut()),
+    }
+}
+
+/// The permission vocabulary: base set + the IIIF-only extensions.
+fn valid_permission(s: &str, extended: bool) -> bool {
+    matches!(s, "allow" | "login" | "restrict" | "deny")
+        || (extended && matches!(s, "clickthrough" | "kiosk" | "external"))
+}
+
+/// Port of the preflight return-shape parsing: the permission is a bare
+/// string or a table carrying `type` plus extra string keys; every non-deny
+/// permission requires an infile string as the second value.
+fn parse_preflight_values(
+    rvals: &MultiValue,
+    funcname: &str,
+    extended: bool,
+) -> Result<(String, Vec<(String, String)>), String> {
+    let mut kv: Vec<(String, String)> = Vec::new();
+    let Some(perm_val) = rvals.iter().next() else {
+        return Err(format!(
+            "Lua function {funcname} must return at least one value"
+        ));
+    };
+    let permission = match perm_val {
+        Value::String(s) => s.to_string_lossy(),
+        Value::Table(t) => {
+            let type_val: Value = t.get("type").map_err(|e| e.to_string())?;
+            let Value::String(type_str) = type_val else {
+                return Err(if matches!(type_val, Value::Nil) {
+                    format!("The permission value returned by Lua function {funcname} has no type field!")
+                } else {
+                    format!("The permission 'type' returned by Lua function {funcname} must be a string")
+                });
+            };
+            for pair in t.pairs::<Value, Value>() {
+                let (key, value) = pair.map_err(|e| e.to_string())?;
+                let Value::String(key) = key else { continue };
+                let key = key.to_string_lossy();
+                if key == "type" {
+                    continue;
+                }
+                let Value::String(value) = value else {
+                    return Err(format!(
+                        "The '{key}' value returned by Lua function {funcname} must be a string"
+                    ));
+                };
+                kv.push((key, value.to_string_lossy()));
+            }
+            type_str.to_string_lossy()
+        }
+        _ => {
+            return Err(format!(
+                "The permission value returned by Lua function {funcname} was not valid"
+            ));
+        }
+    };
+
+    if !valid_permission(&permission, extended) {
+        return Err(format!(
+            "The permission returned by Lua function {funcname} is not valid: {permission}"
+        ));
+    }
+
+    if permission == "deny" {
+        kv.push(("infile".to_string(), String::new()));
+    } else {
+        let Some(infile_val) = rvals.iter().nth(1) else {
+            return Err(format!(
+                "Lua function {funcname} returned other permission than 'deny', but it did not return a file path"
+            ));
+        };
+        let Value::String(infile) = infile_val else {
+            return Err(format!(
+                "The file path returned by Lua function {funcname} was not a string"
+            ));
+        };
+        kv.push(("infile".to_string(), infile.to_string_lossy()));
+    }
+
+    Ok((permission, kv))
 }

@@ -15,9 +15,7 @@
 
 #include "SipiImage.h"// SipiImage::read_shape (sipi_image_dims)
 #include "ffi/engine_context.h"
-#include "ffi/lua_config.h"// make_lua_server (sipi_has_preflight)
 #include "ffi/metrics_snapshot.h"
-#include "ffi/preflight.h"
 #include "ffi/response_sink.h"// FfiResponseSink (sipi_preflight / sipi_file_preflight)
 #include "ffi/run_lua_route.h"
 #include "ffi/serve_image.h"
@@ -103,63 +101,6 @@ int sipi_phase_count(void) { return SIPI_PHASE_COUNT; }
 const char *sipi_build_version(void) { return VERSION; }
 
 const char *sipi_build_commit(void) { return BUILD_SCM_REVISION; }
-
-int sipi_preflight(const char *prefix,
-  const char *identifier,
-  SipiRequestContext *ctx,
-  SipiPermType *type,
-  SipiKVFn emit_kv,
-  void *kv_ctx,
-  const SipiResponse *resp)
-{
-  // Same build/apply/guard shape as the serve entries: build_preflight runs the
-  // Lua hook against the caller's request context and every fallible step (VM
-  // build, execution, result validation) before anything is committed;
-  // apply_preflight is the only code that touches the C output channel (the type
-  // out-param + the kv callback); all under the no-throw guard. The opaque
-  // SipiRequestContext is the C++ shttps::RequestContext the caller built.
-  //
-  // A non-NULL resp wires ctx.response for the call's duration, scoped to this
-  // stack frame so the reference FfiResponseSink holds never outlives it: a
-  // pre_flight script that emits a response directly (server.sendStatus/
-  // sendHeader/print) writes through it instead of dereferencing a NULL sink.
-  return Sipi::ffi::sipi_guard([&] {
-    auto &rc = *reinterpret_cast<shttps::RequestContext *>(ctx);
-    std::optional<Sipi::ffi::FfiResponseSink> sink;
-    if (resp != nullptr) {
-      sink.emplace(*resp);
-      rc.response = &*sink;
-    }
-    auto result = Sipi::ffi::build_preflight(prefix, identifier, rc);
-    if (!result) { return static_cast<int>(result.error()); }
-    Sipi::ffi::apply_preflight(std::move(*result), type, emit_kv, kv_ctx);
-    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
-  });
-}
-
-int sipi_file_preflight(const char *filepath,
-  SipiRequestContext *ctx,
-  SipiPermType *type,
-  SipiKVFn emit_kv,
-  void *kv_ctx,
-  const SipiResponse *resp)
-{
-  // The /file media-serving preflight; identical shape to sipi_preflight
-  // (including the resp-wiring above), runs the file_pre_flight hook over a
-  // resolved filepath.
-  return Sipi::ffi::sipi_guard([&] {
-    auto &rc = *reinterpret_cast<shttps::RequestContext *>(ctx);
-    std::optional<Sipi::ffi::FfiResponseSink> sink;
-    if (resp != nullptr) {
-      sink.emplace(*resp);
-      rc.response = &*sink;
-    }
-    auto result = Sipi::ffi::build_file_preflight(filepath, rc);
-    if (!result) { return static_cast<int>(result.error()); }
-    Sipi::ffi::apply_preflight(std::move(*result), type, emit_kv, kv_ctx);
-    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
-  });
-}
 
 int sipi_run_lua_route(const char *script, SipiRequestContext *ctx, const SipiResponse *resp)
 {
@@ -452,30 +393,6 @@ void sipi_request_context_set_docroot(SipiRequestContext *ctx, const char *docro
     reinterpret_cast<shttps::RequestContext *>(ctx)->docroot = nz(docroot);
   } catch (...) {
   }
-}
-
-int sipi_has_preflight(int *out)
-{
-  // Build a VM from the engine Lua config (which runs the init script, defining
-  // the hooks) and check whether pre_flight is defined — the Rust analog of the
-  // C++ luaserver.luaFunctionExists gate. Builds a VM, so the shell calls this
-  // once at startup. An empty context suffices (we only inspect the globals).
-  return Sipi::ffi::sipi_guard([&] {
-    shttps::RequestContext ctx;
-    auto vm = Sipi::ffi::make_lua_server(ctx);
-    *out = vm->luaFunctionExists("pre_flight") ? 1 : 0;
-    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
-  });
-}
-
-int sipi_has_file_preflight(int *out)
-{
-  return Sipi::ffi::sipi_guard([&] {
-    shttps::RequestContext ctx;
-    auto vm = Sipi::ffi::make_lua_server(ctx);
-    *out = vm->luaFunctionExists("file_pre_flight") ? 1 : 0;
-    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
-  });
 }
 
 void sipi_set_log_trace_context(const char *trace_id, const char *span_id)

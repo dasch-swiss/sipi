@@ -82,7 +82,12 @@ fn cache_does_not_leak_across_credentials() {
     let srv = start_cached();
     let c = http_client();
     let url = format!("{}/auth/lena512.jp2/full/max/0/default.jpg", srv.base_url);
-    let token = create_jwt(&json!({ "allow": true }), JWT_SECRET);
+    let exp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        + 3600;
+    let token = create_jwt(&json!({ "allow": true, "exp": exp }), JWT_SECRET);
 
     // Authenticated → allow (200), cached under the token's credential key.
     let authed = c
