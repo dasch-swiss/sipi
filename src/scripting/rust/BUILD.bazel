@@ -8,7 +8,7 @@ symbol set in the final binary. Colocated component-first / language-second
 with the C++ `//src/scripting` package (the ADR-0021 pattern).
 """
 
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//src:__subpackages__"])
 
@@ -54,6 +54,22 @@ rust_test(
         "@crates//:mlua",
         "@crates//:tempfile",
     ],
+)
+
+# Per-request Lua VM cost, Rust side (manual, `-c opt`, never CI-gated) —
+# paired with //src/scripting:luaserver_benchmark; run both on the same
+# machine and compare medians.
+rust_binary(
+    name = "runtime_benchmark",
+    testonly = True,
+    srcs = ["runtime_benchmark.rs"],
+    data = [
+        "//config:configs",
+        "//scripts:all_scripts",
+    ],
+    edition = "2021",
+    tags = ["manual"],
+    deps = [":scripting"],
 )
 
 # Lua config-parse tests: the shipped config/sipi.config.lua resolves to the
