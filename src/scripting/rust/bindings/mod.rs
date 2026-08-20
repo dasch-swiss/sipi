@@ -150,6 +150,7 @@ pub type WriteFn = Box<dyn FnMut(&[u8]) -> Result<(), ClientGone>>;
 /// channel, tests wire them to buffers.
 pub struct ResponseWriter {
     status: u16,
+    status_set: bool,
     headers: Vec<(String, String)>,
     cookies: Vec<ResponseCookie>,
     committed: bool,
@@ -161,6 +162,7 @@ impl ResponseWriter {
     pub fn new(commit: CommitFn, write: WriteFn) -> Self {
         Self {
             status: 200,
+            status_set: false,
             headers: Vec::new(),
             cookies: Vec::new(),
             committed: false,
@@ -171,6 +173,23 @@ impl ResponseWriter {
 
     pub fn set_status(&mut self, status: u16) {
         self.status = status;
+        self.status_set = true;
+    }
+
+    /// Whether the script called `sendStatus` at all — the historical
+    /// criterion for a preflight hook having answered the request itself.
+    pub fn status_was_set(&self) -> bool {
+        self.status_set
+    }
+
+    /// The current head (status + headers + rendered cookies) without
+    /// consuming the writer — the uncommitted direct-response snapshot.
+    pub fn head_snapshot(&self) -> (u16, Vec<(String, String)>) {
+        let mut headers = self.headers.clone();
+        for cookie in &self.cookies {
+            headers.push(("Set-Cookie".to_string(), cookie.render()));
+        }
+        (self.status, headers)
     }
 
     pub fn add_header(&mut self, name: String, value: String) {

@@ -23,6 +23,9 @@ pub mod entry;
 pub mod limits;
 pub mod runtime;
 
-pub use entry::{parse_config_file, LuaConfigFile, LuaRouteSpec, LuaScalingQuality};
+pub use entry::{
+    parse_config_file, HookProbes, LuaConfigFile, LuaEnv, LuaRouteSpec, LuaScalingQuality,
+    PreflightFailure, PreflightReply,
+};
 pub use limits::{kill_stats, Deadline, KillReason, KillStats, LimitConfig, RuntimeError};
 pub use runtime::{config_vm, BytecodeCache, LoadError, RequestVm, ScriptRuntime};

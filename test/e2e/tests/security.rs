@@ -43,11 +43,12 @@ fn jwt_expired_token() {
         .expect("expired JWT request failed");
 
     let status = resp.status().as_u16();
-    // Current behavior: expired JWT is accepted (200) because Lua only checks `allow`
-    // Ideal behavior would be 401, but documenting as-is.
+    // decode_jwt validates `exp` (ADR-0023): the expired token is rejected.
+    // The 500 is this test hook's own decode-failure shape (it sendStatus(500)s
+    // on a failed decode) — the point pinned here is that access is refused.
     assert_eq!(
-        status, 200,
-        "KNOWN: sipi accepts expired JWT (no exp check in Lua handler), got {}",
+        status, 500,
+        "expired JWT must be rejected by decode_jwt, got {}",
         status
     );
 }

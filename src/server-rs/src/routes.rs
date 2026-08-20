@@ -54,6 +54,10 @@ pub struct AppState {
     prefix_as_path: bool,
     has_preflight: bool,
     has_file_preflight: bool,
+    /// The Rust-hosted Lua environment (hardened runtime + init script +
+    /// config-table values) behind the preflight hooks. `None` when no config
+    /// is installed.
+    lua: Option<Arc<scripting::LuaEnv>>,
     /// The two-lane admission pool: classifies each request tile/full and bounds
     /// concurrency (global pool + full sub-pool). Owns the per-partition wait/shed
     /// counters. Shared (`Arc`) across all requests. See
@@ -86,11 +90,20 @@ impl AppState {
     /// Lua config, where the routes are read back from the engine via
     /// [`ffi::routes`] after `sipi_init` installed them.
     ///
+    /// `lua` is the Rust-hosted Lua environment (hardened runtime + init
+    /// script + config-table values); `has_preflight`/`has_file_preflight`
+    /// are its boot-frozen hook probes.
+    ///
     /// `nthreads`/`max_waiting`/`queue_timeout` are the
     /// `--nthreads`/`--max-waiting`/`--queue-timeout` serve knobs (`None` → the
     /// defaults below).
+    // Startup glue with one parameter per serve knob (like `serve()` in
+    // lib.rs); a config struct would just relocate the list.
+    #[allow(clippy::too_many_arguments)]
     pub fn load(
         configured_routes: Option<Vec<ffi::RouteEntry>>,
+        lua: Option<Arc<scripting::LuaEnv>>,
+        hook_probes: Option<scripting::HookProbes>,
         nthreads: Option<u32>,
         tiles_thread_ratio: Option<f64>,
         max_waiting: Option<u64>,
@@ -146,10 +159,11 @@ impl AppState {
                     imgroot,
                     resolved_imgroot,
                     prefix_as_path,
-                    // A failed hook probe (engine error) disables preflight rather
-                    // than failing startup — the same effect as "no hook defined".
-                    has_preflight: ffi::has_preflight().unwrap_or(false),
-                    has_file_preflight: ffi::has_file_preflight().unwrap_or(false),
+                    // Boot-frozen hook probes (an init-script error already
+                    // refused startup in lib.rs — fail closed).
+                    has_preflight: hook_probes.is_some_and(|p| p.pre_flight),
+                    has_file_preflight: hook_probes.is_some_and(|p| p.file_pre_flight),
+                    lua,
                     admission,
                     // TOML config supplies routes directly; a Lua config has them
                     // read back from the engine via the seam.
@@ -168,6 +182,7 @@ impl AppState {
                     prefix_as_path: true,
                     has_preflight: false,
                     has_file_preflight: false,
+                    lua: None,
                     admission,
                     routes: Vec::new(),
                     max_post_size: 0,
@@ -478,26 +493,37 @@ fn iiif_access(
             }
         }
 
-        let ctx = build_ctx(method, uri, headers)
-            .ok_or_else(|| Box::new(sink::error_response(StatusCode::BAD_REQUEST)))?;
-        // Run the hook under a `sipi.preflight` span and stamp the outbound
-        // `traceparent` from it, so the hook's dsp-api call nests under this span.
-        // (Engine log lines stay correlated to the parent `sipi.serve` span — the
-        // scopes clear on drop rather than restore, so re-stamping the log context
-        // here would need a save/restore stack; same trace either way.)
-        let result = {
+        let lua = state
+            .lua
+            .as_ref()
+            .ok_or_else(|| Box::new(sink::error_response(StatusCode::INTERNAL_SERVER_ERROR)))?;
+        // Run the hook under a `sipi.preflight` span; the outbound traceparent
+        // rides on the request data (host-side injection, ADR-0017), so the
+        // hook's dsp-api call nests under this span.
+        let reply = {
             let _span = tracing::info_span!("sipi.preflight").entered();
-            let _tp =
-                crate::telemetry::current_traceparent().map(|tp| ffi::OutboundTraceScope::set(&tp));
-            ffi::preflight(&parsed.prefix, &parsed.identifier, &ctx)
-        }
-        .map_err(|_| Box::new(sink::error_response(StatusCode::INTERNAL_SERVER_ERROR)))?;
-        if let Some(dr) = result.direct_response {
-            return Err(Box::new(preflight_direct_response(dr)));
-        }
-        let outcome = result
-            .outcome
-            .expect("a preflight Ok result always carries a direct response or an outcome");
+            let req = build_request_data(method, uri, headers);
+            lua.preflight(req, &parsed.prefix, &parsed.identifier)
+        };
+        let outcome = match reply {
+            Ok(scripting::PreflightReply::Decision { permission, kv }) => PreflightOutcome {
+                permission: permission_from_str(&permission),
+                kv,
+            },
+            Ok(scripting::PreflightReply::Direct {
+                status,
+                headers,
+                body,
+            }) => {
+                return Err(Box::new(sink::direct_response(status, headers, body)));
+            }
+            // A killed or failed hook is a bare 500 and is never cached.
+            Err(_) => {
+                return Err(Box::new(sink::error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                )));
+            }
+        };
         if let (Some(cache), Some(key)) = (state.preflight_cache.as_ref(), cache_key.as_ref()) {
             cache.insert(
                 key,
@@ -546,36 +572,85 @@ fn file_access(
             kv: Vec::new(),
         });
     }
-    let ctx = build_ctx(method, uri, headers)
-        .ok_or_else(|| Box::new(sink::error_response(StatusCode::BAD_REQUEST)))?;
-    // Run the hook under a `sipi.file_preflight` span and stamp the outbound
-    // `traceparent` from it, so the hook's dsp-api call nests under this span.
-    // (Engine log lines stay correlated to the parent `sipi.serve` span — see the
-    // note in `iiif_access`.)
-    let result = {
+    let lua = state
+        .lua
+        .as_ref()
+        .ok_or_else(|| Box::new(sink::error_response(StatusCode::INTERNAL_SERVER_ERROR)))?;
+    // Run the hook under a `sipi.file_preflight` span; the outbound
+    // traceparent rides on the request data (host-side injection, ADR-0017).
+    let reply = {
         let _span = tracing::info_span!("sipi.file_preflight").entered();
-        let _tp =
-            crate::telemetry::current_traceparent().map(|tp| ffi::OutboundTraceScope::set(&tp));
-        ffi::file_preflight(&built, &ctx)
-    }
-    .map_err(|_| Box::new(sink::error_response(StatusCode::INTERNAL_SERVER_ERROR)))?;
-    if let Some(dr) = result.direct_response {
-        return Err(Box::new(preflight_direct_response(dr)));
-    }
-    let outcome = result
-        .outcome
-        .expect("a preflight Ok result always carries a direct response or an outcome");
+        let req = build_request_data(method, uri, headers);
+        lua.file_preflight(req, &built)
+    };
+    let outcome = match reply {
+        Ok(scripting::PreflightReply::Decision { permission, kv }) => PreflightOutcome {
+            permission: permission_from_str(&permission),
+            kv,
+        },
+        Ok(scripting::PreflightReply::Direct {
+            status,
+            headers,
+            body,
+        }) => {
+            return Err(Box::new(sink::direct_response(status, headers, body)));
+        }
+        Err(_) => {
+            return Err(Box::new(sink::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+            )));
+        }
+    };
     match outcome.permission {
         SipiPermType::Allow | SipiPermType::Restrict => Ok(access_from(outcome)),
         _ => Err(Box::new(sink::error_response(StatusCode::UNAUTHORIZED))),
     }
 }
 
-/// Render a hook-emitted direct response (see [`ffi::DirectResponse`]) as the
-/// final HTTP response, verbatim — the hook chose to answer the request
-/// itself, so neither caller falls through to its own permission dispatch.
-fn preflight_direct_response(dr: ffi::DirectResponse) -> Response {
-    sink::direct_response(dr.status, dr.headers, dr.body)
+/// Map a validated permission string (the hook's vocabulary) onto the seam
+/// enum the serve paths dispatch on.
+fn permission_from_str(s: &str) -> SipiPermType {
+    match s {
+        "allow" => SipiPermType::Allow,
+        "login" => SipiPermType::Login,
+        "clickthrough" => SipiPermType::Clickthrough,
+        "kiosk" => SipiPermType::Kiosk,
+        "external" => SipiPermType::External,
+        "restrict" => SipiPermType::Restrict,
+        _ => SipiPermType::Deny,
+    }
+}
+
+/// The request as the Lua bindings see it: lowercase header names (axum
+/// guarantees them), one entry per cookie with original-case names
+/// (DEV-6119), and the host-injected outbound traceparent.
+fn build_request_data(
+    method: &Method,
+    uri: &Uri,
+    headers: &HeaderMap,
+) -> scripting::bindings::RequestData {
+    let header_vec: Vec<(String, String)> = headers
+        .iter()
+        .filter_map(|(n, v)| {
+            v.to_str()
+                .ok()
+                .map(|v| (n.as_str().to_owned(), v.to_owned()))
+        })
+        .collect();
+    let cookies = parse_cookies(headers);
+    let (_scheme, host) = forwarded(headers);
+    scripting::bindings::RequestData {
+        method: method.as_str().to_owned(),
+        client_ip: client_ip(headers),
+        client_port: 0,
+        secure: false,
+        host,
+        uri: uri.path().to_owned(),
+        headers: header_vec,
+        cookies,
+        traceparent: crate::telemetry::current_traceparent(),
+        ..Default::default()
+    }
 }
 
 /// Fold a [`PreflightOutcome`] into an [`Access`], taking the hook's `infile`
@@ -1636,32 +1711,6 @@ fn redirect(headers: &HeaderMap, parsed: &ParsedRequest) -> Response {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-
-/// Build the preflight request context from the axum request: all headers
-/// (lowercased C-side), the parsed cookies, host, and client IP. `secure` is
-/// false (SIPI runs plain HTTP behind Traefik, matching the C++ `conn.secure()`).
-fn build_ctx(method: &Method, uri: &Uri, headers: &HeaderMap) -> Option<ffi::RequestContext> {
-    let header_vec: Vec<(String, String)> = headers
-        .iter()
-        .filter_map(|(n, v)| {
-            v.to_str()
-                .ok()
-                .map(|v| (n.as_str().to_owned(), v.to_owned()))
-        })
-        .collect();
-    let cookies = parse_cookies(headers);
-    let (_scheme, host) = forwarded(headers);
-    ffi::build_request_context(ffi::RequestFields {
-        method: method.as_str(),
-        client_ip: &client_ip(headers),
-        client_port: 0,
-        secure: false,
-        host: &host,
-        uri: uri.path(),
-        headers: &header_vec,
-        cookies: &cookies,
-    })
-}
 
 /// Parse the `Cookie` header into name/value pairs (the parsed map the Lua
 /// `server.cookies` binding reads) via the `cookie` crate's RFC 6265 splitter.

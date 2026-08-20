@@ -243,11 +243,59 @@ async fn server_main(
             }
         };
 
+    // The Rust-hosted Lua environment: hardened runtime + init script + the
+    // config-table values, built from the resolved config. The boot probe runs
+    // the init script under the request-VM limit profile; an init-script error
+    // refuses startup (fail closed — the old probes failed open, silently
+    // disabling authorization). A hook genuinely not defined is the legitimate
+    // no-preflight mode. Probe results are boot-frozen.
+    let (lua_env, hook_probes) = if configured_routes.is_some() {
+        let limits = match scripting::LimitConfig::from_env() {
+            Ok(l) => l,
+            Err(e) => {
+                tracing::error!(error = %e, "invalid Lua limit knob");
+                flush_telemetry(otel).await;
+                return ExitCode::FAILURE;
+            }
+        };
+        let env = std::sync::Arc::new(scripting::LuaEnv::new(
+            std::path::PathBuf::from(effective.scriptdir.clone().unwrap_or_default()),
+            effective
+                .initscript
+                .clone()
+                // "." is the schema default a Lua config without `initscript`
+                // resolves to — a placeholder for "none", not a script path.
+                .filter(|p| !p.is_empty() && p != ".")
+                .map(std::path::PathBuf::from),
+            effective.jwtkey.clone().unwrap_or_default(),
+            limits,
+            lua_config_values(&effective),
+        ));
+        let probes = match env.probe_hooks() {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::error!(error = %e, "init script failed — refusing startup (fail closed)");
+                flush_telemetry(otel).await;
+                return ExitCode::FAILURE;
+            }
+        };
+        tracing::info!(
+            pre_flight = probes.pre_flight,
+            file_pre_flight = probes.file_pre_flight,
+            "Lua runtime installed"
+        );
+        (Some(env), Some(probes))
+    } else {
+        (None, None)
+    };
+
     let drain_deadline = Duration::from_secs(drain_timeout.unwrap_or(30));
     let result = serve(
         effective.serverport,
         drain_deadline,
         configured_routes,
+        lua_env,
+        hook_probes,
         nthreads,
         tiles_thread_ratio,
         max_waiting,
@@ -374,6 +422,8 @@ async fn serve(
     port: Option<u16>,
     drain_timeout: Duration,
     configured_routes: Option<Vec<ffi::RouteEntry>>,
+    lua_env: Option<std::sync::Arc<scripting::LuaEnv>>,
+    hook_probes: Option<scripting::HookProbes>,
     nthreads: Option<u32>,
     tiles_thread_ratio: Option<f64>,
     max_waiting: Option<u64>,
@@ -390,6 +440,8 @@ async fn serve(
     let state = Arc::new(
         routes::AppState::load(
             configured_routes,
+            lua_env,
+            hook_probes,
             nthreads,
             tiles_thread_ratio,
             max_waiting,
@@ -506,6 +558,51 @@ async fn favicon() -> impl IntoResponse {
     )
 }
 
+/// The Lua `config`-table values, resolved from the merged config with the
+/// engine-config defaults (what the deleted C++ `SipiConf` getters exposed).
+fn lua_config_values(effective: &ServerOverrides) -> scripting::bindings::ConfigValues {
+    let size_bytes = |raw: &Option<String>, default: i64| -> i64 {
+        raw.as_deref()
+            .and_then(|s| scripting::entry::parse_size_string(s).ok())
+            .unwrap_or(default)
+    };
+    scripting::bindings::ConfigValues {
+        hostname: effective
+            .hostname
+            .clone()
+            .unwrap_or_else(|| "localhost".into()),
+        port: effective.serverport.map_or(3333, i64::from),
+        sslport: effective.sslport.map_or(-1, i64::from),
+        imgroot: effective.imgroot.clone().unwrap_or_else(|| ".".into()),
+        max_temp_file_age: effective.maxtmpage.map_or(86400, i64::from),
+        prefix_as_path: effective.pathprefix.unwrap_or(true),
+        init_script: effective.initscript.clone().unwrap_or_else(|| ".".into()),
+        cache_dir: effective
+            .cache_dir
+            .clone()
+            .unwrap_or_else(|| "./cache".into()),
+        cache_size: size_bytes(&effective.cache_size, 200 * 1024 * 1024),
+        jpeg_quality: effective.jpeg_quality.map_or(80, i64::from),
+        thumb_size: effective
+            .thumbsize
+            .clone()
+            .unwrap_or_else(|| "!128,128".into()),
+        cache_n_files: effective.cache_nfiles.map_or(200, i64::from),
+        max_post_size: size_bytes(&effective.maxpost, 0).max(0),
+        tmpdir: effective.tmpdir.clone().unwrap_or_else(|| "/tmp".into()),
+        scriptdir: effective
+            .scriptdir
+            .clone()
+            .unwrap_or_else(|| "./scripts".into()),
+        knora_path: effective
+            .knorapath
+            .clone()
+            .unwrap_or_else(|| "localhost".into()),
+        knora_port: effective.knoraport.clone().unwrap_or_else(|| "3333".into()),
+        docroot: effective.docroot.clone().unwrap_or_default(),
+    }
+}
+
 #[cfg(test)]
 mod app_tests {
     use super::*;
@@ -521,7 +618,7 @@ mod app_tests {
         // Defaults everywhere (ratios fall back to valid values), so `load` cannot
         // return the degenerate-ratio error here.
         app(Arc::new(
-            routes::AppState::load(None, None, None, None, None, None, None)
+            routes::AppState::load(None, None, None, None, None, None, None, None, None)
                 .expect("default admission config is valid"),
         ))
     }
