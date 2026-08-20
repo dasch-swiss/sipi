@@ -336,14 +336,6 @@ pub struct SipiImageDims {
 /// C string, so `sipi_mimetype` hands its result back through this callback.
 pub type SipiStrFn = extern "C" fn(ctx: *mut c_void, value: *const c_char);
 
-/// Emits one configured Lua route — method/route/script — (mirrors `SipiRouteFn`).
-pub type SipiRouteFn = extern "C" fn(
-    ctx: *mut c_void,
-    method: *const c_char,
-    route: *const c_char,
-    script: *const c_char,
-);
-
 /// Emits an image's Essentials-packet identity — original mimetype + original
 /// filename — together (mirrors `SipiEssentialsFn`). Called at most once: both
 /// strings are known together or not at all.
@@ -523,10 +515,7 @@ extern "C" {
     ///
     /// `pub(crate)` (unlike the sibling bindings): it names the crate-private
     /// `SipiServerConfig`, so wider visibility would trip `private_interfaces`.
-    pub(crate) fn sipi_init(
-        lua_config_path: *const c_char,
-        overrides: *const SipiServerConfig,
-    ) -> c_int;
+    pub(crate) fn sipi_init(overrides: *const SipiServerConfig) -> c_int;
 
     /// The configured image root (`resolved` = 0 → raw config value for the path
     /// build; 1 → realpath()-resolved root for the containment check). `*out` is
@@ -568,21 +557,11 @@ extern "C" {
     /// Returns 0, or 500 if `sipi_init` has not run.
     pub fn sipi_memory_limit_bytes(out: *mut usize) -> c_int;
 
-    /// The configured HTTP listen port (the Lua config `sipi.port`); a
-    /// fallback below `--serverport`/`SIPI_SERVERPORT`/`SIPI_RS_PORT`.
-    /// Returns 0, or 500 if `sipi_init` has not run.
-    pub fn sipi_port(out: *mut c_int) -> c_int;
-
     /// Snapshot the engine metrics singleton (cache /
     /// decode-memory / admission counters + gauges) into `out`, a caller-owned
     /// buffer. A pure `sipi_guard`-only read — no response sink, no fallible
     /// pre-commit step. Returns 0, or non-zero on an internal error.
     pub fn sipi_metrics_snapshot(out: *mut SipiMetricsSnapshot) -> c_int;
-
-    /// Enumerate the configured Lua routes (method/route/script) installed by
-    /// `sipi_init`, one `emit` call per route. Returns 0, or 500 if `sipi_init`
-    /// has not run.
-    pub fn sipi_routes(emit: SipiRouteFn, ctx: *mut c_void) -> c_int;
 
     /// Run a configured Lua route's script against `ctx`, emitting its response
     /// through `resp` (the streaming sink). Returns 0 once emitted, or an HTTP
@@ -811,20 +790,16 @@ pub fn link_self_check() -> i32 {
 /// run once before serving images. `overrides` carries the parsed CLI/env flags
 /// the engine layers over the loaded config. Returns the FFI status code on
 /// failure (non-zero).
-pub fn init(config_path: &str, overrides: &ServerOverrides) -> Result<(), i32> {
-    let c_path = match CString::new(config_path) {
-        Ok(p) => p,
-        Err(_) => return Err(-1), // interior NUL in the path
-    };
+pub fn init(overrides: &ServerOverrides) -> Result<(), i32> {
     let holder = match OverridesHolder::new(overrides) {
         Ok(h) => h,
         Err(_) => return Err(-1), // interior NUL in a config string value
     };
-    // SAFETY: `c_path` and `holder` both outlive this synchronous call; the
-    // engine deep-copies every present override during sipi_init, so none of the
-    // holder's pointers escape; the seam guards exceptions. `holder` is a local
-    // consumed inline, so it is not moved between `as_ptr()` and the call.
-    let code = unsafe { sipi_init(c_path.as_ptr(), holder.as_ptr()) };
+    // SAFETY: `holder` outlives this synchronous call; the engine deep-copies
+    // every present override during sipi_init, so none of the holder's pointers
+    // escape; the seam guards exceptions. `holder` is a local consumed inline,
+    // so it is not moved between `as_ptr()` and the call.
+    let code = unsafe { sipi_init(holder.as_ptr()) };
     if code == 0 {
         Ok(())
     } else {
@@ -969,19 +944,6 @@ pub fn memory_limit_bytes() -> Result<u64, i32> {
     Ok(v as u64)
 }
 
-/// The configured HTTP listen port (the Lua config `sipi.port`). Used only as
-/// a fallback below `--serverport`/`SIPI_SERVERPORT`/`SIPI_RS_PORT`. `Err`
-/// carries the FFI status (500 if `sipi_init` has not run).
-pub fn port() -> Result<u16, i32> {
-    let mut v: c_int = 0;
-    // SAFETY: `out` is a valid pointer; the seam guards exceptions.
-    let code = unsafe { sipi_port(&mut v) };
-    if code != 0 {
-        return Err(code);
-    }
-    Ok(v.clamp(0, i32::from(u16::MAX)) as u16)
-}
-
 /// Read the engine metrics singleton into a flat snapshot for the OTel meter.
 /// Returns `None` on an internal FFI error — the caller then observes nothing
 /// this collection cycle (fail-safe, never a panic on the collection thread).
@@ -997,61 +959,13 @@ pub fn metrics_snapshot() -> Option<SipiMetricsSnapshot> {
     }
 }
 
-/// One configured Lua route: HTTP method, the route prefix, and the resolved
-/// script path (already composed against scriptdir by the engine).
+/// One configured Lua route: HTTP method, the route prefix, and the script
+/// path (composed against the config's script dir by the config loader).
 #[derive(Clone)]
 pub struct RouteEntry {
     pub method: String,
     pub route: String,
     pub script: String,
-}
-
-/// Collects emitted routes into the `Vec<RouteEntry>` at `ctx`.
-extern "C" fn collect_route(
-    ctx: *mut c_void,
-    method: *const c_char,
-    route: *const c_char,
-    script: *const c_char,
-) {
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        // SAFETY: `ctx` is the `&mut Vec<RouteEntry>` passed to sipi_routes.
-        let out = unsafe { &mut *(ctx as *mut Vec<RouteEntry>) };
-        if method.is_null() || route.is_null() || script.is_null() {
-            return;
-        }
-        // SAFETY: the engine passes NUL-terminated C strings valid for the call.
-        let (method, route, script) = unsafe {
-            (
-                CStr::from_ptr(method).to_string_lossy().into_owned(),
-                CStr::from_ptr(route).to_string_lossy().into_owned(),
-                CStr::from_ptr(script).to_string_lossy().into_owned(),
-            )
-        };
-        out.push(RouteEntry {
-            method,
-            route,
-            script,
-        });
-    }));
-}
-
-/// The configured Lua routes installed by `sipi_init` (read once at startup; the
-/// shell registers an axum route per entry). `Err` carries the FFI status (500 if
-/// `sipi_init` has not run).
-pub fn routes() -> Result<Vec<RouteEntry>, i32> {
-    let mut out: Vec<RouteEntry> = Vec::new();
-    // SAFETY: `collect_route` writes into `out` via the ctx pointer; the seam
-    // guards exceptions.
-    let code = unsafe {
-        sipi_routes(
-            collect_route,
-            &mut out as *mut Vec<RouteEntry> as *mut c_void,
-        )
-    };
-    if code != 0 {
-        return Err(code);
-    }
-    Ok(out)
 }
 
 /// Header-only image shape for a validated path (no Essentials identity —

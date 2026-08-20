@@ -153,7 +153,7 @@ impl AppState {
                     admission,
                     // TOML config supplies routes directly; a Lua config has them
                     // read back from the engine via the seam.
-                    routes: configured_routes.unwrap_or_else(|| ffi::routes().unwrap_or_default()),
+                    routes: configured_routes.unwrap_or_default(),
                     max_post_size: ffi::max_post_size().unwrap_or(0),
                     // The fileserver docroot/wwwroute (empty when not configured →
                     // no static route registered).

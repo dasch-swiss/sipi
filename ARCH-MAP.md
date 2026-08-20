@@ -185,7 +185,7 @@ engine-side memory budget under one component. Supersedes the former
 ### ffi
 
 - **Paths:** `:(glob)src/ffi/**`
-- **Purpose:** The hand-mirrored `extern "C"` seam the Rust shell drives the C++ engine through — serve/preflight/lua-route entries, the engine-context install, the metrics snapshot, edge probes, and the shared `LibraryInitialiser`. Also hosts `SipiLua` (the `sipi.*` Lua bindings) and `sipi_init`.
+- **Purpose:** The hand-mirrored `extern "C"` seam the Rust shell drives the C++ engine through — serve/preflight/lua-route entries, the engine-context install, the metrics snapshot, edge probes, and the shared `LibraryInitialiser`. Also hosts `SipiLua` (the `sipi.*` Lua bindings) and `sipi_init`. Config parsing is NOT here: the shell parses both config flavors (TOML via `config_file.rs`, Lua via `//src/scripting/rust`) and `sipi_init` consumes only the resolved `SipiServerConfig` override channel.
 - **Key entities:** `sipi_serve_image`/`sipi_serve_file`/`sipi_init`/`sipi_preflight`/`sipi_run_lua_route`/`sipi_metrics_snapshot`/`sipi_cli_main` (defined in `cli`), `SipiResponse` (streamed sink), `SipiIiifParams`/`SipiServeRequest`/`SipiMetricsSnapshot` (`#[repr(C)]` mirrors), `EngineContext` + `set_engine_context`, `LibraryInitialiser`, `FfiResponseSink`
 - **Public interface:** `sipi_ffi.h` (`strip_include_prefix="/src"` → `#include "ffi/sipi_ffi.h"`), mirrored by hand in `src/server-rs/src/ffi.rs`.
 - **Local-context kit:** `src/ffi/sipi_ffi.h`, `src/ffi/serve_image.cpp`, `src/ffi/engine_context.{h,cpp}`, `src/ffi/init.cpp`, `src/ffi/metrics_snapshot.h`, `src/ffi/BUILD.bazel`, `src/server-rs/src/ffi.rs` (the Rust mirror)
@@ -195,7 +195,7 @@ engine-side memory budget under one component. Supersedes the former
   - `//src:engine` does **not** depend on this package (the seam drives the engine, never the reverse) — no cycle. *Enforcement: `structure`* (Bazel dep direction).
   - Every `#[repr(C)]` struct/enum crossing the seam is guarded on both sides: C++ `static_assert(sizeof/offsetof)` + Rust `offset_of!`/`size_of` layout tests (DUNE-002). *Enforcement: `structure`* on the C++ side (a drifted struct fails to compile) + `static-analysis` on the Rust side (test-time layout asserts run on the `//src/...` wildcard).
   - No C++ exception may cross the boundary — every `sipi_*` wraps in a catch-all (`sipi_guard`). *Enforcement: `review`*.
-- **Durable state:** `EngineContext` (file-static `g_engine`, single sink `set_engine_context`, sole installer `sipi_init`); the Lua config VM (`set_lua_config`, installed once by `sipi_init`).
+- **Durable state:** `EngineContext` (file-static `g_engine`, single sink `set_engine_context`, sole installer `sipi_init`); the per-request Lua VM factory config (`set_lua_config`, installed once by `sipi_init` — scriptdir/init-script source/JWT secret + globals installers; the config *parse* VM is gone, the shell parses configs Rust-side).
 
 ### cli
 

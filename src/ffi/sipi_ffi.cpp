@@ -47,32 +47,6 @@ shttps::HttpMethod parse_http_method(const char *method)
   return shttps::HttpMethod::OTHER;
 }
 
-// The canonical method name for a Lua-route enum value, the inverse of
-// parse_http_method — the string the Rust shell registers an axum route under.
-const char *http_method_name(shttps::HttpMethod m)
-{
-  switch (m) {
-  case shttps::HttpMethod::OPTIONS:
-    return "OPTIONS";
-  case shttps::HttpMethod::GET:
-    return "GET";
-  case shttps::HttpMethod::HEAD:
-    return "HEAD";
-  case shttps::HttpMethod::POST:
-    return "POST";
-  case shttps::HttpMethod::PUT:
-    return "PUT";
-  case shttps::HttpMethod::DELETE:
-    return "DELETE";
-  case shttps::HttpMethod::TRACE:
-    return "TRACE";
-  case shttps::HttpMethod::CONNECT:
-    return "CONNECT";
-  case shttps::HttpMethod::OTHER:
-    return "OTHER";
-  }
-  return "OTHER";// unreachable; the enum is exhaustively handled above
-}
 
 // Lower-case a header name, matching make_request_context (the Lua hooks look
 // headers up by their lower-cased name, e.g. ctx.headers["cookie"]).
@@ -340,17 +314,6 @@ int sipi_memory_limit_bytes(size_t *out)
   });
 }
 
-int sipi_port(int *out)
-{
-  // Guard-only edge probe — a pure read of the installed engine context. The
-  // Rust edge uses this only as a fallback below
-  // --serverport/SIPI_SERVERPORT/SIPI_RS_PORT.
-  return Sipi::ffi::sipi_guard([&] {
-    *out = Sipi::ffi::engine_context().port;
-    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
-  });
-}
-
 int sipi_image_dims(const char *resolved_path, SipiImageDims *out, SipiEssentialsFn emit, void *ctx)
 {
   // Header-only shape read. The Rust edge owns existence + containment (R1/R2)
@@ -489,22 +452,6 @@ void sipi_request_context_set_docroot(SipiRequestContext *ctx, const char *docro
     reinterpret_cast<shttps::RequestContext *>(ctx)->docroot = nz(docroot);
   } catch (...) {
   }
-}
-
-int sipi_routes(SipiRouteFn emit, void *ctx)
-{
-  // A pure read of the engine-held Lua config — guard-only (no response sink, no
-  // fallible pre-commit work). The Rust shell calls this once at startup. The
-  // script path is composed against scriptdir exactly as the transport did
-  // (`_scriptdir + "/" + route.script`), so the emitted path resolves the same.
-  return Sipi::ffi::sipi_guard([&] {
-    const auto &cfg = Sipi::ffi::lua_config();
-    for (const auto &route : cfg.routes) {
-      const std::string script = cfg.script_dir + "/" + route.script;
-      emit(ctx, http_method_name(route.method), route.route.c_str(), script.c_str());
-    }
-    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
-  });
 }
 
 int sipi_has_preflight(int *out)

@@ -408,7 +408,7 @@ fn upload_size_enforcement() {
     nthreads = 4,
     jpeg_quality = 60,
     scaling_quality = { jpeg = "medium", tiff = "high", png = "high", j2k = "high" },
-    max_post_size = '1K',
+    max_post_size = '1024',
     imgroot = './images',
     prefix_as_path = true,
     initscript = './config/sipi.init-knora.lua',

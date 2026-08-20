@@ -154,6 +154,56 @@ impl std::fmt::Debug for ServerOverrides {
     }
 }
 
+impl ServerOverrides {
+    /// The parsed Lua config as an overrides base (before the CLI/env layer) —
+    /// every field the config schema resolves arrives `Some` (the parse already
+    /// applied the schema defaults), except the shell-owned admission knobs and
+    /// `loglevel`, which the Lua config never carried.
+    pub fn from_lua_config(cfg: &scripting::LuaConfigFile) -> Result<Self, String> {
+        fn narrow<T: TryFrom<i64>>(value: i64, key: &str) -> Result<T, String> {
+            T::try_from(value).map_err(|_| format!("{key} value {value} out of range"))
+        }
+        Ok(ServerOverrides {
+            serverport: Some(narrow(cfg.port, "sipi.port")?),
+            imgroot: Some(cfg.img_root.clone()),
+            scriptdir: Some(cfg.script_dir.clone()),
+            initscript: Some(cfg.init_script.clone()),
+            tmpdir: Some(cfg.tmp_dir.clone()),
+            maxtmpage: Some(narrow(cfg.max_temp_file_age, "sipi.max_temp_file_age")?),
+            docroot: Some(cfg.docroot.clone()),
+            wwwroute: Some(cfg.wwwroute.clone()),
+            pathprefix: Some(cfg.prefix_as_path),
+            jwtkey: Some(cfg.jwt_secret.clone()),
+            adminuser: Some(cfg.admin_user.clone()),
+            adminpasswd: Some(cfg.admin_password.clone()),
+            cache_dir: Some(cfg.cache_dir.clone()),
+            cache_size: Some(cfg.cache_size.clone()),
+            cache_nfiles: Some(narrow(cfg.cache_nfiles, "sipi.cache_nfiles")?),
+            // Shell-owned admission knobs: never read from the Lua config
+            // (CLI/env or TOML only).
+            memory_limit: None,
+            admission_mode: None,
+            tiles_memory_ratio: None,
+            large_decode_threshold_bytes: None,
+            maxpost: Some(cfg.max_post_size.clone()),
+            thumbsize: Some(cfg.thumb_size.clone()),
+            knorapath: Some(cfg.knora_path.clone()),
+            knoraport: Some(cfg.knora_port.clone()),
+            // The Lua config schema has no log-level key.
+            loglevel: None,
+            jpeg_quality: Some(narrow(cfg.jpeg_quality, "sipi.jpeg_quality")?),
+            scaling_quality: ScalingQuality {
+                jpeg: cfg.scaling_quality.jpeg.clone(),
+                tiff: cfg.scaling_quality.tiff.clone(),
+                png: cfg.scaling_quality.png.clone(),
+                j2k: cfg.scaling_quality.j2k.clone(),
+            },
+            hostname: Some(cfg.hostname.clone()),
+            sslport: Some(narrow(cfg.ssl_port, "sipi.ssl_port")?),
+        })
+    }
+}
+
 /// Per-codec scaling-quality overrides ("high"|"medium"|"low"); `None` = engine
 /// default. TOML-config-only — there is no CLI flag for these.
 ///

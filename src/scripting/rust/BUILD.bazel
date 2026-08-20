@@ -20,6 +20,7 @@ package(default_visibility = ["//src:__subpackages__"])
 rust_library(
     name = "scripting",
     srcs = [
+        "entry.rs",
         "lib.rs",
         "limits.rs",
         "runtime.rs",
@@ -52,6 +53,21 @@ rust_test(
         ":scripting",
         "@crates//:mlua",
         "@crates//:tempfile",
+    ],
+)
+
+# Lua config-parse tests: the shipped config/sipi.config.lua resolves to the
+# expected values (the former //test/unit/configuration coverage) plus the
+# schema semantics (defaults, deprecated keys, strict types, required routes).
+rust_test(
+    name = "config_parse_test",
+    srcs = ["config_parse_tests.rs"],
+    data = ["//config:configs"],
+    edition = "2021",
+    deps = [
+        ":scripting",
+        "@crates//:tempfile",
+        "@rules_rust//rust/runfiles",
     ],
 )
 

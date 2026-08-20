@@ -17,8 +17,10 @@
 // is enabled here explicitly; CI's `-Dwarnings` promotes it to a hard error.
 #![warn(clippy::undocumented_unsafe_blocks)]
 
+pub mod entry;
 pub mod limits;
 pub mod runtime;
 
+pub use entry::{parse_config_file, LuaConfigFile, LuaRouteSpec, LuaScalingQuality};
 pub use limits::{kill_stats, Deadline, KillReason, KillStats, LimitConfig, RuntimeError};
 pub use runtime::{config_vm, BytecodeCache, LoadError, RequestVm, ScriptRuntime};
