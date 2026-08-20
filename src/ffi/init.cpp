@@ -172,6 +172,10 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
       if (o.docroot != nullptr) conf.setDocRoot(o.docroot);
       if (o.wwwroute != nullptr) conf.setWWWRoute(o.wwwroute);
       if (o.loglevel != nullptr) conf.setLogLevel(o.loglevel);
+      // No engine behavior of their own: they feed the SipiConf getters the
+      // Lua `config` table exposes (config.hostname / config.sslport).
+      if (o.hostname != nullptr) conf.setHostname(o.hostname);
+      if (o.has_sslport) conf.setSSLPort(o.sslport);
       // Scaling-quality per codec (TOML-config-only — no CLI flag). Merge the
       // present codecs onto the base map so a partial override keeps the others.
       // The "j2k" key is stored as the config writes it; to_scaling_quality reads
