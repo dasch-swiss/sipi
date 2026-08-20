@@ -17,6 +17,7 @@
 // is enabled here explicitly; CI's `-Dwarnings` promotes it to a hard error.
 #![warn(clippy::undocumented_unsafe_blocks)]
 
+pub mod bindings;
 pub mod entry;
 pub mod limits;
 pub mod runtime;

@@ -20,6 +20,10 @@ package(default_visibility = ["//src:__subpackages__"])
 rust_library(
     name = "scripting",
     srcs = [
+        "bindings/config.rs",
+        "bindings/helpers.rs",
+        "bindings/mod.rs",
+        "bindings/server.rs",
         "entry.rs",
         "lib.rs",
         "limits.rs",
@@ -29,8 +33,15 @@ rust_library(
     crate_root = "lib.rs",
     edition = "2021",
     deps = [
+        "@crates//:base64",
+        "@crates//:httpdate",
+        "@crates//:jsonwebtoken",
         "@crates//:libc",
         "@crates//:mlua",
+        "@crates//:rand",
+        "@crates//:reqwest",
+        "@crates//:serde",
+        "@crates//:serde_json",
         "@crates//:tracing",
         "@lua",
     ],
@@ -70,6 +81,23 @@ rust_binary(
     edition = "2021",
     tags = ["manual"],
     deps = [":scripting"],
+)
+
+# Binding-surface tests: field parity, result shapes, json/uuid/jwt
+# semantics, requireAuth quirks, the fs table, an in-process http mock, and
+# the chokepoint enumeration over every binding table.
+rust_test(
+    name = "bindings_test",
+    srcs = ["bindings_tests.rs"],
+    edition = "2021",
+    deps = [
+        ":scripting",
+        "@crates//:base64",
+        "@crates//:jsonwebtoken",
+        "@crates//:mlua",
+        "@crates//:serde_json",
+        "@crates//:tempfile",
+    ],
 )
 
 # Lua config-parse tests: the shipped config/sipi.config.lua resolves to the
