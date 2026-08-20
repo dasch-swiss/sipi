@@ -9,6 +9,12 @@
 # Bazel's cache keys across CI runs.
 build --incompatible_strict_action_env
 
+# TEMPORARY — RBE load test (2026-08-20). Injecting a fresh env var into the
+# strict action environment changes the cache key of every action (C++, Rust,
+# links, tests), forcing a full cold rebuild on the NativeLink backend. Delete
+# this line and the branch/PR once the load test is complete.
+build --action_env=RBE_LOAD_TEST_20260820=1
+
 # Force the resolved toolchain (the hermetic `llvm` toolchain in MODULE.bazel)
 # instead of Bazel's autodetected host C++ toolchain. Without this, Bazel can
 # fall back to the host clang/gcc when toolchain resolution misfires, which
