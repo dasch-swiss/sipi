@@ -150,7 +150,7 @@ included — is deleted: request data no longer crosses the seam at all.
   preflight + lua-route entries); the new `sipi_image_*` handle ABI is the
   engine's script-facing surface.
 - Limits are operator knobs (`SIPI_LUA_MEMORY_LIMIT`, `SIPI_LUA_TIMEOUT_MS`)
-  with kill metrics (`lua_kills_total{reason}`) and structured kill logs.
+  with kill metrics (`sipi.lua.kills`, rendered `sipi_lua_kills_total{reason}`) and structured kill logs.
 - The bytecode cache's mtime invalidation preserves edit-takes-effect
   operations; a *new* preflight hook still requires a restart (probe results
   are boot-frozen).
