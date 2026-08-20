@@ -2,7 +2,7 @@
 dune_map: true
 schema_version: 1
 last_verified_commit: none   # not SHA-tracked: rebase-merge rewrites branch SHAs, so a pre-merge SHA is unknowable. Use `date` for freshness.
-date: 2026-08-16
+date: 2026-08-21
 ---
 
 # ARCH-MAP.md — SIPI
@@ -123,14 +123,16 @@ engine-side memory budget under one component. Supersedes the former
 ### scripting
 
 - **Paths:** `:(glob)src/scripting/**`
-- **Purpose:** The connection-less Lua runtime extracted from the deleted shttps transport — `LuaServer` + the `RequestContext`/`ResponseSink` seam + the `server.db` sqlite bindings. C++ namespace stays `shttps::` (location moved, not API).
-- **Key entities:** `shttps::LuaServer`, `RequestContext`, `ResponseSink` (abstract), `HttpMethod`, `UploadedFile`, `shttps::sqliteGlobals`, `LuaSetGlobalsFunc`
-- **Public interface:** `LuaServer` + `request_context.h` (via `//src/scripting:scripting`); sqlite bindings via `//src/scripting:lua_sqlite`.
-- **Local-context kit:** `src/scripting/BUILD.bazel`, `src/scripting/LuaServer.h`, `src/scripting/request_context.h`, `src/ffi/lua_config.cpp` (builds a per-request `LuaServer`), `src/ffi/response_sink.h` (the concrete `ResponseSink`), `docs/adr/0017-extensibility-lua-and-rust.md`
-- **Depends on:** util, jwt, logging; lua, jansson, curl, sole (base62 UUID for DSP IRIs), sqlite3 (lua_sqlite)
-- **Used by:** ffi (preflight, run_lua_route, init, SipiLua)
-- **Boundary rules:** driven only through the `RequestContext`/`ResponseSink` DI seam — no HTTP transport dep (the transport is deleted). `lua_sqlite` visibility narrowed to `//src/cli` + `//src/ffi`. *Enforcement: `structure`* (Bazel visibility + the transport package no longer exists).
-- **Durable state:** none intrinsic (a runtime/VM). `lua_sqlite`'s `server.db` opens caller-controlled sqlite files at script direction.
+- **Purpose:** The Lua runtime, colocated polyglot (component-first, then language; ADR-0021). `rust/` is the Rust mlua runtime (ADR-0023): hardened per-request VM profile (stdlib whitelist, `os` shim, restricted `require`, memory cap, deadline hook + binding chokepoint) and the bytecode cache. The C++ side (`LuaServer` + the `RequestContext`/`ResponseSink` seam + the `server.db` sqlite bindings) still serves the live preflight/route/config entry points and is deleted at the ADR-0023 cutover.
+- **Key entities:** Rust: `ScriptRuntime`/`RequestVm` (VM factory + chokepoint), `BytecodeCache`, `LimitConfig`/`Deadline`/`KillStats`, `config_vm`. C++: `shttps::LuaServer`, `RequestContext`, `ResponseSink` (abstract), `HttpMethod`, `UploadedFile`, `shttps::sqliteGlobals`, `LuaSetGlobalsFunc`
+- **Public interface:** Rust runtime via `//src/scripting/rust:scripting` (crate `scripting`); C++ `LuaServer` + `request_context.h` via `//src/scripting:scripting`; sqlite bindings via `//src/scripting:lua_sqlite`.
+- **Local-context kit:** `src/scripting/rust/BUILD.bazel`, `src/scripting/rust/runtime.rs`, `src/scripting/rust/limits.rs`, `src/scripting/BUILD.bazel`, `src/scripting/LuaServer.h`, `src/scripting/request_context.h`, `src/ffi/lua_config.cpp` (builds a per-request `LuaServer`), `docs/adr/0023-rust-hosted-mlua-lua-runtime.md` — over the ≤7-file budget while both implementations coexist; the C++ half of the kit is deleted with the cutover.
+- **Depends on:** Rust: mlua (`external` link mode), lua (direct `@lua` dep), libc, tracing. C++: util, jwt, logging; lua, jansson, curl, sole (base62 UUID for DSP IRIs), sqlite3 (lua_sqlite)
+- **Used by:** ffi (preflight, run_lua_route, init, SipiLua); server-rs (the Rust runtime)
+- **Boundary rules:**
+  - C++ side driven only through the `RequestContext`/`ResponseSink` DI seam — no HTTP transport dep. `lua_sqlite` visibility narrowed to `//src/cli` + `//src/ffi`. *Enforcement: `structure`* (Bazel visibility).
+  - Rust side: every script-visible binding registers through the `RequestVm::register_binding` chokepoint (deadline check first); `verify_bindings_checked` enumerates binding tables against the registration record. *Enforcement: `static-analysis`* (the enumeration test).
+- **Durable state:** none intrinsic (a runtime/VM; fresh VM per request). The bytecode cache is in-memory, keyed by path, invalidated by mtime+size. `lua_sqlite`'s `server.db` opens caller-controlled sqlite files at script direction.
 
 ### util
 
