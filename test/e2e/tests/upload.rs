@@ -332,6 +332,40 @@ fn empty_file_upload() {
 }
 
 #[test]
+fn upload_corrupt_image_reports_500_json() {
+    // Garbage bytes under an image mimetype: SipiImage.new fails and
+    // upload.lua's error path must answer through send_response.lua's
+    // send_error — a clean 500 with a JSON message, never a script crash
+    // ("attempt to call a nil value" was the historical failure shape of the
+    // never-registered server.send_error).
+    let test_data = test_data_dir();
+    let srv = SipiServer::start("config/sipi.e2e-test-config.lua", &test_data);
+    let c = http_client();
+
+    let form = multipart::Form::new().part(
+        "file",
+        // A real TIFF magic ("II*\0") so libmagic classifies it as
+        // image/tiff and upload.lua takes the image branch; the truncated
+        // garbage after it makes SipiImage.new fail.
+        multipart::Part::bytes(b"II*\x00garbage-not-a-real-tiff-body".to_vec())
+            .file_name("corrupt.tif")
+            .mime_str("image/tiff")
+            .expect("valid mime"),
+    );
+    let resp = c
+        .post(format!("{}/api/upload", srv.base_url))
+        .multipart(form)
+        .send()
+        .expect("upload request failed");
+    assert_eq!(resp.status().as_u16(), 500);
+    let body: serde_json::Value = resp.json().expect("error body is JSON");
+    assert!(
+        body.get("message").is_some(),
+        "send_error carries a message: {body}"
+    );
+}
+
+#[test]
 fn concurrent_file_uploads() {
     // Send 10 parallel POST uploads simultaneously, verify all succeed
     // or fail gracefully (no crashes).

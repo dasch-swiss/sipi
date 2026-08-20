@@ -67,7 +67,7 @@ end
 
 success, mimeinfo = server.file_mimetype(config.imgroot .. '/unit/' .. 'lena512.tif')
 if not success then
-    server.send_error(500, mimetype)
+    send_error(500, mimetype)
     return false
 end
 
