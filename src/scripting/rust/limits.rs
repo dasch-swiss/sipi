@@ -4,8 +4,8 @@
 //! budget. The [`Deadline`] is shared between the instruction-count hook and
 //! every binding's checked entry ([`crate::runtime::RequestVm::register_binding`]),
 //! so a `pcall`-trapped timeout error still cannot reach I/O. Kills are
-//! counted process-wide in [`KillStats`] (the OTLP `lua_kills_total{reason}`
-//! source) and logged as one structured line at the kill site.
+//! counted process-wide in [`KillStats`] (the OTLP `sipi.lua.kills`
+//! source, rendered `sipi_lua_kills_total{reason}`) and logged as one structured line at the kill site.
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -94,7 +94,7 @@ pub enum KillReason {
 }
 
 impl KillReason {
-    /// The metric label value (`lua_kills_total{reason}`).
+    /// The metric label value (the `sipi.lua.kills` `reason` attribute).
     pub fn as_str(self) -> &'static str {
         match self {
             KillReason::Timeout => "timeout",
@@ -181,7 +181,8 @@ impl Deadline {
     }
 }
 
-/// Process-wide kill counters, exported as `lua_kills_total{reason}`.
+/// Process-wide kill counters, exported as `sipi.lua.kills` (rendered
+/// `sipi_lua_kills_total{reason}`).
 #[derive(Debug, Default)]
 pub struct KillStats {
     timeout: AtomicU64,

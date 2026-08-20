@@ -206,6 +206,21 @@ pub(crate) fn register(admission: Arc<Admission>) {
         |s| s.classifier_disagreement_total,
     );
 
+    // ── Lua runtime kills ───────────────────────────────────────────────────
+    // The scripting crate's process-wide KillStats, split by reason — the OTLP
+    // export of the runtime's kill accounting (a request VM killed for
+    // exceeding its wall-clock or Lua-heap budget). Renders as
+    // `sipi_lua_kills_total{reason}` after Prometheus normalization.
+    let kills = scripting::kill_stats();
+    let _ = meter
+        .u64_observable_counter("sipi.lua.kills")
+        .with_description("Request VMs killed by the Lua runtime limits, by reason")
+        .with_callback(move |observer| {
+            observer.observe(kills.timeout(), &[KeyValue::new("reason", "timeout")]);
+            observer.observe(kills.memory(), &[KeyValue::new("reason", "memory")]);
+        })
+        .build();
+
     // ── Config fingerprint ──────────────────────────────────────────────────
     // The derived (threads, ratios, mode, thresholds) the pool was built from —
     // observable on Grafana with no ops-deploy change after shipping the binary.
