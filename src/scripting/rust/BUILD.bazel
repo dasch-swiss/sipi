@@ -1,0 +1,27 @@
+"""src/scripting/rust — the Rust-hosted Lua runtime (ADR-0023).
+
+Hosts the Lua VM behind the preflight hooks, the configured Lua routes, the
+docroot `.lua`/`.elua` pages, and the Lua config parse, built on mlua
+(`lua53` + `serde`; `mlua-sys` feature `external`) linked against the BCR
+`@lua` 5.3.6 `cc_library` — the same interpreter the C++ side links, one
+symbol set in the final binary. Colocated component-first / language-second
+with the C++ `//src/scripting` package (the ADR-0021 pattern).
+"""
+
+load("@rules_rust//rust:defs.bzl", "rust_test")
+
+package(default_visibility = ["//src:__subpackages__"])
+
+# Pins the mlua ↔ `@lua` external-link contract: VM creation, chunk exec,
+# integer-width ABI, `set_memory_limit`, the instruction-count hook, and the
+# `panic=unwind` build profile mlua's callback boundary requires. `@lua` is a
+# direct dep — with `external`, mlua-sys emits no link inputs of its own.
+rust_test(
+    name = "mlua_external_link_test",
+    srcs = ["mlua_external_link_test.rs"],
+    edition = "2021",
+    deps = [
+        "@crates//:mlua",
+        "@lua",
+    ],
+)

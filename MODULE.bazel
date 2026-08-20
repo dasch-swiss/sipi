@@ -558,6 +558,18 @@ crate.spec(package = "clap", version = "4", features = ["derive", "env"])
 crate.spec(package = "sentry-rust-minidump", version = "0.16", features = ["ipc"])
 crate.spec(package = "rustls", version = "0.23", default_features = False, features = ["ring", "std", "tls12", "logging"])
 
+# //src/scripting/rust — the Rust-hosted Lua runtime (ADR-0023)
+# mlua in `external` link mode: mlua-sys's build script emits nothing (no
+# pkg-config probe, no vendored source, no link flags) — the `lua_*` symbols
+# resolve at final-link time from the BCR `@lua` 5.3.6 cc_library, which the
+# consuming rust target lists as a direct dep. `external` is a feature of
+# `mlua-sys`, not `mlua` (no passthrough feature exists), hence the
+# annotation — the first `crate.annotation()` in this file. Annotation
+# features are additive at BUILD generation and `external` has no deps, so
+# the Cargo resolve is unaffected.
+crate.spec(package = "mlua", version = "0.12", features = ["lua53", "serde"])
+crate.annotation(crate = "mlua-sys", crate_features = ["external"])
+
 # //test/e2e — the e2e suite (beyond the shared serde_json/tempfile)
 crate.spec(package = "reqwest", version = "0.12", default_features = False, features = ["blocking", "json", "multipart", "rustls-tls"])
 crate.spec(package = "image", version = "0.25", default_features = False, features = ["jpeg", "png", "tiff"])
