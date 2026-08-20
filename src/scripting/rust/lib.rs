@@ -18,6 +18,7 @@
 #![warn(clippy::undocumented_unsafe_blocks)]
 
 pub mod bindings;
+pub mod engine_ffi;
 pub mod entry;
 pub mod limits;
 pub mod runtime;

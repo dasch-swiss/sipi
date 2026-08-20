@@ -624,6 +624,70 @@ fn http_rejects_non_get() {
     );
 }
 
+// ── sqlite ───────────────────────────────────────────────────────────────────
+
+#[test]
+fn sqlite_round_trip() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db_path = dir.path().join("test.db").display().to_string();
+    let (vm, _, _) = test_vm(sample_request());
+    assert!(eval_bool(
+        &vm,
+        &format!(
+            r#"
+            local db = sqlite('{db_path}', 'CRW')
+            local qry = db << 'CREATE TABLE t (id INTEGER, name TEXT, score REAL)'
+            qry()
+            qry = ~qry
+            qry = db << 'INSERT INTO t VALUES (?, ?, ?)'
+            qry(1, 'one', 1.5)
+            qry(2, 'two', 2.5)
+            qry = ~qry
+            qry = db << 'SELECT id, name, score FROM t ORDER BY id'
+            local row = qry()
+            -- row tables keep the historical 0-based column keys
+            if not (row[0] == 1 and row[1] == 'one' and row[2] == 1.5) then return false end
+            row = qry()
+            if not (row[0] == 2 and row[1] == 'two') then return false end
+            row = qry()
+            if row ~= nil then return false end
+            if not tostring(db):find('DB%-File:') then return false end
+            qry = ~qry
+            db = ~db
+            return true
+            "#
+        ),
+    ));
+}
+
+#[test]
+fn sqlite_error_convention_is_lua_errors() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db_path = dir.path().join("err.db").display().to_string();
+    let (vm, _, _) = test_vm(sample_request());
+    assert!(eval_bool(
+        &vm,
+        &format!(
+            r#"
+            local db = sqlite('{db_path}', 'CRW')
+            -- syntax errors raise (pcall-trapped), never (false, msg)
+            local trapped = pcall(function() return db << 'NOT REAL SQL' end)
+            if trapped then return false end
+            -- a statement outliving ~db raises a clean error, not a crash
+            local qry = db << 'CREATE TABLE t (id INTEGER)'
+            db = ~db
+            local trapped2, err = pcall(function() return qry() end)
+            return trapped2 == false and tostring(err):find('database is closed', 1, true) ~= nil
+            "#
+        ),
+    ));
+    // Opening a nonexistent path read-only raises.
+    assert!(eval_bool(
+        &vm,
+        "local ok = pcall(function() return sqlite('/no/such/dir/x.db', 'RO') end) return ok == false",
+    ));
+}
+
 // ── chokepoint enumeration ───────────────────────────────────────────────────
 
 #[test]

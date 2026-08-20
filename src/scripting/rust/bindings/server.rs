@@ -158,6 +158,21 @@ pub fn install(vm: &RequestVm, ctx: &BindingCtx) -> mlua::Result<Table> {
     })?;
     vm.register_binding("server", &server, "log", log_message)?;
     vm.register_binding("server", &server, "parse_mimetype", parse_mimetype)?;
+    {
+        let req = Rc::clone(&req);
+        vm.register_binding("server", &server, "file_mimetype", move |lua, args| {
+            file_mimetype(lua, &req, args)
+        })?;
+    }
+    {
+        let req = Rc::clone(&req);
+        vm.register_binding(
+            "server",
+            &server,
+            "file_mimeconsistency",
+            move |lua, args| file_mimeconsistency(lua, &req, args),
+        )?;
+    }
 
     // loglevel constants (ascending severity, matching the C++ LogLevel enum).
     let loglevel = lua.create_table()?;
@@ -1276,6 +1291,70 @@ fn parse_mimetype(lua: &Lua, args: Variadic<Value>) -> mlua::Result<MultiValue> 
             }
             ok2(lua, Value::Table(out))
         }
+    }
+}
+
+/// `server.file_mimetype(pathOrUploadIndex)` — libmagic sniff via the seam.
+fn file_mimetype(lua: &Lua, req: &RequestData, args: Variadic<Value>) -> mlua::Result<MultiValue> {
+    if args.is_empty() {
+        return fail(lua, "server.file_mimetype(): no path given");
+    }
+    let path = match &args[0] {
+        Value::Integer(i) => match upload_tmpname(req, *i) {
+            Some(u) => u.tmpname.clone(),
+            None => {
+                return fail(
+                    lua,
+                    "'server.file_mimetype()': Could not read data of uploaded file. Invalid index?",
+                );
+            }
+        },
+        Value::String(s) => s.to_string_lossy(),
+        _ => return fail(lua, "server.file_mimetype(): path is not a string"),
+    };
+    match crate::engine_ffi::file_mimetype(&path) {
+        Err(msg) => fail(lua, format!("server.file_mimetype() failed: {msg}")),
+        Ok((mimetype, charset)) => {
+            let out = lua.create_table()?;
+            out.set("mimetype", mimetype)?;
+            if let Some(charset) = charset {
+                out.set("charset", charset)?;
+            }
+            ok2(lua, Value::Table(out))
+        }
+    }
+}
+
+/// `server.file_mimeconsistency(pathOrUploadIndex)` — content vs expected
+/// mimetype/extension, via the seam.
+fn file_mimeconsistency(
+    lua: &Lua,
+    req: &RequestData,
+    args: Variadic<Value>,
+) -> mlua::Result<MultiValue> {
+    if args.is_empty() {
+        // The historical message reuses the file_mimetype wording.
+        return fail(lua, "server.file_mimetype(): no path given");
+    }
+    let (path, filename, expected) = match &args[0] {
+        Value::Integer(i) => match upload_tmpname(req, *i) {
+            Some(u) => (u.tmpname.clone(), u.origname.clone(), u.mimetype.clone()),
+            None => {
+                return fail(
+                    lua,
+                    "'server.file_mimeconsistency()': Could not read data of uploaded file. Invalid index?",
+                );
+            }
+        },
+        Value::String(s) => {
+            let p = s.to_string_lossy();
+            (p.clone(), p, String::new())
+        }
+        _ => return fail(lua, "server.file_mimeconsistency(): path is not a string"),
+    };
+    match crate::engine_ffi::file_mimeconsistency(&path, &filename, &expected) {
+        Err(msg) => fail(lua, format!("server.file_mimeconsistency() failed: {msg}")),
+        Ok(consistent) => ok2(lua, Value::Boolean(consistent)),
     }
 }
 
