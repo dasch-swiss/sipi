@@ -50,6 +50,7 @@ cc_library(
         "serve_image.cpp",
         "serve_response.cpp",
         "serve_timings.cpp",
+        "image_handle.cpp",
         "sipi_ffi.cpp",
         "startup.cpp",
     ],
