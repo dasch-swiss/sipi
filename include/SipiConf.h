@@ -10,7 +10,9 @@
 #ifndef __sipi_conf_h
 #define __sipi_conf_h
 
-#include "scripting/LuaServer.h"
+#include <cstddef>
+#include <map>
+#include <string>
 
 namespace Sipi {
 
@@ -51,7 +53,6 @@ private:
   size_t max_post_size{ 0 }; // 0 = unlimited
   std::string tmp_dir;
   std::string scriptdir;
-  std::vector<shttps::LuaRoute> routes;
   std::string knora_path;
   std::string knora_port;
   std::string loglevel;
@@ -63,12 +64,10 @@ private:
   size_t memory_limit{ 0 };                       //!< total RAM envelope; 0 = auto (detect available RAM)
   std::string admission_mode_str{ "basic" };    //!< "basic", "advanced"
   double tiles_memory_ratio{ 0.25 };              //!< fraction of the envelope reserved for tiles + non-decode floor; the full lane gets envelope × (1 − ratio)
-  unsigned drain_timeout{ 30 }; //!< seconds to wait for in-flight requests during shutdown
 
 public:
   SipiConf();
 
-  explicit SipiConf(shttps::LuaServer &luacfg);
 
   std::string getHostname() { return hostname; }
   void setHostname(const std::string &str) { hostname = str; }
@@ -118,8 +117,6 @@ public:
   std::string getScriptDir() { return scriptdir; }
   void setScriptDir(const std::string &str) { scriptdir = str; }
 
-  std::vector<shttps::LuaRoute> getRoutes() { return routes; }
-  void seRoutes(const std::vector<shttps::LuaRoute> &r) { routes = r; }
 
   std::string getKnoraPath() { return knora_path; }
   void setKnoraPath(const std::string &str) { knora_path = str; }
@@ -154,8 +151,6 @@ public:
   double getTilesMemoryRatio() const { return tiles_memory_ratio; }
   void setTilesMemoryRatio(double v) { tiles_memory_ratio = v; }
 
-  unsigned getDrainTimeout() const { return drain_timeout; }
-  void setDrainTimeout(unsigned v) { drain_timeout = v; }
 };
 
 }// namespace Sipi

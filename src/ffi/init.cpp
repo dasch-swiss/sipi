@@ -6,9 +6,9 @@
 /*!
  * `sipi_init` — the production server-mode engine install behind the FFI seam.
  *
- * The Rust shell calls this once at startup before serving: it parses the Lua
- * config (or, on the TOML path, takes every value from `overrides`), layers the
- * CLI/env overrides on top, builds the cache / decode-memory-budget services,
+ * The Rust shell calls this once at startup before serving: it takes every
+ * configured value from `overrides` (the shell parses both config flavors —
+ * TOML and Lua — Rust-side), builds the cache / decode-memory-budget services,
  * points `engine_context()` at them, and installs the engine-held Lua config VM
  * factory. It is a production entry point, so it lives in the seam package
  * (`src/ffi`), not in the CLI package (`src/cli`).
@@ -24,7 +24,6 @@
 #include <string>
 #include <vector>
 
-#include "scripting/LuaServer.h"// shttps::LuaServer (parse the Lua config)
 #include "scripting/LuaSqlite.h"// shttps::sqliteGlobals
 #include "util/Error.h"// shttps::Error
 
@@ -88,25 +87,20 @@ std::unique_ptr<ServerRuntime> g_server_runtime;
 }// namespace
 
 /*!
- * Parse the Lua config and install the engine + Lua config from scratch. The
- * Rust shell calls it once at startup before serving. Builds the cache / memory
- * budget into `g_server_runtime`, points `engine_context()` at them, and installs
- * the engine-held Lua config VM factory. Returns 0 on success or `EXIT_FAILURE`;
+ * Install the engine + Lua config from scratch. The Rust shell calls it once at
+ * startup before serving. Builds the cache / memory budget into
+ * `g_server_runtime`, points `engine_context()` at them, and installs the
+ * engine-held Lua config VM factory. Returns 0 on success or `EXIT_FAILURE`;
  * never lets a C++ exception cross the boundary.
  *
- * `overrides` carries the CLI/env flags the Rust shell parsed (or null = none).
- * Present overrides are layered onto the Lua-parsed SipiConf below, before the
- * engine services read it. Only engine-behaviour flags are forwarded; transport
- * flags the Rust shell owns (TLS, keep-alive, concurrency) are not in the struct.
+ * `overrides` carries the resolved config the Rust shell assembled (config file
+ * base + CLI/env layered on top; null = none). Only engine-behaviour values are
+ * forwarded; transport knobs the Rust shell owns (TLS, keep-alive, concurrency)
+ * are not in the struct.
  */
-extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *overrides)
+extern "C" int sipi_init(const SipiServerConfig *overrides)
 {
   try {
-    // A null/empty config path selects the Lua-less init path: a TOML config,
-    // parsed Rust-side, supplies every value through `overrides`. Otherwise the
-    // Lua config is the base the overrides layer onto.
-    const bool has_lua_config = (lua_config_path != nullptr && lua_config_path[0] != '\0');
-
     // Initialise the codec libraries (curl / Exiv2 / TIFF) the decode pipeline
     // needs. The Rust server path does not go through sipi_cli_main's
     // LibraryInitialiser, so sipi_init owns it here; the singleton is idempotent.
@@ -114,19 +108,14 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
 
     auto runtime = std::make_unique<ServerRuntime>();
 
-    // Parse the Lua config into SipiConf.
-    // Skipped on the Lua-less path: `runtime->conf` stays default-constructed (an
-    // all-defaults config via SipiConf's in-class initializers) and the overrides
-    // below supply imgroot / scriptdir / etc.
-    if (has_lua_config) {
-      shttps::LuaServer luacfg(lua_config_path);
-      runtime->conf = Sipi::SipiConf(luacfg);
-    }
+    // `runtime->conf` stays default-constructed (an all-defaults config via
+    // SipiConf's in-class initializers); the overrides below supply every
+    // configured value — the shell parses both config flavors (TOML and Lua)
+    // and sends the result over this one channel.
     Sipi::SipiConf &conf = runtime->conf;
 
-    // CLI/env overrides: layer the present overrides onto the
-    // Lua-parsed SipiConf BEFORE the cache / memory-budget
-    // services below are built from `conf`, so an override reaches the engine.
+    // Apply the present values onto the default-constructed SipiConf BEFORE
+    // the cache / memory-budget services below are built from `conf`.
     // Setter names are SipiConf's verbatim (incl. the `setPasswort` typo). Sized
     // strings (cache_size/maxpost/memory_limit) carry the raw "300M" text;
     // parseSizeString expands the suffix engine-side. A negative maxpost /
@@ -316,7 +305,6 @@ extern "C" int sipi_init(const char *lua_config_path, const SipiServerConfig *ov
         { shttps::sqliteGlobals, nullptr },
         { Sipi::sipiGlobals, nullptr },
       },
-      .routes = conf.getRoutes(),
     });
 
     g_server_runtime = std::move(runtime);

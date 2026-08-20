@@ -75,6 +75,9 @@ rust_library(
         # The pure-CPU IIIF URL parser (domain types; no FFI). `server-rs` owns
         # the `From<iiif_parser::IiifParams> for SipiIiifParams` flattening.
         "//src/iiifparser/rust:iiif_parser",
+        # The Rust-hosted Lua runtime (ADR-0023): config-VM parse of the Lua
+        # config; the request-VM entry points arrive with the cutover.
+        "//src/scripting/rust:scripting",
         # The FFI-free two-lane admission pool (classify + acquire + per-partition
         # counters). Owned by `AppState`; `routes.rs` keeps only the call sites.
         "//src/throttling/rust:admission",

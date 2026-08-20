@@ -401,11 +401,6 @@ typedef struct
  *  owned C string (no malloc/free contract across the boundary). */
 typedef void (*SipiStrFn)(void *ctx, const char *value);
 
-/*! Emits one configured Lua route — its HTTP method ("GET"/"POST"/…), the route
- *  prefix, and the script path — through a caller callback, so the seam returns
- *  no owned array. The Rust shell registers an axum route per emitted entry. */
-typedef void (*SipiRouteFn)(void *ctx, const char *method, const char *route, const char *script);
-
 /*! Emits an image's Essentials-packet identity — its original mimetype and
  *  original filename — through a caller callback, so the seam returns no
  *  owned strings. Called at most once, from sipi_image_dims: both strings are
@@ -685,12 +680,6 @@ void sipi_request_context_add_param(SipiRequestContext *ctx, int kind, const cha
  *  NULL/empty = not injected. */
 void sipi_request_context_set_docroot(SipiRequestContext *ctx, const char *docroot);
 
-/*! Enumerate the configured Lua routes (method/route/script) installed by
- *  `sipi_init`, one `emit` call per route in config order. The Rust shell calls
- *  this once at startup and registers an axum route per entry, preserving the
- *  C++ longest-prefix precedence. Returns 0, or 500 if `sipi_init` has not run. */
-SIPI_FFI_NODISCARD int sipi_routes(SipiRouteFn emit, void *ctx);
-
 /*! Whether the engine Lua config defines a `pre_flight` / `file_pre_flight` hook
  *  (`luaFunctionExists`). The Rust shell reads these once at startup to mirror the
  *  C++ `luaFunctionExists` gate: with no hook it falls back to a default path +
@@ -710,9 +699,9 @@ SIPI_FFI_NODISCARD int sipi_run_lua_route(const char *script, SipiRequestContext
 /*! Engine counters → Rust OTel meter (NOT Prometheus). */
 SIPI_FFI_NODISCARD int sipi_metrics_snapshot(SipiMetricsSnapshot *out);
 
-/*! C++ parses the Lua config (full `config.*` surface incl. routes + preflight
- *  hook); `overrides` carries CLI/env overrides only. */
-SIPI_FFI_NODISCARD int sipi_init(const char *lua_config_path, const SipiServerConfig *overrides);
+/*! Install the engine from the resolved config the shell assembled (both
+ *  config flavors are parsed Rust-side; `overrides` is the one channel). */
+SIPI_FFI_NODISCARD int sipi_init(const SipiServerConfig *overrides);
 
 /* ── Edge probes ─────────────────────────────────────────────────────────────
  * Read-only helpers the Rust shell calls at the request edge. Like
@@ -770,12 +759,6 @@ SIPI_FFI_NODISCARD int sipi_large_decode_threshold_bytes(size_t *out);
  *  the shell's config-fingerprint metric. Returns 0, or 500 if `sipi_init` has not
  *  run. */
 SIPI_FFI_NODISCARD int sipi_memory_limit_bytes(size_t *out);
-
-/*! The configured HTTP listen port (the Lua config `sipi.port`). The Rust edge
- *  falls back to this only when neither `--serverport`/`SIPI_SERVERPORT` nor
- *  the dev/test `SIPI_RS_PORT` selected a port. Returns 0, or
- *  500 if `sipi_init` has not run. */
-SIPI_FFI_NODISCARD int sipi_port(int *out);
 
 /*! Header-only image-shape probe (`SipiImage::read_shape` — no full decode;
  *  one read_shape() call serves both the native shape AND the Essentials

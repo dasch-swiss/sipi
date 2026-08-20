@@ -108,6 +108,8 @@ change for script authors):
 | `decode_jwt` validates `exp`, algorithm pinned to HS256 | signature-only validation accepted expired tokens |
 | `server.http` timeout is total-request (was connect-only) | converts a latent worker hang into a visible failure |
 | `server.http` no redirect-following, response body capped | redirect-driven SSRF amplification; bodies evade the Lua memory cap |
+| Config size strings (`cache_size`, `max_post_size`) parse strictly | C `stoll` silently truncated trailing garbage — `'1K'` meant 1 *byte*; now a startup error |
+| Config integer/boolean keys are strictly typed at parse (as before), but errors surface pre-boot with chunk name + line, never a source echo | the config file carries `jwt_secret` literally; parity with the TOML redaction |
 
 `server.header` keys stay lowercase and `_G` stays shared between init script
 and route/hook chunk within a request VM — pinned invariants production

@@ -38,12 +38,6 @@ typedef struct _LuaValstruct
   } value;
 } LuaValstruct;
 
-typedef struct _LuaRoute
-{
-  HttpMethod method;
-  std::string route;
-  std::string script;
-} LuaRoute;
 
 typedef std::unordered_map<std::string, LuaValstruct> LuaKeyValStore;
 
@@ -144,7 +138,6 @@ public:
     const std::string &variable,
     const std::map<std::string, std::string> &defval);
 
-  std::vector<LuaRoute> configRoute(const std::string &routetable) const;
 
   const std::map<std::string, LuaKeyValStore> configKeyValueStores(std::string table);
   /*!

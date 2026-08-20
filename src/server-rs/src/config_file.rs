@@ -315,7 +315,7 @@ impl Config {
 /// Resolve a route `script` against `script_dir`, matching the engine's
 /// `script_dir + "/" + script` composition. An already-absolute script is used
 /// verbatim.
-fn compose_script_path(script_dir: &str, script: &str) -> String {
+pub(crate) fn compose_script_path(script_dir: &str, script: &str) -> String {
     if Path::new(script).is_absolute() {
         script.to_string()
     } else {
