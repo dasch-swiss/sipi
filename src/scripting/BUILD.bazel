@@ -15,7 +15,7 @@ moved, not the API). `strip_include_prefix = "/src"` exposes the headers at
 `"scripting/LuaSqlite.h"` (ADR-0003); siblings use the bare quote form.
 """
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 
 package(default_visibility = ["//src:__subpackages__"])
 
@@ -45,6 +45,24 @@ cc_library(
         "@lua",
         # server.uuid* — r-lyeh's base62 UUID (DSP IRI scheme).
         "@sole//:sole",
+    ],
+)
+
+# Per-request Lua VM cost, C++ side (manual, `-c opt`, never CI-gated) —
+# paired with //src/scripting/rust:runtime_benchmark; see
+# docs/src/development/benchmarking.md for the compare discipline.
+cc_binary(
+    name = "luaserver_benchmark",
+    testonly = True,
+    srcs = ["luaserver_benchmark.cpp"],
+    data = [
+        "//config:configs",
+        "//scripts:all_scripts",
+    ],
+    tags = ["manual"],
+    deps = [
+        ":scripting",
+        "@google_benchmark//:benchmark_main",
     ],
 )
 
