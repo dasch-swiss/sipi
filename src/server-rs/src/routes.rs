@@ -272,7 +272,7 @@ pub async fn iiif(
     // the work. The pool permit is held for the whole dispatch — released when the
     // blocking task ends (after the last chunk), restoring the concurrency bound.
     let (outcome_tx, outcome_rx) = oneshot::channel::<Outcome>();
-    let (body_tx, body_rx) = mpsc::channel::<axum::body::Bytes>(sink::BODY_CHANNEL_CAP);
+    let (body_tx, body_rx) = mpsc::channel::<sink::BodyItem>(sink::BODY_CHANNEL_CAP);
     // Carry the request span (created by OtelAxumLayer) onto the blocking thread
     // so the engine's coarse span nests under it and its trace context is what
     // stamps the C++ engine logs.
@@ -332,7 +332,7 @@ fn dispatch_engine(
     uri: &Uri,
     headers: &HeaderMap,
     outcome_tx: oneshot::Sender<Outcome>,
-    body_tx: mpsc::Sender<axum::body::Bytes>,
+    body_tx: mpsc::Sender<sink::BodyItem>,
 ) {
     // A coarse engine span under the request span. Low-cardinality name; the
     // identifier rides as an attribute (never in the name). Its trace
@@ -614,7 +614,7 @@ fn serve_image(
     access: &Access,
     admission: &Admission,
     outcome_tx: oneshot::Sender<Outcome>,
-    body_tx: mpsc::Sender<axum::body::Bytes>,
+    body_tx: mpsc::Sender<sink::BodyItem>,
 ) {
     let params: ffi::SipiIiifParams = parsed
         .params
@@ -736,7 +736,7 @@ fn serve_file(
     resolved: &str,
     headers: &HeaderMap,
     outcome_tx: oneshot::Sender<Outcome>,
-    body_tx: mpsc::Sender<axum::body::Bytes>,
+    body_tx: mpsc::Sender<sink::BodyItem>,
 ) {
     let c_resolved = match CString::new(resolved) {
         Ok(c) => c,
@@ -964,7 +964,7 @@ async fn serve_lua_script(
         Acquired::Shed | Acquired::TimedOut => return busy_response(),
     };
     let (outcome_tx, outcome_rx) = oneshot::channel::<Outcome>();
-    let (body_tx, body_rx) = mpsc::channel::<axum::body::Bytes>(sink::BODY_CHANNEL_CAP);
+    let (body_tx, body_rx) = mpsc::channel::<sink::BodyItem>(sink::BODY_CHANNEL_CAP);
     let request_span = tracing::Span::current();
     let method_str = method.as_str().to_owned();
     let uri_path = uri.path().to_owned();
@@ -1027,7 +1027,7 @@ fn run_lua_route_blocking(
     docroot: Option<&str>,
     req: LuaRequest,
     outcome_tx: oneshot::Sender<Outcome>,
-    body_tx: mpsc::Sender<axum::body::Bytes>,
+    body_tx: mpsc::Sender<sink::BodyItem>,
 ) {
     // Log only the basename — the full resolved path leaks the server's
     // filesystem layout to the OTel backend, and the basename identifies the route.
@@ -1496,7 +1496,7 @@ fn stream_region(
     offset: u64,
     length: u64,
 ) -> Response {
-    let (body_tx, body_rx) = mpsc::channel::<axum::body::Bytes>(sink::BODY_CHANNEL_CAP);
+    let (body_tx, body_rx) = mpsc::channel::<sink::BodyItem>(sink::BODY_CHANNEL_CAP);
     tokio::task::spawn_blocking(move || {
         let _ = sink::stream_file_region(&body_tx, &path, offset, length);
     });

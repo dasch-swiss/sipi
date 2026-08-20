@@ -25,13 +25,33 @@ use std::io::{Read, Seek, SeekFrom};
 use std::os::raw::{c_char, c_int, c_void};
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
-use tokio_stream::StreamExt;
 
 use crate::ffi::SipiResponse;
 
 /// Body-chunk channel capacity: bounds in-flight memory to `CAP × chunk` and
 /// stalls the engine thread when the client drains slowly.
 pub const BODY_CHANNEL_CAP: usize = 16;
+
+/// One item on the body channel: a chunk, or a post-commit abort.
+///
+/// Once the head has committed, dropping the sender produces a clean EOF —
+/// indistinguishable from a complete body. A producer that must terminate a
+/// committed response abnormally (a killed Lua script mid-stream) sends
+/// `Err(BodyAbort)` instead: the error propagates through the axum `Body`,
+/// so hyper resets the connection and the client never sees a clean end.
+pub type BodyItem = Result<Bytes, BodyAbort>;
+
+/// The abort marker carried by [`BodyItem`].
+#[derive(Debug)]
+pub struct BodyAbort;
+
+impl std::fmt::Display for BodyAbort {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("response aborted after commit")
+    }
+}
+
+impl std::error::Error for BodyAbort {}
 
 /// Read size for the `send_file` body mode (the `/file` region is streamed, not
 /// read into memory).
@@ -57,7 +77,7 @@ struct StreamSink {
     /// Sends the head exactly once — taken on the first body callback, or in
     /// [`serve_streaming`]'s tail for a body-less response.
     outcome_tx: Option<oneshot::Sender<Outcome>>,
-    body_tx: mpsc::Sender<Bytes>,
+    body_tx: mpsc::Sender<BodyItem>,
     head_sent: bool,
 }
 
@@ -127,7 +147,7 @@ extern "C" fn cb_write(ctx: *mut c_void, data: *const u8, len: usize) -> c_int {
         let chunk = Bytes::copy_from_slice(unsafe { std::slice::from_raw_parts(data, len) });
         // blocking_send blocks on a slow client; Err = the receiver is gone
         // (client disconnected) → tell the engine to abort + unlink partial cache.
-        match state.body_tx.blocking_send(chunk) {
+        match state.body_tx.blocking_send(Ok(chunk)) {
             Ok(()) => 0,
             Err(_) => 1,
         }
@@ -176,7 +196,7 @@ extern "C" fn cb_cancelled(ctx: *mut c_void) -> c_int {
 /// the same bounded-memory path the engine `send_file` callback uses (run it on a
 /// `spawn_blocking` thread — the reads are blocking `std::fs`).
 pub(crate) fn stream_file_region(
-    body_tx: &mpsc::Sender<Bytes>,
+    body_tx: &mpsc::Sender<BodyItem>,
     path: &str,
     offset: u64,
     length: u64,
@@ -198,7 +218,7 @@ pub(crate) fn stream_file_region(
             Ok(0) => return 1, // file shorter than the declared length
             Ok(n) => {
                 chunk.truncate(n);
-                if body_tx.blocking_send(Bytes::from(chunk)).is_err() {
+                if body_tx.blocking_send(Ok(Bytes::from(chunk))).is_err() {
                     return 1; // client gone
                 }
                 remaining -= n as u64;
@@ -218,7 +238,7 @@ pub(crate) fn stream_file_region(
 /// closing the stream.
 pub fn serve_streaming<F>(
     outcome_tx: oneshot::Sender<Outcome>,
-    body_tx: mpsc::Sender<Bytes>,
+    body_tx: mpsc::Sender<BodyItem>,
     call: F,
 ) where
     F: FnOnce(&SipiResponse) -> i32,
@@ -260,9 +280,11 @@ pub fn serve_streaming<F>(
 pub fn stream_response(
     status: u16,
     headers: Vec<(String, String)>,
-    body_rx: mpsc::Receiver<Bytes>,
+    body_rx: mpsc::Receiver<BodyItem>,
 ) -> Response {
-    let body = Body::from_stream(ReceiverStream::new(body_rx).map(Ok::<Bytes, std::io::Error>));
+    // An `Err(BodyAbort)` item propagates as a body error: hyper resets the
+    // connection instead of ending the chunked body cleanly.
+    let body = Body::from_stream(ReceiverStream::new(body_rx));
     apply_headers(Response::builder().status(map_status_u16(status)), &headers)
         .body(body)
         .unwrap_or_else(|_| error_response(StatusCode::INTERNAL_SERVER_ERROR))
