@@ -32,13 +32,19 @@ pub(crate) const DEFAULT_LARGE_DECODE_THRESHOLD_BYTES: u64 = 32 * 1024 * 1024;
 /// forwarded `server` flag (`None` = neither CLI nor env set it → the Lua config
 /// wins).
 ///
-/// Only engine-behaviour flags are forwarded. Transport flags the Rust shell
-/// owns (`--sslport`/`--sslcert`/`--sslkey`, `--keepalive`, `--hostname`) are
-/// accepted for CLI compatibility but are never forwarded, so they are absent here.
+/// Only engine-behaviour flags are forwarded from the CLI. Transport flags the
+/// Rust shell owns (`--sslport`/`--sslcert`/`--sslkey`, `--keepalive`,
+/// `--hostname`) are accepted for CLI compatibility but never forwarded from
+/// clap; the `hostname`/`sslport` fields below are populated only by the Lua
+/// config parse, because the Lua-built `config` table exposes them to scripts.
 /// `--max-waiting`/`--queue-timeout` are also absent here, but for the opposite
 /// reason: the shell honors them as Rust-owned serve knobs passed straight to
 /// [`crate::run`] (like `--drain-timeout`), not layered onto the engine config.
-#[derive(Debug, Default, Clone)]
+///
+/// `Debug` is implemented manually: `jwtkey` and `adminpasswd` are secrets and
+/// render as `[redacted]`, so no `{:?}` of this struct (logs, Sentry
+/// breadcrumbs, panic messages) can leak them.
+#[derive(Default, Clone)]
 pub struct ServerOverrides {
     /// HTTP listen port (`--serverport` / `SIPI_SERVERPORT`). One input to the
     /// listen-port resolution in `serve()` (`lib.rs`), which is the single
@@ -95,6 +101,57 @@ pub struct ServerOverrides {
     // Image quality — TOML-config-only (no CLI flag).
     pub jpeg_quality: Option<i32>,
     pub scaling_quality: ScalingQuality,
+
+    // Lua-config-only (never set from CLI/env): no engine behavior of their
+    // own — they feed the SipiConf getters the Lua `config` table exposes to
+    // scripts (`config.hostname` / `config.sslport`).
+    pub hostname: Option<String>,
+    pub sslport: Option<i32>,
+}
+
+impl std::fmt::Debug for ServerOverrides {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fn redact(s: &Option<String>) -> &'static str {
+            if s.is_some() {
+                "Some([redacted])"
+            } else {
+                "None"
+            }
+        }
+        f.debug_struct("ServerOverrides")
+            .field("serverport", &self.serverport)
+            .field("imgroot", &self.imgroot)
+            .field("scriptdir", &self.scriptdir)
+            .field("initscript", &self.initscript)
+            .field("tmpdir", &self.tmpdir)
+            .field("maxtmpage", &self.maxtmpage)
+            .field("docroot", &self.docroot)
+            .field("wwwroute", &self.wwwroute)
+            .field("pathprefix", &self.pathprefix)
+            .field("jwtkey", &redact(&self.jwtkey))
+            .field("adminuser", &self.adminuser)
+            .field("adminpasswd", &redact(&self.adminpasswd))
+            .field("cache_dir", &self.cache_dir)
+            .field("cache_size", &self.cache_size)
+            .field("cache_nfiles", &self.cache_nfiles)
+            .field("memory_limit", &self.memory_limit)
+            .field("admission_mode", &self.admission_mode)
+            .field("tiles_memory_ratio", &self.tiles_memory_ratio)
+            .field(
+                "large_decode_threshold_bytes",
+                &self.large_decode_threshold_bytes,
+            )
+            .field("maxpost", &self.maxpost)
+            .field("thumbsize", &self.thumbsize)
+            .field("knorapath", &self.knorapath)
+            .field("knoraport", &self.knoraport)
+            .field("loglevel", &self.loglevel)
+            .field("jpeg_quality", &self.jpeg_quality)
+            .field("scaling_quality", &self.scaling_quality)
+            .field("hostname", &self.hostname)
+            .field("sslport", &self.sslport)
+            .finish()
+    }
 }
 
 /// Per-codec scaling-quality overrides ("high"|"medium"|"low"); `None` = engine
@@ -160,6 +217,8 @@ impl ServerOverrides {
                 png: self.scaling_quality.png.or(base.scaling_quality.png),
                 j2k: self.scaling_quality.j2k.or(base.scaling_quality.j2k),
             },
+            hostname: self.hostname.or(base.hostname),
+            sslport: self.sslport.or(base.sslport),
         }
     }
 }
@@ -208,6 +267,9 @@ pub(crate) struct SipiServerConfig {
     pub scaling_quality_tiff: *const c_char,
     pub scaling_quality_png: *const c_char,
     pub scaling_quality_j2k: *const c_char,
+    // 8-byte: Lua `config`-table feed only (with sslport below) — no engine
+    // behavior of their own.
+    pub hostname: *const c_char,
     // 8-byte: 64-bit scalar values (presence via the has_ flags below)
     pub tiles_memory_ratio: f64, // fraction of the envelope reserved for tiles; full lane = envelope × (1 − ratio)
     pub large_decode_threshold_bytes: u64, // estimated peak >= this => full lane (charged); below => tile (bypass)
@@ -217,6 +279,7 @@ pub(crate) struct SipiServerConfig {
     pub cache_nfiles: u32, // 0 = unlimited; a negative is rejected at the CLI (no wrap)
     pub pathprefix: i32,   // prefix_as_path, bool carried as 0/1
     pub jpeg_quality: i32, // JPEG output quality (1-100); TOML-only
+    pub sslport: i32,      // Lua `config`-table feed only (see hostname)
     // 4-byte presence flags (non-zero = present)
     pub has_serverport: c_int,
     pub has_maxtmpage: c_int,
@@ -225,6 +288,7 @@ pub(crate) struct SipiServerConfig {
     pub has_jpeg_quality: c_int,
     pub has_tiles_memory_ratio: c_int,
     pub has_large_decode_threshold_bytes: c_int,
+    pub has_sslport: c_int,
 }
 
 /// Owns the C storage backing a [`SipiServerConfig`] so its pointers stay valid
@@ -283,6 +347,8 @@ impl OverridesHolder {
             loglevel,
             jpeg_quality,
             scaling_quality,
+            hostname,
+            sslport,
         } = o.clone();
 
         let mut strings: Vec<CString> = Vec::new();
@@ -310,6 +376,7 @@ impl OverridesHolder {
             scaling_quality_tiff: intern_cstr(&mut strings, &scaling_quality.tiff)?,
             scaling_quality_png: intern_cstr(&mut strings, &scaling_quality.png)?,
             scaling_quality_j2k: intern_cstr(&mut strings, &scaling_quality.j2k)?,
+            hostname: intern_cstr(&mut strings, &hostname)?,
             tiles_memory_ratio: tiles_memory_ratio.unwrap_or(0.0),
             // Always sent with the shell-side default when unset: the shell owns
             // the single definition (DUNE-003), so the engine reads it from the
@@ -321,6 +388,7 @@ impl OverridesHolder {
             cache_nfiles: cache_nfiles.unwrap_or(0),
             pathprefix: pathprefix.map(i32::from).unwrap_or(0),
             jpeg_quality: jpeg_quality.unwrap_or(0),
+            sslport: sslport.unwrap_or(0),
             has_serverport: serverport.is_some() as c_int,
             has_maxtmpage: maxtmpage.is_some() as c_int,
             has_cache_nfiles: cache_nfiles.is_some() as c_int,
@@ -330,6 +398,7 @@ impl OverridesHolder {
             // Always present: the shell always supplies the threshold (its own
             // default when unset), so the engine can rely on the seam value.
             has_large_decode_threshold_bytes: 1,
+            has_sslport: sslport.is_some() as c_int,
         };
 
         Ok(Self {
@@ -375,7 +444,7 @@ mod layout {
     fn repr_c_matches_sipi_ffi_h() {
         assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
         assert_eq!(align_of::<SipiServerConfig>(), 8);
-        assert_eq!(size_of::<SipiServerConfig>(), 240);
+        assert_eq!(size_of::<SipiServerConfig>(), 256);
 
         assert_eq!(offset_of!(SipiServerConfig, imgroot), 0);
         assert_eq!(offset_of!(SipiServerConfig, scriptdir), 8);
@@ -399,26 +468,29 @@ mod layout {
         assert_eq!(offset_of!(SipiServerConfig, scaling_quality_tiff), 152);
         assert_eq!(offset_of!(SipiServerConfig, scaling_quality_png), 160);
         assert_eq!(offset_of!(SipiServerConfig, scaling_quality_j2k), 168);
-        assert_eq!(offset_of!(SipiServerConfig, tiles_memory_ratio), 176);
+        assert_eq!(offset_of!(SipiServerConfig, hostname), 176);
+        assert_eq!(offset_of!(SipiServerConfig, tiles_memory_ratio), 184);
         assert_eq!(
             offset_of!(SipiServerConfig, large_decode_threshold_bytes),
-            184
+            192
         );
-        assert_eq!(offset_of!(SipiServerConfig, serverport), 192);
-        assert_eq!(offset_of!(SipiServerConfig, maxtmpage), 196);
-        assert_eq!(offset_of!(SipiServerConfig, cache_nfiles), 200);
-        assert_eq!(offset_of!(SipiServerConfig, pathprefix), 204);
-        assert_eq!(offset_of!(SipiServerConfig, jpeg_quality), 208);
-        assert_eq!(offset_of!(SipiServerConfig, has_serverport), 212);
-        assert_eq!(offset_of!(SipiServerConfig, has_maxtmpage), 216);
-        assert_eq!(offset_of!(SipiServerConfig, has_cache_nfiles), 220);
-        assert_eq!(offset_of!(SipiServerConfig, has_pathprefix), 224);
-        assert_eq!(offset_of!(SipiServerConfig, has_jpeg_quality), 228);
-        assert_eq!(offset_of!(SipiServerConfig, has_tiles_memory_ratio), 232);
+        assert_eq!(offset_of!(SipiServerConfig, serverport), 200);
+        assert_eq!(offset_of!(SipiServerConfig, maxtmpage), 204);
+        assert_eq!(offset_of!(SipiServerConfig, cache_nfiles), 208);
+        assert_eq!(offset_of!(SipiServerConfig, pathprefix), 212);
+        assert_eq!(offset_of!(SipiServerConfig, jpeg_quality), 216);
+        assert_eq!(offset_of!(SipiServerConfig, sslport), 220);
+        assert_eq!(offset_of!(SipiServerConfig, has_serverport), 224);
+        assert_eq!(offset_of!(SipiServerConfig, has_maxtmpage), 228);
+        assert_eq!(offset_of!(SipiServerConfig, has_cache_nfiles), 232);
+        assert_eq!(offset_of!(SipiServerConfig, has_pathprefix), 236);
+        assert_eq!(offset_of!(SipiServerConfig, has_jpeg_quality), 240);
+        assert_eq!(offset_of!(SipiServerConfig, has_tiles_memory_ratio), 244);
         assert_eq!(
             offset_of!(SipiServerConfig, has_large_decode_threshold_bytes),
-            236
+            248
         );
+        assert_eq!(offset_of!(SipiServerConfig, has_sslport), 252);
     }
 }
 

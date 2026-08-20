@@ -304,6 +304,10 @@ impl Config {
                 png: self.image.scaling_quality.png.clone(),
                 j2k: self.image.scaling_quality.j2k.clone(),
             },
+            // Lua-config-only fields (the TOML schema deliberately owns no
+            // transport keys; these feed the Lua `config` table for scripts).
+            hostname: None,
+            sslport: None,
         }
     }
 }

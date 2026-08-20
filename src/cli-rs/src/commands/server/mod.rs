@@ -133,6 +133,11 @@ impl From<&ServerArgs> for ServerOverrides {
             // so the clap path never sets them.
             jpeg_quality: None,
             scaling_quality: Default::default(),
+            // Lua-config-only (the CLI --hostname/--sslport transport flags are
+            // deliberately not forwarded; these fields feed the Lua `config`
+            // table and are set by the Lua config parse alone).
+            hostname: None,
+            sslport: None,
         }
     }
 }
