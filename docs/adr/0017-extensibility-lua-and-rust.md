@@ -83,8 +83,9 @@ Config is a separate, declarative concern (**TOML**), not scripting.
   across the seam onto the script's outbound call (implemented for the Lua path),
   so a downstream service continues the trace. Because it is host-side, a future
   scripting language inherits it unchanged.
-- **A pure-Rust Lua runtime (mlua) is low priority.** If a different scripting
-  language replaces Lua, reimplementing Lua in mlua is moot; while Lua persists,
-  mlua only removes the C++ `LuaServer` dependency. Not a priority either way.
+- ~~**A pure-Rust Lua runtime (mlua) is low priority.**~~ *Superseded by
+  [ADR-0023](0023-rust-hosted-mlua-lua-runtime.md)*: the sandbox/limits
+  hardening drivers invalidated the "only removes the C++ `LuaServer`
+  dependency" premise — the Lua runtime is hosted in Rust via mlua.
 
 Refines decision #9 of the strangler plan; extends [ADR-0013](0013-shttps-as-internal-module.md).
