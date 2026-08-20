@@ -21,12 +21,14 @@ use crate::runtime::RequestVm;
 
 pub mod config;
 pub mod helpers;
+pub mod image;
 pub mod server;
+pub mod sqlite;
 
 /// The binding tables the chokepoint-enumeration check sweeps
 /// ([`RequestVm::verify_bindings_checked`]): every function-valued entry in
 /// these tables must have registered through `register_binding`.
-pub const BINDING_TABLES: &[&str] = &["server", "server.fs", "helper", "os"];
+pub const BINDING_TABLES: &[&str] = &["server", "server.fs", "helper", "os", "SipiImage"];
 
 /// An uploaded file as seen by Lua (`server.uploads`, `server.copyTmpfile`).
 #[derive(Debug, Clone)]
@@ -255,5 +257,7 @@ pub fn install(vm: &RequestVm, ctx: &BindingCtx) -> mlua::Result<()> {
     let helper = vm.lua().create_table()?;
     helpers::install(vm, &helper)?;
     vm.lua().globals().set("helper", helper)?;
+    image::install(vm, ctx)?;
+    sqlite::install(vm)?;
     Ok(())
 }

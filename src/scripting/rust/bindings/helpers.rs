@@ -112,11 +112,40 @@ impl SoleUuid {
     }
 }
 
-/// Installs the `helper` table's functions. `helper.filename_hash` arrives
-/// with the engine-backed bindings; the table itself exists from the start so
-/// scripts can probe it.
-pub fn install(_vm: &RequestVm, _helper: &Table) -> mlua::Result<()> {
-    Ok(())
+/// Installs the `helper` table's functions.
+pub fn install(vm: &RequestVm, helper: &Table) -> mlua::Result<()> {
+    vm.register_binding("helper", helper, "filename_hash", filename_hash)
+}
+
+/// `helper.filename_hash` — the storage-path derivation over the engine's
+/// `SipiFilenameHash` (byte-identical: it derives on-disk layout).
+fn filename_hash(
+    lua: &mlua::Lua,
+    args: mlua::Variadic<mlua::Value>,
+) -> mlua::Result<mlua::MultiValue> {
+    use mlua::Value;
+    let fail = |msg: String| -> mlua::Result<mlua::MultiValue> {
+        Ok(mlua::MultiValue::from_iter([
+            Value::Boolean(false),
+            Value::String(lua.create_string(msg)?),
+        ]))
+    };
+    if args.is_empty() {
+        return fail("'helper.hash(filename)': parameter missing".into());
+    }
+    let name = match args.first() {
+        Some(Value::String(s)) => s.to_string_lossy(),
+        Some(Value::Integer(i)) => i.to_string(),
+        Some(Value::Number(n)) => n.to_string(),
+        _ => return fail("'helper.hash(filename)': filename is not a string".into()),
+    };
+    match crate::engine_ffi::filename_hash(&name) {
+        Err(msg) => fail(format!("'helper.hash(filename)': {msg}")),
+        Ok(path) => Ok(mlua::MultiValue::from_iter([
+            Value::Boolean(true),
+            Value::String(lua.create_string(path)?),
+        ])),
+    }
 }
 
 #[cfg(test)]
