@@ -805,6 +805,156 @@ void sipi_set_log_trace_context(const char *trace_id, const char *span_id);
  *  the full formatted header (incl. the sampling flag). */
 void sipi_set_outbound_traceparent(const char *traceparent);
 
+/* ── SipiImage handle (script-facing image work) ─────────────────────────────
+ *
+ * The engine surface the Lua runtime's `SipiImage` userdata drives — modeled
+ * verbatim on the `SipiRequestContext` handle family. THE CONTRACT:
+ *
+ * Ownership. `sipi_image_new` returns a heap-allocated opaque handle owned by
+ * the caller; `sipi_image_free` is the only release path (NULL-safe). The
+ * Rust userdata frees it in `Drop`, so a killed/unwound VM releases every
+ * handle it created. Handles carry no engine-global state; freeing in any
+ * order is safe.
+ *
+ * Inputs. Every `const char*` is borrowed for the synchronous call only and
+ * deep-copied on receipt (NULL is normalized to ""). The seam returns no
+ * owned strings: values and error text are emitted through caller callbacks
+ * (`SipiStrFn`/`SipiKVFn`) with pointers valid only during the emit call.
+ *
+ * Error channel. Pointer-returning `sipi_image_new` returns NULL on failure
+ * and emits one message through its `err` callback — the message is the
+ * script-visible `(false, msg)` text, shape-preserved from the historical
+ * bindings. `int`-returning entries return 0 on success or a non-zero status
+ * with the message emitted through `err`; every entry wraps `sipi_guard`
+ * (or the pointer-returning try/catch), so no C++ exception crosses.
+ *
+ * Reentrancy / threading. A handle is confined to one thread at a time (the
+ * request VM's blocking thread); no entry is reentrant on the same handle.
+ * Different handles are independent.
+ *
+ * Callbacks during kill/unwind. `sipi_image_send`'s write callback is Rust
+ * code invoked from inside C++ codec frames; the Rust side wraps it in
+ * `catch_unwind`, and a failed/blocked sink returns non-zero so the codec
+ * aborts — no Rust panic ever unwinds through the C++ frames, and engine
+ * calls are uninterruptible by the VM deadline (the deadline bounds Lua and
+ * bindings, not decode time).
+ *
+ * Geometry validation. `region`/`size` arrive as IIIF strings and `reduce`
+ * as an integer from Lua, bypassing the IIIF URL parser — the parse
+ * constructors validate the grammar here at the seam, `reduce` must be
+ * >= 0, and range clamping against the actual dims happens in the engine's
+ * crop/scale paths as on the serve path. */
+
+typedef struct SipiImageHandle SipiImageHandle;
+
+/*! Read an image into a new handle. `region`/`size` are IIIF strings (NULL =
+ *  absent); `has_reduce` gates `reduce` (>= 0). A non-empty `original`
+ *  selects the preservation-aware `readSource` read and records the original
+ *  filename. NULL on failure (one message emitted via `err`). */
+SipiImageHandle *sipi_image_new(const char *path,
+  const char *region,
+  const char *size,
+  int reduce,
+  int has_reduce,
+  const char *original,
+  SipiStrFn err,
+  void *err_ctx);
+
+/*! Free a handle (NULL-safe). */
+void sipi_image_free(SipiImageHandle *img);
+
+/*! Dims of an already-open handle (never fails on a live handle). */
+SIPI_FFI_NODISCARD int sipi_image_handle_dims(const SipiImageHandle *img,
+  uint64_t *nx,
+  uint64_t *ny,
+  int *orientation);
+
+/*! Header-only shape probe for a path (`read_shape`, no full decode) — the
+ *  path form of `SipiImage.dims`. */
+SIPI_FFI_NODISCARD int
+  sipi_image_file_dims(const char *path, uint64_t *nx, uint64_t *ny, int *orientation, SipiStrFn err, void *err_ctx);
+
+/*! In-place mutations. 0 on success; non-zero with the message emitted. */
+SIPI_FFI_NODISCARD int sipi_image_crop(SipiImageHandle *img, const char *iiif_region, SipiStrFn err, void *err_ctx);
+SIPI_FFI_NODISCARD int sipi_image_scale(SipiImageHandle *img, const char *iiif_size, SipiStrFn err, void *err_ctx);
+SIPI_FFI_NODISCARD int sipi_image_rotate(SipiImageHandle *img, float angle, int mirror, SipiStrFn err, void *err_ctx);
+SIPI_FFI_NODISCARD int sipi_image_topleft(SipiImageHandle *img);
+SIPI_FFI_NODISCARD int sipi_image_watermark(SipiImageHandle *img, const char *wmfile, SipiStrFn err, void *err_ctx);
+
+/*! EXIF tag read. The tag's typed value is emitted as one JSON document
+ *  (string / integer / number / [num,den] rational / arrays thereof) the Lua
+ *  runtime converts to the historical Lua shapes. Returns 0 (emitted),
+ *  1 (unrecognized tag), 2 (tag not present in this image), 3 (no exif
+ *  data), or 500. */
+SIPI_FFI_NODISCARD int sipi_image_exif_get(const SipiImageHandle *img, const char *tag, SipiStrFn emit, void *ctx);
+
+/*! The fixed GPS block as one JSON object ({"GPSLatitudeRef": "N",
+ *  "GPSLatitude": [d,m,s], …}; absent fields default to 0 / ""). Returns 0,
+ *  3 (no exif data), or 500. */
+SIPI_FFI_NODISCARD int sipi_image_gps(const SipiImageHandle *img, SipiStrFn emit, void *ctx);
+
+/*! Consistency of the handle's recorded source path against the caller-given
+ *  mimetype + filename (libmagic + extension logic). */
+SIPI_FFI_NODISCARD int sipi_image_mimetype_consistency(const SipiImageHandle *img,
+  const char *mimetype,
+  const char *filename,
+  int *consistent,
+  SipiStrFn err,
+  void *err_ctx);
+
+/*! Encode + write to `path`. `ftype` is the resolved handler name
+ *  ("tif"/"jpg"/"png"/"jpx" — the Lua runtime maps extensions and validates
+ *  the compression-parameter values). `param_keys/values` are the validated
+ *  compression parameters (J2K/JPEG knobs by their Lua key names). A
+ *  non-empty `origname` + `mimetype` pair requests Service-File stamping:
+ *  the Essentials packet (SHA-256 pixel hash, ICC bytes, dims) is built
+ *  engine-side and TIFF output is forced pyramidal. */
+SIPI_FFI_NODISCARD int sipi_image_write(SipiImageHandle *img,
+  const char *ftype,
+  const char *path,
+  const char *const *param_keys,
+  const char *const *param_values,
+  size_t n_params,
+  const char *origname,
+  const char *mimetype,
+  SipiStrFn err,
+  void *err_ctx);
+
+/*! Encode + stream through `write` (the response sink) — `SipiImage.send`
+ *  and the `write("http.<ext>")` streaming form. No Rust panic crosses the
+ *  codec frames: the callback is `catch_unwind`-wrapped caller-side and
+ *  reports failure via its non-zero return. */
+SIPI_FFI_NODISCARD int sipi_image_send(SipiImageHandle *img,
+  const char *ftype,
+  const char *const *param_keys,
+  const char *const *param_values,
+  size_t n_params,
+  SipiWriteFn write,
+  void *write_ctx,
+  SipiStrFn err,
+  void *err_ctx);
+
+/*! The handle's `__tostring` rendering ("File: <path>" + the image summary). */
+SIPI_FFI_NODISCARD int sipi_image_tostring(const SipiImageHandle *img, SipiStrFn emit, void *ctx);
+
+/*! `helper.filename_hash`: the storage-path derivation over
+ *  `SipiFilenameHash` (byte-identical — it derives on-disk layout). Returns
+ *  0 with the path emitted, or non-zero with the error text emitted. */
+SIPI_FFI_NODISCARD int sipi_filename_hash(const char *filename, SipiStrFn emit, void *ctx);
+
+/*! `server.file_mimetype`: libmagic sniff of `path`; emits ("mimetype", v)
+ *  and, when non-empty, ("charset", v). Non-zero → error text via `err`. */
+SIPI_FFI_NODISCARD int sipi_file_mimetype(const char *path, SipiKVFn emit, void *ctx, SipiStrFn err, void *err_ctx);
+
+/*! `server.file_mimeconsistency`: does the file's actual content match the
+ *  expected mimetype/extension for `filename`? */
+SIPI_FFI_NODISCARD int sipi_file_mimeconsistency(const char *path,
+  const char *filename,
+  const char *expected_mimetype,
+  int *consistent,
+  SipiStrFn err,
+  void *err_ctx);
+
 #ifdef __cplusplus
 }
 #endif
