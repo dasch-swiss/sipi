@@ -27,7 +27,7 @@ use admission::{
 };
 use iiif_parser::{ParsedRequest, RequestKind};
 
-use crate::ffi::{self, PreflightOutcome, SipiPermType, SipiResponse, SipiServeRequest};
+use crate::ffi::{self, SipiPermType, SipiResponse, SipiServeRequest};
 use crate::info::{self, Sidecar};
 use crate::path::{self, Resolved};
 use crate::preflight_cache;
@@ -200,6 +200,24 @@ impl AppState {
     /// [`Admission`] pool, whose snapshot feeds the concurrency + fingerprint gauges.
     pub(crate) fn register_metrics(&self) {
         crate::metrics::register(Arc::clone(&self.admission));
+    }
+}
+
+/// The parsed result of a preflight hook: the permission and the open kv
+/// channel (`infile` plus `watermark` / `size` / auth-service keys).
+pub struct PreflightOutcome {
+    pub permission: SipiPermType,
+    pub kv: Vec<(String, String)>,
+}
+
+impl PreflightOutcome {
+    /// The value of a kv key, if the hook emitted it.
+    #[must_use]
+    fn get(&self, key: &str) -> Option<&str> {
+        self.kv
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
     }
 }
 
@@ -1043,13 +1061,18 @@ async fn serve_lua_script(
     let request_span = tracing::Span::current();
     let method_str = method.as_str().to_owned();
     let uri_path = uri.path().to_owned();
+    let Some(lua) = state.lua.clone() else {
+        return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR);
+    };
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
         let _entered = request_span.enter();
-        // Temp files outlive the route call: the engine opens them by path during
-        // executeChunk, and they are deleted when this Vec drops (after the call).
+        // Temp files outlive the route call: the script opens them by path
+        // during execution, and they are deleted when this Vec drops (after
+        // the call — a killed script still drops them).
         let _tempfiles = tempfiles;
         run_lua_route_blocking(
+            &lua,
             &script,
             docroot.as_deref(),
             LuaRequest {
@@ -1094,10 +1117,11 @@ struct LuaRequest<'a> {
     uploads: &'a [UploadPart],
 }
 
-/// Build the request context (full request: body, uploads, params) and run the
-/// route's script through `sipi_run_lua_route` against the streaming sink. Runs
+/// Build the request data (full request: body, uploads, params) and run the
+/// route's script in the Rust Lua runtime against the streaming channels. Runs
 /// on a `spawn_blocking` thread (the Lua VM + any decode/encode is blocking).
 fn run_lua_route_blocking(
+    lua: &scripting::LuaEnv,
     script: &str,
     docroot: Option<&str>,
     req: LuaRequest,
@@ -1114,52 +1138,149 @@ fn run_lua_route_blocking(
     let _enter = span.enter();
     let _trace =
         crate::telemetry::current_trace_context().map(|(t, s)| ffi::LogTraceScope::set(&t, &s));
-    // Any `server.http` the route makes carries this span's `traceparent`, so a
-    // downstream service continues the trace.
-    let _tp = crate::telemetry::current_traceparent().map(|tp| ffi::OutboundTraceScope::set(&tp));
 
+    // The merged get+post view (`server.request`), get params first.
+    let mut request_params = req.get_params.to_vec();
+    request_params.extend_from_slice(req.post_params);
     // secure = false: SIPI runs plain HTTP behind Traefik (matches conn.secure()).
-    let Some(ctx) = ffi::build_request_context(ffi::RequestFields {
-        method: req.method,
-        client_ip: req.client_ip,
+    let data = scripting::bindings::RequestData {
+        method: req.method.to_owned(),
+        client_ip: req.client_ip.to_owned(),
         client_port: 0,
         secure: false,
-        host: req.host,
-        uri: req.uri_path,
-        headers: req.headers,
-        cookies: req.cookies,
-    }) else {
-        return complete(outcome_tx, sink::error_response(StatusCode::BAD_REQUEST));
+        host: req.host.to_owned(),
+        uri: req.uri_path.to_owned(),
+        headers: req.headers.to_vec(),
+        cookies: req.cookies.to_vec(),
+        get_params: req.get_params.to_vec(),
+        post_params: req.post_params.to_vec(),
+        request_params,
+        uploads: req
+            .uploads
+            .iter()
+            .map(|u| scripting::bindings::Upload {
+                fieldname: u.fieldname.clone(),
+                origname: u.origname.clone(),
+                tmpname: u.tmpname.clone(),
+                mimetype: u.mime.clone(),
+                filesize: u.size,
+            })
+            .collect(),
+        content: req.body.to_vec(),
+        content_type: req.content_type.to_owned(),
+        jwt_secret: String::new(), // stamped by LuaEnv
+        docroot: docroot.map(str::to_owned),
+        // Any `server.http` the route makes carries this span's traceparent,
+        // so a downstream service continues the trace (host-side, ADR-0017).
+        traceparent: crate::telemetry::current_traceparent(),
     };
-    // A docroot script reads `server.docroot` (the fileserver injects it);
-    // configured routes pass None and leave it unset.
-    if let Some(dr) = docroot {
-        ctx.set_docroot(dr);
-    }
-    if !req.body.is_empty() || !req.content_type.is_empty() {
-        ctx.set_body(req.content_type, req.body);
-    }
-    for (k, v) in req.get_params {
-        ctx.add_param(0, k, v);
-    }
-    for (k, v) in req.post_params {
-        ctx.add_param(1, k, v);
-    }
-    for u in req.uploads {
-        ctx.add_upload(&u.fieldname, &u.origname, &u.tmpname, &u.mime, u.size);
-    }
 
-    let Ok(c_script) = CString::new(script) else {
-        return complete(
-            outcome_tx,
-            sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
-        );
-    };
-    // SAFETY: `c_script` + `ctx` outlive the synchronous call; the seam guards C++
-    // exceptions (→ status code, never an unwind into Rust).
-    sink::serve_streaming(outcome_tx, body_tx, |resp: &SipiResponse| unsafe {
-        ffi::sipi_run_lua_route(c_script.as_ptr(), ctx.as_ptr(), resp)
+    // The head commits through the oneshot on the first body byte; the sender
+    // is shared with the post-run completion path (a body-less route sends a
+    // Complete response instead).
+    let outcome_slot = std::rc::Rc::new(std::cell::RefCell::new(Some(outcome_tx)));
+    let commit_slot = std::rc::Rc::clone(&outcome_slot);
+    let commit: scripting::bindings::CommitFn = Box::new(move |status, headers| {
+        if let Some(tx) = commit_slot.borrow_mut().take() {
+            let _ = tx.send(Outcome::StreamHead { status, headers });
+        }
     });
+    // Every body-channel send is bounded by the request's Lua deadline: a
+    // client that stops reading stalls the axum body stream, fills the
+    // bounded channel, and would otherwise pin this blocking thread forever —
+    // exactly the DEV-6070 hang the deadline exists to close, reachable by
+    // any unauthenticated slow reader. On expiry the write fails as
+    // client-gone and the script aborts.
+    let write_deadline = std::time::Instant::now() + lua.limits().timeout;
+    let write_tx = body_tx.clone();
+    let write: scripting::bindings::WriteFn = Box::new(move |chunk| {
+        send_body_until(
+            &write_tx,
+            Ok(axum::body::Bytes::copy_from_slice(chunk)),
+            write_deadline,
+        )
+        .map_err(|_| scripting::bindings::ClientGone)
+    });
+
+    let outcome = lua.run_route(data, std::path::Path::new(script), commit, write);
+
+    let take_tx = || outcome_slot.borrow_mut().take();
+    match outcome.result {
+        Ok(()) => {
+            if let Some(tx) = take_tx() {
+                // Body-less completion: the buffered head as a complete response.
+                let (status, headers) = outcome.head;
+                let _ = tx.send(Outcome::Complete(sink::direct_response(
+                    status,
+                    headers,
+                    Vec::new(),
+                )));
+            }
+        }
+        Err(scripting::RouteFailure::NotFound) => {
+            if let Some(tx) = take_tx() {
+                let _ = tx.send(Outcome::Complete(sink::error_response(
+                    StatusCode::NOT_FOUND,
+                )));
+            }
+        }
+        Err(scripting::RouteFailure::Killed(_)) => {
+            if outcome.committed {
+                // Post-commit kill: abort the stream so the client never sees
+                // a clean EOF (the ADR-0023 kill contract). Bounded send — a
+                // stalled client must not re-pin the thread the kill just
+                // freed; if the abort can't be delivered in time, freeing the
+                // thread wins and the connection dies by keep-alive timeout.
+                let _ = send_body_until(&body_tx, Err(sink::BodyAbort), abort_deadline());
+            } else if let Some(tx) = take_tx() {
+                let _ = tx.send(Outcome::Complete(sink::error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                )));
+            }
+        }
+        Err(scripting::RouteFailure::Error(_)) => {
+            if outcome.committed {
+                // Post-commit error: abort the stream exactly like a
+                // post-commit kill — dropping the sender would read as a
+                // clean EOF, indistinguishable from a complete body (the
+                // sink contract), silently serving truncated content as 200.
+                let _ = send_body_until(&body_tx, Err(sink::BodyAbort), abort_deadline());
+            } else if let Some(tx) = take_tx() {
+                let _ = tx.send(Outcome::Complete(sink::error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                )));
+            }
+        }
+    }
+}
+
+/// The budget for delivering a stream abort to an already-stalled client.
+fn abort_deadline() -> std::time::Instant {
+    std::time::Instant::now() + Duration::from_secs(2)
+}
+
+/// Bounded body-channel send from a blocking thread: `try_send` polled until
+/// `deadline`. `Err` = the client is gone or stopped reading past the budget;
+/// either way the caller must give up rather than block indefinitely.
+fn send_body_until(
+    tx: &tokio::sync::mpsc::Sender<sink::BodyItem>,
+    mut item: sink::BodyItem,
+    deadline: std::time::Instant,
+) -> Result<(), ()> {
+    use tokio::sync::mpsc::error::TrySendError;
+    loop {
+        match tx.try_send(item) {
+            Ok(()) => return Ok(()),
+            Err(TrySendError::Closed(_)) => return Err(()),
+            Err(TrySendError::Full(returned)) => {
+                if std::time::Instant::now() >= deadline {
+                    return Err(());
+                }
+                item = returned;
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+    }
 }
 
 // ── /server docroot fileserver ───────────────────────────────────────────────

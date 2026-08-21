@@ -238,13 +238,6 @@ typedef enum {
 
 typedef void (*SipiKVFn)(void *ctx, const char *key, const char *value);
 
-/*! A name/value pair, for passing request headers + cookies to the request-context
- *  builder. Both pointers are caller-owned; the builder deep-copies them. */
-typedef struct
-{
-  const char *name;
-  const char *value;
-} SipiStrPair;
 
 /* ── CLI/env override channel (concrete) ──────────────────────────────────────
  * The CLI/env overrides `sipi_init` layers on top of the Lua-parsed SipiConf,
@@ -371,13 +364,6 @@ static_assert(offsetof(SipiServerConfig, has_sslport) == 252, "SipiServerConfig 
  * commits no field set it does not need (made concrete at its own slice). */
 typedef struct SipiMetricsSnapshot SipiMetricsSnapshot;
 
-/* The whole HTTP request the Lua subsystem reads (method/uri/host/secure +
- * headers, cookies, GET/POST params, uploads, body). Opaque because the Lua
- * runtime stays C++ behind the seam (it wraps the C++ `shttps::RequestContext`);
- * the Lua hooks can read ANY request field via `server.*`, so preflight and
- * configured routes carry the full request, not the narrow IIIF `SipiServeRequest`.
- * Built by the caller — the Rust shell via a builder. */
-typedef struct SipiRequestContext SipiRequestContext;
 
 /* ── Edge-probe types (Rust-edge path validation + info.json/knora.json) ─────
  * Read-only helpers the Rust shell needs to build a request and to assemble the
@@ -532,10 +518,6 @@ static_assert(offsetof(SipiServeRequest, is_head) == 144, "SipiServeRequest layo
 static_assert(offsetof(SipiServeRequest, report_error) == 152, "SipiServeRequest layout drift");
 static_assert(offsetof(SipiServeRequest, report_ctx) == 160, "SipiServeRequest layout drift");
 
-/* SipiStrPair — the header/cookie name/value pair. */
-static_assert(sizeof(SipiStrPair) == 16, "SipiStrPair size drifted from src/server-rs/src/ffi.rs");
-static_assert(offsetof(SipiStrPair, name) == 0, "SipiStrPair layout drift");
-static_assert(offsetof(SipiStrPair, value) == 8, "SipiStrPair layout drift");
 
 /* SipiImageDims — five uint32_t; 4-aligned, unlike the pointer-bearing structs. */
 static_assert(sizeof(SipiImageDims) == 20, "SipiImageDims size drifted from src/server-rs/src/ffi.rs");
@@ -590,75 +572,6 @@ SIPI_FFI_NODISCARD int sipi_serve_file(const char *resolved_path, const char *ra
 
 
 
-/*! Build the opaque request context the preflight hooks read (`server.*`) from
- *  primitive request fields. Header names are lowercased for case-insensitive
- *  lookup. The JWT secret is NOT taken here: it is injected from the engine
- *  Lua config by `make_lua_server`. The response sink is likewise not taken
- *  here — it is wired per-call via `sipi_preflight`/`sipi_file_preflight`'s
- *  `resp` parameter, not stored on the context itself. Deep-copies
- *  `headers`/`cookies`, so the caller's arrays need not outlive the call.
- *  Returns the context (caller frees it with `sipi_free_request_context`) or
- *  NULL on allocation failure. */
-SIPI_FFI_NODISCARD SipiRequestContext *sipi_make_request_context(const char *method,
-  const char *client_ip,
-  int client_port,
-  int secure,
-  const char *host,
-  const char *uri,
-  const SipiStrPair *headers,
-  size_t n_headers,
-  const SipiStrPair *cookies,
-  size_t n_cookies);
-
-/*! Free a context returned by `sipi_make_request_context`. NULL is a no-op. */
-void sipi_free_request_context(SipiRequestContext *ctx);
-
-/* ── Request-context body / uploads / params (configured Lua routes) ──────────
- * sipi_make_request_context builds the read-only view preflight needs (method,
- * headers, cookies, …). A configured Lua route additionally reads the POST body,
- * the parsed multipart uploads, and the GET/POST form params via `server.*`, so
- * the Rust shell attaches them to the context with these mutators after building
- * it, before `sipi_run_lua_route`. Each deep-copies its inputs; NULL pointers
- * collapse to empty. No-ops that cannot fail (a throw is swallowed). */
-
-/*! Attach the request body (`server.content`) and its content type
- *  (`server.content_type`). `data` may be NULL with `len` 0. */
-void sipi_request_context_set_body(SipiRequestContext *ctx,
-  const char *content_type,
-  const uint8_t *data,
-  size_t len);
-
-/*! Append one parsed multipart upload (`server.uploads`, `server.copyTmpfile`,
- *  `SipiImage.new(index)`). `tmpname` is the on-disk path of the spooled part —
- *  the engine opens it directly, so it must exist for the route call. */
-void sipi_request_context_add_upload(SipiRequestContext *ctx,
-  const char *fieldname,
-  const char *origname,
-  const char *tmpname,
-  const char *mimetype,
-  uint64_t filesize);
-
-/*! Append a GET (`kind` = 0 → `server.get`) or POST (`kind` = 1 → `server.post`)
- *  form parameter. Each is also visible through `server.request` (the merged
- *  view of GET + POST). */
-void sipi_request_context_add_param(SipiRequestContext *ctx, int kind, const char *name, const char *value);
-
-/*! Set `server.docroot` for a docroot `.lua`/`.elua` script — the Rust shell sets
- *  it before `sipi_run_lua_route` for docroot scripts so the script can read it.
- *  A configured route leaves it unset, so `server.docroot` stays absent there.
- *  NULL/empty = not injected. */
-void sipi_request_context_set_docroot(SipiRequestContext *ctx, const char *docroot);
-
-
-
-/*! Run a configured Lua route: execute the route's script in the engine-config VM
- *  and emit its response (`server.print` / `sendStatus` / `sendHeader` /
- *  `sendCookie`) through `resp`. Takes the FULL request as the opaque
- *  `SipiRequestContext` — a route reads arbitrary request data via `server.*`, so
- *  it carries the whole request, not the narrow IIIF `SipiServeRequest`. The Rust
- *  shell owns route dispatch and calls this per matched route; the upload routes
- *  additionally depend on multipart `uploads` reaching the context. */
-SIPI_FFI_NODISCARD int sipi_run_lua_route(const char *script, SipiRequestContext *ctx, const SipiResponse *resp);
 
 /*! Engine counters → Rust OTel meter (NOT Prometheus). */
 SIPI_FFI_NODISCARD int sipi_metrics_snapshot(SipiMetricsSnapshot *out);
@@ -771,8 +684,7 @@ void sipi_set_outbound_traceparent(const char *traceparent);
 
 /* ── SipiImage handle (script-facing image work) ─────────────────────────────
  *
- * The engine surface the Lua runtime's `SipiImage` userdata drives — modeled
- * verbatim on the `SipiRequestContext` handle family. THE CONTRACT:
+ * The engine surface the Lua runtime's `SipiImage` userdata drives — THE CONTRACT:
  *
  * Ownership. `sipi_image_new` returns a heap-allocated opaque handle owned by
  * the caller; `sipi_image_free` is the only release path (NULL-safe). The

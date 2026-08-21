@@ -469,6 +469,12 @@ impl LuaEnv {
     /// init-script *error* is fatal — the caller refuses startup (fail
     /// closed); a hook genuinely not defined is the legitimate no-preflight
     /// mode.
+    /// The limit profile request VMs run under — the host derives its own
+    /// budgets (e.g. the body-channel write bound) from the same clock.
+    pub fn limits(&self) -> crate::limits::LimitConfig {
+        self.runtime.limits()
+    }
+
     pub fn probe_hooks(&self) -> Result<HookProbes, RuntimeError> {
         let (vm, _response) = self.vm_with_bindings(RequestData::default(), Self::null_writer())?;
         let is_function = |name: &str| -> bool {
@@ -685,4 +691,168 @@ fn parse_preflight_values(
     }
 
     Ok((permission, kv))
+}
+
+/// Why a route run produced no (complete) response.
+#[derive(Debug)]
+pub enum RouteFailure {
+    /// The routed script is missing on disk — a request-time 404, never a
+    /// boot failure (production configs may route deleted scripts).
+    NotFound,
+    Killed(KillReason),
+    /// Logged here; the caller maps it to a bare 500 (pre-commit) or a
+    /// stream truncation (post-commit).
+    Error(String),
+}
+
+/// The result of one route/docroot script run. `committed` is the
+/// pre-/post-commit kill boundary; `head` is the buffered head for a
+/// body-less completion (status defaults to 200, as the transport did).
+pub struct RouteOutcome {
+    pub result: Result<(), RouteFailure>,
+    pub committed: bool,
+    pub head: (u16, Vec<(String, String)>),
+}
+
+impl LuaEnv {
+    /// Runs a configured route or docroot script (`.lua` whole-chunk or
+    /// `.elua` HTML/Lua interleave) against the given response closures.
+    /// `.lua` chunks load through the bytecode cache; `.elua` sources are
+    /// read per request (mixed HTML is not a cacheable chunk).
+    pub fn run_route(
+        &self,
+        req: RequestData,
+        script: &Path,
+        commit: bindings::CommitFn,
+        write: bindings::WriteFn,
+    ) -> RouteOutcome {
+        let writer = ResponseWriter::new(commit, write);
+        let (vm, response) = match self.vm_with_bindings(req, writer) {
+            Ok(pair) => pair,
+            Err(RuntimeError::Killed(k)) => {
+                return RouteOutcome {
+                    result: Err(RouteFailure::Killed(k)),
+                    committed: false,
+                    head: (500, Vec::new()),
+                };
+            }
+            Err(other) => {
+                tracing::error!(error = %other, "route VM setup failed");
+                return RouteOutcome {
+                    result: Err(RouteFailure::Error(other.to_string())),
+                    committed: false,
+                    head: (500, Vec::new()),
+                };
+            }
+        };
+
+        let ext = script
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let result = match ext.as_str() {
+            "lua" => match self.runtime.cache().load_function(vm.lua(), script) {
+                Err(crate::runtime::LoadError::NotFound(_)) => Err(RouteFailure::NotFound),
+                Err(e) => {
+                    tracing::error!(error = %e, "route script failed to load");
+                    Err(RouteFailure::Error(e.to_string()))
+                }
+                Ok(chunk) => vm.run(|_| chunk.call::<()>(())).map_err(route_failure),
+            },
+            "elua" => run_elua(&vm, &response, script),
+            other => {
+                tracing::error!(extension = other, "route script has no valid extension");
+                Err(RouteFailure::Error(format!(
+                    "script has no valid extension '{other}'"
+                )))
+            }
+        };
+
+        // Drop the VM first: the binding closures hold the response Rc, so the
+        // writer is only unwrappable once the Lua state is gone.
+        drop(vm);
+        let Ok(cell) = Rc::try_unwrap(response) else {
+            unreachable!("the dropped VM held the only other response references");
+        };
+        let writer = cell.into_inner();
+        RouteOutcome {
+            committed: writer.committed(),
+            head: writer.head_snapshot(),
+            result,
+        }
+    }
+}
+
+fn route_failure(e: RuntimeError) -> RouteFailure {
+    match e {
+        RuntimeError::Killed(k) => RouteFailure::Killed(k),
+        other => {
+            tracing::error!(error = %other, "route script failed");
+            RouteFailure::Error(other.to_string())
+        }
+    }
+}
+
+/// The `.elua` interleave: raw HTML alternates with `<lua>…</lua>` chunks
+/// (literal, case-sensitive delimiters). HTML segments write to the response
+/// (committing the head on the first byte); every chunk runs in the same VM,
+/// so state set by one chunk is visible to later ones. A chunk error aborts
+/// the whole route. An unterminated `<lua>` executes the remainder as the
+/// final chunk and then fails the route (the historical behavior errored
+/// there too, via an out-of-range substr).
+fn run_elua(
+    vm: &RequestVm,
+    response: &Rc<RefCell<ResponseWriter>>,
+    script: &Path,
+) -> Result<(), RouteFailure> {
+    let code = match std::fs::read(script) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(RouteFailure::NotFound);
+        }
+        Err(e) => return Err(RouteFailure::Error(e.to_string())),
+        Ok(bytes) => bytes,
+    };
+    let name = format!("@{}", script.display());
+    let mut cursor = 0usize;
+    loop {
+        let Some(open) = find(&code, b"<lua>", cursor) else {
+            break;
+        };
+        let html = &code[cursor..open];
+        if !html.is_empty() && response.borrow_mut().write(html).is_err() {
+            return Err(RouteFailure::Error("client gone".into()));
+        }
+        let chunk_start = open + 5;
+        let (chunk, terminated) = match find(&code, b"</lua>", chunk_start) {
+            Some(close) => {
+                cursor = close + 6;
+                (&code[chunk_start..close], true)
+            }
+            None => (&code[chunk_start..], false),
+        };
+        vm.run(|lua| {
+            lua.load(chunk)
+                .set_name(name.as_str())
+                .set_mode(mlua::chunk::ChunkMode::Text)
+                .exec()
+        })
+        .map_err(route_failure)?;
+        if !terminated {
+            return Err(RouteFailure::Error("unterminated <lua> chunk".into()));
+        }
+    }
+    let tail = &code[cursor..];
+    if !tail.is_empty() && response.borrow_mut().write(tail).is_err() {
+        return Err(RouteFailure::Error("client gone".into()));
+    }
+    Ok(())
+}
+
+fn find(haystack: &[u8], needle: &[u8], from: usize) -> Option<usize> {
+    haystack
+        .get(from..)?
+        .windows(needle.len())
+        .position(|w| w == needle)
+        .map(|i| from + i)
 }

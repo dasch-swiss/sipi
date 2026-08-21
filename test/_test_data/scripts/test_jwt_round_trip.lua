@@ -7,7 +7,9 @@ local payload = {
     iss = "sipi-test",
     sub = "test-user",
     custom_field = "hello-world",
-    number_field = 42
+    number_field = 42,
+    -- decode_jwt validates exp (ADR-0023); a token without one is rejected.
+    exp = server.systime() + 3600
 }
 
 local success, token = server.generate_jwt(payload)
