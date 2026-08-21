@@ -111,9 +111,9 @@ TEST_F(LoggerTest, SformatAllLevels)
     {LL_NOTICE, "NOTICE"},
     {LL_WARNING, "WARN"},
     {LL_ERR, "ERROR"},
-    {LL_CRIT, "ALERT"},
-    {LL_ALERT, "EMERG"},
-    {LL_EMERG, "ERROR"},
+    {LL_CRIT, "CRIT"},
+    {LL_ALERT, "ALERT"},
+    {LL_EMERG, "EMERG"},
   };
 
   for (auto &tc : cases) {
