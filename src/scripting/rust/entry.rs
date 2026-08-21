@@ -436,9 +436,11 @@ impl LuaEnv {
     /// executed (through the bytecode cache).
     fn vm_with_bindings(
         &self,
+        entry: &'static str,
         mut req: RequestData,
         writer: ResponseWriter,
     ) -> Result<(RequestVm, Rc<RefCell<ResponseWriter>>), RuntimeError> {
+        let started = std::time::Instant::now();
         req.jwt_secret = self.jwt_secret.clone();
         let vm = self.runtime.request_vm()?;
         let response = Rc::new(RefCell::new(writer));
@@ -456,6 +458,7 @@ impl LuaEnv {
                 .map_err(|e| RuntimeError::Setup(e.to_string()))?;
             vm.run(|_| chunk.call::<()>(()))?;
         }
+        crate::limits::record_vm_build(entry, started.elapsed());
         Ok((vm, response))
     }
 
@@ -476,7 +479,8 @@ impl LuaEnv {
     }
 
     pub fn probe_hooks(&self) -> Result<HookProbes, RuntimeError> {
-        let (vm, _response) = self.vm_with_bindings(RequestData::default(), Self::null_writer())?;
+        let (vm, _response) =
+            self.vm_with_bindings("probe", RequestData::default(), Self::null_writer())?;
         let is_function = |name: &str| -> bool {
             matches!(
                 vm.lua().globals().get::<Value>(name),
@@ -524,7 +528,7 @@ impl LuaEnv {
     fn run_hook(
         &self,
         req: RequestData,
-        funcname: &str,
+        funcname: &'static str,
         args: impl mlua::IntoLuaMulti,
         extended: bool,
     ) -> Result<PreflightReply, PreflightFailure> {
@@ -544,17 +548,21 @@ impl LuaEnv {
             }),
         );
 
-        let (vm, response) = self.vm_with_bindings(req, writer).map_err(|e| match e {
-            RuntimeError::Killed(k) => PreflightFailure::Killed(k),
-            other => PreflightFailure::Error(other.to_string()),
-        })?;
+        let (vm, response) = self
+            .vm_with_bindings(funcname, req, writer)
+            .map_err(|e| match e {
+                RuntimeError::Killed(k) => PreflightFailure::Killed(k),
+                other => PreflightFailure::Error(other.to_string()),
+            })?;
 
+        let script_started = std::time::Instant::now();
         let result = vm.run(|lua| {
             // Fetching the hook inside the run: a hook that vanished after the
             // boot-frozen probe is a request-time error (fail closed).
             let hook: mlua::Function = lua.globals().get(funcname)?;
             hook.call::<MultiValue>(args)
         });
+        crate::limits::record_script(funcname, script_started.elapsed());
 
         let rvals = match result {
             Err(RuntimeError::Killed(k)) => return Err(PreflightFailure::Killed(k)),
@@ -727,7 +735,13 @@ impl LuaEnv {
         write: bindings::WriteFn,
     ) -> RouteOutcome {
         let writer = ResponseWriter::new(commit, write);
-        let (vm, response) = match self.vm_with_bindings(req, writer) {
+        let ext = script
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let entry = if ext == "elua" { "elua" } else { "route" };
+        let (vm, response) = match self.vm_with_bindings(entry, req, writer) {
             Ok(pair) => pair,
             Err(RuntimeError::Killed(k)) => {
                 return RouteOutcome {
@@ -746,11 +760,7 @@ impl LuaEnv {
             }
         };
 
-        let ext = script
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or_default()
-            .to_ascii_lowercase();
+        let script_started = std::time::Instant::now();
         let result = match ext.as_str() {
             "lua" => match self.runtime.cache().load_function(vm.lua(), script) {
                 Err(crate::runtime::LoadError::NotFound(_)) => Err(RouteFailure::NotFound),
@@ -768,6 +778,7 @@ impl LuaEnv {
                 )))
             }
         };
+        crate::limits::record_script(entry, script_started.elapsed());
 
         // Drop the VM first: the binding closures hold the response Rc, so the
         // writer is only unwrappable once the Lua state is gone.

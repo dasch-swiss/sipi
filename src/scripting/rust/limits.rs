@@ -212,6 +212,37 @@ pub fn kill_stats() -> &'static KillStats {
     STATS.get_or_init(KillStats::default)
 }
 
+/// Per-sample duration observations the host subscribes to (the OTel
+/// histograms live host-side; this crate stays OTel-free). Both closures get
+/// the entry-point label (`probe` / `pre_flight` / `file_pre_flight` /
+/// `route` / `elua`) and the elapsed seconds.
+pub struct DurationRecorder {
+    /// One request-VM build: hardened VM + bindings + init script.
+    pub vm_build: Box<dyn Fn(&'static str, f64) + Send + Sync>,
+    /// One hook/route chunk run (the script itself, after the VM stands).
+    pub script: Box<dyn Fn(&'static str, f64) + Send + Sync>,
+}
+
+static DURATION_RECORDER: OnceLock<DurationRecorder> = OnceLock::new();
+
+/// Installs the process-wide duration recorder. First call wins; later calls
+/// are ignored (set once at boot).
+pub fn set_duration_recorder(recorder: DurationRecorder) {
+    let _ = DURATION_RECORDER.set(recorder);
+}
+
+pub(crate) fn record_vm_build(entry: &'static str, elapsed: std::time::Duration) {
+    if let Some(r) = DURATION_RECORDER.get() {
+        (r.vm_build)(entry, elapsed.as_secs_f64());
+    }
+}
+
+pub(crate) fn record_script(entry: &'static str, elapsed: std::time::Duration) {
+    if let Some(r) = DURATION_RECORDER.get() {
+        (r.script)(entry, elapsed.as_secs_f64());
+    }
+}
+
 /// The `Send`-able domain error the runtime hands the async shell.
 /// `mlua::Error` is `!Send`, so it never crosses a channel; the runtime
 /// classifies it into this owned form at the blocking-thread boundary.

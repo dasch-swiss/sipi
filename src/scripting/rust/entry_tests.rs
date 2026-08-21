@@ -316,6 +316,47 @@ fn hook_missing_at_request_time_fails_closed() {
 }
 
 #[test]
+fn duration_recorder_observes_vm_build_and_script() {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
+
+    static VM_BUILDS: AtomicU64 = AtomicU64::new(0);
+    static SCRIPTS: AtomicU64 = AtomicU64::new(0);
+    let entries: Arc<std::sync::Mutex<Vec<&'static str>>> = Arc::default();
+    let seen = Arc::clone(&entries);
+    scripting::set_duration_recorder(scripting::DurationRecorder {
+        vm_build: Box::new(|_, secs| {
+            assert!(secs >= 0.0);
+            VM_BUILDS.fetch_add(1, Ordering::Relaxed);
+        }),
+        script: Box::new(move |entry, secs| {
+            assert!(secs >= 0.0);
+            seen.lock().unwrap().push(entry);
+            SCRIPTS.fetch_add(1, Ordering::Relaxed);
+        }),
+    });
+
+    let dir = tempfile::tempdir().unwrap();
+    let env = env_with(dir.path(), "function pre_flight() return 'deny' end");
+    let builds_before = VM_BUILDS.load(Ordering::Relaxed);
+    let scripts_before = SCRIPTS.load(Ordering::Relaxed);
+    let _ = env.preflight(RequestData::default(), "p", "i");
+
+    assert!(
+        VM_BUILDS.load(Ordering::Relaxed) > builds_before,
+        "a preflight must record a VM build"
+    );
+    assert!(
+        SCRIPTS.load(Ordering::Relaxed) > scripts_before,
+        "a preflight must record a script run"
+    );
+    assert!(
+        entries.lock().unwrap().contains(&"pre_flight"),
+        "the script sample carries the entry-point label"
+    );
+}
+
+#[test]
 fn killed_preflight_reports_the_kill() {
     let dir = tempfile::tempdir().unwrap();
     let env = env_with_limits(

@@ -221,6 +221,30 @@ pub(crate) fn register(admission: Arc<Admission>) {
         })
         .build();
 
+    // ── Lua runtime durations ───────────────────────────────────────────────
+    // Per-sample VM-build and script-run histograms, recorded through the
+    // scripting crate's host recorder (the crate stays OTel-free); the
+    // `entry_point` attribute is probe / pre_flight / file_pre_flight /
+    // route / elua.
+    let vm_build = meter
+        .f64_histogram("sipi.lua.vm_build.duration")
+        .with_description("Request-VM build time (hardened VM + bindings + init script)")
+        .with_unit("s")
+        .build();
+    let script = meter
+        .f64_histogram("sipi.lua.script.duration")
+        .with_description("Lua hook/route script run time (after the VM stands)")
+        .with_unit("s")
+        .build();
+    scripting::set_duration_recorder(scripting::DurationRecorder {
+        vm_build: Box::new(move |entry, secs| {
+            vm_build.record(secs, &[KeyValue::new("entry_point", entry)]);
+        }),
+        script: Box::new(move |entry, secs| {
+            script.record(secs, &[KeyValue::new("entry_point", entry)]);
+        }),
+    });
+
     // ── Config fingerprint ──────────────────────────────────────────────────
     // The derived (threads, ratios, mode, thresholds) the pool was built from —
     // observable on Grafana with no ops-deploy change after shipping the binary.
