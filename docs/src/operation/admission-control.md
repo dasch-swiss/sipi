@@ -41,8 +41,8 @@ preserves tile headroom — an explicit design choice, not automatic preemption.
 | Viewer tiles, small explicit `{w},{h}` / `!{w},{h}` sizes | Tile |
 | `info.json`, `knora.json` (metadata, no decode) | Tile |
 | `/{id}/file` (raw byte stream, no decode) | Tile |
-| Lua routes (global permit only; any decode they trigger is still memory-budgeted) | Tile |
 | Large explicit sizes, `/full/max/`, percentages (estimated peak ≥ `large_decode_threshold_bytes`) | Full |
+| Lua routes and docroot `.lua`/`.elua` scripts (script cost is unknowable up front; decodes they trigger are memory-budgeted in the same lane) | Full |
 
 Classification is coarse in the shell (from the IIIF URL params, before any
 decode) and precise in the engine (from `estimate_peak_memory`). The two are

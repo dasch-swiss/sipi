@@ -1048,11 +1048,13 @@ async fn serve_lua_script(
         body = bytes.to_vec();
     }
 
-    // Lua routes take a global permit only (no full-partition thread slot); any
-    // decode they trigger is still charged to the full-lane memory budget engine
-    // side. Admit via the tile partition, then run the (blocking) Lua VM off the
-    // async runtime; a shed/timeout returns 503 + Retry-After.
-    let permit = match state.admission.acquire(AdmissionKind::Tile).await {
+    // Lua routes admit via the full partition: a script can do full-image-class
+    // work (upload decode+encode) and its cost is unknowable up front, so it is
+    // classed like a full decode — capped at `full_max` in advanced mode, keeping
+    // the `tile_min` floor reachable by tiles — matching the full-lane memory
+    // budget its decodes are charged to engine-side. Then run the (blocking)
+    // Lua VM off the async runtime; a shed/timeout returns 503 + Retry-After.
+    let permit = match state.admission.acquire(AdmissionKind::Full).await {
         Acquired::Admitted(permit) => permit,
         Acquired::Shed | Acquired::TimedOut => return busy_response(),
     };
