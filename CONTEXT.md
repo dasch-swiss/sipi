@@ -40,10 +40,9 @@ removal as ordinary top-level packages:
 
 - `src/util/` — generic utilities (`shttps::Hash` / `HashType`, `shttps::Parsing`,
   `shttps::Error`, `shttps::Global`, `shttps::urldecode`).
-- `src/jwt/` — the JWT verify/sign leaf.
-- `src/scripting/` — the connection-less Lua runtime (`shttps::LuaServer` +
-  `request_context.h` + the `server.db` sqlite bindings), the C++ side of SIPI's
-  three Lua entry points.
+- `src/scripting/rust/` — the Rust-hosted mlua Lua runtime (ADR-0023): the
+  hardened per-request VM, all `server.*`/`SipiImage`/sqlite bindings (JWT
+  sign/verify included, via `jsonwebtoken`), and SIPI's three Lua entry points.
 
 Their C++ symbols keep `namespace shttps` (only the file/package location moved),
 so a `shttps::` qualifier in code refers to one of these surviving modules, not to
@@ -52,6 +51,6 @@ a deleted HTTP transport. `src/shttps/` no longer exists.
 ### Naming clarification
 
 SIPI's **Route handler** (in `UBIQUITOUS_LANGUAGE.md`) is a *Lua script* bound to a
-URL pattern, run inside the request-scoped `shttps::LuaServer`. SIPI's IIIF `/file`
+URL pattern, run inside a request-scoped hardened VM of the Rust mlua runtime. SIPI's IIIF `/file`
 endpoint (the **Bitstream** path-through) is the `FILE_DOWNLOAD` case of the Rust
 IIIF classifier (`//src/iiifparser/rust:iiif_parser`), which reads from the **image root**.

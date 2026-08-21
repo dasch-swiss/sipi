@@ -77,11 +77,21 @@ Every request VM is built to one hardened profile:
   useful progress. Every binding enters through one checked-entry chokepoint
   that performs the deadline check (the `Icc::iccBytes()` single-chokepoint
   precedent), so a trapped timeout error still cannot do I/O. Blocking
-  bindings derive budgets from the remaining deadline. Engine calls are
-  uninterruptible — the deadline bounds Lua and bindings, not decode time.
+  bindings derive budgets from the remaining deadline — `server.http` clamps
+  its timeout to it, sqlite bounds lock waits by it, and the host bounds
+  body-channel writes by it (a client that stops reading cannot pin the
+  worker past the deadline). Individual filesystem syscalls (`server.fs.*`)
+  and engine calls are uninterruptible — the deadline re-checks at the next
+  binding entry, not mid-syscall or mid-decode.
 - **Kill semantics**: pre-commit kill → 500 with a generic body; post-commit
-  kill → the response stream is aborted, never a clean EOF. A killed preflight
-  is never written to the preflight cache.
+  kill *or uncaught script error* → the response stream is aborted, never a
+  clean EOF (a dropped body sender reads as a complete body, so truncated
+  output would silently serve as a 200). A killed preflight is never written
+  to the preflight cache. A deadline kill is untrappable (the re-arming hook
+  denies progress inside `pcall`); a memory-cap error is a standard Lua
+  error — trappable, as in stock Lua (`LUA_ERRMEM`) — but trapping it never
+  lifts the cap, and an *untrapped* memory error is classified and logged as
+  a memory kill.
 - **Per-request isolation kept**: a fresh VM per request. Cost reduction comes
   from a **bytecode cache** (init script, route scripts, and `require`d
   modules; `Function::dump` bytes loaded per VM as binary chunks), invalidated
