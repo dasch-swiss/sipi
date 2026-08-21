@@ -1,5 +1,65 @@
 # Changelog
 
+## [7.0.0](https://github.com/dasch-swiss/sipi/compare/v6.4.1...v7.0.0) (2026-08-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **scripting:** script-facing divergences from the previous runtime (each documented in ADR-0023 and docs/src/lua): config.password, config.adminuser, server.shutdown, and server.fs.chdir are removed; the stdlib is whitelisted (io/debug absent, os reduced to getenv/clock/date); require is restricted to the script dir; decode_jwt pins HS256 and requires a valid exp claim; server.http no longer follows redirects, caps response bodies at 16 MiB, and treats the timeout as total-request; server.cookies returns one entry per cookie with original-case names; config size strings parse strictly; scripts run under a memory cap and deadline (SIPI_LUA_MEMORY_LIMIT, SIPI_LUA_TIMEOUT_MS).
+
+### Features
+
+* **observability:** Export sipi.lua.kills{reason} from the runtime kill stats ([e44f5f5](https://github.com/dasch-swiss/sipi/commit/e44f5f5e5ce2a7993b472ce31146ff67120827f2))
+* **observability:** Per-entry-point Lua VM-build and script-duration histograms ([7fa0188](https://github.com/dasch-swiss/sipi/commit/7fa01880c3437f58627f2f1d25cae85b19c5ba60))
+
+
+### Bug Fixes
+
+* **logging:** Correct the CRIT/ALERT/EMERG level labels ([d0ed51f](https://github.com/dasch-swiss/sipi/commit/d0ed51f2703d5560e8e16a5b44df9e75c8898901))
+* **lua:** Call the send_error global, not the never-registered server.send_error ([ed1b2b5](https://github.com/dasch-swiss/sipi/commit/ed1b2b5ee5c7a166d6ff9d4e6b056ba027e84179))
+* **throttling:** Admit Lua routes and docroot scripts through the Full lane ([88b1239](https://github.com/dasch-swiss/sipi/commit/88b1239291d21022995e77814aeba4843f5925a8))
+
+
+### Code Refactoring
+
+* **ffi:** Add the sipi_image_* handle ABI for the Lua runtime ([3d6790c](https://github.com/dasch-swiss/sipi/commit/3d6790c6634397a5ed5b31d3c2772d35e60d4408))
+* **ffi:** Carry hostname/sslport over the seam and redact secrets in Debug ([f98ce35](https://github.com/dasch-swiss/sipi/commit/f98ce354401ba74f6cc740304e59e18ca0e1525f))
+* **scripting:** Add the mlua runtime core — VM profile, limits, bytecode cache ([90a38f6](https://github.com/dasch-swiss/sipi/commit/90a38f6a35829203fc5061ce6165ebc80ee7bf49))
+* **scripting:** Delete the C++ Lua runtime ([2042b1e](https://github.com/dasch-swiss/sipi/commit/2042b1efe1ec6a0732f8be9e7052f91be51f586e))
+* **scripting:** Parse the Lua config in Rust and delete the C++ config parse ([e6b042e](https://github.com/dasch-swiss/sipi/commit/e6b042eb1792e75c1f3e82858a0b9c16da98ce0e))
+* **scripting:** Pure-Rust server.* / config / helper bindings ([e4bc618](https://github.com/dasch-swiss/sipi/commit/e4bc618dadbbcc18456aa927e40c0672e435a49d))
+* **scripting:** Serve Lua routes and docroot scripts from the Rust runtime ([971ce5d](https://github.com/dasch-swiss/sipi/commit/971ce5ded7ecd60e352534708b5ec226c87215cc))
+* **scripting:** Serve preflight from the Rust runtime, delete the seam entries ([d484644](https://github.com/dasch-swiss/sipi/commit/d4846446ac946b53a67312f7cceece2dd3ac7fa6))
+* **scripting:** SipiImage, sqlite, and helper bindings over the engine ABI ([bbb8244](https://github.com/dasch-swiss/sipi/commit/bbb8244bad4db71f6c208dc530c9668bc73ce014))
+* **server-rs:** Carry Result&lt;Bytes, BodyAbort&gt; on the body channel ([806f425](https://github.com/dasch-swiss/sipi/commit/806f425b121ac0e368ad65124c66bccb7e8d327d))
+
+
+### Documentation
+
+* **build:** Add the src/ module-dependency diagram ([0969bcc](https://github.com/dasch-swiss/sipi/commit/0969bccbc3cb36d11eba2ff42befbf852c485d8c))
+* **ci:** State the phase-1 model evidence precisely ([9fb10f2](https://github.com/dasch-swiss/sipi/commit/9fb10f266c73dbcc6b6072b003b6e5529f3d5d9c))
+* **scripting:** Add ADR-0023 for the Rust-hosted mlua Lua runtime ([68d8bc4](https://github.com/dasch-swiss/sipi/commit/68d8bc4ec80b12aed074d99afc3a191e63977a72))
+* **scripting:** Add the request-flow overview diagram ([4d54aa5](https://github.com/dasch-swiss/sipi/commit/4d54aa57770fdbe67f4666eeb31a0c8778ab887a))
+* **throttling:** Add the threads-and-permits stage diagram ([8c6d54a](https://github.com/dasch-swiss/sipi/commit/8c6d54abcd4d3f1676ded0acd82925c7746cd15b))
+
+
+### Tests
+
+* **scripting:** Hardening and dsp-api-closure e2e suites ([818c874](https://github.com/dasch-swiss/sipi/commit/818c8746b3fa35d4a818947b512502ff2b9269ed))
+* **scripting:** Paired C++/Rust per-request Lua VM microbenchmarks ([510c589](https://github.com/dasch-swiss/sipi/commit/510c589cf9af8fd0877ec4f35e56e712c2a891f6))
+
+
+### Build System
+
+* **deps:** Enable mlua (lua53 + external) against the BCR [@lua](https://github.com/lua) ([78f65ca](https://github.com/dasch-swiss/sipi/commit/78f65ca2a3fbe7ee04b3a968cf406a62eef66684))
+
+
+### Miscellaneous Chores
+
+* **ci:** Gate the review on a verified wrong outcome, and pin Opus 5 at medium effort ([b77ec60](https://github.com/dasch-swiss/sipi/commit/b77ec60992f487289aef784a27bfa841788216cb))
+* **ci:** Split the review out of the shared Claude job and align its tool set ([45a4e4f](https://github.com/dasch-swiss/sipi/commit/45a4e4f25383007bbd87e2100e36afa15d2c0b93))
+* **logging:** Drop commented-out debug prints and their dead helper ([c32be23](https://github.com/dasch-swiss/sipi/commit/c32be23447d748f28cbf287f3443b4121d554f46))
+
 ## [6.4.1](https://github.com/dasch-swiss/sipi/compare/v6.4.0...v6.4.1) (2026-08-19)
 
 
