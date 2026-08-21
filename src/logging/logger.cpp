@@ -164,11 +164,11 @@ inline const char *LogLevelToString(LogLevel ll)
   case LL_ERR:
     return "ERROR";
   case LL_CRIT:
-    return "ALERT";
+    return "CRIT";
   case LL_ALERT:
-    return "EMERG";
+    return "ALERT";
   case LL_EMERG:
-    return "ERROR";
+    return "EMERG";
   default:
     return "Missing";
   }
