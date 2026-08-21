@@ -256,6 +256,13 @@ build:asan --@llvm//config:asan=true
 # `detect_leaks=1` keeps LSan on; `halt_on_error=0` lets a test surface
 # every leak in one report rather than needing N reruns.
 test:asan --test_env=ASAN_OPTIONS=detect_leaks=1:halt_on_error=0:log_path=$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e
+# The Lua request deadline (default 5s) assumes production-speed engine calls;
+# under ASan's 10-20x slowdown a TIFF->JP2 upload conversion outlives it and
+# the post-call deadline check kills the route (upload e2e all-500). The
+# spawned sipi inherits the test env, so raise the deadline for sanitizer runs
+# only. Tests that probe the kill behavior itself pass an explicit
+# SIPI_LUA_TIMEOUT_MS via start_env, which overrides this.
+test:asan --test_env=SIPI_LUA_TIMEOUT_MS=120000
 
 # ASAN_SYMBOLIZER_PATH is NOT forwarded from the client env here: the e2e test
 # macro (`test/e2e/sipi_e2e_test.bzl`) attaches `//bazel:llvm-symbolizer` as a
@@ -384,9 +391,9 @@ common --downloader_config=bazel/downloader.cfg
 # BCR curl ships with three configurable TLS backends (boringssl default,
 # mbedtls, openssl) selected via a `string_flag`. Pin to `openssl` so the
 # resolved cc dep is `@openssl//:{ssl,crypto}` rather than BoringSSL —
-# sipi's `src/jwt/jwt.c` calls OpenSSL 3.x APIs (`EVP_PKEY_get_int_param`
-# etc.) that BoringSSL doesn't expose, and a mixed include path causes
-# the BoringSSL `openssl/evp.h` to shadow the real OpenSSL header.
+# sipi links real OpenSSL elsewhere (src/util checksum digests), and a mixed
+# include path causes the BoringSSL `openssl/evp.h` to shadow the real
+# OpenSSL header.
 build --@curl//:ssl_lib=openssl
 
 # ── User overrides ─────────────────────────────────────────────────────────

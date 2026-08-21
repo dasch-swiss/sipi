@@ -46,16 +46,19 @@ Scripts run in a hardened, per-request Lua VM:
   (`scriptdir`) and nowhere else; `package.path` and `package.cpath` are
   empty.
 - **Memory cap.** Lua-heap allocations are capped per request (default
-  64 MiB; operator knob `SIPI_LUA_MEMORY_LIMIT`, in bytes). Exceeding the cap
-  kills the script.
+  64 MiB; operator knob `SIPI_LUA_MEMORY_LIMIT`, in bytes). An untrapped
+  over-cap allocation kills the script. As in stock Lua, `pcall` can catch
+  the allocation error itself — but the cap stays in force for every
+  subsequent allocation.
 - **Execution deadline.** Each request VM gets one wall-clock budget covering
   the init script, the hook or route script, and every binding call (default
   5 seconds; operator knob `SIPI_LUA_TIMEOUT_MS`). On expiry the script is
   killed; `pcall` cannot trap its way past the deadline, and blocking calls
   (`server.http`, sqlite) never wait past the remaining budget.
 - **Kill behavior.** A script killed before any output was sent yields an
-  HTTP 500 with a generic body. A script killed after output started has its
-  response stream aborted (never a clean end-of-body). A killed `pre_flight`
+  HTTP 500 with a generic body. A script killed — or failing with an uncaught
+  error — after output started has its response stream aborted (never a
+  clean end-of-body). A killed `pre_flight`
   decision is never written to the preflight access-cache. Kills are counted
   in the `sipi_lua_kills_total{reason}` metric and logged.
 - **Fail-closed startup.** An error in the init script refuses server

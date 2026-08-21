@@ -194,13 +194,30 @@ fn send_cookie_validates_options() {
         as_str(&msg),
         "'server.sendCookie(name, value[, options])': unknown option: nope"
     );
-    // secure=false is a no-op (the flag only turns on) — the cookie still
-    // renders Secure.
-    let (ok, _) = call2(
-        &vm,
-        "return server.sendCookie('c', 'd', { secure = false })",
+    // secure=false is a no-op (the flag only turns on) — the rendered
+    // Set-Cookie still carries Secure. Committed via print so the head
+    // renders, then asserted on the actual header.
+    let (vm, head, _) = test_vm(sample_request());
+    vm.run(|lua| {
+        lua.load(
+            r#"
+            server.sendCookie('c', 'd', { secure = false })
+            server.print('x')
+            "#,
+        )
+        .exec()
+    })
+    .expect("script");
+    let (_, headers) = head.borrow().clone().expect("head committed");
+    let set_cookie = headers
+        .iter()
+        .find(|(n, _)| n == "Set-Cookie")
+        .map(|(_, v)| v.clone())
+        .expect("Set-Cookie rendered");
+    assert!(
+        set_cookie.contains("Secure"),
+        "secure=false must not clear the secure default: {set_cookie}"
     );
-    assert!(ok);
 }
 
 // ── json ─────────────────────────────────────────────────────────────────────
@@ -611,6 +628,126 @@ fn http_total_timeout_fails_cleanly() {
     assert!(!ok);
     assert!(as_str(&msg).contains("failed"), "{msg:?}");
     assert!(started.elapsed() < std::time::Duration::from_secs(3));
+}
+
+/// The 16 MiB body cap (the ADR-0023 "bodies evade the Lua memory cap"
+/// mitigation), both enforcement layers: the Content-Length pre-check
+/// (rejected without downloading) and the streamed limiter for bodies with
+/// no length header (read-to-close), which can lie or be absent.
+#[test]
+fn http_body_cap_is_enforced() {
+    use std::io::{Read as _, Write as _};
+    let over_cap: usize = scripting::bindings::server::HTTP_BODY_CAP + 1024;
+
+    // Declared oversize: rejected on the Content-Length header alone.
+    let declared = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            if let Ok((mut sock, _)) = listener.accept() {
+                let mut buf = [0u8; 4096];
+                let _ = sock.read(&mut buf);
+                let _ = sock.write_all(
+                    format!(
+                        "HTTP/1.1 200 OK
+Content-Length: {over_cap}
+
+"
+                    )
+                    .as_bytes(),
+                );
+            }
+        });
+        format!("http://{addr}")
+    };
+    let (vm, _, _) = test_vm(sample_request());
+    let (ok, msg) = call2(
+        &vm,
+        &format!("return server.http('GET', '{declared}/big', 5000)"),
+    );
+    assert!(!ok);
+    assert!(as_str(&msg).contains("cap"), "{msg:?}");
+
+    // No length header, read-to-close: the streamed limiter must cut it off.
+    let streamed = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            if let Ok((mut sock, _)) = listener.accept() {
+                let mut buf = [0u8; 4096];
+                let _ = sock.read(&mut buf);
+                let _ = sock.write_all(
+                    b"HTTP/1.0 200 OK
+
+",
+                );
+                let chunk = vec![b'y'; 1024 * 1024];
+                for _ in 0..17 {
+                    if sock.write_all(&chunk).is_err() {
+                        break;
+                    }
+                }
+            }
+        });
+        format!("http://{addr}")
+    };
+    let (ok, msg) = call2(
+        &vm,
+        &format!("return server.http('GET', '{streamed}/stream', 10000)"),
+    );
+    assert!(!ok);
+    assert!(as_str(&msg).contains("cap"), "{msg:?}");
+}
+
+/// ADR-0023: blocking bindings derive budgets from the remaining deadline —
+/// a script asking for a 60s http timeout in a 500ms request budget must be
+/// bounded by the deadline, not the requested timeout.
+#[test]
+fn http_timeout_is_clamped_to_the_deadline() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let addr = listener.local_addr().unwrap();
+    std::thread::spawn(move || {
+        let _held = listener.accept();
+        std::thread::sleep(std::time::Duration::from_secs(10));
+    });
+
+    let dir = std::env::temp_dir();
+    let rt = ScriptRuntime::new(
+        dir,
+        LimitConfig {
+            timeout: std::time::Duration::from_millis(500),
+            ..LimitConfig::default()
+        },
+    );
+    let vm = rt.request_vm().expect("vm");
+    let writer = ResponseWriter::new(Box::new(|_, _| {}), Box::new(|_| Ok(())));
+    let ctx = BindingCtx {
+        request: Rc::new(sample_request()),
+        response: Rc::new(RefCell::new(writer)),
+        config: Rc::new(ConfigValues::default()),
+    };
+    scripting::bindings::install(&vm, &ctx).expect("install");
+
+    let started = std::time::Instant::now();
+    // The clamped call fails at ~500ms; the deadline is then expired, so the
+    // run itself classifies as a timeout kill — both outcomes prove the
+    // clamp, the elapsed bound is the real assertion.
+    let result = vm.run(|lua| {
+        lua.load(format!(
+            "return server.http('GET', 'http://{addr}/hang', 60000)"
+        ))
+        .eval::<(bool, Value)>()
+    });
+    match result {
+        Ok((ok, _)) => assert!(!ok, "the hanging upstream must fail, not succeed"),
+        Err(scripting::RuntimeError::Killed(scripting::KillReason::Timeout)) => {}
+        Err(other) => panic!("unexpected outcome: {other}"),
+    }
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(3),
+        "a 60s requested timeout must be clamped to the 500ms deadline, took {:?}",
+        started.elapsed()
+    );
 }
 
 #[test]

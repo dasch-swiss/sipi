@@ -91,9 +91,11 @@ bazel_dep(name = "libdeflate", version = "1.25")
 # (src/resample.cc). A true BCR drop-in — a SIMD utility, not a codec (ADR-0015).
 bazel_dep(name = "highway", version = "1.3.0.bcr.1")
 
-# Hard pin to the 5.3 line — SipiLua.cpp and src/scripting/LuaServer.cpp use the
-# Lua C API extensively, and 5.3 → 5.4 is not ABI-compatible (lua_resume
-# signature change, integer-subtype defaults, bitlib removal).
+# Hard pin to the 5.3 line — mlua's `lua53` feature (the Rust Lua runtime,
+# ADR-0023) resolves `lua_*` symbols against this cc_library at link time via
+# its `external` mode, and 5.3 → 5.4 is not ABI-compatible (lua_resume
+# signature change, integer-subtype defaults, bitlib removal) nor
+# behavior-neutral for user scripts.
 bazel_dep(name = "lua", version = "5.3.6")
 
 # 8.12.0.bcr.1 (one patch behind upstream 8.12.1 we previously pinned).

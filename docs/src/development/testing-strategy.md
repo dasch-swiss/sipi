@@ -310,7 +310,7 @@ Four layers, from fastest/narrowest to slowest/broadest:
 - **FFI / C-library boundaries** where the bug class lives in the C++↔C interop (libtiff variadic-arg type widths, kakadu callback lifetimes, lcms2 profile ownership) and Rust e2e would observe only the downstream symptom.
 - **Move/copy/RAII semantics** that pure-function tests can pin but server-level tests cannot (assignment-operator buffer lifecycle, exception-safety guarantees, `noexcept` move correctness).
 - **Concurrency primitives** with lock-free or atomic semantics (`SipiMemoryBudget`) where deterministic e2e reproduction is impractical.
-- **Engine-internal coverage:** C++ engine components the Rust shell drives (Lua scripting, cache management) are covered with C++ unit tests that travel with the C++ code. This documents existing engine behavior and avoids false failures when internal C++ behavior changes while the HTTP contract the shell exposes stays fixed.
+- **Engine-internal coverage:** C++ engine components the Rust shell drives (cache management, decode pipeline) are covered with C++ unit tests that travel with the C++ code. This documents existing engine behavior and avoids false failures when internal C++ behavior changes while the HTTP contract the shell exposes stays fixed. (Lua scripting is Rust-hosted — its coverage is the Rust `#[test]` files in `src/scripting/rust/`.)
 
 Behavior that *is* HTTP-observable belongs in Rust e2e — not in C++ unit tests.
 

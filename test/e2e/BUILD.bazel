@@ -9,7 +9,7 @@ Layout:
   * `:sipi_e2e`        `rust_library` exposing the shared helpers
                        (`SipiServer`, `repo_root`, `http_client`, …)
                        consumed by every test binary.
-  * 28 × `rust_test`   one target per non-docker `tests/<name>.rs`,
+  * 30 × `rust_test`   one target per non-docker `tests/<name>.rs`,
                        defined via `sipi_e2e_test()` (see
                        `sipi_e2e_test.bzl`). The macro injects the
                        shared `data`/`env`/`args`/`tags` so the
@@ -17,7 +17,7 @@ Layout:
   * `:docker_smoke`    inline `rust_test` — its data shape (OCI image
                        tarball) and tags (`requires-docker`) diverge
                        from the macro's defaults.
-  * `:all_e2e`         `test_suite` aggregating the 28 non-docker
+  * `:all_e2e`         `test_suite` aggregating the 30 non-docker
                        targets (not `:docker_smoke`).
                        `just bazel-test-e2e` wraps `bazel test
                        //test/e2e:all_e2e`.
@@ -128,6 +128,8 @@ sipi_e2e_test(name = "connection", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "docroot_scripts", deps = _e2e_test_deps)
 
+sipi_e2e_test(name = "dsp_api_closure", deps = _e2e_test_deps)
+
 sipi_e2e_test(name = "health", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "heritage_jpeg", deps = _e2e_test_deps)
@@ -139,6 +141,8 @@ sipi_e2e_test(name = "iiif_compliance", deps = _e2e_test_deps)
 sipi_e2e_test(name = "input_validation", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "latency", deps = _e2e_test_deps)
+
+sipi_e2e_test(name = "lua_hardening", deps = _e2e_test_deps)
 
 # SIPI-1R regression gate: several OTel metric collections — the path that
 # segfaulted 6.3.0's mis-declared `mi_stats_get` FFI — must run without
@@ -282,12 +286,14 @@ test_suite(
         ":config",
         ":connection",
         ":docroot_scripts",
+        ":dsp_api_closure",
         ":health",
         ":heritage_jpeg",
         ":http_contracts",
         ":iiif_compliance",
         ":input_validation",
         ":latency",
+        ":lua_hardening",
         ":metrics_export",
         ":option_matrix",
         ":preflight_cache",

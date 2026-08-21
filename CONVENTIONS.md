@@ -162,8 +162,8 @@ per-module diff shape.
 Built-in routes are registered on the axum `Router` in the Rust shell
 (`src/server-rs/src/routes.rs`). Scripted routes are Lua scripts bound to URL
 patterns in the config ([ADR-0017](docs/adr/0017-extensibility-lua-and-rust.md)):
-a `Route handler` is a Lua script the shell dispatches to, run inside the
-request-scoped `shttps::LuaServer`. IIIF requests are classified by the
+a `Route handler` is a Lua script the shell dispatches to, run inside a
+request-scoped hardened VM of the Rust mlua runtime (`src/scripting/rust/`). IIIF requests are classified by the
 standalone `//src/iiifparser/rust:iiif_parser` crate (`parse_request`), which
 owns region/size/rotation/quality/format parsing and emits domain types;
 `server-rs` flattens those into the FFI params that cross the seam to the C++
