@@ -371,22 +371,8 @@ const _: () = {
     assert!(SipiPermType::Deny as isize == 6);
 };
 
-/// A name/value pair passed to the request-context builder (mirrors `SipiStrPair`).
-#[repr(C)]
-pub struct SipiStrPair {
-    pub name: *const c_char,
-    pub value: *const c_char,
-}
-
 /// The preflight key/value emit callback (mirrors `SipiKVFn`).
 pub type SipiKVFn = extern "C" fn(ctx: *mut c_void, key: *const c_char, value: *const c_char);
-
-/// The opaque request context the preflight hooks read (an opaque C++ handle).
-/// Built by [`sipi_make_request_context`], freed by [`sipi_free_request_context`].
-#[repr(C)]
-pub struct SipiRequestContext {
-    _private: [u8; 0],
-}
 
 /// Number of serve phases — matches the C `SIPI_PHASE_COUNT`. The
 /// `serve_timings_layout` test asserts this equals the engine's own
@@ -563,49 +549,6 @@ extern "C" {
     /// pre-commit step. Returns 0, or non-zero on an internal error.
     pub fn sipi_metrics_snapshot(out: *mut SipiMetricsSnapshot) -> c_int;
 
-    /// Run a configured Lua route's script against `ctx`, emitting its response
-    /// through `resp` (the streaming sink). Returns 0 once emitted, or an HTTP
-    /// status (404/500) on a pre-body failure.
-    pub fn sipi_run_lua_route(
-        script: *const c_char,
-        ctx: *mut SipiRequestContext,
-        resp: *const SipiResponse,
-    ) -> c_int;
-
-    /// Attach the POST body + content type to a context (deep-copied). `data` may
-    /// be null with `len` 0.
-    pub fn sipi_request_context_set_body(
-        ctx: *mut SipiRequestContext,
-        content_type: *const c_char,
-        data: *const u8,
-        len: usize,
-    );
-
-    /// Append one parsed multipart upload (`server.uploads`). `tmpname` is the
-    /// on-disk path of the spooled part; it must exist for the route call.
-    pub fn sipi_request_context_add_upload(
-        ctx: *mut SipiRequestContext,
-        fieldname: *const c_char,
-        origname: *const c_char,
-        tmpname: *const c_char,
-        mimetype: *const c_char,
-        filesize: u64,
-    );
-
-    /// Append a GET (`kind` = 0) or POST (`kind` = 1) form parameter; both also
-    /// feed `server.request`.
-    pub fn sipi_request_context_add_param(
-        ctx: *mut SipiRequestContext,
-        kind: c_int,
-        name: *const c_char,
-        value: *const c_char,
-    );
-
-    /// Set `server.docroot` for a docroot `.lua`/`.elua` script (injected into the
-    /// VM by `run_lua_route`). NULL/empty = not injected (configured routes leave
-    /// it unset, matching the C++ `script_handler`).
-    pub fn sipi_request_context_set_docroot(ctx: *mut SipiRequestContext, docroot: *const c_char);
-
     /// Header-only image-shape probe (no full decode) — also optionally emits
     /// the Essentials identity from the SAME read via `emit`/`ctx` (`None` =
     /// caller doesn't want it, e.g. info.json). When `emit` is present, it
@@ -623,33 +566,6 @@ extern "C" {
     /// The engine's libmagic MIME type for a file, emitted once via `emit`.
     /// `resolved_path` is an already-validated absolute path. Returns 0, or 500.
     pub fn sipi_mimetype(resolved_path: *const c_char, emit: SipiStrFn, ctx: *mut c_void) -> c_int;
-
-    /// Run the IIIF `pre_flight(prefix, identifier, cookie)` hook against `ctx`.
-    /// Writes the permission to `*type` and emits each kv pair (incl. `infile`)
-    /// via `emit_kv`. Returns 0, or 500 on a Lua/validation failure. `resp`, if
-    /// non-null, is wired as the hook's response sink for the call — some
-    /// `pre_flight` scripts emit a response directly (`server.sendStatus`/
-    /// `sendHeader`/`server.print`) instead of, or alongside, returning a
-
-    /// Build the opaque request context from primitive fields (header names are
-    /// lowercased). Deep-copies the arrays. Returns the context or null.
-    pub fn sipi_make_request_context(
-        method: *const c_char,
-        client_ip: *const c_char,
-        client_port: c_int,
-        secure: c_int,
-        host: *const c_char,
-        uri: *const c_char,
-        headers: *const SipiStrPair,
-        n_headers: usize,
-        cookies: *const SipiStrPair,
-        n_cookies: usize,
-    ) -> *mut SipiRequestContext;
-
-    /// Free a context from [`sipi_make_request_context`]. Null is a no-op.
-    pub fn sipi_free_request_context(ctx: *mut SipiRequestContext);
-
-    /// Whether the engine Lua config defines a `pre_flight` / `file_pre_flight`
 
     /// Stamp the C++ engine's server-mode JSON logs on the calling thread with
     /// the active trace context (lowercase-hex `trace_id`/`span_id`); both NULL
@@ -1168,178 +1084,6 @@ pub(crate) extern "C" fn report_image_error(ctx: *mut c_void, err: *const SipiIm
     }));
 }
 
-// ── Preflight wrappers ──────────────────────────────────────────────────────
-
-/// An owned request context. Frees the underlying C++ request context on
-/// drop, so a preflight call never leaks (the seam contract: Rust owns it).
-pub struct RequestContext {
-    ptr: *mut SipiRequestContext,
-}
-
-impl RequestContext {
-    /// The raw context pointer, for passing to [`sipi_run_lua_route`]. Valid for
-    /// the lifetime of this `RequestContext`.
-    #[must_use]
-    pub fn as_ptr(&self) -> *mut SipiRequestContext {
-        self.ptr
-    }
-
-    /// Attach the POST body + content type (`server.content` / `content_type`).
-    /// Binary-safe (the body is passed as raw bytes, not a C string).
-    pub fn set_body(&self, content_type: &str, data: &[u8]) {
-        let ct = CString::new(content_type).unwrap_or_default();
-        // SAFETY: `ct` and `data` outlive the synchronous call; the builder
-        // deep-copies; the seam guards exceptions.
-        unsafe { sipi_request_context_set_body(self.ptr, ct.as_ptr(), data.as_ptr(), data.len()) };
-    }
-
-    /// Append one parsed multipart upload (`server.uploads`). A field with an
-    /// interior NUL in any string is skipped (such fields cannot reach Lua).
-    pub fn add_upload(
-        &self,
-        fieldname: &str,
-        origname: &str,
-        tmpname: &str,
-        mimetype: &str,
-        filesize: u64,
-    ) {
-        let (Ok(f), Ok(o), Ok(t), Ok(m)) = (
-            CString::new(fieldname),
-            CString::new(origname),
-            CString::new(tmpname),
-            CString::new(mimetype),
-        ) else {
-            return;
-        };
-        // SAFETY: the C strings outlive the synchronous call; deep-copied; guarded.
-        unsafe {
-            sipi_request_context_add_upload(
-                self.ptr,
-                f.as_ptr(),
-                o.as_ptr(),
-                t.as_ptr(),
-                m.as_ptr(),
-                filesize,
-            )
-        };
-    }
-
-    /// Append a GET (`kind` = 0) or POST (`kind` = 1) form parameter (`server.get`
-    /// / `server.post`; both visible through `server.request`).
-    pub fn add_param(&self, kind: i32, name: &str, value: &str) {
-        let (Ok(n), Ok(v)) = (CString::new(name), CString::new(value)) else {
-            return;
-        };
-        // SAFETY: the C strings outlive the synchronous call; deep-copied; guarded.
-        unsafe { sipi_request_context_add_param(self.ptr, kind, n.as_ptr(), v.as_ptr()) };
-    }
-
-    /// Set `server.docroot` for a docroot `.lua`/`.elua` script. An interior NUL
-    /// is dropped (the field then stays unset, as for a configured route).
-    pub fn set_docroot(&self, docroot: &str) {
-        let Ok(d) = CString::new(docroot) else {
-            return;
-        };
-        // SAFETY: `d` outlives the synchronous call; the engine deep-copies; guarded.
-        unsafe { sipi_request_context_set_docroot(self.ptr, d.as_ptr()) };
-    }
-}
-
-impl Drop for RequestContext {
-    fn drop(&mut self) {
-        // SAFETY: `ptr` came from sipi_make_request_context and is freed exactly
-        // once (this Drop); null is a no-op on the C side.
-        unsafe { sipi_free_request_context(self.ptr) }
-    }
-}
-
-/// The primitive request fields the preflight hooks read, grouped for the
-/// [`build_request_context`] FFI builder.
-pub struct RequestFields<'a> {
-    pub method: &'a str,
-    pub client_ip: &'a str,
-    pub client_port: i32,
-    pub secure: bool,
-    pub host: &'a str,
-    pub uri: &'a str,
-    pub headers: &'a [(String, String)],
-    pub cookies: &'a [(String, String)],
-}
-
-/// Build the opaque request context the preflight hooks read, from primitive
-/// request fields. Returns `None` on an interior NUL or an allocation failure.
-pub fn build_request_context(fields: RequestFields) -> Option<RequestContext> {
-    let c_method = CString::new(fields.method).ok()?;
-    let c_client_ip = CString::new(fields.client_ip).ok()?;
-    let c_host = CString::new(fields.host).ok()?;
-    let c_uri = CString::new(fields.uri).ok()?;
-
-    // Own every C string for the duration of the call; the builder deep-copies,
-    // so they only need to outlive the synchronous call. CString heap buffers are
-    // stable across the Vec growth, so the recorded pointers stay valid.
-    let mut owned: Vec<CString> =
-        Vec::with_capacity((fields.headers.len() + fields.cookies.len()) * 2);
-    fn pair(owned: &mut Vec<CString>, k: &str, v: &str) -> Option<SipiStrPair> {
-        let ck = CString::new(k).ok()?;
-        let cv = CString::new(v).ok()?;
-        let p = SipiStrPair {
-            name: ck.as_ptr(),
-            value: cv.as_ptr(),
-        };
-        owned.push(ck);
-        owned.push(cv);
-        Some(p)
-    }
-    let mut header_pairs = Vec::with_capacity(fields.headers.len());
-    for (k, v) in fields.headers {
-        header_pairs.push(pair(&mut owned, k, v)?);
-    }
-    let mut cookie_pairs = Vec::with_capacity(fields.cookies.len());
-    for (k, v) in fields.cookies {
-        cookie_pairs.push(pair(&mut owned, k, v)?);
-    }
-
-    // SAFETY: all pointers outlive the synchronous call; the builder deep-copies
-    // and returns an owned handle (or null). The seam guards C++ exceptions.
-    let ptr = unsafe {
-        sipi_make_request_context(
-            c_method.as_ptr(),
-            c_client_ip.as_ptr(),
-            fields.client_port,
-            c_int::from(fields.secure),
-            c_host.as_ptr(),
-            c_uri.as_ptr(),
-            header_pairs.as_ptr(),
-            header_pairs.len(),
-            cookie_pairs.as_ptr(),
-            cookie_pairs.len(),
-        )
-    };
-    if ptr.is_null() {
-        None
-    } else {
-        Some(RequestContext { ptr })
-    }
-}
-
-/// The parsed result of a preflight hook: the permission and the open kv channel
-/// (`infile` plus `watermark` / `size` / auth-service keys).
-pub struct PreflightOutcome {
-    pub permission: SipiPermType,
-    pub kv: Vec<(String, String)>,
-}
-
-impl PreflightOutcome {
-    /// The value of a kv key, if the hook emitted it.
-    #[must_use]
-    pub fn get(&self, key: &str) -> Option<&str> {
-        self.kv
-            .iter()
-            .find(|(k, _)| k == key)
-            .map(|(_, v)| v.as_str())
-    }
-}
-
 // Lock-step layout guard — paired with the C++ static_assert/offsetof block in
 // src/ffi/serve_timings.cpp. The offset asserts catch a field reorder; the
 // `size_of` literal and the `sipi_phase_count()` cross-check catch a one-sided
@@ -1704,20 +1448,5 @@ mod image_dims_layout {
         assert_eq!(offset_of!(SipiImageDims, numpages), 8);
         assert_eq!(offset_of!(SipiImageDims, tile_width), 12);
         assert_eq!(offset_of!(SipiImageDims, tile_height), 16);
-    }
-}
-
-#[cfg(test)]
-mod str_pair_layout {
-    use super::SipiStrPair;
-    use std::mem::{align_of, offset_of, size_of};
-
-    #[test]
-    fn repr_c_matches_sipi_ffi_h() {
-        assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
-        assert_eq!(align_of::<SipiStrPair>(), 8);
-        assert_eq!(size_of::<SipiStrPair>(), 16);
-        assert_eq!(offset_of!(SipiStrPair, name), 0);
-        assert_eq!(offset_of!(SipiStrPair, value), 8);
     }
 }

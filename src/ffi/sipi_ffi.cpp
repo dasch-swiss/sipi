@@ -16,46 +16,16 @@
 #include "SipiImage.h"// SipiImage::read_shape (sipi_image_dims)
 #include "ffi/engine_context.h"
 #include "ffi/metrics_snapshot.h"
-#include "ffi/response_sink.h"// FfiResponseSink (sipi_preflight / sipi_file_preflight)
-#include "ffi/run_lua_route.h"
 #include "ffi/serve_image.h"
 #include "ffi/serve_response.h"
 #include "ffi/serve_timings.h"// serve_timings_reset/export (sipi_serve_timings_take)
 #include "generated/SipiVersion.h"// VERSION / BUILD_SCM_REVISION (sipi_build_version/commit)
 #include "logging/logger.h"// set_log_trace_context (sipi_set_log_trace_context)
 #include "observability/metrics.h"
-#include "scripting/request_context.h"// shttps::RequestContext (the opaque SipiRequestContext)
 #include "util/Parsing.h"// shttps::Parsing::getBestFileMimetype (sipi_mimetype)
 
 namespace {
 
-// Map an HTTP method string to the Lua-facing enum (request_context.h), matching
-// the transport's Connection::method() → HttpMethod mapping. Unknown → OTHER.
-shttps::HttpMethod parse_http_method(const char *method)
-{
-  const std::string m = (method != nullptr) ? method : "";
-  if (m == "GET") { return shttps::HttpMethod::GET; }
-  if (m == "HEAD") { return shttps::HttpMethod::HEAD; }
-  if (m == "POST") { return shttps::HttpMethod::POST; }
-  if (m == "PUT") { return shttps::HttpMethod::PUT; }
-  if (m == "DELETE") { return shttps::HttpMethod::DELETE; }
-  if (m == "OPTIONS") { return shttps::HttpMethod::OPTIONS; }
-  if (m == "TRACE") { return shttps::HttpMethod::TRACE; }
-  if (m == "CONNECT") { return shttps::HttpMethod::CONNECT; }
-  return shttps::HttpMethod::OTHER;
-}
-
-
-// Lower-case a header name, matching make_request_context (the Lua hooks look
-// headers up by their lower-cased name, e.g. ctx.headers["cookie"]).
-std::string ascii_lower(const char *s)
-{
-  std::string r = (s != nullptr) ? s : "";
-  std::transform(r.begin(), r.end(), r.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-  return r;
-}
-
-const char *nz(const char *s) { return (s != nullptr) ? s : ""; }
 
 }// namespace
 
@@ -101,66 +71,6 @@ int sipi_phase_count(void) { return SIPI_PHASE_COUNT; }
 const char *sipi_build_version(void) { return VERSION; }
 
 const char *sipi_build_commit(void) { return BUILD_SCM_REVISION; }
-
-int sipi_run_lua_route(const char *script, SipiRequestContext *ctx, const SipiResponse *resp)
-{
-  // The Lua route writes its whole response (status/headers/body) through the
-  // sink during execution, so unlike the serve entries there is no build/apply
-  // split — run_lua_route drives the FfiResponseSink directly. Only the no-throw
-  // guard applies; a Lua error before any byte is written becomes a clean status,
-  // after it the already-committed stream truncates (parity with the transport).
-  return Sipi::ffi::sipi_guard([&] {
-    auto &rc = *reinterpret_cast<shttps::RequestContext *>(ctx);
-    return Sipi::ffi::run_lua_route(script, rc, *resp);
-  });
-}
-
-int sipi_metrics_snapshot(SipiMetricsSnapshot *out)
-{
-  // A thin read of the engine metrics singleton — no response sink and no
-  // fallible pre-commit work, so it needs no build/apply split (that shape
-  // exists to drive the response callbacks correctly). Only the no-throw guard
-  // applies: the boundary contract is uniform — no entry lets a C++ exception
-  // cross into Rust. `out` is a caller-owned buffer, trusted like the response
-  // sinks of the serve entries.
-  return Sipi::ffi::sipi_guard([&] {
-    auto &m = Sipi::observability::Metrics::instance();
-
-    // The singleton stores counters as uint64 and gauges as int64 (a gauge may
-    // be negative: the cache size limit is -1 when unlimited). These readers make
-    // the snapshot's integral narrowing explicit at the seam.
-    const auto counter = [](const Sipi::observability::Counter &c) { return c.Value(); };
-    const auto gauge = [](const Sipi::observability::Gauge &g) { return g.Value(); };
-
-    out->cache_hits_total = counter(m.cache_hits_total);
-    out->cache_misses_total = counter(m.cache_misses_total);
-    out->cache_evictions_total = counter(m.cache_evictions_total);
-    out->cache_skips_total = counter(m.cache_skips_total);
-    out->client_disconnected_total = counter(m.client_disconnected_total);
-    out->memory_alloc_failures_total = counter(m.memory_alloc_failures_total);
-    out->rejected_connections_total = counter(m.rejected_connections_total);
-
-    out->decode_memory_acquired_total = counter(m.decode_memory_acquired);
-    out->decode_memory_rejected_total = counter(m.decode_memory_rejected);
-    out->decode_memory_shadow_rejected_total = counter(m.decode_memory_shadow_rejected);
-    out->decode_memory_near_limit_total = counter(m.decode_memory_near_limit_total);
-
-    out->tiff_pyramid_reduced_decodes_total = counter(m.tiff_pyramid_reduced_decodes_total);
-
-    out->decode_memory_too_large_total = counter(m.decode_memory_too_large_total);
-    out->decode_memory_shadow_too_large_total = counter(m.decode_memory_shadow_too_large_total);
-
-    out->waiting_connections = gauge(m.waiting_connections);
-    out->cache_size_bytes = gauge(m.cache_size_bytes);
-    out->cache_files = gauge(m.cache_files);
-    out->cache_size_limit_bytes = gauge(m.cache_size_limit_bytes);
-    out->cache_files_limit = gauge(m.cache_files_limit);
-    out->decode_memory_budget_bytes = gauge(m.decode_memory_budget_bytes);
-    out->decode_memory_used_bytes = gauge(m.decode_memory_used_bytes);
-
-    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
-  });
-}
 
 int sipi_imgroot(int resolved, const char **out)
 {
@@ -294,106 +204,53 @@ int sipi_mimetype(const char *resolved_path, SipiStrFn emit, void *ctx)
   });
 }
 
-SipiRequestContext *sipi_make_request_context(const char *method,
-  const char *client_ip,
-  int client_port,
-  int secure,
-  const char *host,
-  const char *uri,
-  const SipiStrPair *headers,
-  size_t n_headers,
-  const SipiStrPair *cookies,
-  size_t n_cookies)
+int sipi_metrics_snapshot(SipiMetricsSnapshot *out)
 {
-  // Returns a pointer, so it can't use sipi_guard (which returns int); a throw
-  // collapses to NULL. The heap RequestContext is owned by the Rust caller and
-  // released via sipi_free_request_context. Fields preflight does not read
-  // (get/post params, uploads, body) stay default-empty (YAGNI); jwt_secret +
-  // response sink are filled by make_lua_server / left null (preflight read-only).
-  try {
-    auto ctx = std::make_unique<shttps::RequestContext>();
-    ctx->method = parse_http_method(method);
-    ctx->client_ip = nz(client_ip);
-    ctx->client_port = client_port;
-    ctx->secure = secure != 0;
-    ctx->host = nz(host);
-    ctx->uri = nz(uri);
-    for (size_t i = 0; i < n_headers; ++i) { ctx->headers[ascii_lower(headers[i].name)] = nz(headers[i].value); }
-    for (size_t i = 0; i < n_cookies; ++i) { ctx->cookies[nz(cookies[i].name)] = nz(cookies[i].value); }
-    return reinterpret_cast<SipiRequestContext *>(ctx.release());
-  } catch (...) {
-    return nullptr;
-  }
+  // A thin read of the engine metrics singleton — no response sink and no
+  // fallible pre-commit work, so it needs no build/apply split (that shape
+  // exists to drive the response callbacks correctly). Only the no-throw guard
+  // applies: the boundary contract is uniform — no entry lets a C++ exception
+  // cross into Rust. `out` is a caller-owned buffer, trusted like the response
+  // sinks of the serve entries.
+  return Sipi::ffi::sipi_guard([&] {
+    auto &m = Sipi::observability::Metrics::instance();
+
+    // The singleton stores counters as uint64 and gauges as int64 (a gauge may
+    // be negative: the cache size limit is -1 when unlimited). These readers make
+    // the snapshot's integral narrowing explicit at the seam.
+    const auto counter = [](const Sipi::observability::Counter &c) { return c.Value(); };
+    const auto gauge = [](const Sipi::observability::Gauge &g) { return g.Value(); };
+
+    out->cache_hits_total = counter(m.cache_hits_total);
+    out->cache_misses_total = counter(m.cache_misses_total);
+    out->cache_evictions_total = counter(m.cache_evictions_total);
+    out->cache_skips_total = counter(m.cache_skips_total);
+    out->client_disconnected_total = counter(m.client_disconnected_total);
+    out->memory_alloc_failures_total = counter(m.memory_alloc_failures_total);
+    out->rejected_connections_total = counter(m.rejected_connections_total);
+
+    out->decode_memory_acquired_total = counter(m.decode_memory_acquired);
+    out->decode_memory_rejected_total = counter(m.decode_memory_rejected);
+    out->decode_memory_shadow_rejected_total = counter(m.decode_memory_shadow_rejected);
+    out->decode_memory_near_limit_total = counter(m.decode_memory_near_limit_total);
+
+    out->tiff_pyramid_reduced_decodes_total = counter(m.tiff_pyramid_reduced_decodes_total);
+
+    out->decode_memory_too_large_total = counter(m.decode_memory_too_large_total);
+    out->decode_memory_shadow_too_large_total = counter(m.decode_memory_shadow_too_large_total);
+
+    out->waiting_connections = gauge(m.waiting_connections);
+    out->cache_size_bytes = gauge(m.cache_size_bytes);
+    out->cache_files = gauge(m.cache_files);
+    out->cache_size_limit_bytes = gauge(m.cache_size_limit_bytes);
+    out->cache_files_limit = gauge(m.cache_files_limit);
+    out->decode_memory_budget_bytes = gauge(m.decode_memory_budget_bytes);
+    out->decode_memory_used_bytes = gauge(m.decode_memory_used_bytes);
+
+    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+  });
 }
 
-void sipi_free_request_context(SipiRequestContext *ctx)
-{
-  delete reinterpret_cast<shttps::RequestContext *>(ctx);
-}
-
-void sipi_request_context_set_body(SipiRequestContext *ctx, const char *content_type, const uint8_t *data, size_t len)
-{
-  // Void + can only fail on allocation; swallow so no C++ exception crosses the
-  // boundary (the uniform boundary contract).
-  try {
-    auto &rc = *reinterpret_cast<shttps::RequestContext *>(ctx);
-    rc.content_type = nz(content_type);
-    if (data != nullptr && len > 0) {
-      rc.content.assign(reinterpret_cast<const char *>(data), len);
-    } else {
-      rc.content.clear();
-    }
-  } catch (...) {
-  }
-}
-
-void sipi_request_context_add_upload(SipiRequestContext *ctx,
-  const char *fieldname,
-  const char *origname,
-  const char *tmpname,
-  const char *mimetype,
-  uint64_t filesize)
-{
-  try {
-    auto &rc = *reinterpret_cast<shttps::RequestContext *>(ctx);
-    rc.uploads.push_back(shttps::UploadedFile{
-      .fieldname = nz(fieldname),
-      .origname = nz(origname),
-      .tmpname = nz(tmpname),
-      .mimetype = nz(mimetype),
-      .filesize = static_cast<std::size_t>(filesize),
-    });
-  } catch (...) {
-  }
-}
-
-void sipi_request_context_add_param(SipiRequestContext *ctx, int kind, const char *name, const char *value)
-{
-  // GET (kind 0) → server.get, POST (kind 1) → server.post; both also feed
-  // server.request (the merged view), matching make_request_context's split.
-  try {
-    auto &rc = *reinterpret_cast<shttps::RequestContext *>(ctx);
-    auto pair = std::make_pair(std::string{ nz(name) }, std::string{ nz(value) });
-    if (kind == 1) {
-      rc.post_params.push_back(pair);
-    } else {
-      rc.get_params.push_back(pair);
-    }
-    rc.request_params.push_back(std::move(pair));
-  } catch (...) {
-  }
-}
-
-void sipi_request_context_set_docroot(SipiRequestContext *ctx, const char *docroot)
-{
-  // server.docroot for a docroot .lua/.elua script (run_lua_route injects it into
-  // the VM when set). Void + can only fail on allocation; swallow so no C++
-  // exception crosses the boundary (the uniform boundary contract).
-  try {
-    reinterpret_cast<shttps::RequestContext *>(ctx)->docroot = nz(docroot);
-  } catch (...) {
-  }
-}
 
 void sipi_set_log_trace_context(const char *trace_id, const char *span_id)
 {

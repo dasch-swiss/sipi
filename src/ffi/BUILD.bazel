@@ -45,7 +45,6 @@ cc_library(
         # helpers it shares with the CLI dispatch (dependency runs cli -> ffi).
         "init.cpp",
         "lua_config.cpp",
-        "run_lua_route.cpp",
         "serve_image.cpp",
         "serve_response.cpp",
         "serve_timings.cpp",
@@ -58,8 +57,6 @@ cc_library(
         "engine_context.h",
         "lua_config.h",
         "metrics_snapshot.h",
-        "response_sink.h",
-        "run_lua_route.h",
         "serve_image.h",
         "serve_response.h",
         "serve_timings.h",
