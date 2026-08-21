@@ -447,12 +447,6 @@ bool SipiIOJ2k::read(SipiImage *img,
   siz->get(Ssize, 0, 0, __ny);
   siz->get(Ssize, 0, 1, __nx);
 
-  /*
-  int __clayers;
-  __clayers = codestream.get_min_dwt_levels( );
-  std::cerr << "Clayers=" << __clayers << std::endl;
-  */
-
   //
   // is there a region of interest defined ? If yes, get the cropping parameters...
   //
@@ -755,15 +749,12 @@ bool SipiIOJ2k::read(SipiImage *img,
     switch (scaling_quality.jk2) {
     case ScalingMethod::HIGH:
       img->scale(nnx, nny);
-      // std::cerr << "===>HIGH SCALING to nnx=" << nnx << " nny=" << nny << std::endl;
       break;
     case ScalingMethod::MEDIUM:
       img->scaleMedium(nnx, nny);
-      // std::cerr << "===>MEDIUM SCALING to nnx=" << nnx << " nny=" << nny << std::endl;
       break;
     case ScalingMethod::LOW:
       img->scaleFast(nnx, nny);
-      // std::cerr << "===>FAST SCALING to nnx=" << nnx << " nny=" << nny << std::endl;
       break;
     }
   }
