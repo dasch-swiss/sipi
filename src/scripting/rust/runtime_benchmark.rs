@@ -1,8 +1,7 @@
 //! Per-request Lua VM cost, Rust runtime: hardened-profile VM build, init
 //! execution through the bytecode cache (`require`d modules included), and
-//! the instruction-hook overhead on a fixed compute chunk. Paired with the
-//! C++ `//src/scripting:luaserver_benchmark`; run both on the same machine
-//! and compare medians (`docs/src/development/benchmarking.md` discipline).
+//! the instruction-hook overhead on a fixed compute chunk
+//! (`docs/src/development/benchmarking.md` discipline).
 //!
 //! The init script + script dir default to the repo's own
 //! `config/sipi.init.lua` / `scripts/`; point SIPI_BENCH_INITSCRIPT /

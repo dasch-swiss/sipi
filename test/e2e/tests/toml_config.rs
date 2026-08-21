@@ -62,7 +62,7 @@ fn toml_config_serves_identically_to_lua() {
     );
 
     // 3. the configured [[routes]] entry dispatches identically — proving a TOML
-    //    route reaches the engine's Lua runtime via the same sipi_run_lua_route
+    //    route reaches the Lua runtime via the same `LuaEnv::run_route`
     //    path as a Lua-config route.
     let lua_route = client
         .get(format!("{}/parity", lua.base_url))

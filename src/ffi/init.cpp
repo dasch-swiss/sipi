@@ -9,8 +9,8 @@
  * The Rust shell calls this once at startup before serving: it takes every
  * configured value from `overrides` (the shell parses both config flavors —
  * TOML and Lua — Rust-side), builds the cache / decode-memory-budget services,
- * points `engine_context()` at them, and installs the engine-held Lua config VM
- * factory. It is a production entry point, so it lives in the seam package
+ * and points `engine_context()` at them. It is a production entry point, so it
+ * lives in the seam package
  * (`src/ffi`), not in the CLI package (`src/cli`).
  */
 
@@ -24,7 +24,6 @@
 #include <string>
 #include <vector>
 
-#include "scripting/LuaSqlite.h"// shttps::sqliteGlobals
 #include "util/Error.h"// shttps::Error
 
 #include "SipiCache.h"
@@ -34,9 +33,7 @@
 #include "logging/logger.h"// log_warn / log_err / log_info
 #include "observability/metrics.h"// Sipi::observability::Metrics
 
-#include "ffi/SipiLua.h"// Sipi::sipiGlobals
 #include "ffi/engine_context.h"// Sipi::ffi::set_engine_context, EngineContext
-#include "ffi/lua_config.h"// Sipi::ffi::set_lua_config, LuaConfig, sipiConfGlobals
 #include "ffi/sipi_ffi.h"// the extern "C" sipi_init contract + SipiServerConfig
 #include "ffi/startup.h"// Sipi::ffi::LibraryInitialiser, detect_available_memory
 
@@ -72,9 +69,7 @@ Sipi::ScalingQuality to_scaling_quality(const std::map<std::string, std::string>
  * The Rust shell has no server object to own the engine services, so `sipi_init`
  * parks them here for the process lifetime.
  * `engine_context()` stores non-owning pointers into this holder, so it must
- * outlive every serve call — hence file-static. The held `SipiConf` also backs
- * the `sipiConfGlobals` installer captured in the Lua config (the per-request VM
- * factory reads it on every preflight / route call).
+ * outlive every serve call — hence file-static.
  */
 struct ServerRuntime
 {
@@ -87,10 +82,9 @@ std::unique_ptr<ServerRuntime> g_server_runtime;
 }// namespace
 
 /*!
- * Install the engine + Lua config from scratch. The Rust shell calls it once at
- * startup before serving. Builds the cache / memory budget into
- * `g_server_runtime`, points `engine_context()` at them, and installs the
- * engine-held Lua config VM factory. Returns 0 on success or `EXIT_FAILURE`;
+ * Install the engine from scratch. The Rust shell calls it once at startup
+ * before serving. Builds the cache / memory budget into `g_server_runtime` and
+ * points `engine_context()` at them. Returns 0 on success or `EXIT_FAILURE`;
  * never lets a C++ exception cross the boundary.
  *
  * `overrides` carries the resolved config the Rust shell assembled (config file
@@ -161,10 +155,6 @@ extern "C" int sipi_init(const SipiServerConfig *overrides)
       if (o.docroot != nullptr) conf.setDocRoot(o.docroot);
       if (o.wwwroute != nullptr) conf.setWWWRoute(o.wwwroute);
       if (o.loglevel != nullptr) conf.setLogLevel(o.loglevel);
-      // No engine behavior of their own: they feed the SipiConf getters the
-      // Lua `config` table exposes (config.hostname / config.sslport).
-      if (o.hostname != nullptr) conf.setHostname(o.hostname);
-      if (o.has_sslport) conf.setSSLPort(o.sslport);
       // Scaling-quality per codec (TOML-config-only — no CLI flag). Merge the
       // present codecs onto the base map so a partial override keeps the others.
       // The "j2k" key is stored as the config writes it; to_scaling_quality reads
@@ -253,24 +243,6 @@ extern "C" int sipi_init(const SipiServerConfig *overrides)
     }
     const std::string resolved_imgroot(resolved);
 
-    // Read the init script — the last fallible step — BEFORE any install. The
-    // engine context and Lua config install non-owning pointers into `runtime`;
-    // installing them first and then failing here would leave the file-static
-    // engine pointing into `runtime`, which is freed on this early return.
-    std::string initscript_src;
-    if (!conf.getInitScript().empty()) {
-      std::ifstream initscript_in(conf.getInitScript());
-      if (initscript_in.fail()) {
-        log_err("sipi_init: initscript \"%s\" not found", conf.getInitScript().c_str());
-        return EXIT_FAILURE;
-      }
-      initscript_src.assign(
-        (std::istreambuf_iterator<char>(initscript_in)), std::istreambuf_iterator<char>());
-    }
-    // else (Lua-less / TOML, no initscript set): leave initscript_src empty —
-    // set_lua_config accepts it and the sipiGlobals installers still register the
-    // `server` Lua table, so configured route scripts run.
-
     // Install the engine context — non-owning pointers into g_server_runtime.
     Sipi::ffi::set_engine_context(Sipi::ffi::EngineContext{
       .cache = runtime->cache.get(),
@@ -290,25 +262,8 @@ extern "C" int sipi_init(const SipiServerConfig *overrides)
       .max_post_size = conf.getMaxPostSize(),
     });
 
-    // Install the engine-held Lua config (the per-call VM factory behind
-    // sipi_preflight / sipi_run_lua_route): the scriptdir, JWT secret, and
-    // globals installers (in registration order) the factory applies.
-    // The sipiConfGlobals installer captures &conf, which stays valid: `runtime`
-    // is heap-allocated, so its SipiConf address is stable across the move into
-    // g_server_runtime below.
-    Sipi::ffi::set_lua_config(Sipi::ffi::LuaConfig{
-      .init_script = std::move(initscript_src),
-      .script_dir = conf.getScriptDir(),
-      .jwt_secret = conf.getJwtSecret(),
-      .globals = {
-        { Sipi::ffi::sipiConfGlobals, &conf },
-        { shttps::sqliteGlobals, nullptr },
-        { Sipi::sipiGlobals, nullptr },
-      },
-    });
-
     g_server_runtime = std::move(runtime);
-    log_info("sipi_init: engine + Lua config installed (imgroot resolved: %s)", resolved_imgroot.c_str());
+    log_info("sipi_init: engine installed (imgroot resolved: %s)", resolved_imgroot.c_str());
     return EXIT_SUCCESS;
   } catch (const shttps::Error &e) {
     log_err("sipi_init failed: %s", e.what());

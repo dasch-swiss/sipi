@@ -933,8 +933,8 @@ pub fn lua_route_method_router(
 }
 
 /// Run a Lua script against the request: snapshot it, spool any multipart uploads
-/// to temp files, build the request context, and run the script through
-/// `sipi_run_lua_route` on the blocking pool. The script's own Lua sets the
+/// to temp files, build the request data, and run the script through
+/// `LuaEnv::run_route` on the blocking pool. The script's own Lua sets the
 /// response status/headers/body (no shell-injected CORS — the script owns its
 /// headers). Shared by configured Lua routes (`docroot = None`) and docroot
 /// `.lua`/`.elua` scripts (`docroot = Some`, injecting `server.docroot`).

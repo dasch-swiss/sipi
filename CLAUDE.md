@@ -119,7 +119,7 @@ localdev config in one step.
 | Caching | `src/SipiCache.h` | File-based LRU cache with dual-limit eviction (size + file count), crash recovery |
 | Metrics | `src/observability/metrics.h` | Metrics singleton (`Sipi::observability::Metrics`) — plain atomic counters/gauges; scalar fields cross the FFI seam as `SipiMetricsSnapshot` and export over OTLP via `src/server-rs/src/metrics.rs` |
 | Memory Budget | `src/SipiMemoryBudget.h` | Lock-free decode memory budget with RAII guard — prevents OOM from concurrent large decodes |
-| Lua Integration | `src/ffi/SipiLua.h` | Lua bindings for image manipulation, HTTP handling, config/routes |
+| Lua Runtime | `src/scripting/rust/` | Rust-hosted mlua runtime (ADR-0023): hardened per-request VM (stdlib whitelist, memory cap, deadline), bytecode cache, all `server.*`/`SipiImage`/sqlite bindings, Lua-flavor config parse |
 
 ### Image Processing Pipeline
 

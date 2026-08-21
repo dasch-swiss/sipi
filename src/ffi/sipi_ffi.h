@@ -219,7 +219,7 @@ typedef struct
   void *report_ctx; /* opaque data passed to report_error (the Rust edge: the request URI) */
 } SipiServeRequest;
 
-/* ── Preflight (C++ LuaServer pre_flight / file_pre_flight) ──────────────────
+/* ── Config override channel ─────────────────────────────────────────────────
  * A fixed permission TYPE plus an open key/value channel (infile, watermark,
  * size, cookie_url, token_url, logout_url, service pass-through) — the real
  * preflight returns an unordered_map, not a flat struct. Two hooks, same
@@ -240,8 +240,8 @@ typedef void (*SipiKVFn)(void *ctx, const char *key, const char *value);
 
 
 /* ── CLI/env override channel (concrete) ──────────────────────────────────────
- * The CLI/env overrides `sipi_init` layers on top of the Lua-parsed SipiConf,
- * before the cache / memory-budget services are built from it.
+ * The resolved config `sipi_init` consumes (the shell parses both config
+ * flavors and merges the CLI/env layer before the call).
  * Hand-mirrored by the Rust `#[repr(C)] SipiServerConfig` in
  * src/server-rs/src/config.rs — field order, widths, and the `has_` presence
  * flags must match byte-for-byte or it is silent UB on drift. NOT bindgen: the
@@ -285,11 +285,6 @@ typedef struct SipiServerConfig
   const char *scaling_quality_tiff;
   const char *scaling_quality_png;
   const char *scaling_quality_j2k;
-  /* 8-byte: no engine behavior of their own (with sslport below) — they feed
-   * the SipiConf getters the C++-built Lua `config` table exposes
-   * (hostname/sslport), so the Rust-side Lua config parse can supply every
-   * field that table carries. */
-  const char *hostname;
   /* 8-byte: 64-bit scalar values (presence via the has_ flags below) */
   double tiles_memory_ratio;            /* fraction of the envelope reserved for tiles; full lane = envelope × (1 − ratio) */
   uint64_t large_decode_threshold_bytes;/* estimated peak >= this => full lane (charged); below => tile (bypass) */
@@ -299,7 +294,6 @@ typedef struct SipiServerConfig
   uint32_t cache_nfiles;          /* 0 = unlimited; a negative is rejected at the CLI (no wrap) */
   int32_t pathprefix;             /* prefix_as_path, bool carried as 0/1 */
   int32_t jpeg_quality;           /* JPEG output quality (1-100); TOML-config-only */
-  int32_t sslport;                /* Lua `config` table feed only (see hostname) */
   /* 4-byte presence flags for the scalars above (non-zero = present) */
   int has_serverport;
   int has_maxtmpage;
@@ -308,7 +302,6 @@ typedef struct SipiServerConfig
   int has_jpeg_quality;
   int has_tiles_memory_ratio;
   int has_large_decode_threshold_bytes;
-  int has_sslport;
 } SipiServerConfig;
 
 #ifdef __cplusplus
@@ -317,7 +310,7 @@ typedef struct SipiServerConfig
  * breaks one of the two. LP64 on every supported target (darwin-aarch64,
  * linux-x86_64, linux-aarch64). */
 static_assert(sizeof(void *) == 8, "SipiServerConfig layout assumes an LP64 target");
-static_assert(sizeof(SipiServerConfig) == 256, "SipiServerConfig size drifted from src/server-rs/src/config.rs");
+static_assert(sizeof(SipiServerConfig) == 240, "SipiServerConfig size drifted from src/server-rs/src/config.rs");
 static_assert(offsetof(SipiServerConfig, imgroot) == 0, "SipiServerConfig layout drift");
 static_assert(offsetof(SipiServerConfig, scriptdir) == 8, "SipiServerConfig layout drift");
 static_assert(offsetof(SipiServerConfig, initscript) == 16, "SipiServerConfig layout drift");
@@ -340,23 +333,20 @@ static_assert(offsetof(SipiServerConfig, scaling_quality_jpeg) == 144, "SipiServ
 static_assert(offsetof(SipiServerConfig, scaling_quality_tiff) == 152, "SipiServerConfig layout drift");
 static_assert(offsetof(SipiServerConfig, scaling_quality_png) == 160, "SipiServerConfig layout drift");
 static_assert(offsetof(SipiServerConfig, scaling_quality_j2k) == 168, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, hostname) == 176, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, tiles_memory_ratio) == 184, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, large_decode_threshold_bytes) == 192, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, serverport) == 200, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, maxtmpage) == 204, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, cache_nfiles) == 208, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, pathprefix) == 212, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, jpeg_quality) == 216, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, sslport) == 220, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_serverport) == 224, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_maxtmpage) == 228, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_cache_nfiles) == 232, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_pathprefix) == 236, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_jpeg_quality) == 240, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_tiles_memory_ratio) == 244, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_large_decode_threshold_bytes) == 248, "SipiServerConfig layout drift");
-static_assert(offsetof(SipiServerConfig, has_sslport) == 252, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, tiles_memory_ratio) == 176, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, large_decode_threshold_bytes) == 184, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, serverport) == 192, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, maxtmpage) == 196, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, cache_nfiles) == 200, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, pathprefix) == 204, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, jpeg_quality) == 208, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, has_serverport) == 212, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, has_maxtmpage) == 216, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, has_cache_nfiles) == 220, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, has_pathprefix) == 224, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, has_jpeg_quality) == 228, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, has_tiles_memory_ratio) == 232, "SipiServerConfig layout drift");
+static_assert(offsetof(SipiServerConfig, has_large_decode_threshold_bytes) == 236, "SipiServerConfig layout drift");
 #endif
 
 /* Engine-counter snapshot for `sipi_metrics_snapshot`. Incomplete here on
@@ -593,7 +583,7 @@ SIPI_FFI_NODISCARD int sipi_init(const SipiServerConfig *overrides);
  *  never freed by the caller. Returns 0, or 500 if `sipi_init` has not run. */
 SIPI_FFI_NODISCARD int sipi_imgroot(int resolved, const char **out);
 
-/*! The `/server` fileserver docroot (the Lua config `fileserver.docroot`), the
+/*! The `/server` fileserver docroot (the config `fileserver.docroot`), the
  *  raw config value — the Rust edge canonicalises it per request for the
  *  containment check (the docroot dir may be created after startup, unlike the
  *  image root). `*out` is empty when no fileserver is configured. Points at
@@ -601,7 +591,7 @@ SIPI_FFI_NODISCARD int sipi_imgroot(int resolved, const char **out);
  *  `sipi_init` has not run. */
 SIPI_FFI_NODISCARD int sipi_docroot(const char **out);
 
-/*! The URL prefix the docroot fileserver is mounted at (the Lua config
+/*! The URL prefix the docroot fileserver is mounted at (the config
  *  `fileserver.wwwroute`, e.g. "/server"). `*out` is empty when no fileserver is
  *  configured; the Rust shell registers the static route only when both docroot
  *  and wwwroute are non-empty. Returns 0, or 500 if `sipi_init` has not run. */
@@ -612,7 +602,7 @@ SIPI_FFI_NODISCARD int sipi_wwwroute(const char **out);
  *  Returns 0, or 500 if `sipi_init` has not run. */
 SIPI_FFI_NODISCARD int sipi_prefix_as_path(int *out);
 
-/*! The configured max POST body size in bytes (the Lua config `max_post_size`).
+/*! The configured max POST body size in bytes (the config `max_post_size`).
  *  The Rust shell caps Lua-route request bodies at this size (oversized → 413).
  *  `*out` = 0 means unlimited. Returns 0, or 500 if `sipi_init` has not run. */
 SIPI_FFI_NODISCARD int sipi_max_post_size(size_t *out);

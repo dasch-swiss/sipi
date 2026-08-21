@@ -3,8 +3,8 @@ SIPI has an embedded [LUA](http://www.lua.org) interpreter. LUA is a simple scri
 specifically to be embedded into applications. For example the games [minecraft](https://www.minecraft.net) and
 [World of Warcraft](https://worldofwarcraft.com/de-de/) make extensive use of LUA scripting for customization and programming extensions.
 
-Each HTTP request to SIPI invokes a recent, independent
-lua-instance (Version 5.3.5). Therefore, LUA may be used in the following contexts:
+Each HTTP request to SIPI runs in a fresh, independent Lua instance
+(language version 5.3). Therefore, LUA may be used in the following contexts:
 
 - Preflight function
 - Embedded in HTML pages
@@ -17,15 +17,56 @@ Each lua-instance in SIPI includes additional SIPI-specific information:
 - SIPI specific functions for
   - processing the request and send back information
   - getting image information and transforming images
-  - querying and changing the SIPI runtime configuration (e.g. the cache)
+  - accessing SQLite databases
 
 In general, the SIPI LUA function make use that a Lua function's return value may consist of
 more than one element (see [Multiple Results](http://www.lua.org/pil/5.3.html)):
 
-*The Lua interpreter in Sipi runs in a multithreaded environment: each
-request runs in its own thread and has its own Lua interpreter.
-Therefore, only Lua packages that are known to be thread-safe may be
-used!*
+*Each request runs in its own thread with its own, freshly built Lua VM.
+Globals do not survive across requests; within one request, the init script
+and the hook or route script share the same VM and globals. The VM is
+sandboxed and resource-limited — see the next section.*
+
+## Sandbox and resource limits
+
+Scripts run in a hardened, per-request Lua VM:
+
+- **Standard library whitelist.** Only `string`, `table`, `math`, `utf8` and
+  `package` are loaded. The `io` and `debug` libraries are absent, and the
+  base-library escape hatches `dofile`, `loadfile`, `load` and `collectgarbage`
+  are removed, as are `package.loadlib` and `package.searchpath`.
+- **`os` shim.** The `os` table provides exactly `os.getenv`, `os.clock` and
+  `os.date` (a C-locale strftime subset, including `%c`, `%x`, `%X`, the `*t`
+  table form and the `!` UTC prefix). `os.execute`, `os.remove`, `os.time`
+  and the rest of the stock `os` library are absent — use `server.systime()`
+  for the current epoch time and the `server.fs.*` functions for file
+  operations.
+- **Restricted `require`.** `require 'name'` resolves plain module names
+  (letters, digits and `_` only) against the configured script directory
+  (`scriptdir`) and nowhere else; `package.path` and `package.cpath` are
+  empty.
+- **Memory cap.** Lua-heap allocations are capped per request (default
+  64 MiB; operator knob `SIPI_LUA_MEMORY_LIMIT`, in bytes). Exceeding the cap
+  kills the script.
+- **Execution deadline.** Each request VM gets one wall-clock budget covering
+  the init script, the hook or route script, and every binding call (default
+  5 seconds; operator knob `SIPI_LUA_TIMEOUT_MS`). On expiry the script is
+  killed; `pcall` cannot trap its way past the deadline, and blocking calls
+  (`server.http`, sqlite) never wait past the remaining budget.
+- **Kill behavior.** A script killed before any output was sent yields an
+  HTTP 500 with a generic body. A script killed after output started has its
+  response stream aborted (never a clean end-of-body). A killed `pre_flight`
+  decision is never written to the preflight access-cache. Kills are counted
+  in the `sipi_lua_kills_total{reason}` metric and logged.
+- **Fail-closed startup.** An error in the init script refuses server
+  startup. Whether `pre_flight`/`file_pre_flight` are defined is probed once
+  at boot; if a later edit to the init script breaks it, affected requests
+  fail with 500.
+- **Bytecode cache.** The init script, route scripts and `require`d modules
+  are compiled once and cached as bytecode, invalidated by file modification
+  time and size — a script edit takes effect on the next request without a
+  restart. Adding a *new* preflight hook still requires a restart, since the
+  hook probes are boot-frozen.
 
 ## Preflight function
 It is possible to define a LUA pre-flight function for *IIIF*-requests and independently one for *file*-requests
@@ -129,9 +170,9 @@ function pre_flight(prefix, identifier, cookie)
     end
     --
     -- we need a cookie containing the user information that will be
-    -- sent to the authorization server. In this
-    -- example, the content does not follow the JWT rules
-    -- (which is possible to pack any table into a JWT encoded token)
+    -- sent to the authorization server. The payload may be any table,
+    -- but it must carry a valid 'exp' claim: server.decode_jwt requires
+    -- and validates it.
     --
     if cookie then
         --
@@ -502,13 +543,6 @@ Maximal size of cache
 Maximal number of files in cache.
 (see [cache_nfiles](../guide/sipi.md#cachenfiles) in configuration description).
 
-#### config.cache\_hysteresis
-
-    config.cache_hysteresis
-    
-Amount of data to be purged if cache reaches maximum size.
-(see [cache_hysteresis](../guide/sipi.md#hysteresis) in configuration description).
-
 #### config.jpeg\_quality
 
     config.jpeg_quality
@@ -540,20 +574,6 @@ Maximal size of POST data allowed
     
 Temporary directory to store uploads.
 (see [tmpdir](../guide/sipi.md#tmpdir) in configuration description).
-
-#### config.adminuser
-
-    config.adminuser
-    
-Name of admin user.
-(see [user](../guide/sipi.md#configuration-of-administrator-access) in configuration description).
-
-#### config.password
-
-    config.password
-    
-Password (plain text, not encrypted) of admin user (*use with caution*)!
-(see [password](../guide/sipi.md#configuration-of-administrator-access) in configuration description).
 
 ### SIPI Server Variables
 Sipi server variables are dependent on the incoming request and are created by SIPI automatically for each
@@ -612,7 +632,8 @@ A table containing all the HTTP request headers(in lowercase).
 
     server.cookies
      
-A table of the cookies that were sent with the request.
+A table of the cookies that were sent with the request — one entry per
+cookie, keyed by the cookie's name in its original case.
 
 #### server.get
 
@@ -643,6 +664,13 @@ If the request had a body, the variable contains the body data. Otherwise it's `
     server.content_type
 
 Returns the content type of the request. If there is no type or no content, this variable is `nil`.
+
+#### server.docroot
+
+    server.docroot
+
+The document root of the built-in web server, when one is configured;
+`nil` otherwise.
 
 #### server.uploads
 
@@ -700,9 +728,10 @@ These LUA function alter the way the HTTP connection is handled.
 
     success, errmsg = server.setBuffer([bufsize][,incsize])
 
-Activates the the connection buffer. Optionally the buffer size and
-increment size can be given. Returns `true, nil` on success or
-`false, errormsg` on failure.
+Accepted for compatibility: the response is streamed by the server, so the
+call validates its arguments and succeeds without changing behavior.
+Optionally the buffer size and increment size can be given. Returns
+`true, nil` on success or `false, errormsg` on invalid arguments.
 
 #### server.sendHeader
 
@@ -773,12 +802,13 @@ Example:
         -- everything OK, let's create the token for further
         -- calls and ad it to a cookie
         --
-        if auth.username == config.adminuser and
-           auth.password == config.password then
+        if auth.username == os.getenv('SIPI_ADMIN_USER') and
+           auth.password == os.getenv('SIPI_ADMIN_PASSWORD') then
             tokendata = {
                 iss = "sipi.unibas.ch",
                 aud = "knora.org",
-                user = auth.username
+                user = auth.username,
+                exp = server.systime() + 3600
             }
             success, token = server.generate_jwt(tokendata)
             if not success then
@@ -809,7 +839,7 @@ Example:
         end
         if (jwt.iss ~= 'sipi.unibas.ch') or
            (jwt.aud ~= 'knora.org') or
-           (jwt.user ~= config.adminuser) then
+           (jwt.user ~= os.getenv('SIPI_ADMIN_USER')) then
             server.sendStatus(401)
             server.sendHeader('WWW-Authenticate', 'Basic realm="Sipi"')
             return -1
@@ -820,7 +850,7 @@ Example:
         server.sendHeader('WWW-Authenticate', 'Basic realm="Sipi"')
         return -1
     else
-        server.status(401)
+        server.sendStatus(401)
         server.sendHeader('WWW-Authenticate', 'Basic realm="Sipi"')
         return -1
     end
@@ -835,7 +865,7 @@ These functions offer tools to manipuale files and directories, and to gather fi
 
 Checks the filetype of a given filepath. Returns either `true, filetype`
 (with filetype one of `"FILE"`, `"DIRECTORY"`, `"CHARDEV"`, `"BLOCKDEV"`, `"LINK"`,
-`"SOCKET"` or `"UNKNOWN"`) or `false, errormsg`.
+`"FIFO"`, `"SOCKET"` or `"UNKNOWN"`) or `false, errormsg`.
 
 #### server.fs.modtime
 
@@ -882,9 +912,10 @@ must have write access. Returns `true, nil` on success or
 
 #### server.fs.mkdir
 
-    success, errormsg = server.fs.mkdir(dirname, [tonumber('0755', 8)])
+    success, errormsg = server.fs.mkdir(dirname, mode)
 
-Creates a new directory, optionally with the specified permissions.
+Creates a new directory with the specified permissions. Both parameters are
+required; `mode` is a Unix permission integer (e.g. `tonumber('0755', 8)`).
 Returns `true, nil` on success or `false, errormsg` on failure.
 
 #### server.fs.rmdir
@@ -908,13 +939,6 @@ success or `false, errormsg` on failure.
 Gets the names of the files in a directory, not including `.` and `..`.
 Returns `true, table` on success or `false, errormsg` on failure.
 
-#### server.fs.chdir
-
-    success, oldir = server.fs.chdir(newdir)
-
-Change working directory. Returns `true, olddir` on success or
-`false, errormsg` on failure.
-
 #### server.fs.copyFile
 
     success, errormsg = server.fs.copyFile(source, destination)
@@ -935,16 +959,24 @@ success or `false, errormsg` on failure.
 
     success, result = server.http(method, "http://server.domain[:port]/path/file" [, header] [, timeout])
 
-Performs an HTTP request using curl. Currently implements only GET requests. Parameters:
+Performs an outbound HTTP request. Currently implements only GET requests.
+Parameters:
 
 -   `method`: The HTTP request method. Currently must be `"GET"`.
 -   `url`: The HTTP URL.
 -   `header`: An optional table of key-value pairs representing HTTP
     request headers.
--   `timeout`: An optional number of milliseconds until the connection
-    times out.
+-   `timeout`: An optional number of milliseconds for the *whole* request
+    (connect, send and receive; default 2000). The effective timeout is
+    additionally capped by the remaining execution deadline of the request,
+    so an outbound call can never outlive its request budget.
 
-Authentication is not yet supported.
+Hardened semantics:
+
+-   Redirects are **not** followed: a `3xx` response is returned to the
+    script as-is (with its `location` header).
+-   The response body is capped at 16 MiB; a larger body fails the call.
+-   Authentication is not supported.
 
 When SIPI is handling a request under an active distributed trace, `server.http`
 automatically adds a W3C `traceparent` header to the outbound request so the
@@ -952,38 +984,29 @@ downstream service continues the same trace (e.g. a `pre_flight` authorization
 call to dsp-api). If the `header` table already contains a `traceparent`, that
 value is kept and no header is injected.
 
-The result is a table:
+On success the result is a table:
 
     result = {
-        status_code = value -- HTTP status code returned
-        erromsg = "error description" -- only if success is false
+        status_code = value, -- HTTP status code returned
         header = {
             name = value [, name = value, ...]
-        },
-        certificate = { -- only if HTTPS connection
-            subject = value,
-            issuer = value
         },
         body = data,
         duration = milliseconds
     }
 
+On failure the second return value is the error message string.
+
 Example:
 
     success, result = server.http("GET", "http://www.salsah.org/api/resources/1", 100)
 
-    if (result.success) then
-       server.print("<table>")
-       server.print("<tr><th>Field</th><th>Value</th></tr>")
-       for k,v in pairs(server.header) do
-           server.print("<tr><td>", k, "</td><td>", v, "</td></tr>")
-       end
-       server.print("</table><hr/>")
-
+    if success then
+       server.print("Status: ", result.status_code, "<br/>")
        server.print("Duration: ", result.duration, " ms<br/><hr/>")
        server.print("Body:<br/>", result.body)
     else
-       server.print("ERROR: ", result.errmsg)
+       server.print("ERROR: ", result)
     end
 
 #### server.table\_to\_json
@@ -1004,15 +1027,17 @@ success or `false, errormsg` on failure.
 
     success, token = server.generate_jwt(table)
 
-Generates a [JSON Web Token](https://jwt.io/) (JWT) with the supplied table as
-payload. Returns `true, token` on success or `false, errormsg` on
-failure. The internal may contain arbitrary keys and/or may contains the JWT
-claims as follows. (The type `IntDate` is a number of seconds since
-1970-01-01T0:0:0Z):
+Generates a [JSON Web Token](https://jwt.io/) (JWT) with the supplied table
+as payload, signed with HS256 using the configured
+[jwt_secret](../guide/sipi.md#jwt-secret). Returns `true, token` on success
+or `false, errormsg` on failure. The payload may contain arbitrary keys
+and/or the JWT claims as follows. (The type `IntDate` is a number of seconds
+since 1970-01-01T0:0:0Z):
 
 -   `iss` (string =&gt; StringOrURI) OPT: principal that issued the JWT.
--   `exp` (number =&gt; IntDate) OPT: expiration time on or after which
-    the token MUST NOT be accepted for processing.
+-   `exp` (number =&gt; IntDate): expiration time on or after which
+    the token MUST NOT be accepted for processing. **Required** in any token
+    that will be verified with `server.decode_jwt`.
 -   `nbf` (number =&gt; IntDate) OPT: identifies the time before which
     the token MUST NOT be accepted for processing.
 -   `iat` (number =&gt; IntDate) OPT: identifies the time at which the
@@ -1030,9 +1055,15 @@ claims as follows. (The type `IntDate` is a number of seconds since
 
     success, table = server.decode_jwt(token)
 
-Decodes a [JSON Web Token](https://jwt.io/) (JWT) and returns its
-content as table. Returns `true, table` on success or `false, errormsg`
-on failure.
+Decodes and verifies a [JSON Web Token](https://jwt.io/) (JWT) and returns
+its content as table. Returns `true, table` on success or `false, errormsg`
+on failure. Verification is strict:
+
+-   The signature must be a valid HS256 signature over the configured
+    [jwt_secret](../guide/sipi.md#jwt-secret); tokens using any other
+    algorithm (including `none`) are rejected.
+-   The token must carry an `exp` claim that is not in the past (a small
+    clock-skew leeway is applied).
 
 #### server.parse\_mimetype
 
@@ -1130,296 +1161,17 @@ Converts a Base62-encoded UUID to canonical form. Returns `true, uuid`
 on success or `false, errormsg` on failure.
 
 
-## Cache Management Functions
+## Helper Functions
 
-The following functions are available for managing the SIPI image cache from Lua scripts.
+The `helper` table carries SIPI-internal helpers.
 
-#### cache.size
-
-```lua
-success, size = cache.size()
-```
-
-Returns the current total size of cached files in bytes. Returns `nil` if no cache is configured.
-
-#### cache.max_size
-
-```lua
-success, max = cache.max_size()
-```
-
-Returns the configured maximum cache size limit in bytes.
-
-#### cache.nfiles
-
-```lua
-success, count = cache.nfiles()
-```
-
-Returns the current number of files in the cache.
-
-#### cache.max_nfiles
-
-```lua
-success, max = cache.max_nfiles()
-```
-
-Returns the configured maximum number of files allowed in cache.
-
-#### cache.path
-
-```lua
-path = cache.path()
-```
-
-Returns the filesystem path to the cache directory, or `nil` if no cache is configured.
-
-#### cache.filelist
-
-```lua
-filelist = cache.filelist([sortmethod])
-```
-
-Returns a table of cached files with metadata. The optional `sortmethod` parameter controls sorting:
-
-- `"AT_ASC"` — sort by access time, ascending
-- `"AT_DESC"` — sort by access time, descending
-- `"FS_ASC"` — sort by file size, ascending
-- `"FS_DESC"` — sort by file size, descending
-
-Each entry in the returned table contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `canonical` | string | Canonical cache key |
-| `origpath` | string | Original file path |
-| `cachepath` | string | Cache file path |
-| `size` | integer | File size in bytes |
-| `last_access` | string | Last access time (`"YYYY-MM-DD HH:MM:SS"`) |
-
-Returns `nil` if no cache is configured.
-
-#### cache.delete
-
-```lua
-success = cache.delete(canonical)
-```
-
-Deletes a specific cached file by its canonical key. Returns `true` on success, `false` otherwise.
-
-#### cache.purge
-
-```lua
-count = cache.purge()
-```
-
-Purges cache entries based on configured purge criteria (LRU). Returns the number of files purged, or `nil` if no cache is configured.
-
-## Filesystem Helper Functions
-
-The `server.fs` table provides filesystem operations. All functions return `(true, result)` on success or `(false, error_message)` on failure.
-
-#### server.fs.exists
-
-```lua
-success, exists = server.fs.exists(filepath)
-```
-
-Check if a file or directory exists. Returns `true/false` for the existence check.
-
-#### server.fs.ftype
-
-```lua
-success, filetype = server.fs.ftype(filepath)
-```
-
-Get the type of a path. Returns one of: `"FILE"`, `"DIRECTORY"`, `"CHARDEV"`, `"BLOCKDEV"`, `"LINK"`, `"FIFO"`, `"SOCKET"`, `"UNKNOWN"`.
-
-#### server.fs.modtime
-
-```lua
-success, timestamp = server.fs.modtime(filepath)
-```
-
-Get the modification time of a file as a Unix timestamp (seconds since epoch).
-
-#### server.fs.readdir
-
-```lua
-success, filenames = server.fs.readdir(dirpath)
-```
-
-List all files and directories in a directory. Returns a Lua table of filenames (excludes `.` and `..`).
-
-#### server.fs.is_readable
-
-```lua
-success, readable = server.fs.is_readable(filepath)
-```
-
-Check if a file is readable by the current process.
-
-#### server.fs.is_writeable
-
-```lua
-success, writeable = server.fs.is_writeable(filepath)
-```
-
-Check if a file is writable by the current process.
-
-#### server.fs.is_executable
-
-```lua
-success, executable = server.fs.is_executable(filepath)
-```
-
-Check if a file is executable by the current process.
-
-#### server.fs.unlink
-
-```lua
-success, errmsg = server.fs.unlink(filepath)
-```
-
-Delete a file from the filesystem.
-
-#### server.fs.mkdir
-
-```lua
-success, errmsg = server.fs.mkdir(dirname, mode)
-```
-
-Create a new directory. `mode` is a Unix permission integer (e.g., `tonumber('0755', 8)`).
-
-#### server.fs.rmdir
-
-```lua
-success, errmsg = server.fs.rmdir(dirname)
-```
-
-Remove an empty directory.
-
-#### server.fs.getcwd
-
-```lua
-success, cwd = server.fs.getcwd()
-```
-
-Get the current working directory.
-
-#### server.fs.chdir
-
-```lua
-success, old_dir = server.fs.chdir(newdir)
-```
-
-Change the current working directory. Returns the previous working directory on success.
-
-#### server.fs.copyFile
-
-```lua
-success, errmsg = server.fs.copyFile(source, target)
-```
-
-Copy a file from source to target.
-
-#### server.fs.moveFile
-
-```lua
-success, errmsg = server.fs.moveFile(source, target)
-```
-
-Move/rename a file. `source` can be a file path (string) or an uploaded file index (integer, 1-based).
-
-## Server Request Properties
-
-The following read-only properties are available on the `server` table within request handlers:
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `server.method` | string | HTTP method: `"GET"`, `"POST"`, `"PUT"`, `"DELETE"`, `"HEAD"`, `"OPTIONS"` |
-| `server.uri` | string | The complete request URI/path |
-| `server.host` | string | The Host header value |
-| `server.client_ip` | string | Client's IP address |
-| `server.client_port` | integer | Client's port number |
-| `server.secure` | boolean | Whether the connection is HTTPS |
-| `server.has_openssl` | boolean | Whether OpenSSL is available |
-| `server.route` | string | The matched route (if using routing) |
-| `server.content` | string | Raw POST/PUT body content |
-| `server.content_type` | string | Content-Type header value |
-| `server.docroot` | string | Document root path |
-
-### Request Data Tables
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `server.header` | table | HTTP request headers (name-value pairs) |
-| `server.cookies` | table | Cookie name-value pairs |
-| `server.get` | table | URL query parameters |
-| `server.post` | table | POST form parameters |
-| `server.request` | table | Path parameters |
-
-### Uploaded Files
-
-`server.uploads` is a table of uploaded files (1-based indexing). Each entry contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `fieldname` | string | Form field name |
-| `origname` | string | Original filename |
-| `tmpname` | string | Temporary file path on server |
-| `mimetype` | string | MIME type of the uploaded file |
-| `filesize` | integer | File size in bytes |
-
-## Additional Server Functions
-
-#### server.setBuffer
-
-```lua
-success, errmsg = server.setBuffer([bufsize], [incsize])
-```
-
-Enable response buffering with optional buffer size and increment size (in bytes).
-
-#### server.sendCookie
-
-```lua
-success, errmsg = server.sendCookie(name, value [, options])
-```
-
-Set a cookie in the HTTP response. The optional `options` table can contain:
-
-| Key | Type | Description |
-|-----|------|-------------|
-| `path` | string | Cookie path |
-| `domain` | string | Cookie domain |
-| `expires` | integer | Expiration (seconds since epoch) |
-| `secure` | boolean | Secure flag |
-| `http_only` | boolean | HTTP-only flag |
-
-#### server.requireAuth
-
-```lua
-auth = server.requireAuth()
-```
-
-Parse authentication information from the request. Returns a table with:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `status` | string | `"NOAUTH"`, `"BASIC"`, `"BEARER"`, or `"ERROR"` |
-| `username` | string | Username (BASIC auth only) |
-| `password` | string | Password (BASIC auth only) |
-| `token` | string | Bearer token (BEARER auth only) |
-| `message` | string | Error message (ERROR status only) |
-
-## Utility Functions
-
-#### helper.filename_hash
+#### helper.filename\_hash
 
 ```lua
 success, hashed_path = helper.filename_hash(filename)
 ```
 
-Convert a filename into a hashed filesystem path, using SIPI's internal hash algorithm for cache file organization.
+Converts a filename into SIPI's hashed storage path (the on-disk layout the
+repository uses). Returns `true, hashed_path` on success or
+`false, errormsg` on failure.
 
