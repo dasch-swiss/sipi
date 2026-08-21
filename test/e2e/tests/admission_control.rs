@@ -161,3 +161,67 @@ fn basic_over_budget_still_serves() {
     drop(srv);
     drop(cache);
 }
+
+// =============================================================================
+// Lua routes occupy the full partition
+// =============================================================================
+
+/// A Lua route admits through the full partition, not the tile partition:
+/// with `SIPI_NTHREADS=2` (tile_min = 1, full_max = 1) and the queue disabled,
+/// a second script sheds with 503 while the first still runs — and a tile
+/// request keeps its `tile_min` floor and serves 200 through the same window.
+/// Under the previous tile-lane classification the second script would have
+/// taken the remaining global permit (200) and a script burst could starve
+/// tiles entirely.
+#[test]
+fn lua_route_occupies_the_full_lane() {
+    let srv = SipiServer::start_env(
+        "config/sipi.lua-lane-config.lua",
+        &test_data_dir(),
+        &["--admission-mode", "advanced"],
+        &[
+            ("SIPI_NTHREADS", "2"),
+            ("SIPI_MAX_WAITING", "0"),
+            ("SIPI_LUA_TIMEOUT_MS", "30000"),
+        ],
+    );
+
+    // First script: holds the single full-lane permit for ~2s of CPU.
+    let slow_url = format!("{}/lane/slow", srv.base_url);
+    let first = std::thread::spawn({
+        let url = slow_url.clone();
+        move || {
+            let resp = http_client().get(url).send().expect("slow GET failed");
+            (resp.status().as_u16(), resp.text().unwrap_or_default())
+        }
+    });
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    // Second script inside the window: the full sub-pool permit is taken and
+    // the queue is disabled, so it must shed immediately.
+    let resp = http_client()
+        .get(&slow_url)
+        .send()
+        .expect("second slow GET failed");
+    assert_eq!(
+        resp.status().as_u16(),
+        503,
+        "a second concurrent Lua route must shed on the exhausted full sub-pool"
+    );
+
+    // A tile through the same window: the tile_min floor stays reachable.
+    let resp = http_client()
+        .get(format!("{}/unit/lena512.jp2/info.json", srv.base_url))
+        .send()
+        .expect("tile GET failed");
+    assert_eq!(
+        resp.status().as_u16(),
+        200,
+        "a tile must keep serving while a Lua route holds the full lane"
+    );
+
+    let (status, body) = first.join().expect("slow request thread panicked");
+    assert_eq!(status, 200, "the first Lua route completes: {body}");
+    assert_eq!(body.trim(), "SLOW_DONE");
+    drop(srv);
+}
