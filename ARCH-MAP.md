@@ -21,7 +21,9 @@ removed (ADR-0020), so the C++ `sipi` binary now provides only offline verbs
 (convert/verify/query/compare/health). The engine is a set of Bazel `cc_library`
 packages carved by concern — the image hub (`SipiImage` + cache + memory budget),
 the codec handlers (`formats`), the IIIF parsers (`iiifparser`), metadata, and
-the Lua/util/jwt support leaves extracted from the deleted shttps transport. The
+the util support leaf extracted from the deleted shttps transport. Lua scripting
+is Rust-hosted (`src/scripting/rust`, ADR-0023) and drives the engine through
+the seam's `sipi_image_*` handle family. The
 top-level dependency arrow is one-way: **shell → seam → engine → leaves**; the
 engine never links the shell or the seam. New work is added by dropping a file in
 a package or a route in the axum router, not by editing a central switch — except
@@ -34,7 +36,7 @@ image formats, whose registry fan-out is documented, not mechanized.
 - **Paths:** `:(glob)src/SipiImage.{h,cpp}`, `:(glob)src/SipiCommon.{h,cpp}`, `:(glob)src/SipiFilenameHash.{h,cpp}`, `:(glob)src/SipiIO.h`, `:(glob)src/SipiImageError.h`, `:(glob)src/SipiError.{h,cpp}`, `:(glob)src/populate_from_image.{h,cpp}`, `:(glob)src/resample.{cc,h}`, `:(glob)src/SipiConf.cpp`, `:(glob)src/SipiReport.cpp`, `:(glob)src/process_benchmark.cpp`, `:(glob)src/BUILD.bazel`, `:(glob)src/nsswitch.conf`
 - **Purpose:** The image engine hub — `SipiImage` orchestrates decode → process (scale/rotate/crop/ICC) → encode, and owns the metadata wrappers and format dispatch. Also holds the shared error base (`SipiError` = `//src:sipi_top`), the `//src` package's Bazel wiring, and the CLI's config object (`SipiConf`) and JSON reporter (`SipiReport`).
 - **Key entities:** `Sipi::SipiImage`, `SipiImage::io` (static handler registry, *defined* in `formats`), `SipiImage::read`/`read_shape`/`write`/`add_watermark`/`convertToIcc`/`scale`/`rotate`/`crop`, `Sipi::SipiIO` (abstract), `SipiImgInfo`, `Sipi::read_watermark` (defined in `formats`), `SipiFilenameHash`, `Sipi::resample_separable_u8/u16`, `Sipi::estimate_peak_memory`, `Sipi::SipiError`/`SipiImageError`, `Sipi::SipiConf`, `Sipi::emit_json_report`
-- **Public interface:** `SipiImage` (via `//src:engine`), `SipiIO`, `SipiError`; consumed by `formats`, `ffi`, `cli`, and the Lua bindings.
+- **Public interface:** `SipiImage` (via `//src:engine`), `SipiIO`, `SipiError`; consumed by `formats`, `ffi` (including the `sipi_image_*` handles behind the Lua `SipiImage` bindings), and `cli`.
 - **Local-context kit:** `src/SipiImage.h`, `src/SipiImage.cpp`, `src/SipiIO.h`, `src/BUILD.bazel` (the `:engine`/`:sipi_lib` targets), `src/formats/format_registry.cpp` (where `io` is defined), `docs/adr/0007-sipiimage-decomposition.md`, `CONVENTIONS.md`
 - **Depends on:** metadata, iiifparser, formats (`:output_sink` only), util, logging, observability, cache, throttling
 - **Used by:** formats (one-way back-edge, see rule), ffi, cli, cli-rs (transitively)
@@ -123,16 +125,15 @@ engine-side memory budget under one component. Supersedes the former
 ### scripting
 
 - **Paths:** `:(glob)src/scripting/**`
-- **Purpose:** The Lua runtime, colocated polyglot (component-first, then language; ADR-0021). `rust/` is the Rust mlua runtime (ADR-0023): hardened per-request VM profile (stdlib whitelist, `os` shim, restricted `require`, memory cap, deadline hook + binding chokepoint) and the bytecode cache. The C++ side (`LuaServer` + the `RequestContext`/`ResponseSink` seam + the `server.db` sqlite bindings) still serves the live preflight/route/config entry points and is deleted at the ADR-0023 cutover.
-- **Key entities:** Rust: `ScriptRuntime`/`RequestVm` (VM factory + chokepoint), `BytecodeCache`, `LimitConfig`/`Deadline`/`KillStats`, `config_vm`. C++: `shttps::LuaServer`, `RequestContext`, `ResponseSink` (abstract), `HttpMethod`, `UploadedFile`, `shttps::sqliteGlobals`, `LuaSetGlobalsFunc`
-- **Public interface:** Rust runtime via `//src/scripting/rust:scripting` (crate `scripting`); C++ `LuaServer` + `request_context.h` via `//src/scripting:scripting`; sqlite bindings via `//src/scripting:lua_sqlite`.
-- **Local-context kit:** `src/scripting/rust/BUILD.bazel`, `src/scripting/rust/runtime.rs`, `src/scripting/rust/limits.rs`, `src/scripting/BUILD.bazel`, `src/scripting/LuaServer.h`, `src/scripting/request_context.h`, `src/ffi/lua_config.cpp` (builds a per-request `LuaServer`), `docs/adr/0023-rust-hosted-mlua-lua-runtime.md` — over the ≤7-file budget while both implementations coexist; the C++ half of the kit is deleted with the cutover.
-- **Depends on:** Rust: mlua (`external` link mode), lua (direct `@lua` dep), libc, tracing. C++: util, jwt, logging; lua, jansson, curl, sole (base62 UUID for DSP IRIs), sqlite3 (lua_sqlite)
-- **Used by:** ffi (preflight, run_lua_route, init, SipiLua); server-rs (the Rust runtime)
+- **Purpose:** The Rust-hosted mlua Lua runtime (ADR-0023, in `rust/` per the colocated-polyglot layout ADR-0021): hardened per-request VM profile (stdlib whitelist, `os` shim, restricted `require`, memory cap, deadline hook + binding chokepoint), the bytecode cache, the `LuaEnv` entry points (preflight / file preflight / routes / elua), the full binding surface (`server.*`, `server.fs`, `helper`, `SipiImage`, sqlite `server.db`), and the Lua-flavor config-file parse.
+- **Key entities:** `LuaEnv` (preflight/route/config entry), `ScriptRuntime`/`RequestVm` (VM factory + binding chokepoint), `BytecodeCache`, `LimitConfig`/`Deadline`/`KillStats`, `RequestData`/`ResponseWriter`, `LuaImage`, `parse_config_file`
+- **Public interface:** `//src/scripting/rust:scripting` (crate `scripting`), re-exports in `lib.rs`.
+- **Local-context kit:** `src/scripting/rust/BUILD.bazel`, `src/scripting/rust/entry.rs`, `src/scripting/rust/runtime.rs`, `src/scripting/rust/limits.rs`, `src/scripting/rust/bindings/mod.rs`, `docs/adr/0023-rust-hosted-mlua-lua-runtime.md`
+- **Depends on:** mlua (`external` link mode against `@lua`), ffi (the `sipi_image_*` handle family + edge probes), sqlite3 (hand-written FFI over `@sqlite3`), jsonwebtoken, reqwest, libc, tracing
+- **Used by:** server-rs (the Rust shell builds one `LuaEnv` and drives every Lua entry through it)
 - **Boundary rules:**
-  - C++ side driven only through the `RequestContext`/`ResponseSink` DI seam — no HTTP transport dep. `lua_sqlite` visibility narrowed to `//src/cli` + `//src/ffi`. *Enforcement: `structure`* (Bazel visibility).
   - Rust side: every script-visible binding registers through the `RequestVm::register_binding` chokepoint (deadline check first); `verify_bindings_checked` enumerates binding tables against the registration record. *Enforcement: `static-analysis`* (the enumeration test).
-- **Durable state:** none intrinsic (a runtime/VM; fresh VM per request). The bytecode cache is in-memory, keyed by path, invalidated by mtime+size. `lua_sqlite`'s `server.db` opens caller-controlled sqlite files at script direction.
+- **Durable state:** none intrinsic (a runtime/VM; fresh VM per request). The bytecode cache is in-memory, keyed by path, invalidated by mtime+size. The `server.db` sqlite binding opens caller-controlled sqlite files at script direction.
 
 ### util
 
@@ -142,21 +143,9 @@ engine-side memory budget under one component. Supersedes the former
 - **Public interface:** the free functions + value types (via `//src/util`, `strip_include_prefix="/src"` → `#include "util/…"`).
 - **Local-context kit:** `src/util/BUILD.bazel`, `src/util/Parsing.h`, `src/util/Hash.h`, `src/util/Error.h`, `src/util/UrlDecode.h`
 - **Depends on:** openssl (Hash), libmagic (Parsing MIME sniff) — no SIPI-internal deps.
-- **Used by:** image, formats, iiifparser, metadata, scripting, cli, ffi (broadly used leaf)
+- **Used by:** image, formats, iiifparser, metadata, cli, ffi (broadly used leaf)
 - **Boundary rules:** a leaf — no internal deps; colocated `util_test` links only `:util`, so a forbidden cross-module include is a build error, not a `sipi_lib`-wide slip. *Enforcement: `structure`*.
 - **Durable state:** `Hash::HashType` values are an on-disk contract (mirrored in `essentials.proto`); `Parsing` ships a compiled-in `magic.mgc` blob (read-only).
-
-### jwt
-
-- **Paths:** `:(glob)src/jwt/**`
-- **Purpose:** A minimal JWT (JWS) sign/verify C leaf over OpenSSL + jansson, consumed only by the Lua `server.jwt` bindings.
-- **Key entities:** `jwt_new`/`jwt_decode`/`jwt_encode_str`/`jwt_set_alg`/`jwt_add_grants_json`, `enum jwt_alg_t` (only HS256 exercised)
-- **Public interface:** `jwt.h` (`extern "C"`), via `//src/jwt`.
-- **Local-context kit:** `src/jwt/BUILD.bazel`, `src/jwt/jwt.h`, `src/scripting/LuaServer.cpp` (the sole caller, `server.jwt` bindings)
-- **Depends on:** openssl, jansson (no internal deps)
-- **Used by:** scripting (only)
-- **Boundary rules:** visibility restricted to `//src/scripting:__pkg__`. *Enforcement: `structure`* (Bazel visibility). No colocated unit test — coverage is e2e only (`test/e2e/src/jwt.rs`). *Enforcement: `docs-only`* (a noted gap).
-- **Durable state:** none; the `jwt_secret` flows through `RequestContext`, caller-supplied per request.
 
 ### observability
 
@@ -185,17 +174,17 @@ engine-side memory budget under one component. Supersedes the former
 ### ffi
 
 - **Paths:** `:(glob)src/ffi/**`
-- **Purpose:** The hand-mirrored `extern "C"` seam the Rust shell drives the C++ engine through — serve/preflight/lua-route entries, the engine-context install, the metrics snapshot, edge probes, and the shared `LibraryInitialiser`. Also hosts `SipiLua` (the `sipi.*` Lua bindings) and `sipi_init`. Config parsing is NOT here: the shell parses both config flavors (TOML via `config_file.rs`, Lua via `//src/scripting/rust`) and `sipi_init` consumes only the resolved `SipiServerConfig` override channel.
-- **Key entities:** `sipi_serve_image`/`sipi_serve_file`/`sipi_init`/`sipi_preflight`/`sipi_run_lua_route`/`sipi_metrics_snapshot`/`sipi_cli_main` (defined in `cli`), `SipiResponse` (streamed sink), `SipiIiifParams`/`SipiServeRequest`/`SipiMetricsSnapshot` (`#[repr(C)]` mirrors), `EngineContext` + `set_engine_context`, `LibraryInitialiser`, `FfiResponseSink`
+- **Purpose:** The hand-mirrored `extern "C"` seam the Rust shell drives the C++ engine through — serve entries, the engine-context install (`sipi_init`), the metrics snapshot, edge probes, the `sipi_image_*` opaque image handle family (the Rust Lua `SipiImage` bindings' callee), and the shared `LibraryInitialiser`. Config parsing is NOT here: the shell parses both config flavors (TOML via `config_file.rs`, Lua via `//src/scripting/rust`) and `sipi_init` consumes only the resolved `SipiServerConfig` override channel.
+- **Key entities:** `sipi_serve_image`/`sipi_serve_file`/`sipi_init`/`sipi_metrics_snapshot`/`sipi_cli_main` (defined in `cli`), the `sipi_image_*` handle family, `SipiResponse` (streamed sink), `SipiIiifParams`/`SipiServeRequest`/`SipiMetricsSnapshot` (`#[repr(C)]` mirrors), `EngineContext` + `set_engine_context`, `LibraryInitialiser`
 - **Public interface:** `sipi_ffi.h` (`strip_include_prefix="/src"` → `#include "ffi/sipi_ffi.h"`), mirrored by hand in `src/server-rs/src/ffi.rs`.
 - **Local-context kit:** `src/ffi/sipi_ffi.h`, `src/ffi/serve_image.cpp`, `src/ffi/engine_context.{h,cpp}`, `src/ffi/init.cpp`, `src/ffi/metrics_snapshot.h`, `src/ffi/BUILD.bazel`, `src/server-rs/src/ffi.rs` (the Rust mirror)
-- **Depends on:** image, formats, iiifparser (transitive), metadata, scripting (+lua_sqlite), util, observability, logging; lua, curl, exiv2
+- **Depends on:** image, formats, iiifparser (transitive), metadata, util, observability, logging; curl, exiv2
 - **Used by:** server-rs (drives it), cli-rs (links it), cli (shares `startup`/`LibraryInitialiser`)
 - **Boundary rules:**
   - `//src:engine` does **not** depend on this package (the seam drives the engine, never the reverse) — no cycle. *Enforcement: `structure`* (Bazel dep direction).
   - Every `#[repr(C)]` struct/enum crossing the seam is guarded on both sides: C++ `static_assert(sizeof/offsetof)` + Rust `offset_of!`/`size_of` layout tests (DUNE-002). *Enforcement: `structure`* on the C++ side (a drifted struct fails to compile) + `static-analysis` on the Rust side (test-time layout asserts run on the `//src/...` wildcard).
   - No C++ exception may cross the boundary — every `sipi_*` wraps in a catch-all (`sipi_guard`). *Enforcement: `review`*.
-- **Durable state:** `EngineContext` (file-static `g_engine`, single sink `set_engine_context`, sole installer `sipi_init`); the per-request Lua VM factory config (`set_lua_config`, installed once by `sipi_init` — scriptdir/init-script source/JWT secret + globals installers; the config *parse* VM is gone, the shell parses configs Rust-side).
+- **Durable state:** `EngineContext` (file-static `g_engine`, single sink `set_engine_context`, sole installer `sipi_init`).
 
 ### cli
 
@@ -252,7 +241,7 @@ Files and rules that span components rather than living in one:
 
 These carry no component boundary rules but exist so every tracked file maps somewhere:
 
-- **Tests** — `:(glob)test/**` (unit under `test/unit/**`, snapshot regression under `test/approval/**`, Rust reqwest e2e under `test/e2e/**`, fixtures under `test/_test_data/**`). Unit tests link the narrow per-module target where one exists (metadata, util, iiifparser, formats, output_sink, jwt-via-scripting, decode_dims, handlers), else `//src:sipi_lib` (sipiimage, cache, memory_budget, logger, configuration, tiff_codecs). Colocated C++ tests live beside their module (ADR-0003).
+- **Tests** — `:(glob)test/**` (unit under `test/unit/**`, snapshot regression under `test/approval/**`, Rust reqwest e2e under `test/e2e/**`, fixtures under `test/_test_data/**`). Unit tests link the narrow per-module target where one exists (metadata, util, iiifparser, formats, output_sink, decode_dims, handlers), else `//src:sipi_lib` (sipiimage, cache, memory_budget, logger, configuration, tiff_codecs). Colocated C++ tests live beside their module (ADR-0003).
 - **Build & tooling** — `:(glob)MODULE.bazel`, `:(glob)MODULE.bazel.lock`, `:(glob).bazelrc` (absent = tracked via workflow), `:(glob)justfile`, `:(glob)bazel/**`, `:(glob)tools/**`, `:(glob)platforms/**`, `:(glob).github/**`, `:(glob)flake.nix`, `:(glob)flake.lock`, `:(glob)rustfmt.toml`, `:(glob)codecov.yml`, `:(glob)version.txt`. CI gates: `just bazel-rustfmt-check`, `just bazel-clippy-check`, `just commit-lint`, the approval + e2e + unit suites.
 - **Docs & agent-context** — `:(glob)docs/**`, `:(glob)*.md` (CLAUDE.md, CONTEXT.md, UBIQUITOUS_LANGUAGE.md, CONVENTIONS.md, REVIEW.md, RELEASING.md, README.md, DEPRECATIONS.md, ARCH-MAP.md), ADRs under `docs/adr/**`.
 - **Runtime assets** — `:(glob)include/**` (generated headers, ICC profiles, favicon), `:(glob)server/**`, `:(glob)config/**`, `:(glob)scripts/**`, `:(glob)certificate/**`, `:(glob)db/**`, `:(glob)openseadragon.min.js.map`, `:(glob)test_tifs.sh`, `:(glob).claude/**`.
@@ -260,7 +249,7 @@ These carry no component boundary rules but exist so every tracked file maps som
 ## Conventions
 
 - **Module granularity** — one Bazel `cc_library` per concern under `src/<mod>/`, source + header + `*_test.cpp` colocated (ADR-0003). Local-context-kit budget **≤7 files**.
-- **Top-level dependency direction (one-way):** `cli-rs → server-rs → //src/ffi:sipi_ffi → //src:engine → {metadata, iiifparser, formats:output_sink, util, logging, observability}`; `formats`/`scripting`/`jwt` sit beside/below the engine. **The engine never links the shell or the seam.** *Enforcement: `structure`* (Bazel dep graph; a back-edge fails analysis).
+- **Top-level dependency direction (one-way):** `cli-rs → server-rs → //src/ffi:sipi_ffi → //src:engine → {metadata, iiifparser, formats:output_sink, util, logging, observability}`; `formats` sits beside/below the engine; `//src/scripting/rust` is a shell-side Rust crate over the seam. **The engine never links the shell or the seam.** *Enforcement: `structure`* (Bazel dep graph; a back-edge fails analysis).
 - **New work is added by dropping a file / adding a route, not editing a central switch** — a new offline verb is one file in `src/cli/commands/`; a new axum route is a registration in `server-rs/lib.rs::app()`; a new engine module is a new `cc_library` package. *Enforcement: `docs-only`.*
   - **Exception (banned-construct):** new image format → editing the `SipiImage::io` registry + `read`/`read_shape` switch + `friend` fan-out (~5 shared sites, `tools/formats-fanout.sh`) → *why it couples:* the dispatch is centralized, so a 5th format is a multi-file shared edit → *alternative:* a descriptor-registration table (deferred until a real 5th format; ADR-0006) → *enforcement:* `docs-only`.
 - **Test seam** — a helper that must be unit-tested but not publicly callable goes in an `internal/` subpackage with visibility restricted to its parent (`//src/metadata/internal` is the model). *Enforcement: `structure`.*

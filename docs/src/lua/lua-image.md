@@ -36,11 +36,9 @@ The more complex form is as follows:
             hash="md5"|"sha1"|"sha256"|"sha384"|"sha512"
           })
 
-This creates a new Lua image object and loads the given image into. The
+This creates a new Lua image object and loads the given image into it. The
 second form allows to indicate a region, the size or a reduce factor and
-the original filename. The `hash` parameter indicates that the given
-checksum should be calculated out of the pixel values and written into
-the header. All parameters are optional, but at least one has to given.
+the original filename. All parameters are optional.
 The meaning of the parameters are:
 
 - `region`: A region in IIIF format the image should be cropped to.
@@ -48,8 +46,9 @@ The meaning of the parameters are:
 - `reduce`: An much faster alternative to size, if the image size will be
   reduced by a integer factor (2=half size, 3=one third size etc.)
 - `original`: The original file name that should be recorded in the metadata
-- `hash`: The Hash algorithm that will be used for the hash of the pixel values. Valid
-  entries are `md5`, `sha1`, `sha256`, `sha384` and `sha512`.
+- `hash`: Accepted and validated for compatibility (valid entries are `md5`,
+  `sha1`, `sha256`, `sha384` and `sha512`), but the checksum algorithm actually
+  used is decided at write time.
 
 For example to read an image and include the SIPI preservation metadata,
 the function is called as follows:
@@ -64,10 +63,15 @@ use the md5-algorithm for the has of the pixel values.
 
 ### SipiImage.dims()
 
-      success, dims = img.dims()
+      success, dims = img:dims()
       if success then
           server.print('nx=', dims.nx, ' ny=', dims.ny, ' ori=', dims.orientation)
       end
+
+The method can also be called with a file path instead of an image object,
+returning the dimensions without keeping the image around:
+
+      success, dims = SipiImage.dims("path_to_file")
 
 This method returns basic information about the image. It returns a Lua table withg the following items:
 - _nx_: Number of pixels in X direction (image width)
@@ -84,7 +88,7 @@ This method returns basic information about the image. It returns a Lua table wi
 
 ### SipiImage.exif(&lt;EXIF-parameter-name&gt;)
 
-    success, value-or-errormsg = img:exit(<EXIF-parameter-name>)
+    success, value-or-errormsg = img:exif(<EXIF-parameter-name>)
 
 Return the value of an exif parameter. The following EXIF parameters are supported:
 - _"Orientation"_: Orientation (integer)
@@ -105,22 +109,24 @@ Return the value of an exif parameter. The following EXIF parameters are support
 
 ### SipiImage.crop(&lt;iiif-region-string&gt;)
 
-    success, errormsg = img.crop(<IIIF-region-string>)
+    success, errormsg = img:crop(<IIIF-region-string>)
 
 Crops the image to the given rectangular region. The parameter must be a
 valid IIIF-region string.
 
 ### SipiImage.scale(&lt;iiif-size-string&gt;)
 
-    success, errormsg = img.scale(<iiif-size-string>)
+    success, errormsg = img:scale(<iiif-size-string>)
 
 Resizes the image to the given size as IIIF-conformant size string.
 
-### SipiImage.rotate(&lt;iiif-rotation-string&gt;)
+### SipiImage.rotate(angle [, mirror])
 
-    success, errormsg = img.rotate(<iiif-rotation-string>)
+    success, errormsg = img:rotate(angle)
+    success, errormsg = img:rotate(angle, mirror)
 
-Rotates and/or mirrors the image according the given iiif-conformant rotation string.
+Rotates the image by the given angle in degrees (a number). The optional
+second parameter is a boolean; `true` mirrors the image before rotating.
 
 ### SipiImage.topleft()
 Rotates an image to the standard TOPLEFT orientation if necessary. Please note
@@ -130,34 +136,35 @@ involve rotation of 90, 180 or 270 degrees and possible mirroring which does _no
 
 ### SipiImage.watermark(wm-file-path)
 
-    success, errormsg = img.watermark(wm-file-path)
+    success, errormsg = img:watermark(wm-file-path)
 
 Applies the given watermark file to the image. The watermark file must
 be a single channel 8-Bit gray value TIFF file.
 
 ### SipiImage.write(filepath, [compression_params])
 
-    success, errormsg = img.write(filepath)
-    success, errormsg = img.write('HTTP.jpg')
+    success, filepath = img:write(filepath)
+    success, filepath = img:write('HTTP.jpg')
 
-The first version write the image to a file in the SIPI server, the second writes the file
-to the HTTP connection (which is done whenever the basename of the output file is `HTTP `):
-
+The first version writes the image to a file on the SIPI server, the second
+streams the encoded file over the HTTP connection (which is done whenever the
+basename of the output file is `HTTP` or `http`). On success the second
+return value is the given filepath.
 
 Parameters:
 
 - `filepath`: Path to output file. The file format is determined by the filename extension. Supported are
-    -   `jpg` : writes a JPEG file
-    -   `tif` : writes a TIFF file
+    -   `jpg`, `jpeg` : writes a JPEG file
+    -   `tif`, `tiff` : writes a TIFF file
     -   `png` : writes a PNG file
-    -   `jpx` : writes a JPEG2000 file
-    -   `webp` : writes a WebP file
-    -   `gif` : writes a GIF file
-    -   `pdf` : writes a PDF file
+    -   `jpx`, `j2k`, `jp2` : writes a JPEG2000 file
+
+    An unsupported extension raises a Lua error (catch it with `pcall`).
 
 - `compression_params`: (optional) An optional Lua table with compression parameters (which are dependent on the
-  chosen output file format!) can be given. All compression parameters are optional. But if a compression parameter
-  table is give, it must have at least one entry.
+  chosen output file format!) can be given. All compression parameters are optional.
+  An invalid value for a validated parameter, or an unknown parameter name,
+  raises a Lua error.
   - JPEG format:
     - `quality`: Number between 1 and 100 (1 highest compression, worst quality, 100 lowest compression, best quality)      
   - JPEG2000 format:
@@ -165,26 +172,34 @@ Parameters:
       `CINEMA2S`, `CINEMA4S`, `CINEMASS`, `IMF`. Defaults to `PART2`.
     - `Creversible`: Use the reversible compression algorithms of JPEG2000. Must be string `yes` or `no`. Defaults
           to `yes`.
+    - `Cuse_sop`: Include SOP markers. Must be string `yes` or `no`.
     - `Clayers`: Number of layers to use.
     - `Clevels`: Number of levels to use.
     - `Corder`: Ordering of file components. Must be one of the following strings: `LRCP`, `RLCP`, `RPCL`, `PCRL` or
       `CPRL`.
     - `Cprecincts`: A kakadu conformant precinct string.
+    - `Cblk`: A kakadu conformant code-block size string.
     - `rates`: rates string as used in kakadu.
-    
+  - Service-File stamping (Preservation metadata):
+    - `file_role`: Must be the string `"service-file"`. Marks the output as a
+      Service File; requires `origname` and `mimetype`, and the output format
+      must be JPEG2000 or TIFF.
+    - `origname`: The original filename to record.
+    - `mimetype`: The original MIME type to record.
+
 
 ### SipiImage.send(format)
 
-    success, errormsg = img.send(format)
+    success, errormsg = img:send(format)
 
 Sends the file to the HTTP connection. Supported format strings:
 
--   `jpg` : sends a JPEG file
--   `tif` : sends a TIFF file
+-   `jpg`, `jpeg` : sends a JPEG file
+-   `tif`, `tiff` : sends a TIFF file
 -   `png` : sends a PNG file
--   `jpx` : sends a JPEG2000 file
--   `webp` : sends a WebP file
--   `gif` : sends a GIF file
+-   `jpx`, `j2k` : sends a JPEG2000 file
+
+An unsupported format string raises a Lua error (catch it with `pcall`).
 
 ### SipiImage.mimetype_consistency(mimetype, filename)
 

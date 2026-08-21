@@ -108,16 +108,15 @@ is scoped `ffi` only when the seam mechanism itself is the point.
 | `formats` | `src/formats/` | Per-format codecs: TIFF, JP2 (Kakadu), PNG, JPEG |
 | `metadata` | `src/metadata/` | EXIF, IPTC, XMP, ICC profile handling |
 | `iiifparser` | `src/iiifparser/` | IIIF URL parsing, colocated polyglot (ADR-0021): `cpp/value_objects/` (live engine value objects), `cpp/classifier/` (testonly `parse_iiif_uri` reference oracle `:iiif_handler`), and `rust/` (the production parser `//src/iiifparser/rust:iiif_parser` the shell drives) |
-| `scripting` | `src/scripting/` (colocated polyglot, ADR-0021/0023) | The Lua runtime: `rust/` (the mlua runtime — hardened VM profile, limits, bytecode cache) + the C++ `LuaServer`/`request_context.h`/`server.db` sqlite bindings (deleted at the ADR-0023 cutover) |
+| `scripting` | `src/scripting/rust/` (ADR-0021/0023 layout) | The Rust-hosted mlua Lua runtime: hardened VM profile, limits, bytecode cache, the `server.*`/`SipiImage`/sqlite bindings, Lua-flavor config parse |
 | `util` | `src/util/` | Generic SIPI-domain helpers: MIME/string parsing, file hashing, the `shttps::Error`/`Global` types |
-| `jwt` | `src/jwt/` | JWT (JWS) sign/verify leaf over OpenSSL + jansson |
 | `cache` | `src/SipiCache.{h,cpp}` | File-based LRU cache with dual-limit eviction |
 | `throttling` | `src/throttling/` (colocated polyglot, ADR-0021/0022): `cpp/` (engine-side `memory_budget` — the full-lane decode budget) + `rust/` (shell-side `admission` — the two-lane pool) | Load-driven request-rejection: two-lane admission (tile floor + full hard cap) and the full-lane memory budget |
 | `memory` | `bazel/mimalloc.BUILD.bazel`, `_ALLOCATOR` in `src/cli-rs/BUILD.bazel`, `tools/allocator-replay/` | Process memory behavior: the production allocator, RSS/retention measurement |
 | `observability` | `src/observability/` | Metrics (atomic counters/gauges), tracing |
 | `logging` | `src/logging/` | Structured logging |
 | `cli` | `src/cli/` | C++ CLI app (offline verbs) behind the `sipi_cli_main` FFI entry |
-| `ffi` | `src/ffi/` | Rust↔C++ FFI seam and Lua bindings |
+| `ffi` | `src/ffi/` | Rust↔C++ FFI seam (incl. the `sipi_image_*` handle family) |
 | `lua` | `scripts/`, `config/*.lua` | Lua route/preflight scripts and config |
 | `server-rs` | `src/server-rs/` | Rust server shell — the production server |
 | `cli-rs` | `src/cli-rs/` | Rust CLI shell |
@@ -146,9 +145,10 @@ The codebase has two coexisting layouts:
 - **Module-co-located ([ADR-0003](docs/adr/0003-module-co-located-source-and-tests.md), proposed):**
   `src/<mod>/{Foo.cpp, Foo.h, foo_test.cpp}` with flat-style includes
   (`#include "metadata/Foo.h"` cross-module, `#include "Foo.h"`
-  intra-module). `src/util/`, `src/scripting/`, `src/jwt/`, and `src/iiifparser/`
-  already follow this — `src/iiifparser/` additionally splits by language into
-  `cpp/` + `rust/` (the colocated polyglot of ADR-0021). Migration is staged
+  intra-module). `src/util/` and `src/iiifparser/`
+  already follow this — `src/iiifparser/` and `src/scripting/` additionally
+  split by language into `cpp/`/`rust/` subdirectories (the colocated polyglot
+  of ADR-0021). Migration is staged
   behind the Bazel build-tool migration
   and lands as mechanical per-module PRs.
 

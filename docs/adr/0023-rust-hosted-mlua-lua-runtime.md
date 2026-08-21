@@ -85,7 +85,7 @@ Every request VM is built to one hardened profile:
 - **Per-request isolation kept**: a fresh VM per request. Cost reduction comes
   from a **bytecode cache** (init script, route scripts, and `require`d
   modules; `Function::dump` bytes loaded per VM as binary chunks), invalidated
-  by mtime — script edits still take effect immediately. The base `load` scrub
+  by mtime + size — script edits still take effect immediately. The base `load` scrub
   closes the attacker-supplied-bytecode hole the cache would otherwise open.
 - **Fail-closed startup**: an init-script *error* refuses startup (the old
   probes failed open, silently disabling authorization); a hook genuinely not

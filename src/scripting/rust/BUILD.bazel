@@ -104,9 +104,7 @@ rust_test(
     tags = ["no-sanitizer"],
 )
 
-# Per-request Lua VM cost, Rust side (manual, `-c opt`, never CI-gated) —
-# paired with //src/scripting:luaserver_benchmark; run both on the same
-# machine and compare medians.
+# Per-request Lua VM cost (manual, `-c opt`, never CI-gated).
 rust_binary(
     name = "runtime_benchmark",
     testonly = True,

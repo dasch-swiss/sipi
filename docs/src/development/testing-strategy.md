@@ -84,7 +84,7 @@ The production HTTP server is the Rust axum shell (`src/server-rs` +
 | Range requests | HTTP 206 Partial Content | Handler-level |
 | CORS | Via Lua preflight scripts | `scripts/` |
 | Methods | GET, POST, PUT, DELETE | `src/server-rs/src/lib.rs` |
-| Authentication | JWT (HS256), HTTP Basic Auth, cookie support | `src/jwt/jwt.h` |
+| Authentication | JWT (HS256), HTTP Basic Auth, cookie support | `src/scripting/rust/bindings/server.rs` |
 | Max POST size | Configurable (`max_post_size`, default 300M) | `src/server-rs/src/config_file.rs` |
 | Multipart upload | Form-data file upload retained as a Lua route (ADR-0017) | `scripts/` |
 

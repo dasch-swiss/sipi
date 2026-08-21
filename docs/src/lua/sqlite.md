@@ -7,23 +7,29 @@ returned by SQLite.
 
 ## Opening an SQLite Database
 
-    db = sqlite(path_to_db, access)
+    db = sqlite(path_to_db [, access])
 
-This creates a new opaque database object. The parameters are:
+This creates a new opaque database object. Errors raise real Lua errors
+(hence the `pcall` advice above). The parameters are:
 
 - `path_to_db`: path to the sqlite3 database file.
 - `access`: Method of opening the database. Allowed are
-    - `'RO'`: readonly access. The file must exist and the SPIP server must have read access to it.
-    - `'RW'`: read and write access. The file must exist and the SPIP server must have read/write access to it.
+    - `'RO'`: readonly access. The file must exist and the SIPI server must have read access to it.
+    - `'RW'`: read and write access. The file must exist and the SIPI server must have read/write access to it. This is the default when the parameter is omitted.
     - `'CRW'`: If the database file does not exist, it will be created and opened with read/write access.
 
+If the database is locked by another writer, calls wait at most the remaining
+execution deadline of the request.
 
-To destroy the database object and free all resources, you can do this:
+To close the database, you can do this:
 
     db = ~db
 
-However, Lua's garbage collection will destroy the database object and
-free all resources when they are no longer used.
+This marks the connection closed: any later use of the database or of a query
+object prepared from it raises a `database is closed` error. The underlying
+connection is freed once every query object prepared from it is gone.
+Alternatively, Lua's garbage collection will free the database object and all
+resources when they are no longer used.
 
 ### Preparing a Query
 The SIPI sqlite interface supports direct queries as well as prepared statements. A direct query is constructed as
@@ -43,8 +49,10 @@ query object is not needed anymore, it may be destroyed:
 Query objects should be destroyed explicitly if not needed any longer.
 
 ### Executing a Query
-Excuting (calling) a query objects gets the next row of data. If there are no more rows, `nil` is returned. The row is
-returned as array of values.
+Executing (calling) a query object gets the next row of data. If there are no
+more rows, `nil` is returned. The row is returned as a table of values with
+**0-based** column indices; a column whose value is SQL `NULL` is absent from
+the table (its index is `nil`).
 
     row = qry()
     while (row) do
@@ -56,4 +64,7 @@ Or with a prepared statement:
 
     row = qry('SGV_1960_00315', 'This is an image of a steam engine...')
 
-The second way is used for prepared queries that contain parameters.
+The second way is used for prepared queries that contain parameters
+(`?` placeholders, bound 1-based from the first call argument). Calling a
+query object with arguments resets the statement and rebinds all parameters.
+Supported bind types are strings, integers, floats, booleans and `nil`.

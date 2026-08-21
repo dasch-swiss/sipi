@@ -16,7 +16,7 @@ within the package use the bare quote form (`#include "sipi_ffi.h"`).
 The target hosts the C++ side of the seam; its `srcs` grow as the engine is
 carved behind the FFI (today: `sipi_serve_file` / `sipi_serve_image` /
 `sipi_serve_timings_take` / `sipi_phase_count` / `sipi_metrics_snapshot`,
-the `sipi_image_*` handle family, and the `sipi_run_lua_route` route entry).
+and the `sipi_image_*` handle family the Rust-hosted Lua runtime drives).
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
@@ -32,19 +32,15 @@ cc_library(
         # engine_context.{h,cpp} holds the engine services/config the pipeline
         # reads; sipi_ffi.cpp is the thin extern "C" surface (incl.
         # sipi_metrics_snapshot, which fills the SipiMetricsSnapshot layout
-        # defined in metrics_snapshot.h). SipiLua.cpp is the SipiImage Lua
-        # bindings (the `sipi.*` globals installer), relocated here from
-        # //src:sipi_lib so the engine-held config VM behind
-        # sipi_run_lua_route can install them — they name no server object
-        # (there is no `__sipiserver` light-userdata).
-        "SipiLua.cpp",
+        # defined in metrics_snapshot.h); image_handle.cpp is the opaque
+        # sipi_image_* handle family the Rust-hosted Lua SipiImage bindings
+        # drive.
         "engine_context.cpp",
         # init.cpp is the production `sipi_init` engine install; it lives in
         # //src/ffi, not //src/cli, so no production FFI entry lives in the CLI
         # label; startup.cpp holds the LibraryInitialiser + memory-detection
         # helpers it shares with the CLI dispatch (dependency runs cli -> ffi).
         "init.cpp",
-        "lua_config.cpp",
         "serve_image.cpp",
         "serve_response.cpp",
         "serve_timings.cpp",
@@ -53,9 +49,7 @@ cc_library(
         "startup.cpp",
     ],
     hdrs = [
-        "SipiLua.h",
         "engine_context.h",
-        "lua_config.h",
         "metrics_snapshot.h",
         "serve_image.h",
         "serve_response.h",
@@ -92,18 +86,6 @@ cc_library(
         # MIME sniff) + shttps::urldecode. Generic SIPI-domain utilities, not the
         # HTTP transport, so this is no SIPI -> shttps-transport coupling.
         "//src/util",
-        # The connection-less LuaServer + RequestContext the SipiLua `sipi.*`
-        # bindings install into. //src/scripting:scripting is transport-free (transport
-        # deps lua, never the reverse), so this is no SIPI -> shttps-transport
-        # coupling — it is exactly the dep the seam needs to reach the
-        # Lua runtime connection-less.
-        "//src/scripting:scripting",
-        # The Lua C API the SipiImage bindings call directly (lua_State, luaL_*).
-        "@lua",
-        # sipi_init installs shttps::sqliteGlobals into the engine Lua config, so
-        # configured Lua routes get the `db` (sqlite) bindings. Transport-free,
-        # like //src/scripting:scripting.
-        "//src/scripting:lua_sqlite",
         # startup.cpp's LibraryInitialiser initialises these directly (curl_global_init,
         # Exiv2::XmpParser). Both also arrive transitively via //src:engine; named
         # here because startup.cpp includes their headers directly.
