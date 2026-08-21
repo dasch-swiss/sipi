@@ -672,9 +672,6 @@ bool SipiIOJpeg::read(SipiImage *img,
       if (marker->data_length >= 12 && memcmp(marker->data, "Adobe", 5) == 0) {
         img->app14_transform = static_cast<uint8_t>(marker->data[11]);
       }
-    } else {
-      // fprintf(stderr, "4) MARKER= %d, %d Bytes, ==> %s\n\n", marker->marker - JPEG_APP0, marker->data_length,
-      // marker->data);
     }
     marker = marker->next;
   }

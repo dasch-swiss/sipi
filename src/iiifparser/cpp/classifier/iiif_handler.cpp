@@ -113,18 +113,6 @@ namespace {
 
 }// namespace
 
-template<typename T> std::string vector_to_string(const std::vector<T> &vec)
-{
-  std::ostringstream oss;
-  oss << "[";
-  for (size_t i = 0; i < vec.size(); ++i) {
-    if (i > 0) { oss << ", "; }
-    oss << vec[i];
-  }
-  oss << "]";
-  return oss.str();
-}
-
 static auto make_parse_error(std::string msg) -> std::expected<IIIFUriParseResult, std::string>
 {
   return std::expected<IIIFUriParseResult, std::string>(std::unexpect, std::move(msg));
@@ -146,9 +134,6 @@ static auto make_parse_error(std::string msg) -> std::expected<IIIFUriParseResul
  */
 [[nodiscard]] auto parse_iiif_uri(const std::string &uri) noexcept -> std::expected<IIIFUriParseResult, std::string>
 {
-
-  // std::cout << ">> parsing IIIF URI: " << uri << std::endl;
-
   RequestType request_type{ UNDEFINED };
 
   std::vector<std::string> parts;
@@ -175,8 +160,6 @@ static auto make_parse_error(std::string msg) -> std::expected<IIIFUriParseResul
   if (old_pos != uri.length()) { parts.push_back(shttps::urldecode(uri.substr(old_pos, std::string::npos))); }
 
   if (parts.empty()) { return make_parse_error("No parameters/path given"); }
-
-  // std::cout << ">> parts found: " << vector_to_string(parts) << std::endl;
 
   std::vector<std::string> params;
 
