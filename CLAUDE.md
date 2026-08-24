@@ -38,53 +38,6 @@ For full build instructions, see [`docs/src/development/building.md`](docs/src/d
 
 **ICC determinism invariant:** [`Icc::iccBytes()`](src/metadata/icc.cpp) is the single chokepoint that converts an `cmsHPROFILE` into raw bytes for codec consumption — every TIFF, JPEG, PNG, and JP2 emission funnels through it. Any new format handler must route through `iccBytes()`; bypassing it (calling `cmsSaveProfileToMem` directly) breaks the approval-test gate. Approval tests run with `SOURCE_DATE_EPOCH=946684800` and `SIPI_WORKSPACE_ROOT="."` injected by `test/approval/BUILD.bazel` so the wall-clock-stamped ICC creation date is overwritten with a fixed value and goldens stay byte-deterministic. Production never sets the env var; deployed binaries continue to embed wall-clock-stamped ICC headers. See [`docs/adr/0002-icc-profile-determinism-test-only.md`](docs/adr/0002-icc-profile-determinism-test-only.md).
 
-### Quick Reference
-
-```bash
-# Build sipi (fastbuild — fast incremental for inner-loop edits)
-just bazel-build                 # bazel build --stamp //src/cli:sipi
-just bazel-build --config=release  # production build (-c opt + hardening; matches Docker image)
-just bazel-build --config=asan   # ASan+UBSan; same flag form for ad-hoc variants
-just bazel-build-server          # bazel build //src/cli-rs:sipi (the Rust shell binary; wraps //src/server-rs:lib)
-
-# Tests
-just bazel-test-unit             # bazel test //test/unit/...  (12 components)
-just bazel-test-approval         # bazel test //test/approval:approvaltests
-just bazel-test-e2e              # Rust e2e tests via rules_rust
-just bazel-test-smoke            # Docker smoke test (OCI tarball loaded by the test)
-
-# Coverage (canonical CI build — what ci.yml invokes on every PR)
-just bazel-coverage              # unit + approval + e2e under instrumentation; lcov
-                                 # at bazel-out/_coverage/_coverage_report.dat
-
-# Rust formatting + rust-analyzer
-just bazel-rustfmt               # format the Rust crates per rustfmt.toml (rules_rust runner)
-just bazel-rustfmt-check         # CI gate: rustfmt --check via the rules_rust rustfmt aspect
-just bazel-rust-project          # (re)generate rust-project.json for rust-analyzer (git-ignored)
-
-# Run / debug
-just run                         # run sipi with the localdev config
-just valgrind                    # run sipi under Valgrind
-
-# Microbenchmarks (local dev loop, never CI-gated)
-just bench <tier>                # tier ∈ parse|decode|process|encode; -c opt build + direct exec
-just bench-compare before after  # U-test deltas + geomean via //tools/benchmark:compare
-
-# Sanitizer
-just bazel-build-sanitized       # bazel build --config=asan --config=ubsan //src/cli:sipi  (ci.yml sanitizer job)
-
-# Docker (Bazel rules_oci)
-just bazel-docker-build-amd64            # build + load amd64 image as daschswiss/sipi:latest (CI on amd64 runner)
-just bazel-docker-build-arm64            # build + load arm64 image (CI on arm64 runner)
-just bazel-docker-push-amd64             # push amd64 image as :v<version>-amd64 + :latest-amd64
-just bazel-docker-push-arm64             # push arm64 image as :v<version>-arm64 + :latest-arm64
-just bazel-docker-publish-manifest       # crane index append → daschswiss/sipi:v<version> multi-arch
-just bazel-docker-extract-debug <arch>   # surface sipi-<arch>.debug for sentry-cli upload
-
-# Documentation
-just docs-serve                  # serve docs locally
-```
-
 ### Inner-loop development (incremental rebuilds)
 
 `bazel build` IS the inner loop. The first build is slow (cold action cache,
@@ -120,22 +73,6 @@ localdev config in one step.
 | Metrics | `src/observability/metrics.h` | Metrics singleton (`Sipi::observability::Metrics`) — plain atomic counters/gauges; scalar fields cross the FFI seam as `SipiMetricsSnapshot` and export over OTLP via `src/server-rs/src/metrics.rs` |
 | Memory Budget | `src/SipiMemoryBudget.h` | Lock-free decode memory budget with RAII guard — prevents OOM from concurrent large decodes |
 | Lua Runtime | `src/scripting/rust/` | Rust-hosted mlua runtime (ADR-0023): hardened per-request VM (stdlib whitelist, memory cap, deadline), bytecode cache, all `server.*`/`SipiImage`/sqlite bindings, Lua-flavor config parse |
-
-### Image Processing Pipeline
-
-1. HTTP server receives IIIF URL
-2. IIIF parameters extracted and validated
-3. Cache check (SipiCache)
-4. Image loaded via appropriate SipiIO handler
-5. Processing: region, scaling, rotation, quality
-6. Serve processed image or write to cache
-
-### Configuration
-
-- Main config: `config/sipi.config.lua`
-- Test config: `config/sipi.test-config.lua`
-- Local dev config: `config/sipi.localdev-config.lua`
-- Lua scripts: `scripts/` directory
 
 ### Dependencies
 
