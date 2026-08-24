@@ -25,6 +25,16 @@ Read these before reasoning about names, boundaries, or architectural decisions:
 - [`docs/adr/`](docs/adr/) — architectural decision records. Start with [`0020-oracle-removal.md`](docs/adr/0020-oracle-removal.md) (the C++ oracle is removed; the Rust shell is the sole server — completing the strangler-fig migration that [`0013-shttps-as-internal-module.md`](docs/adr/0013-shttps-as-internal-module.md) prepared) and [`0017-extensibility-lua-and-rust.md`](docs/adr/0017-extensibility-lua-and-rust.md) (Lua and Rust extensions are both first-class, permanently).
 - Architecture map: see [`ARCH-MAP.md`](ARCH-MAP.md); load on demand for blast-radius and boundary questions (never auto-loaded).
 
+## Specs
+
+SIPI specs (PRDs, implementation plans, design docs) live in [`docs/specs/`](docs/specs/), one date-prefixed folder per feature/initiative. Platform-wide specs that span several repos stay in [`dasch-specs`](https://github.com/dasch-swiss/dasch-specs); a spec whose primary subject is SIPI belongs here even when it touches deploy config or another repo.
+
+- **Folder:** `docs/specs/YYYY-MM-DD-{title-slug}/` — date = creation date of the folder's first artifact; slug lowercase, alphanumeric + hyphens, max 60 chars.
+- **Files:** sequential per-folder numbering shared across all file types (`max(nn) + 1`): `{nn}-{topic}-PRD.md`, `{nn}-{type}-{topic}-plan.md` (`{type}` ∈ `feat`/`fix`/`refactor`), `{nn}-{topic}-design.md`.
+- **Assets:** images go in an `assets/` subdirectory of the spec folder, referenced relatively (`![…](assets/file.png)`).
+- **Frontmatter** (YAML, all spec files): `title`, `date`, `author`, `status: draft | reviewed | approved | implemented`, and `repositories:` listing the *other* code repos the feature modifies — never list `sipi` itself (the spec's home repo carries no signal).
+- `docs/specs/` is outside the mkdocs site (`docs_dir: src`); specs are repo context, not published documentation.
+
 ## Build System and Common Commands
 
 All targets are in a single `justfile`. Run `just` for a complete list.
