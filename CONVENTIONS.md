@@ -107,7 +107,7 @@ is scoped `ffi` only when the seam mechanism itself is the point.
 | `image` | `src/SipiImage.{h,cpp}` | Image read/write pipeline; orchestrates decode → process → encode |
 | `formats` | `src/formats/` | Per-format codecs: TIFF, JP2 (Kakadu), PNG, JPEG |
 | `metadata` | `src/metadata/` | EXIF, IPTC, XMP, ICC profile handling |
-| `iiifparser` | `src/iiifparser/` | IIIF URL parsing, colocated polyglot (ADR-0021): `cpp/value_objects/` (live engine value objects), `cpp/classifier/` (testonly `parse_iiif_uri` reference oracle `:iiif_handler`), and `rust/` (the production parser `//src/iiifparser/rust:iiif_parser` the shell drives) |
+| `iiifparser` | `src/iiifparser/` | IIIF URL parsing, colocated polyglot (ADR-0021): `cpp/value_objects/` (live engine value objects), `cpp/classifier/` (testonly `parse_iiif_uri` reference oracle `:iiif_handler`), `rust/` (the production parser `//src/iiifparser/rust:iiif_parser` the shell drives), and `fuzz/` (the libFuzzer harness over the Rust parser) |
 | `scripting` | `src/scripting/rust/` (ADR-0021/0023 layout) | The Rust-hosted mlua Lua runtime: hardened VM profile, limits, bytecode cache, the `server.*`/`SipiImage`/sqlite bindings, Lua-flavor config parse |
 | `util` | `src/util/` | Generic SIPI-domain helpers: MIME/string parsing, file hashing, the `shttps::Error`/`Global` types |
 | `cache` | `src/SipiCache.{h,cpp}` | File-based LRU cache with dual-limit eviction |
@@ -124,6 +124,17 @@ is scoped `ffi` only when the seam mechanism itself is the point.
 All server work lands under `server-rs`; there is no C++ server (the `shttps`
 transport and `SipiHttpServer` were removed with the oracle,
 [ADR-0020](docs/adr/0020-oracle-removal.md)).
+
+**FFI direction.** The seam is Rust-calls-C++ everywhere that ships: `src/ffi/`
+and `src/server-rs/src/ffi.rs`. The one **C++-calls-Rust** link is
+`//src/iiifparser/fuzz` (`shim.rs` → `fuzz_target.cc`), which exists because
+libFuzzer's entry point is a C symbol and `rules_fuzzing` is a C++ rule set.
+Its confinement is analysis-enforced, not documented: both targets are `testonly`
+and the package grants no default visibility, so nothing outside it can depend on
+the shim and the reverse direction cannot reach a production binary. Adding a
+second reverse-direction link is an
+architectural decision, not a local one — ask the maintainer. See
+[fuzzing.md](docs/src/development/fuzzing.md).
 
 Beyond modules, commits use **test-layer scopes** (`e2e`, `approval`, for a
 test layer's own harness or fixtures) and **cross-cutting scopes** (`deps`,

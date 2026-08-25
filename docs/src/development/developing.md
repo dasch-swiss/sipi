@@ -97,6 +97,8 @@ just bazel-test-unit             # bazel test //src/... //test/unit/...
 just bazel-test-approval         # bazel test //test/approval:approvaltests
 just bazel-test-e2e              # all rust_test e2e targets
 just bazel-test-smoke            # Docker smoke test
+
+bazel test //src/iiifparser/fuzz:parse_request_fuzz   # fuzz-corpus replay (also inside the //src/... sweeps)
 ```
 
 CI runs the full pyramid through `just bazel-coverage` (unit +
@@ -206,6 +208,15 @@ regression. See
 [`test/approval/CHANGELOG.approval.md`](../../../test/approval/CHANGELOG.approval.md)
 for the full list and the re-approval procedure, and `docs/adr/0002-icc-profile-determinism-test-only.md`
 in the project root for the design rationale.
+
+### Fuzzing
+
+Coverage-guided libFuzzer fuzzing of the production Rust IIIF parser lives in
+`src/iiifparser/fuzz/`. `bazel test //src/iiifparser/fuzz:parse_request_fuzz` is
+a corpus replay that runs on every platform; `just fuzz` and the nightly
+`fuzz.yml` run the mutation loop on Linux. The canonical how-to — the C++→Rust
+shim seam, the two modes, the corpus policy, and crash triage — is
+[Fuzzing](fuzzing.md).
 
 ### Microbenchmarks
 

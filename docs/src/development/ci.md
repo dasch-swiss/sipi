@@ -47,7 +47,7 @@ provisioning" below). Nix remains the local dev-shell provisioner only.
 
 A `changes` job runs first and inspects the diff to decide whether the
 sanitizer job (below) needs to run: it looks for changes under
-`src/`, `include/`, `test/`, `fuzz/`, `bazel/`, `platforms/`, `config/`,
+`src/`, `include/`, `test/`, `bazel/`, `platforms/`, `config/`,
 `scripts/`, `MODULE.bazel*`, `.bazelrc`, `.bazelversion`, `BUILD.bazel`,
 `justfile`, `.lsan_suppressions.txt`, `ci.yml`, and `.github/actions/`.
 A docs-only PR skips the sanitizer job — a skipped required job still
@@ -251,7 +251,20 @@ justfile is missing a recipe and should grow one.
 
 ## Fuzz testing
 
-The C++ libFuzzer harness has been retired along with the C++ IIIF URL
-parser it targeted; a Rust fuzz harness against the Rust shell's
-`parse_request` is a tracked follow-up. See [Fuzzing](fuzzing.md) for the
-current status.
+Workflow: `.github/workflows/fuzz.yml`. Trigger: `schedule` at `17 3 * * *`
+(03:17 UTC) plus manual `workflow_dispatch` — the repo's only scheduled
+workflow. One job on `ubuntu-24.04`: it restores the previous nightly's
+working corpus from the `fuzz-corpus` artifact, builds the instrumented
+libFuzzer binary with `just bazel-build-fuzz` (RBE-eligible, `bep-fuzz`
+artifact attached like the other legs), fuzzes
+`//src/iiifparser/fuzz:parse_request_fuzz` for 600s, minimizes and re-uploads
+the corpus, then runs a 300s ASan-paired pass.
+
+Linux-amd64 only — `--config=fuzz` cannot link the libFuzzer runtime on
+darwin, exactly like the sanitizer gate. macOS coverage is the corpus-replay
+mode of the same target, which rides along in the `//src/...` test sweeps on
+every PR.
+
+A crash makes libFuzzer exit 77, which fails the job; the reproducers and
+logs upload as a `fuzz-crashes` artifact and triage is manual. See
+[Fuzzing](fuzzing.md) for the harness, the corpus policy, and the recipes.

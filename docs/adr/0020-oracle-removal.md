@@ -56,8 +56,10 @@ oracle collapses that surface to the one server that ships.
   `handlers::iiif_handler::parse_iiif_uri`, which was on the oracle path only.
   Production parses IIIF URIs entirely in Rust (`//src/iiifparser/rust:iiif_parser`;
   colocated per ADR-0021). A cargo-fuzz harness against its `parse_request` (the
-  production parser) is a tracked follow-up under DEV-6969; until it lands there
-  is no IIIF-parser fuzzing.
+  production parser) is a tracked follow-up under DEV-6970; until it lands there
+  is no IIIF-parser fuzzing. *(Landed 2026-08-25 — in-Bazel via `rules_fuzzing`
+  and an FFI shim, not cargo-fuzz; see
+  [Fuzzing](../src/development/fuzzing.md).)*
 
 ## Considered Options
 

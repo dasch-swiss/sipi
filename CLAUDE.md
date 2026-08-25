@@ -116,6 +116,7 @@ For test framework details (how to run tests, directory layout, adding tests), s
 - **Approval tests** (`test/approval/`): snapshot-based regression — `just bazel-test-approval` (or via `bazel-coverage` in CI). `SOURCE_DATE_EPOCH=946684800` and `SIPI_WORKSPACE_ROOT="."` are injected by `test/approval/BUILD.bazel`.
 - **E2E tests** (`test/e2e/`): Rust (reqwest + `rules_rust`'s hermetic rustc). Run via `just bazel-test-e2e`, or a single target with `bazel test //test/e2e:<name> --test_output=streamed`.
 - **Smoke tests** (`test/e2e/tests/docker_smoke.rs`): against Docker image. Run via `just bazel-test-smoke` — the `:docker_smoke` rust_test consumes the OCI tarball from `//src:image_load` and `docker load`s it before probing endpoints.
+- **Fuzzing** (`src/iiifparser/fuzz/`): libFuzzer over the production Rust IIIF parser. `bazel test //src/iiifparser/fuzz:parse_request_fuzz` is a corpus replay that rides along in the `//src/...` sweeps on every platform; the mutation loop (`just fuzz`, nightly `fuzz.yml`) is Linux-only. See [`docs/src/development/fuzzing.md`](docs/src/development/fuzzing.md).
 
 Run a single unit-test target with `bazel test //test/unit/<component>:<component>_test --test_output=streamed`.
 
@@ -167,7 +168,7 @@ These are not style preferences — they are contract with the maintainer. Code 
 
 ## Development Notes
 
-**Compiler Requirements:** C++23. Bazel selects a hermetic LLVM 22.1.7 toolchain via the BCR `llvm` (hermetic-llvm) module pinned at 0.8.10; the host compiler does not need to be Clang. libc++ is the default stdlib and a single toolchain serves all platforms including the fuzz platforms. See [`docs/adr/0014-toolchain-provider-swap.md`](docs/adr/0014-toolchain-provider-swap.md).
+**Compiler Requirements:** C++23. Bazel selects a hermetic LLVM 22.1.7 toolchain via the BCR `llvm` (hermetic-llvm) module pinned at 0.8.10; the host compiler does not need to be Clang. libc++ is the default stdlib and a single toolchain serves all platforms and configs, `--config=fuzz` included. See [`docs/adr/0014-toolchain-provider-swap.md`](docs/adr/0014-toolchain-provider-swap.md).
 
 **Build configurations:**
 - `bazel build //src/cli:sipi` — fastbuild (`-O0 -g`, fast incremental)
@@ -175,5 +176,6 @@ These are not style preferences — they are contract with the maintainer. Code 
 - `bazel build --config=release //src/cli:sipi` — production: `-c opt` + `_FORTIFY_SOURCE=2` hardening; what the Docker image ships
 - `bazel build -c dbg //src/cli:sipi` — Debug (`-O0 -g`)
 - `bazel build --config=asan --config=ubsan //src/cli:sipi` — sanitizers
+- `bazel build --config=fuzz //src/iiifparser/fuzz:parse_request_fuzz_bin` — instrumented libFuzzer binary (Linux only; `-c opt` + SanitizerCoverage on the Rust crate graph)
 
 **Error Reporting:** Optional Sentry integration (Rust `sentry` crate, `cli-rs/src/main.rs`) via `SIPI_SENTRY_DSN`, `SIPI_SENTRY_ENVIRONMENT`, `SIPI_SENTRY_RELEASE` environment variables — panics and handled image errors for every verb, plus an out-of-process minidump reporter for native crashes on `server` (see [`docs/adr/0018-minidump-crash-memory-accepted-risk.md`](docs/adr/0018-minidump-crash-memory-accepted-risk.md)).

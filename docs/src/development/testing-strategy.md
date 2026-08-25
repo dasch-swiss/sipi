@@ -254,7 +254,7 @@ The cache counters and gauges are exported over OTLP, not a scrape endpoint. The
 
 | Feature | Details |
 |---|---|
-| **Build systems** | CMake, Nix |
+| **Build systems** | Bazel (Nix provisions the dev shell only) |
 | **CI** | GitHub Actions: unit tests, e2e tests, fuzz (nightly), Docker builds |
 | **Documentation** | MkDocs Material site, LLM-optimized `llms.txt` output |
 | **Dependency management** | Bazel `bazel_dep` (BCR) + `http_archive` source pins with SHA-256 checksums in `MODULE.bazel` |
@@ -368,10 +368,24 @@ Behavior that *is* HTTP-observable belongs in Rust e2e — not in C++ unit tests
 | Framework | Location | When to use |
 |---|---|---|
 | `proptest` (Rust) | `test/e2e/tests/proptest_iiif_uri.rs` | Property-based coverage of the Rust IIIF URI parser (`parse_request`) |
-| Rust fuzz harness (`cargo-fuzz` / `libfuzzer-sys`, tracked follow-up) | — | Coverage-guided fuzzing of `//src/iiifparser/rust:iiif_parser` (`parse_request`) |
+| Corpus regression (Rust) | `src/iiifparser/rust/corpus_regression_test.rs` | Fixed sweep of the 241-file shared corpus through `parse_request` — the per-PR net |
+| libFuzzer (`rules_fuzzing` + FFI shim) | `src/iiifparser/fuzz/` → `//src/iiifparser/fuzz:parse_request_fuzz` | Coverage-guided fuzzing of `//src/iiifparser/rust:iiif_parser` (`parse_request`) |
 
-The C++ libFuzzer harness (`//fuzz/handlers`) has been retired along with the C++
-IIIF URL parser it targeted. See [Fuzzing](fuzzing.md) for the current status.
+**Status: shipped.** The fuzz target has two modes from one definition. By
+default (`rules_fuzzing`'s `replay` engine, no libFuzzer runtime) it is a
+corpus-replay regression test that builds and runs on every platform and rides
+along in the `//src/...` sweeps — including the sanitizer leg. `--config=fuzz`
+arms the real libFuzzer engine plus SanitizerCoverage on the Rust crate graph;
+that mode is Linux-only and runs nightly.
+
+```bash
+bazel test //src/iiifparser/fuzz:parse_request_fuzz   # corpus replay, any platform
+just fuzz -max_total_time=60                          # mutation loop, Linux
+```
+
+The retired C++ libFuzzer harness (`//fuzz/handlers`) fuzzed the oracle-only C++
+classifier and went away with the oracle. See [Fuzzing](fuzzing.md) for the shim
+seam, the corpus policy, and the nightly workflow.
 
 **What belongs here:**
 
@@ -391,7 +405,8 @@ New test needed?
 ├── Is it regression detection for complex output?
 │   └── insta snapshot (JSON structure, headers) — this is a Rust e2e test with insta
 ├── Is it testing untrusted input handling?
-│   └── proptest today (`proptest_iiif_uri.rs`); a Rust fuzz harness is a tracked follow-up
+│   └── proptest (`proptest_iiif_uri.rs`) + the corpus regression sweep; the nightly
+│       libFuzzer target (`//src/iiifparser/fuzz`) covers mutation
 ├── Is it testing image output correctness?
 │   └── Rust e2e with `image` crate decode + dimension/checksum verification
 └── Does it need filesystem setup or custom server config?
@@ -601,7 +616,7 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 | Zero-byte / empty file upload | :white_check_mark: | `upload.rs::empty_file_upload` | |
 | Invalid server config startup | :white_check_mark: | `config.rs::invalid_config_startup` | |
 | Double-encoded URL handling | :white_check_mark: | `iiif_compliance.rs::double_encoded_url` | `%252F`: the Rust shell single-decodes (DEV-6700) |
-| Extremely long URL / header | :x: GAP | — | Partially covered by fuzz only |
+| Extremely long URL / header | :x: GAP | `//src/iiifparser/fuzz:parse_request_fuzz` (URL half only) | URL half closed: libFuzzer mutates URI length without bound (nightly, Linux) and the corpus replay runs on every PR. The header half is still untested — the fuzz target takes the URI, not HTTP headers |
 | JWT validation edge cases | :white_check_mark: | `security.rs::jwt_expired_token`, `jwt_alg_none_bypass`, `jwt_tampered_payload` | the preflight response-sink crash (DEV-6670) is fixed — a Bearer token to an `/auth`-prefixed image no longer null-derefs |
 | Image decompression bomb | :white_check_mark: | `security.rs::decompression_bomb_rejection` | |
 | Upload size enforcement | :white_check_mark: | `upload.rs::upload_size_enforcement` | |
@@ -679,7 +694,7 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 
 - **Deep metadata survival** (2 gaps): positive XMP round-trip, ICC profile HTTP-level round-trip — EXIF/IPTC now covered
 - **Concurrency edge cases** (1 gap): thread-pool-exhaustion saturation test (`concurrent_requests`/`lua_state_thread_isolation` are written and correct, just `#[ignore]`'d for the unrelated 503-shedding reason above — not gaps)
-- **Hardening depth** (2 gaps): TSan (nightly-future), extremely long URL/header (fuzz-only today)
+- **Hardening depth** (2 gaps): TSan (nightly-future), extremely long URL/header (URL half now covered by the nightly libFuzzer target; the header half is untested)
 - **Test-harness depth** (1 gap): a direct SImage Lua-API unit harness (vs. black-box HTTP coverage)
 - **Test removed with the differential suite** (1 gap): favicon endpoint — the route exists but its only e2e test lived in the removed differential suite
 - **Documented, not missing** (1 row): multi-page TIFF `@page` — `#[ignore]`'d pending a real page-selection implementation, not an untested behavior
@@ -780,7 +795,8 @@ insta::assert_json_snapshot!(info_json, {
 | Differential parity | *(retired)* | — | The strangler parity gate and the retained C++ oracle server it compared against have been removed; the Rust shell is the sole production surface |
 | Hurl contract tests | *(retired)* | — | Folded into Rust e2e (`tests/http_contracts.rs` + `iiif_compliance.rs`) |
 | Python e2e tests | *(retired)* | — | Replaced by Rust e2e tests |
-| Fuzz testing | *(retired)* | — | The C++ libFuzzer harness was removed with the C++ IIIF URL parser; a Rust fuzz harness against `//src/iiifparser/rust:iiif_parser` (`parse_request`) is a tracked follow-up (see [Fuzzing](fuzzing.md)) |
+| Fuzz corpus replay | `just bazel-test` / `bazel-test-unit` / `bazel-test-sanitized` / `bazel-coverage` | PR CI, all platforms | `//src/iiifparser/fuzz:parse_request_fuzz` under `rules_fuzzing`'s default `replay` engine; picked up by the `//src/...` wildcard |
+| Fuzz mutation loop | `just bazel-build-fuzz` + the runner-local loop (`just fuzz` locally) | nightly (`fuzz.yml`), Linux only | libFuzzer + SanitizerCoverage on the Rust parser via the `//src/iiifparser/fuzz` shim; see [Fuzzing](fuzzing.md) |
 | Sanitizer builds | `just bazel-build-sanitized` (`bazel build --config=asan --config=ubsan //src/cli:sipi`) | PR | ASan+UBSan; e2e suite against `bazel-bin/src/cli/sipi` with `.lsan_suppressions.txt` |
 
 ## Python Test Deprecation — Parity Checklist
