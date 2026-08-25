@@ -181,9 +181,9 @@ approach is being reconsidered) — verify it locally. Without a
 `--platforms` override the default host platform on macOS is darwin,
 which fails the linux gate and skips the target.
 
-The C++ libFuzzer harness has been retired along with the C++ IIIF URL
-parser it targeted; a Rust fuzz harness against the Rust shell's
-`parse_request` is a tracked follow-up. See [Fuzzing](fuzzing.md).
+Fuzzing has its own opt-in config. `//src/iiifparser/fuzz:parse_request_fuzz`
+builds and corpus-replays everywhere by default; `--config=fuzz` arms the real
+libFuzzer engine and is Linux-only. See [Fuzzing](fuzzing.md).
 
 For Linux-target builds from a macOS host, see
 [Building from source](building.md#cross-platform-builds).
@@ -195,7 +195,8 @@ For Linux-target builds from a macOS host, see
 - [`.bazelrc`](https://github.com/dasch-swiss/sipi/blob/main/.bazelrc)
   — flag defaults, sanitizer/fuzz configs, production hardening
   (stack-protector-strong, _FORTIFY_SOURCE=2, stack-clash-protection,
-  BindNow) with per-config exemptions for asan/ubsan/fuzz
+  BindNow) with per-config exemptions for asan/ubsan (which `--config=fuzz`
+  inherits when paired with them)
 - [`tools/workspace_status.sh`](https://github.com/dasch-swiss/sipi/blob/main/tools/workspace_status.sh)
   — emits `STABLE_*` keys consumed by `expand_template` and
   `oci_image`'s stamping

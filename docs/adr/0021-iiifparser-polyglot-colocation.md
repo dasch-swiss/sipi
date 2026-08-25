@@ -145,3 +145,11 @@ them:**
   [ADR-0013](0013-shttps-as-internal-module.md) / [ADR-0020](0020-oracle-removal.md):
   the Rust surface stands more on its own, the C++ reference is bounded and clearly
   labeled, and its removal is a smaller, well-marked change.
+
+> **Update (2026-08-25, DEV-6970 — fuzzing landed in-Bazel):** the "No new
+> fuzzing" consequence above is closed, but not by the cargo-fuzz crate it
+> sketched. `//src/iiifparser/fuzz` is a `rules_fuzzing` `cc_fuzz_test` reaching
+> `iiif_parser::parse_request` through an `extern "C"` shim — inside Bazel, on the
+> stable toolchain, seeded from the same corpus — which grew 240 → 241 seeds in
+> the same change (one embedded-NUL input, locking in that a NUL is just another
+> byte to the parser). See [Fuzzing](../src/development/fuzzing.md).
