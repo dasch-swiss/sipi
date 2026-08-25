@@ -24,6 +24,18 @@ module(
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "rules_cc", version = "0.2.19")
 
+# ── Fuzzing ───────────────────────────────────────────────────────────────
+# `rules_fuzzing` provides the `cc_fuzz_test` behind
+# `//src/iiifparser/fuzz:parse_request_fuzz`. Its default engine is
+# `//fuzzing/engines:replay` (instrumentation `none`), so the target builds
+# and corpus-replays on every platform without a libFuzzer runtime;
+# `--config=fuzz` switches to the libFuzzer engine.
+#
+# `dev_dependency = True` for the same reason as googletest and
+# google_benchmark below: it is test-only tooling — both fuzz targets are
+# `testonly`, so nothing in the shipped binary's graph can reach it.
+bazel_dep(name = "rules_fuzzing", version = "0.8.0", dev_dependency = True)
+
 # `cmake_configure_file` reproduces CMake `configure_file()` config-header
 # generation natively (`#cmakedefine` / `@VAR@` substitution), so the native
 # `cc_library` deps (jansson, libtiff, exiv2) generate their config headers
@@ -340,12 +352,13 @@ bazel_dep(name = "google_benchmark", version = "1.9.5", dev_dependency = True)
 
 # Python for `//tools/benchmark:compare` (the vendored google_benchmark
 # compare.py — see tools/benchmark/BUILD.bazel for why it is vendored).
-# `rules_python` is already resolved transitively at exactly 1.7.0
-# (googletest→re2→pybind11, protobuf), so this direct
-# dev_dependency causes zero MVS churn. The hermetic 3.12 toolchain and the
+# `rules_python` is resolved transitively at 1.8.0 (`rules_fuzzing` requires
+# it as a non-dev dep; googletest→re2→pybind11 and protobuf only ask for
+# 1.7.0), so this direct dev_dependency matches MVS and causes zero churn.
+# The hermetic 3.12 toolchain and the
 # `sipi_bench_pip` hub (numpy/scipy, mirroring google_benchmark 1.9.5's own
 # tools/requirements.txt) keep the compare workflow off the host/Nix python.
-bazel_dep(name = "rules_python", version = "1.7.0", dev_dependency = True)
+bazel_dep(name = "rules_python", version = "1.8.0", dev_dependency = True)
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python", dev_dependency = True)
 python.toolchain(python_version = "3.12")

@@ -136,7 +136,7 @@ bazel-rustfmt *FLAGS='':
 # `rustfmt --check` over every first-party Rust target and fails on any file
 # that is not rustfmt-clean; run `just bazel-rustfmt` to fix.
 bazel-rustfmt-check *FLAGS='':
-    bazel build //src/iiifparser/rust/... //src/scripting/rust/... //src/throttling/rust/... //src/server-rs/... //src/cli-rs/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect --output_groups=rustfmt_checks {{FLAGS}}
+    bazel build //src/iiifparser/... //src/scripting/rust/... //src/throttling/rust/... //src/server-rs/... //src/cli-rs/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect --output_groups=rustfmt_checks {{FLAGS}}
 
 # Run clippy — the CI lint gate. The rules_rust clippy aspect runs
 # `clippy-driver` over every first-party Rust target; `-Dwarnings` promotes
@@ -145,7 +145,7 @@ bazel-rustfmt-check *FLAGS='':
 # fast unsafe check: it requires a `// SAFETY:` comment on every `unsafe {}`
 # block. Runs in CI's `lint` job alongside `bazel-rustfmt-check`.
 bazel-clippy-check *FLAGS='':
-    bazel build //src/iiifparser/rust/... //src/scripting/rust/... //src/throttling/rust/... //src/server-rs/... //src/cli-rs/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect --output_groups=clippy_checks --@rules_rust//rust/settings:clippy_flags=-Dwarnings {{FLAGS}}
+    bazel build //src/iiifparser/... //src/scripting/rust/... //src/throttling/rust/... //src/server-rs/... //src/cli-rs/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect --output_groups=clippy_checks --@rules_rust//rust/settings:clippy_flags=-Dwarnings {{FLAGS}}
 
 # Lint commit messages with commitlint-rs — the CI `commit-lint` gate. Enforces
 # the type allowlist + mandatory scope from `.commitlintrc.yml` on every commit in
@@ -260,6 +260,95 @@ bazel-build-tracy *FLAGS='':
     bazel build -c opt --config=tracy --verbose_failures --stamp {{FLAGS}} //src/cli-rs:sipi
     @echo "Tracy-instrumented server binary at: $(pwd)/bazel-bin/src/cli-rs/sipi"
     @echo "Run it (e.g. `sipi server --config …`), then open the Tracy profiler and Connect (localhost:8086)."
+
+#####################################
+# Fuzzing (libFuzzer via rules_fuzzing)
+#
+# Coverage-guided fuzzing of the production Rust IIIF parser through the
+# `//src/iiifparser/fuzz` shim. All three recipes are **Linux-only**: the
+# hermetic toolchain cannot link the libFuzzer runtime on darwin (see
+# `.bazelrc` §Fuzzing). macOS gets the corpus-replay test instead, which runs
+# in the ordinary `//src/...` sweeps with no extra config.
+#
+# The mutation loop executes the built binary DIRECTLY rather than via
+# `bazel run` — the sandbox would discard corpus growth.
+#####################################
+
+# Build the instrumented fuzz binary (CI-invoked; RBE-eligible). Builds the
+# `_bin` target rather than the `parse_request_fuzz` test target: `_bin` is what
+# the loop executes, and only a top-level target is materialised locally under
+# the `.bazelrc` BwoB default (`--remote_download_minimal`).
+bazel-build-fuzz *FLAGS='':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "$(uname -s)" != "Linux" ]; then
+        echo "ERROR: --config=fuzz is Linux-only (see .bazelrc §Fuzzing)." >&2
+        echo "       On macOS run 'bazel test //src/iiifparser/fuzz:parse_request_fuzz'" >&2
+        echo "       for the corpus-replay regression instead." >&2
+        exit 1
+    fi
+    bazel build --config=fuzz --verbose_failures --remote_download_toplevel {{FLAGS}} //src/iiifparser/fuzz:parse_request_fuzz_bin //bazel:llvm-symbolizer
+    # The sanitizer runtime symbolizes crash frames by shelling out to
+    # `llvm-symbolizer`, which is a source file inside the hermetic toolchain
+    # repo — its execroot path embeds the pinned LLVM version, so resolve it
+    # rather than hardcoding it, and expose it at a stable workspace path the
+    # loop (`just fuzz`, the nightly) can point the runtime at. Without this,
+    # first-party frames print as bare `binary+0xOFFSET`.
+    mkdir -p .fuzz
+    ln -sfn "$(bazel info execution_root)/$(bazel cquery --config=fuzz //bazel:llvm-symbolizer --output=files 2>/dev/null | head -1)" .fuzz/llvm-symbolizer
+    echo "Instrumented fuzz binary at: $(pwd)/bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin"
+    echo "llvm-symbolizer at:          $(pwd)/.fuzz/llvm-symbolizer"
+
+# Run the mutation loop locally, e.g. `just fuzz -max_total_time=60`. FLAGS pass
+# straight through to libFuzzer.
+#
+# The working corpus under `.fuzz/` is writable and persists between runs (the
+# checked-in corpus is a Bazel input, and libFuzzer writes new units into the
+# directory it is given). It is re-seeded from `src/iiifparser/corpus/` on every
+# run so newly committed seeds are picked up; `BUILD.bazel` is excluded because
+# the whole directory is copied, not the filegroup. Crash reproducers land in
+# `.fuzz/artifacts/`; promoting anything into the checked-in corpus is
+# deliberate and manual (`fuzz-corpus-merge`, or a reproducer committed with its
+# fix).
+fuzz *FLAGS='': bazel-build-fuzz
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p .fuzz/corpus .fuzz/artifacts
+    find src/iiifparser/corpus -maxdepth 1 -type f ! -name BUILD.bazel \
+        -exec cp {} .fuzz/corpus/ \;
+    ./bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin \
+        -artifact_prefix=.fuzz/artifacts/ .fuzz/corpus "$@"
+
+# Import coverage-adding inputs from the latest nightly `fuzz-corpus` artifact
+# into the checked-in corpus. The only path from the live corpus to the repo —
+# and it stops at a diff: the corpus filegroup also feeds the C++ and Rust
+# regression sweeps, so growing it is a maintainer decision, never automatic.
+#
+# `-merge=1 <dst> <src>` is libFuzzer's own minimisation: it copies an input
+# from `<src>` into `<dst>` only if it adds coverage the destination lacks,
+# which is why this needs the instrumented binary.
+fuzz-corpus-merge: bazel-build-fuzz
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # `--branch main`: only the nightly chain on the default branch is a real
+    # corpus. `// empty` (not bare `.[0].databaseId`) so an empty result is the
+    # empty string rather than the literal "null", and `if !` so a gh failure
+    # (auth, network) reaches the message instead of aborting under `set -e`.
+    if ! RUN_ID="$(gh run list --workflow=fuzz.yml --branch main --status=success --limit=1 --json databaseId --jq '.[0].databaseId // empty')"; then
+        echo "ERROR: 'gh run list' failed — check 'gh auth status' and network" >&2
+        exit 1
+    fi
+    if [ -z "$RUN_ID" ]; then
+        echo "ERROR: no successful fuzz.yml run found on main — nothing to merge" >&2
+        exit 1
+    fi
+    artifact_dir="$(mktemp -d)"
+    trap 'rm -rf "$artifact_dir"' EXIT
+    gh run download "$RUN_ID" --name fuzz-corpus --dir "$artifact_dir"
+    ./bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin \
+        -merge=1 src/iiifparser/corpus "$artifact_dir"
+    echo "==> Review and commit deliberately:"
+    git status --short src/iiifparser/corpus/
 
 #####################################
 # Microbenchmarks (Google Benchmark)

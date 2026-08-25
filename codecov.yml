@@ -15,7 +15,7 @@ coverage:
         threshold: 5%
 
 ignore:
-  - "fuzz/**"
+  - "src/iiifparser/fuzz/**"
   - "test/**"
   - "build/**"
   - "vendor/**"

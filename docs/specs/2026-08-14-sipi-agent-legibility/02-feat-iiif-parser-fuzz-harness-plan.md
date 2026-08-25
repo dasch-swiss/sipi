@@ -65,15 +65,24 @@ FFI is Rust→C++). Hand-written declaration on the C++ side, mirroring the
 hand-written `sipi_ffi.h` convention; no cbindgen.
 
 ```rust
+#![warn(clippy::undocumented_unsafe_blocks)]
+
 use std::slice;
 
-/// Fuzz entry point over `iiif_parser::parse_request`.
+/// Parse one fuzzer-supplied input as an IIIF request URI.
 ///
 /// Invalid UTF-8 is rejected, not lossy-converted: every production caller
 /// (axum path extraction) hands the parser a valid `&str`, so U+FFFD inputs
 /// are structurally unreachable and would only produce untriageable findings.
+///
+/// # Safety
+///
+/// `data` must point to `len` initialized bytes, per libFuzzer's
+/// `LLVMFuzzerTestOneInput` contract.
 #[unsafe(no_mangle)]
-pub extern "C" fn sipi_fuzz_parse_request(data: *const u8, len: usize) -> i32 {
+pub unsafe extern "C" fn sipi_fuzz_parse_request(data: *const u8, len: usize) -> i32 {
+    // SAFETY: libFuzzer guarantees `data`/`len` describe a live, initialized
+    // buffer for the duration of the call.
     let bytes = unsafe { slice::from_raw_parts(data, len) };
     if let Ok(uri) = std::str::from_utf8(bytes) {
         let _ = iiif_parser::parse_request(uri);
@@ -81,6 +90,12 @@ pub extern "C" fn sipi_fuzz_parse_request(data: *const u8, len: usize) -> i32 {
     0
 }
 ```
+
+`unsafe extern "C"` plus the `# Safety` section and `// SAFETY:` comment are
+required, not stylistic: `#[unsafe(no_mangle)]` under edition 2021 wants the fn
+marked `unsafe`, and the crate root enables `clippy::undocumented_unsafe_blocks`
+(the repo convention for every crate containing `unsafe`), which CI's
+`-Dwarnings` promotes to an error.
 
 ```cpp
 // fuzz_target.cc
@@ -95,7 +110,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 ```
 
 ```python
-# src/iiifparser/fuzz/BUILD.bazel (sketch — exact deps shape settled by the spike)
+# src/iiifparser/fuzz/BUILD.bazel
 load("@rules_fuzzing//fuzzing:cc_defs.bzl", "cc_fuzz_test")
 load("@rules_rust//rust:defs.bzl", "rust_static_library")
 
@@ -114,35 +129,48 @@ cc_fuzz_test(
 )
 ```
 
+Neither target is `testonly`: `cc_fuzz_test` generates a non-`testonly`
+`cc_binary` for the fuzzing loop, which a `testonly` dep fails analysis on. The
+seam's confinement is that nothing outside the package depends on the shim.
+
 **Coverage instrumentation of the Rust side** — applied config-wide in the
-fuzz `.bazelrc` config via `rules_rust`'s `extra_rustc_flags` build setting
+fuzz `.bazelrc` config via `rules_rust`'s `extra_rustc_flag` build setting
 (target config only; exec-config proc-macros/build scripts unaffected). All
 flags are stable rustc:
 
 ```
-# .bazelrc (sketch)
+# .bazelrc
 build:fuzz --@rules_fuzzing//fuzzing:cc_engine=@rules_fuzzing//fuzzing/engines:libfuzzer
 build:fuzz --@rules_fuzzing//fuzzing:cc_engine_instrumentation=libfuzzer
-build:fuzz --@rules_rust//rust/settings:extra_rustc_flags=-Cpasses=sancov-module
-build:fuzz --@rules_rust//rust/settings:extra_rustc_flags=-Cllvm-args=-sanitizer-coverage-level=4
-build:fuzz --@rules_rust//rust/settings:extra_rustc_flags=-Cllvm-args=-sanitizer-coverage-inline-8bit-counters
-build:fuzz --@rules_rust//rust/settings:extra_rustc_flags=-Cllvm-args=-sanitizer-coverage-pc-table
-build:fuzz --@rules_rust//rust/settings:extra_rustc_flags=-Cllvm-args=-sanitizer-coverage-trace-compares
-build:fuzz --@rules_rust//rust/settings:extra_rustc_flags=-Cpanic=abort
+build:fuzz --@llvm//config:fuzzer=true
+build:fuzz --@llvm//config:ubsan=true
+build:fuzz --@rules_rust//rust/settings:extra_rustc_flag=-Cpasses=sancov-module
+build:fuzz --@rules_rust//rust/settings:extra_rustc_flag=-Cllvm-args=-sanitizer-coverage-level=4
+build:fuzz --@rules_rust//rust/settings:extra_rustc_flag=-Cllvm-args=-sanitizer-coverage-inline-8bit-counters
+build:fuzz --@rules_rust//rust/settings:extra_rustc_flag=-Cllvm-args=-sanitizer-coverage-pc-table
+build:fuzz --@rules_rust//rust/settings:extra_rustc_flag=-Cllvm-args=-sanitizer-coverage-trace-compares
+build:fuzz --@rules_rust//rust/settings:extra_rustc_flag=-Cpanic=abort
 ```
+
+The **singular** `extra_rustc_flag` is required: it accumulates across
+occurrences, whereas each plural `extra_rustc_flags` occurrence replaces the
+whole list, so a plural block silently keeps only its last line.
 
 `-Cpanic=abort` is set explicitly for the whole fuzz-config crate graph rather
 than relying on the (correct since Rust 1.71, but implicit)
 abort-on-unwind-across-`extern "C"` default — smaller binary, unambiguous
 crash semantics for libFuzzer.
 
-**ASan pairing:** one CI variant runs the ASan-paired engine config. The Rust
-parser is safe code and already runs under the ASan/UBSan CI leg via its unit
-and corpus tests; the fuzz-specific ASan value is at the shim boundary
-(`*const u8, usize` → `&[u8]` → `&str`) and in libFuzzer's own buffer
-handling. Whether the pairing composes as rules_fuzzing's
-`cc_engine_sanitizer=asan` or the repo's existing `--config=asan`
-(`--@llvm//config:asan=true`, compiler-rt from source) is a spike outcome.
+**ASan pairing** is `--config=fuzz --config=asan` — the repo's own sanitizer
+config, not rules_fuzzing's `cc_engine_sanitizer` (which injects
+`-fsanitize=…` without provisioning a runtime and so must stay at `none`). The
+two compose because the rules_fuzzing transition re-emits `--copt`/`--linkopt`
+while `--@llvm//config:asan=true` passes through it untouched. The Rust parser
+is safe code and already runs under the ASan/UBSan CI leg via its unit and
+corpus tests; the fuzz-specific ASan value is at the shim boundary
+(`*const u8, usize` → `&[u8]` → `&str`), in libFuzzer's own buffer handling,
+and in the linked native runtime — ASan does **not** instrument the Rust crate
+graph (that needs nightly `-Zsanitizer`, which this design avoids).
 
 **Corpus policy — two tiers, artifact-chained (same workflow the retired
 `fuzz.yml` used):**
@@ -151,8 +179,8 @@ handling. Whether the pairing composes as rules_fuzzing's
    (241 files, shared with the C++ classifier test and
    `corpus_regression_test`). Grows only by deliberate, human-committed
    merges (below) and by crash reproducers committed with the fix for the
-   bug they reproduce — never silently (the filegroup feeds two unrelated
-   regression tests).
+   bug they reproduce — never silently (the filegroup also feeds the C++ and
+   Rust corpus regression sweeps).
 2. **Live working corpus** — chained between nightly runs as a GitHub
    Actions **artifact** (`fuzz-corpus`), not the cache (artifacts chain
    explicitly across runs, are downloadable for the manual merge step, and
@@ -188,20 +216,29 @@ handling. Whether the pairing composes as rules_fuzzing's
 
 - **First reverse-direction FFI seam.** Everything under `src/ffi/` +
   `src/server-rs/src/ffi.rs` is Rust-calls-C++; this adds the first
-  C++-calls-Rust link. It is confined to a test-only package (never in the
-  production binary), with a hand-written `extern "C"` declaration mirroring
-  the `sipi_ffi.h` convention. `rust_static_library` provides `CcInfo`
+  C++-calls-Rust link. It is confined to the fuzz package (nothing outside it
+  depends on the shim, so it never reaches the production binary), with a
+  hand-written `extern "C"` declaration mirroring the `sipi_ffi.h` convention. `rust_static_library` provides `CcInfo`
   (verified in rules_rust 0.70.0 source), so `cc_fuzz_test.deps` consumes the
-  shim directly; the spike exercises the actual link against this repo's
-  toolchain.
-- **libFuzzer runtime under hermetic LLVM.** ADR-0014 recorded "no libFuzzer
-  runtime" under hermetic-llvm 0.8.8; the ASan/UBSan re-arm (DEV-6563) later
-  added compiler-rt-from-source via `--@llvm//config:asan=true`. Whether the
-  `llvm` module (0.8.10, LLVM 22.1.7) exposes `-fsanitize=fuzzer` link support
-  is the central spike question. **Fallback (hermetic, no toolchain change):**
-  compile LLVM's libFuzzer sources as a first-party `cc_library` and register
-  it as a custom `cc_fuzzing_engine` — rules_fuzzing supports user-provided
-  engines.
+  shim directly — no `cc_library` wrapper needed.
+- **libFuzzer runtime under hermetic LLVM.** The `llvm` module (0.8.10,
+  LLVM 22.1.7) lists `fuzzer` in its `SANITIZERS`, so
+  `--@llvm//config:fuzzer=true` both adds `-fsanitize=fuzzer` to compile+link
+  and stages `clang_rt.fuzzer*` — compiler-rt built from source — into the
+  toolchain resource directory. Same machinery `--config=asan` uses (DEV-6563);
+  ADR-0014's "no libFuzzer runtime" note is stale for 0.8.10. `config:ubsan` is
+  required alongside it: the clang driver links `libclang_rt.ubsan_standalone`
+  for `-fsanitize=fuzzer`, and only `config:ubsan=true` stages that archive.
+- **macOS is not supported for `--config=fuzz`.** `@llvm//toolchain:resource_dir`
+  selects `[]` for `@platforms//os:macos`, so `-resource-dir` is never passed and
+  the driver looks for sanitizer runtimes in the prebuilt toolchain's empty
+  `lib/darwin/`. Same root cause as the documented "macOS cannot link ASan
+  locally". The first-party-`cc_library`-libFuzzer fallback is closed too:
+  compiler-rt's libFuzzer sources do not compile for darwin under this
+  toolchain's runtime-bootstrap config (`FuzzerDefs.h: 'cassert' file not
+  found`). macOS keeps the default replay engine — the target builds and
+  corpus-replays there, so the build-completeness invariant holds; the mutation
+  loop and its `just` recipes are Linux-gated, like the sanitizer legs.
 - **rules_fuzzing 0.8.0 (BCR) under bzlmod / Bazel 9.** C++/Java only, which
   is fine — the Rust side enters through the shim. A plain `bazel_dep`
   suffices (its module extensions are self-consumed; verified against its
@@ -222,13 +259,19 @@ handling. Whether the pairing composes as rules_fuzzing's
   sweeps the crate API directly, without the shim/engine path).
   `cc_fuzz_test` also generates a `parse_request_fuzz_run` launcher for
   `bazel run`; CI's nightly loop still executes the built binary directly to
-  control corpus growth outside the sandbox (the raw binary's output path is
-  a macro internal — settled in the spike).
+  control corpus growth outside the sandbox, at
+  `bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin` — a stable symlink
+  declared by `fuzzing_binary` into the transitioned config's config-hashed
+  `…_raw_` path, which must never be hardcoded. Every generated target except
+  the test itself is `manual`-tagged upstream, so `_bin` is built by naming it
+  (or the test target) explicitly, not by a `//src/...` wildcard.
 - **Stable-rustc sancov.** `-Cpasses=sancov-module` + `-Cllvm-args=…` are
   stable flags; instrumentation is emitted by rustc's own LLVM, so the only
-  cross-LLVM contact point is the runtime symbols resolved at link. The spike
-  verifies libFuzzer actually observes Rust edge coverage (cov counter growth
-  in its log), not just that the build succeeds.
+  cross-LLVM contact point is the runtime symbols resolved at link. libFuzzer
+  observes the Rust edges: 1119 inline 8-bit counters vs 8 for a shim-only
+  build, `cov: 628` vs `cov: 1` at INITED, and a recommended dictionary of
+  string literals (`bitonal`, `default`, `gif`) that exist only in the Rust
+  crate.
 - **RBE vs runner execution.** Building the instrumented binary is a normal
   cacheable RBE action (the sanitizer CI job already builds via RBE). The
   long-lived fuzz *loop* is not an RBE action: CI builds via
@@ -236,9 +279,10 @@ handling. Whether the pairing composes as rules_fuzzing's
   runner with runner-local corpus/artifact directories — not `bazel run`,
   whose sandbox would silently discard corpus growth.
 - **Panic behavior.** Rust panic → abort (explicit `-Cpanic=abort`) → SIGABRT
-  → libFuzzer crash report with the input saved. Verified in the spike with a
-  deliberate-panic canary (temporary `debug_assert`/injected panic), since no
-  known panic exists in `parse.rs`/`request.rs` to use as a natural canary.
+  → libFuzzer crash report with the input saved as `crash-<sha1>`, process exit
+  code 77 — so CI's fail-loudly step needs no crash detection of its own.
+  Verified with a temporary injected panic, since no known panic exists in
+  `parse.rs`/`request.rs` to use as a natural canary.
 - **Input edge cases.** Empty input and interior NULs need no shim handling
   (`tokenize()` handles empty; NUL is a valid UTF-8 scalar the parser treats
   as any other byte) — seed one embedded-`\0` corpus entry to lock that in.
@@ -246,39 +290,39 @@ handling. Whether the pairing composes as rules_fuzzing's
   dependency.
 - **Commit slicing** (one PR, self-contained commits, scope `iiifparser` —
   already covers the whole `src/iiifparser/` tree, no new scope):
-  `test(iiifparser)` for the harness + Bazel/justfile wiring, `chore(ci)` for
-  the nightly workflow, `docs(docs)` for the doc repairs. Confirm slicing at
-  plan review if you prefer `build(iiifparser)` for the MODULE.bazel/.bazelrc
-  part.
+  `test(iiifparser)` for the harness + Bazel/justfile wiring (kept as one
+  self-contained commit — the `.bazelrc`/MODULE.bazel wiring is inert without
+  the package), `chore(ci)` for the nightly workflow, `docs(docs)` for the doc
+  repairs.
 
 ## Implementation Phases
 
-#### Phase 1: Spike — feasibility gates (throwaway branch state, findings recorded in the PR description)
+#### Phase 1: Spike — feasibility gates (all six pass; the verified configuration is what this plan now documents)
 
-- [ ] Add `bazel_dep(name = "rules_fuzzing", version = "0.8.0")` and confirm the module graph resolves under Bazel 9 bzlmod — the known effect is an MVS bump of `rules_python` 1.7.0 → 1.8.0 (rules_fuzzing requires it non-dev); confirm the bump is harmless or add a `single_version_override` and record why
-- [ ] Confirm a minimal `cc_fuzz_test` links and runs against the hermetic LLVM toolchain with `-fsanitize=fuzzer` (engine `@rules_fuzzing//fuzzing/engines:libfuzzer`); if the runtime is missing, build LLVM's libFuzzer sources as a first-party `cc_library` + custom `cc_fuzzing_engine` (rule confirmed in `@rules_fuzzing//fuzzing:cc_defs.bzl`: `library` takes any `CcInfo` target, plus a `launcher` script)
-- [ ] Exercise the C++→Rust link: `cc_fuzz_test.deps = [":parse_request_shim"]` (`rust_static_library` provides `CcInfo` per rules_rust 0.70.0 — confirmed upstream; the spike proves it against this repo's toolchain)
-- [ ] Confirm the stable sancov `extra_rustc_flags` set instruments the Rust crate graph: libFuzzer's `cov:` counters grow beyond the C++-shim baseline when fuzzing
-- [ ] Panic canary: with a temporarily injected panic in `parse_request`, confirm libFuzzer reports a crash (SIGABRT) and saves the reproducer input
-- [ ] ASan pairing: determine the working flag composition (rules_fuzzing `cc_engine_sanitizer=asan` vs `--config=asan`'s `--@llvm//config:asan=true`) and record it in the `.bazelrc` comment block
+- [x] Add `bazel_dep(name = "rules_fuzzing", version = "0.8.0")` and confirm the module graph resolves under Bazel 9 bzlmod — MVS bumps `rules_python` 1.7.0 → 1.8.0 (rules_fuzzing requires it non-dev), so the repo's dev-dependency declaration is bumped to 1.8.0 to match; no `single_version_override` needed
+- [x] Confirm a minimal `cc_fuzz_test` links and runs against the hermetic LLVM toolchain with `-fsanitize=fuzzer` (engine `@rules_fuzzing//fuzzing/engines:libfuzzer`) — the toolchain provisions the runtime behind `--@llvm//config:fuzzer=true` (plus `config:ubsan=true`) on Linux; the first-party-`cc_library` fallback is unnecessary and, on darwin, unusable
+- [x] Exercise the C++→Rust link: `cc_fuzz_test.deps = [":parse_request_shim"]` (`rust_static_library` provides `CcInfo` per rules_rust 0.70.0 — confirmed upstream; the spike proves it against this repo's toolchain)
+- [x] Confirm the stable sancov `extra_rustc_flag` set instruments the Rust crate graph: libFuzzer's `cov:` counters grow beyond the C++-shim baseline when fuzzing (628 vs 1, 1119 vs 8 inline counters)
+- [x] Panic canary: with a temporarily injected panic in `parse_request`, confirm libFuzzer reports a crash (SIGABRT) and saves the reproducer input
+- [x] ASan pairing: `--config=fuzz --config=asan` composes; rules_fuzzing's `cc_engine_sanitizer` cannot provision a runtime and stays at `none` — recorded in the `.bazelrc` comment block
 
 #### Phase 2: Harness package + build wiring
 
-- [ ] Create `src/iiifparser/fuzz/BUILD.bazel` with `rust_static_library` shim + `cc_fuzz_test` seeded from `//src/iiifparser/corpus:seed_corpus`, package docstring explaining the reverse-FFI seam and its test-only confinement
-- [ ] Implement `shim.rs` (UTF-8 reject, result discarded, doc comment stating the production-contract rationale)
-- [ ] Implement `fuzz_target.cc` (hand-written extern declaration, `sipi_ffi.h` convention)
-- [ ] Add the `build:fuzz` (and ASan-paired variant) config block to `.bazelrc` with the sancov + `-Cpanic=abort` `extra_rustc_flags`, documented in the file's existing comment style
-- [ ] Add an embedded-NUL seed file to `src/iiifparser/corpus/`
-- [ ] Verify visibility: `//src/iiifparser/fuzz` consumes `//src/iiifparser/rust:iiif_parser` within the existing `//src:__subpackages__` grant (no new visibility edges)
-- [ ] Update `ARCH-MAP.md`'s `iiifparser` component entry with the new `fuzz/` subpackage and bump `last_verified_commit`
+- [x] Create `src/iiifparser/fuzz/BUILD.bazel` with `rust_static_library` shim + `cc_fuzz_test` seeded from `//src/iiifparser/corpus:seed_corpus`, package docstring explaining the reverse-FFI seam and why its confinement cannot be a `testonly` marker
+- [x] Implement `shim.rs` (UTF-8 reject, result discarded, doc comment stating the production-contract rationale)
+- [x] Implement `fuzz_target.cc` (hand-written extern declaration, `sipi_ffi.h` convention)
+- [x] Add the `build:fuzz` config block to `.bazelrc` with the sancov + `-Cpanic=abort` `extra_rustc_flag` lines, documenting the ASan pairing and the macOS limitation in the file's existing comment style
+- [x] Add an embedded-NUL seed file to `src/iiifparser/corpus/` (content-sha1 filename, matching the existing seeds), and exclude `BUILD.bazel` from the `seed_corpus` glob so the filegroup is exactly the seed inputs
+- [x] Verify visibility: `//src/iiifparser/fuzz` consumes `//src/iiifparser/rust:iiif_parser` within the existing `//src:__subpackages__` grant (no new visibility edges)
+- [x] Update `ARCH-MAP.md`'s `iiifparser` component entry with the new `fuzz/` subpackage (and the reverse-FFI boundary rule); freshness is date-tracked, not SHA-tracked, per the map's own header
 
 #### Phase 3: justfile integration
 
-- [ ] Add `just bazel-build-fuzz` (builds `//src/iiifparser/fuzz:parse_request_fuzz` with `--config=fuzz`; RBE-eligible, CI-invoked — `bazel-*` naming)
-- [ ] Add `just fuzz *FLAGS` (local/dev-loop bare-name recipe: builds, then executes the binary directly with a writable working-corpus dir seeded from the checked-in corpus; passes `FLAGS` through to libFuzzer, e.g. `-max_total_time=60`)
-- [ ] Add `just fuzz-corpus-merge` (depends on `bazel-build-fuzz` — `-merge=1` needs the instrumented binary; downloads the latest `fuzz-corpus` artifact via `gh run list`/`gh api` + `gh run download`, merges from the artifact into `src/iiifparser/corpus/` so only coverage-adding inputs are imported, prints the resulting diff for review — committing stays manual)
-- [ ] Extend the `bazel-rustfmt-check` and `bazel-clippy-check` target lists (`justfile:139`, `justfile:148`) to cover the new package (broaden `//src/iiifparser/rust/...` to `//src/iiifparser/...`)
-- [ ] Re-run `just bazel-rust-project` so rust-analyzer sees the shim crate
+- [x] Add `just bazel-build-fuzz` (builds `//src/iiifparser/fuzz:parse_request_fuzz_bin` with `--config=fuzz`; RBE-eligible, CI-invoked — `bazel-*` naming). `_bin`, not the test target: it is what the loop executes, only a top-level target materialises under the BwoB default, and the test target cannot be configured for a non-host platform (no test toolchain). Linux-gated with a clear error on darwin
+- [x] Add `just fuzz *FLAGS` (local/dev-loop bare-name recipe: builds, then executes the binary directly with a writable working-corpus dir under `.fuzz/`, re-seeded from the checked-in corpus each run; passes `FLAGS` through to libFuzzer, e.g. `-max_total_time=60`)
+- [x] Add `just fuzz-corpus-merge` (depends on `bazel-build-fuzz` — `-merge=1` needs the instrumented binary; downloads the latest `fuzz-corpus` artifact via `gh run list`/`gh api` + `gh run download`, merges from the artifact into `src/iiifparser/corpus/` so only coverage-adding inputs are imported, prints the resulting diff for review — committing stays manual)
+- [x] Extend the `bazel-rustfmt-check` and `bazel-clippy-check` target lists (`justfile:139`, `justfile:148`) to cover the new package (broaden `//src/iiifparser/rust/...` to `//src/iiifparser/...`)
+- [x] Re-run `just bazel-rust-project` so rust-analyzer sees the shim crate (`rust-project.json` is gitignored — regenerated per checkout, never committed)
 
 #### Phase 4: Nightly CI workflow
 
@@ -298,12 +342,12 @@ handling. Whether the pairing composes as rules_fuzzing's
 
 ## Acceptance Criteria
 
-- [ ] `just bazel-build-fuzz` builds the instrumented fuzz binary on linux-x86_64 (required); macOS-arm64 is best-effort — linking the libFuzzer runtime there is as unproven as ASan ("macOS cannot link ASan locally"), and the spike records whether it works or the recipe is linux-gated like the sanitizer legs
-- [ ] `just fuzz -max_total_time=60` runs the mutation loop locally: all 241 seeds replay clean, libFuzzer's coverage counters exceed the shim-only baseline (Rust instrumentation proven)
-- [ ] Panic-canary spike result recorded: a parser panic surfaces as a libFuzzer crash with a saved reproducer
+- [x] `just bazel-build-fuzz` builds the instrumented fuzz binary on Linux; the recipe is linux-gated like the sanitizer legs (macOS cannot link the libFuzzer runtime — see Technical Considerations). Verified by cross-building `//src/iiifparser/fuzz:parse_request_fuzz_bin` under `--config=fuzz --platforms=//platforms:linux_aarch64`, which yields a Linux aarch64 ELF
+- [x] `just fuzz -max_total_time=60` runs the mutation loop on Linux: every seed replays clean, libFuzzer's coverage counters exceed the shim-only baseline (Rust instrumentation proven). macOS gets `bazel test //src/iiifparser/fuzz:parse_request_fuzz` (corpus replay) instead
+- [x] Panic-canary result recorded: a parser panic surfaces as a libFuzzer crash (SIGABRT, exit 77) with a saved `crash-<sha1>` reproducer
 - [ ] Nightly `fuzz.yml` runs green on schedule; a second run demonstrably restores the previous run's `fuzz-corpus` artifact (chaining works); a forced failure demonstrates crash-artifact upload
 - [ ] `just fuzz-corpus-merge` imports coverage-adding inputs from the latest CI artifact into `src/iiifparser/corpus/` and leaves the commit to the maintainer
-- [ ] `just bazel-rustfmt-check` and `just bazel-clippy-check` cover `//src/iiifparser/fuzz` and pass
+- [x] `just bazel-rustfmt-check` and `just bazel-clippy-check` cover `//src/iiifparser/fuzz` and pass
 - [ ] Existing gates green with the new target included: `//src/...` test sweeps (`bazel-test`, `bazel-test-unit`, `bazel-test-sanitized`) now pick up the replay-mode fuzz test on all platforms — intended; unit, approval goldens, e2e all green; production binary contents unchanged (fuzz package is test-only)
 - [ ] All Phase 5 doc fixes landed; `fuzzing.md` describes only what exists
 - [ ] PR closes DEV-6970
@@ -312,9 +356,10 @@ handling. Whether the pairing composes as rules_fuzzing's
 
 - **rules_fuzzing 0.8.0** (new `bazel_dep`) — C++/Java-only rule set used
   exactly for its C++ path; Rust enters via the shim.
-- **Hermetic LLVM fuzzer runtime** — the single hard feasibility gate
-  (Phase 1); the custom-engine fallback keeps the plan viable without
-  toolchain changes.
+- **Hermetic LLVM fuzzer runtime** — provisioned by the toolchain behind
+  `--@llvm//config:fuzzer=true` on Linux; no toolchain change and no custom
+  engine needed. Not available on darwin, which is why the fuzz recipes are
+  linux-gated.
 - **rules_rust 0.70.0 `@rules_rust//rust/settings:extra_rustc_flags`** —
   verified: target-config only (a separate `extra_exec_rustc_flags` exists
   for exec-config, deliberately untouched here).
@@ -324,10 +369,10 @@ handling. Whether the pairing composes as rules_fuzzing's
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| Hermetic LLVM lacks `-fsanitize=fuzzer` runtime | M | H | Spike first; fallback: first-party libFuzzer `cc_library` + custom `cc_fuzzing_engine` |
-| `rust_static_library`→`cc_fuzz_test` link fails against this toolchain | L | L | CcInfo provision confirmed upstream (rules_rust 0.70.0); spike exercises the actual link; thin `cc_library` wrapper as escape hatch |
-| rules_python MVS bump 1.7.0→1.8.0 breaks something | L | M | Spike confirms; `single_version_override` precedent exists |
-| Stable sancov flags don't yield usable coverage on rustc 1.89 | L | H | Spike gate with explicit cov-counter check; if it fails, escalate to maintainer before proceeding (would reopen the shape decision) |
+| Hermetic LLVM lacks `-fsanitize=fuzzer` runtime | — | — | Resolved: the toolchain builds compiler-rt's libFuzzer from source behind `--@llvm//config:fuzzer=true` (+ `config:ubsan=true`) on Linux |
+| `rust_static_library`→`cc_fuzz_test` link fails against this toolchain | — | — | Resolved: links directly against this repo's toolchain; no `cc_library` wrapper needed |
+| rules_python MVS bump 1.7.0→1.8.0 breaks something | — | — | Resolved: the declaration is bumped to 1.8.0 to match MVS; every gate green, no `single_version_override` |
+| Stable sancov flags don't yield usable coverage on rustc 1.89 | — | — | Resolved: 1119 inline counters vs 8 shim-only, `cov: 628` vs `1`, and `trace-compares` recovers Rust-only string literals |
 | Fuzzer-found inputs polluting the shared regression corpus | M | M | Explicit corpus policy: runner-side working corpus, check-in only deliberate reproducers with fixes |
 | Nightly-only cadence delays detection up to 24h | certain | L | Accepted; `corpus_regression_test` is the per-PR net; documented in fuzzing.md |
 

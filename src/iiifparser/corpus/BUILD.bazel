@@ -7,6 +7,8 @@ Consumers:
     oracle, ADR-0020).
   * `//src/iiifparser/rust:corpus_regression_test` — sweeps the production Rust
     `iiif_parser::parse_request` over the same corpus (ADR-0021).
+  * `//src/iiifparser/fuzz:parse_request_fuzz` — libFuzzer seed corpus again
+    (replayed by the default engine, mutated under `--config=fuzz`).
 
 Exposing the corpus as a Bazel `filegroup` lets each test declare it as a `data`
 dep and find the files in its runfiles tree — the `cc_test` at a
@@ -16,7 +18,12 @@ workspace-relative path (cwd = workspace root), the `rust_test` via the
 
 package(default_visibility = ["//visibility:public"])
 
+# `BUILD.bazel` is excluded so the filegroup is exactly the seed inputs: libFuzzer
+# would otherwise load this file as a seed.
 filegroup(
     name = "seed_corpus",
-    srcs = glob(["*"], allow_empty = True),
+    srcs = glob(
+        ["*"],
+        exclude = ["BUILD.bazel"],
+    ),
 )
