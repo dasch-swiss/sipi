@@ -1,0 +1,46 @@
+"""src/iiifparser/fuzz — libFuzzer harness over the production Rust parser.
+
+Coverage-guided fuzzing of `iiif_parser::parse_request`, the first parser every
+HTTP request hits. Reopens the gap ADR-0020 left when the oracle-only C++ fuzz
+harness was retired.
+
+This is the repo's only **C++-calls-Rust** link: `//src/ffi` and
+`src/server-rs/src/ffi.rs` are all Rust→C++. It exists because libFuzzer's entry
+point is `LLVMFuzzerTestOneInput` and `rules_fuzzing` is a C++/Java rule set, so
+the Rust parser enters through an `extern "C"` shim (`shim.rs`) whose declaration
+is hand-mirrored in `fuzz_target.cc` — the `sipi_ffi.h` convention, no cbindgen.
+The seam never leaves this package, and Bazel enforces that: both targets are
+`testonly` (`cc_fuzz_test` forwards `testonly` to its raw `cc_binary` and marks
+every generated wrapper `testonly` itself), and the package grants no default
+visibility, so nothing outside it can depend on the shim — the one-way
+shell→seam→engine direction still holds for everything that ships. Naming a
+target on the command line needs no visibility, so `just fuzz` and the nightly
+still build `:parse_request_fuzz_bin` directly.
+
+Two modes, one target. `rules_fuzzing`'s default engine is
+`//fuzzing/engines:replay` with instrumentation `none`, so
+`bazel test //src/iiifparser/fuzz:parse_request_fuzz` is a corpus-replay
+regression run needing no libFuzzer runtime — it joins the `//src/...` sweeps
+(including the sanitizer leg) on every platform. `--config=fuzz` (see `.bazelrc`,
+Linux only) switches to the real libFuzzer engine and arms SanitizerCoverage on
+the Rust crate graph; `just fuzz` drives that loop.
+"""
+
+load("@rules_fuzzing//fuzzing:cc_defs.bzl", "cc_fuzz_test")
+load("@rules_rust//rust:defs.bzl", "rust_static_library")
+
+rust_static_library(
+    name = "parse_request_shim",
+    srcs = ["shim.rs"],
+    edition = "2021",
+    testonly = True,
+    deps = ["//src/iiifparser/rust:iiif_parser"],
+)
+
+cc_fuzz_test(
+    name = "parse_request_fuzz",
+    srcs = ["fuzz_target.cc"],
+    testonly = True,
+    corpus = ["//src/iiifparser/corpus:seed_corpus"],
+    deps = [":parse_request_shim"],
+)

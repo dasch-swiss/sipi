@@ -37,9 +37,6 @@ fn manifest_path() -> Option<PathBuf> {
 }
 
 /// Locate every corpus input in the test's runfiles, in either runfiles mode.
-///
-/// The `seed_corpus` filegroup globs the whole package, so `BUILD.bazel` rides
-/// along — it is skipped in both modes.
 fn corpus_files() -> Vec<PathBuf> {
     // Primary: the MANIFEST, which lists every corpus file with its real path and
     // is present whether or not the tree is materialized. Each manifest line is
@@ -51,7 +48,7 @@ fn corpus_files() -> Vec<PathBuf> {
             .lines()
             .filter_map(|line| {
                 let (rf, real) = line.strip_prefix(' ').unwrap_or(line).split_once(' ')?;
-                (rf.contains("/src/iiifparser/corpus/") && !rf.ends_with("/BUILD.bazel"))
+                rf.contains("/src/iiifparser/corpus/")
                     .then(|| PathBuf::from(real))
             })
             .collect();
@@ -70,7 +67,7 @@ fn corpus_files() -> Vec<PathBuf> {
     fs::read_dir(&dir)
         .expect("could not read the corpus directory")
         .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.is_file() && p.file_name().is_some_and(|n| n != "BUILD.bazel"))
+        .filter(|p| p.is_file())
         .collect()
 }
 

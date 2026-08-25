@@ -2,7 +2,7 @@
 dune_map: true
 schema_version: 1
 last_verified_commit: none   # not SHA-tracked: rebase-merge rewrites branch SHAs, so a pre-merge SHA is unknowable. Use `date` for freshness.
-date: 2026-08-21
+date: 2026-08-25
 ---
 
 # ARCH-MAP.md — SIPI
@@ -95,7 +95,7 @@ engine-side memory budget under one component. Supersedes the former
 ### iiifparser
 
 - **Paths:** `:(glob)src/iiifparser/**`
-- **Purpose:** The IIIF URL parser, colocated polyglot (component-first, then language; ADR-0021). `cpp/value_objects/` is the live engine value objects (region/size/rotation/quality/format/identifier + `compute_decode_dims`); `cpp/classifier/` is the `testonly` `parse_iiif_uri` reference oracle; `rust/` is the production Rust parser (`//src/iiifparser/rust:iiif_parser`) the shell drives, emitting domain types. `corpus/` is the language-neutral regression corpus both languages sweep.
+- **Purpose:** The IIIF URL parser, colocated polyglot (component-first, then language; ADR-0021). `cpp/value_objects/` is the live engine value objects (region/size/rotation/quality/format/identifier + `compute_decode_dims`); `cpp/classifier/` is the `testonly` `parse_iiif_uri` reference oracle; `rust/` is the production Rust parser (`//src/iiifparser/rust:iiif_parser`) the shell drives, emitting domain types. `corpus/` is the language-neutral regression corpus both languages sweep. `fuzz/` is the libFuzzer harness over `parse_request` (`rules_fuzzing` `cc_fuzz_test` + an `extern "C"` shim), seeded from `corpus/`.
 - **Key entities:** C++: `SipiRegion`/`SipiSize`/`SipiRotation`/`SipiQualityFormat`/`SipiIdentifier` (each with a string-parse ctor and a flattened-FFI-seam ctor + `canonical()`), `SipiDecodeDims`/`compute_decode_dims`, `handlers::iiif_handler::parse_iiif_uri` (testonly reference). Rust: `parse_request`, `ParsedRequest`/`RequestKind`, `IiifParams`, `RegionKind`/`SizeKind`/`QualityKind`/`FormatKind` (domain enums, total supersets of the FFI enums)
 - **Public interface:** the value-object classes (via `//src/iiifparser/cpp/value_objects:iiifparser`); `parse_iiif_uri` via the testonly `//src/iiifparser/cpp/classifier:iiif_handler`; the Rust parser via `//src/iiifparser/rust:iiif_parser` (`parse_request` → domain `IiifParams`, `server-rs` owns the `From` flattening).
 - **Local-context kit:** `src/iiifparser/cpp/value_objects/BUILD.bazel`, `src/iiifparser/cpp/value_objects/SipiSize.h`, `src/iiifparser/cpp/classifier/iiif_handler.h`, `src/iiifparser/rust/BUILD.bazel`, `src/iiifparser/rust/parse.rs`, `src/ffi/serve_image.cpp` (the C++ FFI-seam reconstruction), `src/server-rs/src/ffi.rs` (the domain → seam `From<IiifParams>` mapping a domain-enum change must be kept exhaustive against). ADR-0021 is one hop away via every subpackage's BUILD docstring.
@@ -105,6 +105,7 @@ engine-side memory budget under one component. Supersedes the former
   - `cpp/value_objects` is a leaf — deps only `//src:sipi_top` + `//src/util`, never `SipiImage`/codecs. *Enforcement: `structure`* (Bazel visibility + dep set). Each subpackage pins the virtual `iiifparser/` include prefix to its own physical depth (`strip_include_prefix` + `include_prefix = "iiifparser"`) so consumers keep `#include "iiifparser/*.h"`. *Enforcement: `structure`* (a wrong prefix fails the engine compile).
   - `cpp/classifier` `iiif_handler` is the `testonly` reference oracle for the Rust `parse_request`, deps `//src/util` only, and is `rm -rf`-deletable as a whole folder once the Rust port is trusted (only the `//test/approval` edge + corpus consumer need unwiring). *Enforcement: `structure`* (`testonly` keeps it out of `//src:sipi_lib`; DUNE-015).
   - `rust/iiif_parser` is FFI-free: `bazel query 'deps(...)'` shows no `//src/ffi:sipi_ffi` and no C++ engine, so it needs no `_CPP_STDLIB_LINK` and is sanitizer-eligible (untagged). *Enforcement: `structure`* (Bazel dep set). The domain→FFI `From` impls in `server-rs/ffi.rs` are exhaustive matches, never `as` casts. *Enforcement: `static-analysis`* (a new variant fails to compile; per-variant mapping test).
+  - `fuzz/` holds the repo's only **C++→Rust** link (`shim.rs` → `fuzz_target.cc`); every other FFI edge is Rust→C++. It exists because libFuzzer's entry point is C and `rules_fuzzing` is a C++/Java rule set. Nothing outside the package can depend on the shim, so the one-way shell→seam→engine direction still holds for everything that ships. *Enforcement: `structure`* (both targets are `testonly` and the package grants no default visibility, so a dep from outside fails analysis). `--config=fuzz` is Linux-only; the default `replay` engine keeps the target building and corpus-replaying on every platform. *Enforcement: `structure`* (the `//src/...` test sweeps pick up the replay test).
 - **Durable state:** `SipiSize::limitdim` (static compile-time constant, no writer).
 
 ### metadata

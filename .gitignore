@@ -79,6 +79,9 @@ icc.zip
 # (rules_rust gen_rust_project). Holds machine-absolute Bazel paths — generated
 # per checkout, never committed.
 /rust-project.json
+# Working corpus + crash reproducers written by `just fuzz`. The checked-in seed
+# corpus is `src/iiifparser/corpus/`; this is the mutable live one.
+/.fuzz/
 # Debug-symbol file surfaced by `just bazel-docker-extract-debug <arch>` for
 # the Sentry upload; a large, ephemeral per-arch artifact, never committed.
 /sipi-*.debug

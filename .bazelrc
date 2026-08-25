@@ -302,6 +302,78 @@ build:tracy --strip=never
 # to first-party code in the normal/sanitizer builds).
 build:tracy --copt=-Wno-thread-safety-analysis
 
+# ── Fuzzing — opt-in via --config=fuzz ─────────────────────────────────────
+# Arms `//src/iiifparser/fuzz:parse_request_fuzz` with the real libFuzzer engine
+# for `just bazel-build-fuzz` / `just fuzz` and the nightly loop. WITHOUT this
+# config the target uses rules_fuzzing's default `replay` engine
+# (instrumentation `none`, no runtime needed), so it builds and corpus-replays on
+# every platform and rides along in the `//src/...` test sweeps — the
+# build-completeness invariant holds by default and only this config needs the
+# runtime.
+#
+# **Linux-only.** hermetic-llvm passes `-resource-dir` only on non-macOS
+# (`@llvm//toolchain:resource_dir` selects `[]` for `@platforms//os:macos`), so
+# the from-source compiler-rt runtimes are unreachable to the clang driver on
+# darwin — the same reason the sanitizer gate is linux-only (§Sanitizers above).
+# Compiler-rt's libFuzzer sources do not even *compile* for darwin under this
+# toolchain (`FuzzerDefs.h: 'cassert' file not found`), so wrapping them as a
+# first-party `cc_library` + custom `cc_fuzzing_engine` is closed too. macOS devs
+# get the replay test; the mutation loop runs on Linux.
+#
+# **ASan pairing** is `--config=fuzz --config=asan`: the two compose because the
+# rules_fuzzing transition re-emits `--copt`/`--linkopt` (so `build:asan`'s
+# `-U_FORTIFY_SOURCE` / `-fno-stack-protector` survive) while
+# `--@llvm//config:asan=true` passes through it untouched. rules_fuzzing's own
+# `--@rules_fuzzing//fuzzing:cc_engine_sanitizer` must stay at its `none`
+# default — it injects `-fsanitize=…` without provisioning a runtime, and
+# hermetic-llvm stages `libclang_rt.asan*` only under `config:asan=true`. Note
+# the scope: ASan instruments the C++ shim, libFuzzer itself, and the linked
+# native runtime — not the Rust crate graph (that needs nightly `-Zsanitizer`,
+# which this design avoids).
+build:fuzz --@rules_fuzzing//fuzzing:cc_engine=@rules_fuzzing//fuzzing/engines:libfuzzer
+build:fuzz --@rules_fuzzing//fuzzing:cc_engine_instrumentation=libfuzzer
+
+# Fuzzing throughput is the budget: a nightly run has a fixed wall-clock
+# window, so execs/s is coverage. `-c opt` is worth several times the
+# `fastbuild` default here, and unlike a normal build there is nothing to
+# debug in a stepping debugger — a finding is a saved reproducer, replayed
+# separately.
+build:fuzz --compilation_mode=opt
+
+# The libFuzzer runtime, built from source by the toolchain — the same
+# compiler-rt machinery `--config=asan` uses. `config:ubsan` is required, not
+# optional: the clang driver links `libclang_rt.ubsan_standalone` for
+# `-fsanitize=fuzzer`, and only `config:ubsan=true` stages that archive into the
+# resource directory.
+build:fuzz --@llvm//config:fuzzer=true
+build:fuzz --@llvm//config:ubsan=true
+
+# SanitizerCoverage for the Rust crate graph — all stable rustc flags (no
+# `-Zsanitizer`, no nightly). The **singular** `extra_rustc_flag` is required:
+# it accumulates across occurrences, whereas each `extra_rustc_flags` (plural)
+# occurrence REPLACES the whole list, so a plural block silently keeps only its
+# last line. Target config only; exec-config proc-macros and build scripts are
+# untouched (`extra_exec_rustc_flags` is the separate exec-config setting).
+build:fuzz --@rules_rust//rust/settings:extra_rustc_flag=-Cpasses=sancov-module
+build:fuzz --@rules_rust//rust/settings:extra_rustc_flag=-Cllvm-args=-sanitizer-coverage-level=4
+build:fuzz --@rules_rust//rust/settings:extra_rustc_flag=-Cllvm-args=-sanitizer-coverage-inline-8bit-counters
+build:fuzz --@rules_rust//rust/settings:extra_rustc_flag=-Cllvm-args=-sanitizer-coverage-pc-table
+build:fuzz --@rules_rust//rust/settings:extra_rustc_flag=-Cllvm-args=-sanitizer-coverage-trace-compares
+
+# `-c opt` above turns both of these OFF by default, and they are exactly the
+# bug class this target hunts: an integer overflow in a coordinate/dimension
+# parser is a debug-build panic and a silent wraparound in release. Turning
+# them back on makes the fuzzer see the panic.
+#
+# NOT `-Cpanic=abort`: it is config-wide, so it would break
+# `bazel test --config=fuzz` on every Rust test target (the prebuilt sysroot's
+# `test` crate is unwind-compiled). Nothing is lost — a Rust panic unwinding
+# out of an `extern "C"` fn has aborted since Rust 1.71, so the
+# panic→SIGABRT→libFuzzer-crash path through `sipi_fuzz_parse_request` is
+# guaranteed by the language, not by this flag.
+build:fuzz --@rules_rust//rust/settings:extra_rustc_flag=-Cdebug-assertions=on
+build:fuzz --@rules_rust//rust/settings:extra_rustc_flag=-Coverflow-checks=on
+
 # ── Test ───────────────────────────────────────────────────────────────────
 # Surface test stderr immediately on failure rather than collecting it into
 # bazel-testlogs — useful for inner-loop iteration. CI flips this off.
