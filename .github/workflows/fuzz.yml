@@ -1,0 +1,257 @@
+# Nightly coverage-guided fuzzing of the production Rust IIIF parser.
+#
+# Structure — one job, one runner, four phases:
+#   1. Restore — rebuild the live working corpus from the checked-in seeds
+#      (`src/iiifparser/corpus/`) plus the `fuzz-corpus` artifact of the last
+#      SUCCESSFUL run of this workflow. The two-tier corpus policy is in
+#      `docs/src/development/fuzzing.md`: CI never writes the checked-in seeds;
+#      `just fuzz-corpus-merge` is the only path from live corpus to repo.
+#   2. Fuzz — `just bazel-build-fuzz` (RBE-eligible Bazel build, same
+#      ci-setup + bazel-rbe composite steps as ci.yml's `sanitizer` job), then
+#      the built binary is executed DIRECTLY on the runner for a bounded
+#      budget. Not `bazel run`: the sandbox would discard corpus growth.
+#   3. Chain — minimize the grown corpus with libFuzzer `-merge=1` and upload
+#      it as this run's `fuzz-corpus` artifact for the next nightly. Both
+#      steps run on `!cancelled()`, so a crash in phase 2 still chains the
+#      night's corpus growth forward — libFuzzer writes reproducers to
+#      `-artifact_prefix`, never into the corpus directory, so the merge
+#      cannot launder a crashing input into the chain.
+#   4. ASan-paired pass — rebuild with `--config=fuzz --config=asan` and fuzz
+#      the minimized corpus for a shorter budget. ASan covers the C++ shim
+#      boundary, libFuzzer's own buffer handling, and the linked native
+#      runtime — NOT the Rust crate graph (that needs nightly `-Zsanitizer`,
+#      which the design avoids; see `.bazelrc` §Fuzzing).
+#
+# A crash (libFuzzer exits 77) fails the job loudly and uploads the
+# reproducers plus the libFuzzer log. Triage is manual — no auto-filed issue.
+#
+# Linux-amd64 only: `--config=fuzz` cannot link the libFuzzer runtime on
+# darwin (`.bazelrc` §Fuzzing), exactly like the sanitizer gate. macOS gets the
+# corpus-replay test, which rides along in the ordinary `//src/...` sweeps.
+#
+# Every Bazel step invokes `just <recipe>` — no inline bazel calls (CLAUDE.md's
+# build-reproducibility invariant). The fuzz loop itself is not a Bazel
+# invocation, so it is plain shell here and emits no BEP.
+
+name: fuzz
+
+on:
+  # 03:17 UTC — off-peak for the DaSCH team (04:17/05:17 CET/CEST) and off the
+  # top of the hour, which is the congested slot on GitHub's scheduler. No
+  # other workflow in this repo is scheduled, so there is nothing to collide
+  # with; keep it that way when adding one.
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # `gh run list` / `gh run download` read the previous run's `fuzz-corpus`
+  # artifact through the Actions API.
+  actions: read
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-24.04
+    name: fuzz / linux-amd64
+    # Two cold instrumented builds (plain + ASan, each building compiler-rt
+    # from source), 900s of fuzzing, and a merge pass. ci.yml's `coverage` job
+    # uses 90 for ONE instrumented config.
+    timeout-minutes: 150
+    # One fuzz run at a time, and never kill a nightly mid-flight: cancelling
+    # would discard the corpus growth the next run chains from. A manual
+    # `workflow_dispatch` therefore queues behind a running nightly.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          lfs: false
+
+      # `lfs: "false"`: the fuzz target's inputs are the Rust parser crate, the
+      # C++ shim, and the extensionless corpus files — none of them LFS-tracked
+      # (`.gitattributes` covers image/font formats only).
+      - name: CI setup (bazelisk, just, repo cache, RBE flags)
+        id: setup
+        uses: ./.github/actions/ci-setup
+        with:
+          lfs: "false"
+          rbe-runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
+          rbe-ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
+          rbe-client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
+          rbe-client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
+
+      # Working corpus = checked-in seeds + the last successful run's artifact.
+      # Tolerates absence on both counts (first run ever — the workflow is not
+      # yet on the default branch, so `gh run list` finds nothing; or the
+      # 90-day retention has expired) and degrades to seeds alone.
+      #
+      # `.fuzz/` is the same gitignored working directory `just fuzz` uses, so
+      # the local loop and the nightly have one layout.
+      - name: Restore working corpus from the last successful nightly
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p .fuzz/corpus .fuzz/artifacts
+          find src/iiifparser/corpus -maxdepth 1 -type f ! -name BUILD.bazel \
+              -exec cp {} .fuzz/corpus/ \;
+          seeds=$(find .fuzz/corpus -type f | wc -l)
+          # `--branch main`: the nightly chain belongs to the default branch. A
+          # `workflow_dispatch` from a feature branch reads main's corpus but
+          # uploads its own artifact under its own ref, so it never pollutes
+          # the chain. `// empty` keeps an empty result an empty string rather
+          # than the literal "null"; the `if !` separates a genuine gh/API
+          # failure (a warning worth seeing) from "no run yet" (routine).
+          if ! RUN_ID="$(gh run list --workflow=fuzz.yml --branch main --status=success --limit=1 \
+              --json databaseId --jq '.[0].databaseId // empty')"; then
+            echo "::warning::gh run list failed — seeding from the checked-in corpus only"
+            RUN_ID=""
+          fi
+          if [ -z "$RUN_ID" ]; then
+            echo "no previous successful fuzz.yml run — seeding from the checked-in corpus alone"
+          elif ! gh run download "$RUN_ID" --name fuzz-corpus --dir .fuzz/restored; then
+            echo "run $RUN_ID has no fuzz-corpus artifact (expired retention?) — seeds only"
+          else
+            find .fuzz/restored -type f -exec cp {} .fuzz/corpus/ \;
+          fi
+          echo "working corpus: $(find .fuzz/corpus -type f | wc -l) files (checked-in seeds: $seeds)"
+
+      # Builds `//src/iiifparser/fuzz:parse_request_fuzz_bin` under
+      # `--config=fuzz`. A normal cacheable RBE action — only the loop below is
+      # runner-local. The recipe already carries `--remote_download_toplevel` so
+      # the binary materialises on the runner under the `.bazelrc`
+      # `--remote_download_minimal` default. It also resolves
+      # `.fuzz/llvm-symbolizer` for the loops below.
+      #
+      # No `DASCHBOT_PAT`: the Kakadu release fetch needs it, and the fuzz
+      # target's dep graph has no Kakadu edge (`bazel query 'deps(…)'` over
+      # `:parse_request_fuzz_bin` returns no kakadu package) — it is the Rust
+      # parser crate, the C++ shim, and compiler-rt.
+      - name: Build the instrumented fuzz binary
+        run: just bazel-build-fuzz ${{ steps.setup.outputs.flags }} --build_event_json_file=bep-fuzz.json
+
+      # `-timeout=25`: libFuzzer's 1200s per-input default exceeds the whole
+      # budget, so a hang would silently consume the run instead of being
+      # reported as a finding. `-artifact_prefix` is where reproducers land —
+      # the failure-artifact upload below reads that directory.
+      #
+      # `UBSAN_OPTIONS=external_symbolizer_path`: this build links
+      # `ubsan_standalone` (required for `-fsanitize=fuzzer`, see
+      # `.bazelrc` §Fuzzing) and that runtime prints the crash trace. Pointing
+      # it at the hermetic `llvm-symbolizer` turns first-party
+      # `binary+0xOFFSET` frames into `function file:line`.
+      - name: Fuzz (libFuzzer, 600s)
+        env:
+          RUST_BACKTRACE: "1"
+          UBSAN_OPTIONS: external_symbolizer_path=${{ github.workspace }}/.fuzz/llvm-symbolizer
+        run: |
+          set -euo pipefail
+          ./bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin \
+              -max_total_time=600 \
+              -timeout=25 \
+              -print_final_stats=1 \
+              -artifact_prefix=.fuzz/artifacts/ \
+              .fuzz/corpus 2>&1 | tee .fuzz/libfuzzer.log
+
+      # `-merge=1 <dst> <src>` copies an input into the (empty) destination only
+      # if it adds coverage the destination lacks — libFuzzer's own
+      # minimization, which is why it needs the instrumented binary.
+      #
+      # `!cancelled()`: a crash in the loop above must not discard the night's
+      # corpus growth. Safe, because libFuzzer writes reproducers to
+      # `-artifact_prefix` and never into the corpus directory, so a crashing
+      # input cannot enter the chain via the merge.
+      #
+      # `-timeout=25` matches the loop (a hang must not eat the merge), and
+      # `-rss_limit_mb=4096` bounds the merge's own footprint: `-merge=1`
+      # holds the whole feature set in memory, which grows with the corpus.
+      - name: Minimize the working corpus
+        if: ${{ !cancelled() }}
+        timeout-minutes: 15
+        env:
+          UBSAN_OPTIONS: external_symbolizer_path=${{ github.workspace }}/.fuzz/llvm-symbolizer
+        run: |
+          set -euo pipefail
+          rm -rf .fuzz/merged && mkdir -p .fuzz/merged
+          ./bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin \
+              -merge=1 \
+              -timeout=25 \
+              -rss_limit_mb=4096 \
+              -artifact_prefix=.fuzz/artifacts/ \
+              .fuzz/merged .fuzz/corpus 2>&1 | tee .fuzz/merge.log
+          echo "minimized: $(find .fuzz/merged -type f | wc -l) files (from $(find .fuzz/corpus -type f | wc -l))"
+
+      # The next nightly chains from this artifact. `!cancelled()` for the same
+      # reason as the merge: a crash anywhere above still leaves the corpus
+      # chained forward, which is the whole point of a coverage corpus.
+      # `include-hidden-files` because the working directory is `.fuzz/`.
+      - name: Upload minimized corpus (chains into the next nightly)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-corpus
+          path: .fuzz/merged
+          retention-days: 90
+          include-hidden-files: true
+
+      # No `DASCHBOT_PAT` here either — same empty-Kakadu-edge reason as above.
+      - name: Build the instrumented fuzz binary (ASan-paired)
+        run: just bazel-build-fuzz --config=asan ${{ steps.setup.outputs.flags }} --build_event_json_file=bep-fuzz-asan.json
+
+      # Shorter budget: ASan costs ~2.6x throughput, and this pass exists to
+      # exercise the shim/runtime boundary rather than to grow coverage — its
+      # corpus additions are discarded (the artifact is already uploaded).
+      # `ASAN_SYMBOLIZER_PATH` rather than `UBSAN_OPTIONS`: under
+      # `--config=asan` the ASan runtime owns the crash report, and that is the
+      # variable it reads for its external symbolizer (the same one the
+      # sanitizer e2e legs set, see `test/e2e/sipi_e2e_test.bzl`).
+      - name: Fuzz under ASan (300s)
+        env:
+          RUST_BACKTRACE: "1"
+          ASAN_SYMBOLIZER_PATH: ${{ github.workspace }}/.fuzz/llvm-symbolizer
+        run: |
+          set -euo pipefail
+          ./bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin \
+              -max_total_time=300 \
+              -timeout=25 \
+              -print_final_stats=1 \
+              -artifact_prefix=.fuzz/artifacts/ \
+              .fuzz/merged 2>&1 | tee .fuzz/libfuzzer-asan.log
+
+      # BEP for cache-hit-rate analysis (see the `bep-*` uploads in ci.yml).
+      # One artifact, both invocations: the glob tolerates the ASan build's
+      # file being absent when an earlier step failed.
+      - name: Upload build event JSON (cache-hit-rate analysis)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bep-fuzz
+          path: bep-fuzz*.json
+          retention-days: 30
+
+      # A crash exits 77, which fails the step above — so no detection logic is
+      # needed here, only preservation. Mirrors the sanitizer job's
+      # failure-artifact pattern.
+      - name: Upload crash reproducers + libFuzzer logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-crashes
+          path: |
+            .fuzz/artifacts
+            .fuzz/*.log
+          retention-days: 30
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+      # Persist the repository cache even when the job fails — the paired
+      # save for ci-setup's restore-only cache step (rationale there).
+      - name: Save Bazel repository cache
+        if: ${{ !cancelled() && steps.setup.outputs.repo-cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/bazel-repo
+          key: ${{ steps.setup.outputs.repo-cache-key }}
