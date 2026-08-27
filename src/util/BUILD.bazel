@@ -41,6 +41,7 @@ cc_library(
         "Hash.h",
         "Parsing.h",
         "UrlDecode.h",
+        "checked_arith.h",
         ":magic_mgc_h",
     ],
     strip_include_prefix = "/src",
@@ -62,6 +63,17 @@ cc_test(
         "parsing_test.cpp",
         "urldecode_test.cpp",
     ],
+    deps = [
+        ":util",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# checked_arith.h is header-only with no matching .cpp in :util, so its test
+# gets its own cc_test rather than folding into util_test above.
+cc_test(
+    name = "checked_arith_test",
+    srcs = ["checked_arith_test.cpp"],
     deps = [
         ":util",
         "@googletest//:gtest_main",
