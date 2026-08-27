@@ -265,10 +265,10 @@ bazel-build-tracy *FLAGS='':
 # Fuzzing (libFuzzer via rules_fuzzing)
 #
 # Coverage-guided fuzzing of the production Rust IIIF parser through the
-# `//src/iiifparser/fuzz` shim. All three recipes are **Linux-only**: the
-# hermetic toolchain cannot link the libFuzzer runtime on darwin (see
-# `.bazelrc` §Fuzzing). macOS gets the corpus-replay test instead, which runs
-# in the ordinary `//src/...` sweeps with no extra config.
+# `//src/iiifparser/fuzz` shim. Runs on Linux and macOS: hermetic-llvm 0.8.18
+# stages `libclang_rt.fuzzer_osx.a`, so `-fsanitize=fuzzer` links on darwin
+# (see `.bazelrc` §Fuzzing; the macOS repo-rule DEVELOPER_DIR that lets
+# rules_fuzzing's Python deps resolve in the Nix shell is set globally there).
 #
 # The mutation loop executes the built binary DIRECTLY rather than via
 # `bazel run` — the sandbox would discard corpus growth.
@@ -281,12 +281,6 @@ bazel-build-tracy *FLAGS='':
 bazel-build-fuzz *FLAGS='':
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ "$(uname -s)" != "Linux" ]; then
-        echo "ERROR: --config=fuzz is Linux-only (see .bazelrc §Fuzzing)." >&2
-        echo "       On macOS run 'bazel test //src/iiifparser/fuzz:parse_request_fuzz'" >&2
-        echo "       for the corpus-replay regression instead." >&2
-        exit 1
-    fi
     bazel build --config=fuzz --verbose_failures --remote_download_toplevel {{FLAGS}} //src/iiifparser/fuzz:parse_request_fuzz_bin //bazel:llvm-symbolizer
     # The sanitizer runtime symbolizes crash frames by shelling out to
     # `llvm-symbolizer`, which is a source file inside the hermetic toolchain
@@ -316,8 +310,14 @@ fuzz *FLAGS='': bazel-build-fuzz
     mkdir -p .fuzz/corpus .fuzz/artifacts
     find src/iiifparser/corpus -maxdepth 1 -type f ! -name BUILD.bazel \
         -exec cp {} .fuzz/corpus/ \;
+    # `set positional-arguments` + the `*FLAGS=''` default expand to a single
+    # empty positional when no flags are given, which libFuzzer would read as an
+    # (empty) corpus path and abort with "No such file or directory: ;". Keep
+    # only the non-empty extra flags.
+    flags=()
+    for f in "$@"; do [ -n "$f" ] && flags+=("$f"); done
     ./bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin \
-        -artifact_prefix=.fuzz/artifacts/ .fuzz/corpus "$@"
+        -artifact_prefix=.fuzz/artifacts/ .fuzz/corpus ${flags[@]+"${flags[@]}"}
 
 # Import coverage-adding inputs from the latest nightly `fuzz-corpus` artifact
 # into the checked-in corpus. The only path from the live corpus to the repo —

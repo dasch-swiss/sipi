@@ -1,0 +1,21 @@
+--- a/cargo/private/cargo_build_script.bzl	2026-08-27 13:46:50
++++ b/cargo/private/cargo_build_script.bzl	2026-08-27 13:47:28
+@@ -262,13 +262,17 @@
+ def _pwd_flags_resource_dir(args):
+     """Prefix execroot-relative paths in -resource-dir arguments with ${pwd}."""
+     return _prefix_pwd_to_flag(args, ["-resource-dir=", "-resource-dir"])
++
++def _pwd_flags_isysroot(args):
++    """Prefix execroot-relative paths in -isysroot arguments with ${pwd}."""
++    return _prefix_pwd_to_flag(args, ["-isysroot"])
+ 
+ def _pwd_paths(args):
+     """Prefix execroot-relative paths with ${pwd}."""
+     return _prefix_pwd_to_paths(args)
+ 
+ def _pwd_flags(args):
+-    return _pwd_flags_fsanitize_ignorelist(_pwd_flags_isystem(_pwd_flags_L(_pwd_flags_B(_pwd_flags_resource_dir(_pwd_flags_sysroot(args))))))
++    return _pwd_flags_isysroot(_pwd_flags_fsanitize_ignorelist(_pwd_flags_isystem(_pwd_flags_L(_pwd_flags_B(_pwd_flags_resource_dir(_pwd_flags_sysroot(args)))))))
+ 
+ def _feature_enabled(ctx, feature_name, default = False):
+     """Check if a feature is enabled.

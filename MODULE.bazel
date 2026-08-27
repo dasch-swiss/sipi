@@ -160,7 +160,7 @@ single_version_override(
 # decouples from host Nix/Xcode tooling. The toolchain-extension wiring
 # (LLVM version, exec/target platforms) lives below.
 # See docs/adr/0014-toolchain-provider-swap.md.
-bazel_dep(name = "llvm", version = "0.8.10")
+bazel_dep(name = "llvm", version = "0.8.18")
 
 # hermetic-llvm hands the Linux kernel + glibc system headers to compile actions
 # as a bare source-directory artifact via two paths: the toolchain cc_args
@@ -401,17 +401,18 @@ use_repo(benchmark_fixtures, "sipi_bench_fixtures")
 # (MacOSX26.4.sdk) is fetched hermetically from Apple's CDN, so darwin needs
 # no host Xcode CLT and no `.bazelrc` SDK hacks.
 #
-# LLVM 22.1.7 is the module's prebuilt default. 19.1.7 (the prior
-# toolchains_llvm pin) has NO prebuilt in hermetic-llvm 0.8.x and would force
+# LLVM 22.1.7 is pinned explicitly via `llvm.version` below (0.8.18's own
+# default floats to 22.1.8; we pin an exact patch per ADR-0014). 19.1.7 (the
+# prior toolchains_llvm pin) has NO prebuilt in hermetic-llvm and would force
 # a multi-hour from-source clang bootstrap, so the provider swap necessarily
 # carries a 19→22 compiler bump. libc++ is the toolchain default on every
 # target, so the old `stdlib = {linux-*: libc++}` map is gone. C++23 comes
 # from the global `--cxxopt=-std=c++23` in .bazelrc (the module exposes no
 # `cxx_standard` attr). See docs/adr/0014-toolchain-provider-swap.md for the
 # rationale and the v0.8.x / compatibility-level-0 pinning policy.
-llvm_source = use_extension("@llvm//extensions:llvm_source.bzl", "llvm_source")
-llvm_source.version(llvm_version = "22.1.7")
-use_repo(llvm_source, "llvm-raw", "llvm_config", "llvm_zlib", "llvm_zstd")
+llvm = use_extension("@llvm//extensions:llvm.bzl", "llvm")
+llvm.version(llvm_version = "22.1.7")
+use_repo(llvm, "llvm-project")
 
 # `exec` = the hosts we build ON; `target` = the platforms we build FOR. CI
 # runs the test matrix natively on all three (macOS-arm64, linux-x86_64, and
@@ -459,21 +460,23 @@ register_toolchains("@llvm_toolchains//:all")
 # (llvm-objcopy, llvm-cov, …) are referenceable as `@<bundle>//:bin/<tool>`.
 # Needed for the Linux debug-split genrule (objcopy/readelf) and `bazel
 # coverage` (llvm-cov/llvm-profdata version-matched to the instrumented
-# `.profraw`). The repo name embeds the LLVM
-# version + exec triple — bumping LLVM_VERSION means updating it here and in
-# //bazel (see ADR-0014's pinning policy).
+# `.profraw`). The repo names are version-neutral (`…-<exec triple>`); the
+# extension resolves them to the prebuilt release matching the `llvm.version`
+# selected above (see ADR-0014's pinning policy).
 llvm_toolchain_minimal = use_extension("@llvm//extensions:llvm_toolchain_minimal.bzl", "llvm_toolchain_minimal")
 
-# `bazel mod tidy` drops these lines — it can't see the bundles referenced from
-# the string labels in `//bazel`'s `alias(actual = "@llvm-toolchain-minimal-…")`
-# targets, so it judges the repos unused. They are required for the
-# //bazel:{llvm-objcopy,llvm-readelf,llvm-cov,llvm-profdata} (Linux debug-split
-# + coverage) aliases. Re-add after running `bazel mod tidy`.
+# The extension reports all six prebuilt bundles as direct deps, so all six are
+# imported here even though `//bazel`'s `alias(actual = "@llvm-toolchain-minimal-…")`
+# targets only reference the darwin-arm64 / linux-amd64 / linux-arm64 triples
+# (Linux debug-split objcopy/readelf + `bazel coverage` llvm-cov/llvm-profdata).
 use_repo(
     llvm_toolchain_minimal,
-    "llvm-toolchain-minimal-22.1.7-darwin-arm64",
-    "llvm-toolchain-minimal-22.1.7-linux-amd64",
-    "llvm-toolchain-minimal-22.1.7-linux-arm64",
+    "llvm-toolchain-minimal-darwin-amd64",
+    "llvm-toolchain-minimal-darwin-arm64",
+    "llvm-toolchain-minimal-linux-amd64",
+    "llvm-toolchain-minimal-linux-arm64",
+    "llvm-toolchain-minimal-windows-amd64",
+    "llvm-toolchain-minimal-windows-arm64",
 )
 
 # ── Rust toolchain + Crate Universe ─────────────────────────────────────────
@@ -489,6 +492,22 @@ use_repo(
 # otherwise build scripts silently pick up the host `cc` and produce
 # non-hermetic artifacts.
 bazel_dep(name = "rules_rust", version = "0.70.0")
+
+# `cargo_build_script` re-invokes the cc_toolchain's compile flags from a build
+# script's runfiles cwd (not the execroot), so `_pwd_flags` in rules_rust rewrites
+# execroot-relative toolchain flags (`--sysroot=`, `-isystem`, `-L`, `-B`,
+# `-resource-dir`) to `${pwd}/…`. It omits `-isysroot`, which hermetic-llvm's
+# macOS toolchain emits alongside `--sysroot=` (repo `@llvm++osx+macos_sdk`). The
+# relative `-isysroot external/…/sysroot` then can't resolve from the runfiles
+# cwd, so cc-rs crates (ring) fail with `'TargetConditionals.h' file not found`
+# on darwin — breaking every ring-dependent Rust target (the production server
+# included). The patch adds `-isysroot` to `_pwd_flags`, mirroring the existing
+# entries. Drop if/when fixed upstream (rules_rust > 0.70.0).
+single_version_override(
+    module_name = "rules_rust",
+    patch_strip = 1,
+    patches = ["//bazel/patches:rules_rust_cargo_build_script_isysroot.patch"],
+)
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(

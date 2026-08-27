@@ -17,6 +17,19 @@ build --incompatible_strict_action_env
 # place until the swap is proven green on all platforms, then test-removed.)
 build --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
 
+# macOS repo-rule SDK. rules_python's pip sdist path (e.g. rules_fuzzing's
+# absl-py, pulled in by the fuzz harness) shells out to `xcrun xcodebuild
+# -showsdks` to locate an SDK, which the Nix dev shell's apple-sdk stub can't
+# satisfy (no `xcodebuild`) — the fetch dies with "tool 'xcodebuild' not found".
+# Pointing the repo-rule DEVELOPER_DIR at the Command Line Tools makes
+# rules_python take its non-Xcode branch (path contains "CommandLineTools", so
+# it derives the SDK directly and skips the `xcodebuild` call). `--repo_env`
+# scopes this to repository-rule evaluation only — build actions compile against
+# the hermetic-llvm SDK and are unaffected (verified: adding this leaves a warm
+# `//src/cli:sipi` a 100% action-cache hit). No-op on Linux, where rules_python's
+# SDK probe never runs.
+build --repo_env=DEVELOPER_DIR=/Library/Developer/CommandLineTools
+
 # Inherit PATH from the invocation environment. `--incompatible_strict_action_env`
 # above otherwise rebuilds PATH from a small allow-list (`/bin:/usr/bin:/usr/local/bin`),
 # which omits the Nix dev-shell's `/nix/store/…/bin` entries. Inheriting PATH
@@ -311,14 +324,15 @@ build:tracy --copt=-Wno-thread-safety-analysis
 # build-completeness invariant holds by default and only this config needs the
 # runtime.
 #
-# **Linux-only.** hermetic-llvm passes `-resource-dir` only on non-macOS
-# (`@llvm//toolchain:resource_dir` selects `[]` for `@platforms//os:macos`), so
-# the from-source compiler-rt runtimes are unreachable to the clang driver on
-# darwin — the same reason the sanitizer gate is linux-only (§Sanitizers above).
-# Compiler-rt's libFuzzer sources do not even *compile* for darwin under this
-# toolchain (`FuzzerDefs.h: 'cassert' file not found`), so wrapping them as a
-# first-party `cc_library` + custom `cc_fuzzing_engine` is closed too. macOS devs
-# get the replay test; the mutation loop runs on Linux.
+# **Linux + macOS.** hermetic-llvm 0.8.18 stages the compiler-rt libFuzzer
+# runtime for darwin too (`libclang_rt.fuzzer_osx.a`, upstream PR #700), so
+# `-fsanitize=fuzzer` links on macOS as well as Linux. The driver also pulls
+# `libclang_rt.ubsan_osx_dynamic` on darwin, so `config:ubsan=true` below is
+# required on both. (rules_fuzzing's Python launcher deps also need a macOS
+# repo-rule DEVELOPER_DIR to resolve in the Nix dev shell — set globally near the
+# top of this file, not here, since the plain replay build needs it too.) The
+# broader `--config=fuzz --config=asan` pairing is a separate runtime and stays
+# Linux-only — the macOS ASan header path is still gapped (§Sanitizers above).
 #
 # **ASan pairing** is `--config=fuzz --config=asan`: the two compose because the
 # rules_fuzzing transition re-emits `--copt`/`--linkopt` (so `build:asan`'s

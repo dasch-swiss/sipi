@@ -109,22 +109,33 @@ avoids). The value of the paired pass is the shim boundary
 runtime; the Rust parser is safe code that already runs under the ASan/UBSan CI
 leg via its unit, corpus-regression, and replay tests.
 
-### Linux only
+### Linux and macOS
 
-`--config=fuzz` is Linux-only, and the `just` recipes below are gated on it with
-a clear error on darwin. hermetic-llvm passes `-resource-dir` only on non-macOS
-(`@llvm//toolchain:resource_dir` selects `[]` for `@platforms//os:macos`), so the
-from-source compiler-rt runtimes are unreachable to the clang driver on darwin —
-the same root cause as the Linux-only sanitizer gate. Wrapping compiler-rt's
-libFuzzer as a first-party `cc_library` is closed too: those sources do not
-compile for darwin under this toolchain (`FuzzerDefs.h: 'cassert' file not
-found`). macOS gets the replay test, which is the default mode and needs no
-extra flags.
+`--config=fuzz` links on both platforms. hermetic-llvm **0.8.18** stages the
+compiler-rt libFuzzer runtime for darwin (`libclang_rt.fuzzer_osx.a`, upstream
+[PR #700](https://github.com/hermeticbuild/hermetic-llvm/pull/700)), closing the
+gap where `@llvm//toolchain:resource_dir` used to select `[]` for
+`@platforms//os:macos`. The clang driver also links `libclang_rt.ubsan_osx_dynamic`
+on darwin, so `--@llvm//config:ubsan=true` is required there too (already set by
+`--config=fuzz`).
+
+One macOS-only wrinkle, unrelated to the LLVM runtime: `rules_fuzzing`'s Python
+launcher deps (`absl-py`) resolve as an sdist, and `rules_python`'s macOS sdist
+path shells out to `xcrun xcodebuild`, which the Nix dev shell's SDK stub lacks.
+`.bazelrc` handles this globally by pointing the **repo-rule** `DEVELOPER_DIR` at
+the Command Line Tools (`/Library/Developer/CommandLineTools`), which makes
+`rules_python` take its non-Xcode branch and skip the `xcodebuild` call — for the
+replay build in the `//src/...` sweep as well as `--config=fuzz`. Build actions
+are unaffected; they compile against the hermetic-llvm SDK. A macOS dev therefore
+needs the Command Line Tools installed (`xcode-select --install`); no full Xcode.
+
+The broader `--config=fuzz --config=asan` pairing stays Linux-only — the macOS
+ASan header path is still gapped (see the sanitizer gate).
 
 ## Recipes
 
 ```bash
-just bazel-build-fuzz              # build the instrumented binary (Linux; CI-invoked, RBE-eligible)
+just bazel-build-fuzz              # build the instrumented binary (Linux + macOS; CI-invoked, RBE-eligible)
 just fuzz -max_total_time=60       # run the mutation loop locally; FLAGS pass through to libFuzzer
 just fuzz-corpus-merge             # import coverage-adding inputs from the latest nightly artifact
 ```
