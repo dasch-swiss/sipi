@@ -52,6 +52,7 @@
 #include "kdu_stripe_decompressor.h"
 
 #include "util/Global.h"
+#include "util/checked_arith.h"
 #include "observability/metrics.h"
 
 #include "SipiError.h"
@@ -64,6 +65,30 @@ using namespace kdu_core;
 using namespace kdu_supp;
 
 namespace Sipi {
+
+void validate_j2k_palette_mapping(std::size_t bps, std::size_t nc, int numcol, int nentries, const std::string &filepath)
+{
+  if (bps != 8) {
+    throw SipiImageError(
+      "Cannot read JPEG2000 file \"" + filepath + "\": palette color images with " + std::to_string(bps)
+      + "-bit indices are not supported");
+  }
+  if (nc != 1) {
+    throw SipiImageError("Cannot read JPEG2000 file \"" + filepath
+      + "\": palette color images with more than one index component are not supported");
+  }
+  if (numcol != 3) {
+    throw SipiImageError("Cannot read JPEG2000 file \"" + filepath
+      + "\": palette color images must map to exactly 3 output colors, got " + std::to_string(numcol));
+  }
+  // Every possible bps-bit index value must resolve to a valid palette
+  // entry; checking this once here means the expansion loop needs no
+  // per-pixel bounds check.
+  if (nentries < (1 << bps)) {
+    throw SipiImageError("Cannot read JPEG2000 file \"" + filepath + "\": palette has only "
+      + std::to_string(nentries) + " entries, too few for " + std::to_string(bps) + "-bit indices");
+  }
+}
 
 //=========================================================================
 // Here we are implementing a subclass of kdu_core::kdu_compressed_target
@@ -492,6 +517,7 @@ bool SipiIOJ2k::read(SipiImage *img,
 
   img->nc = codestream.get_num_components();// not the same as the number of colors!
 
+  validate_decode_dims(img->nx, img->ny, img->nc, static_cast<int>(img->bps), filepath);
 
   //
   // The following definitions we need in case we get a palette color image!
@@ -505,7 +531,7 @@ bool SipiIOJ2k::read(SipiImage *img,
   jpx_layer = jpx_in.access_layer(0);
   img->photo = PhotometricInterpretation::INVALID;// we initialize to an invalid value in order to test later if
                                                   // img->photo has been set
-  int numcol;
+  int numcol = 0;
   if (jpx_layer.exists()) {
     kdu_supp::jp2_colour colinfo = jpx_layer.access_colour(0);
     kdu_supp::jp2_channels chaninfo = jpx_layer.access_channels();
@@ -513,6 +539,10 @@ bool SipiIOJ2k::read(SipiImage *img,
     int nluts = palette.get_num_luts();
     if (nluts == 3) {
       int nentries = palette.get_num_entries();
+      // The palette-expansion loop below only handles a single 8-bit index
+      // component mapped to a 3-channel (RGB) output; reject anything else
+      // instead of silently mis-decoding or overrunning the expansion buffer.
+      validate_j2k_palette_mapping(img->bps, img->nc, numcol, nentries, filepath);
       rlut.resize(nentries);
       glut.resize(nentries);
       blut.resize(nentries);
@@ -729,12 +759,21 @@ bool SipiIOJ2k::read(SipiImage *img,
     //
     // we have a palette color image...
     //
-    std::vector<byte> tmpbuf(img->nx * img->ny * numcol);
+    // numcol == 3 and img->bps == 8 are enforced above where rlut/glut/blut
+    // are built, so the buffer's stride-3 layout matches the writes below
+    // and every index into rlut/glut/blut is in range.
+    const auto tmpbuf_size = checked_buf_size(
+      static_cast<std::size_t>(img->nx), static_cast<std::size_t>(img->ny), static_cast<std::size_t>(numcol), 1);
+    if (!tmpbuf_size) {
+      throw SipiImageError("Cannot read JPEG2000 file \"" + filepath + "\": palette-expanded buffer size overflow");
+    }
+    std::vector<byte> tmpbuf(*tmpbuf_size);
     for (int y = 0; y < img->ny; ++y) {
       for (int x = 0; x < img->nx; ++x) {
-        tmpbuf[3 * (y * img->nx + x) + 0] = rlut[img->pixels[y * img->nx + x]];
-        tmpbuf[3 * (y * img->nx + x) + 1] = glut[img->pixels[y * img->nx + x]];
-        tmpbuf[3 * (y * img->nx + x) + 2] = blut[img->pixels[y * img->nx + x]];
+        const byte idx = img->pixels[y * img->nx + x];
+        tmpbuf[3 * (y * img->nx + x) + 0] = rlut[idx];
+        tmpbuf[3 * (y * img->nx + x) + 1] = glut[idx];
+        tmpbuf[3 * (y * img->nx + x) + 2] = blut[idx];
       }
     }
     img->pixels = std::move(tmpbuf);
