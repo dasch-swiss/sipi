@@ -14,9 +14,9 @@ exports_files(["kakadu.BUILD.bazel"])
 alias(
     name = "llvm-objcopy",
     actual = select({
-        "//platforms:is_linux_x86_64": "@llvm-toolchain-minimal-22.1.7-linux-amd64//:bin/llvm-objcopy",
-        "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-22.1.7-linux-arm64//:bin/llvm-objcopy",
-        "//conditions:default": "@llvm-toolchain-minimal-22.1.7-darwin-arm64//:bin/llvm-objcopy",
+        "//platforms:is_linux_x86_64": "@llvm-toolchain-minimal-linux-amd64//:bin/llvm-objcopy",
+        "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-linux-arm64//:bin/llvm-objcopy",
+        "//conditions:default": "@llvm-toolchain-minimal-darwin-arm64//:bin/llvm-objcopy",
     }),
     visibility = ["//visibility:public"],
 )
@@ -24,9 +24,9 @@ alias(
 alias(
     name = "llvm-readelf",
     actual = select({
-        "//platforms:is_linux_x86_64": "@llvm-toolchain-minimal-22.1.7-linux-amd64//:bin/llvm-readelf",
-        "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-22.1.7-linux-arm64//:bin/llvm-readelf",
-        "//conditions:default": "@llvm-toolchain-minimal-22.1.7-darwin-arm64//:bin/llvm-readelf",
+        "//platforms:is_linux_x86_64": "@llvm-toolchain-minimal-linux-amd64//:bin/llvm-readelf",
+        "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-linux-arm64//:bin/llvm-readelf",
+        "//conditions:default": "@llvm-toolchain-minimal-darwin-arm64//:bin/llvm-readelf",
     }),
     visibility = ["//visibility:public"],
 )
@@ -34,9 +34,9 @@ alias(
 alias(
     name = "llvm-cov",
     actual = select({
-        "//platforms:is_linux_x86_64": "@llvm-toolchain-minimal-22.1.7-linux-amd64//:bin/llvm-cov",
-        "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-22.1.7-linux-arm64//:bin/llvm-cov",
-        "//conditions:default": "@llvm-toolchain-minimal-22.1.7-darwin-arm64//:bin/llvm-cov",
+        "//platforms:is_linux_x86_64": "@llvm-toolchain-minimal-linux-amd64//:bin/llvm-cov",
+        "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-linux-arm64//:bin/llvm-cov",
+        "//conditions:default": "@llvm-toolchain-minimal-darwin-arm64//:bin/llvm-cov",
     }),
     visibility = ["//visibility:public"],
 )
@@ -44,9 +44,9 @@ alias(
 alias(
     name = "llvm-profdata",
     actual = select({
-        "//platforms:is_linux_x86_64": "@llvm-toolchain-minimal-22.1.7-linux-amd64//:bin/llvm-profdata",
-        "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-22.1.7-linux-arm64//:bin/llvm-profdata",
-        "//conditions:default": "@llvm-toolchain-minimal-22.1.7-darwin-arm64//:bin/llvm-profdata",
+        "//platforms:is_linux_x86_64": "@llvm-toolchain-minimal-linux-amd64//:bin/llvm-profdata",
+        "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-linux-arm64//:bin/llvm-profdata",
+        "//conditions:default": "@llvm-toolchain-minimal-darwin-arm64//:bin/llvm-profdata",
     }),
     visibility = ["//visibility:public"],
 )
@@ -60,9 +60,9 @@ alias(
 alias(
     name = "llvm-symbolizer",
     actual = select({
-        "//platforms:is_linux_x86_64": "@llvm-toolchain-minimal-22.1.7-linux-amd64//:bin/llvm-symbolizer",
-        "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-22.1.7-linux-arm64//:bin/llvm-symbolizer",
-        "//conditions:default": "@llvm-toolchain-minimal-22.1.7-darwin-arm64//:bin/llvm-symbolizer",
+        "//platforms:is_linux_x86_64": "@llvm-toolchain-minimal-linux-amd64//:bin/llvm-symbolizer",
+        "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-linux-arm64//:bin/llvm-symbolizer",
+        "//conditions:default": "@llvm-toolchain-minimal-darwin-arm64//:bin/llvm-symbolizer",
     }),
     visibility = ["//visibility:public"],
 )
