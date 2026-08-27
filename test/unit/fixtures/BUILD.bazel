@@ -1,0 +1,16 @@
+"""One-shot fixture generators shared across unit-test suites.
+
+Not part of the normal test/build sweep — `tags = ["manual"]` keeps these
+out of `//...` and `just bazel-build`/`just bazel-test`; run them explicitly
+via `bazel run` when (re)generating committed fixtures.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+# Regenerates test/_test_data/images/malformed/. See the generator's own
+# header comment and test/_test_data/images/malformed/README.md.
+cc_binary(
+    name = "generate_malformed_images",
+    srcs = ["generate_malformed_images.cpp"],
+    tags = ["manual"],
+)

@@ -9,6 +9,7 @@
 #ifndef _sipi_io_h
 #define _sipi_io_h
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -16,6 +17,7 @@
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiSize.h"
 #include "formats/output_sink.h"
+#include "SipiImageError.h"
 
 #include <memory>
 
@@ -23,6 +25,42 @@
  * @namespace Sipi Is used for all Sipi things.
  */
 namespace Sipi {
+
+/// Named caps for post-header decode dimensions, enforced before any decode
+/// buffer is sized/allocated from them.
+inline constexpr std::size_t kMaxDecodeDim = 1u << 17;
+inline constexpr std::size_t kMaxDecodeChannels = 32;
+
+/*!
+ * Validate the dimensions a codec reads from a file's header before any
+ * decode buffer is sized/allocated from them (C-library boundary input
+ * validation). A crafted header can claim dimensions or a channel/bit-depth
+ * combination that overflows or exhausts memory long before pixel data is
+ * read; reject such headers here instead of trusting them into an
+ * allocation.
+ *
+ * \param nx Image width in pixels, as read from the file header
+ * \param ny Image height in pixels, as read from the file header
+ * \param nc Number of channels/samples-per-pixel, as read from the file header
+ * \param bps Bits per sample, as read from the file header
+ * \param filepath Path of the file being decoded, for the error message
+ *
+ * \throws SipiImageError if nx or ny exceeds kMaxDecodeDim, nc exceeds
+ * kMaxDecodeChannels, or bps is not one of the bit depths SIPI's codecs
+ * support (1, 4, 8, 12, 16).
+ */
+inline void validate_decode_dims(std::size_t nx, std::size_t ny, std::size_t nc, int bps, const std::string &filepath)
+{
+  if (nx > kMaxDecodeDim || ny > kMaxDecodeDim) {
+    throw SipiImageError("Image dimensions exceed the supported decode limit: " + filepath);
+  }
+  if (nc > kMaxDecodeChannels) {
+    throw SipiImageError("Image channel count exceeds the supported decode limit: " + filepath);
+  }
+  if (bps != 1 && bps != 4 && bps != 8 && bps != 12 && bps != 16) {
+    throw SipiImageError("Unsupported bits-per-sample value: " + filepath);
+  }
+}
 
 enum class ScalingMethod : std::uint8_t { HIGH = 0, MEDIUM = 1, LOW = 2 };
 
