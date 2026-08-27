@@ -1,12 +1,22 @@
 """Native libtiff codec-coverage proof — verifies the re-enabled ingest codecs
-(JPEG/LZMA/ZSTD/WebP/JBIG) are compiled into the vendored libtiff (DEV-6563)."""
+(JPEG/LZMA/ZSTD/WebP/JBIG) are compiled into the vendored libtiff (DEV-6563).
+
+Also carries the crafted-malformed-TIFF decode-path regression suite
+(DEV-6064, DEV-6065, DEV-6067, N3, N6): these cases go through
+SipiIOTiff::read() (via SipiImage), not raw libtiff, hence the //src:sipi_lib
+dependency alongside @tiff//:tiff.
+"""
 
 load("@rules_cc//cc:defs.bzl", "cc_test")
 
 cc_test(
     name = "tiff_codecs_tests",
     srcs = glob(["*.cpp"]),
+    data = ["//test/_test_data:images"],
+    env = {"SIPI_WORKSPACE_ROOT": "."},
     deps = [
+        "//src:sipi_lib",
+        "//test:test_paths",
         "@googletest//:gtest_main",
         "@tiff//:tiff",
     ],

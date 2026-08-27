@@ -13,4 +13,5 @@ cc_binary(
     name = "generate_malformed_images",
     srcs = ["generate_malformed_images.cpp"],
     tags = ["manual"],
+    deps = ["@tiff//:tiff"],
 )
