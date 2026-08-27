@@ -28,6 +28,36 @@ use std::os::raw::{c_char, c_int};
 /// reads it from the seam, so the shell and engine classifiers cannot drift.
 pub(crate) const DEFAULT_LARGE_DECODE_THRESHOLD_BYTES: u64 = 32 * 1024 * 1024;
 
+/// Parses `SIPI_ALLOWED_ORIGINS` — a comma-separated list of exact origins
+/// (e.g. `https://a.example,https://b.example`) — into the CORS allowlist
+/// `routes::cors_allow` reads. Entries are trimmed; empty entries are dropped.
+///
+/// Read directly via `std::env` (like `SIPI_RS_PORT` in `lib.rs`) rather than
+/// through the `ServerOverrides`/FFI channel: CORS is a Rust-shell-only
+/// concern and never crosses the FFI seam into the engine, unlike the
+/// codec/limit overrides above.
+///
+/// DEV-6061 (opt-in hardening): unset or empty is the "no restriction
+/// configured" sentinel — `cors_allow` then falls back to today's
+/// reflect-any-origin behaviour, byte-identical to a build predating this
+/// knob. Setting the var switches an instance into allowlist mode.
+pub fn allowed_origins_from_env() -> Vec<String> {
+    parse_allowed_origins(std::env::var("SIPI_ALLOWED_ORIGINS").ok().as_deref())
+}
+
+/// Pure parse, split out from [`allowed_origins_from_env`] so it is testable
+/// without mutating process-global env state.
+fn parse_allowed_origins(raw: Option<&str>) -> Vec<String> {
+    raw.map(|s| {
+        s.split(',')
+            .map(str::trim)
+            .filter(|o| !o.is_empty())
+            .map(str::to_owned)
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
 /// CLI/env flag overrides layered over the loaded Lua config — one `Option` per
 /// forwarded `server` flag (`None` = neither CLI nor env set it → the Lua config
 /// wins).
@@ -617,5 +647,28 @@ mod overrides_tests {
             ..Default::default()
         };
         assert!(OverridesHolder::new(&o).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod allowed_origins_tests {
+    use super::parse_allowed_origins;
+
+    #[test]
+    fn unset_yields_empty_allowlist() {
+        assert_eq!(parse_allowed_origins(None), Vec::<String>::new());
+    }
+
+    #[test]
+    fn empty_string_yields_empty_allowlist() {
+        assert_eq!(parse_allowed_origins(Some("")), Vec::<String>::new());
+    }
+
+    #[test]
+    fn splits_trims_and_drops_empty_entries() {
+        assert_eq!(
+            parse_allowed_origins(Some(" https://a.example ,https://b.example,,")),
+            vec!["https://a.example", "https://b.example"]
+        );
     }
 }

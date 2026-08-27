@@ -448,6 +448,9 @@ async fn serve(
             queue_timeout,
             preflight_cache_ttl,
             preflight_cache_slots,
+            // Read directly (like `SIPI_RS_PORT` below): CORS is a Rust-shell
+            // knob, never a `ServerOverrides`/FFI concern (DEV-6061).
+            config::allowed_origins_from_env(),
         )
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string()))?,
     );
@@ -618,8 +621,19 @@ mod app_tests {
         // Defaults everywhere (ratios fall back to valid values), so `load` cannot
         // return the degenerate-ratio error here.
         app(Arc::new(
-            routes::AppState::load(None, None, None, None, None, None, None, None, None)
-                .expect("default admission config is valid"),
+            routes::AppState::load(
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Vec::new(),
+            )
+            .expect("default admission config is valid"),
         ))
     }
 
