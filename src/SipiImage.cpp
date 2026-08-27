@@ -27,10 +27,26 @@
 #include "resample.h"
 #include "observability/metrics.h"
 #include "observability/profiling.h"
+#include "util/checked_arith.h"
 #include "util/Global.h"
 #include "util/Hash.h"
 
 namespace Sipi {
+
+namespace {
+
+// Every pixel-buffer allocation in this file funnels through here: reject
+// (throw) the moment `nx * ny * nc * elem` overflows `size_t`, rather than
+// letting a wrapped size feed a too-small `std::vector`/`unique_ptr<[]>`
+// allocation that a later copy then overruns.
+size_t checked_buf_size_or_throw(size_t nx_, size_t ny_, size_t nc_, size_t elem_)
+{
+  if (const auto sz = checked_buf_size(nx_, ny_, nc_, elem_)) { return *sz; }
+  throw SipiImageError("Pixel buffer size overflow (dimensions=" + std::to_string(nx_) + "x" + std::to_string(ny_)
+                        + ", channels=" + std::to_string(nc_) + ", elem=" + std::to_string(elem_) + ")");
+}
+
+}// namespace
 
 // SipiImage::io — the static format-handler registry — is defined in
 // //src/formats (format_registry.cpp), not here, so the engine does not
@@ -68,12 +84,12 @@ SipiImage::SipiImage(const SipiImage &img_p)
 
   switch (bps) {
   case 8: {
-    bufsiz = nx * ny * nc * sizeof(unsigned char);
+    bufsiz = checked_buf_size_or_throw(nx, ny, nc, sizeof(unsigned char));
     break;
   }
 
   case 16: {
-    bufsiz = nx * ny * nc * sizeof(unsigned short);
+    bufsiz = checked_buf_size_or_throw(nx, ny, nc, sizeof(unsigned short));
     break;
   }
 
@@ -129,12 +145,12 @@ SipiImage::SipiImage(size_t nx_p, size_t ny_p, size_t nc_p, size_t bps_p, Photom
 
   switch (bps) {
   case 8: {
-    bufsiz = nx * ny * nc * sizeof(unsigned char);
+    bufsiz = checked_buf_size_or_throw(nx, ny, nc, sizeof(unsigned char));
     break;
   }
 
   case 16: {
-    bufsiz = nx * ny * nc * sizeof(unsigned short);
+    bufsiz = checked_buf_size_or_throw(nx, ny, nc, sizeof(unsigned short));
     break;
   }
 
@@ -178,12 +194,12 @@ SipiImage &SipiImage::operator=(const SipiImage &img_p)
 
     switch (bps) {
     case 8: {
-      bufsiz = nx * ny * nc * sizeof(unsigned char);
+      bufsiz = checked_buf_size_or_throw(nx, ny, nc, sizeof(unsigned char));
       break;
     }
 
     case 16: {
-      bufsiz = nx * ny * nc * sizeof(unsigned short);
+      bufsiz = checked_buf_size_or_throw(nx, ny, nc, sizeof(unsigned short));
       break;
     }
 
@@ -298,7 +314,7 @@ void SipiImage::readSource(const std::string &filepath,
   // abort. Active deliberate validation lives in `sipi verify service-file`.
   if (emdata.is_set()) {
     shttps::Hash internal_hash(emdata.fields().hash_type);
-    internal_hash.add_data(pixels.data(), nx * ny * nc * bps / 8);
+    internal_hash.add_data(pixels.data(), checked_buf_size_or_throw(nx, ny, nc, bps / 8));
     std::string checksum = internal_hash.hash();
     if (checksum != Essentials::to_hex(emdata.fields().data_chksum)) {
       log_err("Essentials data_chksum mismatch in %s; possible corruption", filepath.c_str());
@@ -325,7 +341,7 @@ void SipiImage::readSource(const std::string &filepath,
 std::vector<std::byte> SipiImage::compute_pixel_hash(shttps::HashType type) const
 {
   shttps::Hash digest(type);
-  if (!pixels.empty()) { digest.add_data(pixels.data(), nx * ny * nc * bps / 8); }
+  if (!pixels.empty()) { digest.add_data(pixels.data(), checked_buf_size_or_throw(nx, ny, nc, bps / 8)); }
   return Essentials::from_hex(digest.hash());
 }
 
@@ -399,7 +415,7 @@ void SipiImage::convertYCC2RGB()
 {
   if (bps == 8) {
     byte *inbuf = pixels.data();
-    std::vector<byte> outbuf((size_t)nc * (size_t)nx * (size_t)ny);
+    std::vector<byte> outbuf(checked_buf_size_or_throw(nx, ny, nc, 1));
 
     for (size_t j = 0; j < ny; j++) {
       for (size_t i = 0; i < nx; i++) {
@@ -424,7 +440,7 @@ void SipiImage::convertYCC2RGB()
   } else if (bps == 16) {
     word *inbuf = (word *)pixels.data();
     size_t nnc = nc - 1;
-    std::vector<byte> outbuf_v(2 * (nnc * nx * ny));
+    std::vector<byte> outbuf_v(checked_buf_size_or_throw(nx, ny, nnc, 2));
     word *outbuf = (word *)outbuf_v.data();
 
     for (size_t j = 0; j < ny; j++) {
@@ -511,7 +527,7 @@ void SipiImage::convertToIcc(const Icc &target_icc_p, int new_bps)
       + ", target_profile_type=" + std::to_string(static_cast<int>(target_icc_p.getProfileType())));
   }
 
-  std::vector<byte> outbuf(nx * ny * nnc * new_bps / 8);
+  std::vector<byte> outbuf(checked_buf_size_or_throw(nx, ny, nnc, static_cast<size_t>(new_bps) / 8));
   cmsDoTransform(hTransform.get(), pixels.data(), outbuf.data(), nx * ny);
   icc = std::make_shared<Icc>(target_icc_p);
   pixels = std::move(outbuf);
@@ -654,7 +670,7 @@ void SipiImage::removeChannel(const unsigned int channel, const bool force_gray_
   if (bps == _8bps) {
     const byte *original_pixels = pixels.data();
     const size_t new_nc = nc - 1;
-    std::vector<byte> changed_v(new_nc * nx * ny);
+    std::vector<byte> changed_v(checked_buf_size_or_throw(nx, ny, new_nc, 1));
     byte *changed_pixels = changed_v.data();
 
     // only force gray values if the image is RGB and the alpha channel is the channel to be removed
@@ -669,7 +685,7 @@ void SipiImage::removeChannel(const unsigned int channel, const bool force_gray_
   } else if (bps == _16bps) {
     const auto *original_pixels = reinterpret_cast<const unsigned short *>(pixels.data());
     size_t new_nc = nc - 1;
-    std::vector<byte> changed_v(2 * new_nc * nx * ny);
+    std::vector<byte> changed_v(checked_buf_size_or_throw(nx, ny, new_nc, 2));
     auto *changed_pixels = reinterpret_cast<unsigned short *>(changed_v.data());
 
     purge_channel_pixels(original_pixels, changed_pixels, nx, ny, nc, channel, new_nc);
@@ -693,15 +709,27 @@ void SipiImage::removeChannel(const unsigned int channel, const bool force_gray_
 bool SipiImage::crop(int x, int y, size_t width, size_t height)
 {
   SIPI_ZONE_N("SipiImage::crop");
+  // x/y are validated and clamped BEFORE combining with the unsigned width/
+  // height: a negative x or y converted directly to size_t and added to
+  // width/height would wrap, and the caller-supplied region could silently
+  // widen back out to the full image instead of being rejected.
   if (x < 0) {
-    width += x;
+    const auto shrink_x = static_cast<size_t>(-static_cast<long long>(x));
+    if (width != 0) {
+      if (shrink_x >= width) { return false; }
+      width -= shrink_x;
+    }
     x = 0;
   } else if (x >= (long)nx) {
     return false;
   }
 
   if (y < 0) {
-    height += y;
+    const auto shrink_y = static_cast<size_t>(-static_cast<long long>(y));
+    if (height != 0) {
+      if (shrink_y >= height) { return false; }
+      height -= shrink_y;
+    }
     y = 0;
   } else if (y >= (long)ny) {
     return false;
@@ -725,7 +753,7 @@ bool SipiImage::crop(int x, int y, size_t width, size_t height)
 
   if (bps == 8) {
     byte *inbuf = pixels.data();
-    std::vector<byte> outbuf(width * height * nc);
+    std::vector<byte> outbuf(checked_buf_size_or_throw(width, height, nc, 1));
 
     for (size_t j = 0; j < height; j++) {
       for (size_t i = 0; i < width; i++) {
@@ -736,7 +764,7 @@ bool SipiImage::crop(int x, int y, size_t width, size_t height)
     pixels = std::move(outbuf);
   } else if (bps == 16) {
     word *inbuf = (word *)pixels.data();
-    std::vector<byte> outbuf_v(2 * (width * height * nc));
+    std::vector<byte> outbuf_v(checked_buf_size_or_throw(width, height, nc, 2));
     word *outbuf = (word *)outbuf_v.data();
 
     for (size_t j = 0; j < height; j++) {
@@ -770,7 +798,7 @@ bool SipiImage::crop(const std::shared_ptr<SipiRegion> &region)
 
   if (bps == 8) {
     byte *inbuf = pixels.data();
-    std::vector<byte> outbuf(width * height * nc);
+    std::vector<byte> outbuf(checked_buf_size_or_throw(width, height, nc, 1));
 
     for (size_t j = 0; j < height; j++) {
       for (size_t i = 0; i < width; i++) {
@@ -781,7 +809,7 @@ bool SipiImage::crop(const std::shared_ptr<SipiRegion> &region)
     pixels = std::move(outbuf);
   } else if (bps == 16) {
     word *inbuf = (word *)pixels.data();
-    std::vector<byte> outbuf_v(2 * (width * height * nc));
+    std::vector<byte> outbuf_v(checked_buf_size_or_throw(width, height, nc, 2));
     word *outbuf = (word *)outbuf_v.data();
 
     for (size_t j = 0; j < height; j++) {
@@ -902,7 +930,7 @@ bool SipiImage::scaleFast(size_t nnx, size_t nny)
 
   if (bps == 8) {
     byte *inbuf = pixels.data();
-    std::vector<byte> outbuf(nnx * nny * nc);
+    std::vector<byte> outbuf(checked_buf_size_or_throw(nnx, nny, nc, 1));
     for (size_t y = 0; y < nny; y++) {
       for (size_t x = 0; x < nnx; x++) {
         for (size_t k = 0; k < nc; k++) { outbuf[nc * (y * nnx + x) + k] = inbuf[nc * (ylut[y] * nx + xlut[x]) + k]; }
@@ -911,7 +939,7 @@ bool SipiImage::scaleFast(size_t nnx, size_t nny)
     pixels = std::move(outbuf);
   } else if (bps == 16) {
     word *inbuf = (word *)pixels.data();
-    std::vector<byte> outbuf_v(2 * (nnx * nny * nc));
+    std::vector<byte> outbuf_v(checked_buf_size_or_throw(nnx, nny, nc, 2));
     word *outbuf = (word *)outbuf_v.data();
     for (size_t y = 0; y < nny; y++) {
       for (size_t x = 0; x < nnx; x++) {
@@ -947,7 +975,7 @@ bool SipiImage::scaleMedium(size_t nnx, size_t nny)
 
   if (bps == 8) {
     byte *inbuf = pixels.data();
-    std::vector<byte> outbuf(nnx * nny * nc);
+    std::vector<byte> outbuf(checked_buf_size_or_throw(nnx, nny, nc, 1));
     double rx, ry;
 
     for (size_t j = 0; j < nny; j++) {
@@ -961,7 +989,7 @@ bool SipiImage::scaleMedium(size_t nnx, size_t nny)
     pixels = std::move(outbuf);
   } else if (bps == 16) {
     word *inbuf = (word *)pixels.data();
-    std::vector<byte> outbuf_v(2 * (nnx * nny * nc));
+    std::vector<byte> outbuf_v(checked_buf_size_or_throw(nnx, nny, nc, 2));
     word *outbuf = (word *)outbuf_v.data();
     double rx, ry;
 
@@ -1090,7 +1118,7 @@ bool SipiImage::scale(size_t nnx, size_t nny)
   const AxisWeights wx = build_axis_weights(nx, nnx);
   const AxisWeights wy = build_axis_weights(ny, nny);
 
-  std::vector<byte> out(nnx * nny * nc * (bps == 16 ? 2 : 1));
+  std::vector<byte> out(checked_buf_size_or_throw(nnx, nny, nc, bps == 16 ? 2 : 1));
   if (bps == 8) {
     resample_separable_u8(pixels.data(), nx, ny, nc, nnx, nny, wx.offset.data(), wx.idx.data(), wx.wt.data(),
       wy.offset.data(), wy.idx.data(), wy.wt.data(), out.data());
@@ -1117,7 +1145,7 @@ bool SipiImage::rotate(float angle, bool mirror)
   if (mirror) {
     if (bps == 8) {
       byte *inbuf = pixels.data();
-      std::vector<byte> outbuf(nx * ny * nc);
+      std::vector<byte> outbuf(checked_buf_size_or_throw(nx, ny, nc, 1));
       for (size_t j = 0; j < ny; j++) {
         for (size_t i = 0; i < nx; i++) {
           for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nx + i) + k] = inbuf[nc * (j * nx + (nx - i - 1)) + k]; }
@@ -1127,7 +1155,7 @@ bool SipiImage::rotate(float angle, bool mirror)
       pixels = std::move(outbuf);
     } else if (bps == 16) {
       word *inbuf = (word *)pixels.data();
-      std::vector<byte> outbuf_v(2 * (nx * ny * nc));
+      std::vector<byte> outbuf_v(checked_buf_size_or_throw(nx, ny, nc, 2));
       word *outbuf = (word *)outbuf_v.data();
 
       for (size_t j = 0; j < ny; j++) {
@@ -1162,7 +1190,7 @@ bool SipiImage::rotate(float angle, bool mirror)
 
     if (bps == 8) {
       byte *inbuf = pixels.data();
-      std::vector<byte> outbuf(nx * ny * nc);
+      std::vector<byte> outbuf(checked_buf_size_or_throw(nx, ny, nc, 1));
 
       for (size_t j = 0; j < nny; j++) {
         for (size_t i = 0; i < nnx; i++) {
@@ -1173,7 +1201,7 @@ bool SipiImage::rotate(float angle, bool mirror)
       pixels = std::move(outbuf);
     } else if (bps == 16) {
       word *inbuf = (word *)pixels.data();
-      std::vector<byte> outbuf_v(2 * (nx * ny * nc));
+      std::vector<byte> outbuf_v(checked_buf_size_or_throw(nx, ny, nc, 2));
       word *outbuf = (word *)outbuf_v.data();
 
       for (size_t j = 0; j < nny; j++) {
@@ -1197,7 +1225,7 @@ bool SipiImage::rotate(float angle, bool mirror)
     size_t nny = ny;
     if (bps == 8) {
       byte *inbuf = pixels.data();
-      std::vector<byte> outbuf(nx * ny * nc);
+      std::vector<byte> outbuf(checked_buf_size_or_throw(nx, ny, nc, 1));
 
       for (size_t j = 0; j < nny; j++) {
         for (size_t i = 0; i < nnx; i++) {
@@ -1210,7 +1238,7 @@ bool SipiImage::rotate(float angle, bool mirror)
       pixels = std::move(outbuf);
     } else if (bps == 16) {
       word *inbuf = (word *)pixels.data();
-      std::vector<byte> outbuf_v(2 * (nx * ny * nc));
+      std::vector<byte> outbuf_v(checked_buf_size_or_throw(nx, ny, nc, 2));
       word *outbuf = (word *)outbuf_v.data();
 
       for (size_t j = 0; j < nny; j++) {
@@ -1239,7 +1267,7 @@ bool SipiImage::rotate(float angle, bool mirror)
 
     if (bps == 8) {
       byte *inbuf = pixels.data();
-      std::vector<byte> outbuf(nx * ny * nc);
+      std::vector<byte> outbuf(checked_buf_size_or_throw(nx, ny, nc, 1));
       for (size_t j = 0; j < nny; j++) {
         for (size_t i = 0; i < nnx; i++) {
           for (size_t k = 0; k < nc; k++) { outbuf[nc * (j * nnx + i) + k] = inbuf[nc * (i * nx + (nx - j - 1)) + k]; }
@@ -1249,7 +1277,7 @@ bool SipiImage::rotate(float angle, bool mirror)
       pixels = std::move(outbuf);
     } else if (bps == 16) {
       word *inbuf = (word *)pixels.data();
-      std::vector<byte> outbuf_v(2 * (nx * ny * nc));
+      std::vector<byte> outbuf_v(checked_buf_size_or_throw(nx, ny, nc, 2));
       word *outbuf = (word *)outbuf_v.data();
       for (size_t j = 0; j < nny; j++) {
         for (size_t i = 0; i < nnx; i++) {
@@ -1292,7 +1320,7 @@ bool SipiImage::rotate(float angle, bool mirror)
 
     if (bps == 8) {
       byte *inbuf = pixels.data();
-      std::vector<byte> outbuf(nnx * nny * nc);
+      std::vector<byte> outbuf(checked_buf_size_or_throw(nnx, nny, nc, 1));
       byte bg = 0;
 
       for (size_t j = 0; j < nny; j++) {
@@ -1311,7 +1339,7 @@ bool SipiImage::rotate(float angle, bool mirror)
       pixels = std::move(outbuf);
     } else if (bps == 16) {
       word *inbuf = (word *)pixels.data();
-      std::vector<byte> outbuf_v(2 * (nnx * nny * nc));
+      std::vector<byte> outbuf_v(checked_buf_size_or_throw(nnx, nny, nc, 2));
       word *outbuf = (word *)outbuf_v.data();
       word bg = 0;
 
@@ -1385,7 +1413,7 @@ void SipiImage::to8bps()
     // icc = NULL;
 
     word *inbuf = (word *)pixels.data();
-    std::vector<byte> outbuf(nc * nx * ny);
+    std::vector<byte> outbuf(checked_buf_size_or_throw(nx, ny, nc, 1));
     for (size_t j = 0; j < ny; j++) {
       for (size_t i = 0; i < nx; i++) {
         for (size_t k = 0; k < nc; k++) {
@@ -1419,7 +1447,8 @@ void SipiImage::toBitonal()
   if (!doit) return;// we have to do nothing, it's already bitonal
 
   // must be signed!! Error propagation my result in values < 0 or > 255
-  std::vector<short> outbuf(nx * ny);
+  const size_t outbuf_bytes = checked_buf_size_or_throw(nx, ny, 1, sizeof(short));
+  std::vector<short> outbuf(outbuf_bytes / sizeof(short));
 
   for (size_t i = 0; i < nx * ny; i++) {
     outbuf[i] = pixels[i];// copy buffer
@@ -1511,7 +1540,8 @@ SipiImage &SipiImage::operator-=(const SipiImage &rhs)
     rhs_ptr = new_rhs_guard.get();
   }
 
-  auto diffbuf = std::make_unique<int[]>(nx * ny * nc);
+  const size_t diffbuf_bytes = checked_buf_size_or_throw(nx, ny, nc, sizeof(int));
+  auto diffbuf = std::make_unique<int[]>(diffbuf_bytes / sizeof(int));
 
   int *dbuf = diffbuf.get();
 
@@ -1637,7 +1667,8 @@ SipiImage &SipiImage::operator+=(const SipiImage &rhs)
     rhs_ptr = new_rhs_guard.get();
   }
 
-  auto diffbuf = std::make_unique<int[]>(nx * ny * nc);
+  const size_t diffbuf_bytes = checked_buf_size_or_throw(nx, ny, nc, sizeof(int));
+  auto diffbuf = std::make_unique<int[]>(diffbuf_bytes / sizeof(int));
   int *dbuf = diffbuf.get();
 
   switch (bps) {
