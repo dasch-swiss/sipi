@@ -22,6 +22,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "logging/logger.h"
 #include "util/Error.h"
 #include "util/Parsing.h"
 
@@ -125,15 +126,17 @@ extern "C" SipiImageHandle *sipi_image_new(const char *path,
     }
     return handle.release();
   } catch (const Sipi::SipiImageError &e) {
-    emit_str(err, err_ctx, e.to_string());
+    emit_str(err, err_ctx, e.message());
     return nullptr;
   } catch (const Sipi::SipiError &e) {
-    std::ostringstream ss;
-    ss << e;
-    emit_str(err, err_ctx, ss.str());
+    emit_str(err, err_ctx, e.message());
     return nullptr;
   } catch (const std::exception &e) {
-    emit_str(err, err_ctx, e.what());
+    // Arbitrary std::exception (e.g. std::filesystem/system_error) can embed
+    // the offending path in what(); log the full detail server-side and
+    // send only a generic string to the client.
+    log_err("sipi_image_new: %s", e.what());
+    emit_str(err, err_ctx, "internal engine error");
     return nullptr;
   } catch (...) {
     emit_str(err, err_ctx, "unknown engine error");
@@ -168,7 +171,7 @@ extern "C" int
       emit_str(err, err_ctx, "Couldn't get dimensions");
       return 1;
     } catch (const Sipi::SipiImageError &e) {
-      emit_str(err, err_ctx, e.to_string());
+      emit_str(err, err_ctx, e.message());
       return 1;
     }
     *nx = info.width;
@@ -185,9 +188,7 @@ extern "C" int sipi_image_crop(SipiImageHandle *img, const char *iiif_region, Si
     try {
       reg = std::make_shared<Sipi::SipiRegion>(nz(iiif_region));
     } catch (const Sipi::SipiError &e) {
-      std::ostringstream ss;
-      ss << e;
-      emit_str(err, err_ctx, ss.str());
+      emit_str(err, err_ctx, e.message());
       return 1;
     }
     img->image.crop(reg);
@@ -206,9 +207,7 @@ extern "C" int sipi_image_scale(SipiImageHandle *img, const char *iiif_size, Sip
       bool ro = false;
       size.get_size(img->image.getNx(), img->image.getNy(), nx, ny, r, ro);
     } catch (const Sipi::SipiError &e) {
-      std::ostringstream ss;
-      ss << e;
-      emit_str(err, err_ctx, ss.str());
+      emit_str(err, err_ctx, e.message());
       return 1;
     }
     img->image.scale(nx, ny);
@@ -241,7 +240,7 @@ extern "C" int sipi_image_watermark(SipiImageHandle *img, const char *wmfile, Si
     try {
       img->image.add_watermark(nz(wmfile));
     } catch (const Sipi::SipiImageError &e) {
-      emit_str(err, err_ctx, e.to_string());
+      emit_str(err, err_ctx, e.message());
       return 1;
     }
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
@@ -504,12 +503,10 @@ extern "C" int sipi_image_mimetype_consistency(const SipiImageHandle *img,
     try {
       *consistent = shttps::Parsing::checkMimeTypeConsistency(img->filename, nz(filename), nz(mimetype)) ? 1 : 0;
     } catch (const Sipi::SipiImageError &e) {
-      emit_str(err, err_ctx, e.to_string());
+      emit_str(err, err_ctx, e.message());
       return 1;
     } catch (const shttps::Error &e) {
-      std::ostringstream ss;
-      ss << e;
-      emit_str(err, err_ctx, ss.str());
+      emit_str(err, err_ctx, e.message());
       return 1;
     }
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
@@ -599,7 +596,7 @@ extern "C" int sipi_image_write(SipiImageHandle *img,
     try {
       img->image.write(ftype_str, nz(path), comp_params.empty() ? nullptr : &comp_params);
     } catch (const Sipi::SipiImageError &e) {
-      emit_str(err, err_ctx, e.to_string());
+      emit_str(err, err_ctx, e.message());
       return 1;
     }
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
@@ -626,7 +623,7 @@ extern "C" int sipi_image_send(SipiImageHandle *img,
       img->image.write(
         nz(ftype), Sipi::CallbackSink{ write, write_ctx }, comp_params.empty() ? nullptr : &comp_params);
     } catch (const Sipi::SipiImageError &e) {
-      emit_str(err, err_ctx, e.to_string());
+      emit_str(err, err_ctx, e.message());
       return 1;
     }
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
@@ -651,9 +648,7 @@ extern "C" int sipi_filename_hash(const char *filename, SipiStrFn emit, void *ct
       SipiFilenameHash hash(nz(filename));
       emit_str(emit, ctx, hash.filepath());
     } catch (const shttps::Error &e) {
-      std::ostringstream ss;
-      ss << e;
-      emit_str(emit, ctx, ss.str());
+      emit_str(emit, ctx, e.message());
       return 1;
     }
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
@@ -670,9 +665,7 @@ extern "C" int sipi_file_mimetype(const char *path, SipiKVFn emit, void *ctx, Si
         if (!mimetype.second.empty()) { emit(ctx, "charset", mimetype.second.c_str()); }
       }
     } catch (const shttps::Error &e) {
-      std::ostringstream ss;
-      ss << e;
-      emit_str(err, err_ctx, ss.str());
+      emit_str(err, err_ctx, e.message());
       return 1;
     }
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
@@ -691,9 +684,7 @@ extern "C" int sipi_file_mimeconsistency(const char *path,
       *consistent =
         shttps::Parsing::checkMimeTypeConsistency(nz(path), nz(filename), nz(expected_mimetype)) ? 1 : 0;
     } catch (const shttps::Error &e) {
-      std::ostringstream ss;
-      ss << e;
-      emit_str(err, err_ctx, ss.str());
+      emit_str(err, err_ctx, e.message());
       return 1;
     }
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);

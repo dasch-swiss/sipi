@@ -32,7 +32,14 @@ public:
 
   [[nodiscard]] std::string getFile() const { return location.file_name(); }
 
-  [[nodiscard]] std::string getMessage() const { return message; }
+  /*!
+   * Client-safe error message: the description passed to the constructor,
+   * WITHOUT the source location and with filesystem directory prefixes
+   * redacted. Suitable for HTTP response bodies / script-visible strings;
+   * `to_string()`/`what()` carry the full diagnostic (source file + line,
+   * full paths) for server-side logs.
+   */
+  [[nodiscard]] std::string message() const;
 
   [[nodiscard]] int getSysErrno() const { return sysErrno; }
 
@@ -71,7 +78,7 @@ public:
   friend std::ostream &operator<<(std::ostream &out_stream, const Error &rhs);
 
 private:
-  std::string message;//!< Description of the problem
+  std::string message_;//!< Description of the problem
   int sysErrno;//!< If there is a system error number
   std::source_location location;//!< The source location where the error occurs
 };

@@ -40,6 +40,7 @@ cc_library(
         "Global.h",
         "Hash.h",
         "Parsing.h",
+        "PathRedact.h",
         "UrlDecode.h",
         "checked_arith.h",
         ":magic_mgc_h",

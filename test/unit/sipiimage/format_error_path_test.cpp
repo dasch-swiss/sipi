@@ -147,3 +147,20 @@ TEST(JpegErrorPath, TruncatedJpegReadShapeReturnsFailure)
 
   std::remove(truncated.c_str());
 }
+
+// ============================================================
+// message() path redaction — client-facing accessors strip
+// filesystem directory prefixes; to_string()/what() keep them.
+// ============================================================
+
+TEST(SipiImageErrorPathRedaction, MessageStripsDirectoryPrefixKeepsFilename)
+{
+  const Sipi::SipiImageError err{ "Cannot read file \"/srv/images/sub/foo.jp2\": broken" };
+
+  const std::string msg = err.message();
+  EXPECT_EQ(msg.find("/srv/images/"), std::string::npos);
+  EXPECT_NE(msg.find("foo.jp2"), std::string::npos);
+
+  const std::string full = err.to_string();
+  EXPECT_NE(full.find("/srv/images/sub/foo.jp2"), std::string::npos);
+}
