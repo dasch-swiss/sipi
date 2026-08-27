@@ -42,6 +42,7 @@
 #include <zlib.h>
 
 #include "logging/logger.h"
+#include "SipiIO.h"
 #include "SipiImageError.h"
 #include "formats/SipiIOPng.h"
 #include "observability/profiling.h"
@@ -242,6 +243,10 @@ bool SipiIOPng::read(SipiImage *img,
 
   png_read_update_info(png_ptr, info_ptr);
 
+  img->bps = png_get_bit_depth(png_ptr, info_ptr);
+  img->nc = png_get_channels(png_ptr, info_ptr);
+  validate_decode_dims(img->nx, img->ny, img->nc, static_cast<int>(img->bps), filepath);
+
   //
   // check for ICC profiles...
   //
@@ -289,15 +294,13 @@ bool SipiIOPng::read(SipiImage *img,
 
   png_read_image(png_ptr, row_pointers.data());
   png_read_end(png_ptr, info_ptr);
-  img->bps = png_get_bit_depth(png_ptr, info_ptr);
-  img->nc = png_get_channels(png_ptr, info_ptr);
   if (color_type == PNG_COLOR_TYPE_PALETTE && img->nc == 4) { img->es.push_back(ExtraSamples::ASSOCALPHA); }
 
   png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 
   if (img->bps == 16) {
     auto *tmp = (unsigned short *)buffer.data();
-    for (int i = 0; i < img->nx * img->ny * img->nc; i++) { tmp[i] = ntohs(tmp[i]); }
+    for (size_t i = 0; i < static_cast<size_t>(img->nx) * img->ny * img->nc; i++) { tmp[i] = ntohs(tmp[i]); }
   }
   img->pixels = std::move(buffer);
 
