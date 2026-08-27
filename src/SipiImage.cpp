@@ -439,8 +439,10 @@ void SipiImage::convertYCC2RGB()
     pixels = std::move(outbuf);
   } else if (bps == 16) {
     word *inbuf = (word *)pixels.data();
-    size_t nnc = nc - 1;
-    std::vector<byte> outbuf_v(checked_buf_size_or_throw(nx, ny, nnc, 2));
+    // Sized with nc, matching the 8-bit path above: YCbCr->RGB conversion
+    // does not drop a channel, it converts the first three and copies any
+    // remaining ones through unchanged (see the k=3.. loop below).
+    std::vector<byte> outbuf_v(checked_buf_size_or_throw(nx, ny, nc, 2));
     word *outbuf = (word *)outbuf_v.data();
 
     for (size_t j = 0; j < ny; j++) {
@@ -622,7 +624,11 @@ void SipiImage::removeChannel(const unsigned int channel, const bool force_gray_
       for (size_t i = 0; i < nx; i++) {
         for (size_t k = 0; k < nc; k++) {
           if (k == channel_to_remove) { continue; }
-          changed_pixels[new_nc * (j * nx + i) + k] = original_pixels[nc * (j * nx + i) + k];
+          // Compact: channels after the removed one shift down by one slot
+          // in the output, or a non-terminal removal overruns the
+          // new_nc-wide row into the next pixel (or past the buffer end).
+          const size_t out_k = (k < channel_to_remove) ? k : k - 1;
+          changed_pixels[new_nc * (j * nx + i) + out_k] = original_pixels[nc * (j * nx + i) + k];
         }
       }
     }
@@ -646,7 +652,10 @@ void SipiImage::removeChannel(const unsigned int channel, const bool force_gray_
       for (size_t i = 0; i < nx; i++) {
         for (size_t k = 0; k < nc; k++) {
           if (k == channel_to_remove) { continue; }
-          changed_pixels[new_nc * (j * nx + i) + k] = (original_pixels[nc * (j * nx + i) + channel_to_remove] == 0)
+          // See purge_channel_pixels above: compact the removed channel's
+          // slot instead of leaving a gap that overruns the output row.
+          const size_t out_k = (k < channel_to_remove) ? k : k - 1;
+          changed_pixels[new_nc * (j * nx + i) + out_k] = (original_pixels[nc * (j * nx + i) + channel_to_remove] == 0)
                                                         ? 128
                                                         : original_pixels[nc * (j * nx + i) + k];
         }
