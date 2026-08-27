@@ -20,6 +20,23 @@
 
 namespace Sipi {
 
+/*!
+ * Validate a JPEG2000 palette (index) color mapping before the index-to-RGB
+ * expansion allocates or writes its output buffer. The expansion loop only
+ * handles a single 8-bit index component mapped to a 3-channel (RGB) output,
+ * and every possible index value must resolve to a palette entry.
+ *
+ * \param bps Bits per sample of the index component
+ * \param nc Number of components in the index codestream (before expansion)
+ * \param numcol Number of output colors the palette LUTs map to
+ * \param nentries Number of entries in each palette LUT
+ * \param filepath Path of the file being decoded, for the error message
+ *
+ * \throws SipiImageError if bps != 8, nc != 1, numcol != 3, or nentries is
+ * too small to cover every possible bps-bit index value.
+ */
+void validate_j2k_palette_mapping(std::size_t bps, std::size_t nc, int numcol, int nentries, const std::string &filepath);
+
 /*! Class which implements the JPEG2000-reader/writer */
 class SipiIOJ2k : public SipiIO
 {
