@@ -382,21 +382,23 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
   char name[256];
 
   while ((ptr - data) < length) {
-    // Bounds check: need at least 4 bytes for signature
-    if (ptr + 4 > end) break;
+    // Bounds check: need at least 4 bytes for signature. `end - ptr` (rather
+    // than `ptr + N > end`) avoids forming a pointer past `end` — pointer
+    // arithmetic that overflows the pointed-to object is undefined behavior.
+    if (4 > (size_t)(end - ptr)) break;
 
     if (memcmp(ptr, "8BIM", 4) != 0) break;
     ptr += 4;
 
     // Bounds check: need at least 2 bytes for tag ID
-    if (ptr + 2 > end) break;
+    if (2 > (size_t)(end - ptr)) break;
     id = ((unsigned char)*(ptr + 0) << 8) | (unsigned char)*(ptr + 1);
     ptr += 2;
 
     // Name processing (Pascal string) — bounds check
     if (ptr >= end) break;
     slen = (unsigned char)*ptr;
-    if (ptr + 1 + slen > end) break;
+    if (static_cast<size_t>(1 + slen) > (size_t)(end - ptr)) break;
     int name_len = (slen < 255) ? slen : 255;
     for (int i = 0; i < name_len; i++) name[i] = *(ptr + i + 1);
     name[name_len] = '\0';
@@ -405,13 +407,13 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
     ptr += slen;
 
     // Bounds check: need 4 bytes for data length
-    if (ptr + 4 > end) break;
+    if (4 > (size_t)(end - ptr)) break;
     datalen = ((unsigned char)*ptr << 24) | ((unsigned char)*(ptr + 1) << 16) | ((unsigned char)*(ptr + 2) << 8)
               | (unsigned char)*(ptr + 3);
     ptr += 4;
 
     // Bounds check: validate datalen against remaining buffer
-    if (ptr + datalen > end) break;
+    if (datalen > (size_t)(end - ptr)) break;
 
     switch (id) {
     case 0x0404: {
@@ -633,16 +635,27 @@ bool SipiIOJpeg::read(SipiImage *img,
       // ICC MARKER.... may span multiple marker segments
       auto *pos = static_cast<unsigned char *>(memmem(marker->data, marker->data_length, "ICC_PROFILE\0", 12));
       if (pos != nullptr) {
-        auto len = marker->data_length - (pos - (unsigned char *)marker->data) - 14;
-        auto *newbuf = static_cast<unsigned char *>(realloc(icc_buffer, icc_buffer_len + len));
-        if (newbuf == nullptr) {
-          // realloc failed — skip this ICC segment, keep what we have
-          log_err("realloc failed for ICC buffer (%d bytes)", icc_buffer_len + len);
-          break;
+        const auto offset = static_cast<unsigned int>(pos - (unsigned char *)marker->data);
+        // "ICC_PROFILE\0" (12 bytes) + sequence-number byte + count byte = 14
+        // bytes of non-profile overhead precede the profile bytes in this
+        // segment. memmem only guarantees the 12-byte identifier fits, not
+        // the trailing 2-byte header, so reject a segment too short to hold
+        // it before computing `len` — done in unsigned arithmetic so a
+        // malformed marker can never underflow into a huge copy length.
+        if (marker->data_length < offset + 14) {
+          log_err("ICC APP2 marker too short for ICC_PROFILE header (%u bytes)", marker->data_length);
+        } else {
+          const unsigned int len = marker->data_length - offset - 14;
+          auto *newbuf = static_cast<unsigned char *>(realloc(icc_buffer, icc_buffer_len + len));
+          if (newbuf == nullptr) {
+            // realloc failed — skip this ICC segment, keep what we have
+            log_err("realloc failed for ICC buffer (%d bytes)", icc_buffer_len + len);
+            break;
+          }
+          icc_buffer = newbuf;
+          memcpy(icc_buffer + icc_buffer_len, pos + 14, (size_t)len);
+          icc_buffer_len += len;
         }
-        icc_buffer = newbuf;
-        memcpy(icc_buffer + icc_buffer_len, pos + 14, (size_t)len);
-        icc_buffer_len += len;
       }
     } else if (marker->marker == JPEG_APP0 + 13) {
       // PHOTOSHOP MARKER....
@@ -650,7 +663,7 @@ bool SipiIOJpeg::read(SipiImage *img,
       // Photoshop resource block does not prevent the image from being read.
       // TODO(SipiReport-style-guide): refactor Iptc / Exif / Xmp
       // constructors to return std::expected<T, E> and delete this try/catch.
-      if (strncmp("Photoshop 3.0", (char *)marker->data, 14) == 0) {
+      if (marker->data_length >= 14 && strncmp("Photoshop 3.0", (char *)marker->data, 14) == 0) {
         try {
           parse_photoshop(img, (char *)marker->data + 14, (int)marker->data_length - 14);
         } catch (const std::exception &err) {
@@ -688,6 +701,7 @@ bool SipiIOJpeg::read(SipiImage *img,
   img->nx = cinfo.output_width;
   img->ny = cinfo.output_height;
   img->nc = cinfo.output_components;
+  validate_decode_dims(img->nx, img->ny, img->nc, static_cast<int>(img->bps), filepath);
   int colspace = cinfo.out_color_space;
   // JCS_UNKNOWN, JCS_GRAYSCALE, JCS_RGB, JCS_YCbCr, JCS_CMYK, JCS_YCCK
   switch (colspace) {
@@ -903,74 +917,25 @@ SipiImgInfo SipiIOJpeg::read_shape(const std::string &filepath)
       }
 
       //
-      // first we try to find the xmp part: TODO: reading XMP which spans multiple segments. See ExtendedXMP !!!
-      //
-      pos = (unsigned char *)memmem(marker->data, marker->data_length, "http://ns.adobe.com/xap/1.0/\000", 29);
+      // XMP packet: same bounded extraction as SipiIOJpeg::read() (DEV-6066)
+      // — the APP1 XMP segment payload starts with the 29-byte namespace
+      // header "http://ns.adobe.com/xap/1.0/\0"; everything after it is the
+      // raw XMP packet (older Photoshop exports omit the optional
+      // <?xpacket> wrappers, so scanning for them is not reliable). TODO:
+      // handle ExtendedXMP (multi-APP1-segment XMP packets larger than
+      // 64 KB).
+      constexpr size_t kXmpNsLen = 29;// "http://ns.adobe.com/xap/1.0/" + NUL
+      pos = (unsigned char *)memmem(marker->data, marker->data_length, "http://ns.adobe.com/xap/1.0/\000", kXmpNsLen);
       if (pos != nullptr) {
         try {
-          char start[] = { '<', '?', 'x', 'p', 'a', 'c', 'k', 'e', 't', ' ', 'b', 'e', 'g', 'i', 'n', '\0' };
-          char end[] = { '<', '?', 'x', 'p', 'a', 'c', 'k', 'e', 't', ' ', 'e', 'n', 'd', '\0' };
-
-          char *s;
-          unsigned int ll = 0;
-          do {
-            s = start;
-            // skip to the start marker
-            while ((ll < marker->data_length) && (*pos != *s)) {
-              pos++;
-              //// ISSUE: code fails here if there are many concurrent access; data overrrun??
-              ll++;
-            }
-            // read the start marker
-            while ((ll < marker->data_length) && (*s != '\0') && (*pos == *s)) {
-              pos++;
-              s++;
-              ll++;
-            }
-          } while ((ll < marker->data_length) && (*s != '\0'));
-          if (ll == marker->data_length) {
-            break;// XMP empty
+          const auto *data_end = (const unsigned char *)marker->data + marker->data_length;
+          const unsigned char *xmp_start = pos + kXmpNsLen;
+          if (xmp_start < data_end) {
+            const size_t xmp_len = data_end - xmp_start;
+            img.xmp = std::make_shared<Xmp>(std::string((const char *)xmp_start, xmp_len));
           }
-          // now we start reading the data
-          while ((ll < marker->data_length) && (*pos != '>')) {
-            ll++;
-            pos++;
-          }
-          if (ll >= marker->data_length) {
-            throw SipiImageError("Failed to parse XMP in read_shape: '>' not found");
-          }
-          pos++;// skip past '>'
-          unsigned char *start_xmp = pos;
-
-          unsigned char *data_end = (unsigned char *)marker->data + marker->data_length;
-          unsigned char *end_xmp = start_xmp;
-          do {
-            s = end;
-            while (pos < data_end && *pos != *s) pos++;
-            if (pos >= data_end) break;
-            end_xmp = pos;// a candidate
-            while (pos < data_end && (*s != '\0') && (*pos == *s)) {
-              pos++;
-              s++;
-            }
-          } while (pos < data_end && *s != '\0');
-          if (pos >= data_end || *s != '\0') {
-            throw SipiImageError("Failed to parse XMP in read_shape: end marker not found");
-          }
-          while (pos < data_end && *pos != '>') { pos++; }
-          if (pos < data_end) pos++;
-
-          size_t xmp_len = end_xmp - start_xmp;
-
-          std::string xmpstr((char *)start_xmp, xmp_len);
-          size_t npos = xmpstr.find("</x:xmpmeta>");
-          if (npos != std::string::npos) xmpstr = xmpstr.substr(0, npos + 12);
-
-          img.xmp = std::make_shared<Xmp>(xmpstr);
-        } catch (SipiImageError &err) {
-          jpeg_destroy_decompress(&cinfo);
-          info.success = SipiImgInfo::FAILURE;
-          return info;
+        } catch (const std::exception &err) {
+          log_warn("Failed to parse XMP metadata from JPEG (read_shape): %s", err.what());
         }
       }
     } else if (marker->marker == JPEG_APP0 + 13) {
@@ -978,7 +943,7 @@ SipiImgInfo SipiIOJpeg::read_shape(const std::string &filepath)
       // Wrapped like the main read path: a malformed IPTC / EXIF / XMP inside
       // the Photoshop resource block must not abort the shape probe (and must
       // not unwind past the live decompress struct).
-      if (strncmp("Photoshop 3.0", (char *)marker->data, 14) == 0) {
+      if (marker->data_length >= 14 && strncmp("Photoshop 3.0", (char *)marker->data, 14) == 0) {
         try {
           parse_photoshop(&img, (char *)marker->data + 14, (int)marker->data_length - 14);
         } catch (const std::exception &err) {

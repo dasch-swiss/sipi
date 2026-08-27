@@ -19,6 +19,11 @@ Produces three fixtures under test/_test_data/images/jpeg/:
      F3 feature-contract test to prove that log_warn is routed to stderr under
      --json without breaking the single-document contract on stdout.
 
+Also produces three marker-parsing over-read regression fixtures as a
+sibling `../malformed/` directory (relative to the given output dir), see
+`generate_malformed()` and test/_test_data/images/malformed/README.md for
+each fixture's defect (DEV-6066, N1, N4).
+
 Run (from the sipi repo root):
 
     uv run test/unit/sipiimage/fixtures/generate_jpeg_fixtures.py \
@@ -142,6 +147,78 @@ def _inject_malformed_xmp(jpeg_bytes: bytes) -> bytes:
     return jpeg_bytes[:2] + bytes(app1) + jpeg_bytes[2:]
 
 
+def _insert_app_marker(jpeg_bytes: bytes, marker: int, payload: bytes) -> bytes:
+    """Insert a raw APPn segment with an arbitrary payload immediately after
+    SOI. `payload` becomes the segment's data bytes verbatim (no namespace
+    header is added) — the caller controls the exact `data_length` libjpeg's
+    marker-saving machinery will see.
+    """
+    if jpeg_bytes[:2] != b"\xff\xd8":
+        raise ValueError("not a JPEG (missing SOI)")
+    seg_len = len(payload) + 2  # +2 for the length field itself
+    if seg_len > 0xFFFF:
+        raise ValueError("segment payload too large")
+    seg = bytearray()
+    seg.append(0xFF)
+    seg.append(marker)
+    seg.extend(seg_len.to_bytes(2, "big"))
+    seg.extend(payload)
+    return jpeg_bytes[:2] + bytes(seg) + jpeg_bytes[2:]
+
+
+def generate_malformed(malformed_dir: pathlib.Path) -> None:
+    """Regression fixtures for the JPEG marker-parsing over-reads fixed
+    alongside DEV-6066 / N1 / N4 (see
+    test/_test_data/images/malformed/README.md for the defect writeup).
+    Each fixture starts from a small well-formed RGB JPEG so libjpeg's
+    header parse (and the image decode itself) still succeeds; only the
+    injected marker segment is malformed.
+    """
+    malformed_dir.mkdir(parents=True, exist_ok=True)
+
+    base_img = Image.new("RGB", (32, 32), color=(96, 160, 32))
+    base_buf = io.BytesIO()
+    base_img.save(base_buf, format="JPEG", quality=85)
+    base_jpeg = base_buf.getvalue()
+
+    # jpeg_xmp_truncated.jpg — the APP1 XMP namespace header
+    # ("http://ns.adobe.com/xap/1.0/\0", 29 bytes) is the *entire* segment
+    # payload: no XMP packet bytes follow it, and no "<?xpacket begin"
+    # wrapper is present anywhere in the segment. Before DEV-6066,
+    # read_shape()'s marker walk tracked how far it had scanned with a
+    # counter that started at 0 from the position memmem() found (not from
+    # the start of marker->data), so it kept advancing up to a further
+    # marker->data_length bytes past the namespace header — walking well
+    # past the end of the segment's heap buffer looking for a wrapper that
+    # does not exist.
+    xmp_ns = b"http://ns.adobe.com/xap/1.0/\0"
+    xmp_truncated = _insert_app_marker(base_jpeg, 0xE1, xmp_ns)
+    xmp_path = malformed_dir / "jpeg_xmp_truncated.jpg"
+    xmp_path.write_bytes(xmp_truncated)
+    print(f"  wrote {xmp_path} ({len(xmp_truncated)} bytes, XMP namespace with no packet body)")
+
+    # jpeg_icc_short_app2.jpg — an APP2 segment whose payload is exactly the
+    # 12-byte "ICC_PROFILE\0" identifier with none of the 2 trailing
+    # sequence-number/count bytes the real ICC-in-JPEG layout requires.
+    # `read()`'s ICC extraction computed `data_length - offset - 14`; with
+    # `data_length == offset + 12` that underflows (N1) before the fix.
+    icc_short = _insert_app_marker(base_jpeg, 0xE2, b"ICC_PROFILE\0")
+    icc_path = malformed_dir / "jpeg_icc_short_app2.jpg"
+    icc_path.write_bytes(icc_short)
+    print(f"  wrote {icc_path} ({len(icc_short)} bytes, ICC_PROFILE identifier with no header tail)")
+
+    # jpeg_photoshop_short_app13.jpg — an APP13 segment shorter than the
+    # 14-byte "Photoshop 3.0\0" identifier it is compared against. The first
+    # 5 bytes ("Photo") deliberately match the identifier's prefix so
+    # `strncmp(..., 14)` cannot short-circuit on an early mismatch and must
+    # walk past the segment's actual (5-byte) allocation to find a
+    # difference or `n` (N4).
+    app13_short = _insert_app_marker(base_jpeg, 0xED, b"Photo")
+    app13_path = malformed_dir / "jpeg_photoshop_short_app13.jpg"
+    app13_path.write_bytes(app13_short)
+    print(f"  wrote {app13_path} ({len(app13_short)} bytes, APP13 identifier truncated to 5 bytes)")
+
+
 def generate(out_dir: pathlib.Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "cmyk").mkdir(exist_ok=True)
@@ -178,6 +255,9 @@ def main() -> int:
     out_dir = pathlib.Path(sys.argv[1])
     print(f"Generating JPEG fixtures under {out_dir}")
     generate(out_dir)
+    malformed_dir = out_dir.parent / "malformed"
+    print(f"Generating JPEG marker-parsing regression fixtures under {malformed_dir}")
+    generate_malformed(malformed_dir)
     print("\nAll fixtures generated successfully.")
     return 0
 
