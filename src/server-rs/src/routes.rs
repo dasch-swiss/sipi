@@ -1565,12 +1565,24 @@ fn static_binary(
                 header::CONTENT_RANGE.to_string(),
                 format!("bytes {start}-{end}/{fsize}"),
             ));
-            // The full infile path is leaked here in the filename; hardening is
-            // deferred.
-            headers.push((
-                header::CONTENT_DISPOSITION.to_string(),
-                format!("inline; filename={infile}"),
-            ));
+            // Basename only — the full infile path leaks the server's docroot
+            // layout; `content_disposition` also closes the header-injection
+            // surface (CR/LF/NUL/control/DEL stripped, RFC 2616/6266 escaping).
+            // An unresolvable or empty basename (e.g. `file_name()` returns
+            // `None`, or the name isn't valid UTF-8) hard-errors instead of
+            // falling back to the full path, so the leak closure is structural.
+            let Some(infile_basename) = std::path::Path::new(infile)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .filter(|name| !name.is_empty())
+            else {
+                return StaticOutcome::Err(StatusCode::INTERNAL_SERVER_ERROR);
+            };
+            if let Some(cd) = content_disposition(infile_basename) {
+                if let Ok(cd_str) = cd.to_str() {
+                    headers.push((header::CONTENT_DISPOSITION.to_string(), cd_str.to_owned()));
+                }
+            }
             // `end >= start` is guaranteed by parse_byte_range, so `end - start + 1`
             // cannot underflow.
             if is_head {

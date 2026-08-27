@@ -51,7 +51,7 @@ for imgindex,imgparam in pairs(server.uploads) do
     success, mime_ok = server.file_mimeconsistency(imgindex)
     if not success then
         server.log(newfilepath, server.loglevel.error)
-        send_error(500, mime_ok)
+        send_error(500, "Could not check mimetype consistency")
         return false
     end
 
@@ -60,7 +60,7 @@ for imgindex,imgparam in pairs(server.uploads) do
         success, mimetypeobj = server.file_mimetype(imgindex)
         if not success then
             server.log("Couldn't determine mimetype!", server.loglevel.error)
-            send_error(500, mime_ok)
+            send_error(500, "Could not determine mimetype")
             return false
         end
         mimetype = mimetypeobj.mimetype
@@ -74,7 +74,7 @@ for imgindex,imgparam in pairs(server.uploads) do
     local success, uuid62 = server.uuid62()
     if not success then
         server.log(uuid62, server.loglevel.error)
-        send_error(500, uuid62)
+        send_error(500, "Could not generate a UUID")
         return false
     end
 
@@ -92,7 +92,7 @@ for imgindex,imgparam in pairs(server.uploads) do
         success, myimg[imgindex] = SipiImage.new(imgindex)
         if not success then
             server.log(myimg[imgindex], server.loglevel.error)
-            send_error(500, myimg[imgindex])
+            send_error(500, "Could not process uploaded image")
             return false
         end
 
@@ -109,7 +109,7 @@ for imgindex,imgparam in pairs(server.uploads) do
         success, newfilepath = helper.filename_hash(newfilename[imgindex]);
         if not success then
             server.log(newfilepath, server.loglevel.error)
-            send_error(500, newfilepath)
+            send_error(500, "Could not compute destination path")
             return false
         end
 
@@ -134,7 +134,7 @@ for imgindex,imgparam in pairs(server.uploads) do
             mimetype = mimetype,
         })
         if not status then
-            server.print('Error converting image to j2k: ', filename, ' ** ', errmsg)
+            server.log('Error converting image to j2k: ' .. filename .. ' ** ' .. errmsg, server.loglevel.error)
         end
     else
         filename = imgparam["origname"]
@@ -144,7 +144,7 @@ for imgindex,imgparam in pairs(server.uploads) do
         success, newfilepath = helper.filename_hash(filename)
         if not success then
             server.log(newfilepath, server.loglevel.error)
-            send_error(500, newfilepath)
+            send_error(500, "Could not compute destination path")
             return false
         end
 

@@ -359,9 +359,21 @@ fn upload_corrupt_image_reports_500_json() {
         .expect("upload request failed");
     assert_eq!(resp.status().as_u16(), 500);
     let body: serde_json::Value = resp.json().expect("error body is JSON");
+    let message = body.get("message").expect("send_error carries a message");
+    let message = message.as_str().expect("message is a string");
+    // The client-visible message must be generic — no leaked C++/Rust source
+    // path or absolute filesystem path (DEV-6062).
     assert!(
-        body.get("message").is_some(),
-        "send_error carries a message: {body}"
+        !message.contains("src/"),
+        "message leaks a source path: {message}"
+    );
+    assert!(
+        !message.contains('/'),
+        "message leaks an absolute path: {message}"
+    );
+    assert!(
+        !message.contains(".cpp:"),
+        "message leaks a source file/line: {message}"
     );
 }
 

@@ -7,6 +7,7 @@
 #include <sstream>// std::ostringstream
 
 #include "Error.h"
+#include "PathRedact.h"
 
 #include <source_location>
 
@@ -15,7 +16,7 @@ namespace shttps {
 Error::Error(const char *msg, int errno_p, const std::source_location &loc)
   : runtime_error(std::string(msg) + "\nFile: " + std::string(loc.file_name()) + std::string(" Line: ")
                   + std::to_string(loc.line())),
-    message{ msg }, sysErrno{ errno_p }, location{ loc }
+    message_{ msg }, sysErrno{ errno_p }, location{ loc }
 {}
 //============================================================================
 
@@ -23,8 +24,11 @@ Error::Error(const char *msg, int errno_p, const std::source_location &loc)
 Error::Error(const std::string &msg, int errno_p, const std::source_location &loc)
   : runtime_error(std::string(msg) + "\nFile: " + std::string(loc.file_name()) + std::string(" Line: ")
                   + std::to_string(loc.line())),
-    message{ msg }, sysErrno{ errno_p }, location{ loc }
+    message_{ msg }, sysErrno{ errno_p }, location{ loc }
 {}
+//============================================================================
+
+std::string Error::message() const { return Sipi::redact_paths(message_); }
 //============================================================================
 
 std::string Error::to_string() const
@@ -32,7 +36,7 @@ std::string Error::to_string() const
   std::ostringstream err_stream;
   err_stream << "Error at [" << location.file_name() << ": " << location.line() << "]";
   if (sysErrno != 0) err_stream << " (system error: " << std::strerror(sysErrno) << ")";
-  err_stream << ": " << message;
+  err_stream << ": " << message_;
   return err_stream.str();
 }
 //============================================================================

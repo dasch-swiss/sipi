@@ -10,6 +10,8 @@
 #include <source_location>
 #include <sstream>
 
+#include "util/PathRedact.h"
+
 namespace Sipi {
 
 /*!
@@ -90,6 +92,21 @@ public:
     if (errnum_ != 0) { errStream << " (system error: " << std::strerror(errnum_) << ")"; }
     errStream << ": " << errmsg_;
     return errStream.str();
+  }
+  //============================================================================
+
+  /*!
+   * Client-safe error message: the human-readable description (and system
+   * error text, if any) WITHOUT the source location. Suitable for HTTP
+   * response bodies / script-visible strings; `to_string()`/`what()` carry
+   * the full diagnostic (source file + line) for server-side logs.
+   */
+  [[nodiscard]] std::string message() const
+  {
+    std::ostringstream errStream;
+    if (errnum_ != 0) { errStream << "(system error: " << std::strerror(errnum_) << "): "; }
+    errStream << errmsg_;
+    return redact_paths(errStream.str());
   }
   //============================================================================
 
