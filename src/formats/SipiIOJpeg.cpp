@@ -404,6 +404,9 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
     name[name_len] = '\0';
     slen++;// add length byte
     if ((slen % 2) == 1) slen++;
+    // The even-padding bump above can push slen one byte past the bound
+    // already checked against `end - ptr`; re-check before advancing.
+    if (slen > static_cast<size_t>(end - ptr)) break;
     ptr += slen;
 
     // Bounds check: need 4 bytes for data length
@@ -441,6 +444,9 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
     }
 
     if ((datalen % 2) == 1) datalen++;
+    // The even-padding bump above can push datalen one byte past the bound
+    // already checked against `end - ptr`; re-check before advancing.
+    if (datalen > static_cast<size_t>(end - ptr)) break;
     ptr += datalen;
   }
 }
