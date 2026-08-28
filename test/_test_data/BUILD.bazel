@@ -60,6 +60,7 @@ filegroup(
 filegroup(
     name = "fuzz_seeds_j2k",
     srcs = [
+        "images/malformed/j2k_oversized_dimensions.jp2",
         "images/malformed/palette_undersized_lut.jp2",
         "images/unit/gray_with_icc.jp2",
         "images/unit/ycbcr16.jpx",
