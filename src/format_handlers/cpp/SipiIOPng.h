@@ -11,6 +11,7 @@
 
 #include <string>
 
+#include "error/SipiValueError.h"
 #include "image/SipiImage.h"
 #include "image/SipiIO.h"
 
@@ -18,6 +19,20 @@ namespace Sipi {
 
 class SipiIOPng : public SipiIO
 {
+private:
+  /*! Decodes a PNG file into img, reporting failure as a Result value. */
+  [[nodiscard]] static Result<bool> read_impl(SipiImage *img,
+    const std::string &filepath,
+    std::shared_ptr<SipiRegion> region,
+    std::shared_ptr<SipiSize> size,
+    bool force_bps_8,
+    ScalingQuality scaling_quality);
+
+  /*! Encodes img to the given sink, reporting failure as a Result value. */
+  [[nodiscard]] static Result<void> write_impl(SipiImage *img,
+    const OutputSink &sink,
+    const SipiCompressionParams *params);
+
 public:
   ~SipiIOPng() override = default;
   ;
