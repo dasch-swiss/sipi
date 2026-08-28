@@ -1,33 +1,45 @@
-# Nightly coverage-guided fuzzing of the production Rust IIIF parser.
+# Nightly coverage-guided fuzzing: the production Rust IIIF parser and the
+# four C++ codec decode handlers (SipiIOTiff, SipiIOJpeg, SipiIOPng,
+# SipiIOJ2k; DEV-7066).
 #
-# Structure — one job, one runner, four phases:
-#   1. Restore — rebuild the live working corpus from the checked-in seeds
-#      (`src/iiifparser/corpus/`) plus the `fuzz-corpus` artifact of the last
-#      SUCCESSFUL run of this workflow. The two-tier corpus policy is in
-#      `docs/src/development/fuzzing.md`: CI never writes the checked-in seeds;
-#      `just fuzz-corpus-merge` is the only path from live corpus to repo.
-#   2. Fuzz — `just bazel-build-fuzz` (RBE-eligible Bazel build, same
-#      ci-setup + bazel-rbe composite steps as ci.yml's `sanitizer` job), then
-#      the built binary is executed DIRECTLY on the runner for a bounded
-#      budget. Not `bazel run`: the sandbox would discard corpus growth.
-#   3. Chain — minimize the grown corpus with libFuzzer `-merge=1` and upload
-#      it as this run's `fuzz-corpus` artifact for the next nightly. Both
-#      steps run on `!cancelled()`, so a crash in phase 2 still chains the
-#      night's corpus growth forward — libFuzzer writes reproducers to
+# Structure — a 5-entry matrix (one leg per harness, `fail-fast: false` so a
+# crash in one codec never discards another target's corpus growth for the
+# night), each leg its own runner running five phases:
+#   1. Build — `just bazel-build-fuzz` (RBE-eligible Bazel build, same
+#      ci-setup + bazel-rbe composite steps as ci.yml's `sanitizer` job)
+#      produces the instrumented binaries AND, via `rules_fuzzing`, the
+#      generated two-tier corpus directory (the matrix `corpus_out` column)
+#      that merges the `test/_test_data` fixture seeds with whatever coverage
+#      growth is checked into the source-tree corpus directory. That
+#      generated directory is what makes the fixture seeds reachable by a
+#      binary executed outside Bazel.
+#   2. Restore — rebuild the live working corpus from that generated corpus
+#      directory plus the `fuzz-corpus-<target>` artifact of the last
+#      SUCCESSFUL run of this workflow for that target. The two-tier corpus
+#      policy is in `docs/src/development/fuzzing.md`: CI never writes the
+#      checked-in seeds; `just fuzz-corpus-merge` is the only path from live
+#      corpus to repo.
+#   3. Fuzz — the leg's built binary is executed DIRECTLY on the runner for a
+#      bounded budget. Not `bazel run`: the sandbox would discard corpus
+#      growth.
+#   4. Chain — minimize the grown corpus with libFuzzer `-merge=1` and upload
+#      it as this run's `fuzz-corpus-<target>` artifact for the next nightly.
+#      Both steps run on `!cancelled()`, so a crash in phase 3 still chains
+#      the night's corpus growth forward — libFuzzer writes reproducers to
 #      `-artifact_prefix`, never into the corpus directory, so the merge
 #      cannot launder a crashing input into the chain.
-#   4. ASan-paired pass — rebuild with `--config=fuzz --config=asan` and fuzz
+#   5. ASan-paired pass — rebuild with `--config=fuzz --config=asan` and fuzz
 #      the minimized corpus for a shorter budget. ASan covers the C++ shim
 #      boundary, libFuzzer's own buffer handling, and the linked native
 #      runtime — NOT the Rust crate graph (that needs nightly `-Zsanitizer`,
 #      which the design avoids; see `.bazelrc` §Fuzzing).
 #
-# A crash (libFuzzer exits 77) fails the job loudly and uploads the
+# A crash (libFuzzer exits 77) fails that leg loudly and uploads its
 # reproducers plus the libFuzzer log. Triage is manual — no auto-filed issue.
 #
 # Linux-amd64 only: `--config=fuzz` cannot link the libFuzzer runtime on
 # darwin (`.bazelrc` §Fuzzing), exactly like the sanitizer gate. macOS gets the
-# corpus-replay test, which rides along in the ordinary `//src/...` sweeps.
+# corpus-replay tests, which ride along in the ordinary `//src/...` sweeps.
 #
 # Every Bazel step invokes `just <recipe>` — no inline bazel calls (CLAUDE.md's
 # build-reproducibility invariant). The fuzz loop itself is not a Bazel
@@ -46,57 +58,137 @@ on:
 
 permissions:
   contents: read
-  # `gh run list` / `gh run download` read the previous run's `fuzz-corpus`
-  # artifact through the Actions API.
+  # `gh run list` / `gh run download` read the previous successful run's
+  # per-target `fuzz-corpus-<target>` artifact through the Actions API.
   actions: read
 
 jobs:
   fuzz:
     runs-on: ubuntu-24.04
-    name: fuzz / linux-amd64
+    name: fuzz / ${{ matrix.target }} / linux-amd64
     # Two cold instrumented builds (plain + ASan, each building compiler-rt
-    # from source), 900s of fuzzing, and a merge pass. ci.yml's `coverage` job
-    # uses 90 for ONE instrumented config.
+    # from source), 900s of fuzzing, and a merge pass, per leg. ci.yml's
+    # `coverage` job uses 90 for ONE instrumented config. The matrix runs its
+    # five legs in parallel, so wall-clock is unchanged from the single-target
+    # job this replaced.
     timeout-minutes: 150
-    # One fuzz run at a time, and never kill a nightly mid-flight: cancelling
-    # would discard the corpus growth the next run chains from. A manual
-    # `workflow_dispatch` therefore queues behind a running nightly.
+    env:
+      # `kakadu_archive`'s `gh_release_archive` repository rule re-evaluates
+      # on every `bazel` invocation, and this job invokes `bazel` (via
+      # `bazel-build-fuzz`) twice per leg (plain + ASan build) — a step-level
+      # GH_TOKEN would miss whichever invocation didn't carry it. Job-level
+      # covers all of them uniformly. The codec targets (tiff/jpeg/png/j2k)
+      # link Kakadu and need this; the parser-only leg builds it too (one
+      # `bazel-build-fuzz` invocation builds all five binaries) but doesn't
+      # read it.
+      GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: parse_request
+            bin: src/iiifparser/fuzz/parse_request_fuzz_bin
+            corpus_out: src/iiifparser/fuzz/parse_request_fuzz_corpus
+            max_len: ""
+            dict: ""
+            asan_options: ""
+          - target: tiff
+            bin: src/formats/fuzz/tiff_decode_fuzz_bin
+            corpus_out: src/formats/fuzz/tiff_decode_fuzz_corpus
+            max_len: "16384"
+            dict: src/formats/fuzz/dicts/tiff.dict
+            asan_options: ""
+          - target: jpeg
+            bin: src/formats/fuzz/jpeg_decode_fuzz_bin
+            corpus_out: src/formats/fuzz/jpeg_decode_fuzz_corpus
+            max_len: "16384"
+            dict: src/formats/fuzz/dicts/jpeg.dict
+            # libjpeg-turbo's error path is setjmp/longjmp, which skips
+            # destructors past the jump — a documented LSan false-positive
+            # source. TIFF and J2K unwind via real exceptions and keep leak
+            # detection on; never disable it repo-wide.
+            asan_options: "detect_leaks=0"
+          - target: png
+            bin: src/formats/fuzz/png_decode_fuzz_bin
+            corpus_out: src/formats/fuzz/png_decode_fuzz_corpus
+            max_len: "8192"
+            dict: src/formats/fuzz/dicts/png.dict
+            # Same setjmp/longjmp reasoning as jpeg (libpng's error handler).
+            asan_options: "detect_leaks=0"
+          - target: j2k
+            bin: src/formats/fuzz/j2k_decode_fuzz_bin
+            corpus_out: src/formats/fuzz/j2k_decode_fuzz_corpus
+            max_len: "32768"
+            dict: ""
+            asan_options: ""
+    # One fuzz run per target at a time, and never kill a nightly leg
+    # mid-flight: cancelling would discard the corpus growth the next run
+    # chains from. `matrix.target` is part of the group so the five legs run
+    # concurrently; a manual `workflow_dispatch` queues behind a running
+    # nightly for the SAME target only.
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.target }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          lfs: false
+          lfs: true
 
-      # `lfs: "false"`: the fuzz target's inputs are the Rust parser crate, the
-      # C++ shim, and the extensionless corpus files — none of them LFS-tracked
-      # (`.gitattributes` covers image/font formats only).
+      # `lfs: "true"`: the codec seed corpora reached through the generated
+      # `corpus_out` directories are LFS-tracked image fixtures under
+      # `test/_test_data/`. With LFS off, those fixtures materialise as
+      # ~131-byte pointer files, and the codec harnesses would spend the
+      # budget fuzzing pointer text — silently producing meaningless coverage
+      # instead of failing loudly.
       - name: CI setup (bazelisk, just, repo cache, RBE flags)
         id: setup
         uses: ./.github/actions/ci-setup
         with:
-          lfs: "false"
+          lfs: "true"
           rbe-runner-endpoint: ${{ vars.REMOTEBUILD_RUNNER_ENDPOINT }}
           rbe-ca-cert: ${{ secrets.REMOTEBUILD_CA_CERT }}
           rbe-client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
           rbe-client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
 
-      # Working corpus = checked-in seeds + the last successful run's artifact.
-      # Tolerates absence on both counts (first run ever — the workflow is not
-      # yet on the default branch, so `gh run list` finds nothing; or the
-      # 90-day retention has expired) and degrades to seeds alone.
+      # Builds all five instrumented fuzz binaries every leg
+      # (`bazel-build-fuzz` builds the whole target set in one invocation);
+      # this leg only executes its own `matrix.bin`. A normal cacheable RBE
+      # action — only the loop below is runner-local. The recipe already
+      # carries `--remote_download_toplevel` so the binaries materialise on
+      # the runner under the `.bazelrc` `--remote_download_minimal` default.
+      # It also resolves `.fuzz/llvm-symbolizer` for the loops below.
+      #
+      # This runs before the corpus restore below: `rules_fuzzing` only
+      # materialises the generated two-tier corpus directory (matrix
+      # `corpus_out`) as a build output, and the restore step reads it.
+      - name: Build the instrumented fuzz binaries
+        run: just bazel-build-fuzz ${{ steps.setup.outputs.flags }} --build_event_json_file=bep-fuzz.json
+
+      # Working corpus = this leg's generated two-tier corpus directory
+      # (`bazel-bin/${{ matrix.corpus_out }}`, materialised by the build step
+      # above) + the last successful run's per-target artifact. That generated
+      # directory merges the hand-picked `test/_test_data` fixture seeds with
+      # whatever coverage growth is checked into the source-tree corpus
+      # directory — it is what makes those fixture seeds reachable by a binary
+      # executed outside Bazel (the loop below runs the binary directly, not
+      # via `bazel run`). Tolerates absence of the previous-run artifact
+      # (first run ever — the workflow is not yet on the default branch, so
+      # `gh run list` finds nothing; or the 90-day retention has expired) and
+      # degrades to the generated seeds alone.
       #
       # `.fuzz/` is the same gitignored working directory `just fuzz` uses, so
       # the local loop and the nightly have one layout.
       - name: Restore working corpus from the last successful nightly
         env:
+          # Least-privileged token: this step only reads the Actions API (`gh
+          # run list`/`gh run download`), never Bazel/Kakadu, so it keeps the
+          # default `github.token` rather than the job-level DASCHBOT_PAT.
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p .fuzz/corpus .fuzz/artifacts
-          find src/iiifparser/corpus -maxdepth 1 -type f ! -name BUILD.bazel \
+          find bazel-bin/${{ matrix.corpus_out }} -maxdepth 1 -type f \
               -exec cp {} .fuzz/corpus/ \;
           seeds=$(find .fuzz/corpus -type f | wc -l)
           # `--branch main`: the nightly chain belongs to the default branch. A
@@ -107,36 +199,24 @@ jobs:
           # failure (a warning worth seeing) from "no run yet" (routine).
           if ! RUN_ID="$(gh run list --workflow=fuzz.yml --branch main --status=success --limit=1 \
               --json databaseId --jq '.[0].databaseId // empty')"; then
-            echo "::warning::gh run list failed — seeding from the checked-in corpus only"
+            echo "::warning::gh run list failed — seeding from the generated corpus only"
             RUN_ID=""
           fi
           if [ -z "$RUN_ID" ]; then
-            echo "no previous successful fuzz.yml run — seeding from the checked-in corpus alone"
-          elif ! gh run download "$RUN_ID" --name fuzz-corpus --dir .fuzz/restored; then
-            echo "run $RUN_ID has no fuzz-corpus artifact (expired retention?) — seeds only"
+            echo "no previous successful fuzz.yml run — seeding from the generated corpus alone"
+          elif ! gh run download "$RUN_ID" --name fuzz-corpus-${{ matrix.target }} --dir .fuzz/restored; then
+            echo "run $RUN_ID has no fuzz-corpus-${{ matrix.target }} artifact (expired retention?) — seeds only"
           else
             find .fuzz/restored -type f -exec cp {} .fuzz/corpus/ \;
           fi
-          echo "working corpus: $(find .fuzz/corpus -type f | wc -l) files (checked-in seeds: $seeds)"
-
-      # Builds `//src/iiifparser/fuzz:parse_request_fuzz_bin` under
-      # `--config=fuzz`. A normal cacheable RBE action — only the loop below is
-      # runner-local. The recipe already carries `--remote_download_toplevel` so
-      # the binary materialises on the runner under the `.bazelrc`
-      # `--remote_download_minimal` default. It also resolves
-      # `.fuzz/llvm-symbolizer` for the loops below.
-      #
-      # No `DASCHBOT_PAT`: the Kakadu release fetch needs it, and the fuzz
-      # target's dep graph has no Kakadu edge (`bazel query 'deps(…)'` over
-      # `:parse_request_fuzz_bin` returns no kakadu package) — it is the Rust
-      # parser crate, the C++ shim, and compiler-rt.
-      - name: Build the instrumented fuzz binary
-        run: just bazel-build-fuzz ${{ steps.setup.outputs.flags }} --build_event_json_file=bep-fuzz.json
+          echo "working corpus: $(find .fuzz/corpus -type f | wc -l) files (generated seeds: $seeds)"
 
       # `-timeout=25`: libFuzzer's 1200s per-input default exceeds the whole
       # budget, so a hang would silently consume the run instead of being
       # reported as a finding. `-artifact_prefix` is where reproducers land —
-      # the failure-artifact upload below reads that directory.
+      # the failure-artifact upload below reads that directory. `-dict`/
+      # `-max_len` are per-target (matrix `dict`/`max_len`); the parser target
+      # passes neither — it fuzzes URL text, not a binary container format.
       #
       # `UBSAN_OPTIONS=external_symbolizer_path`: this build links
       # `ubsan_standalone` (required for `-fsanitize=fuzzer`, see
@@ -149,12 +229,10 @@ jobs:
           UBSAN_OPTIONS: external_symbolizer_path=${{ github.workspace }}/.fuzz/llvm-symbolizer
         run: |
           set -euo pipefail
-          ./bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin \
-              -max_total_time=600 \
-              -timeout=25 \
-              -print_final_stats=1 \
-              -artifact_prefix=.fuzz/artifacts/ \
-              .fuzz/corpus 2>&1 | tee .fuzz/libfuzzer.log
+          args=(-max_total_time=600 -timeout=25 -print_final_stats=1 -artifact_prefix=.fuzz/artifacts/)
+          [ -n "${{ matrix.dict }}" ] && args+=(-dict=${{ matrix.dict }})
+          [ -n "${{ matrix.max_len }}" ] && args+=(-max_len=${{ matrix.max_len }})
+          ./bazel-bin/${{ matrix.bin }} "${args[@]}" .fuzz/corpus 2>&1 | tee .fuzz/libfuzzer.log
 
       # `-merge=1 <dst> <src>` copies an input into the (empty) destination only
       # if it adds coverage the destination lacks — libFuzzer's own
@@ -176,7 +254,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf .fuzz/merged && mkdir -p .fuzz/merged
-          ./bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin \
+          ./bazel-bin/${{ matrix.bin }} \
               -merge=1 \
               -timeout=25 \
               -rss_limit_mb=4096 \
@@ -187,18 +265,19 @@ jobs:
       # The next nightly chains from this artifact. `!cancelled()` for the same
       # reason as the merge: a crash anywhere above still leaves the corpus
       # chained forward, which is the whole point of a coverage corpus.
-      # `include-hidden-files` because the working directory is `.fuzz/`.
+      # `include-hidden-files` because the working directory is `.fuzz/`. The
+      # artifact name carries `matrix.target` — five legs run in parallel and
+      # each needs its own chain.
       - name: Upload minimized corpus (chains into the next nightly)
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: fuzz-corpus
+          name: fuzz-corpus-${{ matrix.target }}
           path: .fuzz/merged
           retention-days: 90
           include-hidden-files: true
 
-      # No `DASCHBOT_PAT` here either — same empty-Kakadu-edge reason as above.
-      - name: Build the instrumented fuzz binary (ASan-paired)
+      - name: Build the instrumented fuzz binaries (ASan-paired)
         run: just bazel-build-fuzz --config=asan ${{ steps.setup.outputs.flags }} --build_event_json_file=bep-fuzz-asan.json
 
       # Shorter budget: ASan costs ~2.6x throughput, and this pass exists to
@@ -208,38 +287,52 @@ jobs:
       # `--config=asan` the ASan runtime owns the crash report, and that is the
       # variable it reads for its external symbolizer (the same one the
       # sanitizer e2e legs set, see `test/e2e/sipi_e2e_test.bzl`).
+      #
+      # `-rss_limit_mb=0` disables libFuzzer's own OOM detector (2048MB
+      # default) so ASan's own detector drives instead — under `--config=asan`
+      # ASan's redzones inflate apparent RSS past that default on a legitimate
+      # allocation, so libFuzzer's detector would fire spuriously.
+      #
+      # `ASAN_OPTIONS` (matrix `asan_options`): `detect_leaks=0` for jpeg/png
+      # only — see the matrix comment above for why. Empty for the other
+      # three targets, which keep leak detection on.
       - name: Fuzz under ASan (300s)
         env:
           RUST_BACKTRACE: "1"
           ASAN_SYMBOLIZER_PATH: ${{ github.workspace }}/.fuzz/llvm-symbolizer
+          ASAN_OPTIONS: ${{ matrix.asan_options }}
         run: |
           set -euo pipefail
-          ./bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin \
+          ./bazel-bin/${{ matrix.bin }} \
               -max_total_time=300 \
               -timeout=25 \
+              -rss_limit_mb=0 \
               -print_final_stats=1 \
               -artifact_prefix=.fuzz/artifacts/ \
               .fuzz/merged 2>&1 | tee .fuzz/libfuzzer-asan.log
 
       # BEP for cache-hit-rate analysis (see the `bep-*` uploads in ci.yml).
-      # One artifact, both invocations: the glob tolerates the ASan build's
-      # file being absent when an earlier step failed.
+      # One artifact per leg, both invocations: the glob tolerates the ASan
+      # build's file being absent when an earlier step failed. The name
+      # carries `matrix.target` — five legs upload in the same workflow run
+      # and artifact names must be unique within it.
       - name: Upload build event JSON (cache-hit-rate analysis)
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: bep-fuzz
+          name: bep-fuzz-${{ matrix.target }}
           path: bep-fuzz*.json
           retention-days: 30
 
       # A crash exits 77, which fails the step above — so no detection logic is
       # needed here, only preservation. Mirrors the sanitizer job's
-      # failure-artifact pattern.
+      # failure-artifact pattern. Name carries `matrix.target` for the same
+      # uniqueness reason as the BEP upload.
       - name: Upload crash reproducers + libFuzzer logs
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: fuzz-crashes
+          name: fuzz-crashes-${{ matrix.target }}
           path: |
             .fuzz/artifacts
             .fuzz/*.log

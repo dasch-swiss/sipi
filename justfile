@@ -264,24 +264,33 @@ bazel-build-tracy *FLAGS='':
 #####################################
 # Fuzzing (libFuzzer via rules_fuzzing)
 #
-# Coverage-guided fuzzing of the production Rust IIIF parser through the
-# `//src/iiifparser/fuzz` shim. Runs on Linux and macOS: hermetic-llvm 0.8.18
-# stages `libclang_rt.fuzzer_osx.a`, so `-fsanitize=fuzzer` links on darwin
-# (see `.bazelrc` §Fuzzing; the macOS repo-rule DEVELOPER_DIR that lets
+# Coverage-guided fuzzing of the production Rust IIIF parser
+# (`//src/iiifparser/fuzz`) and the C++ codec decode entry points
+# (`//src/formats/fuzz`; DEV-7066). Runs on Linux and macOS: hermetic-llvm
+# 0.8.18 stages `libclang_rt.fuzzer_osx.a`, so `-fsanitize=fuzzer` links on
+# darwin (see `.bazelrc` §Fuzzing; the macOS repo-rule DEVELOPER_DIR that lets
 # rules_fuzzing's Python deps resolve in the Nix shell is set globally there).
 #
 # The mutation loop executes the built binary DIRECTLY rather than via
 # `bazel run` — the sandbox would discard corpus growth.
 #####################################
 
-# Build the instrumented fuzz binary (CI-invoked; RBE-eligible). Builds the
-# `_bin` target rather than the `parse_request_fuzz` test target: `_bin` is what
-# the loop executes, and only a top-level target is materialised locally under
-# the `.bazelrc` BwoB default (`--remote_download_minimal`).
+# Build the instrumented fuzz binaries (CI-invoked; RBE-eligible). Builds the
+# `_bin` targets rather than the `*_fuzz` test targets: `_bin` is what the loop
+# executes, and only a top-level target is materialised locally under the
+# `.bazelrc` BwoB default (`--remote_download_minimal`). The `_corpus` targets
+# are built alongside them so `just fuzz`/`fuzz-corpus-merge` can re-seed from
+# `bazel-bin` without a separate build step.
 bazel-build-fuzz *FLAGS='':
     #!/usr/bin/env bash
     set -euo pipefail
-    bazel build --config=fuzz --verbose_failures --remote_download_toplevel {{FLAGS}} //src/iiifparser/fuzz:parse_request_fuzz_bin //bazel:llvm-symbolizer
+    bazel build --config=fuzz --verbose_failures --remote_download_toplevel {{FLAGS}} \
+        //src/iiifparser/fuzz:parse_request_fuzz_bin //src/iiifparser/fuzz:parse_request_fuzz_corpus \
+        //src/formats/fuzz:tiff_decode_fuzz_bin //src/formats/fuzz:tiff_decode_fuzz_corpus \
+        //src/formats/fuzz:jpeg_decode_fuzz_bin //src/formats/fuzz:jpeg_decode_fuzz_corpus \
+        //src/formats/fuzz:png_decode_fuzz_bin //src/formats/fuzz:png_decode_fuzz_corpus \
+        //src/formats/fuzz:j2k_decode_fuzz_bin //src/formats/fuzz:j2k_decode_fuzz_corpus \
+        //bazel:llvm-symbolizer
     # The sanitizer runtime symbolizes crash frames by shelling out to
     # `llvm-symbolizer`, which is a source file inside the hermetic toolchain
     # repo — its execroot path embeds the pinned LLVM version, so resolve it
@@ -290,46 +299,100 @@ bazel-build-fuzz *FLAGS='':
     # first-party frames print as bare `binary+0xOFFSET`.
     mkdir -p .fuzz
     ln -sfn "$(bazel info execution_root)/$(bazel cquery --config=fuzz //bazel:llvm-symbolizer --output=files 2>/dev/null | head -1)" .fuzz/llvm-symbolizer
-    echo "Instrumented fuzz binary at: $(pwd)/bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin"
-    echo "llvm-symbolizer at:          $(pwd)/.fuzz/llvm-symbolizer"
+    echo "Instrumented fuzz binaries at: $(pwd)/bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin, $(pwd)/bazel-bin/src/formats/fuzz/{tiff,jpeg,png,j2k}_decode_fuzz_bin"
+    echo "llvm-symbolizer at:            $(pwd)/.fuzz/llvm-symbolizer"
 
-# Run the mutation loop locally, e.g. `just fuzz -max_total_time=60`. FLAGS pass
-# straight through to libFuzzer.
+# short name -> "_bin target|_corpus target|dict path|max_len|checked-in corpus dir"
+# used by both `fuzz` and `fuzz-corpus-merge`. `-max_len` caps are deliberate:
+# the bug class these harnesses hunt is header/marker parsing at the front of
+# the file, and a small cap concentrates the mutation budget there rather than
+# on bulk pixel data. `parse_request` has no dict/max_len (it fuzzes URL text,
+# not a binary container format). The checked-in corpus dir is the destination
+# `fuzz-corpus-merge` merges coverage-adding inputs into.
+_fuzz_target_table := '
+parse_request //src/iiifparser/fuzz:parse_request_fuzz_bin //src/iiifparser/fuzz:parse_request_fuzz_corpus - - src/iiifparser/corpus
+tiff //src/formats/fuzz:tiff_decode_fuzz_bin //src/formats/fuzz:tiff_decode_fuzz_corpus src/formats/fuzz/dicts/tiff.dict 16384 src/formats/corpus/tiff
+jpeg //src/formats/fuzz:jpeg_decode_fuzz_bin //src/formats/fuzz:jpeg_decode_fuzz_corpus src/formats/fuzz/dicts/jpeg.dict 16384 src/formats/corpus/jpeg
+png //src/formats/fuzz:png_decode_fuzz_bin //src/formats/fuzz:png_decode_fuzz_corpus src/formats/fuzz/dicts/png.dict 8192 src/formats/corpus/png
+j2k //src/formats/fuzz:j2k_decode_fuzz_bin //src/formats/fuzz:j2k_decode_fuzz_corpus - 32768 src/formats/corpus/j2k
+'
+
+# Run the mutation loop locally, e.g. `just fuzz tiff -max_total_time=60`.
+# TARGET selects the harness (see the table above); FLAGS pass straight
+# through to libFuzzer.
 #
-# The working corpus under `.fuzz/` is writable and persists between runs (the
-# checked-in corpus is a Bazel input, and libFuzzer writes new units into the
-# directory it is given). It is re-seeded from `src/iiifparser/corpus/` on every
-# run so newly committed seeds are picked up; `BUILD.bazel` is excluded because
-# the whole directory is copied, not the filegroup. Crash reproducers land in
-# `.fuzz/artifacts/`; promoting anything into the checked-in corpus is
-# deliberate and manual (`fuzz-corpus-merge`, or a reproducer committed with its
-# fix).
-fuzz *FLAGS='': bazel-build-fuzz
+# The working corpus lives at `.fuzz/corpus/<TARGET>/` — strictly per-format,
+# never shared — and is writable, persisting between runs. It is re-seeded on
+# every run by copying from the built `_corpus` target under `bazel-bin`,
+# which already merges both tiers (the hand-picked `//test/_test_data`/
+# `//src/iiifparser/corpus` fixture seeds and whatever coverage growth is
+# checked into the source-tree corpus directory), so there is no seed list to
+# duplicate here. Crash reproducers land in `.fuzz/artifacts/`; promoting
+# anything into the checked-in corpus is deliberate and manual
+# (`fuzz-corpus-merge`, or a reproducer committed with its fix).
+fuzz TARGET='parse_request' *FLAGS='': bazel-build-fuzz
     #!/usr/bin/env bash
     set -euo pipefail
-    mkdir -p .fuzz/corpus .fuzz/artifacts
-    find src/iiifparser/corpus -maxdepth 1 -type f ! -name BUILD.bazel \
-        -exec cp {} .fuzz/corpus/ \;
+    bin='' corpus_target='' dict='' max_len=''
+    while read -r name bin_t corpus_t dict_t max_len_t checked_in_corpus_t; do
+        [ -z "$name" ] && continue
+        if [ "$name" = "{{TARGET}}" ]; then
+            bin="$bin_t"; corpus_target="$corpus_t"; dict="$dict_t"; max_len="$max_len_t"
+        fi
+    done <<< "{{_fuzz_target_table}}"
+    if [ -z "$bin" ]; then
+        echo "ERROR: unknown fuzz TARGET '{{TARGET}}' — valid names: parse_request, tiff, jpeg, png, j2k" >&2
+        exit 1
+    fi
+    bin_path="bazel-bin/${bin#//}"
+    bin_path="${bin_path/://}"
+    corpus_path="bazel-bin/${corpus_target#//}"
+    corpus_path="${corpus_path/://}"
+    work_dir=".fuzz/corpus/{{TARGET}}"
+    mkdir -p "$work_dir" .fuzz/artifacts
+    find "$corpus_path" -maxdepth 1 -type f -exec cp {} "$work_dir/" \;
+    args=(-timeout=25)
+    [ "$dict" != "-" ] && args+=("-dict=$dict")
+    [ "$max_len" != "-" ] && args+=("-max_len=$max_len")
+    args+=(-artifact_prefix=.fuzz/artifacts/ "$work_dir")
     # `set positional-arguments` + the `*FLAGS=''` default expand to a single
     # empty positional when no flags are given, which libFuzzer would read as an
     # (empty) corpus path and abort with "No such file or directory: ;". Keep
     # only the non-empty extra flags.
     flags=()
+    shift
     for f in "$@"; do [ -n "$f" ] && flags+=("$f"); done
-    ./bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin \
-        -artifact_prefix=.fuzz/artifacts/ .fuzz/corpus ${flags[@]+"${flags[@]}"}
+    "./$bin_path" "${args[@]}" ${flags[@]+"${flags[@]}"}
 
-# Import coverage-adding inputs from the latest nightly `fuzz-corpus` artifact
-# into the checked-in corpus. The only path from the live corpus to the repo —
-# and it stops at a diff: the corpus filegroup also feeds the C++ and Rust
-# regression sweeps, so growing it is a maintainer decision, never automatic.
+# Import coverage-adding inputs from the latest nightly `fuzz-corpus-<TARGET>`
+# artifact into the checked-in corpus for TARGET. The only path from the live corpus to
+# the repo — and it stops at a diff: the corpus filegroup also feeds the C++
+# and Rust regression sweeps, so growing it is a maintainer decision, never
+# automatic.
 #
 # `-merge=1 <dst> <src>` is libFuzzer's own minimisation: it copies an input
 # from `<src>` into `<dst>` only if it adds coverage the destination lacks,
-# which is why this needs the instrumented binary.
-fuzz-corpus-merge: bazel-build-fuzz
+# which is why this needs the instrumented binary. Known imprecision: for the
+# codec targets the checked-in tier does not contain the fixture seeds (those
+# live in `test/_test_data` and reach the fuzzer through the Bazel filegroup),
+# so `-merge=1` cannot see their coverage and may propose inputs the fixtures
+# already cover — which is why this stops at a diff for a human.
+fuzz-corpus-merge TARGET='parse_request': bazel-build-fuzz
     #!/usr/bin/env bash
     set -euo pipefail
+    bin='' checked_in_corpus=''
+    while read -r name bin_t corpus_t dict_t max_len_t checked_in_corpus_t; do
+        [ -z "$name" ] && continue
+        if [ "$name" = "{{TARGET}}" ]; then
+            bin="$bin_t"; checked_in_corpus="$checked_in_corpus_t"
+        fi
+    done <<< "{{_fuzz_target_table}}"
+    if [ -z "$bin" ]; then
+        echo "ERROR: unknown fuzz TARGET '{{TARGET}}' — valid names: parse_request, tiff, jpeg, png, j2k" >&2
+        exit 1
+    fi
+    bin_path="bazel-bin/${bin#//}"
+    bin_path="${bin_path/://}"
     # `--branch main`: only the nightly chain on the default branch is a real
     # corpus. `// empty` (not bare `.[0].databaseId`) so an empty result is the
     # empty string rather than the literal "null", and `if !` so a gh failure
@@ -344,11 +407,10 @@ fuzz-corpus-merge: bazel-build-fuzz
     fi
     artifact_dir="$(mktemp -d)"
     trap 'rm -rf "$artifact_dir"' EXIT
-    gh run download "$RUN_ID" --name fuzz-corpus --dir "$artifact_dir"
-    ./bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin \
-        -merge=1 src/iiifparser/corpus "$artifact_dir"
+    gh run download "$RUN_ID" --name "fuzz-corpus-{{TARGET}}" --dir "$artifact_dir"
+    "./$bin_path" -timeout=25 -merge=1 "$checked_in_corpus" "$artifact_dir"
     echo "==> Review and commit deliberately:"
-    git status --short src/iiifparser/corpus/
+    git status --short "$checked_in_corpus"/
 
 #####################################
 # Microbenchmarks (Google Benchmark)
