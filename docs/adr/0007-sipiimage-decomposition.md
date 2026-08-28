@@ -11,7 +11,7 @@ The `SipiImage` god-object (~2,526 lines of `.cpp` + `.hpp`, six distinct respon
 
 Three concerns leave the class entirely:
 
-- The static `io` registry (extension → format handler) — already split so that [`src/formats/`](../../src/formats/) (`//src/formats`) *defines* it (`format_registry.cpp`) while `SipiImage` only *declares* it — stays split this way; `image` never gains a Bazel edge to `formats`.
+- The static `io` registry (extension → format handler) — already split so that [`src/format_handlers/`](../../src/format_handlers/) (`//src/format_handlers`) *defines* it (`format_registry.cpp`) while `SipiImage` only *declares* it — stays split this way; `image` never gains a Bazel edge to `format_handlers`.
 - The `shttps::Connection*` field disappears (replaced by `OutputSink::HttpSink` per ADR-0006).
 - The `app14_transform` JPEG-specific marker field moves into the JPEG decode pipeline (consumed at decode, inverted before `Image` is "complete"; downstream sees standard CMYK).
 
@@ -56,22 +56,22 @@ The hub dissolves into named packages, not a single successor. Full disposition:
 | [`SipiReport.cpp`](../../src/SipiReport.cpp) | `src/cli/cpp/` |
 | [`SipiError.{h,cpp}`](../../src/SipiError.h) | `src/error/cpp/` (`//src/error`) |
 
-`//src/formats` (the four `SipiIO` codec handlers, `output_sink`, and `format_registry.cpp`) is out of scope for this ADR — it already exists as its own package and is unaffected except for the `read_watermark` boundary below.
+`//src/format_handlers` (the four `SipiIO` codec handlers, `output_sink`, and `format_registry.cpp`) is out of scope for this ADR — it already exists as its own package and is unaffected except for the `read_watermark` boundary below.
 
 Two points in this disposition are non-obvious and need their reasoning spelled out:
 
 - **No `src/engine/` folder is created.** "Engine" stays umbrella vocabulary for the whole C++ side (as [`ARCH-MAP.md`](../../ARCH-MAP.md) uses it), not a directory. The hub dissolves into named packages; there is no grab-bag destination for anything that doesn't obviously belong elsewhere.
-- **`//src/error` is its own foundational package**, not folded into `image`. `metadata`, `formats`, and `iiifparser` all need `SipiError` *without* depending on `image`; folding it into `image` would create an `image → metadata → image` Bazel cycle that cannot be expressed. It is the `//src:sipi_top` role (today's shared-error-base target) made an explicit, named package.
+- **`//src/error` is its own foundational package**, not folded into `image`. `metadata`, `format_handlers`, and `iiifparser` all need `SipiError` *without* depending on `image`; folding it into `image` would create an `image → metadata → image` Bazel cycle that cannot be expressed. It is the shared-error-base role that used to live in the flat `//src:sipi_top` target (since dissolved), made an explicit, named package.
 - **`SipiConf` goes to `ffi`, not `cli`.** Its production consumer is [`src/ffi/cpp/init.cpp`](../../src/ffi/cpp/init.cpp) (`sipi_init`), and `cli → ffi` is the documented one-way dependency direction ([`src/ffi/BUILD.bazel:39-42`](../../src/ffi/BUILD.bazel)). ARCH-MAP's "CLI's config object" line for `SipiConf` is stale and will be corrected when ARCH-MAP is next rewritten.
 
 ### The `read_watermark` link-time inversion
 
-`format_registry.cpp` keeps sole ownership of `SipiImage::io`: `image` declares the static registry, `formats` defines it, and there is no Bazel edge from `image` to `formats` — the existing inversion is carried forward unchanged.
+`format_registry.cpp` keeps sole ownership of `SipiImage::io`: `image` declares the static registry, `format_handlers` defines it, and there is no Bazel edge from `image` to `format_handlers` — the existing inversion is carried forward unchanged.
 
-`Sipi::read_watermark` needs the same treatment, but the direction is the reverse of `io`: it is *declared* today in `SipiImage.h` (moving to `image`) and *called* from the watermark-application method (moving to `image_processing`), while its *definition* stays in `formats` (`SipiIOTiff.cpp`). Once `image_processing` calls it, `formats` must be able to see the same declaration it defines against. Two options, and only two:
+`Sipi::read_watermark` needs the same treatment, but the direction is the reverse of `io`: it is *declared* today in `SipiImage.h` (moving to `image`) and *called* from the watermark-application method (moving to `image_processing`), while its *definition* stays in `format_handlers` (`SipiIOTiff.cpp`). Once `image_processing` calls it, `format_handlers` must be able to see the same declaration it defines against. Two options, and only two:
 
-- `//src/formats` gains an explicit dependency on the `image_processing` header that declares `read_watermark` (the reverse edge — `image_processing` depending on `formats` — would cycle, since `formats` already depends on `image`/`image_processing` for the `Image` value type).
-- The declaration is hoisted into a dependency-free leaf header that both packages depend on, following the [`output_sink`](../../src/formats/output_sink.h) pattern (a leaf `formats` already uses so `image` can reach it without depending on the handler package).
+- `//src/format_handlers` gains an explicit dependency on the `image_processing` header that declares `read_watermark` (the reverse edge — `image_processing` depending on `format_handlers` — would cycle, since `format_handlers` already depends on `image`/`image_processing` for the `Image` value type).
+- The declaration is hoisted into a dependency-free leaf header that both packages depend on, following the [`output_sink`](../../src/format_handlers/cpp/output_sink.h) pattern (a leaf `format_handlers` already uses so `image` can reach it without depending on the handler package).
 
 "No edge in either direction" is not one of the options — the definition and the declaration must agree, and that requires a dependency one way or the other (or a shared leaf both depend on).
 
@@ -79,7 +79,7 @@ Two points in this disposition are non-obvious and need their reasoning spelled 
 
 The new topology must satisfy these `bazel query` invariants (same style as [ARCH-MAP's iiifparser FFI-freedom check](../../ARCH-MAP.md)):
 
-- `bazel query 'deps(//src/image_processing/...)'` resolves only to `{image, error, util, logging, observability}` — no `formats`, no `ffi`, no Kakadu/libtiff/etc.
+- `bazel query 'deps(//src/image_processing/...)'` resolves only to `{image, error, util, logging, observability}` — no `format_handlers`, no `ffi`, no Kakadu/libtiff/etc.
 - `bazel query 'somepath(//src/image, //src/image_processing)'` is empty — `image` never depends on `image_processing`, even transitively.
 - `bazel query 'deps(//src/error/...)'` matches its minimal documented set (stdlib only) — nothing pulls `image` back in through `error`.
 
@@ -95,11 +95,11 @@ The new topology must satisfy these `bazel query` invariants (same style as [ARC
 
 - **No more HTTP coupling in `SipiImage`** (already true). No `shttps::Connection*` field or `connection()` accessor remains on the class. The HTTP-output sink is a parameter to format-handler `write()` per ADR-0006, not a property of `Image`.
 
-- **Static `io` registry stays split, definition-side in `formats`.** `SipiImage::io` is declared where `SipiImage` moves (`image`) and defined in `format_registry.cpp` (`formats`) — see the link-time inversion above. This is not a pending move; it already holds and the decomposition preserves it.
+- **Static `io` registry stays split, definition-side in `format_handlers`.** `SipiImage::io` is declared where `SipiImage` moves (`image`) and defined in `format_registry.cpp` (`format_handlers`) — see the link-time inversion above. This is not a pending move; it already holds and the decomposition preserves it.
 
 - **`app14_transform` field removed.** The JPEG handler inverts CMYK/YCCK at decode time so downstream code sees standard CMYK; no transient flag needed on the universal Image type. Still present on `SipiImage` today; lands with the decomposition.
 
-- **TeeSink for dual-write preservation** (already true). `OutputSink`'s variant already includes a `TeeSink` alternative ([`output_sink.h`](../../src/formats/output_sink.h)).
+- **TeeSink for dual-write preservation** (already true). `OutputSink`'s variant already includes a `TeeSink` alternative ([`output_sink.h`](../../src/format_handlers/cpp/output_sink.h)).
 
 - **Migration is gated on the Bazel build-system migration reaching its module-co-located layout phase** for the Bazel-package-dependent steps: extracting `image_processing`, removing the friend declarations in favour of a public mutator surface, and moving the supporting modules per the disposition table. The `vector<byte>` swap and `app14_transform` removal are not Bazel-package-dependent and can land independently.
 

@@ -6,13 +6,15 @@ fields cross the FFI seam as `SipiMetricsSnapshot` (see `//src/ffi:sipi_ffi`)
 and are exported over OTLP by the Rust shell. Crash/error reporting (Sentry) is
 Rust-owned (DEV-6659) — the engine links no Sentry SDK; handled image errors
 cross the FFI seam as `SipiImageErrorReport`, flattened from
-`Sipi::observability::ImageContext` (`//src:populate_from_image.h`, not this
-package — it dereferences `SipiImage`, which this package doesn't depend on).
+`Sipi::observability::ImageContext` (`//src/image/cpp/populate_from_image.h`,
+not this package — it dereferences `SipiImage`, which this package doesn't
+depend on).
 
 Co-locates the `metrics_registry_test.cpp` seam tripwire per ADR-0003.
 
-`layering_check` and `parse_headers` are **deferred** until SipiImage moves
-into its own package (DEV-6388 / DEV-6395).
+`layering_check` and `parse_headers` are **deferred** repo-wide (vendored
+native deps emit no module maps, DEV-6353) — same as every package except
+`//src/logging`, not specific to this one.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")

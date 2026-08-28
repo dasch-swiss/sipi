@@ -1,22 +1,16 @@
 """Sipi first-party C++ build graph.
 
-  //src:sipi_lib       `cc_library` containing every Sipi translation unit
-                       *except* the executable's `main`.
-                       Per-module Bazel packages under `//src/<mod>/` (e.g.
-                       `//src/metadata`, `//src/observability`, `//src/cli`)
-                       own their own headers — including internal/
-                       subpackages with restricted visibility for Test
-                       seam helpers.
-  //src/cli:sipi       thin `cc_binary` (`srcs = ["sipi.cpp"]`) deps-only
-                       on `:sipi_lib`. Lives in its own package so the
-                       CLI subcommand restructure (DEV-6540) lands in
-                       its natural home alongside the per-subcommand
-                       callbacks and Service File commands.
-
-The split is mandatory infrastructure for Y+1 (per-component unit tests)
-and scaffolds the post-Y+6 layout flip — the eventual Y+8 series breaks
-`:sipi_lib` apart into per-module `cc_library` targets without re-touching
-this BUILD's public shape.
+  //src:sipi_lib       `cc_library` aggregating the per-module engine
+                       libraries transitively via `deps`; it carries no
+                       translation units of its own (`srcs` globs to nothing —
+                       every `.cpp`/`.h` lives under a per-module package,
+                       e.g. `//src/image`, `//src/format_handlers`,
+                       `//src/metadata`, `//src/observability`, `//src/ffi`).
+                       Each per-module package owns its own headers,
+                       including `internal/` subpackages with restricted
+                       visibility for Test seam helpers.
+  //src/cli:sipi       the offline-verb `cc_binary`, declared in
+                       `src/cli/BUILD.bazel`, deps-only on `:sipi_lib`.
 
 Versioning: `expand_template` regenerates `SipiVersion.h` from
 `include/SipiVersion.h.in` whenever any `STABLE_*` value emitted by

@@ -20,7 +20,8 @@ hand-mirrored `extern "C"` FFI seam (`src/ffi`); the former C++ HTTP server was
 removed (ADR-0020), so the C++ `sipi` binary now provides only offline verbs
 (convert/verify/query/compare/health). The engine is a set of Bazel `cc_library`
 packages carved by concern — the image hub (`SipiImage` + cache + memory budget),
-the codec handlers (`format_handlers`), the IIIF parsers (`iiifparser`), metadata, and
+the image-processing free functions (`image_processing`), the codec handlers
+(`format_handlers`), the IIIF parsers (`iiifparser`), metadata, and
 the util support leaf extracted from the deleted shttps transport. Lua scripting
 is Rust-hosted (`src/scripting/rust`, ADR-0023) and drives the engine through
 the seam's `sipi_image_*` handle family. The
@@ -34,16 +35,32 @@ image formats, whose registry fan-out is documented, not mechanized.
 ### image
 
 - **Paths:** `:(glob)src/image/**`, `:(glob)src/BUILD.bazel`, `:(glob)src/nsswitch.conf`
-- **Purpose:** The image engine hub — `SipiImage` orchestrates decode → process (scale/rotate/crop/ICC) → encode, and owns the metadata wrappers and format dispatch, and the `//src` package's Bazel wiring.
-- **Key entities:** `Sipi::SipiImage`, `SipiImage::io` (static handler registry, *defined* in `format_handlers`), `SipiImage::read`/`read_shape`/`write`/`add_watermark`/`convertToIcc`/`scale`/`rotate`/`crop`, `Sipi::SipiIO` (abstract), `SipiImgInfo`, `Sipi::read_watermark` (defined in `format_handlers`), `Sipi::resample_separable_u8/u16`, `Sipi::estimate_peak_memory`, `Sipi::SipiImageError`
-- **Public interface:** `SipiImage` (via `//src/image`), `SipiIO`; consumed by `format_handlers`, `ffi` (including the `sipi_image_*` handles behind the Lua `SipiImage` bindings), and `cli`.
+- **Purpose:** The image engine hub — `SipiImage` is the pixel-buffer + metadata value type that orchestrates decode → encode through the format-handler dispatch, and owns the `//src` package's Bazel wiring. Processing operators (crop/scale/rotate/ICC conversion/watermarking/comparison/arithmetic) are not methods on the class — they are free functions in `image_processing`.
+- **Key entities:** `Sipi::SipiImage`, `SipiImage::io` (static handler registry, *defined* in `format_handlers`), `SipiImage::read`/`readSource`/`write`/`getDim` (decode/encode orchestration), the pixel/metadata mutator surface (`setPixel`/`set_pixels`/`setEs`/`setPhoto`/`set_icc`/`setOrientation`/`essential_metadata`), `Sipi::SipiIO` (abstract), `SipiImgInfo`, `Sipi::SipiImageError`
+- **Public interface:** `SipiImage` (via `//src/image`), `SipiIO`; consumed by `format_handlers`, `image_processing`, `ffi` (including the `sipi_image_*` handles behind the Lua `SipiImage` bindings), and `cli`.
 - **Local-context kit:** `src/image/cpp/SipiImage.h`, `src/image/cpp/SipiImage.cpp`, `src/image/cpp/SipiIO.h`, `src/image/BUILD.bazel`, `src/BUILD.bazel` (the `:sipi_lib` target), `src/format_handlers/cpp/format_registry.cpp` (where `io` is defined), `docs/adr/0007-sipiimage-decomposition.md`, `CONVENTIONS.md`
 - **Depends on:** error, metadata, iiifparser, format_handlers (`:output_sink` only), util, logging, observability, throttling
-- **Used by:** format_handlers (one-way back-edge, see rule), ffi, cli (transitively)
+- **Used by:** format_handlers (one-way back-edge, see rule), image_processing (one-way, see the `image_processing` entry's boundary rules), ffi, cli (transitively)
 - **Boundary rules:**
   - The engine references but does **not** define `SipiImage::io` / `Sipi::read_watermark`; both are defined in `format_handlers`, so `//src/image` does not depend on `//src/format_handlers:format_handlers`. This inverts the `SipiImage`↔handler cycle. *Enforcement: `structure`* (a Bazel package cannot depend on itself; the cycle is unrepresentable).
   - The four codec handlers are `friend`s of `SipiImage` (`SipiImage.h`), a documented bidirectional coupling ADR-0007 plans to remove. *Enforcement: `docs-only`* (friendship is a language reach-in nothing flags).
+  - `image_processing` depends one-way on `//src/image`; `//src/image` never depends back — a facade method forwarding to a free function in `image_processing` would reintroduce the cycle the extraction removes. *Enforcement: `structure`* (`bazel query 'somepath(//src/image, //src/image_processing)'` is empty; see the `image_processing` entry for the CI-only caveat on running this locally).
 - **Durable state:** `SipiImage::io` (static registry, single writer = `format_registry.cpp`).
+
+### image_processing
+
+- **Paths:** `:(glob)src/image_processing/**`
+- **Purpose:** Free-function pixel operators over `SipiImage &`, extracted off the `SipiImage` god-object per ADR-0007: crop, scale (fast/medium), rotate, colour conversion (YCC→RGB, ICC), channel removal, bit-depth reduction (8bps/bitonal), watermarking, comparison, plus the free arithmetic/equality operators over `SipiImage` and the separable resampler the geometry operators call.
+- **Key entities:** `Sipi::processing::crop`/`scaleFast`/`scaleMedium`/`scale`/`rotate`/`set_topleft`/`convertYCC2RGB`/`convertToIcc`/`removeChannel`/`removeExtraSamples`/`to8bps`/`toBitonal`/`add_watermark`/`compare`/`bilinn`, `Sipi::read_watermark` (declared here, *called* from `add_watermark`, *defined* in `format_handlers`), `Sipi::operator==`/`operator+`/`operator-` (free arithmetic/equality over `SipiImage`, namespace `Sipi`), `Sipi::resample_separable_u8`/`resample_separable_u16`
+- **Public interface:** the free functions (via `//src/image_processing`; default visibility is public — `processing.h` is included directly from `test/approval/`, which sits outside `//src/...`)
+- **Local-context kit:** `src/image_processing/BUILD.bazel`, `src/image_processing/cpp/processing.h`, `src/image_processing/cpp/geometry.cpp`, `src/image_processing/cpp/color.cpp`, `src/image_processing/cpp/compose.cpp`, `docs/adr/0007-sipiimage-decomposition.md`
+- **Depends on:** image (one-way), logging, metadata, observability, util; `@highway` (SIMD), `@lcms2`
+- **Used by:** format_handlers' test target (real codec decode fixtures the operators run against — the `image_processing` *library* itself is not a `format_handlers` dependency), `test/approval` (`processing.h` included directly)
+- **Boundary rules:**
+  - `//src/image_processing` depends one-way on `//src/image`; `//src/image` never depends back. *Enforcement: `structure`* — `bazel query 'somepath(//src/image, //src/image_processing)'` is empty.
+  - `deps(//src/image_processing/...)` resolves only to `{image, error, util, logging, observability}` (plus the vendored `@highway`/`@lcms2` externals) — no `format_handlers`, no `ffi`, no Kakadu/libtiff. *Enforcement: `structure`* — `bazel query 'deps(//src/image_processing/...)'`. Both queries above are CI-verifiable, not locally runnable in every environment: a `bazel query` whose universe reaches `@google_benchmark` needs to fetch `@libpfm`, which fails without DNS — treat a local failure-to-fetch as inconclusive, not as a passing or failing check.
+  - `Sipi::read_watermark` is *declared* here and *called* from `add_watermark`, but *defined* in `format_handlers` (`SipiIOTiff.cpp`) — resolved at link time, the same declare-here/define-there asymmetry `//src/image` documents for `SipiImage::io`. This package must never gain a dependency on `format_handlers` (the reverse edge — since `format_handlers` already depends on `image_processing` for the pixel operators — would cycle). *Enforcement: `docs-only`* (a Bazel dep would fail analysis, but the link-time resolution itself isn't mechanically checked).
+- **Durable state:** none.
 
 ### error
 
@@ -54,7 +71,7 @@ image formats, whose registry fan-out is documented, not mechanized.
 - **Local-context kit:** `src/error/BUILD.bazel`, `src/error/cpp/SipiError.h`, `src/error/cpp/SipiError.cpp`
 - **Depends on:** util
 - **Used by:** image, metadata, format_handlers, iiifparser, cache
-- **Boundary rules:** a leaf — no internal deps beyond `util`. *Enforcement: `structure`* (Bazel dep set).
+- **Boundary rules:** a leaf — no internal deps beyond `util`; `deps(//src/error/...)` matches this minimal set — nothing pulls `image` back in through `error`. *Enforcement: `structure`* — `bazel query 'deps(//src/error/...)'` (CI-verifiable; see the `image_processing` entry's caveat on running `bazel query` locally in this sandbox).
 - **Durable state:** none.
 
 ### cache
@@ -93,10 +110,10 @@ engine-side memory budget under one component. Supersedes the former
 
 - **Paths:** `:(glob)src/format_handlers/**`
 - **Purpose:** The four `SipiIO` codec handlers (TIFF, JPEG2000/Kakadu, JPEG, PNG), the codec-agnostic `output_sink`, and the `SipiImage::io` registry definition.
-- **Key entities:** `SipiIOTiff`/`SipiIOJ2k`/`SipiIOJpeg`/`SipiIOPng`, `OutputSink`/`SinkStream`, `read_watermark`, `SipiImage::io` (defined in `format_registry.cpp`)
+- **Key entities:** `SipiIOTiff`/`SipiIOJ2k`/`SipiIOJpeg`/`SipiIOPng`, `OutputSink`/`SinkStream`, `read_watermark` (declared/called in `image_processing`, *defined* here), `SipiImage::io` (defined in `format_registry.cpp`)
 - **Public interface:** the `SipiIO` overrides (reached only through `SipiImage`'s dispatch); `output_sink` is a separate leaf target `//src/format_handlers:output_sink`.
 - **Local-context kit:** `src/format_handlers/BUILD.bazel`, `src/format_handlers/cpp/format_registry.cpp`, `src/format_handlers/cpp/SipiIOTiff.{h,cpp}`, `src/format_handlers/cpp/output_sink.h`, `src/image/cpp/SipiImage.h` (friend decls + `io` decl), `tools/format-handlers-fanout.sh` (the new-format edit-site list)
-- **Depends on:** error, image (`//src/image`, one-way), metadata, observability, logging, util, output_sink; codecs `@kakadu` `@tiff` `@libpng` `@libjpeg_turbo`
+- **Depends on:** error, image (`//src/image`, one-way), image_processing (the `read_watermark` declaration + pixel-operator fixtures its tests drive), metadata, observability, logging, util, output_sink; codecs `@kakadu` `@tiff` `@libpng` `@libjpeg_turbo`
 - **Used by:** image (link-time, for `io`/`read_watermark`), ffi, cli, tests
 - **Boundary rules:**
   - `//src/format_handlers:format_handlers` depends one-way on `//src/image`; `output_sink` is a dependency-free leaf so the engine can reach it without depending on the handler package. *Enforcement: `structure`* (Bazel target-granularity dep direction).
@@ -254,7 +271,7 @@ These carry no component boundary rules but exist so every tracked file maps som
 ## Conventions
 
 - **Module granularity** — one Bazel `cc_library` per concern under `src/<mod>/`, source + header + `*_test.cpp` colocated (ADR-0003). Local-context-kit budget **≤7 files**.
-- **Top-level dependency direction (one-way):** `cli → server → //src/ffi:sipi_ffi → //src/image → {metadata, iiifparser, format_handlers:output_sink, util, logging, observability}`; `format_handlers` sits beside/below the engine; `//src/scripting/rust` is a shell-side Rust crate over the seam. **The engine never links the shell or the seam.** *Enforcement: `structure`* (Bazel dep graph; a back-edge fails analysis).
+- **Top-level dependency direction (one-way):** `cli → server → //src/ffi:sipi_ffi → //src/image → {metadata, iiifparser, format_handlers:output_sink, util, logging, observability}`; `format_handlers` and `image_processing` sit beside/below the engine and depend on `//src/image`, never the reverse; `//src/scripting/rust` is a shell-side Rust crate over the seam. **The engine never links the shell or the seam.** *Enforcement: `structure`* (Bazel dep graph; a back-edge fails analysis).
 - **New work is added by dropping a file / adding a route, not editing a central switch** — a new offline verb is one file in `src/cli/cpp/commands/`; a new axum route is a registration in `server/rust/lib.rs::app()`; a new engine module is a new `cc_library` package. *Enforcement: `docs-only`.*
   - **Exception (banned-construct):** new image format → editing the `SipiImage::io` registry + `read`/`read_shape` switch + `friend` fan-out (~5 shared sites, `tools/format-handlers-fanout.sh`) → *why it couples:* the dispatch is centralized, so a 5th format is a multi-file shared edit → *alternative:* a descriptor-registration table (deferred until a real 5th format; ADR-0006) → *enforcement:* `docs-only`.
 - **Test seam** — a helper that must be unit-tested but not publicly callable goes in an `internal/` subpackage with visibility restricted to its parent (`//src/metadata/cpp/internal` is the model). *Enforcement: `structure`.*

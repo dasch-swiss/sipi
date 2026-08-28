@@ -13,6 +13,12 @@ registry definition was moved OUT of the image package into `format_registry.cpp
 here. `//src/image` references `io`; the linker resolves it from this package,
 which every final link pulls in via `//src:sipi_lib` and `//src/ffi:sipi_ffi`.
 
+This package also depends one-way on `//src/image_processing`: `SipiIOTiff.cpp`
+*defines* `Sipi::read_watermark`, which `image_processing` *declares* and calls
+from `add_watermark` — the same link-time-resolution asymmetry as `io`, mirrored.
+`//src/image_processing` must never depend back on this package (see its own
+BUILD docstring).
+
 `include_prefix = "format_handlers"` + `strip_include_prefix = "/src/format_handlers/cpp"`
 exposes the headers at `#include "format_handlers/SipiIOTiff.h"`; siblings
 inside `cpp/` use the bare quote form.

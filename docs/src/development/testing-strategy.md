@@ -44,11 +44,11 @@ Sipi implements the full [IIIF Image API 3.0](https://iiif.io/api/image/3.0/) at
 
 | System | Library | Read | Write | Source |
 |---|---|---|---|---|
-| EXIF | Exiv2 | Yes | Yes | `src/metadata/Exif.cpp` |
-| XMP | Exiv2 | Yes | Yes | `src/metadata/Xmp.cpp` |
-| IPTC | Exiv2 | Yes | Yes | `src/metadata/Iptc.cpp` |
-| ICC Profiles | littleCMS2 | Yes | Yes | `src/metadata/Icc.cpp` |
-| Essentials | Custom | Yes | Yes | `src/metadata/Essentials.cpp` |
+| EXIF | Exiv2 | Yes | Yes | `src/metadata/cpp/exif.cpp` |
+| XMP | Exiv2 | Yes | Yes | `src/metadata/cpp/xmp.cpp` |
+| IPTC | Exiv2 | Yes | Yes | `src/metadata/cpp/iptc.cpp` |
+| ICC Profiles | littleCMS2 | Yes | Yes | `src/metadata/cpp/icc.cpp` |
+| Essentials | Custom | Yes | Yes | `src/metadata/cpp/essentials.cpp` |
 
 **Predefined ICC Profiles:** sRGB, AdobeRGB, GRAY_D50, LUM_D65, CMYK_standard, LAB, ROMM_GRAY.
 
@@ -90,7 +90,7 @@ The production HTTP server is the Rust axum shell (`src/server/rust` +
 
 ### Caching System
 
-File-based LRU cache with dual-limit eviction (`SipiCache.h`, `src/SipiCache.cpp`):
+File-based LRU cache with dual-limit eviction (`src/cache/cpp/SipiCache.h`, `src/cache/cpp/SipiCache.cpp`):
 
 | Feature | Details |
 |---|---|
@@ -192,7 +192,7 @@ Sipi operates in three CLI modes (`src/cli/cpp/cli_app.cpp`):
 
 ### Configuration System
 
-Lua-based configuration (`SipiConf.h`, `src/ffi/cpp/SipiConf.cpp`):
+Lua-based configuration (`src/ffi/cpp/SipiConf.h`, `src/ffi/cpp/SipiConf.cpp`):
 
 | Category | Keys |
 |---|---|

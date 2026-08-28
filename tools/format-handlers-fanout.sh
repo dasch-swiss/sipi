@@ -17,16 +17,16 @@ cd "$ROOT"
 echo "# Shared edit sites for a new image format (src/format_handlers fan-out)"
 echo
 
-echo "## 1. friend declaration — src/SipiImage.h"
-grep -n 'friend class SipiIO' src/SipiImage.h
+echo "## 1. friend declaration — src/image/cpp/SipiImage.h"
+grep -n 'friend class SipiIO' src/image/cpp/SipiImage.h
 
 echo
 echo "## 2. static handler registry — src/format_handlers/cpp/format_registry.cpp"
 grep -nE '#include "SipiIO|make_shared<SipiIO' src/format_handlers/cpp/format_registry.cpp
 
 echo
-echo "## 3. read + read_shape dispatch branches — src/SipiImage.cpp"
-grep -nE 'io\[std::string\("(tif|jpg|png|jpx)"\)\]' src/SipiImage.cpp
+echo "## 3. read + read_shape dispatch branches — src/image/cpp/SipiImage.cpp"
+grep -nE 'io\[std::string\("(tif|jpg|png|jpx)"\)\]' src/image/cpp/SipiImage.cpp
 
 echo
 echo "## 4. Bazel target srcs/hdrs (+ any new codec dep) — src/format_handlers/BUILD.bazel"

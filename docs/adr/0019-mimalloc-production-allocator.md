@@ -23,7 +23,7 @@ the only variable:
 
 **There is no leak.** The ratchet is glibc allocator retention: every JP2
 decode creates and destroys a full Kakadu worker-thread pool
-(`kdu_get_num_processors()` threads per request, `src/formats/SipiIOJ2k.cpp`),
+(`kdu_get_num_processors()` threads per request, `src/format_handlers/cpp/SipiIOJ2k.cpp`),
 and that cross-thread malloc/free churn fragments glibc's per-thread arenas (up
 to 8 × cores of them), each of which retains its high-water mark instead of
 returning freed memory to the OS. Production serves exclusively JP2, so every
@@ -80,7 +80,7 @@ mimalloc as well.
 *partial* interposition (override symbols silently not exported): the binary's
 `free` would be mimalloc while libc-internal `malloc` stays glibc — latent
 heap corruption (the engine frees `scandir`-allocated entries in
-`src/SipiCache.cpp`). At startup, `allocator::init()` in `src/cli/rust/src/main.rs`
+`src/cache/cpp/SipiCache.cpp`). At startup, `allocator::init()` in `src/cli/rust/src/main.rs`
 probes a libc-internal allocation (`getcwd(NULL, 0)`) with
 `mi_is_in_heap_region` and aborts on mismatch rather than serving.
 
