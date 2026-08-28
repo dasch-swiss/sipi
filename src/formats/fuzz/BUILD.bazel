@@ -1,0 +1,74 @@
+"""src/formats/fuzz — libFuzzer harnesses over the C++ codec decode entry points.
+
+Coverage-guided fuzzing of the `SipiIO` handlers (`SipiIOTiff`, `SipiIOJpeg`,
+`SipiIOPng`, `SipiIOJ2k`; DEV-7066), reopening the codec-level gap ADR-0020 left
+when the oracle-only C++ fuzz harness was retired. `SipiIO` has no in-memory
+decode overload, so `codec_fuzz_harness.h` materializes each fuzzer-supplied
+buffer as a temp file before driving `read_shape`/`read`.
+
+Two modes, one target per format. `rules_fuzzing`'s default engine is
+`//fuzzing/engines:replay` with instrumentation `none`, so
+`bazel test //src/formats/fuzz:tiff_decode_fuzz` is a corpus-replay regression
+run needing no libFuzzer runtime — it joins the `//src/...` sweeps (including
+the sanitizer leg) on every platform. `--config=fuzz` (see `.bazelrc`, Linux
+and macOS) switches to the real libFuzzer engine and arms SanitizerCoverage;
+`just fuzz` drives that loop.
+"""
+
+load("@rules_fuzzing//fuzzing:cc_defs.bzl", "cc_fuzz_test")
+
+cc_fuzz_test(
+    name = "tiff_decode_fuzz",
+    srcs = [
+        "codec_fuzz_harness.h",
+        "tiff_decode_fuzz.cc",
+    ],
+    testonly = True,
+    corpus = ["//src/formats/corpus/tiff:seed_corpus"],
+    deps = [
+        "//src:engine",
+        "//src/formats",
+    ],
+)
+
+cc_fuzz_test(
+    name = "jpeg_decode_fuzz",
+    srcs = [
+        "codec_fuzz_harness.h",
+        "jpeg_decode_fuzz.cc",
+    ],
+    testonly = True,
+    corpus = ["//src/formats/corpus/jpeg:seed_corpus"],
+    deps = [
+        "//src:engine",
+        "//src/formats",
+    ],
+)
+
+cc_fuzz_test(
+    name = "png_decode_fuzz",
+    srcs = [
+        "codec_fuzz_harness.h",
+        "png_decode_fuzz.cc",
+    ],
+    testonly = True,
+    corpus = ["//src/formats/corpus/png:seed_corpus"],
+    deps = [
+        "//src:engine",
+        "//src/formats",
+    ],
+)
+
+cc_fuzz_test(
+    name = "j2k_decode_fuzz",
+    srcs = [
+        "codec_fuzz_harness.h",
+        "j2k_decode_fuzz.cc",
+    ],
+    testonly = True,
+    corpus = ["//src/formats/corpus/j2k:seed_corpus"],
+    deps = [
+        "//src:engine",
+        "//src/formats",
+    ],
+)

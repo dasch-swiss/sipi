@@ -22,6 +22,50 @@ filegroup(
     ),
 )
 
+# Fuzz seed inputs for the codec fuzz harnesses (`//src/formats/fuzz`,
+# DEV-7066): one named filegroup per format, each pairing the smallest-valid
+# fixture with crafted-malformed fixtures already exercised by that codec's
+# unit/approval tests. Consumed indirectly through `//src/formats/corpus/<fmt>`,
+# which layers these onto the (currently empty) per-package glob that
+# `fuzz-corpus-merge` grows over time. These fixtures are Git LFS.
+filegroup(
+    name = "fuzz_seeds_tiff",
+    srcs = [
+        "images/malformed/tiff_colormap_unsupported_bps.tif",
+        "images/malformed/tiff_oversized_dimensions.tif",
+        "images/malformed/tiff_palette_1bit.tif",
+        "images/malformed/tiff_transferfunction_grayscale.tif",
+        "images/unit/exif_lens_specification.tif",
+    ],
+)
+
+filegroup(
+    name = "fuzz_seeds_jpeg",
+    srcs = [
+        "images/malformed/jpeg_icc_short_app2.jpg",
+        "images/malformed/jpeg_photoshop_overshoot_app13.jpg",
+        "images/malformed/jpeg_photoshop_short_app13.jpg",
+        "images/malformed/jpeg_xmp_truncated.jpg",
+        "images/unit/HasCommentBlock.JPG",
+    ],
+)
+
+filegroup(
+    name = "fuzz_seeds_png",
+    srcs = [
+        "images/unit/mario.png",
+    ],
+)
+
+filegroup(
+    name = "fuzz_seeds_j2k",
+    srcs = [
+        "images/malformed/palette_undersized_lut.jp2",
+        "images/unit/gray_with_icc.jp2",
+        "images/unit/ycbcr16.jpx",
+    ],
+)
+
 # Every test-data file under this package — consumed by `//:test_fixtures`
 # which the Rust e2e suite materialises into runfiles and surfaces as
 # `SIPI_REPO_ROOT`. `repo_root()` traverses arbitrary sub-paths
