@@ -1,5 +1,5 @@
 # Debian bookworm packages installed into the production OCI image
-# (`//src:image`) on top of `gcr.io/distroless/base-debian12`.
+# (`//src:sipi_image`) on top of `gcr.io/distroless/base-debian12`.
 #
 # Anytime this file is changed, the lockfile needs to be regenerated:
 #

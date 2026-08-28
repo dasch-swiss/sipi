@@ -30,7 +30,7 @@
 #include <string>
 #include <sys/stat.h>
 
-#include "SipiImage.h"
+#include "image/SipiImage.h"
 #include "cli/commands/convert_access_file.h"
 #include "cli/commands/convert_service_file.h"
 #include "metadata/essentials.h"

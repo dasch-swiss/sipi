@@ -23,9 +23,9 @@
 #include <unistd.h>
 #include <vector>
 
-#include "SipiIO.h"
-#include "SipiImage.h"
-#include "SipiImageError.h"
+#include "image/SipiIO.h"
+#include "image/SipiImage.h"
+#include "image/SipiImageError.h"
 #include "metadata/essentials.h"
 #include "util/Hash.h"
 #include "test_paths.h"

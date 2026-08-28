@@ -94,7 +94,7 @@ the real version); drop it only from `bazel-test` / `bazel-coverage`.
 ### 2. Do not build heavyweight non-test targets on the test legs
 
 `bazel test //src/... //test/...` builds every non-test target under `//src`,
-including `//src:image` (the OCI image — a full-rootfs `Tar`). The image is
+including `//src:sipi_image` (the OCI image — a full-rootfs `Tar`). The image is
 already exercised by its own `bazel-test-smoke` job, so building it on all three
 test legs makes the worker materialize the rootfs closure three extra times per
 run for no test coverage. Scope the test pattern (or use

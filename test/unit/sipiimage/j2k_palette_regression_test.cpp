@@ -40,8 +40,8 @@
 
 #include <gtest/gtest.h>
 
-#include "SipiImage.h"
-#include "SipiImageError.h"
+#include "image/SipiImage.h"
+#include "image/SipiImageError.h"
 #include "formats/SipiIOJ2k.h"
 #include "test_paths.h"
 

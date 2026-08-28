@@ -27,8 +27,8 @@
 #include "util/Parsing.h"
 #include "util/SipiFilenameHash.h"
 
-#include "SipiImage.h"
-#include "SipiImageError.h"
+#include "image/SipiImage.h"
+#include "image/SipiImageError.h"
 
 #include "ffi/serve_response.h"// sipi_guard, SipiStatus
 #include "ffi/sipi_ffi.h"

@@ -17,7 +17,7 @@ and instantiated by the `kakadu_extension` module extension
 ([`bazel/kakadu_extension.bzl`](https://github.com/dasch-swiss/sipi/blob/main/bazel/kakadu_extension.bzl),
 wired in `MODULE.bazel`). On the first `bazel build`
 invocation that needs Kakadu (most do — `//src/cli:sipi`,
-`//src:image`, every test that links sipi), Bazel:
+`//src:sipi_image`, every test that links sipi), Bazel:
 
 1. Resolves the `gh` binary on PATH (the dev shell provides it).
 2. Calls `gh release download <tag> --repo dasch-swiss/dsp-ci-assets

@@ -2,8 +2,8 @@
 
 `memory_budget` is the lock-free, process-wide accounting of in-flight decode
 memory with its RAII guard (the *Decode memory budget* Throttling sub-policy).
-Carved out of `//src:engine` so its unit test links this narrow target rather
-than the whole image engine (ADR-0003), and colocated under `src/throttling/`
+A narrow target separate from `//src/image` so its unit test links this
+target rather than the whole image engine (ADR-0003), and colocated under `src/throttling/`
 with the shell-side `//src/throttling/rust:admission` pool (ADR-0021: the
 package carries the Throttling umbrella, the target carries the mechanism).
 

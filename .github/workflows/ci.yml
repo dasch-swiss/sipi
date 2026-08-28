@@ -200,14 +200,14 @@ jobs:
 
       # Docker steps run on Linux only because they `docker load` the image
       # into a local Linux Docker daemon (absent on the macOS runner) — not
-      # because the image can't be built on macOS. //src:image is gated on the
+      # because the image can't be built on macOS. //src:sipi_image is gated on the
       # target OS (`target_compatible_with = ["@platforms//os:linux"]`), which a
       # macOS host can satisfy with `--platforms=linux_*` (see
       # `just bazel-cross-build-image`). With no platform override the default
       # host platform on macOS is darwin, which fails that gate.
       #
       # `bazel-test-smoke` is one Bazel invocation that:
-      #   1. Builds //src:image as a transitive `data` dep of
+      #   1. Builds //src:sipi_image as a transitive `data` dep of
       #      //test/e2e:docker_smoke.
       #   2. Runs the smoke test, whose startup code does
       #      `docker load -i $SIPI_IMAGE_TAR` — the image lands in the

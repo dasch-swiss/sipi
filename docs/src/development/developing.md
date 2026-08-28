@@ -109,7 +109,7 @@ approval + e2e under instrumentation, lcov for Codecov).
 Unit tests live in `test/unit/` and use GoogleTest with
 ApprovalTests. Tests are organized by component:
 
-These still live under `test/unit/` (they test code that stays in `//src:engine`/`//src:sipi_lib`, not its own package):
+These still live under `test/unit/` (they test code that stays in `//src/image`/`//src:sipi_lib`, not its own package):
 
 - `test/unit/cache/` — LRU cache tests
 - `test/unit/configuration/` — Configuration parsing tests
@@ -176,7 +176,7 @@ against a built Docker image. They verify basic server functionality
 after a Docker build:
 
 ```bash
-just bazel-test-smoke            # builds //src:image, loads tarball, probes
+just bazel-test-smoke            # builds //src:sipi_image, loads tarball, probes
 ```
 
 ### Approval tests

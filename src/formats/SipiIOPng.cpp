@@ -42,8 +42,8 @@
 #include <zlib.h>
 
 #include "logging/logger.h"
-#include "SipiIO.h"
-#include "SipiImageError.h"
+#include "image/SipiIO.h"
+#include "image/SipiImageError.h"
 #include "formats/SipiIOPng.h"
 #include "observability/profiling.h"
 

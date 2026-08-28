@@ -15,7 +15,7 @@
 
 #include <vector>
 
-#include "../../../src/SipiImage.h"
+#include "image/SipiImage.h"
 
 namespace {
 

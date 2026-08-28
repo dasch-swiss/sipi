@@ -10,8 +10,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "SipiImage.h"
-#include "SipiImageError.h"
+#include "image/SipiImage.h"
+#include "image/SipiImageError.h"
 #include "formats/SipiIOJpeg.h"
 #include "formats/SipiIOPng.h"
 #include "formats/SipiIOTiff.h"

@@ -22,7 +22,7 @@
 #include <fstream>
 #include <string>
 
-#include "SipiImage.h"
+#include "image/SipiImage.h"
 
 namespace sipi::fuzz {
 

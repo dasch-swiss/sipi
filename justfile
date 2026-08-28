@@ -67,7 +67,7 @@ bazel-build-server *FLAGS='':
 # `--build_tests_only` keeps the wildcard from building the non-test OCI
 # image + layer tars (built only by `bazel-test-smoke` / the docker recipes).
 # `--test_tag_filters=-requires-docker` drops `//test/e2e:docker_smoke` (run
-# separately by `bazel-test-smoke`), so its `//src:image` data dep is not built
+# separately by `bazel-test-smoke`), so its `//src:sipi_image` data dep is not built
 # here either. Both cut RBE worker materialisation; see
 # `docs/src/development/rbe-write-pressure.md`.
 bazel-test *FLAGS='':
@@ -548,7 +548,7 @@ bazel-docker-build-arm64 *FLAGS='':
     bazel run --config=release --stamp --platforms=//platforms:linux_aarch64 --verbose_failures {{FLAGS}} //src:image_load
 
 # Cross-build the Linux OCI image for `arch` (amd64|arm64) WITHOUT loading it
-# into a Docker daemon. Builds `//src:image` under
+# into a Docker daemon. Builds `//src:sipi_image` under
 # `--platforms=//platforms:linux_x86_64` / `:linux_aarch64` so a host of any OS (e.g. a
 # macOS dev box, where there is no Linux Docker daemon so `bazel-docker-build-*`
 # cannot `docker load`) can prove every native dep cross-compiles through the
@@ -567,7 +567,7 @@ bazel-cross-build-image arch *FLAGS='':
             exit 1
             ;;
     esac
-    bazel build --platforms="$PLATFORM" --verbose_failures {{FLAGS}} //src:image
+    bazel build --platforms="$PLATFORM" --verbose_failures {{FLAGS}} //src:sipi_image
 
 # Push the per-arch image to docker.io/daschswiss/sipi with two tags:
 # `latest-${arch}` and `v<version>-${arch}`. Driven by `oci_push`'s

@@ -18,7 +18,7 @@
 
 #include <optional>
 
-#include "../../../src/SipiImage.h"
+#include "image/SipiImage.h"
 
 namespace {
 

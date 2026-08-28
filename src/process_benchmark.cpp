@@ -29,7 +29,7 @@
 #include <string>
 #include <vector>
 
-#include "SipiImage.h"
+#include "image/SipiImage.h"
 #include "metadata/icc.h"
 #include "test_paths.h"
 

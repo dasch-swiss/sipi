@@ -58,7 +58,7 @@ specified in `Color Profile EULA.pdf` at the repo root.
 
 ## Building a Docker image
 
-The Docker image is built by Bazel `rules_oci` (`//src:image`).
+The Docker image is built by Bazel `rules_oci` (`//src:sipi_image`).
 There is no `Dockerfile` — `src/BUILD.bazel` is the
 single source of truth. A running Docker daemon is still required
 for `docker load` / `docker push`, but `docker buildx` is not used
@@ -67,7 +67,7 @@ coordinator job).
 
 ```bash
 just bazel-docker-build-arm64  # or -amd64; loads daschswiss/sipi:latest
-just bazel-test-smoke          # builds //src:image and probes the loaded image
+just bazel-test-smoke          # builds //src:sipi_image and probes the loaded image
 ```
 
 ### Per-arch builds (used by CI)
@@ -102,8 +102,8 @@ host-bound the build; with it gone (ADR-0015), every native
 clang for the target platform:
 
 ```bash
-just bazel-cross-build-image amd64   # build //src:image for linux-x86_64
-just bazel-cross-build-image arm64   # build //src:image for linux-aarch64
+just bazel-cross-build-image amd64   # build //src:sipi_image for linux-x86_64
+just bazel-cross-build-image arm64   # build //src:sipi_image for linux-aarch64
 ```
 
 These are build-only (no `docker load`, since a macOS host has no Linux
@@ -130,7 +130,7 @@ groups:
 | `bazel-test-e2e [*FLAGS]` | All Rust e2e `rust_test` targets |
 | `bazel-test-smoke [*FLAGS]` | Docker smoke test (consumes Bazel-built image tarball) |
 | `bazel-build-sanitized [*FLAGS]` | `bazel build --config=asan --config=ubsan //src/cli:sipi` |
-| `bazel-cross-build-image {amd64,arm64}` | Cross-build `//src:image` for the Linux target arch (build-only; darwin→linux gate) |
+| `bazel-cross-build-image {amd64,arm64}` | Cross-build `//src:sipi_image` for the Linux target arch (build-only; darwin→linux gate) |
 | `bazel-docker-build-{amd64,arm64}` | Build + load per-arch image as `daschswiss/sipi:latest` |
 | `bazel-docker-push-{amd64,arm64}` | Push to `daschswiss/sipi:{latest,v<version>}-${arch}` |
 | `bazel-docker-publish-manifest` | `crane index append` → multi-arch manifest at `daschswiss/sipi:v<version>` |

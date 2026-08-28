@@ -19,7 +19,7 @@ This package no longer depends on `SipiImage`: the one coupling — `Icc`'s
 was inverted so `iccFormatter` takes the pixel shape (`bps`/`nc`/`photo`) by
 value and the `PhotometricInterpretation` enum lives here in
 `photometric_interpretation.h`. Metadata now sits cleanly *below* the image
-engine (`SipiImage` is owned by `//src:engine`), depending only on
+engine (`SipiImage` is owned by `//src/image`), depending only on
 `//src/error` for `SipiError`. `layering_check`/`parse_headers` stay
 deferred to the global DEV-6353 flip.
 """

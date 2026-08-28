@@ -70,12 +70,12 @@ cc_library(
     deps = [
         # The transport-free image engine (SipiImage, memory budget) the
         # IIIF pipeline drives, with the IIIF value objects
-        # (//src/iiifparser/cpp/value_objects) reached transitively. //src:engine
+        # (//src/iiifparser/cpp/value_objects) reached transitively. //src/image
         # does NOT depend on this package, so there is no cycle.
-        "//src:engine",
+        "//src/image",
         # The serve-time cache SipiCache. init.cpp constructs the single
         # instance; serve_image.cpp calls check/add. Independent of
-        # //src:engine (SipiCache has no dependency on SipiImage).
+        # //src/image (SipiCache has no dependency on SipiImage).
         "//src/cache",
         # The codec handlers. serve_image.cpp calls SipiImage::read/write, whose
         # `io` handler registry is defined in //src/formats (moved there to
@@ -96,7 +96,7 @@ cc_library(
         # HTTP transport, so this is no SIPI -> shttps-transport coupling.
         "//src/util",
         # startup.cpp's LibraryInitialiser initialises these directly (curl_global_init,
-        # Exiv2::XmpParser). Both also arrive transitively via //src:engine; named
+        # Exiv2::XmpParser). Both also arrive transitively via //src/image; named
         # here because startup.cpp includes their headers directly.
         "@curl",
         "@exiv2//:exiv2",

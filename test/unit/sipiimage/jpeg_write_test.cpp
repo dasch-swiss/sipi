@@ -10,9 +10,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "SipiImage.h"
-#include "SipiImageError.h"
-#include "SipiIO.h"
+#include "image/SipiImage.h"
+#include "image/SipiImageError.h"
+#include "image/SipiIO.h"
 #include "test_paths.h"
 
 // `sipi::test::{data_dir,tmp_dir}` honour Bazel's SIPI_TEST_DATA_DIR /

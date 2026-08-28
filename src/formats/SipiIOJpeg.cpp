@@ -21,9 +21,9 @@
 
 #include "logging/logger.h"
 #include "error/SipiError.h"
-#include "SipiIO.h"
-#include "SipiImage.h"
-#include "SipiImageError.h"
+#include "image/SipiIO.h"
+#include "image/SipiImage.h"
+#include "image/SipiImageError.h"
 #include "formats/SipiIOJpeg.h"
 #include "observability/profiling.h"
 

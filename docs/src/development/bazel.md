@@ -133,7 +133,7 @@ bazel query 'attr("srcs", "", //test/unit/cache:cache_test)' --output=build
 
 `bazel cquery` is the configured-graph variant: it accounts for
 `select()` and platform-specific deps, useful when querying targets
-that vary by config (`//src:image` is `target_compatible_with`-gated
+that vary by config (`//src:sipi_image` is `target_compatible_with`-gated
 to Linux, etc.).
 
 ## Cache hygiene
@@ -168,7 +168,7 @@ See [Kakadu setup](kakadu.md) for the full version-bump procedure.
 
 ## Cross-platform
 
-Linux-only targets (`//src:image`, `//src:image_load`,
+Linux-only targets (`//src:sipi_image`, `//src:image_load`,
 `//src:image_push_*`, `//src:sipi_debug_layout`) are gated by
 `target_compatible_with = ["@platforms//os:linux"]` — on the **target**
 OS, not the host. A macOS host builds them by setting the target

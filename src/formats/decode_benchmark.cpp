@@ -38,7 +38,7 @@
 #include <memory>
 #include <string>
 
-#include "SipiImage.h"
+#include "image/SipiImage.h"
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiSize.h"
 

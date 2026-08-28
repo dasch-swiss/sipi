@@ -41,7 +41,7 @@
 #include <sys/stat.h>
 #include <vector>
 
-#include "SipiImage.h"
+#include "image/SipiImage.h"
 #include "cli/commands/convert_service_file.h"
 #include "formats/SipiIOTiff.h"
 #include "metadata/essentials.h"
