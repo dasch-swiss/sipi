@@ -55,7 +55,7 @@
 #include "util/checked_arith.h"
 #include "observability/metrics.h"
 
-#include "SipiError.h"
+#include "error/SipiError.h"
 #include "SipiImageError.h"
 #include "formats/SipiIOJ2k.h"
 #include "logging/logger.h"

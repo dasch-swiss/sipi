@@ -4,7 +4,7 @@ The pure-CPU front door that turns the region/size/rotation/quality/format/
 identifier path segments of an IIIF URL into validated value objects
 (`SipiRegion`, `SipiSize`, `SipiRotation`, `SipiQualityFormat`,
 `SipiIdentifier`, `SipiDecodeDims`). A leaf of the engine graph: it depends
-only on `SipiError` (`//src:sipi_top`) and the string helpers in `//src/util`,
+only on `SipiError` (`//src/error`) and the string helpers in `//src/util`,
 never on `SipiImage` or any codec. `//src:engine` deps this library and the
 format handlers pass `std::shared_ptr<SipiRegion>`/`SipiSize` — this is **live
 production engine code**, non-`testonly`, not deletable. The string
@@ -48,7 +48,7 @@ cc_library(
     include_prefix = "iiifparser",
     strip_include_prefix = "/src/iiifparser/cpp/value_objects",
     deps = [
-        "//src:sipi_top",
+        "//src/error",
         "//src/util",
     ],
 )

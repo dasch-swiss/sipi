@@ -47,6 +47,10 @@ cc_library(
         "image_handle.cpp",
         "sipi_ffi.cpp",
         "startup.cpp",
+        # SipiConf is the Lua-flavoured config object init.cpp constructs and
+        # populates before installing the engine context; it has no consumer
+        # outside this package.
+        "SipiConf.cpp",
     ],
     hdrs = [
         "engine_context.h",
@@ -56,6 +60,7 @@ cc_library(
         "serve_timings.h",
         "sipi_ffi.h",
         "startup.h",
+        "SipiConf.h",
     ],
     strip_include_prefix = "/src",
     # -fexceptions: the catch-all guard in each entry point relies on
@@ -63,11 +68,15 @@ cc_library(
     # instead of unwinding across the C ABI (FFI contract).
     copts = ["-fexceptions"],
     deps = [
-        # The transport-free image engine (SipiImage, cache, memory budget) the
+        # The transport-free image engine (SipiImage, memory budget) the
         # IIIF pipeline drives, with the IIIF value objects
         # (//src/iiifparser/cpp/value_objects) reached transitively. //src:engine
         # does NOT depend on this package, so there is no cycle.
         "//src:engine",
+        # The serve-time cache SipiCache. init.cpp constructs the single
+        # instance; serve_image.cpp calls check/add. Independent of
+        # //src:engine (SipiCache has no dependency on SipiImage).
+        "//src/cache",
         # The codec handlers. serve_image.cpp calls SipiImage::read/write, whose
         # `io` handler registry is defined in //src/formats (moved there to
         # break the SipiImage<->handler cycle); this dep puts that definition —

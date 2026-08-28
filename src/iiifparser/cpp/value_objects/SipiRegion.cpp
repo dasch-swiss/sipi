@@ -10,7 +10,7 @@
 #include <sstream>
 #include <string>
 
-#include "SipiError.h"
+#include "error/SipiError.h"
 #include "SipiRegion.h"
 
 namespace Sipi {

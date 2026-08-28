@@ -53,10 +53,9 @@ cc_library(
     strip_include_prefix = "/src",
     deps = [
         ":output_sink",
-        "//include:headers",
         "//src:engine",
         "//src:sipi_generated_hdrs",
-        "//src:sipi_top",
+        "//src/error",
         "//src/logging:logging",
         "//src/metadata:metadata",
         "//src/observability:observability",

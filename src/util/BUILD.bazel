@@ -1,10 +1,11 @@
 """util — generic SIPI-domain utilities (parsing, hashing, errors).
 
-Generic helpers — MIME/string parsing, file hashing, the shttps error type
-— that are SIPI-domain rather than HTTP transport, kept as a leaf package
-so the boundary is a build-graph invariant. The only external dependencies
-are OpenSSL (Hash's EVP digest context) and libmagic (Parsing's MIME
-sniffing plus the embedded `magic.mgc` database).
+Generic helpers — MIME/string parsing, file hashing, filename-to-subdirectory
+hashing, the shttps error type — that are SIPI-domain rather than HTTP
+transport, kept as a leaf package so the boundary is a build-graph invariant.
+External dependencies are OpenSSL (Hash's EVP digest context) and libmagic
+(Parsing's MIME sniffing plus the embedded `magic.mgc` database); the one
+internal dep is `//src/logging` (SipiFilenameHash's log_debug calls).
 
 `strip_include_prefix = "/src"` exposes the headers at the path-prefixed
 form `#include "util/Parsing.h"` (ADR-0003) self-sufficiently — no
@@ -33,6 +34,7 @@ cc_library(
         "Error.cpp",
         "Hash.cpp",
         "Parsing.cpp",
+        "SipiFilenameHash.cpp",
         "UrlDecode.cpp",
     ],
     hdrs = [
@@ -41,6 +43,7 @@ cc_library(
         "Hash.h",
         "Parsing.h",
         "PathRedact.h",
+        "SipiFilenameHash.h",
         "UrlDecode.h",
         "checked_arith.h",
         ":magic_mgc_h",
@@ -51,6 +54,8 @@ cc_library(
         "@openssl//:crypto",
         # Parsing's libmagic MIME sniffing + the embedded magic database.
         "@libmagic//:lib",
+        # SipiFilenameHash.cpp's log_debug calls.
+        "//src/logging:logging",
     ],
 )
 

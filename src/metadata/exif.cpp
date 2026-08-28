@@ -8,7 +8,7 @@
 #include <cstring>
 #include <memory>
 
-#include "SipiError.h"
+#include "error/SipiError.h"
 #include "metadata/exif.h"
 
 namespace Sipi {

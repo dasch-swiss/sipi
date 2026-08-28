@@ -192,7 +192,7 @@ Sipi operates in three CLI modes (`src/cli/cli_app.cpp`):
 
 ### Configuration System
 
-Lua-based configuration (`SipiConf.h`, `src/SipiConf.cpp`):
+Lua-based configuration (`SipiConf.h`, `src/ffi/SipiConf.cpp`):
 
 | Category | Keys |
 |---|---|

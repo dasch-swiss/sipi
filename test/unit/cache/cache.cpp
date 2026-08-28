@@ -5,8 +5,8 @@
 
 #include "gtest/gtest.h"
 
-#include "SipiCache.h"
-#include "SipiError.h"
+#include "cache/SipiCache.h"
+#include "error/SipiError.h"
 
 #include <cstdio>
 #include <cstring>

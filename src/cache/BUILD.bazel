@@ -1,0 +1,33 @@
+"""src/cache — the serve-time file cache.
+
+`SipiCache` is a file-based LRU of generated representations, keyed by
+*Cache key*, with dual-limit eviction (total size **and** file count) and
+crash recovery. It has no dependency on `SipiImage` or any codec — it is a
+genuine sibling of the image engine, not a part of it, and its only
+production owner is the FFI runtime (`//src/ffi:sipi_ffi`, which constructs
+and drives the single instance).
+
+`include_prefix = "cache"` + `strip_include_prefix = "/src/cache/cpp"`
+exposes the header at `#include "cache/SipiCache.h"` for cross-package
+consumers; the sibling inside this package uses the bare quote form
+(`#include "SipiCache.h"`).
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//src:__subpackages__"])
+
+cc_library(
+    name = "cache",
+    srcs = ["cpp/SipiCache.cpp"],
+    hdrs = ["cpp/SipiCache.h"],
+    include_prefix = "cache",
+    strip_include_prefix = "/src/cache/cpp",
+    deps = [
+        "//src:sipi_generated_hdrs",
+        "//src/error",
+        "//src/logging:logging",
+        "//src/observability:observability",
+        "//src/util",
+    ],
+)

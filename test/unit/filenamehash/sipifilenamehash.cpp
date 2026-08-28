@@ -1,7 +1,7 @@
 #include "gtest/gtest.h"
 
-#include "SipiFilenameHash.h"
 #include "util/Error.h"
+#include "util/SipiFilenameHash.h"
 
 TEST(SipiFilenameHash, ConsistentHashing)
 {
