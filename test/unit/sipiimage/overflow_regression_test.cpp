@@ -17,6 +17,7 @@
 
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
+#include "image_processing/processing.h"
 
 namespace {
 
@@ -49,13 +50,13 @@ TEST(OverflowRegression, ConstructorRejectsOverflowingChannelCount)
 TEST(CropRegression, NegativeXBeyondRequestedWidthIsRejected)
 {
   SipiImage img(4, 4, 1, 8, PhotometricInterpretation::MINISBLACK);
-  EXPECT_FALSE(img.crop(-100, 0, 5, 4));
+  EXPECT_FALSE(Sipi::processing::crop(img, -100, 0, 5, 4));
 }
 
 TEST(CropRegression, NegativeYBeyondRequestedHeightIsRejected)
 {
   SipiImage img(4, 4, 1, 8, PhotometricInterpretation::MINISBLACK);
-  EXPECT_FALSE(img.crop(0, -100, 4, 5));
+  EXPECT_FALSE(Sipi::processing::crop(img, 0, -100, 4, 5));
 }
 
 }// namespace

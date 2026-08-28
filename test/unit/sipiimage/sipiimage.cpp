@@ -7,6 +7,7 @@
 
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
+#include "image_processing/processing.h"
 #include "format_handlers/SipiIOTiff.h"
 #include "observability/metrics.h"
 #include "test_paths.h"
@@ -335,7 +336,7 @@ TEST(SipiImage, WrongRotation)
   // EXPECT_EQ(img.getNy(), 2448);
   // EXPECT_EQ(img.getNc(), 3);
   EXPECT_EQ(img.getOrientation(), Sipi::RIGHTTOP);
-  ASSERT_NO_THROW(img.set_topleft());
+  ASSERT_NO_THROW(Sipi::processing::set_topleft(img));
   // EXPECT_EQ(img.getNx(), 2448);
   // EXPECT_EQ(img.getNy(), 3264);
   // EXPECT_EQ(img.getNc(), 3);
@@ -361,23 +362,23 @@ TEST(SipiImage, Watermark)
   EXPECT_TRUE(exists_file(gradstars));
 
   ASSERT_NO_THROW(img1.read(cielab));
-  EXPECT_NO_THROW(img1.add_watermark(watermark_correct));
+  EXPECT_NO_THROW(Sipi::processing::add_watermark(img1, watermark_correct));
 
   ASSERT_NO_THROW(img2.read(cielab16));
-  EXPECT_NO_THROW(img2.add_watermark(watermark_correct));
+  EXPECT_NO_THROW(Sipi::processing::add_watermark(img2, watermark_correct));
 
   ASSERT_NO_THROW(img3.read(maori));
 
-  EXPECT_NO_THROW(img3.add_watermark(gradstars));
+  EXPECT_NO_THROW(Sipi::processing::add_watermark(img3, gradstars));
   /* ASSERT_NO_THROW(img3.write("jpg", maoriWater)); */
 
   ASSERT_NO_THROW(img4.read(maoriWater));
-  EXPECT_TRUE(img4.compare(img3).value_or(1000) < 0.007);// 0.00605
+  EXPECT_TRUE(Sipi::processing::compare(img4, img3).value_or(1000) < 0.007);// 0.00605
 
   ASSERT_NO_THROW(img3.read(maori));
-  EXPECT_TRUE(img4.compare(img3) > 0.017);// 0.0174
+  EXPECT_TRUE(Sipi::processing::compare(img4, img3) > 0.017);// 0.0174
 
-  ASSERT_NO_THROW(img3.rotate(90));
+  ASSERT_NO_THROW(Sipi::processing::rotate(img3, 90));
 }
 
 TEST(SipiImage, CMYK_With_Alpha_Conversion)

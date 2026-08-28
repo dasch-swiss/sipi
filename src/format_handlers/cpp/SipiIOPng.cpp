@@ -44,6 +44,7 @@
 #include "logging/logger.h"
 #include "image/SipiIO.h"
 #include "image/SipiImageError.h"
+#include "image_processing/processing.h"
 #include "SipiIOPng.h"
 #include "observability/profiling.h"
 
@@ -307,7 +308,7 @@ bool SipiIOPng::read(SipiImage *img,
   infile.reset();
 
   if (region != nullptr) {// we just use the image.crop method
-    (void)img->crop(region);
+    (void)Sipi::processing::crop(*img, region);
   }
 
   //
@@ -321,18 +322,18 @@ bool SipiIOPng::read(SipiImage *img,
     if (rtype != SipiSize::FULL) {
       switch (scaling_quality.png) {
       case ScalingMethod::HIGH:
-        img->scale(nnx, nny);
+        Sipi::processing::scale(*img, nnx, nny);
         break;
       case ScalingMethod::MEDIUM:
-        img->scaleMedium(nnx, nny);
+        Sipi::processing::scaleMedium(*img, nnx, nny);
         break;
       case ScalingMethod::LOW:
-        img->scaleFast(nnx, nny);
+        Sipi::processing::scaleFast(*img, nnx, nny);
       }
     }
   }
 
-  if (force_bps_8) { img->to8bps(); }
+  if (force_bps_8) { processing::to8bps(*img); }
   return true;
 };
 
@@ -511,7 +512,7 @@ void SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompress
 
   // PNG does not support alpha channels, so we have to remove them if they are present
   if ((img->getNc() > 3) && (img->getNalpha() > 0)) {// we have an alpha channel and possibly a CMYK image
-    img->removeExtraSamples();
+    processing::removeExtraSamples(*img);
   }
 
   int color_type;
@@ -524,7 +525,7 @@ void SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompress
   } else if ((img->nc == 4) && (img->es.size() == 1)) {// RGB + ALPHA
     color_type = PNG_COLOR_TYPE_RGB_ALPHA;
   } else if (img->nc == 4) {
-    img->convertToIcc(Icc(Sipi::PredefinedProfiles::icc_sRGB), 8);
+    processing::convertToIcc(*img, Icc(Sipi::PredefinedProfiles::icc_sRGB), 8);
     color_type = PNG_COLOR_TYPE_RGB;
     img->nc = 3;
     img->bps = 8;
@@ -549,7 +550,7 @@ void SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompress
   Essentials es = img->essential_metadata();
   if ((img->icc != nullptr) || es.fields().use_icc) {
     if ((img->icc != nullptr) && (img->icc->getProfileType() == icc_LAB)) {
-      img->convertToIcc(Icc(Sipi::PredefinedProfiles::icc_sRGB), img->bps);
+      processing::convertToIcc(*img, Icc(Sipi::PredefinedProfiles::icc_sRGB), img->bps);
     }
     std::vector<unsigned char> icc_buf;
     try {

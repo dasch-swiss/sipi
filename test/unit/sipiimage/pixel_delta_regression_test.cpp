@@ -2,7 +2,7 @@
  * Copyright © 2016 - 2026 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * Regression test — `SipiImage::maxPixelDelta` (the metric behind the
+ * Regression test — `Sipi::processing::maxPixelDelta` (the metric behind the
  * `sipi compare` command). The original `run_compare` loop computed the
  * per-channel difference as `size_t dv = img1.getPixel(...) - img2.getPixel(...)`,
  * an unsigned subtraction that underflows to a huge value whenever the
@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include "image/SipiImage.h"
+#include "image_processing/processing.h"
 
 namespace {
 
@@ -53,7 +54,7 @@ TEST(MaxPixelDelta, AbsoluteDeltaBothDirections)
   img1.setPixel(2, 2, 0, 5);
   img2.setPixel(2, 2, 0, 255);
 
-  const std::optional<PixelDelta> delta = img1.maxPixelDelta(img2);
+  const std::optional<PixelDelta> delta = Sipi::processing::maxPixelDelta(img1, img2);
   ASSERT_TRUE(delta.has_value());
 
   // True max |Δ| is 250 — a regressed unsigned subtraction would report a
@@ -83,7 +84,7 @@ TEST(MaxPixelDelta, SixteenBitBrighterSecondImage)
   img1.setPixel(0, 0, 0, 1000);
   img2.setPixel(0, 0, 0, 60000);
 
-  const std::optional<PixelDelta> delta = img1.maxPixelDelta(img2);
+  const std::optional<PixelDelta> delta = Sipi::processing::maxPixelDelta(img1, img2);
   ASSERT_TRUE(delta.has_value());
   EXPECT_EQ(delta->max_abs, 59000);
   EXPECT_DOUBLE_EQ(delta->mean_abs, 59000.0 / 4.0);
@@ -101,7 +102,7 @@ TEST(MaxPixelDelta, IdenticalImagesReportZero)
     }
   }
 
-  const std::optional<PixelDelta> delta = img1.maxPixelDelta(img2);
+  const std::optional<PixelDelta> delta = Sipi::processing::maxPixelDelta(img1, img2);
   ASSERT_TRUE(delta.has_value());
   EXPECT_EQ(delta->max_abs, 0);
   EXPECT_DOUBLE_EQ(delta->mean_abs, 0.0);
@@ -112,7 +113,7 @@ TEST(MaxPixelDelta, IncomparableDimensionsReturnsNullopt)
   SipiImage img1(4, 4, 1, 8, PhotometricInterpretation::MINISBLACK);
   SipiImage img2(2, 2, 1, 8, PhotometricInterpretation::MINISBLACK);
 
-  EXPECT_FALSE(img1.maxPixelDelta(img2).has_value());
+  EXPECT_FALSE(Sipi::processing::maxPixelDelta(img1, img2).has_value());
 }
 
 }// namespace

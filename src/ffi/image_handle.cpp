@@ -29,6 +29,7 @@
 
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
+#include "image_processing/processing.h"
 
 #include "ffi/serve_response.h"// sipi_guard, SipiStatus
 #include "ffi/sipi_ffi.h"
@@ -191,7 +192,7 @@ extern "C" int sipi_image_crop(SipiImageHandle *img, const char *iiif_region, Si
       emit_str(err, err_ctx, e.message());
       return 1;
     }
-    img->image.crop(reg);
+    Sipi::processing::crop(img->image, reg);
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
   });
 }
@@ -210,7 +211,7 @@ extern "C" int sipi_image_scale(SipiImageHandle *img, const char *iiif_size, Sip
       emit_str(err, err_ctx, e.message());
       return 1;
     }
-    img->image.scale(nx, ny);
+    Sipi::processing::scale(img->image, nx, ny);
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
   });
 }
@@ -220,7 +221,7 @@ extern "C" int sipi_image_rotate(SipiImageHandle *img, float angle, int mirror, 
   (void)err;
   (void)err_ctx;
   return Sipi::ffi::sipi_guard([&] {
-    img->image.rotate(angle, mirror != 0);
+    Sipi::processing::rotate(img->image, angle, mirror != 0);
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
   });
 }
@@ -228,7 +229,7 @@ extern "C" int sipi_image_rotate(SipiImageHandle *img, float angle, int mirror, 
 extern "C" int sipi_image_topleft(SipiImageHandle *img)
 {
   return Sipi::ffi::sipi_guard([&] {
-    img->image.set_topleft();
+    Sipi::processing::set_topleft(img->image);
     img->image.setOrientation(Sipi::TOPLEFT);
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
   });
@@ -238,7 +239,7 @@ extern "C" int sipi_image_watermark(SipiImageHandle *img, const char *wmfile, Si
 {
   return Sipi::ffi::sipi_guard([&] {
     try {
-      img->image.add_watermark(nz(wmfile));
+      Sipi::processing::add_watermark(img->image, nz(wmfile));
     } catch (const Sipi::SipiImageError &e) {
       emit_str(err, err_ctx, e.message());
       return 1;

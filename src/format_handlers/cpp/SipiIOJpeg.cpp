@@ -24,6 +24,7 @@
 #include "image/SipiIO.h"
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
+#include "image_processing/processing.h"
 #include "SipiIOJpeg.h"
 #include "observability/profiling.h"
 
@@ -788,7 +789,7 @@ bool SipiIOJpeg::read(SipiImage *img,
     //
     // let's first crop the region (we read the full size image in this case)
     //
-    (void)img->crop(region);
+    (void)Sipi::processing::crop(*img, region);
 
     //
     // no we scale the region to the desired size
@@ -804,13 +805,13 @@ bool SipiIOJpeg::read(SipiImage *img,
   if ((size != nullptr) && (rtype != SipiSize::FULL)) {
     switch (scaling_quality.jpeg) {
     case ScalingMethod::HIGH:
-      img->scale(nnx, nny);
+      Sipi::processing::scale(*img, nnx, nny);
       break;
     case ScalingMethod::MEDIUM:
-      img->scaleMedium(nnx, nny);
+      Sipi::processing::scaleMedium(*img, nnx, nny);
       break;
     case ScalingMethod::LOW:
-      img->scaleFast(nnx, nny);
+      Sipi::processing::scaleFast(*img, nnx, nny);
       break;
     }
   }
@@ -1015,11 +1016,11 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
   bool range_valid = three_or_more_channels && more_than_zero_alpha_channel;
   if (range_valid) {
     // we can have an alpha channel and possibly a CMYK image
-    img->removeExtraSamples(false);
+    processing::removeExtraSamples(*img, false);
   }
 
   auto icc = Sipi::Icc(Sipi::icc_sRGB);// force sRGB !!
-  img->convertToIcc(icc, 8);// only 8 bit JPEGs are supported by the spec
+  processing::convertToIcc(*img, icc, 8);// only 8 bit JPEGs are supported by the spec
 
   jpeg_compress_struct cinfo{};
   JpegErrorMgr jerr;
@@ -1135,7 +1136,7 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
     break;
   }
   case PhotometricInterpretation::CIELAB: {
-    img->convertToIcc(Icc(Sipi::PredefinedProfiles::icc_sRGB), 8);
+    processing::convertToIcc(*img, Icc(Sipi::PredefinedProfiles::icc_sRGB), 8);
     cinfo.in_color_space = JCS_RGB;
     cinfo.jpeg_color_space = JCS_RGB;
     break;

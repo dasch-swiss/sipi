@@ -19,6 +19,7 @@
 
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
+#include "image_processing/processing.h"
 #include "cache/SipiCache.h"
 #include "throttling/SipiMemoryBudget.h"
 #include "throttling/SipiPeakMemory.h"
@@ -697,7 +698,7 @@ std::expected<ServeResponse, SipiStatus>
     }
     try {
       PhaseTimer phase_timer(SIPI_PHASE_ROTATE);
-      img.rotate(angle, mirror);
+      processing::rotate(img, angle, mirror);
     } catch (const std::bad_alloc &) {
       Metrics::instance().memory_alloc_failures_total.Increment();
       return std::unexpected(SipiStatus::InternalError);
@@ -720,13 +721,13 @@ std::expected<ServeResponse, SipiStatus>
       PhaseTimer phase_timer(SIPI_PHASE_QUALITY);
       switch (quality_format.quality()) {
       case SipiQualityFormat::COLOR:
-        img.convertToIcc(Icc(icc_sRGB), 8);
+        processing::convertToIcc(img, Icc(icc_sRGB), 8);
         break;
       case SipiQualityFormat::GRAY:
-        img.convertToIcc(Icc(icc_GRAY_D50), 8);
+        processing::convertToIcc(img, Icc(icc_GRAY_D50), 8);
         break;
       case SipiQualityFormat::BITONAL:
-        img.toBitonal();
+        processing::toBitonal(img);
         break;
       default:
         return std::unexpected(SipiStatus::BadRequest);
@@ -751,7 +752,7 @@ std::expected<ServeResponse, SipiStatus>
     }
     try {
       PhaseTimer phase_timer(SIPI_PHASE_WATERMARK);
-      img.add_watermark(watermark);
+      processing::add_watermark(img, watermark);
     } catch (Sipi::SipiError &err) {
       ImageContext sentry_ctx;
       sentry_ctx.input_file = infile;

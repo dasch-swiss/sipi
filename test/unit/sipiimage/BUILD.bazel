@@ -24,6 +24,7 @@ cc_test(
     }),
     deps = [
         "//src:sipi_lib",
+        "//src/image_processing",
         "//test:test_paths",
         "@googletest//:gtest_main",
     ],

@@ -37,6 +37,7 @@
 #include "image/SipiIO.h"
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
+#include "image_processing/processing.h"
 #include "ffi/engine_context.h"
 #include "ffi/sipi_ffi.h"
 #include "ffi/startup.h"
@@ -317,8 +318,8 @@ extern "C" int sipi_cli_main(int argc, char **argv)
     try {
       img.readSource(optInFile, region, size);
       if (format == "jpg") {
-        img.to8bps();
-        img.convertToIcc(Sipi::Icc(Sipi::PredefinedProfiles::icc_sRGB), 8);
+        Sipi::processing::to8bps(img);
+        Sipi::processing::convertToIcc(img, Sipi::Icc(Sipi::PredefinedProfiles::icc_sRGB), 8);
       }
     } catch (const Sipi::SipiImageError &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
@@ -345,13 +346,13 @@ extern "C" int sipi_cli_main(int argc, char **argv)
         }
         switch (orientation) {
         case Sipi::TOPLEFT: break;
-        case Sipi::TOPRIGHT: img.rotate(0., true); break;
-        case Sipi::BOTRIGHT: img.rotate(180., false); break;
-        case Sipi::BOTLEFT: img.rotate(180., true); break;
-        case Sipi::LEFTTOP: img.rotate(270., true); break;
-        case Sipi::RIGHTTOP: img.rotate(90., false); break;
-        case Sipi::RIGHTBOT: img.rotate(90., true); break;
-        case Sipi::LEFTBOT: img.rotate(270., false); break;
+        case Sipi::TOPRIGHT: Sipi::processing::rotate(img, 0., true); break;
+        case Sipi::BOTRIGHT: Sipi::processing::rotate(img, 180., false); break;
+        case Sipi::BOTLEFT: Sipi::processing::rotate(img, 180., true); break;
+        case Sipi::LEFTTOP: Sipi::processing::rotate(img, 270., true); break;
+        case Sipi::RIGHTTOP: Sipi::processing::rotate(img, 90., false); break;
+        case Sipi::RIGHTBOT: Sipi::processing::rotate(img, 90., true); break;
+        case Sipi::LEFTBOT: Sipi::processing::rotate(img, 270., false); break;
         default:;
         }
         exif->addKeyVal("Exif.Image.Orientation", static_cast<unsigned short>(Sipi::TOPLEFT));
@@ -368,20 +369,20 @@ extern "C" int sipi_cli_main(int argc, char **argv)
         case OptIcc::GRAY: icc = Sipi::Icc(Sipi::PredefinedProfiles::icc_GRAY_D50); break;
         case OptIcc::none: break;
         }
-        img.convertToIcc(icc, img.getBps());
+        Sipi::processing::convertToIcc(img, icc, img.getBps());
       }
 
       if (user_set("--mirror") || user_set("--rotate")) {
         switch (optMirror) {
-        case OptMirror::vertical: img.rotate(optRotate + 180.0F, true); break;
-        case OptMirror::horizontal: img.rotate(optRotate, true); break;
+        case OptMirror::vertical: Sipi::processing::rotate(img, optRotate + 180.0F, true); break;
+        case OptMirror::horizontal: Sipi::processing::rotate(img, optRotate, true); break;
         case OptMirror::none:
-          if (optRotate != 0.0F) { img.rotate(optRotate, false); }
+          if (optRotate != 0.0F) { Sipi::processing::rotate(img, optRotate, false); }
           break;
         }
       }
 
-      if (user_set("--watermark")) { img.add_watermark(optWatermark); }
+      if (user_set("--watermark")) { Sipi::processing::add_watermark(img, optWatermark); }
     } catch (const Sipi::SipiImageError &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
       log_err("Error processing image: %s", err.what());
@@ -470,7 +471,7 @@ extern "C" int sipi_cli_main(int argc, char **argv)
     // Capture the per-channel delta from the original pixels before the
     // `img1 -= img2` visualization step below rewrites img1 into the
     // normalized diff (which would otherwise corrupt the reported avg/max).
-    const std::optional<Sipi::PixelDelta> delta = img1.maxPixelDelta(img2);
+    const std::optional<Sipi::PixelDelta> delta = Sipi::processing::maxPixelDelta(img1, img2);
 
     if (!delta.has_value()) {
       // Differing channel count / bit depth / photometric interpretation:

@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "image/SipiImage.h"
+#include "image_processing/processing.h"
 #include "test_paths.h"
 
 namespace {
@@ -72,7 +73,7 @@ TEST(ConvertYcc, ConvertYcc16BitDoesNotOverflow)
     }
   }
 
-  ASSERT_NO_THROW(img.convertYCC2RGB());
+  ASSERT_NO_THROW(Sipi::processing::convertYCC2RGB(img));
 
   EXPECT_EQ(img.getNc(), nc);
   for (size_t y = 0; y < ny; ++y) {
@@ -126,7 +127,7 @@ TEST(RemoveChannel, RemoveNonTerminalChannel)
     }
   }
 
-  ASSERT_NO_THROW(img.removeChannel(4, false));
+  ASSERT_NO_THROW(Sipi::processing::removeChannel(img, 4, false));
 
   ASSERT_EQ(img.getNc(), 5u);
   ASSERT_EQ(img.getNalpha(), 1u);

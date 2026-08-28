@@ -19,6 +19,7 @@
 #include <optional>
 
 #include "image/SipiImage.h"
+#include "image_processing/processing.h"
 
 namespace {
 
@@ -48,7 +49,7 @@ TEST(PixelAccessor, SetPixelLandsAtRowMajorStoreNonSquare)
   }
   img1.setPixel(2, 1, 0, 250);// one distinctive sample, off-diagonal (x != y)
 
-  const std::optional<PixelDelta> delta = img2.maxPixelDelta(img1);
+  const std::optional<PixelDelta> delta = Sipi::processing::maxPixelDelta(img2, img1);
   ASSERT_TRUE(delta.has_value());
   EXPECT_EQ(delta->max_abs, 250 - 40);
   EXPECT_EQ(delta->max_x, 2u);

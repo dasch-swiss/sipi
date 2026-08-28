@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "image/SipiImage.h"
+#include "image_processing/processing.h"
 #include "metadata/icc.h"
 #include "test_paths.h"
 
@@ -107,7 +108,7 @@ void BM_ScaleFast(benchmark::State &state)
     state.PauseTiming();
     Sipi::SipiImage img(leaves8());
     state.ResumeTiming();
-    img.scaleFast(dim, dim);
+    Sipi::processing::scaleFast(img, dim, dim);
     benchmark::DoNotOptimize(img.getNx());
     benchmark::ClobberMemory();
   }
@@ -122,7 +123,7 @@ void BM_ScaleMedium(benchmark::State &state)
     state.PauseTiming();
     Sipi::SipiImage img(leaves8());
     state.ResumeTiming();
-    img.scaleMedium(dim, dim);
+    Sipi::processing::scaleMedium(img, dim, dim);
     benchmark::DoNotOptimize(img.getNx());
     benchmark::ClobberMemory();
   }
@@ -137,7 +138,7 @@ void BM_ScaleHigh(benchmark::State &state)
     state.PauseTiming();
     Sipi::SipiImage img(leaves8());
     state.ResumeTiming();
-    img.scale(dim, dim);
+    Sipi::processing::scale(img, dim, dim);
     benchmark::DoNotOptimize(img.getNx());
     benchmark::ClobberMemory();
   }
@@ -155,7 +156,7 @@ void BM_Rotate90(benchmark::State &state)
     state.PauseTiming();
     Sipi::SipiImage img(leaves8());
     state.ResumeTiming();
-    img.rotate(90.0F);
+    Sipi::processing::rotate(img, 90.0F);
     benchmark::DoNotOptimize(img.getNx());
     benchmark::ClobberMemory();
   }
@@ -169,7 +170,7 @@ void BM_Rotate45(benchmark::State &state)
     state.PauseTiming();
     Sipi::SipiImage img(leaves8());
     state.ResumeTiming();
-    img.rotate(45.0F);
+    Sipi::processing::rotate(img, 45.0F);
     benchmark::DoNotOptimize(img.getNx());
     benchmark::ClobberMemory();
   }
@@ -186,7 +187,7 @@ void BM_Crop1024(benchmark::State &state)
     state.PauseTiming();
     Sipi::SipiImage img(leaves8());
     state.ResumeTiming();
-    img.crop(512, 512, 1024, 1024);
+    Sipi::processing::crop(img, 512, 512, 1024, 1024);
     benchmark::DoNotOptimize(img.getNx());
     benchmark::ClobberMemory();
   }
@@ -208,7 +209,7 @@ void BM_To8bps(benchmark::State &state)
     std::vector<Sipi::SipiImage> imgs(kBatch, rgba16());
     state.ResumeTiming();
     for (auto &img : imgs) {
-      img.to8bps();
+      Sipi::processing::to8bps(img);
       benchmark::DoNotOptimize(img.getBps());
     }
     benchmark::ClobberMemory();
@@ -232,7 +233,7 @@ void BM_ConvertToIccAdobeRgb(benchmark::State &state)
     state.PauseTiming();
     Sipi::SipiImage img(leaves8());
     state.ResumeTiming();
-    img.convertToIcc(Sipi::Icc(Sipi::icc_AdobeRGB), 8);
+    Sipi::processing::convertToIcc(img, Sipi::Icc(Sipi::icc_AdobeRGB), 8);
     benchmark::DoNotOptimize(img.getNc());
     benchmark::ClobberMemory();
   }
@@ -250,7 +251,7 @@ void BM_ConvertToIccCmykToSrgb(benchmark::State &state)
     state.PauseTiming();
     Sipi::SipiImage img(cmyk128());
     state.ResumeTiming();
-    img.convertToIcc(Sipi::Icc(Sipi::icc_sRGB), 8);
+    Sipi::processing::convertToIcc(img, Sipi::Icc(Sipi::icc_sRGB), 8);
     benchmark::DoNotOptimize(img.getNc());
     benchmark::ClobberMemory();
   }
@@ -268,7 +269,7 @@ void BM_RemoveAlphaChannel(benchmark::State &state)
     state.PauseTiming();
     Sipi::SipiImage img(leaves_alpha());
     state.ResumeTiming();
-    img.removeChannel(3);
+    Sipi::processing::removeChannel(img, 3);
     benchmark::DoNotOptimize(img.getNc());
     benchmark::ClobberMemory();
   }

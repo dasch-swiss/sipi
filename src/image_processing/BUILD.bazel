@@ -1,0 +1,84 @@
+"""src/image_processing — free-function pixel operators over `SipiImage`.
+
+Geometry, colour/channel, and watermark/arithmetic operators that used to be
+`SipiImage` methods, re-expressed as free functions taking `SipiImage &` as
+their first parameter. This package depends one-way on `//src/image` (it
+reads and mutates a `SipiImage` through its public accessor surface — never
+its protected members) and `//src/image` never depends back: a facade method
+that forwarded to a free function here would reintroduce the cycle the
+extraction is meant to remove.
+
+This package also declares (and `Sipi::processing::add_watermark` calls)
+`Sipi::read_watermark`; the definition lives in `//src/format_handlers`
+(`SipiIOTiff.cpp`, which uses libtiff) and is resolved at link time from
+whichever binary links both packages — the same link-time-resolution trick
+`src/image/BUILD.bazel` documents for `SipiImage::io`. This package must
+never gain a dependency on `//src/format_handlers` (the reverse edge — since
+`format_handlers` already depends on `image_processing` for the pixel
+operators — would cycle).
+
+`include_prefix = "image_processing"` + `strip_include_prefix =
+"/src/image_processing/cpp"` exposes the header at `#include
+"image_processing/processing.h"` for cross-package consumers; the sibling
+`resample.cc` includes `resample.h` with the bare quote form.
+
+Default visibility is public: `processing.h` is included directly from
+`test/unit/sipiimage/` and `test/approval/` sources, which sit outside
+`//src/...`.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "image_processing",
+    srcs = [
+        "cpp/color.cpp",
+        "cpp/compose.cpp",
+        "cpp/geometry.cpp",
+        "cpp/resample.cc",
+    ],
+    hdrs = [
+        "cpp/processing.h",
+        "cpp/resample.h",
+    ],
+    include_prefix = "image_processing",
+    strip_include_prefix = "/src/image_processing/cpp",
+    copts = ["-fexceptions"],
+    deps = [
+        "//src/image",
+        "//src/logging:logging",
+        "//src/metadata:metadata",
+        "//src/observability:observability",
+        "//src/util",
+        "@highway//:hwy",
+        "@lcms2//:lcms2",
+    ],
+)
+
+# Process tier — the image-processing operators between decode and encode
+# (scale/rotate/crop/to8bps/convertToIcc/removeChannel). Uses existing small
+# repo fixtures via the `//test/_test_data:images` filegroup — not blocked on
+# the benchmark fixture archive. Co-located with the module per ADR-0003. The
+# `env` applies under `bazel run`; `just bench` exports the same variables
+# when exec'ing the binary directly (SOURCE_DATE_EPOCH pins the wall-clock-
+# stamped ICC creation date on the convertToIcc path per ADR-0002;
+# SIPI_WORKSPACE_ROOT resolves fixtures via `//test:test_paths`).
+cc_binary(
+    name = "process_benchmark",
+    srcs = ["cpp/process_benchmark.cpp"],
+    data = ["//test/_test_data:images"],
+    env = {
+        "SIPI_WORKSPACE_ROOT": ".",
+        "SOURCE_DATE_EPOCH": "946684800",
+    },
+    tags = ["manual"],
+    testonly = True,
+    deps = [
+        ":image_processing",
+        "//src:sipi_lib",
+        "//test:test_paths",
+        "@google_benchmark//:benchmark_main",
+    ],
+)

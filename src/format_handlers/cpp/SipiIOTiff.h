@@ -20,9 +20,9 @@
 
 namespace Sipi {
 
-// `read_watermark` is declared in SipiImage.h (the engine header this file
-// includes above) and defined in SipiIOTiff.cpp below — it is the one codec
-// helper the engine's `SipiImage::add_watermark` calls back into.
+// `read_watermark` is declared in //src/image_processing's processing.h and
+// defined in SipiIOTiff.cpp below — it is the one codec helper
+// `Sipi::processing::add_watermark` calls back into.
 
 /*!
  * Select the pyramid resolution level (IFD index) for a requested reduce.

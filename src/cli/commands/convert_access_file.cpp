@@ -16,6 +16,7 @@
 #include "logging/logger.h"
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
+#include "image_processing/processing.h"
 #include "iiifparser/SipiRegion.h"
 #include "cli/SipiReport.h"
 #include "iiifparser/SipiSize.h"
@@ -117,13 +118,13 @@ bool apply_orientation_topleft(SipiImage &img)
   }
   switch (orientation) {
   case TOPLEFT: break;
-  case TOPRIGHT: img.rotate(0., true); break;
-  case BOTRIGHT: img.rotate(180., false); break;
-  case BOTLEFT: img.rotate(180., true); break;
-  case LEFTTOP: img.rotate(270., true); break;
-  case RIGHTTOP: img.rotate(90., false); break;
-  case RIGHTBOT: img.rotate(90., true); break;
-  case LEFTBOT: img.rotate(270., false); break;
+  case TOPRIGHT: Sipi::processing::rotate(img, 0., true); break;
+  case BOTRIGHT: Sipi::processing::rotate(img, 180., false); break;
+  case BOTLEFT: Sipi::processing::rotate(img, 180., true); break;
+  case LEFTTOP: Sipi::processing::rotate(img, 270., true); break;
+  case RIGHTTOP: Sipi::processing::rotate(img, 90., false); break;
+  case RIGHTBOT: Sipi::processing::rotate(img, 90., true); break;
+  case LEFTBOT: Sipi::processing::rotate(img, 270., false); break;
   default: break;
   }
   if (exif != nullptr) {
@@ -135,19 +136,28 @@ bool apply_orientation_topleft(SipiImage &img)
 
 void apply_icc(SipiImage &img, const std::string &icc)
 {
-  if (icc == "sRGB") { img.convertToIcc(Icc(PredefinedProfiles::icc_sRGB), img.getBps()); return; }
-  if (icc == "AdobeRGB") { img.convertToIcc(Icc(PredefinedProfiles::icc_AdobeRGB), img.getBps()); return; }
-  if (icc == "GRAY") { img.convertToIcc(Icc(PredefinedProfiles::icc_GRAY_D50), img.getBps()); return; }
+  if (icc == "sRGB") {
+    Sipi::processing::convertToIcc(img, Icc(PredefinedProfiles::icc_sRGB), img.getBps());
+    return;
+  }
+  if (icc == "AdobeRGB") {
+    Sipi::processing::convertToIcc(img, Icc(PredefinedProfiles::icc_AdobeRGB), img.getBps());
+    return;
+  }
+  if (icc == "GRAY") {
+    Sipi::processing::convertToIcc(img, Icc(PredefinedProfiles::icc_GRAY_D50), img.getBps());
+    return;
+  }
 }
 
 void apply_rotate_mirror(SipiImage &img, float rotate, const std::string &mirror)
 {
   if (mirror == "vertical") {
-    img.rotate(rotate + 180.0F, true);
+    Sipi::processing::rotate(img, rotate + 180.0F, true);
   } else if (mirror == "horizontal") {
-    img.rotate(rotate, true);
+    Sipi::processing::rotate(img, rotate, true);
   } else if (rotate != 0.0F) {
-    img.rotate(rotate, false);
+    Sipi::processing::rotate(img, rotate, false);
   }
 }
 
@@ -190,8 +200,8 @@ int cmd_convert_access_file(const ConvertAccessFileArgs &args)
   try {
     img.readSource(args.input_path, region, size);
     if (format == "jpg") {
-      img.to8bps();
-      img.convertToIcc(Icc(PredefinedProfiles::icc_sRGB), 8);
+      Sipi::processing::to8bps(img);
+      Sipi::processing::convertToIcc(img, Icc(PredefinedProfiles::icc_sRGB), 8);
     }
   } catch (const SipiImageError &err) {
     observability::populate_from_image(sentry_ctx, img);
@@ -230,7 +240,7 @@ int cmd_convert_access_file(const ConvertAccessFileArgs &args)
     if (!args.mirror.empty() || args.rotate != 0.0F) {
       apply_rotate_mirror(img, args.rotate, args.mirror);
     }
-    if (!args.watermark.empty()) { img.add_watermark(args.watermark); }
+    if (!args.watermark.empty()) { Sipi::processing::add_watermark(img, args.watermark); }
   } catch (const SipiImageError &err) {
     observability::populate_from_image(sentry_ctx, img);
     report_error(sentry_ctx, "convert", err.what(), args.json_output);

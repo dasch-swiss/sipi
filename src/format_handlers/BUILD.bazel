@@ -59,6 +59,7 @@ cc_library(
         "//src:sipi_generated_hdrs",
         "//src/error",
         "//src/image",
+        "//src/image_processing",
         "//src/logging:logging",
         "//src/metadata:metadata",
         "//src/observability:observability",

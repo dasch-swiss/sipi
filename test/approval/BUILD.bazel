@@ -48,6 +48,7 @@ cc_test(
     local_defines = ["APPROVAL_TESTS_HIDE_DEPRECATED_CODE=1"],
     deps = [
         "//src:sipi_lib",
+        "//src/image_processing",
         # The `parse_iiif_uri` classifier `iiif_parse_approval_test.cpp` checks;
         # testonly reference oracle, no longer in `//src:sipi_lib` (colocated
         # under the iiifparser component, DUNE-015).

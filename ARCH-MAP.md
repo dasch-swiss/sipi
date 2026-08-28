@@ -33,7 +33,7 @@ image formats, whose registry fan-out is documented, not mechanized.
 
 ### image
 
-- **Paths:** `:(glob)src/image/**`, `:(glob)src/process_benchmark.cpp`, `:(glob)src/BUILD.bazel`, `:(glob)src/nsswitch.conf`
+- **Paths:** `:(glob)src/image/**`, `:(glob)src/BUILD.bazel`, `:(glob)src/nsswitch.conf`
 - **Purpose:** The image engine hub — `SipiImage` orchestrates decode → process (scale/rotate/crop/ICC) → encode, and owns the metadata wrappers and format dispatch, and the `//src` package's Bazel wiring.
 - **Key entities:** `Sipi::SipiImage`, `SipiImage::io` (static handler registry, *defined* in `format_handlers`), `SipiImage::read`/`read_shape`/`write`/`add_watermark`/`convertToIcc`/`scale`/`rotate`/`crop`, `Sipi::SipiIO` (abstract), `SipiImgInfo`, `Sipi::read_watermark` (defined in `format_handlers`), `Sipi::resample_separable_u8/u16`, `Sipi::estimate_peak_memory`, `Sipi::SipiImageError`
 - **Public interface:** `SipiImage` (via `//src/image`), `SipiIO`; consumed by `format_handlers`, `ffi` (including the `sipi_image_*` handles behind the Lua `SipiImage` bindings), and `cli`.

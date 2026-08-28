@@ -14,6 +14,7 @@
 
 #include "logging/logger.h"
 #include "image/SipiImage.h"
+#include "image_processing/processing.h"
 #include "metadata/essentials.h"
 #include "metadata/icc.h"
 #include "util/Hash.h"
@@ -102,13 +103,13 @@ int cmd_convert_service_file(const ConvertServiceFileArgs &args)
       }
       switch (orientation) {
       case Sipi::TOPLEFT: break;
-      case Sipi::TOPRIGHT: img.rotate(0., true); break;
-      case Sipi::BOTRIGHT: img.rotate(180., false); break;
-      case Sipi::BOTLEFT: img.rotate(180., true); break;
-      case Sipi::LEFTTOP: img.rotate(270., true); break;
-      case Sipi::RIGHTTOP: img.rotate(90., false); break;
-      case Sipi::RIGHTBOT: img.rotate(90., true); break;
-      case Sipi::LEFTBOT: img.rotate(270., false); break;
+      case Sipi::TOPRIGHT: Sipi::processing::rotate(img, 0., true); break;
+      case Sipi::BOTRIGHT: Sipi::processing::rotate(img, 180., false); break;
+      case Sipi::BOTLEFT: Sipi::processing::rotate(img, 180., true); break;
+      case Sipi::LEFTTOP: Sipi::processing::rotate(img, 270., true); break;
+      case Sipi::RIGHTTOP: Sipi::processing::rotate(img, 90., false); break;
+      case Sipi::RIGHTBOT: Sipi::processing::rotate(img, 90., true); break;
+      case Sipi::LEFTBOT: Sipi::processing::rotate(img, 270., false); break;
       default: break;
       }
       if (exif != nullptr) {
