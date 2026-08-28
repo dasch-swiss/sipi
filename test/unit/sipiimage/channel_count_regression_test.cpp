@@ -17,12 +17,27 @@
 #include <gtest/gtest.h>
 
 #include "../../../src/SipiImage.h"
+#include "test_paths.h"
 
 namespace {
 
 using Sipi::ExtraSamples;
 using Sipi::PhotometricInterpretation;
 using Sipi::SipiImage;
+
+// End-to-end companion to ConvertYcc16BitDoesNotOverflow below: a real
+// 16-bit, 3-component JP2 whose colour box declares the sYCC enumerated
+// colourspace, so SipiIOJ2k::read() sets photo == YCBCR and bps == 16 and
+// runs convertYCC2RGB()'s 16-bit branch in situ (rather than the crafted
+// in-memory image the unit test drives). Provenance: an 8x8 16-bit RGB
+// codestream written by `sipi convert`, whose enumerated colr box was then
+// flipped from sRGB (EnumCS 16) to sYCC (EnumCS 18) so the reader takes the
+// YCbCr path — the standards-valid way a JP2 signals YCbCr.
+//
+// Local build can't run ASan (broken libc++ link on macOS); a clean decode
+// to the right geometry is the local signal, the CI asan-ubsan job is the
+// gate that would catch the original `nc - 1`-sized-buffer overflow.
+const std::string kYcbcr16Jp2 = sipi::test::data_dir() + "/images/unit/ycbcr16.jpx";
 
 // removeChannel() only operates on registered extra-sample channels (`es`),
 // which is a protected member with no public mutator — a thin subclass gets
@@ -70,6 +85,25 @@ TEST(ConvertYcc, ConvertYcc16BitDoesNotOverflow)
       EXPECT_EQ(img.getPixel(x, y, 3), static_cast<int>(1000 + idx)) << "pass-through channel at pixel " << idx;
     }
   }
+}
+
+// Reads the real 16-bit sYCC JP2 end-to-end through SipiIOJ2k::read(), which
+// takes the bps == 16 decode branch and then convertYCC2RGB()'s 16-bit path.
+// Post-fix, that path sizes and indexes its output buffer with the same `nc`,
+// so the decode completes and yields a 3-channel 16-bit RGB image at the
+// original geometry. Pre-fix, the `nc - 1`-sized buffer overran on the last
+// pixel (detected by ASan on CI).
+TEST(ConvertYcc, Decodes16BitYcbcrJp2EndToEnd)
+{
+  SipiImage img;
+  ASSERT_NO_THROW(img.read(kYcbcr16Jp2));
+
+  EXPECT_EQ(img.getNx(), 8u);
+  EXPECT_EQ(img.getNy(), 8u);
+  EXPECT_EQ(img.getNc(), 3u);// index component expanded to R,G,B; no channel dropped
+  EXPECT_EQ(img.getBps(), 16u);// the 16-bit convertYCC2RGB branch, not the 8-bit one
+  // read() flips YCbCr to RGB once the conversion has run.
+  EXPECT_EQ(img.getPhoto(), PhotometricInterpretation::RGB);
 }
 
 // A SEPARATED (CMYK-family) image with 2 extra samples beyond the 4 content
