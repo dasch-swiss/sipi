@@ -62,8 +62,8 @@ exercise a byte sequence this harness skips.
 
 Fuzzing of the `SipiIO` decode entry points — `read_shape` and `read` — for
 each of the four format handlers: `SipiIOTiff`, `SipiIOJpeg`, `SipiIOPng`,
-`SipiIOJ2k` (DEV-7066). The four targets live in `src/formats/fuzz/`:
-`//src/formats/fuzz:tiff_decode_fuzz`, `:jpeg_decode_fuzz`, `:png_decode_fuzz`,
+`SipiIOJ2k` (DEV-7066). The four targets live in `src/format_handlers/fuzz/`:
+`//src/format_handlers/fuzz:tiff_decode_fuzz`, `:jpeg_decode_fuzz`, `:png_decode_fuzz`,
 `:j2k_decode_fuzz`. This reopens the codec-level gap
 [ADR-0020](../../adr/0020-oracle-removal.md) left when the oracle-only C++
 fuzz harness was retired — no other test layer feeds these handlers arbitrary
@@ -75,7 +75,7 @@ JP2 boxes) that no unit test catches and that hand review finds only by luck.
 
 `SipiIO` has no in-memory decode overload anywhere — every handler's
 `read_shape`/`read` take a filesystem path — so the shared harness
-(`src/formats/fuzz/codec_fuzz_harness.h`) writes each fuzzer-supplied buffer to
+(`src/format_handlers/fuzz/codec_fuzz_harness.h`) writes each fuzzer-supplied buffer to
 one fixed per-process temp path before driving the handler over it. The path
 name embeds `getpid()`: libFuzzer runs each process single-threaded, so a
 per-iteration temp file with a stable, truncated-and-rewritten name avoids
@@ -104,7 +104,7 @@ targets (including the parser) pass `-timeout=25`.
   The bug class these harnesses hunt is header/marker parsing at the front of
   the file, so a small cap concentrates the mutation budget there instead of
   on bulk pixel data a full-size image would carry.
-- **Dictionaries**: `src/formats/fuzz/dicts/{tiff,jpeg,png}.dict`, vendored
+- **Dictionaries**: `src/format_handlers/fuzz/dicts/{tiff,jpeg,png}.dict`, vendored
   verbatim from AFL++ (see the package README for provenance and license).
   There is no canonical J2K dictionary upstream, so that target runs without
   one. They are passed as explicit `-dict=` flags from the `justfile` recipes
@@ -140,7 +140,7 @@ parser and all four codec handlers — needs no libFuzzer runtime and, e.g.,
 
 ```bash
 bazel test //src/iiifparser/fuzz:parse_request_fuzz
-bazel test //src/formats/fuzz:tiff_decode_fuzz
+bazel test //src/format_handlers/fuzz:tiff_decode_fuzz
 ```
 
 is a corpus-replay regression run: every seed through the harness, asserting no
@@ -242,7 +242,7 @@ just fuzz-corpus-merge tiff                   # import coverage-adding inputs fr
 `bazel-build-fuzz` builds the `_bin` and `_corpus` targets for all five
 harnesses in one invocation — e.g.
 `//src/iiifparser/fuzz:parse_request_fuzz_bin` and
-`//src/formats/fuzz:tiff_decode_fuzz_bin` — the `_bin` target, not the test
+`//src/format_handlers/fuzz:tiff_decode_fuzz_bin` — the `_bin` target, not the test
 target: `_bin` is what the loop executes, and only a top-level target
 materialises locally under the `--remote_download_minimal` default. Each
 target's path (e.g.
@@ -273,11 +273,11 @@ the hand-picked tier differently.
      `//src/iiifparser/corpus:seed_corpus`), shared with the C++ classifier
      test and `//src/iiifparser/rust:corpus_regression_test`.
    - Codec targets: two separate locations merged by the `seed_corpus`
-     filegroup in each `src/formats/corpus/<fmt>/BUILD.bazel` — the
+     filegroup in each `src/format_handlers/corpus/<fmt>/BUILD.bazel` — the
      hand-picked fixtures reached through
      `//test/_test_data:fuzz_seeds_{tiff,jpeg,png,j2k}` (crafted-malformed
      images already used by that codec's unit tests, plus a smallest-valid
-     fixture; these are Git LFS), and the checked-in `src/formats/corpus/<fmt>/`
+     fixture; these are Git LFS), and the checked-in `src/format_handlers/corpus/<fmt>/`
      directory itself as the growth tier (empty today).
 
    Both cases grow only deliberately: a human-committed merge (below), or a
@@ -299,12 +299,12 @@ the hand-picked tier differently.
 3. **Periodic pull-into-repo** — `just fuzz-corpus-merge <target>` downloads
    the latest `fuzz-corpus-<target>` artifact and `-merge=1`s it into that
    target's checked-in corpus directory (`src/iiifparser/corpus/` or
-   `src/formats/corpus/<fmt>/`), so only coverage-adding inputs are imported,
+   `src/format_handlers/corpus/<fmt>/`), so only coverage-adding inputs are imported,
    then prints the diff. Reviewing and committing is manual. This is the only
    path from the live corpus to the checked-in one.
 
    **Known imprecision for the codec targets**: the checked-in tier
-   (`src/formats/corpus/<fmt>/`) does not contain the `test/_test_data`
+   (`src/format_handlers/corpus/<fmt>/`) does not contain the `test/_test_data`
    fixture seeds — those live in a separate package. `-merge=1` only sees
    coverage relative to its destination directory, so it can propose importing
    an input whose coverage the fixtures already reach but the checked-in
@@ -394,14 +394,14 @@ A nightly failure is a manual triage, not an auto-filed issue:
 
    ```bash
    just bazel-build-fuzz
-   ./bazel-bin/src/formats/fuzz/tiff_decode_fuzz_bin path/to/crash-<sha1>
+   ./bazel-bin/src/format_handlers/fuzz/tiff_decode_fuzz_bin path/to/crash-<sha1>
    ```
 
 2. **Fix as its own commit**, typed `fix:` — the bug already exists on `main`,
    so `fix:` is the correct Conventional Commit type regardless of when the
    fuzz target that found it landed.
 3. **Commit the reproducer** into the target's checked-in corpus directory
-   (`src/iiifparser/corpus/` or `src/formats/corpus/<fmt>/`) alongside the fix,
+   (`src/iiifparser/corpus/` or `src/format_handlers/corpus/<fmt>/`) alongside the fix,
    so it replays forever in the `//src/...` sweeps rather than only living in a
    30-day CI artifact.
 4. **Open a Linear issue** tracking the finding and its fix.

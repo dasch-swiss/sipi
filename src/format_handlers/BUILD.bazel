@@ -1,4 +1,4 @@
-"""src/formats/ — image codec handlers (per-module carve, DEV-6353).
+"""src/format_handlers/ — image codec handlers (per-module carve, DEV-6353).
 
 The four `SipiIO` implementations (TIFF, JPEG2000, JPEG, PNG) plus the shared
 `output_sink`, wrapping libtiff / Kakadu / libjpeg-turbo / libpng. Each handler
@@ -13,8 +13,9 @@ registry definition was moved OUT of the image package into `format_registry.cpp
 here. `//src/image` references `io`; the linker resolves it from this package,
 which every final link pulls in via `//src:sipi_lib` and `//src/ffi:sipi_ffi`.
 
-`strip_include_prefix = "/src"` exposes the headers at the path-prefixed form
-(`#include "formats/SipiIOTiff.h"`); siblings use the quote-form.
+`include_prefix = "format_handlers"` + `strip_include_prefix = "/src/format_handlers/cpp"`
+exposes the headers at `#include "format_handlers/SipiIOTiff.h"`; siblings
+inside `cpp/` use the bare quote form.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
@@ -24,33 +25,35 @@ package(default_visibility = ["//src:__subpackages__"])
 # The codec-agnostic streaming write target (`"file"`/stdout/HTTP sink). A pure
 # leaf — stdlib only, no SipiImage — that `SipiIO::write` returns through, so
 # `//src/image`'s `SipiIO.h` includes it. Kept a separate target from
-# `:formats` so `//src/image` can depend on it WITHOUT depending on the handler
+# `:format_handlers` so `//src/image` can depend on it WITHOUT depending on the handler
 # package that in turn depends on `//src/image` (the cycle stays broken at target
-# granularity: output_sink <- image <- formats).
+# granularity: output_sink <- image <- format_handlers).
 cc_library(
     name = "output_sink",
-    srcs = ["output_sink.cpp"],
-    hdrs = ["output_sink.h"],
-    strip_include_prefix = "/src",
+    srcs = ["cpp/output_sink.cpp"],
+    hdrs = ["cpp/output_sink.h"],
+    include_prefix = "format_handlers",
+    strip_include_prefix = "/src/format_handlers/cpp",
 )
 
 cc_library(
-    name = "formats",
+    name = "format_handlers",
     srcs = [
-        "SipiIOJ2k.cpp",
-        "SipiIOJpeg.cpp",
-        "SipiIOPng.cpp",
-        "SipiIOTiff.cpp",
-        "format_registry.cpp",
+        "cpp/SipiIOJ2k.cpp",
+        "cpp/SipiIOJpeg.cpp",
+        "cpp/SipiIOPng.cpp",
+        "cpp/SipiIOTiff.cpp",
+        "cpp/format_registry.cpp",
     ],
     hdrs = [
-        "SipiIOJ2k.h",
-        "SipiIOJpeg.h",
-        "SipiIOPng.h",
-        "SipiIOTiff.h",
+        "cpp/SipiIOJ2k.h",
+        "cpp/SipiIOJpeg.h",
+        "cpp/SipiIOPng.h",
+        "cpp/SipiIOTiff.h",
     ],
     copts = ["-fexceptions"],
-    strip_include_prefix = "/src",
+    include_prefix = "format_handlers",
+    strip_include_prefix = "/src/format_handlers/cpp",
     deps = [
         ":output_sink",
         "//src:sipi_generated_hdrs",
@@ -83,10 +86,10 @@ cc_library(
 
 # Decode tier — SipiImage::read() across the @sipi_bench_fixtures input-format
 # matrix. Co-located with the module per ADR-0003 (moved from //src with the
-# formats carve). Built only by `just bench` (`tags = ["manual"]`).
+# format_handlers carve). Built only by `just bench` (`tags = ["manual"]`).
 cc_binary(
     name = "decode_benchmark",
-    srcs = ["decode_benchmark.cpp"],
+    srcs = ["cpp/decode_benchmark.cpp"],
     data = ["@sipi_bench_fixtures//:images"],
     tags = ["manual"],
     testonly = True,
@@ -100,7 +103,7 @@ cc_binary(
 # pins the wall-clock-stamped ICC creation date in emitted headers (ADR-0002).
 cc_binary(
     name = "encode_benchmark",
-    srcs = ["encode_benchmark.cpp"],
+    srcs = ["cpp/encode_benchmark.cpp"],
     data = ["@sipi_bench_fixtures//:images"],
     env = {
         "SIPI_WORKSPACE_ROOT": ".",
@@ -120,9 +123,9 @@ cc_binary(
 # TIFF pyramid-level selection (`select_pyramid_level` in SipiIOTiff.h).
 cc_test(
     name = "formats_test",
-    srcs = ["select_pyramid_level_test.cpp"],
+    srcs = ["cpp/select_pyramid_level_test.cpp"],
     deps = [
-        ":formats",
+        ":format_handlers",
         "@googletest//:gtest_main",
     ],
 )
@@ -130,7 +133,7 @@ cc_test(
 # The codec-agnostic write sink (`OutputSink` / `SinkStream`), linking the leaf.
 cc_test(
     name = "output_sink_test",
-    srcs = ["output_sink_test.cpp"],
+    srcs = ["cpp/output_sink_test.cpp"],
     deps = [
         ":output_sink",
         "@googletest//:gtest_main",

@@ -7,7 +7,7 @@
 
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
-#include "formats/SipiIOTiff.h"
+#include "format_handlers/SipiIOTiff.h"
 #include "observability/metrics.h"
 #include "test_paths.h"
 #include <cmath>

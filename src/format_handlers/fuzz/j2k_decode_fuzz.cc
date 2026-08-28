@@ -7,9 +7,9 @@
 #include <cstdint>
 
 #include "codec_fuzz_harness.h"
-#include "formats/SipiIOPng.h"
+#include "format_handlers/SipiIOJ2k.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
-  return sipi::fuzz::run_decode<Sipi::SipiIOPng>(data, size, ".png");
+  return sipi::fuzz::run_decode<Sipi::SipiIOJ2k>(data, size, ".jp2");
 }

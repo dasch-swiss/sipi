@@ -23,7 +23,7 @@
 
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
-#include "formats/SipiIOTiff.h"
+#include "format_handlers/SipiIOTiff.h"
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiSize.h"
 #include "metadata/icc.h"

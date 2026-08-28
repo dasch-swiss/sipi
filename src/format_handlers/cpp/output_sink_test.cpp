@@ -3,7 +3,7 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#include "formats/output_sink.h"
+#include "output_sink.h"
 
 #include <gtest/gtest.h>
 

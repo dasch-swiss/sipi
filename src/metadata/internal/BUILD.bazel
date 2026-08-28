@@ -39,7 +39,7 @@ cc_library(
 # the only translation unit that includes the generated `essentials.pb.h`; the
 # rest of the metadata module talks to it via `EssentialsCodecFields`. Visibility
 # stays at `//src/metadata:__pkg__` so the generated headers cannot leak into
-# `//src/formats` or `//shttps` even by accident.
+# `//src/format_handlers` or `//shttps` even by accident.
 cc_library(
     name = "protobuf_codec",
     srcs = ["protobuf_codec.cpp"],

@@ -10,7 +10,7 @@
  * for stdout, `"HTTP"` for the HTTP-server output) at the `SipiIO::write`
  * surface. It is deliberately free of any `shttps`/HTTP types: the HTTP socket
  * is reached only through `CallbackSink`'s opaque C-ABI callback, so
- * `src/formats/` carries no dependency on the transport layer. That callback
+ * `src/format_handlers/` carries no dependency on the transport layer. That callback
  * signature (`SipiWriteFn`) is fixed here and reused verbatim by the FFI seam,
  * where the Rust shell supplies the body-write callback.
  */

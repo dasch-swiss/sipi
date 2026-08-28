@@ -50,8 +50,8 @@ extern "C" {
  *  transport frames it chunked over HTTP/1.1). Returns 0 on success, non-zero
  *  on a write failure (peer gone, socket error) so the engine aborts without
  *  throwing across C frames. Structurally identical to `Sipi::SipiWriteFn` in
- *  `formats/output_sink.h` — the two are kept in lock-step by design across the
- *  formats/ffi layer boundary; each header stays self-contained. */
+ *  `format_handlers/output_sink.h` — the two are kept in lock-step by design across the
+ *  format_handlers/ffi layer boundary; each header stays self-contained. */
 typedef int (*SipiWriteFn)(void *ctx, const uint8_t *data, size_t len);
 
 /*! Deliver a **known-length** file region `[offset, offset+length)` to the

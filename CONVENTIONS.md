@@ -105,7 +105,7 @@ is scoped `ffi` only when the seam mechanism itself is the point.
 | Module (scope) | Path | Responsibility |
 |---|---|---|
 | `image` | `src/image/` | Image read/write pipeline; orchestrates decode → process → encode |
-| `formats` | `src/formats/` | Per-format codecs: TIFF, JP2 (Kakadu), PNG, JPEG; `fuzz/` (the libFuzzer harnesses over the `SipiIO` decode handlers), `fuzz/dicts/` (vendored AFL++ token dictionaries), and `corpus/` (the per-format two-tier seed corpora) |
+| `format_handlers` | `src/format_handlers/` | Per-format codecs: TIFF, JP2 (Kakadu), PNG, JPEG; `fuzz/` (the libFuzzer harnesses over the `SipiIO` decode handlers), `fuzz/dicts/` (vendored AFL++ token dictionaries), and `corpus/` (the per-format two-tier seed corpora) |
 | `metadata` | `src/metadata/` | EXIF, IPTC, XMP, ICC profile handling |
 | `iiifparser` | `src/iiifparser/` | IIIF URL parsing, colocated polyglot (ADR-0021): `cpp/value_objects/` (live engine value objects), `cpp/classifier/` (testonly `parse_iiif_uri` reference oracle `:iiif_handler`), `rust/` (the production parser `//src/iiifparser/rust:iiif_parser` the shell drives), and `fuzz/` (the libFuzzer harness over the Rust parser) |
 | `scripting` | `src/scripting/rust/` (ADR-0021/0023 layout) | The Rust-hosted mlua Lua runtime: hardened VM profile, limits, bytecode cache, the `server.*`/`SipiImage`/sqlite bindings, Lua-flavor config parse |
@@ -168,7 +168,7 @@ folder carries a `-rs` suffix; the subfolder is named `rust/`, not
 package, never nested under `cpp/` — they exercise the package as a
 whole, not one language's sources. `src/iiifparser/{cpp,rust,fuzz,corpus}/`
 is the reference shape; `src/scripting/rust/`, `src/throttling/cpp/`,
-and `src/formats/{fuzz,corpus}/` also conform today.
+and `src/format_handlers/{fuzz,corpus}/` also conform today.
 
 Splitting into `cpp/` moves sources one physical directory deeper, so
 the package's `cc_library` re-pins the virtual include path to keep
@@ -181,7 +181,7 @@ subpackage, e.g.
 (`#include "Foo.h"`). A package that hasn't split by language has no
 extra physical depth to correct for and needs only the plain
 `strip_include_prefix = "/src"` form, self-sufficient without any
-`include_prefix` twinning — `src/util/`, `src/formats/`, and
+`include_prefix` twinning — `src/util/` and
 `src/ffi/` set exactly that. `src/metadata/` sets neither attribute,
 the weaker fallback: cross-module consumers resolve `#include
 "metadata/icc.h"` through the consumer's own `includes = ["."]`.

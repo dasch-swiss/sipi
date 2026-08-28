@@ -44,7 +44,7 @@
 #include "logging/logger.h"
 #include "image/SipiIO.h"
 #include "image/SipiImageError.h"
-#include "formats/SipiIOPng.h"
+#include "SipiIOPng.h"
 #include "observability/profiling.h"
 
 // bad hack in order to include definitions in png.h on debian systems

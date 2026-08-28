@@ -266,7 +266,7 @@ bazel-build-tracy *FLAGS='':
 #
 # Coverage-guided fuzzing of the production Rust IIIF parser
 # (`//src/iiifparser/fuzz`) and the C++ codec decode entry points
-# (`//src/formats/fuzz`; DEV-7066). Runs on Linux and macOS: hermetic-llvm
+# (`//src/format_handlers/fuzz`; DEV-7066). Runs on Linux and macOS: hermetic-llvm
 # 0.8.18 stages `libclang_rt.fuzzer_osx.a`, so `-fsanitize=fuzzer` links on
 # darwin (see `.bazelrc` §Fuzzing; the macOS repo-rule DEVELOPER_DIR that lets
 # rules_fuzzing's Python deps resolve in the Nix shell is set globally there).
@@ -286,10 +286,10 @@ bazel-build-fuzz *FLAGS='':
     set -euo pipefail
     bazel build --config=fuzz --verbose_failures --remote_download_toplevel {{FLAGS}} \
         //src/iiifparser/fuzz:parse_request_fuzz_bin //src/iiifparser/fuzz:parse_request_fuzz_corpus \
-        //src/formats/fuzz:tiff_decode_fuzz_bin //src/formats/fuzz:tiff_decode_fuzz_corpus \
-        //src/formats/fuzz:jpeg_decode_fuzz_bin //src/formats/fuzz:jpeg_decode_fuzz_corpus \
-        //src/formats/fuzz:png_decode_fuzz_bin //src/formats/fuzz:png_decode_fuzz_corpus \
-        //src/formats/fuzz:j2k_decode_fuzz_bin //src/formats/fuzz:j2k_decode_fuzz_corpus \
+        //src/format_handlers/fuzz:tiff_decode_fuzz_bin //src/format_handlers/fuzz:tiff_decode_fuzz_corpus \
+        //src/format_handlers/fuzz:jpeg_decode_fuzz_bin //src/format_handlers/fuzz:jpeg_decode_fuzz_corpus \
+        //src/format_handlers/fuzz:png_decode_fuzz_bin //src/format_handlers/fuzz:png_decode_fuzz_corpus \
+        //src/format_handlers/fuzz:j2k_decode_fuzz_bin //src/format_handlers/fuzz:j2k_decode_fuzz_corpus \
         //bazel:llvm-symbolizer
     # The sanitizer runtime symbolizes crash frames by shelling out to
     # `llvm-symbolizer`, which is a source file inside the hermetic toolchain
@@ -299,7 +299,7 @@ bazel-build-fuzz *FLAGS='':
     # first-party frames print as bare `binary+0xOFFSET`.
     mkdir -p .fuzz
     ln -sfn "$(bazel info execution_root)/$(bazel cquery --config=fuzz //bazel:llvm-symbolizer --output=files 2>/dev/null | head -1)" .fuzz/llvm-symbolizer
-    echo "Instrumented fuzz binaries at: $(pwd)/bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin, $(pwd)/bazel-bin/src/formats/fuzz/{tiff,jpeg,png,j2k}_decode_fuzz_bin"
+    echo "Instrumented fuzz binaries at: $(pwd)/bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin, $(pwd)/bazel-bin/src/format_handlers/fuzz/{tiff,jpeg,png,j2k}_decode_fuzz_bin"
     echo "llvm-symbolizer at:            $(pwd)/.fuzz/llvm-symbolizer"
 
 # short name -> "_bin target|_corpus target|dict path|max_len|checked-in corpus dir"
@@ -311,10 +311,10 @@ bazel-build-fuzz *FLAGS='':
 # `fuzz-corpus-merge` merges coverage-adding inputs into.
 _fuzz_target_table := '
 parse_request //src/iiifparser/fuzz:parse_request_fuzz_bin //src/iiifparser/fuzz:parse_request_fuzz_corpus - - src/iiifparser/corpus
-tiff //src/formats/fuzz:tiff_decode_fuzz_bin //src/formats/fuzz:tiff_decode_fuzz_corpus src/formats/fuzz/dicts/tiff.dict 16384 src/formats/corpus/tiff
-jpeg //src/formats/fuzz:jpeg_decode_fuzz_bin //src/formats/fuzz:jpeg_decode_fuzz_corpus src/formats/fuzz/dicts/jpeg.dict 16384 src/formats/corpus/jpeg
-png //src/formats/fuzz:png_decode_fuzz_bin //src/formats/fuzz:png_decode_fuzz_corpus src/formats/fuzz/dicts/png.dict 8192 src/formats/corpus/png
-j2k //src/formats/fuzz:j2k_decode_fuzz_bin //src/formats/fuzz:j2k_decode_fuzz_corpus - 32768 src/formats/corpus/j2k
+tiff //src/format_handlers/fuzz:tiff_decode_fuzz_bin //src/format_handlers/fuzz:tiff_decode_fuzz_corpus src/format_handlers/fuzz/dicts/tiff.dict 16384 src/format_handlers/corpus/tiff
+jpeg //src/format_handlers/fuzz:jpeg_decode_fuzz_bin //src/format_handlers/fuzz:jpeg_decode_fuzz_corpus src/format_handlers/fuzz/dicts/jpeg.dict 16384 src/format_handlers/corpus/jpeg
+png //src/format_handlers/fuzz:png_decode_fuzz_bin //src/format_handlers/fuzz:png_decode_fuzz_corpus src/format_handlers/fuzz/dicts/png.dict 8192 src/format_handlers/corpus/png
+j2k //src/format_handlers/fuzz:j2k_decode_fuzz_bin //src/format_handlers/fuzz:j2k_decode_fuzz_corpus - 32768 src/format_handlers/corpus/j2k
 '
 
 # Run the mutation loop locally, e.g. `just fuzz tiff -max_total_time=60`.
@@ -449,11 +449,11 @@ bench name *FLAGS='':
     #!/usr/bin/env bash
     set -euo pipefail
     # The parse tier lives in the carved //src/iiifparser/cpp/value_objects
-    # package and the decode/encode tiers in //src/formats (ADR-0003); the
+    # package and the decode/encode tiers in //src/format_handlers (ADR-0003); the
     # process tier still sits at //src.
     case "{{name}}" in
         parse)         pkg="src/iiifparser/cpp/value_objects" ;;
-        decode|encode) pkg="src/formats" ;;
+        decode|encode) pkg="src/format_handlers" ;;
         *)             pkg="src" ;;
     esac
     bazel build -c opt //${pkg}:{{name}}_benchmark

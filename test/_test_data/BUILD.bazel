@@ -22,10 +22,10 @@ filegroup(
     ),
 )
 
-# Fuzz seed inputs for the codec fuzz harnesses (`//src/formats/fuzz`,
+# Fuzz seed inputs for the codec fuzz harnesses (`//src/format_handlers/fuzz`,
 # DEV-7066): one named filegroup per format, each pairing the smallest-valid
 # fixture with crafted-malformed fixtures already exercised by that codec's
-# unit/approval tests. Consumed indirectly through `//src/formats/corpus/<fmt>`,
+# unit/approval tests. Consumed indirectly through `//src/format_handlers/corpus/<fmt>`,
 # which layers these onto the (currently empty) per-package glob that
 # `fuzz-corpus-merge` grows over time. These fixtures are Git LFS.
 filegroup(

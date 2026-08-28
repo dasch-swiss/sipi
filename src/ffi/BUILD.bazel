@@ -78,10 +78,10 @@ cc_library(
         # //src/image (SipiCache has no dependency on SipiImage).
         "//src/cache",
         # The codec handlers. serve_image.cpp calls SipiImage::read/write, whose
-        # `io` handler registry is defined in //src/formats (moved there to
+        # `io` handler registry is defined in //src/format_handlers (moved there to
         # break the SipiImage<->handler cycle); this dep puts that definition —
         # and the four SipiIO* handlers it instantiates — on the link line.
-        "//src/formats:formats",
+        "//src/format_handlers:format_handlers",
         # generated/SipiVersion.h — the Bazel build stamp the seam hands to the
         # shell for its OTel resource attributes (sipi_build_version/commit).
         "//src:sipi_generated_hdrs",
