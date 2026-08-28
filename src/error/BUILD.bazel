@@ -1,4 +1,4 @@
-"""src/error — the SipiError exception base.
+"""src/error — the SipiError exception base and the SipiValueError value type.
 
 `metadata`, `format_handlers`, and `iiifparser` all throw/catch `SipiError` without
 depending on the image engine; folding the type into `//src/image` would
@@ -7,23 +7,45 @@ package is the tree's foundational leaf: everything above it (`metadata`,
 `format_handlers`, `iiifparser`, the image engine) depends on it, and it depends on
 nothing above itself.
 
+`SipiValueError` (ADR-0024) is the image/codec layer's value-returning
+replacement for `SipiImageError`; it lives here rather than in `//src/image`
+for the same reason `SipiError` does — every consumer of the image/codec
+layer already depends on this package without a cycle. It is header-only:
+no eager formatting happens at construction, so there is nothing to put in a
+translation unit.
+
 `include_prefix = "error"` + `strip_include_prefix = "/src/error/cpp"`
-exposes the header at `#include "error/SipiError.h"` for cross-package
-consumers; the sibling inside this package uses the bare quote form
-(`#include "SipiError.h"`).
+exposes the headers at `#include "error/SipiError.h"` / `#include
+"error/SipiValueError.h"` for cross-package consumers; siblings inside this
+package use the bare quote form (`#include "SipiError.h"`).
 """
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//src:__subpackages__"])
 
 cc_library(
     name = "error",
     srcs = ["cpp/SipiError.cpp"],
-    hdrs = ["cpp/SipiError.h"],
+    hdrs = [
+        "cpp/SipiError.h",
+        "cpp/SipiValueError.h",
+    ],
     include_prefix = "error",
     strip_include_prefix = "/src/error/cpp",
     deps = [
         "//src/util",
+    ],
+)
+
+# Colocated unit test (ADR-0003) for the header-only SipiValueError value
+# type: ErrorCode/policy_for completeness and the client_message()/
+# diagnostic_message() behavior it must reproduce from SipiImageError.
+cc_test(
+    name = "error_test",
+    srcs = ["cpp/sipi_value_error_test.cpp"],
+    deps = [
+        ":error",
+        "@googletest//:gtest_main",
     ],
 )

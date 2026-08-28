@@ -210,3 +210,54 @@ TEST(BuildImageResponse, ReportErrorNullCallbackIsSafeNoOp)
   ASSERT_FALSE(result.has_value());
   EXPECT_EQ(result.error(), SipiStatus::InternalError);
 }
+
+TEST(StatusFor, ReportPolicyCodeIsInternalError)
+{
+  const Sipi::SipiValueError err(Sipi::ErrorCode::kDecodeFailed, "boom");
+  EXPECT_EQ(status_for(err), SipiStatus::InternalError);
+}
+
+TEST(StatusFor, SkipPolicyCodeIsAlsoInternalError)
+{
+  // Every ErrorCode maps to kInternalError today (error-model.md); the
+  // sentry_policy (kReport vs kSkip) is orthogonal to the HTTP status.
+  const Sipi::SipiValueError err(Sipi::ErrorCode::kClientAbort, "client gone");
+  EXPECT_EQ(status_for(err), SipiStatus::InternalError);
+}
+
+TEST(ReportValueError, CallsCallbackForReportPolicyCode)
+{
+  const Sipi::SipiValueError err(Sipi::ErrorCode::kDecodeFailed, "decode boom");
+  Sipi::observability::ImageContext ctx;
+  ctx.input_file = "/unit/lena512.tif";
+  ctx.output_format = "png";
+  ReportedError out;
+
+  report_value_error(collect_report, &out, err, "convert", ctx);
+
+  ASSERT_TRUE(out.fired);
+  EXPECT_EQ(out.phase, "convert");
+  EXPECT_EQ(out.message, err.diagnostic_message());
+  EXPECT_EQ(out.input_file, ctx.input_file);
+}
+
+TEST(ReportValueError, SkipsCallbackForClientAbort)
+{
+  // The load-bearing case: kSkip must not call the callback at all,
+  // not merely pass it an empty report.
+  const Sipi::SipiValueError err(Sipi::ErrorCode::kClientAbort, "client gone");
+  Sipi::observability::ImageContext ctx;
+  ReportedError out;
+
+  report_value_error(collect_report, &out, err, "write", ctx);
+
+  EXPECT_FALSE(out.fired);
+}
+
+TEST(ReportValueError, NullCallbackIsSafeNoOp)
+{
+  const Sipi::SipiValueError err(Sipi::ErrorCode::kDecodeFailed, "decode boom");
+  Sipi::observability::ImageContext ctx;
+
+  report_value_error(nullptr, nullptr, err, "read", ctx);
+}

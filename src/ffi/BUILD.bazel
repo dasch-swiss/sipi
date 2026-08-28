@@ -69,6 +69,12 @@ cc_library(
     # instead of unwinding across the C ABI (FFI contract).
     copts = ["-fexceptions"],
     deps = [
+        # SipiValueError + policy_for (ADR-0024): serve_image.{h,cpp}'s
+        # status_for/report_value_error convert a value error into the seam's
+        # SipiStatus / SipiImageErrorReport. Reached transitively today via
+        # //src/image, but declared explicitly per this repo's rule that a
+        # consuming target states what it includes.
+        "//src/error",
         # The transport-free image engine (SipiImage, memory budget) the
         # IIIF pipeline drives, with the IIIF value objects
         # (//src/iiifparser/cpp/value_objects) reached transitively. //src/image

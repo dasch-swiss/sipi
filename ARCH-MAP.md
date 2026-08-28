@@ -65,10 +65,10 @@ image formats, whose registry fan-out is documented, not mechanized.
 ### error
 
 - **Paths:** `:(glob)src/error/**`
-- **Purpose:** The shared `SipiError` exception base. A standalone leaf so `metadata`, `format_handlers`, and `iiifparser` can throw/catch it without depending on the image engine — folding it into `image` would close an `image -> metadata -> image` cycle Bazel cannot express.
-- **Key entities:** `Sipi::SipiError`
-- **Public interface:** `SipiError` (via `//src/error`).
-- **Local-context kit:** `src/error/BUILD.bazel`, `src/error/cpp/SipiError.h`, `src/error/cpp/SipiError.cpp`
+- **Purpose:** The shared `SipiError` exception base and `SipiValueError` (ADR-0024), the image/codec layer's value-returning failure type. Both are a standalone leaf so `metadata`, `format_handlers`, and `iiifparser` can throw/catch `SipiError` without depending on the image engine — folding it into `image` would close an `image -> metadata -> image` cycle Bazel cannot express. `SipiValueError` lives here for the same reason: every consumer of the image/codec layer already depends on this package without a cycle.
+- **Key entities:** `Sipi::SipiError`, `Sipi::SipiValueError`, `Sipi::ErrorCode`, `Sipi::Result<T>`
+- **Public interface:** `SipiError`, `SipiValueError` (via `//src/error`).
+- **Local-context kit:** `src/error/BUILD.bazel`, `src/error/cpp/SipiError.h`, `src/error/cpp/SipiError.cpp`, `src/error/cpp/SipiValueError.h`, `src/error/cpp/sipi_value_error_test.cpp`
 - **Depends on:** util
 - **Used by:** image, metadata, format_handlers, iiifparser, cache
 - **Boundary rules:** a leaf — no internal deps beyond `util`; `deps(//src/error/...)` matches this minimal set — nothing pulls `image` back in through `error`. *Enforcement: `structure`* — `bazel query 'deps(//src/error/...)'` (CI-verifiable; see the `image_processing` entry's caveat on running `bazel query` locally in this sandbox).

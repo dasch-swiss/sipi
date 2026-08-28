@@ -455,6 +455,26 @@ namespace {
 
 }// namespace
 
+SipiStatus status_for(const SipiValueError &err)
+{
+  switch (policy_for(err.code()).http_status_class) {
+  case HttpStatusClass::kInternalError:
+    return SipiStatus::InternalError;
+  }
+}
+
+void report_value_error(SipiReportErrorFn report_error,
+  void *report_ctx,
+  const SipiValueError &err,
+  const std::string &phase,
+  const observability::ImageContext &ctx)
+{
+  // kSkip marks a failure that is not a server-side fault (e.g. a client
+  // abort mid-response): no callback, no Sentry.
+  if (policy_for(err.code()).sentry_policy == SentryPolicy::kSkip) { return; }
+  report_image_error(report_error, report_ctx, err.diagnostic_message(), phase, ctx);
+}
+
 std::expected<ServeResponse, SipiStatus>
   build_image_response(const SipiServeRequest &req, const EngineContext &eng, const std::function<bool()> &cancelled)
 {
