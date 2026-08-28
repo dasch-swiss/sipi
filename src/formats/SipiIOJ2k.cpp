@@ -697,7 +697,12 @@ bool SipiIOJ2k::read(SipiImage *img,
   if (force_bps_8) img->bps = 8;// forces kakadu to convert to 8 bit!
   switch (img->bps) {
   case 8: {
-    std::vector<byte> buffer8(static_cast<int>(dims.area()) * img->nc);
+    const auto buf8_size = checked_buf_size(
+      static_cast<std::size_t>(dims.size.x), static_cast<std::size_t>(dims.size.y), static_cast<std::size_t>(img->nc), 1);
+    if (!buf8_size) {
+      throw SipiImageError("Cannot read JPEG2000 file \"" + filepath + "\": image dimensions overflow buffer size");
+    }
+    std::vector<byte> buffer8(*buf8_size);
     try {
       decompressor.pull_stripe(buffer8.data(), stripe_heights);
     } catch (kdu_exception &exc) {
@@ -709,7 +714,12 @@ bool SipiIOJ2k::read(SipiImage *img,
   }
   case 12: {
     std::vector<char> get_signed(img->nc, 0);// vector<bool> does not work -> special treatment in C++
-    std::vector<byte> buffer16(2 * dims.area() * img->nc);
+    const auto buf16_size = checked_buf_size(
+      static_cast<std::size_t>(dims.size.x), static_cast<std::size_t>(dims.size.y), static_cast<std::size_t>(img->nc), 2);
+    if (!buf16_size) {
+      throw SipiImageError("Cannot read JPEG2000 file \"" + filepath + "\": image dimensions overflow buffer size");
+    }
+    std::vector<byte> buffer16(*buf16_size);
     try {
       decompressor.pull_stripe(reinterpret_cast<kdu_core::kdu_int16 *>(buffer16.data()),
         stripe_heights,
@@ -728,7 +738,12 @@ bool SipiIOJ2k::read(SipiImage *img,
   }
   case 16: {
     std::vector<char> get_signed(img->nc, 0);// vector<bool> does not work -> special treatment in C++
-    std::vector<byte> buffer16(2 * dims.area() * img->nc);
+    const auto buf16_size = checked_buf_size(
+      static_cast<std::size_t>(dims.size.x), static_cast<std::size_t>(dims.size.y), static_cast<std::size_t>(img->nc), 2);
+    if (!buf16_size) {
+      throw SipiImageError("Cannot read JPEG2000 file \"" + filepath + "\": image dimensions overflow buffer size");
+    }
+    std::vector<byte> buffer16(*buf16_size);
     try {
       decompressor.pull_stripe(reinterpret_cast<kdu_core::kdu_int16 *>(buffer16.data()),
         stripe_heights,
