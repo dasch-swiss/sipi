@@ -16,8 +16,8 @@ amends: 0013-shttps-as-internal-module.md
 
 The C++ HTTP server (`src/shttps/transport/` + `src/SipiHttpServer.{h,cpp}` + the
 `server` subcommand of the C++ `//src/cli:sipi` binary) is deleted. The Rust axum
-shell (`src/server-rs` + `src/cli-rs`) is the sole production server; it drives the
-C++ image engine (`libsipi`) over the FFI seam (`src/server-rs/src/ffi.rs`). The
+shell (`src/server/rust` + `src/cli/rust`) is the sole production server; it drives the
+C++ image engine (`libsipi`) over the FFI seam (`src/server/rust/src/ffi.rs`). The
 C++ `//src/cli:sipi` binary remains, but only for the offline verbs
 (`convert` / `verify` / `query` / `compare` / `health`).
 
@@ -38,7 +38,7 @@ oracle collapses that surface to the one server that ships.
   and `shttps.config.lua`. The domain modules ADR-0013 extracted
   (`src/scripting/`, `src/util/`, `src/jwt/`) survive; the interim reverse edges
   from `transport/` back into them die with the transport.
-- `src/SipiHttpServer.{h,cpp}` and the `server`-mode branch of `src/cli/cli_app.cpp`.
+- `src/SipiHttpServer.{h,cpp}` and the `server`-mode branch of `src/cli/cpp/cli_app.cpp`.
 - `src/observability/connection_metrics_adapter.{h,cpp}` — the transport→`Metrics`
   bridge, whose only caller was the deleted server mode.
 - **The differential parity gate, without replacement** — `test/e2e/tests/differential.rs`,
@@ -85,7 +85,7 @@ oracle collapses that surface to the one server that ships.
   `src/util` *through* shttps are retargeted to `//src/util` directly.
 - `Sipi::observability::Metrics` is a plain atomic-counter singleton. The
   `SipiMetricsSnapshot` 160-byte layout lock-step (`static_assert` +
-  `offset_of!`, mirrored in `server-rs/src/ffi.rs`) is unchanged and still gates
+  `offset_of!`, mirrored in `server/rust/src/ffi.rs`) is unchanged and still gates
   drift. The label-fanned `read_shape_*` / `essentials_hash_mismatch_*` counters
   remain engine-internal (not snapshotted) — the recorded observability gap is
   unchanged by this ADR (see `metrics_registry_test.cpp`).

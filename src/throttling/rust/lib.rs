@@ -132,7 +132,7 @@ pub struct Permit {
 
 /// A point-in-time read of the pool's fixed sizing, live occupancy, per-partition
 /// wait/shed counters, and the config fingerprint — the single source the OTLP
-/// bridge (`server-rs/src/metrics.rs`) reads.
+/// bridge (`server/rust/src/metrics.rs`) reads.
 #[derive(Clone, Copy, Debug)]
 pub struct AdmissionSnapshot {
     // Fixed sizing.

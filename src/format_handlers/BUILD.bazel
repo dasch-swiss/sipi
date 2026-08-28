@@ -119,14 +119,29 @@ cc_binary(
     ],
 )
 
-# Colocated unit tests (ADR-0003).
-
-# TIFF pyramid-level selection (`select_pyramid_level` in SipiIOTiff.h).
+# Colocated unit tests (ADR-0003). Covers TIFF pyramid-level selection plus
+# the per-format `read`/`read_shape`/`write` regression suites (bilevel TIFF,
+# JPEG marker parsing + write, J2K palette + oversized-dimension decode, the
+# shared `SipiImgInfo`/`read_shape` surface across all four handlers, and the
+# error paths each codec throws on truncated/malformed input).
 cc_test(
     name = "formats_test",
-    srcs = ["cpp/select_pyramid_level_test.cpp"],
+    srcs = [
+        "cpp/format_error_path_test.cpp",
+        "cpp/imginfo_test.cpp",
+        "cpp/j2k_dimension_regression_test.cpp",
+        "cpp/j2k_palette_regression_test.cpp",
+        "cpp/jpeg_format_regression_test.cpp",
+        "cpp/jpeg_marker_regression_test.cpp",
+        "cpp/jpeg_write_test.cpp",
+        "cpp/select_pyramid_level_test.cpp",
+        "cpp/tiff_bilevel_regression_test.cpp",
+    ],
+    data = ["//test/_test_data:images"],
+    env = {"SIPI_WORKSPACE_ROOT": "."},
     deps = [
         ":format_handlers",
+        "//test:test_paths",
         "@googletest//:gtest_main",
     ],
 )

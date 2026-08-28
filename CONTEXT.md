@@ -22,7 +22,7 @@ Prefer the glossary's canonical terms over the variant spellings in older code.
 
 ## The HTTP server: Rust shell over the C++ engine
 
-The HTTP server is the Rust shell (`//src/cli-rs:sipi` over the `//src/server-rs:lib`
+The HTTP server is the Rust shell (`//src/cli/rust:sipi` over the `//src/server/rust:lib`
 library, axum-based), which drives the C++ image engine through the FFI seam. There
 is no C++ HTTP server: the retained `shttps` transport and `SipiHttpServer` — kept
 in-tree through the strangler migration as the differential-parity oracle — have

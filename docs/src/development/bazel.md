@@ -20,7 +20,7 @@ native-`cc_library` deps' source archives via `http_archive`. Version
 bumps live here.
 
 **BUILD.bazel** files describe the *target graph*. Each first-party
-package — `//src`, `//src/server-rs`, `//src/cli-rs`,
+package — `//src`, `//src/server/rust`, `//src/cli/rust`,
 `//test/unit/<mod>`, `//bazel/...` — has its own
 BUILD.bazel that declares its `cc_library`/`cc_binary`/`cc_test`/
 `oci_image`/`rust_test` targets and visibility rules.
@@ -59,8 +59,8 @@ through link.
 
 ```bash
 nix develop                                    # bazelisk + host tools on PATH
-just bazel-build-server                        # bazel build --stamp //src/cli-rs:sipi (the Rust server shell)
-./bazel-bin/src/cli-rs/sipi server --config config/sipi.localdev-config.lua
+just bazel-build-server                        # bazel build --stamp //src/cli/rust:sipi (the Rust server shell)
+./bazel-bin/src/cli/rust/sipi server --config config/sipi.localdev-config.lua
 # Subsequent edits:
 just bazel-build-server                        # incremental, sub-second through link
 ```

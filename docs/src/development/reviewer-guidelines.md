@@ -51,7 +51,7 @@ Checklist for human and AI reviewers. Not every item applies to every PR — use
 
 ## Consistency
 
-- [ ] Follow existing patterns (route registration in the Rust axum router, `app()` in `src/server-rs/src/lib.rs`; native third-party deps as `cc_library` in `bazel/<lib>.BUILD.bazel`; test layout in `test/unit/`)
+- [ ] Follow existing patterns (route registration in the Rust axum router, `app()` in `src/server/rust/src/lib.rs`; native third-party deps as `cc_library` in `bazel/<lib>.BUILD.bazel`; test layout in `test/unit/`)
 - [ ] Config example files updated alongside code changes
 - [ ] New fields mirror structure of similar existing fields
 

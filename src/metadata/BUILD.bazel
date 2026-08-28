@@ -8,7 +8,7 @@ Houses SIPI's EXIF (`Exif`), IPTC (`Iptc`), XMP (`Xmp`), and ICC
 co-located.
 
 The byte-mutation helper `apply_icc_header_normalization` lives in
-`//src/metadata/internal:icc_normalization` per DEV-6406 — the canonical
+`//src/metadata/cpp/internal:icc_normalization` per DEV-6406 — the canonical
 Test seam pattern. Its visibility is restricted to `//src/metadata:__pkg__`
 at the Bazel analysis level, replacing today's comment-as-policy header
 with a build-graph invariant. The co-located `icc_normalize_test`
@@ -22,6 +22,11 @@ value and the `PhotometricInterpretation` enum lives here in
 engine (`SipiImage` is owned by `//src/image`), depending only on
 `//src/error` for `SipiError`. `layering_check`/`parse_headers` stay
 deferred to the global DEV-6353 flip.
+
+`include_prefix = "metadata"` + `strip_include_prefix = "/src/metadata/cpp"`
+exposes the headers at the path-prefixed form `#include "metadata/icc.h"` for
+cross-module consumers; siblings inside this package use the quote-form
+(`#include "icc.h"`).
 """
 
 load("@protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
@@ -31,12 +36,12 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 package(default_visibility = ["//src:__subpackages__"])
 
 # Essentials packet wire format (ADR-0005 / DEV-6410). `cc_proto_library` is
-# consumed only by `//src/metadata/internal:protobuf_codec`;
+# consumed only by `//src/metadata/cpp/internal:protobuf_codec`;
 # every other translation unit talks to the codec via the `EssentialsFields`
 # struct in `essentials.h` so `essentials.pb.h` stays out of the public ABI.
 proto_library(
     name = "essentials_proto",
-    srcs = ["essentials.proto"],
+    srcs = ["cpp/essentials.proto"],
 )
 
 cc_proto_library(
@@ -47,26 +52,22 @@ cc_proto_library(
 cc_library(
     name = "metadata",
     srcs = [
-        "essentials.cpp",
-        "exif.cpp",
-        "icc.cpp",
-        "iptc.cpp",
-        "xmp.cpp",
+        "cpp/essentials.cpp",
+        "cpp/exif.cpp",
+        "cpp/icc.cpp",
+        "cpp/iptc.cpp",
+        "cpp/xmp.cpp",
     ],
     hdrs = [
-        "essentials.h",
-        "exif.h",
-        "icc.h",
-        "iptc.h",
-        "photometric_interpretation.h",
-        "xmp.h",
+        "cpp/essentials.h",
+        "cpp/exif.h",
+        "cpp/icc.h",
+        "cpp/iptc.h",
+        "cpp/photometric_interpretation.h",
+        "cpp/xmp.h",
     ],
-    # No `includes` directive: cross-module consumers use the path-prefixed
-    # form (`#include "metadata/icc.h"`) which is resolved via the
-    # consumer's own `includes = ["."]` (typically via //src:sipi_lib).
-    # Siblings inside this package use the quote-form (`#include
-    # "icc.h"`) which auto-searches the current source's directory.
-    #
+    include_prefix = "metadata",
+    strip_include_prefix = "/src/metadata/cpp",
     # `-ldl` / `-lpthread` propagate to every consumer at link time:
     # exiv2 + sentry (transitive deps of `:icc` and `:exif`) call into
     # libdl + libpthread directly. //src:sipi_lib declares these for its
@@ -90,8 +91,8 @@ cc_library(
         "//src:sipi_generated_hdrs",
         "//src/error",
         "//src/logging:logging",
-        "//src/metadata/internal:icc_normalization",
-        "//src/metadata/internal:protobuf_codec",
+        "//src/metadata/cpp/internal:icc_normalization",
+        "//src/metadata/cpp/internal:protobuf_codec",
     ],
 )
 
@@ -102,11 +103,11 @@ cc_library(
 cc_test(
     name = "icc_normalize_test",
     srcs = [
-        "icc_normalize_test.cpp",
-        "test_main.cpp",
+        "cpp/icc_normalize_test.cpp",
+        "cpp/test_main.cpp",
     ],
     deps = [
-        "//src/metadata/internal:icc_normalization",
+        "//src/metadata/cpp/internal:icc_normalization",
         "@googletest//:gtest_main",
     ],
 )
@@ -117,10 +118,28 @@ cc_test(
 # (protobuf) or `Essentials::parse_legacy` (pipe-delimited).
 cc_test(
     name = "essentials_test",
-    srcs = ["essentials_test.cpp"],
+    srcs = ["cpp/essentials_test.cpp"],
     deps = [
         ":metadata",
-        "//src/metadata/internal:protobuf_codec",
+        "//src/metadata/cpp/internal:protobuf_codec",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# Co-located unit test for the EXIF rational-array read path (DEV-6537).
+# Decodes a real TIFF fixture through `SipiIOTiff::read()`, so this target
+# depends on `//src/format_handlers` and `//src/image` for the codec dispatch
+# alongside `:metadata` for `Exif`.
+cc_test(
+    name = "exif_rational_test",
+    srcs = ["cpp/exif_rational_regression_test.cpp"],
+    data = ["//test/_test_data:images"],
+    env = {"SIPI_WORKSPACE_ROOT": "."},
+    deps = [
+        ":metadata",
+        "//src/format_handlers:format_handlers",
+        "//src/image",
+        "//test:test_paths",
         "@googletest//:gtest_main",
     ],
 )

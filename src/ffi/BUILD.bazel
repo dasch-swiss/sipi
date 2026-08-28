@@ -9,8 +9,8 @@ rules_rust `cc_import`/`deps`) as a defined unit. (It is not dependency-free:
 the `//src/util` dep below pulls libmagic transitively; as the engine
 slices land behind the FFI the target grows rather than shrinks.)
 
-`strip_include_prefix = "/src"` exposes the header at `#include "ffi/sipi_ffi.h"`
-self-sufficiently (ADR-0003), the same shape as `//src/util`. Siblings
+`include_prefix = "ffi"` + `strip_include_prefix = "/src/ffi/cpp"` exposes the
+header at `#include "ffi/sipi_ffi.h"` self-sufficiently (ADR-0003). Siblings
 within the package use the bare quote form (`#include "sipi_ffi.h"`).
 
 The target hosts the C++ side of the seam; its `srcs` grow as the engine is
@@ -35,34 +35,35 @@ cc_library(
         # defined in metrics_snapshot.h); image_handle.cpp is the opaque
         # sipi_image_* handle family the Rust-hosted Lua SipiImage bindings
         # drive.
-        "engine_context.cpp",
+        "cpp/engine_context.cpp",
         # init.cpp is the production `sipi_init` engine install; it lives in
         # //src/ffi, not //src/cli, so no production FFI entry lives in the CLI
         # label; startup.cpp holds the LibraryInitialiser + memory-detection
         # helpers it shares with the CLI dispatch (dependency runs cli -> ffi).
-        "init.cpp",
-        "serve_image.cpp",
-        "serve_response.cpp",
-        "serve_timings.cpp",
-        "image_handle.cpp",
-        "sipi_ffi.cpp",
-        "startup.cpp",
+        "cpp/init.cpp",
+        "cpp/serve_image.cpp",
+        "cpp/serve_response.cpp",
+        "cpp/serve_timings.cpp",
+        "cpp/image_handle.cpp",
+        "cpp/sipi_ffi.cpp",
+        "cpp/startup.cpp",
         # SipiConf is the Lua-flavoured config object init.cpp constructs and
         # populates before installing the engine context; it has no consumer
         # outside this package.
-        "SipiConf.cpp",
+        "cpp/SipiConf.cpp",
     ],
     hdrs = [
-        "engine_context.h",
-        "metrics_snapshot.h",
-        "serve_image.h",
-        "serve_response.h",
-        "serve_timings.h",
-        "sipi_ffi.h",
-        "startup.h",
-        "SipiConf.h",
+        "cpp/engine_context.h",
+        "cpp/metrics_snapshot.h",
+        "cpp/serve_image.h",
+        "cpp/serve_response.h",
+        "cpp/serve_timings.h",
+        "cpp/sipi_ffi.h",
+        "cpp/startup.h",
+        "cpp/SipiConf.h",
     ],
-    strip_include_prefix = "/src",
+    include_prefix = "ffi",
+    strip_include_prefix = "/src/ffi/cpp",
     # -fexceptions: the catch-all guard in each entry point relies on
     # exceptions being enabled so a codec/std throw becomes a status code
     # instead of unwinding across the C ABI (FFI contract).
@@ -110,7 +111,7 @@ cc_library(
 # parse/clamp + status/header derivation, exercised without a transport.
 cc_test(
     name = "serve_response_test",
-    srcs = ["serve_response_test.cpp"],
+    srcs = ["cpp/serve_response_test.cpp"],
     deps = [
         ":sipi_ffi",
         "@googletest//:gtest_main",
@@ -123,7 +124,7 @@ cc_test(
 # which honours SIPI_WORKSPACE_ROOT.
 cc_test(
     name = "serve_image_test",
-    srcs = ["serve_image_test.cpp"],
+    srcs = ["cpp/serve_image_test.cpp"],
     data = ["//test/_test_data:images"],
     env = {"SIPI_WORKSPACE_ROOT": "."},
     deps = [
@@ -139,7 +140,7 @@ cc_test(
 # //test:test_paths, which honours SIPI_WORKSPACE_ROOT.
 cc_test(
     name = "seam_probe_test",
-    srcs = ["seam_probe_test.cpp"],
+    srcs = ["cpp/seam_probe_test.cpp"],
     data = ["//test/_test_data:images"],
     env = {"SIPI_WORKSPACE_ROOT": "."},
     deps = [
@@ -154,7 +155,7 @@ cc_test(
 # overwrite-on-retime, reset clearing, out-of-range no-op), without a transport.
 cc_test(
     name = "serve_timings_test",
-    srcs = ["serve_timings_test.cpp"],
+    srcs = ["cpp/serve_timings_test.cpp"],
     deps = [
         ":sipi_ffi",
         "@googletest//:gtest_main",
@@ -167,7 +168,7 @@ cc_test(
 # to drive the singleton.
 cc_test(
     name = "metrics_snapshot_test",
-    srcs = ["metrics_snapshot_test.cpp"],
+    srcs = ["cpp/metrics_snapshot_test.cpp"],
     deps = [
         ":sipi_ffi",
         "//src/observability:observability",

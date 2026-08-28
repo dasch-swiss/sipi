@@ -134,7 +134,7 @@ coincide with no aggregate gain (or a regression) once the request pool is
 saturated.
 
 `just loadtest-decode "10,20,40"` covers that gap. It builds the production
-Rust shell (`//src/cli-rs:sipi`, `-c opt`), serves `load_test.jpx` via
+Rust shell (`//src/cli/rust:sipi`, `-c opt`), serves `load_test.jpx` via
 `config/sipi.loadtest-config.lua`, and drives it with
 `tools/loadtest/loadgen.py`: N concurrent clients each requesting a distinct
 native-resolution tile (distinct region → cache miss → real decode), reporting

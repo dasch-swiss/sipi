@@ -14,7 +14,7 @@ The target mirrors the BCR 2.x overlay's `:mimalloc-lib` shape: one
 `alwayslink` (whole-archive) library compiled as C with `MI_MALLOC_OVERRIDE`,
 so the `malloc`/`free`/`operator new` override objects — `src/alloc-override.c`
 is textually included by `src/alloc.c` — are unconditionally in any link that
-depends on this target. Consumed only by `//src/cli-rs:sipi` (Linux); nothing
+depends on this target. Consumed only by `//src/cli/rust:sipi` (Linux); nothing
 else may depend on it (the C++ engine binary stays on glibc as the
 allocator-isolated oracle baseline).
 """

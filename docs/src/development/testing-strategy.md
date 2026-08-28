@@ -20,9 +20,9 @@ Sipi implements the full [IIIF Image API 3.0](https://iiif.io/api/image/3.0/) at
 | **Quality** (Section 4.4) | `default`, `color`, `gray`, `bitonal` | `src/iiifparser/cpp/value_objects/SipiQualityFormat.cpp` |
 | **Format** (Section 4.5) | `jpg`, `png`, `tif`, `jp2`, `webp` | `src/iiifparser/cpp/value_objects/SipiQualityFormat.cpp` |
 | **Identifiers** (Section 3) | URL-encoded, `%2F` slash, prefix-based resolution | `src/iiifparser/cpp/value_objects/SipiIdentifier.cpp` |
-| **Info.json** (Section 5) | Full response: `@context`, `id`, `type`, `protocol`, `profile`, `width`, `height`, `sizes`, `tiles`, `extraFormats`, `extraFeatures`, `preferredFormats` | `src/server-rs/src/info.rs` |
-| **Content negotiation** | `Accept: application/ld+json` → JSON-LD with `@context`; default → `application/json` | `src/server-rs/src/info.rs` |
-| **HTTP behavior** (Section 7) | Base URI redirect, HEAD, CORS, Link headers, canonical URI, 400/401/403/404/500/501 errors | `src/server-rs/src/routes.rs` |
+| **Info.json** (Section 5) | Full response: `@context`, `id`, `type`, `protocol`, `profile`, `width`, `height`, `sizes`, `tiles`, `extraFormats`, `extraFeatures`, `preferredFormats` | `src/server/rust/src/info.rs` |
+| **Content negotiation** | `Accept: application/ld+json` → JSON-LD with `@context`; default → `application/json` | `src/server/rust/src/info.rs` |
+| **HTTP behavior** (Section 7) | Base URI redirect, HEAD, CORS, Link headers, canonical URI, 400/401/403/404/500/501 errors | `src/server/rust/src/routes.rs` |
 | **IIIF Extension: `red:n`** | Reduce factor for JP2 (faster subsampling on read) — sipi-specific, not in IIIF spec | `src/iiifparser/cpp/value_objects/SipiSize.cpp` |
 
 !!! note "IIIF Auth exclusion"
@@ -72,20 +72,20 @@ Each step allocates an intermediate buffer. Peak memory is ~2x image size per tr
 
 ### HTTP Server (Rust axum shell)
 
-The production HTTP server is the Rust axum shell (`src/server-rs` +
-`src/cli-rs`), which drives the C++ image engine over the FFI seam:
+The production HTTP server is the Rust axum shell (`src/server/rust` +
+`src/cli/rust`), which drives the C++ image engine over the FFI seam:
 
 | Feature | Details | Source |
 |---|---|---|
-| SSL/TLS | Terminated at Traefik in front of the shell; `sslport`/`sslcert`/`sslkey` keys parse but are inert | `src/server-rs/src/config.rs` |
-| Threading | Bounded worker pool with a request queue (env-tunable: `SIPI_NTHREADS`, `SIPI_MAX_WAITING`, `SIPI_QUEUE_TIMEOUT`) | `src/server-rs/src/routes.rs` |
-| Keep-alive | `keepalive`/`SIPI_KEEPALIVE` CLI/env flag; parse-only, unread | `src/server-rs/src/config.rs` |
-| Chunked transfer | axum/hyper streaming responses | `src/server-rs/src/sink.rs` |
+| SSL/TLS | Terminated at Traefik in front of the shell; `sslport`/`sslcert`/`sslkey` keys parse but are inert | `src/server/rust/src/config.rs` |
+| Threading | Bounded worker pool with a request queue (env-tunable: `SIPI_NTHREADS`, `SIPI_MAX_WAITING`, `SIPI_QUEUE_TIMEOUT`) | `src/server/rust/src/routes.rs` |
+| Keep-alive | `keepalive`/`SIPI_KEEPALIVE` CLI/env flag; parse-only, unread | `src/server/rust/src/config.rs` |
+| Chunked transfer | axum/hyper streaming responses | `src/server/rust/src/sink.rs` |
 | Range requests | HTTP 206 Partial Content | Handler-level |
 | CORS | Via Lua preflight scripts | `scripts/` |
-| Methods | GET, POST, PUT, DELETE | `src/server-rs/src/lib.rs` |
+| Methods | GET, POST, PUT, DELETE | `src/server/rust/src/lib.rs` |
 | Authentication | JWT (HS256), HTTP Basic Auth, cookie support | `src/scripting/rust/bindings/server.rs` |
-| Max POST size | Configurable (`max_post_size`, default 300M) | `src/server-rs/src/config_file.rs` |
+| Max POST size | Configurable (`max_post_size`, default 300M) | `src/server/rust/src/config_file.rs` |
 | Multipart upload | Form-data file upload retained as a Lua route (ADR-0017) | `scripts/` |
 
 ### Caching System
@@ -163,7 +163,7 @@ Per-request isolated Lua 5.3.5 interpreter with full server access:
 
 ### CLI Mode
 
-Sipi operates in three CLI modes (`src/cli/cli_app.cpp`):
+Sipi operates in three CLI modes (`src/cli/cpp/cli_app.cpp`):
 
 **File Conversion:** `sipi infile outfile [options]`
 
@@ -188,11 +188,11 @@ Sipi operates in three CLI modes (`src/cli/cli_app.cpp`):
 
 **Compare Mode:** `sipi compare file1 file2` — compare two images.
 
-**Server Mode:** the Rust axum shell (`//src/cli-rs:sipi server --config config.lua`) with CLI overrides for port, hostname, imgroot, cache settings, JWT, admin credentials, logging, etc. (TLS terminates at Traefik; `sslcert`/`sslkey` flags parse but are inert.)
+**Server Mode:** the Rust axum shell (`//src/cli/rust:sipi server --config config.lua`) with CLI overrides for port, hostname, imgroot, cache settings, JWT, admin credentials, logging, etc. (TLS terminates at Traefik; `sslcert`/`sslkey` flags parse but are inert.)
 
 ### Configuration System
 
-Lua-based configuration (`SipiConf.h`, `src/ffi/SipiConf.cpp`):
+Lua-based configuration (`SipiConf.h`, `src/ffi/cpp/SipiConf.cpp`):
 
 | Category | Keys |
 |---|---|
@@ -211,7 +211,7 @@ Lua-based configuration (`SipiConf.h`, `src/ffi/SipiConf.cpp`):
 
 ### Metrics (OTLP)
 
-The cache counters and gauges are exported over OTLP, not a scrape endpoint. The C++ engine maintains them (`src/observability/metrics.h`, `src/observability/metrics.cpp`); the scalar fields cross the FFI seam via `SipiMetricsSnapshot` and the Rust shell (`src/server-rs/src/metrics.rs`) emits them over OTLP. There is no `GET /metrics` route. Test accordingly: cache observability goes through on-disk cache-dir file counts (`cache.rs`), not a scrape endpoint.
+The cache counters and gauges are exported over OTLP, not a scrape endpoint. The C++ engine maintains them (`src/observability/cpp/metrics.h`, `src/observability/cpp/metrics.cpp`); the scalar fields cross the FFI seam via `SipiMetricsSnapshot` and the Rust shell (`src/server/rust/src/metrics.rs`) emits them over OTLP. There is no `GET /metrics` route. Test accordingly: cache observability goes through on-disk cache-dir file counts (`cache.rs`), not a scrape endpoint.
 
 | Metric | Type | Description |
 |---|---|---|
@@ -607,7 +607,7 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 | Restricted image size reduction | :white_check_mark: | `server.rs::restricted_image_reduction` | |
 | 4-bit palette PNG upload | :white_check_mark: | `upload.rs` | `upload_4bit_palette_png` |
 | Cache API routes (`/api/cache`) | N/A — removed | — | route unregistered, Lua `cache` table bindings absent from `src/` |
-| Favicon endpoint | :x: GAP | — | favicon route exists (`src/server-rs/src/lib.rs`); its only e2e test was removed with the differential suite |
+| Favicon endpoint | :x: GAP | — | favicon route exists (`src/server/rust/src/lib.rs`); its only e2e test was removed with the differential suite |
 | Memory safety (ASan/LSan) | :white_check_mark: | `ci.yml`'s `sanitizer` job | unit + e2e suites against an ASan+UBSan-instrumented binary (see Cross-Cutting section below) |
 | Thread safety (TSan) | :x: GAP | — | Untested for data races; future optional nightly variant |
 | Performance regression detection | :white_check_mark: | `latency.rs` | smoke thresholds only (info.json / cache-miss / cache-hit); load-baseline tier intentionally deferred to staging (see Cross-Cutting section) |

@@ -1,5 +1,5 @@
 //! Hand-mirrored `extern "C"` declarations and safe wrappers for the
-//! `sipi_image_*` handle family (`src/ffi/sipi_ffi.h` — the contract lives on
+//! `sipi_image_*` handle family (`src/ffi/cpp/sipi_ffi.h` — the contract lives on
 //! the C declarations). The wrappers own the handle ([`ImageHandle`] frees it
 //! in `Drop`, so a killed/unwound VM releases every handle), deep-copy every
 //! emitted string inside the callback, and `catch_unwind`-wrap the one Rust

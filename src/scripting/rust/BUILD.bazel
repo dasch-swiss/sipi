@@ -12,7 +12,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//src:__subpackages__"])
 
-# The C++ stdlib link bracket — same shape as //src/server-rs (see its
+# The C++ stdlib link bracket — same shape as //src/server/rust (see its
 # docstring): any target that performs a FINAL link of the C++ engine
 # archives under rustc's C linker driver needs libc++ linked explicitly.
 # The rust_library itself only produces an rlib; the rust_test/rust_binary
@@ -74,7 +74,7 @@ rust_library(
         # see bindings/sqlite.rs for why not libsqlite3-sys).
         "@sqlite3",
     ],
-    # Excluded from the sanitizer build like //src/server-rs:lib: the crate
+    # Excluded from the sanitizer build like //src/server/rust:lib: the crate
     # carries the transitive C++ engine dep whose source trips the missing
     # <sanitizer/*.h> header under --config=asan.
     tags = ["no-sanitizer"],

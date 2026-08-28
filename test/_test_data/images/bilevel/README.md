@@ -1,12 +1,12 @@
 # Bilevel TIFF test fixtures
 
-Synthetic 1-bit bilevel TIFF fixtures used by the `sipi_image_tests`
+Synthetic 1-bit bilevel TIFF fixtures used by the `//src/format_handlers:formats_test`
 1-bit bilevel TIFF regression suite. Regenerate with:
 
     $TMPDIR/generate_bilevel_tiffs test/_test_data/images/bilevel/
 
 The generator source lives at
-`test/unit/sipiimage/fixtures/generate_bilevel_tiffs.cpp`. The `.tif` files
+`test/unit/fixtures/generate_bilevel_tiffs.cpp`. The `.tif` files
 below are committed so CI does not need a libtiff tool chain or Python at
 test time.
 

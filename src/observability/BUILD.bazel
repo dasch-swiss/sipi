@@ -22,21 +22,23 @@ package(default_visibility = ["//src:__subpackages__"])
 cc_library(
     name = "observability",
     srcs = [
-        "metrics.cpp",
+        "cpp/metrics.cpp",
     ],
     hdrs = [
-        "metrics.h",
+        "cpp/metrics.h",
         # The Tracy zone-macro shim. Header-only; the `@tracy//:tracy` dep below
         # propagates the (inert-unless-`--config=tracy`) profiler to every
         # //src:sipi_lib TU that `#include "observability/profiling.h"`.
-        "profiling.h",
+        "cpp/profiling.h",
     ],
-    # No `includes` directive needed: cross-module consumers use the
-    # path-prefixed form (`#include "observability/metrics.h"`) which is
-    # resolved via a consumer's own `includes = ["."]` (typically via
-    # //src:sipi_lib). Siblings inside this package use the quote-form
-    # (`#include "metrics.h"`) which searches the current source's
-    # directory automatically.
+    # `include_prefix = "observability"` + `strip_include_prefix =
+    # "/src/observability/cpp"` exposes the path-prefixed form
+    # (`#include "observability/metrics.h"`) for cross-module consumers.
+    # Siblings inside this package use the quote-form (`#include
+    # "metrics.h"`), which searches the current source's directory
+    # automatically.
+    include_prefix = "observability",
+    strip_include_prefix = "/src/observability/cpp",
     deps = [
         "//src:sipi_generated_hdrs",
         # Profiler shim (profiling.h). Inert unless `--config=tracy` defines
@@ -51,8 +53,8 @@ cc_library(
 cc_test(
     name = "metrics_registry_test",
     srcs = [
-        "metrics_registry_test.cpp",
-        "test_main.cpp",
+        "cpp/metrics_registry_test.cpp",
+        "cpp/test_main.cpp",
     ],
     deps = [
         ":observability",

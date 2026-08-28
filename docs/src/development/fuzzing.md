@@ -37,9 +37,9 @@ src/iiifparser/fuzz/
 ```
 
 This is the repo's only **C++-calls-Rust** link — every other FFI edge
-(`src/ffi/`, `src/server-rs/src/ffi.rs`) is Rust→C++. The declaration in
+(`src/ffi/`, `src/server/rust/src/ffi.rs`) is Rust→C++. The declaration in
 `fuzz_target.cc` is hand-mirrored from the Rust signature, following the
-`src/ffi/sipi_ffi.h` convention (no cbindgen).
+`src/ffi/cpp/sipi_ffi.h` convention (no cbindgen).
 
 The seam never leaves the package, and Bazel enforces that rather than merely
 documenting it: both targets are `testonly` (`cc_fuzz_test` forwards `testonly`

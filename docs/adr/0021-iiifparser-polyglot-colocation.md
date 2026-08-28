@@ -9,14 +9,14 @@ languages, and they live apart. The C++ classifier (`iiif_handler.cpp`,
 `handlers::iiif_handler::parse_iiif_uri`) and the C++ value-object string parsers
 (`SipiRegion`/`SipiSize`/`SipiRotation`/`SipiQualityFormat`/`SipiIdentifier`/
 `SipiDecodeDims`) sit under `src/iiifparser/`. The production Rust parser is a
-single 821-line file, `src/server-rs/src/iiif.rs`, buried inside the monolithic
-`//src/server-rs:lib` crate. The shared regression corpus (`src/iiifparser/corpus/`,
+single 821-line file, `src/server/rust/src/iiif.rs`, buried inside the monolithic
+`//src/server/rust:lib` crate. The shared regression corpus (`src/iiifparser/corpus/`,
 240 IIIF-URI files, originally the retired libFuzzer seed corpus — [ADR-0020](0020-oracle-removal.md))
 is wired only to the C++ side.
 
 Two problems follow. First, the two implementations of one logical component are
 not colocated, so reading them side by side during the strangler migration means
-jumping between `src/iiifparser/` and a file inside `server-rs`. Second, the Rust
+jumping between `src/iiifparser/` and a file inside `server/rust`. Second, the Rust
 parser is coupled to the FFI seam: `iiif.rs` imports
 `crate::ffi::{SipiFormatType, SipiIiifParams, SipiQualityType, SipiRegionType, SipiSizeType}`
 and emits the flattened `#[repr(C)]` `SipiIiifParams` directly. The parser — pure
@@ -44,8 +44,8 @@ idiomatic Rust (`bool` for the upscaling/mirror flags, no `#[repr(C)]`). It has 
 dependency on `//src/ffi:sipi_ffi` and does not import `crate::ffi`; its only
 external crate is `percent-encoding`. **The domain → seam flattening
 (`From<iiif_parser::IiifParams> for SipiIiifParams`, plus the enum conversions)
-lives in `server-rs`**, applied at the single site where params cross the FFI
-(`routes.rs` `serve_image`). `server-rs` owns the seam; the parser does not know
+lives in `server/rust`**, applied at the single site where params cross the FFI
+(`routes.rs` `serve_image`). `server/rust` owns the seam; the parser does not know
 the seam exists.
 
 **The Rust side is one crate, not a mirror of the C++ split.** The C++ folders
@@ -89,14 +89,14 @@ them:**
   engine into a pure-CPU parser, defeating the point of the carve and keeping the
   parser un-sanitizable and slow to build.
 - **Path 2 — split the ~5 seam types into a tiny types-only module both the parser
-  and `server-rs` depend on.** Rejected as the endpoint (viable as an interim):
+  and `server/rust` depend on.** Rejected as the endpoint (viable as an interim):
   low-risk, but the parser still emits FFI-flavored types, so the seam concern
   still leaks into the parser's public API.
-- **Path 3 — the parser emits its own domain types; `server-rs` owns the mapping.**
+- **Path 3 — the parser emits its own domain types; `server/rust` owns the mapping.**
   Chosen. The parser's public API speaks the IIIF domain; flattening to the FFI
   struct is a seam concern owned by the seam's owner. Consistent with the domain
   model (parsing produces value objects; the flattened `SipiIiifParams` is a
-  transport detail) and with treating the seam as `server-rs`'s responsibility.
+  transport detail) and with treating the seam as `server/rust`'s responsibility.
 - **Language-first top-level split (`src/cpp/iiifparser`, `src/rust/iiifparser`).**
   Rejected: it scatters one logical component across two distant trees, the
   opposite of what a side-by-side strangler migration needs, and it breaks the
@@ -122,7 +122,7 @@ them:**
   IIIF-parser target eligible for the sanitizer build (verified on CI; macOS cannot
   link ASan locally).
 - **The `From` mapping is the new coupling guard for the params flattening**, backed
-  by exhaustive matches at compile time and an explicit `server-rs` unit test over
+  by exhaustive matches at compile time and an explicit `server/rust` unit test over
   every enum variant plus the `bool → c_int` flags. The `ffi.rs` discriminant
   asserts continue to guard the wire contract against the C++ header.
 - **The corpus becomes a shared, language-neutral asset.** The existing `filegroup`

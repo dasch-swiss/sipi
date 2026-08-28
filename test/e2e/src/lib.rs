@@ -160,7 +160,7 @@ impl SipiServer {
         // the listen-log line.
         // Watching both streams keeps readiness independent of which sink a
         // given binary logs to.
-        // server-rs logs this once `sipi::run` binds the axum listener. Used
+        // server/rust logs this once `sipi::run` binds the axum listener. Used
         // as a fast readiness hint; the startup poll falls back to a TCP /
         // `/health` probe if it never appears (suppressed by log level, or
         // written to a stream we don't match), so this is an optimization, not
@@ -518,7 +518,7 @@ fn copy_dir_recursive_writable(src: &Path, dst: &Path) -> std::io::Result<()> {
 ///
 /// Test harness resolution prefers `$SIPI_BIN` (set by
 /// `just bazel-test-e2e` and the Bazel `rust_test` env to
-/// `$(rootpath //src/cli-rs:sipi)`); this fallback only fires when
+/// `$(rootpath //src/cli/rust:sipi)`); this fallback only fires when
 /// `SIPI_BIN` is unset (cmake inner-loop dev shell path).
 pub fn find_sipi_bin() -> PathBuf {
     repo_root().join("build").join("sipi")
@@ -549,7 +549,7 @@ pub fn sipi_bin_path_from(env_var: &str, fallback: PathBuf) -> String {
         .unwrap_or(raw)
 }
 
-/// The Rust shell under test (`//src/cli-rs:sipi`), from `$SIPI_BIN` or the
+/// The Rust shell under test (`//src/cli/rust:sipi`), from `$SIPI_BIN` or the
 /// cmake inner-loop fallback (`<repo>/build/sipi`).
 pub fn sipi_bin_path() -> String {
     sipi_bin_path_from("SIPI_BIN", find_sipi_bin())

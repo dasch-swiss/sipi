@@ -37,11 +37,11 @@ Bazel):
     bazel run //test/unit/fixtures:generate_malformed_images -- test/_test_data/images/malformed/
 
 The JPEG marker-parsing fixtures (`jpeg_*.jpg`) are produced by
-`test/unit/sipiimage/fixtures/generate_jpeg_fixtures.py` — its
+`test/unit/fixtures/generate_jpeg_fixtures.py` — its
 `generate_malformed()` function writes into a `malformed/` directory
 alongside the `.../images/jpeg/` output dir the script is invoked with:
 
-    uv run test/unit/sipiimage/fixtures/generate_jpeg_fixtures.py \
+    uv run test/unit/fixtures/generate_jpeg_fixtures.py \
         test/_test_data/images/jpeg/
 
 `palette_undersized_lut.jp2` is not produced by those generators: SIPI's own

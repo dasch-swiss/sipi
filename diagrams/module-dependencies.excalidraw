@@ -94,8 +94,8 @@
     },
     {
       "type": "text", "id": "t_clirs", "x": 260, "y": 180, "width": 180, "height": 40,
-      "text": "cli-rs (bin)\n14 f · 1.0k LOC",
-      "originalText": "cli-rs (bin)\n14 f · 1.0k LOC",
+      "text": "cli/rust (bin)\n14 f · 1.0k LOC",
+      "originalText": "cli/rust (bin)\n14 f · 1.0k LOC",
       "fontSize": 16, "fontFamily": 2, "textAlign": "center", "verticalAlign": "middle",
       "strokeColor": "#1e3a5f", "backgroundColor": "transparent", "fillStyle": "solid",
       "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100, "angle": 0,
@@ -113,8 +113,8 @@
     },
     {
       "type": "text", "id": "t_serverrs", "x": 250, "y": 355, "width": 240, "height": 60,
-      "text": "server-rs\naxum HTTP shell\n12 f · 8.4k LOC",
-      "originalText": "server-rs\naxum HTTP shell\n12 f · 8.4k LOC",
+      "text": "server/rust\naxum HTTP shell\n12 f · 8.4k LOC",
+      "originalText": "server/rust\naxum HTTP shell\n12 f · 8.4k LOC",
       "fontSize": 16, "fontFamily": 2, "textAlign": "center", "verticalAlign": "middle",
       "strokeColor": "#1e3a5f", "backgroundColor": "transparent", "fillStyle": "solid",
       "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100, "angle": 0,

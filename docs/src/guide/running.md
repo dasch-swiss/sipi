@@ -305,7 +305,7 @@ These options are accepted by the `server` subcommand. Usage:
 No CLI flags — these are environment-variable only (see [Environment
 Variables](#environment-variables) below): `SIPI_SENTRY_DSN`,
 `SIPI_SENTRY_RELEASE`, `SIPI_SENTRY_ENVIRONMENT`. Read by the Rust shell's
-`main` (`cli-rs/src/main.rs`), which owns Sentry init for every verb.
+`main` (`cli/rust/src/main.rs`), which owns Sentry init for every verb.
 
 ### Deprecated Options
 

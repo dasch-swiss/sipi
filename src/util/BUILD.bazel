@@ -7,10 +7,10 @@ External dependencies are OpenSSL (Hash's EVP digest context) and libmagic
 (Parsing's MIME sniffing plus the embedded `magic.mgc` database); the one
 internal dep is `//src/logging` (SipiFilenameHash's log_debug calls).
 
-`strip_include_prefix = "/src"` exposes the headers at the path-prefixed
-form `#include "util/Parsing.h"` (ADR-0003) self-sufficiently — no
-reliance on a consumer's `includes = ["."]`. Siblings within the package
-use the bare quote form (`#include "Error.h"`).
+`include_prefix = "util"` + `strip_include_prefix = "/src/util/cpp"` exposes
+the headers at the path-prefixed form `#include "util/Parsing.h"` (ADR-0003)
+self-sufficiently — no reliance on a consumer's `includes = ["."]`. Siblings
+within the package use the bare quote form (`#include "Error.h"`).
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
@@ -25,30 +25,31 @@ package(default_visibility = ["//src:__subpackages__"])
 magic_mgc_header(
     name = "magic_mgc_h",
     mgc = "@libmagic//:magic.mgc",
-    out = "generated/magic_mgc.h",
+    out = "cpp/generated/magic_mgc.h",
 )
 
 cc_library(
     name = "util",
     srcs = [
-        "Error.cpp",
-        "Hash.cpp",
-        "Parsing.cpp",
-        "SipiFilenameHash.cpp",
-        "UrlDecode.cpp",
+        "cpp/Error.cpp",
+        "cpp/Hash.cpp",
+        "cpp/Parsing.cpp",
+        "cpp/SipiFilenameHash.cpp",
+        "cpp/UrlDecode.cpp",
     ],
     hdrs = [
-        "Error.h",
-        "Global.h",
-        "Hash.h",
-        "Parsing.h",
-        "PathRedact.h",
-        "SipiFilenameHash.h",
-        "UrlDecode.h",
-        "checked_arith.h",
+        "cpp/Error.h",
+        "cpp/Global.h",
+        "cpp/Hash.h",
+        "cpp/Parsing.h",
+        "cpp/PathRedact.h",
+        "cpp/SipiFilenameHash.h",
+        "cpp/UrlDecode.h",
+        "cpp/checked_arith.h",
         ":magic_mgc_h",
     ],
-    strip_include_prefix = "/src",
+    include_prefix = "util",
+    strip_include_prefix = "/src/util/cpp",
     deps = [
         # Hash.h's EVP_MD_CTX digest context (SHA via OpenSSL EVP).
         "@openssl//:crypto",
@@ -65,9 +66,9 @@ cc_library(
 cc_test(
     name = "util_test",
     srcs = [
-        "hash_test.cpp",
-        "parsing_test.cpp",
-        "urldecode_test.cpp",
+        "cpp/hash_test.cpp",
+        "cpp/parsing_test.cpp",
+        "cpp/urldecode_test.cpp",
     ],
     deps = [
         ":util",
@@ -79,7 +80,7 @@ cc_test(
 # gets its own cc_test rather than folding into util_test above.
 cc_test(
     name = "checked_arith_test",
-    srcs = ["checked_arith_test.cpp"],
+    srcs = ["cpp/checked_arith_test.cpp"],
     deps = [
         ":util",
         "@googletest//:gtest_main",

@@ -39,8 +39,8 @@ package(default_visibility = ["//visibility:public"])
 # bumping `version.txt` flips `STABLE_SIPI_VERSION`, the header regenerates,
 # and the few TUs that include it recompile.
 #
-# Output path is `generated/SipiVersion.h` because `src/cli/sipi.cpp` and
-# `src/observability/metrics.cpp` consume it as
+# Output path is `generated/SipiVersion.h` because `src/cli/cpp/sipi.cpp` and
+# `src/observability/cpp/metrics.cpp` consume it as
 # `#include "generated/SipiVersion.h"` — the prefix is mandatory and
 # matches the existing CMake build's `${CMAKE_BINARY_DIR}/generated/`
 # layout.
@@ -95,7 +95,7 @@ expand_template(
 # C arrays embedding the binary ICC profiles, mirroring `CMakeLists.txt`'s ICC
 # `add_custom_command` chain. Each genrule runs the hermetic `//tools:bin2c`
 # tool (an `xxd -i` replacement) directly on the profile, passing the C-array
-# symbol name explicitly so `src/metadata/Icc.cpp` resolves it.
+# symbol name explicitly so `src/metadata/cpp/icc.cpp` resolves it.
 [
     genrule(
         name = profile + "_icc_h",
@@ -418,7 +418,7 @@ expand_template(
 # "incompatible target" message rather than a confusing failure.
 genrule(
     name = "sipi_debug_split",
-    srcs = ["//src/cli-rs:sipi"],
+    srcs = ["//src/cli/rust:sipi"],
     outs = [
         "_dbg/sipi.stripped",
         "_dbg/sipi.debug",
@@ -428,7 +428,7 @@ genrule(
 set -euo pipefail
 OBJCOPY=$(execpath //bazel:llvm-objcopy)
 READELF=$(execpath //bazel:llvm-readelf)
-BIN=$(execpath //src/cli-rs:sipi)
+BIN=$(execpath //src/cli/rust:sipi)
 
 # Build-id is encoded in `.note.gnu.build-id`; llvm-readelf -n prints
 # something like:
@@ -446,7 +446,7 @@ echo "$$BUILD_ID" > $(execpath _dbg/sipi_build_id.txt)
 # is done).
 #
 # The output is in a `_dbg/` subdir purely to namespace these three
-# genrule outputs away from the `//src/cli-rs:sipi` binary's own output
+# genrule outputs away from the `//src/cli/rust:sipi` binary's own output
 # names; the basenames (`sipi.stripped`, `sipi.debug`) stay conventional.
 "$$OBJCOPY" --only-keep-debug "$$BIN" $(execpath _dbg/sipi.debug)
 cp "$$BIN" $(execpath _dbg/sipi.stripped)
@@ -540,12 +540,12 @@ tar(
 # `docker run --entrypoint ffprobe daschswiss/sipi …` (video metadata).
 # Per-arch layer selection is via `select()` on the host CPU below.
 
-# Sipi binary at /sbin/sipi — the STRIPPED Rust `cli-rs` shell. Ships the
-# `:sipi_debug_split` stripped output (not the raw `//src/cli-rs:sipi`), so
+# Sipi binary at /sbin/sipi — the STRIPPED Rust `cli/rust` shell. Ships the
+# `:sipi_debug_split` stripped output (not the raw `//src/cli/rust:sipi`), so
 # the DWARF built under `--config=release` lives only in the `.debug`
 # uploaded to Sentry (`:sipi_debug_layout`), never in the shipped image; the
 # stripped binary keeps its `.note.gnu.build-id` + an embedded debuglink so
-# Sentry matches crash minidumps back to those symbols. cli-rs is the deployed
+# Sentry matches crash minidumps back to those symbols. cli/rust is the deployed
 # entrypoint; the C++ //src/cli:sipi binary provides the offline CLI verbs only
 # (convert/verify/query/compare/health), not a server. Kept at /sbin/sipi so the
 # entrypoint + `sipi health` HEALTHCHECK are unchanged. Linux-only (the binary is Linux

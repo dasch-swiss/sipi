@@ -52,8 +52,8 @@ from a hunch about which function "feels slow."
 ## Building and running
 
 ```bash
-just bazel-build-tracy        # -c opt --config=tracy //src/cli-rs:sipi
-./bazel-bin/src/cli-rs/sipi server --config config/sipi.localdev-config.lua
+just bazel-build-tracy        # -c opt --config=tracy //src/cli/rust:sipi
+./bazel-bin/src/cli/rust/sipi server --config config/sipi.localdev-config.lua
 ```
 
 `just bazel-build-tracy` builds at `-c opt` (so the timeline reflects production
@@ -118,7 +118,7 @@ iiif_handler
 ```
 
 Instrumentation lives behind one first-party shim,
-[`src/observability/profiling.h`](../../../src/observability/profiling.h): code
+[`src/observability/cpp/profiling.h`](../../../src/observability/cpp/profiling.h): code
 includes it and uses `SIPI_ZONE()` / `SIPI_ZONE_N("name")` rather than the Tracy
 macros directly, so the profiler dependency sits at a single site.
 

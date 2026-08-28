@@ -106,7 +106,7 @@ release-notes line reads `concern: subject`. There is no scopeless form.
 
 The scope names the **concern the change serves** — the module whose
 responsibility it belongs to, not the directory the edited files happen to
-sit in. Telemetry code under `src/server-rs/` is `observability`; an `ffi`
+sit in. Telemetry code under `src/server/rust/` is `observability`; an `ffi`
 seam field whose only purpose is to carry a metric across is `observability`
 too. Scope by what the change is *about*, not where it landed. The canonical
 module list — which is also the scope vocabulary — lives in
@@ -115,8 +115,8 @@ these names, lowercase:
 
 - **Module scopes:** `image`, `format_handlers`, `metadata`, `iiifparser`,
   `scripting`, `util`, `jwt`, `cache`, `memory-budget`,
-  `memory`, `observability`, `logging`, `cli`, `ffi`, `lua`, `server-rs`,
-  `cli-rs` (`scripting` = the C++ Lua runtime in `src/scripting/`; `lua` stays
+  `memory`, `observability`, `logging`, `cli`, `ffi`, `lua`, `server`
+  (`scripting` = the C++ Lua runtime in `src/scripting/`; `lua` stays
   the Lua *scripts*/config in `scripts/` + `config/*.lua`; the retired `handlers`
   scope folded into `iiifparser` per DUNE-014)
 - **Test-layer scopes** (`e2e`, `approval`) — for changes to a test
@@ -134,10 +134,10 @@ Rules:
 
 - Lowercase, kebab-case. `ci` not `CI`; `bazel` not `bazel-build`.
 - A commit that spans several modules may list them comma-separated:
-  `refactor(cli-rs,server-rs): ...`.
+  `refactor(cli,server): ...`.
 - **Concern over location.** When code for one module's responsibility lives
   under another module's directory, scope by the responsibility, not the
-  enclosing directory. `server-rs/src/metrics.rs` → `observability`.
+  enclosing directory. `server/rust/src/metrics.rs` → `observability`.
 - **No catch-all.** There is no `repo`/`all` scope. If none of the enumerated
   scopes genuinely fits, ask the maintainer before inventing one — new scopes
   are added to the canonical list in `CONVENTIONS.md` deliberately, not ad hoc.

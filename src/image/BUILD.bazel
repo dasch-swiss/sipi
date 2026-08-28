@@ -19,7 +19,7 @@ consumers; siblings inside this package use the bare quote form
 (`#include "SipiIO.h"`).
 """
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//src:__subpackages__"])
 
@@ -89,4 +89,40 @@ cc_library(
         "@platforms//os:linux": ["//bazel:glibc23_compat"],
         "//conditions:default": [],
     }),
+)
+
+# Mirrors the CMake guard in CMakeLists.txt: Kakadu's JPEG2000 encoder
+# SIGILLs on palette images when compiled with Clang on Linux in Debug.
+# Bazel's `fastbuild` (the default for `bazel test`) is Debug-like
+# (-O0 -g, no NDEBUG), so apply the filter on Linux unconditionally.
+_LINUX_GTEST_FILTER = {"GTEST_FILTER": "-SipiImage.PALETTE_Conversion"}
+
+# Colocated unit tests (ADR-0003): the pixel-buffer mutator surface, the
+# getPixel/setPixel accessor contract, the Essentials-packet 64 KB service-file
+# prefix invariant (ADR-0004), and the broad `SipiImage` characterization
+# suite (construction, format conversion, ICC handling, scaling). Depends on
+# `//src/format_handlers` and `//src/image_processing` for real codec
+# read/write and for the pixel-comparison/rotation oracles the tests drive
+# `SipiImage` through.
+cc_test(
+    name = "image_test",
+    srcs = [
+        "cpp/essentials_prefix_invariant_test.cpp",
+        "cpp/mutator_surface_test.cpp",
+        "cpp/pixel_accessor_regression_test.cpp",
+        "cpp/sipiimage_test.cpp",
+    ],
+    data = ["//test/_test_data:images"],
+    env = select({
+        "@platforms//os:linux": {"SIPI_WORKSPACE_ROOT": "."} | _LINUX_GTEST_FILTER,
+        "//conditions:default": {"SIPI_WORKSPACE_ROOT": "."},
+    }),
+    deps = [
+        ":image",
+        "//src/format_handlers:format_handlers",
+        "//src/image_processing",
+        "//src/observability:observability",
+        "//test:test_paths",
+        "@googletest//:gtest_main",
+    ],
 )
