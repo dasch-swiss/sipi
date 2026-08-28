@@ -109,14 +109,7 @@ impl SipiServer {
         // process's own stdout/stderr pipes instead, where `captured_output`
         // (used by every test that asserts on server exit/liveness) can see
         // it. A no-op when ASAN_OPTIONS isn't set (non-sanitizer builds).
-        if let Ok(asan_options) = std::env::var("ASAN_OPTIONS") {
-            let without_log_path = asan_options
-                .split(':')
-                .filter(|opt| !opt.starts_with("log_path="))
-                .collect::<Vec<_>>()
-                .join(":");
-            cmd.env("ASAN_OPTIONS", without_log_path);
-        }
+        strip_asan_log_path(&mut cmd);
         cmd.arg("server")
             .arg("--config")
             .arg(config)
@@ -577,26 +570,48 @@ pub fn test_data_dir() -> PathBuf {
 // identical.
 // =============================================================================
 
+/// Drop `log_path` from `ASAN_OPTIONS` for a spawned sipi subprocess.
+///
+/// `.bazelrc`'s `test:asan` sets
+/// `ASAN_OPTIONS=...:log_path=$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e`. The
+/// sanitizer e2e leg does not shell-expand `$TEST_UNDECLARED_OUTPUTS_DIR` for a
+/// spawned subprocess, so ASan tries to create a directory named literally
+/// `$TEST_UNDECLARED_OUTPUTS_DIR` and aborts. Stripping `log_path` routes any
+/// sanitizer report into this harness's captured stdout/stderr instead. A no-op
+/// when `ASAN_OPTIONS` isn't set (non-sanitizer builds). Shared by the server
+/// spawn and the CLI `convert`/`verify` spawns.
+fn strip_asan_log_path(cmd: &mut Command) {
+    if let Ok(asan_options) = std::env::var("ASAN_OPTIONS") {
+        let without_log_path = asan_options
+            .split(':')
+            .filter(|opt| !opt.starts_with("log_path="))
+            .collect::<Vec<_>>()
+            .join(":");
+        cmd.env("ASAN_OPTIONS", without_log_path);
+    }
+}
+
 /// Run `sipi convert <input> <output> --format <format>` from the test-data
 /// dir and return the process output.
 pub fn cli_convert(input: &str, output: &str, format: &str) -> std::process::Output {
-    Command::new(sipi_bin_path())
-        .arg("convert")
+    let mut cmd = Command::new(sipi_bin_path());
+    cmd.arg("convert")
         .arg(input)
         .arg(output)
         .arg("--format")
         .arg(format)
-        .current_dir(test_data_dir())
-        .output()
+        .current_dir(test_data_dir());
+    strip_asan_log_path(&mut cmd);
+    cmd.output()
         .unwrap_or_else(|e| panic!("Failed to run sipi CLI: {}", e))
 }
 
 /// Run `sipi <args...>` from the test-data dir and return the process output.
 pub fn cli_run(args: &[&str]) -> std::process::Output {
-    Command::new(sipi_bin_path())
-        .args(args)
-        .current_dir(test_data_dir())
-        .output()
+    let mut cmd = Command::new(sipi_bin_path());
+    cmd.args(args).current_dir(test_data_dir());
+    strip_asan_log_path(&mut cmd);
+    cmd.output()
         .unwrap_or_else(|e| panic!("Failed to run sipi {:?}: {}", args, e))
 }
 
