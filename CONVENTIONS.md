@@ -93,9 +93,10 @@ The codebase has mixed naming styles. For new code, prefer the C++23 style guide
 
 These are SIPI's modules. Each name is also the canonical [commit
 scope](docs/src/development/commit-conventions.md#scopes). A module is a
-unit of responsibility, not necessarily a directory yet — the migration
-to per-module co-located directories is tracked by
-[ADR-0003](docs/adr/0003-module-co-located-source-and-tests.md).
+unit of responsibility as well as a per-module co-located directory
+([ADR-0003](docs/adr/0003-module-co-located-source-and-tests.md)); see
+[Directory layouts](#directory-layouts) below for the residual test-only
+holdouts.
 
 Scope a commit by the responsibility it serves, not the directory the edited
 files happen to sit in. A metrics or tracing change is `observability` even
@@ -104,7 +105,8 @@ is scoped `ffi` only when the seam mechanism itself is the point.
 
 | Module (scope) | Path | Responsibility |
 |---|---|---|
-| `image` | `src/image/` | Image read/write pipeline; orchestrates decode → process → encode |
+| `image` | `src/image/` | The `SipiImage` value type: pixel buffer, metadata composite, decode/encode orchestration and format dispatch. No processing operators — those are `image_processing` |
+| `image_processing` | `src/image_processing/` | Free-function pixel operators over `SipiImage &` (crop/scale/rotate/colour/channel/watermark/comparison/arithmetic), extracted off `SipiImage` per ADR-0007; depends one-way on `image`, never the reverse |
 | `format_handlers` | `src/format_handlers/` | Per-format codecs: TIFF, JP2 (Kakadu), PNG, JPEG; `fuzz/` (the libFuzzer harnesses over the `SipiIO` decode handlers), `fuzz/dicts/` (vendored AFL++ token dictionaries), and `corpus/` (the per-format two-tier seed corpora) |
 | `metadata` | `src/metadata/` | EXIF, IPTC, XMP, ICC profile handling |
 | `iiifparser` | `src/iiifparser/` | IIIF URL parsing, colocated polyglot (ADR-0021): `cpp/value_objects/` (live engine value objects), `cpp/classifier/` (testonly `parse_iiif_uri` reference oracle `:iiif_handler`), `rust/` (the production parser `//src/iiifparser/rust:iiif_parser` the shell drives), and `fuzz/` (the libFuzzer harness over the Rust parser) |
@@ -149,14 +151,17 @@ ask the maintainer before inventing a new one. The full scope rules live in
 
 ### Directory layouts
 
-The codebase has two coexisting layouts:
-
-- **Historical (current default):** `src/<mod>/Foo.cpp` paired with
-  `include/<mod>/Foo.h`, unit tests under `test/unit/<mod>/`.
-- **Module-co-located ([ADR-0003](docs/adr/0003-module-co-located-source-and-tests.md), proposed):**
-  `src/<mod>/{Foo.cpp, Foo.h, foo_test.cpp}` with flat-style includes
-  (`#include "metadata/Foo.h"` cross-module, `#include "Foo.h"`
-  intra-module). `src/util/` and `src/metadata/` already follow this.
+Every module's source now follows **module-co-located**
+([ADR-0003](docs/adr/0003-module-co-located-source-and-tests.md), status
+`proposed` but the layout is in force repo-wide): `src/<mod>/{Foo.cpp, Foo.h,
+foo_test.cpp}` with flat-style includes (`#include "metadata/Foo.h"`
+cross-module, `#include "Foo.h"` intra-module). The `include/<mod>/` shadow
+directories are gone; `include/` retains only the generated headers
+(`SipiVersion.h.in`, `ICC-Profiles/`). A residual handful of tests still link
+the **historical** layout — `test/unit/{cache,tiff_codecs,filenamehash}`
+against `//src:sipi_lib` rather than a narrow per-module target — the last
+holdout the ADR-0003 migration has yet to close (see ARCH-MAP's Support
+areas note).
 
 A module-co-located package additionally splits its sources by language
 into `cpp/`/`rust/` subfolders whenever it holds (or will hold) more
@@ -182,11 +187,9 @@ extra physical depth to correct for and needs only the plain
 `strip_include_prefix = "/src"` form, self-sufficient without any
 `include_prefix` twinning.
 
-Until ADR-0003 is accepted and a module is migrated, follow the
-historical layout for that module — the language-subfolder split
-applies only once a package migrates. After migration, follow the new
-layout. ADR-0003 is the source of truth for migration order and
-per-module diff shape.
+For the residual historical-layout test targets above, keep the existing
+placement rather than migrating opportunistically; ADR-0003 is the source of
+truth for closing them out.
 
 ## Route Registration
 

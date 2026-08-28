@@ -75,7 +75,8 @@ localdev config in one step.
 | Component | Path | Purpose |
 |-----------|------|---------|
 | Main Application | `src/cli/cpp/cli_app.cpp` | CLI11 arg parsing + offline-verb dispatch, behind the `sipi_cli_main` FFI entry; `src/cli/rust/src/main.rs` owns `main` and Sentry init |
-| SipiImage | `src/image/cpp/SipiImage.h` | Image processing: TIFF, JP2, PNG, JPEG; metadata (EXIF, IPTC, XMP); ICC profiles |
+| SipiImage | `src/image/cpp/SipiImage.h` | The image value type: pixel buffer, metadata composite, decode/encode orchestration and format dispatch |
+| Image Processing | `src/image_processing/cpp/processing.h` | Free-function pixel operators over `SipiImage &` — crop/scale/rotate/ICC conversion/channel ops/watermark/comparison/arithmetic; depends one-way on `SipiImage` |
 | Rust HTTP shell | `src/server/rust/` | The production server: axum routes, IIIF endpoints, caching, Lua request-shaping; drives the C++ engine over FFI |
 | IIIF Parser | `src/iiifparser/cpp/` (C++ engine) / `src/iiifparser/rust/` (production, `//src/iiifparser/rust:iiif_parser`) | IIIF URL parsing: identifier, region, size, rotation, quality/format. Production parses in Rust and emits domain types; `server` flattens them into the seam struct the C++ engine consumes (ADR-0021) |
 | Format Handlers | `src/format_handlers/` | SipiIO base class + SipiIOTiff, SipiIOJ2k, SipiIOJpeg, SipiIOPng |

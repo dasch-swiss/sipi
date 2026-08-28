@@ -19,5 +19,5 @@ This decision is also a response to agentic coding. AI now writes the bulk of ap
 
 - The CMake `libsipi_testable` God-library is replaced by per-module `cc_library` targets. Each module's unit test depends only on the module's own library, surfacing implicit cross-module coupling as build errors.
 - `scripts/shttps-context-check.sh` is deleted — `package_group()` + `visibility` on `//shttps:shttps` enforces the SIPI → shttps direction at analysis time. The known violation (`shttps/Server.cpp` calling `SipiMetrics::instance()`) becomes a build error, forcing a real fix.
-- `src/formats/` (today: zero unit tests, only approval coverage) gains a per-format unit-test target as part of the same flip.
+- `src/format_handlers/` (today: zero unit tests, only approval coverage) gains a per-format unit-test target as part of the same flip.
 - Migration is staged as five mechanical PRs (Y+8a..Y+8e in the Bazel migration plan), gated on the Bazel build-tool migration (Y+6) being merged. Each PR is one module and is revertable.

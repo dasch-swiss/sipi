@@ -67,8 +67,9 @@ them:**
 
 - `cpp/value_objects/` — `cc_library iiifparser` (the `SipiRegion`/`SipiSize`/
   `SipiRotation`/`SipiQualityFormat`/`SipiIdentifier`/`SipiDecodeDims` value objects)
-  is **live production engine code**, not a reference. `//src:engine` depends on it;
-  `src/SipiIO.h`, `src/SipiImage.cpp`, and the format handlers pass
+  is **live production engine code**, not a reference. `//src/image` and
+  `//src/format_handlers` depend on it; `image/SipiIO.h`, `image/SipiImage.cpp`,
+  and the format handlers pass
   `std::shared_ptr<SipiRegion>`/`SipiSize` through the decode/crop path. It is **not**
   `testonly` and **not** deletable now. Only its string-parsing *constructors* are
   off the production path (the engine reconstructs geometry from the flattened seam
@@ -100,7 +101,7 @@ them:**
 - **Language-first top-level split (`src/cpp/iiifparser`, `src/rust/iiifparser`).**
   Rejected: it scatters one logical component across two distant trees, the
   opposite of what a side-by-side strangler migration needs, and it breaks the
-  repo's established component-first convention (`src/util`, `src/formats`).
+  repo's established component-first convention (`src/util`, `src/format_handlers`).
 - **A single mixed `BUILD.bazel` holding both languages' targets.** Rejected: one
   directory is one Bazel package, and a mixed package invites `glob()`
   cross-language capture and target-name collisions. Per-language subpackages give
