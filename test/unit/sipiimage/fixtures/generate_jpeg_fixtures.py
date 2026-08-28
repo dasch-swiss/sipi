@@ -19,10 +19,11 @@ Produces three fixtures under test/_test_data/images/jpeg/:
      F3 feature-contract test to prove that log_warn is routed to stderr under
      --json without breaking the single-document contract on stdout.
 
-Also produces three marker-parsing over-read regression fixtures as a
+Also produces four marker-parsing over-read regression fixtures as a
 sibling `../malformed/` directory (relative to the given output dir), see
 `generate_malformed()` and test/_test_data/images/malformed/README.md for
-each fixture's defect (DEV-6066, N1, N4).
+each fixture's defect (DEV-6066, N1, N4, and the parse_photoshop
+even-padding pointer overshoot).
 
 Run (from the sipi repo root):
 
@@ -217,6 +218,30 @@ def generate_malformed(malformed_dir: pathlib.Path) -> None:
     app13_path = malformed_dir / "jpeg_photoshop_short_app13.jpg"
     app13_path.write_bytes(app13_short)
     print(f"  wrote {app13_path} ({len(app13_short)} bytes, APP13 identifier truncated to 5 bytes)")
+
+    # jpeg_photoshop_overshoot_app13.jpg — a *well-formed* "Photoshop 3.0\0"
+    # identifier (14 bytes, so the caller's `data_length >= 14` + strncmp
+    # guard passes and parse_photoshop() runs) followed by exactly one 8BIM
+    # resource that is precisely 7 bytes and nothing after it:
+    #   "8BIM" (4) + resource id 0x0404 (2) + Pascal name-length 0x00 (1).
+    # parse_photoshop() sees length==7. It consumes 8BIM(4)+id(2), reads the
+    # 1-byte name length (0 -> empty, even), then `slen++` (length byte) makes
+    # slen=1 and the odd-even padding bump makes slen=2 — one byte more than
+    # the single byte remaining. Before the fix, `ptr += slen` walked one byte
+    # past `end`, so the next `4 > (size_t)(end - ptr)` computed `end - ptr ==
+    # -1`, cast to SIZE_MAX, defeated the guard, and over-read `datalen` and
+    # beyond (the review's most severe finding). The fix adds
+    # `if (slen > (size_t)(end - ptr)) break;` before the advance, so the walk
+    # stops cleanly and the image still decodes.
+    app13_overshoot = _insert_app_marker(
+        base_jpeg, 0xED, b"Photoshop 3.0\0" + b"8BIM" + b"\x04\x04" + b"\x00"
+    )
+    overshoot_path = malformed_dir / "jpeg_photoshop_overshoot_app13.jpg"
+    overshoot_path.write_bytes(app13_overshoot)
+    print(
+        f"  wrote {overshoot_path} ({len(app13_overshoot)} bytes, "
+        "APP13 8BIM resource with even-padding pointer overshoot)"
+    )
 
 
 def generate(out_dir: pathlib.Path) -> None:
