@@ -4,7 +4,7 @@
  */
 
 #include "metadata/iptc.h"
-#include "SipiError.h"
+#include "error/SipiError.h"
 
 namespace Sipi {
 

@@ -40,7 +40,7 @@
 #include "ffi/engine_context.h"
 #include "ffi/sipi_ffi.h"
 #include "ffi/startup.h"
-#include "SipiReport.h"
+#include "cli/SipiReport.h"
 #include "populate_from_image.h"
 #include "formats/SipiIOTiff.h"
 

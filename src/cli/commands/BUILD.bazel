@@ -38,7 +38,11 @@ cc_library(
         "verify.h",
     ],
     copts = ["-fexceptions"],
-    deps = ["//src:sipi_lib"],
+    deps = [
+        "//src:sipi_lib",
+        # convert_access_file.cpp's JSON report emitter.
+        "//src/cli:sipi_report",
+    ],
 )
 
 # Co-located unit tests for each subcommand (DEV-6537),

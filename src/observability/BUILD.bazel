@@ -38,7 +38,6 @@ cc_library(
     # (`#include "metrics.h"`) which searches the current source's
     # directory automatically.
     deps = [
-        "//include:headers",
         "//src:sipi_generated_hdrs",
         # Profiler shim (profiling.h). Inert unless `--config=tracy` defines
         # TRACY_ENABLE; see bazel/tracy.BUILD.bazel.

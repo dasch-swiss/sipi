@@ -1,7 +1,7 @@
 #include "gtest/gtest.h"
 
 #include "iiifparser/SipiQualityFormat.h"
-#include "SipiError.h"
+#include "error/SipiError.h"
 
 struct QualityFormatTestCase {
     std::string input;

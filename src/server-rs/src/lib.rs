@@ -552,8 +552,8 @@ async fn health() -> Response {
         .into_response()
 }
 
-/// Rust-native favicon — 200 + `image/x-icon`, byte-identical to the
-/// `favicon_ico` array in `include/favicon.h`.
+/// Rust-native favicon — 200 + `image/x-icon`, serving the crate-local
+/// `favicon.ico` bytes embedded via `include_bytes!`.
 async fn favicon() -> impl IntoResponse {
     (
         [(axum::http::header::CONTENT_TYPE, "image/x-icon")],

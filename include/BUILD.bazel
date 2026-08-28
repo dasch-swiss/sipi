@@ -1,43 +1,16 @@
-"""Sipi public + private headers as a header-only `cc_library`.
+"""Sipi build-time inputs that have no dedicated module.
 
-The `include/` directory holds the server-side / config headers that are NOT
-owned by a dedicated module: the Lua config surface (`SipiConf.h`), the offline
-report (`SipiReport.h`), the embedded favicon, the generated-config templates,
-and the ICC profile binaries.
-
-Per-module packages NOT bundled here (consumers depend on the dedicated
-target directly):
-
-  `//src:engine`         — image engine + iiifparser + cache headers, now
-                           co-located with their sources (ADR-0003)
-  `//src/metadata`       — EXIF/IPTC/XMP/ICC wrappers
-  `//src/logging`        — Logger
-
-Cross-package consumers:
-  //src:sipi_lib       — primary consumer
+The `include/` directory holds the generated-config templates consumed by
+`expand_template` (`SipiVersion.h.in`, `SipiConfig.h.in`) and the ICC
+profile binaries embedded as C arrays by the `//src:<profile>_icc_h`
+genrules. Each is exported individually below; there is no bundled
+`cc_library` here.
 """
-
-load("@rules_cc//cc:defs.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
-cc_library(
-    name = "headers",
-    hdrs = glob(
-        [
-            "*.h",
-            "*.hpp",
-        ],
-        # Future-proof against new subdirs without tripping the empty-glob
-        # lint when a subdir is empty or absent.
-        allow_empty = True,
-    ),
-    includes = ["."],
-)
-
-# Individual file labels — used where a target needs one specific header
-# rather than the whole bundle (e.g. expand_template's `template` argument
-# accepts a single Label, not a `cc_library`).
+# Individual file labels — e.g. expand_template's `template` argument
+# accepts a single Label, not a target that bundles multiple files.
 exports_files([
     "SipiVersion.h.in",
     "SipiConfig.h.in",

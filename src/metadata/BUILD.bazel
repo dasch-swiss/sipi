@@ -19,9 +19,9 @@ This package no longer depends on `SipiImage`: the one coupling — `Icc`'s
 was inverted so `iccFormatter` takes the pixel shape (`bps`/`nc`/`photo`) by
 value and the `PhotometricInterpretation` enum lives here in
 `photometric_interpretation.h`. Metadata now sits cleanly *below* the image
-engine (`SipiImage` is owned by `//src:engine`), depending only on `:sipi_top`
-for `SipiError`. `layering_check`/`parse_headers` stay deferred to the global
-DEV-6353 flip.
+engine (`SipiImage` is owned by `//src:engine`), depending only on
+`//src/error` for `SipiError`. `layering_check`/`parse_headers` stay
+deferred to the global DEV-6353 flip.
 """
 
 load("@protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
@@ -86,10 +86,10 @@ cc_library(
         "@lcms2//:lcms2",
         "@openssl//:crypto",
         "@openssl//:ssl",
-        "//include:headers",
         "//src/util",
         "//src:sipi_generated_hdrs",
-        "//src:sipi_top",
+        "//src/error",
+        "//src/logging:logging",
         "//src/metadata/internal:icc_normalization",
         "//src/metadata/internal:protobuf_codec",
     ],

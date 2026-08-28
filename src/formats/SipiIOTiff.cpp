@@ -40,7 +40,7 @@
 #include <cerrno>
 
 #include "logging/logger.h"
-#include "SipiError.h"
+#include "error/SipiError.h"
 #include "SipiIO.h"
 #include "SipiImage.h"
 #include "SipiImageError.h"

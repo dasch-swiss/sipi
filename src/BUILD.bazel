@@ -1,8 +1,7 @@
 """Sipi first-party C++ build graph.
 
   //src:sipi_lib       `cc_library` containing every Sipi translation unit
-                       *except* the executable's `main`. Headers come via
-                       `//include:headers` for the legacy include/ tree.
+                       *except* the executable's `main`.
                        Per-module Bazel packages under `//src/<mod>/` (e.g.
                        `//src/metadata`, `//src/observability`, `//src/cli`)
                        own their own headers — including internal/
@@ -142,58 +141,9 @@ cc_library(
     visibility = ["//src:__subpackages__"],
 )
 
-# ── //src:sipi_top ─────────────────────────────────────────────────────────
-# Foundational `cc_library` covering the SipiError infrastructure source
-# file and the top-level `.h` headers (`SipiError.h`, `SipiImage.h`)
-# that per-module packages need to consume.
-#
-# Why this split exists:
-#
-#   - Per-module `cc_library` targets under `//src/<mod>/` (e.g.
-#     `//src/metadata:metadata`) cannot depend on `:sipi_lib` — that
-#     would close a cycle, since `:sipi_lib` deps on every per-module
-#     target.
-#
-#   - Those modules' `.cpp` files reference symbols from `SipiError.cpp`
-#     (the constructors emitted by every `throw SipiError(...)` site).
-#     Unit tests that link only the per-module `cc_library` would fail
-#     with undefined-symbol errors without those definitions in the
-#     link line.
-#
-# Including the implementation here (not just headers) is what lets each
-# module's co-located unit test link cleanly with `deps = [":<mod>"]` +
-# gtest.
-#
-# `:sipi_lib` excludes this file from its srcs glob and instead depends
-# on `:sipi_top` so each TU stays in exactly one library — no
-# duplicate-symbol risk.
-#
-# When `SipiImage` moves into its own package (DEV-6396), `SipiImage.h`
-# leaves this library; same for `SipiError` if a future probe extracts
-# it into a dedicated module. This target is transitional scaffolding
-# for the Y+8 per-module flip series.
-cc_library(
-    name = "sipi_top",
-    srcs = [
-        "SipiError.cpp",
-    ],
-    hdrs = [
-        "SipiError.h",
-    ],
-    # Consumers `#include "SipiError.h"` — `.` (i.e. `src/`) on the
-    # include path resolves the quote-form lookup.
-    includes = ["."],
-    visibility = ["//src:__subpackages__"],
-    deps = [
-        "//include:headers",
-        "//src/util",
-        "//src/logging:logging",
-    ],
-)
-
 # ── //src:engine ───────────────────────────────────────────────────────────
-# The transport-free image core: `SipiImage` (decode/encode + pixel ops) and
-# the serve-time cache. Carved out of
+# The transport-free image core: `SipiImage` (decode/encode + pixel ops).
+# Carved out of
 # `:sipi_lib` so the FFI seam (//src/ffi:sipi_ffi) can drive the engine WITHOUT
 # a dependency cycle — `:sipi_lib` deps `:sipi_ffi`, so `:sipi_ffi` cannot reach
 # the engine while it lives inside `:sipi_lib`. The engine depends only on the
@@ -203,13 +153,12 @@ cc_library(
 # the codec-agnostic write sink (`//src/formats:output_sink`), never any HTTP
 # transport. The `rust_binary` links the engine through //src/ffi:sipi_ffi.
 #
-# SipiImage and the cache stay ONE package: they share no internal boundary
-# worth a cut (the cache exists only to serve SipiImage reads), and SipiImage is
-# the hub every other module points at. The IIIF value objects
+# The serve-time cache (`//src/cache`) is a sibling package, not part of the
+# engine: `SipiCache` has no dependency on `SipiImage`, so it stands on its
+# own leaf alongside the IIIF value objects
 # (`//src/iiifparser/cpp/value_objects`), the decode-memory budget
 # (`//src/throttling/cpp:memory_budget`) and the codec handlers
-# (`//src/formats`) were the
-# separable leaves and were carved out. The handlers could not become a package
+# (`//src/formats`). The handlers could not become a package
 # BELOW SipiImage — they read/write it as `friend`s and SipiImage dispatches
 # through the `io` registry, a bidirectional coupling — so //src/formats depends
 # one-way on the engine and defines `SipiImage::io` (format_registry.cpp); the
@@ -218,21 +167,14 @@ cc_library(
 cc_library(
     name = "engine",
     srcs = [
-        "SipiCache.cpp",
-        "SipiCommon.cpp",
-        "SipiFilenameHash.cpp",
         "SipiImage.cpp",
         "populate_from_image.cpp",
         "resample.cc",
     ],
     hdrs = [
         # The engine's headers, co-located with their sources (ADR-0003).
-        # SipiImage.h moved here from :sipi_top as part of the SipiImage
-        # repackaging — the engine now owns the image surface, sitting above
-        # //src/metadata (which no longer depends on SipiImage).
-        "SipiCache.h",
-        "SipiCommon.h",
-        "SipiFilenameHash.h",
+        # The engine owns the image surface, sitting above //src/metadata
+        # (which does not depend on SipiImage).
         "SipiIO.h",
         "SipiImage.h",
         "SipiImageError.h",
@@ -276,8 +218,7 @@ cc_library(
     # includes them.
     deps = [
         ":sipi_generated_hdrs",
-        ":sipi_top",
-        "//include:headers",
+        "//src/error",
         "//src/formats:output_sink",
         "//src/iiifparser/cpp/value_objects:iiifparser",
         "//src/logging:logging",
@@ -318,17 +259,10 @@ cc_library(
             "**/*.h",
         ],
         exclude = [
-            # Owned by `:sipi_top` so per-module unit tests can link it
-            # transitively without depending on `:sipi_lib` (which would
-            # close a cycle).
-            "SipiError.cpp",
             # Owned by `:engine` (the transport-free image engine carved out
             # so //src/ffi:sipi_ffi can drive it without a cycle). The headers
             # stay in the glob (harmless; headers aren't compiled) so callers
             # in this package keep resolving them.
-            "SipiCache.cpp",
-            "SipiCommon.cpp",
-            "SipiFilenameHash.cpp",
             "SipiImage.cpp",
             "populate_from_image.cpp",
             # Google Benchmark microbenchmark sources are `cc_binary`
@@ -384,8 +318,7 @@ cc_library(
     deps = [
         ":engine",
         ":sipi_generated_hdrs",
-        ":sipi_top",
-        "//include:headers",
+        "//src/error",
         "//src/ffi:sipi_ffi",
         "//src/formats:formats",
         "//src/logging:logging",

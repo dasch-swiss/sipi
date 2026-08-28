@@ -19,7 +19,7 @@
 
 #include "SipiImage.h"
 #include "SipiImageError.h"
-#include "SipiCache.h"
+#include "cache/SipiCache.h"
 #include "throttling/SipiMemoryBudget.h"
 #include "throttling/SipiPeakMemory.h"
 #include "formats/output_sink.h"

@@ -30,8 +30,8 @@ cc_library(
     # repo-relative `src/` prefix so consumers can `#include
     # "metadata/internal/icc_normalization.h"` — the canonical
     # path-prefixed form per ADR-0003 — without needing to pull in
-    # `:sipi_top` (or any other library) just to put `src/` on the
-    # include path. The internal package becomes self-sufficient.
+    # another package's library just to put `src/` on the include
+    # path. The internal package becomes self-sufficient.
     strip_include_prefix = "/src",
 )
 

@@ -25,8 +25,8 @@
 #include "logging/logger.h"
 #include "util/Error.h"
 #include "util/Parsing.h"
+#include "util/SipiFilenameHash.h"
 
-#include "SipiFilenameHash.h"
 #include "SipiImage.h"
 #include "SipiImageError.h"
 

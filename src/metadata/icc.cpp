@@ -13,7 +13,7 @@
 
 #include "logging/logger.h"
 
-#include "SipiError.h"
+#include "error/SipiError.h"
 #include "generated/AdobeRGB1998_icc.h"
 #include "generated/Rec709-Rec1886_icc.h"
 #include "generated/USWebCoatedSWOP_icc.h"

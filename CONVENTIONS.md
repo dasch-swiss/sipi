@@ -109,8 +109,9 @@ is scoped `ffi` only when the seam mechanism itself is the point.
 | `metadata` | `src/metadata/` | EXIF, IPTC, XMP, ICC profile handling |
 | `iiifparser` | `src/iiifparser/` | IIIF URL parsing, colocated polyglot (ADR-0021): `cpp/value_objects/` (live engine value objects), `cpp/classifier/` (testonly `parse_iiif_uri` reference oracle `:iiif_handler`), `rust/` (the production parser `//src/iiifparser/rust:iiif_parser` the shell drives), and `fuzz/` (the libFuzzer harness over the Rust parser) |
 | `scripting` | `src/scripting/rust/` (ADR-0021/0023 layout) | The Rust-hosted mlua Lua runtime: hardened VM profile, limits, bytecode cache, the `server.*`/`SipiImage`/sqlite bindings, Lua-flavor config parse |
-| `util` | `src/util/` | Generic SIPI-domain helpers: MIME/string parsing, file hashing, the `shttps::Error`/`Global` types |
-| `cache` | `src/SipiCache.{h,cpp}` | File-based LRU cache with dual-limit eviction |
+| `util` | `src/util/` | Generic SIPI-domain helpers: MIME/string parsing, file hashing, filename-to-subdirectory hashing (`SipiFilenameHash`), the `shttps::Error`/`Global` types |
+| `error` | `src/error/` | The `SipiError` exception base shared by the codec, metadata, and IIIF-parser packages |
+| `cache` | `src/cache/` | File-based LRU cache with dual-limit eviction |
 | `throttling` | `src/throttling/` (colocated polyglot, ADR-0021/0022): `cpp/` (engine-side `memory_budget` — the full-lane decode budget) + `rust/` (shell-side `admission` — the two-lane pool) | Load-driven request-rejection: two-lane admission (tile floor + full hard cap) and the full-lane memory budget |
 | `memory` | `bazel/mimalloc.BUILD.bazel`, `_ALLOCATOR` in `src/cli-rs/BUILD.bazel`, `tools/allocator-replay/` | Process memory behavior: the production allocator, RSS/retention measurement |
 | `observability` | `src/observability/` | Metrics (atomic counters/gauges), tracing |
@@ -249,7 +250,7 @@ FFI seam:
    struct fails to compile (unused binding under `-D warnings`).*
 
 C++ engine:
-8. **`include/SipiConf.h` + `src/SipiConf.cpp`** — the getter/setter and the Lua
+8. **`src/ffi/SipiConf.h` + `src/ffi/SipiConf.cpp`** — the getter/setter and the Lua
    `config.*` table read (the engine's own config surface).
 9. **`config/sipi.config.lua`** — document the option.
 10. **THE ONE UNMECHANIZED LINK — the `sipi_init` apply block**

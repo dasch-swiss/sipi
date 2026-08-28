@@ -17,7 +17,7 @@
 #include "SipiImage.h"
 #include "SipiImageError.h"
 #include "iiifparser/SipiRegion.h"
-#include "SipiReport.h"
+#include "cli/SipiReport.h"
 #include "iiifparser/SipiSize.h"
 #include "metadata/essentials.h"
 #include "metadata/icc.h"

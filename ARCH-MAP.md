@@ -2,7 +2,7 @@
 dune_map: true
 schema_version: 1
 last_verified_commit: none   # not SHA-tracked: rebase-merge rewrites branch SHAs, so a pre-merge SHA is unknowable. Use `date` for freshness.
-date: 2026-08-25
+date: 2026-08-28
 ---
 
 # ARCH-MAP.md — SIPI
@@ -33,26 +33,38 @@ image formats, whose registry fan-out is documented, not mechanized.
 
 ### image
 
-- **Paths:** `:(glob)src/SipiImage.{h,cpp}`, `:(glob)src/SipiCommon.{h,cpp}`, `:(glob)src/SipiFilenameHash.{h,cpp}`, `:(glob)src/SipiIO.h`, `:(glob)src/SipiImageError.h`, `:(glob)src/SipiError.{h,cpp}`, `:(glob)src/populate_from_image.{h,cpp}`, `:(glob)src/resample.{cc,h}`, `:(glob)src/SipiConf.cpp`, `:(glob)src/SipiReport.cpp`, `:(glob)src/process_benchmark.cpp`, `:(glob)src/BUILD.bazel`, `:(glob)src/nsswitch.conf`
-- **Purpose:** The image engine hub — `SipiImage` orchestrates decode → process (scale/rotate/crop/ICC) → encode, and owns the metadata wrappers and format dispatch. Also holds the shared error base (`SipiError` = `//src:sipi_top`), the `//src` package's Bazel wiring, and the CLI's config object (`SipiConf`) and JSON reporter (`SipiReport`).
-- **Key entities:** `Sipi::SipiImage`, `SipiImage::io` (static handler registry, *defined* in `formats`), `SipiImage::read`/`read_shape`/`write`/`add_watermark`/`convertToIcc`/`scale`/`rotate`/`crop`, `Sipi::SipiIO` (abstract), `SipiImgInfo`, `Sipi::read_watermark` (defined in `formats`), `SipiFilenameHash`, `Sipi::resample_separable_u8/u16`, `Sipi::estimate_peak_memory`, `Sipi::SipiError`/`SipiImageError`, `Sipi::SipiConf`, `Sipi::emit_json_report`
-- **Public interface:** `SipiImage` (via `//src:engine`), `SipiIO`, `SipiError`; consumed by `formats`, `ffi` (including the `sipi_image_*` handles behind the Lua `SipiImage` bindings), and `cli`.
+- **Paths:** `:(glob)src/SipiImage.{h,cpp}`, `:(glob)src/SipiIO.h`, `:(glob)src/SipiImageError.h`, `:(glob)src/populate_from_image.{h,cpp}`, `:(glob)src/resample.{cc,h}`, `:(glob)src/process_benchmark.cpp`, `:(glob)src/BUILD.bazel`, `:(glob)src/nsswitch.conf`
+- **Purpose:** The image engine hub — `SipiImage` orchestrates decode → process (scale/rotate/crop/ICC) → encode, and owns the metadata wrappers and format dispatch, and the `//src` package's Bazel wiring.
+- **Key entities:** `Sipi::SipiImage`, `SipiImage::io` (static handler registry, *defined* in `formats`), `SipiImage::read`/`read_shape`/`write`/`add_watermark`/`convertToIcc`/`scale`/`rotate`/`crop`, `Sipi::SipiIO` (abstract), `SipiImgInfo`, `Sipi::read_watermark` (defined in `formats`), `Sipi::resample_separable_u8/u16`, `Sipi::estimate_peak_memory`, `Sipi::SipiImageError`
+- **Public interface:** `SipiImage` (via `//src:engine`), `SipiIO`; consumed by `formats`, `ffi` (including the `sipi_image_*` handles behind the Lua `SipiImage` bindings), and `cli`.
 - **Local-context kit:** `src/SipiImage.h`, `src/SipiImage.cpp`, `src/SipiIO.h`, `src/BUILD.bazel` (the `:engine`/`:sipi_lib` targets), `src/formats/format_registry.cpp` (where `io` is defined), `docs/adr/0007-sipiimage-decomposition.md`, `CONVENTIONS.md`
-- **Depends on:** metadata, iiifparser, formats (`:output_sink` only), util, logging, observability, cache, throttling
+- **Depends on:** error, metadata, iiifparser, formats (`:output_sink` only), util, logging, observability, throttling
 - **Used by:** formats (one-way back-edge, see rule), ffi, cli, cli-rs (transitively)
 - **Boundary rules:**
   - The engine references but does **not** define `SipiImage::io` / `Sipi::read_watermark`; both are defined in `formats`, so `//src:engine` does not depend on `//src/formats:formats`. This inverts the `SipiImage`↔handler cycle. *Enforcement: `structure`* (a Bazel package cannot depend on itself; the cycle is unrepresentable).
   - The four codec handlers are `friend`s of `SipiImage` (`SipiImage.h`), a documented bidirectional coupling ADR-0007 plans to remove. *Enforcement: `docs-only`* (friendship is a language reach-in nothing flags).
-- **Durable state:** `SipiImage::io` (static registry, single writer = `format_registry.cpp`); `SipiFilenameHash::__levels` (static, set via `setLevels`/`migrateToLevels`).
+- **Durable state:** `SipiImage::io` (static registry, single writer = `format_registry.cpp`).
+
+### error
+
+- **Paths:** `:(glob)src/error/**`
+- **Purpose:** The shared `SipiError` exception base. A standalone leaf so `metadata`, `formats`, and `iiifparser` can throw/catch it without depending on the image engine — folding it into `image` would close an `image -> metadata -> image` cycle Bazel cannot express.
+- **Key entities:** `Sipi::SipiError`
+- **Public interface:** `SipiError` (via `//src/error`).
+- **Local-context kit:** `src/error/BUILD.bazel`, `src/error/cpp/SipiError.h`, `src/error/cpp/SipiError.cpp`
+- **Depends on:** util
+- **Used by:** image, metadata, formats, iiifparser, cache
+- **Boundary rules:** a leaf — no internal deps beyond `util`. *Enforcement: `structure`* (Bazel dep set).
+- **Durable state:** none.
 
 ### cache
 
-- **Paths:** `:(glob)src/SipiCache.{h,cpp}`
-- **Purpose:** File-based LRU of generated representations, keyed by *Cache key*, with dual-limit eviction (total size **and** file count) and crash recovery. Compiled into `//src:engine`.
+- **Paths:** `:(glob)src/cache/**`
+- **Purpose:** File-based LRU of generated representations, keyed by *Cache key*, with dual-limit eviction (total size **and** file count) and crash recovery.
 - **Key entities:** `Sipi::SipiCache`, `SipiCache::check`/`add`/`purge`/`deblock`, `FileCacheRecord` (on-disk fixed-width), `CacheRecord`
-- **Public interface:** `SipiCache` (via `//src:engine`); the FFI runtime owns one instance.
-- **Local-context kit:** `src/SipiCache.h`, `src/SipiCache.cpp`, `src/ffi/init.cpp` (constructs it), `src/ffi/serve_image.cpp` (check/add call sites), `UBIQUITOUS_LANGUAGE.md` (Cache / Cache key / Cache pin)
-- **Depends on:** logging, observability
+- **Public interface:** `SipiCache` (via `//src/cache`); the FFI runtime owns one instance.
+- **Local-context kit:** `src/cache/BUILD.bazel`, `src/cache/cpp/SipiCache.h`, `src/cache/cpp/SipiCache.cpp`, `src/ffi/init.cpp` (constructs it), `src/ffi/serve_image.cpp` (check/add call sites), `UBIQUITOUS_LANGUAGE.md` (Cache / Cache key / Cache pin)
+- **Depends on:** error, logging, observability
 - **Used by:** ffi (`init.cpp` owns it, `serve_image.cpp` uses it)
 - **Boundary rules:** Cache state is exposed **exclusively** through *Metrics*, never Lua bindings; cache-hit responses bypass both Throttling policies (ADR-0008). *Enforcement: `docs-only`* (glossary rule; no mechanical check).
 - **Durable state:** in-memory `cachetable` + `blocked_files` + `cache_used_bytes`/`nfiles` (mutex-guarded); on-disk `.sipicache` index (rewritten on destruction; corruption → dir cleared). Single owner = the FFI runtime (`std::unique_ptr`, constructed in `init.cpp`).
@@ -84,7 +96,7 @@ engine-side memory budget under one component. Supersedes the former
 - **Key entities:** `SipiIOTiff`/`SipiIOJ2k`/`SipiIOJpeg`/`SipiIOPng`, `OutputSink`/`SinkStream`, `read_watermark`, `SipiImage::io` (defined in `format_registry.cpp`)
 - **Public interface:** the `SipiIO` overrides (reached only through `SipiImage`'s dispatch); `output_sink` is a separate leaf target `//src/formats:output_sink`.
 - **Local-context kit:** `src/formats/BUILD.bazel`, `src/formats/format_registry.cpp`, `src/formats/SipiIOTiff.{h,cpp}`, `src/formats/output_sink.h`, `src/SipiImage.h` (friend decls + `io` decl), `tools/formats-fanout.sh` (the new-format edit-site list)
-- **Depends on:** image (`//src:engine`, one-way), metadata, observability, logging, util, output_sink; codecs `@kakadu` `@tiff` `@libpng` `@libjpeg_turbo`
+- **Depends on:** error, image (`//src:engine`, one-way), metadata, observability, logging, util, output_sink; codecs `@kakadu` `@tiff` `@libpng` `@libjpeg_turbo`
 - **Used by:** image (link-time, for `io`/`read_watermark`), ffi, cli, tests
 - **Boundary rules:**
   - `//src/formats:formats` depends one-way on `//src:engine`; `output_sink` is a dependency-free leaf so the engine can reach it without depending on the handler package. *Enforcement: `structure`* (Bazel target-granularity dep direction).
@@ -99,10 +111,10 @@ engine-side memory budget under one component. Supersedes the former
 - **Key entities:** C++: `SipiRegion`/`SipiSize`/`SipiRotation`/`SipiQualityFormat`/`SipiIdentifier` (each with a string-parse ctor and a flattened-FFI-seam ctor + `canonical()`), `SipiDecodeDims`/`compute_decode_dims`, `handlers::iiif_handler::parse_iiif_uri` (testonly reference). Rust: `parse_request`, `ParsedRequest`/`RequestKind`, `IiifParams`, `RegionKind`/`SizeKind`/`QualityKind`/`FormatKind` (domain enums, total supersets of the FFI enums)
 - **Public interface:** the value-object classes (via `//src/iiifparser/cpp/value_objects:iiifparser`); `parse_iiif_uri` via the testonly `//src/iiifparser/cpp/classifier:iiif_handler`; the Rust parser via `//src/iiifparser/rust:iiif_parser` (`parse_request` → domain `IiifParams`, `server-rs` owns the `From` flattening).
 - **Local-context kit:** `src/iiifparser/cpp/value_objects/BUILD.bazel`, `src/iiifparser/cpp/value_objects/SipiSize.h`, `src/iiifparser/cpp/classifier/iiif_handler.h`, `src/iiifparser/rust/BUILD.bazel`, `src/iiifparser/rust/parse.rs`, `src/ffi/serve_image.cpp` (the C++ FFI-seam reconstruction), `src/server-rs/src/ffi.rs` (the domain → seam `From<IiifParams>` mapping a domain-enum change must be kept exhaustive against). ADR-0021 is one hop away via every subpackage's BUILD docstring.
-- **Depends on:** image (`//src:sipi_top` for `SipiError`), util. The Rust crate deps only `@crates//:percent-encoding` — no FFI, no C++ engine.
+- **Depends on:** error (`SipiError`), util. The Rust crate deps only `@crates//:percent-encoding` — no FFI, no C++ engine.
 - **Used by:** image (`SipiIO.h`), ffi (`serve_image.cpp` rebuilds the value objects), formats (`SipiIOJ2k`), cli; server-rs (drives the Rust parser)
 - **Boundary rules:**
-  - `cpp/value_objects` is a leaf — deps only `//src:sipi_top` + `//src/util`, never `SipiImage`/codecs. *Enforcement: `structure`* (Bazel visibility + dep set). Each subpackage pins the virtual `iiifparser/` include prefix to its own physical depth (`strip_include_prefix` + `include_prefix = "iiifparser"`) so consumers keep `#include "iiifparser/*.h"`. *Enforcement: `structure`* (a wrong prefix fails the engine compile).
+  - `cpp/value_objects` is a leaf — deps only `//src/error` + `//src/util`, never `SipiImage`/codecs. *Enforcement: `structure`* (Bazel visibility + dep set). Each subpackage pins the virtual `iiifparser/` include prefix to its own physical depth (`strip_include_prefix` + `include_prefix = "iiifparser"`) so consumers keep `#include "iiifparser/*.h"`. *Enforcement: `structure`* (a wrong prefix fails the engine compile).
   - `cpp/classifier` `iiif_handler` is the `testonly` reference oracle for the Rust `parse_request`, deps `//src/util` only, and is `rm -rf`-deletable as a whole folder once the Rust port is trusted (only the `//test/approval` edge + corpus consumer need unwiring). *Enforcement: `structure`* (`testonly` keeps it out of `//src:sipi_lib`; DUNE-015).
   - `rust/iiif_parser` is FFI-free: `bazel query 'deps(...)'` shows no `//src/ffi:sipi_ffi` and no C++ engine, so it needs no `_CPP_STDLIB_LINK` and is sanitizer-eligible (untagged). *Enforcement: `structure`* (Bazel dep set). The domain→FFI `From` impls in `server-rs/ffi.rs` are exhaustive matches, never `as` casts. *Enforcement: `static-analysis`* (a new variant fails to compile; per-variant mapping test).
   - `fuzz/` holds the repo's only **C++→Rust** link (`shim.rs` → `fuzz_target.cc`); every other FFI edge is Rust→C++. It exists because libFuzzer's entry point is C and `rules_fuzzing` is a C++/Java rule set. Nothing outside the package can depend on the shim, so the one-way shell→seam→engine direction still holds for everything that ships. *Enforcement: `structure`* (both targets are `testonly` and the package grants no default visibility, so a dep from outside fails analysis). `--config=fuzz` is Linux-only; the default `replay` engine keeps the target building and corpus-replaying on every platform. *Enforcement: `structure`* (the `//src/...` test sweeps pick up the replay test).
@@ -115,7 +127,7 @@ engine-side memory budget under one component. Supersedes the former
 - **Key entities:** `Exif`/`Iptc`/`Xmp`/`Icc`/`Essentials`, `Icc::iccBytes()` (the single ICC-materialization chokepoint, ADR-0002), `EssentialsFields`, `PhotometricInterpretation`
 - **Public interface:** the wrapper classes (via `//src/metadata:metadata`); the byte-mutation helper is in `//src/metadata/internal` (restricted).
 - **Local-context kit:** `src/metadata/BUILD.bazel`, `src/metadata/icc.h`, `src/metadata/icc.cpp`, `src/metadata/internal/BUILD.bazel`, `src/metadata/internal/icc_normalization.{h,cpp}`, `src/metadata/essentials.h`, `docs/adr/0002-icc-profile-determinism-test-only.md`
-- **Depends on:** image (`//src:sipi_top` for `SipiError`), util; exiv2, lcms2, openssl, protobuf (internal codec)
+- **Depends on:** error (`SipiError`), util; exiv2, lcms2, openssl, protobuf (internal codec)
 - **Used by:** image (owns the wrappers as members), formats (read/write ICC + Essentials), ffi, cli
 - **Boundary rules:**
   - `//src/metadata/internal` (`icc_normalization`, `protobuf_codec`) is visibility-restricted to `//src/metadata:__pkg__` — the canonical **Test seam** pattern (DEV-6406). *Enforcement: `structure`* (Bazel visibility fails analysis on an external include).
@@ -139,14 +151,14 @@ engine-side memory budget under one component. Supersedes the former
 ### util
 
 - **Paths:** `:(glob)src/util/**`
-- **Purpose:** Generic SIPI-domain helpers (MIME/string parsing, file hashing, error/global types, URL decode) extracted from shttps; a leaf. Namespace stays `shttps::`.
-- **Key entities:** `shttps::Error`, `shttps::Hash` + `enum HashType` (on-disk contract, ADR-0005), `shttps::Parsing::{getFileMimetype,getBestFileMimetype,parseMimetype}`, `shttps::urldecode`, `Global::as_integer`
+- **Purpose:** Generic SIPI-domain helpers (MIME/string parsing, file hashing, filename-to-subdirectory hashing, error/global types, URL decode) extracted from shttps; a leaf. Namespace stays `shttps::`.
+- **Key entities:** `shttps::Error`, `shttps::Hash` + `enum HashType` (on-disk contract, ADR-0005), `shttps::Parsing::{getFileMimetype,getBestFileMimetype,parseMimetype}`, `shttps::urldecode`, `Global::as_integer`, `SipiFilenameHash`, `SipiFilenameHash::setLevels`, `SipiFilenameHash::migrateToLevels`
 - **Public interface:** the free functions + value types (via `//src/util`, `strip_include_prefix="/src"` → `#include "util/…"`).
-- **Local-context kit:** `src/util/BUILD.bazel`, `src/util/Parsing.h`, `src/util/Hash.h`, `src/util/Error.h`, `src/util/UrlDecode.h`
-- **Depends on:** openssl (Hash), libmagic (Parsing MIME sniff) — no SIPI-internal deps.
+- **Local-context kit:** `src/util/BUILD.bazel`, `src/util/Parsing.h`, `src/util/Hash.h`, `src/util/Error.h`, `src/util/UrlDecode.h`, `src/util/SipiFilenameHash.h`
+- **Depends on:** openssl (Hash), libmagic (Parsing MIME sniff), logging (`SipiFilenameHash`'s `log_debug` calls) — the one SIPI-internal dep.
 - **Used by:** image, formats, iiifparser, metadata, cli, ffi (broadly used leaf)
-- **Boundary rules:** a leaf — no internal deps; colocated `util_test` links only `:util`, so a forbidden cross-module include is a build error, not a `sipi_lib`-wide slip. *Enforcement: `structure`*.
-- **Durable state:** `Hash::HashType` values are an on-disk contract (mirrored in `essentials.proto`); `Parsing` ships a compiled-in `magic.mgc` blob (read-only).
+- **Boundary rules:** a leaf — deps only `logging` internally; colocated `util_test` links only `:util`, so a forbidden cross-module include is a build error, not a `sipi_lib`-wide slip. *Enforcement: `structure`*.
+- **Durable state:** `Hash::HashType` values are an on-disk contract (mirrored in `essentials.proto`); `Parsing` ships a compiled-in `magic.mgc` blob (read-only); `SipiFilenameHash::__levels` (static, set via `setLevels`/`migrateToLevels`).
 
 ### observability
 
@@ -176,9 +188,9 @@ engine-side memory budget under one component. Supersedes the former
 
 - **Paths:** `:(glob)src/ffi/**`
 - **Purpose:** The hand-mirrored `extern "C"` seam the Rust shell drives the C++ engine through — serve entries, the engine-context install (`sipi_init`), the metrics snapshot, edge probes, the `sipi_image_*` opaque image handle family (the Rust Lua `SipiImage` bindings' callee), and the shared `LibraryInitialiser`. Config parsing is NOT here: the shell parses both config flavors (TOML via `config_file.rs`, Lua via `//src/scripting/rust`) and `sipi_init` consumes only the resolved `SipiServerConfig` override channel.
-- **Key entities:** `sipi_serve_image`/`sipi_serve_file`/`sipi_init`/`sipi_metrics_snapshot`/`sipi_cli_main` (defined in `cli`), the `sipi_image_*` handle family, `SipiResponse` (streamed sink), `SipiIiifParams`/`SipiServeRequest`/`SipiMetricsSnapshot` (`#[repr(C)]` mirrors), `EngineContext` + `set_engine_context`, `LibraryInitialiser`
+- **Key entities:** `sipi_serve_image`/`sipi_serve_file`/`sipi_init`/`sipi_metrics_snapshot`/`sipi_cli_main` (defined in `cli`), the `sipi_image_*` handle family, `SipiResponse` (streamed sink), `SipiIiifParams`/`SipiServeRequest`/`SipiMetricsSnapshot` (`#[repr(C)]` mirrors), `EngineContext` + `set_engine_context`, `LibraryInitialiser`, `Sipi::SipiConf`, `Sipi::parseSizeString` (the Lua-flavoured config object `sipi_init` constructs and populates)
 - **Public interface:** `sipi_ffi.h` (`strip_include_prefix="/src"` → `#include "ffi/sipi_ffi.h"`), mirrored by hand in `src/server-rs/src/ffi.rs`.
-- **Local-context kit:** `src/ffi/sipi_ffi.h`, `src/ffi/serve_image.cpp`, `src/ffi/engine_context.{h,cpp}`, `src/ffi/init.cpp`, `src/ffi/metrics_snapshot.h`, `src/ffi/BUILD.bazel`, `src/server-rs/src/ffi.rs` (the Rust mirror)
+- **Local-context kit:** `src/ffi/sipi_ffi.h`, `src/ffi/serve_image.cpp`, `src/ffi/engine_context.{h,cpp}`, `src/ffi/init.cpp`, `src/ffi/metrics_snapshot.h`, `src/ffi/SipiConf.{h,cpp}`, `src/ffi/BUILD.bazel`, `src/server-rs/src/ffi.rs` (the Rust mirror)
 - **Depends on:** image, formats, iiifparser (transitive), metadata, util, observability, logging; curl, exiv2
 - **Used by:** server-rs (drives it), cli-rs (links it), cli (shares `startup`/`LibraryInitialiser`)
 - **Boundary rules:**
@@ -191,10 +203,10 @@ engine-side memory budget under one component. Supersedes the former
 
 - **Paths:** `:(glob)src/cli/**`
 - **Purpose:** The C++ offline verbs (convert/verify/query/compare/health) behind the `sipi_cli_main` FFI entry, and the thin `main` in `sipi.cpp`. Server mode was deleted with the oracle (Phase 7).
-- **Key entities:** `sipi_cli_main` (extern "C"), `Sipi::cli::cmd_convert_access_file`/`cmd_convert_service_file`/`cmd_verify`/`cmd_health`, `LibraryInitialiser::instance()`
+- **Key entities:** `sipi_cli_main` (extern "C"), `Sipi::cli::cmd_convert_access_file`/`cmd_convert_service_file`/`cmd_verify`/`cmd_health`, `LibraryInitialiser::instance()`, `Sipi::emit_json_report`, `Sipi::emit_json_cli_arg_error` (the `--json` report emitter)
 - **Public interface:** `sipi_cli_main` (the sole export `cli-rs` links); `//src/cli:sipi` binary.
-- **Local-context kit:** `src/cli/cli_app.cpp`, `src/cli/sipi.cpp`, `src/cli/BUILD.bazel`, `src/cli/commands/BUILD.bazel`, `src/cli/commands/convert_service_file.h`, `docs/adr/0009-file-taxonomy.md`
-- **Depends on:** image (`sipi_lib`), ffi (`sipi_cli_main` contract, shared `startup`), cli11
+- **Local-context kit:** `src/cli/cli_app.cpp`, `src/cli/sipi.cpp`, `src/cli/SipiReport.{h,cpp}`, `src/cli/BUILD.bazel`, `src/cli/commands/BUILD.bazel`, `src/cli/commands/convert_service_file.h`, `docs/adr/0009-file-taxonomy.md`
+- **Depends on:** image (`sipi_lib`), ffi (`sipi_cli_main` contract, shared `startup`), cli11, jansson
 - **Used by:** cli-rs (dispatches offline verbs via `sipi_cli_main`)
 - **Boundary rules:** one `.cpp`/`.h` per `sipi <verb> <noun>` in `commands/`; CLI11 stays in `cli_app.cpp` and never leaks into `commands/` (which take plain `*Args` structs). `//src/cli/commands` visibility scoped to `//src/cli:__pkg__`. *Enforcement: `structure`* (visibility) + `docs-only` (the one-file-per-verb convention).
 - **Durable state:** `LibraryInitialiser` singleton (process-global init, idempotent).
