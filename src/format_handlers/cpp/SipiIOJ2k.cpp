@@ -56,6 +56,7 @@
 #include "observability/metrics.h"
 
 #include "error/SipiError.h"
+#include "error/SipiValueError.h"
 #include "image/SipiImageError.h"
 #include "image_processing/processing.h"
 #include "SipiIOJ2k.h"
@@ -67,28 +68,33 @@ using namespace kdu_supp;
 
 namespace Sipi {
 
-void validate_j2k_palette_mapping(std::size_t bps, std::size_t nc, int numcol, int nentries, const std::string &filepath)
+Result<void>
+  validate_j2k_palette_mapping(std::size_t bps, std::size_t nc, int numcol, int nentries, const std::string &filepath)
 {
   if (bps != 8) {
-    throw SipiImageError(
+    return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
       "Cannot read JPEG2000 file \"" + filepath + "\": palette color images with " + std::to_string(bps)
-      + "-bit indices are not supported");
+        + "-bit indices are not supported" });
   }
   if (nc != 1) {
-    throw SipiImageError("Cannot read JPEG2000 file \"" + filepath
-      + "\": palette color images with more than one index component are not supported");
+    return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+      "Cannot read JPEG2000 file \"" + filepath
+        + "\": palette color images with more than one index component are not supported" });
   }
   if (numcol != 3) {
-    throw SipiImageError("Cannot read JPEG2000 file \"" + filepath
-      + "\": palette color images must map to exactly 3 output colors, got " + std::to_string(numcol));
+    return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+      "Cannot read JPEG2000 file \"" + filepath
+        + "\": palette color images must map to exactly 3 output colors, got " + std::to_string(numcol) });
   }
   // Every possible bps-bit index value must resolve to a valid palette
   // entry; checking this once here means the expansion loop needs no
   // per-pixel bounds check.
   if (nentries < (1 << bps)) {
-    throw SipiImageError("Cannot read JPEG2000 file \"" + filepath + "\": palette has only "
-      + std::to_string(nentries) + " entries, too few for " + std::to_string(bps) + "-bit indices");
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "Cannot read JPEG2000 file \"" + filepath + "\": palette has only " + std::to_string(nentries)
+        + " entries, too few for " + std::to_string(bps) + "-bit indices" });
   }
+  return {};
 }
 
 //=========================================================================
@@ -262,10 +268,10 @@ static bool is_jpx(const char *fname)
 //=============================================================================
 
 
-bool SipiIOJ2k::read(SipiImage *img,
+Result<bool> SipiIOJ2k::read_impl(SipiImage *img,
   const std::string &filepath,
-  const std::shared_ptr<SipiRegion> region,
-  const std::shared_ptr<SipiSize> size,
+  std::shared_ptr<SipiRegion> region,
+  std::shared_ptr<SipiSize> size,
   bool force_bps_8,
   ScalingQuality scaling_quality)
 {
@@ -346,8 +352,8 @@ bool SipiIOJ2k::read(SipiImage *img,
     jpx_open_result = jpx_in.open(&jp2_ultimate_src, true);
   } catch (kdu_exception&) {
     jp2_ultimate_src.close();
-    throw SipiImageError(
-      "Cannot read JPEG2000 file \"" + filepath + "\": corrupt JP2/JPX structure");
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "Cannot read JPEG2000 file \"" + filepath + "\": corrupt JP2/JPX structure" });
   }
   if (jpx_open_result < 0) {// if < 0, not compatible with JP2 or JPX. Try opening as a raw code-stream.
     jp2_ultimate_src.close();
@@ -424,8 +430,8 @@ bool SipiIOJ2k::read(SipiImage *img,
       // open_stream() returned before the throw; the codestream is not
       // created yet). jp2_ultimate_src is released by its destructor on
       // unwind, as on the normal path.
-      throw SipiImageError(
-        "Cannot read JPEG2000 file \"" + filepath + "\": no usable codestream in JP2/JPX container");
+      return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+        "Cannot read JPEG2000 file \"" + filepath + "\": no usable codestream in JP2/JPX container" });
     }
   }
 
@@ -441,8 +447,8 @@ bool SipiIOJ2k::read(SipiImage *img,
     codestream.set_fast();// No errors expected in input
     maximal_reduce = codestream.get_min_dwt_levels();
   } catch (kdu_exception&) {
-    throw SipiImageError(
-      "Cannot read JPEG2000 file \"" + filepath + "\": corrupt or truncated codestream");
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "Cannot read JPEG2000 file \"" + filepath + "\": corrupt or truncated codestream" });
   }
 
   //
@@ -543,7 +549,9 @@ bool SipiIOJ2k::read(SipiImage *img,
       // The palette-expansion loop below only handles a single 8-bit index
       // component mapped to a 3-channel (RGB) output; reject anything else
       // instead of silently mis-decoding or overrunning the expansion buffer.
-      validate_j2k_palette_mapping(img->bps, img->nc, numcol, nentries, filepath);
+      if (auto validated = validate_j2k_palette_mapping(img->bps, img->nc, numcol, nentries, filepath); !validated) {
+        return std::unexpected(validated.error());
+      }
       rlut.resize(nentries);
       glut.resize(nentries);
       blut.resize(nentries);
@@ -606,7 +614,8 @@ bool SipiIOJ2k::read(SipiImage *img,
           img->photo = PhotometricInterpretation::SEPARATED;
         } else {
           log_err("Unsupported number of colors: %d", numcol);
-          throw SipiImageError("Unsupported number of colors: " + std::to_string(numcol));
+          return std::unexpected(
+            SipiValueError{ ErrorCode::kUnsupportedFormat, "Unsupported number of colors: " + std::to_string(numcol) });
         }
         int icc_len;
         const unsigned char *icc_buf = colinfo.get_icc_profile(&icc_len);
@@ -636,7 +645,8 @@ bool SipiIOJ2k::read(SipiImage *img,
 
       default: {
         log_err("Unsupported ICC profile: %s", std::to_string(space).c_str());
-        throw SipiImageError("Unsupported ICC profile: " + std::to_string(space));
+        return std::unexpected(
+          SipiValueError{ ErrorCode::kUnsupportedFormat, "Unsupported ICC profile: " + std::to_string(space) });
       }
       }
     }
@@ -659,8 +669,9 @@ bool SipiIOJ2k::read(SipiImage *img,
       break;
     }
     default: {
-      throw SipiImageError("Cannot determine photometric interpretation for JPEG2000 file \""
-        + filepath + "\": unsupported number of color channels (" + std::to_string(numcol) + ")");
+      return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+        "Cannot determine photometric interpretation for JPEG2000 file \"" + filepath
+          + "\": unsupported number of color channels (" + std::to_string(numcol) + ")" });
     }
     }// switch(numcol)
   }
@@ -687,8 +698,8 @@ bool SipiIOJ2k::read(SipiImage *img,
     }
     decompressor.start(codestream, false, false, env_ref);
   } catch (kdu_exception&) {
-    throw SipiImageError(
-      "Cannot read JPEG2000 file \"" + filepath + "\": corrupt codestream (decompressor start failed)");
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "Cannot read JPEG2000 file \"" + filepath + "\": corrupt codestream (decompressor start failed)" });
   }
   // TODO: check image for number of components and make this dynamic
   int stripe_heights[5] = {
@@ -701,7 +712,8 @@ bool SipiIOJ2k::read(SipiImage *img,
     const auto buf8_size = checked_buf_size(
       static_cast<std::size_t>(dims.size.x), static_cast<std::size_t>(dims.size.y), static_cast<std::size_t>(img->nc), 1);
     if (!buf8_size) {
-      throw SipiImageError("Cannot read JPEG2000 file \"" + filepath + "\": image dimensions overflow buffer size");
+      return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+        "Cannot read JPEG2000 file \"" + filepath + "\": image dimensions overflow buffer size" });
     }
     std::vector<byte> buffer8(*buf8_size);
     try {
@@ -718,7 +730,8 @@ bool SipiIOJ2k::read(SipiImage *img,
     const auto buf16_size = checked_buf_size(
       static_cast<std::size_t>(dims.size.x), static_cast<std::size_t>(dims.size.y), static_cast<std::size_t>(img->nc), 2);
     if (!buf16_size) {
-      throw SipiImageError("Cannot read JPEG2000 file \"" + filepath + "\": image dimensions overflow buffer size");
+      return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+        "Cannot read JPEG2000 file \"" + filepath + "\": image dimensions overflow buffer size" });
     }
     std::vector<byte> buffer16(*buf16_size);
     try {
@@ -742,7 +755,8 @@ bool SipiIOJ2k::read(SipiImage *img,
     const auto buf16_size = checked_buf_size(
       static_cast<std::size_t>(dims.size.x), static_cast<std::size_t>(dims.size.y), static_cast<std::size_t>(img->nc), 2);
     if (!buf16_size) {
-      throw SipiImageError("Cannot read JPEG2000 file \"" + filepath + "\": image dimensions overflow buffer size");
+      return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+        "Cannot read JPEG2000 file \"" + filepath + "\": image dimensions overflow buffer size" });
     }
     std::vector<byte> buffer16(*buf16_size);
     try {
@@ -763,9 +777,10 @@ bool SipiIOJ2k::read(SipiImage *img,
   default: {
     decompressor.finish();
     log_err("Unsupported number of bits/sample: %ld in file %s", img->bps, filepath.c_str());
-    throw SipiImageError("Cannot read JPEG2000: unsupported bits/sample (" + std::to_string(img->bps)
-      + ") in file \"" + filepath + "\" (dimensions: " + std::to_string(img->nx) + "x"
-      + std::to_string(img->ny) + ", channels: " + std::to_string(img->nc) + ")");
+    return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+      "Cannot read JPEG2000: unsupported bits/sample (" + std::to_string(img->bps) + ") in file \"" + filepath
+        + "\" (dimensions: " + std::to_string(img->nx) + "x" + std::to_string(img->ny)
+        + ", channels: " + std::to_string(img->nc) + ")" });
   }
   }
   decompressor.finish();
@@ -781,7 +796,8 @@ bool SipiIOJ2k::read(SipiImage *img,
     const auto tmpbuf_size = checked_buf_size(
       static_cast<std::size_t>(img->nx), static_cast<std::size_t>(img->ny), static_cast<std::size_t>(numcol), 1);
     if (!tmpbuf_size) {
-      throw SipiImageError("Cannot read JPEG2000 file \"" + filepath + "\": palette-expanded buffer size overflow");
+      return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+        "Cannot read JPEG2000 file \"" + filepath + "\": palette-expanded buffer size overflow" });
     }
     std::vector<byte> tmpbuf(*tmpbuf_size);
     for (int y = 0; y < img->ny; ++y) {
@@ -815,10 +831,30 @@ bool SipiIOJ2k::read(SipiImage *img,
   }
   return true;
 }
+
+bool SipiIOJ2k::read(SipiImage *img,
+  const std::string &filepath,
+  const std::shared_ptr<SipiRegion> region,
+  const std::shared_ptr<SipiSize> size,
+  bool force_bps_8,
+  ScalingQuality scaling_quality)
+{
+  auto result = read_impl(img, filepath, region, size, force_bps_8, scaling_quality);
+  if (!result) {
+    const auto &err = result.error();
+    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
+  }
+  return *result;
+}
 //=============================================================================
 
 
-SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
+namespace {
+
+// The shape probe proper: reports a Kakadu failure as a SipiValueError value
+// rather than by throwing. File-local so it can reuse is_jpx, the kdu_sipi_*
+// statics and the rest of this TU.
+[[nodiscard]] Result<SipiImgInfo> read_shape_impl(const std::string &filepath)
 {
   SIPI_ZONE_N("SipiIOJ2k::read_shape");
   SipiImgInfo info;
@@ -866,8 +902,18 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
   bool take_fast_path = false;
   bool essentials_parse_failed = false;
   bool essentials_partial = false;
-  if (jpx_in.open(&jp2_ultimate_src, true)
-      < 0) {// if < 0, not compatible with JP2 or JPX.  Try opening as a raw code-stream.
+  // A corrupt JP2/JPX box structure makes jpx_in.open raise a Kakadu error
+  // (thrown as a kdu_exception by KduSipiError::flush) rather than returning
+  // < 0; convert it to a SipiValueError instead of letting a bare int unwind
+  // past the FFI seam.
+  int jpx_open_result;
+  try {
+    jpx_open_result = jpx_in.open(&jp2_ultimate_src, true);
+  } catch (kdu_exception &) {
+    return std::unexpected(SipiValueError{ ErrorCode::kShapeProbeFailed,
+      "Cannot read JPEG2000 file \"" + filepath + "\": corrupt JP2/JPX structure" });
+  }
+  if (jpx_open_result < 0) {// if < 0, not compatible with JP2 or JPX.  Try opening as a raw code-stream.
     jp2_ultimate_src.close();
     file_in.open(filepath.c_str());
     input = &file_in;
@@ -929,33 +975,52 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
     // Pre-record fast-path outcome for the slow path; the actual
     // increment happens in the unified post-shape block below.
     int stream_id = 0;
-    jpx_stream = jpx_in.access_codestream(stream_id);
-    input = jpx_stream.open_stream();
+    // A truncated/corrupt JP2 container reaches here with no usable
+    // codestream; Kakadu raises an error (thrown as a kdu_exception) from
+    // access_codestream/open_stream. Convert it to a SipiValueError so the
+    // failure is an enriched, leak-free error rather than a bare kdu_exception
+    // escaping past the FFI seam.
+    try {
+      jpx_stream = jpx_in.access_codestream(stream_id);
+      input = jpx_stream.open_stream();
+    } catch (kdu_exception &) {
+      return std::unexpected(SipiValueError{ ErrorCode::kShapeProbeFailed,
+        "Cannot read JPEG2000 file \"" + filepath + "\": no usable codestream in JP2/JPX container" });
+    }
   }
 
-  codestream.create(input);
-  codestream.set_fussy();// Set the parsing error tolerance.
+  // Corrupt or truncated input makes create()/header parsing raise a Kakadu
+  // error, which KduSipiError::flush throws as a kdu_exception. Convert it to
+  // a SipiValueError; KduReadTeardown tears down the codestream + source, so
+  // the engine reports an enriched error rather than a bare kdu_exception, and
+  // no source is leaked on the failure path. The subsequent siz->get(...)
+  // shape reads parse the same header, so they stay inside the same guarded
+  // region.
+  int tmp_height = 0, tmp_width = 0, __tnx = 0, __tny = 0;
+  try {
+    codestream.create(input);
+    codestream.set_fussy();// Set the parsing error tolerance.
 
-  //
-  // get the size of the full image (without reduce!)
-  //
-  siz_params *siz = codestream.access_siz();
-  int tmp_height;
-  siz->get(Ssize, 0, 0, tmp_height);
+    //
+    // get the size of the full image (without reduce!)
+    //
+    siz_params *siz = codestream.access_siz();
+    siz->get(Ssize, 0, 0, tmp_height);
+    siz->get(Ssize, 0, 1, tmp_width);
+    siz->get(Stiles, 0, 0, __tny);
+    siz->get(Stiles, 0, 1, __tnx);
+    info.clevels = codestream.get_min_dwt_levels();
+    info.nc = codestream.get_num_components();
+    info.bps = codestream.get_bit_depth(0);
+  } catch (kdu_exception &) {
+    return std::unexpected(SipiValueError{ ErrorCode::kShapeProbeFailed,
+      "Cannot read JPEG2000 file \"" + filepath + "\": corrupt or truncated codestream" });
+  }
   info.height = tmp_height;
-  int tmp_width;
-  siz->get(Ssize, 0, 1, tmp_width);
   info.width = tmp_width;
   if (info.success == SipiImgInfo::FAILURE) { info.success = SipiImgInfo::DIMS; }
-
-  int __tnx, __tny;
-  siz->get(Stiles, 0, 0, __tny);
-  siz->get(Stiles, 0, 1, __tnx);
   info.tile_width = __tnx;
   info.tile_height = __tny;
-  info.clevels = codestream.get_min_dwt_levels();
-  info.nc = codestream.get_num_components();
-  info.bps = codestream.get_bit_depth(0);
 
   bool essentials_from_codestream_comment = false;
   if (!essentials_from_uuid_box) {
@@ -991,6 +1056,18 @@ SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
     Sipi::observability::EssentialsFormat::Jp2, outcome).Increment();
 
   return info;
+}
+
+}// namespace
+
+SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
+{
+  auto result = read_shape_impl(filepath);
+  if (!result) {
+    const auto &err = result.error();
+    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
+  }
+  return *result;
 }
 //=============================================================================
 
@@ -1045,7 +1122,7 @@ static void write_essentials_box(kdu_supp::jp2_family_tgt *tgt, const std::vecto
 }
 //=============================================================================
 
-void SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
+Result<void> SipiIOJ2k::write_impl(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
 {
   SIPI_ZONE_N("SipiIOJ2k::write");
   // A streamed sink (callback/tee) writes via J2kHttpStream → SinkStream; a
@@ -1104,7 +1181,7 @@ void SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const SipiCompress
     if ((params != nullptr) && (!params->empty())) {
       if (params->find(J2K_Stiles) != params->end()) {
         int n = std::sscanf(params->at(J2K_Stiles).c_str(), "{%d,%d}", &tw, &th);
-        if (n != 2) { throw SipiImageError("Tiling parameter invalid!"); }
+        if (n != 2) { return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed, "Tiling parameter invalid!" }); }
         if ((mindim > tw) && (mindim > th)) {
           std::stringstream ss;
           ss << "Stiles=" << params->at(J2K_Stiles);
@@ -1515,11 +1592,10 @@ void SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const SipiCompress
         stripe_start += img->ny - stripe_start;
       }
     } else {
-      throw SipiImageError("Unsupported number of bits/sample for JPEG2000 write: bps="
-        + std::to_string(img->bps) + " (only 8 and 16 supported)"
-        + ", file=" + filepath
-        + ", dimensions=" + std::to_string(img->nx) + "x" + std::to_string(img->ny)
-        + ", channels=" + std::to_string(img->nc));
+      return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+        "Unsupported number of bits/sample for JPEG2000 write: bps=" + std::to_string(img->bps)
+          + " (only 8 and 16 supported)" + ", file=" + filepath + ", dimensions=" + std::to_string(img->nx) + "x"
+          + std::to_string(img->ny) + ", channels=" + std::to_string(img->nc) });
     }
     compressor.finish(0, NULL, NULL, env_ref);
     // Finally, cleanup
@@ -1530,14 +1606,26 @@ void SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const SipiCompress
   } catch (kdu_exception e) {
     if (codestream.exists()) { codestream.destroy(); }
     if (http && http->client_aborted) {
-      throw SipiImageClientAbortError("Client aborted HTTP response during JPEG2000 write");
+      return std::unexpected(
+        SipiValueError{ ErrorCode::kClientAbort, "Client aborted HTTP response during JPEG2000 write" });
     }
-    throw SipiImageError("Failed writing JPEG2000 image (Kakadu exception " + std::to_string(e) + ")"
-      + ", file=" + filepath
-      + ", dimensions=" + std::to_string(img->nx) + "x" + std::to_string(img->ny)
-      + ", channels=" + std::to_string(img->nc)
-      + ", bps=" + std::to_string(img->bps)
-      + ", colorspace=" + to_string(img->photo));
+    return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed,
+      "Failed writing JPEG2000 image (Kakadu exception " + std::to_string(e) + ")" + ", file=" + filepath
+        + ", dimensions=" + std::to_string(img->nx) + "x" + std::to_string(img->ny) + ", channels="
+        + std::to_string(img->nc) + ", bps=" + std::to_string(img->bps) + ", colorspace=" + to_string(img->photo) });
+  }
+  return {};
+}
+
+void SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
+{
+  auto result = write_impl(img, sink, params);
+  if (!result) {
+    const auto &err = result.error();
+    if (err.code() == ErrorCode::kClientAbort) {
+      throw SipiImageClientAbortError(err.raw_message(), err.errnum(), err.location());
+    }
+    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
   }
 }
 }// namespace Sipi

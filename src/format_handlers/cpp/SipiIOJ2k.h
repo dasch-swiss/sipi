@@ -14,6 +14,7 @@
 #include "tiff.h"
 #include "tiffio.h"
 
+#include "error/SipiValueError.h"
 #include "image/SipiImage.h"
 // #include "metadata/exif.h"
 #include "image/SipiIO.h"
@@ -32,15 +33,28 @@ namespace Sipi {
  * \param nentries Number of entries in each palette LUT
  * \param filepath Path of the file being decoded, for the error message
  *
- * \throws SipiImageError if bps != 8, nc != 1, numcol != 3, or nentries is
- * too small to cover every possible bps-bit index value.
+ * \returns A `Result<void>` holding no value if bps != 8, nc != 1, numcol !=
+ * 3, or nentries is too small to cover every possible bps-bit index value.
  */
-void validate_j2k_palette_mapping(std::size_t bps, std::size_t nc, int numcol, int nentries, const std::string &filepath);
+[[nodiscard]] Result<void>
+  validate_j2k_palette_mapping(std::size_t bps, std::size_t nc, int numcol, int nentries, const std::string &filepath);
 
 /*! Class which implements the JPEG2000-reader/writer */
 class SipiIOJ2k : public SipiIO
 {
 private:
+  /*! Decodes a JPEG2000 file into img, reporting failure as a Result value. */
+  [[nodiscard]] static Result<bool> read_impl(SipiImage *img,
+    const std::string &filepath,
+    std::shared_ptr<SipiRegion> region,
+    std::shared_ptr<SipiSize> size,
+    bool force_bps_8,
+    ScalingQuality scaling_quality);
+
+  /*! Encodes img as a JPEG2000 file to sink, reporting failure as a Result value. */
+  [[nodiscard]] static Result<void>
+    write_impl(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params);
+
 public:
   ~SipiIOJ2k() override = default;
   ;

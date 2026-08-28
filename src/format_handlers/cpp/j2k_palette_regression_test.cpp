@@ -40,6 +40,7 @@
 
 #include <gtest/gtest.h>
 
+#include "error/SipiValueError.h"
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
 #include "SipiIOJ2k.h"
@@ -47,6 +48,7 @@
 
 namespace {
 
+using Sipi::ErrorCode;
 using Sipi::PhotometricInterpretation;
 using Sipi::SipiImage;
 using Sipi::SipiImageError;
@@ -60,21 +62,28 @@ constexpr int kValidNentries = 256;// covers every 8-bit index value
 
 TEST(J2kPaletteRegression, AcceptsWellFormedEightBitRgbPalette)
 {
-  EXPECT_NO_THROW(validate_j2k_palette_mapping(8, 1, kValidNumcol, kValidNentries, "palette.jp2"));
+  auto result = validate_j2k_palette_mapping(8, 1, kValidNumcol, kValidNentries, "palette.jp2");
+  EXPECT_TRUE(result.has_value());
 }
 
 TEST(J2kPaletteRegression, RejectsSixteenBitIndices)
 {
   // bps == 16 indices are not handled by the expansion loop (it reads a
   // single index byte per pixel); must be rejected, not mis-decoded.
-  EXPECT_THROW(validate_j2k_palette_mapping(16, 1, kValidNumcol, 65536, "palette.jp2"), SipiImageError);
+  auto result = validate_j2k_palette_mapping(16, 1, kValidNumcol, 65536, "palette.jp2");
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error().code(), ErrorCode::kUnsupportedFormat);
+  EXPECT_NE(result.error().raw_message().find("16-bit indices"), std::string::npos);
 }
 
 TEST(J2kPaletteRegression, RejectsMultiComponentIndex)
 {
   // More than one index component is not handled by the expansion loop's
   // single-component addressing.
-  EXPECT_THROW(validate_j2k_palette_mapping(8, 2, kValidNumcol, kValidNentries, "palette.jp2"), SipiImageError);
+  auto result = validate_j2k_palette_mapping(8, 2, kValidNumcol, kValidNentries, "palette.jp2");
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error().code(), ErrorCode::kUnsupportedFormat);
+  EXPECT_NE(result.error().raw_message().find("more than one index component"), std::string::npos);
 }
 
 TEST(J2kPaletteRegression, RejectsStrideMismatch)
@@ -82,16 +91,30 @@ TEST(J2kPaletteRegression, RejectsStrideMismatch)
   // numcol != 3 would leave the expansion buffer sized for `numcol`
   // channels while the loop writes at a hardcoded stride of 3 -- the N2
   // heap overflow. Must be rejected before the buffer is ever sized.
-  EXPECT_THROW(validate_j2k_palette_mapping(8, 1, 4, kValidNentries, "palette.jp2"), SipiImageError);
-  EXPECT_THROW(validate_j2k_palette_mapping(8, 1, 1, kValidNentries, "palette.jp2"), SipiImageError);
+  auto result_four = validate_j2k_palette_mapping(8, 1, 4, kValidNentries, "palette.jp2");
+  ASSERT_FALSE(result_four.has_value());
+  EXPECT_EQ(result_four.error().code(), ErrorCode::kUnsupportedFormat);
+  EXPECT_NE(result_four.error().raw_message().find("exactly 3 output colors"), std::string::npos);
+
+  auto result_one = validate_j2k_palette_mapping(8, 1, 1, kValidNentries, "palette.jp2");
+  ASSERT_FALSE(result_one.has_value());
+  EXPECT_EQ(result_one.error().code(), ErrorCode::kUnsupportedFormat);
+  EXPECT_NE(result_one.error().raw_message().find("exactly 3 output colors"), std::string::npos);
 }
 
 TEST(J2kPaletteRegression, RejectsUndersizedPalette)
 {
   // An 8-bit index can be any value 0-255; a palette with fewer than 256
   // entries leaves some index values pointing past the LUT (DEV-6065).
-  EXPECT_THROW(validate_j2k_palette_mapping(8, 1, kValidNumcol, 255, "palette.jp2"), SipiImageError);
-  EXPECT_THROW(validate_j2k_palette_mapping(8, 1, kValidNumcol, 0, "palette.jp2"), SipiImageError);
+  auto result_255 = validate_j2k_palette_mapping(8, 1, kValidNumcol, 255, "palette.jp2");
+  ASSERT_FALSE(result_255.has_value());
+  EXPECT_EQ(result_255.error().code(), ErrorCode::kMalformedInput);
+  EXPECT_NE(result_255.error().raw_message().find("too few for"), std::string::npos);
+
+  auto result_0 = validate_j2k_palette_mapping(8, 1, kValidNumcol, 0, "palette.jp2");
+  ASSERT_FALSE(result_0.has_value());
+  EXPECT_EQ(result_0.error().code(), ErrorCode::kMalformedInput);
+  EXPECT_NE(result_0.error().raw_message().find("too few for"), std::string::npos);
 }
 
 // End-to-end: a well-formed palette JP2 decodes and the single 8-bit index
