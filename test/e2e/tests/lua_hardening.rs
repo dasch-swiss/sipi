@@ -78,19 +78,30 @@ fn timeout_kill_before_commit_is_a_500() {
 }
 
 /// The head is already committed (first body byte streamed) when the loop
-/// starts: the kill must abort the stream so the client never sees a clean
-/// EOF — reading the body errors instead of returning a short success.
+/// starts: the deadline kill must abort the stream so the client never sees a
+/// clean EOF — reading the body errors instead of returning a short success.
+/// The abort races the response head reaching the client, so either ordering
+/// is acceptable evidence of the abort: the head may land first (`send()`
+/// returns 200 and the subsequent `bytes()` read then fails), or the abort may
+/// win outright (`send()` itself fails, e.g. with an incomplete-message
+/// error, because the connection dropped before the head flushed). The only
+/// unacceptable outcome is a complete, cleanly-terminated body.
 #[test]
 fn timeout_kill_after_commit_aborts_the_stream() {
-    let resp = http_client()
-        .get(format!("{}/hardening/loop_committed", server().base_url))
-        .send()
-        .expect("GET failed");
-    assert_eq!(resp.status().as_u16(), 200, "head commits before the kill");
-    assert!(
-        resp.bytes().is_err(),
-        "a post-commit kill must reset the connection, not end the body cleanly"
-    );
+    let url = format!("{}/hardening/loop_committed", server().base_url);
+    match http_client().get(&url).send() {
+        Ok(resp) => {
+            assert_eq!(resp.status().as_u16(), 200, "head commits before the kill");
+            assert!(
+                resp.bytes().is_err(),
+                "a post-commit kill must reset the connection, not end the body cleanly"
+            );
+        }
+        Err(_) => {
+            // The abort landed before the head reached the client — still a
+            // torn stream, not a clean success.
+        }
+    }
 }
 
 /// An untrapped memory bomb hits the Lua allocator cap: a pre-commit 500
@@ -103,18 +114,29 @@ fn memory_kill_is_a_500() {
 
 /// The head is already committed when the script raises an ordinary uncaught
 /// Lua error: the stream must be aborted — a dropped sender would read as a
-/// clean EOF, indistinguishable from a complete 200 body.
+/// clean EOF, indistinguishable from a complete 200 body. The abort races the
+/// response head reaching the client, so either ordering is acceptable
+/// evidence of the abort: the head may land first (`send()` returns 200 and
+/// the subsequent `bytes()` read then fails), or the abort may win outright
+/// (`send()` itself fails, e.g. with an incomplete-message error, because the
+/// connection dropped before the head flushed). The only unacceptable outcome
+/// is a complete, cleanly-terminated body.
 #[test]
 fn script_error_after_commit_aborts_the_stream() {
-    let resp = http_client()
-        .get(format!("{}/hardening/error_committed", server().base_url))
-        .send()
-        .expect("GET failed");
-    assert_eq!(resp.status().as_u16(), 200, "head commits before the error");
-    assert!(
-        resp.bytes().is_err(),
-        "a post-commit script error must abort the stream, not end the body cleanly"
-    );
+    let url = format!("{}/hardening/error_committed", server().base_url);
+    match http_client().get(&url).send() {
+        Ok(resp) => {
+            assert_eq!(resp.status().as_u16(), 200, "head commits before the error");
+            assert!(
+                resp.bytes().is_err(),
+                "a post-commit script error must abort the stream, not end the body cleanly"
+            );
+        }
+        Err(_) => {
+            // The abort landed before the head reached the client — still a
+            // torn stream, not a clean success.
+        }
+    }
 }
 
 /// A slow-reading client must not pin the blocking thread past the Lua
