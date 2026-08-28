@@ -7,7 +7,8 @@
  * Redact filesystem-path directory prefixes from client-facing error text.
  *
  * `redact_paths` collapses every whitespace-delimited token containing a
- * `'/'` down to the substring after its last `'/'`, so a throw-site message
+ * `'/'` down to the substring after its last `'/'`, preserving any leading
+ * run of quote characters (`"`/`'`) on the token, so a throw-site message
  * like `Cannot read file "/srv/images/sub/foo.jp2": broken` becomes
  * `Cannot read file "foo.jp2": broken`. This keeps error text useful for a
  * caller while dropping the server's imgroot/docroot layout. Used only by
@@ -26,8 +27,10 @@ namespace Sipi {
 /*!
  * Collapse directory prefixes out of whitespace-delimited tokens containing
  * a `'/'`, replacing each such token with the substring after its last
- * `'/'`. Tokens without a `'/'` and the original whitespace separators are
- * left unchanged.
+ * `'/'`. A leading run of quote characters (`"`/`'`) on the token is
+ * preserved ahead of the redacted substring, so a quoted path token like
+ * `"/srv/images/sub/foo.jp2":` becomes `"foo.jp2":`. Tokens without a `'/'`
+ * and the original whitespace separators are left unchanged.
  *
  * \param s The message text to redact.
  * \returns The redacted message text.
@@ -43,9 +46,16 @@ namespace Sipi {
     while (token_end < s.size() && !std::isspace(static_cast<unsigned char>(s[token_end]))) { ++token_end; }
 
     const std::string token = s.substr(token_start, token_end - token_start);
-    const std::size_t last_slash = token.find_last_of('/');
+
+    std::size_t quote_run = 0;
+    while (quote_run < token.size() && (token[quote_run] == '"' || token[quote_run] == '\'')) { ++quote_run; }
+
+    const std::string quotes = token.substr(0, quote_run);
+    const std::string rest = token.substr(quote_run);
+    const std::size_t last_slash = rest.find_last_of('/');
     if (last_slash != std::string::npos) {
-      result += token.substr(last_slash + 1);
+      result += quotes;
+      result += rest.substr(last_slash + 1);
     } else {
       result += token;
     }

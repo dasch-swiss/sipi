@@ -79,15 +79,14 @@ TEST(PolicyFor, IsUsableAtCompileTime)
 }
 
 // redact_paths (util/PathRedact.h) collapses a whitespace-delimited token
-// containing '/' down to the substring after its LAST '/' — any characters
-// preceding that slash within the same token (here, the opening quote) are
-// dropped along with the directory prefix, not just the directory itself.
+// containing '/' down to the substring after its last '/', preserving any
+// leading run of quote characters on the token.
 TEST(SipiValueErrorTest, ClientMessageIsPathRedactedAndHasNoSourceLocation)
 {
   const SipiValueError err{ ErrorCode::kDecodeFailed, R"(Cannot read file "/srv/images/sub/foo.jp2": broken)" };
 
   const std::string msg = err.client_message();
-  EXPECT_EQ(msg, R"(Cannot read file foo.jp2": broken)");
+  EXPECT_EQ(msg, R"(Cannot read file "foo.jp2": broken)");
   EXPECT_EQ(msg.find(__FILE__), std::string::npos);
 }
 
