@@ -156,15 +156,38 @@ The codebase has two coexisting layouts:
 - **Module-co-located ([ADR-0003](docs/adr/0003-module-co-located-source-and-tests.md), proposed):**
   `src/<mod>/{Foo.cpp, Foo.h, foo_test.cpp}` with flat-style includes
   (`#include "metadata/Foo.h"` cross-module, `#include "Foo.h"`
-  intra-module). `src/util/` and `src/iiifparser/`
-  already follow this — `src/iiifparser/` and `src/scripting/` additionally
-  split by language into `cpp/`/`rust/` subdirectories (the colocated polyglot
-  of ADR-0021). Migration is staged
-  behind the Bazel build-tool migration
-  and lands as mechanical per-module PRs.
+  intra-module). `src/util/` and `src/metadata/` already follow this.
+
+A module-co-located package additionally splits its sources by language
+into `cpp/`/`rust/` subfolders whenever it holds (or will hold) more
+than one — the colocated polyglot of
+[ADR-0021](docs/adr/0021-iiifparser-polyglot-colocation.md). No package
+folder carries a `-rs` suffix; the subfolder is named `rust/`, not
+`<pkg>-rs/`. `fuzz/` and `corpus/` stay sibling subfolders of the
+package, never nested under `cpp/` — they exercise the package as a
+whole, not one language's sources. `src/iiifparser/{cpp,rust,fuzz,corpus}/`
+is the reference shape; `src/scripting/rust/`, `src/throttling/cpp/`,
+and `src/formats/{fuzz,corpus}/` also conform today.
+
+Splitting into `cpp/` moves sources one physical directory deeper, so
+the package's `cc_library` re-pins the virtual include path to keep
+cross-module `#include`s unchanged: `strip_include_prefix =
+"/src/<pkg>/cpp"` (or `/src/<pkg>/cpp/<subpkg>` for a nested
+subpackage, e.g.
+`src/iiifparser/cpp/value_objects/BUILD.bazel`) paired with
+`include_prefix = "<pkg>"`, so consumers keep writing `#include
+"<pkg>/Foo.h"`; siblings inside the package still use the quote-form
+(`#include "Foo.h"`). A package that hasn't split by language has no
+extra physical depth to correct for and needs only the plain
+`strip_include_prefix = "/src"` form, self-sufficient without any
+`include_prefix` twinning — `src/util/`, `src/formats/`, and
+`src/ffi/` set exactly that. `src/metadata/` sets neither attribute,
+the weaker fallback: cross-module consumers resolve `#include
+"metadata/icc.h"` through the consumer's own `includes = ["."]`.
 
 Until ADR-0003 is accepted and a module is migrated, follow the
-historical layout for that module. After migration, follow the new
+historical layout for that module — the language-subfolder split
+applies only once a package migrates. After migration, follow the new
 layout. ADR-0003 is the source of truth for migration order and
 per-module diff shape.
 
