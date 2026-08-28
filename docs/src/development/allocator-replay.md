@@ -6,7 +6,7 @@ root-caused the 2026-07-29 vre-prod-01 OOM and gated the mimalloc switch
 ([ADR-0019](../../adr/0019-mimalloc-production-allocator.md)).
 
 Run it whenever a change touches the JP2 decode path's threading or
-allocation behavior (`src/formats/SipiIOJ2k.cpp`, Kakadu thread handling,
+allocation behavior (`src/format_handlers/cpp/SipiIOJ2k.cpp`, Kakadu thread handling,
 decode buffering), the allocator itself (`bazel/mimalloc.BUILD.bazel`, the
 `_ALLOCATOR` dep in `src/cli-rs/BUILD.bazel`), or allocator-relevant image
 env. Microbenchmarks (`just bench decode`) measure speed; this harness

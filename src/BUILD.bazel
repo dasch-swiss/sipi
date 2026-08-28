@@ -208,7 +208,7 @@ cc_library(
         ":sipi_generated_hdrs",
         "//src/error",
         "//src/ffi:sipi_ffi",
-        "//src/formats:formats",
+        "//src/format_handlers:format_handlers",
         "//src/image",
         "//src/logging:logging",
         "//src/metadata:metadata",
@@ -288,8 +288,8 @@ cc_binary(
 )
 
 # Decode + encode tiers — now co-located with the module at
-# `//src/formats:{decode,encode}_benchmark` (per ADR-0003), moved with the
-# formats carve.
+# `//src/format_handlers:{decode,encode}_benchmark` (per ADR-0003), moved with the
+# format_handlers carve.
 
 # ── //src/cli:sipi ─────────────────────────────────────────────────────────
 # The sipi cc_binary lives at `//src/cli:sipi`; see `src/cli/BUILD.bazel`.

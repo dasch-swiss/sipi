@@ -22,7 +22,7 @@
 #include "cache/SipiCache.h"
 #include "throttling/SipiMemoryBudget.h"
 #include "throttling/SipiPeakMemory.h"
-#include "formats/output_sink.h"
+#include "format_handlers/output_sink.h"
 #include "iiifparser/SipiDecodeDims.h"
 #include "iiifparser/SipiIdentifier.h"
 #include "iiifparser/SipiQualityFormat.h"
@@ -82,7 +82,7 @@ namespace {
   // (DUNE-005). The engine's own read-time mime classifier
   // (`SipiImage::getFileType`, SipiImage.cpp) keeps its separate sniff-alias
   // list — unifying the two is format-descriptor-table work, deferred until a
-  // fifth format arrives (decision 2; see ARCH-MAP formats entry).
+  // fifth format arrives (decision 2; see ARCH-MAP format_handlers entry).
   struct FormatMime
   {
     SipiQualityFormat::FormatType fmt;

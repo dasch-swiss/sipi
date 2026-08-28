@@ -16,7 +16,7 @@
 
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiSize.h"
-#include "formats/output_sink.h"
+#include "format_handlers/output_sink.h"
 #include "SipiImageError.h"
 
 #include <memory>

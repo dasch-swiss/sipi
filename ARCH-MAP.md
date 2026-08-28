@@ -20,7 +20,7 @@ hand-mirrored `extern "C"` FFI seam (`src/ffi`); the former C++ HTTP server was
 removed (ADR-0020), so the C++ `sipi` binary now provides only offline verbs
 (convert/verify/query/compare/health). The engine is a set of Bazel `cc_library`
 packages carved by concern — the image hub (`SipiImage` + cache + memory budget),
-the codec handlers (`formats`), the IIIF parsers (`iiifparser`), metadata, and
+the codec handlers (`format_handlers`), the IIIF parsers (`iiifparser`), metadata, and
 the util support leaf extracted from the deleted shttps transport. Lua scripting
 is Rust-hosted (`src/scripting/rust`, ADR-0023) and drives the engine through
 the seam's `sipi_image_*` handle family. The
@@ -35,25 +35,25 @@ image formats, whose registry fan-out is documented, not mechanized.
 
 - **Paths:** `:(glob)src/image/**`, `:(glob)src/process_benchmark.cpp`, `:(glob)src/BUILD.bazel`, `:(glob)src/nsswitch.conf`
 - **Purpose:** The image engine hub — `SipiImage` orchestrates decode → process (scale/rotate/crop/ICC) → encode, and owns the metadata wrappers and format dispatch, and the `//src` package's Bazel wiring.
-- **Key entities:** `Sipi::SipiImage`, `SipiImage::io` (static handler registry, *defined* in `formats`), `SipiImage::read`/`read_shape`/`write`/`add_watermark`/`convertToIcc`/`scale`/`rotate`/`crop`, `Sipi::SipiIO` (abstract), `SipiImgInfo`, `Sipi::read_watermark` (defined in `formats`), `Sipi::resample_separable_u8/u16`, `Sipi::estimate_peak_memory`, `Sipi::SipiImageError`
-- **Public interface:** `SipiImage` (via `//src/image`), `SipiIO`; consumed by `formats`, `ffi` (including the `sipi_image_*` handles behind the Lua `SipiImage` bindings), and `cli`.
-- **Local-context kit:** `src/image/cpp/SipiImage.h`, `src/image/cpp/SipiImage.cpp`, `src/image/cpp/SipiIO.h`, `src/image/BUILD.bazel`, `src/BUILD.bazel` (the `:sipi_lib` target), `src/formats/format_registry.cpp` (where `io` is defined), `docs/adr/0007-sipiimage-decomposition.md`, `CONVENTIONS.md`
-- **Depends on:** error, metadata, iiifparser, formats (`:output_sink` only), util, logging, observability, throttling
-- **Used by:** formats (one-way back-edge, see rule), ffi, cli, cli-rs (transitively)
+- **Key entities:** `Sipi::SipiImage`, `SipiImage::io` (static handler registry, *defined* in `format_handlers`), `SipiImage::read`/`read_shape`/`write`/`add_watermark`/`convertToIcc`/`scale`/`rotate`/`crop`, `Sipi::SipiIO` (abstract), `SipiImgInfo`, `Sipi::read_watermark` (defined in `format_handlers`), `Sipi::resample_separable_u8/u16`, `Sipi::estimate_peak_memory`, `Sipi::SipiImageError`
+- **Public interface:** `SipiImage` (via `//src/image`), `SipiIO`; consumed by `format_handlers`, `ffi` (including the `sipi_image_*` handles behind the Lua `SipiImage` bindings), and `cli`.
+- **Local-context kit:** `src/image/cpp/SipiImage.h`, `src/image/cpp/SipiImage.cpp`, `src/image/cpp/SipiIO.h`, `src/image/BUILD.bazel`, `src/BUILD.bazel` (the `:sipi_lib` target), `src/format_handlers/cpp/format_registry.cpp` (where `io` is defined), `docs/adr/0007-sipiimage-decomposition.md`, `CONVENTIONS.md`
+- **Depends on:** error, metadata, iiifparser, format_handlers (`:output_sink` only), util, logging, observability, throttling
+- **Used by:** format_handlers (one-way back-edge, see rule), ffi, cli, cli-rs (transitively)
 - **Boundary rules:**
-  - The engine references but does **not** define `SipiImage::io` / `Sipi::read_watermark`; both are defined in `formats`, so `//src/image` does not depend on `//src/formats:formats`. This inverts the `SipiImage`↔handler cycle. *Enforcement: `structure`* (a Bazel package cannot depend on itself; the cycle is unrepresentable).
+  - The engine references but does **not** define `SipiImage::io` / `Sipi::read_watermark`; both are defined in `format_handlers`, so `//src/image` does not depend on `//src/format_handlers:format_handlers`. This inverts the `SipiImage`↔handler cycle. *Enforcement: `structure`* (a Bazel package cannot depend on itself; the cycle is unrepresentable).
   - The four codec handlers are `friend`s of `SipiImage` (`SipiImage.h`), a documented bidirectional coupling ADR-0007 plans to remove. *Enforcement: `docs-only`* (friendship is a language reach-in nothing flags).
 - **Durable state:** `SipiImage::io` (static registry, single writer = `format_registry.cpp`).
 
 ### error
 
 - **Paths:** `:(glob)src/error/**`
-- **Purpose:** The shared `SipiError` exception base. A standalone leaf so `metadata`, `formats`, and `iiifparser` can throw/catch it without depending on the image engine — folding it into `image` would close an `image -> metadata -> image` cycle Bazel cannot express.
+- **Purpose:** The shared `SipiError` exception base. A standalone leaf so `metadata`, `format_handlers`, and `iiifparser` can throw/catch it without depending on the image engine — folding it into `image` would close an `image -> metadata -> image` cycle Bazel cannot express.
 - **Key entities:** `Sipi::SipiError`
 - **Public interface:** `SipiError` (via `//src/error`).
 - **Local-context kit:** `src/error/BUILD.bazel`, `src/error/cpp/SipiError.h`, `src/error/cpp/SipiError.cpp`
 - **Depends on:** util
-- **Used by:** image, metadata, formats, iiifparser, cache
+- **Used by:** image, metadata, format_handlers, iiifparser, cache
 - **Boundary rules:** a leaf — no internal deps beyond `util`. *Enforcement: `structure`* (Bazel dep set).
 - **Durable state:** none.
 
@@ -89,19 +89,19 @@ engine-side memory budget under one component. Supersedes the former
   - `admission_mode`/`tiles_memory_ratio`/`large_decode_threshold_bytes`/`memory_limit` are resolved engine-side and read back over the seam (single authority, DUNE-003). *Enforcement: `docs-only`*.
 - **Durable state:** admission — `Arc<Semaphore>` global + full sub-pool, per-partition `AtomicUsize`/`AtomicU64` wait/shed counters (single writer). memory_budget — `std::atomic<size_t> _used` (CAS-updated). No persistence.
 
-### formats
+### format_handlers
 
-- **Paths:** `:(glob)src/formats/**`
+- **Paths:** `:(glob)src/format_handlers/**`
 - **Purpose:** The four `SipiIO` codec handlers (TIFF, JPEG2000/Kakadu, JPEG, PNG), the codec-agnostic `output_sink`, and the `SipiImage::io` registry definition.
 - **Key entities:** `SipiIOTiff`/`SipiIOJ2k`/`SipiIOJpeg`/`SipiIOPng`, `OutputSink`/`SinkStream`, `read_watermark`, `SipiImage::io` (defined in `format_registry.cpp`)
-- **Public interface:** the `SipiIO` overrides (reached only through `SipiImage`'s dispatch); `output_sink` is a separate leaf target `//src/formats:output_sink`.
-- **Local-context kit:** `src/formats/BUILD.bazel`, `src/formats/format_registry.cpp`, `src/formats/SipiIOTiff.{h,cpp}`, `src/formats/output_sink.h`, `src/image/cpp/SipiImage.h` (friend decls + `io` decl), `tools/formats-fanout.sh` (the new-format edit-site list)
+- **Public interface:** the `SipiIO` overrides (reached only through `SipiImage`'s dispatch); `output_sink` is a separate leaf target `//src/format_handlers:output_sink`.
+- **Local-context kit:** `src/format_handlers/BUILD.bazel`, `src/format_handlers/cpp/format_registry.cpp`, `src/format_handlers/cpp/SipiIOTiff.{h,cpp}`, `src/format_handlers/cpp/output_sink.h`, `src/image/cpp/SipiImage.h` (friend decls + `io` decl), `tools/format-handlers-fanout.sh` (the new-format edit-site list)
 - **Depends on:** error, image (`//src/image`, one-way), metadata, observability, logging, util, output_sink; codecs `@kakadu` `@tiff` `@libpng` `@libjpeg_turbo`
 - **Used by:** image (link-time, for `io`/`read_watermark`), ffi, cli, tests
 - **Boundary rules:**
-  - `//src/formats:formats` depends one-way on `//src/image`; `output_sink` is a dependency-free leaf so the engine can reach it without depending on the handler package. *Enforcement: `structure`* (Bazel target-granularity dep direction).
+  - `//src/format_handlers:format_handlers` depends one-way on `//src/image`; `output_sink` is a dependency-free leaf so the engine can reach it without depending on the handler package. *Enforcement: `structure`* (Bazel target-granularity dep direction).
   - Byte-exact cross-arch output invariant — the encode paths are pinned byte-for-byte by `//test/approval:approvaltests` across all platforms; math feeding the encoder must be architecture-independent (fixed-point over float). *Enforcement: `static-analysis`* (CI approval gate; file-head banners in SipiIOTiff/J2k/Png.cpp).
-  - Adding a format touches a shared registry + dispatch + friend fan-out (~5 sites across 3 files, listed by `tools/formats-fanout.sh`). *Enforcement: `docs-only`* (DUNE-005 deferred a descriptor table until a real 5th format; ADR-0006 is the prior art to check first).
+  - Adding a format touches a shared registry + dispatch + friend fan-out (~5 sites across 3 files, listed by `tools/format-handlers-fanout.sh`). *Enforcement: `docs-only`* (DUNE-005 deferred a descriptor table until a real 5th format; ADR-0006 is the prior art to check first).
 - **Durable state:** `SipiImage::io` (single writer here); no runtime state.
 
 ### iiifparser
@@ -112,7 +112,7 @@ engine-side memory budget under one component. Supersedes the former
 - **Public interface:** the value-object classes (via `//src/iiifparser/cpp/value_objects:iiifparser`); `parse_iiif_uri` via the testonly `//src/iiifparser/cpp/classifier:iiif_handler`; the Rust parser via `//src/iiifparser/rust:iiif_parser` (`parse_request` → domain `IiifParams`, `server-rs` owns the `From` flattening).
 - **Local-context kit:** `src/iiifparser/cpp/value_objects/BUILD.bazel`, `src/iiifparser/cpp/value_objects/SipiSize.h`, `src/iiifparser/cpp/classifier/iiif_handler.h`, `src/iiifparser/rust/BUILD.bazel`, `src/iiifparser/rust/parse.rs`, `src/ffi/serve_image.cpp` (the C++ FFI-seam reconstruction), `src/server-rs/src/ffi.rs` (the domain → seam `From<IiifParams>` mapping a domain-enum change must be kept exhaustive against). ADR-0021 is one hop away via every subpackage's BUILD docstring.
 - **Depends on:** error (`SipiError`), util. The Rust crate deps only `@crates//:percent-encoding` — no FFI, no C++ engine.
-- **Used by:** image (`SipiIO.h`), ffi (`serve_image.cpp` rebuilds the value objects), formats (`SipiIOJ2k`), cli; server-rs (drives the Rust parser)
+- **Used by:** image (`SipiIO.h`), ffi (`serve_image.cpp` rebuilds the value objects), format_handlers (`SipiIOJ2k`), cli; server-rs (drives the Rust parser)
 - **Boundary rules:**
   - `cpp/value_objects` is a leaf — deps only `//src/error` + `//src/util`, never `SipiImage`/codecs. *Enforcement: `structure`* (Bazel visibility + dep set). Each subpackage pins the virtual `iiifparser/` include prefix to its own physical depth (`strip_include_prefix` + `include_prefix = "iiifparser"`) so consumers keep `#include "iiifparser/*.h"`. *Enforcement: `structure`* (a wrong prefix fails the engine compile).
   - `cpp/classifier` `iiif_handler` is the `testonly` reference oracle for the Rust `parse_request`, deps `//src/util` only, and is `rm -rf`-deletable as a whole folder once the Rust port is trusted (only the `//test/approval` edge + corpus consumer need unwiring). *Enforcement: `structure`* (`testonly` keeps it out of `//src:sipi_lib`; DUNE-015).
@@ -128,7 +128,7 @@ engine-side memory budget under one component. Supersedes the former
 - **Public interface:** the wrapper classes (via `//src/metadata:metadata`); the byte-mutation helper is in `//src/metadata/internal` (restricted).
 - **Local-context kit:** `src/metadata/BUILD.bazel`, `src/metadata/icc.h`, `src/metadata/icc.cpp`, `src/metadata/internal/BUILD.bazel`, `src/metadata/internal/icc_normalization.{h,cpp}`, `src/metadata/essentials.h`, `docs/adr/0002-icc-profile-determinism-test-only.md`
 - **Depends on:** error (`SipiError`), util; exiv2, lcms2, openssl, protobuf (internal codec)
-- **Used by:** image (owns the wrappers as members), formats (read/write ICC + Essentials), ffi, cli
+- **Used by:** image (owns the wrappers as members), format_handlers (read/write ICC + Essentials), ffi, cli
 - **Boundary rules:**
   - `//src/metadata/internal` (`icc_normalization`, `protobuf_codec`) is visibility-restricted to `//src/metadata:__pkg__` — the canonical **Test seam** pattern (DEV-6406). *Enforcement: `structure`* (Bazel visibility fails analysis on an external include).
   - `Icc::iccBytes()` is the single chokepoint every codec-bound ICC profile funnels through; new format handlers must route through it (bypassing it breaks the approval gate). *Enforcement: `static-analysis`* (approval determinism gate) + `docs-only` (the banner).
@@ -156,7 +156,7 @@ engine-side memory budget under one component. Supersedes the former
 - **Public interface:** the free functions + value types (via `//src/util`, `strip_include_prefix="/src"` → `#include "util/…"`).
 - **Local-context kit:** `src/util/BUILD.bazel`, `src/util/Parsing.h`, `src/util/Hash.h`, `src/util/Error.h`, `src/util/UrlDecode.h`, `src/util/SipiFilenameHash.h`
 - **Depends on:** openssl (Hash), libmagic (Parsing MIME sniff), logging (`SipiFilenameHash`'s `log_debug` calls) — the one SIPI-internal dep.
-- **Used by:** image, formats, iiifparser, metadata, cli, ffi (broadly used leaf)
+- **Used by:** image, format_handlers, iiifparser, metadata, cli, ffi (broadly used leaf)
 - **Boundary rules:** a leaf — deps only `logging` internally; colocated `util_test` links only `:util`, so a forbidden cross-module include is a build error, not a `sipi_lib`-wide slip. *Enforcement: `structure`*.
 - **Durable state:** `Hash::HashType` values are an on-disk contract (mirrored in `essentials.proto`); `Parsing` ships a compiled-in `magic.mgc` blob (read-only); `SipiFilenameHash::__levels` (static, set via `setLevels`/`migrateToLevels`).
 
@@ -168,9 +168,9 @@ engine-side memory budget under one component. Supersedes the former
 - **Public interface:** `Metrics::instance()` (via `//src/observability:observability`).
 - **Local-context kit:** `src/observability/metrics.h`, `src/observability/metrics.cpp`, `src/observability/metrics_registry_test.cpp` (the seam tripwire), `src/ffi/metrics_snapshot.h` (the Inclusion rule), `src/server-rs/src/metrics.rs` (the OTLP bridge)
 - **Depends on:** tracy (inert unless `--config=tracy`)
-- **Used by:** image, cache (writers), ffi (reader/bridge), formats
+- **Used by:** image, cache (writers), ffi (reader/bridge), format_handlers
 - **Boundary rules:** the singleton is engine-internal; a scalar counter reaches production only if it is also read into `SipiMetricsSnapshot` and mapped in `metrics.rs`. `metrics_registry_test` pins the full field inventory (22 bridged / 13 engine-internal). *Enforcement: `static-analysis`* (the seam-tripwire test + the `SipiMetricsSnapshot` 176-byte layout lock) + `docs-only` (the banner).
-- **Durable state:** the `Metrics` singleton atomics (process-lifetime); writers across image/cache/formats/ffi, reader = `sipi_metrics_snapshot`.
+- **Durable state:** the `Metrics` singleton atomics (process-lifetime); writers across image/cache/format_handlers/ffi, reader = `sipi_metrics_snapshot`.
 
 ### logging
 
@@ -191,7 +191,7 @@ engine-side memory budget under one component. Supersedes the former
 - **Key entities:** `sipi_serve_image`/`sipi_serve_file`/`sipi_init`/`sipi_metrics_snapshot`/`sipi_cli_main` (defined in `cli`), the `sipi_image_*` handle family, `SipiResponse` (streamed sink), `SipiIiifParams`/`SipiServeRequest`/`SipiMetricsSnapshot` (`#[repr(C)]` mirrors), `EngineContext` + `set_engine_context`, `LibraryInitialiser`, `Sipi::SipiConf`, `Sipi::parseSizeString` (the Lua-flavoured config object `sipi_init` constructs and populates)
 - **Public interface:** `sipi_ffi.h` (`strip_include_prefix="/src"` → `#include "ffi/sipi_ffi.h"`), mirrored by hand in `src/server-rs/src/ffi.rs`.
 - **Local-context kit:** `src/ffi/sipi_ffi.h`, `src/ffi/serve_image.cpp`, `src/ffi/engine_context.{h,cpp}`, `src/ffi/init.cpp`, `src/ffi/metrics_snapshot.h`, `src/ffi/SipiConf.{h,cpp}`, `src/ffi/BUILD.bazel`, `src/server-rs/src/ffi.rs` (the Rust mirror)
-- **Depends on:** image, formats, iiifparser (transitive), metadata, util, observability, logging; curl, exiv2
+- **Depends on:** image, format_handlers, iiifparser (transitive), metadata, util, observability, logging; curl, exiv2
 - **Used by:** server-rs (drives it), cli-rs (links it), cli (shares `startup`/`LibraryInitialiser`)
 - **Boundary rules:**
   - `//src/image` does **not** depend on this package (the seam drives the engine, never the reverse) — no cycle. *Enforcement: `structure`* (Bazel dep direction).
@@ -254,7 +254,7 @@ Files and rules that span components rather than living in one:
 
 These carry no component boundary rules but exist so every tracked file maps somewhere:
 
-- **Tests** — `:(glob)test/**` (unit under `test/unit/**`, snapshot regression under `test/approval/**`, Rust reqwest e2e under `test/e2e/**`, fixtures under `test/_test_data/**`). Unit tests link the narrow per-module target where one exists (metadata, util, iiifparser, formats, output_sink, decode_dims, handlers), else `//src:sipi_lib` (sipiimage, cache, memory_budget, logger, configuration, tiff_codecs). Colocated C++ tests live beside their module (ADR-0003).
+- **Tests** — `:(glob)test/**` (unit under `test/unit/**`, snapshot regression under `test/approval/**`, Rust reqwest e2e under `test/e2e/**`, fixtures under `test/_test_data/**`). Unit tests link the narrow per-module target where one exists (metadata, util, iiifparser, format_handlers, output_sink, decode_dims, handlers), else `//src:sipi_lib` (sipiimage, cache, memory_budget, logger, configuration, tiff_codecs). Colocated C++ tests live beside their module (ADR-0003).
 - **Build & tooling** — `:(glob)MODULE.bazel`, `:(glob)MODULE.bazel.lock`, `:(glob).bazelrc` (absent = tracked via workflow), `:(glob)justfile`, `:(glob)bazel/**`, `:(glob)tools/**`, `:(glob)platforms/**`, `:(glob).github/**`, `:(glob)flake.nix`, `:(glob)flake.lock`, `:(glob)rustfmt.toml`, `:(glob)codecov.yml`, `:(glob)version.txt`. CI gates: `just bazel-rustfmt-check`, `just bazel-clippy-check`, `just commit-lint`, the approval + e2e + unit suites.
 - **Docs & agent-context** — `:(glob)docs/**`, `:(glob)*.md` (CLAUDE.md, CONTEXT.md, UBIQUITOUS_LANGUAGE.md, CONVENTIONS.md, REVIEW.md, RELEASING.md, README.md, DEPRECATIONS.md, ARCH-MAP.md), ADRs under `docs/adr/**`.
 - **Runtime assets** — `:(glob)include/**` (generated headers, ICC profiles, favicon), `:(glob)server/**`, `:(glob)config/**`, `:(glob)scripts/**`, `:(glob)certificate/**`, `:(glob)db/**`, `:(glob)openseadragon.min.js.map`, `:(glob)test_tifs.sh`, `:(glob).claude/**`.
@@ -262,9 +262,9 @@ These carry no component boundary rules but exist so every tracked file maps som
 ## Conventions
 
 - **Module granularity** — one Bazel `cc_library` per concern under `src/<mod>/`, source + header + `*_test.cpp` colocated (ADR-0003). Local-context-kit budget **≤7 files**.
-- **Top-level dependency direction (one-way):** `cli-rs → server-rs → //src/ffi:sipi_ffi → //src/image → {metadata, iiifparser, formats:output_sink, util, logging, observability}`; `formats` sits beside/below the engine; `//src/scripting/rust` is a shell-side Rust crate over the seam. **The engine never links the shell or the seam.** *Enforcement: `structure`* (Bazel dep graph; a back-edge fails analysis).
+- **Top-level dependency direction (one-way):** `cli-rs → server-rs → //src/ffi:sipi_ffi → //src/image → {metadata, iiifparser, format_handlers:output_sink, util, logging, observability}`; `format_handlers` sits beside/below the engine; `//src/scripting/rust` is a shell-side Rust crate over the seam. **The engine never links the shell or the seam.** *Enforcement: `structure`* (Bazel dep graph; a back-edge fails analysis).
 - **New work is added by dropping a file / adding a route, not editing a central switch** — a new offline verb is one file in `src/cli/commands/`; a new axum route is a registration in `server-rs/lib.rs::app()`; a new engine module is a new `cc_library` package. *Enforcement: `docs-only`.*
-  - **Exception (banned-construct):** new image format → editing the `SipiImage::io` registry + `read`/`read_shape` switch + `friend` fan-out (~5 shared sites, `tools/formats-fanout.sh`) → *why it couples:* the dispatch is centralized, so a 5th format is a multi-file shared edit → *alternative:* a descriptor-registration table (deferred until a real 5th format; ADR-0006) → *enforcement:* `docs-only`.
+  - **Exception (banned-construct):** new image format → editing the `SipiImage::io` registry + `read`/`read_shape` switch + `friend` fan-out (~5 shared sites, `tools/format-handlers-fanout.sh`) → *why it couples:* the dispatch is centralized, so a 5th format is a multi-file shared edit → *alternative:* a descriptor-registration table (deferred until a real 5th format; ADR-0006) → *enforcement:* `docs-only`.
 - **Test seam** — a helper that must be unit-tested but not publicly callable goes in an `internal/` subpackage with visibility restricted to its parent (`//src/metadata/internal` is the model). *Enforcement: `structure`.*
 - **Colocated docs** — every `cc_library`/`rust_library` package carries a `BUILD.bazel` docstring; invariant banners sit at the file head next to the code they govern (`src/metadata/icc.h`, the format encoders, `src/observability/metrics.h`). *Enforcement: `docs-only`.*
 - **`layering_check`** is deferred repo-wide (vendored native deps emit no module maps — DEV-6353) except `//src/logging`, where it passes today. *Enforcement: `static-analysis`* (where enabled).

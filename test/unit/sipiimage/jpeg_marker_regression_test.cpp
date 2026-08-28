@@ -40,7 +40,7 @@
 
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
-#include "formats/SipiIOJpeg.h"
+#include "format_handlers/SipiIOJpeg.h"
 #include "test_paths.h"
 
 #include <string>

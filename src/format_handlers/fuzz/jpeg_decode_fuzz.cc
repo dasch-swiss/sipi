@@ -7,9 +7,9 @@
 #include <cstdint>
 
 #include "codec_fuzz_harness.h"
-#include "formats/SipiIOTiff.h"
+#include "format_handlers/SipiIOJpeg.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
-  return sipi::fuzz::run_decode<Sipi::SipiIOTiff>(data, size, ".tif");
+  return sipi::fuzz::run_decode<Sipi::SipiIOJpeg>(data, size, ".jpg");
 }

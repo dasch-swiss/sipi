@@ -127,7 +127,7 @@ Per-module Bazel packages co-locate their unit tests alongside the sources
 - `//src/iiifparser/cpp/classifier:iiif_handler_test` — the `parse_iiif_uri` classifier + its regression corpus
 - `//src/iiifparser/rust:iiif_parser_test` — the production Rust IIIF URL parser (domain, parse, request modules)
 - `//src/iiifparser/rust:corpus_regression_test` — the Rust parser swept over the shared corpus
-- `//src/formats:formats_test`, `//src/formats:output_sink_test` — TIFF pyramid selection + the write sink
+- `//src/format_handlers:formats_test`, `//src/format_handlers:output_sink_test` — TIFF pyramid selection + the write sink
 - `//src/logging:logger_test` — logger
 - `//src/throttling/cpp:memory_budget_test` — decode memory budget: CAS accounting, RAII guard, peak-memory estimator
 

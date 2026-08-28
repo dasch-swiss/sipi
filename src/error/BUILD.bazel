@@ -1,10 +1,10 @@
 """src/error — the SipiError exception base.
 
-`metadata`, `formats`, and `iiifparser` all throw/catch `SipiError` without
+`metadata`, `format_handlers`, and `iiifparser` all throw/catch `SipiError` without
 depending on the image engine; folding the type into `//src/image` would
 close an `image -> metadata -> image` cycle Bazel cannot express. This
 package is the tree's foundational leaf: everything above it (`metadata`,
-`formats`, `iiifparser`, the image engine) depends on it, and it depends on
+`format_handlers`, `iiifparser`, the image engine) depends on it, and it depends on
 nothing above itself.
 
 `include_prefix = "error"` + `strip_include_prefix = "/src/error/cpp"`

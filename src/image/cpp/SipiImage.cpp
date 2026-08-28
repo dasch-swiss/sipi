@@ -49,10 +49,10 @@ size_t checked_buf_size_or_throw(size_t nx_, size_t ny_, size_t nc_, size_t elem
 }// namespace
 
 // SipiImage::io — the static format-handler registry — is defined in
-// //src/formats (format_registry.cpp), not here, so the engine does not
+// //src/format_handlers (format_registry.cpp), not here, so the engine does not
 // include the concrete SipiIO* handlers and the SipiImage<->handler Bazel
 // dependency cycle stays broken. The engine references `io` below; the linker
-// resolves its definition from the formats package.
+// resolves its definition from the format_handlers package.
 
 SipiImage::SipiImage()
 {

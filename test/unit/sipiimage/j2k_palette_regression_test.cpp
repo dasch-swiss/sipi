@@ -42,7 +42,7 @@
 
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
-#include "formats/SipiIOJ2k.h"
+#include "format_handlers/SipiIOJ2k.h"
 #include "test_paths.h"
 
 namespace {

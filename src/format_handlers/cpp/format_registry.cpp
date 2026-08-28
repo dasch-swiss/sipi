@@ -2,10 +2,10 @@
 //
 // Defines `SipiImage::io`, the map from format key (`tif`/`jpx`/`jpg`/`png`)
 // to the concrete SipiIO handler instance. This translation unit lives in
-// //src/formats — which depends one-way on //src/image — precisely so the
+// //src/format_handlers — which depends one-way on //src/image — precisely so the
 // engine's SipiImage.cpp does NOT include the concrete handlers. That inverts
 // the former SipiImage<->handler include cycle: the engine references `io`,
-// and the linker resolves the definition here when //src/formats is on the
+// and the linker resolves the definition here when //src/format_handlers is on the
 // link line (via //src:sipi_lib and //src/ffi:sipi_ffi).
 
 #include <memory>

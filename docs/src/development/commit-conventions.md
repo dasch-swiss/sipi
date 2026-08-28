@@ -113,7 +113,7 @@ module list — which is also the scope vocabulary — lives in
 [`CONVENTIONS.md` § Module Layout](../../../CONVENTIONS.md). Use one of
 these names, lowercase:
 
-- **Module scopes:** `image`, `formats`, `metadata`, `iiifparser`,
+- **Module scopes:** `image`, `format_handlers`, `metadata`, `iiifparser`,
   `scripting`, `util`, `jwt`, `cache`, `memory-budget`,
   `memory`, `observability`, `logging`, `cli`, `ffi`, `lua`, `server-rs`,
   `cli-rs` (`scripting` = the C++ Lua runtime in `src/scripting/`; `lua` stays

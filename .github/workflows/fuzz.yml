@@ -93,31 +93,31 @@ jobs:
             dict: ""
             asan_options: ""
           - target: tiff
-            bin: src/formats/fuzz/tiff_decode_fuzz_bin
-            corpus_out: src/formats/fuzz/tiff_decode_fuzz_corpus
+            bin: src/format_handlers/fuzz/tiff_decode_fuzz_bin
+            corpus_out: src/format_handlers/fuzz/tiff_decode_fuzz_corpus
             max_len: "16384"
-            dict: src/formats/fuzz/dicts/tiff.dict
+            dict: src/format_handlers/fuzz/dicts/tiff.dict
             asan_options: ""
           - target: jpeg
-            bin: src/formats/fuzz/jpeg_decode_fuzz_bin
-            corpus_out: src/formats/fuzz/jpeg_decode_fuzz_corpus
+            bin: src/format_handlers/fuzz/jpeg_decode_fuzz_bin
+            corpus_out: src/format_handlers/fuzz/jpeg_decode_fuzz_corpus
             max_len: "16384"
-            dict: src/formats/fuzz/dicts/jpeg.dict
+            dict: src/format_handlers/fuzz/dicts/jpeg.dict
             # libjpeg-turbo's error path is setjmp/longjmp, which skips
             # destructors past the jump — a documented LSan false-positive
             # source. TIFF and J2K unwind via real exceptions and keep leak
             # detection on; never disable it repo-wide.
             asan_options: "detect_leaks=0"
           - target: png
-            bin: src/formats/fuzz/png_decode_fuzz_bin
-            corpus_out: src/formats/fuzz/png_decode_fuzz_corpus
+            bin: src/format_handlers/fuzz/png_decode_fuzz_bin
+            corpus_out: src/format_handlers/fuzz/png_decode_fuzz_corpus
             max_len: "8192"
-            dict: src/formats/fuzz/dicts/png.dict
+            dict: src/format_handlers/fuzz/dicts/png.dict
             # Same setjmp/longjmp reasoning as jpeg (libpng's error handler).
             asan_options: "detect_leaks=0"
           - target: j2k
-            bin: src/formats/fuzz/j2k_decode_fuzz_bin
-            corpus_out: src/formats/fuzz/j2k_decode_fuzz_corpus
+            bin: src/format_handlers/fuzz/j2k_decode_fuzz_bin
+            corpus_out: src/format_handlers/fuzz/j2k_decode_fuzz_corpus
             max_len: "32768"
             dict: ""
             asan_options: ""

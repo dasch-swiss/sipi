@@ -57,7 +57,7 @@
 
 #include "error/SipiError.h"
 #include "image/SipiImageError.h"
-#include "formats/SipiIOJ2k.h"
+#include "SipiIOJ2k.h"
 #include "logging/logger.h"
 #include "observability/profiling.h"
 

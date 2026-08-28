@@ -78,7 +78,7 @@ localdev config in one step.
 | SipiImage | `src/image/cpp/SipiImage.h` | Image processing: TIFF, JP2, PNG, JPEG; metadata (EXIF, IPTC, XMP); ICC profiles |
 | Rust HTTP shell | `src/server-rs/` | The production server: axum routes, IIIF endpoints, caching, Lua request-shaping; drives the C++ engine over FFI |
 | IIIF Parser | `src/iiifparser/cpp/` (C++ engine) / `src/iiifparser/rust/` (production, `//src/iiifparser/rust:iiif_parser`) | IIIF URL parsing: identifier, region, size, rotation, quality/format. Production parses in Rust and emits domain types; `server-rs` flattens them into the seam struct the C++ engine consumes (ADR-0021) |
-| Format Handlers | `src/formats/` | SipiIO base class + SipiIOTiff, SipiIOJ2k, SipiIOJpeg, SipiIOPng |
+| Format Handlers | `src/format_handlers/` | SipiIO base class + SipiIOTiff, SipiIOJ2k, SipiIOJpeg, SipiIOPng |
 | Caching | `src/cache/cpp/SipiCache.h` | File-based LRU cache with dual-limit eviction (size + file count), crash recovery |
 | Metrics | `src/observability/metrics.h` | Metrics singleton (`Sipi::observability::Metrics`) — plain atomic counters/gauges; scalar fields cross the FFI seam as `SipiMetricsSnapshot` and export over OTLP via `src/server-rs/src/metrics.rs` |
 | Memory Budget | `src/throttling/cpp/SipiMemoryBudget.h` | Lock-free decode memory budget with RAII guard — prevents OOM from concurrent large decodes |
@@ -120,7 +120,7 @@ For test framework details (how to run tests, directory layout, adding tests), s
 
 Run a single unit-test target with `bazel test //test/unit/<component>:<component>_test --test_output=streamed`.
 
-**Hot-path changes require a benchmark.** Before changing any image decode/encode hot path (`src/formats/*`, `SipiImage` read/write, `iiifparser`), a Google Benchmark microbench must exist, co-located with the module (per ADR-0003) as a manual-tagged `*_benchmark.cpp` `cc_binary`. Add one if it doesn't. Justify the change with a before/after `just bench` + `just bench-compare` run on the same `-c opt` binary and machine (trust a delta only if the U-test is green AND the median shift exceeds the baseline CV; sub-3% is noise). See [`docs/src/development/benchmarking.md`](docs/src/development/benchmarking.md).
+**Hot-path changes require a benchmark.** Before changing any image decode/encode hot path (`src/format_handlers/*`, `SipiImage` read/write, `iiifparser`), a Google Benchmark microbench must exist, co-located with the module (per ADR-0003) as a manual-tagged `*_benchmark.cpp` `cc_binary`. Add one if it doesn't. Justify the change with a before/after `just bench` + `just bench-compare` run on the same `-c opt` binary and machine (trust a delta only if the U-test is green AND the median shift exceeds the baseline CV; sub-3% is noise). See [`docs/src/development/benchmarking.md`](docs/src/development/benchmarking.md).
 
 ## CI, Release, and Commit Messages
 

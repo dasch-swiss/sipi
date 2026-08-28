@@ -6,7 +6,7 @@
 #include "gtest/gtest.h"
 
 #include "image/SipiIO.h"
-#include "formats/SipiIOTiff.h"
+#include "SipiIOTiff.h"
 
 using Sipi::select_pyramid_level;
 using Sipi::SubImageInfo;

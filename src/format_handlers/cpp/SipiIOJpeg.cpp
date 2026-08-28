@@ -24,7 +24,7 @@
 #include "image/SipiIO.h"
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
-#include "formats/SipiIOJpeg.h"
+#include "SipiIOJpeg.h"
 #include "observability/profiling.h"
 
 #include "jerror.h"

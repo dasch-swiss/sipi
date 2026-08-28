@@ -42,7 +42,7 @@
 #include "ffi/startup.h"
 #include "cli/SipiReport.h"
 #include "image/populate_from_image.h"
-#include "formats/SipiIOTiff.h"
+#include "format_handlers/SipiIOTiff.h"
 
 #include "generated/SipiVersion.h"
 

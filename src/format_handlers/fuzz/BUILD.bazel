@@ -1,4 +1,4 @@
-"""src/formats/fuzz — libFuzzer harnesses over the C++ codec decode entry points.
+"""src/format_handlers/fuzz — libFuzzer harnesses over the C++ codec decode entry points.
 
 Coverage-guided fuzzing of the `SipiIO` handlers (`SipiIOTiff`, `SipiIOJpeg`,
 `SipiIOPng`, `SipiIOJ2k`; DEV-7066), reopening the codec-level gap ADR-0020 left
@@ -8,7 +8,7 @@ buffer as a temp file before driving `read_shape`/`read`.
 
 Two modes, one target per format. `rules_fuzzing`'s default engine is
 `//fuzzing/engines:replay` with instrumentation `none`, so
-`bazel test //src/formats/fuzz:tiff_decode_fuzz` is a corpus-replay regression
+`bazel test //src/format_handlers/fuzz:tiff_decode_fuzz` is a corpus-replay regression
 run needing no libFuzzer runtime — it joins the `//src/...` sweeps (including
 the sanitizer leg) on every platform. `--config=fuzz` (see `.bazelrc`, Linux
 and macOS) switches to the real libFuzzer engine and arms SanitizerCoverage;
@@ -24,9 +24,9 @@ cc_fuzz_test(
         "tiff_decode_fuzz.cc",
     ],
     testonly = True,
-    corpus = ["//src/formats/corpus/tiff:seed_corpus"],
+    corpus = ["//src/format_handlers/corpus/tiff:seed_corpus"],
     deps = [
-        "//src/formats",
+        "//src/format_handlers",
         "//src/image",
     ],
 )
@@ -38,9 +38,9 @@ cc_fuzz_test(
         "jpeg_decode_fuzz.cc",
     ],
     testonly = True,
-    corpus = ["//src/formats/corpus/jpeg:seed_corpus"],
+    corpus = ["//src/format_handlers/corpus/jpeg:seed_corpus"],
     deps = [
-        "//src/formats",
+        "//src/format_handlers",
         "//src/image",
     ],
 )
@@ -52,9 +52,9 @@ cc_fuzz_test(
         "png_decode_fuzz.cc",
     ],
     testonly = True,
-    corpus = ["//src/formats/corpus/png:seed_corpus"],
+    corpus = ["//src/format_handlers/corpus/png:seed_corpus"],
     deps = [
-        "//src/formats",
+        "//src/format_handlers",
         "//src/image",
     ],
 )
@@ -66,9 +66,9 @@ cc_fuzz_test(
         "j2k_decode_fuzz.cc",
     ],
     testonly = True,
-    corpus = ["//src/formats/corpus/j2k:seed_corpus"],
+    corpus = ["//src/format_handlers/corpus/j2k:seed_corpus"],
     deps = [
-        "//src/formats",
+        "//src/format_handlers",
         "//src/image",
     ],
 )

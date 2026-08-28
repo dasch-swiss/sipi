@@ -44,7 +44,7 @@
 #include "image/SipiIO.h"
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
-#include "formats/SipiIOTiff.h"
+#include "SipiIOTiff.h"
 #include "observability/metrics.h"
 #include "observability/profiling.h"
 
