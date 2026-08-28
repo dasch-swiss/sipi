@@ -26,7 +26,7 @@ CLI-mode conversion writes the Essentials packet with shape + structure offsets.
 
 We accept this for four coupled reasons.
 
-**1. Shape is intrinsic to the image, not derivable from cache state.** The cache's earlier shape memoization (`SipiCache::sizetable`) was parasitic — populated only as a side effect of `add()`, never independently persisted, vestigial after eviction, absent for un-cached origpaths. The right-shaped optimisation lives at the format-handler layer, not the cache layer. See [Probe 1](../deep-modules.md#probe-1--sipicache).
+**1. Shape is intrinsic to the image, not derivable from cache state.** The cache's earlier shape memoization (`SipiCache::sizetable`) was parasitic — populated only as a side effect of `add()`, never independently persisted, vestigial after eviction, absent for un-cached origpaths. The right-shaped optimisation lives at the format-handler layer, not the cache layer. See [Probe 1](../archive/2026-05-08-modularization-analysis.md#probe-1--sipicache).
 
 **2. The S3 transition is a forcing function (3-6 months out).** Service Files are accessed remotely *today* (NFS-mounted ZFS spinning disk; each read is a network round trip with seek penalties on spinning disk). The S3 transition makes every read an HTTP **range GET** (~1-10ms per round trip, no seek but with TLS + auth overhead). The packet-at-fixed-offset design allows SIPI's pre-decode logic to fetch the packet with **one** range GET of a known prefix (e.g. the first 64KB of the file), then **one** targeted range GET for the data SIPI actually needs to decode. Without the packet, SIPI must walk format-native structures (TIFF IFD chains, JP2 box hierarchies) — each parse step is a separate range GET — racking up 5+ round trips per request, multiplied by pyramid depth. The latency difference is roughly 5ms vs. 50ms on the server hot path. NFS already pays a fraction of this cost today; S3 makes it the dominant load-bearing factor.
 
@@ -50,9 +50,9 @@ We accept this for four coupled reasons.
 
 ## Consequences
 
-- **`SipiCache` shrinks**. `SizeRecord`, `sizetable`, `getSize()`, and the bug-prone non-cleanup of `sizetable` on eviction (`purge()` and `remove()` don't touch it — vestigial growth) all go away. The cache becomes a pure representation cache. See [Probe 1](../deep-modules.md#probe-1--sipicache).
+- **`SipiCache` shrinks**. `SizeRecord`, `sizetable`, `getSize()`, and the bug-prone non-cleanup of `sizetable` on eviction (`purge()` and `remove()` don't touch it — vestigial growth) all go away. The cache becomes a pure representation cache. See [Probe 1](../archive/2026-05-08-modularization-analysis.md#probe-1--sipicache).
 
-- **`SipiIO::getDim` is renamed to `read_shape`**. Existing virtual already returns full shape via `SipiImgInfo`; the rename is for self-documentation. Each subclass's override updates name. No new virtual method added. See [Probe 3](../deep-modules.md#probe-3--format_handlers-renamed-from-formats).
+- **`SipiIO::getDim` is renamed to `read_shape`**. Existing virtual already returns full shape via `SipiImgInfo`; the rename is for self-documentation. Each subclass's override updates name. No new virtual method added. See [Probe 3](../archive/2026-05-08-modularization-analysis.md#probe-3--format_handlers-renamed-from-formats).
 
 - **Service File format handlers (`SipiIOJ2k` + pyramidal `SipiIOTiff`) get the Essentials-packet fast path** in `read_shape`. Implementation: range-read a fixed prefix (e.g. first 64KB), parse the packet from its known location, return shape from the packet's `shape` section. Fallback to format-native parsing if the packet is absent or lacks the requested fields.
 
@@ -70,4 +70,4 @@ We accept this for four coupled reasons.
 
 - **The decision is coupled with [ADR-0005](./0005-essentials-packet-versioned-binary-serialization.md)** (wire format). The wire-format choice matters more under S3 — every byte of header sits inside a range-GET span, and forward-compat allows future schema additions (e.g. per-tile offset tables for ultra-tile-heavy access patterns) without re-encoding.
 
-- **Glossary deltas land in [`UBIQUITOUS_LANGUAGE.md`](../../UBIQUITOUS_LANGUAGE.md)**: `Image shape`, `Operating mode` / `Server mode` / `CLI mode`, the three-tier *Preservation pipeline* taxonomy per [ADR-0009](./0009-file-taxonomy.md) (**Preservation File** / **Service File** / **Access File** plus `Preservation pipeline` umbrella and format entries), `Pyramidal TIFF`, `Object storage`, `Range GET`, `Codec` (sharpened), `read_shape` (rename of `getDim`), and a sharpened `Essentials packet` definition. Tracked in the [glossary delta register](../deep-modules.md#glossary-delta-register).
+- **Glossary deltas land in [`UBIQUITOUS_LANGUAGE.md`](../../UBIQUITOUS_LANGUAGE.md)**: `Image shape`, `Operating mode` / `Server mode` / `CLI mode`, the three-tier *Preservation pipeline* taxonomy per [ADR-0009](./0009-file-taxonomy.md) (**Preservation File** / **Service File** / **Access File** plus `Preservation pipeline` umbrella and format entries), `Pyramidal TIFF`, `Object storage`, `Range GET`, `Codec` (sharpened), `read_shape` (rename of `getDim`), and a sharpened `Essentials packet` definition. Tracked in the [glossary delta register](../archive/2026-05-08-modularization-analysis.md#glossary-delta-register).
